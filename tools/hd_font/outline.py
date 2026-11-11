@@ -1,10 +1,10 @@
-"""Outline tracing of 1x coverage masks into 4x coverage frames (ARC-DEV-355; method of docs/research/font-vectorization.md, section 3).
+"""Outline tracing of 1x coverage masks into 4x coverage frames (ARC-DEV-355; method in docs/workflow/hd-font.md).
 
 Needs numpy, scipy, Pillow and potracer (tools/hd_font/requirements.lock).  Deterministic: the same masks give the same bytes.
 
 Per glyph: pad by 3 px, cubic-upsample to 8x (pixel-centre aligned), 6 rounds of iterative back-projection so the 8x field
-reproduces the 1x masks when box-reduced, binarize at the **mass-preserving level** (the level at or below 0.5 at which the
-binary area equals the mask's total coverage), Potrace curve fit (turdsize 24 at 8x, alphamax 1.0, optimizing curves, tolerance 0.2),
+reproduces the 1x masks when box-reduced, binarize at the **mass-preserving level** (the level at or below 0.42 at which the
+binary area equals the mask's total coverage), Potrace curve fit (turdsize 24 at 8x, alphamax 0.6, optimizing curves, tolerance 0.2),
 even-odd fill rasterized at 16x and box-reduced to 4x.
 """
 
@@ -21,12 +21,12 @@ UPSAMPLE = 8
 PAD = 3
 BACK_PROJECTIONS = 6
 TURD_SIZE = 24
-ALPHA_MAX = 1.0
+ALPHA_MAX = 0.6
 OPT_TOLERANCE = 0.2
 OUTPUT_SCALE = 4
 SUPERSAMPLE = 4  # per output pixel: 4 x 4 = 16 samples, so 16x the 1x grid
 BISECTION_STEPS = 14
-LEVEL_LOW, LEVEL_HIGH, LEVEL_CAP = 0.05, 0.95, 0.5
+LEVEL_LOW, LEVEL_HIGH, LEVEL_CAP = 0.05, 0.95, 0.42
 CURVE_POINTS = 12
 
 
@@ -67,7 +67,7 @@ def back_project(coverage: np.ndarray, factor: int = UPSAMPLE, rounds: int = BAC
 
 
 def mass_level(field: np.ndarray, mass: float, factor: int = UPSAMPLE) -> float:
-    """The level in [0.05, 0.95] at which the area above it equals `mass` (1x pixels), capped at 0.5 (bisection, 14 steps)."""
+    """The level in [0.05, 0.95] at which the area above it equals `mass` (1x pixels), capped at LEVEL_CAP, 0.42 (bisection, 14 steps)."""
     low, high = LEVEL_LOW, LEVEL_HIGH
     for _ in range(BISECTION_STEPS):
         middle = (low + high) / 2
@@ -166,7 +166,7 @@ def trace_mask(mask: np.ndarray) -> GlyphTrace:
 
 def frame_pixels(coverage: np.ndarray) -> np.ndarray:
     """(h, w, 4) uint8: red = green = blue = coverage x 255, alpha 255 on every ink pixel and 0 elsewhere (the HD glyph frame
-    rule of docs/research/font-vectorization.md, option A)."""
+    rule of the research findings in docs/workflow/hd-font.md)."""
     value = np.rint(np.clip(coverage, 0.0, 1.0) * 255.0).astype(np.uint8)
     alpha = np.where(value > 0, 255, 0).astype(np.uint8)
     return np.stack([value, value, value, alpha], axis=-1)

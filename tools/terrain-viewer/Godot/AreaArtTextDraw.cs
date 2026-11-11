@@ -9,7 +9,7 @@ namespace Arcanum.TerrainViewer;
 /// each blend (<see cref="AreaArtTextRules.LayerPixels"/>) are made on first use.
 /// <para>ARC-DEV-361: with the HD interface on and an active pack that holds a traced coverage frame for a glyph (a 4× entry of the font's ART,
 /// see docs/formats/hd-pack.md), the <see cref="AreaArtTextBlend.Coverage"/> texture is that frame, drawn into the same Legacy-size
-/// rectangle through its own <see cref="CanvasTexture"/> with trilinear mip sampling (as ARC-UI-112 does for interface frames), so
+/// rectangle through its own <see cref="CanvasTexture"/> with bilinear sampling and no mipmaps (ARC-UI-145; interface frames keep trilinear, ARC-UI-112), so
 /// the layout, the advances and the blend are the original's and only the glyph's edge is finer. A glyph without an entry, every other blend and
 /// everything with the switch off or no pack draw the Legacy frame as before.</para></summary>
 public sealed class AreaArtFontFace
@@ -61,8 +61,9 @@ public sealed class AreaArtFontFace
             && pack.ResolveSprite(query, art.Rgba) is { Status: HdFrameStatus.Hd, Rgba: { } rgba } result)
         {
             using var image = Image.CreateFromData(result.Width, result.Height, false, Image.Format.Rgba8, AreaArtTextRules.LayerPixels(rgba, AreaArtTextBlend.Coverage));
-            image.GenerateMipmaps();
-            texture = new CanvasTexture { DiffuseTexture = ImageTexture.CreateFromImage(image), TextureFilter = CanvasItem.TextureFilterEnum.LinearWithMipmaps };
+            // ARC-UI-145: bilinear, no mipmaps. The mip chain of a 4× glyph blurred the edge at the sheet's and the windows' scales (2.5-3.5 here),
+            // where one level down is a quarter of the detail; the owner chose this over trilinear, nearest and a sharper trace by comparing them on screen.
+            texture = new CanvasTexture { DiffuseTexture = ImageTexture.CreateFromImage(image), TextureFilter = CanvasItem.TextureFilterEnum.Linear };
         }
         _hdTextures[frame] = texture;
         return texture;

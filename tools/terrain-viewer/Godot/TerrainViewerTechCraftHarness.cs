@@ -41,7 +41,7 @@ public partial class TerrainViewerApp
         var scheme = session.QueryHero()!.Advancement.AutoLevelScheme;
         if (session.QueryHeroExperience() is { UnspentPoints: var have } && have >= need) return;
         if (scheme != 0) session.SetAutoLevelScheme(session.Version, SessionSchemeTarget.Hero, 0);
-        for (var round = 0; round < 12 && session.QueryHeroExperience() is { } now && now.UnspentPoints < need; round++)
+        for (var round = 0; round < 40 && session.QueryHeroExperience() is { } now && now.UnspentPoints < need; round++)
             session.AwardHeroExperience(session.Version, Math.Max(2000, (now.ToNextLevel ?? 0) * 4 / 3 + 1));
         if (scheme != 0) session.SetAutoLevelScheme(session.Version, SessionSchemeTarget.Hero, scheme);
         TechSmokeRequire(session.QueryHeroExperience() is { } after && after.UnspentPoints >= need, $"an experience award buys {need} points ({session.QueryHeroExperience()?.UnspentPoints})");
@@ -154,7 +154,7 @@ public partial class TerrainViewerApp
         var consumed = given.Where(e => !heldAfter.Contains(e)).ToArray();
         var kindsAfter = TechSmokeHeldKinds(session);
         var lost = components.GroupBy(p => p).All(g => kindsGiven.Count(k => k.Kind.Prototype == g.Key) - kindsAfter.Count(k => k.Kind.Prototype == g.Key) == g.Count());
-        TechSmokeRequire(made.Length == read.Quantity, $"record {record} made {read.Quantity} product(s) ({made.Length})");
+        TechSmokeRequire(made.Length == read.Quantity || (made.Length == 1 && session.QueryAmmo(made[0])?.Units is { } units && units >= read.Quantity && units % read.Quantity == 0), $"record {record} made {read.Quantity} product(s) ({made.Length}; an ammunition product is one stack of the quantity times the item's units, stack {(made.Length == 1 ? session.QueryAmmo(made[0])?.Units.ToString() ?? "none" : "-")})");
         TechSmokeRequire(lost, $"the two components are gone ({consumed.Length} of the given entities)");
         return new(record, components, made, consumed, message);
     }

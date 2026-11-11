@@ -164,7 +164,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** save schema/versioning, world clock, active scheme, sector state and event queue. **Предложенные сценарии:** сохранить synthetic world перед переходом часа, загрузить после нескольких wall-clock минут и получить прежние часы/схему; сохранить во время приостановленного мира и проверить точное возобновление без пропуска или повтора hourly event.
 
-**Steamwoven:** частично, [ARC-WORLD-010](../world/game-session-runtime.md#snapshot-schema-51): снимок сессии схемы 3 несёт часы (время, пауза) и применённую схему (id и час); viewer записывает схему после каждой смены часа или сектора, restore отклоняет схему другого часа. Быстрое сохранение F7/F8 (ARC-WORLD-011) пишет и загружает эти часы и схему, драйвер дня/ночи перепривязывается к загруженной сессии; списка сохранений и очереди событий нет.
+**Steamwoven:** частично, [ARC-WORLD-010](../world/game-session-runtime.md#snapshot-schema-62): снимок сессии схемы 3 несёт часы (время, пауза) и применённую схему (id и час); viewer записывает схему после каждой смены часа или сектора, restore отклоняет схему другого часа. Быстрое сохранение F7/F8 (ARC-WORLD-011) пишет и загружает эти часы и схему, драйвер дня/ночи перепривязывается к загруженной сессии; списка сохранений и очереди событий нет.
 
 ## Поздние визуальные идеи и границы доказательств
 
@@ -180,7 +180,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 ## Покрытие и неопределённости до 2026-10-20
 
-[RES-018 time/light](../world/time-lighting-contract.md) и [RES-020 clock policy](../world/game-clock-policy.md) смержены как исследование. Их bounded source/raw-data/table checks не являются тестами production clock или lighting. На audit baseline публичных clock/scheduler/light-scheme/emitters/rendering/save систем нет. WORLD004 существует на доске, но не вошёл в этот merged срез. Exact movement time и ART playback clocks остаются отдельными доменами.
+[RES-018 time/light](../world/time-lighting-contract.md) и [RES-020 clock policy](../world/game-clock-runtime.md#original-clock-evidence-carried-from-the-res-020-policy) смержены как исследование. Их bounded source/raw-data/table checks не являются тестами production clock или lighting. На audit baseline публичных clock/scheduler/light-scheme/emitters/rendering/save систем нет. WORLD004 существует на доске, но не вошёл в этот merged срез. Exact movement time и ART playback clocks остаются отдельными доменами.
 
 Area Data owner сохраняет секционные границы/counts и raw fields; декодирование источников/схем, их значение и активность требуют своих реализаций. Состояние исследования и production coverage разделены в матрице.
 

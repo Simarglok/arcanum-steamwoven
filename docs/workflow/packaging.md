@@ -4,10 +4,23 @@ A packaged build is the game for a player: the terrain viewer project exported w
 folder, started without inputs, so it opens the launcher ([ARC-UI-014](../rendering/terrain-viewer.md#launcher-screen-arc-ui-014))
 and the original main menu. It is separate from the developer builds of the export endpoints (`artifacts/world-builds`,
 the build registry, `./arcanum area`/`map`), which it neither reads nor changes. The owner's build instruction
-(prerequisites, `main` or a chosen commit, outputs) is the [README](../../README.md#how-to-build-the-alpha-for-a-player); the player
+(prerequisites, `main` or a chosen commit, outputs) is this page; the player
 instruction is [docs/player/alpha-build.md](../player/alpha-build.md). Platforms: **macOS** (universal `.app`, ad-hoc signed, smoked on
 the Mac) and **Windows 11 x64** (exported on the Mac from the installed Godot 4.7.2 .NET Windows templates, unsigned,
 checked by its files only, delivered as one zip).
+
+## Prerequisites on the Mac
+
+The build runs on a Mac from a committed state of the repository, never from local changes: `git archive` of one commit
+into a fresh temporary folder, so uncommitted or untracked files cannot enter it.
+
+- .NET SDK **8.0.425** (pinned by `global.json`) in `~/.local/share/dotnet` or the folder `DOTNET_ROOT` names;
+- Godot **4.7.2 .NET** at `/Applications/Godot_mono.app`;
+- its export templates `4.7.2.stable.mono` (Godot: Editor → Manage Export Templates), which hold both the macOS and the
+  Windows templates;
+- this repository cloned with the `origin` remote (the command fetches `origin main` itself);
+- for the macOS smoke only: the game in `/Applications/Arcanum`, `~/Applications/Arcanum` or a CrossOver bottle (without
+  it the smoke is skipped and the run says so).
 
 ## Command
 
@@ -45,6 +58,19 @@ every line, stdout keeps PASS or FAIL). The builder is `tools/local_dev/package.
    and the log's last 20 lines. The temporary folder is removed, also when the queue stops the run (`--keep-work` keeps
    it). The owner's opt-in variables (`DAT_ROOT`, `ARC_*`, `ARCANUM_*` but the queue's own, `LAUNCHER_SETTINGS_*`,
    `WORLD_DIAGNOSTIC_*`) are dropped from the build and smoke environment.
+
+### Building another commit
+
+`--ref` is resolved in the main checkout with `git rev-parse` after `git fetch origin main`, so every commit of `main`
+(also an older one) works directly, and so do a tag or `origin/BRANCH`. A commit that is only on another branch must be in
+the checkout first: `git fetch origin BRANCH`, then `--ref origin/BRANCH` or the hash. Only committed files of that commit
+are built; the checkout itself is not touched. `--no-fetch` skips the fetch (offline, or a commit already present).
+Other options (`./arcanum package --help`): `--no-smoke` skips the macOS smoke, `--keep-work` keeps the temporary source and
+export folder for a look, `--verbose` streams the step lines instead of the quiet run log.
+
+Two limits: the build line in the game always reads `main <commit>`, also for a commit that is not on `main` (check
+`BUILD.txt` for the real commit), and the player instruction copied beside the build is the one of that commit, so an
+older commit ships its older instruction.
 
 ## Where the build lands
 
@@ -125,7 +151,7 @@ Nothing else under `artifacts/packages` is written by `daily` itself, so the bug
   (the app and its window), and a custom user folder "Arcanum Steamwoven Game", so `user://` is
   `~/Library/Application Support/Arcanum Steamwoven Game/` on macOS and `%APPDATA%\Arcanum Steamwoven Game\` on Windows.
   It is not the developer launcher's home `~/Library/Application Support/Arcanum Steamwoven`
-  ([launcher research](../research/launcher-settings.md)), and source runs and the endpoint exports keep Godot's
+  ([launcher research](../project/status/session.md)), and source runs and the endpoint exports keep Godot's
   default `app_userdata/Arcanum Terrain Viewer`.
 - **Build line**: the package step sets the MSBuild properties `ArcanumPackageCommit` and `ArcanumPackageDate` (as
   environment variables); the viewer project turns them into assembly metadata, and `ViewerBuildInfo` shows
@@ -139,6 +165,7 @@ Nothing else under `artifacts/packages` is written by `daily` itself, so the bug
   synthetic tests only), the main menu, the SmartScreen steps of the player instruction, a new game reaching the map and a
   save and load are still to be confirmed by the owner (map files are read on Windows since ARC-DEV-049, tested on macOS
   only); the Windows build is not signed (a free signature would need a free certificate route, none chosen).
+- Bundling `innoextract` into the package, so the player needs no separate install (the "A+" option of the GOG installer research, ARC-RES-087), is not built.
 - An app icon of the project's own (Godot's default icon is used), notarization (needs a paid Apple Developer ID),
   automatic updates.
 - Starting a downloaded (quarantined) copy was not tried: the instruction's "Open Anyway" steps follow Apple's

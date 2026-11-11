@@ -1,8 +1,8 @@
 # Project status and component catalogue
 
-Audit baseline: merged main [`a8a553b7c406ace77ea019bf2b13251f00ecddb6`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), through PR #54, 2026-10-09. The audit compared repository source/tests/contracts, all 54 merged PR records and the read-only Hermes board snapshot at **18:11:36 UTC**. Merge commits were checked against this baseline; root-card `done` alone is not product delivery. Later merges require another coverage update.
+The catalogue was seeded by a source/delivery audit of merged main through PR #54 (2026-10-09) and has been kept current by the PRs that change a component since; a component's row is the place to look for what is merged, its evidence and its remaining boundary. Root-card `done` alone is not product delivery.
 
-This is a source/delivery audit, **not a new build, game, original-data, graphical, export or device run**. Test results below are historical evidence reported for the linked reviewed candidates. They do not certify every subsystem together on the audit baseline. The [191-group requirements register](../requirements/README.md) gives each requirement one status with what is implemented, what is missing and documentation links in its [coverage matrix](../requirements/coverage.md) (re-checked against code 2026-11-11, ARC-RES-107); no whole-game readiness percentage is inferred.
+This is a source/delivery catalogue, **not a new build, game, original-data, graphical, export or device run**. Neither green tests nor a merge establishes original executable parity, and the tests of separate components do not certify every subsystem together. The [191-group requirements register](../requirements/README.md) gives each requirement one status with what is implemented, what is missing and documentation links in its [coverage matrix](../requirements/coverage.md); no whole-game readiness percentage is inferred.
 
 ## Implemented components
 
@@ -238,43 +238,9 @@ One line per subject; the full row (canonical result, what remains) is in its ar
 | Original input and navigation | [World, maps and movement](status/world.md) | — |
 | Screen size and UI layout | [Viewer, rendering, HD and input](status/viewer.md) | ARC-RES-093 |
 
-## Verification that can be credited
-
-These are candidate-specific historical PR receipts, **not fresh audit executions**:
-
-- PR #46: full production original Area load/repeat, every 2,444 visual chain, handles/leases/copies and four frozen regressions; 322 root synthetic tests and93 terrain tests. This confirms bounded Data, not full-scene rendering.
-- PR #44: eighteen source/export gates, original-data bridge, source/export grid/Human/input/persistence readback and owner ordinary movement observations;95 focused viewer tests. This confirms the finite diagnostic, not general original collision or physical-device certification.
-- PR #39/#37:264 Human selections and scoped zoom/focus/persistence/ordinary observations. No exact physical pixel1:1, Bluetooth timing or all-display readability claim.
-- PR #48:36 focused NPC-entry synthetic tests,358 root tests and opt-in original entry/regressions. Entry selection does not execute the conversation.
-- PR #54:22 GF tests,81 Scripting regressions and380 root tests; independent540-assertion source probe. GF integration-negative tests explicitly retain the DLG frontier.
-
-Unchanged source files/evidence links preserve earlier bounded parser/lab verification. Neither green tests nor a merge establishes original executable parity.
-
-## Board work outside the merged baseline
-
-ARC-GPAD-005 is merged (PR #67, 2026-10-14, head `d58e43c`): one synthetic three-template/ten-slot input framework with user-copy validation, lab-only v2 migration, target/ground/grid mock execution and display-provider highlights. [Actual preset contract, boundaries and owner checklist](../input/gamepad-presets.md). Its exact-head source and exported GUI/persistence gates, ordinary one-window launch with post-run integrity, and independent review are recorded in PR #67 (local export manifest SHA-256 `d2ffcdb1b1057499694b14766f0e2bf42754cbbf308accaae9433a46d2466dfa`). Physical XboxBT/comfort/final layout (owner L3) is deferred by the owner to the first playable game build (2026-10-20); no production inventory/spells/skills/combat/party UI or WORLD preset integration is credited. The historical merged catalogue/snapshot below remains dated, not overwritten by this note.
-
-ARC-RENDER-007 candidate adds the closed `area` Terrain Viewer mode over the DATA-009 snapshot: nine core sectors, 36,864 terrain cells, 499 eligible bodies plus 15 keyed N/A records, one chart, center/hotspot/rank composition with the controlled HumanFixed actor, whole-envelope Fit/pan and bounded GPU residency from the retained CPU repository. [Viewer contract, checks and boundaries](../rendering/area-viewer.md). Movement stays the proven x4..8/y0..3 zone. Roofs/walls/portals/lights, gameplay, cave transfer and original-runtime visual parity are not credited; ordinary human observation, physical controller and comparison with the original game remain owner-pending.
-
-Read-only snapshot **2026-10-09 18:11:36 UTC**. This is an audit observation, not a live task queue or instruction to dispatch. Source/main delivery wins over a root's coordination status. Older cards without explicit FR fields are mapped below by the auditor; these mappings do not amend their contracts.
-
-| Product root(s) | Snapshot finding | Related requirement boundary |
-| --- | --- | --- |
-| ARC-RENDER-007 | Root todo at the snapshot; the later direct candidate is described above. No merged full-area viewer on this baseline. | FR-SCENE-001..006, FR-WORLD-002..004: consume the complete exterior Data snapshot in presentation. |
-| ARC-GPAD-005 | Root done, implementation/diagnostic children still open at the snapshot. Delivered later by PR #67 (merged 2026-10-14; synthetic lab/framework only). Owner physical check (L3) deferred to the first playable game build. | FR-PRODUCT-002, FR-UI-002: controller templates/actions; physical final UX remains owner's check. |
-| ARC-INPUT-001 | Delivered (code and software checks; [contract](../input/diagnostic-palette.md)). | Terrain Viewer WORLD diagnostic palette (Ctrl+Shift+F9 / HUD button / Start: Fit, Reset scene, Reload, exact zoom) and the original keyboard/mouse route without debug bindings: no keyboard actor vector, fixed-direction arrows, original keys reserved as not implemented. Physical keyboard/controller verdict: ARC-INPUT-002 owner check PASS 2026-10-17 (HUD reserved-key hint not seen, cause unconfirmed). Click-to-move still needs navigation behavior. |
-| ARC-RENDER-008 | Delivered (code, software and original-data checks; [contract](../rendering/passability-overlay.md)). | Read-only Terrain Viewer passability overlay from the palette checkbox (OFF at launch): red fill only when every admitted incoming step is Blocked, red directed edges, gray hatch for Unknown/outside, from the movement session's own assessor (whole core at T0 or the bounded WORLD003 zone). Not a permit, collision system or original parity claim. |
-| ARC-WORLD-004 | Root done; publication running and postpublication handoff todo. No clock implementation on this audit baseline. | FR-LIGHT-001/002: headless clock/pause/calendar/snapshots; eventual lighting consumer separate. |
-| ARC-RES-022 | Root done; research publication running, close stage todo. No merged audio contract at cutoff. | FR-MEDIA-003: original audio resources/contracts, research first. |
-| ARC-UI-002 | Root done; synthetic audio implementation running, publication/close pending. | FR-MEDIA-003: standalone synthetic lab, not original audio/world integration. |
-| ARC-DATA-010 / ARC-UI-003 | Todo; close stages open. | FR-MEDIA-003: bounded original audio loading and playback lab. |
-| ARC-WORLD-005 / ARC-SCRIPT-004 / ARC-WORLD-006 | Todo. | FR-MEDIA-003/004: music/ambient, dialog voice lifecycle, positional SFX/footsteps; mappings must retain each accepted card scope. |
-
-ARC-SCRIPT-003 was just delivered by merged PR #54 and is credited above even though an earlier board/PR read caught its separate merge stage running. DATA009/SCRIPT002/research root completion is credited only together with actual merge ancestry. The board was not edited by this audit.
-
 ## Still missing for a playable game
 
-State of 2026-11-11 (main `52f66db`), checked against the code by ARC-RES-107 and the [missing systems plan](missing-systems-plan.md#3-map-of-the-systems) (sections 3.1 and 3.2 name each system with its file and symbol). This is a list of what the player cannot do yet, not of what exists: the viewer plays the opening map and the world map in the original's window, and the components in the tables above are integrated into it.
+State of 2026-11-11 (main `52f66db`), checked against the code by ARC-RES-107 and the [missing systems plan](missing-systems-plan.md#3-map-of-the-systems) (section 3.1 names each system with its file and symbol). This is a list of what the player cannot do yet, not of what exists: the viewer plays the opening map and the world map in the original's window, and the components in the tables above are integrated into it.
 
 What is integrated and working in the viewer (details in the [coverage matrix](../requirements/coverage.md)): whole-map rendering with passability and the sector cache, game lighting and the clock, cave entry and return, dialogue and barter, the inventory and equipment, the character sheet and creation, the hero's combat, ranged attacks and thrown items, NPC awareness and combat, spells from the hotkey bar and from items, the technology schematics, traps on maps, the logbook, the world map screen with travel and discovery, save and load, and the HD graphics and interface switches.
 
@@ -291,7 +257,7 @@ Not built or only stubbed (each has an epic in the plan):
 - Gamepad in the game UI, UI scale, and Windows, Linux and handheld validation (E9; the Windows package exists and was never run on Windows).
 - The network game, a second module and mods (E10, deferred by the owner).
 
-This is not yet a playable game. The [roadmap](roadmap.md) describes dependency gates; the [vision](vision.md) describes accepted direction. Requirements/product completeness and milestone scope need their own decisions.
+This is not yet a playable game. The [missing systems plan](missing-systems-plan.md) describes the order of the unbuilt systems; the [vision](vision.md) describes accepted direction. Requirements/product completeness and milestone scope need their own decisions.
 
 ## Maintaining this catalogue
 

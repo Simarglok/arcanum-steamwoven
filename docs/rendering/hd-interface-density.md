@@ -194,7 +194,7 @@ engine's scaling does not round edges and line widths to device pixels (judgemen
 
 Generated chrome is sharp only if its text is too. Three ways: (a) keep the original bitmap fonts and their traced 4× frames
 (ARC-DEV-361), minified to `s` (soft below 4×, the current HD path); (b) a vector font built locally from the traced outlines
-([font vectorization](../research/font-vectorization.md)) and drawn by Godot's text server at the device size (derived, so
+([font vectorization](../workflow/hd-font.md)) and drawn by Godot's text server at the device size (derived, so
 local only); (c) a free-licence font in git for the generated windows. Text baked into panel art (engraved titles, labels)
 has to become drawn text when its panel is generated; its census is open.
 
@@ -314,7 +314,7 @@ Local observation, on the owner's Mac (Apple M4 Pro, Godot 4.7.2 .NET, GL Compat
 The owner asked (2026-11-11) for the generated interface as a working third variant of the viewer's interface, with every
 element where the original puts it: only the drawing changes, not the UI or UX. S1 is the first slice.
 
-- **Setting.** The options window's HD interface line has a third value, **Generated (experimental)**
+- **Setting.** The HD interface line (the launcher screen's since ARC-UI-143, the options window's before) has a third value, **Generated (experimental)**
   (`generatedInterface` in `game_settings_v1.json`, file version 5; older files read it as off). It keeps the HD interface on,
   so frames without a recipe still draw from the HD pack.
 - **Where it plugs in.** `HdInterfaceTexture` (the texture the interface already draws through) asks

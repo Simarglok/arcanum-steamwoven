@@ -79,7 +79,7 @@ Source references are the function addresses listed under [Provenance](#provenan
    gender (`-1` any, `0` female, `1` male), then effective IQ (`iq>0`: at least, `iq<0`: at
    most `-iq`; a dumb PC above 4 counts as 1), then the condition conjunction left to right,
    short-circuiting on the first false. Enumeration **stops after five eligible replies;
-   later rows are not queried** (source behavior; this deliberately differs from the RES-019
+   later rows are not queried** (source behavior; this deliberately differs from the retired RES-019
    overflow-fail proposal). No eligible reply gives one generated-farewell fallback that exits.
 4. **Look-ahead per offer** — a reply's action and its next NPC step are planned (pure, one
    level). If either cannot run here the reply is still shown, but `Block` says why and
@@ -217,7 +217,7 @@ a clever hero (IQ ≥ 5) and a dull one (IQ ≤ 4, or dumb) each have a complete
 The original matches 37 condition codes (0x4150D0, 0x5A06BC); this runtime parses 30 (`LF GF RE RA ME RP WA PS HA SK TR GV PV PF RU RQ $$ QU QA QB SS AR IA CH PE LE AL MA TA NA`) and, as actions, `CO` and `SS` besides the earlier ones (35 action codes in the original).
 Any other code in a Player condition is `UnsupportedOperation`: the reply is offered blocked, and a reply group that needs it is a frontier
 (`TargetUnsupported` on the reply that leads there). The owner's decision (2026-11-07) is that the remaining codes are implemented. The plan,
-the slices and the table of codes are in [dialog-condition-codes-plan.md](../research/dialog-condition-codes-plan.md). Slice C0 (ARC-RES-092) read
+the slices and the table of codes are in [dialog-condition-codes-plan.md](../research/ledger/scripts.md). Slice C0 (ARC-RES-092) read
 all 37 condition and 35 action codes in the executable ([DCC1–DAC12](../research/ledger/scripts.md#dialog-condition-and-action-codes-arc-res-092)) and counted
 them over the 709 installed DLG files (the opt-in test `DialogCodeCensusRealDataTests`): 10,431 condition and action fields hold a code outside the
 subset (10,384 stop first on one); admitting gold `$$` freed 2,857 of them (C1, ARC-DEV-179, below), the quest log `qu qa qb` freed 1,653 more (C2, ARC-DEV-180, [below](#quest-log-conditions-arc-dev-180)), the combat action `co` freed 1,325 more (C3, ARC-DEV-190, [below](#combat-action-arc-dev-190)), the story and area codes `ss ar ia` 1,051 more (C4, ARC-DEV-191, [below](#story-state-and-area-codes-arc-dev-191)), the PC stat conditions `ch pe le al ma ta na` 1,026 more (C5, ARC-DEV-192, [below](#pc-stat-conditions-arc-dev-192)) and the item conditions `in ni` 1,056 more (C6, ARC-DEV-194, [below](#item-conditions-arc-dev-194)); the plan orders slices C1 to C10 by it. Slices C7 to C10 are not built yet; 1,463 fields still hold a code outside the subset.
@@ -645,6 +645,109 @@ real mouse click on a reply is not automated. Synthetic fixtures are invented. T
 before and after and asserts identifiers and command kinds only; screenshots of original
 text stay in an ignored local directory. Ordinary `./arcanum area` launches the registered
 ARC-RENDER-007 export, which predates this change until a new export is registered.
+
+## Original dialog evidence carried from the state contract
+
+Carried from the retired ARC-RES-019 research contract; its proposal, conformance
+and future-seam parts were dropped (this runtime and the
+[negative-IN contract](negative-inventory-transfer-contract.md), the
+[global-flag owner](global-flag-state-runtime.md) and the
+[ledger rows](../research/ledger/scripts.md) DG1-DG4, DCC9, DAC3, IQ1 and HR1 hold
+the accepted behaviour). Labels: S = a reading of the original's functions at the
+cited addresses (F0 unless the [ledger](../research/original-verification-ledger.md)
+lists it); D = hash-gated selected data fields, not live world state. Hashes and
+instance identities of the selected Virgil chain are in the
+[Crash Site NPC evidence](../research/crash-site-npc-dialog-evidence.md) and the
+[dialogue evidence record](../research/dialog-evidence.md).
+
+**Evidence index (what the original does, by address).**
+
+- Entry order (0x4167C0, 0x416840): a fresh NPC entry runs its action effects
+  before reply eligibility; the selected Player's action (0x413130) runs before
+  the transition into the target (Direct dispatch 0x414810). A regeneration
+  (`randomize=true`) skips the entry effects in the source; it is not a retry
+  recipe for a failed command.
+- Operand scans (0x4167C0 second operand, 0x415BA0 action integers): permissive
+  `atoi` plus a digit/whitespace scan, not a safe expression grammar; strict
+  byte admission is project policy.
+- GF (query 0x4150D0, action 0x415BA0, owner 0x444CF0/0x444D20): two operands,
+  bit index and compare/write value; a world-global bit, not PC- or
+  attachment-local. The source setter does not itself validate boolean or bounds.
+- RE (0x4150D0, 0x415BA0, reaction service 0x4C0CC0, 0x4C0CE0, 0x4C0D00,
+  0x4C0DE0): a signed threshold in the condition, a lexically signed delta or an
+  unsigned target in the action; the effective query and the mutable reaction
+  storage are not the same quantity.
+- QU/RU/LF (0x415BA0, 0x4150D0, attachment flags 0x444F10/0x444F60): PC quest
+  with the NPC as context; PC rumor; LF reads the NPC's effective SAP_DIALOG
+  attachment header (inherited or overridden), never the immutable SCR initial
+  header or the DLG asset.
+- Reply grouping (sort 0x417720, compare 0x417E00, gender/IQ/condition/cap
+  0x414E60/0x414F50, role/gender parse 0x417860): records load then sort by
+  numeric ID, the NPC is found by ID, following Player records are scanned to the
+  next IQ-0 NPC and the scan short-circuits at five eligible rows; gender first,
+  then adjusted IQ (a dumb PC above LOW_INTELLIGENCE uses 1), then conditions;
+  the Player alternate field is the gender selector, the NPC Condition is media
+  metadata, not an eligibility expression. Generated option building can remove
+  a candidate and yield a generic fallback.
+- D: the selected serialized and numerically sorted Virgil groups are both
+  `[2,3,4,5,6,7]` (agreement for this group only). An algebraic enumeration of the
+  selected gender/IQ/RE predicates gave eligible subsets `[2,6]`, `[3]`, `[4,7]`,
+  `[5]` (at most 2) for the diagnostic selector domain 0/1: worksheet results,
+  not observed sessions (worksheet
+  [`dialog_state_probe.py`](../../tools/research/dialog_state_probe.py)).
+
+**Operation, representation and ownership.** Metavariables below are not original
+values; DLG fields are ASCII decimal, not SCR's tagged instructions; `+`/`-`
+lexical presence must survive conversion (`-0` is no IN direction, but RE `-0` is
+a relative action).
+
+| Operation (S) | Role, owner and read/write |
+| --- | --- |
+| GF condition/action `GF n b` | World-global story bit; NPC and PC are context only. Condition = equality; action = explicit bool write (D: four selected actions write 0/1, none relative, none a toggle). An unknown index is not "unset". |
+| IN action `IN s`, `s<0` | Negative: NPC primary inventory, then conditional substitute, then PC recipient; non-negative: PC, followers, NPC. `s` is an item **name** ID (`OBJ_F_NAME`), not a prototype or instance. |
+| IN condition `IN s` | Read-only presence (negative: NPC then substitute; non-negative: PC then followers); no transfer, no count; no selected reply uses it. |
+| RE condition `RE t` | `t>=0`: effective reaction >= t; `t<0`: <= abs(t), inclusive. The NPC's reaction toward this PC, keyed `(NPC, PC)`, may include modifiers, hostility, mind control. |
+| RE action `RE n` (no sign) | Reads effective R, requests adjustment `n-R`: an absolute target intent, not a guaranteed stored result under modifiers (D: Player 4, 5, 7). `RE +d`/`RE -d` is a relative adjustment of the same relation. A leading `>`/`<` is tested after `atoi` ran, so a marker-prefixed number is not a working clamp (ledger DAC3). |
+| QU `QU q s`, RU `RU r` | PC quest `(PC, quest)` and PC rumor log writes; entry commands 6 and 7 even when no visible reply uses a rumor. |
+
+**IN identity, quantity, transfer.** The lookup returns the **first** object with
+a matching name in inventory list order (no slot filter, so a worn item can be
+chosen). The substitute applies only to an NPC with no leader, a non-null
+substitute and distance <= 20. If primary and substitute lack the item, the
+source continues without transferring. The positive direction also searches the
+PC's followers in source enumeration order. There is no quantity operand and no
+item creation: the source transfers the found handle without an explicit
+split/decrement, so "one command" does not prove "one unit". Negative direction
+(0x415BA0): transfer to the PC, ignore the boolean result, check the parent;
+if the parent is not the PC, remove the item and place it at the PC's location
+(an existing or new junk pile, or the ground with decay), not always a bare drop.
+Positive direction on parent mismatch places at the NPC's location when the NPC
+has a PC leader, otherwise destroys the item. The wrapper dispatches to parented
+SAP_TRANSFER (0x461CA0) or unparented SAP_GET (0x4617F0, 0x461810) by the item's
+current parent. Stacking, slots and callbacks: the negative-IN contract.
+
+**Complete entry and one Direct trace (D/S, selected Virgil chain).** The
+conditional entry (SAP_DIALOG: PC triggerer, NPC attachee, caller SCR line 0;
+Following false, two attachment-local flags false and jilted false reach SCR
+line 4 -> DLG NPC 1) is diagnostic assumption, not observed world state.
+
+| Step | Record / stage | Operation shape |
+| --- | --- | --- |
+| 1-3 | NPC 1 entry actions 1-3 | GF, world bit write |
+| 4 | NPC 1 entry action 4 | negative IN: lookup NPC/substitute, transfer or placement to the PC |
+| 5 | NPC 1 entry action 5 | GF write |
+| 6, 7 | NPC 1 entry actions 6, 7 | QU (PC quest, NPC context), RU (PC rumor log) |
+| Q | Player 2..7 enumeration | gender, then adjusted IQ, then RE threshold on **post-entry** state |
+| 8 | the selected Player 4 | unsigned RE (target intent NPC to PC) |
+| 9 | checked Direct to NPC 9 | NPC 9's entry action is empty: zero commands |
+| F | NPC 9 | stop before enumerating its replies |
+
+Player 2, 3 and 6 have empty actions, Player 4, 5 and 7 one unsigned RE each; all
+six Direct targets are NPC 9, so choosing Player 2 would mutate nothing and cannot
+establish RE semantics. A static check covers the whole entry group, every
+response action and every distinct target action before the first entry
+mutation; a runtime failure keeps the completed prefix and stops the rest (no
+atomic conversation transaction or rollback is inferred from the source).
 
 ## Provenance
 

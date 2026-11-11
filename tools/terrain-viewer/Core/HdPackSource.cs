@@ -171,7 +171,7 @@ public sealed record HdPackSourceChoice(HdDiscoveredPack? Chosen, string Source,
         ? $"{Source}, {pack.Id}" + (Skipped.Count == 0 ? "" : $" (fallback: {string.Join(" | ", Skipped)})")
         : $"no pack ({(Skipped.Count == 0 ? "nothing found" : string.Join(" | ", Skipped))})";
 
-    /// <summary>What the options window says after a change: null when the source has nothing to explain.</summary>
+    /// <summary>What the launcher screen says after a change: null when the source has nothing to explain.</summary>
     public string Notice() => Chosen?.Result.Pack is { } pack
         ? $"HD pack after a restart: {Source}, {pack.Id}" + (Skipped.Count == 0 ? "" : "; " + string.Join("; ", Skipped))
         : "HD pack after a restart: none; " + (Skipped.Count == 0 ? "no pack found" : string.Join("; ", Skipped));

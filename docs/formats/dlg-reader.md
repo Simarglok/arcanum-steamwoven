@@ -99,11 +99,77 @@ DAT_ROOT=/path/to/Arcanum dotnet test \
 It reads only the selected members and never extracts or writes original
 resources. Original dialogue bytes/text/expressions are kept local: logs and
 review evidence use only approved identifiers, hashes, sizes, counts, and
-status aggregates. Physical grammar evidence is in [bounded DLG
-format research](dlg.md) and the [dialogue evidence
-record](../research/dialog-evidence.md); this implementation is
-independently authored and does not execute the research probe. The [minimal dialog contract](../scripting/dialog-minimal-contract.md)
-is a separate proposal, not part of this physical reader.
+status aggregates. Physical grammar evidence is in the sections below and the [dialogue evidence
+record](../research/dialog-evidence.md); this implementation is independently
+authored and does not execute the research probe. The conversation
+runtime lives in the [conversation runtime](../scripting/dialog-conversation-runtime.md) (the earlier bounded subset is the [transition runtime](../scripting/dialog-transition-runtime.md)).
+
+## Research subset: observed grammar and bounded policy
+
+Carried from the former seven-field research record of
+`tools/research/Arcanum.DialogProbe` (one explicit archive path and one exact
+raw DLG identifier, `dlg\basename.dlg`: printable ASCII, no drive, separator
+or traversal forms). The initial inspection candidate was `dlg\01324Virgil.dlg` in
+`arcanum3.dat` (ordinal 160; declared/stored bytes 56,782/12,335; archive SHA-256
+`cbadd76bb3df798fa25dcc05871af1ea751c1164fb1426dccc520cd7d9edc499`); a file
+name is not evidence of character identity, initial encounter, archive winner or
+runtime entry node.
+
+The original's dialog entry and field parse (0x417860, 0x417C20) is a
+brace-delimited entry of seven fields. The roles and the evidence behind them:
+
+| Field | Role | Boundary |
+| --- | --- | --- |
+| 0 | unique signed decimal record ID | full `Int32`; duplicate, malformed or empty IDs reject |
+| 1 | primary text bytes | opaque; encoding not established |
+| 2 | alternate/gender bytes | opaque; encoding not established |
+| 3 | empty = NPC; nonzero = player response | a nonempty zero rejects; structural role, not runtime selection |
+| 4 | condition opcodes | printable ASCII |
+| 5 | signed decimal response value; empty parses as zero in the source | positive direct, zero/empty exit, negative special |
+| 6 | action opcodes | printable ASCII |
+
+The probe's safety limits (stored/decoded DAT entry 1 MiB, payload 512 KiB,
+10,000 records, exactly seven fields, 4 KiB per field) are policy, not DLG
+facts; the reader's own defaults are above. Synthetic forms:
+`{100}{synthetic-npc}{}{ }{}{200}{}` and `{200}{synthetic-player}{}{5}{}{0}{}`.
+
+References: the original's dialog check (0x418030) treats a positive player
+response as a target record and reports a missing target or a target with the
+wrong structural role; its response classification (0x417590) separates
+positive, zero and negative values (source reading, F0, not checked in the
+executable). The research probe classified references as `direct`, `exit`,
+`special`, `dangling`, `ambiguous` or `unresolved` and never turned a missing
+edge into a direct branch. Its bounded traversal started at the lowest numeric
+NPC record (a deterministic convenience, not the runtime entry; first-record
+order is never entry evidence), counted nodes/references before appending, and
+stopped at the first exit, special/generated transition, callback,
+uninterpreted condition/action, dangling target, cycle or cap (256 nodes, 1,024
+references); with no operation evaluator every nonempty condition/action was an
+unsupported boundary (`SC` callback-shaped). Without such a stop it chose the
+smallest positive target ID, then the smallest response ID.
+
+ARC-RES-006 selected semantic slice (identifier-only, from `dlg\01478Erland.dlg`,
+ordinal 220 in `arcanum3.dat`; fingerprints in
+[dialog-evidence.md](../research/dialog-evidence.md); no claim about identity,
+invocation, entry, precedence or a runtime branch): NPC `N30` has action
+`QU(questId, questState)`; its immediate player row `P31` has condition
+`LF(localFlagIndex, expectedValue)`, action `LF(localFlagIndex, newValue)` and a
+positive response whose checked target is NPC `N50`, whose action is
+`RU(rumorId)`. Bounded admission for the proposal: local-flag indices `0..31`,
+LF values `0..1`, QU state `0..6`, RU ids `>=1000` (source-backed domain). A
+positive `P31` response is `Direct(N50)` only after target existence and NPC
+role validation; zero stays `exit`, negative stays `special` (neither is in this
+slice). The probe's `--semantic-slice NPC_ID PLAYER_ID TARGET_NPC_ID` form
+validated such a slice fail-closed (unknown/malformed/out-of-domain operations,
+missing or wrong-role nodes, invalid targets), without state mutation.
+
+Readiness of that research subset: the physical reader is ready for the bounded
+byte-preserving subset (synthetic data plus one opt-in hashed sample, no
+encoding or localization verdict); the LF/QU/RU/direct slice is project design
+plus synthetic evidence, not original-runtime execution. Unknown: runtime
+entry and invocation, dialogue identity, archive precedence, generated dialogue,
+the SCR bridge, text encoding beyond the sampled ASCII observation, localization
+and text substitution.
 
 ## Original read mode (ARC-DATA-017)
 

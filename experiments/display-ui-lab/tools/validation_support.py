@@ -39,7 +39,7 @@ REQUIRED_EVIDENCE = (
 # change. Keep that authority explicit: changes outside this finite set must
 # still fail the Display endpoint hygiene gate.
 AUTHORITATIVE_FULL_CARD_SCOPE = frozenset((
-    ".gitignore", "README.md", "docs/Arcanum.Godot.md", "docs/README.md", "docs/input/display-ui-validation.md",
+    ".gitignore", "README.md", "docs/project/components/Arcanum.Godot.md", "docs/README.md", "docs/input/display-ui-validation.md",
     "docs/project/status.md", "docs/rendering/terrain-viewer.md",
     "docs/workflow/local-development.md", "docs/workflow/toolchain.md",
     "experiments/display-ui-lab/README.md",

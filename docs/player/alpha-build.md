@@ -8,15 +8,15 @@ reimplementation: it opens the launcher and the original main menu, and much of 
 Platforms: **macOS** (Apple silicon and Intel, one universal `.app`) and **Windows 11 x64** (a folder with
 `Arcanum Steamwoven.exe`, delivered as one zip).
 
-Every key and mouse control of the game, grouped by purpose, is in the repository README:
-[Hotkeys](https://github.com/Simarglok/arcanum-steamwoven#hotkeys) (a web link, as this instruction is also copied
+Every key and mouse control of the game, grouped by purpose, is in the repository:
+[Hotkeys](https://github.com/Simarglok/arcanum-steamwoven/blob/main/docs/player/hotkeys.md) (a web link, as this instruction is also copied
 beside the build). The sections below name only the keys of their own steps.
 
 ## 1. Get the build
 
 Both builds are made on the developer's Mac with `./arcanum package mac` and `./arcanum package win`, from `main` or from
-a chosen commit. How to build them, where they land and which commit they come from is in the repository README:
-[How to build the alpha for a player](https://github.com/Simarglok/arcanum-steamwoven#how-to-build-the-alpha-for-a-player)
+a chosen commit. How to build them, where they land and which commit they come from is in the repository:
+[Packaged builds](https://github.com/Simarglok/arcanum-steamwoven/blob/main/docs/workflow/packaging.md)
 (a web link, as this instruction is also copied beside the build as its `README.md`, next to `BUILD.txt`).
 
 **macOS:** copy `Arcanum Steamwoven.app` wherever you like (for example `/Applications`). It is a self-contained app;
@@ -96,7 +96,7 @@ installed elsewhere is found through the registry; if it is not, press **Choose 
   unpacks it, checks that `Arcanum.exe` is the 1.0.7.4 one and chooses the folder (Play stores it). By hand, the same is
   `innoextract --gog -m -d ~/Games/Arcanum setup_arcanum_….exe`, then choose the folder that holds `Arcanum.exe` (for the
   1.0.7.4 installer the files land in the folder root, not in `app`). Tried on 2026-11-04 on the 1.0.7.4 installer
-  ([ARC-RES-087](../research/gog-installer-unpack.md)): the files unpack in seconds with `Arcanum.exe` in the folder
+  ([ARC-RES-087](../workflow/packaging.md)): the files unpack in seconds with `Arcanum.exe` in the folder
   root, game files byte-identical to a real installation. Such a folder has no `data/proto` (the original writes it at its own
   first start, which cannot run on a Mac): the first **Play** builds those files from your own `Arcanum.exe` (about half a minute,
   see below). The map's other first-start files are not built yet, so the first map may still refuse on such a folder.
@@ -116,7 +116,9 @@ On the first start the **launcher** screen opens before the main menu:
    with another executable the screen says so. Your game folder is only read.
 
 To open the launcher again, **hold Shift** while the game starts. **Reset settings** on the launcher forgets the stored
-folder and rules.
+folder and rules. The launcher also has the **HD graphics**, **HD interface** and **HD pack** lines for an HD pack you
+have built or copied yourself (they are not in the Options window); each choice is saved at once, and the pack source
+applies from the next start.
 
 ## 5. Where your settings and saves live
 

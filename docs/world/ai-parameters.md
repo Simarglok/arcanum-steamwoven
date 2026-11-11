@@ -1,7 +1,7 @@
 # AI parameter table (ARC-DATA-033, ARC-WORLD-077)
 
 Status: **Implemented bounded component**, ARC-DATA-033; typed rows by ARC-WORLD-077 (NPC combat AI
-plan slice [I1](../research/npc-combat-ai-plan.md#implementation-slices-proposals-after-the-matching-research)).
+plan slice [I1](../research/npc-combat-ai-plan.md#phase-1-faithful-reconstruction)).
 `Arcanum.Data.Characters.AiParameterTable` reads the original's AI parameter table from the content
 stack, as the retail executable builds it
 ([ledger AP1, AP2, AP6](../research/ledger/npc-ai.md#ai-parameters-and-follow-consent-arc-data-033)).

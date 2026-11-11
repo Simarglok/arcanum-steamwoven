@@ -200,7 +200,7 @@ while a book is in the hero's pack the discipline's expertise is higher by the h
   list keep their 64.
 - **Not ready.** Taking a book out of the pack by a path that runs no removal (a drop, a sale, a gift, a theft, the placed-item pickup) is still refused
   where it was ([above](#item-events-arc-script-041)), so a book's effects end only with the grid move above; where the books lie in the world is not
-  read ([RES-115](../research/technology-census-res-115.md)).
+  read ([RES-115](../research/technology-evidence.md)).
 
 ## Dialog seam
 
@@ -624,7 +624,7 @@ rings stay out. Code: [`GameSessionAmmo`](../../src/Arcanum.Session/GameSessionA
 ## NPC gold and transfers (ARC-WORLD-071)
 
 NPC gold as counted piles and the moves between the hero and an NPC that pick pocket (task S15 of the
-[skills plan](../research/skills-plan.md)) and the barter window (ARC-UI-050) share, read in the executable
+skills plan) and the barter window (ARC-UI-050) share, read in the executable
 ([ledger NT1–NT4](../research/ledger/items.md#npc-gold-and-transfers-arc-world-071), with AM1–AM5). No prices and no skill:
 the caller decides how many coins or units move. Code: [`GameSessionNpcTransfer`](../../src/Arcanum.Session/GameSessionNpcTransfer.cs);
 tests [`NpcTransferStateTests`](../../tests/Arcanum.Session.Tests/NpcTransferStateTests.cs). Snapshot schema 39.

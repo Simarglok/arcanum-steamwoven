@@ -1,7 +1,7 @@
 # NPC AI support and magic: heal, spells, lists, items and grenades (ARC-WORLD-088)
 
 Status: **Implemented bounded component**, ARC-WORLD-088, NPC combat AI plan slice
-[I8](../research/npc-combat-ai-plan.md#implementation-slices-proposals-after-the-matching-research) (its decision half; the goals the
+[I8](../research/npc-combat-ai-plan.md#phase-1-faithful-reconstruction) (its decision half; the goals the
 decisions start are slice I8b, owner decision 2026-10-28). How the retail 1.0.7.4 executable decides whom an NPC heals and with
 what, which spell or magick item it uses in a fight, how its ten action lists are built, sorted and cached, why an entry is
 refused, when it picks items up from the ground, when it throws a grenade, and whom a spell's AI redirect turns

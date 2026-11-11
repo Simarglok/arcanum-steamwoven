@@ -60,7 +60,55 @@ public sealed partial class SessionSpellCaster
         Act(new(SessionSpellRunActionKind.ClearSources, Object: item));
         return new(SessionTrapDeviceOutcome.Placed, plan, placed.Marker);
     }
+
+    /// <summary>
+    /// ARC-WORLD-125 (E6-c, ledger IA13, TP2): the hero's use of the script trap device <paramref name="item"/> (slot 1 empty) on <paramref name="target"/> (the object form, 0x4BC2E0: a portal or a container whose
+    /// use slot is empty takes it; a wall takes the tile form) or on the tile <paramref name="tile"/> (0x4BC480; <paramref name="trapObjectOnTile"/>: the map data holds a trap object there, which with a script trap
+    /// marker of the session refuses it). <paramref name="script"/> is the device's own use slot and <paramref name="kind"/> its trap class from the script file's header (<see cref="TrapRules.Classify"/>): they
+    /// choose the marker. The refusals keep the device and answer the line of <c>mes\trap.mes</c> the player gets (2 or 3); an armed trap is <see cref="GameSessionOwner.PlaceScriptTrapDevice"/>.
+    /// </summary>
+    public SessionScriptTrapUse UseScriptTrapDevice(string item, SessionTrapScript script, TrapClass kind, SpellLocation tile, SessionScriptTrapTarget? target, bool trapObjectOnTile)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        var onTile = target is null or { Type: TrapDeviceRules.ObjectTypeWall };
+        if (Item(item) is not { Holder: Hero } spells || spells.Spells.Count <= TrapDeviceRules.SpellSlot) return new(SessionScriptTrapOutcome.Unknown, default);
+        if (TrapDeviceRules.Plan(spells.Spells[TrapDeviceRules.SpellSlot], onTile).Kind != TrapDeviceKind.Script) return new(SessionScriptTrapOutcome.Invalid, default);
+        var map = _owner.QueryActor().Map;
+        var cell = new Arcanum.Simulation.Movement.CellCoord(checked((int)tile.X), checked((int)tile.Y));
+        var plan = onTile
+            ? TrapDeviceRules.ScriptOnTile(trapObjectOnTile || _owner.QueryScriptTrapMarkers(map, cell).Count > 0, script.Script, kind)
+            : TrapDeviceRules.ScriptOnObject(target!.Type, target.UseScript);
+        if (!plan.Armed) return new(plan.RefusalLine == TrapDeviceRules.TargetRefusedLine ? SessionScriptTrapOutcome.TargetRefused : SessionScriptTrapOutcome.TileRefused, plan);
+        var placed = _owner.PlaceScriptTrapDevice(_owner.Version, item, map, cell, onTile ? null : target!.Entity, script, plan.MarkerPrototype);
+        if (placed.Disposition != GameSessionDisposition.Changed) return new(SessionScriptTrapOutcome.Refused, plan, null, null, placed.Failure);
+        Act(new(SessionSpellRunActionKind.ClearSources, Object: item));
+        return new(SessionScriptTrapOutcome.Armed, plan, placed.Marker, placed.Target);
+    }
 }
+
+/// <summary>The object a script trap device is used on, as the host reads it: its entity, object type (field 0x14F: 0 wall, 1 portal, 2 container) and the use script now in its slot 1 (0 for none).</summary>
+public sealed record SessionScriptTrapTarget(string Entity, int Type, int UseScript);
+
+/// <summary>What <see cref="SessionSpellCaster.UseScriptTrapDevice"/> did.</summary>
+public enum SessionScriptTrapOutcome
+{
+    /// <summary>The item is not a carried device of the hero's.</summary>
+    Unknown,
+    /// <summary>Slot 1 holds a spell (a timed device, <see cref="SessionSpellCaster.UseTrapDevice"/>) or a number no record has: nothing happens.</summary>
+    Invalid,
+    /// <summary>The target takes no script trap (not a portal or container, or it holds a script): the device stays, <c>mes\trap.mes</c> line 2.</summary>
+    TargetRefused,
+    /// <summary>The tile holds a trap object already: the device stays, <c>mes\trap.mes</c> line 3.</summary>
+    TileRefused,
+    /// <summary>The script is written on the target or on a marker made at the tile and the device is destroyed.</summary>
+    Armed,
+    /// <summary>The session refused (<see cref="SessionScriptTrapUse.Failure"/>): the device stays.</summary>
+    Refused,
+}
+
+/// <summary>The outcome of one script trap device use: what happened, the plan, the marker made on a tile, the armed target object and the session's refusal.</summary>
+public sealed record SessionScriptTrapUse(SessionScriptTrapOutcome Outcome, ScriptTrapPlan Plan, SessionCreatedObject? Marker = null, string? Target = null, GameSessionFailure Failure = GameSessionFailure.None);
+
 
 /// <summary>What <see cref="SessionSpellCaster.UseTrapDevice"/> did.</summary>
 public enum SessionTrapDeviceOutcome

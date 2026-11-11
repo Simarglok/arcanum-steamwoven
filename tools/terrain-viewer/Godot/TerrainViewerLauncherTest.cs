@@ -240,13 +240,60 @@ public partial class TerrainViewerApp
         _launcherPanel.ResetForSelfTest();
         Require(LauncherSettingsFile.Load(settingsPath) is { Status: LauncherSettingsReadStatus.Read } reset && reset.Settings == LauncherSettings.Defaults
                 && Lines()[5] == "Settings reset to the defaults.", "Reset wrote the defaults over it: " + Lines()[5]);
+
+        // ARC-UI-143: the HD lines on the launcher: defaults off/off/Auto, each choice saved at once in the settings files the
+        // start reads, shown again by the next launcher, Custom's folder, and Reset leaving them alone.
+        var hdFolder = System.IO.Directory.CreateDirectory(System.IO.Path.Combine(directory, "hd")).FullName;
+        var gameSettingsPath = System.IO.Path.Combine(hdFolder, "game_settings_v1.json");
+        var visualPath = System.IO.Path.Combine(hdFolder, "visual_profile_v1.json");
+        OS.SetEnvironment(GameSettingsStore.TestVariable, gameSettingsPath);
+        OS.SetEnvironment(VisualProfileSettingsStore.TestVariable, visualPath);
+        (_gameSettingsStore, _visualStore, _gameSettings, _launcherHdProfile) = (null, null, AreaGameSettings.Defaults, VisualProfile.Legacy);
+        try
+        {
+            string[] HdLines() => [.. Lines()[8..11]];
+            await Start(true);
+            Require(HdLines().SequenceEqual(["HD graphics: Off", "HD interface: Off", "HD pack: Auto"]) && _launcherPanel.HdEnabledForSelfTest, "the HD lines default to Off, Off, Auto: " + string.Join(" | ", HdLines()));
+            _launcherPanel.HdGraphicsForSelfTest(true);
+            _launcherPanel.HdInterfaceForSelfTest(1);
+            _launcherPanel.HdPackForSelfTest(HdPackSourceMode.GameFolder);
+            Require(HdLines().SequenceEqual(["HD graphics: On", "HD interface: On", "HD pack: Game"]), "the choices show: " + string.Join(" | ", HdLines()));
+            Require(new VisualProfileSettingsStore(false).Load() == VisualProfile.Hd
+                    && new GameSettingsStore(false).Load() is { HdInterface: true, GeneratedInterface: false, HdPackSource: HdPackSourceMode.GameFolder }, "each choice was saved at once in the options window's files");
+            _launcherPanel.HdInterfaceForSelfTest(2);
+            Require(Lines()[9] == "HD interface: Generated (experimental)" && new GameSettingsStore(false).Load() is { HdInterface: true, GeneratedInterface: true }, "the generated interface is the third choice");
+            // The next launcher shows what was saved, and the start's own reading finds the same values.
+            (_gameSettings, _launcherHdProfile) = (AreaGameSettings.Defaults, VisualProfile.Legacy);
+            await Start(true);
+            Require(HdLines().SequenceEqual(["HD graphics: On", "HD interface: Generated (experimental)", "HD pack: Game"]), "the next launcher shows the saved choices: " + string.Join(" | ", HdLines()));
+            ConfigureGameSettings();
+            Require(_gameSettings is { HdInterface: true, GeneratedInterface: true, HdPackSource: HdPackSourceMode.GameFolder } && new VisualProfileSettingsStore(false).Load() == VisualProfile.Hd, "the start reads the launcher's choices");
+            // Custom asks for a folder: with no dialog (an automated run) the note names the setting; the chosen folder is saved with the source.
+            _launcherPanel.HdPackForSelfTest(HdPackSourceMode.Custom);
+            Require(Lines()[11].Contains("no folder dialog here", StringComparison.Ordinal), "Custom without a dialog names the setting: " + Lines()[11]);
+            LauncherHdPackFolderForSelfTest(hdFolder);
+            Require(new GameSettingsStore(false).Load() is { HdPackSource: HdPackSourceMode.Custom, HdPackPath: { } custom } && custom == hdFolder && Lines()[10] == "HD pack: Custom", "the chosen folder is saved with Custom");
+            LauncherHdPackFolderForSelfTest(System.IO.Path.Combine(hdFolder, "missing"));
+            Require(Lines()[11].EndsWith("| that folder cannot be used", StringComparison.Ordinal) && new GameSettingsStore(false).Load().HdPackPath == hdFolder, "a missing folder is refused and the saved one stays");
+            _launcherPanel.HdGraphicsForSelfTest(false);
+            Require(new VisualProfileSettingsStore(false).Load() == VisualProfile.Legacy && Lines()[8] == "HD graphics: Off", "HD graphics Off is saved");
+            // Reset settings leaves the HD lines alone.
+            var before = HdLines();
+            _launcherPanel.ResetForSelfTest();
+            Require(HdLines().SequenceEqual(before) && new GameSettingsStore(false).Load().HdPackSource == HdPackSourceMode.Custom, "Reset leaves the HD lines alone");
+        }
+        finally
+        {
+            OS.UnsetEnvironment(GameSettingsStore.TestVariable); OS.UnsetEnvironment(VisualProfileSettingsStore.TestVariable);
+            (_gameSettingsStore, _visualStore, _gameSettings, _launcherHdProfile) = (null, null, AreaGameSettings.Defaults, VisualProfile.Legacy);
+        }
         _launcher = null; _launcherPanel.CloseView();
         _launcherProvisionForSelfTest = null;
         PrototypeCacheMount.Use(null);
         return "first run without a folder, a non-game folder in words, Play storing folder/identity/Original/show at start, show at start "
                + "reopening it, a stored folder going straight on, --launcher, the Rules line writing the file, the GOG installer unpacked by a stand-in "
                + "tool (no tool, progress lock, chosen folder, used folder refused, cancel), the game data prepared on the first Play (progress, cancel, refusal, "
-               + "cached, a stored folder), Reset over a newer build's file";
+               + "cached, a stored folder), Reset over a newer build's file, the HD lines (saved at once in the settings files, shown again, Custom's folder, Reset leaves them)";
     }
 
     /// <summary>ARC-UI-014 native smoke: the launcher a start without inputs opened (run with <c>--launcher</c>, or a first run), over the
@@ -272,6 +319,19 @@ public partial class TerrainViewerApp
             panel.ShowAtStartForSelfTest(false);
             var lines = panel.LinesForSelfTest.ToArray();
             Require(panel.PlayEnabledForSelfTest && lines[3] == "Rules: Steamwoven [Original]" && lines[4] == "Show at every start: off", "choices: " + string.Join(" | ", lines));
+            // ARC-UI-143: the HD lines are on the screen (their saved values are not touched in an automated run).
+            var hdLines = panel.LinesForSelfTest.Skip(8).Take(3).ToArray();
+            Require(hdLines.Length == 3 && hdLines[0].StartsWith("HD graphics: ", StringComparison.Ordinal) && hdLines[1].StartsWith("HD interface: ", StringComparison.Ordinal)
+                    && hdLines[2].StartsWith("HD pack: ", StringComparison.Ordinal), "the HD lines: " + string.Join(" | ", hdLines));
+            // The screenshot of the launcher itself, when the run asks for one (the end of the smoke has its own).
+            if (_nativeSmokeScreenshot is { } shot)
+            {
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                var full = System.IO.Path.GetFullPath(System.IO.Path.ChangeExtension(shot, null) + "-launcher.png");
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(full)!);
+                using var image = GetViewport().GetTexture().GetImage();
+                Require(image is not null && image.SavePng(full) == Error.Ok, "the launcher screenshot was not written");
+            }
             _prepareTask = null;
             panel.PlayForSelfTest();
             if (_prepareTask is { } preparing) await preparing;
@@ -281,7 +341,7 @@ public partial class TerrainViewerApp
                 Require(LauncherSettingsFile.Load(path).Settings is { Rules: RuleMode.Original, ShowAtStart: false } stored && stored.GameRoot == _launcherSettings.GameRoot,
                     "Play stored the folder and Original");
             GD.Print("ARC-UI-014 native-smoke launcher PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Lines = lines[..3], Rules = RuleModeNames.Name(_ruleMode), Stored = path is not null }));
+                Lines = lines[..3], Hd = hdLines, Rules = RuleModeNames.Name(_ruleMode), Stored = path is not null }));
         }
         catch (InvalidOperationException error)
         {

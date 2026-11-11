@@ -24,8 +24,7 @@ such.
 ## Frozen input and byte boundary
 
 The input remains the R3 module described in
-[crash-site-slice.md](crash-site-slice.md) and
-[crash-site-evidence.md](crash-site-evidence.md):
+[crash-site-framing.md](crash-site-framing.md):
 
 | Field | Value |
 | --- | --- |
@@ -256,45 +255,6 @@ inspected DAT/PATCH, a discovered duplicate, or a discovered loose candidate as
 the cause of the historical 457 misses; they do **not** establish general
 module/PATCH/loose-file precedence.
 
-## Historical R1 anchor-only boundary (superseded by R2 below)
-
-`location_xy` (0x4B8680) maps a world cell in isometric view as:
-
-```text
-screenX = originX + 40 * (worldY - worldX - 1)
-screenY = originY + 20 * (worldY + worldX)
-```
-
-After cancelling the caller-controlled origin and the shared `-1` constant,
-sector-relative points are:
-
-```text
-relativeX = 40 * (localY - localX)
-relativeY = 20 * (localY + localX)
-```
-
-The probe checks `(0,0) -> (0,0)`, `(1,0) -> (-40,20)`, `(0,1) -> (40,20)`,
-and R3's start offset `(30,32) -> (80,1240)`.
-
-The concrete draw call sites establish the cell anchor but not a standalone
-C# baseline formula. The isometric tile draw under `tile_draw` (0x4D6950)
-assigns the packed ID, uses the projected location, and starts the tile
-rectangle at `(centerX + 1, centerY)`. `facade_draw` (0x4C9E70)
-uses `location_xy` for each facade cell, offsets its isometric tile rectangle
-by one X pixel, and passes it to the ART blit. The ART library then
-loads selected `hot_x`, `hot_y`, `offset_x`, and `offset_y` frame metadata in
-`tig_art_frame_data`. The functions inspected here do not
-supply a small independent formula that reduces the later renderer's blit
-geometry to `ArtDecoder` metadata alone. Therefore:
-
-* confirmed: relative projected cell anchors, `+1` X anchor adjustment,
-  type-specific selected frame, and the metadata fields routed to the renderer;
-* historical R1 limitation, now superseded by the R2 diagnostic rule below:
-  a C# draw rectangle/baseline transform, crop rule, palette lighting behavior,
-  or facade-vs-tile overlap ordering was not then confirmed;
-* deliberately not claimed: static-scenery occlusion. It still depends on the
-  unresolved selected-retail object envelope and object ART/baseline evidence.
-
 ## R2 renderer-independent tile/facade placement specification
 
 This diagnostic specification is an earlier source reading (F0), cited by
@@ -349,49 +309,54 @@ The real-data run
 uses the same calculation for every representative and reports footprint,
 source, destination, and raw-ID flip state.
 
-## Fixed-source terrain-only loader contract and future implementation
+## Source fingerprints and bounded inventory scope
 
-**Fixed-source terrain-only loader contract: READY.** The frozen sector's
-caller-supplied immutable module and explicit one-source resource archive have
-complete 4,096-cell resolution, selected-frame validation, and diagnostic
-placement evidence. The accepted output is terrain-only and preserves the
-framed object suffix as opaque; it does not infer general archive or loose-file
-precedence.
+Sources of the ARC-RES-004 correction (the retired evidence ledger, carried
+here). Original data was read only; the repository holds no extracted bytes,
+asset names, previews, installation paths or credentials.
 
-**Terrain scene: NOT READY.** Production/Godot scene and renderer integration,
-lighting/palette treatment, camera/dirty-rectangle policy, normal-runtime
-facade intent, and measured presentation comparison remain absent.
+| Source | Identifier | Use | Status / limit |
+| --- | --- | --- | --- |
+| Module archive | `Arcanum.dat`, 355,938,305 bytes, SHA-256 `8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f` | exact map and sector selectors | experimentally verified local input; not a retail-canonical or precedence claim |
+| Resource archive | `arcanum2.dat`, 147,991,122 bytes, SHA-256 `4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d` | the one explicit terrain lookup source | same limit |
+| Installed-source inventory | `arcanum1.dat` `6dd9d10ef0932e02fc88f0eb5367b1bc37275db51d60bd68ac9bd7ef2d478576`; `arcanum3.dat` `cbadd76bb3df798fa25dcc05871af1ea751c1164fb1426dccc520cd7d9edc499`; `Arcanum4.dat` `975d43854fca8b7dd74e2b12ef2ff3fe6d3c0f99dc541151d33001469f89710c`; `tig.dat` `c9b48eb6396c514eba3805fb4847df67db3c67ef9f13a79ea21bbf7dd329a09b`; `Vormantown.dat` `163a9560ad7d684f486167bf91ad6da0fdef8bd7fd1082fc054084611da04345`; `Arcanum.PATCH0` `d9a3313f71d78115dcac489296bf3d8a5801dd55b20267bd6017b7a898364bce` | duplicate check for the 220 corrected and 86 historical paths | all eight fingerprints matched before and after; no precedence policy inferred |
+| Loose-ART check | the installation's ART root, `data` and `modules` | direct generated-path check | all three roots existed, none held a candidate; no recursive scan or loose-file policy inferred |
+| Project code | `src/Arcanum.Data/DatArchive.cs`, `ArtDecoder.cs` | bounded DAT opening and selected-frame decode | independently authored; no scene-parity or precedence claim |
+| Earlier source reading | sector (0x4CEF70-0x4D31C0), location (0x4B8440-0x4B99C0), name (0x41CA40-0x41F240, 0x4EAC80-0x4ED440) and ART-identifier functions | sector sequence, coordinate packing, isometric relation, ART-ID context | level F0, not independent corroboration |
+| Community catalogue | preserved toolkit metadata | Crash Site context | reported only; not byte-level map proof |
 
-**Static-object diagnostic: READY; static scenery scene: NOT READY.**
-ARC-RES-007 establishes the selected-v119 type-3/static predicate,
-current-ART/prototype chain, and five bounded ART metadata examples. Baseline,
-placement, occlusion, and static-scene ordering remain absent.
+## Corrected boundary and remaining probe limits
 
-A future implementation task may build the ready narrow contract; it is not
-authorized by this research result.
+`Arcanum.CrashSiteProbe` reuses `DatArchive`, caps the selected entry at 1 MiB
+and validates arithmetic before each count-dependent region. On the frozen input
+it frames zero lights, the 4,096-word table, the roof and all enabled
+intermediate sections, then the object window `17140..47287` with terminal
+count at `47287..47291` (the `1` at `16388` is a roof discriminator; see
+[crash-site-framing.md](crash-site-framing.md)). Its v119 delimiter is framing
+evidence, not an object model or scenery classifier.
 
-A separate implementation task may accept only a caller-supplied, immutable
-module plus an explicitly ordered resource source set. It must:
+`Arcanum.TerrainProbe` supports only the observed tile/facade classes and an
+explicit one-archive source set. It pins and reports both source fingerprints,
+verifies them again after the read-only run, and applies source-attributed MES
+callback rules including the tile normalization that clears palette and low flag
+bits before filename construction. It rejects malformed MES, requires tile keys
+`0`, `100`, `200`, `300`, `400`, rejects facade tables outside 1-511 entries or
+without exact key `0`, requires one exact raw-path candidate, and uses
+`DatArchive` plus `ArtDecoder` for a selected bounded entry/frame. Unsupported
+classes, missing or duplicate candidates, invalid selectors and unresolved
+lookups fail closed; no fallback path or generic precedence is inferred.
 
-1. validate the frozen selector/fingerprint, light prefix, 4,096-word bounds,
-   and x-major ordinal mapping;
-2. classify only packed tile/facade words, reject every other class, and retain
-   unresolved lookup as an error record rather than an image fallback;
-3. initialize the bounded MES-derived tables, apply the F0 packed
-   field and normalized lookup rules, and require exactly one candidate under
-   the chosen source policy;
-4. use `DatArchive` and `ArtDecoder` for any approved bounded ART entry,
-   retaining the physical group/frame/palette selection separately from ART
-   metadata; and
-5. expose the bounded diagnostic footprint/source/destination/flip record and
-   mode-qualified terrain order, retaining hotspot/offset metadata as evidence
-   rather than applying a viewer baseline.
+The probe's pathname comparison is the non-Windows/macOS branch (lowercasing and
+backslash-to-slash); Windows behavior was not claimed. The bounded one-source
+resolver covers all 4,096 records only for the recorded explicit source: it
+establishes neither a general resource-precedence policy nor a complete rendered
+sector. The location formula comes from an earlier source reading of
+`location_xy` (0x4B8680, F0); the numeric synthetic checks verify its relative
+arithmetic only, not visual parity.
 
-For the present R3 source set, resource lookup can expose all 4,096 records
-with explicit source identity and selected-frame validation. The R2 rule permits
-a bounded diagnostic terrain record, but not a complete terrain scene: lighting,
-palette treatment, camera/dirty-rectangle policy, runtime facade intent, and
-renderer parity remain separate evidence.
+The terrain-only loader contract built on this evidence is
+[terrain-loader.md](../world/terrain-loader.md); the readiness verdicts are in
+[crash-site-framing.md](crash-site-framing.md#separate-readiness-verdicts).
 
 ## Remaining blockers
 

@@ -7,8 +7,8 @@ Status: **research only, 2026-11-07; U3 (redraw + fit) run on the owner's 12 red
 Goal: an HD interface for any screen resolution. [ARC-RES-093](../research/screen-size-and-ui-layout.md) settled the
 layout (UI in 800 × 600 "UI units" at UI scale `s`, blocks anchored to screen edges, strips centred with tiled sides).
 This note asks how interface art gets more detail than the 1× original without moving a pixel of its geometry. It
-follows [HD alternatives](hd-alternatives.md) (ARC-RES-053), [generative re-detailing](hd-generative-redetail.md)
-(ARC-RES-038) and [upscale research](hd-upscale-research.md) (ARC-RES-033), which did not cover interface art.
+follows the closed HD alternatives (ARC-RES-053) and generative re-detailing (ARC-RES-038) notes (removed; their rules
+are under [Methods](#methods-32)) and [upscale research](hd-upscale-research.md) (ARC-RES-033), which did not cover interface art.
 
 No original or derived image, crop, sheet, weight or harness file is in this repository or its PR. Everything stayed
 under the ignored `local/` of the owner's Mac (the sheets are in `local/res094/sheets/` of the main checkout). The
@@ -109,6 +109,21 @@ Same inputs for every method: the decoded RGBA at slot 0.
 | U2 | U1 with edge decontamination (the bleed starts one pixel inside the silhouette: the ring is replaced from the interior; the frame border counts as interior) and a coarse colour lock (the chroma error blurred over one source pixel, two iterations) | smooth alpha | run |
 | U3 | redraw + fit (external redraw, registration, luma and coarse colour lock, Legacy alpha with an anti-aliased edge and exact holes, repeated-part step) | Legacy | **run** on the owner's 12 redraws (OpenAI's built-in image generator, in the owner's own account; no local generator, ARC-RES-053); the repeated-part step and a local warp not run; the lock is U2's (U3) or coarse (U3c); [results below](#u3-results-the-owners-redraws) |
 | U4 | tileable side pieces of the 9-slice, cut from U1/U2 | n/a | run on the strips (below) |
+
+Rules of the U1/U2 methods (defined in the closed ARC-RES-038 and ARC-RES-053 notes, whose models the owner rejected;
+history in git):
+
+- **Smooth alpha.** The binary Legacy mask, nearest ×4, Gaussian blur with σ = 3.2 output px, then the linear ramp
+  `clip((b − 0.5) · 3 + 0.5)`. It removes the 4-px staircase of the nearest mask and keeps the silhouette's position:
+  no pixel with α > 0 lies outside one Legacy texel of the Legacy silhouette (checked on the five statics and 50 walk
+  frames, with the pack format's exact `soft` rule).
+- **Shading lock.** Iterative back-projection on luminance: downsample the 4× result to source size by an
+  alpha-weighted 4×4 box, take the per-pixel Rec. 601 luma error against the original on opaque source pixels,
+  upsample that error bicubically (after bleeding it into the transparent area), add it to all three channels; four
+  iterations. It keeps the network's own high-frequency detail and colour but forces its low-frequency light and shadow
+  back to the original's (luma MAE about 0.1 by construction; at most 0.3 s a frame on the CPU).
+- **Colour bleed.** Opaque colours spread 12 px into the transparent area by repeated 8-neighbour averaging, the rest
+  filled with the mean opaque colour.
 
 The Legacy-alpha variant of U1/U2 is the same RGB with the Legacy alpha (the pack's `legacy` mode); it is not a fifth
 method. Its alpha, hole and key results are exact by construction. Its colour metrics were re-measured on the whole
@@ -350,7 +365,7 @@ it is still the only measured method; no row has passed the formal gates for U3 
 | gauges (vials, bars) | **U3** (owner's choice; vials: set B is the crisper redraw; round 1: 98 % of blocks within 1 UI px); U2 is the fallback | `legacy` | (U2 numbers) colour lock matters (ΔE 3.2 → 1.1) | the 15 vial frames: only frame 0 is drawn (PA1); flicker across frames not measured |
 | icons | **U3** (owner's choice; small ammunition icons from sheet 13, fit within 0.8 UI px); the round 1 icons failed on content; U2 is the fallback | `legacy` | (U2 numbers) IoU 0.998 | U3 icon gates; the full icon set beyond sheet 13 is not redrawn |
 | cursors | **U0**, not in the pack, or a hand-drawn redraw | `legacy` | 24 × 27 px; smooth alpha IoU 0.904; ΔE 9–10 | hot points are integer UI px (CU4) |
-| fonts | not redrawn: **traced** from the Legacy coverage masks into 4× coverage frames ([font vectorization](../research/font-vectorization.md), ARC-DEV-355; `masked` entries, ARC-DEV-361) | `masked` | the glyphs are 4-bit coverage masks, so a deterministic trace replaces the redraw; layout stays the original's | the owner's look in the windows (slice 3 of the research); the 6 to 9 px fonts; the other 23 fonts |
+| fonts | not redrawn: **traced** from the Legacy coverage masks into 4× coverage frames ([font vectorization](../workflow/hd-font.md), ARC-DEV-355; `masked` entries, ARC-DEV-361) | `masked` | the glyphs are 4-bit coverage masks, so a deterministic trace replaces the redraw; layout stays the original's | the owner's look in the windows (slice 3 of the research); the 6 to 9 px fonts; the other 23 fonts |
 
 U1 alone is not recommended anywhere: U2 improves ΔE on every kind (cursors excepted, where neither is recommended)
 but trades a little luma MAE and sharpness on a few arts (`IntTop`: luma MAE 0.49 against 0.32, sharpness 0.73 against
@@ -410,7 +425,7 @@ No model was trained; no weight is added to the repository. Generated frames are
 - The ΔE and sharpness values depend on the Real-ESRGAN output of one GPU (M4 Pro); cross-GPU bit-exactness is not
   established (ARC-RES-033).
 - Seams are measured on the Legacy frames' columns; no 21:9 repeat metric exists beyond the mock-up.
-- Fonts (the bitmap arts 27, 229, 171, 327; see [font vectorization](../research/font-vectorization.md),
+- Fonts (the bitmap arts 27, 229, 171, 327; see [font vectorization](../workflow/hd-font.md),
   ARC-RES-100; their traced frames and the viewer's drawing of them are ARC-DEV-361), a scaling and anchoring layer, pack format changes, renderer changes,
   the build tool ARC-DEV-003 and the second Mac are outside this task.
 
@@ -429,6 +444,18 @@ multiplied by alpha before upload; the pack, mask, Legacy size, hit rectangles
 and art-font material stay unchanged. Other interface canvases keep their
 existing straight-alpha path. This is independent of ARC-UI-111 edge smoothing
 and ARC-UI-112 filtering.
+
+### Dialog box, menus and pre-made browser (ARC-UI-144)
+
+The same hazard stood on more canvases: the dialog box (the quit and death-load questions), the main menu's art views (menus, options controls), the
+pre-made browser, new-character and opening-shop windows, and the schematic window's slot pictures. These canvases are prepared by `AreaArtTextDraw.Prepare` (premultiplied-alpha
+material), but their art was built with the straight-alpha texture, so with the HD interface on the colour of the transparent texels of the round Accept and
+Cancel buttons (and of every other frame with transparent HD texels) was added to the background: a square behind each round button (report
+`2026-11-11_22-22-57`, "such squares were already fixed"). Their art is now built with `InterfaceHd.Texture(frame, premultipliedAlpha: true)`
+(`PremultipliedTexture` beside `HotkeyTexture`; the schematic slot pictures too), and `AreaShopArtView`, which shares the pre-made art's textures, prepares its canvas too. The rule of
+ARC-UI-126 stands: **every texture on a prepared canvas is the premultiplied variant, and every canvas that takes them is prepared.** The native
+self-test checks that the five art canvases are premultiplied; `ARC_AREA_DEATH_HD_VERIFY=1` runs the `death` stage with the HD interface switch on for a
+native look: `./arcanum smoke pr --stages death --env ARC_HD_PACK=<pack> --env ARC_AREA_DEATH_HD_VERIFY=1 --env ARC_AREA_DEATH_CAPTURE=<local png>`.
 
 Unavailable spell icons retain the HD texture wrapper when greyed. Each active
 frame uses the existing .299/.587/.114 luminance formula; the wrapper retains the
@@ -470,7 +497,7 @@ with `./arcanum smoke pr --stages bar --main-menu` and pass those variables
 with `--env`. Keep real packs and readbacks local.
 
 The local art, checks and installation of this strip and of the later local repairs (Phantasm, spell slots, Combat centring,
-Fate Points ring) are recorded in [HD interface local repairs](../verification/hd-interface-local-repairs.md).
+Fate Points ring) were done in the owner's ignored local folder and are not recorded in git; the pack's storage, backup and rollback are in the [HD pack workflow](../workflow/hd-pack.md).
 
 ## World map window (ARC-UI-126)
 

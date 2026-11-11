@@ -101,7 +101,7 @@ height, hotspot, camera pan and zoom do not enter this ordering.
 
 Equal-rank deterministic identity tie-breaks are project policy, not recovered
 retail insertion order. The historical five-only
-[static scenery diagnostic](static-scenery-contract.md)'s
+[static scenery diagnostic](../research/scenery-placement.md)'s
 `(anchorY,anchorX,sourceIndex)` is not the area's universal order.
 
 The normal diagnostic observer does not detect invisibility. Inventory insertion
@@ -127,7 +127,12 @@ raster origin a decimated chunk keeps only the texels that zoom samples. If the
 plan does not admit chunks, or the visible chunks would exceed 192 MiB or 1,024
 textures, terrain is drawn per command as before. Visibility, culling counts,
 coverage and pixel observation still use the per-command list. The
-[draw-call research](../research/area-draw-calls.md) has the proof.
+proof of exactness: for a 1:1 item at integer destination `d` and zoom `z` the nearest rule selects source
+index `floor((s + 1/2 - o) / z) - d` for screen pixel `s`, so every 1:1 item samples the same world texel `W = floor((s + 1/2 - o) / z)` and owns the
+pixel exactly when `W` lies in its destination; with only binary alpha and painter order the pixel shows the last terrain command whose texel at `W`
+is opaque, which is what a chunk composed on the CPU in the same order holds at `W`, and adjacent chunks partition the world texels, so seams add or
+drop nothing. At zoom `2^-k` with an integer origin `W` is congruent to `2^(k-1)` modulo `2^k` for every pixel, whatever the pan, so a decimated
+chunk that keeps only those texels, drawn at `2^k` times its size, selects exactly them; other (continuous) zooms need the full chunk.
 
 ## Resource ownership and reports
 
@@ -384,7 +389,7 @@ Resident size is recorded, not bounded, because freed runtime/driver pages need
 not return to the system. One full original load currently takes
 about 22 seconds in a Debug source run and 12–13 seconds in the release export on
 the development Mac (see the
-[performance review](../research/area-performance-review.md)); one
+the 2026-10 performance review, deleted; its figures are kept here); one
 replacement is measured, well within the 900-second validator bound. Process
 figures are measured observations, not a memory guarantee. `area_validate.py` keeps only the
 scalar summary in the safe receipt; the raw report stays in private evidence.

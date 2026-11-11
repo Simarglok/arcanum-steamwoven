@@ -229,9 +229,11 @@ public partial class AreaMainMenuPanel : CanvasLayer
     /// shop's kit (ARC-UI-036, shop only). ARC-UI-066: <paramref name="browsed"/> is the browsed hero in the browser's art (null keeps
     /// the diagnostic window) with its large <paramref name="portrait"/>. ARC-UI-068: <paramref name="created"/> is the new character in
     /// its window's art (null keeps the diagnostic window), with the same portrait. ARC-UI-069: <paramref name="shopArt"/>, the opening shop
-    /// in its art (its barter window shows the original look docked over it).</summary>
+    /// in its art (its barter window shows the original look docked over it). ARC-UI-147: <paramref name="editorArt"/>, the character editor
+    /// (window 14) in the original's look: its strips and Accept and Back buttons are the shop's (same table, CM2, MW30) under the character sheet's
+    /// original look, which the editor's own panel draws between them.</summary>
     public void Render(AreaMainMenu menu, string hero, AreaPremadeBrowserView? browsed = null, Texture2D? portrait = null, AreaNewCharacterView? created = null,
-        bool shopArt = false)
+        bool shopArt = false, bool editorArt = false)
     {
         ArgumentNullException.ThrowIfNull(menu);
         Show();
@@ -267,7 +269,8 @@ public partial class AreaMainMenuPanel : CanvasLayer
         if (newCharacter) _newCharacterArt.Render(created!, portrait, menu.Focus);
         else _newCharacterArt.CloseView();
         art |= newCharacter;
-        var shopWindow = shopping && shopArt && _shopArt.ArtSet;
+        var editing = menu.Window == AreaMenuWindow.CharacterEditor && !quitPanel;
+        var shopWindow = (shopping && shopArt || editing && editorArt) && _shopArt.ArtSet;
         if (shopWindow) _shopArt.Render(menu.Focus);
         else _shopArt.CloseView();
         art |= shopWindow;

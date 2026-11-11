@@ -73,7 +73,7 @@ archive bytes, and sampled colours are deliberately not shown.
 ### Start without inputs (ARC-DEV-046)
 
 Started with no viewer arguments (a player's build; `--native-smoke`, its screenshot option and `--launcher` alone also count), the
-viewer reads the launcher settings `user://launcher_v1.json` ([research](../research/launcher-settings.md#configuration-file);
+viewer reads the launcher settings `user://launcher_v1.json` (research (deleted);
 `LAUNCHER_SETTINGS_TEST_PATH` names another file, and an automated run without it has no file). It opens the stored
 game folder while `GameFolderLocator.Check` finds it ready, else the first ready fixed candidate (Windows: the GOG
 registry key `HKLM\SOFTWARE\WOW6432Node\GOG.com\Games\1207658829` and its 64-bit twin, `C:\GOG Games\Arcanum`, the GOG
@@ -92,7 +92,7 @@ packaging task checks them on Windows and in Wine wrappers.
 ### Launcher screen (ARC-UI-014)
 
 Before the original main menu, a start without inputs shows the launcher screen (owner decision 2026-10-28,
-[research](../research/launcher-settings.md#recommended-shape-option-a) option A, question 2 A) when
+research (deleted) option A, question 2 A) when
 `LauncherScreen.Decide` gives a reason, in this order: on request (`--launcher`, alone or with `--native-smoke`; or
 Shift pressed at the start or during the 0.75 s an ordinary start that would skip the screen waits for it, with the HUD
 saying so; only while the game's window has the focus), the first run (no stored folder, also when the settings file is one this build cannot use), a stored folder
@@ -106,10 +106,21 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   warning that only that release is checked; otherwise what is missing, for example "no arcanum2.dat here"); a button
   for each other ready fixed candidate; "Choose folder…" (the system's folder dialog; `GameFolderLocator.Choose` also
   looks inside a chosen Wine wrapper `.app`, bottle or `drive_c`); the rules Steamwoven or Original (custom mixes
-  after alpha); "Show this screen at every start"; "Debug mode" (ARC-DEV-050, off by default:
+  after alpha); three HD lines (ARC-UI-143, below); "Show this screen at every start"; "Debug mode" (ARC-DEV-050, off by default:
   [debug mode](area-map-mode.md#debug-mode-arc-dev-050)); Play, Reset settings and Quit. The project's own look, not a
   window of the original's menu.
-- **Install from GOG installer…** (ARC-DEV-074, [research](../research/gog-installer-unpack.md) option A) is for a player
+- **HD lines (ARC-UI-143).** After the rules the screen has three HD lines (the Game page of the options window had them until ARC-UI-146), one row of choices each: **HD graphics**
+  Off/On (the visual profile, `visual_profile_v1.json`), **HD interface** Off/On/Generated (experimental) and **HD pack** Auto/Game/Custom
+  (`hdInterface`, `generatedInterface`, `hdPack`, `hdPackPath` of `game_settings_v1.json`, [HD pack source](../workflow/hd-pack.md#hd-pack-source-arc-dev-350)).
+  They are the only saved-settings screen for them (the options window has no HD line since ARC-UI-146; the `H` key and the palette still
+  switch the visual profile in play, HD interface and HD pack change only here, with Shift held at the start): a choice is saved at once in the files (not at Play) and the game that Play
+  starts reads them like any start. The pack source applies at the next start; the note under the rows says what that start will read (an automated run: that pack folders are not searched). Custom opens the
+  system folder dialog, with the same fallback note where there is none. The rows are off while the screen is busy; **Reset settings**
+  resets `launcher_v1.json` only and leaves the HD lines as they are. A run with no settings file (an automated run) keeps the choices
+  for the screen only: its start reads the files and finds the defaults. A choice that could not be written is named under the rows. Checked by the launcher self-test (defaults, each choice saved in the files, shown again by the next screen, read by
+  the start, Custom's folder, Reset) and by the launcher native smoke's HD lines and screenshot (`--native-smoke-screenshot PATH`
+  also writes `NAME-launcher.png` beside it, the screen before Play, where `PATH` is `NAME.png`).
+- **Install from GOG installer…** (ARC-DEV-074, [research](../workflow/packaging.md) option A) is for a player
   without Windows who has the GOG offline installer (`setup_arcanum_….exe`, Inno Setup 5.6.2, one file). It first looks for
   the free `innoextract` tool (zlib licence; `PATH`, then `/opt/homebrew/bin`, `/usr/local/bin`, `/opt/local/bin`,
   `/usr/bin`; `innoextract.exe` on `PATH` on Windows); without it the screen says how to get it (`brew install
@@ -1414,7 +1425,7 @@ plans, picking, routes, the wall check, light, animation, the clock and the Sess
 it is not part of a snapshot or quick save.
 
 **Interface art (ARC-UI-089, ARC-UI-095).** The HD redraws of the interface (the pack's `interface` slice, ARC-DEV-242) have their own
-switch: the Game page of the options window has two project lines next to Rules. **HD graphics: Off/On** requests the Legacy or HD
+switch: the launcher screen has three project lines after Rules (ARC-UI-143; until ARC-UI-146 they were the options window's Game page lines, which no longer has them, the page ends with Rules). **HD graphics: Off/On** requests the Legacy or HD
 profile exactly as the key does (saved, the same toggle protocol) and switches the sprites and terrain of an HD pack only.
 **HD interface: Off/On/Generated (experimental)** (ARC-UI-095, default Off) is a separate saved setting (`hdInterface` of `game_settings_v1.json`, file version 3;
 version 1 and 2 files read it as Off); it draws the interface art alone and does not touch the visual profile, so the two can be
@@ -1426,8 +1437,8 @@ the window's exact whole device scale on a worker (the first draw no longer stal
 third project line: where the active pack is read from, saved in the same file (`hdPack`, `hdPackPath`; file version 4, version 1–3 files
 read it as Auto). Auto prefers the player's iCloud pack folder (macOS, only when that folder exists on this device) when the pack in it
 is whole, and falls back to the installed copy in the game's own `user://hd-packs`; Game reads the installed copy alone; Custom opens the
-system folder dialog (a pack folder or a folder of packs) and reads that folder, then the installed copy. The choice applies at the next
-start (the pack is chosen once at startup); the window's note says now what the next start will read, or why a source was skipped. The
+system folder dialog (a pack folder or a folder of packs) and reads that folder, then the installed copy (the launcher screen's line, ARC-UI-143). The choice applies at the next
+start (the pack is chosen once at startup); the launcher screen's note says now what the next start will read, or why a source was skipped. The
 rules, the file check and the log line are in [HD pack source](../workflow/hd-pack.md#hd-pack-source-arc-dev-350). `InterfaceHd` holds the active pack and the HD interface setting
 (synced each frame); every interface frame with a key (`AreaInterfaceFrame.Hd`, built in
 `AreaInterfaceArt.ReadFile`) is an `HdInterfaceTexture`: it reports its **Legacy** size and Legacy pixels to every reader (layout,
@@ -1454,8 +1465,8 @@ the options smoke's HD line.
 **Bitmap-font text (ARC-DEV-361).** `AreaArtFontFace` (the one source of every art-font glyph texture, drawn by `AreaArtTextDraw`) draws a glyph from
 its HD coverage frame when HD interface is on, the active pack holds an `interface` entry for that glyph's frame (a traced 4× coverage frame, `masked`
 entry, [format](../formats/hd-pack.md#interface-art-arc-dev-242)) and the blend is **Coverage**: the HD pixels go through the same layer maths as the
-Legacy ones (`AreaArtTextRules.LayerPixels`, cover as (w, w, w, w) on the premultiplied canvas), are built with mipmaps and drawn through their own
-`CanvasTexture` (trilinear, as ARC-UI-112) into the glyph's **Legacy-size** rectangle at the same integer position, so the layout, the integer
+Legacy ones (`AreaArtTextRules.LayerPixels`, cover as (w, w, w, w) on the premultiplied canvas), are drawn through their own
+`CanvasTexture` (bilinear, **no mipmaps**, ARC-UI-145: the mip chain blurred the edge at the windows' scales; interface frames stay trilinear, ARC-UI-112) into the glyph's **Legacy-size** rectangle at the same integer position, so the layout, the integer
 advances, the colour and the blend are the original's and only the glyph edge differs. A glyph without an entry, a frame without a key, the Additive and
 Multiply blends and the switch off or no pack draw the Legacy frame exactly as before; the decoded HD glyphs are dropped when the pack or the switch
 changes. Check: `ARC-DEV-361 self-test HD font glyphs PASS` (synthetic 6 × 5 glyph: HD only with pack and switch on, never for another blend or a
@@ -1656,7 +1667,7 @@ not admitted fails the load (`AREA_HERO_TableUnavailable`, `AREA_HERO_Experience
 
 #### Skills page (ARC-UI-009)
 
-Since ARC-UI-009 (task S6 of the [skills plan](../research/skills-plan.md)) the sheet has the original's skills page, checked
+Since ARC-UI-009 (task S6 of the skills plan) the sheet has the original's skills page, checked
 in the original executable (ledger rows [SP1–SP8](../research/ledger/skills.md#skills-page-arc-ui-009)):
 
 - the sixteen skills in the original's four groups of four (three of basic skills, the fourth the tech skills), all four
@@ -1988,7 +1999,7 @@ replaces it. The windows, buttons, texts, keys and back moves are the original's
 ([ledger MM1–MM7](../research/ledger/ui-audio.md#main-menu-arc-ui-011)); since ARC-UI-058 the button windows have the original's art
 and layout (below), the other windows the project's.
 
-- **Early menu (ARC-DEV-381, O1 of the [load-time diagnosis](../research/performance-diagnosis-2026-11.md)).** The first opening of the run
+- **Early menu (ARC-DEV-381, O1 of the [load-time diagnosis](../project/status/tools.md)).** The first opening of the run
   does not wait for the start map: the viewer starts the map's load on its worker and opens the menu as soon as the menu art is read
   (`ARC-DEV-381 early main menu open`; the probe's `start-to-menu` in the packaged build went from the whole map's publication to about
   1.6 s on a loaded Mac, see the diagnosis). The menu is the same one: its windows, texts, art, keys and back moves are unchanged. No scene
@@ -2238,7 +2249,7 @@ project's, except as below.
   arrows 667 and 668 at (+6, +21) and (+180, +21), a slider's bar 623 `SkilGauge` at (+47, +24) as wide as value × 120 / top, a
   list's value centred in red `Flare12Font` at (+47, +30). An arrow is a push button: the pointer over it shows its lit frame, a
   press its down frame with sound 3000, the release over it plays 3001 and changes the value. PROJECT: the shown controls take the
-  page's first slots in order (the Rules line the Game page's fifth, at (531, 122), ARC-UI-089's HD graphics line the sixth, at (531, 197) and ARC-UI-095's HD interface line the seventh, at (531, 272)); the control with the keyboard or controller
+  page's first slots in order (the Rules line the Game page's fifth and last, at (531, 122); ARC-UI-146 removed the HD graphics, HD interface and HD pack lines that stood after it, they are the [launcher screen](#launcher-screen-arc-ui-014)'s); the control with the keyboard or controller
   focus has its label lit in the page buttons' hover red; a text is one line. The line at the top names the hidden controls and the
   notice. Without the game's art (the synthetic self-tests) the whole window is the project's panel.
 
@@ -2389,7 +2400,7 @@ snapshot every refund stops at, so the five starting points can be spent and tak
   (hit points, fatigue, the eight stats), the skills page and the spells page with their `−` and `+` (the in-game sheet's
   rules and texts, [skills page](#skills-page-arc-ui-009)) and, since ARC-MAGIC-043, a tech page with the eight disciplines'
   `−` and `+` (the original's degree page of the same editor, CM8; the pool's technology lane, refused below the snapshot the
-  editor opened on, TC10; project labels, the original look of the page is not drawn in the creation window), and Cancel and
+  editor opened on, TC10; project labels; the original look of the page since ARC-UI-147, below), and Cancel and
   Accept. Each press that changes the draft is recorded (the replay at Accept is by track, so degrees replay like the other
   points); a refused one is not.
 - **Accept** (or Return, CM5) opens the [opening shop](#opening-shop-arc-ui-036) (window 15, CM2), whose Accept starts the new
@@ -2401,6 +2412,20 @@ snapshot every refund stops at, so the five starting points can be spent and tak
   slice).
 - **Keys.** The menu owns the keys: Return accepts, Escape cancels, no letters (CM7). A controller moves over Accept and Cancel
   and confirms; the pages' buttons take the pointer.
+- **Original look (ARC-UI-147).** With the game's art the editor is the in-game character sheet's original look
+  ([sheet](../ui/original-windows.md#character-sheet), CHW1–CHW9, the pages ARC-UI-076/077) over the draft: art 22 with the draft hero's
+  portrait, name, level, the five points, the stats, the alignment gauge and the skills, tech or spells page, and the ten `−` and `+` and
+  the four tabs by the pointer, between the strips and the shop's two art buttons Accept (675, 496) and Back (69, 496) of the 800 × 600 screen
+  (window 14 has no background of its own and the same buttons as window 15, MW1, MW30, CM2; `AreaShopArtView`). The sheet's window stands at the
+  menu screen's (0, 41) at the bars' whole factor (`AreaCharacterSheetArtView.MenuScreen`, as the shop's barter window). Differences from
+  the in-game sheet, all original: a release in the portrait's close rectangle does not close the editor (the rectangle is the interface
+  modes 1 and 2's, CM3); the pages' presses are the same ones the diagnostic panel records on the draft (`AreaCreationEditor`). PROJECT: the
+  original's text bar belongs to the game, so the hover hints are not shown and a refused press writes the original's `charedit.mes` text
+  (ARC-UI-078) into the menu's note line at the top of the screen; the controller's focus row lights Accept or Back as in the shop. Without the
+  game's art (the synthetic self-tests, a game folder whose sheet or strips art does not read) the diagnostic panel above is shown as before.
+  Native smoke (`menu` stage): `ARC-UI-147 native-smoke character editor art PASS` (the draft's sheet and portrait, the window's place, a refused
+  `−` written as the note, the close rectangle that does not close, the spells tab, willpower's `+` by the pointer);
+  `ARC_AREA_EDITOR_CAPTURE=PATH.png` saves readbacks of the skills and spells pages (PATH-skills.png, PATH-spells.png, ignored local paths).
 
 Self-test inside `ARC-UI-011 self-test PASS synthetic main menu`: Accept opens the editor on the dwarf's draft, `+` on
 strength, Cancel back to a new human, then Accept again, strength, a hit point, constitution `+` and `−`, the first skill, a
@@ -2680,7 +2705,7 @@ on the live session; on a detached copy every quest and rumor that has a text is
 
 With the game's art and the message window's fonts read (`TextFonts`, ARC-DEV-156) the logbook shows the original's book instead of the list
 (`AreaLogbookArtLayout`, `AreaLogbookArtView`; ledger [LB14–LB17](../research/ledger/ui-audio.md#logbook-arc-ui-008), plan
-[original windows](../ui/original-windows.md#logbook-rumors-and-quests-done-arc-ui-074)): the side panel and the book with the page art, the seven tab
+[original windows](../ui/original-windows.md#logbook-all-seven-tabs-the-pc-lens-and-the-tab-hint-done-arc-ui-074-arc-ui-079082-arc-ui-098)): the side panel and the book with the page art, the seven tab
 buttons (the shown tab pressed), the previous and next page buttons, the title and the page numbers in the two page halves, and the entries of
 the tab laid out on the spread by the original's rules (one text line between entries, an entry that does not fit the column goes whole to the
 next column or spread, only the first entry of a fresh column is cut at the bottom) in the colours of their state with a strike-through for a
@@ -2883,7 +2908,7 @@ item taken from a body plays its pickup sound; the palette has the three volume 
 ### Window art warm-up (ARC-DEV-369)
 
 The first opening of the inventory, the character sheet and the logbook cost 0.25–2.2 s because the window's art was read from the game folder and its HD
-redraws were resolved on the main thread ([diagnosis O2](../research/performance-diagnosis-2026-11.md)). Since ARC-DEV-369 the viewer prepares that art in
+redraws were resolved on the main thread ([diagnosis O2](../project/status/tools.md)). Since ARC-DEV-369 the viewer prepares that art in
 the background after the map is published and the first 30 frames have drawn, one window at a time (inventory, sheet, logbook), so the first opening is a warm one:
 
 - **Worker.** The window's art content is read by its own loader through a `Lazy`, so a window the player opens meanwhile waits for the worker's read instead

@@ -65,7 +65,7 @@ public sealed record SessionTrapDisarmResult(GameSessionMutationResult Mutation,
 /// ARC-WORLD-076: the trap state owner of trap objects and trapped objects on any map (ledger TT1–TT10), for the spot and
 /// disarm skills (S10), the trap devices (ARC-TECHNOLOGY-011/012) and the hosts' use and step paths. An object's trap is
 /// its T0 baseline until a spot mark or a removal; each write records the object's trap state as one map change of its
-/// entity (<see cref="TrapStateProperty"/>: bit 1 spotted, bit 2 removed, and above bit 8 the script number the removal
+/// entity (<see cref="TrapStateProperty"/>: bit 1 spotted, bit 2 removed, bit 4 placed by the PC (ARC-WORLD-125), and above bit 8 the script number the removal
 /// cleared), which the snapshot already carries, so the domain adds no schema. A removal holds only while the baseline still
 /// names that script, so a trap armed again later (a trap device, TP2) is seen; the spotted bit stays, as the original keeps
 /// object flag 0x2000000 through a removal (TT5). A removed trap object is also recorded destroyed (<see cref="ObjectConditionProperty"/>). The rolls are
@@ -75,7 +75,7 @@ public sealed record SessionTrapDisarmResult(GameSessionMutationResult Mutation,
 public sealed partial class GameSessionOwner
 {
     public const string TrapStateProperty = "trap.state";
-    private const long TrapSpottedBit = 1, TrapRemovedBit = 2;
+    private const long TrapSpottedBit = 1, TrapRemovedBit = 2, TrapPlacedBit = 4;
     private const int TrapScriptShift = 8;
 
     /// <summary>The object's current trap state: its recorded changes over its baseline.</summary>
@@ -194,7 +194,7 @@ public sealed partial class GameSessionOwner
     [Arcanum.Simulation.OriginalFunction(0x4BC220, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     private GameSessionMutationResult Remove(GameSessionVersion expected, SessionTrapped trapped, SessionTrapBaseline baseline, SessionTrapState state) =>
         ApplyChanges(expected, null, TrapEdits(trapped, baseline,
-            (state.Spotted ? TrapSpottedBit : 0) | TrapRemovedBit | (long)baseline.Script << TrapScriptShift));
+            (state.Spotted ? TrapSpottedBit : 0) | (RecordedTrap(trapped, baseline) & TrapPlacedBit) | TrapRemovedBit | (long)baseline.Script << TrapScriptShift));
 
     private SessionTrapResult TrapRejected(GameSessionFailure failure) => TrapRejected(Reject(failure));
 
@@ -205,6 +205,7 @@ public sealed partial class GameSessionOwner
         var recorded = RecordedTrap(trapped, baseline);
         var flags = (recorded & TrapSpottedBit) != 0 ? TrapRules.MarkSpotted(TrapObserver.Player, baseline.Carrier, baseline.ObjectFlags).ObjectFlags
             : baseline.ObjectFlags;
+        if ((recorded & TrapPlacedBit) != 0) flags |= TrapRules.PlacedByPcFlag;
         return (recorded & TrapRemovedBit) != 0 ? new(TrapClass.None, 0, flags, true)
             : new(TrapRules.Classify(baseline.Script, baseline.HeaderFlags), baseline.Script, flags, false);
     }
@@ -216,9 +217,9 @@ public sealed partial class GameSessionOwner
         if (_maps.Get(trapped.Map, MapChangeKey.ForEntity(trapped.Entity, TrapStateProperty)) is not { } value || value < 0) return 0;
         var bits = value & ((1L << TrapScriptShift) - 1);
         var script = value >> TrapScriptShift;
-        if (bits > (TrapSpottedBit | TrapRemovedBit) || script > Arcanum.Data.Scripts.ScrCatalogue.MaxScriptNumber ||
+        if (bits > (TrapSpottedBit | TrapRemovedBit | TrapPlacedBit) || script > Arcanum.Data.Scripts.ScrCatalogue.MaxScriptNumber ||
             (bits & TrapRemovedBit) == 0 && script != 0) return 0;
-        return (bits & TrapRemovedBit) != 0 && script != baseline.Script ? bits & TrapSpottedBit : bits;
+        return (bits & TrapRemovedBit) != 0 && script != baseline.Script ? bits & (TrapSpottedBit | TrapPlacedBit) : bits;
     }
 
     private static MapChangeEdit[] TrapEdits(SessionTrapped trapped, SessionTrapBaseline baseline, long bits) =>

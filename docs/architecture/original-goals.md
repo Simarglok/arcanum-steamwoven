@@ -1,7 +1,7 @@
 # The original's goals: one run table for every animated object, one priority rule
 
 Status: **Research**, work item ARC-RES-083 (2026-11-04), slice R5 of the
-[architecture audit](../research/architecture-audit-plan.md) (spine SP5, hypothesis H4).
+[architecture audit](gap-register.md) (spine SP5, hypothesis H4).
 Docs-only: no code changes and no checks run. It is a reference model of the original
 game, not a comparison: the "Steamwoven today" column notes only the obvious differences;
 the full comparison, its classes and the target model are slice G1's.

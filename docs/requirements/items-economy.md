@@ -212,7 +212,7 @@
 
 [Complete exterior Area API](../world/area-loader.md) читает static/mobile/prototype fields, object identity, item/container body appearance и отдельные insertion-refused dispositions. Это data-layer вклад в FR-ITEM-001 и визуальный/identity контракт, а не игровой inventory owner. Сохранение wire fields и распознавание типа не устанавливают семантику веса, stacks, экипировки, цен, ремонта или crafting; по этим предметным значениям coverage ниже — «Нет».
 
-[RES-019 dialog state](../scripting/dialog-state-contract.md) и [RES-021 negative IN](../scripting/negative-inventory-transfer-contract.md) описывают источники и будущие порты/сценарии. Production inventory/IN transfer, callbacks, parent mutation, quantity и recovery не реализованы. GF owner к инвентарю отношения не имеет. Ни research self-tests, ни Area body/frame checks не считаются выполнением передачи предмета.
+[Исходные данные диалога RES-019](../scripting/dialog-conversation-runtime.md#original-dialog-evidence-carried-from-the-state-contract) и [RES-021 negative IN](../scripting/negative-inventory-transfer-contract.md) описывают источники и предложения по портам. Production inventory/IN transfer, callbacks, parent mutation, quantity и recovery не реализованы. GF owner к инвентарю отношения не имеет. Ни research self-tests, ни Area body/frame checks не считаются выполнением передачи предмета.
 
 [ARC-RES-023 items and inventory](../research/crash-site-item-inventory.md) — research по данным T0: кто держит какие предметы на месте крушения (кольцо у Вергилия, его отдаёт единственная операция `IN` в первом узле диалога), как их получить (подбор, обыск мёртвых, генерация сундуков при первом обыске), как выбирается имя. Inventory owner, перенос и UI не реализованы.
 

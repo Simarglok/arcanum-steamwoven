@@ -26,7 +26,7 @@ import sys
 import tempfile
 from typing import Callable, Mapping, Sequence
 
-from . import config, launch, run_queue, smoke_history, smoke_zones, start_check
+from . import config, focus_guard, launch, run_queue, smoke_history, smoke_zones, start_check
 
 ROOT = Path(__file__).resolve().parents[2]
 VIEWER = Path("tools/terrain-viewer/Godot")
@@ -65,7 +65,7 @@ NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 RESERVED = frozenset({"PATH", "DOTNET_ROOT", "HOME", "GODOT", "__GODOT_SHELL_ENV_SET"})  # the canonical start's own
 BATTERY_MINUTES = 60.0  # a whole map battery (no stage list) runs about 2 minutes; the queue's window default is 30
 # ARC-DEV-390: the seconds each step declares to the launch queue, which puts a short run ahead of a long one that arrived a
-# little before it (run_queue.ORDER_WEIGHT). Measured for docs/research/smoke-speed-diagnosis-2026-11.md: a run with no
+# little before it (run_queue.ORDER_WEIGHT). Measured for the smoke speed diagnosis (ARC-DEV-384, deleted; see docs/workflow/toolchain.md): a run with no
 # stage worth naming is its map load (about 20 s with start and exit) plus 0-2 s per cheap stage; the whole map battery
 # 25 s (declared with room for a loaded Mac); the self-test 24 s with a window and 12 s headless; the Crash Site smoke 98 s;
 # a project import 3 s warm; a viewer build 12 s warm, 45 s cold. The stages that stand out add their own time: `walk`
@@ -138,7 +138,7 @@ SKIP_LINE = re.compile(r"native-smoke .* (NONE|SKIP|NO-EXIT|SAME-MAP-ONLY)\b")
 # mode at launch, so only stages with the same configuration can share a process. The table (read by `--stages` to group the
 # stages into the fewest processes, and to refuse a stage given the wrong configuration before anything waits for the
 # queue) is the one place that says "this stage runs on this configuration"; the evidence is the stage's own NONE/SKIP
-# lines and the smoke speed diagnosis (docs/research/smoke-speed-diagnosis-2026-11.md, section 5). The hero is HERO_STAGES.
+# lines and the smoke speed diagnosis (ARC-DEV-384, deleted; the result is in docs/workflow/toolchain.md). The hero is HERO_STAGES.
 TOWN = "1409,1314"  # the town sector
 WILD = "1384,239"  # the generated wilderness sector (`plants`)
 SHRINE = "1452,1291"  # Virgil's altar sector (`altar`, `npc-tile`)
@@ -301,13 +301,15 @@ def start_line(map_name: str | None, main_menu: bool = False) -> str:
 def godot_command(godot: str, prefs: Path, viewer: Sequence[str], environ: Mapping[str, str], *,
                   stages: Sequence[str] = (), extra: Sequence[tuple[str, str]] = (), headless: bool = False) -> tuple[str, ...]:
     """`env` that drops the owner's variables and sets the smoke's own, then Godot on the source project
-    (godot_canonical: the sentinel, the pinned SDK and a plain PATH)."""
+    (godot_canonical: the sentinel, the pinned SDK and a plain PATH). ARC-DEV-403: a window run also loads the focus
+    guard when the plan carries it (focus_guard.carry), so its window never takes the focus."""
     sdk = run_queue.pinned_sdk(dict(environ))
-    dropped = sorted(key for key in environ if key.startswith(DROPPED_PREFIXES) and key not in KEPT_VARIABLES)
+    dropped = sorted(key for key in environ if key.startswith(DROPPED_PREFIXES) and key not in KEPT_VARIABLES
+                     and key != focus_guard.CARRIER)
     settings = [f"{name}_TEST_PATH={prefs / (name.lower() + '.json')}" for name in SETTINGS]
     return ("env", *(part for key in dropped for part in ("-u", key)), "__GODOT_SHELL_ENV_SET=1", f"DOTNET_ROOT={sdk}",
-            f"PATH={sdk}:/usr/bin:/bin:/usr/sbin:/sbin", *settings,
-            *([f"{STAGES_ENV}={','.join(stages)}"] if stages else []), *(f"{name}={value}" for name, value in extra),
+            f"PATH={sdk}:/usr/bin:/bin:/usr/sbin:/sbin", *(() if headless else focus_guard.insert_arguments(focus_guard.reads(environ))),
+            *settings, *([f"{STAGES_ENV}={','.join(stages)}"] if stages else []), *(f"{name}={value}" for name, value in extra),
             godot, *(["--headless"] if headless else []), "--path", str(VIEWER), "--", *viewer)
 
 
@@ -486,8 +488,9 @@ def map_runs(base: str, stages: Sequence[str], pins: Pins, hero: str | None, say
 
 
 def plan(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mapping[str, str], imported: bool,
-         say: Callable[[str], None] = lambda line: print(line, flush=True)) -> list[Step]:
-    """Every step of this smoke run, in order."""
+         say: Callable[[str], None] = lambda line: print(line, flush=True), focus_lib: Path | None = None) -> list[Step]:
+    """Every step of this smoke run, in order. `focus_lib` is the built focus guard the window steps load (ARC-DEV-403)."""
+    environ = focus_guard.carry(dict(environ), focus_lib)
     godot = environ.get("GODOT") or DEFAULT_GODOT
     inputs = conf.get("inputs", {})
     extra = parse_env(getattr(args, "env", None) or ())
@@ -755,6 +758,28 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
     return stopped[0] if stopped else (1 if failed or skipped else 0)
 
 
+def focus_guard_target(args: argparse.Namespace, prefs_root: Path) -> Path | None:
+    """ARC-DEV-403: where the focus guard library of this run goes (in the run's settings folder), None when this run does
+    not use one (--take-focus, off macOS)."""
+    if getattr(args, "take_focus", False) or not focus_guard.supported():
+        return None
+    return prefs_root / "focus-guard" / focus_guard.LIBRARY
+
+
+def focus_guard_library(steps: Sequence[Step], target: Path | None,
+                        build: Callable[[Path], tuple[Path | None, str]] | None = None,
+                        say: Callable[[str], None] = lambda line: print(line, flush=True)) -> Path | None:
+    """The focus guard library the window smokes load: built at `target` when some step is a window run, None (with a
+    note: the smoke windows then take the focus as before) when it cannot be built. Nothing is built for a run with no
+    window step."""
+    if target is None or not any(step.kind == "window" for step in steps):
+        return None
+    library, why = (build or focus_guard.build)(target)
+    if library is None:
+        say(f"SMOKE note: {why}; the smoke windows may take the focus")
+    return library
+
+
 def run(args: argparse.Namespace) -> int:
     environ = dict(os.environ)
     if environ.get(run_queue.TICKET_ENV):
@@ -763,7 +788,9 @@ def run(args: argparse.Namespace) -> int:
     prefs_root = Path(tempfile.mkdtemp(prefix="arcanum-smoke-"))
     keep = False
     try:
-        steps = plan(args, config.load_config(), prefs_root, environ, imported=(ROOT / VIEWER / ".godot").is_dir())
+        target = focus_guard_target(args, prefs_root)
+        conf, imported = config.load_config(), (ROOT / VIEWER / ".godot").is_dir()
+        steps = plan(args, conf, prefs_root, environ, imported=imported, focus_lib=target)
         if not steps:
             print("SMOKE PASS nothing to run: no smoke zone covers this diff", flush=True)
             return 0
@@ -777,6 +804,9 @@ def run(args: argparse.Namespace) -> int:
         godot = environ.get("GODOT") or DEFAULT_GODOT
         if not os.access(godot, os.X_OK):
             raise ValueError(f"no Godot at {godot} (set GODOT)")
+        if target is not None and focus_guard_library(steps, target) is None:
+            # not built (no window step, or it failed with a note): plan again without the guard
+            steps = plan(args, conf, prefs_root, environ, imported=imported, say=lambda line: None, focus_lib=None)
         os.chdir(ROOT)  # the steps name the viewer project and solution relative to the checkout
         for step in steps:
             if step.settings:
@@ -805,6 +835,8 @@ def configure(command: argparse.ArgumentParser) -> None:
         parser.add_argument("--dry-run", action="store_true", help="print each step's command and start line; run nothing")
         parser.add_argument("--no-config-check", action="store_true", help="do not refuse a stage given a map or sector it "
                             "does not pass in (STAGE_NEEDS); the stages are still grouped by configuration")
+        parser.add_argument("--take-focus", action="store_true", help="let the smoke windows take the focus as before "
+                            "(by default they are background-only on macOS, never active; ARC-DEV-403)")
 
     def map_options(parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--hero", choices=launch.PREMADE_HEROES, help="start as this pre-made hero")

@@ -235,7 +235,7 @@ address,state,class,level,name,domain,basis
 0x4DE390,not implemented,,F2,light tint,lighting,read: LT15 world.md
 0x4DE4D0,not yet read,,F0,light helper,lighting,census only
 0x4DE4F0,not yet read,,F0,light helper,lighting,census only
-0x4DE5D0,not yet read,,F0,shadow map loader,lighting,census only; named in lights-on-all-maps.md
+0x4DE5D0,not yet read,,F0,shadow map loader,lighting,census only; named in the lights census (ledger LT1-LT15)
 0x4DE730,not yet read,,F0,light shadow helper,lighting,census only
 0x4DE770,not yet read,,F0,light shadow helper,lighting,census only
 0x4DE7A0,not yet read,,F0,light shadow helper,lighting,census only
@@ -540,7 +540,7 @@ address,state,class,level,name,domain,basis
 0x4ED370,not yet read,,F0,roof name loader,names,census only
 0x4ED3A0,not yet read,,F0,roof name loader,names,census only; named in first-building-evidence.md
 0x4ED3E0,not yet read,,F0,roof name loader,names,census only; named in first-building-evidence.md
-0x4ED440,not yet read,,F0,roof name loader,names,census only; named in crash-site-evidence.md
+0x4ED440,not yet read,,F0,roof name loader,names,census only; named in crash-site-terrain-resolution.md
 0x4ED510,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
 0x4ED630,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
 0x4ED6C0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
@@ -645,7 +645,7 @@ address,state,class,level,name,domain,basis
 0x4F0FD0,registered,,F2,container sound,audio,registry row (full)
 0x4F1010,registered,,F2,portal sound,audio,registry row (full)
 0x4F1050,registered,,F2,misc object sound,audio,registry row (full)
-0x4F1150,not yet read,,F0,object list helper,objects,census only; named in crash-site-slice.md
+0x4F1150,not yet read,,F0,object list helper,objects,census only; named in crash-site-framing.md
 0x4F1170,not implemented,,F1,object list helper,objects,read: RL7 original-object-model.md
 0x4F1200,not yet read,,F0,object list helper,objects,census only
 0x4F1210,not implemented,,F1,object list bucket add,objects,read: RL3 original-object-model.md
@@ -774,7 +774,7 @@ address,state,class,level,name,domain,basis
 0x4F7940,registered,,F2,sector light fold,lighting,registry row (partial)
 0x4F7B40,not yet read,,F0,sector tile list helper,maps,census only
 0x4F7B50,not yet read,,F0,sector tile list helper,maps,census only; named in generated-wilderness-evidence.md
-0x4F7BA0,not yet read,,F0,sector tile list helper,maps,census only; named in crash-site-slice.md
+0x4F7BA0,not yet read,,F0,sector tile list helper,maps,census only; named in crash-site-framing.md
 0x4F7BE0,not yet read,,F0,sector tile list helper,maps,census only
 0x4F7C20,not yet read,,F0,sector tile list helper,maps,census only
 0x4F7C30,not yet read,,F0,sector tile list helper,maps,census only; named in crash-site-terrain-resolution.md
@@ -785,7 +785,7 @@ address,state,class,level,name,domain,basis
 0x4F7CE0,not yet read,,F0,sector tile list helper,maps,census only; named in crash-site-framing.md
 0x4F7D10,not yet read,,F0,sector tile list helper,maps,census only
 0x4F7D40,not yet read,,F0,sector tile list helper,maps,census only; named in original-persistence.md
-0x4F7DF0,not yet read,,F0,sector tile list helper,maps,census only; named in crash-site-slice.md
+0x4F7DF0,not yet read,,F0,sector tile list helper,maps,census only; named in crash-site-framing.md
 0x4F7F20,not yet read,,F0,sector roof list helper,maps,census only; named in source-coverage.md
 0x4F7F40,not yet read,,F0,sector roof list helper,maps,census only
 0x4F7F70,not yet read,,F0,sector roof list helper,maps,census only

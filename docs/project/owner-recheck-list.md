@@ -20,7 +20,7 @@ for this comparison was `artifacts/packages/macos` at commit d2899817a; any late
 | --- | --- | --- | --- |
 | 1 | Cast Fireflash (spell 22) at empty ground. | A flash appears on the strike tile for about 0.75 s and goes away by itself. | open |
 | 2 | Cast Fireflash at a creature that stands on a tile. | No flash object, because the tile is not empty (`Tgt_Tile_Empty`). Note also what the creature itself gets (eye candy, damage): the Summon rules do not decide that, so it is part of the comparison. The owner does not remember this empty-tile rule, so it is the main thing to check. | open |
-| 3 | Cast Wall of Fire (spell 21), once on open ground and once next to a wall. | A straight line of 5 pieces centred on the target tile; the line runs along the direction from the caster to the target (TA12). A tile with a wall gets no piece (`Tgt_Tile_Empty_Immobiles`); creatures do not stop a piece. Also check that the line runs along the cast direction, not across it. | open |
+| 3 | Cast Wall of Fire (spell 21), once on open ground and once next to a wall. | A straight line of 5 pieces centred on the target tile; the line runs along the direction from the caster to the target (TA12). A tile with a wall gets no piece (`Tgt_Tile_Empty_Immobiles`); creatures do not stop a piece. Also check that the line runs along the cast direction, not across it. ARC-MAGIC-054: the pieces are drawn additive, as the original's translucent flames; the owner's 2026-11-11 screenshot of the original shows **3** pieces where the rules read give 5, so count the pieces on open ground and say how many appear ([note](../research/wall-of-fire-look-magic-054.md)). | open |
 | 4 | Walk the hero or a creature through the wall. | The pieces do not block passage: their prototype carries the "no block" flag in the data. | open |
 | 5 | Stand the caster and a companion in the wall, then a hostile creature. | The caster and creatures led by the caster's party are not burned. Other creatures burn each step, and in turn-based mode once per round. | open |
 | 6 | Stop maintaining Wall of Fire (or let it run out). | All pieces disappear at the same moment. | open |
@@ -317,7 +317,7 @@ Known differences (reading only, no game step):
 ## ARC-DEV-366 — Tech books give expertise equal to intelligence (PR #980, 2026-11-11)
 
 The rules and what is built are in [tech books](../world/inventory-runtime.md#tech-books-arc-dev-366) and [ledger XA9, XA11](../research/ledger/technology.md#aptitude-and-expertise-consumers-arc-res-114).
-Where the eight books lie in the world is not read yet ([census](../research/technology-census-res-115.md)), so the first step is to find where one lies in the original; in ours it works wherever the viewer lets the hero pick up, loot or buy a book. Known differences, not to be re-reported: taking a book out of the pack by a drop, a sale or a gift is
+Where the eight books lie in the world is not read yet ([census](../research/technology-evidence.md)), so the first step is to find where one lies in the original; in ours it works wherever the viewer lets the hero pick up, loot or buy a book. Known differences, not to be re-reported: taking a book out of the pack by a drop, a sale or a gift is
 refused in ours (the removal script does not run there yet); a book picked up from the ground after the hero dropped it is refused likewise.
 
 | # | Step | Expected (from the original executable and data) | Status |
@@ -586,26 +586,6 @@ English label, not the game's text; the view is not re-centred; an NPC cast of t
 | 8 | Walk with Spatial Distortion (spell 3) over a tile that has a script, starting from a tile next to it. | The script runs **before** the caster is put on the last tile: a message from it names the caster's old tile; the last tile's script runs once more afterwards. | open |
 
 
-## ARC-DEV-381 — Main menu opens before the start map (O1 of the performance diagnosis, 2026-11-11)
-
-The menu now opens as soon as its art is read, while the start map loads behind it ([early menu](../rendering/terrain-viewer.md#main-menu-arc-ui-011)). The original shows
-its menu before any map exists, so the comparison is about the order and the waiting, not about the menu's contents (they are unchanged). Compare on a start with the menu
-(`./arcanum area`, or a packaged build); the first build for this comparison is any build from `main` that contains this task.
-
-| # | Step | Expected (from the original executable and data) | Status |
-| --- | --- | --- | --- |
-| 1 | Start the game and watch how soon the main menu appears. | Like the original: the menu is the first thing on screen, a second or two after the window opens, with no map shown behind it. The music of the menu starts a few seconds later, when the start map is ready. | open |
-| 2 | Open Single Player, New Game, Pick Character and browse the heroes at once, before the map is ready. | Everything works as in the original: the same windows, the same twelve heroes. Nothing waits. | open |
-| 3 | Press Start on a hero before the map is ready. | The menu shows that the world is still loading and the game starts by itself when it is ready (the original has no such wait, because it loads the map after the choice; this is the one visible difference). Escape takes the choice back. | open |
-| 4 | Press Load Game or Last Save at once, with a save present. | Superseded by ARC-DEV-387 (below): they no longer wait for the start map. | superseded |
-| 5 | Press New Character at once, then go through the window, the editor and the shop. | The wait note first; then the windows work as before (the shop's merchant loads behind it). | open |
-| 6 | Open Options at once and change a setting, then Done. | The window works before the map is ready and the change holds; the main window returns. | open |
-
-Known differences (documented, not bugs):
-
-- A choice that needs the game world waits for the start map's load, which the original does not do. It is the price of showing the menu first.
-- The main thread is busy while the start map is published, for about a second after the load ends, so the menu may answer late then (O6 of the diagnosis).
-
 ## ARC-RES-121 — Function audit wave 3, groups G and I (2026-11-11)
 
 The audit changes no behaviour. It first named two places where the original behaves in a way our code does not reproduce and the export showed no caller for ([ledger GI-5](../research/ledger/census-triage-gi.md#findings-of-wave-3)). Task T5 (ARC-RES-123) then searched the whole executable bytes and found no reference to either, so both are dead code as far as a static search shows: the typed-order garbling 0x4C3120 is not run (an order should arrive whole) and the bar hide toggle 0x54ACB0 is not what F10 runs. One confirmation of the live F10 path remains.
@@ -616,7 +596,7 @@ The audit changes no behaviour. It first named two places where the original beh
 
 
 
-## ARC-DEV-387 — The start map loads only when a new game needs it (follow-up of ARC-DEV-381, 2026-11-11)
+## ARC-DEV-387 — The start map loads only when a new game needs it (O1 of the performance diagnosis, 2026-11-11)
 
 The start map is no longer loaded when the game starts with the menu ([early menu](../rendering/terrain-viewer.md#main-menu-arc-ui-011)). It begins to load when you
 enter the New Game window (the pre-made heroes or New Character); Last Save and a save chosen in the Load Game window load the map of the save itself, once. The
@@ -637,7 +617,8 @@ build); the first build for this comparison is any build from `main` that contai
 
 Known differences (documented, not bugs):
 
-- A new game still waits for the start map, which now begins to load when the New Game window opens (one press later than in ARC-DEV-381).
+- A new game still waits for the start map, which begins to load when the New Game window opens.
+- The main thread is busy while the start map is published, for about a second after the load ends, so the menu may answer late then (O6 of the diagnosis).
 - The menu's music was silent until the start map was loaded; ARC-UI-139 (below) plays it from the start without a scene.
 - While a save's map loads the menu stays on screen with a note; the original shows its own loading screen.
 
@@ -664,7 +645,7 @@ Known differences (documented, not bugs):
 ## ARC-WORLD-124 — Timed bombs: placing trap devices with a spell (E6-b, 2026-11-11)
 
 The rules are in [placed trap devices](../world/trap-device-runtime.md). Give the hero the timed bomb (item 15154, record 176; or 15193, record 220) and compare in both games. The script
-trap devices (15100, 15120) are the next slice (ARC-WORLD-125) and still answer NOT READY.
+trap devices (15100, 15120) are the next slice (ARC-WORLD-125, [below](#arc-world-125--script-trap-devices-arming-traps-on-objects-and-tiles-e6-c-2026-11-11)).
 
 | # | Step | Expected (from the original executable and data) | Status |
 | --- | --- | --- | --- |
@@ -676,5 +657,39 @@ trap devices (15100, 15120) are the next slice (ARC-WORLD-125) and still answer 
 
 Known differences (documented, not bugs):
 
-- The line the original shows when the marker is spotted (`mes\trap.mes` line 0) appears in the viewer's status text, not in a message window.
+- The original shows no message when a device is placed (its spotted mark is quiet); the viewer's status line names the outcome.
 - The marker is a plain scenery in Steamwoven: it cannot be spotted, disarmed or triggered by a step (the original's marker has no script either).
+
+## ARC-WORLD-125 — Script trap devices: arming traps on objects and tiles (E6-c, 2026-11-11)
+
+The rules are in [placed trap devices](../world/trap-device-runtime.md#script-trap-devices-arc-world-125). Give the hero the spike trap (item 15100, script 30001) or item 15120 and compare in both games.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Use the device from the inventory (Use icon) and click a closed, unscripted chest or a door. | The hero walks next to it, the device leaves the pack, and the chest or door is now trapped (the trap is known to the hero). | open |
+| 2 | Open that chest, or use that door. | The trap goes off on the hero as its script says. | open |
+| 3 | Use the device on an NPC, a creature or a scenery object that is not a door or chest. | The device stays in the pack; the game shows its "cannot be set here" line (`mes\trap.mes` line 2). | open |
+| 4 | Use the device on a chest or door that already holds a script (a trap or a lock script). | The same refusal, the device stays. | open |
+| 5 | Use the device on an empty floor tile. | A trap marker (a hidden-trap sprite) stands on the tile and the device is spent. | open |
+| 6 | Use a second device on the same tile. | The device stays and the game shows `mes\trap.mes` line 3. | open |
+| 7 | Save and load with a trapped chest and a marker on the map. | Both are still there; the chest is still trapped. | open |
+
+Known differences (documented, not bugs):
+
+- The refusal lines appear in the viewer's status text, not in a message window.
+- A marker does not go off when the hero steps on it yet, and it cannot be disarmed or spotted by a roll yet (a later slice): in the original it fires on the step. Check steps 5 and 6 only.
+
+## ARC-UI-147 — The character editor of the new-character flow in the original's look (2026-11-11)
+
+The editor is the in-game character sheet's original look between the menu's strips, with the opening shop's Accept and Back buttons ([viewer](../rendering/terrain-viewer.md#character-editor-in-creation-mode-arc-ui-034)). Compare in both games.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | New Game, New Character, give a name, Accept. | The editor opens as the character sheet (the wooden window with the portrait, the five points, the eight stats and the skills page) between the top and bottom strips, with the green arrow (Accept) and the red arrow (Back) in the bottom strip. | open |
+| 2 | Press the + and − of a stat, of a skill, of a college's spell rank and of a tech degree; try a − before any + . | Points move as in the game's sheet; a − at the start values is refused (in the original with its text in the text bar, here in the note line at the top). | open |
+| 3 | Click the portrait's round area. | Nothing happens: the editor does not close (in the game the same click closes the sheet). | open |
+| 4 | Accept, then Back in the shop, then change a stat again. | The points spent before the shop can still be taken back. | open |
+
+Known differences (documented, not bugs):
+
+- The hover hints of the buttons and values are not shown in the editor (the original shows them in the game's text bar).
