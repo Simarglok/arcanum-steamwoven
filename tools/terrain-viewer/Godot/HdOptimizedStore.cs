@@ -34,6 +34,10 @@ public static class HdOptimizedStore
 
     private static bool Off => System.Environment.GetEnvironmentVariable("ARC_HD_CACHE") == "0";
 
+    // ARC_HD_CACHE=convert lets an automated run convert too (a check of the conversion on a real pack); ARC_HD_CACHE_DIR names the cache folder.
+    private static bool ConvertForced => System.Environment.GetEnvironmentVariable("ARC_HD_CACHE") == "convert";
+    private static string? DirOverride => System.Environment.GetEnvironmentVariable("ARC_HD_CACHE_DIR") is { Length: > 0 } dir ? dir : null;
+
     /// <summary>Follows the active pack and the HD interface setting (called from <see cref="InterfaceHd.Configure"/>).</summary>
     public static void Attach(HdPack? pack, bool enabled, string? rootOverride = null)
     {
@@ -44,8 +48,8 @@ public static class HdOptimizedStore
             _cancel?.Cancel();
             _cancel = null; _pack = wanted; _cache = null;
             if (wanted is null) return;
-            _cache = new HdOptimizedCache(rootOverride ?? System.IO.Path.Combine(OS.GetUserDataDir(), "hd-cache", wanted.Id));
-            if (!ConversionAllowed) return;
+            _cache = new HdOptimizedCache(rootOverride ?? DirOverride ?? System.IO.Path.Combine(OS.GetUserDataDir(), "hd-cache", wanted.Id));
+            if (!ConversionAllowed && !ConvertForced) return;
             var cancel = _cancel = new CancellationTokenSource();
             var cache = _cache;
             var thread = _coordinator = new Thread(() => Convert(wanted, cache, cancel.Token, 3000)) { IsBackground = true, Name = "hd-cache-convert", Priority = System.Threading.ThreadPriority.BelowNormal };

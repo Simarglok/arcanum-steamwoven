@@ -106,7 +106,8 @@ The PNGs stay the pack's only content: you edit a PNG, `refresh` it into the man
   converted=... failed=... removed=... size=...MiB ms=...`. Entries are named by the PNG's hash, so an edited PNG (after `refresh`) has no entry and is
   converted again, and after every finished pass the entries no PNG of the pack names any more are removed (a PNG that fails to convert does not stop that).
   The worker threads are stopped when the game exits. An automated run (smoke, self-test) reads the cache but
-  never converts; `ARC_HD_CACHE=0` turns the cache off (read and write).
+  never converts (`ARC_HD_CACHE=convert` lets it, e.g. to check the conversion on the real pack); `ARC_HD_CACHE=0` turns the cache off (read and write);
+  `ARC_HD_CACHE_DIR=<folder>` names another cache folder.
 - **What the draw saves:** with an entry the frame is bound without reading the PNG, hashing it, decoding it or generating mipmaps; the pack's own checks
   (key, Legacy frame, review marks, size, alpha rule) still run on the cached level 0 (`HdPack.CheckPrepared`), and the pack file must still exist with the
   manifest's byte size (one stat; it is not read, so a PNG edited without `refresh` is noticed by `verify`, not by this draw). A frame without an entry, a damaged entry
