@@ -891,6 +891,7 @@ public partial class TerrainViewerApp
             TakeEyeCandyEvent(entry);
             TakeSummonEvent(entry);
             TakeKnockbackEvent(entry);
+            TakeMovementEvent(entry);
             TakeHoldEvent(entry);
             if (AreaSpellCasting.Line(entry, texts, SpellObjectName) is { } line) lines.Add(line);
         }

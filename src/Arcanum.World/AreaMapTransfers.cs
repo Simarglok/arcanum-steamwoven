@@ -186,16 +186,18 @@ public sealed class AreaMapTransfers
     /// <paramref name="requestsRefused"/> (ARC-DEV-351, RL21, RL24): the hero's own arrival inside a change of place that is still being processed (a same-map
     /// teleport: the relocation's notification runs inside the payload, while the local player's request is pending, and 0x4D3380 refuses every request then)
     /// queues no transfer: the jump point and the tile's teleport are dropped like a teleport asked while another is pending, and the script's other effects stay.
+    /// <paramref name="jumpPoint"/> false (ARC-MAGIC-036, 0x455350: the immediate path relocation of the spell Movement component runs only the **tile script** of each tile it walks, 0x4C0980, not the jump
+    /// point of the location notification): the tile's jump point queues nothing.
     /// </summary>
     [OriginalFunction(0x444270, OriginalFunctionScope.Partial)]
     [OriginalFunction(0x4101D0, OriginalFunctionScope.Partial)]
-    public IReadOnlyList<AreaMapUseResult> Enter(AreaStepCell cell, bool requestsRefused = false)
+    public IReadOnlyList<AreaMapUseResult> Enter(AreaStepCell cell, bool requestsRefused = false, bool jumpPoint = true)
     {
         LastScripted = null;
         var results = new List<AreaMapUseResult>(2);
         var site = _cells.GetValueOrDefault(cell);
         var dropped = requestsRefused || Pending is not null;
-        if (site is { Trigger: MapTransitionTrigger.JumpPoint }) results.Add(dropped ? Dropped(site, requestsRefused) : Queue(site, null, 0));
+        if (jumpPoint && site is { Trigger: MapTransitionTrigger.JumpPoint }) results.Add(dropped ? Dropped(site, requestsRefused) : Queue(site, null, 0));
         var ran = PlacedRunner is not null && _tiles.TryGetValue(cell, out var placed) ? RunPlaced(placed, requestsRefused) : null;
         // A run that did not happen (outside the set, no content, no session) leaves the tile's unconditional teleport
         // (ARC-WORLD-031) to fire as before.
