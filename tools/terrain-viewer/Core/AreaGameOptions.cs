@@ -74,7 +74,7 @@ public static class AreaOptionTable
     public const string RuleModes = "project:rule modes";
     /// <summary>ARC-UI-089: the HD graphics control's values (a project list): Off, On.</summary>
     public const string HdGraphicsValues = "project:hd graphics";
-    /// <summary>ARC-UI-095: the HD interface control's values (a project list): Off, On.</summary>
+    /// <summary>ARC-UI-095: the HD interface control's values (a project list): Off, On; ARC-UI-140 adds Generated (experimental).</summary>
     public const string HdInterfaceValues = "project:hd interface";
     /// <summary>ARC-DEV-350: the HD pack source control's values (a project list): Auto, Game, Custom (<see cref="HdPackSourceMode"/>).</summary>
     public const string HdPackValues = "project:hd pack";
@@ -104,7 +104,7 @@ public static class AreaOptionTable
         // ARC-UI-089: HD graphics, beside the rule mode: the saved visual profile (Legacy/HD, ARC-UI-006) for the pack's sprites and ground.
         new(AreaOption.HdGraphics, AreaOptionsPage.Game, 9, AreaOptionKind.List, 1, 1, HdGraphicsValues, "hd graphics", 0, null, Project: true),
         // ARC-UI-095: HD interface, its own switch for the interface art alone, independent of the visual profile.
-        new(AreaOption.HdInterface, AreaOptionsPage.Game, 10, AreaOptionKind.List, 1, 1, HdInterfaceValues, "hd interface", 0, null, Project: true),
+        new(AreaOption.HdInterface, AreaOptionsPage.Game, 10, AreaOptionKind.List, 2, 2, HdInterfaceValues, "hd interface", 0, null, Project: true),
         // ARC-DEV-350: where the HD pack is read from (Auto: the iCloud copy when it is here and whole, else the installed copy).
         new(AreaOption.HdPack, AreaOptionsPage.Game, 11, AreaOptionKind.List, 2, 2, HdPackValues, "hd pack", 0, null, Project: true),
     });
@@ -123,7 +123,7 @@ public static class AreaOptionTable
 /// the floating text's level and speed (ARC-UI-021).</summary>
 public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAttack, bool AlwaysRun, int Effects, int Voice, int Music,
     RuleMode Rules = RuleMode.Steamwoven, int Floats = FloaterRules.DefaultLevel, int FloatSpeed = FloaterRules.DefaultSpeed, bool HdGraphics = false,
-    bool HdInterface = false, HdPackSourceMode HdPackSource = HdPackSourceMode.Auto)
+    bool HdInterface = false, HdPackSourceMode HdPackSource = HdPackSourceMode.Auto, bool GeneratedInterface = false)
 {
     /// <summary>A shown control's value; null for a hidden one.</summary>
     public int? Value(AreaOption option) => option switch
@@ -137,7 +137,7 @@ public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAt
         AreaOption.Music => Music,
         AreaOption.Rules => (int)Rules,
         AreaOption.HdGraphics => HdGraphics ? 1 : 0,
-        AreaOption.HdInterface => HdInterface ? 1 : 0,
+        AreaOption.HdInterface => GeneratedInterface ? 2 : HdInterface ? 1 : 0,
         AreaOption.HdPack => (int)HdPackSource,
         AreaOption.Floats => Floats,
         AreaOption.FloatSpeed => FloatSpeed,
@@ -172,6 +172,10 @@ public sealed record AreaGameSettings
     /// <summary>ARC-UI-095: the interface art draws its HD redraws (default off); independent of the visual profile (the H key).</summary>
     public bool HdInterface { get; init; }
 
+    /// <summary>ARC-UI-140: the interface draws its generated chrome where a recipe exists (default off; the options line's third value,
+    /// saved with <see cref="HdInterface"/> on so the pictures keep the HD redraws).</summary>
+    public bool GeneratedInterface { get; init; }
+
     /// <summary>ARC-DEV-350: where the active HD pack is read from (default Auto); it takes effect at the next start.</summary>
     public HdPackSourceMode HdPackSource { get; init; }
 
@@ -198,13 +202,13 @@ public sealed record AreaGameSettings
     public GameDifficulty SessionDifficulty => Difficulty switch { 0 => GameDifficulty.Easy, 2 => GameDifficulty.Hard, _ => GameDifficulty.Normal };
 }
 
-/// <summary>ARC-UI-013: the preference file's text, <c>{"version":4,"difficulty":D,"turnBased":B,"autoAttack":B,"floats":F,"floatSpeed":S,"hdInterface":B,"hdPack":"auto|game|custom","hdPackPath":null|"FOLDER"}</c>
-/// (ARC-UI-021 added the floaters, ARC-UI-095 the HD interface, ARC-DEV-350 the last two); a version 1 file (the first four) reads with the
-/// floaters' defaults, a version 2 file (the first six) with the HD interface off and a version 3 file (the first seven) with the HD pack
-/// source Auto. Anything else (another version, a missing, extra or out-of-range value) reads as null; the caller then uses the defaults.</summary>
+/// <summary>ARC-UI-013: the preference file's text, <c>{"version":5,"difficulty":D,"turnBased":B,"autoAttack":B,"floats":F,"floatSpeed":S,"hdInterface":B,"hdPack":"auto|game|custom","hdPackPath":null|"FOLDER","generatedInterface":B}</c>
+/// (ARC-UI-021 added the floaters, ARC-UI-095 the HD interface, ARC-DEV-350 the pack source and path, ARC-UI-140 the generated interface);
+/// a version 1 file (the first four) reads with the floaters' defaults, a version 2 file (the first six) with the HD interface off, a
+/// version 3 file (the first seven) with the HD pack source Auto and a version 4 file (the first nine) with the generated interface off. Anything else (another version, a missing, extra or out-of-range value) reads as null; the caller then uses the defaults.</summary>
 public static class AreaGameSettingsCodec
 {
-    public const int Version = 4;
+    public const int Version = 5;
     /// <summary>The longest folder path the file may hold.</summary>
     public const int MaxPath = 1024;
 
@@ -212,7 +216,7 @@ public static class AreaGameSettingsCodec
     {
         ArgumentNullException.ThrowIfNull(settings);
         return string.Create(CultureInfo.InvariantCulture,
-            $"{{\"version\":{Version},\"difficulty\":{settings.Difficulty},\"turnBased\":{(settings.TurnBased ? "true" : "false")},\"autoAttack\":{(settings.AutoAttack ? "true" : "false")},\"floats\":{settings.Floats},\"floatSpeed\":{settings.FloatSpeed},\"hdInterface\":{(settings.HdInterface ? "true" : "false")},\"hdPack\":\"{HdPackSourceResolver.ModeName(settings.HdPackSource)}\",\"hdPackPath\":{(settings.HdPackPath is null ? "null" : JsonSerializer.Serialize(settings.HdPackPath))}}}");
+            $"{{\"version\":{Version},\"difficulty\":{settings.Difficulty},\"turnBased\":{(settings.TurnBased ? "true" : "false")},\"autoAttack\":{(settings.AutoAttack ? "true" : "false")},\"floats\":{settings.Floats},\"floatSpeed\":{settings.FloatSpeed},\"hdInterface\":{(settings.HdInterface ? "true" : "false")},\"hdPack\":\"{HdPackSourceResolver.ModeName(settings.HdPackSource)}\",\"hdPackPath\":{(settings.HdPackPath is null ? "null" : JsonSerializer.Serialize(settings.HdPackPath))},\"generatedInterface\":{(settings.GeneratedInterface ? "true" : "false")}}}");
     }
 
     public static AreaGameSettings? Deserialize(string text)
@@ -223,8 +227,8 @@ public static class AreaGameSettingsCodec
             using var document = JsonDocument.Parse(text);
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object) return null;
-            if (!root.TryGetProperty("version", out var version) || version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out var v) || v is not (1 or 2 or 3 or Version)) return null;
-            var count = v == 1 ? 4 : v == 2 ? 6 : v == 3 ? 7 : 9;
+            if (!root.TryGetProperty("version", out var version) || version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out var v) || v is not (1 or 2 or 3 or 4 or Version)) return null;
+            var count = v == 1 ? 4 : v == 2 ? 6 : v == 3 ? 7 : v == 4 ? 9 : 10;
             var names = root.EnumerateObject().Select(p => p.Name).ToArray();
             if (names.Length != count || names.Distinct(StringComparer.Ordinal).Count() != count) return null;
             if (!Int(root, "difficulty", 0, AreaGameSettings.MaxDifficulty, out var d)) return null;
@@ -241,7 +245,11 @@ public static class AreaGameSettingsCodec
             if (!root.TryGetProperty("hdPackPath", out var path) || path.ValueKind is not (JsonValueKind.Null or JsonValueKind.String)) return null;
             var folder = path.GetString();
             if (folder is not null && (folder.Length == 0 || folder.Length > MaxPath || folder.Contains('\0'))) return null;
-            return settings with { HdPackSource = source, HdPackPath = folder };
+            settings = settings with { HdPackSource = source, HdPackPath = folder };
+            if (v == 4) return settings;
+            if (!Bool(root, "generatedInterface", out var generated)) return null;
+            // The generated interface draws through the HD interface, so it is on only with it (the options line writes both).
+            return settings with { GeneratedInterface = generated && settings.HdInterface };
         }
         catch (JsonException) { return null; }
     }
@@ -291,7 +299,7 @@ public sealed class AreaOptionsTexts
     {
         [AreaOptionTable.RuleModes] = ["Steamwoven", "Original"],
         [AreaOptionTable.HdGraphicsValues] = ["Off", "On"],
-        [AreaOptionTable.HdInterfaceValues] = ["Off", "On"],
+        [AreaOptionTable.HdInterfaceValues] = ["Off", "On", "Generated (experimental)"],
         [AreaOptionTable.HdPackValues] = ["Auto", "Game", "Custom"],
     };
     private readonly Func<string, int, string?> _original;

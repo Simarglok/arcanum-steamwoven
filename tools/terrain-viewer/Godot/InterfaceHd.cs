@@ -34,14 +34,19 @@ public static class InterfaceHd
     /// <summary>True while the HD interface setting is on.</summary>
     public static bool Enabled { get; private set; }
 
+    /// <summary>ARC-UI-140: true while the interface setting is "Generated (experimental)": frames with a recipe
+    /// (<see cref="InterfaceChromeRecipes"/>) draw generated chrome, their pictures from the HD redraw when <see cref="Enabled"/> and the
+    /// pack have one, else from the Legacy frame; frames without a recipe draw as before.</summary>
+    public static bool Generated { get; private set; }
+
     /// <summary>Raised on the main thread after <see cref="Pack"/> or <see cref="Enabled"/> changed; nodes that draw by hand redraw.</summary>
     public static event Action? Changed;
 
     /// <summary>Sets the pack and the profile; textures repaint only when one of them changed.</summary>
-    public static bool Configure(HdPack? pack, bool enabled)
+    public static bool Configure(HdPack? pack, bool enabled, bool generated = false)
     {
-        if (ReferenceEquals(pack, Pack) && enabled == Enabled) return false;
-        Pack = pack; Enabled = enabled;
+        if (ReferenceEquals(pack, Pack) && enabled == Enabled && generated == Generated) return false;
+        Pack = pack; Enabled = enabled; Generated = generated;
         HdOptimizedStore.Attach(pack, enabled);
         lock (Textures)
         {
@@ -49,7 +54,7 @@ public static class InterfaceHd
                 if (Textures[i].TryGetTarget(out var texture)) texture.Refresh(); else Textures.RemoveAt(i);
         }
         Changed?.Invoke();
-        GD.Print($"ARC-UI-089 interface HD enabled={enabled} pack={(pack is null ? "none" : $"{pack.Id} {pack.Scale}x")}");
+        GD.Print($"ARC-UI-089 interface HD enabled={enabled} generated={generated} pack={(pack is null ? "none" : $"{pack.Id} {pack.Scale}x")}");
         return true;
     }
 
@@ -211,6 +216,12 @@ public partial class HdInterfaceTexture : Texture2D
     private bool _failed;
     private readonly bool _greyscale;
     private readonly bool _premultipliedAlpha;
+    // ARC-UI-140: the generated frame (built once per pack while the generated interface is on) and the scale of what draws.
+    private ImageTexture? _generated;
+    private CanvasTexture? _generatedCanvas;
+    private HdPack? _generatedFor;
+    private bool _generatedFailed;
+    private int _activeScale = 1;
 
     public HdInterfaceTexture() { }
 
@@ -221,10 +232,13 @@ public partial class HdInterfaceTexture : Texture2D
     /// <summary>True when the next draw uses the HD redraw.</summary>
     public bool IsHd => Active() is not null;
 
+    /// <summary>ARC-UI-140: true when what draws is the generated chrome of a recipe (a self-test reads it).</summary>
+    internal bool IsGenerated => Active() is { } active && ReferenceEquals(active, _generatedCanvas);
+
     /// <summary>ARC-DEV-369: builds the HD texture now (the warm-up spreads these over frames) instead of at the first draw.</summary>
     internal void Warm() => Active();
 
-    internal int HdScale => InterfaceHd.Pack?.Scale ?? 1;
+    internal int HdScale => _activeScale;
 
     /// <summary>True when the HD image is premultiplied for an art-font (PremultAlpha) canvas.</summary>
     internal bool Premultiplied => _premultipliedAlpha;
@@ -236,12 +250,21 @@ public partial class HdInterfaceTexture : Texture2D
     internal void Refresh()
     {
         if (!InterfaceHd.Enabled) { _hd = null; _hdCanvas = null; _hdFor = null; _failed = false; }
+        // The generated frame takes its pictures from the pack only while HD is on, so any change of the profile repaints it.
+        _generated = null; _generatedCanvas = null; _generatedFor = null; _generatedFailed = false;
         EmitChanged();
     }
 
     // The canvas texture of the HD image (null while Legacy draws); built with the image, so the two are dropped together.
     private CanvasTexture? Active()
     {
+        if (InterfaceHd.Generated && _frame?.Hd is { } generatedQuery && InterfaceChromeRecipes.For(generatedQuery) is { } recipe
+            && GeneratedCanvas(recipe, generatedQuery) is { } generated)
+        {
+            _activeScale = InterfaceChromeRenderer.Scale;
+            return generated;
+        }
+        _activeScale = InterfaceHd.Pack?.Scale ?? 1;
         if (!InterfaceHd.Enabled || InterfaceHd.Pack is not { } pack || _frame?.Hd is not { } query) return null;
         if (!ReferenceEquals(_hdFor, pack)) { _hdFor = pack; _hd = null; _hdCanvas = null; _failed = false; }
         if (_hdCanvas is null && !_failed)
@@ -279,6 +302,37 @@ public partial class HdInterfaceTexture : Texture2D
             else _failed = true;
         }
         return _hdCanvas;
+    }
+
+    // ARC-UI-140: paints the recipe once (per pack, since the pictures may come from its redraw); a failure draws Legacy or HD as before.
+    private CanvasTexture? GeneratedCanvas(ChromeRecipe recipe, HdSpriteQuery query)
+    {
+        var pack = InterfaceHd.Pack;
+        if (!ReferenceEquals(_generatedFor, pack)) { _generatedFor = pack; _generated = null; _generatedCanvas = null; _generatedFailed = false; }
+        if (_generatedCanvas is not null || _generatedFailed) return _generatedCanvas;
+        try
+        {
+            var scale = InterfaceChromeRenderer.Scale;
+            byte[]? picture = null;
+            if (InterfaceHd.Enabled && pack is { } source && source.Scale == scale
+                && source.ResolveSprite(query, _frame.Rgba) is { Status: HdFrameStatus.Hd, Rgba: { } rgba } hd
+                && hd.Width == _frame.Width * scale && hd.Height == _frame.Height * scale)
+                picture = rgba;
+            var pixels = InterfaceChromeRenderer.Render(recipe, _frame.Width, _frame.Height, _frame.Rgba, picture, query.Key.Frame);
+            using var image = Image.CreateFromData(_frame.Width * scale, _frame.Height * scale, false, Image.Format.Rgba8, pixels);
+            if (_greyscale) InterfaceHd.GreyImage(image);
+            if (_premultipliedAlpha) image.PremultiplyAlpha();
+            image.GenerateMipmaps();
+            _generated = ImageTexture.CreateFromImage(image);
+            _generatedCanvas = new CanvasTexture { DiffuseTexture = _generated, TextureFilter = CanvasItem.TextureFilterEnum.LinearWithMipmaps };
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            // Any failure of a recipe or of the pack's picture: drawn as HD or Legacy from now on, logged once.
+            _generatedFailed = true;
+            GD.PrintErr($"ARC-UI-140 generated interface frame {recipe.File} {query.Key.Frame} failed: {e.GetType().Name}");
+        }
+        return _generatedCanvas;
     }
 
     private Texture2D Source() => Active() is { } hd ? hd : _legacy;
