@@ -275,11 +275,11 @@ CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the morale switches act through the rul
 - **Throws.** The thrown item does not fly (ARC-WORLD-113 lands it at once): no projectile is drawn, a miss strikes no critter on
   the tiles it passes (PF6), no item event fires at its end (PF10) and the item is never hidden while it flies; a first blocker on the line that
   is a scenery, a wall, a dead or unknown critter is not struck, nor is the hero standing on the line to another target (the
-  line's map holds no hero): the item then lands on the tile without a roll; only the wielded "default throws" weapon is thrown (no
-  generic items or grenades: the grenade step answers no grenade), only a seed item of the NPC's list without scripts
+  line's map holds no hero): the item then lands on the tile without a roll; the wielded "default throws" weapon and, since ARC-DEV-364,
+  a grenade the grenade step chose are thrown (a grenade flies as ARC-DEV-258's shot; see [grenade step](#grenade-step-arc-dev-364)), only a seed item of the NPC's list without scripts
   (`ThrowableWeapon` answers no weapon for one the session added to the NPC or one with scripts, so the NPC attacks with it); the
   throw and remove-item scripts are not run and the item spells' unwear (0x4CBFC0) is not run.
-- **Action goals.** Pickups (I8b's goals), grenades and goal 40 (the heal skill or pick locks with an item,
+- **Action goals.** Pickups (I8b's goals) and goal 40 (the heal skill or pick locks with an item,
   0x4352C0): the host's calls refuse or do nothing; the item search chooses nothing. ARC-WORLD-116: the heal skill's rung does not
   search the substitute container of an NPC without a leader (HI1; a companion never has one); an NPC's item use runs no use
   script (an item with one goes on as if the script let it, which the trace notes), and a trap device's use, reading a written item
@@ -398,3 +398,16 @@ square and strikes it (`Resolved=true`, `VisitorHit` in the marker; an unresolve
 `opening` on `Arcanum1-024-fixed` with `--hero` (ARC-SCRIPT-047): the AI runs with the hero where the new game puts it, without any
 input; Virgil's heartbeat 1100 opens his talk (DLG 1324, a talk at the dialog point), removes itself, and after the talk is closed
 no second talk opens; marker `ARC-SCRIPT-047 native-smoke opening PASS`.
+
+## Grenade step (ARC-DEV-364)
+
+Combat perform's grenade step (0x4AC910, [ai-support](ai-support.md), ledger SP14, SP15, [TH1–TH4](../research/ledger/npc-ai.md#npc-grenade-host-arc-dev-364)) runs
+`AiGroundRules.Grenade` over the host (`AreaAiHost` is an `IAiGrenadeWorld`): the grenade is the first generic item (type 14) of the NPC's list (listed or worn, in its
+order) with generic flag 0x10 (`Grenade(npc)`); the thrower needs stored throwing points (basic skill 3, `HasThrowingPoints`); the blast radius is the Begin radius of the
+grenade's first spell slot (`BlastRadius`, `AiGroundRules.BlastRadius`; the Original setting reproduces the original's inverted slot test, which reads 0 for every installed
+grenade, `GrenadeRadiusReadsNoSpellSlot`, TH1); the line of fire is the attack's trace from the NPC's tile to the target's (`LineOfFireBlocker`, cost ignored); the friendly-fire
+square is the host's critter square around the target (`SquareAround`: the hero left out in the Original setting, SP15). CHECK_GRENADE is cleared by the step through the session's
+support-bit operation (`WriteDangerBits`). A chosen throw is the executor's goal 37 at the target's tile (`ThrowItem`: the session's `ThrowByNpc`, the grenade flies as a shot the
+viewer launches and its spell runs at the landing). Heal items, the chooser's items and the NPC's use of an item with no spell were already hosted (ARC-WORLD-108, ARC-WORLD-116);
+the trap device and the written item never reach an NPC in the installed data (IA15). **NOT READY:** the original has no further test; the host answers the blast radius 0 without
+a cast host (the viewer smoke has one).
