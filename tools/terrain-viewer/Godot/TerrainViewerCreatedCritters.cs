@@ -26,12 +26,9 @@ public partial class TerrainViewerApp
     {
         if (_createdPrototypeRead is not { } read || _inventoryHost is not { } inventory) return;
         var critters = CreatedCrittersOf(session, read);
-        // ARC-DEV-371 (PG1): an encounter creature the AI's tick destroyed is destroyed in the session here, outside the tick that holds it; the sync below drops it from the host.
-        foreach (var gone in host.TakeDestroyedCreated())
-        {
-            var destroyed = session.DestroyCreatedObject(session.Version, gone);
-            GD.Print($"ARC-DEV-371 encounter-creature-destroyed entity={gone} disposition={destroyed.Disposition} failure={destroyed.Failure}");
-        }
+        // ARC-DEV-371: the hero left the map these critters were made on: the original's encounter creatures are destroyed when their sector is no longer loaded, and a map change unloads them all.
+        if (_createdCrittersMap != 0 && _createdCrittersMap != CurrentAreaMap && ReferenceEquals(_createdCrittersSession, session))
+            DestroyEncounterCritters(session, new SessionMapId(_createdCrittersMap), "left-map");
         var revision = session.Version.Revision;
         if (revision == _createdCrittersRevision && ReferenceEquals(_createdCrittersHost, host) && _createdCrittersMap == CurrentAreaMap) return;
         _createdCrittersRevision = revision; _createdCrittersHost = host; _createdCrittersMap = CurrentAreaMap;
@@ -60,6 +57,26 @@ public partial class TerrainViewerApp
     private AreaObjectRecord? CreatedCrittersRow(string entity) =>
         _areaSession is { } session && _createdPrototypeRead is { } read && SessionCreatedObject.KindOf(entity) == SessionCreatedKind.Critter
             ? CreatedCrittersOf(session, read).Row(new SessionMapId(CurrentAreaMap), entity) : null;
+
+    /// <summary>ARC-DEV-371 (PG1): applies the destroys the AI host's ticks queued for encounter creatures (a tick holds the session, so this runs from the frame, not from a sync that a script's callback may reach).</summary>
+    private void DrainEncounterDestroys(GameSessionOwner session, AreaAiHost host)
+    {
+        foreach (var gone in host.TakeDestroyedCreated())
+        {
+            var destroyed = session.DestroyCreatedObject(session.Version, gone);
+            GD.Print($"ARC-DEV-371 encounter-creature-destroyed entity={gone} disposition={destroyed.Disposition} failure={destroyed.Failure}");
+        }
+    }
+
+    /// <summary>The critters of <paramref name="map"/> that carry the encounter flag are destroyed in the session.</summary>
+    private void DestroyEncounterCritters(GameSessionOwner session, SessionMapId map, string why)
+    {
+        foreach (var made in session.QueryCreatedObjects(map).Where(o => o.Kind == SessionCreatedKind.Critter && (session.QueryObjectFlags(o.Entity).CritterSet & SessionCreatedObject.EncounterCritterFlag) != 0).ToArray())
+        {
+            var destroyed = session.DestroyCreatedObject(session.Version, made.Entity);
+            GD.Print($"ARC-DEV-371 encounter-creature-destroyed entity={made.Entity} why={why} disposition={destroyed.Disposition} failure={destroyed.Failure}");
+        }
+    }
 
     private AreaCreatedCritters CreatedCrittersOf(GameSessionOwner session, Func<int, Arcanum.Data.Characters.PrototypeFile> read)
     {

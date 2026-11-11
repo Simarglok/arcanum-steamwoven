@@ -1069,8 +1069,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>ARC-DEV-371 (PG1): the critter flag 0x20000 (field 0xDA) the script action create object writes on a critter it made, over the data's own flags. Only a critter the session created is asked (a map
     /// NPC's data has none of them): the AI tick then destroys it when it is left without a next tick outside a round (the sector its tick found not loaded), which this host answers by queuing the
     /// session's destroy of the created critter (<see cref="TakeDestroyedCreated"/>; the viewer applies it outside the tick, which holds the session).</summary>
-    public bool IsEncounterCreature(string npc) => _created.Contains(npc) && Fields(npc)?.Critter is { } critter
-        && (_session.QueryObjectFlags(npc).Critter(unchecked((int)critter.Flags)) & SessionCreatedObject.EncounterCritterFlag) != 0;
+    public bool IsEncounterCreature(string npc) => _created.Contains(npc)
+        && (_session.QueryObjectFlags(npc).Critter(unchecked((int)(Fields(npc)?.Critter?.Flags ?? 0))) & SessionCreatedObject.EncounterCritterFlag) != 0;
 
     private readonly List<string> _destroyedCreated = [];
 

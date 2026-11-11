@@ -49,7 +49,9 @@ public sealed class AreaCreatedCritters
 
     /// <summary>ARC-DEV-371: the base record of the created critter <paramref name="entity"/> of <paramref name="map"/>, or null when the session holds none under it or its prototype did not build a row.</summary>
     public AreaObjectRecord? Row(SessionMapId map, string entity) =>
-        Rows(map).Select(row => row.Map.TryGetRow(entity, out var found) ? found : null).FirstOrDefault(found => found is not null);
+        _session.QueryCreatedObject(entity) is not { Kind: SessionCreatedKind.Critter } made || made.Map != map ? null
+        : _built.TryGetValue(entity, out var known) ? (known.Map.TryGetRow(entity, out var row) ? row : null)
+        : Rows(map).Select(row => row.Map.TryGetRow(entity, out var found) ? found : null).FirstOrDefault(found => found is not null);
 
     /// <summary>The created critters of <paramref name="map"/> as the AI host's NPCs, in the order they were created (<see cref="AreaAiHost.SyncCreated"/>).</summary>
     public IReadOnlyList<AreaAiNpc> Npcs(SessionMapId map) => Rows(map).Select(row => row.Npc).ToArray();

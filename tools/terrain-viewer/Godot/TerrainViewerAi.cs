@@ -552,6 +552,8 @@ public partial class TerrainViewerApp
         TouchAreaView();
         // ARC-DEV-371: the critters a heartbeat or another run created since the last frame are notified (a run that went through Awarded was noted at once).
         if (_useScriptHost is { } scripted) NoteScriptCreations(scripted.Host.TakeCreations());
+        // ARC-DEV-371: the encounter creatures a tick destroyed are destroyed in the session here, from the frame, never from inside a tick.
+        if (_areaSession is { } scriptedSession) DrainEncounterDestroys(scriptedSession, host);
         var steps = AiFrameParticipant.TakeSteps();
         // ARC-WORLD-095: in a round the runs' charges and subturn ends reach the round log and the status line's action points.
         var roundEvents = host.DrainRoundEvents();
@@ -663,7 +665,9 @@ public partial class TerrainViewerApp
     private bool RunNpcTilePending()
     {
         var changed = false;
-        while (_npcTilePending.Count > 0 && !ConversationOpen)
+        // A tile script that creates a critter onto a tile with the same script would queue another notice for each run: at most 64 runs a frame, the rest wait for the next one.
+        var budget = 64;
+        while (_npcTilePending.Count > 0 && !ConversationOpen && budget-- > 0)
         {
             var (npc, homeMap, at) = _npcTilePending.Dequeue();
             // A companion carried here is the group's (its record may be unresolved for the host, which then reads as dead): its death is the session's.

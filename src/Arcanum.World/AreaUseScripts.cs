@@ -1378,7 +1378,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             if (item is null && _world.Critter?.Invoke(request.Prototype) != true) return $"{request.Prototype}: no item prototype and no critter prototype";
             if (request.Near.Map != _shownMap || Place(request.Near) is not { } near) return $"{request.Prototype}: {request.Near.Code} has no place on the shown map";
             var refusal = item is null
-                ? _session.QueryCreateObjectRefusal(SessionCreatedKind.Critter, request.Prototype + AreaPrototypeItems.PrototypeOffset, new SessionMapId(_shownMap), near, count: critters)
+                ? _session.QueryCreateCritterRefusal(request.Prototype + AreaPrototypeItems.PrototypeOffset, new SessionMapId(_shownMap), near, critters)
                 : _session.QueryCreateGroundItemRefusal(item.Kind, new SessionMapId(_shownMap), near, effects.Creations.Count - critters);
             if (refusal is { } refused) return $"{request.Prototype}: the session would refuse it ({refused})";
         }

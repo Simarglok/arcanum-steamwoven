@@ -113,6 +113,18 @@ public sealed partial class GameSessionOwner
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, made, new(_identity, _revision));
     }
 
+    /// <summary>ARC-DEV-371: why <see cref="CreateCritterNear"/> would refuse <paramref name="count"/> creations before any draw (the checks of <see cref="QueryCreateObjectRefusal"/> and the bound of critters with
+    /// written flags, which the encounter flag each one carries counts against), or null when it would not; the host checks a whole run with it before it applies anything.</summary>
+    public GameSessionFailure? QueryCreateCritterRefusal(int prototype, SessionMapId map, CellCoord near, int count = 1)
+    {
+        ThrowIfDisposed();
+        return CreateCritterRefusal(prototype, map, near, count);
+    }
+
+    private GameSessionFailure? CreateCritterRefusal(int prototype, SessionMapId map, CellCoord near, int count) =>
+        CreateObjectRefusal(SessionCreatedKind.Critter, prototype, map, near, 0, 0, null, null, count)
+        ?? (count < 1 || (long)_objectFlags.Count + count > MaxObjectFlagCritters ? GameSessionFailure.BudgetExceeded : null);
+
     /// <summary>
     /// ARC-DEV-371 (E1-c3, ledger PG1, PG2, PG12): a script's create object (action 52, 0x447220 case 0x34) of a critter prototype next to the object on <paramref name="near"/>: the tile is the action's
     /// (up to ten tries of a distance 1..3 and a direction over the host's <paramref name="dropMap"/>, <see cref="DropPlacementRules.PlaceCreated"/>, drawn from the session's generator, the same tile
@@ -128,9 +140,8 @@ public sealed partial class GameSessionOwner
         ArgumentNullException.ThrowIfNull(dropMap);
         if (!Enum.IsDefined(owner)) throw new ArgumentOutOfRangeException(nameof(owner));
         SessionCreatedObjectResult Reject(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, new(_identity, _revision));
-        if (CreateObjectRefusal(SessionCreatedKind.Critter, prototype, map, near, 0, 0) is { } refused) return Reject(refused);
+        if (CreateCritterRefusal(prototype, map, near, 1) is { } refused) return Reject(refused);
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
-        if (_objectFlags.Count >= MaxObjectFlagCritters) return Reject(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         var revision = _revision;
         CellCoord cell;

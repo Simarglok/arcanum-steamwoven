@@ -103,4 +103,18 @@ public sealed class CreatedCritterByScriptTests
         var full = owner.CreateCritterNear(owner.Version, Prototype, Exterior, new(100, 201), new OpenMap());
         Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded), (full.Disposition, full.Failure));
     }
+
+    [TestMethod]
+    public void The_pre_check_counts_the_written_flags_each_critter_will_take()
+    {
+        using var owner = Create();
+        for (var i = 0; i < GameSessionOwner.MaxObjectFlagCritters - 1; i++)
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteObjectFlag(owner.Version, "oid:npc" + i.ToString("x"), SessionObjectFlagField.Critter, 0x40, true).Disposition);
+        Assert.IsNull(owner.QueryCreateCritterRefusal(Prototype, Exterior, new(100, 201), 1));
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.QueryCreateCritterRefusal(Prototype, Exterior, new(100, 201), 2), "a run of two would fill the flag table past its bound");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.CreateCritterNear(owner.Version, Prototype, Exterior, new(100, 201), new OpenMap()).Disposition);
+        var full = owner.CreateCritterNear(owner.Version, Prototype, Exterior, new(100, 201), new OpenMap());
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded), (full.Disposition, full.Failure));
+        Assert.AreEqual(1, owner.QueryCreatedObjects(Exterior).Count, "the refused one made nothing");
+    }
 }
