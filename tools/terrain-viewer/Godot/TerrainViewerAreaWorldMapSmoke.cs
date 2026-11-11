@@ -332,7 +332,7 @@ public partial class TerrainViewerApp
             var started = System.Environment.TickCount64;
             // ARC-MAGIC-059 (0x565140 → 0x457450): entering the travel state ends the spells the hero maintains. A maintained spell of the hero (any data spell the stage can start; the stage tolerates a map with no spell data) is running when Enter is pressed.
             var heroSpell = SpellCasterNow() is not null && _spellRecords is { Length: > 0 } ? StartMaintainedSpellForSmoke(session, SessionSpellCaster.Hero) : null;
-            if (heroSpell is null) GD.Print("ARC-MAGIC-059 native-smoke worldmap-demaintain NONE (no cast host, spell data or maintainable spell)");
+            if (heroSpell is null) { Require(session.QueryHero() is null, "a hero is present, so the cast host and a maintainable spell must be too"); GD.Print("ARC-MAGIC-059 native-smoke worldmap-demaintain NONE (no hero)"); }
             else Require(session.QuerySpellRuns()[heroSpell.Value.Run] is not null, "the hero's maintained spell runs before Enter");
             InventoryKey(Key.Enter);
             Require(map.Travelling && session.QueryRealStep(SessionRealStep.WorldMapStep) is not null, "Enter started the journey and scheduled its first step");

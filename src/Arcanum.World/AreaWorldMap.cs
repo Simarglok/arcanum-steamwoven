@@ -217,7 +217,8 @@ public sealed class AreaWorldMap
         if (!OnStartMap) return AreaWorldMapRefusal.NotOnStartMap;
         if (Travelling) return AreaWorldMapRefusal.Travelling;
         if (_journey.Waypoints.Count == 0) return AreaWorldMapRefusal.NoWaypoints;
-        // Entering the travel state needs the start check (0x5615D0 → 0x565140); a refusal leaves the state as it was.
+        // The click clears the selected waypoint before entering the travel state (0x5C9AD8), then the state needs the start check (0x5615D0 → 0x565140); a refusal leaves the rest as it was.
+        Selected = -1;
         if (TravelCheck?.Invoke() == false) return AreaWorldMapRefusal.ActionsRefused;
         Travelling = true; Landing = null; Steps = 0; GameMs = 0; Selected = -1;
         return AreaWorldMapRefusal.None;

@@ -433,7 +433,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-MAGIC-059 (0x565140, ledger WT9, UE6): the travel start check, before the journey and before each later segment. The hero's running
-    /// actions are interrupted at level 3 (0x424070: a walk or a swing ends with its end nodes; an attempted cast of priority 4 refuses), then the spells
+    /// actions are interrupted at level 3 (0x424070: a walk or a swing ends with its end nodes; an attempted cast of priority 4 or 5 refuses), then the spells
     /// the hero maintains end (0x457450, <see cref="SessionSpellCaster.EndMaintainedSpells"/>). False when a run refused: no journey is entered.</summary>
     private bool WorldMapTravelCheck()
     {
