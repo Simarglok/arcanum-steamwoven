@@ -1465,8 +1465,8 @@ the options smoke's HD line.
 **Bitmap-font text (ARC-DEV-361).** `AreaArtFontFace` (the one source of every art-font glyph texture, drawn by `AreaArtTextDraw`) draws a glyph from
 its HD coverage frame when HD interface is on, the active pack holds an `interface` entry for that glyph's frame (a traced 4× coverage frame, `masked`
 entry, [format](../formats/hd-pack.md#interface-art-arc-dev-242)) and the blend is **Coverage**: the HD pixels go through the same layer maths as the
-Legacy ones (`AreaArtTextRules.LayerPixels`, cover as (w, w, w, w) on the premultiplied canvas), are built with mipmaps and drawn through their own
-`CanvasTexture` (trilinear, as ARC-UI-112) into the glyph's **Legacy-size** rectangle at the same integer position, so the layout, the integer
+Legacy ones (`AreaArtTextRules.LayerPixels`, cover as (w, w, w, w) on the premultiplied canvas), are drawn through their own
+`CanvasTexture` (bilinear, **no mipmaps**, ARC-UI-145: the mip chain blurred the edge at the windows' scales; interface frames stay trilinear, ARC-UI-112) into the glyph's **Legacy-size** rectangle at the same integer position, so the layout, the integer
 advances, the colour and the blend are the original's and only the glyph edge differs. A glyph without an entry, a frame without a key, the Additive and
 Multiply blends and the switch off or no pack draw the Legacy frame exactly as before; the decoded HD glyphs are dropped when the pack or the switch
 changes. Check: `ARC-DEV-361 self-test HD font glyphs PASS` (synthetic 6 × 5 glyph: HD only with pack and switch on, never for another blend or a
