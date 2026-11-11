@@ -15,7 +15,7 @@ namespace Arcanum.World;
 /// <c>row:</c> kind and source index — on their world cells (a carried item, object flag 0x1000, on none), the hero (<see cref="SessionSpellCaster.Hero"/>) on its live cell, and (ARC-DEV-259) an item the session lists as lying on the map, from the session's entry for it. An NPC's facts
 /// are its combat values (<see cref="AreaCombatHost"/>) and stored fields with its life in the session; the line of fire is the
 /// original's (<see cref="LineOfFireRules.Trace"/>, ARC-COMBAT-012) over the map's live <see cref="AreaLineOfFire"/>.
-/// Stand-ins, each documented in the contract: the sector kind is one for the whole map, a path exists to every admitted tile, NPCs other than
+/// Stand-ins, each documented in the contract: the sector kind is one for the whole map, a path exists to every tile the terrain verdict does not block (objects and the walk are not tested; ARC-MAGIC-055), NPCs other than
 /// the companions stand on their map cells (a companion where it stands, none while on another map: ARC-MAGIC-021), and an NPC wields no weapon for a spell's context. Damage to objects other than critters reaches doors, windows, containers, scenery and traps (ARC-DEV-255) and items lying on the ground or worn (ARC-COMBAT-025).
 /// </summary>
 public sealed class AreaSpellCastMap : ISpellCastMap
@@ -236,7 +236,16 @@ public sealed class AreaSpellCastMap : ISpellCastMap
 
     private static bool Matches(AreaObjectRecord row, int typeMask) => row.Type is >= 0 and < 32 && (typeMask & (1 << row.Type)) != 0;
 
-    public bool TileBlocked(SpellLocation tile) => !_steps.IsAdmitted(new(tile.X, tile.Y));
+    /// <summary>
+    /// 0x4D7110 from the evidence (ARC-MAGIC-055, PB1): a tile is blocked when the sector's block mask says so or its tile name does, which is the step evidence's own terrain verdict;
+    /// a tile outside the admitted sectors, or one the evidence cannot speak for, counts as blocked (as <see cref="AreaDropMap"/> and the path request count it). Before, only the
+    /// sector test was made, so <c>Tgt_Tile_Empty</c> and <c>Tgt_Tile_Empty_Immobiles</c> (Wall of Fire, Wall of Stone, Fireflash) never refused a tile of blocking terrain.
+    /// </summary>
+    public bool TileBlocked(SpellLocation tile)
+    {
+        var cell = new AreaStepCell(tile.X, tile.Y);
+        return !_steps.IsAdmitted(cell) || _steps.Terrain(cell) is not { Coverage: CardinalTraversalCoverage.Supported, Disposition: CardinalTraversalDisposition.Open };
+    }
 
     public bool PathExists(SpellTargetObject source, SpellLocation tile) => !TileBlocked(tile);
 
