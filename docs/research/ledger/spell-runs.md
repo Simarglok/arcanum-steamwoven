@@ -1066,7 +1066,7 @@ the session); the multiplayer packet.
 
 ## Control components (ARC-MAGIC-044)
 
-Source: slice E4-c of the [technology audit](../technology-audit-res-125.md#6-queue) and the [magic audit](../magic-audit-res-103.md#slices) (ARC-RES-125, ARC-RES-103; the magic plan's MT15). Read on 2026-11-11 in the 1.0.7.4 executable (`VERSION:1.0.7.4`; SHA-256 `9bd80511…8d52`) by this task alone (F1): the component table 0x5B0BA8 (slots 0, 5, 19, 20 and 24), the executors 0x452F00, 0x451850, 0x4529D0, 0x4529F0 and 0x452ED0, the field reader 0x406CA0 and the loop 0x4510F0 that consumes the jump, all from the Ghidra export and the data-dword table. Nothing was run in the emulator, patched or copied. [Technology evidence](../technology-evidence.md#charge-cells) already named 0x451850; the rows below are the re-read with the other four.
+Source: slice E4-c of the [technology audit](../technology-audit-res-125.md#6-queue) and the [magic audit](../magic-audit-res-103.md#slices) (ARC-RES-125, ARC-RES-103; the magic plan's MT15). Read on 2026-11-11 in the 1.0.7.4 executable (`VERSION:1.0.7.4`; SHA-256 `9bd80511…8d52`) by this task alone (F1): the component table 0x5B0BA8 (slots 0, 5, 19, 20 and 24), the executors 0x452F00, 0x451850, 0x4529D0, 0x4529F0 and 0x452ED0, the field reader 0x406CA0 and the loop 0x4510F0 that consumes the jump, all from the Ghidra export and the data-dword table. Nothing was run in the emulator, patched or copied. [Technology evidence](../technology-evidence.md#technological-items-fr-magic-010-fr-magic-011) already named 0x451850; the rows below are the re-read with the other four.
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |

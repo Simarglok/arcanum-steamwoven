@@ -42,8 +42,9 @@ and its link holds the detail.
 - **Where work runs.** Work that builds, tests or runs code, Godot or original
   data runs on the owner's Mac (a Remote Control session in the owner's
   checkout). A docs-only task (only Markdown documentation changes) may run in
-  a cloud clone without .NET or Godot and runs **no checks**; its PR says
-  "docs-only, no checks run", and the independent review still applies.
+  a cloud clone without .NET or Godot and runs **no checks**
+  except `python3 -B tools/docs_check.py`; its PR says "docs-only, no checks run
+  except docs_check", and the independent review still applies.
 - **Runs on the Mac.** Every Godot run, export and `dotnet` build/test goes
   through the launch queue `./arcanum run --kind window|headless|export|dotnet|quick -- COMMAND`
   (`./arcanum queue` shows it; it replaces `lockf`)
@@ -57,7 +58,7 @@ and its link holds the detail.
 - **Pull requests.** Every change goes through a PR from a branch (never push
   to `main`) as GitHub user `Simarglok`. A fresh subagent reviews the exact
   diff first. Once the acceptance criteria, task checks and root checks pass
-  (none for docs-only) and the review is addressed, merge the PR yourself and
+  (only `docs_check.py` for docs-only) and the review is addressed, merge the PR yourself and
   report it, unless the owner explicitly asked to review it; then leave it open
   ([review, publication and merge](docs/workflow/tasks.md#review-publication-and-merge)).
 - **Graphics changes** (owner rule 2026-11-11): post in the thread one
@@ -91,6 +92,7 @@ yet. Current state: the component catalogue
   dotnet restore Arcanum.Steamwoven.sln --locked-mode && dotnet build --no-restore && dotnet test --no-build --filter "TestCategory!=RealData"
   python3 -B tools/research/dat_probe.py --self-test
   python3 -B tools/original-oracle/oracle.py --self-test
+  python3 -B tools/docs_check.py
   ```
 
   The root solution leaves out the terrain viewer and its tests,

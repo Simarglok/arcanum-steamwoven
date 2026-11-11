@@ -2689,7 +2689,7 @@ on the live session; on a detached copy every quest and rumor that has a text is
 
 With the game's art and the message window's fonts read (`TextFonts`, ARC-DEV-156) the logbook shows the original's book instead of the list
 (`AreaLogbookArtLayout`, `AreaLogbookArtView`; ledger [LB14–LB17](../research/ledger/ui-audio.md#logbook-arc-ui-008), plan
-[original windows](../ui/original-windows.md#logbook-rumors-and-quests-done-arc-ui-074)): the side panel and the book with the page art, the seven tab
+[original windows](../ui/original-windows.md#logbook-all-seven-tabs-the-pc-lens-and-the-tab-hint-done-arc-ui-074-arc-ui-079082-arc-ui-098)): the side panel and the book with the page art, the seven tab
 buttons (the shown tab pressed), the previous and next page buttons, the title and the page numbers in the two page halves, and the entries of
 the tab laid out on the spread by the original's rules (one text line between entries, an entry that does not fit the column goes whole to the
 next column or spread, only the first entry of a fresh column is cut at the bottom) in the colours of their state with a strike-through for a
