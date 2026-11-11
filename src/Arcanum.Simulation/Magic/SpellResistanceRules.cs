@@ -1,3 +1,6 @@
+using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Combat;
+
 namespace Arcanum.Simulation.Magic;
 
 /// <summary>What a magic roll decides; every roll carries one, so a trace shows which roll decided what.</summary>
@@ -64,8 +67,10 @@ public readonly record struct SpellResistRecord(int Spell, bool Technology, bool
 
 /// <summary>
 /// The target facts the resistance reads: whether it is the run's parent (the caster), its kind, the "no disintegrate" critter
-/// flag, its <em>stored</em> magic resistance (the object's resistance 4, no armour, effects or clamp: O9), its effective
-/// magick/tech aptitude, the effective value of the record's <c>Resist:</c> stat, and whether that stat is extraordinary.
+/// flag, the magic resistance the save reads (<see cref="StoredMagicResistance"/>), its effective magick/tech aptitude, the effective value of the
+/// record's <c>Resist:</c> stat, and whether that stat is extraordinary. The original reads the <em>stored</em> resistance (the object's resistance 4, no armour,
+/// effects or clamp: O9, RE2); Steamwoven reads it under the target's <c>resistmagic</c> effect changes (<see cref="SpellResistanceRules.ResistanceUnderEffects"/>,
+/// ARC-MAGIC-033, the owner's decision D6c, both modes), so Resist Magick works.
 /// </summary>
 public readonly record struct SpellResistTarget(bool IsCaster, SpellTargetKind Kind, bool NoDisintegrate, int StoredMagicResistance,
     int Aptitude, int ResistStatValue, bool ResistStatExtraordinary);
@@ -258,6 +263,22 @@ public static class SpellResistanceRules
     {
         ArgumentNullException.ThrowIfNull(failChance);
         return itemMagical && itemSpell != -1 ? failChance(itemSpell) : 0;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-033 (owner decision D6c, magic audit RES-103; a bug of the game fixed in both modes, no switch): the magic resistance a save reads once the target's
+    /// <c>resistmagic</c> effect changes (Resist Magick, spell 40, effect 56, and the magic parts of effects 51, 52, 55, 154 and 155) count. The original's save
+    /// reads <paramref name="stored"/> alone (0x4537B0, RE2). With no change the value is <paramref name="stored"/> exactly (an immune 100 stays 100). With changes it is the effect
+    /// aggregation over the stored value (0x4EA6C0, as the sheet's Magick line does: 0x43D6D0 puts the effects after the stored value) cut to 0..95 for a PC and an
+    /// ordinary NPC, but never below an already higher stored value, so a blessing cannot make an immune NPC less resistant; a monstrous NPC is cut to the resolver's ±1000 only.
+    /// </summary>
+    public static int ResistanceUnderEffects(int stored, IReadOnlyList<EffectModifier> magic, bool unclamped)
+    {
+        ArgumentNullException.ThrowIfNull(magic);
+        if (magic.Count == 0) return stored;
+        var value = EffectModifiers.Apply(stored, magic);
+        return unclamped ? Math.Clamp(value, -AttackResolver.MaxResistance, AttackResolver.MaxResistance)
+            : Math.Clamp(value, 0, Math.Max(CombatantRules.MaxResistance, stored));
     }
 
     // The stored resistance, scaled for a negative aptitude unless fate-maximised (toward zero, 32-bit).
