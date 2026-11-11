@@ -22,6 +22,9 @@ internal static class AreaMapLoadOperation
     internal static TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments, CancellationToken token)
     {
         var started = Environment.TickCount64;
+        // ARC-DEV-367: the worker's stages print as load.worker.NAME (and the whole as load.worker).
+        using var lap = PerfProbe.Lap("load.worker");
+        lap.Step("stack");
         var mapName = arguments.AreaMapName ?? throw new InvalidOperationException("AREA_MAP_REQUIRED");
         var discovery = ContentMountPlan.Discover(arguments.GameRoot ?? throw new InvalidOperationException("AREA_MAP_GAME_ROOT_REQUIRED"));
         if (discovery.Status != ContentMountStatus.Ready) throw new InvalidOperationException("AREA_MAP_MOUNT_" + discovery.Status.ToString().ToUpperInvariant());
@@ -32,6 +35,7 @@ internal static class AreaMapLoadOperation
         RequireSame(stack.Plan.SearchOrder.Where(s => s.Role == ContentSourceRole.ModuleArchive).Select(s => s.Path), arguments.ModulePath);
         var catalog = WorldCatalog.Open(stack);
         var centre = WindowCentre(stack, catalog, mapName, arguments);
+        lap.Step("plan");
         // ARC-DATA-037: the map patch is applied under the session's data rules (Steamwoven by default).
         var data = arguments.DataRules ?? Arcanum.Data.Fixes.DataFixProfile.Steamwoven;
         var created = centre is { } around ? AreaMapPlans.CreateWindow(stack, catalog, mapName, new(checked((int)around.X), checked((int)around.Y)), data: data)
@@ -43,6 +47,7 @@ internal static class AreaMapLoadOperation
         Console.WriteLine($"ARC-RENDER-017 load stage=plan map={mapPlan.Map.Name} catalogue={mapPlan.Plan.CatalogueMap} sectors={mapPlan.Map.SectorFiles.Count}" +
             (centre is { } shown ? $" window={shown.X},{shown.Y}" : string.Empty));
         token.ThrowIfCancellationRequested();
+        lap.Step("transitions");
         // ARC-WORLD-031: the map's transitions and the maps this mode can open, from the same stack.
         var (transitions, destinations, transitionsFailure) = Transitions(stack, catalog, mapPlan.Map);
         Console.WriteLine($"ARC-WORLD-031 load stage=transitions sites={transitions?.Sites.Count} unconditional={transitions?.Unconditional.Count()} issues={transitions?.Issues.Count} destinations={destinations?.Count} failure={transitionsFailure}");
@@ -54,7 +59,9 @@ internal static class AreaMapLoadOperation
         if (mapPlan.Plan.Window is not null) Console.WriteLine($"ARC-WORLD-081 load stage=template-scripts scripts={templateScripts.Count}");
         token.ThrowIfCancellationRequested();
 
+        lap.Step("open");
         using var owner = mapPlan.Open();
+        lap.Step("read");
         AreaStepSnapshot? steps = null;
         var area = AreaLoadOperation.ReadWholeMap(generation, owner, token, snapshot =>
         {
@@ -75,6 +82,7 @@ internal static class AreaMapLoadOperation
         Console.WriteLine($"ARC-RENDER-017 load stage=area-steps cells={traversal.AdmittedCells} unknown={traversal.TerrainUnknownCells + traversal.UnknownObjects} spawn={plan.Chart.Spawn}");
         token.ThrowIfCancellationRequested();
 
+        lap.Step("actor");
         using var module = DatArchive.Open(arguments.ModulePath, ViewerArchiveOptions);
         using var actorResource = DatArchive.Open(arguments.ActorResourcePath!, ViewerArchiveOptions);
         // ARC-WORLD-020: the AREA game view also draws the human's run ART, on maps as on the exterior.
@@ -86,6 +94,7 @@ internal static class AreaMapLoadOperation
         // says why. ARC-DATA-027: the lighting files come from the content stack in the phase the original reads
         // them. The three viewer archives read outside the owner are re-verified against the snapshot's identities
         // below; the step evidence's rule payloads from other stack sources are not (it is labelled structural).
+        lap.Step("lighting");
         var lighting = AreaLightingReader.Read(stack, snapshot, token);
         AreaLightingPlan? lit = null; var lightsFailure = LightingFailure.None; var objectsFailure = LightingFailure.None; var objectLights = 0;
         var lightingStarted = Environment.TickCount64;
@@ -117,8 +126,10 @@ internal static class AreaMapLoadOperation
         var unlitStartup = lit is null ? AreaLightingReader.ReadStartup(stack) : null;
         Console.WriteLine($"ARC-RENDER-017 load stage=lighting result={lighting.Failure} stationary={lightsFailure} objects={objectsFailure} " +
             $"object-lights={objectLights} carried-art={lit?.CarriedLightFailure.ToString() ?? "unlit"} ms={Environment.TickCount64 - lightingStarted}");
+        lap.Step("verify");
         AreaLoadOperation.VerifyFiles([(arguments.ModulePath, moduleIdentity), (arguments.ResourcePath, resourceIdentity),
             (arguments.ActorResourcePath!, actorIdentity)], token);
+        lap.Step("scene");
 
         var terrainCommands = plan.Commands.Where(command => command.Identity is null).ToArray();
         var terrain = TerrainScenePlan.CreateSynthetic(plan.WorldBounds, terrainCommands.Select((command, index) =>

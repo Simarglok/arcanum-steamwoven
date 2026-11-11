@@ -193,6 +193,17 @@ class PlanTests(unittest.TestCase):
             self.plan("pr", "--stages", "menu,death")
         self.assertEqual(self.plan("pr", "--stages", "menu,death", "--main-menu", "--no-build")[0].requires, ("menu", "death"))
 
+    def test_the_perf_stages_follow_their_kind(self) -> None:
+        # ARC-DEV-367: `perf` plays a hero in a map window; `perf-menu` runs from the main menu, with no hero.
+        step = self.plan("pr", "--stages", "perf", "--no-build")[0]
+        self.assertEqual(step.requires, ("perf",))
+        self.assertEqual(step.command[step.command.index("--hero") + 1], smoke.AUTO_HERO)
+        menu = self.plan("pr", "--stages", "perf-menu", "--main-menu", "--no-build")[0]
+        self.assertEqual(menu.requires, ("perf-menu",))
+        self.assertNotIn("--hero", menu.command)
+        with self.assertRaisesRegex(ValueError, "perf-menu runs from the main menu: add --main-menu"):
+            self.plan("pr", "--stages", "perf-menu")
+
     def test_the_stages_that_run_only_without_map_get_their_own_run(self) -> None:
         steps = self.plan("pr", "--stages", "map,ai,cast,stream,barter", "--no-build")
         self.assertEqual([(step.name, step.requires) for step in steps],

@@ -59,6 +59,7 @@ public partial class TerrainViewerApp
     {
         // ARC-DEV-111: the menu Escape opens over a window that stays, so a window under the save list does not refuse it.
         if (!QuickKeysActive || SaveListOpen || PanelOutsideStackOpen) return;
+        using var span = PerfProbe.Span("window.open.SaveList");
         var list = SaveLibrary.List();
         if (list.Failure != GameSaveFailure.None)
         {
