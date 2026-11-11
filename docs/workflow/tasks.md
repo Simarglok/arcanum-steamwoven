@@ -163,6 +163,10 @@ narrowed the same day in ARC-DEV-061):
   and only when main changed since the last package; not per PR.
 - A stage that also fails on clean main is not this PR's failure: name it in
   the PR and go on; do not investigate it in the task thread.
+  The runner prints `known on main, not this PR` for the failures listed in
+  `tools/local_dev/smoke_known_failures.json`
+  ([known failures](toolchain.md#smoke-runner-arc-dev-061)); a failure that is
+  not listed but also fails on clean main is named in the PR the same way.
 - Run them with the shared runner ([smoke runner](toolchain.md#smoke-runner-arc-dev-061)):
   `./arcanum smoke pr --stages S,... [--crash-site]` per PR and
   `./arcanum smoke full` for the chain; no scratch smoke scripts.
