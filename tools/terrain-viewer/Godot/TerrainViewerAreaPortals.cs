@@ -183,15 +183,17 @@ public partial class TerrainViewerApp
     /// <summary>Drops armed lockpicks with the reason on the HUD (nothing when none are armed).</summary>
     private void CancelArmedLockpicks(string why)
     {
-        if (_lockpickArmed is null) return;
-        DisarmLockpicks(); _portalNotice = "pick a lock cancelled: " + why;
+        if (_lockpickArmed is null && _itemAiming is null) return;
+        // ARC-DEV-365: the item cursor shares interface mode 16 with armed lockpicks and leaves with them.
+        var cursor = _itemAiming is not null;
+        DisarmLockpicks(); _portalNotice = (cursor ? "item cursor cancelled: " : "pick a lock cancelled: ") + why;
     }
 
     /// <summary>ARC-DEV-110 (MIG16 S3): the armed lockpicks are interface mode 16 (item use) on the viewer's stack; popping it clears them
     /// (its leave step runs <c>_lockpickArmed = null</c>) and puts a held item back. Nothing when none are armed.</summary>
     private void DisarmLockpicks()
     {
-        if (_lockpickArmed is not null) CloseTargetMode(InterfaceMode.ItemTarget);
+        if (ItemTargetOpen) CloseTargetMode(InterfaceMode.ItemTarget);
     }
 
     /// <summary>Drops a walk to a door (another click, a reset or a reload replaced it), and armed lockpicks unless <paramref name="keepArmed"/> (a world press, which the armed lockpicks take).</summary>

@@ -110,6 +110,12 @@ public interface IAreaHeroRunsViewer
     bool HeroFaceSkill(string target) => true;
     void HeroPickPocket(string target, string item, bool plant) { }
     void HeroPickLock(string target, string item) { }
+    /// <summary>ARC-DEV-365: the cell next to a tile that goal 41 walks to; null when there is none.</summary>
+    CellCoord? ItemTileApproach(CellCoord tile, int range) => null;
+    /// <summary>ARC-DEV-365: the last node of goal 39: the item use on the object.</summary>
+    void HeroUseItem(string item, string target) { }
+    /// <summary>ARC-DEV-365: the last node of goal 41: the item use on the tile.</summary>
+    void HeroUseItemOnTile(string item, CellCoord tile) { }
 }
 
 /// <summary>What a request for a walk run did.</summary>
@@ -192,7 +198,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     public static bool IsHeroTurn(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.Rotate;
 
     /// <summary>Whether <paramref name="run"/> is a run of the hero this host steps: its walk (3, 4) or its turn (53).</summary>
-    public static bool IsHeroRun(GoalRun run) => IsHeroWalk(run) || IsHeroTurn(run) || IsHeroTalk(run) || IsHeroUse(run) || IsHeroPickup(run) || IsHeroAttack(run) || IsHeroThrow(run) || IsHeroCast(run) || IsHeroSkill(run) || IsHeroStun(run) || IsHeroDown(run);
+    public static bool IsHeroRun(GoalRun run) => IsHeroWalk(run) || IsHeroTurn(run) || IsHeroTalk(run) || IsHeroUse(run) || IsHeroPickup(run) || IsHeroAttack(run) || IsHeroThrow(run) || IsHeroCast(run) || IsHeroSkill(run) || IsHeroItemUse(run) || IsHeroStun(run) || IsHeroDown(run);
 
     /// <summary>ARC-DEV-187 (MIG13 S13a): the hero's stun run (goal 57): the session starts it from a life step that stunned the hero, which interrupts the hero's other runs (levels 4 then 1).</summary>
     public static bool IsHeroStun(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.AnimateStunned;
@@ -212,6 +218,12 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
 
     /// <summary>ARC-DEV-174: whether <paramref name="run"/> is a use of the hero this host steps: the bottom goal 38 (use object) or 81 (use container) of the owner <c>pc</c>, or (ARC-DEV-176) the door goal 38 turned into at its node 6 (11, 12, 49, 50).</summary>
     public static bool IsHeroUse(GoalRun run) => run.Owner == Hero && run.Bottom.Goal is GoalType.UseObject or GoalType.UseContainer or GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor;
+
+    /// <summary>ARC-DEV-365: whether <paramref name="run"/> is an item use of the hero this host steps: the bottom goal 39 (on an object) or 41 (on a tile) of the owner <c>pc</c>.</summary>
+    public static bool IsHeroItemUse(GoalRun run) => run.Owner == Hero && run.Bottom.Goal is GoalType.UseItem or GoalType.UseItemOnTile;
+
+    /// <summary>ARC-DEV-365: the hero's item use run (goal 39 or 41), or null.</summary>
+    public GoalRun? ItemUseRun => _session.QueryGoals().RunsOf(Hero).FirstOrDefault(IsHeroItemUse);
 
     /// <summary>ARC-DEV-175: whether <paramref name="run"/> is a pickup of the hero this host steps: the bottom goal 15 (pick up an item) of the owner <c>pc</c>.</summary>
     public static bool IsHeroPickup(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.PickupItem;
@@ -472,6 +484,28 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         return started.Started;
     }
 
+    /// <summary>
+    /// ARC-DEV-365 (T-g, ledger IA8, IA11): the item use goal 39 (<paramref name="target"/> an object) or 41 (a tile) the item cursor's apply starts: the movement gate, the generic starter (a level-3 interrupt of the hero's runs),
+    /// the run flag when the always-run rule turns running on, and the no-walk flag 0x100 for a goal 39 started with Shift (the hero acts from where it stands, IA8). False when the gate or a run's refusal stopped it.
+    /// </summary>
+    public bool UseItem(string item, string target, bool run, bool noWalk)
+    {
+        if (!MayTalk) return false;
+        var flags = (run ? GoalRunFlags.Running : GoalRunFlags.None) | (noWalk ? GoalRunFlags.NoWalk : GoalRunFlags.None);
+        var started = _session.StartGoal(new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(GoalType.UseItem, target) { Item = item }, flags), _ports);
+        foreach (var end in started.Ended) EndNodes(end, "ROUTE_REPLACED_BY_ITEM_USE");
+        return started.Started;
+    }
+
+    /// <summary>ARC-DEV-365: goal 41 for a trap device on a tile (ledger IA9, IA11): the starter 0x4355F0 sets no run flags.</summary>
+    public bool UseItemOnTile(string item, CellCoord tile)
+    {
+        if (!MayTalk) return false;
+        var started = _session.StartGoal(new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(GoalType.UseItemOnTile, tile: tile) { Item = item }), _ports);
+        foreach (var end in started.Ended) EndNodes(end, "ROUTE_REPLACED_BY_ITEM_USE");
+        return started.Started;
+    }
+
     /// <summary>ARC-DEV-184: the hero's skill run ends (a cancel): the run is killed and the walk it pushed stops. False when there was none.</summary>
     public bool EndSkill(string why)
     {
@@ -694,7 +728,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
                     return SessionGoalStepAnswer.End;
             }
         }
-        if (!IsHeroWalk(run) && !IsHeroTalk(run) && !IsHeroUse(run) && !IsHeroPickup(run) && !IsHeroAttack(run) && !IsHeroThrow(run) && !IsHeroCast(run) && !IsHeroSkill(run)) return SessionGoalStepAnswer.End;
+        if (!IsHeroWalk(run) && !IsHeroTalk(run) && !IsHeroUse(run) && !IsHeroPickup(run) && !IsHeroAttack(run) && !IsHeroThrow(run) && !IsHeroCast(run) && !IsHeroSkill(run) && !IsHeroItemUse(run)) return SessionGoalStepAnswer.End;
         Steps++;
         // ARC-DEV-149 (MIG13 S10b-2b): the walk is stepped by the table's nodes over the hero ports (goals 3 and 4 plan, goal 5 takes the steps on the hero's body); a far goal is handed to the route follower, and the run
         // lives while the route follows it.
@@ -777,6 +811,9 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         public bool HeroFaceSkill(string target) => host._viewer.HeroFaceSkill(target);
         public void HeroPickPocket(string target, string item, bool plant) => host._viewer.HeroPickPocket(target, item, plant);
         public void HeroPickLock(string target, string item) => host._viewer.HeroPickLock(target, item);
+        public CellCoord? ItemTileApproach(CellCoord tile, int range) => host._viewer.ItemTileApproach(tile, range);
+        public void HeroUseItem(string item, string target) => host._viewer.HeroUseItem(item, target);
+        public void HeroUseItemOnTile(string item, CellCoord tile) => host._viewer.HeroUseItemOnTile(item, tile);
         bool IAiHeroWalkWorld.HeroSettled => host._viewer.HeroSettled;
         public bool NeedsTurn(int rotation) => host._viewer.HeroSettled && host._viewer.HeroFacing != (rotation & 7);
 

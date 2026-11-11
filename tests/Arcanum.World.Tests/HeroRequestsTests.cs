@@ -34,6 +34,8 @@ public sealed class HeroRequestsTests
         public bool StartPickPocket(string victim, string item, bool plant) { Calls.Add($"pickpocket {victim} {item} plant={plant}"); return TalkStarts; }
         public bool StartCast(int run, string? target) { Calls.Add($"cast {run} {target}"); return TalkStarts; }
         public bool StartThrow(string item, CellCoord tile) { Calls.Add($"throw {item} {tile.X},{tile.Y}"); return TalkStarts; }
+        public bool StartUseItem(string item, string target, bool run, bool noWalk) { Calls.Add($"use-item {item} {target} run={run} nowalk={noWalk}"); return TalkStarts; }
+        public bool StartUseItemOnTile(string item, CellCoord tile) { Calls.Add($"use-item-tile {item} {tile.X},{tile.Y}"); return TalkStarts; }
     }
 
     [TestMethod]
@@ -376,5 +378,40 @@ public sealed class HeroRequestsTests
         Assert.AreEqual(HeroRequestOutcome.Ignored, result.Outcome, "a corpse in combat mode without Alt does nothing");
         Assert.AreEqual(0, hero.Calls.Count);
         Assert.AreEqual(HeroClickGoal.UseContainer, new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:4", Alt: true)).Click, "with Alt it is looted");
+    }
+    // ---- ARC-DEV-365 (T-g): the item use goals 39 and 41 ----
+
+    [TestMethod]
+    public void AnItemUseRequestStartsGoal39RunningByTheAlwaysRunRuleAndShiftSetsTheNoWalkFlag()
+    {
+        var hero = new Hero { Input = new(AlwaysRunOption: false, NumLockRun: false) };
+        var host = new HeroRequestHost(hero);
+        var result = host.Apply(new UseItemRequest("kit:3", "npc:2", Ctrl: true, Shift: true));
+        Assert.AreEqual((HeroRequestOutcome.Done, true), (result.Outcome, result.Run));
+        CollectionAssert.AreEqual(new[] { "use-item kit:3 npc:2 run=True nowalk=True" }, hero.Calls);
+        hero.Calls.Clear();
+        Assert.IsFalse(host.Apply(new UseItemRequest("kit:3", "npc:2", Ctrl: false, Shift: false)).Run);
+        CollectionAssert.AreEqual(new[] { "use-item kit:3 npc:2 run=False nowalk=False" }, hero.Calls);
+    }
+
+    [TestMethod]
+    public void AnItemUseRequestIsIgnoredForAHeroThatCannotActAndRefusedWhenTheStartIs()
+    {
+        var down = new Hero { State = new(new CellCoord(10, 10), 5, false, 0, false, false) };
+        Assert.AreEqual(HeroRequestOutcome.Ignored, new HeroRequestHost(down).Apply(new UseItemRequest("kit:3", "npc:2", false, false)).Outcome);
+        Assert.AreEqual(HeroRequestOutcome.Ignored, new HeroRequestHost(down).Apply(new UseItemOnTileRequest("kit:3", new(3, 4))).Outcome);
+        Assert.AreEqual(0, down.Calls.Count);
+        var refused = new Hero { TalkStarts = false };
+        Assert.AreEqual(HeroRequestOutcome.Refused, new HeroRequestHost(refused).Apply(new UseItemRequest("kit:3", "npc:2", false, false)).Outcome);
+        Assert.AreEqual(HeroRequestOutcome.Refused, new HeroRequestHost(refused).Apply(new UseItemOnTileRequest("kit:3", new(3, 4))).Outcome);
+    }
+
+    [TestMethod]
+    public void AnItemUseOnATileRequestStartsGoal41WithNoRunFlag()
+    {
+        var hero = new Hero();
+        var result = new HeroRequestHost(hero).Apply(new UseItemOnTileRequest("kit:3", new(3, 4)));
+        Assert.AreEqual((HeroRequestOutcome.Done, false), (result.Outcome, result.Run));
+        CollectionAssert.AreEqual(new[] { "use-item-tile kit:3 3,4" }, hero.Calls);
     }
 }
