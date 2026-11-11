@@ -2,7 +2,7 @@
 
 Audit baseline: merged main [`a8a553b7c406ace77ea019bf2b13251f00ecddb6`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), through PR #54, 2026-10-09. The audit compared repository source/tests/contracts, all 54 merged PR records and the read-only Hermes board snapshot at **18:11:36 UTC**. Merge commits were checked against this baseline; root-card `done` alone is not product delivery. Later merges require another coverage update.
 
-This is a source/delivery audit, **not a new build, game, original-data, graphical, export or device run**. Test results below are historical evidence reported for the linked reviewed candidates. They do not certify every subsystem together on the audit baseline. The [191-group requirements register](../requirements/README.md) gives each requirement one status with what is implemented, what is missing and documentation links in its [coverage matrix](../requirements/coverage.md) (re-checked 2026-10-20); no whole-game readiness percentage is inferred.
+This is a source/delivery audit, **not a new build, game, original-data, graphical, export or device run**. Test results below are historical evidence reported for the linked reviewed candidates. They do not certify every subsystem together on the audit baseline. The [191-group requirements register](../requirements/README.md) gives each requirement one status with what is implemented, what is missing and documentation links in its [coverage matrix](../requirements/coverage.md) (re-checked against code 2026-11-11, ARC-RES-107); no whole-game readiness percentage is inferred.
 
 ## Implemented components
 
@@ -270,9 +270,24 @@ ARC-SCRIPT-003 was just delivered by merged PR #54 and is credited above even th
 
 ## Still missing for a playable game
 
-No integrated playable conversation/interaction, complete exterior rendered world with general passability, cave entry/return, game lighting, inventory/equipment, character rules, combat, full SCR/quests/AI, overland travel or game save/load. Isolated components and research have explicit narrower value; they do not constitute a pre-alpha game. Legacy/HD switching, upscale assets and Windows/Linux/handheld validation remain later product work.
+State of 2026-11-11 (main `52f66db`), checked against the code by ARC-RES-107 and the [missing systems plan](missing-systems-plan.md#3-map-of-the-systems) (sections 3.1 and 3.2 name each system with its file and symbol). This is a list of what the player cannot do yet, not of what exists: the viewer plays the opening map and the world map in the original's window, and the components in the tables above are integrated into it.
 
-The [roadmap](roadmap.md) describes dependency gates; the [vision](vision.md) describes accepted direction. Requirements/product completeness and milestone scope need their own decisions; the audit changes coverage, not behavior or project merge authority.
+What is integrated and working in the viewer (details in the [coverage matrix](../requirements/coverage.md)): whole-map rendering with passability and the sector cache, game lighting and the clock, cave entry and return, dialogue and barter, the inventory and equipment, the character sheet and creation, the hero's combat, ranged attacks and thrown items, NPC awareness and combat, spells from the hotkey bar and from items, the technology schematics, traps on maps, the logbook, the world map screen with travel and discovery, save and load, and the HD graphics and interface switches.
+
+Not built or only stubbed (each has an epic in the plan):
+
+- Objects made at run time other than items: no critter can be created and the Summon spell component is a stub; scenery and eye-candy objects can (E1, ARC-DEV-347).
+- Monster generators, respawn, critter body decay and random encounters on the world map (E2).
+- Sleep and rest windows, the NPC hourly day (beds, walking between day and night standpoints) and the HUD clock (E3).
+- 17 of the 25 spell component types (movement, cast, polymorph, dispel, branches and others), most object flags, item recharge, teleport bans by area (E4).
+- 76 of 142 script actions and 16 of 53 conditions are admitted (survey of the missing systems plan); dialogue markers `c r t z` and positive `IN` (E5).
+- Spot-trap roll, disarm action and placed trap devices (E6).
+- Movies, credits, intro and endings (E7).
+- Fate window and Fate Points, skill pane, action-point readout, companions screen, gambling, identify window, several sound callers and the hidden options (E8).
+- Gamepad in the game UI, UI scale, and Windows, Linux and handheld validation (E9; the Windows package exists and was never run on Windows).
+- The network game, a second module and mods (E10, deferred by the owner).
+
+This is not yet a playable game. The [roadmap](roadmap.md) describes dependency gates; the [vision](vision.md) describes accepted direction. Requirements/product completeness and milestone scope need their own decisions.
 
 ## Maintaining this catalogue
 
