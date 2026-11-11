@@ -1,0 +1,13 @@
+<Project Sdk="Godot.NET.Sdk/4.7.2">
+  <PropertyGroup>
+    <AssemblyName>Arcanum.Experiments.HdUiDensityLab</AssemblyName>
+    <RootNamespace>Arcanum.Experiments.HdUiDensityLab</RootNamespace>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <NuGetLockFilePath Condition="'$(Configuration)' == 'ExportDebug' Or '$(Configuration)' == 'ExportRelease'">$(BaseIntermediateOutputPath)locks/$(Configuration)/$(GodotTargetPlatform)/$(RuntimeIdentifier)/packages.lock.json</NuGetLockFilePath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+  </ItemGroup>
+</Project>

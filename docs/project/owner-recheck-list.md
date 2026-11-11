@@ -591,9 +591,8 @@ Known differences (documented, not bugs):
 
 ## ARC-RES-121 — Function audit wave 3, groups G and I (2026-11-11)
 
-The audit changes no behaviour. Two places where it read original behaviour that our code does not reproduce and that the export shows no caller for ([ledger GI-5](../research/ledger/census-triage-gi.md#findings-of-wave-3)); the comparison tells whether those functions are live.
+The audit changes no behaviour. It first named two places where the original behaves in a way our code does not reproduce and the export showed no caller for ([ledger GI-5](../research/ledger/census-triage-gi.md#findings-of-wave-3)). Task T5 (ARC-RES-123) then searched the whole executable bytes and found no reference to either, so both are dead code as far as a static search shows: the typed-order garbling 0x4C3120 is not run (an order should arrive whole) and the bar hide toggle 0x54ACB0 is not what F10 runs. One confirmation of the live F10 path remains.
 
 | # | Step | Expected (from the original executable) | Status |
 | --- | --- | --- | --- |
-| 1 | Press F10 in the original game on a normal map. | The interface bar hides or shows (the compact interface toggle, 0x54ACB0) and the two gauge strips are redrawn. Ours only reserves the key. If nothing happens, the function is dead code. | open |
-| 2 | Start a game with a hero of intelligence 3 or 4, join a companion and type a party order with long words (Enter, the companion's name, a command). | Words of intelligence plus two letters or more are replaced by filler text (0x4C3120); for a hero with the dim flag every word is. Ours does not read typed orders yet. If the order arrives whole, the function is dead code. | open |
+| 1 | Start the original game with `-fullscreen` and press F10 on a normal map (without that start option the toggle does nothing). | The interface hides or shows through the interface hide toggle 0x5578E0 (the main loop key handler's F10 branch; [UI ledger](../research/ledger/ui-audio.md) PA4). The older bar toggle 0x54ACB0 has no caller anywhere, so it is not what happens. Ours only reserves the key. | open |
