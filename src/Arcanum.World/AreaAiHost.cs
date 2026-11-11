@@ -14,6 +14,7 @@ using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.Simulation.Reaction;
 using Arcanum.Simulation.Skills;
+using Arcanum.Simulation.Traps;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Goals;
 
@@ -2899,6 +2900,28 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     [OriginalFunction(0x441260, OriginalFunctionScope.Partial)]
     public IReadOnlyList<string> Followers(string id) =>
         id == Pc ? _session.QueryParty().Followers.Select(f => f.Entity).Where(f => Find(f) is not null).ToArray() : [];
+
+    /// <summary>
+    /// ARC-WORLD-124 (E6-b; 0x4AA0D0, ledger TP2, awareness research section 7): the alarm a trap device of record 176 gives when the hero uses it, after the device is consumed. For every NPC in the
+    /// square of half-size <see cref="TrapDeviceRules.AlarmRadius"/> around the hero: a dead, gone or mind-controlled NPC and one the hero leads are skipped; one that sees the hero or hears
+    /// it (silent) is attacked by the hero through the attack event, which raises the silent noise of radius 2. The notice is given when the device is used, not when it goes off. Returns the NPCs attacked.
+    /// </summary>
+    [OriginalFunction(0x4AA0D0, OriginalFunctionScope.Partial)]
+    public IReadOnlyList<string> TrapDeviceAlarm()
+    {
+        var alerted = new List<string>();
+        if (Tile(Pc) is not { } at) return alerted;
+        foreach (var id in _npcs.Keys.Concat(_followers.Keys).Distinct(StringComparer.Ordinal).ToArray())
+        {
+            if (id == Pc || Gone(id) || DeadCritter(id) || Tile(id) is not { } there) continue;
+            if (Math.Max(Math.Abs(there.X - at.X), Math.Abs(there.Y - at.Y)) > TrapDeviceRules.AlarmRadius) continue;
+            if ((SpellFlagsOf(id, Fields(id)?.Object.SpellFlags ?? 0) & MindControlledSpell) != 0 || Leader(id) == Pc) continue;
+            if (See(id, Pc).Excess != 0 && Hear(id, Pc, Loudness.Silent).Excess != 0) continue;
+            AttackEvent(Pc, id, loudness: Loudness.Silent);
+            alerted.Add(id);
+        }
+        return alerted;
+    }
 
     public AwarenessResult See(string observer, string target) => SeeFacing(observer, target, null);
 

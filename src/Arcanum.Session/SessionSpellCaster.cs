@@ -975,6 +975,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         // ARC-MAGIC-024: the pass's life steps call for theirs too (the encumbrance drain, a poison death fires nothing without a killer).
         foreach (var firing in pass.Life) _itemEvents.AddRange(firing.Life.ItemEvents);
         foreach (var firing in pass.SpellRuns.Where(f => f.Ran)) Apply(firing.Notes, id => _owner.QuerySpellRuns()[id] ?? before[id]);
+        RunTrapDevices(pass);
         FirePendingItems();
         return pass;
     }
@@ -1079,7 +1080,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     // The pass world: this host for the magic-tech events, the host's event world for the rest (its party facts when it has them; a
     // world without them answers none, as the pass then does; ARC-WORLD-096: the session asks the wrapped world for the loot window
     // and the restock host).
-    private class PassWorld(SessionSpellCaster caster, ISessionEventWorld events) : ISessionSpellWorld, ISessionPartyEventWorld, ISessionWrappingEventWorld
+    private class PassWorld(SessionSpellCaster caster, ISessionEventWorld events) : ISessionSpellWorld, ISessionPartyEventWorld, ISessionWrappingEventWorld, ISessionTrapDeviceWorld
     {
         public ISpellRunHost SpellRuns => caster;
         public ISessionEventWorld Wrapped => events;
