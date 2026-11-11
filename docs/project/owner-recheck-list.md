@@ -119,7 +119,7 @@ The triage changes no behaviour. These are the places where it found original NP
 | 3 | At night, move a sleeping NPC off its bed (push, teleport or leave the map and come back) and wait. | The sleeper is put back onto a bed object found at its night standpoint, else at its day one (0x4AD0B0, 0x4AD140). Ours leaves it where it is. | open |
 | 4 | Frighten an NPC with a fear effect, or let one surrender in a dialog. | It starts to flee from the source (the start-flee request 0x4AF130). Ours has only the stop-fleeing side. | open |
 
-## ARC-DEV-363 — Technology census (slice T-b, 2026-11-11)
+## ARC-DEV-363 — Technology census (slice T-b, PR #971, 2026-11-11)
 
 The census test pins which components of the 83 technology records the host takes ([audit section 7](../research/technology-audit-res-104.md#7-smoke-and-test-coverage)); it
 reads our code, not the original, so the steps below are the places where the census says a record runs but nobody has compared its effect with the original game. Use a
