@@ -181,7 +181,7 @@ history held about 500 runs of such copies of one template).
   chosen they apply to the `--stages` group (its own step `stages`) and the zones' stages keep their configurations (step `zones-...`);
   without `--stages`, or with `complete`, they are refused. The batteries of `complete` vouch only for `map` and `resources`, so the
   other stages they also run (`cast`, `ranged`, ...) run again in their groups.
-  **`--retry`** (ARC-DEV-396; default on for `complete`, off for `pr`): a viewer process ends at its first failing stage, so the
+  **`--retry`** (ARC-DEV-396; default on for `complete` and for the zone `complete`, off for other `pr` runs; not after a viewer that did not start, exit 125): a viewer process ends at its first failing stage, so the
   stages after it never ran, and a stage can fail only because of what the stages before it left behind (the 2026-11-11 daily run:
   `ai-cast` and `npc-door` failed in their groups and passed alone). With `--retry`, a failed stage process is followed by one
   process per unfinished stage (steps `STEP-retry-STAGE`; the failing stage included); the summary says `passes alone, so it fails

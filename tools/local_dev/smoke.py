@@ -460,8 +460,10 @@ def plan(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mappin
     wants_all = getattr(args, "all", False)
     steps = build_steps(environ, godot, build=not args.no_build, imported=imported)
 
-    retry = getattr(args, "retry", None)
-    retry = args.target == "complete" if retry is None else retry  # the nightly run retries, a PR run does not unless asked
+    asked = getattr(args, "retry", None)
+
+    def retry() -> bool:  # the nightly run (and the complete zone) retries, a PR run does not unless asked
+        return (args.target == "complete" or smoke_zones.COMPLETE in getattr(args, "zones_chosen", ())) if asked is None else asked
 
     def stage_steps(base: str, stages: Sequence[str], pins: Pins, env: Sequence[tuple[str, str]] | None = None) -> None:
         def one(run: Run, name: str, members: Sequence[str]) -> Step:
@@ -478,7 +480,7 @@ def plan(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mappin
         for run in map_runs(base, stages, pins, getattr(args, "hero", None), say, checked=checked):
             step = one(run, run.name, run.stages)
             steps.append(dataclasses.replace(step, again=lambda stage, run=run: alone(run, stage))
-                         if retry and len(run.stages) > 1 else step)
+                         if retry() and len(run.stages) > 1 else step)
 
     if args.target == "self-test":
         steps.append(Step("self-test", "headless" if args.headless else "window",
@@ -672,7 +674,9 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
             break
         # ARC-DEV-396: a smoke process ends at its first failing stage, so the stages after it never ran, and a stage that
         # passes alone may fail only after the others (state it leaves behind). The unfinished stages run one to a process.
-        if code != 0 and step.again is not None:
+        if code == start_check.FAILED_START_EXIT and step.again is not None:
+            say("  not retried one to a process: the viewer did not start, which says nothing about its stages")
+        elif code != 0 and step.again is not None:
             unfinished = stages_not_run(log, step.requires)[0]
             if unfinished:
                 say(f"  retrying {len(unfinished)} unfinished stage(s) one to a process: {', '.join(unfinished)}")
@@ -682,7 +686,7 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
                     code = retry_code
                     break
                 say(f"  {stage}: " + (f"passes alone, so it fails only after the other stages of {step.name}"
-                                if retry_code == 0 else "fails alone too"))
+                                if retry_code == 0 else f"fails alone too (exit {retry_code})"))
             if code >= STOPPED:
                 break
     width = max(len(name) for name, _ in results) if results else 0

@@ -411,13 +411,16 @@ class ExecuteTests(unittest.TestCase):
         self.assertEqual([call[1] for call in calls],
                          ["smoke stages-main", "smoke stages-retry-ai", "smoke stages-retry-life", "smoke main"])
         self.assertIn("  retrying 2 unfinished stage(s) one to a process: ai, life", lines)
-        self.assertIn("  ai: fails alone too", lines)
+        self.assertIn("  ai: fails alone too (exit 1)", lines)
         self.assertIn("  life: passes alone, so it fails only after the other stages of stages-main", lines)
         self.assertIn("  stages-retry-life  PASS exit=0", lines)
         self.assertEqual((code, lines[-1]), (1, "SMOKE FAIL 2 of 4 steps passed"))  # the failed group stays failed
         # a stopped retry ends the chain; a step without `again` is not retried
         code, calls, lines = self.run_steps(steps, {"stages-main": 1, "stages-retry-ai": 130}, {"stages-main": pass_line("cast")})
         self.assertEqual((code, len(calls)), (130, 2))
+        code, calls, lines = self.run_steps(steps, {"stages-main": start_check.FAILED_START_EXIT})
+        self.assertEqual([call[1] for call in calls], ["smoke stages-main", "smoke main"])  # a start failure is not retried
+        self.assertTrue(any("not retried" in line for line in lines))
         plain = [smoke.Step("stages-main", "window", ("g",), requires=("cast", "ai"))]
         code, calls, _ = self.run_steps(plain, {"stages-main": 1}, {"stages-main": pass_line("cast")})
         self.assertEqual((code, len(calls)), (1, 1))
