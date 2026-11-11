@@ -112,6 +112,8 @@ public static class LineOfFireRules
     /// line has more than <see cref="MaxLinePixels"/> points.
     /// </summary>
     [OriginalFunction(0x4201C0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x420330, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4203B0, OriginalFunctionScope.Full)]
     public static IReadOnlyList<(int Dx, int Dy)>? Samples((long X, long Y) from, (long X, long Y) to)
     {
         long dx = to.X - from.X, dy = to.Y - from.Y, ax = Math.Abs(dx), ay = Math.Abs(dy);
