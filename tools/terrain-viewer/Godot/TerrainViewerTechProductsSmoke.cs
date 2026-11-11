@@ -24,7 +24,7 @@ public partial class TerrainViewerApp
     //  3. Chemistry: the first learned record (a poison food, record 171, aggressive) is assembled and used on a living NPC with the item cursor (the use icon, the press on the NPC: goal 39);
     //     the NPC takes the record's damage, the unit is gone.
     //  4. F7 and F8: the hero's effect list and held items are the same after the load.
-    // The NPC's life and the hero's life and effects are put back where the stage can; the rest (points, degrees, items) is the stage's own state: the stage runs alone (smoke.py).
+    // The NPC's life and the hero's hit points are put back; the rest (effects, points, degrees, items) is the stage's own state, not restored: the stage runs alone (smoke.py) and its F8 replaces the session.
     private async Task RunAreaTechProductsSmokeAsync()
     {
         if (_areaSession is not { } session || session.QueryHero() is null || _inventoryHost is null || _combatHost is null || _readyArea is not { } area
@@ -129,10 +129,11 @@ public partial class TerrainViewerApp
             var poisoned = npcBefore - NpcHitPoints();
             GD.Print($"{TechProductsCode} tech-products poison record={chemRecord} product={poisonProduct} npc={npc.Row.Key} record-damage={recordDamage} hit-points={npcBefore}->{NpcHitPoints()} notice={_itemAimLast}");
             TechProductsRequire(!TechSmokeHeld(session).Contains(poisonEntity), $"the poison was used up ({_itemAimLast})");
+            // The NPC's hit points are measured from before the use to the end of the walk and the run; an NPC that is not in a fight with the hero has no other source of damage in the cave.
             TechProductsRequire(poisoned > 0 && recordDamage >= npcBefore && session.QueryLife(life).View!.Status.IsDead, $"the poison killed the NPC (record damage {recordDamage}, hit points {npcBefore} -> {NpcHitPoints()})");
 
             // 4. F7 and F8: the same effects and items after the load.
-            string[] State(GameSessionOwner s) => [.. s.QueryHeroEffects()!.Effects.Select(e => "effect=" + e.Number), .. TechSmokeHeldLines(s),
+            string[] State(GameSessionOwner s) => [.. s.QueryHeroEffects()!.Effects.Select(e => "effect=" + e.Number).OrderBy(l => l, StringComparer.Ordinal), .. TechSmokeHeldLines(s),
                 .. Enumerable.Range(0, 8).Select(d => "degree" + d + "=" + TechSmokeDegree(s, d))];
             var saved = State(session);
             _saveLibraryForSelfTest = new(saves);
@@ -148,7 +149,7 @@ public partial class TerrainViewerApp
             var loaded = State(_areaSession!);
             TechProductsRequire(loaded.SequenceEqual(saved), $"the load restored the effects, items and degrees: lost {string.Join(", ", saved.Except(loaded))}; new {string.Join(", ", loaded.Except(saved))}");
             GD.Print("ARC-MAGIC-051 native-smoke tech-products PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Map = _readyMapName, Intelligence = intelligence, Therapeutics = potions, Chemistry = new { Record = chemRecord, Product = poisonProduct, Damage = recordDamage }, Held = saved.Length }));
+                Map = _readyMapName, Intelligence = intelligence, Therapeutics = potions, Chemistry = new { Record = chemRecord, Product = poisonProduct, Damage = recordDamage }, StateLines = saved.Length }));
         }
         finally
         {
