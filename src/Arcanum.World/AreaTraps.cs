@@ -190,7 +190,9 @@ public sealed class AreaTraps
         if (native is null && cause == SessionTrapCause.Step || TrapEffectRules.Of(state.Script, baseline.Counters) is { Kind: TrapEffectKind.Shot }) return null;
         // The spot attempt (E2, TT3): the player's detect-traps flag spots without a roll, else the hero's spot trap roll (SP1).
         var gate = _session.TrapSpotGate(trapped, baseline, TrapObserver.Player, effects.PlayerSpellFlags);
-        var spotted = gate == TrapSpotGate.Detected || gate == TrapSpotGate.Roll &&
+        // A step with the step-over spell flags never reaches the entry point, so it never rolls (0x4305D0 before 0x441980).
+        var rolls = gate == TrapSpotGate.Roll && (cause != SessionTrapCause.Step || TrapRules.StepTriggers(effects.PlayerSpellFlags));
+        var spotted = gate == TrapSpotGate.Detected || rolls &&
             _session.RollHeroSpotTrap(_session.Version, trapped, baseline, effects.PlayerSpellFlags).Spotted;
         var result = _session.TriggerTrap(_session.Version, trapped, baseline, TrapObserver.Player, cause, spotted,
             cause == SessionTrapCause.Step ? effects.PlayerSpellFlags : 0);

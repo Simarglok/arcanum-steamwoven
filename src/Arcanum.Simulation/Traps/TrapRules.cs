@@ -121,7 +121,7 @@ public static class TrapRules
 
     /// <summary>The gate of a spot attempt (ledger TT3): a PC or NPC only, never on a trap device item, only on a trap; a
     /// known trap answers at once; the player's Detect Traps flag spots without a roll; otherwise the spot trap roll
-    /// (skill 7, the S10 slice) decides.</summary>
+    /// (skill 7, ledger SP1: `SpotCase` and the session's `RollHeroSpotTrap`) decides.</summary>
     [OriginalFunction(0x4BBE40, OriginalFunctionScope.Partial)]
     public static TrapSpotGate SpotGate(TrapObserver observer, bool trapDevice, TrapClass trap, int objectFlags, int playerSpellFlags)
     {

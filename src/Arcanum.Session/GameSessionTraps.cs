@@ -69,8 +69,8 @@ public sealed record SessionSpotRoll(GameSessionDisposition Disposition, GameSes
     bool SecondRoll, GameSessionVersion Version);
 
 /// <summary>
-/// ARC-WORLD-076: the trap state owner of trap objects and trapped objects on any map (ledger TT1–TT10), for the spot and
-/// disarm skills (S10), the trap devices (ARC-TECHNOLOGY-011/012) and the hosts' use and step paths. An object's trap is
+/// ARC-WORLD-076: the trap state owner of trap objects and trapped objects on any map (ledger TT1–TT10), for the spot
+/// trap roll (<see cref="RollHeroSpotTrap"/>, ARC-MAGIC-057), the disarm skill (S10), the trap devices (ARC-TECHNOLOGY-011/012) and the hosts' use and step paths. An object's trap is
 /// its T0 baseline until a spot mark or a removal; each write records the object's trap state as one map change of its
 /// entity (<see cref="TrapStateProperty"/>: bit 1 spotted, bit 2 removed, bit 4 placed by the PC (ARC-WORLD-125), and above bit 8 the script number the removal
 /// cleared), which the snapshot already carries, so the domain adds no schema. A removal holds only while the baseline still

@@ -296,9 +296,30 @@ public sealed class AreaTrapsTests
             Assert.IsTrue(spotted <= plates.Length);
             var use = Row(25, Scenery, 30001);
             var (_, usingTraps) = Hosts(session, content, () => effects.Side, null, use);
+            var useDraws = session.QueryRandom().Draws;
             var meeting = usingTraps.Use(use)!;
+            Assert.IsTrue(session.QueryRandom().Draws >= useDraws + 2, "the use rolled the spot trap skill");
             Assert.IsTrue(meeting.Outcome is SessionTrapOutcome.Spotted or SessionTrapOutcome.Fired, "a use rolls once and then spots or fires");
             Assert.AreEqual(meeting.Outcome == SessionTrapOutcome.Spotted, meeting.Result.PlayerLine);
+        });
+    }
+
+    // The original's step reaches the entry point (and its spot roll) only when the mover's spell flags 0x2 and 0x4 are clear (0x4305D0, TT9).
+    [TestMethod]
+    public void A_step_over_flag_means_no_spot_roll_on_the_step()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var effects = new Effects(spellFlags: 0x2);
+            var plate = Row(1, TrapObject, 30001, x: 60, objectFlags: TrapRules.DontDrawFlag);
+            var (_, traps) = Hosts(session, content, () => effects.Side, null, plate);
+            var draws = session.QueryRandom().Draws;
+            Assert.AreEqual(SessionTrapOutcome.SteppedOver, traps.Step(Cell(plate))!.Outcome);
+            Assert.AreEqual(draws, session.QueryRandom().Draws, "a stepped-over trap draws nothing");
+            effects.SpellFlags = 0;
+            traps.Step(Cell(plate));
+            Assert.IsTrue(session.QueryRandom().Draws >= draws + 2, "a step with no flag rolls");
         });
     }
 
