@@ -399,6 +399,29 @@ class ExecuteTests(unittest.TestCase):
         code, _, lines = self.run_steps(steps, {})
         self.assertEqual((code, lines[-1]), (0, "SMOKE PASS 4 of 4 steps passed"))
 
+    def test_the_unfinished_stages_of_a_failed_process_run_one_to_a_process(self) -> None:
+        pass_line = lambda stage: smoke.STAGE_PASS[stage] + " {}\n"
+        again = lambda stage: smoke.Step(f"stages-retry-{stage}", "window", ("g",), requires=(stage,))
+        group = smoke.Step("stages-main", "window", ("g",), requires=("cast", "ai", "life"), again=again)
+        steps = [group, smoke.Step("main", "window", ("g",))]
+        # cast passed, ai failed and stopped the process, life never ran; alone ai fails too and life passes
+        code, calls, lines = self.run_steps(steps, {"stages-main": 1, "stages-retry-ai": 1},
+                                            {"stages-main": pass_line("cast"), "stages-retry-ai": "",
+                                             "stages-retry-life": pass_line("life")})
+        self.assertEqual([call[1] for call in calls],
+                         ["smoke stages-main", "smoke stages-retry-ai", "smoke stages-retry-life", "smoke main"])
+        self.assertIn("  retrying 2 unfinished stage(s) one to a process: ai, life", lines)
+        self.assertIn("  ai: fails alone too", lines)
+        self.assertIn("  life: passes alone, so it fails only after the other stages of stages-main", lines)
+        self.assertIn("  stages-retry-life  PASS exit=0", lines)
+        self.assertEqual((code, lines[-1]), (1, "SMOKE FAIL 2 of 4 steps passed"))  # the failed group stays failed
+        # a stopped retry ends the chain; a step without `again` is not retried
+        code, calls, lines = self.run_steps(steps, {"stages-main": 1, "stages-retry-ai": 130}, {"stages-main": pass_line("cast")})
+        self.assertEqual((code, len(calls)), (130, 2))
+        plain = [smoke.Step("stages-main", "window", ("g",), requires=("cast", "ai"))]
+        code, calls, _ = self.run_steps(plain, {"stages-main": 1}, {"stages-main": pass_line("cast")})
+        self.assertEqual((code, len(calls)), (1, 1))
+
     def test_a_failed_build_or_a_stopped_run_ends_the_chain(self) -> None:
         steps = [smoke.Step("build", "dotnet", ("sh",), gate=True), smoke.Step("crash-site", "window", ("g",)),
                  smoke.Step("main", "window", ("g",))]

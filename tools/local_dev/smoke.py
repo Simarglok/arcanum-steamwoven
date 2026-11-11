@@ -15,6 +15,7 @@ AUTO_HERO when no --hero is given; a stage the viewer runs only without `map` ge
 from __future__ import annotations
 
 import argparse
+import dataclasses
 from dataclasses import dataclass
 import json
 import os
@@ -226,6 +227,7 @@ class Step:
     settings: str | None = None  # the step's own settings folder under the run's folder
     timeout: float | None = None  # minutes; None: the queue's default for the kind
     requires: tuple[str, ...] = ()  # the map smoke stages whose PASS line the log must hold (ARC-DEV-063)
+    again: Callable[[str], "Step"] | None = None  # ARC-DEV-396: one stage of this step as a step of its own (--retry)
 
 
 def map_stages() -> tuple[str, ...]:
@@ -458,11 +460,25 @@ def plan(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mappin
     wants_all = getattr(args, "all", False)
     steps = build_steps(environ, godot, build=not args.no_build, imported=imported)
 
+    retry = getattr(args, "retry", None)
+    retry = args.target == "complete" if retry is None else retry  # the nightly run retries, a PR run does not unless asked
+
     def stage_steps(base: str, stages: Sequence[str], pins: Pins, env: Sequence[tuple[str, str]] | None = None) -> None:
-        steps.extend(map_step(run.name, inputs, prefs_root, environ, godot, run.config.map, hero=run.hero,
-                              sector=run.config.sector, stages=run.stages, main_menu=run.config.menu,
-                              extra=extra if env is None else env)
-                     for run in map_runs(base, stages, pins, getattr(args, "hero", None), say, checked=checked))
+        def one(run: Run, name: str, members: Sequence[str]) -> Step:
+            return map_step(name, inputs, prefs_root, environ, godot, run.config.map, hero=run.hero,
+                            sector=run.config.sector, stages=members, main_menu=run.config.menu,
+                            extra=extra if env is None else env)
+
+        def alone(run: Run, stage: str) -> Step:
+            step = one(run, f"{run.name}-retry-{stage}", (stage,))
+            if step.settings:
+                (prefs_root / step.settings).mkdir(exist_ok=True)  # made now: the run's folders were made before it started
+            return step
+
+        for run in map_runs(base, stages, pins, getattr(args, "hero", None), say, checked=checked):
+            step = one(run, run.name, run.stages)
+            steps.append(dataclasses.replace(step, again=lambda stage, run=run: alone(run, stage))
+                         if retry and len(run.stages) > 1 else step)
 
     if args.target == "self-test":
         steps.append(Step("self-test", "headless" if args.headless else "window",
@@ -621,7 +637,8 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
     known = load_known_failures() if known is None else known
     results: list[tuple[str, int]] = []
     only_known: list[str] = []
-    for step in steps:
+
+    def run_step(step: Step) -> tuple[int, Path | None]:
         say(f"SMOKE step {step.name} kind={step.kind}")
         check = start_check.for_run(step.kind, step.expect, None, step.command)
         logs: list[Path] = []
@@ -645,19 +662,40 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
                 else:
                     only_known.append(step.name)
         results.append((step.name, code))
+        return code, logs[-1] if logs else None
+
+    done = 0
+    for step in steps:
+        code, log = run_step(step)
+        done += 1
         if code >= STOPPED or (code != 0 and step.gate):
             break
+        # ARC-DEV-396: a smoke process ends at its first failing stage, so the stages after it never ran, and a stage that
+        # passes alone may fail only after the others (state it leaves behind). The unfinished stages run one to a process.
+        if code != 0 and step.again is not None:
+            unfinished = stages_not_run(log, step.requires)[0]
+            if unfinished:
+                say(f"  retrying {len(unfinished)} unfinished stage(s) one to a process: {', '.join(unfinished)}")
+            for stage in unfinished:
+                retry_code, _ = run_step(step.again(stage))
+                if retry_code >= STOPPED:
+                    code = retry_code
+                    break
+                say(f"  {stage}: " + (f"passes alone, so it fails only after the other stages of {step.name}"
+                                if retry_code == 0 else "fails alone too"))
+            if code >= STOPPED:
+                break
     width = max(len(name) for name, _ in results) if results else 0
     say("SMOKE summary")
     for name, code in results:
         say(f"  {name:<{width}}  {'PASS' if code == 0 else 'FAIL'} exit={code}")
-    skipped = [step.name for step in steps[len(results):]]
+    skipped = [step.name for step in steps[done:]]
     if skipped:
         say("  not run: " + ", ".join(skipped))
     failed = [name for name, code in results if code != 0]
     if only_known:
         say("  only known failures on main (not this PR): " + ", ".join(only_known))
-    say(f"SMOKE {'PASS' if not failed and not skipped else 'FAIL'} {len(results) - len(failed)} of {len(steps)} steps passed"
+    say(f"SMOKE {'PASS' if not failed and not skipped else 'FAIL'} {len(results) - len(failed)} of {len(results) + len(skipped)} steps passed"
         + (f" ({len(only_known)} of the {len(failed)} failed with only known failures on main)" if only_known else ""))
     stopped = [code for _, code in results if code >= STOPPED]
     return stopped[0] if stopped else (1 if failed or skipped else 0)
@@ -732,6 +770,10 @@ def configure(command: argparse.ArgumentParser) -> None:
     pr.add_argument("--auto", action="store_true", help="pick the zones from the diff against the merge base with --base: "
                     "prints each zone and the files that chose it; a diff no zone covers runs nothing")
     pr.add_argument("--base", help="the ref --auto diffs against (default origin/main; fetch it first)")
+    retry = argparse.BooleanOptionalAction
+    pr.add_argument("--retry", action=retry, default=None, help="after a failed stage process, run its unfinished stages one to "
+                    "a process, so no stage after the failing one goes unchecked and a stage that fails only after the "
+                    "others is named (default: off for pr, on for complete)")
     pr.add_argument("--map", help=f"the map the stages run on (default: the map each stage needs, {MAIN_MAP} for most)")
     map_options(pr)
     pr.add_argument("--crash-site", action="store_true", help="also the Crash Site smoke first, when the change is related "
@@ -742,6 +784,8 @@ def configure(command: argparse.ArgumentParser) -> None:
     common(full)
     complete = targets.add_parser("complete", help="the nightly run (./arcanum daily): the full chain, then every stage the "
                                   "viewer accepts, grouped by configuration; core plus all heavy zones")
+    complete.add_argument("--retry", action=retry, default=None, help="retry the unfinished stages of a failed process one to a "
+                          "process (default on)")
     common(complete)
     one = targets.add_parser("map", help="one map's smoke: every default stage, or --stages")
     one.add_argument("name", help='the map folder name, e.g. "crash site cave" or Arcanum1-024-fixed')
