@@ -81,6 +81,16 @@ public static class LockRules
         return new(written, schedules, IsLocked(written, hour));
     }
 
+    /// <summary>
+    /// ARC-MAGIC-037 (MA-6, ledger LM1–LM3): one bit of the lock flags turned on or off by a plain field write (the ObjFlag component's final write 0x406D40, the Dispel component's
+    /// clear of the held bit): no lock or jam function, so no Lock event is scheduled whatever the bit (unlike <see cref="SetLocked"/>).
+    /// </summary>
+    public static LockWrite WriteBit(int flags, int bit, bool on, int hour)
+    {
+        var written = on ? flags | bit : flags & ~bit;
+        return new(written, false, IsLocked(written, hour));
+    }
+
     /// <summary>The flags after a Lock event (ledger LK5): locked and not jammed; it schedules nothing. The caller also closes
     /// the object (<see cref="PortalFrameRules.Closed"/>, or a container whose frame is exactly 1 goes to 0).</summary>
     [OriginalFunction(0x441E90, OriginalFunctionScope.Partial)]

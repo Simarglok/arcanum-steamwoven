@@ -42,7 +42,15 @@ public interface ISpellCastMap : ISpellTargetWorld
 
     /// <summary>Applies a step's damage to a non-critter object (its object rules); false when that is not ready.</summary>
     bool DamageObject(string id, AttackDamage damage);
+
+    /// <summary>ARC-MAGIC-037 (MA-6): a portal's or container's lock facts for the ObjFlag component's lock fields and the Dispel component's held bit, or null when the object is none
+    /// (or the host has no lock domain): the session's object, its T0 baseline and its lock level.</summary>
+    SpellOpenable? Openable(string id) => null;
 }
+
+/// <summary>ARC-MAGIC-037 (MA-6): a portal or container a spell reaches: its session identity, its T0 lock baseline (the session's state is read over it) and its lock level (portal field 47, container field 57),
+/// which the unlock gate (0x4551C0) compares with the caster's aptitude.</summary>
+public sealed record SpellOpenable(SessionOpenable Openable, SessionOpenableBaseline Baseline, int LockLevel);
 
 /// <summary>What a cast left for the host to show or do: the run note's kind and run, the local player's spell.mes message, the
 /// component types that are not ready yet, and the objects a component touched.</summary>
@@ -164,6 +172,20 @@ public enum SpellCastEventKind
     /// <summary>ARC-MAGIC-035 (MA-4, SO1–SO8): a social or AI flag of an ObjFlag component did a step besides its own write on <see cref="SpellCastEvent.Object"/>: <see cref="SpellCastEvent.Value"/> is one of the
     /// <see cref="SessionSpellCaster.SocialReaction"/> family of codes and <see cref="SpellCastEvent.Detail"/> its amount or reason.</summary>
     SocialEffect,
+    /// <summary>ARC-MAGIC-037 (MA-6, LM1–LM3): an ObjFlag component wrote the lock flag bit <see cref="SpellCastEvent.Value"/> (a plain write, no Lock event) of the portal or container <see cref="SpellCastEvent.Object"/>;
+    /// <see cref="SpellCastEvent.Detail"/> bit 0x1 is on (else off), bit 0x2 a container (else a portal).</summary>
+    OpenableFlagWritten,
+    /// <summary>ARC-MAGIC-037: the session refused a lock flag write on <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the spell goes on.</summary>
+    OpenableFlagNotSaved,
+    /// <summary>ARC-MAGIC-037 (LM2): the unlock gate (0x4551C0) refused the caster's unlock of the portal or container <see cref="SpellCastEvent.Object"/>: its lock level (the value) is above the caster's
+    /// aptitude; the lock stays and the "resisted" feedback (<see cref="Resisted"/>) follows.</summary>
+    UnlockRefused,
+    /// <summary>ARC-MAGIC-037 (LM2): the guard alert (0x4AEE50 with loudness 0 and kind 2) the lock-clearing branch always calls, after the gate and whether or not the lock opened, on the portal or container
+    /// <see cref="SpellCastEvent.Object"/> by the run's parent; <see cref="SpellCastEvent.Detail"/> is 1 when the unlock was refused. The guards who see or hear it (PL6) are not modelled: the host acts on this line.</summary>
+    LockGuardAlert,
+    /// <summary>ARC-MAGIC-036 (MA-5, MV1–MV3): a Movement component of type 0 (the target tile, 0x4524C0 → the immediate relocation 0x455350) asks the host to relocate <see cref="SpellCastEvent.Object"/> along the path request to the run's
+    /// target tile, whose x is <see cref="SpellCastEvent.Value"/> and y <see cref="SpellCastEvent.Detail"/>: the host asks the path, runs the tiles' scripts on the way and places the object on the last tile. It needs the map's paths, so this host logs the request.</summary>
+    Movement,
 }
 
 /// <summary>
@@ -365,15 +387,20 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     public IReadOnlyList<SpellRunTarget> Collect(SpellRun run)
     {
         ArgumentNullException.ThrowIfNull(run);
+        // 0x4510F0 sets the flag at 0x5E75A8 for each pass (0 unless the PC's armed fate was used), after the target list is set up; the run system asks the fate right after this call.
+        _spellAtMaximum = false;
         if (_records(run.Spell) is not { } record || (int)run.Action >= record.Areas.Length) return [];
         var context = Context(run, record.Areas[(int)run.Action]);
         return SpellTargetRules.Collect(context, _map, Profile).Entries.Select(e => new SpellRunTarget(e.Object is { } o ? RunObject(o.Id) ?? new(o.Id, o.Type) : null, e.Tile))
             .ToArray();
     }
 
-    public bool UseSpellAtMaximum(SpellRunObject pc) =>
+    public bool UseSpellAtMaximum(SpellRunObject pc) => _spellAtMaximum =
         pc.Id == Hero && _owner.QueryHeroFate() is { } fate && FateRules.IsArmed(fate, FateKind.SpellAtMaximum)
         && _owner.UseHeroFate(_owner.Version, FateKind.SpellAtMaximum).Disposition == GameSessionDisposition.Changed;
+
+    // ARC-MAGIC-037: the original's per-pass flag 0x5E75A8 (the PC's armed fate "spell at maximum" was used for this pass); the unlock gate (0x4551C0) reads it.
+    private bool _spellAtMaximum;
 
     public SpellComponentGate Gate(SpellRun run, int component, SpellRunTarget target)
     {

@@ -49,6 +49,20 @@ public sealed class AreaSpellCastingTests
     }
 
     [TestMethod]
+    public void The_lock_flags_a_spell_wrote_on_a_portal_or_container_tell_a_line_of_the_viewers_own()
+    {
+        // ARC-MAGIC-037 (MA-6): the locked bit (0x1) and the magically held bit (0x4); the detail bit 0x1 is on. Any other lock bit, a guard alert and a refused gate tell nothing themselves.
+        Assert.AreEqual("Rat d1 is unlocked", AreaSpellCasting.Line(new(SpellCastEventKind.OpenableFlagWritten, 1, 0x1, "d1", 0), null, Name));
+        Assert.AreEqual("Rat d1 is locked", AreaSpellCasting.Line(new(SpellCastEventKind.OpenableFlagWritten, 1, 0x1, "d1", 1), null, Name));
+        Assert.AreEqual("Rat d1 is held by magick", AreaSpellCasting.Line(new(SpellCastEventKind.OpenableFlagWritten, 1, 0x4, "d1", 1), null, Name));
+        Assert.AreEqual("Rat d1 is no longer held by magick", AreaSpellCasting.Line(new(SpellCastEventKind.OpenableFlagWritten, 1, 0x4, "d1", 0), null, Name));
+        Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.OpenableFlagWritten, 1, 0x2, "d1", 1), null, Name));
+        Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.LockGuardAlert, 1, 2, "d1"), null, Name));
+        Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.UnlockRefused, 1, 40, "d1"), null, Name));
+        Assert.AreEqual("the lock change was not saved", AreaSpellCasting.Line(new(SpellCastEventKind.OpenableFlagNotSaved, 1, 3, "d1"), null, Name));
+    }
+
+    [TestMethod]
     public void A_message_without_its_text_names_its_number()
     {
         Assert.AreEqual("spell message 604", AreaSpellCasting.Line(new(SpellCastEventKind.Message, -1, 604), null, Name));
