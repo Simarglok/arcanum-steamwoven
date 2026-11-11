@@ -58,7 +58,8 @@ public partial class TerrainViewerApp
     private void OpenSaveList(AreaSaveListMode mode)
     {
         // ARC-DEV-111: the menu Escape opens over a window that stays, so a window under the save list does not refuse it.
-        if (!QuickKeysActive || SaveListOpen || PanelOutsideStackOpen) return;
+        // ARC-DEV-387: the menu's load window opens before any scene stands (the lazy start: a save needs no start map).
+        if ((!QuickKeysActive && !(_menuAwaitsScene && _startLoadLazy)) || SaveListOpen || PanelOutsideStackOpen) return;
         using var span = PerfProbe.Span("window.open.SaveList");
         var list = SaveLibrary.List();
         if (list.Failure != GameSaveFailure.None)
@@ -128,6 +129,15 @@ public partial class TerrainViewerApp
                 // A load replaces the session (or starts its map's load); the window then closes, a failed load keeps it.
                 var slot = SaveLibrary.Slot(command.Name!);
                 // From the main menu the placeholder has no hero tables; from play (ARC-UI-012) the running session's are kept, as F8's.
+                // ARC-DEV-387: no scene yet (the start map is not loaded): the save's own map loads and the save loads into it; the menu comes back
+                // under the window, saying so.
+                if (_menuAwaitsScene && _mainMenu is { Root: AreaMenuWindow.Main })
+                {
+                    if (BeginSaveSceneFlow(command.Name!, "Load ") is { } sceneRefused) { RefreshSaveList(command.Name, sceneRefused); return; }
+                    EndSaveList(finished: false);
+                    ShowSaveLoadingNotice();
+                    return;
+                }
                 if (LoadGame(slot, "Load ", _mainMenu is { Root: AreaMenuWindow.Main } ? MainMenuTables() : null, AreaLoadMessageRoute.Result)) { EndSaveList(finished: true); return; }
                 RefreshSaveList(command.Name, _quickSaveStatus);
                 return;
@@ -163,7 +173,7 @@ public partial class TerrainViewerApp
     /// <summary>Per frame while open: a session that is gone (map mode left, a reset) closes the window.</summary>
     private void SyncAreaSaveList()
     {
-        if (SaveListOpen && !QuickKeysActive) EndSaveList();
+        if (SaveListOpen && !QuickKeysActive && !_menuAwaitsScene) EndSaveList();
     }
 
     /// <summary>While the window is open it owns the keys; false lets a typed key reach the description field.</summary>
