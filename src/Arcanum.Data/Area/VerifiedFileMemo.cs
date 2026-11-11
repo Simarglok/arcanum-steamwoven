@@ -37,8 +37,9 @@ public static class VerifiedFileMemo
     internal static long FullPasses => Interlocked.Read(ref _fullPasses);
     /// <summary>Checks answered from the memo without reading the file.</summary>
     internal static long Reused => Interlocked.Read(ref _reused);
-    /// <summary>Forgets every file; the next check of each is a first check.</summary>
-    internal static void Reset() { Verified.Clear(); Interlocked.Exchange(ref _fullPasses, 0); Interlocked.Exchange(ref _reused, 0); }
+    /// <summary>Forgets every file; the next check of each is a first check. Public for the viewer's resources smoke stage (ARC-COMBAT-027),
+    /// which proves a reload reads everything again; no production path calls it.</summary>
+    public static void Reset() { Verified.Clear(); Interlocked.Exchange(ref _fullPasses, 0); Interlocked.Exchange(ref _reused, 0); }
 
     /// <summary>The memoized hash of <paramref name="path"/> when its present stamp is the one recorded with it, else null.
     /// Reads no file bytes.</summary>
