@@ -147,6 +147,7 @@ public static class CharacterPointRules
     /// <item>a college or a discipline: through its <paramref name="lane"/>.</item>
     /// </list>
     /// </summary>
+    [OriginalFunction(0x55F5F0, OriginalFunctionScope.Partial)]
     public static PointChange Refund(AdvancementSheet sheet, AdvancementSheet floor, AdvancementModifiers modifiers, AdvancementTrack track,
         int index, SkillRefundClick click, ImmutableArray<int> spellWillpower, IPointLane? lane = null)
     {

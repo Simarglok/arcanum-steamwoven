@@ -5,6 +5,10 @@ public static class ClockCalendar
 {
     // Shared by bootstrap and advance, and since ARC-UI-008 by the logbook's dates. Extended startYear is an arithmetic
     // capacity seam, not a supported public profile or owner construction range.
+    [OriginalFunction(0x45AB40, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x45AB20, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x45AB00, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x45AAC0, OriginalFunctionScope.Full)]
     [OriginalFunction(0x45ACF0, OriginalFunctionScope.Full)]
     [OriginalFunction(0x45AAE0, OriginalFunctionScope.Full)]
     [OriginalFunction(0x45AAA0, OriginalFunctionScope.Full)]

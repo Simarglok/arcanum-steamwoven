@@ -138,7 +138,7 @@ address,group,state,class,scope,level,name,domain,ours,direct_callers,pointer_ho
 0x44EC30,G,not relevant,editor,,F1,debug dump of an AI path,,,0,0,gap-scan
 0x44ED6E,G,not relevant,not-code,,F1,switch jump table of the path dump,,,0,0,gap-scan
 0x44ED90,G,not relevant,editor,,F1,debug dump of an AI goal,,,0,0,gap-scan
-0x44FE47,G,implemented,,partial,F1,"spell record table load, first pass",magic,Arcanum.Data.Magic.SpellRecordTable.ReadRecords; SpellRecordTable.Force; SpellRecordTable.Read,0,0,ghidra-analysis
+0x44FE47,G,implemented,,partial,F1,"spell record table load, first pass",magic,Arcanum.Data.Magic.SpellRecordTable.ReadRecords,0,0,ghidra-analysis
 0x450BB0,G,not relevant,other,,F1,castable test of a spell (unreferenced),,,0,0,gap-scan
 0x450BE0,G,not relevant,accessor,,F1,spell record aggregate flag word getter,,,0,0,gap-scan
 0x451040,G,not relevant,other,,F1,allocate a pointer array of given size,,,0,0,gap-scan
@@ -540,13 +540,13 @@ address,group,state,class,scope,level,name,domain,ours,direct_callers,pointer_ho
 0x4C6C50,G,not implemented,,,F1,Restore skill training tiers from snapshot,skills,,0,0,gap-scan
 0x4C70E0,G,not relevant,other,,F1,Refresh object ids of a skill invocation,,,0,0,gap-scan
 0x4C8161,G,not relevant,not-code,,F1,Alignment bytes and switch table fragment,,,0,0,gap-scan
-0x4C8EEA,G,implemented,,partial,F1,"Repair service tail: forced run, payment, refresh",items,ItemDurabilityRules.Repair,0,0,ghidra-analysis
+0x4C8EEA,G,implemented,,partial,F1,"Repair service tail: forced run, payment, refresh",items,Arcanum.Simulation.Items.ItemDurabilityRules.Repair,0,0,ghidra-analysis
 0x4C9720,G,not relevant,ui,,F1,Reset dialog reply window layout,,,0,0,ghidra-analysis
 0x4CA350,G,not relevant,editor,,F1,Paint facade tile grid onto the map,,,0,0,gap-scan
 0x4CA430,G,not relevant,editor,,F1,Test tile art at point is a facade,,,0,0,gap-scan
 0x4CA480,G,not relevant,editor,,F1,Re-anchor and rewrite facade tiles from a tile,,,0,0,gap-scan
 0x4CAF30,G,not relevant,accessor,,F1,Area radius by index,,,0,0,gap-scan
-0x4CB3F0,G,implemented,,full,F1,Nearest world map area within a distance,travel,WorldTravelRules.NearestKnownArea,0,0,gap-scan
+0x4CB3F0,G,implemented,,full,F1,Nearest world map area within a distance,travel,Arcanum.Simulation.Travel.WorldTravelGeometry.NearestKnownArea,0,0,gap-scan
 0x4CB750,G,not relevant,other,,F1,Combine incremented value with flag word,,,0,0,gap-scan
 0x4CBCD0,G,not relevant,other,,F1,Parent hit by attack spell item event,,,0,0,gap-scan
 0x4CC430,G,not relevant,accessor,,F1,AI global list header by index,,,0,0,gap-scan
@@ -660,7 +660,7 @@ address,group,state,class,scope,level,name,domain,ours,direct_callers,pointer_ho
 0x4F6940,G,not relevant,other,,F1,Advance word tokenizer to next token,,,0,0,gap-scan
 0x4F6E00,G,not implemented,,,F1,Check a facade walk mask file is valid,world,,0,0,gap-scan
 0x4F7190,G,not relevant,startup,,F1,Clear two-word list header,,,0,0,gap-scan
-0x4F7464,G,implemented,,partial,F1,Load a sector light list with relocation,lighting,Arcanum.Data.Maps.WorldCatalog.RelocateLight; Arcanum.Data.Area.AreaBuilder (48-byte light record read),0,0,ghidra-analysis
+0x4F7464,G,implemented,,partial,F1,Load a sector light list with relocation,lighting,Arcanum.Data.Maps.WorldCatalog.Read,0,0,ghidra-analysis
 0x4F7C10,G,not relevant,forwarder,,F1,Forwarder to sector tile list reset,,,0,0,gap-scan
 0x4F7F60,G,not relevant,stub,,F1,Empty function,,,0,0,gap-scan
 0x4F8220,G,not relevant,startup,,F1,Clear a 516-byte sector section structure,,,0,0,gap-scan
@@ -843,9 +843,9 @@ address,group,state,class,scope,level,name,domain,ours,direct_callers,pointer_ho
 0x557FC0,I,not relevant,startup,,F1,free interface bar art on shutdown,,,1,0,ghidra-follow-up
 0x55E12D,I,not relevant,startup,,F1,"character editor module init, tables and art",,,0,0,ghidra-analysis
 0x55EFF0,I,not relevant,ui,,F1,create scrollbar of the auto-level scheme page,,,0,0,ghidra-analysis
-0x55F1C0,I,implemented,,partial,F1,editor refusal message 36 (raise willpower first),ui-rule,Arcanum.World.AreaSheetRefusals.KeyStatMessage;Arcanum.World.AreaSheetRefusals.Number,1,0,ghidra-analysis
+0x55F1C0,I,implemented,,partial,F1,editor refusal message 36 (raise willpower first),ui-rule,Arcanum.World.AreaSheetRefusals.KeyStatMessage,1,0,ghidra-analysis
 0x55F5DA,I,not relevant,not-code,,F1,alignment padding bytes between functions,,,0,0,gap-scan
-0x55F5F0,I,implemented,,partial,F1,Character editor minus-button dispatch,character,CharacterPointRules.Refund; SpellRankLane.Lower; TechDegreeRules.Lower; AreaSheetRefusals.Number,0,1,gap-pointer-target
+0x55F5F0,I,implemented,,partial,F1,Character editor minus-button dispatch,character,Arcanum.Simulation.Character.CharacterPointRules.Refund,0,1,gap-pointer-target
 0x561520,I,not implemented,,,F1,World map window destroy and state reset,travel,,1,0,ghidra-analysis
 0x563A9E,I,not relevant,not-code,,F1,Switch-table bytes mis-decoded as code,,,0,0,gap-scan
 0x563C50,I,not relevant,stub,,F1,Empty one-byte function,,,0,0,gap-scan
@@ -861,11 +861,11 @@ address,group,state,class,scope,level,name,domain,ours,direct_callers,pointer_ho
 0x575C40,I,not relevant,forwarder,,F1,thunk to one other function,,,0,0,thunk
 0x579F90,I,not relevant,accessor,,F1,Read pending skill-bar skill,,,0,0,gap-scan
 0x57A1C0,I,not implemented,,,F1,"Skill-bar target picked, start skill, clear target",skills,,0,0,gap-scan
-0x57AF8D,I,implemented,,partial,F1,Basic skill minus refusal message choice,skills,AreaSheetRefusals.Number; CharacterPointRules.Refund,0,0,ghidra-analysis
-0x57B02F,I,implemented,,partial,F1,Tech skill minus refusal message choice,skills,AreaSheetRefusals.Number; CharacterPointRules.Refund,0,0,ghidra-analysis
-0x57C470,I,implemented,,full,F1,Maintained spell bar reset,magic,MaintainBar.Empty,1,0,ghidra-analysis
+0x57AF8D,I,implemented,,partial,F1,Basic skill minus refusal message choice,skills,Arcanum.World.AreaSheetRefusals.Number,0,0,ghidra-analysis
+0x57B02F,I,implemented,,partial,F1,Tech skill minus refusal message choice,skills,Arcanum.World.AreaSheetRefusals.Number,0,0,ghidra-analysis
+0x57C470,I,not implemented,,,F1,Maintained spell bar reset,magic,,1,0,ghidra-analysis
 0x57CF3E,I,not relevant,not-code,,F1,Table bytes after UI function,,,0,0,gap-scan
-0x57D6C0,I,implemented,,partial,F1,Apply hour lighting and rearm hourly event,time,AreaAmbientDriver.Apply; AreaAmbientDriver.Tick,1,0,ghidra-analysis
+0x57D6C0,I,implemented,,partial,F1,Apply hour lighting and rearm hourly event,time,Arcanum.World.AreaAmbientDriver.Apply,1,0,ghidra-analysis
 0x57F142,I,not relevant,stub,,F1,Empty function,,,0,0,gap-scan
 0x57F320,I,not relevant,ui,,F1,Clear hotkey bar drag state,,,1,0,ghidra-analysis
 0x57F910,I,not relevant,ui,,F1,Show or hide cyclic UI control,,,0,0,gap-scan
