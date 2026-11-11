@@ -400,6 +400,9 @@ not a font change, stop and look. The real `apply` (then `verify --deep`, then `
   written) when one frame fails. On 2026-11-11 the five fonts of the first trace (arts 27, 171, 229, 327, 840) built as 1113 entries in one run (a local observation).
 - `fonts-plan` overwrites only a plan it wrote (every item a `coverage` item), never the pipeline's `ready/plan.json`, and writes only under a checkout's `local/`.
 - Rolling back is `rollback` of the `apply` backup, as for any update.
+- **Replacing the installed fonts (ARC-UI-145).** A new trace of the same fonts (other `hd_font` parameters) changes the *bytes* of keys that are already installed, so
+  the update is not `--add-new`: run `plan --staged <staging> --base INSTALLED` without `--add-new`; it must say `1106 interface entries differ` (the five fonts: 1113 entries, 7 of them
+  byte-identical under the new trace; a local dry run of 2026-11-11, `staged-only entries: 0`) and no CONFLICT, then `apply` the same way. The viewer draws the glyphs bilinear without mipmaps since ARC-UI-145 (the interface frames stay trilinear).
 
 ## Producing and repairing art (who does what)
 
