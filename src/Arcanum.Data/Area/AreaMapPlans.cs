@@ -445,8 +445,9 @@ public static class AreaMapPlans
 
     private static AreaInputIdentity Identity(AreaInputKey key, string path)
     {
-        using var stream = File.OpenRead(path);
-        return new(key, stream.Length, Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant());
+        // ARC-DEV-374: a large input the process already hashed in full and that has not changed is not read again.
+        var (length, sha256) = VerifiedFileMemo.Identity(path);
+        return new(key, length, sha256);
     }
 
     private static string Hash(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();

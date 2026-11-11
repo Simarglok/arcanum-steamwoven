@@ -78,6 +78,42 @@ public partial class TerrainViewerApp
                 _worldMapPanel.CentreOnParty();
                 Require(artView.Offset == AreaWorldMapArtLayout.CentreOn(map.Position.X, map.Position.Y, max), "Home centres on the party");
                 GD.Print($"ARC-UI-073 native-smoke worldmap-art PASS offset={artView.Offset} max={max}");
+                // ARC-UI-133 (WM36): through the real pointer route (so an input layer over the hole would be seen), a left release in the PC lens closes the
+                // window and a press, or a release just outside the square, does not; the key W opens it again.
+                async Task LensFrames()
+                {
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                }
+                async Task LensButton(Vector2 at, bool pressed)
+                {
+                    GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = pressed, Position = at, GlobalPosition = at, ButtonMask = pressed ? MouseButtonMask.Left : 0 });
+                    await LensFrames();
+                }
+                var (lensX, lensY, lensSide) = AreaWorldMapArtLayout.Lens;
+                await LensFrames();
+                var lensCentre = artView.WindowPointForSelfTest(lensX + lensSide / 2.0, lensY + lensSide / 2.0);
+                var lensCorner = artView.WindowPointForSelfTest(lensX + 2, lensY + 2);
+                foreach (var outside in new[] { (lensX + lensSide, lensY + 40), (lensX + 40, lensY + lensSide), (lensX - 1, lensY + 40), (lensX + 40, lensY - 1) })
+                {
+                    var lensAt = artView.WindowPointForSelfTest(outside.Item1 + .5, outside.Item2 + .5);
+                    await LensButton(lensAt, true); await LensButton(lensAt, false);
+                    Require(WorldMapOpen, $"a click just outside the lens at window {outside} left the map open");
+                }
+                await LensButton(lensCentre, true);
+                Require(WorldMapOpen, "a press in the lens does not close the map");
+                await LensButton(lensCentre, false);
+                Require(!WorldMapOpen && !WorldModal && !_worldMapPanel!.Visible, "a left release in the lens closed the map");
+                InventoryKey(Key.W);
+                Require(WorldMapOpen && WorldModal && _worldMap is not null, "W opened the map again: " + _worldMapStatus);
+                map = _worldMap!;
+                await LensFrames();
+                await LensButton(lensCorner, true); await LensButton(lensCorner, false);
+                Require(!WorldMapOpen, "a corner of the lens square, outside the round ring, closes the map as well (the test is a square)");
+                InventoryKey(Key.W);
+                Require(WorldMapOpen && WorldModal && _worldMap is not null, "W opened the map after the corner click: " + _worldMapStatus);
+                map = _worldMap!;
+                GD.Print("ARC-UI-133 native-smoke worldmap-lens PASS");
             }
             else GD.Print($"ARC-UI-073 native-smoke worldmap-art SKIP (debugMode={DebugMode}, art {(artLook is null ? "not read" : "read")})");
             var here = WorldTravelGeometry.Location(map.Position, data.Width);

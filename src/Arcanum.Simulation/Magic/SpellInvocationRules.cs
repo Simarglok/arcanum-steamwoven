@@ -50,7 +50,7 @@ public sealed record SpellInvocation(int Spell, SpellObjectFacts? Parent, SpellO
     SpellLocation TargetTile, int? SourceItemPower = null, bool TeleportAllowed = true, bool ParentIsLocalPlayer = false,
     bool TurnBased = false, string? TurnBasedActor = null)
 {
-    /// <summary>ARC-MAGIC-025: the invocation's other object (+0xA0, copied to the run's +0x108): the attacker an item executor copies
+    /// <summary>ARC-MAGIC-025: the invocation's other object (+0xA0, copied to the run's block at +0xE8): the attacker an item executor copies
     /// from the global 0x5FF618 that the attacks an opponent and attacks a location wrappers set (IC6, IC10); null for any other
     /// invocation. The check does not read it.</summary>
     public SpellObjectFacts? Other { get; init; }

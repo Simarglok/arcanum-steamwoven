@@ -91,15 +91,56 @@ public partial class TerrainViewerApp
         if (known is null)
         {
             if (_arguments?.ActorResourcePath is not { } path) { NoteHeroBodyFailure(wanted, "no actor archive", textures: true); return; }
-            try
-            {
-                using var archive = DatArchive.Open(path, new DatReaderOptions { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 });
-                known = _heroBodies[wanted] = HeroBodyArt.Load(archive, wanted);
-            }
-            catch (Exception exception) when (exception is TerrainViewerException or DatException or IOException or UnauthorizedAccessException)
-            { NoteHeroBodyFailure(wanted, exception is TerrainViewerException viewer ? viewer.Error.Code.ToString() : exception.GetType().Name, textures: true); return; }
+            // ARC-DEV-368 (O3): the body a worker is already reading (PrefetchHeroBody) is waited for, else it is read here as before.
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            var prefetched = TakeHeroBodyRead(wanted, path);
+            var read = prefetched ?? ReadHeroBody(path, wanted);
+            GD.Print($"ARC-DEV-368 hero body={wanted.Label} armor={wanted.Armor} weapon={wanted.Weapon} shield={wanted.Shield} read={(read.Load is null ? "failed" : "ok")} prefetched={prefetched is not null} waited-ms={System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:F0} worker-ms={read.Milliseconds}");
+            if (read.Load is null) { NoteHeroBodyFailure(wanted, read.Failure!, textures: true); return; }
+            known = _heroBodies[wanted] = read.Load;
         }
         SwapHeroBody(wanted, known.Profile, known.Timing, known.Frames, known.Textures);
+    }
+
+    /// <summary>ARC-DEV-368 (O3): one hero body read from the actor archive: its decoded ARTs, or the reason it did not read. Pure (its own archive
+    /// handle, nothing of the viewer's state), so a worker thread runs it.</summary>
+    private sealed record HeroBodyRead(HeroBodyLoad? Load, string? Failure, long Milliseconds);
+
+    private static HeroBodyRead ReadHeroBody(string path, HeroBody body)
+    {
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        long Elapsed() => (long)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        try
+        {
+            using var archive = DatArchive.Open(path, new DatReaderOptions { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 });
+            return new(HeroBodyArt.Load(archive, body), null, Elapsed());
+        }
+        catch (Exception exception) when (exception is TerrainViewerException or DatException or IOException or UnauthorizedAccessException)
+        { return new(null, exception is TerrainViewerException viewer ? viewer.Error.Code.ToString() : exception.GetType().Name, Elapsed()); }
+    }
+
+    // ARC-DEV-368 (O3): the body being read on a worker for the session's hero, by body and the archive it reads. Main thread only.
+    private (string Path, HeroBody Body, Task<HeroBodyRead> Read)? _heroBodyPrefetch;
+
+    /// <summary>ARC-DEV-368 (O3, ARC-RES-102): starts reading, on a worker, the body the session's hero will be drawn with, as soon as the session and its
+    /// inventory exist (the publication binds the other hosts meanwhile) so the publication's <see cref="SyncHeroBody"/> finds it read instead of
+    /// reading the actor archive and decoding its ARTs on the main thread. Nothing is started when the wanted body is known, failed, the fixed human, or
+    /// has no actor archive; a body that is not the one wanted later (a weapon drawn, armour changed) is dropped unused. Main thread; the worker touches no viewer state.</summary>
+    private void PrefetchHeroBody()
+    {
+        _heroBodyPrefetch = null;
+        if (_areaSession?.QueryHero() is null || _arguments?.ActorResourcePath is not { } path) return;
+        var wanted = WantedHeroBody();
+        if (_heroBodies.ContainsKey(wanted) || _heroBodyFailures.ContainsKey(wanted) || (wanted == HeroBody.HumanFemale && _heroWomanFailure is not null)) return;
+        _heroBodyPrefetch = (path, wanted, Task.Run(() => ReadHeroBody(path, wanted)));
+    }
+
+    /// <summary>The prefetched read of <paramref name="body"/> from <paramref name="path"/> (waited for when it still runs), or null when none was started for it.</summary>
+    private HeroBodyRead? TakeHeroBodyRead(HeroBody body, string path)
+    {
+        if (_heroBodyPrefetch is not { } started || started.Body != body || started.Path != path) return null;
+        _heroBodyPrefetch = null;
+        return started.Read.GetAwaiter().GetResult();
     }
 
     // The swap is all or nothing: a plan that cannot be built puts the actor's previous profile and timing back and records
