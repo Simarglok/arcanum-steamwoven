@@ -87,8 +87,8 @@ public sealed partial class GameSessionOwner
     /// with nothing changed: a negative duration (<see cref="ClockFailure.InvalidDuration"/>), a stale token, or a stamp, calendar
     /// or revision the game clock or the animation clock cannot take.
     /// </summary>
-    [OriginalFunction(0x45C200, OriginalFunctionScope.Full)]
-    [OriginalFunction(0x45C1C0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x45C200, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x45C1C0, OriginalFunctionScope.Partial)]
     public ClockMutationResult JumpClocks(ClockToken token, long durationMs)
     {
         ThrowIfDisposed();

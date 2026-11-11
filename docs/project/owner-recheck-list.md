@@ -71,7 +71,7 @@ Known differences (documented, not bugs):
 
 ## ARC-RES-108 — Executable triage of 0x44-0x45 (2026-11-11)
 
-[Ledger section](../research/ledger/exe-triage-0x44-0x45.md). The triage read 391 functions of the executable and compared them with the code; the differences below are the ones where our code does something other than the function. They are read from the executable, not seen in game, so each step says what the original is expected to do.
+[Ledger section](../research/ledger/census-triage-0x44-0x45.md). The triage read 391 functions of the executable and compared them with the code; the differences below are the ones where our code does something other than the function. They are read from the executable, not seen in game, so each step says what the original is expected to do.
 
 | # | Step | Expected (from the original executable) | Status |
 | --- | --- | --- | --- |
