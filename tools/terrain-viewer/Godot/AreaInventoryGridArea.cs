@@ -170,7 +170,11 @@ public partial class AreaInventoryGridArea : Control
     {
         if (ReferenceEquals(look, Look)) return;
         Look = look; _takeAllDown = false; _arrangeDown = false; QueueRedraw();
+        // ARC-UI-148: the generated interface paints this window's frames at the window's own device scale (the frame scale times the transform's).
+        if (look is not null) InterfaceHd.FollowScale(look.Art.Values, DeviceScale);
     }
+
+    private float DeviceScale() => IsInsideTree() ? _scale * GetGlobalTransformWithCanvas().Scale.X : _scale;
 
     public void Render(AreaInventoryView view)
     {

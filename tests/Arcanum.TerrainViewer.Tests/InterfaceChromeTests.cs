@@ -281,4 +281,72 @@ public sealed class InterfaceChromeTests
         Assert.ThrowsExactly<ArgumentException>(() => InterfaceChromeRenderer.ResamplePicture(new byte[10], 2, 2, 1, 1));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => InterfaceChromeRenderer.ResamplePicture(new byte[16], 2, 2, 0, 1));
     }
+
+    // ARC-UI-148: a window's own (fractional) device scale and the device-pixel grid rule.
+    [TestMethod]
+    public void A_fractional_scale_gives_rounded_sizes_the_legacy_silhouette_and_whole_pixel_lines()
+    {
+        var legacy = Frame(48, 20);
+        foreach (var scale in new[] { 1.25, 1.5, 1.75, 2.4, 3.333 })
+        {
+            var (w, h) = InterfaceChromeRenderer.PixelSize(48, 20, scale);
+            Assert.AreEqual((int)Math.Round(48 * scale, MidpointRounding.AwayFromZero), w);
+            var a = InterfaceChromeRenderer.Render(Panel(), 48, 20, legacy, [], 0, scale);
+            Assert.AreEqual(w * h * 4, a.Length, $"size at {scale}");
+            CollectionAssert.AreEqual(a, InterfaceChromeRenderer.Render(Panel(), 48, 20, legacy, [], 0, scale), $"deterministic at {scale}");
+            // The bottom rim's ink line is max(1, round(scale)) device pixels, the same at every column (equal bands stay equal).
+            var line = Math.Max(1, (int)Math.Round(scale, MidpointRounding.AwayFromZero));
+            foreach (var x in new[] { w / 2, w - 3 })
+            {
+                for (var k = 0; k < line; k++) Assert.AreEqual((20, 14, 8, 255), Pixel(a, w, x, h - 1 - k), $"ink pixel {k} at {scale}");
+                Assert.AreNotEqual((20, 14, 8, 255), Pixel(a, w, x, h - 1 - line), $"no more than {line} ink pixels at {scale}");
+            }
+            // The silhouette is the Legacy frame's: the square hole's device pixels are exactly the rounded edges (the frame is 4..14 × 4..12).
+            int E(int v) => (int)Math.Round(v * scale, MidpointRounding.AwayFromZero);
+            Assert.AreEqual(0, Pixel(a, w, E(4), E(4)).A, $"hole corner at {scale}");
+            Assert.AreEqual(0, Pixel(a, w, E(14) - 1, E(12) - 1).A, $"hole far corner at {scale}");
+            Assert.AreEqual(255, Pixel(a, w, E(4) - 1, E(8)).A, $"outside the hole at {scale}");
+            Assert.AreEqual(255, Pixel(a, w, E(14), E(8)).A, $"outside the hole at {scale}");
+        }
+    }
+
+    [TestMethod]
+    public void A_whole_scale_given_as_a_double_paints_the_same_as_an_int()
+    {
+        var legacy = Frame(48, 20);
+        foreach (var scale in new[] { 1, 2, 4 })
+            CollectionAssert.AreEqual(InterfaceChromeRenderer.Render(Panel(new ChromeSunk(20, 5, 8, 8, ChromeMaterial.Pit), new ChromeGrid(2, 14, 4, 1, 5)), 48, 20, legacy, [], 0, scale),
+                InterfaceChromeRenderer.Render(Panel(new ChromeSunk(20, 5, 8, 8, ChromeMaterial.Pit), new ChromeGrid(2, 14, 4, 1, 5)), 48, 20, legacy, [], 0, (double)scale));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => InterfaceChromeRenderer.Render(Panel(), 4, 4, new byte[64], [], 0, 0.99));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => InterfaceChromeRenderer.Render(Panel(), 4, 4, new byte[64], [], 0, double.NaN));
+    }
+
+    [TestMethod]
+    public void A_grid_draws_one_unit_lines_on_the_last_pixel_of_each_inner_cell()
+    {
+        // Four columns of 8 from (2, 2), two rows of 6: vertical lines at x = 9, 17, 25 and one horizontal line at y = 9, over a pit.
+        var legacy = Frame(48, 20, holes: false);
+        var recipe = Panel(new ChromeSunk(0, 0, 40, 18, ChromeMaterial.Pit), new ChromeGrid(2, 2, 4, 2, 8));
+        foreach (var scale in new[] { 1, 2, 3 })
+        {
+            var a = InterfaceChromeRenderer.Render(recipe, 48, 20, legacy, [], 0, scale);
+            var w = 48 * scale;
+            var pit = Pixel(a, w, 6 * scale + 1, 4 * scale);
+            Assert.AreEqual((3, 3, 5, 255), pit, "the pit is flat near-black");
+            foreach (var lineX in new[] { 9, 17, 25 })
+                for (var k = 0; k < scale; k++) Assert.AreEqual((48, 54, 64, 255), Pixel(a, w, lineX * scale + k, 4 * scale), $"line {lineX} pixel {k} at {scale}");
+            Assert.AreEqual(pit, Pixel(a, w, 10 * scale, 4 * scale), "between the lines the pit shows");
+            for (var k = 0; k < scale; k++) Assert.AreEqual((48, 54, 64, 255), Pixel(a, w, 12 * scale, 9 * scale + k), $"the row line at {scale}");
+            Assert.AreEqual(pit, Pixel(a, w, 12 * scale, 8 * scale), "no line above the row line");
+        }
+    }
+
+    [TestMethod]
+    public void The_inventory_window_frames_have_recipes_and_no_other_window_frame_does_yet()
+    {
+        var names = InterfaceChromeRecipes.All.Select(r => r.File).ToArray();
+        CollectionAssert.IsSubsetOf(new[] { "inventor.art", "pdoll.art" }, names);
+        foreach (var file in new[] { "inventor.art", "pdoll.art" })
+            Assert.AreEqual(ChromeKind.Panel, InterfaceChromeRecipes.All.Single(r => r.File == file).Kind);
+    }
 }

@@ -73,6 +73,19 @@ public static class InterfaceHd
     /// device pixel; otherwise (a fractional content scale) it is sampled Linear.</summary>
     public static bool GeneratedExact { get; private set; } = true;
 
+    /// <summary>ARC-UI-148: the scale a window's generated frames are painted at: its real device scale (the window's own scale times the viewport's) clamped to
+    /// 1..<see cref="InterfaceChromeRenderer.MaxScale"/> and rounded to 1/1000, so noise in the last float digit does not paint a frame again.</summary>
+    public static double PaintScale(double deviceScale) => Math.Clamp(Math.Round(deviceScale, 3), 1, InterfaceChromeRenderer.MaxScale);
+
+    /// <summary>ARC-UI-148: makes the generated frames of <paramref name="textures"/> (a window's arts) follow <paramref name="deviceScale"/> (that window's device
+    /// scale, read at every draw) instead of the bars' whole <see cref="GeneratedScale"/>; non-interface textures are skipped. A change of the value paints the
+    /// frames again at the new scale, the previous image drawing meanwhile.</summary>
+    public static void FollowScale(IEnumerable<Texture2D> textures, Func<float> deviceScale)
+    {
+        ArgumentNullException.ThrowIfNull(textures); ArgumentNullException.ThrowIfNull(deviceScale);
+        foreach (var texture in textures) if (texture is HdInterfaceTexture hd) hd.ScaleSource = deviceScale;
+    }
+
     /// <summary>Sets <see cref="GeneratedScale"/> (rounded and clamped to 1..<see cref="InterfaceChromeRenderer.MaxScale"/>); generated textures paint again for a new
     /// scale (once per scale; the finished pixels of a frame are kept for its greyed copies). Returns whether it changed.</summary>
     public static bool SetGeneratedScale(float deviceScale)
@@ -88,11 +101,12 @@ public static class InterfaceHd
 
     /// <summary>One painted frame: straight RGBA at (Legacy size × <see cref="Scale"/>), kept per Legacy frame so a greyed copy and a rebuilt texture
     /// reuse it. <see cref="Pixels"/> is null while it is painted (<see cref="Failed"/> when painting threw).</summary>
-    internal sealed class GeneratedFrameEntry(HdPack? pack, bool hdOn, int scale)
+    internal sealed class GeneratedFrameEntry(HdPack? pack, bool hdOn, double scale)
     {
         public HdPack? Pack { get; } = pack;
         public bool HdOn { get; } = hdOn;
-        public int Scale { get; } = scale;
+        /// <summary>Device pixels per Legacy pixel the frame is painted at (ARC-UI-148: a window's own scale may be fractional; the bars' is whole).</summary>
+        public double Scale { get; } = scale;
         public byte[]? Pixels { get; set; }
         public bool Failed { get; set; }
     }
@@ -106,9 +120,9 @@ public static class InterfaceHd
 
     /// <summary>The entry of the frame for the current pack, HD setting and <see cref="GeneratedScale"/>: its <c>Pixels</c> are set when ready,
     /// <c>Failed</c> when painting threw, neither while a worker paints it (this call starts the worker the first time). Main thread.</summary>
-    internal static GeneratedFrameEntry GeneratedFor(AreaInterfaceFrame frame, HdSpriteQuery query, ChromeRecipe recipe)
+    internal static GeneratedFrameEntry GeneratedFor(AreaInterfaceFrame frame, HdSpriteQuery query, ChromeRecipe recipe, double scale)
     {
-        var (pack, hdOn, scale) = (Pack, Enabled, GeneratedScale);
+        var (pack, hdOn) = (Pack, Enabled);
         lock (GeneratedFrames)
         {
             if (GeneratedFrames.TryGetValue(frame, out var known) && ReferenceEquals(known.Pack, pack) && known.HdOn == hdOn && known.Scale == scale)
@@ -132,16 +146,17 @@ public static class InterfaceHd
             lock (GeneratedFrames)
                 if (!GeneratedFrames.TryGetValue(frame, out var current) || !ReferenceEquals(current, entry)) { entry.Failed = true; return; }
             var scale = entry.Scale;
+            var (pixelWidth, pixelHeight) = InterfaceChromeRenderer.PixelSize(frame.Width, frame.Height, scale);
             byte[] picture = [];
             // The pictures the chrome keeps (vials, clock, cogs) come from the pack's redraw while the HD interface is on, averaged to the render scale.
             if (entry.HdOn && entry.Pack is { } pack
                 && pack.ResolveSprite(query, frame.Rgba) is { Status: HdFrameStatus.Hd, Rgba: { } rgba } hd
                 && hd.Width == frame.Width * pack.Scale && hd.Height == frame.Height * pack.Scale)
-                picture = InterfaceChromeRenderer.ResamplePicture(rgba, hd.Width, hd.Height, frame.Width * scale, frame.Height * scale);
+                picture = InterfaceChromeRenderer.ResamplePicture(rgba, hd.Width, hd.Height, pixelWidth, pixelHeight);
             entry.Pixels = InterfaceChromeRenderer.Render(recipe, frame.Width, frame.Height, frame.Rgba, picture, query.Key.Frame, scale);
             // The big strips only: the log line says how long a worker painted (the main thread did not wait for it).
-            if ((long)frame.Width * frame.Height * scale * scale > 200_000)
-                GD.Print($"ARC-UI-141 generated frame {recipe.File} {frame.Width * scale}x{frame.Height * scale} painted off the main thread in {clock.ElapsedMilliseconds} ms (scale {scale}, picture {(picture.Length > 0 ? "pack" : "legacy")})");
+            if ((long)pixelWidth * pixelHeight > 200_000)
+                GD.Print($"ARC-UI-141 generated frame {recipe.File} {pixelWidth}x{pixelHeight} painted off the main thread in {clock.ElapsedMilliseconds} ms (scale {scale}, picture {(picture.Length > 0 ? "pack" : "legacy")})");
         }
         catch (Exception e)
         {
@@ -347,12 +362,16 @@ public partial class HdInterfaceTexture : Texture2D
     private CanvasTexture? _generatedCanvas;
     private InterfaceHd.GeneratedFrameEntry? _generatedFrom;
     private int _activeScale = 1;
+    // ARC-UI-148: device pixels per Legacy pixel of what draws, for a region draw (a generated frame at a fractional scale is not a whole multiple).
+    private float _activeRatio = 1;
+    /// <summary>ARC-UI-148: the device scale of the window this texture is drawn in (see <see cref="InterfaceHd.FollowScale"/>); null: the bars' whole scale.</summary>
+    internal Func<float>? ScaleSource { get; set; }
 
     public HdInterfaceTexture() { }
 
     internal HdInterfaceTexture(ImageTexture legacy, AreaInterfaceFrame frame, bool greyscale = false, bool premultipliedAlpha = false) { _legacy = legacy; _frame = frame; _greyscale = greyscale; _premultipliedAlpha = premultipliedAlpha; }
 
-    internal HdInterfaceTexture Greyed() => new(ImageTexture.CreateFromImage(InterfaceHd.GreyImage(_legacy.GetImage())), _frame, true, _premultipliedAlpha);
+    internal HdInterfaceTexture Greyed() => new(ImageTexture.CreateFromImage(InterfaceHd.GreyImage(_legacy.GetImage())), _frame, true, _premultipliedAlpha) { ScaleSource = ScaleSource };
 
     /// <summary>True when the next draw uses the HD redraw.</summary>
     public bool IsHd => Active() is not null;
@@ -394,13 +413,15 @@ public partial class HdInterfaceTexture : Texture2D
         {
             if (GeneratedCanvas(recipe, generatedQuery, out var painting) is { } generated)
             {
-                _activeScale = Math.Max(1, _generated!.GetWidth() / Math.Max(1, _frame.Width));
+                _activeRatio = (float)_generated!.GetWidth() / Math.Max(1, _frame.Width);
+                _activeScale = Math.Max(1, (int)MathF.Round(_activeRatio));
                 return generated;
             }
             // ARC-UI-141: while a worker paints the frame the Legacy pixels draw (no HD decode on the main thread, no stall); the paint swaps in by itself.
-            if (painting) { _activeScale = 1; return null; }
+            if (painting) { _activeScale = 1; _activeRatio = 1; return null; }
         }
         _activeScale = InterfaceHd.Pack?.Scale ?? 1;
+        _activeRatio = _activeScale;
         if (!InterfaceHd.Enabled || InterfaceHd.Pack is not { } pack || _frame?.Hd is not { } query) return null;
         if (!ReferenceEquals(_hdFor, pack)) { _hdFor = pack; _hd = null; _hdCanvas = null; _failed = false; }
         if (_hdCanvas is null && !_failed)
@@ -445,8 +466,9 @@ public partial class HdInterfaceTexture : Texture2D
     private CanvasTexture? GeneratedCanvas(ChromeRecipe recipe, HdSpriteQuery query, out bool painting)
     {
         painting = false;
-        var scale = InterfaceHd.GeneratedScale;
-        var entry = InterfaceHd.GeneratedFor(_frame, query, recipe);
+        var device = ScaleSource is { } source ? source() : (double)InterfaceHd.GeneratedScale;
+        var scale = ScaleSource is null ? InterfaceHd.GeneratedScale : InterfaceHd.PaintScale(device);
+        var entry = InterfaceHd.GeneratedFor(_frame, query, recipe, scale);
         if (entry.Failed) return null; // drawn as HD or Legacy
         if (entry.Pixels is not { } pixels)
         {
@@ -456,11 +478,16 @@ public partial class HdInterfaceTexture : Texture2D
             return _generatedCanvas;
         }
         if (ReferenceEquals(_generatedFrom, entry) && _generatedCanvas is not null) return _generatedCanvas;
-        using var image = Image.CreateFromData(_frame.Width * scale, _frame.Height * scale, false, Image.Format.Rgba8, _greyscale ? InterfaceHd.GreyBytes(pixels) : pixels);
+        var (pixelWidth, pixelHeight) = InterfaceChromeRenderer.PixelSize(_frame.Width, _frame.Height, scale);
+        using var image = Image.CreateFromData(pixelWidth, pixelHeight, false, Image.Format.Rgba8, _greyscale ? InterfaceHd.GreyBytes(pixels) : pixels);
         if (_premultipliedAlpha) image.PremultiplyAlpha();
         _generated = ImageTexture.CreateFromImage(image);
         _generatedFrom = entry;
-        _generatedCanvas = new CanvasTexture { DiffuseTexture = _generated, TextureFilter = InterfaceHd.GeneratedExact ? CanvasItem.TextureFilterEnum.Nearest : CanvasItem.TextureFilterEnum.Linear };
+        // One texel per device pixel (Nearest) only when the painted size is exactly what the window shows: the bars' whole scale, or a window whose
+        // device scale is the painted one and whose frame sizes come out in whole device pixels.
+        var exact = ScaleSource is null ? InterfaceHd.GeneratedExact
+            : Math.Abs(device - scale) < 0.001 && Math.Abs(_frame.Width * scale - pixelWidth) < 0.001 && Math.Abs(_frame.Height * scale - pixelHeight) < 0.001;
+        _generatedCanvas = new CanvasTexture { DiffuseTexture = _generated, TextureFilter = exact ? CanvasItem.TextureFilterEnum.Nearest : CanvasItem.TextureFilterEnum.Linear };
         return _generatedCanvas;
     }
 
@@ -480,7 +507,7 @@ public partial class HdInterfaceTexture : Texture2D
     public override void _DrawRectRegion(Rid toCanvasItem, Rect2 rect, Rect2 srcRect, Color modulate, bool transpose, bool clipUv)
     {
         var hd = Active();
-        var source = hd is null ? srcRect : new Rect2(srcRect.Position * HdScale, srcRect.Size * HdScale);
+        var source = hd is null ? srcRect : new Rect2(srcRect.Position * _activeRatio, srcRect.Size * _activeRatio);
         RenderingServer.CanvasItemAddTextureRectRegion(toCanvasItem, rect, (hd is null ? _legacy : (Texture2D)hd).GetRid(), source, modulate, transpose, clipUv);
     }
 }
