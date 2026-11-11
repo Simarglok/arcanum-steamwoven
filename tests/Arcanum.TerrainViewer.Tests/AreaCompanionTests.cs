@@ -617,4 +617,39 @@ public sealed class AreaCompanionTests
         Assert.AreEqual(0, AreaCompanionGroup.Create([template], f.Steps, AreaChart.Exterior, session, cave, SimulationTime.At(0)).Companions.Count, "the cave's group no longer holds it");
         Assert.AreEqual(1, AreaCompanionGroup.Create([template], f.Steps, AreaChart.Exterior, session, home, SimulationTime.At(0)).Companions.Count);
     }
+
+    [TestMethod]
+    public void A_created_critters_template_moves_whole_with_the_pc_and_writes_no_away_map()
+    {
+        // ARC-MAGIC-050 (FM1, FM3, FM12): a critter the session created has no home map data; the session moves the object itself, so the placement is on the destination and nothing names a home.
+        var f = Load();
+        var plain = Templates(f).Single();
+        SessionMapId first = new(1), second = new(2);
+        var number = 7;
+        var row = f.Speaker.Row;
+        var template = AreaCompanionTemplate.ForCreated(number, row, speaker => AreaCompanionRoster.Virgil with { ScriptId = 0 }, first, AreaChart.Exterior, plain.Commands[0], plain.Visuals.Values.Single());
+        Assert.IsNotNull(template);
+        Assert.IsTrue(template.Created);
+        Assert.AreEqual(AreaCompanionTemplate.CreatedIndexBase + number, template.Speaker.Index);
+        Assert.AreEqual(0, template.Speaker.ScriptId, "a created critter has no dialog script");
+        Assert.IsNull(AreaCompanionTemplate.ForCreated(number, row, _ => null, first, AreaChart.Exterior, plain.Commands[0], plain.Visuals.Values.Single()), "no follow facts, no template");
+        Assert.Throws<ArgumentException>(() => AreaCompanionTemplate.ForCreated(number, row with { Key = row.Key with { ObjectIdSha256 = "other" } }, _ => AreaCompanionRoster.Virgil, first,
+            AreaChart.Exterior, plain.Commands[0], plain.Visuals.Values.Single()), "the body must be the row's own");
+        using var session = ConversationSessionFixture.Create();
+        var entity = template.Entity;
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, entity).Disposition);
+        CellCoord At(int x) => new(checked((int)f.Speaker.WorldX + x), checked((int)f.Speaker.WorldY));
+        Assert.AreEqual(1, AreaCompanionPlacement.Edits(template, first, At(1), NeighborDirection.YPlus).Count, "no stored home cell either");
+        var arrive = AreaCompanionGroup.Arrive(template, first, second, At(2), NeighborDirection.YPlus);
+        Assert.IsTrue(arrive.All(edit => edit.Key != AreaCompanionPlacement.MapKey(entity)), "no away change names a home map");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, new ActorPlacement(second, At(2), NeighborDirection.XPlus), arrive, session.QueryTransferMoveList(new())).Disposition);
+        Assert.IsNull(session.QueryMapChange(first, AreaCompanionPlacement.Key(entity)), "the map it left forgets it");
+        // The destination's template (the session holds the critter on that map now) stands it on the recorded cell.
+        var there = AreaCompanionTemplate.ForCreated(number, row, speaker => AreaCompanionRoster.Virgil with { ScriptId = 0 }, second, AreaChart.Exterior, plain.Commands[0], plain.Visuals.Values.Single())!;
+        var group = AreaCompanionGroup.Create([there], f.Steps, AreaChart.Exterior, session, second, SimulationTime.At(0));
+        var companion = group.Companions.Single();
+        Assert.AreEqual(At(2), new CellCoord(checked((int)AreaChart.Exterior.ToWorld(companion.Grid.State.CommittedCell).X), checked((int)AreaChart.Exterior.ToWorld(companion.Grid.State.CommittedCell).Y)));
+        Assert.AreEqual(0, group.Absent.Count);
+        // (The map it left builds no template of it: the viewer lists the created critters of the shown map, and the session holds this one on the destination.)
+    }
 }
