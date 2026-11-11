@@ -92,6 +92,22 @@ public static partial class TerrainViewerSelfTest
             pixel = await Probe();
             if (native) Require(IsHdColour(pixel), $"HD pixel with the switch on ({pixel.R8},{pixel.G8},{pixel.B8})");
 
+            // ARC-DEV-376: the optimized cache converts the PNG once and then binds the same pixels with their whole mip chain.
+            var cacheRoot = System.IO.Path.Combine(root, "hd-cache");
+            HdOptimizedStore.Attach(null, false);
+            HdOptimizedStore.Attach(pack, true, cacheRoot);
+            Require(HdOptimizedStore.Cache is not null && HdOptimizedStore.TryBind(pack, keyed.Hd!, legacy) is null, "ARC-DEV-376: an empty cache binds nothing");
+            HdOptimizedStore.Convert(pack, HdOptimizedStore.Cache!, CancellationToken.None, 0);
+            var resolved = pack.ResolveSprite(keyed.Hd!, legacy);
+            using (var cachedImage = HdOptimizedStore.TryBind(pack, keyed.Hd!, legacy))
+            {
+                Require(cachedImage is not null && cachedImage.HasMipmaps() && cachedImage.GetWidth() == W * 4 && cachedImage.GetHeight() == H * 4, "ARC-DEV-376: the converted frame binds with its mip chain");
+                Require(resolved.Rgba is { } resolvedRgba && cachedImage!.GetData().AsSpan(0, resolvedRgba.Length).SequenceEqual(resolvedRgba), "ARC-DEV-376: the cached level 0 is the PNG's pixels");
+            }
+            Require(texture.IsHd, "ARC-DEV-376: the texture still draws HD");
+            HdOptimizedStore.Attach(null, false);
+            GD.Print("ARC-DEV-376 self-test optimized cache PASS");
+
             // ARC-UI-114: the production sheet's art-font material must not add RGB from transparent HD texels.
             var straightEdge = await Probe(1, 0);
             var premultiplied = (HdInterfaceTexture)InterfaceHd.Texture(keyed, premultipliedAlpha: true);

@@ -98,7 +98,7 @@ other slice.
 
 **V0 is done** (ARC-RES-106): [`census.csv`](../verification/census.csv) lists 5,815 function starts with their call reach, and the
 [verification README](../verification/README.md#function-census) gives the counts and what they do not say. It was made
-with `llvm-objdump` and a direct-call, data-pointer and prologue scan (`tools/research/exe_census.py`), not Ghidra (not installed on the Mac, and not needed); the scan finds 867 of the registry's 871 functions on its own. V1 starts from the census:
+with `llvm-objdump` and a direct-call, data-pointer and prologue scan (`tools/research/exe_census.py`), not Ghidra (not installed on the Mac, and not needed for the census; the Ghidra text export of ARC-DEV-377 came later); the scan finds 867 of the registry's 871 functions on its own. V1 starts from the census:
 the cited-but-unregistered rows are now 2,652 (any citation, not only call targets), 1,632 of them reached by a direct
 call chain from a registry function or a game-loop root.
 

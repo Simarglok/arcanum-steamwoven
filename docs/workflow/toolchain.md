@@ -191,6 +191,10 @@ a budget or a regression gate. Other optimisations are shown with it: run before
   conversations,companions,binders,ambient,hero-body,selection,menu}` inside `load.publish` (the main thread), `load.first-frame`
   (the first frame drawn after a publication), `window.open.MODE` (the interface stack's opener, the panel's own open included),
   `menu.open`, `menu.open.WINDOW`, `menu.first-frame`, `game.new`, `game.load`, `window.open.SaveList`.
+  ARC-DEV-380 adds the laps inside the publication's selection step, printed for the first selection after a scene publication: `selection.{ambient,walls,roofs,combat,ground,portals,moving,canvas}`,
+  `canvas.publish.{chunks,upright,index,view}` (a new plan) and `canvas.view.{cull,chunks,upload,hd,items}` (its first view): the canvas's own work; `roofs.{bind,follow,publish}`, `walls.{bind,recalc}`,
+  `hero-swap.{upload,profile,plan,select}` (the body swap, not the selection it triggers) and `ground.{stamp,frames,busted,extra-art,items,blood,created,critters}` (each time the ground bodies are
+  computed from nothing, so also after a reset; a step names the region that follows it, so a first open of the extra art inside a busted-object loop counts under `busted`).
 - **`perf`** (a hero stage, own run; needs a window with a map exit: the Crash Site window has none, so
   `./arcanum smoke pr --stages perf --sector 1409,1314`): `startup` (process to load begin, worker, publication and first frame),
   one `window` line per open of each window key I C L T W M, six each through the production key route (`open-sync` is the key's
@@ -557,6 +561,37 @@ python3 -B tools/research/exe_census.py --self-test
 python3 -B tools/research/exe_census.py --exe "$DAT_ROOT/Arcanum.exe"
 ```
 
+## Ghidra text export (ARC-DEV-377)
+
+Checks against the original executable start with a plain text search instead of reading the file again: a one-time headless
+Ghidra export of the decompiled C of every function Ghidra found (4,365 of the pinned 1.0.7.4 `Arcanum.exe`, about 19 MB, 53 s to
+generate) lives in `research-private/ghidra-export/c/` on the owner's Mac. It is derived from the original executable, so it is never
+committed, quoted or copied into git or a PR; a check still records only behaviour in prose (see the
+[original executable check](../research/original-executable-check.md)). The decompiler's variables and types are a guess: confirm
+anything that matters in the disassembly or with the [function oracle](#function-oracle).
+
+- `index.tsv`: address, name, size in bytes, status, file, signature, one row per function; names are Ghidra's (`FUN_<address>`, or
+  library names such as `_malloc`), the project's own names are not applied.
+- `funcs/<address>.c`: one file per function (eight lowercase hex digits); line 1 is the address, name and size, line 2 the callee
+  names, then the C.
+- Search with `rg`: callers of a function `rg -l "FUN_0040da50" research-private/ghidra-export/c/funcs`; a constant or string
+  `rg -n "0x3ec" research-private/ghidra-export/c/funcs`; the function at an address `cat .../funcs/004a6900.c` or
+  `awk -F'\t' '$1=="004a6900"' .../index.tsv`.
+- Gap: 1,498 of the 5,815 [census](#function-census) starts are not in the Ghidra project (functions reached only through pointers,
+  such as the goal-round handler 0x4B7150, among them), so a missing file does not mean the executable has no such function; read it
+  with `llvm-objdump` or run it in the oracle.
+- Regenerate (after a Ghidra upgrade or a re-analysis; the project is opened read-only, no analysis is repeated): the export script
+  (`scripts/ExportAll.java`) and `run.sh` sit in `research-private/ghidra-export/` (not in git; all paths here are relative to the
+  owner's main checkout, which holds `research-private/`), run through the headless queue:
+
+  ```sh
+  ./arcanum run --kind headless --expect 'ghidra export start' -- research-private/ghidra-export/run.sh OUTDIR [LIMIT]
+  ```
+
+  `run.sh` sets `JAVA_HOME` to `openjdk@25` (without it `analyzeHeadless` stops with a "no TTY" error) and calls
+  `/opt/homebrew/opt/ghidra/libexec/support/analyzeHeadless research-private/ghidra-proj ArcanumExe -process Arcanum.exe -noanalysis
+  -readOnly -scriptPath research-private/ghidra-export/scripts -postScript ExportAll.java OUTDIR [LIMIT]`.
+
 ## Function oracle
 
 ARC-DEV-007, [`tools/original-oracle`](../../tools/original-oracle/README.md), method in the
@@ -565,7 +600,7 @@ ARC-DEV-007, [`tools/original-oracle`](../../tools/original-oracle/README.md), m
 | Tool | Version | Use |
 | --- | --- | --- |
 | [Unicorn](https://pypi.org/project/unicorn/) | 2.1.4, pinned with wheel hashes in `tools/original-oracle/requirements.lock` | Emulates single x86-32 functions; installed by `oracle.py` into `local/original-oracle/venv` (or `ARCANUM_ORACLE_VENV`) on first use. Bindings BSD, engine GPLv2; never vendored or referenced by a C# assembly. |
-| [Ghidra](https://github.com/NationalSecurityAgency/ghidra/releases) | 12.1.4 (Apache-2.0), with JDK 21 | Optional headless reading and function discovery; its project stays in `research-private/`. Not needed by the oracle. |
+| [Ghidra](https://github.com/NationalSecurityAgency/ghidra/releases) | 12.2 (Apache-2.0, brew formula `ghidra`), with `openjdk@25` | Optional headless reading and function discovery; its project stays in `research-private/`. Not needed by the oracle. Text export of every function: [Ghidra text export](#ghidra-text-export-arc-dev-377). |
 
 ```sh
 python3 -B tools/original-oracle/oracle.py --self-test   # root check: synthetic code, no game file

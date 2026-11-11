@@ -30,7 +30,7 @@ the [ledger](../research/original-verification-ledger.md) has two readings, F0 w
 executable). Since ARC-DEV-025 no implemented row is at F0: the twelve that were F0 have been read by two readers
 ([ledger IF1–IF12](../research/ledger/data.md#implemented-functions-arc-dev-025)). Since 2026-10-20
 (owner decision, ARC-DEV-030) a new implemented row starts at F1 or higher: the implementing task reads the function in
-the executable first. A host method that
+the exports of the executable (or the executable itself) first. A host method that
 only calls the registered rule carries no mark (one method per address). Other domains add their rows when they are migrated.
 
 ## OriginalFunction attribute

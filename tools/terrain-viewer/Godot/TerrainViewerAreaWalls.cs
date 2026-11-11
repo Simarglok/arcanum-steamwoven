@@ -17,6 +17,9 @@ public partial class TerrainViewerApp
     private void FollowAreaWalls()
     {
         if (_readyArea is not { } area || _worldActor.Session is not AreaGridSession session || _canvas is null) return;
+        // ARC-DEV-380: the first call of a map is timed (steps print as walls.NAME).
+        using var lap = !ReferenceEquals(_areaWallArea, area) && PerfProbe.Enabled ? PerfProbe.Lap("walls") : null;
+        lap?.Step("bind");
         if (!ReferenceEquals(_areaWallArea, area))
         {
             _areaWallCheck = new AreaWallCheck(area.Walls); _areaWallArea = area; _areaWallCell = null;
@@ -26,6 +29,7 @@ public partial class TerrainViewerApp
         var cell = session.Chart.ToWorld(session.State.CommittedCell);
         if (_areaWallCell == cell) return;
         _areaWallCell = cell;
+        lap?.Step("recalc");
         _canvas.SetAreaWallFades(_areaWallCheck.Recalculate(cell.X, cell.Y).Fades);
     }
 

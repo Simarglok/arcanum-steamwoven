@@ -196,6 +196,7 @@ public partial class TerrainViewerApp
     private void SyncInterfaceHd()
     {
         // Windows that draw interface textures by hand repaint once when the switch or the pack changed.
+        HdOptimizedStore.ConversionAllowed = _visualStore?.Persistent == true; // ARC-DEV-376: an automated run reads the cache, never writes it
         if (InterfaceHd.Configure(_canvas?.HdSource?.Pack, _gameSettings.HdInterface)) InterfaceHd.RedrawAll(GetTree().Root);
     }
 
