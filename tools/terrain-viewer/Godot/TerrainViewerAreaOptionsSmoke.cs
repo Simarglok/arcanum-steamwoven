@@ -77,24 +77,14 @@ public partial class TerrainViewerApp
                 && place.X + place.Width / 2 == AreaMenuArtLayout.OptionsButtonX && place.Width > 0 && place.Height == 33).All(ok => ok),
                 "the page labels stand centred at (130, 221 + 40 i): " + string.Join(" ", places));
             Require(art.HoveredForSelfTest == -1, "no page label is lit while the focus is on the first control: " + art.HoveredForSelfTest);
-            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven", "HD graphics: " + (_canvas?.VisualProfile == VisualProfile.Hd ? "On" : "Off"), "HD interface: " + (_gameSettings.HdInterface ? "On" : "Off"), "HD pack: Auto"]), "Game page: " + string.Join("|", Controls()));
-            // ARC-UI-061: the shown controls take the first slots: four in the first column, the fifth to eighth at the second's top (as drawn).
+            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven"]), "Game page: " + string.Join("|", Controls()));
+            // ARC-UI-061: the shown controls take the first slots: four in the first column, the fifth at the second's top (as drawn).
             await Frames(1);
-            Require(art.ControlPlacesForSelfTest.SequenceEqual(Enumerable.Range(0, 8).Select(AreaMenuArtLayout.OptionsSlot)),
+            Require(art.ControlPlacesForSelfTest.SequenceEqual(Enumerable.Range(0, 5).Select(AreaMenuArtLayout.OptionsSlot)),
                 "the Game page's controls stand in their art at the first slots: " + string.Join(" ", art.ControlPlacesForSelfTest));
             // ARC-UI-014: Original chosen in the main menu is the rule mode the new game begins in.
             panel.ChangeForSelfTest(4, 1);
             Require(_ruleMode == RuleMode.Original && Controls()[4] == "Rules: Original", "Original chosen before the game");
-            // ARC-DEV-350: the HD pack source line cycles Auto, Game, Custom and back; an automated run searches no pack folder and has no folder
-            // dialog, so its note says so, and the choice is saved with the game settings (the test file, never the player's).
-            panel.ChangeForSelfTest(7, 1);
-            Require(_gameSettings.HdPackSource == HdPackSourceMode.GameFolder && Controls()[7] == "HD pack: Game" && _mainMenu!.Notice is { } gameNote && gameNote.Contains("automated run"),
-                "HD pack Game chosen: " + Controls()[7] + " / " + _mainMenu!.Notice);
-            panel.ChangeForSelfTest(7, 1);
-            Require(_gameSettings.HdPackSource == HdPackSourceMode.Custom && _gameSettings.HdPackPath is null && Controls()[7] == "HD pack: Custom"
-                && _mainMenu!.Notice is { } customNote && customNote.Contains("no folder dialog here"), "HD pack Custom without a dialog: " + Controls()[7] + " / " + _mainMenu!.Notice);
-            panel.ChangeForSelfTest(7, 1);
-            Require(_gameSettings.HdPackSource == HdPackSourceMode.Auto && Controls()[7] == "HD pack: Auto", "HD pack wrapped to Auto: " + Controls()[7]);
             // ARC-DEV-350: the HD pack problem box: the reason on screen, Continue closes it, Close game quits (the smoke takes the quit over).
             var quits = 0;
             _hdPackProblemQuitForSelfTest = () => quits++;

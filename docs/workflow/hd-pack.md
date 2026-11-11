@@ -274,7 +274,7 @@ elsewhere is a menu picture. Read in the code (`AreaMenuArtView.WidescreenBackgr
    (`hdInterface` in `game_settings_v1.json`, independent of the Legacy/HD world profile), an HD pack is active and not
    `rejected`, and the file is an opaque 16:9 PNG of at most 3840 x 2160. Anything else leaves the original menu art from
    the game data, without a message. An automated run (smoke, self-test) looks for no pack folder and opens one only when `ARC_HD_PACK` names it, so a smoke shows the HD menu only with that variable.
-2. **The active pack** is `ARC_HD_PACK` when set; otherwise the one the **HD pack** setting of the options window chooses
+2. **The active pack** is `ARC_HD_PACK` when set; otherwise the one the **HD pack** setting of the launcher screen chooses
    ([below](#hd-pack-source-arc-dev-350), ARC-DEV-350): by default (Auto) the iCloud pack folder when it is on this device and the pack in it
    is whole, else the first pack that opens and is not `rejected` in the collection `user://hd-packs/` (the installed copy), then, **only for a
    run of the Godot editor binary** (`Godot --path`, feature `editor`), the checkout's `local/hd-packs/` (the same iCloud folder by its symlink).
@@ -304,9 +304,8 @@ elsewhere is a menu picture. Read in the code (`AreaMenuArtView.WidescreenBackgr
 
 ### HD pack source (ARC-DEV-350)
 
-The game chooses its HD pack at startup from the **HD pack** line of the options window (Game page, after *HD interface*; main menu and in-play
-menu), saved as `hdPack` (`auto`, `game`, `custom`) and `hdPackPath` in `game_settings_v1.json` (file version 4; older files read as Auto). A change
-applies at the **next start**, and the window's note says at once what that start will read:
+The game chooses its HD pack at startup from the **HD pack** line of the launcher screen (after *HD interface*; ARC-UI-143 moved it there from the options window's Game page, ARC-UI-146), saved as `hdPack` (`auto`, `game`, `custom`) and `hdPackPath` in `game_settings_v1.json` (file version 4; older files read as Auto). A change
+applies at the **next start**, and the launcher screen's note says at once what that start will read:
 
 | Setting | Chain (first pack that opens, is not `rejected` and is whole wins) |
 | --- | --- |

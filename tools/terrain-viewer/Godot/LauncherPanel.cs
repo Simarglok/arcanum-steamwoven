@@ -132,7 +132,7 @@ public partial class LauncherPanel : CanvasLayer
             Modulate = new Color(.45f, .1f, .05f),
         };
         _debugMode.Toggled += on => { if (!_rendering) DebugModeRequested?.Invoke(on); };
-        // ARC-UI-143: the HD lines of the options window (HD graphics, HD interface, HD pack), the same saved settings, before the game starts.
+        // ARC-UI-143: the HD lines (HD graphics, HD interface, HD pack: the saved settings, no longer in the options window since ARC-UI-146), before the game starts.
         _hdGraphics = MakeChoiceRow("HdGraphics", "HD graphics:", dark, ["Off", "On"], index => HdGraphicsRequested?.Invoke(index == 1));
         _hdInterface = MakeChoiceRow("HdInterface", "HD interface:", dark, ["Off", "On", "Generated (experimental)"], index => HdInterfaceRequested?.Invoke(index));
         _hdPack = MakeChoiceRow("HdPack", "HD pack:", dark, ["Auto", "Game", "Custom"], index => HdPackRequested?.Invoke((HdPackSourceMode)index));
@@ -146,7 +146,7 @@ public partial class LauncherPanel : CanvasLayer
         _notice = Line(new Color(.45f, .1f, .05f));
         var hint = Line(new Color(.3f, .3f, .3f));
         hint.Text = "Steamwoven is the original game with the recorded fixes; Original keeps the retail 1.0.7.4 rules, bugs included. "
-                    + "The rules can also be switched in play in Options. The HD lines are the options window's: they are saved at once and apply from this start on (the pack source from the next one); Reset settings leaves them alone. Hold Shift while the game starts, or start it with --launcher, to open this screen again. "
+                    + "The rules can also be switched in play in Options. The HD lines are saved at once and apply from this start on (the pack source from the next one); they are set here only, so hold Shift at the start to change them; Reset settings leaves them alone. Hold Shift while the game starts, or start it with --launcher, to open this screen again. "
                     + "The game folder is only read, never written. An installation that the original game never started has no prototype files; "
                     + "the first Play prepares them from your own Arcanum.exe (about half a minute) and keeps them in Steamwoven's settings folder. "
                     + "Without Windows, \"Install from GOG installer…\" unpacks the GOG offline installer (setup_arcanum_….exe) with the free innoextract tool into a new folder you pick, and chooses it.";
