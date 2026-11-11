@@ -66,6 +66,9 @@ A flag counts as read when a symbol outside the data tables uses it; behaviour a
 
 `tech-craft` is the only stage with a technology record on real data besides `grenade` (whatever the map lays) and `cast`. Not exercised on real data (RES-104 section 7, unchanged): a Chemistry, Therapeutics or Explosives product used, a found schematic document read,
 a charge cell spent and an NPC crafter through `su`. Per the smoke-scope rule these go into `tech-craft` (or one sibling stage) rather than a new runner.
+
+**T-s progress (ARC-MAGIC-051, sibling stage `tech-products`, slices in order):** slice 1 done: Therapeutics degree 1 and 2 potions (records 157 and 158) eaten with the effect list and the strength +2 measured, a Chemistry poison (record 171) used on a living NPC through the item cursor, effects and items kept across F7/F8.
+Open: found schematic document, charge cell, NPC crafter through `su`, an Explosives product.
 Unit-test coverage of the rules is as RES-104 lists it; no gap was found there.
 
 ## 6. Queue
