@@ -179,6 +179,10 @@ section 4 hole stays.
 A large item, not recommended now: a warm viewer process that runs several stage groups without restarting (saves the 10 s load per group, but each group
 then needs a reset of the session state, and the smokes are written to start from a fresh load).
 
+## Status
+
+Q4 and Q5 are done in ARC-DEV-391 (`STAGE_NEEDS`, `--stages` grouping, the early error, `smoke_known_failures.json`; [smoke runner](../workflow/toolchain.md#smoke-runner-arc-dev-061)). The zones themselves (option A) are a later task on top of them.
+
 ## Recommendation
 
 1. Do Q1, Q2 and Q3 first: they need no decision about coverage, cut the waiting (three quarters of every call) and make the rest measurable.

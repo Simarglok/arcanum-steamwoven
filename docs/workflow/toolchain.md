@@ -104,14 +104,15 @@ history held about 500 runs of such copies of one template).
     ./arcanum smoke map NAME [--stages S,...] [--hero H] [--sector X,Y] [--main-menu] [--env NAME=VALUE]
     ./arcanum smoke crash-site [--hero H] [--env NAME=VALUE]   # the Crash Site smoke alone
     ./arcanum smoke self-test [--headless] [--env NAME=VALUE]  # the viewer's synthetic --self-test
-    # each also takes --no-build, --keep-settings and --dry-run
+    # each also takes --no-build, --keep-settings and --dry-run; pr and map also --no-config-check
 
 - **Click and walk changes** ([smoke scope](tasks.md#smoke-scope), ARC-DEV-239). A PR that changes click or walk handling
   always runs `./arcanum smoke pr --stages map` and `./arcanum smoke self-test` (both, every such PR).
 - **Scope** ([smoke scope](tasks.md#smoke-scope)). `pr` is the per-PR run: only the stages the change touches or is
   directly related to (`--stages`, the viewer's `ARC_AREA_MAP_SMOKE_ONLY` names; checked against its
-  `MapSmokeStageNames` before anything waits for the queue) on `--map` (default `Arcanum1-024-fixed`, opened at the
-  Crash Site, or at `--sector`), with the Crash Site smoke first only when the change is related to it
+  `MapSmokeStageNames` before anything waits for the queue) on `--map` and `--sector` when given, else on the
+  configuration each stage needs (stage configurations below; most run on
+  `Arcanum1-024-fixed` opened at the Crash Site), with the Crash Site smoke first only when the change is related to it
   (`--crash-site`); with neither it refuses (nothing to run). `full` is the chain of the daily package build
   (`./arcanum daily`, [daily package build](packaging.md#daily-package-build-arc-dev-062), when main changed since the last package): the Crash Site smoke, then the whole map battery (no stage list) on the main map with
   `--hero human-male` at the Crash Site, at the town sector (1409, 1314) and at the generated wilderness sector
@@ -128,11 +129,38 @@ history held about 500 runs of such copies of one template).
   `container`, `junk`, `barter`, `life`, `floaters`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`) gets
   the full chain's hero of that map (`elf-female` on `elven ruins`), else `--hero human-male`, when no `--hero` is
   given, and says so (`SMOKE hero human-male (auto): ...`); with
-  `--main-menu` (no hero) it is refused, as is a menu stage (`menu`, `scene`, `options`, `bar`, `death`, `perf-menu`) without
-  `--main-menu`. The stages the viewer runs only without `map` (`barter`, `menu`, `scene`, `options`, `plants`, `bar`,
+  `--main-menu` (no hero) it is refused. A menu stage (`menu`, `scene`, `options`, `bar`, `death`, `perf-menu`) needs no
+  `--main-menu`: it gets its own menu process. The stages the viewer runs only without `map` (`barter`, `menu`, `scene`, `options`, `plants`, `bar`,
   `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-tile`, `tile-ghost`, `container-click`, `fire-order`, `indoor-fade`, `npc-shot`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `placement-census`, `spell-end`, `hold-hero`, `movement`, `spirit-talk`, `created-scenery`, `worn-light`, `critter-light`, `summon-flash`, `summon-wall`, `tech-craft`, `item-aim`, `perf`, `perf-menu`) get a run of their
   own (step `stages-alone`, or `map-alone`) when `map` is in the list too. `tech-craft` (ARC-DEV-362, technology audit slice T-a) needs the bullets the map's bodies hold, so it runs on the cave: `./arcanum smoke map "crash site cave" --stages tech-craft` (on a map with no bullets of the crafted gun's type it fails with that message; its steps are the helpers of `TerrainViewerTechCraftHarness.cs`). `item-aim` (ARC-DEV-365, technology audit slice T-g) opens the item cursor with a script trap device from the use icon and presses a tile (goal 41) and an NPC (goal 39); it needs a hero and a map with a living NPC. A run whose stages include `debug-travel`, `follower-far` or `inv-carry`
   starts the viewer with `--debug-mode` (the stage needs the debug mode, ARC-DEV-050; ARC-WORLD-120).
+- **Stage configurations and grouping (ARC-DEV-391).** A viewer process fixes its map, start sector, hero, main menu and
+  debug mode at launch, so only stages with the same configuration share a process. `STAGE_NEEDS` in
+  `tools/local_dev/smoke.py` is the one table that says which configuration each of the viewer's stages runs in (default
+  map and sector; whether another map or sector fails it, so `only_map`/`only_sector`; main menu, debug mode; a process of
+  its own; portable). `--stages` reads it: with no `--map`, `--sector` or `--main-menu` each stage gets its own
+  configuration, the stages are grouped into the fewest processes (one per configuration, in order of first appearance;
+  the step is named `stages-main`, `stages-wild`, `stages-town`, `stages-shrine`, `stages-crash-site-cave` ... when there
+  are several, `stages` when there is one), a *portable* stage (`map`, `resources`, `report`, `knockdown`, `inv-arrange`,
+  `created-*`, `summon-*`, `item-aim`) rides in a process that already exists on its map (else it gets one), and the stages that end a game, move
+  the window, leave state behind or run long (the menu family, `walk`, `census`, `container-click`, `perf`,
+  `dead-window`, `critter-fall`, `tech-craft`, `debug-travel`, `follower-far`, `inv-carry`) each get a process of
+  their own (`stages-main-walk`). `--map`, `--sector` and `--main-menu` pin that dimension for every stage; a pinned
+  value a stage cannot pass in is refused before anything waits for the queue (`stage plants does not run at --sector
+  1452,1291: it needs map ... at sector 1384,239`), and so is `--main-menu` with a stage that needs a hero or a session.
+  `--no-config-check` runs the request as given (the grouping stays). The table holds only what is known: where a stage
+  was only seen to pass in one place its default is that place and another one is not refused. `inv-carry` and
+  `critter-light` have no configuration seen to pass yet (the diagnosis saw `NONE` at the Crash Site and in the town). A new stage needs a row
+  (the tests fail without one); the zones of [smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md#options)
+  option A are built on this table.
+- **Known failures on main (ARC-DEV-391).** `tools/local_dev/smoke_known_failures.json` lists failures seen on clean
+  `origin/main`: the stage (or `crash-site`), a regex for the line its log holds, the owning task (`ARC-TYPE-NNN` or
+  `unassigned`) and the day. A failed step whose requested stage did not pass and whose log holds that line is reported
+  `known on main, not this PR` (with the task), and the summary adds `only known failures on main` when every missing stage is
+  listed; the step and the run still fail and the exit code is the same, so the PR report names the stage as a known
+  failure and goes on ([smoke scope](tasks.md#smoke-scope)). A failure with another line, or another stage failing beside
+  it, is not hidden. Add an entry only for a failure seen on clean main with its exact log line, and delete it in the PR
+  that fixes the failure.
 - **Targets of the combat stages (ARC-DEV-089).** The stages that fight an NPC (`attack` in `map`, `cast`, `turn-based`, `ai`) do not take the
   map's weakest NPC blindly: they take the first one (weakest first, at most 24 tried) the hero can stand next to and, with the hero placed there,
   see (`AreaSmokeFightableStartAsync`: a roof-covered or walled-in NPC is skipped), and print `NO-TARGET` when none is, which the battery tolerates (so a regression that hides every target shows only in a `--stages` run, which reports the stage as not run; a limit). A stage
@@ -174,7 +202,7 @@ Measured speed of the smoke runner, the queue and each stage, and the options fo
 
 Tests: `python3 -B -m unittest tools.local_dev.test_smoke` (the stage names from the viewer, the per-PR and full plans,
 the settings folders and dropped variables, the start lines, the chain going on after a failure and ending on a failed
-build or a stopped run, the launcher command).
+build or a stopped run, the stage table, the grouping and the early error, the known failures file, the launcher command).
 
 ## Timing probe and the `perf` stages (ARC-DEV-367)
 

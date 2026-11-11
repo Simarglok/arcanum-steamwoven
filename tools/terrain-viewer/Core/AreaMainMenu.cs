@@ -95,6 +95,13 @@ public sealed class AreaMainMenu
     }
 
     public AreaMainMenuTexts Texts { get; }
+
+    /// <summary>ARC-DEV-387: the windows of a new game's way, from the window with its two choices (the pre-made browser, the new
+    /// character) on: the start map is loaded behind the menu from the moment one of them opens (a hero is chosen or made there and
+    /// the game starts on that map), and not before. Single Player, the load window, Last Save and the options need no start map.</summary>
+    public static bool NeedsStartScene(AreaMenuWindow window) =>
+        window is AreaMenuWindow.NewGame or AreaMenuWindow.PickCharacter or AreaMenuWindow.NewCharacter or AreaMenuWindow.CharacterEditor or AreaMenuWindow.Shop;
+
     /// <summary>Why a new game cannot start (null: a hero can be picked). ARC-DEV-381: the menu opens before the start scene is published
     /// (null then: the picking is allowed and the host holds the start until the scene is there); the host sets the real answer when the
     /// scene is published.</summary>
