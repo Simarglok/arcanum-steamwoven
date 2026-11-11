@@ -34,8 +34,8 @@ from scipy.ndimage import gaussian_filter1d, map_coordinates
 MAPMAIN = "interface/world-map/panels/mapmain-f000.png"
 COVER = "interface/character-sheet/panels/pcwincvr-f000.png"
 LENS_LEGACY = (25, 24, 89)  # AreaWorldMapArtLayout.Lens: x, y, side in window pixels (WM140)
-RING_WINDOW = (-26.0, 9.0)  # texels from the cover ring's outer edge that are rebuilt (ring, its inner dark edge, a little shadow)
-FEATHER = (5.0, 8.0)        # texels over which the rebuilt ring fades into the original (inner, outer)
+RING_WINDOW = (-26.0, 10.0)  # texels from the cover ring's outer edge that are rebuilt (ring, its inner dark edge, a little shadow)
+FEATHER = (5.0, 2.5)        # texels over which the rebuilt ring fades into the original (inner, outer); the outer one is short so no old brass survives past it
 POLAR_STEPS = 1440
 
 
@@ -48,7 +48,7 @@ def _brass(a: np.ndarray) -> np.ndarray:
     return (alpha > 128) & (r - b > 40) & (_luma(a) > 60)
 
 
-def fit_ring(cover: np.ndarray, origin: tuple[int, int]) -> tuple[float, float, float]:
+def fit_ring(cover: np.ndarray, origin: tuple[int, int], expected: float | None = None) -> tuple[float, float, float]:
     """Circle through the outer brass edge of the cover's ring, in window texels: (cx, cy, outer radius)."""
     ys, xs = np.nonzero(_brass(cover))
     if len(xs) < 50:
@@ -76,9 +76,16 @@ def fit_ring(cover: np.ndarray, origin: tuple[int, int]) -> tuple[float, float, 
         px, py = np.array(px, float), np.array(py, float)
         if len(px) < 8:
             raise ValueError("the cover's ring was not found")
-        sol = np.linalg.lstsq(np.c_[2 * px, 2 * py, np.ones(len(px))], px ** 2 + py ** 2, rcond=None)[0]
-        cx, cy = float(sol[0]), float(sol[1])
-        radius = float(np.sqrt(sol[2] + cx * cx + cy * cy))
+        for _ in range(2):  # the second pass drops points more than 3 texels off the first circle
+            sol = np.linalg.lstsq(np.c_[2 * px, 2 * py, np.ones(len(px))], px ** 2 + py ** 2, rcond=None)[0]
+            cx, cy = float(sol[0]), float(sol[1])
+            radius = float(np.sqrt(sol[2] + cx * cx + cy * cy))
+            keep = np.abs(np.hypot(px - cx, py - cy) - radius) <= 3.0
+            if keep.all() or keep.sum() < 8:
+                break
+            px, py = px[keep], py[keep]
+    if expected is not None and abs(radius - expected) > 0.15 * expected:
+        raise ValueError(f"the fitted ring radius {radius:.1f} is far from the expected {expected:.1f}")
     return cx, cy, radius
 
 
@@ -101,9 +108,13 @@ def _polar_strip(cover: np.ndarray, origin: tuple[int, int], circle: tuple[float
 def _fill_gaps(strip: np.ndarray, anchored: np.ndarray, rho: np.ndarray) -> np.ndarray:
     """Angles the cover does not show whole: smooth blend of the neighbouring cross-sections plus the grain of the nearby ring."""
     n = len(strip)
-    low = gaussian_filter1d(strip, sigma=n / 90.0, axis=0, mode="wrap")
+    # filter over the anchored angles only: the strip elsewhere is clamped data from outside the cover
+    mask = anchored.astype(float)
+    sigma = n / 90.0
+    norm = np.maximum(gaussian_filter1d(mask, sigma=sigma, mode="wrap"), 1e-6)
+    low = gaussian_filter1d(strip * mask[:, None, None], sigma=sigma, axis=0, mode="wrap") / norm[:, None, None]
     grain_weight = np.clip((1.0 - rho) / 3.0, 0, 1) * np.clip((rho - RING_WINDOW[0] - 4.0) / 3.0, 0, 1)
-    grain = (strip - low) * grain_weight[None, :, None]
+    grain = (strip - low) * grain_weight[None, :, None] * mask[:, None, None]
     out = strip.copy()
     idx = np.nonzero(anchored)[0]
     if len(idx) == 0:
@@ -131,11 +142,11 @@ def _fill_gaps(strip: np.ndarray, anchored: np.ndarray, rho: np.ndarray) -> np.n
     return out
 
 
-def repair_ring(mapmain: np.ndarray, cover: np.ndarray, origin: tuple[int, int]) -> np.ndarray:
+def repair_ring(mapmain: np.ndarray, cover: np.ndarray, origin: tuple[int, int], expected: float | None = None) -> np.ndarray:
     """New RGBA of `mapmain` (uint8, same shape); `origin` is the cover's top left in `mapmain` (texels)."""
     cover = cover.astype(float)
     base = mapmain.astype(float)
-    circle = fit_ring(cover, origin)
+    circle = fit_ring(cover, origin, expected)
     cx, cy, radius = circle
     rho = np.arange(RING_WINDOW[0], RING_WINDOW[1] + 1.0)
     strip, whole = _polar_strip(cover, origin, circle, rho)
@@ -171,25 +182,37 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--dry-run", action="store_true", help="fit and report, write nothing")
     args = ap.parse_args(argv)
     pack, staging = Path(args.pack).expanduser().resolve(), Path(args.staging).expanduser().resolve()
-    if staging == pack or pack in staging.parents:
-        print("refusing: the staging folder is inside the pack", file=sys.stderr)
+    if staging == pack or pack in staging.parents or staging in pack.parents:
+        print("refusing: the staging folder and the pack must be separate folders", file=sys.stderr)
+        return 2
+    if staging.exists() and (not staging.is_dir() or any(staging.iterdir())):
+        print("refusing: the staging folder exists and is not empty (use a new folder)", file=sys.stderr)
         return 2
     manifest = json.loads((pack / "manifest.json").read_text())
     entry = next((e for e in manifest["entries"] if e.get("file") == MAPMAIN), None)
     if entry is None or not any(e.get("file") == COVER for e in manifest["entries"]):
         print("refusing: the pack lacks the mapmain or pcwincvr frame", file=sys.stderr)
         return 2
+    for rel in (MAPMAIN, COVER):
+        listed = next(e for e in manifest["entries"] if e.get("file") == rel)
+        if _sha(pack / rel) != listed["sha256"]:
+            print(f"refusing: {rel} does not match the manifest (run hd_pack.py verify --deep)", file=sys.stderr)
+            return 2
     scale = int(manifest["scale"])
     lx, ly, side = LENS_LEGACY
     origin = (lx * scale, ly * scale)
     mapmain = np.array(Image.open(pack / MAPMAIN).convert("RGBA"))
     cover = np.array(Image.open(pack / COVER).convert("RGBA"))
+    if mapmain.shape[0] < origin[1] + side * scale or mapmain.shape[1] < origin[0] + side * scale:
+        print("refusing: the window frame is too small for the lens", file=sys.stderr)
+        return 2
     if cover.shape[0] != side * scale or cover.shape[1] != side * scale:
         print(f"refusing: the cover is {cover.shape[1]}x{cover.shape[0]}, expected {side * scale}", file=sys.stderr)
         return 2
-    circle = fit_ring(cover.astype(float), origin)
+    expected = 49.4 * scale  # outer radius of the ring in window pixels (ARC-UI-126 measurement)
+    circle = fit_ring(cover.astype(float), origin, expected)
     print(f"cover ring: centre ({circle[0] / scale:.2f}, {circle[1] / scale:.2f}) window px, outer radius {circle[2] / scale:.2f}")
-    result = repair_ring(mapmain, cover, origin)
+    result = repair_ring(mapmain, cover, origin, expected)
     changed = int((result != mapmain).any(axis=2).sum())
     if (result[..., 3] != mapmain[..., 3]).any():
         print("refusing: the alpha channel changed", file=sys.stderr)
@@ -199,7 +222,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     target = staging / MAPMAIN
     target.parent.mkdir(parents=True, exist_ok=True)
-    Image.fromarray(result, "RGBA").save(target, optimize=False)
+    Image.fromarray(result).save(target, optimize=False)
     entry = dict(entry)
     entry["sha256"], entry["bytes"] = _sha(target), target.stat().st_size
     manifest["entries"] = [entry if e.get("file") == MAPMAIN else e for e in manifest["entries"]]

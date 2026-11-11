@@ -1,6 +1,6 @@
 """ARC-UI-136: the lens ring repair keeps alpha and the square, and changes only the ring of the window frame.
 
-Synthetic frames only, no art. Needs numpy, scipy and Pillow (the res094 venv); skipped where they are missing."""
+Synthetic frames only, no art. Needs numpy, scipy and Pillow (as the res094 venv has them); skipped where they are missing."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -63,6 +63,17 @@ class RingRepairTests(unittest.TestCase):
         far = np.ones(window.shape[:2], bool)
         far[40:500, 40:520] = False
         self.assertTrue((out[far] == window[far]).all(), "far from the ring nothing changes")
+        # the top column above the square: brass exactly where the cover's circle puts it, wood outside, no ghost of the old ring
+        cx, cy = ORIGIN[0] + SIDE / 2 - 1, ORIGIN[1] + SIDE / 2 - 4
+        x = int(round(cx))
+        def brassy(y):
+            px = out[y, x].astype(int)
+            return px[0] - px[2] > 80
+        top = cy - 190   # outer edge of the cover's ring at the top
+        for rho in (-12, -8, -4):
+            self.assertTrue(brassy(int(round(top - rho))), f"ring brass at {rho} texels from the outer edge")
+        for rho in (2, 4, 6, 8):
+            self.assertFalse(brassy(int(round(top - rho))), f"no old brass {rho} texels outside the ring")
 
     def test_fit_finds_the_cover_circle(self):
         _, cover = _frames()

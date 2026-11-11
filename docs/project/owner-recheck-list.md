@@ -483,7 +483,7 @@ window drew, floaters included, where the original copies the game view alone; w
 
 With the HD interface switch on, the lens on the world map showed a doubled brass edge at the ring's top and upper right: the ring of the window frame (outside the lens square) and the ring of the cover art 198 (inside it) were
 painted separately and did not coincide. The ring of the window frame `mapmain` is rebuilt from the cover's ring ([HD interface art](../rendering/hd-interface-art.md#world-map-window-arc-ui-126)); the Legacy art is untouched. The repair is a local pack change
-(`lens_ring.py`, then `hd_pack.py apply`, backup and rollback), so the steps below apply once it is installed in the pack the game reads. The cause and the method are in the same section; no frame is in git. Known difference, not to be re-reported: the cover's corner wood and the
+(`lens_ring.py`, then `hd_pack.py apply`, backup and rollback), and it is installed in the pack the game reads (manifest `696edbd2…`, backup `ARC-UI-136-v2-cde8a57839e6`, `hd_pack.py rollback` undoes it). The cause and the method are in the same section; no frame is in git. Known difference, not to be re-reported: the cover's corner wood and the
 window frame's wood have a slightly different grain, which leaves a faint square patch at the lens corners (not part of this repair).
 
 | # | Step | Expected | Status |

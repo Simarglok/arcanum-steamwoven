@@ -29,4 +29,4 @@ Left out on purpose: `rebuild_hd.sh`, `full_hd.sh`, `apply_update.sh`, `merge_up
 `hd_pack.py stage` / `plan` / `apply`; `rebuild_hd.sh` deletes its target) and `docs_res095.py` (writes the Russian
 README/INDEX of the local kit). They stay in `local/res095/tools/` as history.
 
-Tests (synthetic, no art): `python3 -B -m unittest tools.hd_pack.res095.test_hd_paths tools.hd_pack.res095.test_lens_ring` (the second needs the res094 venv and is skipped without it).
+Tests (synthetic, no art): `python3 -B -m unittest tools.hd_pack.res095.test_hd_paths tools.hd_pack.res095.test_lens_ring` (the second needs numpy, scipy and Pillow, as the res094 venv has, and is skipped without them).
