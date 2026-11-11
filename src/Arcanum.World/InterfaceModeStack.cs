@@ -1,3 +1,5 @@
+using Arcanum.Simulation;
+
 namespace Arcanum.World;
 
 /// <summary>ARC-DEV-108: what became of a request to the mode stack.</summary>
@@ -166,6 +168,7 @@ public sealed class InterfaceModeStack
         return new(pushed.Status, [.. popped.Steps, .. pushed.Steps]);
     }
 
+    [OriginalFunction(0x551A80, OriginalFunctionScope.Partial)]
     private InterfaceModeChange Change(InterfaceMode mode, bool pop)
     {
         if (_locked) return InterfaceModeChange.Without(InterfaceModeStatus.Locked);

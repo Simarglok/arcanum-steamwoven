@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Magic;
+using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 
@@ -36,6 +37,7 @@ public sealed partial class GameSessionOwner
 
     private HashSet<int> SavedSpellRunSlots() => SavedCasts().Spells;
 
+    [OriginalFunction(0x57BB60, OriginalFunctionScope.Partial)]
     private SessionSpellState CaptureSpells()
     {
         var saved = SavedSpellRunSlots();
@@ -43,6 +45,7 @@ public sealed partial class GameSessionOwner
         return new([.. _spellRuns.Runs.Where(run => saved.Contains(run.Id))], bar, _spellLastCost) { ObjectFlags = CaptureObjectFlags() };
     }
 
+    [OriginalFunction(0x57BBB0, OriginalFunctionScope.Partial)]
     // Shapes the codec cannot know: the run table's slots, the entity strings of the objects a run names, the actions the build saves, and a bar that shows only runs that exist.
     // ARC-DEV-289: a run before its BEGIN is checked against what waits to begin it once the goals, flights and events are in (CheckCastRuns).
     private static GameSessionFailure ImportSpells(SessionSpellState saved, out SpellRunTable table, out MaintainBar bar)

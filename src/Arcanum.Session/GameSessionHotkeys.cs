@@ -1,5 +1,6 @@
 using Arcanum.Simulation.Hotkeys;
 using Arcanum.Simulation.Magic;
+using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 
@@ -45,6 +46,9 @@ public sealed partial class GameSessionOwner
     /// (<see cref="GameSessionFailure.ItemNotAvailable"/>; the original takes a worn item off the doll onto the bar: not ready); for an item entry, ammunition or gold (<see cref="GameSessionFailure.InvalidHotkey"/>)
     /// and an item of a prototype another item entry holds (<see cref="GameSessionFailure.ItemNotAvailable"/>; the original's message 4000).
     /// The same entry again is NoChange. An item that moves onto the bar or off it empties every other entry naming it (HK6). One revision.
+    [OriginalFunction(0x57ED60, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x57EE30, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x57EED0, OriginalFunctionScope.Partial)]
     /// </summary>
     public GameSessionMutationResult AssignHotkey(GameSessionVersion expected, int slot, HotkeyEntry entry)
     {
@@ -90,6 +94,7 @@ public sealed partial class GameSessionOwner
         EmptyEntriesOfMovedItems(before);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
+    [OriginalFunction(0x57F210, OriginalFunctionScope.Partial)]
     }
 
     /// <summary>ARC-UI-022: entry <paramref name="slot"/> dragged off the bar: it empties, and an item entry's item goes back to the grid. An
@@ -176,6 +181,7 @@ public sealed partial class GameSessionOwner
     /// included, ledger IP6, HK6): an entry whose item the hero no longer holds or whose item moved (its wear slot or grid slot changed since
     /// the last change) empties, whatever its type.
     /// </summary>
+    [OriginalFunction(0x5570D0, OriginalFunctionScope.Partial)]
     private void SettleHotkeys()
     {
         for (var i = 0; i < _hotkeys.Length; i++)
@@ -193,6 +199,8 @@ public sealed partial class GameSessionOwner
         : (_equipment.SlotOf(item), _inventory.Grid.TryGetValue(item, out var placed) ? placed.Slot : null);
 
     // A saved bar: ten entries and two recent actions, each fitting its kind; an entry's item one the hero holds (an item entry's not worn, and
+    [OriginalFunction(0x57DBA0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x57DEF0, OriginalFunctionScope.Partial)]
     // on one entry only); the recent actions only spells and skill-bar buttons. The original's load sets the recent actions through 0x57EFA0
     // in saved order, which turns the two around (HK7); here they come back as saved.
     private static GameSessionFailure ImportHotkeys(SessionHotkeyState saved, bool hasHero, InventoryDomain inventory, EquipmentDomain equipment,

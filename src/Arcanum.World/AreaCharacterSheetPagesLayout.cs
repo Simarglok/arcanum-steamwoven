@@ -2,6 +2,7 @@ using System.Globalization;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Skills;
+using Arcanum.Simulation;
 
 namespace Arcanum.World;
 
@@ -45,6 +46,7 @@ public static class AreaCharacterSheetPagesLayout
     public static (int X, int Y) Gauge(int row) => (59, 87 + 66 * row);
 
     /// <summary>The drawn width of the gauge art for an effective level: 6 pixels a level, nothing at level 0 (0x55BF20).</summary>
+    [OriginalFunction(0x55BF20, OriginalFunctionScope.Partial)]
     public static int GaugeVisible(int level) => Math.Clamp(level, 0, GaugeWidth / PixelsPerLevel) * PixelsPerLevel;
 
     /// <summary>A row's pointer region (table 0x5C8CA8): the name and the gauge.</summary>
@@ -81,6 +83,7 @@ public static class AreaCharacterSheetPagesLayout
     /// <summary>A learned degree's icon slot (also the plus's slot for the next degree, and the minus's for the last one).</summary>
     public static (int X, int Y) DegreeSlot(int row) => (8, 96 + 33 * row);
 
+    [OriginalFunction(0x55C3A0, OriginalFunctionScope.Partial)]
     /// <summary>The degree's colour: white up to the stored degree, yellow for the next one, grey after it; all white at degree 7
     /// (0x55C620..0x55C749).</summary>
     public static AreaSheetColour DegreeColour(int row, int degree) => degree >= Degrees || row + 1 <= degree ? AreaSheetColour.White

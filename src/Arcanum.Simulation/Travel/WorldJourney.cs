@@ -134,6 +134,7 @@ public sealed class WorldJourney
     [OriginalFunction(0x564C20, OriginalFunctionScope.Partial)]
     [OriginalFunction(0x565170, OriginalFunctionScope.Full)]
     [OriginalFunction(0x564EE0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x564E30, OriginalFunctionScope.Partial)]
     public TravelStepResult Step(Func<int, bool> known, TravelRuleProfile rules, Func<bool>? continueJourney = null)
     {
         ArgumentNullException.ThrowIfNull(known); ArgumentNullException.ThrowIfNull(rules);
@@ -161,6 +162,7 @@ public sealed class WorldJourney
 
     /// <summary>Ends the journey where it stands (leaving travel, 0x5615D0): the landing of the map position, without the area
     /// snap under the original's cancel (A4). The map position takes the landing (WT12).</summary>
+    [OriginalFunction(0x5615D0, OriginalFunctionScope.Partial)]
     public TravelLocation Cancel(TravelRuleProfile rules)
     {
         ArgumentNullException.ThrowIfNull(rules);

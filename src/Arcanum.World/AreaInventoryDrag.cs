@@ -1,5 +1,6 @@
 using Arcanum.Session;
 using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation;
 
 namespace Arcanum.World;
 
@@ -56,6 +57,7 @@ public static class AreaInventoryDrag
             [EquipmentSlot.Armor] = (119, 171, 128, 160), [EquipmentSlot.Gauntlets] = (55, 107, 64, 64), [EquipmentSlot.Boots] = (150, 331, 64, 64),
         };
 
+    [OriginalFunction(0x575CB0, OriginalFunctionScope.Partial)]
     /// <summary>The slot or cell under a point of the frame: the wear slots first, then the grid, then the icons; none outside all.</summary>
     public static AreaInventoryHit HitTest(float x, float y)
     {
@@ -80,6 +82,7 @@ public static class AreaInventoryDrag
     }
 
     /// <summary>A left press with nothing held (IW2): the item under the point goes on the cursor; a grid item keeps the grab's offset, a worn
+    [OriginalFunction(0x575FA0, OriginalFunctionScope.Partial)]
     /// item none. Null over an empty cell or slot or outside both. No check runs on the press. ARC-UI-025: a right release with nothing held
     /// names the same item (IW5), which the app may use.</summary>
     public static AreaInventoryHeld? Press(AreaInventoryView view, AreaInventoryHit hit)
@@ -95,6 +98,7 @@ public static class AreaInventoryDrag
     /// in grid locations, unclamped; a negative one puts the item back), a grid move for a grid item and a take-off into that slot for a
     /// worn one; on a wear slot a wear move (its own slot puts it back); anywhere else the item goes back. The session decides the rest.
     /// </summary>
+    [OriginalFunction(0x573850, OriginalFunctionScope.Partial)]
     public static AreaInventoryDrop Release(AreaInventoryHeld held, AreaInventoryHit hit)
     {
         ArgumentNullException.ThrowIfNull(held);
