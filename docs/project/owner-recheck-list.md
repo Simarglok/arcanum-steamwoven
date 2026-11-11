@@ -375,7 +375,7 @@ Compare in both games with the same hero and spells.
 | --- | --- | --- | --- |
 | 1 | Cast Shield of Protection (30) on yourself, then Dweomer Shield (42) on yourself. | The Dispel at the start ends your maintained spells (Shield of Protection ends, its bar slot frees); Dweomer Shield's own run is left and keeps its slot. Ours ends the runs the target is the source of or is aimed at, but never the dispelling run. | open |
 | 2 | Cast a maintained spell on a creature (for example Entangle), then cast Disperse Magick (41) on the creature. | The spell ends (its END runs: the flag is taken off). Ours ends the runs aimed at the creature the same way. | open |
-| 3 | Cast Flesh to Stone (48) on a creature, then Disperse Magick (41) on it. | The creature is no longer held (it acts again). The original clears the stoned spell flag by a plain write and leaves the stoned object flag set: look at whether the creature still looks like stone or acts; ours clears the same flag and leaves the same one. Record what you see. | open |
+| 3 | Cast Flesh to Stone (48) on a creature, then Disperse Magick (41) on it. | The creature is no longer held (it acts again). The original clears the stoned spell flag and then the stoned object flag (0x43D280): the creature stops looking like stone and acts again. Ours clears both flags (ARC-MAGIC-039; MA-3 wrongly left the object flag set). Compare how the creature looks after the Dispel in both games and whether it acts at once. Record what you see. | open |
 | 4 | Cast Disperse Magick (41) on a creature that a companion or a creature cast a maintained spell on, and on a creature a technology item's effect holds. | The spells of a magic record end; the effects of a technological record (a gadget, a schematic) are never ended by it. | open |
 
 Known differences (reading only, no game step):
@@ -556,8 +556,7 @@ Known differences (documented, not bugs):
 
 Read in the original executable (ledger [MV1–MV3](../research/ledger/spell-runs.md#movement-component-and-the-immediate-path-relocation-arc-magic-036)): the Movement component of Spatial Distortion (spell 3) is no teleport. It asks the same
 path request the item drop uses and walks **at most eight tiles** of the route, running the tile script of every tile it walks, then puts the caster on the last tile. Compare in both games with a hero who knows the spell
-(Conveyance college, rank 4), on any open ground such as the Crash Site. Both rule modes behave the same. Known differences, not to be re-reported: Teleportation (spell 4) and the other movement kinds are not built yet; the tile scripts run after the caster is placed here,
-before it in the original (the observable difference is only which tile the script sees the caster on); the view is not re-centred beyond the camera following the hero.
+(Conveyance college, rank 4), on any open ground such as the Crash Site. Both rule modes behave the same. Known differences, not to be re-reported: the view is not re-centred beyond the camera following the hero. Teleportation (spell 4), the random tile, the area portal and the order of the tile scripts (before the placement) were built afterwards: see ARC-MAGIC-038.
 
 | # | Step | Expected (from the original executable and data) | Status |
 | --- | --- | --- | --- |
@@ -567,6 +566,24 @@ before it in the original (the observable difference is only which tile the scri
 | 4 | Start a click-walk far away, then cast spell 3 at a near tile while the hero walks. | The walk stops with the move; the hero stands on the target and does not walk on. | open |
 | 5 | Cast it so that the route crosses or ends on a tile with a script (a trap-like tile, a door sill with a script). | The tile's script runs; the last tile's script runs twice (watch for a message that appears twice). | open |
 | 6 | Cast it at a tile with a creature on it. | `Tgt_Tile_Empty` refuses the tile: the cast does not pick it. | open |
+
+## ARC-MAGIC-038 — Teleportation opens the world map; the teleport ban areas (PR pending, 2026-11-11)
+
+Read in the original executable (ledger [TP1–TP5](../research/ledger/spell-runs.md#teleport-types-and-the-anti-teleport-test-arc-magic-038), contract [teleport types](../world/spell-cast-host.md#teleport-types-and-the-anti-teleport-test-arc-magic-038)): in a single-player game Teleportation (spell 4,
+Conveyance college) moves nothing by itself. It opens the **world map in a teleport mode**; you click a known area, and the hero lands there. Places where teleporting is refused come from the data file `Rules\AntiTeleport.mes` (2 round regions and 5 whole maps in the installed game). Both rule modes behave the same.
+Use a hero who knows Teleportation, with enough fatigue (the spell's fatigue cost is charged only when an area is picked). Known differences, not to be re-reported: in the teleport mode the town map, the compass and the waypoint journey are not offered; the refusal message (the original's message 640) is shown as an
+English label, not the game's text; the view is not re-centred; an NPC cast of the area portal (technology 218) or of a random move does not carry the creature; a multiplayer host is not built.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast Teleportation in the open (outside any ban area). | The world map opens at once in teleport mode (the town map is not shown). No fatigue is taken yet. | open |
+| 2 | Click an area you have discovered, 320 tiles or closer to the click point. | The hero lands on that area on the main map, the map window closes, and the spell's fatigue is taken now (a hero too tired to pay still lands). Repeat from a town or dungeon map: the teleport map opens there too and the click picks the area. | open |
+| 3 | Click open sea or a place with no discovered area within reach. | Nothing happens; the map stays open and nothing is paid. | open |
+| 4 | Close the map (Escape or its close button) without picking. | Nothing is paid and the hero stays where it was. | open |
+| 5 | Cast it in a map the file disables (five maps in the installed data), or inside one of the two regions on the main map. | The cast is refused with a message at once and the world map does not open; no fatigue is taken. | open |
+| 6 | Open the teleport map and pick an area that lies inside one of the ban regions. | The pick is refused with a message and the map stays open; nothing is paid. Pick another area to leave. | open |
+| 7 | Use the technology device that teleports to the area (record 218) on the main map, and in a map that is not the main one. | On the main map the hero is sent to the area's location with a blank screen and no wait orders; elsewhere to the main map at the location of the area that map belongs to. | open |
+| 8 | Walk with Spatial Distortion (spell 3) over a tile that has a script, starting from a tile next to it. | The script runs **before** the caster is put on the last tile: a message from it names the caster's old tile; the last tile's script runs once more afterwards. | open |
 
 
 ## ARC-DEV-381 — Main menu opens before the start map (O1 of the performance diagnosis, 2026-11-11)

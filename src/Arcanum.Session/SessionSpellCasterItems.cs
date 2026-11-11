@@ -250,11 +250,15 @@ public sealed partial class SessionSpellCaster
         var target = aim.Object is null ? null : Facts(aim.Object);
         if (aim.Object is not null && target is null) return new(firing, SessionItemSpellOutcome.NoTarget);
         var invocation = new SpellInvocation(firing.Spell, parent, source, target, target is null ? aim.Tile : SpellLocation.None, ItemPower(item, parent),
-            ParentIsLocalPlayer: item.Holder == Hero) { Other = runOther is null ? null : Facts(runOther) };
+            TeleportAllowed: TeleportAllowedFor(firing.Spell, item.Holder), ParentIsLocalPlayer: item.Holder == Hero) { Other = runOther is null ? null : Facts(runOther) };
         var started = _owner.StartSpellRun(_owner.Version, new(invocation, SkipCastGoal: !firing.CastGoal, Triggers: unchecked((int)eventMask)),
             record.Run, InvocationWorld(), _owner.SpellRolls);
         if (started.Disposition != GameSessionDisposition.Changed || started.Creation?.Run is not { } run)
+        {
+            // ARC-MAGIC-038 (0x4564E0): the anti-teleport refusal shows message 10000 whenever the parent is the local player.
+            if (started.Creation?.Check is { ShowsTeleportMessage: true }) _log.Add(new(SpellCastEventKind.Message, -1, TeleportRefusedMessage));
             return new(firing, SessionItemSpellOutcome.Refused, null, started);
+        }
         Chained(run.Id, _firingChain);
         return new(firing, SessionItemSpellOutcome.Started, run.Id, started);
     }

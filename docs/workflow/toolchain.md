@@ -170,6 +170,8 @@ history held about 500 runs of such copies of one template).
 - **Godot** is `/Applications/Godot_mono.app/Contents/MacOS/Godot`, or `$GODOT`. The import writes the viewer's
   untracked `*.cs.uid` files into the checkout; never commit them (stage files by name).
 
+Measured speed of the smoke runner, the queue and each stage, and the options for faster runs and per-task zones: [smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md) (ARC-DEV-384).
+
 Tests: `python3 -B -m unittest tools.local_dev.test_smoke` (the stage names from the viewer, the per-PR and full plans,
 the settings folders and dropped variables, the start lines, the chain going on after a failure and ending on a failed
 build or a stopped run, the launcher command).

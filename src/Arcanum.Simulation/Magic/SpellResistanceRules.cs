@@ -20,6 +20,8 @@ public enum SpellRollPurpose
     Heal,
     /// <summary>An item spell's chance flag (0x4CB830, ARC-MAGIC-020): d100, fires at or below the flag's percentage.</summary>
     ItemTriggerChance,
+    /// <summary>ARC-MAGIC-038: the Movement component's random-tile direction, 0..8 (0x4F4E40's one draw of 0x4CEF00; 8 is a step in place).</summary>
+    MovementDirection,
 }
 
 /// <summary>

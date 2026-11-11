@@ -115,6 +115,42 @@ public partial class TerrainViewerApp
             var before = HeroWorld();
             var same = Cast(before);
             Require(same == $"Movement:{before.X}:{before.Y}" && HeroWorld() == before && _movementsForSelfTest[^1].Result == "no route", $"a target tile that is the hero's own tile moves nothing: {same} {_movementsForSelfTest[^1].Result}");
+
+            // ---- Teleportation (spell 4, ARC-MAGIC-038, TP3/TP4): the cast moves nothing itself, the world map opens in its teleport mode, and closing it pays nothing and moves nothing ----
+            for (var i = 0; i < 1200 && _worldMapData?.Data is null; i++) { AdoptWorldMapData(); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
+            Require(_worldMapData?.Data is not null, "the world-map data loaded for the teleport check: " + _worldMapData?.Status);
+            for (var i = 0; i < 6; i++) Frame();
+            var teleportHero = Caster().RunObject(SessionSpellCaster.Hero) ?? throw new InvalidOperationException("AREA_MOVEMENT_NO_HERO");
+            var hereNow = HeroWorld();
+            var fatigueBefore = Caster().CurrentFatigue(teleportHero);
+            var teleportLog = "";
+            for (var component = 0; component < 4; component++)
+            {
+                var caster = Caster();
+                var spot = new SpellLocation(checked((uint)hereNow.X), checked((uint)hereNow.Y));
+                var run = new SpellRun(0, 4, SpellRunAction.Begin, teleportHero, teleportHero, spot, teleportHero, spot, null, SpellRunFlags.Active);
+                var logStart = caster.Log.Count;
+                caster.Apply(run, component, new(teleportHero, spot));
+                teleportLog += string.Join(",", caster.Log.Skip(logStart).Where(e => e.Kind is SpellCastEventKind.TeleportMap or SpellCastEventKind.Message).Select(e => $"{e.Kind}:{e.Value}"));
+                FlushSpellLog(null);
+            }
+            GD.Print($"ARC-MAGIC-038 teleportation-cast log=[{teleportLog}] map-open={WorldMapOpen} mode={_teleportMode} status={_worldMapStatus}");
+            Require(teleportLog == $"{SpellCastEventKind.TeleportMap}:4" || teleportLog == $"{SpellCastEventKind.Message}:{SessionSpellCaster.TeleportRefusedMessage}",
+                "the cast logged the teleport request (or the refusal of a banned place): " + teleportLog);
+            if (teleportLog.StartsWith(nameof(SpellCastEventKind.TeleportMap), StringComparison.Ordinal))
+            {
+                Require(_teleportsForSelfTest.Contains("map open spell 4"), "the viewer took the request: " + string.Join(";", _teleportsForSelfTest));
+                Require(WorldMapOpen && _teleportMode is { Spell: 4 }, "the world map opened in its teleport mode: " + _worldMapStatus);
+                Require(HeroWorld() == hereNow && Caster().CurrentFatigue(teleportHero) == fatigueBefore, "opening the map moves and pays nothing");
+                CloseWorldMapByPlayer();
+                for (var i = 0; i < 4; i++) Frame();
+                Require(!WorldMapOpen && _teleportMode is null, "closing the map ends the teleport mode");
+                Require(HeroWorld() == hereNow && Caster().CurrentFatigue(teleportHero) == fatigueBefore, "a map closed with no pick pays nothing and moves nothing");
+            }
+            else Require(!WorldMapOpen, "a refused teleport leaves the world map closed");
+
+            GD.Print("ARC-MAGIC-038 teleport checked: " + string.Join(";", _teleportsForSelfTest));
+
             WorldRouteClick(Screen(start));
             Require(HeroRunsHost()?.WalkRun is not null, $"a click walks the hero again: {_worldRouteClick}");
 
