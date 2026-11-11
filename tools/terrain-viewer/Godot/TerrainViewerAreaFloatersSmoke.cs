@@ -110,15 +110,16 @@ public partial class TerrainViewerApp
 
             // The NPC attacks the hero until a hit lands or is dodged: red damage over the hero, or a white dodge.
             var heroLines = 0;
-            SessionAttackResult? landed = null;
+            SessionAttackResult? landed = null; string refusedAttack = "";
             for (var tries = 0; tries < 40 && landed is null; tries++)
             {
                 var attack = session.AttackByNpc(session.Version, new SessionNpcAttack(combat!) { TargetWorn = AreaCombatHost.HeroWorn(session, _areaKitDurability) });
-                if (attack.Disposition == GameSessionDisposition.Rejected) break;
+                if (attack.Disposition == GameSessionDisposition.Rejected) { refusedAttack = $"rejected try={tries} failure={attack.Failure} npcLife={session.QueryLife(combat!.Target).View?.Status} hero={session.QueryHeroLife()?.Status}"; break; }
+                refusedAttack = $"last try={tries} disposition={attack.Disposition} failure={attack.Failure} outcome={attack.Resolution?.Outcome} cause={attack.Resolution?.MissCause} hero={session.QueryHeroLife()?.Status} npc={session.QueryLife(combat!.Target).View?.Status}";
                 if (attack.Resolution?.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit
                     || attack.Resolution is { Outcome: AttackOutcome.Miss, MissCause: AttackMissCause.Dodged }) landed = attack;
             }
-            Require(landed is not null, "an NPC attack on the hero landed or was dodged");
+            Require(landed is not null, "an NPC attack on the hero landed or was dodged " + refusedAttack);
             if (landed!.Life is { } stun && stun.Events.HasFlag(LifeEvents.Stunned)) HeroStunned(session);
             FloatCritterAttack(landed, entity, HeroFloater);
             var hero = layer.Field.Lines(HeroFloater);

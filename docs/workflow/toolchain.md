@@ -165,6 +165,16 @@ history held about 500 runs of such copies of one template).
   observation from being refused as late (`RestoreWorldTestTime`, ARC-WORLD-025). `summon-wall` read the hero's hit points before
   and after the burn and failed once in the long list (`25 -> 30`, not reproduced alone or in shorter chains); it now checks the
   hit-point damage the hero carries, which the wall's burn would raise (ARC-DEV-405).
+- **Stage boundary reset (ARC-DEV-408).** A stage that passes alone and fails after others had a second cause besides the test time:
+  what the earlier stages left in the shared session. `TerrainViewerSmokeStageSet` calls `SmokeStageBoundary`
+  (`TerrainViewerSmokeStageReset.cs`) at every change of stage in the viewer: the first call takes the baseline (the hero's world cell
+  and the roll sequence's position, `GameSessionOwner.QueryRandom`), every later call puts back what a stage must not inherit and prints
+  `ARC-DEV-408 stage-reset PREVIOUS -> NEXT: ...` for what it changed: the hero's combat mode (`worldmap` refused "leave combat mode
+  first"), the roll sequence (`GameSessionOwner.RestoreRandom`; `floaters`' critical hit knocked its NPC out after `barter` and `life` had
+  rolled, so the NPC could not strike back) and the hero's cell when it is still on the shown map (`door-close` left the hero in the cell
+  `npc-door` walks its NPC into). A new kind of leak is one more line there, not a change to one stage. Not reset: world objects a stage
+  changed (doors, items, bodies) and the viewer's windows; a stage that changes those restores them itself. A session a stage replaced by a
+  load starts a new baseline.
 - **Every requested stage runs (ARC-DEV-063).** `PASS` means each requested stage ran: a map smoke passes only when
   its log holds the `PASS` line of every stage in its list (`STAGE_PASS` in `tools/local_dev/smoke.py`, checked against
   the viewer's sources by the tests), the whole map battery (`full`, `map` without `--stages`) that of `map` and
