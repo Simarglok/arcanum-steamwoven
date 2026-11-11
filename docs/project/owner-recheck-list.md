@@ -381,8 +381,27 @@ Compare in both games with the same hero and spells.
 Known differences (reading only, no game step):
 
 - Polymorph (49) and a script's permanent polymorph (critter flags 2 bit 0x400000) are undone by the original's Dispel with the art restored; ours has neither (MA-8).
-- A portal or container held by Magelock (75) loses the hold in the original; ours has no such writer yet (MA-6).
+- A portal or container held by Magelock (75) loses the hold in the original; ours does the same since MA-6 ([steps below](#arc-magic-037--locks-and-holds-unlocking-cantrip-and-magelock-ma-6-2026-11-11)).
 - A summoned critter is destroyed by the original's Dispel; ours destroys one the session created, and no spell makes one before the creature summons (E1-e).
+
+## ARC-MAGIC-037 — Locks and holds: Unlocking Cantrip and Magelock (MA-6, 2026-11-11)
+
+The rules are in [Locks and holds](../world/spell-cast-host.md#locks-and-holds-on-portals-and-containers-arc-magic-037), the executable reading in [LM1–LM6](../research/ledger/spell-runs.md#lock-flags-of-portals-and-containers-arc-magic-037).
+No viewer smoke stage casts at a door, so every step here is by hand. Compare in both games with the same hero (a mage who knows Unlocking Cantrip of the Conveyance college and Magelock of the Temporal college), the same door and the same chest; use the hero's own "locked" door of a house and a locked chest, and a door with a high lock level for step 3 (pick it with lockpicks first to see how hard it is).
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast Unlocking Cantrip (1) on a locked door with a low lock level (below 20), then open it. Close it, wait more than one game hour (rest or let the clock run), and try the door again. | The door unlocks and opens. **It is still unlocked after the hour**: the spell writes the lock field itself and schedules no relock (a key or lockpicks relock an hour later). Ours does the same; if the original relocked it after an hour, note it here. | open |
+| 2 | Cast Unlocking Cantrip (1) on a locked chest with a low lock level and open it; then do the same with the lockpicks on a second locked chest and wait an hour. | The spell opens the chest and the chest stays unlocked for good; the lockpicked chest locks again after the hour (and, as before, a spilled or looted chest keeps its contents). Ours matches. | open |
+| 3 | Cast Unlocking Cantrip (1) with a hero of low magical aptitude on a door or chest whose lock level is above 19 and above the hero's aptitude (the character sheet's Magick aptitude line; the lock level is the lock's difficulty shown by the pick-locks check). Then raise the aptitude (an aptitude-giving item or a higher level) to at least the lock level and cast again. | The first cast fails: the lock stays and the "resisted" feedback (the resisted effect, spell.mes 643 for the player) plays on the door. At aptitude not below the level the lock opens. A lock of level 19 or lower opens at any aptitude. Ours matches (the "resists" line and message 643). | open |
+| 4 | Stand near a guard or the owner of the door (an NPC who watches it) and cast Unlocking Cantrip on it. | The original calls the object's witnesses (0x4AEE50) after the cast, whether the lock opened or not: NPCs within 10 tiles that guard the object (or are guards) and see or hear the caster react, an unlock making them hostile. A door or chest with no owner alerts nobody. **Ours does nothing yet** (the guards' reaction to a lock crime is not built; the cast log only has a line). Record what the original's guards do. | open |
+| 5 | Cast Magelock (75) on an unlocked, closed door, then try to open it. Cast it on an open door and try to close it. | The held door does not open (the locked sound plays, the hover line shows the held text) and a held open door cannot be closed either. When the spell ends (its duration or maintenance), the door works again. Ours matches. | open |
+| 6 | Cast Magelock on a door, then Disperse Magick (41) on the same door. Then cast Magelock on a door twice if the game lets you (two casters, or the spell again on a door it already holds). | Disperse Magick clears the hold at once. The area of Magelock excludes a door that is already held, so the second cast is refused at the target. If two holds stack (two casters), the first end clears the bit although the other spell goes on. Ours does the same; record whether the original allows the second target. | open |
+
+Known differences (reading only, no game step):
+
+- The guard alert's witnesses and the screen refresh after an unlock are not built; the stone-to-flesh pair of Flesh to Stone (48) on a portal that holds the stoned spell flag is not built either (no installed record makes a stone portal).
+- A container's magically held bit has no writer but Dispel (no installed record writes it).
 
 ## ARC-RES-120 — Function triage of the exe band 0x55-0x59 (2026-11-11)
 

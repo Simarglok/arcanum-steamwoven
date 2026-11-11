@@ -14,7 +14,7 @@ namespace Arcanum.Session;
 /// <item>the **object's**, for a PC or NPC: the stoned spell flag (0x10000) cleared by a plain write (no reference count and no side effect: the object flag stoned that the ObjFlag
 /// component writes stays as it is), the object **destroyed when its spell flags held the summoned bit** (0x4000, read before the clear), and a perma-polymorph undone (critter flags 2
 /// bit 0x400000, with the restore of its art; not modelled: the session keeps no second critter flags field and the Trait restore is MA-8's). A portal's or container's magically held bit
-/// (portal flags bit 4, container flags bit 4) is cleared by the original; the lock state with its writer (Magelock) is MA-6's.</item>
+/// (portal flags bit 4, container flags bit 4) is cleared by a plain write (ARC-MAGIC-037, MA-6: <c>SessionSpellCasterLocks.cs</c>).</item>
 /// </list>
 /// </summary>
 public sealed partial class SessionSpellCaster
@@ -32,10 +32,12 @@ public sealed partial class SessionSpellCaster
         return SpellComponentOutcome.None;
     }
 
-    // The object's own half (0x451C40, after the runs' loops), for the hero, a critter this host knows and a critter the session created; a portal or container (the magically held bit,
-    // MA-6) and the perma-polymorph (MA-8) are not modelled.
+    // The object's own half (0x451C40, after the runs' loops), for the hero, a critter this host knows, a critter the session created and (ARC-MAGIC-037, MA-6) a portal or container
+    // (its magically held bit); the perma-polymorph (MA-8) is not modelled.
     internal void DispelObject(SpellRun run, string id)
     {
+        // A portal or container: only its magically held bit (MA-6).
+        if (DispelOpenable(run, id)) return;
         var created = SessionCreatedObject.KindOf(id) is SessionCreatedKind.Critter ? _owner.QueryCreatedObject(id) : null;
         if (created is null && id != Hero && !CritterKnown(id)) return;
         // The spell flags are read once: the summoned bit is tested on that value after the stoned clear's write.

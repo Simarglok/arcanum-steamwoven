@@ -313,6 +313,7 @@ public sealed partial class SessionSpellCaster
         public IReadOnlyList<SpellAcidItem> WornItems(string entity) => map.WornItems(entity);
         public (Combatant Combatant, AttackTargetKind Kind)? ObjectCombat(string id) => map.ObjectCombat(id);
         public bool DamageObject(string id, AttackDamage damage) => map.DamageObject(id, damage);
+        public SpellOpenable? Openable(string id) => map.Openable(id);
     }
 }
 
