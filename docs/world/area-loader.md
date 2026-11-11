@@ -314,7 +314,8 @@ and the frame copy at 1.2 s of a 6.4-14.9 s worker (packaged, Apple M4 Pro); thi
 | Frame store (`AreaResidentFrames`) | `Arcanum.World` | `AreaFrameKey` (entry, palette, group, frame, policy, payload digest, view length, pixel digest) | `DecodedAreaFrame` (RGBA, shared, immutable by convention: no consumer writes it) | the frame copy's decode, and its batch when every frame hits |
 
 **Authentication rules are unchanged where they bind.** The strict build still authenticates every input at `Open` and again at I7;
-O5a ([DEV-374](../research/performance-diagnosis-2026-11.md)) is the separate decision that may reduce those passes. A hit is served inside that
+O5a (ARC-DEV-374, the verified-file memo above) is the separate, merged decision that lets a later pass of an unchanged file reuse its hash; this design does not depend on it and
+keeps working under either rule, since a key carries the identity whichever pass produced it. A hit is served inside that
 bracket and is keyed by the identity the bracket authenticates, so a changed file gets another key and misses (a file changed during the read is still
 refused at I7). What a hit skips is only re-deriving, in the same process, a value that was derived from the same authenticated bytes:
 
@@ -352,10 +353,10 @@ inserts nothing that was not committed). The main thread only reads the immutabl
 
 **Not kept, and why.** The strict snapshot of a plan, its scene plan and its step evidence. A window move loads another window (other sector files), so the
 whole snapshot differs; the part that was expensive and is shared, the ART work, is what the two stores keep. A reload of the *same* window (a cave return to
-the same arrival, a quick load in place) could keep the snapshot too, but doing so skips the build's authentication, which is the O5a decision; a follow-up
-(snapshot keyed by plan and input identities) belongs after O5a. The map's transitions are O5b ([DEV-368](../research/performance-diagnosis-2026-11.md)).
+the same arrival, a quick load in place) could keep the snapshot too; with the verified-file memo (ARC-DEV-374) merged the authentication no longer stands in its way, so a follow-up
+(snapshot keyed by plan, data rules and input identities and stamps) is open. The map's transitions are O5b ([DEV-368](../research/performance-diagnosis-2026-11.md)).
 
-**Measured (ARC-DEV-375).** One `perf` smoke (Debug source, `--sector 1409,1314`, Mac under load: load average 15-24, so only ratios inside one run mean anything),
+**Measured (ARC-DEV-375, before the verified-file memo and the transitions cache were merged).** One `perf` smoke (Debug source, `--sector 1409,1314`, Mac under load: load average 15-24, so only ratios inside one run mean anything),
 the same build with `ARC_AREA_RESIDENT=0` (before) and without it (after). Worker of the **return to the main map** after a trip to a temple interior (the cave-return case),
 milliseconds: `read.strict` 3,120 -> 3,950, `read.copy` **1,809 -> 469**, and the copy's allocation 103.5 MiB -> 1.9 MiB; frames served 1,617 of 1,623 (6 read), visual records served
 2,459 of 2,466. The unchanged stages of the same leg (plan, transitions, open, verify) were 1.6x slower in the second run (3.2 s -> 5.2 s together), so the second run was the busier one; scaled by
