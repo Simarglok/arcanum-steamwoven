@@ -1,4 +1,4 @@
-# The player's HD interface pack: storage, build, update, backup (ARC-DEV-329, ARC-DEV-343, ARC-DEV-350, ARC-DEV-361)
+# The player's HD interface pack: storage, layout, build, update, backup (ARC-DEV-329, ARC-DEV-343, ARC-DEV-350, ARC-DEV-361, ARC-DEV-376)
 
 One rule set for every agent (Claude, Codex) and the owner, for the **local** HD interface pack
 `interface-redraw-4x`. The pack format is [`docs/formats/hd-pack.md`](../formats/hd-pack.md); the redraw
@@ -13,8 +13,8 @@ library only, tests `python3 -B -m unittest tools.hd_pack.test_hd_pack`).
    with real file lists or receipts that name original files. Git holds this page, the tool, the importer and
    synthetic tests. A task that needs to show a result links a local path or describes it in words.
 2. **Never replace the installed pack folder as a whole**, and never delete, move or re-create it. The installed
-   pack holds work that no rebuild reproduces (`character-hd114/`, `refinement02/`, `recipe-refinement02.json`, the
-   unlisted `main-menu-16x9.png`). Change it only with `hd_pack.py apply`, `menu-art` or `rollback`.
+   pack holds work that no rebuild reproduces (the Codex repairs in the slices `character-hd114` and `interface-refinement02-soft`,
+   `recipe-refinement02.json`, the unlisted `main-menu-16x9.png`). Change it only with `hd_pack.py apply`, `menu-art`, `relayout`, `refresh` or `rollback`.
 3. **Every command that writes is run with `--dry-run` first**, the output is read, and only then the real run.
    A command given to the owner was run with `--dry-run` or `--help` first (launch-check rule).
 4. **Build into staging, never into an installed pack or the iCloud copy.** Staging is
@@ -22,7 +22,7 @@ library only, tests `python3 -B -m unittest tools.hd_pack.test_hd_pack`).
    `local/**/pack-out/` path, and wipes (`--fresh`) only a folder that holds a pack manifest.
 5. **Back up outside `hd-packs`.** The game discovers every folder inside `hd-packs/` as a pack; a backup there is
    a second pack. Backups live in `~/Library/Application Support/Arcanum Steamwoven Game/hd-pack-backups/`.
-6. **One writer at a time.** `apply`, `menu-art`, `rollback` and `mirror` take the lock `hd-packs/.hd-pack.lock` next to
+6. **One writer at a time.** `apply`, `menu-art`, `relayout`, `refresh`, `index`, `rollback` and `mirror` take the lock `hd-packs/.hd-pack.lock` next to
    the installed pack (a file there is not a pack); a lock of a dead process is taken over, one held by a live process
    means wait. Do not start a second agent on the same pack: check with `status` and the backup folder first.
 7. If something is missing or the same failure repeats twice, stop and ask the owner with options. Do not edit a
@@ -35,7 +35,7 @@ library only, tests `python3 -B -m unittest tools.hd_pack.test_hd_pack`).
 | Code, format, this page, synthetic tests | repository | yes | `tools/hd-interface-import`, `tools/hd_pack`, `docs/` |
 | Original art frames, ChatGPT sheets and results, fit/pack outputs, plans, handoffs | `local/res094/`, `local/res095/` (group folders, `ready/`, `character_repair/`, `topbar*/`, `combat119/`, `arc-ui-*/`) | **no** (`/local/` is ignored) | the work area; the pipeline scripts are in git: [`tools/hd_pack/res095/`](../../tools/hd_pack/res095/README.md) (`fit_res095.py`, `pack_res095.py`, `build_res095.py`; ARC-DEV-341) and read and write only the main checkout's `local/res094`, `local/res095` |
 | Staging build | `local/res095/pack-out/interface-redraw-4x/` | no | rebuilt from `ready/plan.json`; may be wiped by `stage --fresh` |
-| **Installed pack the packaged game reads** (since ARC-DEV-350 only when the iCloud copy is not used: the *HD pack* setting [chooses](#hd-pack-source-arc-dev-350); the viewer of `./arcanum area` reads another folder, [below](#which-main-menu-png-the-game-loads-arc-dev-343)) | `~/Library/Application Support/Arcanum Steamwoven Game/hd-packs/interface-redraw-4x/` | no | `manifest.json`, `recipe*.json`, `interface/`, `character-hd114/`, `refinement02/`, `main-menu-16x9.png` (outside the manifest) |
+| **Installed pack the packaged game reads** (since ARC-DEV-350 only when the iCloud copy is not used: the *HD pack* setting [chooses](#hd-pack-source-arc-dev-350); the viewer of `./arcanum area` reads another folder, [below](#which-main-menu-png-the-game-loads-arc-dev-343)) | `~/Library/Application Support/Arcanum Steamwoven Game/hd-packs/interface-redraw-4x/` | no | `manifest.json`, `recipe*.json`, `layout-map.tsv`, `INDEX.md`, `index.tsv`, `interface/<screen>/<kind>/` (the [layout](#pack-layout-arc-dev-376); before ARC-DEV-376 the folders `interface/`, `character-hd114/`, `refinement02/`), `main-menu-16x9.png` (outside the manifest) |
 | Traced interface fonts (ARC-DEV-355) | `local/hd-font/out/<art>-<name>/` (frames, `font.json`, `receipt.json`) | **no** | local 4× coverage glyph frames from the player's own fonts, written by [`tools/hd_font`](hd-font.md); built into a **separate staging pack** `local/res095/pack-out/interface-fonts/` and added to the installed pack only by `apply --add-new` ([below](#traced-fonts-in-the-pack-arc-dev-361)), never by a rebuild of the pack |
 | Backups of every change | `~/Library/Application Support/Arcanum Steamwoven Game/hd-pack-backups/<TASK>-<old manifest sha12>/` | no | the old manifest, the replaced files, `RECEIPT.json` |
 | iCloud copy (ARC-DEV-349) | `~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Arcanum Steamwoven/hd_pack/` (reached as the one symlink `local/hd-packs`; the folder keeps its own name `hd_pack`, the pack is `hd_pack/interface-redraw-4x`) | no | cross-device store inside the owner's Obsidian vault; a **mirror of the installed pack**, never a build target ([below](#icloud-copy-arc-dev-349)). It replaced the Google Drive copy (`~/Library/CloudStorage/GoogleDrive-<account>/My Drive/Steamwoven/hd_pack/`), which stays untouched, is no longer updated and is deleted only with the owner's say-so |
@@ -48,6 +48,71 @@ Unlike Google Drive (`Operation not permitted` for the Claude app, a Remote Cont
 folder was readable and writable from a Remote Control session when it was set up (ARC-DEV-349); if a path answers
 `Operation not permitted` anyway, that is a permission, not a broken pack: run the command from a terminal that has the access,
 or use the installed folder as the source of truth.
+
+## Pack layout (ARC-DEV-376)
+
+The reader puts no meaning on a path ([format](../formats/hd-pack.md#pack-directory)), so the layout is a convention of this tool. Since
+ARC-DEV-376 a pack that holds a `layout-map.tsv` at its root is laid out by it:
+
+```text
+<pack>/
+  manifest.json  recipe-*.json  main-menu-16x9.png      as before (the menu PNG and recipes stay unlisted at the root)
+  layout-map.tsv       art, screen, kind, folder: where every ART of the pack lives (the file the owner edits)
+  INDEX.md             screens > kinds > ARTs with frame counts and sizes (generated, for reading)
+  index.tsv            one line per frame: screen, kind, art, frame, path, Legacy and HD size, slice, alpha, review, sha12 (generated)
+  interface/<screen>/<kind>/<art>-f<NNN>.png        one frame of an ART
+  interface/<screen>/<kind>/<art>/f<NNN>.png        an ART whose map row has folder = 1 (many frames: bitmap fonts, animations)
+```
+
+`<screen>` is the window or area where the art is drawn (`character-sheet`, `inventory`, `hud-bar`, `logbook`, `world-map`, `schematics`, `menus`,
+`widgets` for the buttons shared by several windows, `fonts`, `cursors-indicators` and so on); `<kind>` is what it is (`buttons`, `icons`, `tabs`,
+`gauges`, `panels` for windows, plates and everything else, `spells`, `schematics`, `fonts`, `cursors`, `indicators`). `-g<G>` and `-p<P>` follow the
+frame number when the group or palette is not 0. The file name has **no content hash**, so an edited PNG keeps its name; `refresh` (below) brings
+the manifest up to date. The folders `character-hd114` and `refinement02` of the earlier layout are gone: where a frame came from stays in the
+manifest's `slice`, and the layout does not depend on it. The map, the index and the layout stay local; no art name list is in git.
+
+- **`relayout`** moves every entry to its place by the map (also the first migration and any later change of the map). `--map FILE` gives the map
+  (columns `art screen kind folder`; a `frames` column in place of `folder` means folder = more than 8 frames; further columns are ignored), by default the
+  pack's own `layout-map.tsv` is used. It hard-links (or copies) each file to its new path, writes the map, the index and the manifest, then removes the
+  old paths and the folders they leave empty; the PNG bytes and so every frame hash stay. Backup `<TASK>-<old manifest sha12>/` holds the old manifest and a
+  receipt with every move, `rollback <that folder>` puts everything back byte for byte. It refuses a pack that is already damaged (deep check), an ART
+  the map lacks, two entries on one path and a target that is an unlisted file. Run `--dry-run` first, with the game closed, on the installed pack
+  and then on the iCloud copy (`--installed <copy> --allow-symlink`), then `mirror --dry-run` must show nothing to copy.
+- **`index`** rewrites `INDEX.md` and `index.tsv` from the manifest (`apply`, `relayout` and `refresh` do it themselves).
+- **`refresh`** takes PNGs you edited in place into the manifest: every listed file whose size or SHA-256 changed gets the new values after a header
+  check (8-bit RGBA, not interlaced, exactly the entry's HD size). The backup keeps only the old manifest; the edited PNG is the new truth. Whether the
+  alpha passes the entry's rule is still the game's check at draw time (a refused frame draws Legacy and is logged).
+- **`status`** counts entries per `interface/<screen>`.
+- **`plan` and `apply` on a laid-out pack:** a replaced entry stays at its installed path, a new one (`--add-new`) is placed by the map, so the
+  staging build keeps its importer file names (`interface/<art>-f<N>-<hash>.png`) and is never laid out itself. An ART the map lacks stops the update
+  with its name: add its row to `layout-map.tsv`, or pass `--map FILE` with the missing rows, which `apply` merges into the pack's map (a rollback restores the old map).
+  What may be replaced is chosen by the entry's `slice` (`interface` by default, `--slices character-hd114,interface-refinement02-soft` for the Codex
+  repairs) instead of its folder (`--folders` is only for a pack still in the old layout).
+- **The map file** is the owner's: `relayout` without `--map` and `apply` never rewrite it (`apply --map` only appends rows for ARTs the pack's map lacks, the pack's
+  own rows win); `relayout --map FILE` writes its normalised four-column copy into the pack. A `refresh` cannot be rolled back (the edited PNGs are the only
+  copy); an interrupted `relayout` or `rollback` is finished by running `rollback <backup>` again, before any other command on the pack. The three-way `--base` check is unchanged and still protects a local repair.
+
+## Optimized textures (ARC-DEV-376)
+
+The PNGs stay the pack's only content: you edit a PNG, `refresh` it into the manifest, and the game does the rest. For the draw path the game keeps a
+**device-local cache** of ready textures, `user://hd-cache/<pack id>/<sha[0..2]>/<sha256 of the PNG>.mip` (in the packaged game
+`~/Library/Application Support/Arcanum Steamwoven Game/hd-cache/interface-redraw-4x/`). It is outside the pack, so the pack stays portable and neither
+`mirror` nor iCloud carries it, and it can be deleted at any time (the next start rebuilds it).
+
+- **What an entry is:** the decoded 4× RGBA8 frame with its whole mip chain (Godot's own `Image.GenerateMipmaps`, so the texture is the one the draw
+  built itself before), about 4/3 of the raw frame (about 2 GB for the whole interface pack). Lossless: no VRAM compression in this version.
+- **When it is made:** a few seconds after an HD pack is attached with the *HD interface* setting on, a background worker (two threads, below normal
+  priority) converts every interface PNG of the pack that has no entry yet; it logs one line `ARC-DEV-376 hd cache pack=... entries=... present=...
+  converted=... failed=... removed=... size=...MiB ms=...`. Entries are named by the PNG's hash, so an edited PNG (after `refresh`) has no entry and is
+  converted again, and after every finished pass the entries no PNG of the pack names any more are removed (a PNG that fails to convert does not stop that).
+  The worker threads are stopped when the game exits. An automated run (smoke, self-test) reads the cache but
+  never converts (`ARC_HD_CACHE=convert` lets it, e.g. to check the conversion on the real pack); `ARC_HD_CACHE=0` turns the cache off (read and write);
+  `ARC_HD_CACHE_DIR=<folder>` names another cache folder.
+- **What the draw saves:** with an entry the frame is bound without reading the PNG, hashing it, decoding it or generating mipmaps; the pack's own checks
+  (key, Legacy frame, review marks, size, alpha rule) still run on the cached level 0 (`HdPack.CheckPrepared`), and the pack file must still exist with the
+  manifest's byte size (one stat; it is not read, so a PNG edited without `refresh` is noticed by `verify`, not by this draw). A frame without an entry, a damaged entry
+  and the premultiplied and grey variants (bitmap-font canvases, grey spell icons) take the earlier path, so the cache can never make a frame fail.
+- Format and code: `HdOptimizedCache` (Godot-free store, header `ARCM` version 1, format 1) and `HdOptimizedStore` (viewer).
 
 ## Daily tasks
 
@@ -120,7 +185,8 @@ bytes and SHA-256 changed, and apply it with `--base <the installed pack>`, so t
 A repair of an entry that lives in an extra folder (`character-hd114`, `refinement02`: the Codex repairs) is invisible to `plan`
 and `apply` by default, since only `interface/` entries are replaceable; name the folder with `--folders character-hd114` (a
 comma list, plain folder names only), keep the repaired file in the same folder, and the plan then lists exactly those entries
-(ARC-DEV-345; the other folders and every unlisted file still stay).
+(ARC-DEV-345; the other folders and every unlisted file still stay). In a [laid-out pack](#pack-layout-arc-dev-376) the folder is not the Codex marker any
+more: name the entry's slice with `--slices` and keep the repaired file at the entry's installed path in the staging folder.
 
 Read the plan: no CONFLICT line you did not expect, and the number of replaced entries must match what the task changed (a handful for a repair, never
 hundreds by accident). `apply` checks every staged file against its manifest entry before touching anything, backs
@@ -388,7 +454,7 @@ PR; the owner's 2026-11-08 instruction for ARC-UI-114 to use only Codex sub-agen
   `combat_button-f0-…` differs from the same-named staged file by hash), so the name suffix is not the content hash.
   `apply` and `mirror` compare manifest hashes (`apply` overwrites and keeps the old copy in the backup); a copy or sync by name and size
   would not notice.
-- **Two agents.** Codex repairs (`character-hd114`, `refinement02`) are in the installed pack only. Read
+- **Two agents.** Codex repairs (the slices `character-hd114` and `interface-refinement02-soft`) are in the installed pack only. Read
   `status` before writing and name the manifest sha you started from in the report.
 - **Button frame shifted against the plate baked behind it.** A redrawn round button (`SkilMinusBut` 625 on the character
   sheet's skills page) can keep its RGB a few HD pixels off the ring that is baked into the page's plate, and a sheet gutter

@@ -844,9 +844,9 @@ public sealed partial class SessionSpellCasterTests
     [TestMethod]
     public void Another_flag_or_field_of_an_ObjFlag_component_stays_not_ready()
     {
-        // ARC-DEV-358: the bits of the spell, critter and object flags the original gives no function but the plain write are taken since MA-1 (SessionSpellCasterFlagTests); the ones with a
-        // social or AI function (charmed, mind controlled, undead, fleeing, blinded) and the fields of the portal flags stay not ready.
-        foreach (var (field, flag) in new (int, uint)[] { (20, 0x800000), (20, 0x8000000), (218, 0x10), (218, 0x4), (218, 0x80), (46, 0x1) })
+        // ARC-DEV-358: the bits of the spell, critter and object flags the original gives no function but the plain write are taken since MA-1 (SessionSpellCasterFlagTests); the social and AI
+        // ones are taken since ARC-MAGIC-035 (SessionSpellCasterSocialTests); the fields of the portal flags stay not ready.
+        foreach (var (field, flag) in new (int, uint)[] { (46, 0x1), (46, 0x4), (56, 0x1) })
         {
             var record = Hold(field, flag);
             var (owner, caster) = Session(RuleMode.Steamwoven, record);

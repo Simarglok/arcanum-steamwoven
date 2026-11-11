@@ -422,6 +422,28 @@ In both rule modes the click behaves the same.
 | 5 | In a town-map sector (kind 2) and in the continent view (button below the zoom), click the lens. | The map closes in every view. | open |
 | 6 | With the HD interface switch on, repeat step 1. | The same as in the original look: the click works in HD too. | open |
 
+
+## ARC-MAGIC-035 — Social and AI flags: Charm, Dominate Will, Nightmare, Flash, Create Undead (MA-4, 2026-11-11)
+
+The rules are in [Social and AI flags](../world/spell-cast-host.md#social-and-ai-flags-arc-magic-035), read from the executable in [SO1 to SO8](../research/ledger/spell-runs.md#social-and-ai-flags-arc-magic-035). Compare them in both games with the same
+hero (a mage with these spells; a hero without the college can learn them from the spell book by cheat or lend them through a wand). No viewer smoke stage drives these spells, so these steps are the only run of the whole path.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast Charm (spell 35) on a calm human who is not yours, then talk to them. | Their reaction toward you is 30 higher than before the cast; when the spell ends it drops by 30 again. | open |
+| 2 | Cast Charm Beast (spell 50) on an animal that is attacking you. | The animal stops attacking you (peace with you). When it ends the reaction does not change except by the -30 of a charmed NPC. | open |
+| 3 | Cast Dominate Will (spell 39) on a hostile human. | Their reaction drops by 50 at once, they join you as a follower (they follow you and will not flee), and fight on your side. When the spell ends they leave your party (the reaction stays low). | open |
+| 4 | Cast Control Beast (spell 52) on an animal. | The same as step 3: the animal follows you and does not flee; at the end it is free again. | open |
+| 5 | Cast Nightmare (spell 38) on a human who fights you. | They run away from you (a flee goal) and do not attack while it lasts; at the end they stop fleeing. | open |
+| 6 | Cast Flash (spell 66) on a human who fights you, and watch their hits. | They are blinded (their melee is much worse); at the end, or by chance each AI pass, the blindness goes. | open |
+| 7 | Cast Create Undead (spell 58) on a corpse. | The creature rises under your control (it follows you), and at the spell's end it dies again. Note whether it is hurt by healing or poison as an undead would be. | open |
+| 8 | Dominate Will on a creature that is already your follower, and on one that is summoned. | A summoned creature does not lose reaction (no -50). | open |
+
+Known differences (documented, not bugs):
+
+- A charm adds the NPC flag "kill-on-sight override" in the original and never takes it off; ours does not keep that flag.
+- Mind control makes a follower only under the hero (a spell cast by another creature on a creature does not make a follower); a mind-controlled creature of the world map is not covered.
+- The undead flag a spell writes is not read by the combat or life rules yet, so step 7's undead behaviour may differ.
 ## ARC-DEV-372 — Shared content index (O4 of the performance diagnosis, 2026-11-11)
 
 The viewer's readers now share one index of the game folder per run instead of each indexing it again. Nothing in the game's behaviour is meant to change, so the steps compare the
@@ -438,3 +460,21 @@ Known differences (documented, not bugs):
 
 - The index is read once per run (as the original reads its static installation): a file added or changed in the game folder while the game runs shows after the next start. An archive that changes in size or time is read again.
 
+## ARC-UI-134 — The hero's lens on the world map shows the game around the hero (PR pending, 2026-11-11)
+
+Read in the original executable (ledger [WM141](../research/ledger/ui-audio.md), WM140): the square in the window's top left is the same view-window lens as the logbook's, the inventory's
+and the barter window's. While the map is open it shows the game around the hero, scaled to half size (178 game pixels become the 89-pixel square), with the ring art 198 over it; the open
+centres the camera on the hero first. While a journey runs the square is black under the ring art, and the live view returns when the journey ends. Both rule modes behave the same; with the
+HD interface switch on the frame, the ring and the buttons are the HD art and the lens is the same picture. Known differences, not to be re-reported: the copy reads what the layers under the
+window drew, floaters included, where the original copies the game view alone; whether the HD frame's square cutout against the brass ring looks right is reported separately (ARC-UI-126).
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Stand somewhere with scenery and creatures around the hero and open the world map (`W` or the bar's Map button). | The top-left square shows the game around the hero at half size, the hero in the middle of it (the middle is slightly below the centre of the view), under the brass ring; the map itself is unchanged. | open |
+| 2 | Move the hero's neighbours (wait a few turns, or stand beside a walking creature or a flame), then open the map and look at the lens for a moment. | The lens is live: animations in it keep running while the map is open. | open |
+| 3 | Open the map twice from different places (the second time after walking a few tiles). | The lens always centres on the hero; the game view under it was centred on the hero by the open. | open |
+| 4 | Set a waypoint and press Travel. | The square turns black under the ring at once and stays black for the whole journey. | open |
+| 5 | End a journey (arrival, or the right button or Delete during it). | After a right button or Delete the live view is back in the lens; on arrival the map closes. | open |
+| 6 | Open the map in a town-map sector and switch kinds (zoom, whole map, `Z`), and use the note quill (`Q`). | The lens stays live in every kind and with the quill; only a journey blackens it. | open |
+| 7 | Click the lens, in the middle and in the corner. | The map closes (ARC-UI-133); the lens picture does not change that. | open |
+| 8 | With the HD interface switch on, repeat steps 1 and 4. | The same lens in the HD frame: the ring over the square; the corners of the square show wood, not a hole. If a corner still shows the world through, report it. | open |

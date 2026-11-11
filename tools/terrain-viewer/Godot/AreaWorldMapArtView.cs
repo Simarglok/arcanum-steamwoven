@@ -318,6 +318,26 @@ public partial class AreaWorldMapArtView : Control
 
     private bool Travelling => _map?.Travelling == true;
 
+    // ARC-UI-134 (WM141): the lens state the chrome was last drawn with.
+    private bool _lensFrozenDrawn;
+
+    /// <summary>ARC-UI-134 (WM141): the lens shows no game view while a journey runs: the executable's travel state (0x5615D0(2)) turns the view-window mode to its
+    /// second kind (0x550DA0(2)), which fills the lens's rectangle black and draws art 198 over it; the end of the journey turns the live view on again.</summary>
+    internal bool LensFrozen => Travelling;
+
+    /// <summary>ARC-UI-134: art 198 read and is drawn over the lens's square.</summary>
+    internal bool HasLensArt => _look?.Art.TryGetValue(AreaWorldMapArtLayout.LensArt, out var lens) == true && lens.Length > 0;
+
+    /// <summary>ARC-UI-134: the lens's rectangle on the screen (the window's rectangle scaled and moved), the round view's square.</summary>
+    internal (Vector2 Origin, float Side) LensOnScreen
+    {
+        get
+        {
+            var (x, y, side) = AreaWorldMapArtLayout.Lens;
+            return (GlobalPosition + new Vector2(x, y) * Scale.X, side * Scale.X);
+        }
+    }
+
     private void Redraw()
     {
         _canvas?.QueueRedraw();
@@ -339,6 +359,8 @@ public partial class AreaWorldMapArtView : Control
 
     public override void _Process(double delta)
     {
+        // ARC-UI-134 (WM141): the lens goes black when the journey starts and comes back when it ends, whoever changed the state.
+        if (Visible && Travelling != _lensFrozenDrawn) { _lensFrozenDrawn = Travelling; _chrome?.QueueRedraw(); }
         if (!Visible || _map is null || Travelling || EditingNote || PollGate?.Invoke() == false) return;
         var now = (long)Time.GetTicksMsec();
         // WM18: the poll runs at most once for 10 ms; left beats right and up beats down.
@@ -946,6 +968,12 @@ public partial class AreaWorldMapArtView : Control
     private void DrawChrome(CanvasItem canvas)
     {
         if (_look is null) return;
+        // ARC-UI-134 (WM140, WM141): the lens. The game view's copy lies under the window (the round view); a running journey fills the square black (mode 2),
+        // and art 198 is drawn over the square in both states.
+        var (lensX, lensY, lensSide) = AreaWorldMapArtLayout.Lens;
+        _lensFrozenDrawn = LensFrozen;
+        if (_lensFrozenDrawn) canvas.DrawRect(new Rect2(lensX, lensY, lensSide, lensSide), Colors.Black);
+        if (_look.Art.TryGetValue(AreaWorldMapArtLayout.LensArt, out var lens) && lens.Length > 0) canvas.DrawTexture(lens[0], new Vector2(lensX, lensY));
         foreach (var button in Enum.GetValues<AreaWorldMapArtButton>())
         {
             if (!Shown(button)) continue;
