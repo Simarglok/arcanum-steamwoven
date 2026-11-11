@@ -264,6 +264,8 @@ public partial class TerrainViewerApp : Node
                                 // ARC-DEV-370 (E1-c2): only when named, a critter the session creates by prototype is drawn, picked, moved by the AI's movers with a walk frame and gone once destroyed (--hero, a map window with the inventory).
                                 if (only?.Contains("created-critter") == true) await RunAreaCreatedCritterStageAsync();
                                 if (only?.Contains("trait-body") == true) await RunAreaTraitBodyStageAsync();
+                                // ARC-MAGIC-045 (E4-a2): only when named, the object flags a spell writes (translucent, shrunk, don't-draw, invisible) change how an NPC's body is drawn, and a hit on a shielded critter plays the run spell's hit eye candy (--hero, a map window with the inventory).
+                                if (only?.Contains("body-styles") == true) await RunAreaBodyStylesStageAsync();
                                 // ARC-DEV-371 (E1-c3): only when named, the installed tile script 1629 creates critters next to the hero (--hero, a map window with the inventory): flagged, hosted by the AI host, notified, destroyed.
                                 if (only?.Contains("script-critters") == true) await RunAreaScriptCrittersStageAsync();
                                 // ARC-DEV-352 (E1-b): only when named, Fireflash's flash on an empty tile and none on an occupied one; Wall of Fire's pieces, their burn and their END (--hero, a map window).

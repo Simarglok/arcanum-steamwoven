@@ -64,6 +64,47 @@ public sealed class AreaScenePlanTests
     }
 
     [TestMethod]
+    public void The_object_flags_a_spell_writes_choose_the_body_style_as_the_draw_list_builder_and_blit_setup_do_ARC_MAGIC_045()
+    {
+        // 0x43B390: don't-draw (0x100) and invisible (0x200, unless the local player sees invisible) skip the body; 0x442520: translucent (0x40) or invisible gives constant alpha 0x80 unless
+        // the blit flags (0x70) choose their own mode; 0x443620: shrunk (0x80) halves the frame.
+        Assert.AreEqual(AreaBodyStyle.Plain, AreaBodyStyleRules.Of(0, 0, false));
+        Assert.AreEqual(new AreaBodyStyle(false, false, 255), AreaBodyStyleRules.Of(0x100, 0, true), "don't-draw is never drawn, whatever the player sees");
+        Assert.AreEqual(new AreaBodyStyle(false, false, 128), AreaBodyStyleRules.Of(0x200, 0, false), "invisible, the player cannot see it");
+        Assert.AreEqual(new AreaBodyStyle(true, false, 128), AreaBodyStyleRules.Of(0x200, 0, true), "invisible, seen: translucent");
+        Assert.AreEqual(new AreaBodyStyle(true, false, 128), AreaBodyStyleRules.Of(0x40, 0, false), "translucent");
+        Assert.AreEqual(new AreaBodyStyle(true, false, 255), AreaBodyStyleRules.Of(0x40, 0x10, false), "an additive blit keeps its own mode");
+        Assert.AreEqual(new AreaBodyStyle(true, true, 255), AreaBodyStyleRules.Of(0x80, 0, false), "shrunk");
+        Assert.AreEqual(new AreaBodyStyle(true, false, 255), AreaBodyStyleRules.Delta(AreaBodyStyleRules.Of(0x80, 0, false), AreaBodyStyleRules.Of(0x80, 0, false)), "a body the data shrinks is not halved twice");
+        Assert.AreEqual(new AreaBodyStyle(true, true, 128), AreaBodyStyleRules.Delta(AreaBodyStyle.Plain, AreaBodyStyleRules.Of(0xC0, 0, false)));
+    }
+
+    [TestMethod]
+    public void A_shrink_a_run_made_places_the_body_where_the_data_shrunk_body_stands_and_an_alpha_keeps_other_blends_ARC_MAGIC_045()
+    {
+        var tile = TerrainKey(100, 0);
+        var plain = Body(1); var shrunk = Body(2, flags: 0x80);
+        var plan = AreaScenePlan.Create([new AreaTerrainRecord(tile, 0, 0, 92928, 82560, 0, 0, AreaScope.Core, tile)], [plain, shrunk],
+            [Visual(tile), BodyVisual(plain), BodyVisual(shrunk)]);
+        var full = plan.Commands.Single(c => c.Identity == plain.Key);
+        var data = plan.Commands.Single(c => c.Identity == shrunk.Key);
+        Assert.AreEqual((60, 220), full.Hot, "the hotspot at the drawn size");
+        Assert.AreEqual((30, 110), data.Hot, "halved by the data's shrunk flag");
+        var halved = AreaBodyStyleRules.Apply(full, new(true, true, 255));
+        Assert.AreEqual(data.Destination, halved.Destination, "the rectangle the data's shrunk flag would have placed");
+        Assert.AreEqual(data.Hot, halved.Hot);
+        Assert.AreEqual((halved.Destination.X + halved.Hot!.Value.X, halved.Destination.Y + halved.Hot.Value.Y), (full.Destination.X + 60, full.Destination.Y + 220), "the hotspot stays on its tile");
+        Assert.AreEqual(new TerrainRect(full.Destination.X + 30, full.Destination.Y + 110, 60, 120), halved.Destination);
+        var translucent = AreaBodyStyleRules.Apply(full, new(true, false, 128));
+        Assert.AreEqual(128, translucent.Alpha);
+        Assert.IsTrue(translucent.Unlit, "a constant-alpha body is drawn unlit (BL2)");
+        var additive = full with { Additive = true };
+        Assert.AreEqual(255, AreaBodyStyleRules.Apply(additive, new(true, false, 128)).Alpha, "an additive body keeps its blend");
+        var noHot = full with { Hot = null };
+        Assert.AreEqual(noHot.Destination, AreaBodyStyleRules.Apply(noHot, new(true, true, 255)).Destination, "a command with no hotspot keeps its size");
+    }
+
+    [TestMethod]
     public void A_placed_body_stands_where_a_T0_body_of_its_frame_would_and_a_flat_one_joins_the_flat_commands_in_plan_order()
     {
         // ARC-RENDER-033: an item lying where no T0 body stood is placed by the rule Create places a body with.

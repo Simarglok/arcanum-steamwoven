@@ -199,6 +199,27 @@ public partial class TerrainCanvas
         _areaMovingStamp++; _areaView = null; QueueRedraw();
     }
     /// <summary>ARC-WORLD-017: this map's companions that stand on another map, from the next submission (null = none).</summary>
+    // ARC-MAGIC-045: the body styles the object flags a spell wrote ask for (don't-draw, invisible, translucent, shrunk), by body; the actor's own is applied to its marker.
+    private IReadOnlyDictionary<AreaObjectKey, AreaBodyStyle>? _areaBodyStyles;
+    private AreaBodyStyle? _actorBodyStyle;
+
+    /// <summary>ARC-MAGIC-045: the bodies drawn other than the data says (<see cref="AreaBodyStyleRules"/>), and the actor's; an equal set changes nothing.</summary>
+    public void SetAreaBodyStyles(IReadOnlyDictionary<AreaObjectKey, AreaBodyStyle>? styles, AreaBodyStyle? actor)
+    {
+        if (styles is { Count: 0 }) styles = null;
+        if (actor == AreaBodyStyle.Plain) actor = null;
+        var same = actor == _actorBodyStyle && (styles is null ? _areaBodyStyles is null : _areaBodyStyles is { } old && old.Count == styles.Count && styles.All(p => old.TryGetValue(p.Key, out var o) && o == p.Value));
+        if (same) return;
+        _areaBodyStyles = styles; _actorBodyStyle = actor;
+        _areaMovingStamp++; _areaView = null; QueueRedraw();
+    }
+
+    internal IReadOnlyDictionary<AreaObjectKey, AreaBodyStyle>? AreaBodyStyles => _areaBodyStyles;
+
+    // The style of a command's body: the actor marker's, or the body's by identity (null: as drawn).
+    private AreaBodyStyle? BodyStyleOf(AreaDrawCommand command) =>
+        command.Identity is not { } key ? null : key == ActorSentinel ? _actorBodyStyle : _areaBodyStyles is { } styles && styles.TryGetValue(key, out var style) ? style : null;
+
     public void SetAreaAbsent(IReadOnlySet<AreaObjectKey>? absent)
     {
         if (absent is null or { Count: 0 } && _areaAbsent is null or { Count: 0 }) return;
@@ -369,6 +390,9 @@ public partial class TerrainCanvas
         var flatCommands = flat.Select(index => _areaFlat[index]);
         var ordered = (_areaMoving is { Count: > 0 } ? AreaScenePlan.WithMovingFlat(flatCommands, _areaMoving, _areaMovingKeys) : flatCommands).Concat(upright);
         var visible = ordered.Where(command => Intersects(command) && (command.Identity == ActorSentinel ? _showActor : command.Identity is null || (_showStatics && !AreaHiddenOf(command)))).ToArray();
+        // ARC-MAGIC-045: a body a spell hid (don't-draw, invisible to the player) is not drawn nor picked; a translucent or shrunk one is drawn so (the original's draw list builder and blit set-up).
+        if (_areaBodyStyles is not null || _actorBodyStyle is not null)
+            visible = visible.Where(command => BodyStyleOf(command) is not { Drawn: false }).Select(command => BodyStyleOf(command) is { } style ? AreaBodyStyleRules.Apply(command, style) : command).ToArray();
         if (visible.Length > _area.Commands.Count + 1 + (_areaMoving?.Count ?? 0)) throw new InvalidOperationException("AREA_SUBMISSION_BUDGET");
         // Index rows used by this submission stay resident; rows from earlier views are
         // reused across pans or evicted under the shared 16 MiB cap. The original ART
