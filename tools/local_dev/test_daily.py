@@ -172,19 +172,19 @@ class DailyTests(unittest.TestCase):
         self.write_build("macos", self.commit)
         self.write_build("windows", "0" * 40)
         self.assertEqual(self.run_daily(), daily.PASS)
-        self.assertEqual(len(self.names()), 6)
+        self.assertEqual(len(self.names()), 7)
         self.calls.clear()
         self.write_build("windows", self.commit, package.MAP_SMOKE_NOT_RUN)
         self.assertEqual(self.run_daily(), daily.PASS)
-        self.assertEqual(len(self.names()), 6)
+        self.assertEqual(len(self.names()), 7)
         self.calls.clear()
         self.write_build("windows", self.commit)
         self.assertEqual(self.run_daily(force=True), daily.PASS)
-        self.assertEqual(len(self.names()), 6)
+        self.assertEqual(len(self.names()), 7)
 
     def test_a_passing_day_checks_smokes_and_packages_the_same_commit_in_a_removed_worktree(self) -> None:
         self.assertEqual(self.run_daily(), daily.PASS)
-        self.assertEqual(self.names(), ["dotnet", "dat-probe", "oracle", "smoke", "package-mac", "package-win"])
+        self.assertEqual(self.names(), ["dotnet", "dat-probe", "oracle", "docs-check", "smoke", "package-mac", "package-win"])
         commands = {name: command for name, command, *_ in self.calls}
         self.assertEqual(commands["dotnet"][:4], ("./arcanum", "run", "--kind", "dotnet"))
         self.assertIn("--locked-mode", commands["dotnet"][-1])
@@ -207,7 +207,7 @@ class DailyTests(unittest.TestCase):
     def test_the_root_checks_run_without_the_owners_opt_in_variables_and_with_the_oracle_venv(self) -> None:
         self.run_daily()
         environments = {name: environment for name, _, _, environment, _ in self.calls}
-        for name in ("dotnet", "dat-probe", "oracle"):
+        for name in ("dotnet", "dat-probe", "oracle", "docs-check"):
             self.assertNotIn("DAT_ROOT", environments[name])
             self.assertNotIn("ARC_HD_PACK", environments[name])
             self.assertNotIn("ARCANUM_EXE", environments[name])
@@ -221,7 +221,7 @@ class DailyTests(unittest.TestCase):
                                 "first error at line 70 of 80 (1 error line(s)):\n  error CS1002: ; expected\n")
         self.texts["oracle"] = "oracle: installing the locked Unicorn failed (network or an unsupported platform)\n"
         self.assertEqual(self.run_daily(), daily.FAIL)
-        self.assertEqual(self.names(), ["dotnet", "dat-probe", "oracle"])
+        self.assertEqual(self.names(), ["dotnet", "dat-probe", "oracle", "docs-check"])
         report = self.report()
         self.assertIn("RESULT FAIL root checks failed (dotnet, oracle)", report)
         self.assertIn("  FAIL exit=1 ran=30s lines=80 log=/q/run-9-dotnet.log\n", report)

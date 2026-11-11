@@ -64,7 +64,7 @@ not be the hero's (the host vouches that the NPC holds it); an invalid target; t
 
 The `durability` section gains `uses`: the remaining uses of every item whose uses the session spent (entity and count 1..1,000,000,
 ordinal order; a used-up item is in `destroyed`). The decoder refuses a count outside the range (`OutOfRange`), an out-of-order or
-repeated entity (`NotCanonical`) and a missing or unknown field; Restore refuses a uses record of a destroyed item (`InvalidDurability`). Schema 30 is refused, not migrated ([game session](game-session-runtime.md#snapshot-schema-51)).
+repeated entity (`NotCanonical`) and a missing or unknown field; Restore refuses a uses record of a destroyed item (`InvalidDurability`). Schema 30 is refused, not migrated ([game session](game-session-runtime.md#snapshot-schema-62)).
 
 ## Viewer
 
