@@ -360,8 +360,9 @@ def parser() -> argparse.ArgumentParser:
     command.set_defaults(func=queued)
     # ARC-DEV-061: the shared smoke runner (docs/workflow/toolchain.md#smoke-runner-arc-dev-061).
     command = commands.add_parser("smoke", help="run the viewer's smokes from this checkout through the launch queue, each "
-                                  "with its own settings folder and start check: pr (Crash Site + touched stages), full (the "
-                                  "full map smoke chain), map NAME, crash-site, self-test (ARC-DEV-061)")
+                                  "with its own settings folder and start check: pr (touched stages or zones, --auto from the diff), "
+                                  "full (the full map smoke chain), complete (the nightly run: every stage), map NAME, "
+                                  "crash-site, self-test (ARC-DEV-061, ARC-DEV-396)")
     smoke.configure(command)
     command.set_defaults(func=smoke.run)
     command = commands.add_parser("package", help="build the packaged alpha for a player from a fresh commit of origin/main "

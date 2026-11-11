@@ -66,7 +66,7 @@ are local: the tool never commits, uploads or publishes them; giving a copy to a
 
 ## Daily package build (ARC-DEV-062)
 
-The full map smoke chain runs only here, and only when `main` changed since the last package
+The complete smoke run (the Crash Site smoke, the map batteries and every stage) runs only here, and only when `main` changed since the last package
 ([smoke scope](tasks.md#smoke-scope)). One command does the whole day:
 
     ./arcanum daily               # fetch origin main; skip if both packages hold it; else checks, smoke chain, packages
@@ -97,10 +97,11 @@ thread to find and fix it starts from the report; the first day after the fix pa
    variables (`DAT_ROOT`, `ARC_*`, `ARCANUM_*` but the launcher's home), so no real-data test turns on. The oracle
    self-test uses the main checkout's `local/original-oracle/venv` (or `ARCANUM_ORACLE_VENV`), its cache of the locked
    Unicorn, rather than installing it into the fresh worktree each day; one that cannot load Unicorn is a failed check.
-4. `./arcanum smoke full` ([smoke runner](toolchain.md#smoke-runner-arc-dev-061)): its viewer build and import, the
-   Crash Site smoke and the map batteries. A failed, not run or stopped step ends the day with no package.
+4. `./arcanum smoke complete` ([smoke runner](toolchain.md#smoke-runner-arc-dev-061), ARC-DEV-396): its viewer build and
+   import, the Crash Site smoke, the map batteries and then every stage the viewer accepts (about twenty processes; about 35
+   minutes of slot with the two long stages). A failed, not run or stopped step ends the day with no package.
 5. `./arcanum package mac`, then `win`, of that same commit (`--ref COMMIT --no-fetch`), each told the chain's result as
-   `--map-smoke`, which `BUILD.txt` keeps as its `map-smoke` line (`PASS (crash-site, main, town, wild, ruins)`); a
+   `--map-smoke`, which `BUILD.txt` keeps as its `map-smoke` line (`PASS (crash-site, main, town, wild, ruins, stages-main, ...)`: the steps that ran); a
    plain `./arcanum package` writes `map-smoke NOT RUN (...)`. Each platform is tried even when the other failed.
 
 Every step's whole output goes to `artifacts/packages/logs/daily/STEP.log` (the queue's own run logs as well), and the
