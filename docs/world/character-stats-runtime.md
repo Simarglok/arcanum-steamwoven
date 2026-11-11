@@ -45,6 +45,20 @@ Derived formulas over effective inputs (C integer division, truncation toward ze
 
 "Extraordinary" means a primary stat whose **effective** value is at least 20.
 
+## Context inputs (ARC-MAGIC-028, FR-CHAR-020)
+
+`CharacterStatContext` carries what the original's stat getter (0x4B0490) reads from the world at the critter's place, all before effects and the range clamp
+([ledger AQ1–AQ8](../research/ledger/magic.md#aptitude-inputs-arc-magic-028)):
+
+- `SectorAptitudeAdjustment` (−100..100) is added to aptitude. The source is `WorldSector.AptitudeAdjustment()` of the sector the critter stands in: the second word of the sector file's
+  metadata (version 3 and later; 0 otherwise or for a location outside the map). The Arcanum module has 24 non-zero sectors, −20 to 40.
+- `Background`, `Hour`, `OutdoorTile` and `NatureTile`: the Day (62), Night (63), Sky (64) and Nature (65) Mage backgrounds move **magick points** by ±4 (+4 when the condition holds, −4 when
+  not): Day by the hour 6..17, Night the reverse, Sky by an outdoor tile, Nature by a tile whose name has flag `n`. Aptitude reads the moved magick points. `Background` is the PC's
+  background block (0 for an NPC and for any other background, which add nothing); `Hour` is 0..23 (an invalid hour is `InvalidContext`); the two tile facts come from
+  `TileSoundTable.MageGround` over `WorldSector.TileArt` and are false where no sector is resident.
+
+The session and viewer callers still pass 0 and no background; reading the sector and the tile where the hero stands is the next wiring slice.
+
 ## Accepted departures
 
 - **Strict set-time limits.** `SetBase` rejects a value outside the current race range
@@ -83,7 +97,7 @@ and revision unchanged. The owner is caller-serialized: no locks, events or call
 ## Not implemented
 
 Skill/spell/tech prerequisite checks when lowering a stat; background,
-Tempus Fugit, day/night mage and persuasion-expert adjustments; level,
+Tempus Fugit, persuasion-expert and the other backgrounds' adjustments (the four mage backgrounds are rules, ARC-MAGIC-028); level,
 experience, alignment, fate, unspent points, age and poison stats; HP/fatigue and
 encumbrance recalculation on effect changes; effect lifetimes and durations (FR-CHAR-022);
 skills and resistances; character creation beyond the pre-made start of

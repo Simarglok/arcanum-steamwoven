@@ -69,8 +69,15 @@ public sealed record CharacterStatsDefinition(CharacterRace Race, CharacterGende
 /// World and condition inputs of a query. Sector aptitude adjustment is bounded to [-100, 100]. <paramref name="PoisonLevel"/>
 /// (0..1000) lowers strength and dexterity by <c>min(3, poison / 100)</c> and <paramref name="CrippledLegs"/> lowers speed
 /// by 5, both before effects, as the source's effective-stat read does (ARC-COMBAT-002); the life state owns both values.
+/// ARC-MAGIC-028 (FR-CHAR-020): the mage backgrounds move magick points by 4 before effects, from four facts the caller reads
+/// where the critter stands (stat getter 0x4B0490). <paramref name="Background"/> is the PC's background block (0 for an NPC,
+/// which has none: 0x4C2690); 62 is the Day Mage (+4 from 6:00 to 17:59, else -4), 63 the Night Mage (the reverse), 64 the Sky
+/// Mage (+4 when the tile under it is outdoor, else -4) and 65 the Nature Mage (+4 on a tile whose name carries the <c>n</c>
+/// flag, else -4); any other value changes nothing. <paramref name="Hour"/> is the game hour 0..23, <paramref name="OutdoorTile"/>
+/// and <paramref name="NatureTile"/> are false where no sector is resident (the original reads no tile there).
 /// </summary>
-public readonly record struct CharacterStatContext(int SectorAptitudeAdjustment, int PoisonLevel = 0, bool CrippledLegs = false);
+public readonly record struct CharacterStatContext(int SectorAptitudeAdjustment, int PoisonLevel = 0, bool CrippledLegs = false,
+    int Background = 0, int Hour = 0, bool OutdoorTile = false, bool NatureTile = false);
 
 public readonly record struct AppliedEffectId(long Value);
 public readonly record struct AppliedEffect(AppliedEffectId Id, EffectCause Cause, StatEffectDefinition Definition);
