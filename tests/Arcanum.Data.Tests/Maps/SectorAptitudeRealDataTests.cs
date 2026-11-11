@@ -27,7 +27,11 @@ public sealed class SectorAptitudeRealDataTests
                 sectors++;
                 if (sector.MetadataAndSound is not null) withMetadata++;
                 var value = sector.AptitudeAdjustment();
-                if (value != 0) { nonZero++; values[value] = values.GetValueOrDefault(value) + 1; }
+                if (value != 0)
+                {
+                    nonZero++; values[value] = values.GetValueOrDefault(value) + 1;
+                    Console.WriteLine($"non-zero: {map.Name} ({coordinate.X}, {coordinate.Y}) = {value}");
+                }
                 minimum = Math.Min(minimum, value); maximum = Math.Max(maximum, value);
                 if (Math.Abs(value) > 100) outOfRange++;
             }
