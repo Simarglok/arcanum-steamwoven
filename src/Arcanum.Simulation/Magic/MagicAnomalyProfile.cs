@@ -151,6 +151,12 @@ public sealed record MagicAnomalyProfile
     /// </summary>
     public bool ReResistReadsCachedTargetType { get; init; }
 
+    /// <summary>
+    /// MG10 (ARC-MAGIC-047, owner decision 2026-10-20: fix, a switch): the Trait component's elemental bodies (species 26 to 28, Body of Air, Fire and Water) **assign** the critter flags 2 the value 2 and the blit
+    /// flags the value 0x10 (the plain write 0x406D40), so every other bit of both words is lost, the no-pickpocket bit among them. Steamwoven turns those two bits on and keeps the rest.
+    /// </summary>
+    public bool ElementalFlagsAssigned { get; init; }
+
     /// <summary>The original with every recorded fix; the default setting.</summary>
     public static readonly MagicAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
 
@@ -161,7 +167,7 @@ public sealed record MagicAnomalyProfile
         SurchargeAlways = true, MaintainedCountIsZero = true, UnresistableIsFinalEnd = true, ReflectionPaysLastCost = true, ReEntryDropsRuns = true,
         FreeKeepsOtherEvents = true, DifficultyScalesKillDamage = true, SpellDamageUsesCastersWeapon = true, MarginTakesFromNoDamage = true,
         AcidIgnoresBodyArmour = true, ResistedReflectionKeepsSwap = true, GoalRefusalChargesBegin = true, GoalEndChargesAnyRun = true,
-        ItemRunDamageFiresHooks = true, AiItemCastClearsAnySource = true, ReResistReadsCachedTargetType = true,
+        ItemRunDamageFiresHooks = true, AiItemCastClearsAnySource = true, ReResistReadsCachedTargetType = true, ElementalFlagsAssigned = true,
     };
 
     /// <summary>Both settings, default first.</summary>

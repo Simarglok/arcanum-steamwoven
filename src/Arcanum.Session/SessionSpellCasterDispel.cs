@@ -13,15 +13,15 @@ namespace Arcanum.Session;
 /// is destroyed after those endings are told, because the original's loop reads the runs' summoned lists before the destroy (<c>_dispelDestroys</c>);</item>
 /// <item>the **object's**, for a PC or NPC: the stoned spell flag (0x10000) cleared by a plain write with no reference count, and then (ARC-MAGIC-039; the first read of 0x451C40 missed it) the
 /// object flag stoned (0x80000) cleared through the object flag clear 0x43D280 when it is set (that function also clears the render bit 0x2000000 of field 0x147, which the session does not keep: the viewer
-/// reads the object flags), the object **destroyed when its spell flags held the summoned bit** (0x4000, read before the clear), and a perma-polymorph undone (critter flags 2
-/// bit 0x400000, with the restore of its art; not modelled: the session keeps no second critter flags field and the Trait restore is MA-8's). A portal's or container's magically held bit
+/// reads the object flags), the object **destroyed when its spell flags held the summoned bit** (0x4000, read before the clear), and (ARC-MAGIC-047) a perma-polymorph undone (critter flags 2
+/// bit 0x400000: the Trait restore, then the bit cleared by a plain write; the critter flags 2 are the session's since schema 90). A portal's or container's magically held bit
 /// (portal flags bit 4, container flags bit 4) is cleared by a plain write (ARC-MAGIC-037, MA-6: <c>SessionSpellCasterLocks.cs</c>).</item>
 /// </list>
 /// </summary>
 public sealed partial class SessionSpellCaster
 {
-    /// <summary>The detail bits of a <see cref="SpellCastEventKind.Dispelled"/> line: the stoned spell flag cleared, the summoned critter destroyed, the stoned object flag cleared (ARC-MAGIC-039).</summary>
-    public const int DispelStonedCleared = 1, DispelDestroyed = 2, DispelObjectStonedCleared = 4;
+    /// <summary>The detail bits of a <see cref="SpellCastEventKind.Dispelled"/> line: the stoned spell flag cleared, the summoned critter destroyed, the stoned object flag cleared (ARC-MAGIC-039), the perma-polymorph undone (ARC-MAGIC-047).</summary>
+    public const int DispelStonedCleared = 1, DispelDestroyed = 2, DispelObjectStonedCleared = 4, DispelPermaPolymorphUndone = 8;
 
     // The Dispel component on its target object.
     private SpellComponentOutcome? DispelComponent(SpellRun run, SpellRunTarget target)
@@ -34,7 +34,7 @@ public sealed partial class SessionSpellCaster
     }
 
     // The object's own half (0x451C40, after the runs' loops), for the hero, a critter this host knows, a critter the session created and (ARC-MAGIC-037, MA-6) a portal or container
-    // (its magically held bit); the perma-polymorph (MA-8) is not modelled.
+    // (its magically held bit); the perma-polymorph is the last step (ARC-MAGIC-047).
     internal void DispelObject(SpellRun run, string id)
     {
         // A portal or container: only its magically held bit (MA-6).
@@ -55,6 +55,14 @@ public sealed partial class SessionSpellCaster
             // The destroy waits for the runs' half (it reads the runs' summoned lists first, DP2).
             if (created is not null) { _dispelDestroys.Add((run.Id, id)); detail |= DispelDestroyed; }
             else _log.Add(new(SpellCastEventKind.DispelDestroyNotReady, run.Id, SpellTargetObject.Npc, id));
+        }
+        // The last step of the object half (DP2): a set perma-polymorph bit (critter flags 2, 0x400000) calls the Trait restore with the object's current art, then clears the bit by a plain write. A critter the
+        // summoned bit destroys is not read again here; the viewer's redraw of a map NPC whose data body is the polymorph (the stored art, field 24) is not built.
+        var destroyed = (spell & SpellTargetObject.Summoned) != 0 && id != Hero;
+        if (created is null && !destroyed && (CurrentFlags(id, SessionObjectFlagField.Critter2) & PermaPolymorphCritterFlag2) != 0)
+        {
+            TraitRestore(run, id, _owner.QueryTraitArt(id));
+            if (WriteFlag(run, id, SessionObjectFlagField.Critter2, PermaPolymorphCritterFlag2, false)) detail |= DispelPermaPolymorphUndone;
         }
         if (detail != 0) _log.Add(new(SpellCastEventKind.Dispelled, run.Id, 0, id, detail));
     }

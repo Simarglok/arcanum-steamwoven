@@ -9,7 +9,7 @@ public static partial class GameSessionSnapshotCodec
     // ARC-DEV-302 (schema 83): the flags the spell components wrote on critters.
     private static readonly string[] SpellsFields = ["runs", "bar", "lastCost", "objectFlags", "traitArt"];
     private static readonly string[] TraitArtFields = ["entity", "species", "palette"];
-    private static readonly string[] ObjectFlagFields = ["entity", "spellSet", "spellCleared", "critterSet", "critterCleared", "objectSet", "objectCleared"];
+    private static readonly string[] ObjectFlagFields = ["entity", "spellSet", "spellCleared", "critterSet", "critterCleared", "objectSet", "objectCleared", "critter2Set", "critter2Cleared", "blitSet", "blitCleared"];
     private static readonly string[] SpellRunFields =
         ["id", "spell", "action", "source", "parent", "start", "target", "targetTile", "other", "flags", "triggers", "margin", "triggerCount", "setSpellFlags"];
     private static readonly string[] SpellObjectFields = ["id", "type", "aptitude"];
@@ -61,6 +61,10 @@ public static partial class GameSessionSnapshotCodec
             w.WriteNumber("critterCleared", record.Flags.CritterCleared);
             w.WriteNumber("objectSet", record.Flags.ObjectSet);
             w.WriteNumber("objectCleared", record.Flags.ObjectCleared);
+            w.WriteNumber("critter2Set", record.Flags.Critter2Set);
+            w.WriteNumber("critter2Cleared", record.Flags.Critter2Cleared);
+            w.WriteNumber("blitSet", record.Flags.BlitSet);
+            w.WriteNumber("blitCleared", record.Flags.BlitCleared);
             w.WriteEndObject();
         }
         w.WriteEndArray();
@@ -142,7 +146,9 @@ public static partial class GameSessionSnapshotCodec
             if (i > 0 && string.CompareOrdinal(objectFlags[i - 1].Entity, entity) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, at + ".entity");
             objectFlags[i] = new(entity, new(Int(o["spellSet"], at + ".spellSet", int.MinValue, int.MaxValue), Int(o["spellCleared"], at + ".spellCleared", int.MinValue, int.MaxValue),
                 Int(o["critterSet"], at + ".critterSet", int.MinValue, int.MaxValue), Int(o["critterCleared"], at + ".critterCleared", int.MinValue, int.MaxValue),
-                Int(o["objectSet"], at + ".objectSet", int.MinValue, int.MaxValue), Int(o["objectCleared"], at + ".objectCleared", int.MinValue, int.MaxValue)));
+                Int(o["objectSet"], at + ".objectSet", int.MinValue, int.MaxValue), Int(o["objectCleared"], at + ".objectCleared", int.MinValue, int.MaxValue),
+                Int(o["critter2Set"], at + ".critter2Set", int.MinValue, int.MaxValue), Int(o["critter2Cleared"], at + ".critter2Cleared", int.MinValue, int.MaxValue),
+                Int(o["blitSet"], at + ".blitSet", int.MinValue, int.MaxValue), Int(o["blitCleared"], at + ".blitCleared", int.MinValue, int.MaxValue)));
         }
         // The monster bodies ascending by entity; which entities may carry one is Restore's.
         var artRows = Array(f["traitArt"], p + ".traitArt", GameSessionOwner.MaxTraitArtCritters);
