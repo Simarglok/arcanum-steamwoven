@@ -83,10 +83,12 @@ public static class CombatItemArt
     public static bool IsItemArt(uint art) => art >> 28 == ItemArtType;
 
     /// <summary>Armour coverage: 0 torso, 1 shield, 2 helmet, 3 gauntlets, 4 boots, 5 ring, 6 medallion.</summary>
+    [OriginalFunction(0x504570, OriginalFunctionScope.Full)]
     public static int Coverage(uint art) => IsItemArt(art) ? (int)((art >> 14) & 7) : 0;
 
     public static int Subtype(uint art) => IsItemArt(art) ? (int)((art >> 6) & 15) : 0;
 
+    [OriginalFunction(0x5045A0, OriginalFunctionScope.Partial)]
     public static bool Destroyed(uint art) => IsItemArt(art) && (art & 0x400) != 0;
 }
 
