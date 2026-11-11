@@ -117,6 +117,13 @@ history held about 500 runs of such copies of one template).
   `--hero human-male` at the Crash Site, at the town sector (1409, 1314) and at the generated wilderness sector
   (1384, 239), and on `elven ruins` with `--hero elf-female` (the elf-male's boomerang cannot break a container for
   the junk pile stage).
+- **Stage order matters (ARC-DEV-394).** The stages of one process run in the viewer's order, and a stage can leave the world's test
+  time set (`RestoreWorldTestTime` keeps it at the session's time when that is ahead of the wall clock); while it is set,
+  `ProcessWorld` returns early in a native smoke, so the frame never reaches `ProcessAreaAi`, and a later stage that waits for frames
+  to sync the AI host sees nothing. A stage that needs the frame's AI work asks for it itself (`AreaAiHostNow()` in its wait, as
+  `created-critter` does); a stage that passes alone and fails after others can be this. Seen after the long stage list of the smoke
+  speed diagnosis and not fixed: `script-critters` (`the tile notifications of the creations ran`; it passes alone and fails after
+  `spirit-talk,created-scenery`) and `summon-wall` (`the summoner standing in its own wall is spared`; the cause is not looked at).
 - **Every requested stage runs (ARC-DEV-063).** `PASS` means each requested stage ran: a map smoke passes only when
   its log holds the `PASS` line of every stage in its list (`STAGE_PASS` in `tools/local_dev/smoke.py`, checked against
   the viewer's sources by the tests), the whole map battery (`full`, `map` without `--stages`) that of `map` and
