@@ -14,7 +14,7 @@ namespace Arcanum.TerrainViewer;
 // joins (the session's forced join inside a conversation, as the ARC-WORLD-037 smoke does), its portrait shows its bars, and a
 // hit-point packet that leaves it below 20 % turns the portrait red; hovering it shows "current/maximum", hovering another NPC
 // with combat values shows a percent; with the interface bars drawn the gauges fill their vials. The stage leaves the hero poisoned
-// and the NPC joined and wounded. ARC_AREA_LIFE_CAPTURE saves in-app readbacks to the caller's ignored path.
+// and the NPC joined, wounded and drained of half its fatigue and recovering. ARC_AREA_LIFE_CAPTURE saves in-app readbacks to the caller's ignored path.
 public partial class TerrainViewerApp
 {
     private async Task RunAreaLifeBarsSmokeAsync()
@@ -139,6 +139,40 @@ public partial class TerrainViewerApp
             Require(wounded.Health == low, $"the follower has {low} hit points ({wounded})");
             CheckPortrait("wounded", true);
 
+            // ARC-DEV-360 (CH9): the fatigue bar follows a fatigue-damage write at once (the original's field setter 0x45D5A0 calls the
+            // interface hook 0x57CC10 → 0x56B4D0 → 0x56B290, which redraws the frame of a follower whose leader is the PC).
+            var rested = CompanionLife(companion)!.Value;
+            var tiredBy = Math.Max(1, rested.Fatigue / 2);
+            var tired = session.ApplyDamage(session.Version, target, new LifeDamage { Fatigue = tiredBy });
+            Require(tired.Disposition != GameSessionDisposition.Rejected, "the fatigue packet landed: " + tired.Failure);
+            var drained = CompanionLife(companion)!.Value;
+            Require(drained.Fatigue == rested.Fatigue - tiredBy && drained.Health == rested.Health, $"the follower lost {tiredBy} fatigue ({rested} -> {drained})");
+            var fatigueBefore = _followerPortraits!.BarsForSelfTest(companion.Entity)!.Value.Fatigue;
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            CheckPortrait("tired", true);
+            var fatigueAfter = _followerPortraits.BarsForSelfTest(companion.Entity)!.Value.Fatigue;
+            Require(fatigueAfter < fatigueBefore && fatigueAfter == LifeBarRules.PortraitFill(LifeBarRules.Percent(drained.Fatigue, drained.MaxFatigue), AreaFollowerPortraits.BarWidth),
+                $"the fatigue bar shrank with the fatigue damage ({fatigueBefore} -> {fatigueAfter} px for {rested.Fatigue} -> {drained.Fatigue} of {drained.MaxFatigue})");
+            await Capture("follower-tired");
+            // The follower's own fatigue-recovery timer (80 game seconds after the write, the original's event 0x45E610) runs in the session's
+            // pass: the bar rises again without any other change.
+            Require(session.QueryEvents().Any(e => e.Kind == SessionEventKinds.NpcFatigue), "the follower's fatigue recovery is on the queue");
+            Require(_areaAmbient is not null, "the clock driver is there");
+            int BarPx(AreaLife l) => LifeBarRules.PortraitFill(LifeBarRules.Percent(l.Fatigue, l.MaxFatigue), AreaFollowerPortraits.BarWidth);
+            for (var jumps = 0; jumps < 60 && BarPx(CompanionLife(companion)!.Value) <= fatigueAfter; jumps++) { _areaAmbient!.AdvanceMilliseconds(10_000, AmbientSector()); LogAreaEvents(_areaAmbient); }
+            var recovering = CompanionLife(companion)!.Value;
+            Require(recovering.Fatigue > drained.Fatigue, $"the follower's fatigue recovers ({drained} -> {recovering})");
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            CheckPortrait("recovering", true);
+            Require(_followerPortraits.BarsForSelfTest(companion.Entity)!.Value.Fatigue > fatigueAfter, "the fatigue bar rose with the recovery");
+            // The game-time jumps above let the hero's poison run on: it is put back for the vial checks that follow (the poisoned art).
+            if (!AreaLife.From(session.QueryHeroLife()!).Poisoned)
+            {
+                var again = session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { Poison = 12 });
+                Require(again.Disposition != GameSessionDisposition.Rejected, "the poison packet landed again: " + again.Failure);
+            }
+            Require(AreaLife.From(session.QueryHeroLife()!).Poisoned, "the hero is still poisoned");
+
             // Hovering it: current/maximum (CH8); hovering another NPC with combat values: a percent.
             PublishWorldSelection(); _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -167,7 +201,7 @@ public partial class TerrainViewerApp
             Require(followerPoint is not null, "the follower is drawn on screen");
             HoverAtForSelfTest(followerPoint);
             Require(HoverKeyForSelfTest == companion.Speaker.Row.Key, "the follower is hovered");
-            CheckHover(wounded, pcSide: true, "follower");
+            CheckHover(CompanionLife(companion)!.Value, pcSide: true, "follower");
             var followerBars = HoverBarsForSelfTest!.Value;
             await Capture("follower");
 
@@ -233,7 +267,7 @@ public partial class TerrainViewerApp
                     && b.FatigueText == LifeBarRules.HoverText(life.Fatigue, life.MaxFatigue, pcSide) && b.Poisoned == life.Poisoned,
                     $"{what}: window bars {bars} for {life} pcSide={pcSide}");
             }
-            CheckWindowBars(wounded, pcSide: true, "follower in the window");
+            CheckWindowBars(CompanionLife(companion)!.Value, pcSide: true, "follower in the window");
             // ARC-UI-109 (OH7, OH11): the second line, "Level: N" at the right and the reaction (not concealed, no spell flag) at the left.
             void CheckSecondLine(AreaObjectKey key, AreaLife life, string what)
             {
@@ -244,7 +278,7 @@ public partial class TerrainViewerApp
                     : reaction is null || second.SecondLine.Contains($": {reaction} (")),
                     $"{what}: second line left '{second?.SecondLine}' right '{second?.SecondValue}' reaction {reaction}");
             }
-            CheckSecondLine(companion.Speaker.Row.Key, wounded, "follower");
+            CheckSecondLine(companion.Speaker.Row.Key, CompanionLife(companion)!.Value, "follower");
             await Capture("bars");
             if (other is { } hovered)
             {
@@ -316,7 +350,7 @@ public partial class TerrainViewerApp
             GD.Print("ARC-UI-020 native-smoke life PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName,
                 Hero = new { Before = heroBefore.ToString(), After = heroAfter.ToString(), Gauges = _heroGauges!.ValuesForSelfTest.ToString(), BarFactor = factor },
-                Follower = new { template.Speaker.ScriptId, Start = start.ToString(), Wounded = wounded.ToString(),
+                Follower = new { template.Speaker.ScriptId, Start = start.ToString(), Wounded = wounded.ToString(), Drained = drained.ToString(), Recovering = recovering.ToString(),
                     Portrait = _followerPortraits!.BarsForSelfTest(companion.Entity).ToString(), Hover = followerBars.ToString(),
                     StoredPortrait = storedPortrait, PortraitDrawn = _followerPortraits.FrameForSelfTest(companion.Entity)?.Portrait is not null, MessagePortrait = portraitShown },
                 OtherNpc = other is { } o ? new { Life = o.Life.ToString(), Text = otherText } : null,

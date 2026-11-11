@@ -319,7 +319,7 @@ census (MA-0) in the same PR.
 | --- | --- | --- | --- | --- | --- | --- |
 | **E1-a** DEV-347 (merged, #924) | Created scenery and eye-candy objects, schema 85 | none by itself | - | - | directory, session | FR-MAGIC-008 |
 | **E1-d** DEV-348 (in review) | Effect list and spell flags for every critter | 10, 15, 20, 25, 37, 51, 70 (76 also needs MA-2) once the Effect component's NPC branch is hooked up (check the merged diff) | - | - | `GameSession*` | FR-CHAR-022, FR-MAGIC-007 |
-| **MA-0** Spell census | An opt-in `RealData` test (`DAT_ROOT`) that applies every record's BEGIN, MAINTAIN, END and callbacks (records 0..139) to a synthetic target in the cast host and asserts the exact set of `ComponentNotReady` components per record, plus a per-spell hero cast for the ✅ rows. It is the living matrix: each slice below edits its expected set | verifies 0, 2, 12, 16, 31, 33, 36, 54, 59-62, 64, 65, 67, 78 | M | - | tests plus one test host; no production file | FR-MAGIC-007 |
+| **MA-0** Spell census, ARC-DEV-356 ([result](#spell-census-ma-0)) | An opt-in `RealData` test (`DAT_ROOT`) that applies every record's BEGIN, MAINTAIN, END and callbacks (records 0..139) to a synthetic target in the cast host and asserts the exact set of `ComponentNotReady` components per record (the per-spell hero cast for the ✅ rows was left out, see the result). It is the living matrix: each slice below edits its expected set | verifies 0, 2, 12, 16, 31, 33, 36, 54, 59-62, 64, 65, 67, 78 | M | - | tests plus one test host; no production file | FR-MAGIC-007 |
 | **MA-5** Movement (E4-e) | `Movement` to a target tile and the teleport tile; no-teleport areas ([FR-TRAVEL-005](../requirements/world-travel-runtime.md#fr-travel-005)); followers after a teleport; Teleportation as a map change through the session path of MIG11 | 3, 4 | M-L | MA-1 (dispatch table) | new partial file; map transfer | FR-MAGIC-009, FR-TRAVEL-005 |
 | **MA-R** Executable reads (ARC-DEV-357, done: [ledger XR1-XR15](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)) | One Mac read (docs and ledger rows only): `Identify` on a critter, a container and an item (what each shows, what it writes); Tempus Fugit; the consumers of the illusion and familiar flags and of detecting traps; what magically-held does to a door; whether the speed stat reaches walking and action points; the weapon drop of the Disarm flag | 5-9, 75, 79, 0 | M | - | docs and ledger only | FR-MAGIC-007 |
 | **MA-1** Spell-flag writer (E4-a) | First splits the if-chain of `SessionSpellCaster.Apply` into a dispatch table with one partial file per component group; then generalises `ObjectFlag` from the four whitelisted bits to every `obj_f_spell_flags` and object-flag bit with the reference count it already has; per-flag side effects only where read (invisible render flags, shielded, shrunk, hardened hands and the body flags feed the unarmed rule); NPC targets once DEV-348 lands | 5, 43, 44, 45, 63, 69, 34, 47; part of 8, 30, 42 | M | - (NPC targets: DEV-348) | `SessionSpellCaster.Apply`, `SessionSpellCasterObjectFlags` | FR-MAGIC-007 |
@@ -356,6 +356,30 @@ resistance half of Shield of Protection even after every flag is written.
 - **Cheapest wins first:** Necromantic (white) is four spells already; Sanctuary (63) is MA-1. Force finishes with E1-b (Wall of Force) and MA-1 (Disintegrate's vanishing body); Conveyance with MA-5 and MA-6; Meta with MA-1, MA-2 and MA-3; Temporal with MA-1, MA-2, MA-6 and MA-9.
 - **Longest:** Summoning (all five wait on created critters and mind control), the four elemental colleges (Wall, Fireflash, Elemental, Body), Nature (animals, charm and mind control, Succour Beast) and Divination (Identify).
 - **Reported bugs on this path:** B47 (Fireflash, Wall of Fire, Summon Undead) is E1-b for 21 and 22 and E1-e for 57; the Entangle chain (51) already runs.
+
+## Spell census (MA-0)
+
+ARC-DEV-356 builds MA-0 as the opt-in test `SpellCensusRealDataTests` in `tests/Arcanum.Session.Tests` (`DAT_ROOT`, row in the [opt-in table](../workflow/toolchain.md#opt-in-original-data), owner decision D4 taken
+by its recommendation (a) while it is open). For every record 0..139 it reads the installed records and `rules/effect.mes` like the original, applies each component of every action
+(BEGIN, MAINTAIN, END, CALLBACK, END_CALLBACK) through the cast host's `Apply` to two synthetic targets in turn (the hero, and an NPC of the map), each on a fresh session, and compares the
+set of components the host logs as `ComponentNotReady` with the table in the test. A change prints the new rows to paste. Each later slice edits that table in its own pull request.
+
+What it checks and what it does not:
+
+- It checks the **dispatch**: whether the host takes a component of a record on a PC and on an NPC. It runs no invocation check, target area, save, resistance or run action, so a component it
+  takes may still be partial or inert (the resistance half of the effects, MA-2; the AGoal pushes of the hero), and a not-ready component on these two targets may be ready on another
+  object (Destroy takes lying items only). A session refusal of a taken component's write (`ObjectFlagNotSaved`, `EffectNotSaved`) counts as a change of the table too. The per-spell hero cast the slice row names is left out: a cast through the run rules depends on the save rolls and the event pass,
+  and checking it per spell is the smoke's and the per-slice tests' job. A cast from the hero to these targets was tried while building the test. It started for all 80 college spells, which shows only
+  that the invocation check admits these targets.
+- **Result on `origin/main` after ARC-DEV-353 (2026-11-11):** 18 of the 80 college spells leave no component not ready on either target: 0, 2, 12, 16, 31, 33, 36, 48, 54, 55, 56, 59-62, 64,
+  65 and 78. Twelve more leave only the NPC's Effect (the hero has the only effect list until DEV-348): 10, 15, 20, 25, 37, 40, 46, 51, 67, 70, 76 and 77.
+- **Against the matrix:** the census agrees with the 17 ✅ rows except 67 (Effect, hero only), and adds 2 and 48, which the matrix keeps at ◐ for work outside the dispatch (the hero and
+  companion push; the stone portal and its render side). The ✗ rows 37, 40, 46 and 76 are taken by the host on the hero but change nothing that is modelled (resistances, MA-2) or are unchecked
+  (speed, MA-2). No row disagrees in the other direction.
+- **Records 80..139:** the same gaps, and three not-ready cases the colleges do not have: `Recharge` (103), `NoOp` (129, 130) and an AGoal goal other than 43 and 44 (89). Record 85
+  adds effect 145 with the cause injury (7), and the session refuses that cause from a spell (`EffectNotSaved` on the hero); whether the original's effect add takes it is left to MA-2.
+- **Lanes that will change it:** E1-b (ARC-DEV-352, #941) changes the Summon and Destroy rows of the scenery summons; DEV-348 the NPC's Effect rows; MA-1 the ObjFlag rows. The slice that merges
+  second re-runs the census and updates the table.
 
 ## Decisions for the owner
 

@@ -97,7 +97,8 @@ public partial class TerrainViewerApp
         var host = _shopInventoryHost is not null && session is not null && ReferenceEquals(session, _shopInventorySession) ? _shopInventoryHost : _inventoryHost;
         foreach (var map in host?.Maps ?? [])
             if (map.TryGetRow(item, out var found)) return CombatFieldReader.Read(found).Fields;
-        return null;
+        // ARC-DEV-354: a carried item taken in another window of the main map has the row the host keeps for it.
+        return host?.KnownRow(item) is { } carried ? CombatFieldReader.Read(carried).Fields : null;
     }
 
     /// <summary>An item's inventory art (field 0x5D, IW22), read once per item and session; null when its fields or art do not read.
