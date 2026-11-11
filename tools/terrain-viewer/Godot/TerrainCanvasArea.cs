@@ -115,14 +115,21 @@ public partial class TerrainCanvas
     internal void PublishArea(AreaScenePlan plan, IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> frames,
         ActorDiagnosticScenePlan actor, ActorDiagnosticPlacementInput placement, TerrainTextureCache textures)
     {
+        // ARC-DEV-380: the canvas's own share of a publication (steps print as canvas.publish.NAME, the first view as canvas.view.NAME).
+        // Only a publication of a new plan is timed; the others (a moved hero, a changed body) are per-frame.
+        using var lap = PerfProbe.Enabled && (!ReferenceEquals(_area, plan) || !ReferenceEquals(_areaFrames, frames)) ? PerfProbe.Lap("canvas.publish") : null;
+        lap?.Step("chunks");
         if (!ReferenceEquals(_textures, textures)) _areaView = null;
         if (!ReferenceEquals(_area, plan) || !ReferenceEquals(_areaFrames, frames))
         {
+            _areaPerfView = true;
             var chunks = AreaTerrainChunks.TryCreate(plan, frames);
             _areaView = null; _areaChunkTextures.Clear(); _areaChunks = chunks; _areaChunkChannels.Clear(); _hdChunkQueries.Clear();
             if (_area is not null) ReleaseAreaHd(); // a map change releases the previous map's HD textures
         }
+        lap?.Step("upright");
         if (!ReferenceEquals(_area, plan) || _areaUpright is null) _areaUpright = new AreaUprightOrder(plan.Commands, plan.Chart);
+        lap?.Step("index");
         if (!ReferenceEquals(_area, plan) || _areaIndex is null)
         {
             _areaFlat = plan.Commands.Where(command => command.Phase < 4).ToArray();
@@ -130,6 +137,7 @@ public partial class TerrainCanvas
         }
         _plan = null; _staticPlan = null;
         _area = plan; _areaFrames = frames; _actorPlan = actor; _areaActorPlacement = placement; _textures = textures;
+        lap?.Step("view");
         UpdateAreaVisible(); QueueRedraw();
     }
     /// <summary>Applies a new ambient pair to every item from the next submission (null draws source
@@ -332,6 +340,8 @@ public partial class TerrainCanvas
         try { UpdateAreaVisible(); }
         catch (Exception error) { AreaFailure?.Invoke(error); }
     }
+    // ARC-DEV-380: set by a publication of a new plan; the first full view after it is timed (canvas.view.NAME).
+    private bool _areaPerfView;
     private void UpdateAreaVisible()
     {
         if (!IsInsideTree() || _area is null || _areaFrames is null || _textures is null || _actorPlan is null || _areaActorPlacement is null) return;
@@ -339,6 +349,9 @@ public partial class TerrainCanvas
         var state = (view, GetViewport().GetCanvasTransform(), _actorPlan.Current, _areaActorPlacement, _showActor, _showStatics, AreaTerrainChunksEnabled, _areaMovingStamp, _areaHighlight);
         // Pending HD frames that became ready rebind the same view (ARC-RENDER-014).
         if (_areaView == state && !HdRefreshDue()) { TrimAreaPool(); return; }
+        using var lap = _areaPerfView && PerfProbe.Enabled ? PerfProbe.Lap("canvas.view") : null;
+        _areaPerfView = false;
+        lap?.Step("cull");
         var a = inverse * view.Position; var b = inverse * view.End;
         var world = new Rect2(a, b - a).Abs();
         // ARC-DEV-335, ARC-DEV-353: the carried lights (the hero's, the critters') stand where their creatures stand in this submission; only the ones
@@ -364,6 +377,7 @@ public partial class TerrainCanvas
         // Terrain chunks replace the visible terrain commands in the draw list only;
         // AreaVisibleCommands below keeps the per-command visibility.
         var draw = visible; _areaChunkCommands.Clear(); AreaChunkCount = 0; AreaChunkLevel = 0; var chunked = false;
+        lap?.Step("chunks");
         if (AreaTerrainChunksEnabled && _areaChunks is not null)
         {
             var level = ChunkLevel(AreaDrawItem.RasterTransform(GetViewport()));
@@ -397,12 +411,15 @@ public partial class TerrainCanvas
         // A roof faded out at all four corners leaves the pixels beneath it as they are.
         AreaVisibleCovers = new(Array.AsReadOnly(masks), Array.AsReadOnly(roofs.Where(roof => roof.Corners != Vector4.Zero).Select(roof => roof.Command).ToArray()));
         AreaVisibleRoofCount = roofs.Length;
+        lap?.Step("upload");
         _textures.UploadAreaVisible(_areaFrames, draw.Where((command, index) => command.Identity != ActorSentinel
             && (!_areaChunkCommands.ContainsKey(command) || index >= maskStart && index < maskEnd)).Select(command => command.Frame).ToHashSet());
         var logical = visible; visible = draw;
         // ARC-RENDER-014: HD textures for characters and objects, after the Legacy set (every
         // fallback draws Legacy, so the Legacy visible set stays resident under both profiles).
+        lap?.Step("hd");
         var hd = BindAreaHd(visible); var hdScale = HdActive ? ActiveHdSource.Scale : 1;
+        lap?.Step("items");
         while (_areaItems.Count < visible.Length)
         {
             var item = new AreaDrawItem { TextureFilter = TextureFilterEnum.Nearest, Mappings = _areaMappings };

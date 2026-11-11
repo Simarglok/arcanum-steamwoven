@@ -152,10 +152,16 @@ public partial class TerrainViewerApp
         ActorDiagnosticScenePlan plan; ActorDiagnosticPlacementInput input;
         try
         {
+            // ARC-DEV-380: the swap of the publication is timed (steps print as hero-swap.NAME); the lap ends with this block, before the selection below.
+            using var lap = _perfFirstSelection && PerfProbe.Enabled ? PerfProbe.Lap("hero-swap") : null;
+            lap?.Step("upload");
             if (textures is not null) _cache.UploadActor(textures);
+            lap?.Step("profile");
             _worldActor.UseProfile(profile, timing);
             input = _worldActor.Placement();
+            lap?.Step("plan");
             plan = HeroBodyLoad.PlanOf(profile, frames, input);
+            lap?.Step("select");
         }
         catch (Exception exception) when (exception is TerrainViewerException or ArgumentException or InvalidOperationException)
         {

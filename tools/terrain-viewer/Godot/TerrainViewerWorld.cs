@@ -512,6 +512,8 @@ public partial class TerrainViewerApp
         try { _camera.UpdateWorld(WorldAnchor, default, pan, false, true, WorldViewport); }
         catch (TerrainViewerException exception) { PublishFailure(_arguments?.Mode ?? _readyMode, exception.Error); }
     }
+    // ARC-DEV-380: set by a scene publication; the next PublishWorldSelection is timed.
+    private bool _perfFirstSelection;
     private void PublishWorldSelection()
     {
         // Child canvases have already left the tree when the parent exits.
@@ -524,14 +526,23 @@ public partial class TerrainViewerApp
         if (_readyArea is not null)
         {
             _readyActorInput = input; _readyActorPlan = actor; _readyActor = actor.Current;
-            FollowAreaAmbient(); FollowAreaWalls(); FollowAreaRoofs();
+            // ARC-DEV-380: the first selection after a scene publication is timed (steps print as selection.NAME).
+            using var lap = _perfFirstSelection && PerfProbe.Enabled ? PerfProbe.Lap("selection") : null;
+            _perfFirstSelection = false;
+            lap?.Step("ambient");
+            FollowAreaAmbient(); lap?.Step("walls"); FollowAreaWalls(); lap?.Step("roofs"); FollowAreaRoofs();
             // ARC-COMBAT-005: fallen bodies move like companions, from the frame repository with their poses.
+            lap?.Step("combat");
             SyncAreaCombatBodies();
             // ARC-RENDER-033: destroyed ART and items lying away from a T0 body.
+            lap?.Step("ground");
             SyncAreaGroundBodies();
             // ARC-WORLD-051: portals off their T0 frame are drawn like moved bodies.
+            lap?.Step("portals");
             FollowAreaPortals();
+            lap?.Step("moving");
             _canvas!.SetAreaMovingBodies(AreaMovingCommands()); _canvas.SetAreaAbsent(_areaCompanions?.Absent);
+            lap?.Step("canvas");
             _canvas.PublishArea(_readyArea.Plan, AreaFrames(), actor, input, _cache); return;
         }
         var plan = _readyDiagnosticPlan!.WithWorldActor(actor);
