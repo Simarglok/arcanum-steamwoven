@@ -244,7 +244,9 @@ public partial class TerrainViewerApp
     private bool AiHeartbeat(AiScriptPoint point, string npc)
     {
         if (_readyArea is not { } area || _areaSession is not { } session || UseScriptHost(area.Snapshot) is not { } host
-            || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map || !map.TryGetRow(npc, out var row)) return true;
+            || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map) return true;
+        // ARC-DEV-371: a critter created at run time runs its prototype's heartbeat too (its row is the session's, the map holds none).
+        if ((map.TryGetRow(npc, out var held) ? held : CreatedCrittersRow(npc)) is not { } row) return true;
         var scrPoint = point == AiScriptPoint.Heartbeat ? Arcanum.Scripting.Scr.ScrPoint.Heartbeat : Arcanum.Scripting.Scr.ScrPoint.FirstHeartbeat;
         if (host.Slot(new(CurrentAreaMap, npc), scrPoint) is not { Script: > 0 }) return true;
         var ran = host.RunHeartbeat(row, scrPoint, session.Rules.Scripts);
@@ -548,6 +550,8 @@ public partial class TerrainViewerApp
         if (AreaAiHostNow() is not { } host) return;
         // The view's sectors are touched in every frame the world runs, whether or not the frame step did (a smoke's frames call it only when they say so).
         TouchAreaView();
+        // ARC-DEV-371: the critters a heartbeat or another run created since the last frame are notified (a run that went through Awarded was noted at once).
+        if (_useScriptHost is { } scripted) NoteScriptCreations(scripted.Host.TakeCreations());
         var steps = AiFrameParticipant.TakeSteps();
         // ARC-WORLD-095: in a round the runs' charges and subturn ends reach the round log and the status line's action points.
         var roundEvents = host.DrainRoundEvents();

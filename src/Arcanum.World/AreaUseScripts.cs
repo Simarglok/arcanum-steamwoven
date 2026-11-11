@@ -30,6 +30,9 @@ namespace Arcanum.World;
 /// step (whose get-up starts for a critter that comes round) and answers whether the session took it; without it a run with a heal fatigue is left unapplied. <see cref="ScriptAnimate"/> starts a script's perform animation (62, goal 0 or 60) of an NPC of the shown map in the AI host and
 /// answers what happened; without it a run with a perform animation is left unapplied. ARC-DEV-234 (S14c, GT164): <see cref="ScriptSteal"/> starts a script's try to steal 100 coins (115) of an NPC of the shown map
 /// from another NPC or the PC (<see cref="AreaScriptWorld"/> passes the victim as the PC's scheduler id) and answers what happened; without it a run with a steal is left unapplied. ARC-DEV-236 (S14e, GT187): <see cref="ScriptProne"/> makes an NPC of the shown map lie down (a level-4 interrupt of its runs, then the fall art) and answers what happened; without it a run with a become prone is left unapplied. ARC-DEV-241 (S14f, GT183/GT184): <see cref="ScriptCast"/> (caster, target, spell, free, unresistable) casts a script's spell at an NPC of the shown map or the PC by an NPC of the shown map or by none, and answers what happened; without it a run with a cast is left unapplied. ARC-DEV-243 (S14g, GT194–GT197): <see cref="ScriptDamage"/> (victim, amount, damage type, unresistable) deals a script's damage to an NPC of the shown map or the PC and <see cref="ScriptHeal"/> (victim, amount) heals its hit points; each answers what happened, and without it a run with the action is left unapplied.
+/// ARC-DEV-371 (E1-c3): <see cref="Critter"/> says whether a script's prototype number (the basic number, <see cref="AreaPrototypeItems.PrototypeOffset"/> added for the file) names a critter prototype the
+/// session can create (a prototype file that reads as an NPC's), so a create object of it makes a critter (<see cref="GameSessionOwner.CreateCritterNear"/>) and not a ground item; without it a critter prototype is
+/// refused as before. <see cref="CreatedRow"/> answers a created critter's base record by its entity (the run's NPC rows are the shown map's and the loaded maps'; a critter created at run time has none of them).
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
@@ -37,11 +40,18 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Func<CellCoord, int?>? StartMapAreaAt = null, Func<string, CellCoord, bool, string>? ScriptWalk = null,
     Func<ScrObjectRef, int, bool>? HealFatigue = null, Func<string, int, string>? ScriptAnimate = null, Func<string, string, string>? ScriptSteal = null, Func<string, string>? ScriptProne = null,
     Func<string?, string, int, bool, bool, string>? ScriptCast = null, Func<string, int, int, bool, string>? ScriptDamage = null, Func<string, int, string>? ScriptHeal = null,
-    Func<string, bool>? ScriptDamageAsk = null);
+    Func<string, bool>? ScriptDamageAsk = null, Func<int, bool>? Critter = null, Func<string, AreaObjectRecord?>? CreatedRow = null);
 
 /// <summary>ARC-WORLD-081: one create object a run applied: the prototype number as the script named it, the object it was created next to,
 /// and the session's result (<see cref="InventoryMutationResult.Item"/> the new item; none under the Steamwoven limit).</summary>
-public sealed record AreaScriptCreation(int Prototype, ScrObjectRef Near, InventoryMutationResult Result);
+public sealed record AreaScriptCreation(int Prototype, ScrObjectRef Near, InventoryMutationResult Result)
+{
+    /// <summary>ARC-DEV-371: the entity of the critter this create object made (null for an item or a creation that made nothing).</summary>
+    public string? Critter { get; init; }
+
+    /// <summary>ARC-DEV-371: the cell the critter was put on, where the location notification of its creation (ledger TG9) runs the tile's script.</summary>
+    public CellCoord? Cell { get; init; }
+}
 
 /// <summary>What a scripted use did: ran with a teleport of the player (<see cref="Teleport"/>), ran without one, was refused
 /// by the dispatcher or by the session, found no script content, or asked for a teleport the caller cannot take (then
@@ -437,6 +447,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         if (obj.Map == _shownMap && _clicked is { } clicked && clicked.Entity == obj.Code) return clicked.Row;
         if (obj.Map == _shownMap && _shown.TryGetValue(obj.Code, out var shown)) return shown;
         if (_maps.FirstOrDefault(map => map.RuntimeMap == obj.Map) is { } map && map.TryGetRow(obj.Code, out var row)) return row;
+        // ARC-DEV-371: a critter created at run time is in none of the maps' rows.
+        if (obj.Map == _shownMap && _world?.CreatedRow?.Invoke(obj.Code) is { } created) return created;
         return _itemUse is { } item && item.Equals(obj) ? OtherMapRow?.Invoke(obj) : null;
     }
 
@@ -1065,7 +1077,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         }
         foreach (var request in effects.Creations)
         {
-            var item = _world!.Item(request.Prototype)!;
+            // ARC-DEV-371 (PG1): a critter prototype makes a critter on the same tile search; the action ignores the result.
+            if (_world!.Item(request.Prototype) is null)
+            {
+                var made = _session.CreateCritterNear(_session.Version, request.Prototype + AreaPrototypeItems.PrototypeOffset, new SessionMapId(_shownMap), Place(request.Near)!.Value,
+                    _world.DropMap()!, OwnerOf(request.Near));
+                _created.Add(new(request.Prototype, request.Near, new(made.Disposition, made.Failure, made.Object?.Entity, null, made.Version)) { Critter = made.Object?.Entity, Cell = made.Object?.Cell });
+                if (made.Disposition == GameSessionDisposition.Rejected) return false;
+                continue;
+            }
+            var item = _world.Item(request.Prototype)!;
             var result = _session.CreateGroundItem(_session.Version, item.Kind, new SessionMapId(_shownMap), Place(request.Near)!.Value, _world.DropMap()!,
                 OwnerOf(request.Near));
             _created.Add(new(request.Prototype, request.Near, result));
@@ -1349,12 +1370,17 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     {
         if (effects.Creations.Count == 0) return null;
         if (_world is null || _world.DropMap() is null) return "needs the shown map";
+        var critters = effects.Creations.Count(request => _world.Item(request.Prototype) is null && _world.Critter?.Invoke(request.Prototype) == true);
         foreach (var request in effects.Creations)
         {
-            if (_world.Item(request.Prototype) is not { } item) return $"{request.Prototype}: no item prototype";
+            var item = _world.Item(request.Prototype);
+            // ARC-DEV-371: a critter prototype (a file that reads as an NPC's) is created as a critter; any other type stays refused.
+            if (item is null && _world.Critter?.Invoke(request.Prototype) != true) return $"{request.Prototype}: no item prototype and no critter prototype";
             if (request.Near.Map != _shownMap || Place(request.Near) is not { } near) return $"{request.Prototype}: {request.Near.Code} has no place on the shown map";
-            if (_session.QueryCreateGroundItemRefusal(item.Kind, new SessionMapId(_shownMap), near, effects.Creations.Count) is { } refused)
-                return $"{request.Prototype}: the session would refuse it ({refused})";
+            var refusal = item is null
+                ? _session.QueryCreateObjectRefusal(SessionCreatedKind.Critter, request.Prototype + AreaPrototypeItems.PrototypeOffset, new SessionMapId(_shownMap), near, count: critters)
+                : _session.QueryCreateGroundItemRefusal(item.Kind, new SessionMapId(_shownMap), near, effects.Creations.Count - critters);
+            if (refusal is { } refused) return $"{request.Prototype}: the session would refuse it ({refused})";
         }
         return null;
     }

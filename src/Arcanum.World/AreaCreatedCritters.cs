@@ -1,3 +1,4 @@
+using Arcanum.Data.Area;
 using Arcanum.Data.Characters;
 using Arcanum.Data.Objects;
 using Arcanum.Session;
@@ -45,6 +46,10 @@ public sealed class AreaCreatedCritters
 
     /// <summary>The one-row maps of the critters created on <paramref name="map"/> now, in the order they were created (the resolver's <see cref="RecordResolver.SetCreated"/>).</summary>
     public IReadOnlyList<AreaInventoryMap> Maps(SessionMapId map) => Rows(map).Select(row => row.Map).ToArray();
+
+    /// <summary>ARC-DEV-371: the base record of the created critter <paramref name="entity"/> of <paramref name="map"/>, or null when the session holds none under it or its prototype did not build a row.</summary>
+    public AreaObjectRecord? Row(SessionMapId map, string entity) =>
+        Rows(map).Select(row => row.Map.TryGetRow(entity, out var found) ? found : null).FirstOrDefault(found => found is not null);
 
     /// <summary>The created critters of <paramref name="map"/> as the AI host's NPCs, in the order they were created (<see cref="AreaAiHost.SyncCreated"/>).</summary>
     public IReadOnlyList<AreaAiNpc> Npcs(SessionMapId map) => Rows(map).Select(row => row.Npc).ToArray();
