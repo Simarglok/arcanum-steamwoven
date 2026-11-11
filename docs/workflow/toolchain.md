@@ -666,10 +666,10 @@ Limits, each checked and settled:
 - **Code reached by a computed address** has no xref: the executable has no relocation table, so Ghidra and the scans are both blind to
   it; `indirect-calls.tsv` lists the sites, whose targets must be read from the table or registers that feed them.
 - **String tables are a heuristic:** a table is a run of 3+ records at a fixed stride whose first dword points at a text, so a stride can
-  be a multiple of the true one and a record with a null first pointer ends a run. `data-dwords.txt` is the complete check.
+  be a multiple of the true one; records with a null first pointer inside a table are kept, trailing ones are cut. `data-dwords.txt` is the complete check.
 - **Third-party binaries** (Miles Sound System `Mss32.dll` and the `.asi` codecs, Bink `binkw32.dll`, the DirectDraw compatibility
   `ddraw.dll`, WON `mm_won.dll`, `SierraPt.dll`, `msiexec.exe`) get the PE summary only, no decompilation: their behaviour is the
-  vendors', and the game's calls into them are in `data/imports.tsv`. `RemoveProtos.exe` (a Troika tool by its name and strings, which mention the prototype folder; built 2001-08-23) is the one original program besides the game; a Ghidra project of it is a task of its own if one needs it.
+  vendors', and the game's calls into them are in `data/imports.tsv`. `RemoveProtos.exe` (a Troika tool by its name and strings, which mention the prototype folder) is the one original program besides the game; a Ghidra project of it is a task of its own if one needs it.
 
 ## Function oracle
 

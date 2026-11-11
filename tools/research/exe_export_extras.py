@@ -287,6 +287,9 @@ def dword_dump(img, ranges, fn_set, covered):
         a = lo
         while a + 4 <= hi:
             if a in covered:
+                if zero_start is not None:
+                    out.append("%08x  ; %d zero bytes" % (zero_start, a - zero_start))
+                    zero_start = None
                 a += 4
                 continue
             v = img.dword(a)
@@ -429,7 +432,7 @@ def write_tsv(path, header, rows):
         w.writerows(rows)
 
 
-def run(exe, export, install, registry, dry):
+def run(exe, export, install, registry, dry, replace=False):
     data = Path(exe).read_bytes()
     sha = hashlib.sha256(data).hexdigest()
     if sha != PINNED_SHA256:
@@ -438,13 +441,20 @@ def run(exe, export, install, registry, dry):
     for need in ("listing/text.asm", "c/index.tsv", "data/functions-all.tsv", "data/imports.tsv", "raw/strings-raw.tsv"):
         if not (export / need).is_file():
             sys.exit("FAIL: missing %s (run the Ghidra export first)" % (export / need))
-    plan = ["%s/%s" % (export, d) for d in OUT_DIRS]
+    if not Path(registry).is_file():
+        sys.exit("FAIL: registry %s not found" % registry)
+    if not Path(install).is_dir():
+        sys.exit("FAIL: install folder %s not found" % install)
+    existing = [d for d in OUT_DIRS if (export / d).exists()]
     if dry:
-        print("dry run: would write", *plan, sep="\n  ")
+        print("dry run: would write", *["%s/%s%s" % (export, d, " (exists)" if d in existing else "") for d in OUT_DIRS], sep="\n  ")
+        if existing and not replace:
+            print("a real run would stop: these folders exist (use --replace)")
         return
-    for d in OUT_DIRS:
-        if (export / d).exists():
-            sys.exit("FAIL: %s exists (remove it or run with --replace)" % (export / d))
+    if existing and not replace:
+        sys.exit("FAIL: %s exist (remove them or run with --replace)" % ", ".join(str(export / d) for d in existing))
+    for d in existing:
+        shutil.rmtree(export / d)
     img = Image(data)
     fn_rows = read_tsv(export / "data/functions-all.tsv")
     fn_set = {int(r["address"], 16) for r in fn_rows if r["kind"] != "external"}
@@ -498,7 +508,7 @@ def run(exe, export, install, registry, dry):
     (export / "tables/data-dwords.txt").write_text("\n".join(dword_dump(img, ranges, fn_set, covered)) + "\n", encoding="utf-8")
     ims = imm_stores(insns, img)
     write_tsv(export / "tables/imm-stores.tsv", ("function", "site", "width", "global", "value", "target"),
-              [("%08x" % f, "%08x" % s, w, "%08x" % g, "0x%x" % (v & 0xFFFFFFFF), annotate_dword(img, v & 0xFFFFFFFF, fn_set) if w == "dword" else "") for f, s, w, g, v in ims])
+              [("%08x" % f, "%08x" % s, w, "%08x" % g, "0x%x" % (v & {"dword": 0xFFFFFFFF, "word": 0xFFFF, "byte": 0xFF}[w]), annotate_dword(img, v & 0xFFFFFFFF, fn_set) if w == "dword" else "") for f, s, w, g, v in ims])
     imp = {r["iat_address"]: "%s!%s" % (r["library"], r["name"]) for r in read_tsv(export / "data/imports.tsv")}
     ics = indirect_calls(insns, img, imp)
     write_tsv(export / "tables/indirect-calls.tsv", ("function", "site", "op", "operand", "slot", "kind", "import"),
@@ -519,7 +529,11 @@ def run(exe, export, install, registry, dry):
     for p in sorted(Path(install).iterdir()):
         if p.suffix.lower() in (".exe", ".dll", ".asi") and p.name.lower() != "arcanum.exe":
             b = p.read_bytes()
-            s = pe_summary(b)
+            try:
+                s = pe_summary(b)
+            except (ValueError, struct.error, TypeError) as e:
+                idx.append((p.name, len(b), hashlib.sha256(b).hexdigest(), "error: %s" % e, "", ""))
+                continue
             if not s:
                 continue
             lines = ["%s  sha256 %s  size %d" % (p.name, hashlib.sha256(b).hexdigest(), len(b)),
@@ -645,10 +659,7 @@ def main():
         sys.exit(self_test())
     if not a.exe or not a.export:
         ap.error("--exe and --export are required")
-    if a.replace and not a.dry_run:
-        for d in OUT_DIRS:
-            shutil.rmtree(Path(a.export) / d, ignore_errors=True)
-    run(a.exe, a.export, a.install or str(Path(a.exe).parent), a.registry, a.dry_run)
+    run(a.exe, a.export, a.install or str(Path(a.exe).parent), a.registry, a.dry_run, a.replace)
 
 
 if __name__ == "__main__":
