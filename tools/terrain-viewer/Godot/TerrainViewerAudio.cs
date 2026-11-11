@@ -29,7 +29,18 @@ public partial class TerrainViewerApp
         _audioVolumes = _audioStore.Load();
         _audioOrigin = !_audioStore.Persistent ? "default (automated run)" : _audioStore.HasSaved ? "saved setting" : "default (nothing saved yet)";
         _audio = ViewerAudioBackend.Create(this);
+        MuteAutomatedRun();
         GD.Print($"ARC-UI-040 audio driver={_audio.Driver} audible={_audio.Audible} volumes={_audioVolumes.Effects}/{_audioVolumes.Voice}/{_audioVolumes.Music} from={_audioOrigin}");
+    }
+
+    /// <summary>ARC-DEV-403: an automated run (smoke, self-test) plays into a muted Master bus, so the owner does not hear the
+    /// tests all day; the sounds still start and play, so the audio checks hold (the driver stays the real one, not Dummy).
+    /// ARC_SMOKE_SOUND=1 (`./arcanum smoke ... --env ARC_SMOKE_SOUND=1`) lets a smoke be heard.</summary>
+    private void MuteAutomatedRun()
+    {
+        if (!AutomatedVisualRun || System.Environment.GetEnvironmentVariable("ARC_SMOKE_SOUND") == "1") return;
+        AudioServer.SetBusMute(0, true);
+        GD.Print("ARC-DEV-403 automated run: Master bus muted (ARC_SMOKE_SOUND=1 unmutes)");
     }
 
     /// <summary>The sound catalogue of the module archive the area was read from, opened once and kept; null with a detail

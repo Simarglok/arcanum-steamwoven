@@ -110,7 +110,7 @@ history held about 500 runs of such copies of one template).
     ./arcanum smoke self-test [--headless] [--env NAME=VALUE]  # the viewer's synthetic --self-test
     # each also takes --no-build, --keep-settings, --take-focus and --dry-run; pr and map also --no-config-check
 
-- **Smoke windows and focus (ARC-DEV-403)** <a id="smoke-windows-and-focus-arc-dev-403"></a>. A smoke opens a real Godot
+- **Smoke windows, focus and sound (ARC-DEV-403)** <a id="smoke-windows-and-focus-arc-dev-403"></a>. A smoke opens a real Godot
   window, and Godot makes itself the foreground application when it starts (it asks for it through `TransformProcessType`,
   `setActivationPolicy:`, `activateIgnoringOtherApps:` and `makeKeyAndOrderFront:`), which took the keyboard focus from the
   owner on every smoke, and every lane's smoke does it again. Window flags do not stop that (Godot's `no_focus` and
@@ -127,6 +127,10 @@ history held about 500 runs of such copies of one template).
   the guard. The guard needs the Godot build's `allow-dyld-environment-variables` entitlement (the app in `/Applications` has it; a
   `GODOT=` override without it silently runs unguarded), and a `--env DYLD_INSERT_LIBRARIES=...` replaces it. Smokes of
   other checkouts get the guard once their branch has this change.
+  **Sound.** An automated run of the viewer (a smoke, a windowed self-test) mutes the Master audio bus at start (the log
+  line `ARC-DEV-403 automated run: Master bus muted`), so the tests are not heard: the audio device stays the real one,
+  the sounds still start and play, and the audio checks (`audible=True`, the loop and voice "is playing" checks) hold, as
+  they would not under the Dummy driver. `--env ARC_SMOKE_SOUND=1` on a smoke lets it be heard.
 - **Click and walk changes** ([smoke scope](tasks.md#smoke-scope), ARC-DEV-239). A PR that changes click or walk handling
   always runs `./arcanum smoke pr --stages map` and `./arcanum smoke self-test` (both, every such PR).
 - **Sampled stages (ARC-DEV-395, owner decision 2026-11-11).** `container-click` and `walk` took 675 s and 525 s of the
