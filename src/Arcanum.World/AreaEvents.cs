@@ -2,6 +2,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
+using Arcanum.Simulation;
 
 namespace Arcanum.World;
 
@@ -83,6 +84,7 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
 
     public Arcanum.Simulation.Reaction.ReactionPcFacts? ReactionPcFacts() => _talk()?.State.PcFacts;
 
+    [OriginalFunction(0x445140, OriginalFunctionScope.Partial)]
     public bool RunScriptCall(SessionScriptCall call)
     {
         ArgumentNullException.ThrowIfNull(call);

@@ -101,6 +101,7 @@ public static class SpellBookRules
     /// magick points; a rank already known changes nothing and succeeds.
     /// </summary>
     [OriginalFunction(0x4B1790, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4502E0, OriginalFunctionScope.Partial)]
     public static SpellBookChange Learn(SpellBook book, int spell, bool force, int level, int intelligence, int willpower, int minimumWillpower)
     {
         if (!IsValid(book) || spell is < 0 or >= Spells) return new(SpellBookStatus.Invalid, book, 0);

@@ -5,6 +5,14 @@ public static class ClockCalendar
 {
     // Shared by bootstrap and advance, and since ARC-UI-008 by the logbook's dates. Extended startYear is an arithmetic
     // capacity seam, not a supported public profile or owner construction range.
+    [OriginalFunction(0x45ACF0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x45AAE0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x45AAA0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x45A920, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x45A900, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x45A8E0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x45A8B0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x45A870, OriginalFunctionScope.Full)]
     public static ClockFailure TryDerive(long timestampMs, long startYear, out ClockCalendarFields calendar)
     {
         calendar = default;

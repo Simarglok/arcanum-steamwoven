@@ -281,6 +281,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="world-map-window-arc-ui-073"></a>[World map window (ARC-UI-073)](ledger/ui-audio.md#world-map-window-arc-ui-073) | [Interface windows and audio](ledger/ui-audio.md) | WM1–WM139 |
 | <a id="screen-size-and-layout-arc-res-093"></a>[Screen size and layout (ARC-RES-093)](ledger/ui-audio.md#screen-size-and-layout-arc-res-093) | [Interface windows and audio](ledger/ui-audio.md) | SZ1–SZ14 |
 | <a id="function-audit-0x4b0000-0x4cffff-arc-res-109"></a>[Function audit of 0x4B0000–0x4CFFFF (ARC-RES-109)](ledger/function-audit-4b-4c.md) | [Function audit, slice E of V1](ledger/function-audit-4b-4c.md) | one state per function start, 12 rows marked |
+| <a id="executable-triage-0x44-0x45-arc-res-108"></a>[Executable triage 0x44-0x45 (ARC-RES-108)](ledger/census-triage-0x44-0x45.md) | [Executable triage](ledger/census-triage-0x44-0x45.md) | 389 added: 95 implemented, 68 not implemented, 226 not relevant |
 
 ## Decisions to revisit
 

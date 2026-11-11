@@ -386,6 +386,9 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         if (applied.Disposition == GameSessionDisposition.Changed) AiStruck?.Invoke(victim);
     }
 
+    [OriginalFunction(0x452300, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4516D0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4514E0, OriginalFunctionScope.Partial)]
     public SpellComponentOutcome Apply(SpellRun run, int component, SpellRunTarget target)
     {
         ArgumentNullException.ThrowIfNull(run);
@@ -485,6 +488,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     /// entry 6 · spell + number unless the run is forced to end, a Remove takes that entry off. Presentation only: the host draws it
     /// from the log. ARC-DEV-352 (EC11): an Add with a callback play flag makes the run wait for the animation when the entry plays and calls back at once when it does not
     /// (<see cref="EyeCandyPlays"/>; without it the callbacks are not ready).</summary>
+    [OriginalFunction(0x451FE0, OriginalFunctionScope.Partial)]
     private SpellComponentOutcome EyeCandy(SpellRun run, SessionSpellComponent component, SpellRunTarget target)
     {
         if (target.Object is not { } obj || component.EyeCandy is not { } data) return SpellComponentOutcome.None;

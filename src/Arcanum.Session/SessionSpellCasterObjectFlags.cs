@@ -28,6 +28,7 @@ public sealed partial class SessionSpellCaster
 
     // The ObjFlag component on a critter for a hold flag: true when it was taken (written, or left as the reference count says); false when it is not ready (another bit or field,
     // a target that is no critter), which the caller logs.
+    [OriginalFunction(0x452380, OriginalFunctionScope.Partial)]
     private bool ObjectFlag(SpellRun run, SessionSpellComponent component, SpellRunTarget target)
     {
         if (component.ObjectFlag is not { } data || target.Object is not { } obj) return false;
