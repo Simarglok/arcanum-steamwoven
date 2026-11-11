@@ -47,7 +47,8 @@ effects and items kept across F7/F8; the seven found documents of Chemistry and 
 Chemistry degree 2 power cells (one stack of 50), the Electric degree-3 powered shield worn (its 15 s call takes a cell, the next call a second one) and the degree-6 maintained armour (record 168 pays a cell a tick). The smoke found a real defect, fixed in the same slice: an assembled item lives in the made items,
 which the script host's wear question (`WieldedItemName`) did not read, so the crafted shield's timer ended at its first call (unit test `AreaPoweredShieldCallTests`).
 NPC crafter: the window queued through the field the dialog's `su` fills (`_schematicScriptOpen`, not an actual dialog reply) for the cave NPC, whose sheet the stage patches with a Herbology degree and intelligence 8 (the cave's NPCs have no degree; other maps were not searched for an installed crafter), assembles record 2000 from the NPC's own list into its list with the hero's pack unchanged; the dialog's own `su` reply stays covered by the synthetic self-test.
-Open: an Explosives product (the timed bombs, items 15154 and 15193, are placed by ARC-WORLD-124 and could join), the cell weapon (degree 4, record 147: it fires only `Target_Hit|Target_Attacker`, when its wearer is hit).
+Explosives: the degree-1 grenade (record 219, whose first component is ammunition, so the stage hands it to the hero through an NPC's list) is assembled and thrown at the cave NPC: the item event starts the run, a cave NPC is damaged, the grenade is gone (the timed bombs, items 15154 and 15193, are placed by `item-aim`, ARC-WORLD-124).
+Open: the cell weapon (degree 4, record 147: it fires only `Target_Hit|Target_Attacker`, when its wearer is hit).
 
 ## 6. Queue
 
