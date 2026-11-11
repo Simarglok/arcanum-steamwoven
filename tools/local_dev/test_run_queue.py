@@ -2,6 +2,7 @@
 the place of a run that crashed, was killed or ran out of time."""
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import signal
@@ -19,7 +20,7 @@ ARCANUM = REPO / "arcanum"
 
 
 def ticket(seq: int, kind: str, started: bool = False, priority: int = run_queue.NORMAL, at: float | None = None,
-           estimate: float | None = None, cwd: str | None = None) -> dict:
+           estimate: float | None = None, cwd: str | None = None, lane: str | None = None) -> dict:
     """A ticket; `at` is its arrival time (default: its number, so equal estimates keep the arrival order)."""
     result = {"seq": seq, "kind": kind, "startedAt": 1.0 if started else None, "priority": priority,
               "enqueuedAt": float(seq) if at is None else at}
@@ -27,6 +28,8 @@ def ticket(seq: int, kind: str, started: bool = False, priority: int = run_queue
         result["estimateSeconds"] = estimate
     if cwd is not None:
         result["cwd"] = cwd  # a ticket of the tests has no `.git` above its folder: the checkout is the folder
+    if lane is not None:
+        result["lane"] = lane  # none: a ticket of a wrapper from before ARC-DEV-400, which runs alone
     return result
 
 
@@ -65,6 +68,215 @@ class AdmissionRuleTests(unittest.TestCase):
         live = [ticket(1, "window", started=True), ticket(2, "window"), ticket(3, "window", priority=run_queue.FRONT)]
         self.assertEqual(run_queue.blocker(live[2], live)["seq"], 1)
         self.assertEqual(run_queue.blocker(live[1], live[1:])["seq"], 3)
+
+
+def lane_ticket(seq: int, kind: str = "window", lane: str | None = None, started: bool = False, estimate: float = 20.0,
+                cwd: str | None = None, at: float | None = None) -> dict:
+    """A ticket of a wrapper with lanes; the lane defaults to what its length gives."""
+    return ticket(seq, kind, started=started, estimate=estimate, cwd=cwd or f"/work/{seq}", at=at,
+                  lane=lane or run_queue.lane_for(kind, estimate, 2))
+
+
+class LaneTests(unittest.TestCase):
+    """ARC-DEV-400: the Godot slot as one heavy lane and two short lanes; an export, a rollback run and a run of an old
+    wrapper run alone; two runs of one checkout never run at once."""
+
+    def waits_for(self, live: list[dict], seq: int) -> int | None:
+        mine = next(item for item in live if item["seq"] == seq)
+        found = run_queue.blocker(mine, live)
+        return None if found is None else found["seq"]
+
+    def test_a_run_takes_the_lane_its_declared_length_gives(self) -> None:
+        self.assertEqual(run_queue.lane_for("window", 20.0, 2), "short")
+        self.assertEqual(run_queue.lane_for("window", run_queue.HEAVY_SECONDS, 2), "short")
+        self.assertEqual(run_queue.lane_for("headless", run_queue.HEAVY_SECONDS + 1, 2), "heavy")
+        self.assertEqual(run_queue.lane_for("export", 5.0, 2), "export")
+        self.assertEqual(run_queue.lane_for("window", 20.0, 0), "single")
+        self.assertEqual(run_queue.lane_for("export", 5.0, 0), "export")
+        self.assertIsNone(run_queue.lane_for("dotnet", 20.0, 2))
+        self.assertIsNone(run_queue.lane_for("quick", 20.0, 2))
+
+    def test_the_rollback_variable_sets_the_number_of_short_lanes(self) -> None:
+        for value, lanes in ((None, 2), ("", 2), ("2", 2), ("3", 3), ("0", 0), ("off", 0), (" OFF ", 0), ("9", 0), ("-1", 0),
+                             ("two", 0)):
+            environment = {} if value is None else {run_queue.LANES_ENV: value}
+            with patch.object(run_queue, "_LANE_NOTE", [True]):  # the note is printed once: not in the test output
+                self.assertEqual(run_queue.short_lanes(environment), lanes, value)
+
+    def test_a_heavy_run_and_two_short_runs_run_side_by_side_and_the_next_of_each_lane_waits(self) -> None:
+        live = [lane_ticket(1, estimate=200.0, started=True), lane_ticket(2, started=True), lane_ticket(3, started=True),
+                lane_ticket(4, estimate=300.0), lane_ticket(5), lane_ticket(6)]
+        self.assertEqual(self.waits_for(live, 4), 1)  # one heavy lane
+        self.assertEqual(self.waits_for(live, 5), 2)  # the oldest running short run frees the first short place
+        self.assertEqual(self.waits_for(live, 6), 3)
+        self.assertIsNone(self.waits_for(live[:3], 2))
+        self.assertIsNone(self.waits_for([lane_ticket(1, estimate=200.0, started=True), lane_ticket(2)], 2))
+        self.assertIsNone(self.waits_for([lane_ticket(1, started=True), lane_ticket(2, estimate=200.0)], 2))
+
+    def test_a_short_run_does_not_wait_for_the_heavy_lane_nor_the_reverse(self) -> None:
+        heavy = [lane_ticket(1, estimate=500.0, started=True), lane_ticket(2, estimate=500.0), lane_ticket(3)]
+        self.assertEqual(self.waits_for(heavy, 2), 1)
+        self.assertIsNone(self.waits_for(heavy, 3))
+
+    def test_the_short_places_follow_the_number_of_lanes(self) -> None:
+        live = [lane_ticket(1, started=True), lane_ticket(2, started=True), lane_ticket(4)]
+        self.assertEqual(self.waits_for(live, 4), 1)  # two short places, both taken
+        with patch.dict(os.environ, {run_queue.LANES_ENV: "3"}):
+            self.assertIsNone(self.waits_for(live, 4))  # a third place is free
+            full = [lane_ticket(1, started=True), lane_ticket(2, started=True), lane_ticket(3, started=True), lane_ticket(4)]
+            self.assertEqual(self.waits_for(full, 4), 1)
+
+    def test_two_runs_of_one_checkout_never_run_at_once_in_any_lane(self) -> None:
+        live = [lane_ticket(1, estimate=200.0, started=True, cwd="/work/a"), lane_ticket(2, cwd="/work/a"),
+                lane_ticket(3, cwd="/work/b")]
+        self.assertEqual(self.waits_for(live, 2), 1)
+        self.assertIsNone(self.waits_for(live, 3))
+
+    def test_a_run_held_back_by_its_checkout_fills_no_place_of_another_checkouts_run(self) -> None:
+        # a (short, running) and b (short, running) hold both short places; c waits for the place of a
+        live = [lane_ticket(1, started=True, cwd="/work/a"), lane_ticket(2, started=True, cwd="/work/b"),
+                lane_ticket(3, estimate=200.0, started=True, cwd="/work/c"), lane_ticket(4, cwd="/work/c"),
+                lane_ticket(5, cwd="/work/d")]
+        self.assertEqual(self.waits_for(live, 4), 3)  # its own checkout's heavy run, whatever the places
+        # d: the short places are full (a, b); c's second run (4) waits for c's heavy run and fills none, so d is next after a
+        self.assertEqual(self.waits_for(live, 5), 1)
+        free = [lane_ticket(1, started=True, cwd="/work/a"), lane_ticket(3, estimate=200.0, started=True, cwd="/work/c"),
+                lane_ticket(4, cwd="/work/c"), lane_ticket(5, cwd="/work/d")]
+        self.assertIsNone(self.waits_for(free, 5))  # one short place is free and 4, held by c, does not take it
+
+    def test_an_export_runs_alone_and_waits_for_every_lane(self) -> None:
+        live = [lane_ticket(1, estimate=200.0, started=True), lane_ticket(2, started=True), lane_ticket(3, "export"),
+                lane_ticket(4, at=100000.0), lane_ticket(5, estimate=200.0, at=100000.0)]
+        self.assertEqual(self.waits_for(live, 3), 1)
+        self.assertEqual(self.waits_for(live, 4), 3)  # a run that arrives well after an export waits for it
+        self.assertEqual(self.waits_for(live, 5), 3)
+        self.assertIsNone(self.waits_for([lane_ticket(3, "export")], 3))
+        running = [lane_ticket(3, "export", started=True), lane_ticket(4)]
+        self.assertEqual(self.waits_for(running, 4), 3)
+        two = [lane_ticket(2, started=True), lane_ticket(3, "export", started=True)]
+        self.assertEqual(run_queue.blocker(two[1], two)["seq"], 2)  # (never admitted together; the rule is symmetric)
+
+    def test_an_export_waits_for_the_runs_ahead_of_it_and_for_running_side_runs(self) -> None:
+        live = [lane_ticket(1, estimate=5.0), lane_ticket(2, "export", estimate=5.0), lane_ticket(3, "dotnet", started=True)]
+        self.assertIsNone(self.waits_for(live[:1], 1))
+        self.assertEqual(self.waits_for(live, 2), 1)
+        self.assertEqual(self.waits_for([live[1], live[2]], 2), 3)
+
+    def test_a_rollback_run_and_a_run_of_an_old_wrapper_run_alone(self) -> None:
+        for alone in (lane_ticket(1, lane="single", started=True), ticket(1, "window", started=True)):
+            live = [alone, lane_ticket(2, cwd="/work/2")]
+            self.assertEqual(self.waits_for(live, 2), 1)
+        live = [lane_ticket(1, started=True), lane_ticket(2, lane="single", cwd="/work/2")]
+        self.assertEqual(self.waits_for(live, 2), 1)
+        live = [lane_ticket(1, lane="single", started=True), lane_ticket(2, lane="single", cwd="/work/2")]
+        self.assertEqual(self.waits_for(live, 2), 1)
+
+    def test_a_quick_run_of_the_same_checkout_still_goes_before_a_later_lane_run(self) -> None:
+        live = [ticket(1, "quick", started=True, cwd="/work/a"), lane_ticket(2, cwd="/work/a"), lane_ticket(3, cwd="/work/b")]
+        self.assertEqual(self.waits_for(live, 2), 1)
+        self.assertIsNone(self.waits_for(live, 3))
+
+    def test_the_queue_never_stalls_whatever_arrives(self) -> None:
+        # a model of the queue: random runs in every kind and lane arrive; whenever nothing runs, some waiter may start
+        import random
+        for seed in range(60):
+            rng = random.Random(seed)
+            live, seq = [], 0
+            for step in range(120):
+                if rng.random() < 0.55 and len([item for item in live if not item.get("startedAt")]) < 10:
+                    seq += 1
+                    kind = rng.choice(["window", "window", "headless", "export", "quick", "dotnet"])
+                    estimate = rng.choice([5.0, 20.0, 60.0, 120.0, 600.0])
+                    lane = None if rng.random() < 0.1 and kind != "quick" else run_queue.lane_for(kind, estimate, rng.choice([2, 2, 0]))
+                    live.append(ticket(seq, kind, estimate=estimate, cwd=f"/work/{rng.randint(1, 3)}", lane=lane,
+                                       at=float(step) + rng.random()))
+                waiting = [item for item in live if not item.get("startedAt")]
+                startable = [item for item in waiting if run_queue.blocker(item, live) is None]
+                if waiting and not any(item.get("startedAt") for item in live):
+                    self.assertTrue(startable, f"seed {seed} step {step}: nothing can start")
+                for item in startable[:rng.randint(0, len(startable))]:
+                    if run_queue.blocker(item, live) is None:  # admitted one at a time, as under the queue lock
+                        item["startedAt"] = 1.0
+                running = [item for item in live if item.get("startedAt")]
+                for item in rng.sample(running, rng.randint(0, len(running))):
+                    live.remove(item)
+            for first in live:  # the admitted set holds the rules: at most one heavy, the short places, exports and old runs alone
+                if first.get("startedAt") and run_queue.lane_of(first) in run_queue.EXCLUSIVE_LANES and first["kind"] in run_queue.GODOT_KINDS:
+                    others = [item for item in live if item.get("startedAt") and item is not first and item["kind"] in run_queue.GODOT_KINDS]
+                    self.assertEqual(others, [], f"seed {seed}: {first} runs beside {others}")
+
+
+class LaneAccountingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.env = patch.dict(os.environ, {"ARCANUM_LOCAL_HOME": str(Path(self.temp.name) / "home")})
+        self.env.start()
+
+    def tearDown(self) -> None:
+        self.env.stop()
+        self.temp.cleanup()
+
+    def entry(self, seq: int, exit_code: int, lane: str | None = "short", peers: int | None = 0, **fields) -> dict:
+        result = {"seq": seq, "kind": "window", "label": f"run {seq}", "cwd": "/work/a", "estimateSeconds": 20.0,
+                  "enqueuedAt": 1000.0 + seq, "startedAt": 1001.0 + seq, "endedAt": 1010.0 + seq, "exit": exit_code}
+        if lane is not None:
+            result["lane"] = lane
+        if peers is not None:
+            result.update({"peersStart": peers, "peersEnd": peers, "loadStart": 12.5, "loadEnd": 37.0})
+        result.update(fields)
+        return result
+
+    def test_a_stop_is_not_red_and_every_other_non_zero_exit_is(self) -> None:
+        self.assertFalse(run_queue.is_red(0))
+        for stopped in (129, 130, 143):
+            self.assertFalse(run_queue.is_red(stopped), stopped)
+        for red in (1, 3, 124, 125, 139, 245):
+            self.assertTrue(run_queue.is_red(red), red)
+        self.assertFalse(run_queue.is_red(None))
+        self.assertFalse(run_queue.is_red(True))
+
+    def test_an_entry_from_before_the_lanes_goes_to_the_lane_its_length_would_take(self) -> None:
+        old = {"kind": "window", "estimateSeconds": 540.0}
+        self.assertEqual(run_queue.lane_of_entry(old), "heavy")
+        self.assertEqual(run_queue.lane_of_entry({"kind": "headless", "estimateSeconds": 30.0}), "short")
+        self.assertEqual(run_queue.lane_of_entry({"kind": "export"}), "export")
+        self.assertEqual(run_queue.lane_of_entry({"kind": "window", "lane": "single"}), "single")
+
+    def test_the_accounting_counts_red_runs_alone_and_beside_others(self) -> None:
+        entries = [self.entry(1, 0), self.entry(2, 1), self.entry(3, 0, peers=2), self.entry(4, 1, peers=1),
+                   self.entry(5, 1, peers=1), self.entry(6, 0, lane="heavy", peers=None), self.entry(7, 130),
+                   self.entry(8, 1, peers=0, startedAt=None)]
+        lanes = run_queue.lane_accounting(entries)
+        self.assertEqual((lanes["short"]["runs"], lanes["short"]["red"], lanes["short"]["stopped"]), (6, 3, 1))
+        self.assertEqual((lanes["short"]["alone"], lanes["short"]["beside"]), ([3, 1], [3, 2]))
+        self.assertEqual(lanes["heavy"]["unknown"], [1, 0])
+
+    def test_the_report_lists_the_lanes_and_the_latest_red_runs_with_their_conditions(self) -> None:
+        self.assertEqual(run_queue.lane_report(), ["no finished runs yet"])
+        folder = run_queue._open_folder()
+        (folder / "history.jsonl").write_text("\n".join(json.dumps(item) for item in [
+            self.entry(1, 0), self.entry(2, 1, peers=2)]) + "\nnot json\n" + json.dumps(self.entry(3, 0, lane="heavy", peers=0)) + "\n")
+        lines = run_queue.lane_report()
+        text = "\n".join(lines)
+        self.assertIn("lanes over the last 3 runs", lines[0])
+        self.assertRegex(lines[2], r"^heavy +1 +0 +0.0%")
+        self.assertRegex(lines[3], r"^short +2 +1 +50.0%")
+        self.assertIn("red ", text)
+        self.assertIn("#2 short exit=1 peers 2/2 load 12.5/37", text)
+        self.assertEqual(len(run_queue.lane_report(history=1)), 3)  # the last run only: one lane, no red run
+
+    def test_a_finished_run_records_its_lane_peers_and_load(self) -> None:
+        with patch.dict(os.environ, {run_queue.SHUTDOWN_ENV: "0", "ARCANUM_QUEUE_LEGACY_LOCK": str(Path(self.temp.name) / "legacy.lock")}):
+            os.environ.pop(run_queue.TICKET_ENV, None)
+            self.assertEqual(run_queue.run("window", [sys.executable, "-c", "pass"], estimate=500.0), 0)
+            self.assertEqual(run_queue.run("window", [sys.executable, "-c", "raise SystemExit(3)"], estimate=20.0), 3)
+            self.assertEqual(run_queue.run("dotnet", [sys.executable, "-c", "pass"]), 0)
+        entries = [json.loads(line) for line in (run_queue.folder() / "history.jsonl").read_text().splitlines()]
+        self.assertEqual([item["lane"] for item in entries[:2]], ["heavy", "short"])
+        self.assertEqual([item["peersStart"] for item in entries[:2]], [0, 0])
+        self.assertEqual([item["peersEnd"] for item in entries[:2]], [0, 0])
+        self.assertIn("loadStart", entries[0])
+        self.assertNotIn("lane", entries[2])  # a dotnet run has none
 
 
 class OrderTests(unittest.TestCase):
@@ -495,6 +707,60 @@ class QueueRunTests(unittest.TestCase):
         self.queued("window", "b", 0.1)
         self.assertEqual(sorted(item["seq"] for item in self.live()), [1, 2])
         self.finish()
+
+    def folder(self, name: str) -> Path:
+        path = self.root / name
+        path.mkdir(exist_ok=True)
+        return path
+
+    def test_runs_of_different_checkouts_share_the_lanes_and_the_third_short_run_waits(self) -> None:
+        # ARC-DEV-400: two short lanes and one heavy lane, side by side; the places of a lane are taken in order
+        self.queued("window", "a", 3.5, cwd=self.folder("a"))
+        self.until(lambda: self.log.exists())
+        self.queued("window", "b", 3.5, cwd=self.folder("b"))
+        self.queued("window", "c", 0.2, cwd=self.folder("c"))
+        self.queued("window", "heavy", 0.2, cwd=self.folder("d"), estimate=500.0)
+        self.finish()
+        found = self.events()
+        self.assertLess(found["start b"], found["end a"])  # beside a
+        self.assertLess(found["start heavy"], found["end a"])  # the heavy lane is its own
+        self.assertGreaterEqual(found["start c"], min(found["end a"], found["end b"]))  # no third short place
+        entries = [json.loads(line) for line in (run_queue.folder() / "history.jsonl").read_text().splitlines()]
+        by_label = {item["label"]: item for item in entries}
+        self.assertEqual(by_label["heavy"]["lane"], "heavy")
+        self.assertEqual({by_label[name]["lane"] for name in "abc"}, {"short"})
+        self.assertGreaterEqual(max(by_label[name]["peersStart"] for name in ("b", "heavy")), 1)
+
+    def test_two_runs_of_one_checkout_do_not_run_at_once(self) -> None:
+        folder = self.folder("same")
+        self.queued("window", "a", 1.0, cwd=folder)
+        self.until(lambda: self.log.exists())
+        self.queued("window", "b", 0.2, cwd=folder, estimate=500.0)
+        self.finish()
+        found = self.events()
+        self.assertGreaterEqual(found["start b"], found["end a"])
+
+    def test_the_rollback_variable_returns_to_one_godot_slot(self) -> None:
+        off = {run_queue.LANES_ENV: "0"}
+        self.wrapper("window", "a", [sys.executable, "-c", f"import time; open({str(self.log)!r}, 'a').write('start a %f\\n' % time.time()); "
+                                    f"time.sleep(1.2); open({str(self.log)!r}, 'a').write('end a %f\\n' % time.time())"],
+                     environment=off, cwd=self.folder("a"))
+        self.until(lambda: self.log.exists())
+        self.queued("window", "b", 0.2, cwd=self.folder("b"))  # a wrapper with lanes: it still waits for the single-slot run
+        self.finish()
+        found = self.events()
+        self.assertGreaterEqual(found["start b"], found["end a"])
+        entries = [json.loads(line) for line in (run_queue.folder() / "history.jsonl").read_text().splitlines()]
+        self.assertEqual({item["label"]: item["lane"] for item in entries}, {"a": "single", "b": "short"})
+
+    def test_an_export_waits_for_the_running_lanes_and_runs_alone(self) -> None:
+        self.queued("window", "a", 1.2, cwd=self.folder("a"))
+        self.queued("window", "heavy", 1.2, cwd=self.folder("b"), estimate=500.0)
+        self.until(lambda: len(self.live()) == 2 and self.log.exists())
+        self.queued("export", "export", 0.3, cwd=self.folder("c"))
+        self.finish()
+        found = self.events()
+        self.assertGreaterEqual(found["start export"], max(found["end a"], found["end heavy"]))
 
     def test_status_names_the_holder_and_the_waiters(self) -> None:
         self.queued("window", "holder", 1.5)
