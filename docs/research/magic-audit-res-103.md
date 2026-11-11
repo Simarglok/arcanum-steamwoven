@@ -373,7 +373,7 @@ The 60 records outside the colleges (80..139, used by monsters and items) share 
 
 - Whether the weapon-drop damage flag of Disarm (0) drops the weapon in a run (the original does, with a zero amount: [XR15](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)), whether Unseen Force (2) pushes non-critter objects, whether Illuminate (65) lights the scene, whether the maintained damage of the clouds (11, 27) hits the same
   targets as the BEGIN: all marked ✅ or ◐ by code, none run. MA-0 decides them.
-- What Identify shows for a critter, what Tempus Fugit does, what the illusion and familiar flags change: read by MA-R ([ledger XR1-XR15](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)); left open there: what inventory mode 4 lets the player move, and two owner questions (XR14).
+- What Identify shows for a critter, what Tempus Fugit does, what the illusion and familiar flags change: read by MA-R ([ledger XR1-XR15](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)); left open there: what inventory mode 4 lets the player move, what happens on arrival to a summoned follower the travel hide left shown, whether a familiar's death reaches the follower removal, and two owner questions (XR14).
 - DEV-348 is described from its thread status and the plan, not from its diff.
 - The AI's use of each spell was not audited beyond the priorities in the records (60 of the 80 have one); the AI casts what the cast host can run, so a component that is not ready is not ready for NPCs either.
 - Records 80..139 and the technology records (140..222) are outside the per-spell matrix.
