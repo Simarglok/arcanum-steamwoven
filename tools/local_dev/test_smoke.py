@@ -492,6 +492,13 @@ class ExecuteTests(unittest.TestCase):
 
     # ARC-DEV-391: known failures on main
 
+    def test_a_known_failure_task_code_has_three_or_more_digits(self) -> None:
+        # ARC-DEV-409: a new code ends in its GitHub issue number (four digits and more).
+        for code in ("ARC-DEV-408", "ARC-MAGIC-2000", "unassigned"):
+            self.assertTrue(smoke.KNOWN_TASK.match(code), code)
+        for code in ("ARC-DEV-12", "arc-dev-408", "ARC-DEV-"):
+            self.assertFalse(smoke.KNOWN_TASK.match(code), code)
+
     def test_the_known_failures_file_is_well_formed(self) -> None:
         import json
         entries = smoke.parse_known_failures(json.loads(smoke.KNOWN_FAILURES.read_text(encoding="utf-8")))

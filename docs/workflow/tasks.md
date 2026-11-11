@@ -27,11 +27,11 @@ or the owner cancels the code, the session posts its report, writes a handoff of
 at most 40 lines for the next item and ends. The handoff holds the handoff
 record above (base, head, workspace, reviewer findings) plus the next item's
 plan row verbatim, decisions taken, branch and open questions; it goes where the
-queue of follow-up work is kept (the plan or checklist that lists the next
-items, or the project's coordinator thread). The next code starts in a new
+queue of follow-up work is kept (the next item's [backlog issue](backlog.md),
+or the plan or checklist that lists it). The next code starts in a new
 thread with a fresh session from that handoff; a thread does not take a second
-code, even a small fix found on the way, which goes back to the coordinator
-thread. Inside one task, do not clear or restart the context while it is still
+code, even a small fix found on the way, which becomes a new backlog issue
+(label `tail`). Inside one task, do not clear or restart the context while it is still
 needed for correctness (part of the same decision).
 
 Sessions compact their context at 500k tokens: the committed
@@ -197,11 +197,15 @@ took long even on small fixes.
 
 ### Task code
 
-Owner decision 2026-10-29 (ARC-DEV-057, token audit of 2026-10-29, item 7):
-
-- The coordinator checks the code is unused before handing it out; the thread
-  confirms with one check (remote branches and a PR search for the code), not a
-  full history search ([task naming](task-naming.md)).
+- Owner decision 2026-11-11 (ARC-DEV-409): a new code is `ARC-TYPE-N` with `N` the
+  number of the work item's GitHub issue, created first; no number is chosen or
+  checked by hand any more ([task naming](task-naming.md#codes), [backlog](backlog.md)).
+  The thread confirms with one check: the issue exists, is open and has the label
+  `type:<type>`.
+- Owner decision 2026-10-29 (ARC-DEV-057, token audit of 2026-10-29, item 7), now
+  for a code issued before 2026-11-11 (three digits at most): the thread confirms
+  with one check (remote branches and a PR search for the code), not a full
+  history search.
 - No checklist-only steps: a checklist update rides with other work
   ([fewer steps](#fewer-steps)).
 

@@ -86,7 +86,7 @@ Every key of the game is in [Hotkeys](docs/player/hotkeys.md).
 ## Start here
 
 - [Documentation index](docs/README.md), [component catalogue](docs/project/status.md) and [vision](docs/project/vision.md)
-- [Toolchain and checks](docs/workflow/toolchain.md), [task workflow](docs/workflow/tasks.md) and [task naming](docs/workflow/task-naming.md)
+- [Toolchain and checks](docs/workflow/toolchain.md), [task workflow](docs/workflow/tasks.md), [task naming](docs/workflow/task-naming.md) and [backlog](docs/workflow/backlog.md)
 - [Architecture decisions](docs/architecture/decisions.md) and [research method](docs/research/method.md)
 - [Agent rules](AGENTS.md), [the Claude session guide](CLAUDE.md) and [contributor guidance](CONTRIBUTING.md)
 

@@ -1,0 +1,44 @@
+name: Work item
+description: One result, one PR (the contract of docs/workflow/tasks.md, Definition of Ready)
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Add the label `type:<type>` and one `status:*` label after creating the issue, then rename the title to `ARC-TYPE-N: short English result`, where N is this issue's number (docs/workflow/task-naming.md). Repository text only: no original game content, no secrets.
+  - type: textarea
+    id: result
+    attributes:
+      label: Result
+      description: One mergeable result, one PR.
+    validations:
+      required: true
+  - type: input
+    id: components
+    attributes:
+      label: Components
+      description: At most three, comma-separated.
+  - type: input
+    id: gates
+    attributes:
+      label: Human-Gates
+      description: "none, or the codes of the owner-validation items."
+  - type: input
+    id: requirements
+    attributes:
+      label: Requirements
+      description: "FR-XXX-NNN, ... or none (reason)."
+  - type: textarea
+    id: ac
+    attributes:
+      label: Acceptance criteria
+      description: "AC1. ... up to AC8, each checkable by an agent."
+  - type: input
+    id: planref
+    attributes:
+      label: Plan ref
+      description: "Plan or audit item id (for example E1-f, MA-10, B47) and its document."
+  - type: input
+    id: blocked
+    attributes:
+      label: Blocked by
+      description: "#N, #M or none."

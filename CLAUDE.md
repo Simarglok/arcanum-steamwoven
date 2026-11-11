@@ -30,13 +30,22 @@ and its link holds the detail.
   never a scratch smoke script. Any PR that changes click or walk handling always
   runs `./arcanum smoke pr --stages map` and `./arcanum smoke self-test`, even
   when no other stage covers it ([smoke runner](docs/workflow/toolchain.md#smoke-runner-arc-dev-061)).
-- **Naming** ([task naming](docs/workflow/task-naming.md)): `ARC-TYPE-NNN`
+- **Backlog** ([GitHub issues](docs/workflow/backlog.md), owner decision
+  2026-11-11): open work lives in the repository's issues (labels `type:*`,
+  `status:ready|blocked|in-progress|needs-owner`, `tail`, `epic`; full list in
+  the backlog page), not in docs,
+  handoffs or memory. Find work with the GitHub MCP `list_issues` (cloud) or
+  `gh issue list --label status:ready` (Mac); a leftover you find becomes a new
+  issue; the PR says `Closes #N`.
+- **Naming** ([task naming](docs/workflow/task-naming.md)): `ARC-TYPE-N`
   first in threads, branches, PRs and commits, a Russian result in thread
   titles. Types: `RES`, `DATA`, `RENDER`, `WORLD`, `INPUT`, `GPAD`, `UI`,
-  `SCRIPT`, `DEV`, `AI`, `COMBAT`, `SKILLS`, `MAGIC`, `TECHNOLOGY`. The
-  coordinator checks the number is unused (git history, open/merged PRs,
-  branches, other threads) before handing it out; the thread confirms with one
-  check: remote branches and a PR search ([task code](docs/workflow/tasks.md#task-code)).
+  `SCRIPT`, `DEV`, `AI`, `COMBAT`, `SKILLS`, `MAGIC`, `TECHNOLOGY`. A new code's
+  number is the number of its GitHub issue, created first and never chosen by
+  hand (issue #2000 with `type:magic` is `ARC-MAGIC-2000`); codes issued before 2026-11-11
+  (three digits at most) stay valid. The thread confirms with one check: the
+  issue exists, is open and has the label `type:<type>`
+  ([task code](docs/workflow/tasks.md#task-code)).
 - **Language.** Talk to the owner in Russian; repository text (docs, code,
   commits, PR titles and bodies) stays in English.
 - **Where work runs.** Work that builds, tests or runs code, Godot or original

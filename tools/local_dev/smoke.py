@@ -243,7 +243,7 @@ MENU_STAGES = frozenset(stage for stage, needs in STAGE_NEEDS.items() if needs.m
 DEBUG_STAGES = frozenset(stage for stage, needs in STAGE_NEEDS.items() if needs.debug)
 KNOWN_FAILURES = Path(__file__).with_name("smoke_known_failures.json")
 KNOWN_STAGE = re.compile(r"^[a-z][a-z0-9-]*$")
-KNOWN_TASK = re.compile(r"^(ARC-[A-Z]+-\d{3}|unassigned)$")
+KNOWN_TASK = re.compile(r"^(ARC-[A-Z]+-\d{3,}|unassigned)$")
 
 
 @dataclass(frozen=True)
@@ -638,7 +638,7 @@ def parse_known_failures(raw: object) -> tuple[KnownFailure, ...]:
         if item["stage"] != "crash-site" and item["stage"] not in STAGE_PASS:
             raise ValueError(f"known failure of an unknown stage {item['stage']!r}")
         if not KNOWN_TASK.match(item["task"]) or not re.match(r"^\d{4}-\d{2}-\d{2}$", item["since"]):
-            raise ValueError(f"a known failure names its task (ARC-TYPE-NNN or unassigned) and its day: {item!r}")
+            raise ValueError(f"a known failure names its task (ARC-TYPE-N or unassigned) and its day: {item!r}")
         try:
             symptom = re.compile(item["symptom"])
         except re.error as error:
