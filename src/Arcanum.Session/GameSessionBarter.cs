@@ -1,4 +1,5 @@
 using Arcanum.Simulation.Skills;
+using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 
@@ -46,6 +47,7 @@ public sealed partial class GameSessionOwner
     /// One revision; nothing to move or mark is no change.
     /// </summary>
     [Arcanum.Simulation.OriginalFunction(0x572640, Arcanum.Simulation.OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4643D0, OriginalFunctionScope.Partial)]
     public SessionBarterOpenResult OpenBarter(GameSessionVersion expected, string npc, string? container, bool identify, SessionItemKind pileKind,
         SessionInsertCheck npcInsert)
     {

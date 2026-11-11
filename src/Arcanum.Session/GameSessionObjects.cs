@@ -4,6 +4,7 @@ using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Locks;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Randomness;
+using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 
@@ -552,6 +553,7 @@ public sealed partial class GameSessionOwner
     internal CellCoord? SpilledCell(SessionMapId map, InventoryDomain.Seed seed, string item) =>
         seed.HolderOf.TryGetValue(item, out var holder) ? SpillCell(map, seed, holder) : null;
 
+    [OriginalFunction(0x463730, OriginalFunctionScope.Partial)]
     private GameSessionMutationResult ObjectWrite(SessionObjectTarget target, ObjectHitOutcome hit)
     {
         var condition = hit.Break switch

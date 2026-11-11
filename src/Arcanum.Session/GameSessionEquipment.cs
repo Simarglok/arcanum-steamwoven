@@ -292,6 +292,7 @@ public sealed partial class GameSessionOwner
     /// (0x4677B0, 0x467CB0), before the light recalculation and the wield scripts; here they follow the move and its scripts.
     /// </summary>
     [OriginalFunction(0x464AE0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4677B0, OriginalFunctionScope.Partial)]
     public EquipmentMutationResult Equip(GameSessionVersion expected, string entity, EquipmentSlot slot, SessionWearableItem item,
         SessionWearArtCheck artCheck, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts = null, ISessionItemTriggers? triggers = null)
     {
@@ -472,6 +473,7 @@ public sealed partial class GameSessionOwner
     /// first free slot (<see cref="QueryHeroGrid"/>).
     /// </summary>
     [OriginalFunction(0x464C80, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x467CB0, OriginalFunctionScope.Partial)]
     public EquipmentMutationResult Unequip(GameSessionVersion expected, EquipmentSlot slot, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts = null,
         ISessionItemTriggers? triggers = null, int? gridSlot = null)
     {

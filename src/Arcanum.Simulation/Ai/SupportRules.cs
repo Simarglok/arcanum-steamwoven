@@ -126,6 +126,7 @@ public static class AiSupportRules
     /// (mode 2), the first list whose chooser finds an entry ending the choice. Without a choice the pass's action type is 0.
     /// </summary>
     [OriginalFunction(0x4ABC20, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4ABC70, OriginalFunctionScope.Partial)]
     public static AiSpellChoiceResult ChooseSpell(IAiSupportWorld world, string npc, string target, IAiRollSource rolls)
     {
         ArgumentNullException.ThrowIfNull(world);
