@@ -3,7 +3,7 @@
 Measured diagnosis of the viewer: how long start-up, map loads, save loads and the opening of each window take, where
 the time goes and what to change first. The base commit at measurement time was `ace7c7b81` of `origin/main`
 (measurement builds carried a local, uncommitted probe on top of it). The owner's observation that the game feels much
-less responsive than the original and than arcanum-ce is what started it; the earlier, Crash-Site-only passes are
+less responsive than the original and than the open source port of it is what started it; the earlier, Crash-Site-only passes are
 [area viewer performance](area-viewer-performance.md) and [area performance review](area-performance-review.md).
 It changes no code, is not a budget and not a regression gate. Every optimization below is a candidate that becomes
 its own task through the coordinator; gains marked "estimate" are projections from the numbers, not measurements.
@@ -29,7 +29,7 @@ its own task through the coordinator; gains marked "estimate" are projections fr
   runs, loaded runs included; the load figures say which runs they use. They rank causes; they are not contracts.
   Runs went through the launch queue, so only one Godot window ran at a time.
 - **Units.** Allocation is printed by the probe in KiB and given here in MiB.
-- **Not measured.** The original and arcanum-ce (no timing was taken from them; the comparison below is an unverified
+- **Not measured.** The original and its open source port (no timing was taken from them; the comparison below is an unverified
   expectation), gamepad and hover latency, combat, character creation screens in the packaged build, the Esc-menu
   Options window (the `O` key did nothing in the stage), a save with a large session (the quick loads below are small
   ones), Windows, memory use.
@@ -136,7 +136,7 @@ is why the second open is cheap.
 - GC pressure is a symptom of the publication's allocations, not a lever of its own.
 - Steady state is fine: frames settle at 5–9 ms after the first publication and warm windows open invisibly.
 
-## Expectation against the original and arcanum-ce (not measured)
+## Expectation against the original and its open source port (not measured)
 
 The expectation, from the architecture of the original and of its open source port and not from a run of either
 (level F0; a read of the executable would settle it), is that the interface art is loaded when the interface
