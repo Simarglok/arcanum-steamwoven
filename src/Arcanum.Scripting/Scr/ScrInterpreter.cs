@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S32"/>.
+/// <see cref="ScrAdmissionSet.S33"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -531,6 +531,27 @@ internal sealed class ScrInterpreter
                 var y = Get(a, 2);
                 var change = a.Type == ScrCatalogue.Action.WalkTo ? ScrObjectStateChange.WalkTo : ScrObjectStateChange.RunTo;
                 if (OptionalObject(a, 0) is { } obj) _shared.ObjectStates.Add(new(change, obj, x, y));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.TransformObject:
+            {
+                // TI5: the run's attachee becomes a new object of the basic prototype of operand 0. The host applies it and reads the attachee in the later requests of the run as that object; an absent attachee changes nothing (a project choice:
+                // the original reads the null handle's location).
+                var prototype = Get(a, 0);
+                if (_roles.Attachee is { } attachee) _shared.ObjectStates.Add(new(ScrObjectStateChange.Transform, attachee, prototype));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.MakeFollow:
+            {
+                // TI6: the first object of operand 0 follows the first object of operand 1, the follow check skipped (force 1); nothing without both (a project choice: the original reads null handles). The run goes on.
+                if (OptionalObject(a, 0) is { } follower && OptionalObject(a, 1) is { } leader) _shared.ObjectStates.Add(new(ScrObjectStateChange.MakeFollow, follower, Other: leader));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.Attack:
+            {
+                // TI6: the first object of operand 1 attacks every object of operand 0 in list order; nothing without an attacker (a project choice). The run goes on.
+                if (OptionalObject(a, 1) is { } attacker)
+                    foreach (var victim in Objects(a, 0)) _shared.ObjectStates.Add(new(ScrObjectStateChange.Attack, victim, Other: attacker));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.GiveSpellMastery:
