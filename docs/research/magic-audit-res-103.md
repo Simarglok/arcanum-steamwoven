@@ -46,7 +46,7 @@ Every other college spell has a code path for every component of its record (the
 | --- | --- | --- |
 | 2 Unseen Force | Hero and companions as targets are not pushed (knockback runs of the hero); loose objects unverified | knockback lane |
 | 6, 7, 9 See Contents, Read Aura, Divine Magick | The answer is a text line; the windows (container inventory in mode 4, the NPC sheet, the item description) and picking an inventory item as a target are E8's | E8 |
-| 8 Sense Hidden | Trap spotting for the detecting-traps flag; effect 157 (skill) inert | E6-a, skills lane |
+| 8 Sense Hidden | Trap spotting for the detecting-traps flag works and the hero's spot roll exists (ARC-MAGIC-057); effect 157 (spot-trap skill): the hero's skill level reads the written effect's skill change since the skills lane, so the roll should see it, not run in the viewer | owner recheck |
 | 14, 19, 24, 29 Elemental summons; 53 Succour Beast; 57 Summon Undead; 68 Phantasmal Fiend; 71-74 Orcish Champion, Guardian Ogre, Hellgate, Familiar | Creature Summon (prototype or list pick, flags on the summoned, run ends when it dies) | E1-e |
 | 35, 50 Charm, Charm Beast | The NPC flag KOS_OVERRIDE a charm adds is not kept (the session has no NPC flag layer) | - |
 | 47 Shrink, 34 Disintegrate, 69 Invisibility, 63 Sanctuary | The flags are written; the viewer's draw of shrunk, hidden, translucent critters is not built | render |
@@ -67,7 +67,7 @@ Order: E1-e before E1-f (one writer in the Summon and AI files); E6, MA-9 and MA
 | Slice | Content | Unlocks (spells) | Size | Needs | Lane and files | FR |
 | --- | --- | --- | --- | --- | --- | --- |
 | **E1-e** Summon of critters | Prototype or list pick, summoned flags, palette, faction (MG8), run ends when the summon dies, summoned follower; the familiar hidden with the party on the world map (XR14 (b), decided by the owner: [Decisions](#decisions-for-the-owner)) | 14, 19, 24, 29, 53, 57, 68, 71, 72, 73, 74 | L | E1-c (done), MA-4 (done) | Summon partial file | FR-MAGIC-008 |
-| **E6** Trap spotting (spot roll; the E6-a row of the missing-systems plan) | The spot roll and the detecting-traps flag (spell 8's second flag) | 8 | M | MA-1 (done) | traps | FR-ITEM-016 |
+| **E6** Trap spotting (spot roll; the E6-a row of the missing-systems plan) | The spot roll and the detecting-traps flag (spell 8's second flag); **spot half done, ARC-MAGIC-057** (the disarm action stays E6-a's) | 8 | M | MA-1 (done) | traps | FR-ITEM-016 |
 | **MA-9** Tempus Fugit | Implement what MA-R read (XR6); the XR14 (a) fix decided by the owner ([Decisions](#decisions-for-the-owner)) | 79 | S-M | MA-R, MA-1 (done) | to be read | FR-MAGIC-007 |
 | **MA-10** Raise script hook | The resurrect script (point 0x12) through the SCR dispatcher | edge of 58, 64 | S | the SCR dispatcher (E5) | scripts | FR-MAGIC-007 |
 | **E1-f** AI summoning and AI parity | The AI's summon list and one pass of `ai-cast` over every AI priority of the 80 (an NPC casting a spell must act like the hero's cast) | 60 spells carry an AI priority | M | E1-e | AI host | FR-AI-002 |
@@ -124,7 +124,7 @@ Left: the guard alert's witnesses (0x4AEE50); Flesh to Stone's pair for a portal
 
 Done in four slices ([host contract](../world/spell-cast-host.md#trait-component-arc-magic-040), ledger [TR1-TR6](ledger/spell-runs.md#trait-component-arc-magic-040)): the session keeps the species and palette a Trait chose per critter (schema 89, `-1` restores; no reference count, as the original) (ARC-MAGIC-040); the viewer draws a hosted NPC's monster body and moves the hero's worn items (ARC-MAGIC-046);
 critter flags 2 and blit flags are the session's with MG10's switch and the Dispel undo (ARC-MAGIC-047, schema 90); the hero's own monster body is drawn (ARC-MAGIC-052). The original takes **every** worn item off, not only what the new art cannot wield; an art builder range violation (species 32 or more, palette 4 or more) exits the original and is "not ready" here.
-Left: the dropped leftover of a refused take-off; an NPC's worn items (not tracked by the session); the redraw of a map NPC whose data body is a perma-polymorph; a polymorphed hero's low attack and throw; the drowning damage of the water-walking clear (OB2); the multiplayer packet.
+Left: the dropped leftover of a refused take-off; an NPC's worn items (not tracked by the session); the redraw of a map NPC whose data body is a perma-polymorph; a polymorphed hero's low attack and throw; the drowning damage of the water-walking clear (OB2); the multiplayer packet. Options, data findings and a recommendation for each limit: [ARC-RES-145](trait-polymorph-remainder-res-145.md).
 
 ## Decisions for the owner
 

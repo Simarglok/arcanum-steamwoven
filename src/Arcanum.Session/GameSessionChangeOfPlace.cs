@@ -46,6 +46,13 @@ public interface IChangeOfPlaceHost
     /// <summary>The host's part of <paramref name="step"/>, after the session's. False stops the change there (as a failed step of the
     /// original's process leaves at once, RL30): no later step runs, so no fade-in.</summary>
     bool Run(ChangeOfPlaceStep step, ChangeOfPlaceRequest request);
+
+    /// <summary>
+    /// ARC-MAGIC-058 (MT9b): the player's change to another map, at <see cref="ChangeOfPlaceStep.CarryEvents"/>, before the host's part of the step: the spell runs
+    /// that name an object that does not travel end (0x44F7A0, <see cref="Arcanum.Simulation.Magic.SpellRunTravelRules"/>); <paramref name="moveList"/> says who travels. A host with a spell
+    /// cast host ends them through <see cref="SessionSpellCaster.EndRunsLeavingMap"/>; the default does nothing.
+    /// </summary>
+    void CarrySpellRuns(SessionMoveList moveList) { }
 }
 
 /// <summary>What one call of <see cref="GameSessionOwner.ProcessChangeOfPlace"/> or <see cref="GameSessionOwner.ResumeChangeOfPlace"/> did.</summary>
@@ -245,7 +252,11 @@ public sealed partial class GameSessionOwner
                     if (Payload(flight, host, destination) is var placed && placed != GameSessionFailure.None)
                         return EndChange(flight, ChangeOfPlaceRunStatus.Stopped, step, placed);
                     break;
-                // WaitOrders and CarryEvents are written with the payload (one revision); KeepPlayerId keeps the hero, which the session
+                case ChangeOfPlaceStep.CarryEvents:
+                    // ARC-MAGIC-058: the runs that do not travel end here, on the old map (0x45C720 before the map close); the events and the runs that travel are written with the payload.
+                    host.CarrySpellRuns(flight.MoveList ?? SessionMoveList.Empty);
+                    break;
+                // WaitOrders and the events of CarryEvents are written with the payload (one revision); KeepPlayerId keeps the hero, which the session
                 // always resolves. The other steps are the host's alone.
             }
             if (!host.Run(step, request)) return EndChange(flight, ChangeOfPlaceRunStatus.Stopped, step, GameSessionFailure.ChangeOfPlaceStopped);

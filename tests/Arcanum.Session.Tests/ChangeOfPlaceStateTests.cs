@@ -25,6 +25,7 @@ public sealed class ChangeOfPlaceStateTests
         public SessionTransferFacts Facts { get; init; } = new();
         public IReadOnlyList<MapChangeEdit> Edits { get; init; } = [];
         public SessionMoveList? MoveList { get; private set; }
+        public List<SessionMoveList> SpellRunCarries { get; } = [];
         public Action<Step>? OnRun { get; init; }
         public Func<ChangeOfPlaceReadiness>? OnReady { get; init; }
 
@@ -42,6 +43,8 @@ public sealed class ChangeOfPlaceStateTests
             MoveList = moveList;
             return new(request.Destination, NeighborDirection.YPlus, Edits);
         }
+
+        public void CarrySpellRuns(SessionMoveList moveList) => SpellRunCarries.Add(moveList);
 
         public bool Run(Step step, ChangeOfPlaceRequest request)
         {
@@ -127,6 +130,27 @@ public sealed class ChangeOfPlaceStateTests
         }, host.Calls);
         Assert.AreEqual(new ActorPlacement(Cave, There, NeighborDirection.YPlus), owner.QueryActor());
         CollectionAssert.AreEqual(new[] { Virgil }, host.MoveList!.Travelling.ToArray(), "the follower travels with the hero");
+    }
+
+    // ARC-MAGIC-058 (MT9b, 0x45C720 → 0x44F7A0): the hero's change to another map hands the host the move list at CarryEvents, before the destination is readied, so the runs
+    // that name an object that stays behind end on the old map; a jump on the same map carries nothing.
+    [TestMethod]
+    public void The_hero_s_change_to_another_map_asks_the_host_to_carry_the_spell_runs_with_the_move_list_and_a_same_map_jump_does_not()
+    {
+        using var owner = Party(Virgil, Sogg);
+        Assert.IsTrue(Request(owner, Cave.RuntimeMap, There, caller: ChangeOfPlaceCaller.Script).Accepted);
+        Host? self = null;
+        var carriedAtStep = -1;
+        var host = self = new Host { Facts = new SessionTransferFacts { NoFatigue = entity => entity == Sogg, WaitFacts = _ => null }, OnRun = step => { if (step == Step.CarryEvents) carriedAtStep = self!.SpellRunCarries.Count; } };
+        Assert.AreEqual(ChangeOfPlaceRunStatus.Completed, owner.ProcessChangeOfPlace(host).Status);
+        Assert.AreEqual(1, carriedAtStep, "asked before the host's part of the step");
+        Assert.AreEqual(1, host.SpellRunCarries.Count);
+        CollectionAssert.AreEqual(new[] { Virgil }, host.SpellRunCarries[0].Travelling.ToArray(), "the one that waits is not on the list");
+        using var same = Create();
+        Assert.IsTrue(Request(same, Exterior.RuntimeMap, Here).Accepted);
+        var jump = new Host();
+        Assert.AreEqual(ChangeOfPlaceRunStatus.Completed, same.ProcessChangeOfPlace(jump).Status);
+        Assert.AreEqual(0, jump.SpellRunCarries.Count);
     }
 
     [TestMethod]

@@ -93,7 +93,7 @@ travel step.
 
 - **Start.** Entering the travel state calls 0x424070 with the PC at level 3 (the animation
   interrupt that companion orders also use, [OL5](ledger/social.md#companion-orders-and-loyalty-arc-res-064))
-  and then 0x457450 (demaintain, [magic](magic-core-evidence.md)); neither is read here (F0).
+  and then 0x457450 (demaintain, [magic](magic-core-evidence.md)); both are read in [UE6](ledger/spell-runs.md#spell-run-endings-of-a-critter-arc-dev-301) and implemented (ARC-MAGIC-059).
   It hides the PC and its followers and starts the travel music: every sound stops and
   `sound\music\arcanum.mp3` loops, with fade 25 ([SN30](audio-evidence.md#dialogue-voice-event-sounds-scripts-and-interface)). It then schedules the
   first WorldMap event: real time, 62 ms, kind 14, [event queue](game-event-queue.md#3-event-kinds-and-consumers-s).
@@ -165,7 +165,6 @@ The interface of the original (zoomed tiles, notes, town maps, buttons) is not p
 ## Open (F0)
 
 - The waypoint list in town-map mode and the town-map route (0x44EB40).
-- 0x424070 and 0x565140 refusing travel.
 - The discovery notice 0x460790.
 - The encounter module (0x5581E0..0x559640).
 - The world-map interface's own load and save of positions and notes.

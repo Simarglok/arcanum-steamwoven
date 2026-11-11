@@ -14,9 +14,9 @@ Requirements (reference only, no coverage row changes): [FR-ITEM-011](../require
 1. **The hero's chain is complete on the player's data.** Buy a degree on the sheet, open the schematic window (`T`, dialog `su`, script 129), assemble (118 recipes gate-checked), use the product, wear or fire it:
    covered by the smoke stages `tech-craft` (degrees 1 and 2, assembly, two foods, a firearm) and `tech-products`, and by unit tests. Degrees, expertise, the component gate, charge cells, item durability and repair,
    technology failure and magick cancel rolls, aptitude and its resistance rule are built. No hidden mechanic of the original is missing (the aptitude and expertise readers were checked in ARC-RES-114).
-2. **Technology records: 80 of 83 run** on the hero and on an NPC. The census table in `TechCensusRealDataTests` (ARC-DEV-363, kept current by each slice that makes a component ready) holds three rows that are not RUNS:
-   183 (PART: creature Summon with AIRedirect, E1-e), 184 (INERT: its Use component runs in the use-script host, ARC-MAGIC-048, which the census does not have) and 222 (PART: ObjFlag, the permanent polymorph).
-   Over the 65 records an installed item carries: **63 RUNS, 1 PART, 1 INERT**.
+2. **Technology records: 81 of 83 run** on the hero and on an NPC. The census table in `TechCensusRealDataTests` (ARC-DEV-363, kept current by each slice that makes a component ready) holds two rows that are not RUNS:
+   183 (PART: creature Summon with AIRedirect, E1-e) and 222 (PART: ObjFlag, the permanent polymorph). Record 184 (its Use component runs in the use-script host, ARC-MAGIC-048) is RUNS since ARC-MAGIC-061: the census wires the Use seam the viewer wires, with a stub that answers that a script ran, like its social and teleport hosts (the real host answers false for the hero and for an object with no use script; the answer is only logged, so readiness does not depend on it).
+   Over the 65 records an installed item carries: **64 RUNS, 1 PART, 0 INERT**.
 3. **RUNS is a host verdict, not a behaviour check.** The census says every component of a record is taken; it does not say the flag it writes has a reader (section 4).
 4. **What is left is short:** the viewer draw of hidden, shrunk and translucent critters and the shielded hit eye candy (E4-a2), creature Summon with AIRedirect (E1-e) and the AI's summoning (E1-f),
    the rest of the Trait polymorph (MA-8), and the smoke gaps of section 5. E1-e, E1-f, E4-a2 and MA-8 are shared with the magic queue ([magic audit](magic-audit-res-103.md)); they are listed once, here.
@@ -47,7 +47,8 @@ effects and items kept across F7/F8; the seven found documents of Chemistry and 
 Chemistry degree 2 power cells (one stack of 50), the Electric degree-3 powered shield worn (its 15 s call takes a cell, the next call a second one) and the degree-6 maintained armour (record 168 pays a cell a tick). The smoke found a real defect, fixed in the same slice: an assembled item lives in the made items,
 which the script host's wear question (`WieldedItemName`) did not read, so the crafted shield's timer ended at its first call (unit test `AreaPoweredShieldCallTests`).
 NPC crafter: the window queued through the field the dialog's `su` fills (`_schematicScriptOpen`, not an actual dialog reply) for the cave NPC, whose sheet the stage patches with a Herbology degree and intelligence 8 (the cave's NPCs have no degree; other maps were not searched for an installed crafter), assembles record 2000 from the NPC's own list into its list with the hero's pack unchanged; the dialog's own `su` reply stays covered by the synthetic self-test.
-Open: an Explosives product (the timed bombs, items 15154 and 15193, are placed by ARC-WORLD-124 and could join), the cell weapon (degree 4, record 147: it fires only `Target_Hit|Target_Attacker`, when its wearer is hit).
+Explosives: the degree-1 grenade (record 219, whose first component is ammunition, so the stage hands it to the hero through an NPC's list) is assembled and thrown at the cave NPC: the item event starts the run, a cave NPC is damaged, the grenade is gone (the timed bombs, items 15154 and 15193, are placed by `item-aim`, ARC-WORLD-124).
+Open: the cell weapon (degree 4, record 147: it fires only `Target_Hit|Target_Attacker`, when its wearer is hit).
 
 ## 6. Queue
 
@@ -66,4 +67,4 @@ E1-b, E1-c and E1-d (Summon of scenery, created critters, NPC effect list).
 | **E1-f** AI summoning | Magic queue's last slice; touches no technology record | n/a | M | E1-e | AI host |
 | **T-s** smoke extension | Section 5 gaps in `tech-craft` or `tech-products` | n/a | M | none | smoke |
 
-Rows run one writer at a time in the spell-cast lane (E4-a2, E1-e, E1-f); MA-8 and T-s touch other files. The census row of 184 flips to RUNS when the census gains the use-script host.
+Rows run one writer at a time in the spell-cast lane (E4-a2, E1-e, E1-f); MA-8 and T-s touch other files. The census row of 184 flipped to RUNS in ARC-MAGIC-061.

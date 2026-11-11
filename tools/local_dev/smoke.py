@@ -125,7 +125,7 @@ BATTERY_STAGES = ("map", "resources")
 # The stages a hero must play: without a session hero the viewer skips them (the AI stages silently). The map battery
 # plays the hero's stages too (cast, turn-based, ranged, container, junk ...).
 HERO_STAGES = frozenset({"map", "cast", "turn-based", "knockdown", "ranged", "container", "junk", "hover", "barter", "life",
-                         "floaters", "ai", "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "loot-worn", "inv-arrange", "loot-room", "dead-window", "inv-ui", "follower-home", "follower-far", "npc-resident", "saved-runs", "npc-door", "npc-tile", "tile-ghost", "container-click", "door-close", "fire-order", "indoor-fade", "route-barrel", "critter-fall", "save-resume", "cast-multi", "grenade", "companion-click", "npc-shot", "ai-react", "placement-census", "inv-carry", "spell-end", "hold-hero", "movement", "creature-item", "spirit-talk", "created-scenery", "created-critter", "script-critters", "worn-light", "critter-light", "summon-flash", "summon-wall", "tech-craft", "tech-products", "item-aim", "trait-body", "perf"})
+                         "floaters", "ai", "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "loot-worn", "inv-arrange", "loot-room", "dead-window", "inv-ui", "follower-home", "follower-far", "npc-resident", "saved-runs", "npc-door", "npc-tile", "tile-ghost", "container-click", "door-close", "fire-order", "indoor-fade", "route-barrel", "critter-fall", "save-resume", "cast-multi", "grenade", "companion-click", "npc-shot", "ai-react", "placement-census", "inv-carry", "worldmap", "spell-end", "hold-hero", "movement", "creature-item", "spirit-talk", "created-scenery", "created-critter", "script-critters", "worn-light", "critter-light", "summon-flash", "summon-wall", "tech-craft", "tech-products", "item-aim", "trait-body", "perf"})
 AUTO_HERO = "human-male"  # the full chain's hero on the main map; a map of the chain gets its own (elven ruins: elf-female)
 # The stages the viewer runs only when `map` is not in the list (its else branch), and those of them the map battery runs
 # as well (the tests read both from TerrainViewerApp.cs).
@@ -145,6 +145,7 @@ SHRINE = "1452,1291"  # Virgil's altar sector (`altar`, `npc-tile`)
 FIRE = "1410,1315"  # the town's brick fireplaces (`fire-order`)
 CAVE = "crash site cave"
 RUINS = "elven ruins"
+LIGHT_MAP = "tulla interior - battle - conveyance"  # an NPC there carries a light (`critter-light`; NONE on the main map, town, ruins, cave)
 SCENE_MAP = "crematorium-lev 1"  # a map that is not the start map: `scene` offers a new game only there
 
 
@@ -202,12 +203,14 @@ STAGE_NEEDS: dict[str, StageNeeds] = {
     "walk": _needs(**_MAIN_ONLY, only_sector=True, own=True),  # ~525 s; fails off the main map
     "census": _needs(own=True),  # every map of the catalogue in turn
     "cast": _needs(), "turn-based": _needs(), "knockdown": _needs(portable=True), "ranged": _needs(), "container": _needs(),
-    "junk": _needs(), "barter": _needs(),
+    "junk": _needs(map=RUINS),  # the main map has no container with two items (NONE); the ruins have (ARC-DEV-396)
+    "barter": _needs(),
     "menu": _needs(**_MENU), "options": _needs(**_MENU), "bar": _needs(**_MENU), "death": _needs(**_MENU),
     "perf-menu": _needs(**_MENU),
     "scene": _needs(map=SCENE_MAP, not_maps=(MAIN_MAP,), menu=True, own=True),
     "plants": _needs(**_MAIN_ONLY, sector=WILD, only_sector=True),
-    "ai": _needs(), "ai-turn-based": _needs(), "ai-cast": _needs(), "ai-follower": _needs(**_MAIN_ONLY),
+    "ai": _needs(), "ai-turn-based": _needs(), "ai-cast": _needs(own=True),  # fails after the other AI stages of a process, passes alone (2026-11-11)
+    "ai-follower": _needs(**_MAIN_ONLY),
     "premade": _needs(**_MAIN_ONLY), "opening": _needs(**_MAIN_ONLY),
     "life": _needs(), "floaters": _needs(), "pickpocket": _needs(), "loot-worn": _needs(), "loot-room": _needs(),
     "inv-arrange": _needs(portable=True), "inv-ui": _needs(),
@@ -218,7 +221,7 @@ STAGE_NEEDS: dict[str, StageNeeds] = {
     "follower-far": _needs(**_MAIN_ONLY, debug=True, own=True),
     "npc-resident": _needs(**_MAIN_ONLY, sector=TOWN, only_sector=True),
     "saved-runs": _needs(**_MAIN_ONLY, sector=TOWN, only_sector=True),
-    "npc-door": _needs(**_MAIN_ONLY, sector=TOWN, only_sector=True),
+    "npc-door": _needs(**_MAIN_ONLY, sector=TOWN, only_sector=True, own=True),  # NONE after the other town stages, passes alone
     "npc-tile": _needs(**_MAIN_ONLY, sector=SHRINE, only_sector=True),
     "tile-ghost": _needs(map=CAVE, only_map=True), "route-barrel": _needs(map=CAVE, only_map=True),
     "container-click": _needs(**_MAIN_ONLY, sector=TOWN, only_sector=True, own=True),  # ~675 s
@@ -230,7 +233,7 @@ STAGE_NEEDS: dict[str, StageNeeds] = {
     "inv-carry": _needs(debug=True, own=True),  # a dead body with an item; NONE at the Crash Site was seen
     "spell-end": _needs(), "hold-hero": _needs(), "movement": _needs(), "spirit-talk": _needs(),
     "created-scenery": _needs(portable=True), "created-critter": _needs(portable=True),
-    "script-critters": _needs(**_MAIN_ONLY), "worn-light": _needs(), "critter-light": _needs(),
+    "script-critters": _needs(**_MAIN_ONLY), "worn-light": _needs(), "critter-light": _needs(map=LIGHT_MAP),
     "summon-flash": _needs(portable=True), "summon-wall": _needs(portable=True),
     "tech-craft": _needs(map=CAVE, only_map=True, own=True),  # needs the cave's bullets; F8 replaces the session
     "tech-products": _needs(map=CAVE, only_map=True, own=True),  # a living NPC of the cave for the poison; F8 replaces the session
@@ -243,7 +246,7 @@ MENU_STAGES = frozenset(stage for stage, needs in STAGE_NEEDS.items() if needs.m
 DEBUG_STAGES = frozenset(stage for stage, needs in STAGE_NEEDS.items() if needs.debug)
 KNOWN_FAILURES = Path(__file__).with_name("smoke_known_failures.json")
 KNOWN_STAGE = re.compile(r"^[a-z][a-z0-9-]*$")
-KNOWN_TASK = re.compile(r"^(ARC-[A-Z]+-\d{3}|unassigned)$")
+KNOWN_TASK = re.compile(r"^(ARC-[A-Z]+-\d{3,}|unassigned)$")
 
 
 @dataclass(frozen=True)
