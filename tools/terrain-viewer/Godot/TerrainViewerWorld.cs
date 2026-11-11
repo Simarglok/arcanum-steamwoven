@@ -541,6 +541,7 @@ public partial class TerrainViewerApp
             lap?.Step("portals");
             FollowAreaPortals();
             lap?.Step("moving");
+            SyncTraitBodies();
             _canvas!.SetAreaMovingBodies(AreaMovingCommands()); _canvas.SetAreaAbsent(_areaCompanions?.Absent);
             lap?.Step("canvas");
             _canvas.PublishArea(_readyArea.Plan, AreaFrames(), actor, input, _cache); return;

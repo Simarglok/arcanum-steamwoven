@@ -899,6 +899,7 @@ public partial class TerrainViewerApp
             TakeMovementEvent(entry);
             TakeTeleportEvent(entry);
             TakeHoldEvent(entry);
+            TakeTraitEvent(entry);
             if (AreaSpellCasting.Line(entry, texts, SpellObjectName) is { } line) lines.Add(line);
         }
         if (lines.Count == 0) return;
