@@ -236,9 +236,9 @@ Every list below is the acceptance of the plan slice named: when that slice land
 | ObjFlag bits other than entangle, paralysis, spoken-with-dead | fatigue limit 153, 195, 210; blind 177, 186; flee 148, 165; mind control 142, 194; drunk 172, 181; magnetic inversion 182, 187; enshroud 167; undead 194; shielded 209; don't-draw 178, 183, 200, 217; permanent polymorph 222 | 14 | E4-a (blind, don't-draw) and E4-b (flee, mind control, undead) as the plan names them; **drunk, fatigue limit, magnetic inversion, shielded and enshroud are in neither plan row and must be added to E4-a**; E4-f (polymorph 222) | E1-d | each bit as an object-flag write with its clear at the record's End |
 | Effect on any critter | 22 records (the HERO group plus 172, 181, 195) | 20 | E1-d, then E4-a | none | a stat potion given to a companion by a script or thrown; effect list saved |
 | Control components: ChargeNBranch, TestNBranch, Terminate, Use, Cast, Movement, Trait, AIRedirect, NoOp | 147, 168, 184, 203, 218, plus 183, 187, 222 | 6 | E4-c (branches, Use, Terminate, NoOp), E4-e (teleport 218, nested Cast 203), E4-f (Trait 222), E4-b (AIRedirect 183) | E1-d | the cell weapon spends one cell (147), the maintained armour pays one cell a tick and tests hit points (168), the cell items refuse without cells |
-| Item aiming and use on a critter, object or tile | every aggressive carried record used as an item, and trap devices | n/a | **new: T-g** (after T-r2) | none | the targeting cursor, use on a critter, a tile, an object; refusals as the original |
-| Trap devices | Mechanical degree 1 and 5, Explosives degree 7 (176), 148 and 220 timed bombs | 3 learned products | E6-b (already in the plan) | E1-b for 176, T-g | a placed device spends itself, the marker, the delayed run at the tile after the original's 88 000 ms (TP3) |
-| NPC use of grenades and devices | the AI's grenade pick | n/a | **new: T-h** | E1-b, T-r2 | an NPC picks a grenade from its pack and throws it; heal-with-item, read, lockpick, trap device refusals become actions |
+| Item aiming and use on a critter, object or tile | every aggressive carried record used as an item, and trap devices | n/a | **new: T-g** (T-r2 is done: [ledger IA1–IA16](ledger/items.md#item-aiming-and-use-with-a-target-arc-res-113)) | none | the item cursor of IA3 to IA6 (mask by item kind, interface mode 0x10, left release picks, right release cancels), the apply of IA8 (an object: a charged or magical item in the spell's range is used at once, out of range or with the no-ranged flag the hero walks next to the target first; any other item is used at once) and IA9 (a tile: charged items cast at once, a trap device walks to it as goal 41), the use on a tile of IA12 (no script, no scroll check), refusals and messages of IA14 |
+| Trap devices | Mechanical degree 1 and 5, Explosives degree 7 (176), 148 and 220 timed bombs | 3 learned products | E6-b (already in the plan) | E1-b for 176, T-g | a placed device spends itself, the marker, the delayed run at the tile after the original's 88 000 ms (TP3), and the refusals of IA13 (a script trap on a target that is not a free portal or container, or on a tile that already has a trap, keeps the device and shows trap.mes 2 or 3) |
+| NPC use of grenades and devices | the AI's grenade pick | n/a | **new: T-h** | E1-b, T-r2 (done) | an NPC picks a grenade from its pack and throws it. T-r2 found that no installed AI item entry is a trap device or a written item and the AI always passes a target (IA15, data-dependent), so those need no action; heal-with-item and the pick-locks goal are already read (SP2, PL7), and the chooser's use-at-once path for items with no spell (IA15 a) is the only other item path to check |
 | Item scripts and the flag 0x20 | 6 learned products with scripts (the Electric ring and shield, the Mechanical helmet and the two flag-0x20 items, the Smithy gauntlets), 2 with the flag, 3 found with the flag | n/a | **new: T-r1** (a read), then a slice named by its result | none | what the flag and scripts do and whether the SCR host runs them |
 
 ## 7. Smoke and test coverage
@@ -258,7 +258,7 @@ Every list below is the acceptance of the plan slice named: when that slice land
 | Label | Question | Size |
 | --- | --- | --- |
 | T-r1 | What the generic item flag 0x20 means (two learned Mechanical items and three found products) and the numeric bit of the grenade flag (0x10, read by AI SP14); what the item scripts do that sit at attach points 24, 25, 7 and 8 on crafted armour and devices (28012 to 28015, 29016, 29017, 1022); whether the SCR host runs them | S to M |
-| T-r2 | Item use with a target: the targeting cursor masks per item kind, what the use does on a critter, an object and a tile, and the NPC use of devices and heal items (the AI's grenade rule is already read, ledger SP14, 0x4AC910); refusal messages | M |
+| T-r2 | Item use with a target: the targeting cursor masks per item kind, what the use does on a critter, an object and a tile, and the NPC use of devices and heal items (the AI's grenade rule is already read, ledger SP14, 0x4AC910); refusal messages (**done**, ARC-RES-113: [ledger IA1–IA16](ledger/items.md#item-aiming-and-use-with-a-target-arc-res-113)) | M |
 | T-r3 | Consumers of aptitude and expertise outside the combat and gate paths: callers of the aptitude stat (0x4B0740) in the AI and reaction code; effects in the installed data that target expertise in a discipline (race, background, items) | S |
 | T-r4 | **Done (ARC-RES-115, [placement census](technology-census-res-115.md)).** Placement census (installed maps, scripts, shop lists): where found schematic documents lie (five found records have no written prototype, O3 of the research), which NPCs have `su` dialogs and what degrees and inventories they carry (O5), where the 146 non-craftable technology items lie | S to M |
 
@@ -278,7 +278,7 @@ Labels are planning labels, not task codes (the coordinator hands out codes). Si
 | Slice | Content | Size | Needs | Lane |
 | --- | --- | --- | --- | --- |
 | T-r1 | read: flag 0x20, the grenade flag's bit, item scripts on crafted gear | S to M | Mac read | none |
-| T-r2 | read: item aiming, AI grenade pick and device use | M | Mac read | none |
+| T-r2 | read: item aiming, AI grenade pick and device use (**done**, ARC-RES-113) | M | Mac read | none |
 | T-r3 | read: aptitude and expertise consumers | S | Mac read | none |
 | T-r4 | census: where found schematics, `su` crafters and the non-craftable items are (**done**, ARC-RES-115: [placement census](technology-census-res-115.md)) | S to M | Mac data run | none |
 | T-a | **done (ARC-DEV-362)**: smoke stage `tech-craft` on real data: buy degree 1 and 2 on the sheet, assemble a Herbology heal and a Gun Smithy firearm, use the heal, equip and fire the gun, save and load once; asserts item counts, the heal, a firearm hit | M | none (T-r4 only helps with found documents) | viewer smoke |
@@ -289,9 +289,9 @@ Labels are planning labels, not task codes (the coordinator hands out codes). Si
 | E4-a, E4-b | ObjFlag bits (plan), acceptance: section 6 second row | M, M to L | E1-d | spell-cast lane |
 | E4-c | control components with the cell branch (plan) | L | E1-d | spell-cast lane |
 | E4-e, E4-f | teleport and nested Cast, polymorph (plan) | M to L, M | E4-c, E4-a | spell-cast lane |
-| T-g | **new**: item aiming cursor and use on a critter, object or tile in the viewer | M | T-r2 | viewer |
+| T-g | **new**: item aiming cursor and use on a critter, object or tile in the viewer (185 installed prototypes open it, IA16) | M | T-r2 (done) | viewer |
 | E6-b | placed trap devices (plan), now also fed by the three trap-device products | M | E1-a, T-g | directory lane |
-| T-h | **new**: NPC picks and throws grenades (the rule is SP14; `AreaAiHost.Grenade` answers none today), uses devices and heal items (the latter two after T-r2) | M | E1-b | AI lane |
+| T-h | **new**: NPC picks and throws grenades (the rule is SP14; `AreaAiHost.Grenade` answers none today), uses heal items and the chooser's items (devices need nothing, IA15) | M | E1-b | AI lane |
 | T-k | **conditional**: expertise effects, aptitude readers in the AI and reaction code, per T-r3's result | S to M | T-r3 | by result |
 | T-m | **conditional**: a slice named by T-r1 for flag 0x20 and the item scripts | S to M | T-r1 | by result |
 
