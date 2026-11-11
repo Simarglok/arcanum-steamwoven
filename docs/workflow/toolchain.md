@@ -130,7 +130,7 @@ history held about 500 runs of such copies of one template).
   given, and says so (`SMOKE hero human-male (auto): ...`); with
   `--main-menu` (no hero) it is refused, as is a menu stage (`menu`, `scene`, `options`, `bar`, `death`, `perf-menu`) without
   `--main-menu`. The stages the viewer runs only without `map` (`barter`, `menu`, `scene`, `options`, `plants`, `bar`,
-  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-tile`, `tile-ghost`, `container-click`, `fire-order`, `indoor-fade`, `npc-shot`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `placement-census`, `spell-end`, `hold-hero`, `spirit-talk`, `created-scenery`, `worn-light`, `critter-light`, `summon-flash`, `summon-wall`, `tech-craft`, `item-aim`, `perf`, `perf-menu`) get a run of their
+  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-tile`, `tile-ghost`, `container-click`, `fire-order`, `indoor-fade`, `npc-shot`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `placement-census`, `spell-end`, `hold-hero`, `movement`, `spirit-talk`, `created-scenery`, `worn-light`, `critter-light`, `summon-flash`, `summon-wall`, `tech-craft`, `item-aim`, `perf`, `perf-menu`) get a run of their
   own (step `stages-alone`, or `map-alone`) when `map` is in the list too. `tech-craft` (ARC-DEV-362, technology audit slice T-a) needs the bullets the map's bodies hold, so it runs on the cave: `./arcanum smoke map "crash site cave" --stages tech-craft` (on a map with no bullets of the crafted gun's type it fails with that message; its steps are the helpers of `TerrainViewerTechCraftHarness.cs`). `item-aim` (ARC-DEV-365, technology audit slice T-g) opens the item cursor with a script trap device from the use icon and presses a tile (goal 41) and an NPC (goal 39); it needs a hero and a map with a living NPC. A run whose stages include `debug-travel`, `follower-far` or `inv-carry`
   starts the viewer with `--debug-mode` (the stage needs the debug mode, ARC-DEV-050; ARC-WORLD-120).
 - **Targets of the combat stages (ARC-DEV-089).** The stages that fight an NPC (`attack` in `map`, `cast`, `turn-based`, `ai`) do not take the
@@ -563,34 +563,113 @@ python3 -B tools/research/exe_census.py --exe "$DAT_ROOT/Arcanum.exe"
 
 ## Ghidra text export (ARC-DEV-377)
 
-Checks against the original executable start with a plain text search instead of reading the file again: a one-time headless
-Ghidra export of the decompiled C of every function Ghidra found (4,365 of the pinned 1.0.7.4 `Arcanum.exe`, about 19 MB, 53 s to
+Checks against the original executable start with a plain text search instead of reading the file again: a headless Ghidra
+export of the decompiled C of every function (6,711 of the pinned 1.0.7.4 `Arcanum.exe`, about 26 MB, under two minutes to
 generate) lives in `research-private/ghidra-export/c/` on the owner's Mac. It is derived from the original executable, so it is never
 committed, quoted or copied into git or a PR; a check still records only behaviour in prose (see the
 [original executable check](../research/original-executable-check.md)). The decompiler's variables and types are a guess: confirm
-anything that matters in the disassembly or with the [function oracle](#function-oracle).
+anything that matters in the disassembly (`listing/text.asm`, [below](#exe-exports-beyond-the-decompiled-c-arc-dev-379)) or with the
+[function oracle](#function-oracle). The first pass (ARC-DEV-377, 4,365 functions) was extended by ARC-DEV-379: the census starts
+missing from the project, a wrongly non-returning function and the code Ghidra never disassembled were added, so `c/` covers every
+[census](#function-census) start.
 
 - `index.tsv`: address, name, size in bytes, status, file, signature, one row per function; names are Ghidra's (`FUN_<address>`, or
-  library names such as `_malloc`), the project's own names are not applied.
+  library names such as `_malloc`), the project's own names are not applied. `extra/function-origins.tsv` says where each
+  function came from (below).
 - `funcs/<address>.c`: one file per function (eight lowercase hex digits); line 1 is the address, name and size, line 2 the callee
   names, then the C.
 - Search with `rg`: callers of a function `rg -l "FUN_0040da50" research-private/ghidra-export/c/funcs`; a constant or string
   `rg -n "0x3ec" research-private/ghidra-export/c/funcs`; the function at an address `cat .../funcs/004a6900.c` or
   `awk -F'\t' '$1=="004a6900"' .../index.tsv`.
-- Gap: 1,498 of the 5,815 [census](#function-census) starts are not in the Ghidra project (functions reached only through pointers,
-  such as the goal-round handler 0x4B7150, among them), so a missing file does not mean the executable has no such function; read it
-  with `llvm-objdump` or run it in the oracle.
-- Regenerate (after a Ghidra upgrade or a re-analysis; the project is opened read-only, no analysis is repeated): the export script
-  (`scripts/ExportAll.java`) and `run.sh` sit in `research-private/ghidra-export/` (not in git; all paths here are relative to the
-  owner's main checkout, which holds `research-private/`), run through the headless queue:
+- Limits: 6 rows have status `fail` (2-3 byte fragments); functions that came from the gap scan (origin `gap-scan`) are orphan
+  code that nothing in the image calls or points at, some of them pieces of a larger function, so read them as fragments; 13 bodies
+  could not be extended without merging functions (the C runtime near the end of the code and a few game functions, listed in
+  `extra/bodies.tsv` with `overlap`); the pre-ARC-DEV-379 export is kept as `c-first-pass/` until the owner deletes it.
 
-  ```sh
-  ./arcanum run --kind headless --expect 'ghidra export start' -- research-private/ghidra-export/run.sh OUTDIR [LIMIT]
-  ```
+## Exe exports beyond the decompiled C (ARC-DEV-379)
 
-  `run.sh` sets `JAVA_HOME` to `openjdk@25` (without it `analyzeHeadless` stops with a "no TTY" error) and calls
-  `/opt/homebrew/opt/ghidra/libexec/support/analyzeHeadless research-private/ghidra-proj ArcanumExe -process Arcanum.exe -noanalysis
-  -readOnly -scriptPath research-private/ghidra-export/scripts -postScript ExportAll.java OUTDIR [LIMIT]`.
+What a reader of the executable needs besides the C, all in `research-private/ghidra-export/` (never in git; `README.txt` there is the
+index and is the first thing to read). The sources are Ghidra 12.2 (Apache-2.0) and `python3` scans of the file; nothing else was
+installed (no radare2/rizin; `llvm-objdump` from Xcode only for the leftover gap ranges).
+
+| Folder | What it holds | Use it for |
+| --- | --- | --- |
+| `listing/` | Ghidra listing of every block: `text.asm` (code, jump tables inline, `; FUNCTION` markers), `data.txt`, `rdata.txt`, `idata.txt`, `rsrc.txt`, `Headers.txt`, `reloc.txt`, `IIDKing.asm`; typed data and strings shown, untyped bytes as `db[N]` hex rows | the exact instructions behind a decompiled line (operand width, signedness); data tables and constants by address |
+| `data/` | `sections.tsv`, `functions-all.tsv` (with its 139 thunks, which have no file in `c/`), `imports.tsv`, `strings.tsv` (strings Ghidra defined), `symbols.tsv`, `globals.tsv` (every referenced address outside the code with its readers, writers and pointer holders) | who reads or writes a global, who references a string, imported functions |
+| `raw/` | `pe-info.txt`, `resources.tsv` and `resources/` (8 PE resources: icons, version info), `strings-raw.tsv` (every ASCII run of 4+ characters, with referencing dwords), `pointers.tsv` (every dword equal to a function entry), `ptr-tables.tsv` (runs of code pointers: jump and handler tables) | strings Ghidra did not define, handler/vtable-like tables, the header |
+| `extra/` | `function-origins.tsv`, the logs of each creation step, `gaps.tsv` and `gaps.asm` (the 126 ranges, 711 bytes, of code that no function covers; `llvm-objdump` text of each), `noreturn.tsv` | what was added and what is still open |
+
+The executable has no relocation table (the `.reloc` section is empty), so xrefs are Ghidra's plus the raw dword scans above; a code
+address built in a register is invisible to both. `.rdata` is 16 KB, the tables live in `.data` and, for jump tables, inside `.text`.
+
+How `c/` reaches every census start (ARC-DEV-379; the Ghidra project copy is `research-private/ghidra-proj-full`, the first-pass project
+`ghidra-proj` is untouched; the scripts are in `ghidra-export/scripts/`, run with `run-full.sh [-ro] SCRIPT.java ARGS` through the headless
+queue):
+
+1. `CreateCensusFunctions.java census.csv out.tsv`: disassemble and create a function at each census start that is no function yet
+   (1,474 created, 0 failed, 3 inside other functions; 1,452 are still separate functions after step 2, the rest were absorbed into larger bodies).
+2. Ghidra had marked one function (`FUN_00406d40`, about 950 call sites) non-returning, which cut every caller after the call and left about
+   240 KB of code undisassembled. `FixNoReturn.java 00406d40` clears the flag, `FixCallOverrides.java 00406d40` removes the "call,
+   return" override of each call site, `RecomputeBodies.java` re-flows every function body (180 grew). Do not run `analyzeChanges` or
+   the analysers afterwards: they infer the flag again.
+3. `exe_tables.py`/`gap_ranges.py` find the remaining undisassembled code (a `db[N]` row of `text.asm` that is not padding): the gap
+   starts some dword points at get a function (`CreateAtList.java`, 50), every other gap start gets one from `CreateGapFunctions.java`
+   (929 created, 834 of them still separate functions at the end, 120 starts rejected as not code). What is left is in `extra/gaps.*`.
+
+Regenerate every export from the project (about two minutes; `OUTDIR` must not exist; the `c/` files differ from a previous run only in the
+order of the callee names on line 2):
+
+```sh
+./arcanum run --kind headless --expect 'ghidra full start' -- research-private/ghidra-export/export-all.sh OUTDIR
+```
+
+A Ghidra upgrade or a new analysis needs steps 1-3 again on a copy of the project, in that order.
+
+## Exe exports: derived extras (ARC-DEV-385)
+
+What the Ghidra export (the two sections above) still lacked, found by checking the executable's sections, the export and the install
+folder, and what could be got without a paid tool. [`tools/research/exe_export_extras.py`](../../tools/research/exe_export_extras.py)
+(python3 standard library only, about two seconds) reads the pinned `Arcanum.exe` (it refuses any other SHA-256), the Ghidra listing and
+tables and the registry [`functions.csv`](../verification/functions.csv), and writes five folders next to `c/` in
+`research-private/ghidra-export/`. They are derived from the original and never go into git, a PR or a quote; a check still records only
+behaviour in prose.
+
+```sh
+python3 -B tools/research/exe_export_extras.py --self-test    # task check: synthetic image and listing, no game file
+python3 -B tools/research/exe_export_extras.py --exe "$DAT_ROOT/Arcanum.exe" --export research-private/ghidra-export --dry-run
+python3 -B tools/research/exe_export_extras.py --exe "$DAT_ROOT/Arcanum.exe" --export research-private/ghidra-export [--replace]
+```
+
+| Lack in the first exports | Found | Folder (`research-private/ghidra-export/`) |
+| --- | --- | --- |
+| The listing of one function next to its C (operand width, sign, wrap) means searching a 36 MB file | `listing/text.asm` split at the `; FUNCTION` lines | `asm/funcs/<addr>.asm`, 6,856 files, thunks included |
+| Which source module and line a function comes from | the original's own `assert` calls push the file name (5 source files of the original: Anim.c, AnimPrivate.c, AnimFX.c, MagicTech.c, Intgame.c), the line, the kind text and the expression text; 332 sites | `source-map/asserts.tsv` (function, site, handler, file, line, expression), `files.tsv` (per file), `module-strings.tsv` (other strings that name a module) |
+| Name tables as tables (field names, anim goals, damage types, script action names) | records that start with a text pointer: 46 tables, 1,575 rows; one of them is the 338 names `obj_f_begin`..`obj_f_max` (the object field order), others the anim-goal, script-action and effect names beside their handler functions | `tables/str-tables.tsv` (address, stride, rows), `str-table-rows.tsv` (row address, text, the other dwords resolved) |
+| The decoded initial data of `.rdata`/`.data` (the listing shows untyped `db[N]` rows) | every non-zero aligned dword with its target (text, function, data, float, small number), zero runs collapsed, text bytes skipped | `tables/data-dwords.txt` |
+| What the code stores into globals at start-up | `MOV [global], imm` into `.data`/`.rdata`: 1,156 stores of constants (the file's `.data` is 1.7 MB in memory but 221 KB on disk, the rest is zero-filled and set by code) | `tables/imm-stores.tsv` (function, site, width, global, value, target) |
+| Calls the decompiler shows only as a variable | `CALL`/`JMP` through a register or memory: 1,634 sites (563 through a global slot, 291 through a jump table, 71 through an import, 709 through a register) | `tables/indirect-calls.tsv` (slot and import name where known) |
+| The project's names next to Ghidra's | `docs/verification/functions.csv` joined by address: 3,583 rows | `names/functions-named.tsv`; `registry-not-function.tsv` lists the 21 registry addresses that are no function start in the export |
+| The other binaries of the install | PE header, sections, imports and exports of the 11 DLL/ASI/EXE files beside the executable (hashes, sizes) | `other-binaries/index.tsv` and `<file>.txt` |
+
+Limits, each checked and settled:
+
+- **Run-time state is not in any file.** The zero-filled part of `.data` (about 1.5 MB) holds what is loaded from the DAT archives or
+  computed while the game runs. `imm-stores.tsv` gets only the constants the code writes. For what code computes, run the function in the
+  [oracle](#function-oracle) (single functions) or read the data files; a whole-process dump would need the game running under a
+  Windows layer (CrossOver, a paid tool) and a debugger, neither of which the project uses, so it is not offered.
+- **Resources:** the executable has 8 PE resources (6 icons, the group icon, the version block; no dialogs, menus, string tables or
+  cursors), all already in `raw/resources/`. All game content (maps, protos, MES text, art, sound) lives in the DAT archives and
+  `modules/`, which the [data probes](../research/data-census.md) read, not in the executable.
+- **Types:** the project has no debug information (no PDB, no debug directory, no exports); Ghidra's struct types are only what its
+  analysis guessed. Field order and names come from the `obj_f_*` table above and the project's records, field layouts from the research
+  documents.
+- **Code reached by a computed address** has no xref: the executable has no relocation table, so Ghidra and the scans are both blind to
+  it; `indirect-calls.tsv` lists the sites, whose targets must be read from the table or registers that feed them.
+- **String tables are a heuristic:** a table is a run of 3+ records at a fixed stride whose first dword points at a text, so a stride can
+  be a multiple of the true one; records with a null first pointer inside a table are kept, trailing ones are cut. `data-dwords.txt` is the complete check.
+- **Third-party binaries** (Miles Sound System `Mss32.dll` and the `.asi` codecs, Bink `binkw32.dll`, the DirectDraw compatibility
+  `ddraw.dll`, WON `mm_won.dll`, `SierraPt.dll`, `msiexec.exe`) get the PE summary only, no decompilation: their behaviour is the
+  vendors', and the game's calls into them are in `data/imports.tsv`. `RemoveProtos.exe` (a Troika tool by its name and strings, which mention the prototype folder) is the one original program besides the game; a Ghidra project of it is a task of its own if one needs it.
 
 ## Function oracle
 

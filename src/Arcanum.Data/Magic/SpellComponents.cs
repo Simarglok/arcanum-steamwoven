@@ -323,7 +323,8 @@ public static class SpellComponentTables
     {
         "Target_Tile", "Random_Tile_In_Radius_Self", "Teleport_Tile", "Teleport_Area_Portal",
     });
-    public const int RandomTileInRadius = 1;
+    /// <summary>The <c>Move_Location:</c> indices: the run's target tile (0), a random tile in a radius of the object itself (1), the teleport tile (2) and the area portal (3).</summary>
+    public const int TargetTile = 0, RandomTileInRadius = 1, TeleportTile = 2, TeleportAreaPortal = 3;
 
     /// <summary>The field words of TestNBranch, Trait and Trait64, and their values.</summary>
     public static IReadOnlyList<string> TestFields { get; } = Array.AsReadOnly(new[] { "art_num", "Teleport_Tile", "obj_f_critter_fleeing_from", "HP_Damage" });

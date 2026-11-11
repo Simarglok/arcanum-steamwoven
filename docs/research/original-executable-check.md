@@ -50,11 +50,22 @@ on the original files.
   checked function branches into.
 - The function's address (see above) and the project's own records of the
   callees, globals and constants it uses.
-- The exports in `research-private/` (owner's Mac, never in git): the decompiled
-  C of every function Ghidra found, `research-private/ghidra-export/c/` with
-  `index.tsv` and `funcs/<address>.c`, searched with `rg`
-  ([how-to](../workflow/toolchain.md#ghidra-text-export-arc-dev-377)). The
-  decompiler's names, variables and types are a guess; they are checked, not
+- The exports in `research-private/` (owner's Mac, never in git; index
+  `research-private/ghidra-export/README.txt`): the decompiled C of every
+  function, `research-private/ghidra-export/c/` with `index.tsv` and
+  `funcs/<address>.c`, searched with `rg`
+  ([how-to](../workflow/toolchain.md#ghidra-text-export-arc-dev-377)); beside it
+  the disassembly and data listing (`listing/`), Ghidra tables of globals with
+  their readers and writers, strings, imports (`data/`) and byte-level scans of
+  strings, code-pointer tables and resources (`raw/`)
+  ([what each holds](../workflow/toolchain.md#exe-exports-beyond-the-decompiled-c-arc-dev-379));
+  and the derived extras (ARC-DEV-385): one listing file per function (`asm/funcs/`), the
+  source file and line of the original's asserts (`source-map/`), the name tables
+  such as the object field names, the decoded initial data, the constants the code
+  stores into globals and the indirect call sites (`tables/`), the project's names
+  beside Ghidra's (`names/`) and the PE summary of the install's other binaries
+  (`other-binaries/`) ([what each holds and what no tool can extract](../workflow/toolchain.md#exe-exports-derived-extras-arc-dev-385)).
+  The decompiler's names, variables and types are a guess; they are checked, not
   trusted.
 - Only for what the exports lack: Xcode's `llvm-objdump` (`xcrun -f llvm-objdump`)
   on the executable, or Ghidra (Apache-2.0) headless with names from the
@@ -71,10 +82,15 @@ on the original files.
    `rg -n` over `funcs`. Note the callees' and globals' addresses from the
    registry and the research documents too (for example the object field getter
    0x406CA0 and the PC leader getter 0x45DDA0): the export names are Ghidra's.
-   The export has no file for a function that is only reached through a pointer
-   (1,498 of the census starts, among them the goal-round handler 0x4B7150): a
-   missing file does not mean the executable has no such function.
-2. Only for a missing function, or for a detail of an exported one that the
+   Every census start has a file except 43 thunks (jump stubs, of 139 in the image, kept in
+   `data/functions-all.tsv` with their target) and one start inside another
+   function (some files are fragments, see the limits in the how-to). For any
+   other address without a file check `listing/text.asm` and `extra/gaps.asm` before
+   concluding that the executable has no such function. Globals and tables: a
+   global's readers and writers are in `data/globals.tsv`, its bytes in
+   `listing/data.txt`; a string's users in `data/strings.tsv` and
+   `raw/strings-raw.tsv`; handler and jump tables in `raw/ptr-tables.tsv`.
+2. Only for a function the exports still lack, or for a detail of an exported one that the
    decompiled C leaves open (operand width, signed or unsigned compare, a
    wrapping sum or product, a division), disassemble that one function,
    read-only, into the session scratchpad or the ignored `research-private/`

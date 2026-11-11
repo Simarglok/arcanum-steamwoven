@@ -146,6 +146,9 @@ public sealed class AreaUseScriptHostTests
                 Do(new(ScrCatalogue.Action.LoopFor, (15, 0))),
                 If(new(ScrCatalogue.Condition.IsNamed, (10, 0), N(1673)), new(ScrCatalogue.Action.CreateObject, N(10041), (10, 0)), new(0)),
                 Do(new(ScrCatalogue.Action.LoopEnd)), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // 731 (ARC-DEV-371): create object prototype 20 (a critter of the test world) next to the attachee, then prototype 10 (an item), then the critter again.
+            Write("scr/00731critters.scr", Program(Do(new(ScrCatalogue.Action.CreateObject, N(20), (Attachee, 0))), Do(new(ScrCatalogue.Action.CreateObject, N(10041), (Attachee, 0))),
+                Do(new(ScrCatalogue.Action.CreateObject, N(20), (Attachee, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // 708 (ARC-UI-049): a book for the PC (the triggerer) and a plaque for the gate (not a PC).
             Write("scr/00708read.scr", Program(Do(new(ScrCatalogue.Action.ShowBook, N(1020), (Triggerer, 0))),
                 Do(new(ScrCatalogue.Action.ShowPlaque, N(1500), (Attachee, 0))), Do(Skip)));
@@ -444,6 +447,43 @@ public sealed class AreaUseScriptHostTests
             var refused = noWorld.RunPlaced(sector, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, refused.Outcome, refused.Detail);
             StringAssert.Contains(refused.Detail, "no item prototype");
+        });
+    }
+
+    // ARC-DEV-371 (E1-c3, PG1): a create object of a critter prototype makes critters in the session, next to the object, in action order with an item between them; each is reported with its entity and cell
+    // for the tile notification; a prototype the world does not call a critter leaves the whole run unapplied.
+    [TestMethod]
+    public void A_create_object_of_a_critter_prototype_makes_critters_next_to_the_object_and_reports_each()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var herb = new AreaPrototypeItem(new(SessionItemType.Food, 10061, 7001, 10061), 0x1234, new(1));
+            var world = new AreaScriptWorld(() => new CellCoord(12, 22), _ => false, number => number == 10041 ? herb : null, () => new OpenMap(), Critter: number => number == 20);
+            var gate = Gate(731);
+            var host = new AreaUseScriptHost(session, 1, [gate], [Inventory()], content, world);
+            var ran = host.Run(gate, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            var created = host.TakeCreations();
+            CollectionAssert.AreEqual(new string?[] { "oid:critter:1", null, "oid:critter:2" }, created.Select(c => c.Critter).ToArray(), "in action order, the item between the critters");
+            Assert.IsTrue(created.All(c => c.Result.Disposition == GameSessionDisposition.Changed));
+            var critters = session.QueryCreatedObjects(new SessionMapId(1)).Where(o => o.Kind == SessionCreatedKind.Critter).ToArray();
+            Assert.AreEqual(2, critters.Length);
+            // The prototype file is the script's number + 20 (PG8); each lies within 3 tiles of the gate and is the one the report names.
+            Assert.IsTrue(critters.All(c => c.Prototype == 40 && Math.Abs(c.Cell.X - 10) <= 3 && Math.Abs(c.Cell.Y - 20) <= 3));
+            CollectionAssert.AreEqual(critters.Select(c => (CellCoord?)c.Cell).ToArray(), created.Where(c => c.Critter is not null).Select(c => c.Cell).ToArray());
+            // The encounter flag the action writes on a created type 16 object and on nothing else.
+            Assert.IsTrue(critters.All(c => session.QueryObjectFlags(c.Entity).CritterSet == SessionCreatedObject.EncounterCritterFlag));
+            Assert.AreEqual(1, session.QueryPlacedItems().Count, "the item between them is a ground item");
+
+            // A prototype the world calls no critter and no item leaves the run unapplied, with nothing made.
+            var before = session.Version;
+            var noCritters = new AreaUseScriptHost(session, 1, [gate], [Inventory()], content,
+                new AreaScriptWorld(() => new CellCoord(12, 22), _ => false, number => number == 10041 ? herb : null, () => new OpenMap(), Critter: _ => false));
+            var refused = noCritters.Run(gate, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, refused.Outcome, refused.Detail);
+            StringAssert.Contains(refused.Detail, "no item prototype and no critter prototype");
+            Assert.AreEqual(before, session.Version);
         });
     }
 

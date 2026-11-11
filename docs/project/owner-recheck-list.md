@@ -71,17 +71,16 @@ Known differences (documented, not bugs):
 
 ## ARC-DEV-359 — Created critters, session and hosts (E1-c1, 2026-11-11)
 
-The session now creates, saves and hosts a critter made from a prototype ([created critters](../architecture/object-directory.md#e1-c1-created-critters-arc-dev-359)). Nothing in the game makes one yet (script action 52 for critters is E1-c3, the creature Summon is E1-e),
-and the viewer does not draw it (E1-c2), so there is nothing to play and compare. The steps below wait for those slices.
+The session now creates, saves and hosts a critter made from a prototype ([created critters](../architecture/object-directory.md#e1-c1-created-critters-arc-dev-359)). The viewer draws it (E1-c2) and a script makes it (E1-c3, below); the creature Summon is E1-e.
 
 | # | Step | Expected (from the original executable and data) | Status |
 | --- | --- | --- | --- |
-| 1 | After E1-c2 and E1-c3: let a script create a creature next to the hero (a script that creates a monster at a tile), and watch it. | It appears on the tile, stands there at first, and starts its ordinary behaviour after a short delay that grows with its distance from you (a created NPC gets the delayed first tick, RL16 and RL17). Hostile ones come at you; peaceful ones stand or wander as their prototype says. | open |
-| 2 | After E1-c2: save with a created creature alive, load. | It is still there, where it was last standing. | open |
+| 1 | Let a script create a creature next to the hero (the snapping-twig tile of the start map creates eight, [ARC-DEV-371](#arc-dev-371--script-created-critters-e1-c3-2026-11-11)), and watch them. | It appears on the tile, stands there at first, and starts its ordinary behaviour after a short delay that grows with its distance from you (a created NPC gets the delayed first tick, RL16 and RL17). Hostile ones come at you; peaceful ones stand or wander as their prototype says. | open |
+| 2 | Save with the creatures of a snapping twig alive, load. | It is still there, where it was last standing. | open |
 
 Known differences (documented, not bugs):
 
-- A created creature has an empty inventory (the original generates its inventory list at creation, OM16) and its tile scripts do not fire where it is made (the location notification, GR12): both are E1-c3.
+- A created creature has an empty inventory (the original generates its inventory list at creation, OM16): that is E1-c4. Its tile script does fire where it is made since E1-c3.
 - Its teleport destination field (OM13) is not written; the field is not identified in the repository.
 - The state records of a destroyed created creature stay in the save (its entity is never given again).
 
@@ -239,12 +238,12 @@ Known differences (reading only, no game step):
 
 ## ARC-DEV-370 — Created critters in the viewer (E1-c2, 2026-11-11)
 
-The viewer draws, animates and picks a critter the session created ([E1-c2](../architecture/object-directory.md#e1-c2-created-critters-in-the-viewer-arc-dev-370)). Nothing in the game makes one yet (script action 52 for critters is E1-c3, the creature Summon is E1-e),
-so these steps wait for those slices; the smoke stage `created-critter` covers the draw, the pick, the walk frame and the removal on real data.
+The viewer draws, animates and picks a critter the session created ([E1-c2](../architecture/object-directory.md#e1-c2-created-critters-in-the-viewer-arc-dev-370)). Since ARC-DEV-371 a script makes them (the snapping twig of the start map, below); the creature Summon is E1-e.
+The smoke stage `created-critter` covers the draw, the pick, the walk frame and the removal on real data.
 
 | # | Step | Expected (from the original executable and data) | Status |
 | --- | --- | --- | --- |
-| 1 | After E1-c3: let a script create a creature next to the hero and watch it in the first seconds. | It appears on the tile in its prototype's stand pose and facing, at the size and offset of a map creature of the same body. Compare its size and footing with a map creature of the same race. | open |
+| 1 | Step on a snapping-twig tile of the start map ([ARC-DEV-371](#arc-dev-371--script-created-critters-e1-c3-2026-11-11)) and watch the creatures in the first seconds. | It appears on the tile in its prototype's stand pose and facing, at the size and offset of a map creature of the same body. Compare its size and footing with a map creature of the same race. | open |
 | 2 | Hover and click it, then fight it. | The cursor, name and life bar are those of a map creature; it can be attacked and dies like one, lying in the pose the kill chose. | open |
 | 3 | Watch it walk and run when it chases or wanders. | Its steps use the walk and run cycles in the direction it walks, as map creatures do. | open |
 | 4 | Create a creature whose art is a monster or a unique character (not a human body). | The right monster or character body is drawn; note any creature that is drawn as nothing (the log says `created-critter-art ... status=MissingFile`). | open |
@@ -478,3 +477,74 @@ window drew, floaters included, where the original copies the game view alone; w
 | 6 | Open the map in a town-map sector and switch kinds (zoom, whole map, `Z`), and use the note quill (`Q`). | The lens stays live in every kind and with the quill; only a journey blackens it. | open |
 | 7 | Click the lens, in the middle and in the corner. | The map closes (ARC-UI-133); the lens picture does not change that. | open |
 | 8 | With the HD interface switch on, repeat steps 1 and 4. | The same lens in the HD frame: the ring over the square; the corners of the square show wood, not a hole. If a corner still shows the world through, report it. | open |
+
+## ARC-UI-136 — One brass ring around the hero's lens in HD (PR pending, 2026-11-11)
+
+With the HD interface switch on, the lens on the world map showed a doubled brass edge at the ring's top and upper right: the ring of the window frame (outside the lens square) and the ring of the cover art 198 (inside it) were
+painted separately and did not coincide. The ring of the window frame `mapmain` is rebuilt from the cover's ring ([HD interface art](../rendering/hd-interface-art.md#world-map-window-arc-ui-126)); the Legacy art is untouched. The repair is a local pack change
+(`lens_ring.py`, then `hd_pack.py apply`, backup and rollback), and it is installed in the pack the game reads (manifest `696edbd2…`, backup `ARC-UI-136-v2-cde8a57839e6`, `hd_pack.py rollback` undoes it). The cause and the method are in the same section; no frame is in git. Known difference, not to be re-reported: the cover's corner wood and the
+window frame's wood have a slightly different grain, which leaves a faint square patch at the lens corners (not part of this repair).
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | In Legacy (HD interface off) open the world map (`W`) and look closely at the ring around the top-left lens, at the top and the right side. | The original: one clean brass ring, no second edge. | open |
+| 2 | With the HD interface on, open the world map and look at the same ring, top and right side, with the lens live and again during a journey (black lens). | One continuous brass ring like the original, no doubled edge at the top or at the right; the ring is the same width all around; no seam where the ring meets the square's border. | open |
+| 3 | Open the character sheet and the logbook in HD and look at their lens ring. | Unchanged (the cover art `pcwincvr` is not part of this repair). | open |
+| 4 | Compare the HD ring with the Legacy ring for colour. | The rebuilt top and side arcs are the same warm brass as the arcs that were not rebuilt; report a visibly paler or blurrier arc. | open |
+
+## ARC-DEV-371 — Script-created critters (E1-c3, 2026-11-11)
+
+A script's create object (action 52) makes a critter when the prototype is a critter's ([E1-c3](../architecture/object-directory.md#e1-c3-script-created-critters-arc-dev-371)). The installed case on the
+start map is the "snapping twig" tile script (1629, 130 tiles): it creates eight critters of one prototype next to the hero. Compare it in both games with the same hero on the same tile.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Walk onto a snapping-twig tile of the start map (130 tiles in the wilderness; one cluster is around tile (50851, 15844), far from the Crash Site; the smoke log lists the nearest five to the hero). | Eight creatures of one kind appear within three tiles of you, all at once, each on a tile of its own or sharing one when the search found no free tile. They stand a moment and then act as that kind does (hostile ones come at you). | open |
+| 2 | Walk away from them until they are far (a window move), then come back. | In the original an encounter creature that is left without a next AI tick outside a fight is destroyed: those that were left behind are gone, not standing where you left them. Compare how many remain. | open |
+| 3 | Step onto the same twig tile again, and onto the next twig tile. | Each step creates eight more; creatures made earlier are not removed by it. | open |
+| 4 | Kill one of them and look at what it leaves. | Here it leaves nothing (the inventory generation is E1-c4); the original gives it an inventory at creation when its prototype has an inventory source. Note what the original's creature drops. | open |
+| 5 | Stand a created creature on a tile that has a tile script (a trigger or a door-warning tile) if you can lure one. | It runs the tile script as any creature that walks onto the tile does. | open |
+| 6 | Save with the creatures alive and load. | They are where they last stood, and still count as encounter creatures. | open |
+
+Known differences (documented, not bugs):
+
+- The tile script of the tile a created creature is made on runs after the whole script has run, not inside the creating action, so a script that depends on it between two creations sees it one frame late.
+- A created creature's inventory is empty until E1-c4 (restock at creation, then the best-items wield).
+- A script's vicinity lists (the "critters near" of a script) do not list created creatures yet.
+- The twig tile's own text ("snapping twig", if the original prints one) is the script's, printed as for any tile script.
+## ARC-MAGIC-036 — Spatial Distortion moves the caster along the route, at most eight tiles (PR pending, 2026-11-11)
+
+Read in the original executable (ledger [MV1–MV3](../research/ledger/spell-runs.md#movement-component-and-the-immediate-path-relocation-arc-magic-036)): the Movement component of Spatial Distortion (spell 3) is no teleport. It asks the same
+path request the item drop uses and walks **at most eight tiles** of the route, running the tile script of every tile it walks, then puts the caster on the last tile. Compare in both games with a hero who knows the spell
+(Conveyance college, rank 4), on any open ground such as the Crash Site. Both rule modes behave the same. Known differences, not to be re-reported: Teleportation (spell 4) and the other movement kinds are not built yet; the tile scripts run after the caster is placed here,
+before it in the original (the observable difference is only which tile the script sees the caster on); the view is not re-centred beyond the camera following the hero.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast spell 3 at a clear tile 3 tiles away in the open. | The caster stands on the target tile at once; a cast animation or flash plays on the caster. | open |
+| 2 | Cast spell 3 at a clear tile 15 tiles away in a straight line. | The caster ends on the eighth tile of the way, not on the target (the original cuts the route at eight). | open |
+| 3 | Cast it at a tile behind a wall or across a closed door where the way round is long. | Either the caster ends up to eight tiles along the walking route, or, when there is no route, nothing moves and the fatigue is still paid. | open |
+| 4 | Start a click-walk far away, then cast spell 3 at a near tile while the hero walks. | The walk stops with the move; the hero stands on the target and does not walk on. | open |
+| 5 | Cast it so that the route crosses or ends on a tile with a script (a trap-like tile, a door sill with a script). | The tile's script runs; the last tile's script runs twice (watch for a message that appears twice). | open |
+| 6 | Cast it at a tile with a creature on it. | `Tgt_Tile_Empty` refuses the tile: the cast does not pick it. | open |
+
+
+## ARC-DEV-381 — Main menu opens before the start map (O1 of the performance diagnosis, 2026-11-11)
+
+The menu now opens as soon as its art is read, while the start map loads behind it ([early menu](../rendering/terrain-viewer.md#main-menu-arc-ui-011)). The original shows
+its menu before any map exists, so the comparison is about the order and the waiting, not about the menu's contents (they are unchanged). Compare on a start with the menu
+(`./arcanum area`, or a packaged build); the first build for this comparison is any build from `main` that contains this task.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Start the game and watch how soon the main menu appears. | Like the original: the menu is the first thing on screen, a second or two after the window opens, with no map shown behind it. The music of the menu starts a few seconds later, when the start map is ready. | open |
+| 2 | Open Single Player, New Game, Pick Character and browse the heroes at once, before the map is ready. | Everything works as in the original: the same windows, the same twelve heroes. Nothing waits. | open |
+| 3 | Press Start on a hero before the map is ready. | The menu shows that the world is still loading and the game starts by itself when it is ready (the original has no such wait, because it loads the map after the choice; this is the one visible difference). Escape takes the choice back. | open |
+| 4 | Press Load Game or Last Save at once, with a save present. | The same wait note, then the load as before. A started load never shows a game of another map under the menu. | open |
+| 5 | Press New Character at once, then go through the window, the editor and the shop. | The wait note first; then the windows work as before (the shop's merchant loads behind it). | open |
+| 6 | Open Options at once and change a setting, then Done. | The window works before the map is ready and the change holds; the main window returns. | open |
+
+Known differences (documented, not bugs):
+
+- A choice that needs the game world waits for the start map's load, which the original does not do. It is the price of showing the menu first.
+- The main thread is busy while the start map is published, for about a second after the load ends, so the menu may answer late then (O6 of the diagnosis).

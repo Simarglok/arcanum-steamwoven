@@ -95,7 +95,10 @@ public sealed class AreaMainMenu
     }
 
     public AreaMainMenuTexts Texts { get; }
-    public string? NewGameRefusal { get; }
+    /// <summary>Why a new game cannot start (null: a hero can be picked). ARC-DEV-381: the menu opens before the start scene is published
+    /// (null then: the picking is allowed and the host holds the start until the scene is there); the host sets the real answer when the
+    /// scene is published.</summary>
+    public string? NewGameRefusal { get; set; }
     public AreaMenuWindow Root { get; }
     public bool Reopened { get; }
     /// <summary>True while the quit box asks (message 5100); only its answer, Escape and its letters act.</summary>
