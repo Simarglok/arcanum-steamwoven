@@ -726,3 +726,19 @@ Known differences (documented, not bugs):
 
 - A run that travels keeps its next tick time; the original queues the tick again at the map entry (the time 0x459500 gives is not read).
 - The change of map by the world map is not covered (the endings on rest and world-map travel are MT11's).
+
+## ARC-MAGIC-059 — Spells end when a world-map journey starts (MT11, 2026-11-12)
+
+The world-map start check (0x565140) ends the hero's maintained spells ([ledger UE6](../research/ledger/spell-runs.md#spell-run-endings-of-a-critter-arc-dev-301), [cast host](../world/spell-cast-host.md#the-world-map-travel-start-arc-magic-059)). Compare in both games with a hero who can cast a maintained spell (for example a protection or light spell, one that shows on the top strip).
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast a maintained spell on the hero, open the world map, plan a route and start the journey. | The spell's slot leaves the top strip as the journey starts and its effect is gone on arrival. | open |
+| 2 | Plan a route of two or more waypoints and start it. | The spells end at the start; the journey goes on through every segment. | open |
+| 3 | Start a journey while the hero is walking or has just clicked a target. | The walk stops and the journey starts. | open |
+| 4 | Start a journey while the hero is in the middle of a cast (its casting animation). | The original refuses the start when the cast cannot be interrupted (a cast attempt of priority 4 or 5); Steamwoven shows "the hero's action cannot be interrupted" and keeps the route. | open |
+
+Known differences (documented, not bugs):
+
+- Resting (the rest option click, 0x57B710) also ends the sleeper's maintained spells in the original, but the rest window is not built yet (missing-systems E3-a), so only travel is wired.
+

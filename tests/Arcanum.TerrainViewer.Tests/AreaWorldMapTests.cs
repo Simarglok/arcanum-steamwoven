@@ -267,6 +267,32 @@ public sealed class AreaWorldMapTests
     }
 
     [TestMethod]
+    public void The_travel_start_check_runs_at_the_start_and_between_segments_and_a_refusal_drops_the_route()
+    {
+        // ARC-MAGIC-059 (0x565140): the journey is entered only when the check passes, and the check runs again where a segment ends and another follows.
+        using var session = ConversationSessionFixture.Create();
+        var checks = 0; var pass = false;
+        var map = new AreaWorldMap(Data(), session, Sector(5, 10)) { TravelCheck = () => { checks++; return pass; } };
+        Assert.AreEqual(AreaWorldMapRefusal.None, map.AddWaypoint(WorldTravelGeometry.Pixel(Sector(8, 10), Width)));
+        Assert.AreEqual(AreaWorldMapRefusal.None, map.AddArea(1));
+        Assert.AreEqual(AreaWorldMapRefusal.ActionsRefused, map.Start());
+        Assert.IsFalse(map.Travelling);
+        Assert.AreEqual(2, map.Waypoints.Count, "a refused start leaves the route as planned");
+        Assert.AreEqual(1, checks);
+        pass = true;
+        Assert.AreEqual(AreaWorldMapRefusal.None, map.Start());
+        Assert.AreEqual(2, checks);
+        map.Step(_ => { }); map.Step(_ => { });
+        Assert.AreEqual(2, checks, "no check inside a segment");
+        pass = false;
+        map.Step(_ => { }); // the first segment's last step, with a second segment to go
+        Assert.AreEqual(3, checks);
+        Assert.IsFalse(map.Travelling, "a refusal between segments drops every waypoint and lands");
+        Assert.AreEqual(0, map.Waypoints.Count);
+        Assert.IsNotNull(map.Landing);
+    }
+
+    [TestMethod]
     public void The_release_of_a_drag_snaps_the_selected_waypoint_to_a_known_area_and_never_before()
     {
         // WM99, WM100: the pixel stays the click until the release; then a known area within 320 tiles takes the location and the icon.
