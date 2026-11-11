@@ -15,8 +15,7 @@ public sealed record ShownOverlay(string Owner, GoalHandle Handle, GoalEyeCandy 
 /// candy is a run beside the owner's main run (priority 5, no interrupt, carried): the cast host's EyeCandy components start it through <see cref="Play"/> (the add 0x4CCF70: the goal is chosen by the play flags, the duplicate test, the places in the owner's
 /// overlay lists, the queue under the previous run) and take it off through <see cref="Remove"/> (0x4243E0: a level-6 interrupt of the goal-45 runs of the same entry and tag). The run steps on the animation clock inside the frame step (<see cref="IGoalStepHost"/>),
 /// so the parts stop with the Esc pause; the frame lives on the goal, and the viewer draws <see cref="Shown"/>. The host answers the overlay ports (<see cref="IAiOverlayWorld"/>) from the ART facts the viewer reads.
-/// <b>Not ready:</b> the sound, the light and the tinting of an eye candy, the destroy flag (goal 32 queued under the run), the source's bonus and hostility (S9c burns the critters and, since ARC-COMBAT-025, the loose items of the tile, <see cref="AreaFireBurner"/>), the callbacks into the spell run (counted, <see cref="Callbacks"/>;
-/// the cast host does not wait for them), the sites that are not an EyeCandy component (struck critters, weapons, scripts, traps) and the draw of the hover's raised body.
+/// <b>Not ready:</b> the sound, the light and the tinting of an eye candy, the destroy flag (goal 32 queued under the run), the source's bonus and hostility (S9c burns the critters and, since ARC-COMBAT-025, the loose items of the tile, <see cref="AreaFireBurner"/>), the sites that are not an EyeCandy component (struck critters, weapons, scripts, traps) and the draw of the hover's raised body.
 /// </summary>
 public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
 {
@@ -33,6 +32,9 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     private readonly StartPorts _startPorts = new();
     // The handle of the last eye-candy run started, host-wide like the original's global 0x601700 (GT70): a stack flag queues under it whatever its owner.
     private GoalHandle? _last;
+    // ARC-DEV-352: the run being stepped, and the overlay runs whose spell run was freed (their callbacks are not given to the run that takes the slot next).
+    private GoalHandle? _stepping;
+    private readonly HashSet<GoalHandle> _stale = [];
 
     /// <param name="entry">The eye-candy table's entry by index, or null.</param>
     /// <param name="facts">The ART facts of an entry's art and parts (the header reads), or null when the art does not read.</param>
@@ -64,7 +66,7 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     /// <summary>The fire damages of goals 75/76 reached (<see cref="AreaFireBurner"/> does the damage).</summary>
     public long FireDamages { get; private set; }
 
-    /// <summary>The callbacks of goals 47/48 (phase 3) and 58/59 (phase 4) reached, as (tag, phase); the spell run does not wait for them yet.</summary>
+    /// <summary>The callbacks of goals 47/48 (phase 3) and 58/59 (phase 4) reached, as (tag, phase), in order; ARC-DEV-352: the viewer takes them and calls the spell run back (<see cref="SessionSpellCaster.EyeCandyCallback"/>).</summary>
     public List<(int Tag, int Phase)> Callbacks { get; } = [];
 
     /// <summary>The pixel offset y the hover has applied to an object (0 when none), as the original's stored object offset: a run ended from outside leaves it.</summary>
@@ -89,6 +91,13 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
         _entry(index) is { } e ? new((e.Flags & SpellEyeCandyFlags.Foreground) != 0, (e.Flags & SpellEyeCandyFlags.Background) != 0, (e.Flags & SpellEyeCandyFlags.Underlay) != 0) : null;
 
     // ---- the add and the remove ----
+
+    /// <summary>ARC-DEV-352 (EC9, EC11): whether the entry of <paramref name="entryIndex"/> plays as a goal of its own: it has art and animates with a foreground or underlay part (0x4CD49D). The cast host asks it to know
+    /// whether a callback-flagged add waits for its animation or calls back at once; a play this answers true for that <see cref="Play"/> then refuses (no free place, a duplicate, a full table) is the viewer's to call back at once.</summary>
+    public bool Plays(int entryIndex) =>
+        _entry(entryIndex) is { Art: { } art } entry && PartsOf(entryIndex) is { } parts && SpellEyeCandyRules.Plays((entry.Flags & SpellEyeCandyFlags.Animates) != 0, parts)
+        // An art whose header does not read gives the goal no frames: it ends at its begin and would never call back (a project guard: the viewer cannot show it either).
+        && _facts(art, parts) is { Frames: > 0 };
 
     /// <summary>
     /// The add 0x4CCF70 for an entry that animates with a foreground or underlay part: refused when the owner has no free place in a list the parts go to, or (play flag 0x80) when a goal-45 run of the owner has the same art and tag; started through the
@@ -182,7 +191,10 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     {
         ArgumentNullException.ThrowIfNull(run);
         Steps++;
-        var stepped = GoalStepper.StepOverlay(run, this);
+        _stepping = run.Handle;
+        GoalStepperResult stepped;
+        try { stepped = GoalStepper.StepOverlay(run, this); }
+        finally { _stepping = null; }
         return !_session.QueryGoals().TryGet(run.Handle, out var now) || now.Done ? SessionGoalStepAnswer.End : stepped.Answer;
     }
 
@@ -205,7 +217,30 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
         return _fire is null ? 0 : _fire.Burn(_fire.TileOf(owner), normal, doubled, owner);
     }
 
-    public void EyeCandyCallback(string owner, int tag, int phase) { if (tag >= 0) Callbacks.Add((tag, phase)); }
+    public void EyeCandyCallback(string owner, int tag, int phase)
+    {
+        if (tag < 0) return;
+        // ARC-DEV-352: an overlay run of a freed spell run calls nobody back (its slot may hold another run now).
+        if (_stepping is { } handle && _stale.Contains(handle)) { StaleCallbacks++; return; }
+        Callbacks.Add((tag, phase));
+    }
+
+    /// <summary>ARC-DEV-352: the callbacks dropped because their spell run had been freed.</summary>
+    public int StaleCallbacks { get; private set; }
+
+    /// <summary>ARC-DEV-352: spell run <paramref name="tag"/> was freed: the overlay runs that carry its tag call nobody back any more (a run that takes the slot is not theirs).</summary>
+    public void ForgetRun(int tag)
+    {
+        var runs = _session.QueryGoals().Runs;
+        if (_stale.Count > 256) _stale.RemoveWhere(handle => !runs.Any(r => r.Handle == handle && !r.Done));
+        foreach (var run in runs)
+            if (!run.Done && run.Frames.Any(f => f.EyeCandy is { } eye && eye.Tag == tag)) _stale.Add(run.Handle);
+    }
+
+    /// <summary>ARC-DEV-352: whether a callback goal (47, 48, 58, 59) that will call spell run <paramref name="tag"/> back is in the table (not done, not of a freed run).</summary>
+    public bool AwaitsCallback(int tag) =>
+        _session.QueryGoals().Runs.Any(r => !r.Done && !_stale.Contains(r.Handle)
+            && r.Frames.Any(f => f.EyeCandy is { } eye && eye.Tag == tag && f.Goal is GoalType.EyeCandyCallback or GoalType.EyeCandyReverseCallback or GoalType.EyeCandyEndCallback or GoalType.EyeCandyReverseEndCallback));
 
     public void HoverShift(string owner, int deltaY) => _hover[owner] = _hover.GetValueOrDefault(owner) + deltaY;
 

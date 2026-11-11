@@ -1,6 +1,6 @@
 # Tech degrees runtime
 
-Status: **Implemented bounded component, not wired.** Work item ARC-TECHNOLOGY-002 (2026-10-21), slice TECH-2 of the
+Status: **Implemented bounded component; the character sheet's technology page buys and refunds degrees through it (ARC-UI-076).** Work item ARC-TECHNOLOGY-002 (2026-10-21), slice TECH-2 of the
 [technology research](../research/technology-evidence.md#proposed-implementation-slices-project-policy-not-accepted).
 Godot-free degree rules in `Arcanum.Simulation.Character` and the hero's degrees and expertise in `Arcanum.Session`, bought
 and refunded through the [character point pool](character-point-pool.md) (ARC-WORLD-052). No snapshot schema change: the
@@ -8,7 +8,7 @@ degrees stay in the hero's advancement fields (`techDegrees`, [auto-level scheme
 
 Requirements: [FR-CHAR-017](../requirements/characters-skills.md#fr-char-017) and
 [FR-CHAR-020](../requirements/characters-skills.md#fr-char-020) (their degree part: degrees cost tech points, which move the
-aptitude), [FR-MAGIC-012](../requirements/combat-magic-tech.md#fr-magic-012) (the degree rules of the editor; no UI).
+aptitude), [FR-MAGIC-012](../requirements/combat-magic-tech.md#fr-magic-012) (the degree rules of the editor; its buttons are the viewer's technology page, ARC-UI-076).
 
 Every rule was read in the retail 1.0.7.4 `Arcanum.exe` by two independent readers: the first reading of ARC-RES-062
 ([disciplines and degrees](../research/technology-evidence.md#disciplines-and-degrees-tech-module-0x4afcd00x4b0340)) and a
@@ -66,7 +66,8 @@ reads them for the NPC schematic crafter.
 
 ## Not ready
 
-- No caller of the buy and refund: the character sheet's + and − buttons (skills plan S6) come later; the viewer's
+- The buy and refund have a caller: the AREA viewer's character sheet technology page (`AreaTechPage`, `AreaCharacterSheetPages`, ARC-UI-076)
+  draws the degree rows with the original's + and − and runs them through the point pool (TD7, TD8, CP2); the viewer's
   [schematic window](schematic-window-runtime.md) (ARC-TECHNOLOGY-005) reads the degrees and expertise.
 - The schematic knowledge (TECH-3) and the component gate (TECH-4) do not read the expertise yet.
 - Spell ranks in the intelligence guard are read from the sheet; the spell lane is the magic slice MT3.

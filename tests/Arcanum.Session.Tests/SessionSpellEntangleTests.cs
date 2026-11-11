@@ -16,6 +16,8 @@ namespace Arcanum.Session.Tests;
 public sealed class SessionSpellEntangleTests
 {
     private const string Npc = "npc-a";
+    // ARC-MAGIC-027: a victim named as the session names an NPC (the session's effect list takes only such entities).
+    private const string Victim = "oid:victim";
     private const int Number = 51, Quiet = 52;
 
     private sealed class Map(GameSessionOwner owner) : ISpellCastMap
@@ -24,6 +26,7 @@ public sealed class SessionSpellEntangleTests
         {
             SessionSpellCaster.Hero => new(id, SpellTargetObject.Pc, new(5, 5), HitPoints: owner.QueryHeroLife()!.Status.HitPoints),
             Npc => new(id, SpellTargetObject.Npc, new(7, 5), HitPoints: 10),
+            Victim => new(id, SpellTargetObject.Npc, new(8, 5), HitPoints: 10),
             _ => null,
         };
         public IReadOnlyList<SpellTargetObject> ObjectsInSquare(SpellLocation centre, int radius, int typeMask) => [];
@@ -35,7 +38,7 @@ public sealed class SessionSpellEntangleTests
         public IReadOnlyList<SpellTargetObject> Party(SpellTargetObject source) => [];
         public SpellLineOfFire LineOfFire(SpellObjectFacts parent, SpellLocation tile) => new(0, null);
         // The NPC is a critter of the map with the stats of the combat fixtures (intelligence 10), so it can cast and be entangled.
-        public SpellCastCritter? Critter(string entity) => entity == Npc ? new(SessionCritterCombat.From(Npc, AttackStateTests.Npc(Thinker())).Combat!, 0, 0, 0, 0, 0) : null;
+        public SpellCastCritter? Critter(string entity) => entity is Npc or Victim ? new(SessionCritterCombat.From(entity, AttackStateTests.Npc(Thinker())).Combat!, 0, 0, 0, 0, 0) : null;
 
         // The fixtures' stats with an intelligence of 10 (a critter casts from 5).
         private static int[] Thinker() { var stats = AttackStateTests.Stats(); stats[4] = 10; return stats; }
@@ -117,6 +120,27 @@ public sealed class SessionSpellEntangleTests
         Assert.AreEqual(0, owner.QueryHeroEffects()!.Count(62), "the END's typed removal");
         Assert.IsTrue(caster.Log.Contains(new SpellCastEvent(SpellCastEventKind.EffectRemoved, run, 62, SessionSpellCaster.Hero, 1)));
         Assert.AreEqual((false, false, false), caster.Holds(SessionSpellCaster.Hero));
+    }
+
+    [TestMethod]
+    public void The_effect_component_works_on_an_NPC_victim_through_its_own_list()
+    {
+        // ARC-MAGIC-027: since ARC-DEV-348 an NPC has an effect list and the component takes it (it was "not ready" before): the hero entangles the NPC, its list holds effect 62 (speed -5)
+        // until the END's typed removal takes it, and the hero's own list is untouched.
+        var record = Entangle(-100);
+        var (owner, caster) = Setup(RuleMode.Steamwoven, record);
+        using var _ = owner;
+        var npc = new Map(owner).Critter(Victim)!.Combat;
+        var run = Cast(owner, caster, record, parent: SessionSpellCaster.Hero, target: Victim);
+        Assert.IsFalse(caster.Log.Any(e => e.Kind is SpellCastEventKind.ComponentNotReady or SpellCastEventKind.EffectNotSaved), string.Join(",", caster.Log.Select(e => e.Kind)));
+        Assert.AreEqual(1, owner.QueryNpcEffects(npc.Target)!.Count(62));
+        Assert.AreEqual(0, owner.QueryHeroEffects()!.Count(62));
+        Assert.IsTrue(caster.Log.Contains(new SpellCastEvent(SpellCastEventKind.EffectAdded, run, 62, Victim, 1)));
+        Assert.AreEqual(npc.EffectiveStat(Arcanum.Simulation.Character.CharacterStat.Speed, LifeState.Unharmed) is var plain ? Math.Max(plain - 5, 1) : 0,
+            owner.WithNpcEffects(npc).EffectiveStat(Arcanum.Simulation.Character.CharacterStat.Speed, LifeState.Unharmed), "the victim's speed reads under the list");
+        caster.Act(new(SessionSpellRunActionKind.Interrupt, run));
+        Assert.AreEqual(0, owner.QueryNpcEffects(npc.Target)!.Count(62), "the END's typed removal");
+        Assert.IsTrue(caster.Log.Contains(new SpellCastEvent(SpellCastEventKind.EffectRemoved, run, 62, Victim, 1)));
     }
 
     [TestMethod]

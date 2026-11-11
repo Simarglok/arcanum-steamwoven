@@ -110,7 +110,7 @@ public sealed partial class GameSessionOwner
 
     // A loaded number's rule: the host's, else none (no changes).
     private SessionEffectDefinition LoadedRule(int number) =>
-        number is >= SessionEffectLimits.FirstNumber and <= SessionEffectLimits.LastNumber && NpcEffectRules?.Invoke(number) is { } rule && rule.Number == number ? rule : new(number, []);
+        number is >= SessionEffectLimits.FirstNumber and <= SessionEffectLimits.LastNumber && NpcEffectRules?.Invoke(number) is { } rule && rule.Number == number && EffectDomain.IsValid(rule) ? rule : new(number, []);
 
     // The facts with the maxima an effect list gives (the host's facts carry none: the list replaces them).
     private static LifeFacts WithCritterEffects(LifeFacts facts, IEnumerable<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions) =>

@@ -152,6 +152,20 @@ internal sealed class EffectDomain
             .Select(c => new EffectModifier(Operator(c.Operator), c.Value))];
 
     /// <summary>
+    /// ARC-MAGIC-027 (MA-2): the resistance changes of the entries (the five resistances in the source's order, list order within each), for the effective resistance function
+    /// (<see cref="CombatantRules.Resistances(DamageResistances, Arcanum.Simulation.Equipment.EquipmentResistances, int, bool, EffectResistances)"/>). A number without a rule has no changes.
+    /// </summary>
+    internal static EffectResistances Resistances(IEnumerable<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
+    {
+        var changes = entries.SelectMany(entry => definitions.TryGetValue(entry.Number, out var rule) ? rule.Changes : [])
+            .Where(c => c.Kind == EffectAttributeKind.Resistance).ToArray();
+        if (changes.Length == 0) return EffectResistances.None;
+        IReadOnlyList<EffectModifier> Of(int attribute) =>
+            Array.AsReadOnly(changes.Where(c => c.Attribute == attribute).Select(c => new EffectModifier(Operator(c.Operator), c.Value)).ToArray());
+        return new(Of(0), Of(1), Of(2), Of(3), Of(4));
+    }
+
+    /// <summary>
     /// Whether the entries keep the hero within the bounds of its consumers whatever subset of them stays, so no later removal
     /// can be refused: at most <see cref="ReactionLimits.MaxModifiers"/> changes of each reaction value, and maxima below the
     /// pinned death damage in either direction even when the bounds that hold them and the changes that pull the other way
@@ -222,6 +236,7 @@ internal sealed class EffectDomain
 
     private static bool Modelled(EffectChange change) =>
         change.Kind == EffectAttributeKind.Stat ? Stat(change.Attribute) is not null
+        : change.Kind == EffectAttributeKind.Resistance ? change.Attribute is >= 0 and <= 4
         : change.Kind == EffectAttributeKind.Special && Enum.IsDefined((EffectSpecial)change.Attribute);
 
     // The source's stat index of the stats the character owner models: 0..7 primary, 8..16 derived, 22 and 23 the points.
@@ -594,7 +609,7 @@ public sealed partial class GameSessionOwner
     private LifeFacts? TrialFacts(HeroDomain trial, IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions,
         LifeState state)
     {
-        var facts = LifeDomain.HeroFacts(trial.Stats, trial.State, state, HeroNormalResistance(),
+        var facts = LifeDomain.HeroFacts(trial.Stats, trial.State, state, HeroNormalResistance(entries, definitions),
             EffectDomain.Modifiers(entries, definitions, EffectSpecial.MaxHitPoints), EffectDomain.Modifiers(entries, definitions, EffectSpecial.MaxFatigue));
         return LifeRules.IsValid(facts) ? facts : null;
     }
