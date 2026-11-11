@@ -7,6 +7,7 @@ Start with [current status](project/status.md), [vision](project/vision.md), the
 - [Project status and component catalogue](project/status.md)
 - [Project vision](project/vision.md)
 - [Missing systems: map and work plan](project/missing-systems-plan.md)
+- [Open bugs register (B01-B54)](research/open-bugs.md)
 - [Function audit against the original: state and plan](research/function-audit-plan.md)
 - [Full-game functional requirements and bounded implementation coverage (draft)](requirements/README.md)
 - [Architecture direction](architecture/decisions.md)

@@ -608,7 +608,7 @@ does not come.
 
 ## Effect component and the entangle re-resistance (ARC-DEV-303)
 
-Read in the retail executable (F1, ARC-DEV-303, slice T2b of the [bug triage](../research/bug-reports-triage-2026-11-08.md)): the Effect component 0x451F20, the hit effect 0x459A30 and
+Read in the retail executable (F1, ARC-DEV-303, slice T2b of the [bug triage](../research/open-bugs.md)): the Effect component 0x451F20, the hit effect 0x459A30 and
 the re-resistance 0x459C10, [ledger ER1–ER9](../research/ledger/magic.md#effect-component-and-the-entangle-re-resistance-arc-dev-303) (RS10 raised from F1).
 
 - **What "Effect 62" is.** The number of an effect rule of `effect.mes`, not a component type: rule 62 is the speed stat −5. Entangle (spell 51) adds it at its BEGIN

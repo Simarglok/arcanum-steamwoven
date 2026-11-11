@@ -15,7 +15,7 @@ Today "alive" means "inside the snapshot the viewer last built": one whole small
 main map. A window move, a map change and a quick load build a new snapshot, and with it a new `AreaAiHost`
 (`TerrainViewerAi.AreaAiHostNow` rebuilds on the stamp session, map, loaded area, followers, companions), so every NPC outside the window does
 not exist for the rules, and every NPC inside it gets one delayed first tick as if it had just been created (GR8–GR10, GR13; bugs B06, B08,
-B10, B25 of the [smoke plan](../research/open-bugs-migration-smoke-plan.md)). The session knows only the actor's map and, since MIG7c, where
+B10, B25 of the [smoke plan](../research/open-bugs.md)). The session knows only the actor's map and, since MIG7c, where
 each NPC was last left (`npc.pos`); it has no set of "the objects of the open map" and no notion of a loaded sector. `AreaAiHost.SectorLoaded`
 returns true and `CatchUp` is a stub.
 
@@ -302,7 +302,7 @@ NPC's first tick and far-path chain, an encounter creature's destruction when it
 | S5b | ARC-DEV-118 (**done**, the crossing rule of the planner is not) | `ISectorTerrain` (rows and passability of one sector by id, beside the record source in `Arcanum.World`); the host's chart from the loaded sectors, a planner touching what it reads; the main map's whole mobile read (7,399 rows, §6 risk 1) so the main map opens a residency. | World and host tests over synthetic sectors; smoke `ai`, `town`; the altar run (it needs sector 1452,1291 loaded). |
 | S5c | ARC-DEV-119 (**done**; the move into `Arcanum.World` is MIG15's, §3.5) | The host built per open map: a window move no longer retires it (`Rebind`, the stamp stops carrying the loaded area), the sectors a path goes through are touched. | Host tests (`AreaAiHostRebindTests`); smoke `stream` with `ARC_AREA_STREAM_AI=1`, `ai`, `ai-follower`, `town`. |
 | S6 | ARC-DEV-106 (**done**) | Schema 68 `residency` section, fold on load, saved history, light fold for loaded sectors. | Snapshot round trip, refusals, the 67 → 68 step by hand, a quick save and load by hand and the `ai` stage after it. |
-| S7 | ARC-DEV-107 (**done**: B06 and B10 Changed, B25 still present, B08 unverified; [result](../research/open-bugs-resmoke-2026-11-04.md#re-check-after-mig9-arc-dev-107-2026-11-05)) | Re-check of B06, B10, B25 (and B08 where it depends), coverage and status rows, this document's status. | `./arcanum smoke pr` for the stages touched; daily full chain covers the rest. |
+| S7 | ARC-DEV-107 (**done**: B06 and B10 Changed, B25 still present, B08 unverified; [result](../research/open-bugs.md)) | Re-check of B06, B10, B25 (and B08 where it depends), coverage and status rows, this document's status. | `./arcanum smoke pr` for the stages touched; daily full chain covers the rest. |
 
 Each code slice changes the session core and threading, so it takes the larger review model of [the review-model rule](../workflow/tasks.md#review-model), merges its own PR and updates the
 coverage rows of FR-WORLD-003, FR-WORLD-004, FR-AI-001 and FR-RUNTIME-001 it changes.

@@ -296,7 +296,7 @@ Source: MIG8 slice 4 ([object directory](../../architecture/object-directory.md#
 
 ## Script stats (ARC-DEV-157)
 
-Source: bug B23 of the [open bugs](../open-bugs-resmoke-2026-11-04.md) (tile script 30286 refuses at action 33) and slice 8 of the
+Source: bug B23 of the [open bugs](../open-bugs.md) (tile script 30286 refuses at action 33) and slice 8 of the
 [script trigger audit](../script-trigger-audit.md#6-fix-slices-prioritised) (get stat, 608 refused tile rows, the largest first refusal left), and the
 [dispatcher runtime](../../scripting/scr-dispatcher-runtime.md#script-stats-arc-dev-157-set-s22). Question: what action 33 (the census name
 `get_stat`; the audit's earlier "give gold" reading of 33 was a slip of the table) stores. Read on 2026-11-06 by this task only with `llvm-objdump`,
@@ -311,7 +311,7 @@ at the entry of the action table 0x44ADBC (index type − 1, case 33 at 0x447BEE
 
 ## Script reactions and start-map areas (ARC-DEV-178)
 
-Source: bug B19 of the [open bugs](../open-bugs-resmoke-2026-11-04.md) (town NPC dialogs stop at get area on the start map and at action 29) and
+Source: bug B19 of the [open bugs](../open-bugs.md) (town NPC dialogs stop at get area on the start map and at action 29) and
 bug B26 (the dialog `xp` action). Read on 2026-11-07 by this task only with `llvm-objdump` (F1), at the action table 0x44ADBC (index type - 1, case
 29 at 0x447A5A), the area functions 0x4CB220 and 0x4CB630, the town map getter 0x4BE380 and the sector coordinate helper 0x4CFC50; SHA-256 of
 `Arcanum.exe` checked (`9bd80511...3d52`). An independent re-read is part of the task's review.
@@ -327,7 +327,7 @@ Rule mode: all rows are the original's behaviour in both settings; none is a fla
 
 ## Town-map unfog (ARC-DEV-205)
 
-Source: bug B22 of the [open bugs](../open-bugs-resmoke-2026-11-04.md) (the wreck's sector script 3036 is refused at action 113 at every entry of its
+Source: bug B22 of the [open bugs](../open-bugs.md) (the wreck's sector script 3036 is refused at action 113 at every entry of its
 sector). Read on 2026-11-07 with `llvm-objdump`: the action table 0x44ADBC (index type − 1, so action 113 is entry 112 at
 0x44A135), the network wrapper 0x4EF120, the reveal 0x4BEAB0, the town-map info reader 0x4BE4E0 and name getter 0x4BE420, the fill 0x4BED30, the
 current-town-map switch 0x4BEE60 with its buffer allocation 0x4BEF40 and write-back 0x4BEFB0, the one-cell setter 0x4BED90 and the cell test 0x4BEDD0;
@@ -644,7 +644,7 @@ kept, and what does a save hold? Read on 2026-11-07 with `llvm-objdump` (the act
 
 ## Script print line in the message window and the wards gate of script 1643 (ARC-DEV-309, B21)
 
-Source: bug B21 (the entrance to the elves' town gives no reaction to a click), [triage T6](../bug-reports-triage-2026-11-08.md). Question: why does script 1643 end at its line 2, and what does the original show for the line it prints? Read on 2026-11-08 with `llvm-objdump` (the condition evaluator 0x4451B0 with its jump table 0x44714C, cases 4 (0x445355) and 43 (0x446B93); the value reader 0x44BA70 with its jump table 0x44BB34; the global flag reader 0x444CF0; the print line action 0x44B390; the callback caller 0x460630; the interface table builder 0x57C6E0; the message post 0x550750 → 0x552770), F1, on top of IS1–IS4 and ML1–ML2; `Arcanum.exe` SHA-256 `9bd80511…3678d52`. Every direct branch stays inside `.text`. The installed scripts and dialogs were read with the project's own reader (identifiers and numbers only; no text is recorded here).
+Source: bug B21 (the entrance to the elves' town gives no reaction to a click), [triage T6](../open-bugs.md). Question: why does script 1643 end at its line 2, and what does the original show for the line it prints? Read on 2026-11-08 with `llvm-objdump` (the condition evaluator 0x4451B0 with its jump table 0x44714C, cases 4 (0x445355) and 43 (0x446B93); the value reader 0x44BA70 with its jump table 0x44BB34; the global flag reader 0x444CF0; the print line action 0x44B390; the callback caller 0x460630; the interface table builder 0x57C6E0; the message post 0x550750 → 0x552770), F1, on top of IS1–IS4 and ML1–ML2; `Arcanum.exe` SHA-256 `9bd80511…3678d52`. Every direct branch stays inside `.text`. The installed scripts and dialogs were read with the project's own reader (identifiers and numbers only; no text is recorded here).
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |

@@ -5,7 +5,7 @@ change, no checks run. Each slice is still handed out as its own task: it starts
 takes its task code from the coordinator (the labels `E1-a`, `E4-c` and so on are planning labels, not task codes).
 
 It continues the [architecture audit](../architecture/gap-register.md) (which settled the engine model) and the two bug triages
-([2026-11-08](../research/bug-reports-triage-2026-11-08.md), [2026-11-10](../research/bug-reports-triage-2026-11-10.md)). Those fix
+([the 2026-11-08 and 2026-11-10 triages](../research/open-bugs.md)). Those fix
 individual bugs; this document lists the **large parts of the game that are not built or only stubbed**, checks each against the code,
 and orders the work. It does not repeat bug fixes that are running (section 7).
 
@@ -295,7 +295,7 @@ implementing slice still reads the F0 facts of the functions it changes, as the 
 ## 7. Not in this plan: work already running or already triaged
 
 Running or proposed when this was written: the bug fixes F2 (room check for takes), F3 (quit box), F5 (a taken note), F6 (follower portrait
-bars) and F7 (the ghost of Brego) of the [2026-11-10 triage](../research/bug-reports-triage-2026-11-10.md), and F8 (the inventory's
+bars) and F7 (the ghost of Brego) of the [2026-11-10 triage](../research/open-bugs.md), and F8 (the inventory's
 arrange button, added by that triage's correction); F4, the carried lights V7d (B50, DEV-335); DEV-331 (ai-cast leaves the hero entangled);
 DEV-330 (roof over house containers); DEV-299 (town containers); DEV-332 (main menu music); UI-124 (combat panel). F1 of that triage is E1 of this plan.
 
