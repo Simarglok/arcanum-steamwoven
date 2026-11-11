@@ -150,7 +150,7 @@ public sealed class SessionSpellCasterDispelTests
     }
 
     [TestMethod]
-    public void A_dispel_clears_the_stoned_spell_flag_of_a_critter_by_a_plain_write_and_leaves_the_object_flag_and_other_flags()
+    public void A_dispel_clears_the_stoned_spell_flag_and_the_stoned_object_flag_of_a_critter_and_leaves_other_flags()
     {
         var (owner, caster) = Session();
         using var _ = owner;
@@ -160,12 +160,35 @@ public sealed class SessionSpellCasterDispelTests
         Assert.IsTrue(caster.Holds(Target).Stoned);
         CastDispel(owner, caster, Target);
         Assert.IsFalse(caster.Holds(Target).Stoned, Trail(caster));
-        Assert.AreEqual(new SessionObjectFlags(0x400, 0, 0, 0, SessionSpellCaster.ObjectStoned, 0), owner.QueryObjectFlags(Target), "only the stoned spell flag goes: the object flag stoned and the shielded bit stay (the original writes field 0x14 alone)");
-        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.Dispelled, 0, 0, Target, SessionSpellCaster.DispelStonedCleared), caster.Log.Single(e => e.Kind == SpellCastEventKind.Dispelled) with { Run = 0 });
+        Assert.AreEqual(new SessionObjectFlags(0x400, 0, 0, 0, 0, 0), owner.QueryObjectFlags(Target), "the stoned spell flag and the stoned object flag (0x43D280, 0x80000) go, the shielded bit stays");
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.Dispelled, 0, 0, Target, SessionSpellCaster.DispelStonedCleared | SessionSpellCaster.DispelObjectStonedCleared), caster.Log.Single(e => e.Kind == SpellCastEventKind.Dispelled) with { Run = 0 });
         // A second dispel finds nothing to clear and says nothing.
         var before = caster.Log.Count(e => e.Kind == SpellCastEventKind.Dispelled);
         CastDispel(owner, caster, Target);
         Assert.AreEqual(before, caster.Log.Count(e => e.Kind == SpellCastEventKind.Dispelled));
+    }
+
+    [TestMethod]
+    public void A_dispel_leaves_the_stoned_object_flag_of_a_critter_whose_spell_flag_is_not_stoned()
+    {
+        // The object flag is cleared inside the stoned spell flag's branch of 0x451C40 only (ARC-MAGIC-039): without the spell flag the object flag stays and nothing is told.
+        var (owner, caster) = Session();
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteObjectFlag(owner.Version, Target, SessionObjectFlagField.Object, SessionSpellCaster.ObjectStoned, true, false).Disposition);
+        CastDispel(owner, caster, Target);
+        Assert.AreEqual(new SessionObjectFlags(0, 0, 0, 0, SessionSpellCaster.ObjectStoned, 0), owner.QueryObjectFlags(Target), Trail(caster));
+        Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.Dispelled), Trail(caster));
+    }
+
+    [TestMethod]
+    public void A_dispel_of_a_stoned_spell_flag_without_the_object_flag_clears_the_spell_flag_alone()
+    {
+        var (owner, caster) = Session();
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteObjectFlag(owner.Version, Target, SessionObjectFlagField.Spell, SessionSpellCaster.StonedSpellFlag, true, false).Disposition);
+        CastDispel(owner, caster, Target);
+        Assert.IsFalse(caster.Holds(Target).Stoned, Trail(caster));
+        Assert.AreEqual(SessionSpellCaster.DispelStonedCleared, caster.Log.Single(e => e.Kind == SpellCastEventKind.Dispelled).Detail, "0x43D280 with no 0x80000 set changes nothing");
     }
 
     [TestMethod]
