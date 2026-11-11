@@ -1,7 +1,7 @@
 # NPC AI followers in combat and orders
 
 Status: **Research**, work item ARC-RES-067 (2026-10-21), stage A7 of the
-[NPC combat AI plan](npc-combat-ai-plan.md#research-stages-source-reading-one-document-each)
+[NPC combat AI plan](npc-combat-ai-plan.md#phase-1-faithful-reconstruction)
 (source unit S20). It fixes what the three combat orders the PC can give its
 followers do (attack, back off or stop, and curse), how the followers of an
 attacker and of a victim join a fight or complain, what the immediate AI pass

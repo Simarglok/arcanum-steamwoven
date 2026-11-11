@@ -15,7 +15,7 @@ aggregate-only mode or certify general occupancy/installed-game passability.
 
 ## Immutable selected input
 
-The selected base entry and coordinate chain are established by [Crash Site slice](crash-site-slice.md) and [framing](crash-site-framing.md). No original payload, installation path, names/MES text, graphics, screenshots, object payload, or mask/grid is retained here.
+The selected base entry and coordinate chain are established by [Crash Site sector framing](crash-site-framing.md). No original payload, installation path, names/MES text, graphics, screenshots, object payload, or mask/grid is retained here.
 
 | Input / selector | Fixed identity or limit |
 | --- | --- |
@@ -72,4 +72,4 @@ The run also records a cardinal `(30,32)->(31,32)` result as `Unknown + null`, a
 
 The implementation rejects selector/fingerprint mismatch, wrong ordinal/compressed flag/decoded length, a substituted six-prototype ID/length/SHA manifest before parsing, mutation of every fixed input after use, malformed framing, missing/excess block bytes, invalid local coordinates, and overflow. It preserves the original probe CLI unchanged unless `--passability` is explicit.
 
-The evidence supports a **terrain component** fact: a set block bit is an explicit blocking condition in the earlier source reading (F0). ARC-RES-012 additionally supports only the separately named `ordinary-static-scenery/base-sector/cardinal-normal-critter` destination-cell component; see its [evidence](static-obstruction-evidence.md) and [contract](../world/static-obstruction-contract.md). Clear masks and static NoBlock still do not support combined occupancy or traversal: facade/name, dynamic/state, actor, edge, movement-context, and precedence evidence remain required. The fixed base entry also cannot answer `.dif`, PATCH, loose-file, generalized dynamic-object, neighboring-sector, or original-runtime questions.
+The evidence supports a **terrain component** fact: a set block bit is an explicit blocking condition in the earlier source reading (F0). ARC-RES-012 additionally supports only the separately named `ordinary-static-scenery/base-sector/cardinal-normal-critter` destination-cell component; see its [evidence](static-obstruction-evidence.md) and [contract](../world/static-obstruction-components.md). Clear masks and static NoBlock still do not support combined occupancy or traversal: facade/name, dynamic/state, actor, edge, movement-context, and precedence evidence remain required. The fixed base entry also cannot answer `.dif`, PATCH, loose-file, generalized dynamic-object, neighboring-sector, or original-runtime questions.

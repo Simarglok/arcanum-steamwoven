@@ -2,7 +2,7 @@
 
 ## Status, scope and evidence discipline
 
-ARC-RES-021 refines [RES-019](dialog-state-contract.md)'s E5, U3 and
+ARC-RES-021 refines the retired [RES-019 proposal](https://github.com/Simarglok/arcanum-steamwoven/blob/e4f18fd4bd5c7798aab3f451ed52dc24e8ec2420/docs/scripting/dialog-state-contract.md)'s E5, U3 and
 C03..C07/C16/C21. This is a **document-only proposal**, not an inventory service,
 DLG adapter, parser change or working conversation. No `src/**` inputs change.
 Only a lexically negative, numerically nonzero DLG `IN` action is considered.
@@ -24,7 +24,7 @@ Categories:
 The prose and invented scenarios are independently authored project material.
 Original content, selected identifiers, fingerprints, aggregate shapes, operands,
 private paths and local work diaries are not reproduced here. The inherited
-RES-019 evidence remains in its existing document; no new data ledger is published.
+RES-019 evidence is carried in the [conversation runtime](dialog-conversation-runtime.md#original-dialog-evidence-carried-from-the-state-contract); no new data ledger is published.
 
 ## Source index: exact branch, not inferred association
 
@@ -42,7 +42,7 @@ Addresses name the relevant caller/callee.
 | E08 | Placement (0x466E50, 0x466EF0), ground drop (0x4415C0) | Existing/new junk pile or ground; gathering other items; no typed success receipt, destroyed-object drop early return. |
 | E09 | Decay eligibility, scheduling and cancellation (0x467FC0, 0x468010, 0x468090, 0x468110, 0x468150) | Conditional schedule with delay172800000 at transfer/placement callers, not guaranteed destruction or successful scheduler write. |
 | E10 | Script dispatch/writeback (0x441980) | Triggerer/attachee/extra, editor bypass, absent attachment success, execution and attachment writeback; return false need not mean no effects. |
-| E11 | [RES-019 E5 / IN trace](dialog-state-contract.md#in-identity-quantity-transfer-and-refusal), [existing worksheet](../../tools/research/dialog_state_probe.py) | Reuse selected static negative-form evidence; quantity and live inventory are not inferred from that operand or display. |
+| E11 | [RES-019 E5 / IN trace (retired proposal)](https://github.com/Simarglok/arcanum-steamwoven/blob/e4f18fd4bd5c7798aab3f451ed52dc24e8ec2420/docs/scripting/dialog-state-contract.md), evidence in the [conversation runtime](dialog-conversation-runtime.md#original-dialog-evidence-carried-from-the-state-contract), [existing worksheet](../../tools/research/dialog_state_probe.py) | Reuse selected static negative-form evidence; quantity and live inventory are not inferred from that operand or display. |
 
 ## Literal source trace and identity/quantity distinctions
 
@@ -259,7 +259,7 @@ For the initial recommendation refuse stacks, keys/rings, wear/hotkey slots,
 unaccounted magic-tech/AI callbacks, network mutation and unknown placement/decay
 owners. A future expanded adapter must evidence actual effects and receipts first.
 
-P budgets inherit RES-019's ceilings: 4096 candidates per participating inventory,
+P budgets inherit the retired [RES-019](https://github.com/Simarglok/arcanum-steamwoven/blob/e4f18fd4bd5c7798aab3f451ed52dc24e8ec2420/docs/scripting/dialog-state-contract.md) ceilings: 4096 candidates per participating inventory,
 owners4, queries128 and command/substep calls128, separately accounted. A scan
 that exceeds budget is not KnownAbsent. Placement gathering additional owners
 beyond capability/budget is a frontier, not permission to drop accounting.
@@ -269,7 +269,7 @@ interrupt an arbitrary blocked callback or provide rollback.
 
 ### Missing-item decision remains owner-owned
 
-S continues subsequent DLG actions on absent item. RES-019's recommended
+S continues subsequent DLG actions on absent item. the retired [RES-019](https://github.com/Simarglok/arcanum-steamwoven/blob/e4f18fd4bd5c7798aab3f451ed52dc24e8ec2420/docs/scripting/dialog-state-contract.md) recommended
 `MissingItem` rejection intentionally differs. Three alternatives remain open:
 
 1. **Recommendation:** safety profile rejects proven absence, stops later commands

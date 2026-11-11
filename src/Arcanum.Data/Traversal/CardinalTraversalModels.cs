@@ -364,7 +364,7 @@ internal static class CardinalTraversalRules
         _ => throw new ArgumentOutOfRangeException(nameof(policy))
     };
     internal const string ContextId = "ISOLATED_PC_CRITTER_ART_NONPOLYMORPH";
-    internal const string SpecificationId = "docs/world/cardinal-traversal-contract.md";
+    internal const string SpecificationId = "docs/world/cardinal-traversal-assessment.md";
     internal static CardinalTraversalContext DeclaredContext() => new(ContextId, 15, 2, 0, 0, false, false, CardinalTraversalActorState.OrdinaryGround, 0);
     internal static void ValidateId(string value, string parameter)
     {

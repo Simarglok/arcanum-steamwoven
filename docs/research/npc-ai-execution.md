@@ -1,7 +1,7 @@
 # NPC AI action execution
 
 Status: **Research**, work item ARC-RES-066 (2026-10-21), stage A6 of the
-[NPC combat AI plan](npc-combat-ai-plan.md#research-stages-source-reading-one-document-each)
+[NPC combat AI plan](npc-combat-ai-plan.md#phase-1-faithful-reconstruction)
 (source unit S19 and the animation goals behind it). It fixes how the action an
 AI pass chose becomes movement, casting, item and skill use and attacks, in real
 time and in a turn-based round: what perform starts for each action, how the

@@ -4,9 +4,9 @@ using Godot;
 
 namespace Arcanum.TerrainViewer;
 
-// ARC-UI-143: the HD lines of the options window (HD graphics, HD interface, HD pack) on the launcher screen, before the game starts. They are
+// ARC-UI-143: the HD lines (HD graphics, HD interface, HD pack) on the launcher screen, before the game starts (ARC-UI-146 removed them from the options window). They are
 // the same settings in the same files (visual_profile_v1.json, game_settings_v1.json): a change is saved at once, and the game that Play
-// starts reads them like any start (the profile and the interface at once, the pack source from the next start, as in the options window).
+// starts reads them like any start (the profile and the interface at once, the pack source from the next start).
 public partial class TerrainViewerApp
 {
     private VisualProfile _launcherHdProfile = VisualProfile.Legacy;

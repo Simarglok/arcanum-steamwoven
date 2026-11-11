@@ -33,6 +33,20 @@ public sealed class ObjectSoundTests
     }
 
     [TestMethod]
+    public void A_prototype_gives_its_blit_flags_and_alpha_ARC_MAGIC_054()
+    {
+        var plain = Files((1001, 3));
+        Assert.AreEqual((0u, 0), (ObjectSoundReader.ReadPrototype(plain, 1001).Fields!.BlitFlags, ObjectSoundReader.ReadPrototype(plain, 1001).Fields!.BlitAlpha), "stored zeros are read as stored: no blend");
+        var values = Values(3); values[8] = 0x110; values[10] = 128;
+        PrototypeFile File(Dictionary<int, object> fields) => new(PrototypeFileStatus.Found, PremadeHeroTests.Prototype(1002, 3, fields));
+        var blended = ObjectSoundReader.ReadPrototype(_ => File(values), 1002).Fields!;
+        Assert.AreEqual((0x110u, 128), (blended.BlitFlags, blended.BlitAlpha));
+        var out_of_range = Values(3); out_of_range[8] = 0x10; out_of_range[10] = 900;
+        var clamped = ObjectSoundReader.ReadPrototype(_ => File(out_of_range), 1002).Fields!;
+        Assert.AreEqual((0x10u, 255), (clamped.BlitFlags, clamped.BlitAlpha), "an alpha outside 0..255 is read as opaque");
+    }
+
+    [TestMethod]
     public void A_prototype_gives_its_sound_material_art_and_flags_and_items_their_weight()
     {
         var files = Files((1001, 16), (1002, 5), (1003, 6), (1004, 2), (1005, 17));

@@ -1,7 +1,7 @@
 # NPC AI hostility and targeting
 
 Status: **Research**, work item ARC-RES-057 (2026-10-20), stage A3 of the
-[NPC combat AI plan](npc-combat-ai-plan.md#research-stages-source-reading-one-document-each)
+[NPC combat AI plan](npc-combat-ai-plan.md#phase-1-faithful-reconstruction)
 (source units S10–S13). It fixes, for one NPC, when another critter counts as an
 enemy (kill-on-sight), whom the NPC protects and whom it refuses to attack, how it
 scans for a target and picks between two, when a target stays valid, how the enemy

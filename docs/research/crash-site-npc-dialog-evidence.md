@@ -198,6 +198,6 @@ The full aggregate census uses common descriptors and is not an independent
 source lineage or a second semantic proof. Synthetic fixtures reorder IDs,
 exercise actual production DAT/DLG seams and use literal expected outcomes.
 
-See the [invocation contract](../scripting/npc-dialog-entry-contract.md) for state
+See the [invocation contract](../scripting/npc-dialog-entry-runtime.md) for state
 ownership and future gaps; [prior DLG research](dialog-evidence.md) remains valid
 within its original structural scope, not as a claim of initial gameplay entry.

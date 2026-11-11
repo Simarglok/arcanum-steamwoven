@@ -151,5 +151,5 @@ This result does not choose DIF/PATCH/loose-file precedence and does not
 resolve terrain-name rules, dynamic/state changes, actor capability, wall or
 portal behavior, diagonal/edge handling, cross-sector traversal, or original
 runtime behavior. Its `NoBlock` outcome is not a total occupancy or full
-passability outcome. See the [static component contract](../world/static-obstruction-contract.md)
+passability outcome. See the [static component contract](../world/static-obstruction-components.md)
 and [selected-sector passability evidence](sector-passability-evidence.md).

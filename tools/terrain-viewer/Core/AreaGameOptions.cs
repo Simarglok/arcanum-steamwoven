@@ -18,7 +18,7 @@ public enum AreaOption
     Module, Difficulty, ViolenceFilter, DefaultCombatMode, AutoAttack, AutoSwitchWeapons, AlwaysRun, FollowerSkills,
     Brightness, TextDuration, Floats, FloatSpeed, CombatTaunts,
     Effects, Voice, Music,
-    Rules, HdGraphics, HdInterface, HdPack,
+    Rules,
 }
 
 /// <param name="Max">The original's highest value (a slider's 10 unless its record says otherwise, a list's last message number; a
@@ -72,12 +72,6 @@ public static class AreaOptionTable
     public const string FloatLevels = "mes/OptionsFloats.mes";
     /// <summary>The rule mode control's values (a project list, no game file): <see cref="RuleMode"/> in its order.</summary>
     public const string RuleModes = "project:rule modes";
-    /// <summary>ARC-UI-089: the HD graphics control's values (a project list): Off, On.</summary>
-    public const string HdGraphicsValues = "project:hd graphics";
-    /// <summary>ARC-UI-095: the HD interface control's values (a project list): Off, On; ARC-UI-140 adds Generated (experimental).</summary>
-    public const string HdInterfaceValues = "project:hd interface";
-    /// <summary>ARC-DEV-350: the HD pack source control's values (a project list): Auto, Game, Custom (<see cref="HdPackSourceMode"/>).</summary>
-    public const string HdPackValues = "project:hd pack";
 
     /// <summary>Every control of the original's table (0x5CCD78, three pages of eight slots; OP2).</summary>
     public static IReadOnlyList<AreaOptionControl> All { get; } = Array.AsReadOnly(new AreaOptionControl[]
@@ -101,12 +95,7 @@ public static class AreaOptionTable
         new(AreaOption.Music, AreaOptionsPage.Sound, 2, AreaOptionKind.Slider, 10, 10, null, "music volume", 5, null),
         // ARC-UI-014: the rule mode (owner decision D8: the settings menu may switch it in play), after the original's eight Game slots.
         new(AreaOption.Rules, AreaOptionsPage.Game, 8, AreaOptionKind.List, 1, 1, RuleModes, "rules", (int)RuleMode.Steamwoven, null, Project: true),
-        // ARC-UI-089: HD graphics, beside the rule mode: the saved visual profile (Legacy/HD, ARC-UI-006) for the pack's sprites and ground.
-        new(AreaOption.HdGraphics, AreaOptionsPage.Game, 9, AreaOptionKind.List, 1, 1, HdGraphicsValues, "hd graphics", 0, null, Project: true),
-        // ARC-UI-095: HD interface, its own switch for the interface art alone, independent of the visual profile.
-        new(AreaOption.HdInterface, AreaOptionsPage.Game, 10, AreaOptionKind.List, 2, 2, HdInterfaceValues, "hd interface", 0, null, Project: true),
-        // ARC-DEV-350: where the HD pack is read from (Auto: the iCloud copy when it is here and whole, else the installed copy).
-        new(AreaOption.HdPack, AreaOptionsPage.Game, 11, AreaOptionKind.List, 2, 2, HdPackValues, "hd pack", 0, null, Project: true),
+        // ARC-UI-146: the HD graphics, HD interface and HD pack lines (ARC-UI-089, ARC-UI-095, ARC-DEV-350) moved to the launcher screen (ARC-UI-143).
     });
 
     public static AreaOptionControl Of(AreaOption option) => All[(int)option];
@@ -122,8 +111,7 @@ public static class AreaOptionTable
 /// <paramref name="Rules"/> is the rule mode the session plays by (ARC-UI-014), <paramref name="Floats"/> and <paramref name="FloatSpeed"/>
 /// the floating text's level and speed (ARC-UI-021).</summary>
 public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAttack, bool AlwaysRun, int Effects, int Voice, int Music,
-    RuleMode Rules = RuleMode.Steamwoven, int Floats = FloaterRules.DefaultLevel, int FloatSpeed = FloaterRules.DefaultSpeed, bool HdGraphics = false,
-    bool HdInterface = false, HdPackSourceMode HdPackSource = HdPackSourceMode.Auto, bool GeneratedInterface = false)
+    RuleMode Rules = RuleMode.Steamwoven, int Floats = FloaterRules.DefaultLevel, int FloatSpeed = FloaterRules.DefaultSpeed)
 {
     /// <summary>A shown control's value; null for a hidden one.</summary>
     public int? Value(AreaOption option) => option switch
@@ -136,9 +124,6 @@ public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAt
         AreaOption.Voice => Voice,
         AreaOption.Music => Music,
         AreaOption.Rules => (int)Rules,
-        AreaOption.HdGraphics => HdGraphics ? 1 : 0,
-        AreaOption.HdInterface => GeneratedInterface ? 2 : HdInterface ? 1 : 0,
-        AreaOption.HdPack => (int)HdPackSource,
         AreaOption.Floats => Floats,
         AreaOption.FloatSpeed => FloatSpeed,
         _ => null,
@@ -294,13 +279,10 @@ public sealed class AreaOptionsTexts
         [AreaOptionTable.FloatLevels] = ["Never", "Minimal", "Verbose"],
     };
     // ARC-UI-014: the project controls' texts, never looked up in the game's files.
-    private static readonly IReadOnlyDictionary<AreaOption, string> ProjectControlLabels = new Dictionary<AreaOption, string> { [AreaOption.Rules] = "Rules", [AreaOption.HdGraphics] = "HD graphics", [AreaOption.HdInterface] = "HD interface", [AreaOption.HdPack] = "HD pack" };
+    private static readonly IReadOnlyDictionary<AreaOption, string> ProjectControlLabels = new Dictionary<AreaOption, string> { [AreaOption.Rules] = "Rules" };
     private static readonly IReadOnlyDictionary<string, string[]> ProjectControlValues = new Dictionary<string, string[]>(StringComparer.Ordinal)
     {
         [AreaOptionTable.RuleModes] = ["Steamwoven", "Original"],
-        [AreaOptionTable.HdGraphicsValues] = ["Off", "On"],
-        [AreaOptionTable.HdInterfaceValues] = ["Off", "On", "Generated (experimental)"],
-        [AreaOptionTable.HdPackValues] = ["Auto", "Game", "Custom"],
     };
     private readonly Func<string, int, string?> _original;
 

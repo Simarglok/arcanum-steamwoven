@@ -14,16 +14,16 @@ public partial class TerrainViewerApp
     // scenery or eye-candy object names, read once per module (null: the prototype does not read).
     private Func<int, Arcanum.Data.Characters.PrototypeFile>? _createdPrototypeRead;
     private IReadOnlyList<int> _createdPrototypeNumbers = [];
-    private readonly Dictionary<int, (uint Art, bool Flat, uint Flags)?> _createdPrototypes = [];
+    private readonly Dictionary<int, (uint Art, bool Flat, uint Flags, uint Blit, int BlitAlpha)?> _createdPrototypes = [];
 
     /// <summary>ARC-DEV-347: the current art, the flat flag (OF_FLAT, 0x4) and the object flags of the object prototype <paramref name="prototype"/> of the module's content stack, or null when it does not read.</summary>
-    private (uint Art, bool Flat, uint Flags)? CreatedPrototype(int prototype)
+    private (uint Art, bool Flat, uint Flags, uint Blit, int BlitAlpha)? CreatedPrototype(int prototype)
     {
         if (_createdPrototypes.TryGetValue(prototype, out var known)) return known;
         if (ExtraArt() is null || _createdPrototypeRead is not { } read) return null;
         var fields = ObjectSoundReader.ReadPrototype(read, prototype).Fields;
         // A wall's or portal's art class (1, 3) is no body AreaScenePlan.Place draws (it refuses it): a save naming such a prototype is said once and the object not drawn.
-        (uint, bool, uint)? facts = fields is null || AreaDataOwner.NamesNoArt(fields.CurrentArt) || fields.CurrentArt >> 28 is 1 or 3 ? null : (fields.CurrentArt, (fields.Flags & 0x4) != 0, fields.Flags);
+        (uint, bool, uint, uint, int)? facts = fields is null || AreaDataOwner.NamesNoArt(fields.CurrentArt) || fields.CurrentArt >> 28 is 1 or 3 ? null : (fields.CurrentArt, (fields.Flags & 0x4) != 0, fields.Flags, fields.BlitFlags, fields.BlitAlpha);
         _createdPrototypes[prototype] = facts;
         return facts;
     }
@@ -47,8 +47,11 @@ public partial class TerrainViewerApp
                 if (_groundReported.Add("nocreated:" + made.Entity)) GD.Print($"ARC-DEV-347 created-object entity={made.Entity} prototype={made.Prototype} not drawn: no art");
                 continue;
             }
+            // A blit bit WithBlend does not draw (subtract, palette modes) is said once per prototype: the map's own bodies refuse such a state, a created body is drawn without it.
+            if ((facts.Blit & ~0x153u) != 0 && _groundReported.Add("blit:" + made.Prototype)) GD.Print($"ARC-MAGIC-054 created-object prototype={made.Prototype} blit=0x{facts.Blit:X} has bits that are not drawn");
             var key = PlacedKey(area.Snapshot.RuntimeMap, made.Entity);
-            var command = AreaScenePlan.Place(area.Plan.Chart, key, frame.Visual, made.Cell.X, made.Cell.Y, facts.Flat);
+            // ARC-MAGIC-054: the prototype's blit flags are the created body's blend (a wall of fire's piece is additive).
+            var command = AreaScenePlan.WithBlend(AreaScenePlan.Place(area.Plan.Chart, key, frame.Visual, made.Cell.X, made.Cell.Y, facts.Flat), facts.Blit, facts.BlitAlpha);
             var at = command.Destination;
             bodies[key] = command with { Destination = new(checked(at.X + made.OffsetX), checked(at.Y + made.OffsetY), at.Width, at.Height) };
             if (made.Kind == SessionCreatedKind.Scenery)

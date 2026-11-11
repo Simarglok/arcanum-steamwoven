@@ -18,9 +18,42 @@ assets are committed.
 | --- | --- |
 | `START_MAP` selector | `Arcanum1-024-fixed`, `(92958, 82592)` |
 | Sector selector | `(1452, 1290)`, packed ID `86570436012` |
-| Origin and extent | `(92928, 82560)`, 64 by 64 |
+| Origin and extent | `(92928, 82560)`, 64 by 64 positions, inclusive ranges `92928..92991` and `82560..82623` |
+| Start offset inside sector | `(30, 32)` |
 | DAT entry | ordinal 463, flag `0x00000002`, decoded length 47,291 |
+| Terminal object count | 317; not a count of static scenery |
 | Module fingerprint | 355,938,305 bytes; SHA-256 `8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f` |
+
+The one-sector extent follows the sector shift of the earlier source reading
+(F0), not a claim about all formats or maps. The later
+[area inventory](area-inventory.md) and [area contract](../world/area-contract.md)
+survey the start-containing townmap component; this note keeps the one-sector
+regression, not a census of that area or a production readiness claim.
+
+### Identity chain
+
+The selected map is the observed module's only `START_MAP` record, not an
+inference from a directory name; the selected sector is the one containing that
+record's start coordinate, and no neighbouring sector is included.
+
+| Link | Observation | Status / confidence |
+| --- | --- | --- |
+| Community context | The preserved Terra-Arcanum catalogue records a historical Crash Site page and image URL. | reported; context only |
+| Map selector | Raw DAT entry `Rules\MapList.mes` is ordinal 14,935, compressed with `0x00000002`, and decodes to 5,454 bytes. Record 5,000 is the observed module's sole `START_MAP`; it names `Arcanum1-024-fixed` and gives `(92958, 82592)`. | experimentally verified locally; high |
+| Map properties | Raw entry `maps\Arcanum1-024-fixed\map.prp` is ordinal 8,023; its 24 decoded bytes begin with observed words `2`, `1`, and a little-endian pair `(128000, 128000)`. No semantic labels are assigned. | experimentally verified byte observation; high |
+| Sector selector | `sector_id_from_loc` (0x4CFC50) shifts both location coordinates by six and packs the results. Applied to the start coordinate, that gives `(1452, 1290)` and `86570436012`. The matching sector entry is ordinal 463 and decodes to 47,291 bytes. | entry and size experimentally verified; coordinate interpretation F0; medium |
+| Framed object window | The final signed little-endian word is `317`. The corrected section order of `sector_load_game` (0x4D1A30, F0) places the object window at `17140..47287`; the bounded v119 delimiter consumes 317 records to the terminal count. | byte experiment plus F0 order; medium |
+
+### Bounded selector and safety limits
+
+The probe requires the observed module size and SHA-256 above, raw-name matches
+exactly one selected `.sec` entry, limits both stored and decoded payloads to
+1 MiB, and fingerprints the input before and after its in-memory read. Its caps:
+light count 1,024, object count 4,096. The selected input has zero serialized
+lights; its 4,096 tile words hold 1,041 distinct raw identifiers and a mix of
+high-nibble classes, so the probe does **not** claim every word is a directly
+resolvable terrain ART ID. No raw IDs or game payloads are recorded in the
+repository.
 
 Use the configured SDK and pass the local module path explicitly:
 
@@ -53,6 +86,27 @@ The map is a behavioral attribution from an earlier source reading (F0), cited b
 | Placeholder and conditional sections | `sector_load_game` (0x4D1A30); `tile_script_list_load` (0x4F65B0); `sector_script_list_load` (0x4F6250); `sector_sound_list_load` (0x4F8150); `sector_block_list_load` (0x4F8250) | Reads a placeholder in the inclusive range `0xAA0000..0xAA0004`. Nonzero loads a count plus 24-byte tile-script entries; `>= 0xAA0002` loads one 12-byte sector script; `>= 0xAA0003` loads three four-byte metadata values and a 12-byte sound record; `>= 0xAA0004` loads 128 four-byte block-mask values. |
 | Object list | `objlist_load` (0x4F1350) | Saves the current cursor, seeks to `end - 4`, reads the terminal signed count, seeks back to the saved cursor, reads that many records, then reads and compares the trailing count. |
 | Runtime additions after stream decoding | `objlist_load` (0x4F1350); `sector_load_game` (0x4D1A30); `sector_light_list_load` (0x4F72C0) | Object locations are rebased to the sector, postprocessed, and assigned temporary IDs; game loading later folds objects/lights and may precache art. These actions are runtime state and are not additional bytes in the selected base stream. |
+
+Earlier source reading (F0), cited by executable address: the sector
+functions 0x4CEF70–0x4D31C0, the sector tile list 0x4F7BA0–0x4F7DF0, the sector
+object list 0x4F1150–0x4F2330, the location functions 0x4B8440–0x4B99C0, and the
+ART library's identifier functions.
+
+## Separate readiness verdicts
+
+- **Fixed-source terrain-only loader contract: READY.** The frozen sector's
+  caller-supplied immutable module and explicit one-source resource archive
+  have complete 4,096-cell tile/facade resolution and selected-frame plus
+  diagnostic placement evidence. This narrow contract retains the framed
+  object suffix as opaque and does not choose sources for callers.
+- **Terrain scene: NOT READY.** A production/Godot scene and renderer
+  integration do not exist; lighting/palette treatment, camera/dirty-rectangle
+  policy, normal-runtime facade behavior, and measured presentation comparison
+  remain unestablished.
+- **Static-object diagnostic: READY; static scenery scene: NOT READY.** The
+  selected-v119 type-3/static predicate and current-ART/prototype chain for
+  this framed suffix are established. Baseline, placement, occlusion, and
+  static-scene ordering remain unestablished.
 
 ## Reproduced framing result
 

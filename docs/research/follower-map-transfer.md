@@ -1,14 +1,12 @@
 # Followers across maps: the original's object move and the visitor model
 
-Status: **Research**, work item ARC-RES-076 (2026-10-29). Docs-only: no code
-changes and no checks run. It answers the owner's question after ARC-DEV-065
+Status: **Research, its fix built**, work item ARC-RES-076 (2026-10-29). Docs-only: no code
+changes and no checks run. It answered the owner's question after ARC-DEV-065
 (PR #582): a companion carried onto another map (Virgil in the Crash Site cave)
-follows there but neither fights nor is fought, because the shown map has no
-combat data for it. Is the "visitor" model itself wrong? This note reads in the
-retail executable how party followers move between maps and sectors, what a
-save keeps and which AI and combat state travels, compares it with
-Steamwoven's visitor model, and proposes a fix in PR slices. The slices are
-proposals only; none is started.
+followed there but neither fought nor was fought, because the shown map had no
+combat data for it. This note reads in the retail executable how party
+followers move between maps and sectors, what a save keeps and which AI and
+combat state travels. The fix slices V1-V6 are all built (see [Fix plan](#fix-plan)).
 
 Requirements: [FR-WORLD-010](../requirements/world.md#fr-world-010),
 [FR-SOCIAL-005](../requirements/story-social-ai.md#fr-social-005).
@@ -59,20 +57,9 @@ a156e143.
   left on a foreign map walks home: the next forced waypoint or standpoint pass
   teleports it to its standpoint on that map. A follower with a leader is never
   sent back.
-- **Steamwoven's gap is systemic, not narrow.** Identity and mutable state
-  already follow the entity across maps (party, life, reaction, experience,
-  advancement, danger, combat sets, made and worn items). But the NPC's *base
-  record* (its object row with combat fields, AI row, inventory seed holder,
-  body) is found only through the shown map's own rows, and a run-local cache
-  keeps the body. Every system that resolves "the row of entity X on the shown
-  map" fails for a carried companion, so each one has needed a special case
-  (visitor dialog host, home-map fallbacks, the ARC-DEV-065 skip, the
-  "unbodied" visitor after a quick load). ARC-DEV-065 removed a crash; it did
-  not fix the model.
-- **Fix:** one identity-based actor directory that every consumer asks for
-  "where is X and what is its base record", reading the record from the
-  entity's home map data on demand; then the special cases go away one by one.
-  Plan: [slices V1–V6](#fix-plan).
+- **Steamwoven's gap was systemic** (the NPC's base record was found only through the shown map's own rows, so every system that
+  resolved "the row of entity X on the shown map" failed for a carried companion). It was closed by one identity-based record
+  resolver and the slices V1-V6 ([Fix plan](#fix-plan)); "visitor" is no longer a mode.
 
 ## 1. The original mechanism
 
@@ -110,145 +97,10 @@ a156e143.
 | Its time events | global queue | moved when all named objects travel, else parked on the source (FM8) |
 | Active spells on it | magic/tech runs | moved when all participants travel, else ended (FM9, F1) |
 
-## 2. Steamwoven today: the visitor model
-
-Identity: an NPC is the entity `oid:` + the SHA-256 of its object ID
-(`AreaConversationState.EntityId`, `src/Arcanum.World/AreaConversation.cs`), the same on
-every map, which matches FM4.
-
-Session state by key:
-
-- **By entity, on any map:** party standing, life, reaction, NPC experience and
-  advancement, danger records, combat critters and concealment, NPC made items
-  and worn items (`src/Arcanum.Session/GameSessionParty.cs`,
-  `GameSessionLife.cs`, `GameSessionReaction.cs`, `GameSessionExperience.cs`,
-  `GameSessionAdvancement.cs`, `GameSessionDanger.cs`, `GameSessionCombat.cs`,
-  `GameSessionInventory.cs`). This part already behaves like the original's
-  "state is on the object".
-- **By home map:** dialog local flags, counters and script state, off,
-  destroyed and faction changes are keyed on the record's own map
-  (`AreaConversation.cs`, `AreaScriptHost.cs`, `AreaUseScripts.cs`). Since the
-  key does not change when the NPC moves, this is one state per identity too.
-- **By map:** the companion's place (`npc.cell` on the map it stands on, and
-  `npc.map` on its home map naming that map, `AreaCompanionPlacement`,
-  `src/Arcanum.World/AreaCompanions.cs`), the inventory seed holders
-  (`InventoryDomain.Seeds`, one per map) and event payload entities
-  (`GameEventEntity(Map, Code)`). Pending timers of travelling followers are
-  re-keyed to the destination at a transfer (`GameEventQueue.Relocate`,
-  [event queue runtime](../world/game-event-queue-runtime.md)), which matches FM8's
-  first half.
-
-The **base record** (object row, combat fields, AI parameter row, seed holder,
-body commands and visuals) is where the model departs from the original:
-
-- `AreaCombatHost` keeps one row index per loaded map and answers
-  `Fields(map, entity)` and `Build(map, entity)` only for an entity among that
-  map's own rows (`src/Arcanum.World/AreaCombat.cs`). The AI host asks for
-  the shown map (`AreaAiHost.Fields`, `Build`, `Row`, `Find`), so a carried
-  companion has no fields, no build and no AI row there.
-- `AreaCombatHost.Holders(session, map)` and `Worn` read only the shown map's
-  inventory seed, so a carried companion's seed items are not found there.
-- `AreaSpellCastMap.IdOf` has no row for "a row of another map such as a
-  visiting companion's".
-- `AreaCompanionTemplate` holds the body (T0 commands, visuals, home cell) built
-  from the home map's scene, kept in a run-local dictionary (`_travellers`,
-  `tools/terrain-viewer/Godot/TerrainViewerCompanions.cs`) that a fresh run or a
-  quick load does not refill.
-
-Each system then needed its own special case:
-
-| Special case | Where | Why |
-| --- | --- | --- |
-| ~~Visitor dialog host over the home map~~ (gone: ARC-DEV-081, MIG5) | `AreaConversationHost.ForVisitor`, `AreaTalkRouting`, `TerrainViewerConversation.VisitorHost` (ARC-WORLD-048) | the shown map's host does not list the speaker; the one host lists a carried companion now (`AdmitVisitor`) |
-| Home-map fallback for critter facts and object existence | `AreaEventWorld.CritterFacts` / `ObjectExists` → `AreaCombatHost.HomeMap` | the shown map has no row |
-| Life bars, turn-based facts, sheet and levels read the home map | `TerrainViewerAreaLifeBars.CompanionLife`, `TerrainViewerTurnBased`, `TerrainViewerAttack` | the same |
-| Visitor kept out of the AI rules | `AreaAiHost.Stranger` (ARC-DEV-065): not told of attacks, in no square, not in the flee count | the rules refuse an object `Find` does not know |
-| Visitor not targetable by spells | `AreaSpellCastMap.IdOf` | no row |
-| Visitor without a body after a quick load | `AreaVisitors.Unbodied` | the body exists only in the run-local cache |
-| ~~Negative `IN` refused unless the home seed is covered~~ (gone: ARC-DEV-081, MIG5) | `refuseUncoveredInventory` | the seed is per map; the session refuses an entity the hero's map seed does not list (a cross-map give waits for MIG6) |
-| `HomeMap` searches only covered maps | `AreaCombatHost.HomeMap` | rows exist only for maps loaded in this run |
-
-The transfer itself (`AreaCompanionGroup.Carry`, `Arrive`) writes three map
-changes (clear the old cell, write the new cell, point `npc.map`) and relocates
-timers; the session then drops every AI tick and the danger records that hold only check bits (ARC-WORLD-084,
-`GameSessionOwner`), but not FM6's focus, last hitter, enemy list, fleeing or combat mode; it has no followers of followers,
-no unconscious or dead follower rule (FM2) and no inventory move (none is needed
-for the identity-keyed stores, but the seed holder is per map). *Since ARC-DEV-073 (MIG10, V5):* the transfer asks the session
-for a move list and applies it with the placement, so unconscious followers wait, FM6's links are cleared, a travelling
-follower's AI tick is carried and its combat mode is left on another map; the move-list walk handles followers of followers,
-but the session has no NPC leaders to feed it ([companion map change](../world/companion-follow-runtime.md#map-change-arc-world-017)).
-
-## 3. Gap: systemic, not narrow
-
-The ARC-DEV-065 note "load his combat data from the home map" reads like one
-missing lookup, but the same lookup is missing in every consumer that asks "the
-row of X on the shown map", and new consumers (each AI slice, spells, barter,
-pick pocket, healing, scripts run by the AI host) will hit it again. The root is
-that the base record is addressed by **(shown map, entity)** while the original
-addresses the object by **identity alone**, wherever it stands. The state side
-is already identity-based, so the model is not wrong in every layer; the
-record lookup layer is.
-
-| Gap | Kind | Original row |
-| --- | --- | --- |
-| Base record found only among the shown map's rows (combat fields, AI row, build, seed holder, spell target, body) | **systemic** | FM3, FM4 |
-| Body lost after a fresh run or quick load (run-local cache) | systemic (same root) | FM14 |
-| Transient fight state not cleared by a move | narrow | FM6 |
-| No followers of followers; dead/unconscious follower not left waiting | narrow | FM1, FM2 |
-| Former follower on a foreign map never goes home | narrow, missing feature | FM10, FM11 |
-| Active spells of travelling objects | narrow, later (NPC runs are not saved per map yet) | FM9 |
-| Links from other maps' objects to a moved follower are nulled | not modelled; Steamwoven keeps identity links, which is safer (no switch proposed) | FM7 |
-
-## 4. Fix design
-
-Two ways close the systemic gap:
-
-- **(A) Actor directory over home data (recommended).** One session-level
-  query answers, for an entity: the map it stands on (from `npc.map`/`npc.cell`
-  as today) and where its base record comes from (its home map and object ID).
-  A viewer-side record resolver loads the home map's object rows on demand (the
-  rows only, not the scene) and every consumer goes through it: combat fields
-  and builds, the AI row, the seed holder and worn items, spell targets, life
-  and sheet facts, the body template. State stays where it already is, keyed by
-  entity. No snapshot change for the lookup itself; the original's behaviour
-  ("the object is the destination's, with all its fields") holds because no rule
-  reads which map the record came from.
-- **(B) A dynamic object store like the original's files.** The session copies
-  the moved NPC's whole base record into a per-map dynamic store and marks it
-  deleted on the source (`mobile.mdy`/`mobile.des`). Closer to the file layout,
-  but it duplicates the Data layer's object model in the snapshot (every field
-  with a schema), grows saves and needs a large migration, while the mutable
-  part it would carry is already identity-keyed. Not recommended.
-
-Under (A), "visitor" stops being a mode: a companion is drawn, talked to,
-fought, targeted and healed on any map through the same paths as a local NPC.
-
 ## Fix plan
 
-Proposals, one PR each, in this order; codes come from the coordinator when a
-slice starts. Each keeps Data, Simulation, Scripting and Session free of Godot,
-cites the rows it implements and updates the coverage of FR-WORLD-010 (and
-FR-SOCIAL-005 for V6).
-
-| Slice | Result | Rows | Depends on |
-| --- | --- | --- | --- |
-| V1 Actor directory and record resolver (**done for held maps and maps a whole-map plan admits**: ARC-DEV-072, [contract](../world/record-resolver.md), as MIG1 in the world runtime; a home on the main world map, a window, is not read on demand) | A session query for an entity's current map and record source; a viewer record resolver that reads a home map's object rows on demand (any map of the module, loaded in this run or not), bounded by an explicit limits object (maps held, rows per map); `AreaCombatHost.Fields`, `Build`, `Holders`, `Worn` and `HomeMap` resolve by entity through it. Synthetic tests: an NPC of map A standing on map B has the same fields, build and seed items as on A; a map never loaded in the run is read on demand. | FM3, FM4 | — |
-| V2 Carried companions in the AI (**done: ARC-DEV-075 = MIG2**; a companion with no record, a home on the main map's window, stays out of the rules by `AreaAiHost.Unresolved`) | Remove the ARC-DEV-065 `Stranger` skip: `Find`, `Fields`, `Build` and the AI parameter row (`AreaAiHost.Row`) return the companion through V1; it is told of attack events, stands in squares and the flee count, attacks and is attacked. The `transfer` smoke's visitor fight asserts that Virgil strikes in the Crash Site cave and that the cave NPC can target him. | FM3, FO rows | V1 |
-| V3 Targets and panels (**done: ARC-DEV-076, MIG3**; [contract](../world/record-resolver.md#consumers-by-identity-arc-dev-076-mig3)) | Spell targets (`AreaSpellCastMap.IdOf`), hover attack, life bars, turn-based facts, the sheet and levels read the companion through V1; the home-map fallbacks are removed. | FM3 | V1 |
-| V4 Body after a load (**done: ARC-DEV-079 = MIG4**, [contract](../world/record-resolver.md#bodies-and-window-homes-arc-dev-079-mig4); the body is read from the home map's own data, a window home around the stored cell `npc.home`, not from the resolver's rows alone) | The companion template is built from the resolver (home map rows, visuals and frames on demand) instead of the run-local `_travellers`; `AreaVisitors.Unbodied` and the "no body kept this run" path go away; a quick load on a foreign map shows the companion and it follows. Native smoke: F7 in the cave, a fresh run, F8, Virgil drawn and following. | FM14 | V1 |
-| V4b One dialog host (**done: ARC-DEV-081 = MIG5**, [contract](../world/record-resolver.md#one-dialog-host-arc-dev-081-mig5)) | A companion's conversation runs through the shown map's host with its record from V1 (its dialog state stays keyed on its record's map, as ARC-WORLD-048 keeps it); `AreaConversationHost.ForVisitor`, the routing in `AreaTalkRouting`, the viewer's visitor host cache and `refuseUncoveredInventory` go away (a negative `IN` finds the seed holder through V1). | FM3, OL33 | V1, V4 |
-| V5 Transfer parity (**done: ARC-DEV-073 = MIG10**) | The session transfer clears FM6's transient state for every travelling follower (focus, last hitter, enemy list, fleeing; combat mode on a cross-map move; the AI ticks are already dropped by ARC-WORLD-084); followers of followers travel (FM1); an unconscious follower is made to wait first (FM2, settled by RL23). | FM1, FM2, FM6 | — (independent of V1) |
-| V6 Former followers go home (**done: ARC-DEV-116 = MIG11 S5**, [concept](../architecture/change-of-place.md#6-what-the-session-and-viewer-do-for-the-homecoming-of-former-followers-s5); the teleport map is the object field `npc.teleport`, schema 69) | The NPC's teleport map in the session (set once at its first teleport); when a map opens (or its sector re-folds after the 3-second rule), a leaderless NPC whose teleport map differs is moved to its standpoint on that map, as the original's forced pass does; a snapshot schema bump (main + 1) for the new field. | FM10, FM11, FM13 | V1, V5 |
-
-Not planned: carrying active spells (FM9) until NPC spell runs are saved per
-map (MT9b in the [magic plan](magic-implementation-plan.md)); nulling links from
-other maps (FM7).
-
-## Unknowns
-
-- Settled since (ARC-RES-086): 0x45D800 tests fatigue, so unconscious followers
-  wait (FM2, RL23); a time event whose object fails to rebind fires with no
-  object (FM8, RL28); while its sector is evicted an NPC's own timers run and
-  its heartbeat ends unless it is near a player (FM11, RL14, RL16).
-- Script-held object references across maps (not read).
-- Whether map-data NPCs always carry GUIDs (FM4, inference).
+V1-V6 are built: the actor directory and record resolver (MIG1), carried companions in the AI (MIG2), targets and panels (MIG3), the
+body after a load (MIG4), one dialog host (MIG5), transfer parity (MIG10) and former followers going home (MIG11 S5). The contracts are
+[`record-resolver.md`](../world/record-resolver.md), [`change-of-place.md`](../architecture/change-of-place.md) and
+[`object-directory.md`](../architecture/object-directory.md). Open items of the research are in the
+[social ledger](ledger/social.md#followers-across-maps-arc-res-076).

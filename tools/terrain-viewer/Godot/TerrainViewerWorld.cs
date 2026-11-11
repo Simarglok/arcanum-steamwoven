@@ -349,8 +349,13 @@ public partial class TerrainViewerApp
     public override void _Notification(int what)
     {
         // ARC-UI-005: the pointer leaving the window hides the hover tooltip and action cursor.
-        if (what == NotificationWMMouseExit) _pointerInWindow = false;
-        else if (what == NotificationWMMouseEnter) _pointerInWindow = true;
+        // An automated run's pointer is the one its test places (HoverAtForSelfTest, WorldPointerForSelfTest): the real pointer entering or
+        // leaving the window must not flip it (the border scroll of the inv-ui smoke failed whenever the real pointer was outside the window).
+        if (!AutomatedVisualRun)
+        {
+            if (what == NotificationWMMouseExit) _pointerInWindow = false;
+            else if (what == NotificationWMMouseEnter) _pointerInWindow = true;
+        }
         if (!IsWorld || !_worldInitialized) return;
         if (what == NotificationApplicationFocusOut || what == NotificationApplicationFocusIn)
             ObserveWorldFocus(what == NotificationApplicationFocusIn && GetWindow().HasFocus());

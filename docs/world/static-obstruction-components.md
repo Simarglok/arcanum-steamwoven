@@ -2,9 +2,8 @@
 
 ## Scope and provenance
 
-`Arcanum.Data.StaticObjects.StaticObstructionInspector` implements the accepted
-[ordinary-static-scenery contract](static-obstruction-contract.md), not a combined
-collision grid, `IsWalkable`, navigation rule or actor step verdict. The profile
+`Arcanum.Data.StaticObjects.StaticObstructionInspector` implements the ordinary-static-scenery contract specified on this page,
+not a combined collision grid, `IsWalkable`, navigation rule or actor step verdict. The profile
 is the immutable Crash Site base sector `(1452,1290)`, packed ID `86570436012`,
 origin `(92928,82560)`, extent 64×64. Only v119 type-3 ordinary scenery in a normal
 non-editor ordinary-ground-critter, adjacent-cardinal, zero-traversal-flags
@@ -145,8 +144,26 @@ other traversal flags or an unrecognized enum value) return `CONTEXT_UNSUPPORTED
 Step-query exclusions are `SAME_CELL_UNSUPPORTED`, `NONADJACENT_UNSUPPORTED`,
 `DIAGONAL_UNSUPPORTED` and `CROSS_SECTOR_UNSUPPORTED`. Disposition stays null.
 There is no Godot integration, navigation, combined passability, dynamic
-state/door behavior, resource precedence or original movement parity. The
-[passability frontier](passability-contract.md) remains open.
+state/door behavior, resource precedence or original movement parity.
+Unsupported means a silent NoBlock is never assumed: the excluded requests
+(projectile, sound, skip-objects, ignore-critters, wall, portal, window, critter,
+traps, spells, combat, mutable state, diagonal, same-cell, non-adjacent,
+cross-sector) keep null disposition.
+
+## Composition boundary
+
+A consumer must keep this component's result next to the serialized block-mask,
+facade, tile-name, dynamic/state, actor and edge components and may never derive
+a combined `Supported + Open` (walkable) answer from it; the full selected-sector
+result stays Unknown until those independent dependencies and the precedence
+policy are admitted. The component selects no archive, DIF, PATCH or loose-file
+precedence, loads no neighbor sector and establishes no original executable
+behavior. The retained gaps and the Open/Blocked composition rule are in the
+[traversal research contract](area-traversal-contract.md). A normal direct
+slot-18 result carries `OBSERVED_SERIALIZED_INSTANCE` and `SOURCE_READING`
+provenance, an inherited one also `PROTOTYPE_DEFAULT`; the archived WorldEd
+report is corroboration, not original-runtime provenance. The self-test holds a
+distinct slot-19 sentinel against accidental substitution for slot 18.
 
 ## Reproduction and independent oracles
 

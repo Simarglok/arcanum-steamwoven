@@ -12,7 +12,7 @@ is ARC-RENDER-015 and is never a merge gate.
 
 Follow-up (2026-10-16): the owner rejected these 2× outputs on sight (staircase
 edges, no added detail) and moved to a provisional soft-edge 4× base plus generative
-re-detailing; see [hd-generative-redetail.md](hd-generative-redetail.md) (ARC-RES-038).
+re-detailing; see [HD interface art](hd-interface-art.md) (the rejected generative re-detail study, ARC-RES-038, is deleted).
 
 Owner decisions this note works under (2026-10-16, [decisions](../architecture/decisions.md),
 HD pack): scale 2× only; the owner builds the pack on their own machine; the pack is

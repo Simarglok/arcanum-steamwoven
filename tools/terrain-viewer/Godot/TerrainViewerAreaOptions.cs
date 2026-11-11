@@ -37,7 +37,7 @@ public partial class TerrainViewerApp
 
     /// <summary>The values the options window shows: the host's settings as they are now.</summary>
     private AreaGameOptions CurrentGameOptions() => new(_gameSettings.Difficulty, _turnBasedSetting ? 1 : 0, _gameSettings.AutoAttack, _alwaysRunOption,
-        _audioVolumes.Effects, _audioVolumes.Voice, _audioVolumes.Music, _ruleMode, _gameSettings.Floats, _gameSettings.FloatSpeed, HdGraphicsOption, _gameSettings.HdInterface, _gameSettings.HdPackSource, _gameSettings.GeneratedInterface);
+        _audioVolumes.Effects, _audioVolumes.Voice, _audioVolumes.Music, _ruleMode, _gameSettings.Floats, _gameSettings.FloatSpeed);
 
     /// <summary>The options texts, read once a run (the game's files, or the project's with the reason).</summary>
     private AreaOptionsTexts OptionsTexts()
@@ -98,47 +98,13 @@ public partial class TerrainViewerApp
                 SaveLauncherRules();
                 if (_areaSession is { } ruled) ApplySessionSettings(ruled);
                 break;
-            case AreaOption.HdInterface:
-                // ARC-UI-095: the interface art alone, saved with the game settings; it does not touch the visual profile (H, HD graphics).
-                // ARC-UI-140: 2 is the generated interface (experimental); it keeps the HD redraws on for the pictures it does not generate.
-                if (value is not (0 or 1 or 2)) { refused = "out of range"; break; }
-                SaveGameSettings(_gameSettings with { HdInterface = value >= 1, GeneratedInterface = value == 2 });
-                break;
-            case AreaOption.HdPack:
-                // ARC-DEV-350: where the HD pack is read from; saved at once, effective at the next start.
-                if (!Enum.IsDefined((HdPackSourceMode)value)) { refused = "out of range"; break; }
-                ChooseHdPackSource((HdPackSourceMode)value);
-                break;
-            case AreaOption.HdGraphics:
-                // ARC-UI-089: the saved visual profile (ARC-UI-006) for the pack's sprites and ground (the interface follows HD interface,
-                // ARC-UI-095); the line takes effect even with no pack (every frame then draws Legacy, as H does).
-                if (value is not (0 or 1)) { refused = "out of range"; break; }
-                if (_canvas is null) { refused = "no scene to draw the profile"; break; }
-                RequestVisualProfile(value == 1 ? VisualProfile.Hd : VisualProfile.Legacy, "options");
-                break;
             default: refused = option + " is not offered"; break;
         }
         GD.Print($"ARC-UI-013 option {option}={value} {(refused is null ? "applied" : "refused: " + refused)}");
         return refused;
     }
 
-    /// <summary>ARC-DEV-350: saves the HD pack source, says in the options window what the next start will read (the chosen source, or why the
-    /// first one was skipped) and, for Custom, asks for the folder.</summary>
-    private void ChooseHdPackSource(HdPackSourceMode mode)
-    {
-        SaveGameSettings(_gameSettings with { HdPackSource = mode });
-        ReportHdPackSource();
-        if (mode == HdPackSourceMode.Custom) AskHdPackFolder();
-    }
-
-    private void ReportHdPackSource()
-    {
-        var text = HdPackSourceText();
-        GD.Print("ARC-DEV-350 " + text);
-        if (_mainMenu is not null) _mainMenu.Notice = text;
-    }
-
-    /// <summary>What the next start will read for the saved HD pack source (the options window's note, ARC-UI-143: the launcher's too).</summary>
+    /// <summary>What the next start will read for the saved HD pack source (the launcher screen's note, ARC-UI-143).</summary>
     private string HdPackSourceText()
     {
         // An automated run reads no pack folder (ARC-DEV-032); an ordinary run stats every pack file once, no frame is read.
@@ -147,32 +113,6 @@ public partial class TerrainViewerApp
             : ResolveHdPack(_gameSettings.HdPackSource, _gameSettings.HdPackPath).Notice();
         if (!AutomatedVisualRun && !string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("ARC_HD_PACK"))) text += " (this run's ARC_HD_PACK overrides it)";
         return text;
-    }
-
-    /// <summary>ARC-DEV-350: the system folder dialog (a pack folder, or a folder of packs) for the Custom source; where there is none (a
-    /// headless or automated run) the note names the setting to edit.</summary>
-    private void AskHdPackFolder()
-    {
-        if (AutomatedVisualRun || DisplayServer.GetName() == "headless" || !DisplayServer.HasFeature(DisplayServer.Feature.NativeDialogFile))
-        {
-            if (_mainMenu is not null) _mainMenu.Notice = (_mainMenu.Notice is { Length: > 0 } note ? note + " | " : "") + "no folder dialog here: the folder is the hdPackPath of the game settings file";
-            return;
-        }
-        var start = _gameSettings.HdPackPath is { } saved && System.IO.Directory.Exists(saved) ? saved
-            : System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile);
-        var failure = DisplayServer.FileDialogShow("HD pack: a pack folder or a folder of packs", start, "", false, DisplayServer.FileDialogMode.OpenDir, [],
-            Callable.From<bool, string[], int>((ok, paths, _) => CallDeferred(MethodName.HdPackFolderChosen, ok && paths.Length > 0 ? paths[0] : "")));
-        if (failure != Error.Ok && _mainMenu is not null) _mainMenu.Notice = "the folder dialog did not open (" + failure + ")";
-    }
-
-    private void HdPackFolderChosen(string folder)
-    {
-        if (folder.Length == 0 || _mainMenu is null) return; // cancelled: the setting stays as it is
-        if (folder.Length > AreaGameSettingsCodec.MaxPath || !System.IO.Directory.Exists(folder)) { _mainMenu.Notice = "that folder cannot be used"; RenderMainMenu(); return; }
-        SaveGameSettings(_gameSettings with { HdPackSource = HdPackSourceMode.Custom, HdPackPath = folder });
-        ReportHdPackSource();
-        if (_mainMenu is { Window: AreaMenuWindow.Options }) BindOptionsWindow();
-        RenderMainMenu();
     }
 
     /// <summary>The settings a session takes from the player rather than from a save: the difficulty (its skill and experience readers,

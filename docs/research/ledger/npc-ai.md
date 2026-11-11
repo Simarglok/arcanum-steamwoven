@@ -4,7 +4,7 @@ Part of the [original verification ledger](../original-verification-ledger.md) (
 
 ## NPC AI, reaction and companions (ARC-RES-039, ARC-RES-028, ARC-RES-024)
 
-Source: [AI plan](../npc-combat-ai-plan.md#first-pass-anomalies-to-confirm-not-adopted),
+Source: [AI plan](../npc-combat-ai-plan.md#anomaly-decisions),
 [load map](../combat-domain-load-map.md#8-anomalies-found-by-this-reading),
 [reaction](../npc-reaction-reputation-evidence.md#source-anomalies-and-decisions),
 [companions](../companion-follow-evidence.md#open-questions).

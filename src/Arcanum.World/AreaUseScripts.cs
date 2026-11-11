@@ -675,7 +675,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             var worn = _session.QueryEquipment().Worn.ToDictionary(item => item.Entity, item => (int)item.Slot, StringComparer.Ordinal);
             int? Location(string entity) => worn.TryGetValue(entity, out var slot) ? slot : null;
             return _session.QueryHeroKit().Select(item => new HeldItem(item.Kind.Name, Location(item.Entity)))
-                .Concat(_session.QueryPcInventory().Select(item => new HeldItem(item.Kind.Name, Location(item.Entity)))).ToArray();
+                .Concat(_session.QueryPcInventory().Select(item => new HeldItem(item.Kind.Name, Location(item.Entity))))
+                // ARC-MAGIC-051: an item the hero assembled lives in the made items, not the kit or the pack (the powered shield's timer needs its name).
+                .Concat(_session.QueryMadeItems().Select(item => new HeldItem(item.Kind.Name, Location(item.Entity)))).ToArray();
         }
         var holder = _session.QueryMapInventory(new SessionMapId(obj.Map))?.Holders.FirstOrDefault(h => h.Entity == obj.Code);
         return holder is null ? [] : holder.Items.Select(item => new HeldItem(item.Facts.Kind.Name, item.Facts.InventoryLocation)).ToArray();

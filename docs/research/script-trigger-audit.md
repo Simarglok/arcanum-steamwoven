@@ -5,54 +5,35 @@
 Status: **Research and fix**, work item ARC-SCRIPT-047 (2026-10-29). The owner asked whether the scripts that do not run in
 Steamwoven (for example Virgil's talk at the start of a new game, which the original opens at once) are a systemic gap or one
 script each. This note answers it from the retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…23678d52`) and the installed data:
-
-1. every attachment point and every other entry the original runs a script from, with its call sites, against the Steamwoven
-   host that runs it (section 2 and 3);
-2. the interpreter's condition and action tables against the sets each Steamwoven host admits, with counts of what the installed
-   attachments need (section 4);
-3. the chain behind Virgil's opening talk, traced in the executable and fixed in the same change (section 1);
-4. a prioritised list of fix slices, each its own task (section 6).
+every attachment point and other entry the original runs a script from, with its call sites, against the Steamwoven host that
+runs it (sections 2 and 3); the interpreter's condition and action tables against the host admission sets (section 4); and a
+prioritised list of fix slices, each its own task (section 6).
 
 Evidence levels follow the [original executable check](original-executable-check.md). Rows TG1–TG8 of the
-[ledger](ledger/scripts.md#script-triggers-arc-script-047) were read for this task with `llvm-objdump` and, independently, by a
-second reader that saw only the questions and the addresses (method step 6). The event catalogue of the
-[dispatcher research](scr-event-dispatcher.md#2-event-catalogue-s) (E rows, F0) supplied the names; every call site below was
-found again in the executable by scanning all direct calls of the object script entry 0x441980 and reading the point argument each
-one pushes. Behaviour is described in prose; no listing, byte or oracle output is in git. Original parity beyond the rows named here
-is **NOT_VERIFIED**.
+[ledger](ledger/scripts.md#script-triggers-arc-script-047) were read with `llvm-objdump` and, independently, by a second reader
+(method step 6). The event catalogue of the [dispatcher research](scr-event-dispatcher.md#2-event-catalogue-s) (E rows, F0)
+supplied the names; every call site below was found by scanning all direct calls of the object script entry 0x441980 and reading
+the point argument each one pushes. Behaviour is described in prose; no listing, byte or oracle output is in git. Original parity
+beyond the rows named here is **NOT_VERIFIED**.
 
 ## Answer
 
-- **Systemic, three causes.** A script of the original does not run in Steamwoven when (a) no Steamwoven host fires its trigger
-  (23 of the 35 points the original fires have no host at all, section 2), (b) its host's admission set refuses one of its commands
-  (the interpreter runs 52 of 142 action types and 14 of 53 condition types; each host admits a subset, section 4), or (c) the host
-  runs it but cannot apply an effect (a teleport from a heartbeat, a creation off the shown map). Per-script fixes would never end:
-  the slices of section 6 are per trigger and per command group.
-- **Virgil's opening talk** is cause (b): his **heartbeat** (point 19, script 1100), not a dialog or tile trigger. The AI tick runs
-  it as soon as the new game's first tick finds the PC within 30 tiles; it loops over everyone in his vicinity, and for the PC it
-  calls his own dialog point (script 1324) at line 4 with the PC as triggerer, whose dialog action opens DLG 1324 at node 1; then it
-  removes itself and skips the tick's default. Steamwoven refused 1100 (the heartbeat set had no loop, no vicinity focus, no get
-  object type and no call-ex, and call-ex refused the dialog point). **Fixed here** (section 1): new set S17 (critter vicinity),
-  call-ex of the dialog point with the original's dialog gates, a wider heartbeat set, and the viewer opens the talk after the tick.
-  A new game at the Crash Site now opens Virgil's talk without any input (smoke stage `opening`).
+**Systemic, three causes.** A script of the original does not run in Steamwoven when (a) no Steamwoven host fires its trigger
+(section 2), (b) its host's admission set refuses one of its commands (the original's executor has 142 action types and 53 condition
+types (ledger TG7); each host admits a subset, section 4), or (c) the host runs it but cannot apply an effect (a teleport from a heartbeat, a
+creation off the shown map). Per-script fixes would never end: the slices of section 6 are per trigger and per command group.
 
 ## 1. Virgil's opening talk (TG3–TG6)
 
-| Step | Original | Before | Now |
-| --- | --- | --- | --- |
-| Tick | Sector load gives each NPC an immediate AI tick; a living NPC's first tick runs point 10 (Virgil has none), then the near test (alive, no turn-based round, the local PC within 30 tiles) runs point 19 with the NPC as triggerer and attachee; *run default* goes on to the AI pass, *skip default* reschedules (TG3, 0x4AD200, 0x4AD420). | Same (ARC-WORLD-114, `AiSchedulerRules`). | Same. |
-| 1100 | Line 0 loop for over focus 8 (everyone in the vicinity), 1 get object type of the looped object, 2 not 15 (a PC) → loop end; 3 call-ex: attachee, point 9, line 4, triggerer the looped object; 4 remove this script; 5 return and skip default (TG6, data). | Refused: actions 18, 19, 34, 81 and focus 8, 10 outside the heartbeat set; the tick went on as without a script. | Admitted by the heartbeat set; the vicinity is the PCs and NPCs within 10 tiles on both axes (TG4). |
-| Vicinity | Focus 8 and 9: the PCs and NPCs (type mask 0x18000) in the play-window box centred on the attachee, the attachee itself included; destroyed or switched-off objects skipped (mask 0x5E2F88 = 3 outside the editor); at most 100 (TG4, 0x44B4E0, 0x440FC0, 0x440B40). | Not modelled. | `IScrWorldQueries.CrittersInVicinity`, set S17; the viewer answers NPC rows at their live cells (AI-moved, companions) and the PC. |
-| Call-ex | Runs the object's point-9 slot through the object entry 0x441980, so the interpreter's dialog gates apply: a dead NPC without the death-speech file flag 0x8 or a surrendered one without 0x10 runs nothing, a mind-controlled one runs 2188 (TG5, 0x44B170, 0x4449B0). | Refused for points 1 and 9; a dialog action in a call-ex callee refused. | Point 9 runs with the gates; a dialog action in the callee is allowed (its X11 store and the call-ex writeback are the same slot). Point 1 stays refused (the trap spot of a nested use is not modelled). |
-| 1324 | Line 4: dialog node 1 (X11: the PC triggerer starts the talk with DLG 1324; the run's flags go to Virgil's dialog slot). A "return to script" end resumes his point 9 (G4). | — | `ScrDialogStart` with `Point = 9`; the viewer opens it after the event pump (`OpenHeartbeatConversation`), keeps the dialog slot under the dialog host's keys (`dialog.*`), lets the DLG use LF and resumes his dialog slot. |
-
-Steamwoven both rule modes: the same (the original's own behaviour, no anomaly). At the Crash Site the PC starts 2 tiles from
-Virgil, so the talk opens on the first ticks; the smoke stage `opening` observes it (2 frames, node 1, heartbeat removed, no second
-talk). The run is applied before the talk opens (the heartbeat has removed itself), so a talk asked for while another
-conversation or a window is open or the hero is under attack stays pending and opens once it can (Steamwoven's choice, U5). A
-call-ex of the dialog point refuses a callee that reaches call script, as a dialog-point event does (the called script would skip
-the dialog gates). The vicinity leaves out an NPC its map data has destroyed or off (object flags 0x1, 0x2) and one gone in the
-session.
+Fixed in ARC-SCRIPT-047. It was cause (b): Virgil's **heartbeat** (point 19, script 1100), not a dialog or tile trigger. The AI
+tick runs it when the new game's first tick finds the PC within 30 tiles (TG3, 0x4AD200, 0x4AD420); it loops over everyone in his
+vicinity (the PCs and NPCs in the play-window box centred on the attachee, at most 100, destroyed or switched-off objects skipped,
+TG4), and for the PC calls his own dialog point (script 1324, line 4; the dialog gates of a call-ex apply, TG5) whose dialog
+action opens DLG 1324 at node 1, then removes itself and skips the tick's default (TG6). Steamwoven added set S17 (critter
+vicinity, `IScrWorldQueries.CrittersInVicinity`), call-ex of the dialog point, a wider heartbeat set and the viewer's
+`OpenHeartbeatConversation`; the smoke stage `opening` observes it. Both rule modes behave the same (the original's own
+behaviour). A talk asked for while another conversation or a window is open or the hero is under attack stays pending and opens
+once it can (Steamwoven's choice, U5). A call-ex of the dialog point refuses a callee that reaches call script.
 
 ## 2. Attachment points: who fires them
 
@@ -100,20 +81,22 @@ from line 0, static.
 | 34 | critical hit | 0x4B2BAE, 0x4B2FD4, 0x4B37CD (and 0x4B47F8) | **none** | 4 (4) | — |
 | 35 | critical miss | 0x4B2F35, 0x4B3163, 0x4B399C (and 0x4B47F8) | **none** | 2 (2) | — |
 
-Points the original fires for which Steamwoven has **no host**: 0 examine, 2 destroy, 3 unlock, 6 throw, 7 hit, 8 miss, 12 dying,
-13 enter combat, 14 exit combat, 15 start combat, 16 end combat, 17 buy object, 18 resurrect, 20 leader killing, 22 will KOS,
-23 taking damage, 26 critter hits, 27 new sector, 29 leader sleeping, 30 bust, 33 caught thief, 34 critical hit, 35 critical miss.
-Points with a **partial** host: 1 use (use clicks on guarded sites and written items; not the use goal on portals and containers, the
-bed, the trap disarm or the magick-tech component), 4/5/21/24/25/28/32 (the session's item scripts for the hero's own moves only),
-9 dialog (talk, resumption, deferred calls, now a heartbeat's call-ex; not the dead/surrender speech gates of a talk), 10 and 19
-(real-time AI ticks of the shown map; the turn-based subturn heartbeat 0x4B704A runs no script yet), 11 catching thief (pick pocket
-only; the guard's crime notice 0x4AEFCD is not hosted).
+
+Points the original fires for which Steamwoven has **no host**: 2 destroy, 3 unlock, 6 throw, 7 hit, 8 miss, 13 enter combat,
+14 exit combat, 15 start combat, 16 end combat, 17 buy object, 18 resurrect, 20 leader killing, 22 will KOS, 26 critter hits,
+27 new sector, 29 leader sleeping, 30 bust, 33 caught thief, 34 critical hit, 35 critical miss. Points with a **partial** host:
+1 use (use clicks on guarded sites and written items; not the use goal on portals and containers, the bed, the trap disarm or the
+magick-tech component), 4/5/21/24/25/28/32 (the session's item scripts for the hero's own moves only), 9 dialog (talk,
+resumption, deferred calls, a heartbeat's call-ex; not the dead/surrender speech gates of a talk), 10 and 19 (real-time AI ticks
+of the shown map; the turn-based subturn heartbeat 0x4B704A runs no script yet), 11 catching thief (pick pocket only; the
+guard's crime notice 0x4AEFCD is not hosted), 12 dying, 23 taking damage and 0 examine (hosted, with the limits in the table).
+
 
 ## 3. Entries that are not an object slot
 
 | Entry | Original | Steamwoven |
 | --- | --- | --- |
-| Tile script | 0x4C0980, from the location change 0x444270 for a PC or NPC (type 15/16) whenever a location set passes mode 1 or 2 (TS2): moves (0x43E770, 23 callers), object placement (0x4415C0, 12), creation (0x442260, 4), 0x43EA20; mode 0 (0x4423E0, 5 callers) runs none. A second caller walks a tile path (0x455350 from 0x452630) and runs each tile's script (TG2). | Map mode: the PC's steps (ARC-SCRIPT-017) and the companions' (ARC-SCRIPT-046). AI-host movers since ARC-DEV-206 and pushed companions since ARC-DEV-298; since ARC-DEV-328 also companions carried from another map (steps and arrival), a companion's catch-up jump and waypoint relocation (TG9); since ARC-DEV-351 also a leaderless ex-follower's arrival when its home map opens (the saved teleported mark, schema 86) and the PC's own arrival tile after a map change, a landing or a same-map teleport (a same-map arrival drops its jump point and teleport, as the original refuses requests during the change). **Not** a created or placed critter, a follower that travels with a same-map teleport, or the path walk. Of 3,012 tile scripts 1,186 run and 1,696 are refused by their set (the tile census of `AreaUseScriptsOriginalTests`; 829 and 2,053 before ARC-DEV-100 and ARC-DEV-157, 684 and 2,198 before ARC-SCRIPT-052). |
+| Tile script | 0x4C0980, from the location change 0x444270 for a PC or NPC (type 15/16) whenever a location set passes mode 1 or 2 (TS2): moves (0x43E770, 23 callers), object placement (0x4415C0, 12), creation (0x442260, 4), 0x43EA20; mode 0 (0x4423E0, 5 callers) runs none. A second caller walks a tile path (0x455350 from 0x452630) and runs each tile's script (TG2). | Map mode: the PC's steps (ARC-SCRIPT-017) and the companions' (ARC-SCRIPT-046). AI-host movers since ARC-DEV-206 and pushed companions since ARC-DEV-298; since ARC-DEV-328 also companions carried from another map (steps and arrival), a companion's catch-up jump and waypoint relocation (TG9); since ARC-DEV-351 also a leaderless ex-follower's arrival when its home map opens (the saved teleported mark, schema 86) and the PC's own arrival tile after a map change, a landing or a same-map teleport (a same-map arrival drops its jump point and teleport, as the original refuses requests during the change). **Not** a created or placed critter, a follower that travels with a same-map teleport, or the path walk. Of 3,012 tile scripts 1,186 ran and 1,696 were refused by their set at ARC-SCRIPT-052 (the tile census of `AreaUseScriptsOriginalTests`). |
 | Sector script | 0x4F2330 for the local player entering a sector (TS3); followers then get point 27. | Map mode, PC crossing a sector. Point 27 not run. |
 | Call script (7) | 0x44B030: the callee from its header at the caller's point, every triggerer × attachee pair (OV1, X11). | Use, tile and sector sets; not the talk or heartbeat sets. |
 | Call-ex (81) | 0x44B170 → 0x441980 (WE3, TG5). | Item set, heartbeat set, since ARC-SCRIPT-052 the tile and sector set; point 1 refused. |
@@ -125,76 +108,53 @@ only; the guard's crime notice 0x4AEFCD is not hosted).
 
 The interpreter dispatches conditions 0..52 through the table at 0x44714C and actions 1..141 by type − 1 through 0x44ADBC (type 0
 and anything above 141 fall to the default: next line). Every action type has its own case except call in and call at (54, 55),
-which share one (TG7). Steamwoven's interpreter runs at most set **S19** (ARC-SCRIPT-050; S18 of ARC-SCRIPT-049 plus float line and get area): 56 action
-types and 16 condition types.
-
-| Host (set) | Point(s) | Actions admitted | Conditions | Focus kinds |
-| --- | --- | --- | --- | --- |
-| Talk with a hero (`AreaScriptHost.SkillAdmission`) | 9, deferred calls | 0–6, 8–14, 16, 42–43, 47, 49–50, 54, 64–65, 72–73, 82–83, 87, 100–101, 114, 125, 129, 139 (34) | 0, 3–5, 18, 39, 43 | 0, 1, 12, 21 |
-| Talk with the shown map's queries (`AreaScriptHost.SkillTalkAdmission`, ARC-SCRIPT-050) | 9, deferred calls | the talk set plus 23, 37, 84 (37) | 0, 3–6, 17–18, 20–22, 27, 33, 39, 43 | as talk |
-| Use click, item use, catching thief (`AreaUseScriptHost.Admission`) | 1, 11 | 0–3, 5–16, 18–19, 24, 34, 37, 42–44, 49–50, 52, 54, 64–65, 72–73, 82–83, 87, 100–102, 114, 125 (40) | 0, 3–6, 17–18, 20–21, 33, 39, 43 | 0, 1, 10–12, 15, 21 |
-| Tile and sector (`PlacedAdmission`) | tile, sector | the use set plus 4 (41) | as use | as use |
-| Heartbeat (`HeartbeatAdmission`, this task and ARC-SCRIPT-049) | 10, 19 | 0–6, 8–14, 18–19, 34, 42–43, 54, 56, 58, 71, 81, 100–101, 134 (27) | 0, 3–5, 18, 20, 22, 27, 33, 43 | 0, 1, 8–10, 12, 21 |
-| Item scripts (`SessionItemScripts.Admission`) | 4, 5, 21, 24, 25, 28, 32 | 0–3, 5–6, 8–14, 24, 77–78, 81–82, 91, 100–101, 120 (22) | 0, 3–5, 18, 39, 43, 47, 50 | 0, 1, 12, 21 |
-
-No host admits actions 17, 20–22, 25–33, 35–36, 38–41, 45–46, 48, 51, 53, 55, 57, 59–63, 66–70, 74–76, 79–80, 85–86, 88–90,
-92–99, 103–113, 115–119, 121–124, 126–128, 130–133, 135–138, 140–141 (87 types) or conditions 1–2, 7–16, 19, 23–26, 28–32, 34–38,
-40–42, 44–46, 48–49, 51–52 (37 types). The census names the ones the installed attachments reach first (section 5).
+which share one (TG7). Each Steamwoven host admits a subset: talk with a hero (`AreaScriptHost.SkillAdmission` and
+`SkillTalkAdmission`), use click, item use and catching thief (`AreaUseScriptHost.Admission`), tile and sector
+(`PlacedAdmission`), heartbeat (`HeartbeatAdmission`) and the hero's item scripts (`SessionItemScripts.Admission`). The sets
+live in `ScrAdmission` and the host classes; the
+[dispatcher contract](../scripting/scr-dispatcher-runtime.md) says what each set holds. Counts of what the installed attachments
+reach first come from the census (section 5), not from a table here.
 
 ## 5. Census of the installed attachments
 
-Census of 2026-10-29 (`ScriptTriggerCensusTests`, opt-in, the installed 1.0.7.4 data): the 79 maps map mode opens, one row per
-object entity (its first snapshot row), every point but 31. "Admitted" is the host's set from line 0 (region admission); a run can
-still stop on an effect its host cannot apply. Numbers only; the file it writes stays private.
+`ScriptTriggerCensusTests` (opt-in, the installed 1.0.7.4 data; command under Reproduction) counts, over the 79 maps map mode
+opens, one row per object entity and point (every point but 31) and the first command each host refuses; numbers only, the file
+it writes stays private. Run it again for current counts. The first census (2026-10-29) found 3,479 attachments on 22 points, 2,467
+of them use (1) on doors and containers; points with no host held 444 attachments (dying 167, bust 64, will KOS 60, examine 54,
+destroy 26, hit 26, critter hits 18, enter combat 9, resurrect 8, critical hit 4, new sector 3, start combat 2, critical miss 2,
+taking damage 1; dying, examine and taking damage have hosts since).
 
-- **3,479 attachments on 22 points**; 2,467 of them are use (1), most on doors and containers that one script serves (245 scripts).
-  The points with no host hold 444 attachments: dying 167, bust 64, will KOS 60, examine 54, destroy 26, hit 26, critter hits 18,
-  enter combat 9, resurrect 8, critical hit 4, new sector 3, start combat 2, critical miss 2, taking damage 1.
-- **First refusals per host** (the first command of the reachable lines outside the set; condition and action numbers as in
-  [the opcode census](scr-census.md)):
-  - use (1), 246 of 2,467 refused: get hit points (107) 215, computed goto 7, set lock state (53) 5, the vicinity of everyone in a use
-    script (focus 8) 5, change art (59) 4, then one each of unfog town map, grant fate point, eye candy, destroy item named, damage;
-  - dialog (9), 127 of 180 refused, 1 missing: float line (23) 45, critter disband (22) 17, obj is wielding (condition 21) 14, get
-    area (84) 10, random (37) 8, obj is dead (condition 22) 6, get reaction (29) 5, PC quest state (condition 6) 4, hours since
-    start (105) 3, loop for (18) 3. Since ARC-SCRIPT-050 (the talk set "S3-area-talk-queries-skill", S19, with ARC-SCRIPT-049's obj is dead) 64 of 180
-    refused, 1 missing; the largest: critter disband (22) 17, a condition over everyone in the group (focus 13) 14, get reaction (29) 11,
-    obj is in combat (condition 10) 4, hours since start (105) 3, loop for (18) 3, adjust money (36) 3, goto beyond the end 2, give gold
-    (33) and daytime (condition 1) 2 each. ARC-DEV-178 (2026-11-07, bug B19): get reaction (29) is admitted in the talk set (S23) and get area on the start map is answered; the census still admits 115 of 180 and the first refusals are now critter disband (22) 17, a condition over everyone in the group (focus 13) 14, action 30 7, action 33 6, loop for (18) 4, obj is in combat (condition 10) 4, hours since start (105) 3, action 36 3, goto beyond the end 2, daytime (condition 1) 2;
-  - heartbeat (19), 108 of 141 refused: obj is switched off (condition 27) 51, obj is named (condition 20) 26, set faction (134),
-    damage (60) and distance between (71) 4 each, obj is dead and has reputation (conditions 22, 33) 3 each, call script in (54) and
-    destroy (68) 2 each; first heartbeat (10): 21 of 23 admitted, 2 refused by condition 27. After ARC-SCRIPT-049 (slice 1, recount of the
-    same day): heartbeat 81 of 141 admitted, first heartbeat 23 of 23; the heartbeat's first refusals are create object (52) 13, critter
-    follow (21) 10, attack (36) 7, the scenery vicinity in a heartbeat (focus 15) 5, damage (60) 4, call script (7) 4, set day standpoint
-    (45) 3, destroy (68), PC quest state (condition 6) and a global variable operand (value kind 1) 2 each;
-  - item scripts: insert item (21) 25 of 28 refused (toggle state 16, loop for 5), wield on (24) 6 of 98 (call script in 4), wield
-    off (25) 1 of 92, transfer (32) 3 of 6.
 - **Opening heartbeats.** Nine installed heartbeats call their NPC's own dialog point as 1100 does: the Crash Site's 1100 (Virgil)
   and 1717 (the Molochean agent there, after a story flag), Wheel Clan 2700, the Void 1130 and 3081 (Arronax's interior), the Panarii
-  temple 2602, Drog's cave 1490, Dernholm castle 1015 and Vollinger's basement 2106. ARC-SCRIPT-047 admitted 1100 only; since
-  ARC-SCRIPT-049 the set admits 1100, 2700, 1130, 3081 and 2106. The other four still stop on a command outside the set: 1717 on set day
-  standpoint (45), then set night standpoint (46), get location (95) and action run to (74); 2602 on obj can see obj (condition 28), then
-  obj within range (34); 1490 on obj is in dialog (condition 26); 1015 on a global variable operand (value kind 1; admitted by the viewer's heartbeat set since ARC-DEV-100).
-- **Tile scripts** (not object slots): 1,186 of 3,012 run, 1,696 refused (829 and 2,053 before ARC-DEV-100, whose global variable, PC variable and PC flag operands admit 27 more, and ARC-DEV-157, whose get stat and vicinity loops admit 330 more; 684 and 2,198 before ARC-SCRIPT-052, slice 8's first group).
+  temple 2602, Drog's cave 1490, Dernholm castle 1015 and Vollinger's basement 2106. The heartbeat set admits 1100, 2700, 1130, 3081
+  and 2106 (ARC-SCRIPT-047, 049). The other four stopped on a command outside the set when read: 1717 on set day standpoint (45), then
+  set night standpoint (46), get location (95) and action run to (74); 2602 on obj can see obj (condition 28), then obj within range
+  (34); 1490 on obj is in dialog (condition 26); 1015 on a global variable operand (admitted by the viewer's heartbeat set since
+  ARC-DEV-100). Recount with the census before relying on this.
+- **Tile scripts** (not object slots): 3,012 in the installed data; 1,186 ran and 1,696 were refused at ARC-SCRIPT-052 (slice 8).
+
 
 ## 6. Fix slices (prioritised)
 
-Each slice is its own task and thread; codes come from the coordinator. "Reach" is what the census says it unlocks.
+Each slice is its own task and thread; codes come from the coordinator. "Reach" is what the census says it unlocks. Done slices
+carry their task code; the open ones are 5, 6, 7, 10, 11, 12, 13 and the rest of 2, 3, 4, 8 and 9.
 
 | # | Slice | Covers | Reach |
 | ---: | --- | --- | --- |
-| 1 | Heartbeat conditions and world queries (ARC-SCRIPT-049: done but damage and destroy, which go to their own slice) | conditions obj is switched off (27), obj is named (20), obj is dead (22), has reputation (33); actions distance between (71), call script in (54), set faction (134), damage (60), destroy (68) in the heartbeat set | most of the 108 refused heartbeats, the 2 refused first heartbeats, the eight other opening talks (1717 at the Crash Site first) |
-| 2 | Dialog-point commands | float line (23), critter disband (22), obj is wielding (21), get area (84), random (37), obj is dead (22), get reaction (29), loop for (18) in the talk set | most of the 127 refused dialog scripts (talks that now run default). **Done in part** by ARC-SCRIPT-050 (S19: float line, get area, random, the S4 guard conditions and ARC-SCRIPT-049's obj is dead and obj is switched off in the talk set; 63 more rows admitted). Left: critter disband (22) comes only with transform into basic prototype (40), all 17 rows script 30009; obj is wielding over everyone in the group (focus 13, 14 rows, script 1160) is a list condition (slice 11); get reaction (29) with set reaction (30, 0x447ABA: reaction_adj by the difference) and give gold (33); the loop-for talks 1105, 1111, 1116 need conditions over lists and actions 99, 81, 36 |
-| 3 | Tile scripts for every moved critter | the location change of TG2 for AI movers, visitors, a jump or teleport arrival, a created or placed critter, and the path walk 0x455350. **AI-host movers done** by ARC-DEV-206 (a step, a knockback slide, a route relocation; smoke `npc-tile`, the agent's exit tile 1724) and, by ARC-DEV-298, a companion the AI host pushes (`PushSlide`; its landing cell runs the tile script like a step); visitors from another map, a follower's own follow jump, teleports and created critters still open | traps, guards and story tiles NPCs step on |
-| 4 | Dying and destroy | points 12 and 2 (0x45DA57, 0x43CD0E), from the session's death and destroy; a heartbeat's kill then runs the dying script. **Point 12 done** by ARC-DEV-312 (ledger [DY1–DY6](ledger/scripts.md#creature-dying-script-point-12-arc-dev-312-b21-follow-up)): the life step asks the script after the hit points and before the death processing, on every kill path; point 2 (destroy) is still open | 167 + 26 attachments |
-| 5 | Combat points | enter, exit, start, end combat (13–16), hit, miss, critter hits, critical hit and miss, taking damage (7, 8, 26, 34, 35, 23) from the combat hosts | 62 attachments (Virgil's 1997 at enter combat) |
+| 1 | Heartbeat conditions and world queries | **Done** by ARC-SCRIPT-049 (conditions obj is switched off, obj is named, obj is dead, has reputation; actions distance between, call script in, set faction in the heartbeat set; damage and destroy went to their own slices) | |
+| 2 | Dialog-point commands | **Done in part** by ARC-SCRIPT-050 (S19) and ARC-DEV-178 (S23, get reaction). Left: critter disband (22) comes only with transform into basic prototype (40), all 17 rows script 30009; obj is wielding over everyone in the group (focus 13, 14 rows, script 1160) is a list condition (slice 11); set reaction (30, 0x447ABA: reaction_adj by the difference) and give gold (33); the loop-for talks 1105, 1111, 1116 need conditions over lists and actions 99, 81, 36 | talks that run default |
+| 3 | Tile scripts for every moved critter | The location change of TG2 for AI movers, visitors, a jump or teleport arrival, a created or placed critter, and the path walk 0x455350. **Done** for AI-host movers (ARC-DEV-206), pushed companions (ARC-DEV-298), carried companions (ARC-DEV-328) and arrivals (ARC-DEV-351). Open: a follower that travels with a same-map teleport, created or placed critters, the path walk | traps, guards and story tiles NPCs step on |
+| 4 | Dying and destroy | **Point 12 done** by ARC-DEV-312 (ledger [DY1–DY6](ledger/scripts.md#creature-dying-script-point-12-arc-dev-312-b21-follow-up)). Point 2 (destroy, 0x43CD0E) is open | 26 attachments |
+| 5 | Combat points | enter, exit, start, end combat (13–16), hit, miss, critter hits, critical hit and miss (7, 8, 26, 34, 35) from the combat hosts (taking damage, 23, is done by ARC-DEV-261) | 61 attachments (Virgil's 1997 at enter combat) |
 | 6 | Crime and KOS | will KOS (22, 0x4AE179), bust (30), caught thief (33) and the guard's catching thief (11 at 0x4AEFCD) | 124 attachments |
 | 7 | Use-set commands | get hit points (107), set lock state (53), change art (59), computed goto, focus 8 in use scripts | 246 refused use attachments |
-| 8 | Tile-script command groups | the first refusals of the 2,198 refused tile scripts, counted and admitted by group. **First group done** by ARC-SCRIPT-052 (S20, ledger TD1–TD3): call-ex (81), destroy (68) and stop attacking (109) in the tile set; Virgil's altar talk (1328 → 1324 line 14, node 250) opens, 145 more tiles run. **Second group done** by ARC-DEV-157 (S22, ledger GS1–GS4, bug B20 and B23): get stat (33), answered for the PC only, and the loops over everyone or anyone in the vicinity (focus 8, 9) in the tile and sector set (an empty list without an attachee, PG3); 45 more scripts are admitted whole (1,244 of 2,399 from line 0); the loop of Brego's ghost (2768) now stops at cast spell on (61, MT21), the first refusal of 16 scripts. **Third part done** by ARC-DEV-298 (bug B20): the casts had been admitted by ARC-DEV-241 (S29); the ghost's tile script 2768 then stopped one call deeper, in its callee 2789 at float line (23), which the tile and sector set now admits (the run's float lines are handed out by `AreaUseScriptHost.TakeFloats` and floated over their speakers; stage `tile-ghost`). First refusals left before that group (rows): get stat (33) 608, a loop over everyone in the vicinity (focus 8) 443, action 32 98, action 22 93, change art (59) 91, sector is blocked (condition 45) 89, condition 51 85, damage (60) 75, play script eye candy (120) 68, action 112 62, set day standpoint (45) 61, monster generator disabled (condition 46) 57; 1779 now stops at a computed goto. The agent's exit tile 1724 (destroy) needs slice 3 (tiles for AI movers) | tile scripts |
-| 9 | Examine, new sector, resurrect | points 0 (0x57CD93; **examine done** by ARC-DEV-326: the hover, hotkey and inventory descriptions run it, ledger HK24), 27 for followers (0x4F24A3, Virgil's 1568), 18 (0x4B5A46) | 65 attachments |
+| 8 | Tile-script command groups | **Done in three groups**: ARC-SCRIPT-052 (S20, ledger TD1–TD3: call-ex, destroy, stop attacking), ARC-DEV-157 (S22, ledger GS1–GS4, bugs B20 and B23: get stat for the PC, vicinity loops) and ARC-DEV-298 (float line in the tile set; stage `tile-ghost`). Open: the remaining first refusals by group (action 32, action 22, change art 59, sector is blocked 45, condition 51, damage 60, play script eye candy 120, action 112, set day standpoint 45, monster generator disabled 46; 1779 stops at a computed goto) | tile scripts |
+| 9 | Examine, new sector, resurrect | **Examine done** by ARC-DEV-326 (ledger HK24). Open: point 27 for followers (0x4F24A3, Virgil's 1568) and 18 (0x4B5A46) | 11 attachments |
 | 10 | Turn-based heartbeat | the subturn heartbeat 0x4B704A (point 19) in the round host | heartbeats in combat |
 | 11 | List conditions and vicinity order | conditions over focus kinds 8, 9, 15 (SG6, U2) and the list order (U1) | scripts that test "anyone near" |
 | 12 | Item-script commands | toggle state (56) and loop for (18) at insert item, call script in (54) at wield on | 35 item attachments |
 | 13 | Conversation resume and DLG LF | TG8: "return to script" runs the speaker's dialog point; a use- or tile-opened talk then resumes his dialog slot, so its LF reads that slot; read the DLG LF field in the executable (now F0) | talks opened by use and tile scripts |
+
 
 ## Reproduction
 
