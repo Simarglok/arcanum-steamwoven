@@ -120,7 +120,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **Оригинал и данные.** Расчёт стоимости прохода (0x43FE00) распознаёт подмножество wall p-pieces как окна и сообщает признак окна (оконные части и кто может прыгать сверены с exe, строка [W1, W2, W7](../research/ledger/world.md#world-movement-and-data-arc-res-047-arc-res-029-arc-res-034-arc-data-021-clock)); флаги traversal и тип actor влияют на блокировку (wall/window ветвь (0x43FE00), capability flags в caller (0x425760, 0x4257E0)). Отдельная общая pixel/alpha-модель окна из этих функций не следует. Приёмка здесь — предложенный synthetic fixture; выбранные оригинальные window piece и ART/resource association ещё не установлены. Она не является подтверждённым рендером оригинального окна.
 
-**Steamwoven сейчас.** Нет wall/window data path и actor-capability traversal для окон. Static obstruction contract явно исключает wall/window/portal branches и не трактует неопознанные записи как проходимые. [Границы компонента](../world/static-obstruction-contract.md#explicit-exclusions).
+**Steamwoven сейчас.** Нет wall/window data path и actor-capability traversal для окон. Static obstruction contract явно исключает wall/window/portal branches и не трактует неопознанные записи как проходимые. [Границы компонента](../world/static-obstruction-components.md).
 
 <a id="fr-scene-010"></a>
 
@@ -130,7 +130,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **Оригинал и данные.** Оригинал загружает roofs как отдельную секцию сектора; отрисовка крыш (0x439140) выбирает записи на 4-клеточной сетке и blit-ит roof ART, включая piece-specific fade alpha (roof load (0x4D1A30), draw и piece fade (0x439140); сетка, отрисовка и fade сверены с exe, строки [RF1, RF2](../research/ledger/world.md#roofs-arc-render-021)).
 
-**Steamwoven сейчас.** Для выбранной секции зафиксирован только framing roof section и empty discriminator; нет roof data model, ART-resolution chain, roof renderer или synthetic roof piece matrix. [Static scene scope](../rendering/static-scenery-contract.md#scope-and-status), [loader boundary](../world/static-object-loader.md#scope).
+**Steamwoven сейчас.** Для выбранной секции зафиксирован только framing roof section и empty discriminator; нет roof data model, ART-resolution chain, roof renderer или synthetic roof piece matrix. [Scenery placement](../research/scenery-placement.md), [loader boundary](../world/static-object-loader.md#scope).
 
 **Исследование.** [ARC-RES-029](../research/first-building-evidence.md): крыша первого дома — 9 из 256 слотов (3×3 блока по 4×4 клетки, ART номер 7, все девять видов кусков прямоугольника), кусок = кадр + флаг зеркала; fill/fade в данных сброшены. Реализации нет.
 
@@ -176,7 +176,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **Оригинал и данные.** Проверка открытости (0x4F08C0) и переключение портала (0x4F08F0) реализуют state/frame transition; wall/portal traversal пропускает открытую дверь и проверяет возможность попытки открыть закрытую (порядок проверок попытки открытия и выход из здания через запертый портал сверены с exe, строки [LV2–LV5](../research/ledger/world.md#leaving-a-building-through-a-locked-portal-arc-res-049)) (portal state (0x4F08C0, 0x4F08F0), traversal caller (0x43FE00)). Required inputs: portal flags/state, current ART frame, orientation, actor capability, and directed step.
 
-**Steamwoven сейчас.** Нет portal records, open/close animation, capability-aware door action или passability integration. Статический `Blocker/NoBlock` компонент явно исключает порталы и не может отвечать на этот шаг. [Static contract](../world/static-obstruction-contract.md#explicit-exclusions).
+**Steamwoven сейчас.** Нет portal records, open/close animation, capability-aware door action или passability integration. Статический `Blocker/NoBlock` компонент явно исключает порталы и не может отвечать на этот шаг. [Static contract](../world/static-obstruction-components.md).
 
 **Исследование.** [ARC-RES-029](../research/first-building-evidence.md): закрытая дверь блокирует своё ребро; игрок входит днём, ночью дверь заперта (ключа нет, сложность 25), выход открыт всегда; окна заклинены. Реализации нет.
 
@@ -215,7 +215,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 Статусы относятся только к закреплённому Steamwoven source snapshot. Проверка исходных данных, synthetic fixtures и просмотр кода не равны проверке оригинального runtime. Под «интеграцией» понимается подключение к сцене/симуляции, а не наличие отдельного диагностического API.
 
-Подробные границы и доказательства см. в соответствующих FR выше: [loader](../world/static-object-loader.md), [five-object scene contract](../rendering/static-scenery-contract.md), [static obstruction evidence](../research/static-obstruction-evidence.md), [four directed cardinal observations](../research/cardinal-traversal-evidence.md) и [movement catalogue](../project/status.md). Статус одного компонента не складывается с другим: данные сцены, ресурсная полнота, blocker и полный runtime verdict остаются разными измерениями.
+Подробные границы и доказательства см. в соответствующих FR выше: [loader](../world/static-object-loader.md), [scenery placement](../research/scenery-placement.md), [static obstruction evidence](../research/static-obstruction-evidence.md), [four directed cardinal observations](../research/cardinal-traversal-evidence.md) и [movement catalogue](../project/status.md). Статус одного компонента не складывается с другим: данные сцены, ресурсная полнота, blocker и полный runtime verdict остаются разными измерениями.
 
 Исследование не сохраняет игровые байты, тексты, изображения или локальные пути. Для подхода к provenance и уровней проверки см. [метод исследования](../research/method.md); принятое направление проекта см. в [архитектурных решениях](../architecture/decisions.md).
 

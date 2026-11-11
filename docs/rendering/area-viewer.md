@@ -101,7 +101,7 @@ height, hotspot, camera pan and zoom do not enter this ordering.
 
 Equal-rank deterministic identity tie-breaks are project policy, not recovered
 retail insertion order. The historical five-only
-[static scenery diagnostic](static-scenery-contract.md)'s
+[static scenery diagnostic](../research/scenery-placement.md)'s
 `(anchorY,anchorX,sourceIndex)` is not the area's universal order.
 
 The normal diagnostic observer does not detect invisibility. Inventory insertion

@@ -180,7 +180,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 ## Покрытие и неопределённости до 2026-10-20
 
-[RES-018 time/light](../world/time-lighting-contract.md) и [RES-020 clock policy](../world/game-clock-policy.md) смержены как исследование. Их bounded source/raw-data/table checks не являются тестами production clock или lighting. На audit baseline публичных clock/scheduler/light-scheme/emitters/rendering/save систем нет. WORLD004 существует на доске, но не вошёл в этот merged срез. Exact movement time и ART playback clocks остаются отдельными доменами.
+[RES-018 time/light](../world/time-lighting-contract.md) и [RES-020 clock policy](../world/game-clock-runtime.md#original-clock-evidence-carried-from-the-res-020-policy) смержены как исследование. Их bounded source/raw-data/table checks не являются тестами production clock или lighting. На audit baseline публичных clock/scheduler/light-scheme/emitters/rendering/save систем нет. WORLD004 существует на доске, но не вошёл в этот merged срез. Exact movement time и ART playback clocks остаются отдельными доменами.
 
 Area Data owner сохраняет секционные границы/counts и raw fields; декодирование источников/схем, их значение и активность требуют своих реализаций. Состояние исследования и production coverage разделены в матрице.
 

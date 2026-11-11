@@ -18,7 +18,7 @@
 Уточнение ARC-RES-016 для FR-DIALOG-001..004 и FR-SCRIPT-001..003:
 [исследование одного NPC Crash Site](../research/crash-site-npc-dialog-evidence.md)
 связывает исходный instance/prototype/event с условной точкой SAP_DIALOG;
-[контракт вызова](../scripting/npc-dialog-entry-contract.md) отделяет этот bridge
+[контракт вызова](../scripting/npc-dialog-entry-runtime.md) отделяет этот bridge
 от one-edge runtime, будущих state adapters, traversal/text и UI.
 ARC-SCRIPT-002 реализует [bounded query-only выбор entry](../scripting/npc-dialog-entry-runtime.md):
 actual loaded SAP attachment, explicit authenticated resources, versioned queries
@@ -184,7 +184,7 @@ services, не запуск оригинальной игры и не доказ
 
 Статусы относятся к четырём осям. `Нет` обозначает отсутствие компонента в проверенном срезе, а не опровержение поведения оригинальной игры. `Частично` ограничено пояснением в ячейке. `В указанном объёме` потребовало бы теста/интеграции; в этом домене таких игровых проверок нет. Чтение функций оригинала не считается проверкой исполнения.
 
-Это срез текущей ветки Steamwoven, не отчёт о готовности. Исторические PR #48/#54 содержат production-path synthetic и, для NPC entry, opt-in original checks. Они засчитываются только в указанном headless объёме; в текущем аудите не перезапускались. Research-only [reply/state](../scripting/dialog-state-contract.md) и [negative IN](../scripting/negative-inventory-transfer-contract.md) не являются исполнением разговора/передачи предмета.
+Это срез текущей ветки Steamwoven, не отчёт о готовности. Исторические PR #48/#54 содержат production-path synthetic и, для NPC entry, opt-in original checks. Они засчитываются только в указанном headless объёме; в текущем аудите не перезапускались. Research-only [reply/state](../scripting/dialog-conversation-runtime.md#original-dialog-evidence-carried-from-the-state-contract) и [negative IN](../scripting/negative-inventory-transfer-contract.md) не являются исполнением разговора/передачи предмета.
 
 ## Инвентаризация источников и непроверенные части
 

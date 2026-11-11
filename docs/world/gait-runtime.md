@@ -7,7 +7,7 @@ states what the project implements and what it leaves out.
 ## Model
 
 - A step is a walk or a run. The gait is a property of the step, chosen by the host
-  when the step is admitted; the [grid movement contract](grid-movement-contract.md)
+  when the step is admitted; the [grid movement runtime](grid-movement-runtime.md)
   does not change (its `MovementAction` stays Idle/Walk and every step keeps one frozen
   duration).
 - `GaitTiming` (viewer Core, `ActorGait.cs`) gives the exact duration of one step per

@@ -15,7 +15,7 @@ default cardinal-only Data profile and original-executable limitations remain.
 
 `Arcanum.Simulation` is an independently authored, package-free `net8.0` library.
 Its `Arcanum.Simulation.Movement` API implements the bounded project policies
-[P1–P8](grid-movement-contract.md), not the original's step evaluator.
+P1–P8 (below), not the original's step evaluator.
 The [source evidence](../research/grid-movement-evidence.md) remains research
 context. No source code or worksheet evaluator was copied or mechanically
 translated. Synthetic Open records below are policy fixtures, not real terrain
@@ -23,6 +23,140 @@ permissions. Real cardinal/diagonal admission, dynamic invalidation, UX and
 original-runtime parity remain NOT_VERIFIED/out of scope. Data, Input, Scripting,
 Presentation and Godot are not dependencies. No devices, callbacks, clock, file
 access, animation FPS, rendering or route search participate.
+
+## Source boundary
+
+**Original/source-confirmed (source reading, F0, not checked in the executable;
+see the [verification ledger](../research/original-verification-ledger.md))**: the
+original keeps a packed map location and separate instance offsets; its isometric
+location projector (0x4B8680) and the actor base `projected + offset + (40,20)` are
+not a normalized simulation chart. The step-in-direction function (0x4B8FF0)
+enumerates eight neighboring map cells and rejects map-limit violations. Normal
+`AG_ATTEMPT_MOVE` calls begin/update callbacks; update advances ART frames,
+applies frame offsets to instance offsets, normalizes the location, and checks
+progress/completion separately. Scheduler/stat inputs modify the pause (see
+[evidence](../research/grid-movement-evidence.md) S1-S9).
+
+**Unknown**: original runtime interpolation, exact crossing/tie behavior,
+release/cancellation, general turn scheduling and absolute compass-facing
+semantics. The inspected ordinary update is discrete and frame-offset-driven, not
+evidence for the linear law below. Normal completion restores the previous
+animation, not universally Stand; a separate path selects Stand and cleanup has a
+local ART value without writeback: neither is a universal original Idle contract.
+
+**Project policy**: WORLD-001 stays diagnostic free movement; its neutral stop,
+render-adapter floor, projected-pixel speed, screen octants and Idle 6/Walk 10 FPS
+are not this contract. Render hotspot/alpha, image size, camera and zoom never
+determine logical entry, and no raw ART FPS-to-speed equivalence is admitted. The
+[actor placement](../research/actor-placement-evidence.md) and
+[visual contract](../rendering/actor-visual-contract.md) stay conditional.
+
+## Policies P1-P8 (project policy, not inferred original behavior)
+
+**P1-P3 chart, directed entry, ownership.** `CellCoord=(x,y)` checked signed
+integers in a caller-declared chart; `WorldAnchor=(u,v)` finite continuous
+simulation space in the same units; `Center(C)=C`; negative coordinates are legal
+chart examples, not original map bounds. A chart-valid cell is not traversal
+permission. An interior cell extends half a unit each way; a settled actor owns
+its committed center. An active step `A -> B=A+d` has each `d` component in
+-1/0/1 and `d != (0,0)` (cardinal: one nonzero; diagonal: two); overflow,
+same-cell and non-neighbor endpoints reject. With frozen duration `D>0`, start `s`:
+
+```text
+p = (t-s)/D, 0 <= p <= 1     anchor = A + p*d
+entryTime = s + D/2          arrivalTime = s + D
+```
+
+`p<1/2` keeps `committedCell=A`; `p>=1/2` commits `B` once. Directed equality
+belongs to `B` in both signs (generic `floor(anchor+1/2)` is not authoritative);
+for a diagonal, exact corner equality enters only `B`, never a shoulder, in one
+atomic `DestinationEntered/CellCommitted` record: a tie rule, not corner-cutting
+permission. After commit retain `stepFrom/stepTo/direction/duration/step id`;
+commit is not arrival; `Settled` needs `anchor=Center(committedCell)` exactly,
+never by epsilon.
+
+**P4-P5 states, release, turns, renewed intent.** Intent is distinct from motion
+and animation; camera intent cannot activate it. The latest pending direction
+replaces, never queues; an active segment freezes endpoints/timing, so a mid-step
+direction change (even an opposite one) cannot bend, reverse or restart it.
+
+| Phase / input | Result |
+| --- | --- |
+| Settled + active neighbor + admitted permit/timing | Start outbound; freeze from/to/duration/context; Walk, outbound facing |
+| Settled + neutral or rejected traversal | Stay at committed center; Idle; no synthetic default Open |
+| OutboundBeforeEntry (`p<1/2`) + neutral | StepCancelled once; latch Returning to A; no commit |
+| OutboundBeforeEntry + directed entry (incl. equality release) | Commit B atomically first; OutboundAfterEntry |
+| OutboundAfterEntry + neutral | Clear pending activation; finish unchanged to B center; no return |
+| Outbound + turn/held report | Latest intent may change; endpoints, progress, duration do not; held does not restart progress |
+| Returning + re-input | Update latest intent only; cannot unlatch; finish return before a new step |
+| Returning/finish + re-input then neutral | Clear pending activation; settle without a next step |
+| Repeated neutral (Returning or post-entry) | Idempotent: no second cancel/commit, no restarted duration |
+| Arrival at A (return) / B (outbound) | CenterArrived; settle, then consider latest intent after the same-time input batch |
+| Settlement + continuously active intent | May start the next separately assessed step; no admission carried over |
+| Settlement after release, no new active intent | Idle; stale held state cannot start a step |
+
+Release at zero distance settles immediately; press+release in one batch while
+Settled starts nothing; an admitted segment with zero elapsed progress cancels
+and settles with zero return duration. After any neutral a newer active intent
+is required; a report older than the release is rejected. A continuous hold stays
+active without artificial per-step presses.
+
+**P6-P7 time, return, action, facing.** Monotonic simulation timestamps and
+ordered `(timestamp,sequence)` keys, not frame samples; a request supplies all
+batches up to its inclusive watermark and a timestamp batch is never split. Each
+timestamp: advance motion (entry/atomic commit, then arrival); apply all intent
+events in sequence (a neutral before entry latches cancellation even if followed
+by re-input); only then consider a new start from a settled center, so arrival
+cannot launch a stale step before a same-time release. A future work budget stops
+at a complete batch and reports watermark, remaining events and `unconsumedTime`,
+never clamping silently. For release at `r`, `q=(r-s)/D<1/2`: return duration
+`q*D`, `returnProgress=q-(t-r)/D`, `anchor=A+returnProgress*d`,
+`returnArrival=r+q*D` (same segment speed, diagonal included; clamp only at the
+arrival endpoint; repeated release cannot reset `r`). No cardinal/diagonal
+duration relation is assumed; each start supplies its own D. Walk denotes actual
+moving segments (including return and finish with inactive intent); Idle is
+settlement without an immediately admitted next step. Outbound facing follows
+`d`, return facing `-d`, rest retains facing; Facing/ActionChanged only on
+change; no positive-duration Idle slice at an immediate restart. Animation
+cadence is supplied by presentation, never used for displacement.
+
+Source reading S2/S3, map delta to original rotation (alias is project policy,
+not compass; not WORLD `MapFacing` nor a physical ART group table):
+
+| Delta | Rot | Alias | Delta | Rot | Alias |
+| --- | ---: | --- | --- | ---: | --- |
+| (-1,-1) | 0 | X-Y- | (+1,+1) | 4 | X+Y+ |
+| (-1,0) | 1 | X- | (+1,0) | 5 | X+ |
+| (-1,+1) | 2 | X-Y+ | (+1,-1) | 6 | X+Y- |
+| (0,+1) | 3 | Y+ | (0,-1) | 7 | Y- |
+
+Unknown: compass labels, all source/actor facing paths, the visual adapter
+mapping. Hypothesis (future UX experiments only): short-tap comfort, return-facing
+look, turn feel, analog effort-to-duration mapping.
+
+**P8 pure API and invariants.** `AdvanceTo(previousState, targetTime, orderedInputs,
+assessmentTimingRecords) -> MovementResult` is pure (no callbacks that mutate
+objects, open doors or read engine state; independent of invocation count);
+`QuerySnapshot` is read-only and never normalizes an anchor or commits a cell;
+permits are explicit immutable records keyed to exact from/to, actor/context,
+profile/fingerprints, epoch and start opportunity (full `Supported+Open` and
+positive finite D, no bare boolean). Validation precedes mutation: invalid time,
+late/duplicate/out-of-order keys, malformed direction/state, bad timing,
+overflow or mismatched permit identity reject the whole request with the original
+state. A well-formed coverage denial (`Unknown`, `Unsupported`, `Supported+Blocked`)
+emits one step rejection and leaves motion untouched; held intent is never
+retried on frame boundaries, and reassessment needs new explicit evidence. Legal
+states: Settled anchor equals committed center with no segment; OutboundBeforeEntry
+`0<=p<1/2`, committed=from; OutboundAfterEntry `1/2<=p<1`, committed=to; Returning
+has the latched cancellation, committed=from, anchor between release anchor and
+from, and becomes Settled at zero remainder. Per step id: at most one
+StepStarted, one StepCancelled (only before entry), one atomic entry/commit and
+one CenterArrived; cancellation and commit never both. New steps start only at a
+settled center with active intent and their own admission; no shoulder ownership,
+duplicate commit, unbounded input queue or intent inferred from Walk. Unknown and
+out of scope: mutable obstruction invalidation during a step, dynamic-blocker
+recovery, party/combat movement, route search; the admitted context is immutable
+through outbound/return/finish and no teleport recovery is invented.
 
 ## Public API and values
 

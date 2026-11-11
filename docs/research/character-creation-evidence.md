@@ -44,7 +44,7 @@ Before either path the game already has a placeholder PC on the **shop map**;
 the start map and its location come from the module map list. In this
 installation that is record 5000 `Arcanum1-024-fixed`, location
 `(92958, 82592)`, the same Crash Site selector the
-[Crash Site slice](crash-site-slice.md) already uses.
+[Crash Site sector framing](crash-site-framing.md) already uses.
 
 ## The sequence
 

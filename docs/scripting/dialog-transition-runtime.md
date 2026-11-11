@@ -19,7 +19,7 @@ unverified.
 
 ## Synthetic public usage
 
-The [NPC invocation/entry contract](npc-dialog-entry-contract.md) and
+The [NPC invocation/entry rules](npc-dialog-entry-runtime.md#identity-and-event-admission-rules-carried-from-the-entry-contract) and
 [Crash Site evidence](../research/crash-site-npc-dialog-evidence.md) describe a
 separate [bounded query-only entry bridge](npc-dialog-entry-runtime.md). It computes
 a checked NPC entry without calling this runtime. The selected Virgil entry is not

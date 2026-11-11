@@ -219,7 +219,7 @@ character, without a key and with no unlock script attached:
 | `(92892,83346)` | opens | **locked** (key 0 matches no key; difficulty 25 for lock picking (0x4C7160), or bust (0x4F06E0)) | opens (leaving a building) |
 
 The windows refuse as jammed from both sides. A new game starts at hour 15
-([clock policy](../world/game-clock-policy.md)), inside the unlocked 7..21 window, so
+([clock policy](../world/game-clock-runtime.md#original-clock-evidence-carried-from-the-res-020-policy)), inside the unlocked 7..21 window, so
 the door is unlocked (still closed, opening when walked into) if the player reaches
 it before 22:00 on the first day; the travel
 time to the house is not modelled (U2).
