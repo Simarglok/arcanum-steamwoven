@@ -18,6 +18,7 @@ public sealed partial class GameSessionOwner
     /// The support bits <paramref name="bits"/> set on the NPC's danger record in one revision (none when they are set already);
     /// a bit outside <see cref="AiSupportSetBits"/> is <see cref="GameSessionFailure.InvalidDangerFacts"/>.
     /// </summary>
+    [OriginalFunction(0x4ADFF0, OriginalFunctionScope.Partial)]
     public SessionDangerResult SetAiSupportBits(GameSessionVersion expected, string entity, DangerFlags bits) =>
         (bits & ~AiSupportSetBits) != 0 ? RejectDanger(GameSessionFailure.InvalidDangerFacts)
         : ChangeDanger(expected, entity, null, false, plan => plan.Update(entity, record => record with { Flags = record.Flags | bits }));

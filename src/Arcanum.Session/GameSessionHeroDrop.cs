@@ -1,5 +1,6 @@
 using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.Magic;
+using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 
@@ -25,6 +26,9 @@ public sealed partial class GameSessionOwner
     /// The caller places the actor on the hero's current tile first.
     /// </summary>
     [Arcanum.Simulation.OriginalFunction(0x461A70, Arcanum.Simulation.OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x461AB0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x466E00, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x467860, OriginalFunctionScope.Partial)]
     public InventoryMutationResult DropHeroItem(GameSessionVersion expected, string entity, SessionGridMoveItem item, ISessionItemScriptHost? scripts = null,
         ISessionItemTriggers? triggers = null)
     {
@@ -148,6 +152,7 @@ public sealed partial class GameSessionOwner
     /// (<see cref="GameSessionFailure.DropTileUnfit"/>), a full record budget or no free made number
     /// (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision. One revision. The caller places the actor on the hero's current tile first.
     /// </summary>
+    [OriginalFunction(0x464970, OriginalFunctionScope.Partial)]
     public InventoryMutationResult DropHeroGold(GameSessionVersion expected, int count, SessionItemKind pileKind)
     {
         ThrowIfDisposed();

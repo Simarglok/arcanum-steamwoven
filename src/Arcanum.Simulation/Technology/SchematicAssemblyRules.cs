@@ -79,6 +79,7 @@ public static class SchematicAssemblyRules
     /// prototype's skipped; an item in 2000..2009 kept only as a fallback (the last one), any other match returned at once.
     /// An ammunition item with no units is not a component.
     /// </summary>
+    [OriginalFunction(0x462540, OriginalFunctionScope.Partial)]
     public static CraftItem? Find(IReadOnlyList<CraftItem> inventory, int prototype, IReadOnlySet<string>? reserved = null)
     {
         ArgumentNullException.ThrowIfNull(inventory);

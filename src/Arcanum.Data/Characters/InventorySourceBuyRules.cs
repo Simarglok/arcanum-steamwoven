@@ -47,6 +47,7 @@ public static class InventorySourceBuyRules
     ];
 
     /// <summary>Whether <paramref name="number"/> lies in one of the original's basic prototype ranges.</summary>
+    [OriginalFunction(0x468610, OriginalFunctionScope.Full)]
     public static bool InBasicRange(int number) => Ranges.Any(range => number >= range.First && number < range.End);
 
     /// <summary>The buy list of <paramref name="set"/>. <paramref name="prototypeExists"/> answers whether a basic prototype number has a

@@ -1,6 +1,7 @@
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Hotkeys;
 using Arcanum.Simulation.Items;
+using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 
@@ -260,6 +261,7 @@ public sealed partial class GameSessionOwner
 
     // Whether the grid has a free slot for the item (0x4664C0 → 0x4675A0) with its own cells and those of leaving, an item that left
     // too, counted free (the insert check of a move runs with the moved items out, IW3, IW11).
+    [OriginalFunction(0x4664C0, OriginalFunctionScope.Partial)]
     private bool HeroGridRoom(string entity, string? leaving) => FreeGridSlot(entity, leaving).Slot >= 0;
 
     // ARC-DEV-333 (B48): the room test of an item entering the hero's list from outside (a take from a body or a container, a pick-up, a purchase,
