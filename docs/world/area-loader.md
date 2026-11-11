@@ -237,7 +237,8 @@ Loading while leased, a second lease, foreign or superseded snapshots fail.
 escapes. An explicit copy survives independently. Disposal is idempotent, revokes
 leases and closes transferred streams. Previously returned metadata remains valid;
 it cannot be used to reacquire frames after replacement or disposal. There is no
-persistent encoded/decoded frame cache between operations.
+persistent encoded/decoded frame cache between operations of the pinned exterior and of any load that
+passes no resident stores; the map path passes them ([resident frames and visuals](#resident-frames-and-visuals-across-map-loads-arc-dev-375)).
 
 Inside one authenticated bracket, a strict build (between the I0 and I7 passes) or one
 frame batch (between a source's first authentication and `Complete`), an ART entry is
@@ -271,6 +272,71 @@ the first frame of an entry reads it). Any failed copy or
 revoked batches refuse further use. The batch therefore guarantees what per-frame
 reauthentication did for the batch as a whole, not for each frame separately; for the
 Crash Site profile it reads about 1.2 GB of authentication instead of about 596 GB.
+
+## Resident frames and visuals across map loads (ARC-DEV-375)
+
+Status: **design, written before the code** (O5c of the [load time diagnosis](../research/performance-diagnosis-2026-11.md); the owner
+approved keeping the decoded repository between loads of the same map). The rule "no persistent encoded/decoded frame cache between
+operations" above stays for the pinned exterior (the Crash Site smoke, `ExecuteExterior`) and for every load that passes no resident
+store. The map path (`AreaMapLoadOperation`, whole interiors and the main map's windows) passes two.
+
+**Why.** A window move, a cave return and a cross-map quick load each build a new owner and read the same ART again: the strict build
+reads, inflates, hashes and decodes every distinct frame selection to record its pixel digest (`MakeVisual`), and the frame copy then reads and
+decodes each of them a second time (`DecodeDescriptor`), behind two whole-archive authentication passes of the batch. On the main map that is
+about 2,000 distinct frames (25 MiB) per window, most of them the same in the next window. The diagnosis measured the strict snapshot at 1.3 s
+and the frame copy at 1.2 s of a 6.4-14.9 s worker (packaged, Apple M4 Pro); this task measures them again beside the new numbers (below).
+
+**What is kept.** Two process-resident, content-keyed stores. Neither holds a file handle, an owner or a snapshot.
+
+| Store | Where | Key | Value | Replaces |
+| --- | --- | --- | --- | --- |
+| Visual memo (`AreaResidentVisuals`) | `Arcanum.Data` | the owner's build-local `_sharedFrames` key (entry identity, group, frame, palette, single-rotation class flag, fallback policy) plus the entry's source `Length` and `Sha256` from the plan's identities | the `AreaVisualRecord` template (geometry, payload and pixel digests, policy) | the entry read, inflate, payload hash, decode and pixel hash of a frame selection already built in this process |
+| Frame store (`AreaResidentFrames`) | `Arcanum.World` | `AreaFrameKey` (entry, palette, group, frame, policy, payload digest, view length, pixel digest) | `DecodedAreaFrame` (RGBA, shared, immutable by convention: no consumer writes it) | the frame copy's decode, and its batch when every frame hits |
+
+**Authentication rules are unchanged where they bind.** The strict build still authenticates every input at `Open` and again at I7;
+O5a ([DEV-374](../research/performance-diagnosis-2026-11.md)) is the separate decision that may reduce those passes. A hit is served inside that
+bracket and is keyed by the identity the bracket authenticates, so a changed file gets another key and misses (a file changed during the read is still
+refused at I7). What a hit skips is only re-deriving, in the same process, a value that was derived from the same authenticated bytes:
+
+- a **visual record** is inserted only after its build's I7 pass succeeded (it is staged in the owner and committed there; a failed or cancelled build
+  commits nothing), so every record in the memo was derived inside a fully authenticated bracket;
+- a **frame** is inserted only after its batch's `Complete` succeeded, so it passed the entry, payload, geometry, palette and pixel checks and the batch's
+  authentication; a faulted or cancelled batch inserts nothing;
+- a frame hit is accepted only when its width, height and RGBA length equal the descriptor's, and the pixel digest in the key is the descriptor's;
+- an all-hit copy opens no batch and so adds no second authentication pass beyond the build's own (the batch's passes authenticate the sources the
+  batch read from; this load read none); it still refuses a snapshot its owner has not published, as the batch's own check does;
+- the native smoke stage `resources` (a reload on a fresh owner with fresh counters, the retired generation collectable) empties both stores before its
+  reloads, so it keeps proving that contract; the real-data plan test that counts a cold build's frame requests empties the memo per map.
+
+The deviation from the contract above is therefore stated: a frame served from the store is not decoded again in this load. Its pixels are the decoder's output
+for bytes the same process already authenticated; the key carries the pixel digest the strict snapshot of this load published, and the decoder is deterministic.
+Nothing is written to disk, so a stale store cannot outlive the process.
+
+**Budget accounting.** A hit charges none of the owner's frame-domain counters (requests, stored, decoded, RGBA, encoded) and none of the
+copy charges, as nothing was read or decoded. The copy's pre-admission still tests the frames that must be read. The load result's `FinalUsage` on a warm load
+is therefore lower than on a cold one; no limit gets tighter. The per-load repository cap (16,384 frames, 160 MiB) still applies to the `Frames` of the result.
+
+**Memory.** Frame store: at most 256 MiB of RGBA and 32,768 frames, least recently used first, by bytes; every frame a load uses is touched, so the
+window just loaded is the newest. The frames also live in the load result (the result's own 160 MiB cap), so the store's cost is the frames of earlier windows
+that are not in the current one: bounded by 256 MiB. Visual memo: at most 65,536 records, least recently used first (about 0.5 KiB each, about 32 MiB).
+Together under 0.3 GiB resident on top of the load, against 24 GB of RAM on the development Mac. A Windows or smaller machine keeps the same caps; the caps are
+constants of the stores, not settings. The viewer's GPU caches (the 512-frame/32 MiB allowance and the terrain chunk cap) are separate and unchanged: a new
+load still releases every area frame texture, so equal keys never reuse another load's textures, only its CPU pixels.
+
+**Invalidation.** None is needed for correctness: keys carry content digests (and the source identity for the memo). The stores shrink by their caps only;
+`Clear()` empties them (tests, and a viewer that wants the memory back). A different game folder or an edited archive yields other keys and the old entries age out.
+A different data-rules profile (Original or Steamwoven) changes map data, not ART selections, and shares both stores.
+
+**Threads.** The load worker reads and inserts under one lock per store (a load runs one worker at a time; an overlapped reload's cancelled first generation
+inserts nothing that was not committed). The main thread only reads the immutable frames of its own result.
+
+**Not kept, and why.** The strict snapshot of a plan, its scene plan and its step evidence. A window move loads another window (other sector files), so the
+whole snapshot differs; the part that was expensive and is shared, the ART work, is what the two stores keep. A reload of the *same* window (a cave return to
+the same arrival, a quick load in place) could keep the snapshot too, but doing so skips the build's authentication, which is the O5a decision; a follow-up
+(snapshot keyed by plan and input identities) belongs after O5a. The map's transitions are O5b ([DEV-368](../research/performance-diagnosis-2026-11.md)).
+
+**Relation to residency (K1).** This is art residency in the loader, not the sector cache of mobile objects ([residency](../architecture/residency.md)):
+the two share no state, and the object residency's fold and heartbeat rules are untouched.
 
 ## Resource contract: bounds, reservations, observations
 

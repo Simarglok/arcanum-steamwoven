@@ -212,15 +212,25 @@ internal static class AreaLoadOperation
     {
         var started = Environment.TickCount64; var allocated = GC.GetTotalAllocatedBytes();
         token.ThrowIfCancellationRequested();
-        var snapshot = owner.LoadStrict(token);
+        // ARC-DEV-375: the read's three stages print as load.worker.read.{strict,scene,copy} (the probe is off by default).
+        AreaSnapshot snapshot;
+        using (PerfProbe.Span("load.worker.read.strict")) snapshot = owner.LoadStrict(token);
         Console.WriteLine("ARC-RENDER-007 load stage=strict-snapshot");
-        var plan = AreaScenePlan.Create(snapshot, chartFor?.Invoke(snapshot));
-        Console.WriteLine($"ARC-RENDER-007 load stage=scene-planned commands={plan.Commands.Count}");
-        var walls = AreaWallCheck.Pieces(snapshot, plan);
+        if (mapLimits?.ResidentVisuals is { } memo)
+            Console.WriteLine($"ARC-DEV-375 visuals resident-hits={memo.Lookups.Hits} misses={memo.Lookups.Misses} records={memo.Count}");
+        AreaScenePlan plan; IReadOnlyList<AreaWallPiece> walls;
+        using (PerfProbe.Span("load.worker.read.scene"))
+        {
+            plan = AreaScenePlan.Create(snapshot, chartFor?.Invoke(snapshot));
+            Console.WriteLine($"ARC-RENDER-007 load stage=scene-planned commands={plan.Commands.Count}");
+            walls = AreaWallCheck.Pieces(snapshot, plan);
+        }
         var initial = owner.Usage;
-        var frames = mapLimits is not null
-            ? Copy(owner, snapshot, plan, token, AreaRepositoryPolicy.MaxMapFrames, AreaRepositoryPolicy.MaxMapCpuBytes, null, mapLimits)
-            : CopyFrames(owner, snapshot, plan, token);
+        IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> frames;
+        using (PerfProbe.Span("load.worker.read.copy"))
+            frames = mapLimits is not null
+                ? CopyMapFrames(owner, snapshot, plan, token, mapLimits, AreaResidentVisuals.Enabled ? AreaResidentFrames.Shared : null)
+                : CopyFrames(owner, snapshot, plan, token);
         var retained = frames.Values.Sum(frame => (long)frame.Rgba.Length);
         Console.WriteLine($"ARC-RENDER-007 load stage=frames-retained frames={frames.Count} bytes={retained}");
         token.ThrowIfCancellationRequested();
@@ -264,10 +274,16 @@ internal static class AreaLoadOperation
     internal static IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> CopyFrames(AreaDataOwner owner,
         AreaSnapshot snapshot, AreaScenePlan plan, CancellationToken token, int maxFrames = MaxFrames,
         long maxCpuBytes = MaxCpuBytes, Action<int, long>? copied = null)
-        => Copy(owner, snapshot, plan, token, maxFrames, maxCpuBytes, copied, null);
+        => Copy(owner, snapshot, plan, token, maxFrames, maxCpuBytes, copied, null, null);
+
+    /// <summary>ARC-DEV-375: a whole map's frames under the map repository caps, served from <paramref name="resident"/> where it holds them and read (and added to it)
+    /// otherwise; a null store reads every frame, as a load without one does.</summary>
+    internal static IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> CopyMapFrames(AreaDataOwner owner, AreaSnapshot snapshot, AreaScenePlan plan,
+        CancellationToken token, AreaLoaderOptions limits, AreaResidentFrames? resident)
+        => Copy(owner, snapshot, plan, token, AreaRepositoryPolicy.MaxMapFrames, AreaRepositoryPolicy.MaxMapCpuBytes, null, limits, resident);
 
     private static IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> Copy(AreaDataOwner owner, AreaSnapshot snapshot, AreaScenePlan plan,
-        CancellationToken token, int maxFrames, long maxCpuBytes, Action<int, long>? copied, AreaLoaderOptions? limits)
+        CancellationToken token, int maxFrames, long maxCpuBytes, Action<int, long>? copied, AreaLoaderOptions? limits, AreaResidentFrames? store)
     {
         // A whole map (ARC-RENDER-017) passes its own plan limits and the larger map repository caps.
         var mapCaps = limits is not null;
@@ -281,32 +297,52 @@ internal static class AreaLoadOperation
         if (!needed.SetEquals(selected.Keys)) throw new InvalidOperationException("AREA_FRAME_DESCRIPTOR_REQUIRED");
         var initial = owner.Usage;
         limits ??= new AreaLoaderOptions();
-        var predictedBytes = selected.Values.Sum(visual => checked((long)visual.Width * visual.Height * 4));
-        // Pre-admit the cumulative Data domains before the frame batch.
-        if (selected.Count > maxFrames || predictedBytes > maxCpuBytes ||
-            checked(initial.FrameRequests + selected.Count) > limits.MaxFrameRequests ||
-            checked(initial.FrameRgba + predictedBytes) > limits.MaxFrameRgbaBytes ||
-            checked(initial.FrameStored + selected.Values.Sum(v => (long)v.Entry.StoredBytes)) > limits.MaxFrameStoredBytes ||
-            checked(initial.FrameDecoded + selected.Values.Sum(v => (long)v.Entry.DecodedBytes)) > limits.MaxFrameDecodedBytes ||
-            checked(initial.FrameEncoded + selected.Values.Sum(v => (long)v.EncodedBytes)) > limits.MaxFrameEncodedBytes)
-            throw new AreaException(new(AreaErrorCode.BudgetExceeded, AreaStage.Frame));
-        var frames = new Dictionary<AreaFrameKey, DecodedAreaFrame>(); long retained = 0;
-        // One batch: each source is authenticated before its first frame and again at
-        // Complete; nothing is returned unless Complete succeeds.
-        using var batch = owner.BeginFrameBatch(snapshot, token);
+        // ARC-DEV-375: a map load serves the frames an earlier load of this process decoded; only the others are read, and only they are charged.
+        var kept = new Dictionary<AreaFrameKey, DecodedAreaFrame>(); var missing = new List<KeyValuePair<AreaFrameKey, AreaVisualRecord>>();
         foreach (var pair in selected)
         {
-            token.ThrowIfCancellationRequested();
-            retained = checked(retained + (long)pair.Value.Width * pair.Value.Height * 4);
-            if (retained > maxCpuBytes || frames.Count >= maxFrames) throw new AreaException(new(AreaErrorCode.BudgetExceeded, AreaStage.Frame));
-            var rgba = batch.CopySelectedFrame(pair.Value.Key, token);
-            if (rgba.Length != checked(pair.Value.Width * pair.Value.Height * 4))
-                throw new AreaException(new(AreaErrorCode.InputChangedDuringRead, AreaStage.Frame));
-            frames.Add(pair.Key, new(pair.Value.Width, pair.Value.Height, rgba));
-            copied?.Invoke(frames.Count, retained);
+            if (store is not null && store.TryGet(pair.Key, pair.Value.Width, pair.Value.Height, out var frame)) kept.Add(pair.Key, frame);
+            else missing.Add(pair);
         }
-        token.ThrowIfCancellationRequested();
-        batch.Complete(token);
+        var predictedBytes = selected.Values.Sum(visual => checked((long)visual.Width * visual.Height * 4));
+        var readBytes = missing.Sum(pair => checked((long)pair.Value.Width * pair.Value.Height * 4));
+        // Pre-admit the cumulative Data domains before the frame batch.
+        if (selected.Count > maxFrames || predictedBytes > maxCpuBytes ||
+            checked(initial.FrameRequests + missing.Count) > limits.MaxFrameRequests ||
+            checked(initial.FrameRgba + readBytes) > limits.MaxFrameRgbaBytes ||
+            checked(initial.FrameStored + missing.Sum(pair => (long)pair.Value.Entry.StoredBytes)) > limits.MaxFrameStoredBytes ||
+            checked(initial.FrameDecoded + missing.Sum(pair => (long)pair.Value.Entry.DecodedBytes)) > limits.MaxFrameDecodedBytes ||
+            checked(initial.FrameEncoded + missing.Sum(pair => (long)pair.Value.EncodedBytes)) > limits.MaxFrameEncodedBytes)
+            throw new AreaException(new(AreaErrorCode.BudgetExceeded, AreaStage.Frame));
+        var read = new Dictionary<AreaFrameKey, DecodedAreaFrame>(); long retained = 0;
+        // A copy that opens no batch still refuses a snapshot the owner has not published (the batch's own check).
+        if (missing.Count == 0 && store is not null && !ReferenceEquals(owner.PublishedSnapshot, snapshot))
+            throw new AreaException(new(AreaErrorCode.SnapshotMismatch, AreaStage.Frame));
+        if (missing.Count > 0 || store is null)
+        {
+            // One batch: each source is authenticated before its first frame and again at
+            // Complete; nothing is returned unless Complete succeeds. A load whose frames all hit opens none.
+            using var batch = owner.BeginFrameBatch(snapshot, token);
+            foreach (var pair in missing)
+            {
+                token.ThrowIfCancellationRequested();
+                retained = checked(retained + (long)pair.Value.Width * pair.Value.Height * 4);
+                if (retained > maxCpuBytes || read.Count >= maxFrames) throw new AreaException(new(AreaErrorCode.BudgetExceeded, AreaStage.Frame));
+                var rgba = batch.CopySelectedFrame(pair.Value.Key, token);
+                if (rgba.Length != checked(pair.Value.Width * pair.Value.Height * 4))
+                    throw new AreaException(new(AreaErrorCode.InputChangedDuringRead, AreaStage.Frame));
+                read.Add(pair.Key, new(pair.Value.Width, pair.Value.Height, rgba));
+                copied?.Invoke(read.Count, retained);
+            }
+            token.ThrowIfCancellationRequested();
+            batch.Complete(token);
+            if (store is not null) foreach (var (key, frame) in read) store.Add(key, frame);
+        }
+        // The result keeps the order of the selection, whichever frames were served and whichever were read.
+        var frames = new Dictionary<AreaFrameKey, DecodedAreaFrame>(selected.Count);
+        foreach (var key in selected.Keys) frames.Add(key, kept.TryGetValue(key, out var hit) ? hit : read[key]);
+        if (store is not null)
+            Console.WriteLine($"ARC-DEV-375 frames resident-hits={kept.Count} read={read.Count} store-frames={store.Count} store-bytes={store.Bytes}");
         return new ReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame>(frames);
     }
 

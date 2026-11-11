@@ -188,6 +188,19 @@ public sealed partial class AreaDataOwner
         var shared = _sharedFrames is not null ? (entry, group, frame, palette, raw >> 28 is 1 or 3, fallbackPolicy) : default;
         if (_sharedFrames is not null && _sharedFrames.TryGetValue(shared, out var template))
             return template with { Key = key, RawArt = raw, LookupArt = lookup, NominalFacing = nominal, Mirrored = mirrored, ObjectOffsetX = ox, ObjectOffsetY = oy, Scale = scale };
+        // ARC-DEV-375: a selection another build of this process derived from the same authenticated source is served from the resident memo.
+        ResidentVisualKey resident = default; var residentMemo = _sharedFrames is not null ? _limits.ResidentVisuals : null;
+        if (residentMemo is not null)
+        {
+            var source = Identity(entry.Source);
+            resident = new(source.Length, source.Sha256, entry, group, frame, palette, raw >> 28 is 1 or 3, fallbackPolicy);
+            if (residentMemo.TryGet(resident, out var kept))
+            {
+                var served = kept with { Key = key, RawArt = raw, LookupArt = lookup, NominalFacing = nominal, Mirrored = mirrored, ObjectOffsetX = ox, ObjectOffsetY = oy, Scale = scale };
+                _budget.Reserve(512); _sharedFrames!.Add(shared, served);
+                return served;
+            }
+        }
         _budget.Context = new(AreaBudgetCallsite.Pixels, entry.Source, entry.Ordinal, entry.Offset, key.SourceIndex);
         _budget.StartFrame(entry.StoredBytes, entry.DecodedBytes);
         var (bytes, sha) = ReadFrameEntry(entry); var policy = "strict-full-entry"; var view = bytes.Length; var physical = group;
@@ -214,6 +227,7 @@ public sealed partial class AreaDataOwner
             descriptor.Metadata.EncodedPayloadLength, decoded.Rgba.Count, rgbaSha, policy)
         { FrameCount = descriptor.GroupFrames, FramesPerSecond = descriptor.FramesPerSecond };
         if (_sharedFrames is not null) { _budget.Reserve(512); _sharedFrames.Add(shared, visual); }
+        if (residentMemo is not null) _residentStaged?.Add(new(resident, visual));
         return visual;
     }
     // A lease authenticates the whole source before and after each frame. A frame batch

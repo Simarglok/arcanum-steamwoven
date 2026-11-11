@@ -30,6 +30,8 @@ public sealed partial class AreaDataOwner
     private TerrainLoader.TileNames? _objectTiles;
     // ARC-DATA-024: frame facts of each distinct selection decoded by this build (every plan since ARC-DATA-036).
     private Dictionary<(AreaEntryIdentity Entry, int Group, int Frame, int Palette, bool SingleRotationClass, string? Policy), AreaVisualRecord>? _sharedFrames;
+    // ARC-DEV-375: the records this build derived for the resident memo, committed after the build's closing authentication (null without a memo).
+    private List<KeyValuePair<ResidentVisualKey, AreaVisualRecord>>? _residentStaged;
     private static readonly string[] CritterRoots = ["art/critter/", "art/monster/", "art/unique_npc/"];
 
     /// <summary>The file a critter (2), monster (12) or unique NPC (13) art id names in the
