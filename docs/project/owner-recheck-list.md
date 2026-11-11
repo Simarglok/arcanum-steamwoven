@@ -279,3 +279,20 @@ refused in ours (the removal script does not run there yet); a book picked up fr
 | 3 | Raise the intelligence while carrying a book (a potion, an item or a level-up), look at the expertise, then move the book to another place in the pack grid and look again. | Before the move the expertise still counts the old intelligence; after the move (the original removes the book's effects and adds them again) it counts the new intelligence. | open |
 | 4 | Take the book out of the pack (drop it or sell it). | In the original the expertise falls back by the intelligence the book last counted. In ours the drop and the sale are refused for now (see above), so only the original can be compared here. | open |
 | 5 | Open the barter window of a merchant that sells a tech book and buy it. | The book enters the pack and the expertise rises as in step 1 (the purchase fires the same insertion). | open |
+
+## ARC-UI-133 — Click on the hero's lens closes the world map (PR pending, 2026-11-11)
+
+Read in the original executable (ledger [WM140](../research/ledger/ui-audio.md), WM36): in the window's top left the executable registers a square, 89 × 89 pixels at window (25, 24), the hole of
+the background art, as the hero's lens (the same view-window mode as the logbook's lens). A left release inside that square closes the map, as the key `W` does. The circle in the brass ring is only
+what is drawn around the square; the click test is the whole square, corners included. Known differences, not to be re-reported: in the original the lens shows the game around the hero at half size
+with the cover art 198 over it; in ours the square still shows the world behind the window, unscaled, and no cover art (its own task, because it also decides the ARC-UI-126 look of the hole).
+In both rule modes the click behaves the same.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Open the world map (`W` or the bar's Map button) and click the small window in the top left of the brass frame, in the middle of the circle. | The map closes and the game world is shown again, on press and release of the left button (the release does it). | open |
+| 2 | Open the map, press the left button on the lens, keep it down, move the pointer out onto the wood and release there. | Nothing happens (the test is on the release, at the release point); the map stays open. | open |
+| 3 | Open the map and click in a corner of the square, outside the round ring (the corner where the wood shows through), and just outside the square on each side. | The corner of the square closes the map; a click one pixel outside the square does not. | open |
+| 4 | Open the map, start a journey (Travel), and click the lens while it runs. | The map closes through the same close as `W`; the walking party stops where it stands (WT12). In ours this lands the party at its current place. | open |
+| 5 | In a town-map sector (kind 2) and in the continent view (button below the zoom), click the lens. | The map closes in every view. | open |
+| 6 | With the HD interface switch on, repeat step 1. | The same as in the original look: the click works in HD too. | open |
