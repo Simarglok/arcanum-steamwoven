@@ -124,6 +124,7 @@ public partial class TerrainViewerApp
             var petFirst = AreaAiHostNow()?.Tile(petRun.Critter!);
             for (var frames = 0; frames < 400; frames++) Frame();
             var petLater = AreaAiHostNow()?.Tile(petRun.Critter!);
+            Require(!_npcTilePending.Any(n => n.Npc == petRun.Critter), "pet: the creation notice was taken by the AI frame");
             var hero = LiveCell(grid) ?? standAt;
             GD.Print($"ARC-MAGIC-042 creature-item pet-after critter={petRun.Critter} first={petFirst?.X},{petFirst?.Y} later={petLater?.X},{petLater?.Y} hero={hero.X},{hero.Y}"
                 + $" led={session.QueryCompanion(petRun.Critter!).LedByPc} standing={session.QueryCompanion(petRun.Critter!).Standing}");
