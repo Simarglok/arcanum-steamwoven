@@ -175,7 +175,7 @@ public sealed class SessionSpellCasterControlTests
     {
         var (owner, caster) = Session();
         using var _ = owner;
-        Assert.IsNull(caster.Apply(Run(owner, caster, TestNumber), 0, new(null, HeroTile)).JumpTo, "no target object: nothing happens and nothing is logged");
+        Assert.IsNull(caster.Apply(Run(owner, caster, NoBranchNumber), 0, new(null, HeroTile)).JumpTo, "no target object: nothing happens and nothing is logged");
         Assert.IsFalse(NotReady(caster));
         Assert.IsNull(caster.Apply(Run(owner, caster, ArtTestNumber), 0, OnHero(caster)).JumpTo);
         Assert.IsTrue(caster.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady && e.Value == (int)SpellComponentType.TestNBranch), "the art field (1) is not read yet: the component is logged not ready");

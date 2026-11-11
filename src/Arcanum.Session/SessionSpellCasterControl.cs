@@ -25,12 +25,13 @@ public sealed partial class SessionSpellCaster
 
     // 0x451850: with no run source (handle 0) the component does nothing. The payment is the run's one (0x450420 with the record's cells flag, apply on, the component's cost and
     // the run's spell), so a cell record spends cells through the cell source whatever else the source has, and a spent item charge is saved as a BEGIN's is. A source the host
-    // cannot make a payer of (a critter with no life state) pays nothing and does not branch.
+    // cannot make a payer of (a critter with no life state: the original would charge its fatigue) leaves the component not ready.
     [OriginalFunction(0x451850, OriginalFunctionScope.Full)]
     private SpellComponentOutcome? ChargeBranchComponent(SpellRun run, SessionSpellComponent component)
     {
         if (component.ChargeBranch is not { } data) return null;
-        if (run.Source is not { } source || Payer(source) is not { } payer) return SpellComponentOutcome.None;
+        if (run.Source is not { } source) return SpellComponentOutcome.None;
+        if (Payer(source) is not { } payer) return null;
         var payment = SpellPaymentRules.Pay(payer, data.Cost, true, run.Spell, Record(run.Spell).Payment, Cells);
         Pay(run.Id, source.Id, payment);
         return payment.Succeeded ? SpellComponentOutcome.None : Branch(data.Branch);
