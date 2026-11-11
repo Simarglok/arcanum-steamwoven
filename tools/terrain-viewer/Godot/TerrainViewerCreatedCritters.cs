@@ -131,7 +131,8 @@ public partial class TerrainViewerApp
 
     /// <summary>The T0 body of a hosted NPC of the shown map: a map NPC's from the T0 plan, a created critter's from the ground bodies (no map NPC's key is among them).</summary>
     private AreaDrawCommand? NpcT0Body(AreaObjectKey key) =>
-        _areaOverlay is { } overlay && overlay.Bodies.TryGetValue(key, out var own) ? own : _groundBodies.GetValueOrDefault(key);
+        _traitBodies.TryGetValue(key, out var monster) ? monster
+        : _areaOverlay is { } overlay && overlay.Bodies.TryGetValue(key, out var own) ? own : _groundBodies.GetValueOrDefault(key);
 
     /// <summary>The visual of a body of the shown map: a map NPC's own (its T0 plan) or a created critter's.</summary>
     private bool TryBodyVisual(AreaVisualKey key, out AreaVisualRecord visual)
