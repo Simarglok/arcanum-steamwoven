@@ -39,8 +39,23 @@ public sealed class CreatedCritterCarryTests
         // Back again: the move goes both ways, and the creation order is kept.
         var back = owner.ApplyChanges(owner.Version, new ActorPlacement(Exterior, new(5, 5), NeighborDirection.XPlus), [], owner.QueryTransferMoveList(new()));
         Assert.AreEqual(GameSessionDisposition.Changed, back.Disposition);
-        CollectionAssert.AreEqual(new[] { pet.Entity, stayer.Entity }, owner.QueryCreatedObjects(Exterior).Select(o => o.Entity).OrderBy(e => e, StringComparer.Ordinal).ToArray());
+        CollectionAssert.AreEqual(new[] { pet.Entity, stayer.Entity }, owner.QueryCreatedObjects(Exterior).Select(o => o.Entity).ToArray(), "the creation order is kept (the pet was made first)");
         Assert.AreEqual(0, owner.QueryCreatedObjects(Cave).Count);
+    }
+
+    [TestMethod]
+    public void The_moved_critter_is_a_holder_of_the_destinations_seed_and_not_of_the_sources()
+    {
+        using var owner = Create();
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, new([], [])).Failure);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Cave, new([], [])).Failure);
+        var pet = MadeCritter(owner, Exterior, new(101, 200));
+        string[] Holders(SessionMapId map) => owner.QueryMapInventory(map)!.Holders.Select(holder => holder.Entity).ToArray();
+        CollectionAssert.AreEqual(new[] { pet.Entity }, Holders(Exterior));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, pet.Entity).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyChanges(owner.Version, new ActorPlacement(Cave, new(10, 20), NeighborDirection.XPlus), [], owner.QueryTransferMoveList(new())).Disposition);
+        CollectionAssert.AreEqual(Array.Empty<string>(), Holders(Exterior));
+        CollectionAssert.AreEqual(new[] { pet.Entity }, Holders(Cave));
     }
 
     [TestMethod]

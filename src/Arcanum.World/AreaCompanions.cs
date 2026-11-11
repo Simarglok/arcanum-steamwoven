@@ -485,7 +485,8 @@ public sealed class AreaCompanionGroup
     public GameSessionFailure Record(GameSessionOwner session)
     {
         ArgumentNullException.ThrowIfNull(session);
-        var result = session.ApplyChanges(session.Version, null, _companions.SelectMany(Stay).ToArray());
+        // ARC-MAGIC-050: a created critter the session destroyed since the group was built has no placement to record.
+        var result = session.ApplyChanges(session.Version, null, _companions.Where(c => !c.Template.Created || session.QueryCreatedObject(c.Entity) is not null).SelectMany(Stay).ToArray());
         return result.Disposition == GameSessionDisposition.Rejected ? result.Failure : GameSessionFailure.None;
     }
 

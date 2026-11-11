@@ -643,7 +643,7 @@ public sealed class AreaCompanionTests
         var arrive = AreaCompanionGroup.Arrive(template, first, second, At(2), NeighborDirection.YPlus);
         Assert.IsTrue(arrive.All(edit => edit.Key != AreaCompanionPlacement.MapKey(entity)), "no away change names a home map");
         Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, new ActorPlacement(second, At(2), NeighborDirection.XPlus), arrive, session.QueryTransferMoveList(new())).Disposition);
-        Assert.IsNull(session.QueryMapChange(first, AreaCompanionPlacement.Key(entity)), "the map it left forgets it");
+        // (The session's own move of the created record is held by CreatedCritterCarryTests; this entity is an ordinary speaker id.)
         // The destination's template (the session holds the critter on that map now) stands it on the recorded cell.
         var there = AreaCompanionTemplate.ForCreated(number, row, speaker => AreaCompanionRoster.Virgil with { ScriptId = 0 }, second, AreaChart.Exterior, plain.Commands[0], plain.Visuals.Values.Single())!;
         var group = AreaCompanionGroup.Create([there], f.Steps, AreaChart.Exterior, session, second, SimulationTime.At(0));

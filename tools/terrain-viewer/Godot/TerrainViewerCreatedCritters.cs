@@ -190,13 +190,15 @@ public partial class TerrainViewerApp
     private (GameSessionOwner Session, int Map, string Entities)? _createdCompanionLooked;
 
     /// <summary>The created critters of the shown map that are in the party: their entities in creation order.</summary>
+    // A dead one is no body of the group (the fallen pose draws it, as for a map companion); its death changes the set, so the group is rebuilt without it.
     private string CreatedPartyEntities(GameSessionOwner session) => string.Join(",", session.QueryCreatedObjects(new SessionMapId(CurrentAreaMap))
-        .Where(made => made.Kind == SessionCreatedKind.Critter && session.QueryCompanion(made.Entity).Standing != Arcanum.Session.CompanionStanding.Free).Select(made => made.Entity));
+        .Where(made => made.Kind == SessionCreatedKind.Critter && session.QueryCompanion(made.Entity).Standing != Arcanum.Session.CompanionStanding.Free
+            && _combatHost?.Target(session, made.Entity) is not { Dead: true }).Select(made => made.Entity));
 
     /// <summary>Rebuilds the companions when the created critters in the party are not the ones the group was last built for (a joined pet, one that left, a load). The group's own walk state is recorded first.</summary>
     private void SyncCreatedCompanions(GameSessionOwner session)
     {
-        if (_readyMapName is null || _areaCompanions is null || _companionData?.Data is null || _createdPrototypeRead is null || ExtraArt() is null) return;
+        if (_readyMapName is null || _readyArea is null || _areaCompanions is null || _companionData?.Data is null || _createdPrototypeRead is null || ExtraArt() is null) return;
         var wanted = (session, CurrentAreaMap, CreatedPartyEntities(session));
         var looked0 = _createdCompanionLooked;
         if (_createdCompanionLooked is { } looked && ReferenceEquals(looked.Session, session) && looked.Map == wanted.CurrentAreaMap && looked.Entities == wanted.Item3) return;
