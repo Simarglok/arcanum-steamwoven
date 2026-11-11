@@ -43,11 +43,11 @@ script, which the interpreter runs.
 A trap's state is its T0 baseline (`SessionTrapBaseline`: carrier, use script, header
 flags, counters and object flags, which the host reads from the map data and the script
 file) until a spot mark or a removal. Each write records the property `trap.state` of the
-object's entity as a map change (bit 1 spotted, bit 2 removed, and from bit 8 the script
+object's entity as a map change (bit 1 spotted, bit 2 removed, bit 4 placed by the PC since ARC-WORLD-125, and from bit 8 the script
 number the removal cleared), which the snapshot already carries, so the domain adds **no
 schema**. A removal holds only while the baseline names the script it cleared, so a trap
 armed again on the object later (a trap device on an object with an empty use slot, TP2) is
-seen; the spotted bit stays through a removal, as the original keeps object flag 0x2000000
+seen (a script trap device, ARC-WORLD-125, also writes the placed and spotted bits and so clears the removal); the spotted and placed bits stay through a removal, as the original keeps object flags 0x2000000 and 0x1000000
 (TT5). A removed trap object is also recorded destroyed (`object.condition`), so the object
 damage domain sees it gone. A host that reads the object's use script must take the trap
 state's script (0 once removed), and must not offer a destroyed object to the trap methods

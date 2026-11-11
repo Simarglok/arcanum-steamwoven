@@ -477,11 +477,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         return new((int)element.Words[2], (uint)element.Words[0], (uint)element.Words[1]);
     }
 
+    // ARC-WORLD-125: an object whose map data holds no use slot still has the (empty) element in the original (SA1); a script trap device writes its slot onto such an object, so the use point reads as an empty
+    // slot under the written script exactly when the session holds one. Every other point and every object the session wrote nothing on keep reading the loaded slot alone.
+    private ScrSlot? LoadedOrPlaced(AreaObjectRecord row, string entity, int point) =>
+        LoadedSlot(row, point) ?? (point == ScrPoint.Use && _session.QueryObjectChange(new SessionMapId(row.Key.RuntimeMap), MapChangeKey.ForEntity(entity, SlotProperty(ScrPoint.Use, ScriptPart))) is not null ? new ScrSlot(0, 0, 0) : null);
+
     /// <summary>The slot of the object at the point. The use slot is the loaded one under the session's map changes, and since
     /// ARC-WORLD-110 its script is 0 once the trap state removed the trap it names (docs/world/trap-state-runtime.md).</summary>
     public ScrSlot? Slot(ScrObjectRef attachee, int point)
     {
-        if (Row(attachee) is not { } row || LoadedSlot(row, point) is not { } loaded) return null;
+        if (Row(attachee) is not { } row || LoadedOrPlaced(row, attachee.Code, point) is not { } loaded) return null;
         if (!KeptAsMapChanges(point)) return loaded;
         long? Read(string property) => _session.QueryObjectChange(new SessionMapId(attachee.Map), MapChangeKey.ForEntity(attachee.Code, property));
         var slot = new ScrSlot(Read(SlotProperty(point, ScriptPart)) is { } script ? checked((int)script) : loaded.Script,
@@ -497,12 +502,39 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     // script number outside the catalogue's range (it names no script the content holds).
     private ScrSlot? TrapSlot(AreaObjectRecord row, string entity)
     {
-        if (LoadedSlot(row, ScrPoint.Use) is not { } loaded) return null;
+        if (LoadedOrPlaced(row, entity, ScrPoint.Use) is not { } loaded) return null;
         long? Read(string part) => _session.QueryObjectChange(new SessionMapId(row.Key.RuntimeMap), MapChangeKey.ForEntity(entity, SlotProperty(ScrPoint.Use, part)));
         var script = Read(ScriptPart) ?? loaded.Script;
         if (script is < 0 or > ScrCatalogue.MaxScriptNumber) return null;
         return new((int)script, loaded.LocalFlags, Read(CountersPart) is { } counters ? unchecked((uint)counters) : loaded.Counters);
     }
+
+    /// <summary>
+    /// ARC-WORLD-125: the use script now in the slot 1 of the shown map's object <paramref name="row"/> as a script trap device finds it: the loaded slot under the session's writes, 0 for a slot that holds no script, one
+    /// the trap state removed or an object with no slot at all.
+    /// </summary>
+    public int UseScriptOf(AreaObjectRecord row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        return Slot(new ScrObjectRef(row.Key.RuntimeMap, EntityId(row)), ScrPoint.Use)?.Script ?? 0;
+    }
+
+    /// <summary>
+    /// ARC-WORLD-125: the use slot (attachment point 1) of the item <paramref name="entity"/> that was taken from the map <paramref name="originMap"/> and is carried now, as its own data holds it (the
+    /// item's use script a trap device copies); null for an item the host does not find, as <see cref="RunItemUse"/> reads it.
+    /// </summary>
+    public ScrSlot? ItemUseSlot(int originMap, string entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        var item = new ScrObjectRef(originMap, entity);
+        _itemUse = item;
+        try { return Row(item) is null ? null : Slot(item, ScrPoint.Use); }
+        finally { _itemUse = null; }
+    }
+
+    /// <summary>ARC-WORLD-125: the script file header flags of a script number the content holds (0 for any other): the trap class of a device's script (<see cref="Arcanum.Simulation.Traps.TrapRules.Classify"/>).</summary>
+    public uint TrapHeaderFlags(int script) =>
+        script != 0 && _content is not null && Script(script) is { Status: ScrScriptStatus.Found, Program: { } program } ? program.FileFlags : 0;
 
     /// <summary>ARC-WORLD-110: a trap's session object: the row's map and its entity (<see cref="EntityId"/>).</summary>
     public static SessionTrapped Trapped(AreaObjectRecord row) => new(new SessionMapId((row ?? throw new ArgumentNullException(nameof(row))).Key.RuntimeMap), EntityId(row));
