@@ -106,6 +106,9 @@ public partial class TerrainViewerApp
             _inventoryStatus = $"inventory: unavailable (seed {failure})"; return;
         }
         _inventoryHost = host;
+        // ARC-DEV-354: the carried items whose row neither the new host's maps nor the rows handed over from the last one give (a fresh run, a load
+        // into another window or map) are read by identity from their origin map.
+        host.ReadCarriedRows(_areaSession!);
         _inventoryStatus = "inventory: left-click an item to pick it up or a dead NPC to loot; I opens the window";
         // ARC-COMBAT-005: the combat targets are the seeds' NPCs.
         BindAreaCombat(host);

@@ -355,7 +355,7 @@ public sealed class LifeStateTests
         Fails("\"scars\":0,\"deathTimeMs\":null}]", "\"scars\":0}]", SnapshotDecodeFailure.MissingField, "$.life.critters[0].deathTimeMs");
         Fails("\"entity\":\"oid:wolf\"", "\"entity\":\"oid wolf\"", SnapshotDecodeFailure.OutOfRange, "$.life.critters[0].entity");
         Fails(critter, critter + "," + critter, SnapshotDecodeFailure.NotCanonical, "$.life.critters[1].entity");
-        Fails("\"critters\":[", "\"critters\":[],\"x\":[", SnapshotDecodeFailure.UnknownField, "$.life.x");
+        Fails("\"critters\":[{\"entity\":\"oid:wolf\"", "\"critters\":[],\"x\":[{\"entity\":\"oid:wolf\"", SnapshotDecodeFailure.UnknownField, "$.life.x");
         var life = text[text.IndexOf(",\"life\":", StringComparison.Ordinal)..text.IndexOf(",\"reactions\":", StringComparison.Ordinal)];
         Fails(life, ",\"life\":[]", SnapshotDecodeFailure.WrongType, "$.life");
         Fails(life, ",\"life\":null", SnapshotDecodeFailure.WrongType, "$.life");

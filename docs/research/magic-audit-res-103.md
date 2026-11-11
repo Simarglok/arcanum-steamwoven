@@ -99,7 +99,7 @@ The columns say whether anything **reads** the flag today and whether the cast h
 | Fleeing; blinded; undead (critter flags) | 38; 66; 58 | AI rules read them | No (AI notification and combat effects are the side effects) | MA-4 |
 | Locked (portal and container); magically held (portal) | 1; 75 | Door and container state in the session (pick locks) | No | MA-6 |
 | Identified (item) | 9 | Not modelled | No | MA-7 |
-| Illusion; familiar (spell and NPC flags); Tempus Fugit | 68; 74; 79 | None found | No | MA-4, MA-9 |
+| Illusion; familiar (spell and NPC flags); Tempus Fugit | 68; 74; 79 | Illusion: none in the executable either; familiar: the bad-associates test, the travel hide and the follower removal; Tempus Fugit: the speed of the stat getter ([MA-R](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)) | No | MA-4, MA-9 |
 
 ### Effect numbers (the `Effect` component)
 
@@ -108,7 +108,7 @@ modelled; skills, tech skills, resistances and the level and alignment group are
 
 | Effect | Spells | Changes | Runs today |
 | --- | --- | --- | --- |
-| 57, 58 | 76; 77 | speed -50 %; +100 % | Stat modelled; whether speed reaches walking and action points is unchecked (MA-2) |
+| 57, 58 | 76; 77 | speed -50 %; +100 % | Stat modelled; in the original speed reaches the turn-based action points and the real-time attack pause, not walking ([MA-R](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)); the session's use is MA-2's |
 | 59 | 37 | willpower -50 % | Modelled |
 | 60 | 47 | damage bonus -50 % | Modelled |
 | 61, 62 | 18; 28, 51, 70 | speed -5 | Modelled |
@@ -139,8 +139,8 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 | # | Spell | In the records (installed data) | Today | Missing | Needs |
 | --- | --- | --- | --- | --- | --- |
 | 5 | Sense Alignment (1) | 5 fat, maint 1@10; **B** Flag detecting_alignment on; **E** Flag detecting_alignment off | ✗ Cost and eye candy only; the hover window already reads flag 0x80 | `ObjFlag` writer for `OSF_DETECTING_ALIGNMENT` | MA-1 |
-| 6 | See Contents (2) | 10 fat; **B** Identify | ✗ Cost only | `Identify` on containers; item and container identification state is not modelled | MA-7 |
-| 7 | Read Aura (3) | 15 fat; **B** Identify | ✗ Cost only | `Identify` on a critter (what the original shows is not read here) | MA-7 |
+| 6 | See Contents (2) | 10 fat; **B** Identify | ✗ Cost only | `Identify` on containers: the original opens the inventory window in its mode 4 with no lock test ([MA-R](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)); item and container identification state is not modelled | MA-7 |
+| 7 | Read Aura (3) | 15 fat; **B** Identify | ✗ Cost only | `Identify` on a critter: the original opens the read-only NPC sheet for the casting player ([MA-R](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)) | MA-7 |
 | 8 | Sense Hidden (4) | 25 fat, maint 5@10; **B** Flag detecting_invisible on, Flag detecting_traps on, Effect 157 add x1; **E** Flag detecting_invisible off, Flag detecting_traps off, Effect 157 rem x1 | ✗ Cost only | `ObjFlag` detecting invisible and traps; trap spotting is not built; effect 157 is a skill change (inert until the skills lane models skills) | MA-1, E6 |
 | 9 | Divine Magick (5) | 30 fat; **B** Flag identified on, Identify | ✗ Cost only | `ObjFlag` identified (item flags) and `Identify` | MA-7, MA-1 |
 
@@ -282,7 +282,7 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 | 76 | Congeal Time (2) | 10 fat, maint 2@10, save willpower -5; **B** Effect 57 add x1, eye candy x2; **E** Effect 57 rem x1, eye candy x3 | ✗ Cost and eye candy only | Effect 57 (speed -50 %) on NPCs in radius 9; speed use unchecked | E1-d, MA-2 |
 | 77 | Hasten (3) | 20 fat, maint 3@10; **B** Effect 58 add x1, eye candy x2; **E** Effect 58 rem x1, eye candy x3 | ◐ Effect 58 (speed +100 %) on the hero | Companions as targets; the speed stat reaching walk speed and action points is unchecked | E1-d, MA-2 |
 | 78 | Stasis (4) | 25 fat, maint 4@10, save willpower -10; **B** Flag paralyzed on, eye candy x2; **E** Flag paralyzed off, eye candy x3 | ✅ Paralysis flag (hold) on a critter, maintained | Per-spell run | - |
-| 79 | Tempus Fugit (5) | 40 fat, maint 5@10; **B** Flag tempus_fugit on, eye candy; **E** Flag tempus_fugit off, eye candy x2 | ✗ Cost and eye candy only | `ObjFlag` Tempus Fugit; no code reads it, and what it does has not been read in the executable | MA-9, MA-1 |
+| 79 | Tempus Fugit (5) | 40 fat, maint 5@10; **B** Flag tempus_fugit on, eye candy; **E** Flag tempus_fugit off, eye candy x2 | ✗ Cost and eye candy only | `ObjFlag` Tempus Fugit; no code reads it; in the original it gives +10 speed to its holders and -10 to every other critter while the player holds it ([MA-R](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)) | MA-9, MA-1 |
 
 ## By college
 
@@ -319,9 +319,9 @@ census (MA-0) in the same PR.
 | --- | --- | --- | --- | --- | --- | --- |
 | **E1-a** DEV-347 (merged, #924) | Created scenery and eye-candy objects, schema 85 | none by itself | - | - | directory, session | FR-MAGIC-008 |
 | **E1-d** DEV-348 (in review) | Effect list and spell flags for every critter | 10, 15, 20, 25, 37, 51, 70 (76 also needs MA-2) once the Effect component's NPC branch is hooked up (check the merged diff) | - | - | `GameSession*` | FR-CHAR-022, FR-MAGIC-007 |
-| **MA-0** Spell census | An opt-in `RealData` test (`DAT_ROOT`) that applies every record's BEGIN, MAINTAIN, END and callbacks (records 0..139) to a synthetic target in the cast host and asserts the exact set of `ComponentNotReady` components per record, plus a per-spell hero cast for the ✅ rows. It is the living matrix: each slice below edits its expected set | verifies 0, 2, 12, 16, 31, 33, 36, 54, 59-62, 64, 65, 67, 78 | M | - | tests plus one test host; no production file | FR-MAGIC-007 |
+| **MA-0** Spell census, ARC-DEV-356 ([result](#spell-census-ma-0)) | An opt-in `RealData` test (`DAT_ROOT`) that applies every record's BEGIN, MAINTAIN, END and callbacks (records 0..139) to a synthetic target in the cast host and asserts the exact set of `ComponentNotReady` components per record (the per-spell hero cast for the ✅ rows was left out, see the result). It is the living matrix: each slice below edits its expected set | verifies 0, 2, 12, 16, 31, 33, 36, 54, 59-62, 64, 65, 67, 78 | M | - | tests plus one test host; no production file | FR-MAGIC-007 |
 | **MA-5** Movement (E4-e) | `Movement` to a target tile and the teleport tile; no-teleport areas ([FR-TRAVEL-005](../requirements/world-travel-runtime.md#fr-travel-005)); followers after a teleport; Teleportation as a map change through the session path of MIG11 | 3, 4 | M-L | MA-1 (dispatch table) | new partial file; map transfer | FR-MAGIC-009, FR-TRAVEL-005 |
-| **MA-R** Executable reads | One Mac read (docs and ledger rows only): `Identify` on a critter, a container and an item (what each shows, what it writes); Tempus Fugit; the consumers of the illusion and familiar flags and of detecting traps; what magically-held does to a door; whether the speed stat reaches walking and action points; the weapon drop of the Disarm flag | 5-9, 75, 79, 0 | M | - | docs and ledger only | FR-MAGIC-007 |
+| **MA-R** Executable reads (ARC-DEV-357, done: [ledger XR1-XR15](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)) | One Mac read (docs and ledger rows only): `Identify` on a critter, a container and an item (what each shows, what it writes); Tempus Fugit; the consumers of the illusion and familiar flags and of detecting traps; what magically-held does to a door; whether the speed stat reaches walking and action points; the weapon drop of the Disarm flag | 5-9, 75, 79, 0 | M | - | docs and ledger only | FR-MAGIC-007 |
 | **MA-1** Spell-flag writer (E4-a) | First splits the if-chain of `SessionSpellCaster.Apply` into a dispatch table with one partial file per component group; then generalises `ObjectFlag` from the four whitelisted bits to every `obj_f_spell_flags` and object-flag bit with the reference count it already has; per-flag side effects only where read (invisible render flags, shielded, shrunk, hardened hands and the body flags feed the unarmed rule); NPC targets once DEV-348 lands | 5, 43, 44, 45, 63, 69, 34, 47; part of 8, 30, 42 | M | - (NPC targets: DEV-348) | `SessionSpellCaster.Apply`, `SessionSpellCasterObjectFlags` | FR-MAGIC-007 |
 | **MA-6** Locks and holds on objects | `ObjFlag` on portal and container flags through the lock state pick locks already writes: Unlocking Cantrip, Magelock, and Flesh to Stone's reverse path on stone portals | 1, 75, 48 | S-M | MA-1 | door and container state | FR-MAGIC-007, FR-AI-003 |
 | **MA-3** Dispel (E4-c, narrowed) | Dispel: interrupt the runs sourced by, aimed at or listing the target, clear held, stoned and perma-polymorph, destroy a summoned target (exe read: MT15 lists the 0x451AF0 to 0x451C40 group for Dispel and Destroy together, so the Dispel function is confirmed first). The other control components are the technology lane's | 41, 42 | M | MA-1 | Dispel partial file, run host | FR-MAGIC-006, FR-MAGIC-007 |
@@ -357,6 +357,30 @@ resistance half of Shield of Protection even after every flag is written.
 - **Longest:** Summoning (all five wait on created critters and mind control), the four elemental colleges (Wall, Fireflash, Elemental, Body), Nature (animals, charm and mind control, Succour Beast) and Divination (Identify).
 - **Reported bugs on this path:** B47 (Fireflash, Wall of Fire, Summon Undead) is E1-b for 21 and 22 and E1-e for 57; the Entangle chain (51) already runs.
 
+## Spell census (MA-0)
+
+ARC-DEV-356 builds MA-0 as the opt-in test `SpellCensusRealDataTests` in `tests/Arcanum.Session.Tests` (`DAT_ROOT`, row in the [opt-in table](../workflow/toolchain.md#opt-in-original-data), owner decision D4 taken
+by its recommendation (a) while it is open). For every record 0..139 it reads the installed records and `rules/effect.mes` like the original, applies each component of every action
+(BEGIN, MAINTAIN, END, CALLBACK, END_CALLBACK) through the cast host's `Apply` to two synthetic targets in turn (the hero, and an NPC of the map), each on a fresh session, and compares the
+set of components the host logs as `ComponentNotReady` with the table in the test. A change prints the new rows to paste. Each later slice edits that table in its own pull request.
+
+What it checks and what it does not:
+
+- It checks the **dispatch**: whether the host takes a component of a record on a PC and on an NPC. It runs no invocation check, target area, save, resistance or run action, so a component it
+  takes may still be partial or inert (the resistance half of the effects, MA-2; the AGoal pushes of the hero), and a not-ready component on these two targets may be ready on another
+  object (Destroy takes lying items only). A session refusal of a taken component's write (`ObjectFlagNotSaved`, `EffectNotSaved`) counts as a change of the table too. The per-spell hero cast the slice row names is left out: a cast through the run rules depends on the save rolls and the event pass,
+  and checking it per spell is the smoke's and the per-slice tests' job. A cast from the hero to these targets was tried while building the test. It started for all 80 college spells, which shows only
+  that the invocation check admits these targets.
+- **Result on `origin/main` after ARC-DEV-353 (2026-11-11):** 18 of the 80 college spells leave no component not ready on either target: 0, 2, 12, 16, 31, 33, 36, 48, 54, 55, 56, 59-62, 64,
+  65 and 78. Twelve more leave only the NPC's Effect (the hero has the only effect list until DEV-348): 10, 15, 20, 25, 37, 40, 46, 51, 67, 70, 76 and 77.
+- **Against the matrix:** the census agrees with the 17 ✅ rows except 67 (Effect, hero only), and adds 2 and 48, which the matrix keeps at ◐ for work outside the dispatch (the hero and
+  companion push; the stone portal and its render side). The ✗ rows 37, 40, 46 and 76 are taken by the host on the hero but change nothing that is modelled (resistances, MA-2) or are unchecked
+  (speed, MA-2). No row disagrees in the other direction.
+- **Records 80..139:** the same gaps, and three not-ready cases the colleges do not have: `Recharge` (103), `NoOp` (129, 130) and an AGoal goal other than 43 and 44 (89). Record 85
+  adds effect 145 with the cause injury (7), and the session refuses that cause from a spell (`EffectNotSaved` on the hero); whether the original's effect add takes it is left to MA-2.
+- **Lanes that will change it:** E1-b (ARC-DEV-352, #941) changes the Summon and Destroy rows of the scenery summons; DEV-348 the NPC's Effect rows; MA-1 the ObjFlag rows. The slice that merges
+  second re-runs the census and updates the table.
+
 ## Decisions for the owner
 
 | # | Question | Options | Recommendation |
@@ -371,9 +395,9 @@ The 60 records outside the colleges (80..139, used by monsters and items) share 
 
 ## Not read, not verified
 
-- Whether the weapon-drop damage flag of Disarm (0) drops the weapon in a run, whether Unseen Force (2) pushes non-critter objects, whether Illuminate (65) lights the scene, whether the maintained damage of the clouds (11, 27) hits the same
+- Whether the weapon-drop damage flag of Disarm (0) drops the weapon in a run (the original does, with a zero amount: [XR15](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)), whether Unseen Force (2) pushes non-critter objects, whether Illuminate (65) lights the scene, whether the maintained damage of the clouds (11, 27) hits the same
   targets as the BEGIN: all marked ✅ or ◐ by code, none run. MA-0 decides them.
-- What Identify shows for a critter, what Tempus Fugit does, what the illusion and familiar flags change: not read (MA-R).
+- What Identify shows for a critter, what Tempus Fugit does, what the illusion and familiar flags change: read by MA-R ([ledger XR1-XR15](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)); left open there: what inventory mode 4 lets the player move, what happens on arrival to a summoned follower the travel hide left shown, whether a familiar's death reaches the follower removal, and two owner questions (XR14).
 - DEV-348 is described from its thread status and the plan, not from its diff.
 - The AI's use of each spell was not audited beyond the priorities in the records (60 of the 80 have one); the AI casts what the cast host can run, so a component that is not ready is not ready for NPCs either.
 - Records 80..139 and the technology records (140..222) are outside the per-spell matrix.

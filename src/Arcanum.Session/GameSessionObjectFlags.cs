@@ -101,8 +101,10 @@ public sealed partial class GameSessionOwner
 
     // ARC-DEV-302: a critter's life facts with the hold flags the session wrote: stoned (spell flag 0x10000) and paralysed (critter flag 0x40) on or off over the traits its data gives, so
     // the life's activity (0x45D790), its damage and its stun read them.
+    // ARC-DEV-348: and the maxima of the effect list the session holds for the NPC (WithWrittenEffects), which replace the host's.
     private LifeFacts WithWrittenHolds(string entity, LifeFacts facts)
     {
+        facts = WithWrittenEffects(entity, facts);
         var written = _objectFlags.GetValueOrDefault(entity);
         if (written.IsEmpty) return facts;
         var traits = facts.Traits;
