@@ -14,9 +14,9 @@ DLG entry using supplied versioned queries. It never starts
 [DialogTransitionRuntime](dialog-transition-runtime.md), evaluates DLG eligibility
 or executes entry effects. Entry selection is not a working full conversation.
 
-The [entry contract](npc-dialog-entry-contract.md) and
-[original evidence](../research/crash-site-npc-dialog-evidence.md) describe the
-source-backed slice. Original executable/gameplay/display parity is NOT_VERIFIED.
+The [original evidence](../research/crash-site-npc-dialog-evidence.md) and the
+[carried contract rules](#identity-and-event-admission-rules-carried-from-the-entry-contract)
+describe the source-backed slice. Original executable/gameplay/display parity is NOT_VERIFIED.
 
 ## Public API and ownership
 
@@ -187,6 +187,61 @@ not reconstructed new-game/companion state. Full touched-file length/SHA256 is
 compared before/after, including area resources/prototypes. Output is safe numeric
 IDs/counts/fingerprints/status. Missing configuration/Inconclusive is NOT a required
 original PASS. Successful data resolution is not original executable parity.
+
+## Identity and event-admission rules carried from the entry contract
+
+Carried from the retired bridge contract (a design document superseded by the
+[SCR dispatcher](scr-dispatcher-runtime.md#dialogue-arc-script-009-slice-s3));
+only the rules still true of this resolver and of the original are kept.
+
+- **Identities.** An invocation has distinct stable identities for
+  world/module/map, NPC instance, prototype, triggerer PC, optional extra object,
+  event, effective script attachment, selected SCR resource, current SCR line,
+  selected DLG resource and DLG node. A script number is not an instance ID, an
+  SCR line is not a DLG node, the lowest DLG ID is not the start policy. A dialog
+  session identity also binds participant context and the resource
+  version/fingerprint, so a stale handle cannot select a new generation.
+- **Ownership.** The NPC loader owns instance/prototype fields and presence
+  masks. Effective attachment selection is a whole-array override, never a
+  per-slot merge: an absent instance field may inherit the prototype array, an
+  explicitly overridden array without SAP_DIALOG means no binding at that event.
+  Invalid or duplicate identity, mismatched prototype, malformed bitmap and a
+  missing location are errors, never guessed NPCs. Save, deletion and patch
+  overlays need a separately evidenced policy.
+- **Resources.** A validated numeric catalogue key resolves to exactly one raw SCR
+  resource and the DLG identifier follows by the evidenced naming rule; the result
+  carries fingerprint, locator, source-policy identity and content version.
+  Missing or ambiguous candidates fail; an explicit selected archive is not a
+  claim of game-wide precedence; text bytes stay opaque until a decoder policy is
+  chosen.
+- **Event admission.** The investigated object-dialog route is SAP_DIALOG with the
+  PC as triggerer, the NPC as attachee, no extra object and SCR line 0. The event
+  dispatcher owns the speaking, life/consciousness, combat, exclusivity, host and
+  world admission queries; physical UI buttons are not SCR semantics.
+- **Entry inputs and result.** The resolver consumes the effective attachment
+  identity with flags/counters and version, typed participants and caller SCR line,
+  the named SCR source/version, version-bound query results (following(NPC, PC),
+  jilted(NPC), attachment-local flag bits) and an explicit capability set and
+  budget. The result is `ResolvedEntry(SCR line, DLG resource, NPC node, version)`
+  or a typed frontier or error. The selected evidence reaches line 4 -> node 1 only
+  under the documented false predicates; true alternatives, missing results,
+  unknown representations and unsupported operations never fall through. The SCR
+  callback context keeps both the SCR line and the DLG start.
+- **Queries and commands.** A query returns value, owner/version or an explicit
+  failure, and an absent result never defaults to false or zero. A command returns
+  an outcome and an ordered applied-prefix receipt; a later failure does not roll
+  back earlier commands. Unknown opcode, arity, operand representation or
+  participant ownership is a frontier with no replacement no-op.
+- **Entry effects.** Node 1's seven effects keep the order GF, GF, GF, IN, GF, QU,
+  RU; reaction is queried after the entry effects, a Player RE runs only on a
+  selected reply before the target's entry effects, and the destination node 9
+  has no entry action in the inspected step. NPC Condition fields are speech
+  metadata, not a Player gate. The original numerically sorts and caps the
+  *eligible* replies (F0); the grouping equivalence seen on the selected group is
+  not global.
+- **Diagnostics** keep category, originating layer, identities, source/state
+  versions, record/entry identity, missing capability, applied prefix and stop
+  reason, and redact original text, expressions, values and local paths.
 
 ## Provenance and remaining capabilities
 

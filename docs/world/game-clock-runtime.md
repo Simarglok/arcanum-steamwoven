@@ -4,13 +4,13 @@ Status: **Implemented bounded component**, ARC-WORLD-004. This is an independent
 written, Godot-free C# authority in the existing `Arcanum.Simulation` assembly,
 not a full world, scheduler, lighting system or original-runtime compatibility layer.
 The task accepts `steamwoven-normalized-clock-v1` and only the bootstrap/query/
-ordinary-advance/pause subset of [RES-020](game-clock-policy.md). Unselected P1–P3
+ordinary-advance/pause subset of the retired RES-020 policy (carried in [Original clock evidence](#original-clock-evidence-carried-from-the-res-020-policy)). Unselected P1–P3
 remain **Research / Proposed**. Implementation is not independent review, PR
 publication or verified merge delivery; those are separate exact-candidate gates.
 
 ## Evidence and deviations
 
-The [versioned RES-020 policy][res020] and [RES-018 research][res018] distinguish
+The [versioned RES-020 policy][res020] (retired; its evidence is carried below) and [RES-018 research][res018] distinguish
 Source, Data-observed, Proposal and Unknown. Source is a reading of the original's
 functions at the cited addresses, evidence level F0 (not checked in the executable)
 unless the [verification ledger](../research/original-verification-ledger.md) lists
@@ -49,7 +49,7 @@ no conversion or integration with [movement](grid-movement-runtime.md) is accept
 
 `GameTimeFlow` turns monotonic, nonnegative host milliseconds into admitted game
 milliseconds for `OrdinaryAdvance`, following the bounded source worksheet of
-[RES-020](game-clock-policy.md#separate-time-domains-and-source-admission): the first
+[RES-020](#original-clock-evidence-carried-from-the-res-020-policy): the first
 observation admits nothing; an interval under 5 ms admits nothing and keeps the
 reference (short intervals accumulate); an admitted interval moves the reference and
 is clamped to 250 ms, the excess discarded; game time gains 8 × the admitted interval
@@ -298,6 +298,136 @@ is not required here. Run-bound logs/TRX/full acceptance-findings ledger remain
 private and untracked, outside sealed bundles. The ledger records every requirement,
 production seam, independent oracle, command/head/workspace/run/time/result,
 finding disposition and downstream obligation; no worksheet or stale log replaces it.
+
+## Original clock evidence carried from the RES-020 policy
+
+Carried from the retired ARC-RES-020 policy; its P1 (now this runtime), P2/P3
+shapes (JumpTo, Restore, the pure hour consumer: unimplemented, see below) and
+its evidence-class prose were dropped. The full source reading of the original
+clock (pairs, add, calendar, start, ping admission, pause, jumps, event lists) is
+in [original time loop](../architecture/original-time-loop.md) TL14-TL26 and
+[the event queue](../research/game-event-queue.md); only what those rows do not
+state is kept here. **Source** is a reading of the functions under
+[Executable functions](#executable-functions) (F0 unless the ledger lists them);
+a checked integer does not resolve an Unknown.
+
+- **Wire and calendar.** The wire is two uint32 words (`DayWord`,
+  `MillisecondWord`) over a 64-bit representation, not one millisecond count: keep
+  both words with source identity; raw equality differs from normalized equality.
+  The [ordinary date getters][calendar] use day % 30 + 1, day / 30 % 12 + 1 and
+  StartYear + day / 360, but the **current** day/month getters exchange the first
+  two formulas (at day 29 ordinary day/month is 30/1, current is 1/30): do not
+  call them an ordinary calendar. Source addition carries only for a sum
+  > 86,400,000: `(0,86399999)+1=(0,86400000)`, `+2=(1,1)`; the normalized clock
+  gives `(1,0)` and `(1,1)`. Source unsigned wrap and underflow are not simulated
+  by the worksheet; the subtraction underflow branch is an original bug (ledger
+  row Clock subtraction), not a compatibility rule.
+- **Startup branches** ([startup][startup], non-editor, F0; the installed file
+  gives 1885/15, see TL15). The outcome depends on the lifecycle, not on one
+  fallback: resource absent: setters get 1885 and 15; resource present with key 4
+  or 5: the setter gets the `atoi` result; key absent: that setter is skipped and
+  the retained parameter stays ([static values][static-start] 1885 and
+  36,000,000 ms); a negative year/hour is skipped (no strict parse validation);
+  hour 0 makes the start parameter 0 and the constructor gives clock word 1 ms; a
+  non-negative hour above 23 has no upper bound in the setter (signed
+  multiplication risk is Unknown). So missing-key is not always 1885/10, and
+  malformed `atoi`, signed conversions, overflow and the reference epoch are not
+  compatibility rules. The selected module (355,938,305 bytes, SHA-256
+  `8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f`) has startup
+  entry ordinal 14921 (stored 281 / decoded 439 bytes, SHA-256
+  `e098286005ba4c4a16701cd6cbcf74eca2bc8937d9f45c7d9ef6331000c7d670`): year 1885,
+  hour 15; not a precedence rule for every module.
+- **Admission worksheet** (`source-observation-v1`, non-network, TL14): host delta
+  4 admits nothing and keeps the reference (0 -> 4 stays 0); 5 gives real/game/
+  animation 5/40/40; 6 gives 6/48/48; 249 gives 249/1992/1992; 250 and 251 both give
+  250/2000/2000 with the reference moved to the raw timestamp (0 -> 5 -> 256);
+  open gate with a turn-based round gives 5/0/40; closed gate gives 5/0/0. Counter
+  0 opens the gate, 1..30 close it (saturating at both ends; nested 0->1->2->1->0).
+  [Menu open][menu-open] increments only for non-OPTIONS and [menu close][menu-close]
+  decrements if positive, so OPTIONS-open at 1 leaves 1 and its close can take
+  1 -> 0; these call sites do not prove every UI lifecycle is balanced.
+  [Due processing][admission] follows admission and sits outside game advancement:
+  at frozen game time 21,600,000 a deadline of 21,600,000 is due on an admitted
+  ping and 21,600,001 stays future; a rejected ping (< 5 ms) returns before queue
+  processing; a frozen clock does not suppress callbacks elsewhere. The
+  [delay API][delay-api] and [time-kind base][delay-base] make the base relative;
+  [event kinds][event-kinds] put ambient lighting on game time and animation on
+  animation time.
+- **Time domains** (no unit may be inferred from another): source real = admitted
+  ping milliseconds; source game = conditional 8x admitted delta; source
+  animation = conditional 8x delta, also in a turn-based round with an open gate;
+  host elapsed = a timestamp difference submitted to admission, not an authority;
+  admitted game duration = explicit non-negative game milliseconds from a caller;
+  Movement `SimulationTime`/`StepDuration` = the exact rational domain of the
+  [movement runtime](grid-movement-runtime.md#finite-exact-numeric-domain), with no
+  accepted conversion to game hours; display interpolation = renderer-owned,
+  never an advance. Legacy and HD share one world clock; frames, widgets and
+  scenes create no other authority.
+
+**Worksheet ids outside the production tests** (the 96-case worksheet names every
+fixture id here or in the test mapping above; the self-test checks that):
+
+| Fixture ids | Oracle boundary |
+| --- | --- |
+| boundary-dawn-at, boundary-dawn-after, boundary-dusk-at, boundary-dusk-after | 21600000/21600001 -> hour 6, day true; 64800000/64800001 -> hour 18, day false |
+| boundary-midnight-at, boundary-midnight-after | 86400000/86400001 -> day 1, remainder 0/1 |
+| calendar-29, calendar-30, calendar-359, calendar-360, calendar-361 | ordinary (30,1,1885), (1,2,1885), (30,12,1885), (1,1,1886), (2,1,1886); source current pairs separately |
+| raw-equality, raw-overday, carry-equal, carry-after | raw words preserved; strict equality versus normalized next day |
+| start-missing-file, start-missing-key, start-static, start-zero, start-negative, start-upper | the startup branches above |
+| admit-4, admit-5, admit-6, admit-249, admit-250, admit-251, admit-tb, admit-closed, admit-closed-tb, admit-reference | the admission rows above, with reference preservation and the clamp |
+| gate-nested, gate-lower, gate-upper, gate-options, gate-menu | counter 0 -> 1 -> 2 -> 1 -> 0, saturation at 0 and 30, OPTIONS asymmetry |
+| delay-zero, cadence-repeat, due-equal, due-future | delay 0 -> 1 ms versus duration 0; relative deadline; frozen due predicate |
+| jump-forward, jump-backward, jump-paused, jump-equal, jump-negative | proposed P2 JumpTo (not implemented) |
+| restore-same, restore-different, restore-profile, restore-schema, restore-invalid, restore-import-counters, restore-max-revision | proposed P2 Restore (not implemented): same-profile descriptor and a new generation, counters never imported |
+| consumer-initial, consumer-repeat, consumer-resume, consumer-jump, consumer-restore, consumer-version, consumer-profile, consumer-generation, consumer-revision, consumer-invalid | proposed P3 hour consumer (not implemented): full key, complete-output atomic failure |
+
+Fixture output layouts: normalized `[dayIndex, msOfDay, hour, minute, second, day,
+month, year, isDay]`; calendar `[ordinaryDay, ordinaryMonth, year, currentDay,
+currentMonth]`; raw `[retainedDay, retainedMs, normalizedDay, normalizedMs]`; carry
+`[rawDay, rawMs]`; startup `[retainedYear, startParameterMs, constructedClockMs]`;
+admission `[realDelta, gameDelta, animationDelta, newHostReference]`; gate is the
+counter after each call; delay `[constructedDelay, deadline]`; due
+`[deadlineReached, eligibleOnAdmittedPing]`.
+
+## Executable functions
+
+The source references above name these functions of the retail 1.0.7.4
+`Arcanum.exe` (F0 unless the [verification ledger](../research/original-verification-ledger.md)
+lists them). The worksheet self-test reads this table.
+
+| Reference | Function address |
+| --- | --- |
+| wire | data layout or declaration (no function) |
+| startup | 0x4B9C30 |
+| static-start | data layout or declaration (no function) |
+| init | 0x45AD10, 0x45AD20, 0x45AD70, 0x45AD80, 0x45AD90 |
+| calendar | 0x45A840, 0x45A870, 0x45A890, 0x45A8B0, 0x45A8D0, 0x45A8E0, 0x45A900, 0x45A920, 0x45A950, 0x45A970, 0x45A9B0, 0x45A9E0, 0x45AA10, 0x45AA50, 0x45AAA0, 0x45AAC0, 0x45AAE0, 0x45AB00, 0x45AB20, 0x45AB40 |
+| day-predicate | 0x45ACF0 |
+| admission | 0x45B300, 0x45B320, 0x45B340, 0x45B360, 0x45B370 |
+| menu-open | 0x541180 |
+| menu-close | 0x5412E0 |
+| network | data layout or declaration (no function) |
+| ambient-init | 0x57D240, 0x57D2C0, 0x57D2D0 |
+| ambient-callback | 0x57D620, 0x57D640, 0x57D650, 0x57D660, 0x57D6C0 |
+| delay-api | 0x45B800, 0x45B820, 0x45B860, 0x45B880, 0x45B8A0 |
+| delay-base | 0x45BA30 |
+| event-kinds | data layout or declaration (no function) |
+
+[wire]: #executable-functions
+[startup]: #executable-functions
+[static-start]: #executable-functions
+[init]: #executable-functions
+[calendar]: #executable-functions
+[day-predicate]: #executable-functions
+[admission]: #executable-functions
+[menu-open]: #executable-functions
+[menu-close]: #executable-functions
+[network]: #executable-functions
+[ambient-init]: #executable-functions
+[ambient-callback]: #executable-functions
+[delay-api]: #executable-functions
+[delay-base]: #executable-functions
+[event-kinds]: #executable-functions
 
 ## Not implemented / Remaining work
 

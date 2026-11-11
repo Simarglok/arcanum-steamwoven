@@ -8,7 +8,7 @@
 - `FacadeWalkabilityBit`, applicable only to packed class 11. Raw bit 0 set is `NoBlock`; clear is `Blocked` for this component.
 - `TileNameRule`, applicable only to packed class 0. It projects the first material number through the explicitly supplied tile-name MES source.
 
-The API has no `IsWalkable`, `IsPassable`, combined cell value, step value, implicit OR, navigation rule, or actor verdict. `NoBlock` means only that this one admitted component contributes no blocker. Static spatial data, dynamic doors/state, actor capability, diagonal/corner/edge behavior, cross-sector handling, and source precedence remain outside this API and the [passability contract is still NOT READY](passability-contract.md).
+The API has no `IsWalkable`, `IsPassable`, combined cell value, step value, implicit OR, navigation rule, or actor verdict. `NoBlock` means only that this one admitted component contributes no blocker. Static spatial data, dynamic doors/state, actor capability, diagonal/corner/edge behavior, cross-sector handling, and source precedence remain outside this API and full passability is still NOT READY (see the [traversal research contract](area-traversal-contract.md)).
 
 ## Input, ownership, and results
 
@@ -34,3 +34,17 @@ Within that subset, `b` or `f` means `Blocked`; recognized non-block flags or no
 ## Provenance and boundary
 
 The serialized-mask, raw facade-bit, tile category, and `b`/`f` facts are a reading of the original's functions, evidence level F0 (not checked in the executable); this is not original-runtime validation or a clean-room proof. The related selected-sector source record is [sector passability evidence](../research/sector-passability-evidence.md).
+
+## Fixed-profile aggregate check and tests (ARC-DATA-006)
+
+The opt-in Crash Site probe called `TerrainObstructionInspector` on the fixed selector (ordinal `463`, compressed flag `0x00000002`, decoded length `47,291`, six-prototype manifest), emitted the parser-derived aggregate, then repeated the module and explicit-resource length/SHA-256 fingerprint checks. Original files were read only; nothing local or original is recorded. The fixed selector and fingerprints stay in [selected-sector passability evidence](../research/sector-passability-evidence.md).
+
+| Component / domain | Blocked | NoBlock | Unknown |
+| --- | ---: | ---: | ---: |
+| Serialized 512-byte mask / 4,096 cells | 0 | 4,096 | 0 |
+| Class-11 facade raw bit / 1,063 cells | 976 | 87 | 0 |
+| Class-0 tile-name rule / 3,033 cells | 0 | 2,942 | 91 |
+
+These are component aggregates, not passability results: the 91 strict-subset tile-name unknowns keep null dispositions, and the zero set-bit count of the mask holds only for this input and does not make the clear mask walkable.
+
+Synthetic API tests cover 511/512/513-byte mask admission and owned input lifetime; set and clear word/row/final boundaries through the snapshot and the report; X/Y/ordinal rejection and sanitized world-coordinate overflow; class-11 raw-bit polarity with unrelated bits; the sorted ordinal endpoints of every tile-name category and unresolved mappings; the admitted `b`/`f`, non-block and sound-token syntax and the Unknown/null rest; malformed MES structure and the decoded/record/value caps as typed sanitized failures; missing or ambiguous name entries; the null-disposition invariants; and report lifetime after mutating the DAT tile words, mask and MES bytes before archive disposal. Terrain framing tests cover malformed sector sections and limits. The Crash Site probe self-test is a separate regression check.

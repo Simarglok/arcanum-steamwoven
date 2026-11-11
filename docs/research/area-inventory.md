@@ -6,7 +6,7 @@ loaded/live readiness remains NOT_READY.
 
 ## Scope and evidence vocabulary
 
-ARC-RES-015 expands the [frozen initial sector](crash-site-slice.md) into a
+ARC-RES-015 expands the [frozen initial sector](crash-site-framing.md) into a
 reproducible **research area**, not a production loader, scene or gameplay implementation.
 
 - **Source fact** means an earlier source reading (provenance in git history), cited by the executable address of its function; level F0 (not checked in the executable) unless a ledger row is cited; not original execution.

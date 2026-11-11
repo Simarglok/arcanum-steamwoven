@@ -7,7 +7,7 @@ Part of the [original verification ledger](../original-verification-ledger.md) (
 Source: [locomotion](../locomotion-evidence.md#anomalies),
 [first building](../first-building-evidence.md),
 [generated wilderness](../generated-wilderness-evidence.md#anomalies),
-[combat fields](../../formats/combat-fields.md), [clock policy](../../world/game-clock-policy.md).
+[combat fields](../../formats/combat-fields.md), [clock policy](../../world/game-clock-runtime.md#original-clock-evidence-carried-from-the-res-020-policy).
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
