@@ -131,6 +131,8 @@ public partial class TerrainViewerApp
                 if (Frame(destroyed, "destroyed") is not { } frame) continue;
                 bodies[key] = AreaScenePlan.Repose(command, row, visual, frame.Key, frame.Frame.Width, frame.Frame.Height, frame.Visual.HotX, frame.Visual.HotY);
             }
+        lap?.Step("extra-art");
+        if (lap is not null) _ = ExtraArt(); // measuring only: the first open is timed apart from the items
         lap?.Step("items");
         // The items on the ground away from a T0 body.
         var map = _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == area.Snapshot.RuntimeMap);
