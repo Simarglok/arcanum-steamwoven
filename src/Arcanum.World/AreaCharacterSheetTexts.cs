@@ -4,6 +4,7 @@ using Arcanum.Data.Technology;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation;
 
 namespace Arcanum.World;
 
@@ -85,6 +86,7 @@ public sealed class AreaCharacterSheetTexts
 
     /// <summary>ARC-UI-076: the name of the schematic of <paramref name="degree"/> (1..7) in <paramref name="discipline"/> (0x56EA10: the
     /// record 1990 + 200 d + 10 degree of <c>schematic.mes</c>, its name text from <c>schematic_text.mes</c>); null when it does not read.</summary>
+    [OriginalFunction(0x56EA10, OriginalFunctionScope.Partial)]
     public string? SchematicName(int discipline, int degree)
     {
         if (_schematics is not { } catalog) return null;
