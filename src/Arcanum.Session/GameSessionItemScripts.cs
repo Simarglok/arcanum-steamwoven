@@ -377,7 +377,7 @@ public sealed partial class GameSessionOwner
     {
         var trial = TrialHero();
         foreach (var entry in entries) ApplyStats(trial.Stats, entry, definitions);
-        return Math.Clamp(trial.Stats.Query(new(0)).Snapshot!.GetEffective(CharacterStat.MagickTechAptitude), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);
+        return Math.Clamp(trial.Stats.Query(HeroStatContext()).Snapshot!.GetEffective(CharacterStat.MagickTechAptitude), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);
     }
 
     /// <summary>

@@ -244,7 +244,7 @@ public sealed partial class GameSessionOwner
     {
         if (QueryHeroLife() is not { } life) return null;
         var state = life.Record.State;
-        return QueryHeroStats(new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel), state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth)))?.Snapshot?.GetEffective(stat);
+        return QueryHeroStats(HeroStatContext(Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel), state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth)))?.Snapshot?.GetEffective(stat);
     }
 
     private SpellRunSystem NewSpellSystem(ISpellRunHost host) =>
