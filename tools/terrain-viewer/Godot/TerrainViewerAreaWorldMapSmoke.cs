@@ -81,7 +81,7 @@ public partial class TerrainViewerApp
                 for (var f = 0; f < 3; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 var (holeCorner, holeEdge) = artView.LensOnScreen;
                 Require(_worldMapPanel.RoundViewShown && !artView.LensFrozen && holeEdge == AreaWorldMapArtLayout.Lens.Side * artView.Scale.X
-                    && holeCorner == artView.GlobalPosition + new Vector2(AreaWorldMapArtLayout.Lens.X, AreaWorldMapArtLayout.Lens.Y) * artView.Scale.X,
+                    && holeCorner.DistanceTo(artView.WindowPointForSelfTest(AreaWorldMapArtLayout.Lens.X, AreaWorldMapArtLayout.Lens.Y)) < .01f,
                     $"the lens shows the round view: shown={_worldMapPanel.RoundViewShown} frozen={artView.LensFrozen} origin={holeCorner} side={holeEdge}");
                 Require(artView.HasLensArt == (artLook.Art.ContainsKey(AreaWorldMapArtLayout.LensArt)), "the lens art is drawn when it read");
                 // A native look (ARC_WORLDMAP_SMOKE_SHOT): the frame with the live lens; the shot is original-derived and stays under local/.
