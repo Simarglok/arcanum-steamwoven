@@ -344,7 +344,8 @@ check, action-point or time cost and no experience.
   for a cell-powered record; the installed 168 and 187 have maintenance 0, so their
   cells come from a ChargeNBranch component instead, ledger [DV7](ledger/technology.md#tech-devices-arc-technology-008)).
 - **Degrees do not change devices.** Effective expertise has no caller outside
-  the sheet and the schematic gate; degrees act on devices only through tech
+  the sheet and the schematic gate (re-checked over the whole image by ARC-RES-114,
+  [ledger XA6](ledger/technology.md#aptitude-and-expertise-consumers-arc-res-114)); degrees act on devices only through tech
   points → aptitude → item power. The four tech skills work in their own
   domains and do not modify device spells.
 - **Wear**: the weapon wear on a hit (0x4B5580, [combat core](combat-core-evidence.md) C21) **falls** with
