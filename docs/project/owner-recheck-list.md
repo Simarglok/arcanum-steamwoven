@@ -118,3 +118,23 @@ The triage changes no behaviour. These are the places where it found original NP
 | 2 | Watch NPCs whose AI row forbids opening portals next to a closed door on their route. | The AI parameter flag of slot 16 decides whether an NPC may open a portal; the player may always (0x4AEB10). Ours stores the flag and never asks it. | open |
 | 3 | At night, move a sleeping NPC off its bed (push, teleport or leave the map and come back) and wait. | The sleeper is put back onto a bed object found at its night standpoint, else at its day one (0x4AD0B0, 0x4AD140). Ours leaves it where it is. | open |
 | 4 | Frighten an NPC with a fear effect, or let one surrender in a dialog. | It starts to flee from the source (the start-flee request 0x4AF130). Ours has only the stop-fleeing side. | open |
+
+## ARC-DEV-364 — NPC grenades (T-h, 2026-11-11)
+
+An NPC in a fight can now pick a grenade from its pack and throw it at its target ([grenade step](../world/ai-host.md#grenade-step-arc-dev-364), [ledger TH1–TH4](../research/ledger/npc-ai.md#npc-grenade-host-arc-dev-364)).
+The settings differ on purpose in one place: the original's blast-radius reading is inverted (TH1), so **Original** keeps radius 0 for every installed grenade and **Steamwoven** uses the real radius of the
+grenade's spell. Compare in both games with an NPC that carries a grenade (the technology Explosives products, or the grenades in the crash site cave) and has throwing skill points.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Start a fight with a hostile NPC that carries a grenade and has points in throwing, standing a few tiles away with a clear line. | At the start of the fight it throws the grenade once (CHECK_GRENADE is set once per fight start); the grenade flies, explodes with its own spell and is gone from its pack. | open |
+| 2 | Repeat with the hostile NPC standing right next to you. | **Original:** it still throws, because the radius it tests is 0 (TH1). Steamwoven: it does not throw while the target is within the grenade's radius and attacks instead. | open |
+| 3 | Put a friend of that NPC (another NPC of its faction) next to you, then fight. | **Original:** it throws anyway, hurting its friend. Steamwoven: it holds the grenade while a friend it protects stands in the blast square. | open |
+| 4 | Give a companion a grenade (it needs throwing points), then stand next to a hostile NPC that the companion fights. | **Original:** the companion throws anyway and the blast can hit you, its leader (PCs are never checked, SP15; the radius is 0 here too, TH1). Steamwoven: it holds the throw while you stand in the blast square. | open |
+| 5 | Walk behind a wall or a closed door so a blocker stands between you, then fight. | It does not throw while anything blocks the line to your tile (the target tile's own objects do not count). | open |
+| 6 | An NPC with a grenade and no throwing points (a creature with none). | It never throws and attacks as before. | open |
+
+Known differences (documented, not bugs):
+
+- Only the first generic item with the grenade flag in the NPC's list is thrown, as in the original; an NPC does not pick the strongest grenade.
+- The NPC's throw animation and the grenade's flight use the viewer's stand-ins; the NPC's own art is not read yet.

@@ -231,7 +231,7 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 /// the heal skill's rung and goal 40, pickups, a thrown item's flight, grenades, the back-off's away path, the attack order's target and pass, the comment lines, NPC
 /// ranged attacks, scripts at the AI points, routines and waypoints, saved NPC positions.
 /// </summary>
-public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, IAiPerformWorld, IMoraleWorld, IAiSupportWorld, IGoalStepHost
+public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, IAiPerformWorld, IMoraleWorld, IAiSupportWorld, IAiGrenadeWorld, IGoalStepHost
 {
     private const string Pc = AiSchedulerRules.Pc;
     // Object flags: destroyed, off, don't draw, invisible, invulnerable; critter flags; spell flags; NPC flags (HostilityCritter's bits).
@@ -2325,6 +2325,14 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     public DangerState ReadDanger(string npc) => _session.QueryDanger(npc).State;
     public DangerFlags DangerBits(string npc) => _session.QueryDanger(npc).Flags;
+
+    /// <summary>The grenade step's bit write (the session's support-bit operations: only CHECK_GRENADE and the look-for bits may be cleared,
+    /// the support bits set).</summary>
+    public void WriteDangerBits(string npc, DangerFlags set, DangerFlags clear)
+    {
+        if (clear != DangerFlags.None) _session.ClearAiSupportBits(_session.Version, npc, clear);
+        if (set != DangerFlags.None) _session.SetAiSupportBits(_session.Version, npc, set);
+    }
     public BackOffRun BackOff(string npc, string? target) => MoraleRules.BackOff(this, npc, target ?? Pc, DangerBits(npc));
     // The back-off's away path (0x41F3C0 along the offsets) is not walked yet: no tile, so the back-off ends.
     public CellCoord? AwayTile(string npc, string? target, int range) => null;
@@ -2409,7 +2417,51 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         target is not null && MoraleRules.StartsBackOff(this, npc, target, _session.AiRolls)
         && _session.StartBackOff(_session.Version, npc).Disposition == GameSessionDisposition.Changed;
 
-    public AiGrenadeResult Grenade(string npc, string target) => new(AiGrenadeStop.NoGrenade);
+    /// <summary>
+    /// ARC-DEV-364 (T-h): combat perform's grenade step (0x4AC910, <see cref="AiGroundRules.Grenade"/>) over this host as the
+    /// <see cref="IAiGrenadeWorld"/>: the NPC's first generic item with the grenade flag (<see cref="Grenade(string)"/>), its throwing
+    /// points, the grenade's blast radius, the line of fire to the target's tile and the critters of the blast's square. A throw is then
+    /// the executor's goal 37 (<see cref="ThrowItem"/>). NOT READY: nothing; the original has no further test.
+    /// </summary>
+    public AiGrenadeResult Grenade(string npc, string target)
+    {
+        var result = AiGroundRules.Grenade(this, npc, target, _session.Rules.Combat);
+        Trace(npc).Grenade = $"grenade at {target}: {result.Stop}{(result.Grenade is { } item ? " " + item : "")}{(result.Protected is { } friend ? " friend " + friend : "")}";
+        return result;
+    }
+
+    /// <summary>The generic item flag of a grenade (generic flags 0x10, ledger TI3): the AI's throw takes the first such item of the NPC's list.</summary>
+    public const uint GrenadeItemFlag = 0x10;
+
+    /// <summary>The first generic item (type 14) of the NPC's list (fields 0xED/0xEE, listed or worn, in its order) whose generic flags hold
+    /// <see cref="GrenadeItemFlag"/> (0x462760, TI3); none for the hero.</summary>
+    public string? Grenade(string npc) =>
+        npc == Pc ? null : _scene.Combat.NpcItems(_session, npc).Where(item => GrenadeTool(item.Fields)).Select(item => item.Entity).FirstOrDefault();
+
+    private static bool GrenadeTool(CombatFields fields) =>
+        fields.Object.Type == AreaHealingItems.GenericType && fields.Generic is { } generic && (generic.Flags & GrenadeItemFlag) != 0;
+
+    /// <summary>The thrower's stored throwing points (basic skill 3, 0x4C5FA0, bits 0..5): at least one. An NPC without a sheet has none.</summary>
+    public bool HasThrowingPoints(string npc) => NpcSkill(npc, Skill.Throwing) is { Points: > 0 };
+
+    /// <summary>The grenade's blast radius (0x466230, <see cref="AiGroundRules.BlastRadius"/>): from the item's first spell slot and that
+    /// spell's Begin radius as the cast host's record gives it (0 without a cast host or a record).</summary>
+    public int BlastRadius(string grenade)
+    {
+        var slot = ItemFields(grenade)?.Item is { } item && item.Spells.Count > 0 ? item.Spells[0] : ItemSpellTriggerRules.NoSpell;
+        var caster = _scene.Spells?.Invoke();
+        return AiGroundRules.BlastRadius(slot, spell => caster?.SpellRecord(spell)?.Areas is { Length: > 0 } areas ? areas[0].Radius : 0, _session.Rules.Combat);
+    }
+
+    /// <summary>The first object that stops the line of fire (0x4ADE00, cost ignored) from the NPC's tile to the target's; null when it is
+    /// clear or the host has no map. The trace skips the target tile's own non-wall objects (<see cref="LineOfFireRules.Trace{TObject}"/>), and any other blocker stops the throw, as in the original (TH2).</summary>
+    public string? LineOfFireBlocker(string npc, string target) =>
+        Line(npc, target, out _) is { Blocker: { } row } ? EntityOf(row.Key) ?? row.Key.ToString() : null;
+
+    /// <summary>The critters in the square of half-size <paramref name="halfSize"/> around the object (0x4AE4E0): the Original query asks
+    /// for NPCs only, so the hero is left out unless <paramref name="withPcs"/>.</summary>
+    public IReadOnlyList<string> SquareAround(string center, int halfSize, bool withPcs) =>
+        [.. Square(center, halfSize).Where(id => withPcs || id != Pc)];
 
     /// <summary>ARC-WORLD-113: the attack starter's throw (0x434B00, TW1, AG13): the item the NPC wears in its weapon slot (the session's
     /// view) when it is a weapon with the "default throws" flag (weapon flag 0x200) that the remove check (0x466DA0: no no-drop flag)
@@ -2964,6 +3016,8 @@ public sealed class AreaAiTrace
     public string? Skill { get; set; }
     /// <summary>ARC-WORLD-113: the last throw (or the attack starter's unwield).</summary>
     public string? Throw { get; set; }
+    /// <summary>ARC-DEV-364: the grenade step's last answer (0x4AC910): the stop, the grenade and a friend in the blast.</summary>
+    public string? Grenade { get; set; }
     /// <summary>ARC-DEV-117: its last fold step, waypoint or standpoint: what the rules decided and what the host did.</summary>
     public string? Route { get; set; }
 }

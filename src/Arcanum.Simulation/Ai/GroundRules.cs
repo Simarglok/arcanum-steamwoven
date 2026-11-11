@@ -163,6 +163,26 @@ public static class AiGroundRules
 
     private static bool Takable(AiGroundItem item) => !item.NoDisplay && !item.NoNpcPickup && !item.Worthless && !item.CannotTake;
 
+    /// <summary>The "no spell" value of an item's spell slot (<see cref="Arcanum.Simulation.Magic.ItemSpellTriggerRules.NoSpell"/>), as the radius getter reads it.</summary>
+    public const int NoSpellSlot = 10000;
+
+    /// <summary>
+    /// The grenade's area radius R (0x466230, ledger TH1) from the first item spell slot (field 0x64) of the grenade: the original
+    /// compares the slot with 10000 ("none") and goes on to the spell's Begin radius (0x4502B0, the record's +0x80; the spell is the
+    /// slot's low byte, 0x4CB790) only when it <em>is</em> 10000, so it reads the radius of spell 16 for an item with no spell and
+    /// 0 for an item with one (<see cref="CombatAnomalyProfile.GrenadeRadiusReadsNoSpellSlot"/>, Original). Steamwoven reads the radius
+    /// of the slot's own spell when the slot holds one and 0 when it does not. <paramref name="beginRadius"/> answers the Begin radius
+    /// of a spell 0..222 (0 for a spell without a record).
+    /// </summary>
+    [OriginalFunction(0x466230, OriginalFunctionScope.Full)]
+    public static int BlastRadius(int firstSlot, Func<int, int> beginRadius, CombatAnomalyProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(beginRadius);
+        ArgumentNullException.ThrowIfNull(profile);
+        var none = firstSlot == NoSpellSlot;
+        return none == profile.GrenadeRadiusReadsNoSpellSlot ? Math.Max(beginRadius(firstSlot & 0xFF), 0) : 0;
+    }
+
     /// <summary>
     /// The grenade step (0x4AC910) of combat perform at distance <c>d</c> to the target: no CHECK_GRENADE → none; BACKING_OFF →
     /// none, the bit kept; the bit cleared; then no throwing skill points, no grenade, <c>d ≤</c> the blast radius R, any blocker on

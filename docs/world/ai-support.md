@@ -70,6 +70,7 @@ start roll of 80 or more; a one-entry list draws 0..0, which takes nothing from 
 | --- | --- | --- | --- |
 | SP11 | The list cache keeps, per critter, only the list requested when its slot was taken, frozen until an inventory change, an exhausted listed item, a reset or reuse; every other list is rebuilt on each request. | Each list is built fresh on every request. | `CombatAnomalyProfile.AiListCacheKeepsFirstList` |
 | SP15 | The grenade's friendly-fire scan covers NPCs only, so a PC in the blast (a follower's PC leader too) never stops a throw. | PCs and NPCs are scanned with the same protect rule. | `CombatAnomalyProfile.GrenadeIgnoresPcsInBlast` |
+| TH1 | The grenade's blast radius (0x466230) tests the item's first spell slot the wrong way round: an item with a spell reads 0 (every installed grenade), an item with none reads the radius of spell 16. The step then throws at any target farther than 0 tiles and never finds a friend in the blast. | The Begin radius of the slot's spell (0 for a slot with none). | `CombatAnomalyProfile.GrenadeRadiusReadsNoSpellSlot` |
 | SP17 | The heal ladder's fatigue-recovery rung tests the healer's fatigue but is tried for every heal target. | Tried only when the target is the healer. | `CombatAnomalyProfile.HealFatigueRungForOthers` |
 | P3 | The redirect compares the target's intelligence with `MinIQ:` for every candidate, so it redirects all or none. | Each candidate's intelligence is compared. | `CombatAnomalyProfile.RedirectTestsTargetIntelligence` |
 
