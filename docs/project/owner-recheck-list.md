@@ -703,8 +703,8 @@ The hero's change to another map (a jump point, the Crash Site cave, a map-mode 
 | 1 | Cast a maintained spell on yourself (for example a protective spell with a slot in the top bar), walk through an exit to another map. | The spell and its slot are still there on the new map. | open |
 | 2 | With a follower in the party, cast a maintained spell on the follower and change map with the follower coming along. | The spell on the follower goes on; its slot stays. | open |
 | 3 | Cast a maintained spell on a creature that is not in the party (or on a follower you ordered to wait), then leave the map. | The spell ends as you leave: the slot is empty on the new map and the creature is without the effect when you come back. | open |
-| 4 | Summon a creature with a summoning spell, then leave the map without it following. | The run of the summoning spell ends as you leave; the summoned creature is gone when you return. | open |
-| 5 | Cast a spell on a wall or a door of the map (a lock or hold spell, Wall of Fire) and leave. | The effect is over when you return (the run ended at the exit). | open |
+| 4 | Cast Wall of Fire (or another spell that makes scenery) and leave the map. | The run ends as you leave and its fire pieces are gone when you return. (A summoned creature that follows you travels and its run goes on; creature summons are not built yet.) | open |
+| 5 | Cast a lock or hold spell on a door or chest of the map and leave. | The effect is over when you return (the run ended at the exit). | open |
 
 Known differences (documented, not bugs):
 

@@ -21,7 +21,7 @@ public static class SpellRunTravelRules
 {
     /// <summary>
     /// The runs the player's change of map ends, in slot order (0x44F7A0). <paramref name="travels"/> answers whether an object is on the travel list;
-    /// an item (a run object of an item type) is on it when its holder is, which the run knows as its parent. <paramref name="summoned"/> lists the objects
+    /// an item (a run object of an item type) is on it when the run's parent is a holder that travels: right for an item the caster holds (an item's own spell), an approximation for an item target, whose real holder the run does not know (the original tests the item's own handle against the list). <paramref name="summoned"/> lists the objects
     /// a run holds as summoned (the cast host's), the second list the original tests.
     /// </summary>
     [OriginalFunction(0x44F7A0, OriginalFunctionScope.Partial)]

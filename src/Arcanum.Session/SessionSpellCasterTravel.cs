@@ -23,7 +23,7 @@ public sealed partial class SessionSpellCaster
         for (var slot = 0; slot < SpellRunTable.Slots; slot++)
         {
             if (_owner.QuerySpellRuns()[slot] is not { } run || SpellRunTravelRules.Goes(run, Travels, r => SummonedOf(r).Select(summoned => summoned.Id))) continue;
-            Act(new(SessionSpellRunActionKind.ForceEnd, slot));
+            if (Act(new(SessionSpellRunActionKind.ForceEnd, slot)).Disposition == GameSessionDisposition.Rejected) continue;
             ended.Add(slot);
         }
         return ended;

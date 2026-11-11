@@ -49,6 +49,7 @@ public sealed class SpellRunTravelRulesTests
         CollectionAssert.AreEqual(new[] { 1 }, Left(Run(1, Wand, Stranger, null)), "an item a stranger holds stays");
         CollectionAssert.AreEqual(new[] { 2 }, Left(Run(2, Rock, Hero, Hero)), "a scenery source stays behind");
         CollectionAssert.AreEqual(new[] { 4 }, Left(Run(4, Wand, Wand, null)), "an item with no holder (its own parent, lying about) stays");
+        CollectionAssert.AreEqual(Array.Empty<int>(), Left(Run(5, Hero, Hero, Wand)), "an item target is judged by the run's parent (an approximation of the original's own-handle test)");
         var summon = Run(3, Hero, Hero, Hero);
         Assert.IsTrue(SpellRunTravelRules.Goes(summon, Travels, _ => ["oid:friend"]));
         Assert.IsFalse(SpellRunTravelRules.Goes(summon, Travels, _ => ["oid:friend", "oid:imp"]), "a summoned critter that stays ends the run");
