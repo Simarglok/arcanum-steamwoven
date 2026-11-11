@@ -433,6 +433,7 @@ Reproduce on a clean `origin/main` build, then separate the layers before changi
    a Legacy alpha that kept a plate's corners round a redrawn button (#875: alpha mask).
    The world map window drew HD frames on premultiplied canvases with straight-alpha textures, which baked a rectangle behind two
    buttons (ARC-UI-126: every texture on a premultiplied canvas is the premultiplied variant).
+   The dialog box, the menu art views and the pre-made browser had the same fault (round Accept and Cancel buttons with a square behind them, ARC-UI-144).
 4. Native evidence: `./arcanum smoke pr --stages bar --main-menu` (or the stage the window belongs to) with
    `ARC_HD_PACK=<pack dir>`, `ARC_AREA_BAR_HD_VERIFY=1` and `ARC_AREA_BAR_CAPTURE=<dir>` for the readback; a capture that
    needs a temporary patch is made in a separate checkout and the patch is removed afterwards. Captures are original-derived

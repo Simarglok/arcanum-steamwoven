@@ -24,8 +24,18 @@ public partial class TerrainViewerApp
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
         var saves = System.IO.Directory.CreateTempSubdirectory("arc-ui-028-").FullName;
         _saveLibraryForSelfTest = new(saves);
+        var savedInterfaceHd = _gameSettings.HdInterface;
         try
         {
+            // ARC-UI-144: ARC_AREA_DEATH_HD_VERIFY=1 shows the box with the HD interface art of ARC_HD_PACK (the bar and sheet smokes' switch), for a native look at
+            // the round buttons (a straight-alpha texture on the box's premultiplied canvas drew a square behind each); the setting is restored below.
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_DEATH_HD_VERIFY") == "1")
+            {
+                Require(_canvas?.HdSource?.Pack is not null, "HD verification needs ARC_HD_PACK");
+                _gameSettings = _gameSettings with { HdInterface = true };
+                SyncInterfaceHd();
+                Require(InterfaceHd.Enabled, "HD interface switch enabled for this isolated smoke");
+            }
             async Task Frames(int count)
             {
                 for (var i = 0; i < count; i++)
@@ -151,6 +161,7 @@ public partial class TerrainViewerApp
             // A smoke that failed part-way must not leave a covering death for a later stage.
             if (HeroDeathCovering) { GD.Print($"ARC-UI-026 death smoke: dropped a death at stage {_heroDeath.Stage}"); StopHeroDeath(); }
             _heroDeathForSelfTest = false;
+            if (_gameSettings.HdInterface != savedInterfaceHd) { _gameSettings = _gameSettings with { HdInterface = savedInterfaceHd }; SyncInterfaceHd(); }
             if (_mainMenu is not null) EndMainMenu("smoke end");
             _quickKeys.Reset();
             _saveLibraryForSelfTest = null;

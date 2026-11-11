@@ -25,9 +25,9 @@ public partial class TerrainViewerApp
             return;
         }
         var backgrounds = new[] { AreaMenuArtLayout.MainArt, AreaMenuArtLayout.SinglePlayerArt, AreaMenuArtLayout.OptionsArt }
-            .ToDictionary(number => number, number => (Texture2D)HotkeyTexture(_menuArtContent.Art[number].Frames[0]));
+            .ToDictionary(number => number, number => (Texture2D)PremultipliedTexture(_menuArtContent.Art[number].Frames[0]));
         var art = _menuArtContent.Art;
-        IReadOnlyList<Texture2D> Frames(int number) => [.. art[number].Frames.Select(frame => (Texture2D)HotkeyTexture(frame))];
+        IReadOnlyList<Texture2D> Frames(int number) => [.. art[number].Frames.Select(frame => (Texture2D)PremultipliedTexture(frame))];
         // ARC-UI-070: the fonts drawn by the shared art-text draw in the original's blend (MW31).
         var font = new AreaArtFontFace(art[AreaMenuArtLayout.FontArt].Frames);
         panel.SetArt(backgrounds, font);
