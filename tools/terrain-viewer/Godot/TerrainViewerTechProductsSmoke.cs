@@ -214,10 +214,19 @@ public partial class TerrainViewerApp
             }
             GD.Print($"{TechProductsCode} tech-products shield calls after clock={session.QueryClockSnapshot().GameTimestampMs} pending={string.Join(";", session.QueryScriptCalls().Select(c => $"{c.Call.Script}:{c.DeadlineMs}"))} refusals={AreaEvents.CallRefusals} last={AreaEvents.LastCallRefusal}");
             TechProductsRequire(Cells() == cellsWorn - 1, $"the worn shield's 15 s call took one cell ({cellsWorn} -> {Cells()})");
+            // The timer goes on: the next call, 15 script seconds later, takes a second cell (the wear question answered for the assembled shield).
+            TechProductsRequire(session.JumpClocks(session.QueryClockSnapshot().Token, 8L * 16000).Disposition == Arcanum.Simulation.Clock.ClockMutationDisposition.Changed, "the game clock moved by 16 more script seconds");
+            for (var frames = 0; frames < 200 && Cells() == cellsWorn - 1; frames++) Frame();
+            TechProductsRequire(Cells() == cellsWorn - 2, $"the shield's next call took a second cell ({cellsWorn} -> {Cells()})");
             GD.Print($"{TechProductsCode} tech-products shield record={shieldRecord} cells={cellsWorn}->{Cells()}");
 
 
             // The maintained armour (Electric degree 6, record 168): worn, its maintained run pays a cell a tick (5 s of the game clock) through ChargeNBranch.
+            // The shield comes off first: its timer must not be the one that takes the cell.
+            OpenInventory();
+            TakeOffItem(EquipmentSlot.Shield);
+            EndInventory();
+            TechProductsRequire(session.QueryEquipment().Worn.All(w => w.Slot != EquipmentSlot.Shield), "the shield is off");
             var armourRecord = SchematicCatalog.LearnedNumber(TechDisciplineElectric, 6);
             var armour = TechSmokeCraft(data, TechDisciplineElectric, armourRecord).Made[0];
             OpenInventory();
@@ -226,7 +235,7 @@ public partial class TerrainViewerApp
             EndInventory();
             TechProductsRequire(session.QueryEquipment().Worn.Any(w => w.Entity == armour), $"the maintained armour is worn: {_inventoryStatus}");
             var cellsArmour = Cells();
-            for (var step = 0; step < 4 && Cells() >= cellsArmour; step++)
+            for (var step = 0; step < 1 && Cells() >= cellsArmour; step++)
             {
                 TechProductsRequire(session.JumpClocks(session.QueryClockSnapshot().Token, 8L * 6000).Disposition == Arcanum.Simulation.Clock.ClockMutationDisposition.Changed, "the game clock moved by 6 script seconds");
                 caster.ProcessEvents();

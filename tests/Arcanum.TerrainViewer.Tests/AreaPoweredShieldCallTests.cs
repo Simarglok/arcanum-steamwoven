@@ -129,7 +129,7 @@ public sealed class AreaPoweredShieldCallTests
 
     // ARC-MAGIC-051: an item the hero assembled lives in the made items (not the kit or the pack): worn, it must answer the wear question of the shield's timer by name.
     [TestMethod]
-    public void A_made_item_the_hero_wears_answers_the_wear_question_by_name_with_and_without_a_use_host()
+    public void A_made_item_the_hero_wears_answers_the_wear_question_by_name_without_a_use_host()
     {
         With(hero: true, cells: 0, (host, session, pc, shield) =>
         {
