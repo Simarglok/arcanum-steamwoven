@@ -161,6 +161,9 @@ public enum SpellCastEventKind
     Dispelled,
     /// <summary>ARC-MAGIC-034 (DP2): a Dispel component met a summoned critter (spell flag 0x4000) this host cannot destroy (not a created critter of the session): the object stays; the value is its object type.</summary>
     DispelDestroyNotReady,
+    /// <summary>ARC-MAGIC-035 (MA-4, SO1–SO8): a social or AI flag of an ObjFlag component did a step besides its own write on <see cref="SpellCastEvent.Object"/>: <see cref="SpellCastEvent.Value"/> is one of the
+    /// <see cref="SessionSpellCaster.SocialReaction"/> family of codes and <see cref="SpellCastEvent.Detail"/> its amount or reason.</summary>
+    SocialEffect,
 }
 
 /// <summary>

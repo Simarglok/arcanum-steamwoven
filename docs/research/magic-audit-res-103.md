@@ -86,9 +86,9 @@ The columns say whether anything **reads** the flag today and whether the cast h
 | Flag (field) | Spells | Reader today | Writer | Slice |
 | --- | --- | --- | --- | --- |
 | Entangled, stoned (spell flags); paralysed (critter flags); spoken with dead | 51; 48; 59, 78; 56 | Hold rules, walk refusals, hit re-save (ARC-DEV-302, 304) | **Ready** (stoned: render side effect not) | - |
-| Mind controlled | 14, 19, 24, 29, 39, 52, 53, 57, 58, 68, 71, 72, 73, 74 | Reaction and companion rules | No (follow, no flee, -50 reaction, disband at END are the side effects) | MA-4 |
+| Mind controlled | 14, 19, 24, 29, 39, 52, 53, 57, 58, 68, 71, 72, 73, 74 | Reaction and companion rules | **Ready on a critter the map knows (MA-4, ARC-MAGIC-035: -50, forced follower, no flee; the END disbands it)**; a created critter waits for E1-e | E1-e |
 | Object "don't draw" (object flags) | 11, 14, 17, 19, 21, 24, 26, 27, 29, 32, 34, 53, 57, 68, 71-74 | AI host hidden test, target rules (the draw path was not re-checked) | **Ready on a critter (MA-1: the flag and the paralysed bit, [OB3](ledger/spell-runs.md#objflag-component-of-the-cast-host-arc-dev-358)); the rest follow Summon** | E1 |
-| Charmed | 35, 50 | None found | No (+30 reaction toward a PC, kill-on-sight override) | MA-4 |
+| Charmed | 35, 50 | None found | **Ready (MA-4: +30 / -30 toward the hero, peace for an animal); the NPC flag KOS_OVERRIDE it adds is not kept by the session** | - |
 | Water walking; Body of air, earth, fire, water | 13, 28; 13, 18, 23, 28 | The unarmed body bonus (+2 hardened hands, body of earth, fire, water) exists and **no producer feeds it from the flags**; the AI's body-of-air start refusal reads a fact whose producer was not checked | Flags written (MA-1); Trait and the water-walking clear's damage (OB2) are MA-8 | MA-8 |
 | Anti-magic shell, full reflection, bonds of magick | 42; 44; 43 | Per-target stage; invocation check | **Ready (MA-1)** | - |
 | Invisible; enshrouded | 69; 63 | Awareness and hostility rules | **Ready (MA-1: the object flags invisible and translucent are written; the viewer's draw of them is not read)** | - |
@@ -96,7 +96,7 @@ The columns say whether anything **reads** the flag today and whether the cast h
 | Shielded | 30 | Hit eye candy only | **Ready (MA-1)** | - |
 | Hardened hands | 45 | Unarmed damage rule, fed from the flags since MA-1 ([OB5](ledger/spell-runs.md#objflag-component-of-the-cast-host-arc-dev-358)) | **Ready (MA-1)** | - |
 | Shrunk; polymorphed | 47; 49 | Render and equipment rules partly | Flags written (MA-1: shrunk with its object flag); Trait is MA-8 | MA-8 |
-| Fleeing; blinded; undead (critter flags) | 38; 66; 58 | AI rules read them | No (AI notification and combat effects are the side effects) | MA-4 |
+| Fleeing; blinded; undead (critter flags) | 38; 66; 58 | AI rules read them | **Ready (MA-4: flee and stop fleeing through the AI host, the blinded life condition, the undead object flag); the combat and life rules do not read the written undead bit yet** | - |
 | Locked (portal and container); magically held (portal) | 1; 75 | Door and container state in the session (pick locks) | No | MA-6 |
 | Identified (item) | 9 | Not modelled | No | MA-7 |
 | Illusion; familiar (spell and NPC flags); Tempus Fugit | 68; 74; 79 | Illusion: none in the executable either; familiar: the bad-associates test, the travel hide and the follower removal; Tempus Fugit: the speed of the stat getter ([MA-R](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)) | No | MA-4, MA-9 |
@@ -198,11 +198,11 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 
 | # | Spell | In the records (installed data) | Today | Missing | Needs |
 | --- | --- | --- | --- | --- | --- |
-| 35 | Charm (1) | 5 fat, maint 1@10, save willpower -5; **B** Flag charmed on, eye candy; **E** Flag charmed off, eye candy | ✗ Cost and eye candy only | `ObjFlag` charmed with its +30 reaction side effect | MA-4 |
+| 35 | Charm (1) | 5 fat, maint 1@10, save willpower -5; **B** Flag charmed on, eye candy; **E** Flag charmed off, eye candy | ◐ `ObjFlag` charmed with the +30 / -30 reaction (MA-4, ARC-MAGIC-035) | The NPC flag KOS_OVERRIDE the original adds (not kept) | - |
 | 36 | Stun (2) | 10 fat, save willpower -5; **B** eye candy; **E** Damage normal 0-0 (stun) | ✅ Stun flag in the END damage (life effect `Stun`), willpower save | Per-spell run | - |
 | 37 | Drain Will (3) | 15 fat, maint 1@10, save willpower -5; **B** Effect 59 add x1, eye candy; **E** Effect 59 rem x1 | ✗ Cost and eye candy only | Effect 59 (WP -50 %) on an NPC: no NPC effect list | E1-d |
-| 38 | Nightmare (4) | 20 fat, save willpower -5; **B** eye candy, Flag fleeing on | ✗ Cost and eye candy only | `ObjFlag` fleeing with the AI notification | MA-4 |
-| 39 | Dominate Will (5) | 25 fat, maint 6@10, save willpower -5; **B** Flag mind_controlled on, eye candy; **E** Flag mind_controlled off | ✗ Cost and eye candy only | `ObjFlag` mind-controlled with follow and reaction side effects | MA-4 |
+| 38 | Nightmare (4) | 20 fat, save willpower -5; **B** eye candy, Flag fleeing on | ✅ `ObjFlag` fleeing: flee and stop fleeing through the AI host (MA-4) | Per-spell run | - |
+| 39 | Dominate Will (5) | 25 fat, maint 6@10, save willpower -5; **B** Flag mind_controlled on, eye candy; **E** Flag mind_controlled off | ✅ `ObjFlag` mind controlled: -50, forced follower, no flee; the END disbands it (MA-4) | Per-spell run | - |
 
 ### Meta (spells 40-44)
 
@@ -228,9 +228,9 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 
 | # | Spell | In the records (installed data) | Today | Missing | Needs |
 | --- | --- | --- | --- | --- | --- |
-| 50 | Charm Beast (1) | 8 fat, save willpower -5; **B** Flag charmed on, eye candy | ✗ Cost and eye candy only | `ObjFlag` charmed on animals (a separate animal path in the original) | MA-4 |
+| 50 | Charm Beast (1) | 8 fat, save willpower -5; **B** Flag charmed on, eye candy | ◐ `ObjFlag` charmed on an animal: peace with the caster (MA-4) | The NPC flag KOS_OVERRIDE (not kept) | - |
 | 51 | Entangle (2) | 5 fat, maint 2@10, save strength -1; **B** Flag entangled on, eye candy x2, Effect 62 add x1; **E** Flag entangled off, eye candy x3, Effect 62 rem x1 | ◐ Entangle flag, effect 62 on the hero, re-save on each hit, ends with the caster. **Smoke**: spell-end, ai-cast | Effect 62 (speed -5) on an NPC victim (the flag already holds); speed use unchecked (MA-2) | E1-d |
-| 52 | Control Beast (3) | 15 fat, maint 2@10, save willpower -5; **B** Flag mind_controlled on, eye candy x2; **E** Flag mind_controlled off, eye candy x3 | ✗ Cost and eye candy only | `ObjFlag` mind-controlled on animals | MA-4 |
+| 52 | Control Beast (3) | 15 fat, maint 2@10, save willpower -5; **B** Flag mind_controlled on, eye candy x2; **E** Flag mind_controlled off, eye candy x3 | ✅ `ObjFlag` mind controlled on animals (MA-4) | Per-spell run | - |
 | 53 | Succour Beast (4) | 20 fat, maint 4@10; **B** Summon list 4, Flag mind_controlled on, eye candy; **E** eye candy; **C** Flag dontdraw off; **EC** Destroy | ✗ Cost only | `Summon` list 4 (aptitude thresholds), mind-control flag | E1-c, E1-e, MA-4 |
 | 54 | Regenerate (5) | 25 fat, maint 5@10; **B** eye candy x2; **M** Heal normal 1-7 (scaled); **E** eye candy x3 | ✅ Heal on each MAINTAIN tick, party area | Per-spell run | - |
 
@@ -241,7 +241,7 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 | 55 | Harm (1) | 5 fat; **B** Damage normal 3-40 (scaled), eye candy | ✅ Damage normal 3-40, `Scaled`. **Smoke**: first-cast stage (by its data filter this is the one spell it picks; inferred) | None known | - |
 | 56 | Conjure Spirit (2) | 10 fat, maint 3@10; **B** Flag spoken_with_dead on, eye candy x2; **E** Flag spoken_with_dead off, eye candy x3 | ✅ Spoken-with-dead flag on a corpse for the run's life. **Smoke**: spirit-talk | None known | - |
 | 57 | Summon Undead (3) | 15 fat, maint 2@10; **B** Summon list 5, Flag mind_controlled on, eye candy; **E** eye candy; **C** Flag dontdraw off; **EC** Destroy | ✗ Cost only (B47) | `Summon` list 5 (undead by aptitude), mind-control flag | E1-c, E1-e, MA-4 |
-| 58 | Create Undead (4) | 20 fat, maint 3@10; **B** Heal normal 0-0 (raise), Heal poison 32000-32000, eye candy, Flag undead on, Flag mind_controlled on; **E** Flag mind_controlled off, Damage normal 0-0 (kill), Flag undead off | ◐ Raise and poison cure on a corpse; the END damage kills it again | Undead and mind-controlled flags: the raised body is hostile and the flags it clears at END were never set | MA-4 |
+| 58 | Create Undead (4) | 20 fat, maint 3@10; **B** Heal normal 0-0 (raise), Heal poison 32000-32000, eye candy, Flag undead on, Flag mind_controlled on; **E** Flag mind_controlled off, Damage normal 0-0 (kill), Flag undead off | ◐ Raise and poison cure on a corpse; the END damage kills it again | The undead flag is written (MA-4) but the combat and life rules read the data's undead bit; the raised body's hostility and the raise script (MA-10) | MA-10 |
 | 59 | Quench Life (5) | 50 fat, save constitution -5; **B** eye candy, Flag paralyzed on; **C** Flag paralyzed off, Damage normal 50-100 (scaled) | ✅ Paralysis (flag works), 50-100 damage at the eye candy callback | Per-spell run (callback timing) | - |
 
 ### Necromantic (white) (spells 60-64)
@@ -259,7 +259,7 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 | # | Spell | In the records (installed data) | Today | Missing | Needs |
 | --- | --- | --- | --- | --- | --- |
 | 65 | Illuminate (1) | 3 fat, maint 1@10; **B** eye candy; **E** eye candy | ✅ Eye candy 3 added and removed (light as the eye candy provides it) | Whether the glow lights the scene is unverified | - |
-| 66 | Flash (2) | 10 fat, dur 10 s, save constitution -5; **B** Flag blinded on; **E** Flag blinded off | ✗ Cost only | `ObjFlag` blinded (critter flags) with AI and combat effects | MA-4 |
+| 66 | Flash (2) | 10 fat, dur 10 s, save constitution -5; **B** Flag blinded on; **E** Flag blinded off | ✅ `ObjFlag` blinded: the life state's blinded condition (MA-4) | Per-spell run | - |
 | 67 | Blur Sight (3) | 15 fat, maint 2@10; **B** Effect 159 add x30; **E** Effect 159 rem x30 | ✅ Effect 159 (AC +1 x30) on the hero (area is self) | Per-spell run | - |
 | 68 | Phantasmal Fiend (4) | 20 fat, maint 4@10, save willpower -5; **B** Summon proto 28464, Flag illusion on, Flag mind_controlled on, eye candy; **E** eye candy; **C** Flag dontdraw off; **EC** Destroy | ✗ Cost only | `Summon` critter (proto 28464), illusion and mind-control flags | E1-c, E1-e, MA-4, MA-1 |
 | 69 | Invisibility (5) | 30 fat, maint 6@10; **B** Flag invisible on, eye candy; **E** Flag invisible off, eye candy | ✗ Cost and eye candy only (awareness already reads invisible) | `ObjFlag` invisible with its render side effects | MA-1 |
@@ -328,7 +328,7 @@ census (MA-0) in the same PR.
 | **E1-b** Summon of scenery | The seven scenery summons: cloud, fog, ice cloud, walls, the flash and Wall of Fire (burning goal 77 exists); END and Dispel remove them; stage per group ([hand-off](summon-objects-res-101.md#e1-b-the-summon-component-for-objects-needs-e1-a)) | 11, 17, 21, 22, 26, 27, 32 | M | E1-a (done), MA-1 | Summon partial file | FR-MAGIC-008 |
 | **MA-2** Effect consumers, ARC-MAGIC-027 ([result](#effect-consumers-ma-2-arc-magic-027)) | Resistance changes of effects (damage, fire, electrical, poison, magic) reach the combat resolver and the magic save for the hero and, after DEV-348, NPCs; check that speed reaches walking and action points; skills stay with the skills lane | 40, 30, 46, 13, 18, 23, 28 (the resistance half), 77, 76 | M | E1-d (NPC part) | `GameSessionEffects`, resolver | FR-CHAR-022, FR-COMBAT-008, FR-MAGIC-010 |
 | **E1-c** Created critters | A critter from a prototype on a tile, hosted wherever it stands, saved; action 52 for critters | prerequisite | L | E1-a (done) | directory, AI host (no cast-host file) | FR-MAGIC-008, FR-AI-004 |
-| **MA-4** Social and AI flags (E4-b, MT14) | Charm (+30 / -30 through the reaction effects, animals on a separate path), mind control (follow, no flee, -50 for a PC on a non-summoned NPC, disband at END), undead, fleeing, blinded as AI and combat notifications; the illusion and familiar flags | 35, 38, 39, 50, 52, 66, 58; the flag half of 14, 19, 24, 29, 53, 57, 68, 71-74 | M-L | MA-1, E1-d | reaction, AI notices | FR-SOCIAL-001, FR-SOCIAL-003, FR-AI-002 |
+| **MA-4** Social and AI flags (E4-b, MT14; **done**, ARC-MAGIC-035, 2026-11-11, [result](#social-and-ai-flags-ma-4-arc-magic-035)) | Charm (+30 / -30 through the reaction effects, animals on a separate path), mind control (follow, no flee, -50 for a PC on a non-summoned NPC, disband at END), undead, fleeing, blinded as AI and combat notifications; the illusion and familiar flags | 35, 38, 39, 50, 52, 66, 58; the flag half of 14, 19, 24, 29, 53, 57, 68, 71-74 | M-L | MA-1, E1-d | reaction, AI notices | FR-SOCIAL-001, FR-SOCIAL-003, FR-AI-002 |
 | **MA-8** Trait, body spells, Polymorph (E4-f, MT18) | `Trait`: art and palette, drop what the new art cannot wield, restore; MG10 as a technical bug under the owner rule; Body spells with their flags and effects | 13, 18, 23, 28, 49 | L | MA-1, MA-2, E1-d | render, equipment | FR-MAGIC-007 |
 | **MA-7** Identify, ARC-MAGIC-032 ([result](#identify-ma-7-arc-magic-032)) (E4-d, part of E8) | The session state of identification for items, containers and critters and the answer of the spell; the identify window stays with E8 | 6, 7, 9 | M-L | MA-R | session, UI | FR-MAGIC-007, FR-MAGIC-012 |
 | **E1-e** Summon of critters | Prototype or list pick, summoned flags, palette, faction (MG8), run ends when the summon dies, summoned follower; the familiar hidden with the party on the world map (XR14 (b), decided by the owner: [Decisions](#decisions-for-the-owner)) | 14, 19, 24, 29, 53, 57, 68, 71, 72, 73, 74 | L | E1-c, MA-4 | Summon partial file | FR-MAGIC-008 |
@@ -436,6 +436,19 @@ Done on 2026-11-11, by owner decision D5(a): magic builds the state and a text a
   the AI's item rule did already; the weapon's spell pane (slots, gauge, weapon button) now reads it too, which also fixes the pane of an item a barter window identified.
 - **The census** loses `Identify` on records 6, 7 and 9; record 9 keeps its `ObjFlag` on the census's critter targets (its line takes an item only).
 - **Left over, by name.** (1) Nothing picks an inventory item as a spell target (the inventory bit of the spell UI, `Tgt_Obj_Inven` in the target rules): spell 9 cannot be cast from the viewer; that is E8's pick. (2) The three windows (the NPC sheet for a spell, the container's inventory in mode 4, the item description). (3) What a press or release may move in inventory mode 4 (not read in MA-R, XR3). (4) A clear of the identified flag stays "not ready" (no installed record has one); an item whose own data has the flag stays identified whatever the mark says.
+
+## Social and AI flags (MA-4, ARC-MAGIC-035)
+
+Done on 2026-11-11 ([contract](../world/spell-cast-host.md#social-and-ai-flags-arc-magic-035), ledger [SO1 to SO8](ledger/spell-runs.md#social-and-ai-flags-arc-magic-035)): the five flags MA-1 left not ready.
+
+- **The original's order is kept.** 0x454A10 runs the side effects with the run's **parent** as the caster, and for fleeing, blinded (set) and mind control of a non-NPC it **returns before the closing write** (SO1 to SO7); the cast host does the same
+  (`SessionSpellCasterSocial.cs`). Mind control writes nothing on the hero when it has a caster; the flee flag is never written (the danger record is the state); blinded is the life state's condition, which is what the combat resolver and the AI gate read.
+- **What it unlocks.** Spells 38 (Nightmare), 39 (Dominate Will), 52 (Control Beast) and 66 (Flash) need nothing else for their components; 35 (Charm) and 50 (Charm Beast) lack only the NPC flag KOS_OVERRIDE; 58 (Create Undead) writes its flags
+  but the combat and life rules do not read a written undead bit. The summons (14, 19, 24, 29, 53, 57, 68, 71 to 74) lose their ObjFlag line from the census but still wait for E1-e (the flags on a created critter).
+- **Census.** Rows 35, 38, 39, 50, 52, 58, 66, 91 and 106 to 109 left the spell census; the summons keep only Destroy; the technology census lost the ObjFlag rows of 142, 148, 165, 177, 186 and 194 (their state flipped to RUNS). The census gives the host a
+  social host that runs every step, as the viewer wires one.
+- **Left, by name.** (1) The NPC flag KOS_OVERRIDE (a charm adds it and never clears it: SO2; the session has no NPC flag layer). (2) A follower of a caster that is no hero (the party has one leader). (3) The undead flag's readers (the combat values and the life
+  rules read the data's bit). (4) Created critters (E1-e). (5) The AI host's reaction facts carry `MindControlledByPc` false. (6) No viewer smoke stage drives these spells: the recheck is in the [owner recheck list](../project/owner-recheck-list.md).
 
 ## Decisions for the owner
 
