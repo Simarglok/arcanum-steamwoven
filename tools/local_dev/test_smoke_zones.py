@@ -273,6 +273,14 @@ class ZonePlanTests(unittest.TestCase):
         self.assertTrue((self.prefs / (alone.settings or "")).is_dir())
         self.assertIn("ARC_AREA_MAP_SMOKE_ONLY=ai", alone.command)
 
+    def test_the_stages_that_failed_in_the_daily_run_have_the_configuration_they_pass_in(self) -> None:
+        wanted = {"junk": (smoke.RUINS, False), "critter-light": (smoke.LIGHT_MAP, False), "ai-cast": (smoke.MAIN_MAP, True),
+                  "npc-door": (smoke.MAIN_MAP, True)}
+        for stage, (map_name, own) in wanted.items():
+            self.assertEqual((smoke.STAGE_NEEDS[stage].map, smoke.STAGE_NEEDS[stage].own), (map_name, own), stage)
+        steps = self.plan("pr", "--stages", "junk,critter-light,ai-cast,npc-door", "--no-build")
+        self.assertEqual(sorted(step.requires for step in steps), [("ai-cast",), ("critter-light",), ("junk",), ("npc-door",)])
+
     def test_the_launcher_help_lists_the_zone_options(self) -> None:
         args = parse("pr", "--zones", "core", "--auto", "--base", "origin/dev")
         self.assertEqual((args.zones, args.auto, args.base), ("core", True, "origin/dev"))

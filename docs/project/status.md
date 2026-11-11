@@ -240,18 +240,18 @@ One line per subject; the full row (canonical result, what remains) is in its ar
 
 ## Still missing for a playable game
 
-State of 2026-11-11 (main `52f66db`), checked against the code by ARC-RES-107 and the [missing systems plan](missing-systems-plan.md#3-map-of-the-systems) (section 3.1 names each system with its file and symbol). This is a list of what the player cannot do yet, not of what exists: the viewer plays the opening map and the world map in the original's window, and the components in the tables above are integrated into it.
+State of 2026-11-11 (main `4dc5162`), checked against the code by ARC-RES-107 and again by ARC-DEV-1110, and the [missing systems plan](missing-systems-plan.md#3-map-of-the-systems) (section 3.1 names each system with its file and symbol). This is a list of what the player cannot do yet, not of what exists: the viewer plays the opening map and the world map in the original's window, and the components in the tables above are integrated into it.
 
-What is integrated and working in the viewer (details in the [coverage matrix](../requirements/coverage.md)): whole-map rendering with passability and the sector cache, game lighting and the clock, cave entry and return, dialogue and barter, the inventory and equipment, the character sheet and creation, the hero's combat, ranged attacks and thrown items, NPC awareness and combat, spells from the hotkey bar and from items, the technology schematics, traps on maps, the logbook, the world map screen with travel and discovery, save and load, and the HD graphics and interface switches.
+What is integrated and working in the viewer (details in the [coverage matrix](../requirements/coverage.md)): whole-map rendering with passability and the sector cache, game lighting and the clock, cave entry and return, dialogue and barter, the inventory and equipment, the character sheet and creation, the hero's combat, ranged attacks and thrown items, NPC awareness and combat, spells from the hotkey bar and from items (81 of the 83 technology records run; of the 80 college spells the creature Summons and a few others are still open, [magic audit](../research/magic-audit-res-103.md#answer)), the technology schematics and the assembled products, traps on maps and placed trap devices, the logbook, the world map screen with travel and discovery, save and load, and the HD graphics and interface switches.
 
 Not built or only stubbed (each has an epic in the plan):
 
-- Objects made at run time other than items: no critter can be created and the Summon spell component is a stub; scenery and eye-candy objects can (E1, ARC-DEV-347).
+- Objects made at run time: items, scenery, eye-candy objects and critters by prototype can be created (E1, ARC-DEV-347, -359, -370, -371, -386; script action 52 makes critters; a created pet becomes a companion, ARC-MAGIC-050), and the Summon component makes scenery (Fireflash, Wall of Fire). Not built: the Summon of creatures (17 of the 42 installed Summon components, with AIRedirect, E1-e) and the AI's summoning (E1-f).
 - Monster generators, respawn, critter body decay and random encounters on the world map (E2).
 - Sleep and rest windows, the NPC hourly day (beds, walking between day and night standpoints) and the HUD clock (E3).
-- 17 of the 25 spell component types (movement, cast, polymorph, dispel, branches and others), most object flags, item recharge, teleport bans by area (E4).
-- 76 of 142 script actions and 16 of 53 conditions are admitted (survey of the missing systems plan); dialogue markers `c r t z` and positive `IN` (E5).
-- Disarm action and its skill-bar button, the trap shot 30002, NPC and companion spot attempts (E6; the hero's spot trap roll is built, ARC-MAGIC-057).
+- 6 of the 25 spell component types have no handler (AIRedirect, EnvFlag, Interrupt, Recharge, TraitIdx, Trait64; 19 run), item recharge, the viewer draw of hidden, shrunk and translucent critters, the permanent polymorph's ObjFlag part (technology record 222), Tempus Fugit and the raise script hook (E4; [technology audit](../research/technology-audit-res-125.md)).
+- 81 of 142 script actions and 20 of 53 conditions are admitted by the widest admission set (`ScrAdmissionSet.S33`; survey of the missing systems plan); dialogue markers `c r t z` and positive `IN` (E5).
+- Disarm action in the viewer, the native trap script 30002 and the hero's step onto a placed trap marker (E6; the placing of devices is built, ARC-WORLD-124, -125; the hero's spot trap roll is built, ARC-MAGIC-057).
 - Movies, credits, intro and endings (E7).
 - Fate window and Fate Points, skill pane, action-point readout, companions screen, gambling, identify window, several sound callers and the hidden options (E8).
 - Gamepad in the game UI, UI scale, and Windows, Linux and handheld validation (E9; the Windows package exists and was never run on Windows).

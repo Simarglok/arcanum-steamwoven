@@ -197,7 +197,7 @@ FM12's world-map landing). Every direct branch stays inside `.text`.
 
 Not read and not planned (ARC-RES-076): script-held object references across maps; whether map-data NPCs always carry a GUID (the FM4
 inference from the ID getter and the stored IDs, not checked in the data files). Not built by design: carrying an NPC's active spells
-to the destination map (FM9, F1) until NPC spell runs are saved per map (MT9b of the [magic plan](../magic-implementation-plan.md)),
+to the destination map (FM9) is not built for an NPC mover; for the player's change of map ARC-MAGIC-058 (MT9b of the [magic plan](../magic-implementation-plan.md), rows [MX1–MX6](spell-runs.md#spell-runs-at-the-players-change-of-map-arc-magic-058)) ends the runs that do not travel, and the runs that travel stay in the one table,
 and nulling a link from another map's object to a follower that moved (FM7; Steamwoven keeps the identity link, which is the decision of
 GQ7 B in [decisions](../../architecture/decisions.md) as a rule-mode switch).
 

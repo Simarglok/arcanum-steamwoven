@@ -33,10 +33,20 @@ and its link holds the detail.
 - **Naming** ([task naming](docs/workflow/task-naming.md)): `ARC-TYPE-NNN`
   first in threads, branches, PRs and commits, a Russian result in thread
   titles. Types: `RES`, `DATA`, `RENDER`, `WORLD`, `INPUT`, `GPAD`, `UI`,
-  `SCRIPT`, `DEV`, `AI`, `COMBAT`, `SKILLS`, `MAGIC`, `TECHNOLOGY`. The
-  coordinator checks the number is unused (git history, open/merged PRs,
-  branches, other threads) before handing it out; the thread confirms with one
-  check: remote branches and a PR search ([task code](docs/workflow/tasks.md#task-code)).
+  `SCRIPT`, `DEV`, `AI`, `COMBAT`, `SKILLS`, `MAGIC`, `TECHNOLOGY`. From
+  2026-11-12 the number is the GitHub issue number (`ARC-<TYPE>-<issue>`): the
+  coordinator creates the issue first, so the number is atomic and none is
+  searched; the thread confirms with one check (`gh issue view N`, remote
+  branches, a PR search) and its PR says `Closes #N`. Older codes keep their
+  meaning ([task code](docs/workflow/tasks.md#task-code)).
+- **Backlog** ([backlog in GitHub Issues](docs/workflow/tasks.md#backlog-in-github-issues),
+  owner decision 2026-11-12): planned, unstarted work is an issue with labels
+  `type:*`, `area:*`, `status:ready|blocked|in-progress|in-review`, plus `bug`,
+  `owner-decision`, `recheck`; blockers are GitHub relations
+  (`gh issue edit N --add-blocked-by M`); the form is
+  `.github/ISSUE_TEMPLATE/task.yml`. A document that lists pending work links
+  its issue instead of repeating the plan. An unlaunched issue is not task
+  authority.
 - **Language.** Talk to the owner in Russian; repository text (docs, code,
   commits, PR titles and bodies) stays in English.
 - **Where work runs.** Work that builds, tests or runs code, Godot or original

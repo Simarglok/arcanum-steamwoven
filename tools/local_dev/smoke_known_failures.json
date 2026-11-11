@@ -4,5 +4,11 @@
     "symptom": "ranged smoke FAIL: the dagger is picked up and wielded again",
     "task": "ARC-COMBAT-026",
     "since": "2026-11-11"
+  },
+  {
+    "stage": "bar",
+    "symptom": "bar smoke FAIL feedback settles to Hover with combat still on",
+    "task": "unassigned",
+    "since": "2026-11-12"
   }
 ]

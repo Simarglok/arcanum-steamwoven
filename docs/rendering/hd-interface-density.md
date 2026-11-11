@@ -395,6 +395,53 @@ alpha tests and hit areas are still the Legacy ones; only the drawing changes.
   Seen there: S2 at factor 1 is sharper than S1's 4× minified frame (the brass rings and bevels are one-pixel lines), and the vial
   column and the clock sit on wood of their own tone. The generated wood's grain is still plainer than the painted one.
 
+## Generated windows plan (ARC-UI-148..155)
+
+The owner asked (2026-11-12) for the Generated mode to cover every in-game window: the logbook, inventory, character sheet, the world and town
+maps and the other windows. The main menu and its sub-pages stay out. Each slice is one window family with its own task code and PR; positions,
+sizes, alpha tests and hit areas stay the Legacy ones (D9: the original behaviour in both modes, nothing but the drawing changes). The art numbers are
+those of the player's `interface.mes` (the viewer's window ledgers carry them; each slice re-checks its own).
+
+| Slice | Window family | Frames (art numbers) | Notes |
+| --- | --- | --- | --- |
+| ARC-UI-148 | foundation and inventory | 221 pack, 223 paper doll | a window's own fractional scale, grid rule, grid lines; the drop, use and gamble boxes (224, 225, 342–348) are oval buttons with a coloured allowed or refused corner, kept as art |
+| ARC-UI-149 | loot, barter, steal | 234 loot, 235 barter, 337 barter doll, 349 loot doll, 341 doll cover, gamble boxes, the three lenses 231–233 | the same frame family as 148 with their own boxes |
+| ARC-UI-150 | character sheet | 22 main, 29 skills, 30 disciplines, 31 spells, tabs 34–36 and 568, `+`/`−` 257, 258 | stat labels baked in the art stay pictures (kept rectangles) |
+| ARC-UI-151 | logbook | 263, 264 side, 260 book, 259, 261, 262 pages, the tabs | a parchment page material |
+| ARC-UI-152 | world and town map | 138 main, 140, 199 side pieces, 219, 220 town map frames | the map picture itself stays art |
+| ARC-UI-153 | schematic window | 365 base and its buttons and tabs | |
+| ARC-UI-154 | message and dialogue frames, Fate, Sleep | 354, 7, 8, 128, 200, 274, 288, 290, 291 (410 × 107 rows), 292, 298, 218 | |
+| ARC-UI-155 | reading windows and the remaining small panels | 477, 487, 489, 491, 500 backgrounds, 494 side bar, and what is left | |
+
+A slice is done when its frames draw generated chrome at the window's own device scale in the native smoke (Generated and HD runs), the unit
+tests pass, a composite of before, after and the Legacy frame is posted in the task thread (never committed) and a fresh review of the diff is
+addressed. In-game checks by the owner go to the [owner recheck list](../project/owner-recheck-list.md).
+
+## Viewer slice S3 (ARC-UI-148)
+
+S3 makes the generated chrome follow a window's own scale and draws the first window, the inventory.
+
+- **A window's own device scale.** The bars lay out at a whole factor; the windows do not. The inventory window stands at `min(free width / 800,
+  free height / 400)`, a fractional scale (1.5 in a 1280 × 800 window), so S2's one whole scale does not fit it. A window view gives the textures it draws
+  a scale function (`HdInterfaceTexture.ScaleSource`, claimed at the draw, because the inventory and barter panels share their textures); the texture asks it at every draw (the frame scale times the canvas transform's and the viewport stretch's) and
+  the paint scale is that value clamped to 1..8 and rounded to 1/1000. A change paints the frame again on a worker while the previous image draws. A
+  texture without a source keeps the bars' whole `GeneratedScale`. A greyed copy takes the source its original has when the copy is made. While the window is dragged to a new size every distinct scale paints once more on a worker (frames replaced before they start are skipped) and the previous image keeps drawing until the new one is ready.
+- **Device-pixel grid rule.** `InterfaceChromeRenderer.Render` takes a `double` scale. Every Legacy edge `x` goes to the device pixel
+  `round(x × scale)` (halves away from zero), so neighbouring rectangles never gap or overlap and a frame is `round(size × scale)` pixels; a
+  one-unit line (bevel, ink line, rim, rivet shade, grid line) is `max(1, round(scale))` device pixels, the same everywhere, so equal bands stay equal; the Legacy
+  alpha and the Legacy pixel under a device pixel follow the same rounded edges (`Cell` is the inverse of `Edge`, settled against `Edge` itself). At a whole scale all of this is exactly
+  S2's output. The picture a kept rectangle copies is averaged to the rounded size. A texture is drawn Nearest only when the painted size is exactly what the
+  window shows (the window's scale is the painted one and the frame sizes come out in whole pixels), else Linear.
+- **Inventory frames.** `inventor.art` (442 × 400: the sunk pit of the 10 × 12 grid with its brass rim and the cell lines of the original's grid, five sunk
+  count bars, the icon column and the arrow pair kept) and `pdoll.art` (358 × 400: the name box, the 10 × 9 doll grid, the portrait ring and the two curved
+  bottom pits kept). `ChromeGrid` is the new part (one-unit lines on the last pixel of each inner cell); `ChromeMaterial.Pit` is a flat near-black like the
+  original's boxes. The curved flourishes of the original's boxes are not drawn; the box is a plain rectangle.
+- **Not generated.** The drop, use and gamble boxes (224, 225, 342–348): the glow and the green or red corners are the state, so they stay art.
+- **Checks.** `InterfaceChromeTests` (fractional sizes and whole-pixel lines, a whole scale as a double equal to an int, the grid's lines, the two new recipes); the
+  native bar smoke with `ARC_AREA_BAR_GENERATED_VERIFY=1` and `ARC_HD_PACK` opens the inventory, waits for the worker, checks both frames draw generated chrome at
+  `round(size × paint scale)` pixels, resizes the window to 1920 × 1080 and checks they paint again at the new scale, then goes back
+  (`ARC_AREA_BAR_CAPTURE` saves `PREFIX-hud-inventory-generated*.png`, local).
+
 ## Synthetic comparison
 
 The task drew the corner of one synthetic frame (four bands of one UI unit, our own geometry and colours, no original

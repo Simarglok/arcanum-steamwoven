@@ -196,8 +196,10 @@ history held about 500 runs of such copies of one template).
   value a stage cannot pass in is refused before anything waits for the queue (`stage plants does not run at --sector
   1452,1291: it needs map ... at sector 1384,239`), and so is `--main-menu` with a stage that needs a hero or a session.
   `--no-config-check` runs the request as given (the grouping stays). The table holds only what is known: where a stage
-  was only seen to pass in one place its default is that place and another one is not refused. `inv-carry` and
-  `critter-light` have no configuration seen to pass yet (the diagnosis saw `NONE` at the Crash Site and in the town). A new stage needs a row
+  was only seen to pass in one place its default is that place and another one is not refused. `junk` runs on the
+  ruins (the main map has no container with two items), `critter-light` on `tulla interior - battle - conveyance` (an NPC
+  there carries a light; `NONE` on the main map, the town, the ruins and the cave), and `ai-cast` and `npc-door` each get a
+  process of their own (they failed after the other stages of their group and passed alone, 2026-11-11). A new stage needs a row
   (the tests fail without one); the zones below are built on this table.
 - **Stage times (ARC-DEV-399, Q3 of the diagnosis).** The viewer's map smoke times each stage it runs
   (`TerrainViewerSmokeStageSet`: the chain's own question "does this stage run" is the stage's start, the next one its end) and prints

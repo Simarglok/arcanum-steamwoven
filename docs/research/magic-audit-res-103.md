@@ -124,7 +124,7 @@ Left: the guard alert's witnesses (0x4AEE50); Flesh to Stone's pair for a portal
 
 Done in four slices ([host contract](../world/spell-cast-host.md#trait-component-arc-magic-040), ledger [TR1-TR6](ledger/spell-runs.md#trait-component-arc-magic-040)): the session keeps the species and palette a Trait chose per critter (schema 89, `-1` restores; no reference count, as the original) (ARC-MAGIC-040); the viewer draws a hosted NPC's monster body and moves the hero's worn items (ARC-MAGIC-046);
 critter flags 2 and blit flags are the session's with MG10's switch and the Dispel undo (ARC-MAGIC-047, schema 90); the hero's own monster body is drawn (ARC-MAGIC-052). The original takes **every** worn item off, not only what the new art cannot wield; an art builder range violation (species 32 or more, palette 4 or more) exits the original and is "not ready" here.
-Left: the dropped leftover of a refused take-off; an NPC's worn items (not tracked by the session); the redraw of a map NPC whose data body is a perma-polymorph; a polymorphed hero's low attack and throw; the drowning damage of the water-walking clear (OB2); the multiplayer packet.
+Left: the dropped leftover of a refused take-off; an NPC's worn items (not tracked by the session); the redraw of a map NPC whose data body is a perma-polymorph; a polymorphed hero's low attack and throw; the drowning damage of the water-walking clear (OB2); the multiplayer packet. Options, data findings and a recommendation for each limit: [ARC-RES-145](trait-polymorph-remainder-res-145.md).
 
 ## Decisions for the owner
 
