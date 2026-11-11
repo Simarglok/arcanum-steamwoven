@@ -109,6 +109,10 @@ public partial class TerrainViewerApp
     // ARC-UI-089: interface frames with an HD key draw their HD redraw when the HD profile is on (InterfaceHd).
     private static Texture2D HotkeyTexture(AreaInterfaceFrame frame) => InterfaceHd.Texture(frame);
 
+    // ARC-UI-144: the frame for a canvas that AreaArtTextDraw.Prepare gave the premultiplied-alpha material (the menus, the dialog box, the
+    // pre-made browser): a straight-alpha HD texture there adds the colour of its transparent texels to the background (a square behind a round button).
+    private static Texture2D PremultipliedTexture(AreaInterfaceFrame frame) => InterfaceHd.Texture(frame, premultipliedAlpha: true);
+
     private static Texture2D? First(Texture2D[]? frames) => frames is { Length: > 0 } ? frames[0] : null;
 
     // An entry's icon (HK12): a spell's (also an item's spell), a skill-bar button's, an item's (ARC-UI-032).

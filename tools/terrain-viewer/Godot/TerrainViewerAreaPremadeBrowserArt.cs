@@ -31,7 +31,7 @@ public partial class TerrainViewerApp
         // ARC-UI-068: the new-character window's art comes with the same read.
         var frames = AreaPremadeBrowserArtContent.AllArtNumbers.Where(number => number is not (AreaPremadeBrowserArtLayout.TextFontArt or AreaPremadeBrowserArtLayout.NameFontArt)
                 && art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready)
-            .ToDictionary(number => number, number => art[number].Frames.Select(frame => (Texture2D)HotkeyTexture(frame)).ToArray());
+            .ToDictionary(number => number, number => art[number].Frames.Select(frame => (Texture2D)PremultipliedTexture(frame)).ToArray());
         // ARC-UI-070: the fonts drawn by the shared art-text draw (MW31).
         panel.SetPremadeArt(frames, new(new AreaArtFontFace(art[AreaPremadeBrowserArtLayout.TextFontArt].Frames),
                 new AreaArtFontFace(art[AreaPremadeBrowserArtLayout.NameFontArt].Frames)),
