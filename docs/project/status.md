@@ -111,6 +111,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Schematic knowledge | [Technology](status/technology.md) | ARC-TECHNOLOGY-003, ARC-UI-049, ARC-TECHNOLOGY-005 |
 | Schematic assembly | [Technology](status/technology.md) | ARC-TECHNOLOGY-004, ARC-WORLD-070, ARC-TECHNOLOGY-006 |
 | Schematic window | [Technology](status/technology.md) | ARC-TECHNOLOGY-005, ARC-RES-062, ARC-TECHNOLOGY-006 |
+| Powered shield | [Technology](status/technology.md) | ARC-MAGIC-041, ARC-RES-112 |
 | Reading window | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-049, ARC-SCRIPT-020, ARC-TECHNOLOGY-009 |
 | NPC inventory changes | [Items and inventory](status/items.md) | ARC-WORLD-055, ARC-TECHNOLOGY-006 |
 | Ammunition | [Items and inventory](status/items.md) | ARC-WORLD-066, ARC-TECHNOLOGY-009, ARC-TECHNOLOGY-007 |
