@@ -251,7 +251,7 @@ Not built or only stubbed (each has an epic in the plan):
 - Sleep and rest windows, the NPC hourly day (beds, walking between day and night standpoints) and the HUD clock (E3).
 - 17 of the 25 spell component types (movement, cast, polymorph, dispel, branches and others), most object flags, item recharge, teleport bans by area (E4).
 - 76 of 142 script actions and 16 of 53 conditions are admitted (survey of the missing systems plan); dialogue markers `c r t z` and positive `IN` (E5).
-- Spot-trap roll, disarm action and placed trap devices (E6).
+- Disarm action and its skill-bar button, the trap shot 30002, NPC and companion spot attempts (E6; the hero's spot trap roll is built, ARC-MAGIC-057).
 - Movies, credits, intro and endings (E7).
 - Fate window and Fate Points, skill pane, action-point readout, companions screen, gambling, identify window, several sound callers and the hidden options (E8).
 - Gamepad in the game UI, UI scale, and Windows, Linux and handheld validation (E9; the Windows package exists and was never run on Windows).

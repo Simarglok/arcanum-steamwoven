@@ -55,16 +55,17 @@ public sealed record AreaTrapMeeting(AreaObjectRecord Row, SessionTrapCause Caus
 }
 
 /// <summary>What the walk check before one step found (TT10): the trap object it spotted (null: none, the step goes), the session's
-/// mark, and how many unknown traps on the tile needed the spot trap roll, which the viewer does not make (skills plan S10).</summary>
-public sealed record AreaTrapWalk(AreaObjectRecord? Spotted, GameSessionMutationResult? Mark, int RollsNotReady);
+/// mark, and how many spot trap rolls it made on the tile's unknown traps (ARC-MAGIC-057, ledger SP1).</summary>
+public sealed record AreaTrapWalk(AreaObjectRecord? Spotted, GameSessionMutationResult? Mark, int Rolls);
 
 /// <summary>
 /// ARC-WORLD-110: the AREA viewer's trap host for the PC (docs/world/trap-state-runtime.md, ledger TT3, TT9, TT10, EX20): the use of a
 /// trapped object (<see cref="Use"/>, which the use-script host asks before the use script), the walk's check of the next tile
 /// (<see cref="WalkCheck"/>) and the step onto a trap object (<see cref="Step"/>). Each asks the session's trap state with the row's
 /// baseline from <see cref="AreaUseScriptHost.TrapBaseline"/>; a fired native run's effect is the cast host's
-/// (<see cref="AreaTrapEffects"/>). The spot attempt of an unknown trap spots without a roll only when the player's spell flags hold
-/// 0x100 (TT3); the spot trap roll itself is not made (S10), so a trap whose spot needs it is not spotted. No trap is consumed without
+/// (<see cref="AreaTrapEffects"/>). The spot attempt of an unknown trap spots without a roll when the player's spell flags hold
+/// 0x100 (TT3), else by the hero's spot trap roll (ARC-MAGIC-057, ledger SP1: the shared check, the master's second roll, no spot of a
+/// magical trap below expert; its failure leaves the trap unknown and the use or the step goes on). No trap is consumed without
 /// its effect: without a cast host (<paramref name="effects"/> answering null), for a 30002 shot (its shooter search is a later slice)
 /// and for an ordinary trap script on a step (the step's dispatch with the trap as attachee and extra object is a later slice) the trap
 /// is not met at all, so a use goes on as before (the dispatcher stops at a native trap script) and a step meets nothing. Only the PC
@@ -117,7 +118,8 @@ public sealed class AreaTraps
 
     /// <summary>
     /// The walk check before the PC steps onto <paramref name="next"/> (0x427110, TT10): every trap object there the player does not know
-    /// gets a spot attempt; the first one spotted is marked and blocks the step, which ends the walk (EX20). Known traps are skipped.
+    /// gets a spot attempt (the detect flag, else the hero's spot trap roll); the first one spotted is marked and blocks the step, which ends
+    /// the walk (EX20). Known traps are skipped.
     /// Nothing without a cast host; a mark the session refuses lets the step go (<see cref="AreaTrapWalk.Mark"/> says so).
     /// </summary>
     public AreaTrapWalk WalkCheck(CellCoord next)
@@ -135,7 +137,13 @@ public sealed class AreaTraps
                     // A mark the session refuses (a full budget) blocks nothing: the trap would stay unknown and block the tile for good.
                     var mark = _session.MarkTrapSpotted(_session.Version, trapped, baseline, TrapObserver.Player);
                     return new(mark.Disposition == GameSessionDisposition.Rejected ? null : row, mark, rolls);
-                case TrapSpotGate.Roll: rolls++; break;
+                case TrapSpotGate.Roll:
+                    var spot = _session.RollHeroSpotTrap(_session.Version, trapped, baseline, effects.PlayerSpellFlags);
+                    if (spot.Disposition == GameSessionDisposition.Rejected) break;
+                    rolls++;
+                    if (!spot.Spotted) break;
+                    var marked = _session.MarkTrapSpotted(_session.Version, trapped, baseline, TrapObserver.Player);
+                    return new(marked.Disposition == GameSessionDisposition.Rejected ? null : row, marked, rolls);
             }
         }
         return new(null, null, rolls);
@@ -180,8 +188,10 @@ public sealed class AreaTraps
         if (!state.Trapped) return null;
         var native = TrapRules.NativeRun(state.Script, baseline.HeaderFlags);
         if (native is null && cause == SessionTrapCause.Step || TrapEffectRules.Of(state.Script, baseline.Counters) is { Kind: TrapEffectKind.Shot }) return null;
-        // The spot attempt (E2, TT3): only the player's detect-traps flag spots without a roll; the roll itself is S10's.
-        var spotted = _session.TrapSpotGate(trapped, baseline, TrapObserver.Player, effects.PlayerSpellFlags) == TrapSpotGate.Detected;
+        // The spot attempt (E2, TT3): the player's detect-traps flag spots without a roll, else the hero's spot trap roll (SP1).
+        var gate = _session.TrapSpotGate(trapped, baseline, TrapObserver.Player, effects.PlayerSpellFlags);
+        var spotted = gate == TrapSpotGate.Detected || gate == TrapSpotGate.Roll &&
+            _session.RollHeroSpotTrap(_session.Version, trapped, baseline, effects.PlayerSpellFlags).Spotted;
         var result = _session.TriggerTrap(_session.Version, trapped, baseline, TrapObserver.Player, cause, spotted,
             cause == SessionTrapCause.Step ? effects.PlayerSpellFlags : 0);
         if (result.Outcome != SessionTrapOutcome.Fired || result.Run is not { Effect: not NativeTrapEffect.None } run) return new(row, cause, result, null);

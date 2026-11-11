@@ -4,7 +4,8 @@ Status: **Implemented** (Godot-free rules and session owner), slices 1 to 3 of t
 ([FR-NAV-006](../requirements/world-travel-runtime.md#fr-nav-006)). The effects of the other
 native trap scripts are applied since ARC-WORLD-107 ([Effects](#effects-arc-world-107)); the
 AREA viewer's PC meets traps on a use, before each step and on a step since ARC-WORLD-110
-([Viewer](#viewer-arc-world-110)). The spot and disarm rolls (skills plan S10), the shot of
+([Viewer](#viewer-arc-world-110)). The spot trap roll is made since ARC-MAGIC-057 ([ledger SP1–SP2](../research/ledger/technology.md#spot-trap-roll-arc-magic-057));
+the disarm roll and action (skills plan S10, E6-a), the shot of
 script 30002, the drawing of a spotted trap object, the attack's trap trigger in the viewer,
 NPC and companion steps and the trap devices (ARC-TECHNOLOGY-011/012) are later slices. The rules
 follow the retail 1.0.7.4 executable as read in
@@ -151,9 +152,17 @@ is `AreaUseScriptHost.EntityId`, as for the object damage domain.
   so an advance that spans several steps (a very slow frame) may carry the PC past the tile
   before the route stops. A trap object with an ordinary trap script is not met on a step
   (its dispatch with the trap as attachee and extra object is a later slice).
-- **Spot.** The spot trap roll is not made (S10): an unknown trap is spotted only when the
-  player's spell flags hold 0x100 (TT3, the gate `Detected`); a gate that needs the roll
-  spots nothing, and the walk check logs it.
+- **Spot.** An unknown trap is spotted without a roll when the player's spell flags hold 0x100
+  (TT3, the gate `Detected`); otherwise the hero rolls the spot trap skill (ARC-MAGIC-057, ledger
+  SP1, SP2): `GameSessionOwner.RollHeroSpotTrap` runs the shared check (the hero's level and training,
+  its injuries, the light), then `TrapRules.SpotCase`: a master that failed without a critical failure
+  rolls once more, and below expert a magical trap is never spotted. The roll draws from the
+  session generator and costs one revision; a success is marked by the caller (`MarkTrapSpotted`).
+  The walk check rolls for each unknown trap object on the next tile (the first one spotted ends the
+  walk) and a use or a step rolls once more for the trap it meets, as the original's separate
+  attempts do (SP2); a failed roll leaves the trap unknown and the use or step goes on, so the trap
+  fires. The light at the trap is full (as the lock pick's): the darkness term of an untrained hero
+  is not applied. A hero-less session rolls nothing (the trap stays unknown).
 - **Effects.** A fired native run goes to `SessionSpellCaster.ApplyTrapEffect` with the cast
   map's id of the trapped object and the hero as the triggerer. Without a cast host no trap
   is met at all (a use goes on as before and the dispatcher stops at a native trap script; a
@@ -164,8 +173,9 @@ is `AreaUseScriptHost.EntityId`, as for the object damage domain.
 
 ## Not modelled here
 
-- The spot trap and disarm traps rolls, the spot modifier of the item at inventory
-  location 1005 and the master's second roll (S10).
+- The disarm traps roll and action (E6-a, read as SP3), the spot modifier of the item at inventory
+  location 1005 (SP2), the light at the trap for the spot roll, and the NPCs' and companions' own
+  spot attempts.
 - The 30002 trap in the viewer (with its shot), an ordinary trap script on a step, and the
   route cost of a known trap (DC8) on the PC's route (the drop map's route has it), the
   steps of NPCs and companions onto trap objects, the attack's trap trigger in the viewer,
