@@ -625,6 +625,52 @@ order of the callee names on line 2):
 
 A Ghidra upgrade or a new analysis needs steps 1-3 again on a copy of the project, in that order.
 
+## Exe exports: derived extras (ARC-DEV-385)
+
+What the Ghidra export (the two sections above) still lacked, found by checking the executable's sections, the export and the install
+folder, and what could be got without a paid tool. [`tools/research/exe_export_extras.py`](../../tools/research/exe_export_extras.py)
+(python3 standard library only, about two seconds) reads the pinned `Arcanum.exe` (it refuses any other SHA-256), the Ghidra listing and
+tables and the registry [`functions.csv`](../verification/functions.csv), and writes five folders next to `c/` in
+`research-private/ghidra-export/`. They are derived from the original and never go into git, a PR or a quote; a check still records only
+behaviour in prose.
+
+```sh
+python3 -B tools/research/exe_export_extras.py --self-test    # task check: synthetic image and listing, no game file
+python3 -B tools/research/exe_export_extras.py --exe "$DAT_ROOT/Arcanum.exe" --export research-private/ghidra-export --dry-run
+python3 -B tools/research/exe_export_extras.py --exe "$DAT_ROOT/Arcanum.exe" --export research-private/ghidra-export [--replace]
+```
+
+| Lack in the first exports | Found | Folder (`research-private/ghidra-export/`) |
+| --- | --- | --- |
+| The listing of one function next to its C (operand width, sign, wrap) means searching a 36 MB file | `listing/text.asm` split at the `; FUNCTION` lines | `asm/funcs/<addr>.asm`, 6,856 files, thunks included |
+| Which source module and line a function comes from | the original's own `assert` calls push the file name (5 source files of the original: Anim.c, AnimPrivate.c, AnimFX.c, MagicTech.c, Intgame.c), the line, the kind text and the expression text; 332 sites | `source-map/asserts.tsv` (function, site, handler, file, line, expression), `files.tsv` (per file), `module-strings.tsv` (other strings that name a module) |
+| Name tables as tables (field names, anim goals, damage types, script action names) | records that start with a text pointer: 46 tables, 1,575 rows; one of them is the 338 names `obj_f_begin`..`obj_f_max` (the object field order), others the anim-goal, script-action and effect names beside their handler functions | `tables/str-tables.tsv` (address, stride, rows), `str-table-rows.tsv` (row address, text, the other dwords resolved) |
+| The decoded initial data of `.rdata`/`.data` (the listing shows untyped `db[N]` rows) | every non-zero aligned dword with its target (text, function, data, float, small number), zero runs collapsed, text bytes skipped | `tables/data-dwords.txt` |
+| What the code stores into globals at start-up | `MOV [global], imm` into `.data`/`.rdata`: 1,156 stores of constants (the file's `.data` is 1.7 MB in memory but 221 KB on disk, the rest is zero-filled and set by code) | `tables/imm-stores.tsv` (function, site, width, global, value, target) |
+| Calls the decompiler shows only as a variable | `CALL`/`JMP` through a register or memory: 1,634 sites (563 through a global slot, 291 through a jump table, 71 through an import, 709 through a register) | `tables/indirect-calls.tsv` (slot and import name where known) |
+| The project's names next to Ghidra's | `docs/verification/functions.csv` joined by address: 3,583 rows | `names/functions-named.tsv`; `registry-not-function.tsv` lists the 21 registry addresses that are no function start in the export |
+| The other binaries of the install | PE header, sections, imports and exports of the 11 DLL/ASI/EXE files beside the executable (hashes, sizes) | `other-binaries/index.tsv` and `<file>.txt` |
+
+Limits, each checked and settled:
+
+- **Run-time state is not in any file.** The zero-filled part of `.data` (about 1.5 MB) holds what is loaded from the DAT archives or
+  computed while the game runs. `imm-stores.tsv` gets only the constants the code writes. For what code computes, run the function in the
+  [oracle](#function-oracle) (single functions) or read the data files; a whole-process dump would need the game running under a
+  Windows layer (CrossOver, a paid tool) and a debugger, neither of which the project uses, so it is not offered.
+- **Resources:** the executable has 8 PE resources (6 icons, the group icon, the version block; no dialogs, menus, string tables or
+  cursors), all already in `raw/resources/`. All game content (maps, protos, MES text, art, sound) lives in the DAT archives and
+  `modules/`, which the [data probes](../research/data-census.md) read, not in the executable.
+- **Types:** the project has no debug information (no PDB, no debug directory, no exports); Ghidra's struct types are only what its
+  analysis guessed. Field order and names come from the `obj_f_*` table above and the project's records, field layouts from the research
+  documents.
+- **Code reached by a computed address** has no xref: the executable has no relocation table, so Ghidra and the scans are both blind to
+  it; `indirect-calls.tsv` lists the sites, whose targets must be read from the table or registers that feed them.
+- **String tables are a heuristic:** a table is a run of 3+ records at a fixed stride whose first dword points at a text, so a stride can
+  be a multiple of the true one and a record with a null first pointer ends a run. `data-dwords.txt` is the complete check.
+- **Third-party binaries** (Miles Sound System `Mss32.dll` and the `.asi` codecs, Bink `binkw32.dll`, the DirectDraw compatibility
+  `ddraw.dll`, WON `mm_won.dll`, `SierraPt.dll`, `msiexec.exe`) get the PE summary only, no decompilation: their behaviour is the
+  vendors', and the game's calls into them are in `data/imports.tsv`. `RemoveProtos.exe` (a Troika tool by its name and strings, which mention the prototype folder; built 2001-08-23) is the one original program besides the game; a Ghidra project of it is a task of its own if one needs it.
+
 ## Function oracle
 
 ARC-DEV-007, [`tools/original-oracle`](../../tools/original-oracle/README.md), method in the
