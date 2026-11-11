@@ -95,17 +95,33 @@ public partial class TerrainViewerApp
             Require(panel.FrameForSelfTest(AreaBarButton.Character) == 1 && Sounded(AreaGameBarLayout.PressSound) && !SheetOpen, "down: frame 1, 3000, nothing opened yet");
             await Button(character, false);
             Require(Sounded(AreaGameBarLayout.ReleaseSound) && SheetOpen, "the release played 3001 and opened the sheet: " + Sounds() + " " + _gameBarNotice);
-            // ARC-UI-127: the sheet stands on the bottom strip at every window size (no gap above the HUD), centred, at the bars' factor.
+            // ARC-UI-127/132: the sheet stands on the bottom strip at every window size, centred; in HD it also reaches the top strip (the whole
+            // free height at the art's exact scale, aspect ratio kept), the original's bitmaps stand at the largest whole scale that fits.
+            // ARC_AREA_SHEET_CAPTURE=DIR saves a readback of the whole viewport per window size (ignored local path, original-derived).
             async Task SheetOnHud(string at)
             {
                 await Frames(3);
                 var window = _sheetPanel!.ArtViewForSelfTest!;
                 var bottom = panel.StripRectForSelfTest(AreaBarStrip.Bottom);
                 var top = panel.StripRectForSelfTest(AreaBarStrip.Top);
-                var end = window.GlobalPosition.Y + AreaCharacterSheetArtLayout.Height * panel.Factor;
-                Require(Math.Abs(end - bottom.Position.Y) < 0.5f && window.GlobalPosition.Y >= top.End.Y - 0.5f
-                    && Math.Abs(window.GlobalPosition.X - bottom.Position.X) < 0.5f && window.Scale.X == panel.Factor,
-                    $"the sheet stands on the bottom strip {at}: window {window.GlobalPosition} end {end}, bottom strip {bottom}, top strip {top}");
+                var scale = window.Scale.X;
+                var end = window.GlobalPosition.Y + AreaCharacterSheetArtLayout.Height * scale;
+                var freeHeight = bottom.Position.Y - top.End.Y;
+                var side = window.GlobalPosition.X;
+                var viewWidth = GetViewport().GetVisibleRect().Size.X;
+                Require(Math.Abs(end - bottom.Position.Y) <= 0.51f && window.GlobalPosition.Y >= top.End.Y - 0.5f
+                    && Math.Abs(side + AreaCharacterSheetArtLayout.Width * scale + side - viewWidth) < 1.5f
+                    && scale == window.Scale.Y && scale >= panel.Factor
+                    && (verifyHd ? Math.Abs(scale - Math.Min(freeHeight / AreaCharacterSheetArtLayout.Height, viewWidth / AreaCharacterSheetArtLayout.Width)) < 0.01f
+                        : scale == Math.Floor(scale) && (AreaCharacterSheetArtLayout.Height * (scale + 1) > freeHeight || AreaCharacterSheetArtLayout.Width * (scale + 1) > viewWidth)),
+                    $"the sheet stands between the strips {at}: window {window.GlobalPosition} scale {window.Scale} end {end}, bottom strip {bottom}, top strip {top}");
+                if (System.Environment.GetEnvironmentVariable("ARC_AREA_SHEET_CAPTURE") is { Length: > 0 } sheetCapture)
+                {
+                    var sheetDir = System.IO.Path.GetFullPath(sheetCapture);
+                    System.IO.Directory.CreateDirectory(sheetDir);
+                    using var sheetImage = GetViewport().GetTexture().GetImage();
+                    Require(sheetImage is not null && sheetImage.SavePng(System.IO.Path.Combine(sheetDir, $"sheet-{(verifyHd ? "hd" : "legacy")}-{sheetImage.GetWidth()}x{sheetImage.GetHeight()}.png")) == Error.Ok, "sheet readback saved");
+                }
             }
             var sheetSize = DisplayServer.WindowGetSize();
             await SheetOnHud($"at {sheetSize}");
