@@ -124,7 +124,7 @@ STAGE_PASS = {
 BATTERY_STAGES = ("map", "resources")
 # The stages a hero must play: without a session hero the viewer skips them (the AI stages silently). The map battery
 # plays the hero's stages too (cast, turn-based, ranged, container, junk ...).
-HERO_STAGES = frozenset({"map", "cast", "turn-based", "knockdown", "ranged", "container", "junk", "barter", "life",
+HERO_STAGES = frozenset({"map", "cast", "turn-based", "knockdown", "ranged", "container", "junk", "hover", "barter", "life",
                          "floaters", "ai", "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "loot-worn", "inv-arrange", "loot-room", "dead-window", "inv-ui", "follower-home", "follower-far", "npc-resident", "saved-runs", "npc-door", "npc-tile", "tile-ghost", "container-click", "door-close", "fire-order", "indoor-fade", "route-barrel", "critter-fall", "save-resume", "cast-multi", "grenade", "companion-click", "npc-shot", "ai-react", "placement-census", "inv-carry", "spell-end", "hold-hero", "movement", "creature-item", "spirit-talk", "created-scenery", "created-critter", "script-critters", "worn-light", "critter-light", "summon-flash", "summon-wall", "summon-undead", "tech-craft", "tech-products", "item-aim", "trait-body", "perf"})
 AUTO_HERO = "human-male"  # the full chain's hero on the main map; a map of the chain gets its own (elven ruins: elf-female)
 # The stages the viewer runs only when `map` is not in the list (its else branch), and those of them the map battery runs

@@ -664,7 +664,7 @@ Known differences (documented, not bugs):
 ## ARC-WORLD-124 — Timed bombs: placing trap devices with a spell (E6-b, 2026-11-11)
 
 The rules are in [placed trap devices](../world/trap-device-runtime.md). Give the hero the timed bomb (item 15154, record 176; or 15193, record 220) and compare in both games. The script
-trap devices (15100, 15120) are the next slice (ARC-WORLD-125) and still answer NOT READY.
+trap devices (15100, 15120) are the next slice (ARC-WORLD-125, [below](#arc-world-125--script-trap-devices-e6-c-2026-11-11)).
 
 | # | Step | Expected (from the original executable and data) | Status |
 | --- | --- | --- | --- |
@@ -676,8 +676,27 @@ trap devices (15100, 15120) are the next slice (ARC-WORLD-125) and still answer 
 
 Known differences (documented, not bugs):
 
-- The line the original shows when the marker is spotted (`mes\trap.mes` line 0) appears in the viewer's status text, not in a message window.
+- The original shows no message when a device is placed (its spotted mark is quiet); the viewer's status line names the outcome.
 - The marker is a plain scenery in Steamwoven: it cannot be spotted, disarmed or triggered by a step (the original's marker has no script either).
+
+## ARC-WORLD-125 — Script trap devices: arming traps on objects and tiles (E6-c, 2026-11-11)
+
+The rules are in [placed trap devices](../world/trap-device-runtime.md#script-trap-devices-arc-world-125). Give the hero the spike trap (item 15100, script 30001) or item 15120 and compare in both games.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Use the device from the inventory (Use icon) and click a closed, unscripted chest or a door. | The hero walks next to it, the device leaves the pack, and the chest or door is now trapped (the trap is known to the hero). | open |
+| 2 | Open that chest, or use that door. | The trap goes off on the hero as its script says. | open |
+| 3 | Use the device on an NPC, a creature or a scenery object that is not a door or chest. | The device stays in the pack; the game shows its "cannot be set here" line (`mes\trap.mes` line 2). | open |
+| 4 | Use the device on a chest or door that already holds a script (a trap or a lock script). | The same refusal, the device stays. | open |
+| 5 | Use the device on an empty floor tile. | A trap marker (a hidden-trap sprite) stands on the tile and the device is spent. | open |
+| 6 | Use a second device on the same tile. | The device stays and the game shows `mes\trap.mes` line 3. | open |
+| 7 | Save and load with a trapped chest and a marker on the map. | Both are still there; the chest is still trapped. | open |
+
+Known differences (documented, not bugs):
+
+- The refusal lines appear in the viewer's status text, not in a message window.
+- A marker does not go off when the hero steps on it yet, and it cannot be disarmed or spotted by a roll yet (a later slice): in the original it fires on the step. Check steps 5 and 6 only.
 
 ## ARC-MAGIC-053 — Summon for creatures: Summon Undead and the other creature summons (E1-e, 2026-11-11)
 

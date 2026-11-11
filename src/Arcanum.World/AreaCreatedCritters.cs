@@ -75,6 +75,8 @@ public sealed class AreaCreatedCritters
         {
             if (made.Kind != SessionCreatedKind.Critter) continue;
             live.Add(made.Entity);
+            // ARC-MAGIC-050: a critter that followed the PC to another map is built again there (its row names the map and cell it stands on).
+            if (_built.TryGetValue(made.Entity, out var stale) && stale.Npc.Row.Key.RuntimeMap != made.Map.RuntimeMap) { _built.Remove(made.Entity); _refused.Remove(made.Entity); _reported.Remove(made.Entity); }
             if (!_built.TryGetValue(made.Entity, out var built))
             {
                 if (_refused.ContainsKey(made.Entity)) continue;

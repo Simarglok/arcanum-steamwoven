@@ -632,6 +632,8 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         var mapOpens = actorChanged && actor!.Value.Map != _actor.Map;
         if (actorChanged) _actor = actor!.Value;
+        // ARC-MAGIC-050 (FM1, FM3): the followers that travel are whole objects of the destination now, a created critter among them.
+        if (mapOpens && transfer is not null) RehomeCreatedCritters(transfer.Travelling, _actor.Map, _actor.Cell);
         if (mapOpens) { _residency = null; _sectors = null; _pendingHistory = null; CloseGoalMap(); }
         foreach (var change in effective)
         {

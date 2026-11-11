@@ -157,23 +157,82 @@ public partial class TerrainViewerApp
         var map = new SessionMapId(CurrentAreaMap);
         foreach (var npc in CreatedCrittersOf(session, read).Npcs(map))
         {
-            if (npc.Row.WorldX is not { } x || npc.Row.WorldY is not { } y || Number(npc.Row, CurrentArtSlot) is not { } aid) continue;
             // ARC-MAGIC-053 (SUM5): a summoned creature is made with OF_DONTDRAW set and shows when the summoning animation's callback clears it (the ground bodies are computed again with every session revision).
-            if ((session.QueryObjectFlags(npc.Entity).Object(0) & Arcanum.Simulation.Magic.SpellTargetObject.DontDraw) != 0) continue;
-            if (!_createdCritterArt.TryGetValue(aid, out var load))
-            {
-                _createdCritterArt[aid] = load = AreaCreatedCritterArt.Load(aid, area.ArtSources, extra.MappedName);
-                GD.Print($"ARC-DEV-370 created-critter-art art=0x{aid:X8} status={load.Status} detail={load.Detail}");
-            }
-            if (load.Visual is not { } visual || load.Pose is not { } pose) continue;
-            frames.Add(pose.Key, pose.Frame);
-            _extraVisuals[visual.Key] = visual;
+            if (CreatedHidden(session, npc.Entity)) continue;
+            if (CreatedCritterBody(area, frames, extra, npc) is not { } made) continue;
             var key = npc.Row.Key;
-            // Placed upright at the creation cell as a map NPC's T0 body is (the visual's unmirrored hotspot, flipped by its Mirrored flag); the frame is the pose's.
-            var command = AreaScenePlan.Place(area.Plan.Chart, key, visual, x, y, false) with { Frame = pose.Key };
-            bodies[key] = command;
-            only[key] = (npc.Entity, new CellCoord(checked((int)x), checked((int)y)), npc.Row);
+            bodies[key] = made.Command;
+            only[key] = (npc.Entity, new CellCoord(checked((int)npc.Row.WorldX!.Value), checked((int)npc.Row.WorldY!.Value)), npc.Row);
         }
+    }
+
+    /// <summary>
+    /// The stand body of a created critter at its row's cell: its visual (kept among the extra visuals), the pose's frame (added to <paramref name="frames"/>) and the command that draws it, under the key of its row
+    /// (placed upright as a map NPC's T0 body is: the visual's unmirrored hotspot, flipped by its Mirrored flag). Null when the art does not read (said once; the critter stays in the session and acts).
+    /// ARC-MAGIC-050: the body of a created critter that joined the party is this command too (<see cref="CreatedCompanionTemplates"/>).
+    /// </summary>
+    private (AreaDrawCommand Command, AreaVisualRecord Visual, AreaBodyPose Pose)? CreatedCritterBody(AreaLoadResult area, AreaFrameOverlay frames, AreaExtraArt extra, AreaAiNpc npc)
+    {
+        if (npc.Row.WorldX is not { } x || npc.Row.WorldY is not { } y || Number(npc.Row, CurrentArtSlot) is not { } aid) return null;
+        if (!_createdCritterArt.TryGetValue(aid, out var load))
+        {
+            _createdCritterArt[aid] = load = AreaCreatedCritterArt.Load(aid, area.ArtSources, extra.MappedName);
+            GD.Print($"ARC-DEV-370 created-critter-art art=0x{aid:X8} status={load.Status} detail={load.Detail}");
+        }
+        if (load.Visual is not { } visual || load.Pose is not { } pose) return null;
+        frames.Add(pose.Key, pose.Frame);
+        _extraVisuals[visual.Key] = visual;
+        return (AreaScenePlan.Place(area.Plan.Chart, npc.Row.Key, visual, x, y, false) with { Frame = pose.Key }, visual, pose);
+    }
+
+    // ARC-MAGIC-050 (TI12): a critter the session created that is in the party (following or waiting, not free) is a companion of the shown map like any other: it walks by the group's follow drive, shares the
+    // follower portraits and the loyalty and carry rules, and goes with the PC across a change of map (the session moves the whole object, GameSessionOwner.RehomeCreatedCritters). Its body template is the
+    // created critter's own stand body (CreatedCritterBody) with the follow facts of its AI row (AreaCompanionData), standing on the map it is on. The group is rebuilt (BindAreaCompanions) when the set of
+    // such critters changes; the signature below is the set the last rebuild looked at, taken only once the art, the prototypes and the companion data were there to look with.
+    private (GameSessionOwner Session, int Map, string Entities)? _createdCompanionLooked;
+
+    /// <summary>The created critters of the shown map that are in the party: their entities in creation order.</summary>
+    // A dead one is no body of the group (the fallen pose draws it, as for a map companion); its death changes the set, so the group is rebuilt without it.
+    private string CreatedPartyEntities(GameSessionOwner session) => string.Join(",", session.QueryCreatedObjects(new SessionMapId(CurrentAreaMap))
+        .Where(made => made.Kind == SessionCreatedKind.Critter && session.QueryCompanion(made.Entity).Standing != Arcanum.Session.CompanionStanding.Free
+            && !CreatedHidden(session, made.Entity) && _combatHost?.Target(session, made.Entity) is not { Dead: true }).Select(made => made.Entity));
+
+    /// <summary>ARC-MAGIC-053 (SUM5): a created critter that carries OF_DONTDRAW (a summoned creature until its summoning animation's callback) is not drawn, as a body of the ground or of the party; the flag going changes the set the party's bodies are built for.</summary>
+    private static bool CreatedHidden(GameSessionOwner session, string entity) => (session.QueryObjectFlags(entity).Object(0) & Arcanum.Simulation.Magic.SpellTargetObject.DontDraw) != 0;
+
+    /// <summary>Rebuilds the companions when the created critters in the party are not the ones the group was last built for (a joined pet, one that left, a load). The group's own walk state is recorded first.</summary>
+    private void SyncCreatedCompanions(GameSessionOwner session)
+    {
+        if (_readyMapName is null || _readyArea is null || _areaCompanions is null || _companionData?.Data is null || _createdPrototypeRead is null || ExtraArt() is null) return;
+        var wanted = (session, CurrentAreaMap, CreatedPartyEntities(session));
+        var looked0 = _createdCompanionLooked;
+        if (_createdCompanionLooked is { } looked && ReferenceEquals(looked.Session, session) && looked.Map == wanted.CurrentAreaMap && looked.Entities == wanted.Item3) return;
+        // Not yet part of the group: nothing to record for it, and nothing to rebuild when none is wanted and none was built.
+        _createdCompanionLooked = wanted;
+        if (wanted.Item3.Length == 0 && looked0 is null) return;
+        RecordAreaCompanions("created companions changed");
+        BindAreaCompanions();
+    }
+
+    /// <summary>The companion templates of the created critters of the shown map that are in the party, each with the frames its body draws (see <see cref="SyncCreatedCompanions"/>). Empty until the art, the prototypes
+    /// and the companion data are ready.</summary>
+    private IReadOnlyList<(AreaCompanionTemplate Template, IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> Frames)> CreatedCompanionTemplates(GameSessionOwner session, AreaGridSession grid)
+    {
+        if (_readyArea is not { } area || ExtraArt() is not { } extra || _createdPrototypeRead is not { } read || _companionData?.Data is null) return [];
+        var map = new SessionMapId(CurrentAreaMap);
+        var critters = CreatedCrittersOf(session, read);
+        var templates = new List<(AreaCompanionTemplate, IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame>)>();
+        foreach (var npc in critters.Npcs(map))
+        {
+            if (session.QueryCompanion(npc.Entity).Standing == Arcanum.Session.CompanionStanding.Free || CreatedHidden(session, npc.Entity) || SessionCreatedObject.Number(npc.Entity) is not { } number) continue;
+            if (CreatedCritterBody(area, (AreaFrameOverlay)AreaFrames(), extra, npc) is not { } body) continue;
+            var template = AreaCompanionTemplate.ForCreated(number, npc.Row, MapCompanionFacts, map, grid.Chart, body.Command, body.Visual);
+            if (template is null) { GD.Print($"ARC-MAGIC-050 created-companion entity={npc.Entity} no follow facts (the AI row or fields do not read)"); continue; }
+            if (SpeakerDead(template.Speaker)) continue;
+            templates.Add((template, new Dictionary<AreaFrameKey, DecodedAreaFrame> { [body.Pose.Key] = body.Pose.Frame }));
+        }
+        _createdCompanionLooked = (session, CurrentAreaMap, CreatedPartyEntities(session));
+        return templates;
     }
 
     /// <summary>The one-row maps of the critters the session created on the shown map (the holders and rows the combat host and the fallen poses read); none without a session or the module's prototypes.</summary>
