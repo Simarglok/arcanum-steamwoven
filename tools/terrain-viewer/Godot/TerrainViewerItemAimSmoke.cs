@@ -117,7 +117,7 @@ public partial class TerrainViewerApp
             var here = HeroCell()!.Value;
             var npc = area.Snapshot.Objects.Where(row => row.Type == 16 && row.Scope == AreaScope.Core && row.WorldX is not null && row.WorldY is not null && !IsAreaCompanion(row.Key))
                 .Select(row => (Row: row, Id: SpellPickId(row.Key)))
-                .Where(o => o.Id is not null && ItemAimApproach(o.Id, 1) is not null)
+                .Where(o => o.Id is not null && caster!.Facts(o.Id)?.Location is { } there && there != SpellLocation.None)
                 .OrderBy(o => Math.Max(Math.Abs(World(o.Row).X - here.X), Math.Abs(World(o.Row).Y - here.Y))).FirstOrDefault();
             Require(npc.Id is not null, "an NPC with a cell to walk to");
             OpenCursor();
