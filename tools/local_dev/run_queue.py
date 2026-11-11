@@ -7,7 +7,8 @@ runs, wait only for an export and for a free dotnet place, and leave no build se
 shutdown_build_servers). ARC-DEV-390: the Godot slot is no longer strictly first come first served: every run declares
 how long it expects to take, and a run counts as having arrived ORDER_WEIGHT of its estimates later than it did, so a
 12 s run is not queued behind a 10 minute run that arrived a minute before it, while no run is passed by runs that arrive
-after that delay; and a `quick` run (a project import, a headless self-test: short Godot runs with no window) takes a
+after that delay; ARC-DEV-400: the Godot slot is three lanes (one heavy lane for a run declared longer than HEAVY_SECONDS,
+SHORT_LANES short lanes; an export runs alone, and ARCANUM_QUEUE_LANES=0 returns to one slot); and a `quick` run (a project import, a headless self-test: short Godot runs with no window) takes a
 place of its own beside the Godot slot, as a dotnet run does. There is no daemon. Each ticket is a file in the queue folder whose flock its wrapper (and,
 for Godot kinds, the command it started) holds for its whole life, so the kernel frees the place of a run that crashed
 or was killed; a waiter checks the queue every POLL_SECONDS, so the next run starts within that of the last one ending.
@@ -54,9 +55,20 @@ BUILD_ENVIRONMENT = {"MSBUILDDISABLENODEREUSE": "1", "DOTNET_CLI_USE_MSBUILD_SER
 SHUTDOWN_SECONDS = 60.0
 SHUTDOWN_ENV = "ARCANUM_QUEUE_BUILD_SERVER_SHUTDOWN"  # "0" turns the shutdown off: tests only, never touch real build servers
 POLL_SECONDS = 0.25
+# ARC-DEV-400: the Godot slot as lanes. A window or headless run declared longer than HEAVY_SECONDS takes the one heavy
+# lane, a shorter one a short lane (DEFAULT_SHORT_LANES of them); an export runs alone, and a run of the rollback
+# (ARCANUM_QUEUE_LANES=0) or of a wrapper from before the lanes does too. Lanes never share a checkout's project folder.
+LANES_ENV = "ARCANUM_QUEUE_LANES"  # the number of short lanes; 0 (or off, or anything unreadable) is the old single slot
+DEFAULT_SHORT_LANES = 2
+MAX_SHORT_LANES = 8
+HEAVY_SECONDS = 90.0
+HEAVY, SHORT, EXPORT, SINGLE = "heavy", "short", "export", "single"
+EXCLUSIVE_LANES = frozenset({EXPORT, SINGLE})
+# ARC-DEV-400: a run that ended with one of these was stopped on purpose (SIGHUP, SIGINT, SIGTERM of its wrapper): not red.
+STOPPED_EXITS = frozenset({128 + signal.SIGHUP, 128 + signal.SIGINT, 128 + signal.SIGTERM})
 KILL_GRACE_SECONDS = 10.0
 TIMEOUT_EXIT = 124
-FRONT, NORMAL = 0, 1  # ticket priority: FRONT only for the owner's ./arcanum area|world|map launches
+FRONT, NORMAL = 0, 1  # ticket priority: FRONT for the owner's ./arcanum area|world|map launches and ./arcanum package (ARC-DEV-400)
 LEGACY_WINDOW_LOCK = Path("/tmp/arcanum-godot-window.lock")
 TICKET_ENV, KIND_ENV = "ARCANUM_QUEUE_TICKET", "ARCANUM_QUEUE_KIND"
 MAX_LABEL, MAX_COMMAND = 120, 400
@@ -273,6 +285,48 @@ def order_of(live: Sequence[dict[str, Any]]) -> Callable[[dict[str, Any]], tuple
     return _key
 
 
+_LANE_NOTE = [False]
+
+
+def short_lanes(environment: dict[str, str] | None = None) -> int:
+    """The number of short Godot lanes: LANES_ENV, else DEFAULT_SHORT_LANES. 0 is the rollback (one Godot slot); a value
+    that is not a whole number from 0 to MAX_SHORT_LANES is read as the rollback too, with a note once."""
+    value = (os.environ if environment is None else environment).get(LANES_ENV)
+    if value is None or not value.strip():
+        return DEFAULT_SHORT_LANES
+    text = value.strip().lower()
+    if text == "off":
+        return 0
+    if text.isascii() and text.isdigit() and int(text) <= MAX_SHORT_LANES:
+        return int(text)
+    if not _LANE_NOTE[0]:
+        _LANE_NOTE[0] = True
+        say(f"note: {LANES_ENV}={value!r} is not a number from 0 to {MAX_SHORT_LANES}; using one Godot slot")
+    return 0
+
+
+def lane_for(kind: str, estimate: float, lanes: int | None = None) -> str | None:
+    """The lane a new run takes: None for a run beside the Godot slot (`dotnet`, `quick`)."""
+    if kind not in GODOT_KINDS:
+        return None
+    if kind == "export":
+        return EXPORT
+    if (short_lanes() if lanes is None else lanes) <= 0:
+        return SINGLE
+    return HEAVY if estimate > HEAVY_SECONDS else SHORT
+
+
+def lane_of(ticket: dict[str, Any]) -> str | None:
+    """The lane of a ticket. A ticket with no lane comes from a wrapper from before ARC-DEV-400, which counts on running
+    alone: it takes the whole Godot slot (an export always does)."""
+    if ticket.get("kind") not in GODOT_KINDS:
+        return None
+    lane = ticket.get("lane")
+    if ticket["kind"] == "export":
+        return EXPORT
+    return lane if lane in (HEAVY, SHORT, SINGLE) else SINGLE
+
+
 def blocker(mine: dict[str, Any], live: Sequence[dict[str, Any]]) -> dict[str, Any] | None:
     """The ticket this one waits for, or None when it may start now (the admission rule)."""
     others = [ticket for ticket in live if ticket["seq"] != mine["seq"]]
@@ -286,11 +340,37 @@ def blocker(mine: dict[str, Any], live: Sequence[dict[str, Any]]) -> dict[str, A
         for ticket in running + ahead:
             if ticket["kind"] == "quick" and mine_checkout is not None and checkout_of(ticket) == mine_checkout:
                 return ticket
-        for ticket in running + ahead:
-            if ticket["kind"] in GODOT_KINDS:
+        godot = [ticket for ticket in running + ahead if ticket["kind"] in GODOT_KINDS]
+        lane = lane_of(mine)
+        if lane in EXCLUSIVE_LANES:
+            # an export (or a run of the rollback, or of an old wrapper) runs alone: it waits for every Godot run of every
+            # lane that is running or earlier in the order
+            if godot:
+                return godot[0]
+            if mine["kind"] == "export":
+                return next((ticket for ticket in running if ticket["kind"] in SIDE_KINDS), None)
+            return None
+        # a lane run waits for an exclusive run that is running or earlier in the order (an export is passed only by runs
+        # that arrive well before it), and for a run of its own checkout (a project folder is opened by one run at a time)
+        for ticket in godot:
+            if lane_of(ticket) in EXCLUSIVE_LANES:
                 return ticket
-        if mine["kind"] == "export":
-            return next((ticket for ticket in running if ticket["kind"] in SIDE_KINDS), None)
+        for ticket in godot:
+            if mine_checkout is not None and checkout_of(ticket) == mine_checkout:
+                return ticket
+        # then for a free place of its lane: the running runs of the lane and those of it ahead fill its places; a run
+        # ahead that waits only for the checkout of another run of the lane fills none
+        holders, busy = [], set()
+        for ticket in godot:  # the running runs first, then the runs ahead in order, of every lane
+            checkout = checkout_of(ticket)
+            held = not ticket.get("startedAt") and checkout is not None and checkout in busy
+            if lane_of(ticket) == lane and not held:
+                holders.append(ticket)
+            if checkout is not None:
+                busy.add(checkout)
+        slots = 1 if lane == HEAVY else max(1, short_lanes())
+        if len(holders) >= slots:
+            return holders[len(holders) - slots]
         return None
     # dotnet and quick runs wait for a running export or one that is draining (next for the Godot slot), then for a free
     # place of their own kind: the running runs of the kind and those of it ahead fill its slots (ARC-DEV-300, 390).
@@ -322,7 +402,8 @@ def blocker(mine: dict[str, Any], live: Sequence[dict[str, Any]]) -> dict[str, A
 
 
 def _describe(ticket: dict[str, Any]) -> str:
-    return f"#{ticket['seq']} {ticket['kind']} {Path(ticket.get('cwd', '?')).name} \"{ticket.get('label', '')}\""
+    lane = lane_of(ticket)
+    return f"#{ticket['seq']} {ticket['kind']}{'/' + lane if lane else ''} {Path(ticket.get('cwd', '?')).name} \"{ticket.get('label', '')}\""
 
 
 def _write(fd: int, ticket: dict[str, Any]) -> None:
@@ -372,6 +453,9 @@ def _enqueue(kind: str, label: str, command: Sequence[str], priority: int, timeo
                   "pidStart": _process_start(os.getpid()), "timeoutMinutes": timeout, "estimateSeconds": estimate,
                   "enqueuedAt": time.time(),
                   "startedAt": None, "childPid": None, "childStart": None}
+        lane = lane_for(kind, estimate)
+        if lane is not None:
+            ticket["lane"] = lane  # ARC-DEV-400: what the other wrappers read; a ticket with none is a single-slot run
         hidden = base / f".new-{seq}-{os.getpid()}"
         fd = os.open(hidden, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         fcntl.flock(fd, fcntl.LOCK_EX)
@@ -379,6 +463,27 @@ def _enqueue(kind: str, label: str, command: Sequence[str], priority: int, timeo
         path = base / f"t-{seq:012d}.json"
         os.rename(hidden, path)  # visible only once it is locked and complete
     return fd, path, ticket
+
+
+def _peers(live: Sequence[dict[str, Any]], own_seq: int) -> int:
+    """The other runs of Godot (any lane, quick runs too) that are running now."""
+    return sum(1 for item in live if item["seq"] != own_seq and item.get("startedAt") and item["kind"] in HOLD_KINDS)
+
+
+def _load() -> float | None:
+    """The one-minute load average, None when the system gives none."""
+    try:
+        return round(os.getloadavg()[0], 1)
+    except (OSError, AttributeError):
+        return None
+
+
+def _peers_now(own_seq: int) -> int | None:
+    try:
+        with _QueueLock():
+            return _peers([item for _, item in tickets(prune=False)], own_seq)
+    except (OSError, ValueError):
+        return None
 
 
 def _wait_turn(fd: int, ticket: dict[str, Any], sleep: Callable[[float], None]) -> None:
@@ -389,6 +494,9 @@ def _wait_turn(fd: int, ticket: dict[str, Any], sleep: Callable[[float], None]) 
             waiting_for = blocker(ticket, live)
             if waiting_for is None:
                 ticket["startedAt"] = time.time()
+                if ticket["kind"] in HOLD_KINDS:  # ARC-DEV-400: the conditions it starts under, for the lane accounting
+                    ticket["peers"] = _peers(live, ticket["seq"])
+                    ticket["loadStart"] = _load()
                 _write(fd, ticket)
                 return
         order = order_of(live)
@@ -402,7 +510,9 @@ def _wait_turn(fd: int, ticket: dict[str, Any], sleep: Callable[[float], None]) 
 
 def _legacy_hold() -> int:
     """Take the retired lockf lock so a lane still on the lockf rule cannot open a window over this run. Like
-    lockf, retry when the file was replaced while waiting (lockf removes its file when its command ends)."""
+    lockf, retry when the file was replaced while waiting (lockf removes its file when its command ends). Shared
+    (ARC-DEV-400): the runs of the queue's own Godot lanes hold it side by side, a lockf user (exclusive) still waits for
+    all of them and they wait for it."""
     path = legacy_lock()
     announced = False
     while True:
@@ -411,12 +521,12 @@ def _legacy_hold() -> int:
         except OSError as error:
             raise ValueError(f"cannot open the lockf lock {path}: {error.strerror}") from error
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
         except OSError:
             if not announced:
                 say(f"waiting for a lane still on the lockf rule ({path})")
                 announced = True
-            fcntl.flock(fd, fcntl.LOCK_EX)
+            fcntl.flock(fd, fcntl.LOCK_SH)
         try:
             same = os.path.samestat(os.fstat(fd), os.stat(path))
         except FileNotFoundError:
@@ -604,10 +714,14 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
         if ticket.get("startedAt"):
             ran = ended - ticket["startedAt"]
             say(f"end ticket={ticket['seq']} exit={exit_code} ran={ran:.0f}s")
-        _history({"seq": ticket["seq"], "kind": kind, "label": ticket["label"], "cwd": ticket["cwd"],
-                  "command": ticket["command"], "estimateSeconds": ticket["estimateSeconds"], "enqueuedAt": ticket["enqueuedAt"],
-                  "startedAt": ticket.get("startedAt"),
-                  "endedAt": ended, "exit": exit_code})
+        entry = {"seq": ticket["seq"], "kind": kind, "label": ticket["label"], "cwd": ticket["cwd"],
+                 "command": ticket["command"], "estimateSeconds": ticket["estimateSeconds"], "enqueuedAt": ticket["enqueuedAt"],
+                 "startedAt": ticket.get("startedAt"),
+                 "endedAt": ended, "exit": exit_code}
+        if ticket.get("startedAt") and kind in HOLD_KINDS:  # ARC-DEV-400: what a red run is compared by, per lane
+            entry.update({"lane": ticket.get("lane", kind), "peersStart": ticket.get("peers"),
+                          "peersEnd": _peers_now(ticket["seq"]), "loadStart": ticket.get("loadStart"), "loadEnd": _load()})
+        _history(entry)
         try:
             path.unlink()
         except FileNotFoundError:
@@ -781,4 +895,91 @@ def status(history: int = 0) -> list[str]:
             waiting_for = blocker(ticket, live)
             result.append(f"waiting {_describe(ticket)} for {_age(now - ticket['enqueuedAt'])}"
                           + (f" behind #{waiting_for['seq']}" if waiting_for else " (starting)"))
+    return result
+
+
+def is_red(exit_code: Any) -> bool:
+    """A finished run is red when it ended with a non-zero exit that is not its wrapper being stopped on purpose."""
+    return isinstance(exit_code, int) and not isinstance(exit_code, bool) and exit_code != 0 and exit_code not in STOPPED_EXITS
+
+
+def lane_of_entry(entry: dict[str, Any]) -> str:
+    """The lane a history entry of a Godot run (window, headless, export) ran in. An entry from before ARC-DEV-400 has none: it is put in the lane its kind and
+    declared length would take now, so the red rate of the old single slot is the baseline of each lane."""
+    lane = entry.get("lane")
+    if isinstance(lane, str) and lane:
+        return lane
+    kind = entry.get("kind", "?")
+    if kind in ("window", "headless"):
+        estimate = entry.get("estimateSeconds")
+        longer = isinstance(estimate, (int, float)) and not isinstance(estimate, bool) and estimate > HEAVY_SECONDS
+        return HEAVY if longer else SHORT
+    return EXPORT if kind == "export" else str(kind)
+
+
+def lane_accounting(entries: Sequence[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """ARC-DEV-400: per lane, the runs that started, how many were red, and the same split by whether another Godot run was
+    running beside it at its start (`peersStart` above 0; an entry with none recorded is `unknown`). A run that never
+    started (stopped while queued) is not counted."""
+    lanes: dict[str, dict[str, Any]] = {}
+    for entry in entries:
+        if not entry.get("startedAt") or entry.get("kind") not in GODOT_KINDS:  # dotnet and quick runs have no lane
+            continue
+        row = lanes.setdefault(lane_of_entry(entry), {"runs": 0, "red": 0, "stopped": 0, "alone": [0, 0],
+                                                       "beside": [0, 0], "unknown": [0, 0], "reds": []})
+        red = is_red(entry.get("exit"))
+        row["runs"] += 1
+        row["red"] += red
+        row["stopped"] += entry.get("exit") in STOPPED_EXITS
+        peers = entry.get("peersStart")
+        bucket = row["unknown"] if not isinstance(peers, int) else row["beside"] if peers > 0 else row["alone"]
+        bucket[0] += 1
+        bucket[1] += red
+        if red:
+            row["reds"].append(entry)
+    return lanes
+
+
+def _percent(part: int, whole: int) -> str:
+    return f"{100 * part / whole:.1f}%" if whole else "-"
+
+
+def _load_text(entry: dict[str, Any]) -> str:
+    start, end = entry.get("loadStart"), entry.get("loadEnd")
+    return "load " + "/".join(f"{value:g}" if isinstance(value, (int, float)) else "?" for value in (start, end))
+
+
+def lane_report(history: int = 0, recent: int = 8) -> list[str]:
+    """Lines for ./arcanum queue --lanes: per lane the runs and red runs (alone and beside other Godot runs), then the
+    latest red runs with the conditions they ran under: other Godot runs at the start and the end, the load average
+    at the start and the end, and the run's number (its log is `run-<number>-*` in the logs folder)."""
+    try:
+        lines = (_open_folder() / "history.jsonl").read_text(errors="replace").splitlines()
+    except FileNotFoundError:
+        return ["no finished runs yet"]
+    entries = []
+    for line in lines[-history:] if history else lines:
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(entry, dict) and entry.get("kind") in GODOT_KINDS:  # a dotnet or quick run has no lane
+            entries.append(entry)
+    lanes = lane_accounting(entries)
+    if not lanes:
+        return ["no finished runs yet"]
+    result = [f"lanes over the last {len(entries)} Godot runs (red = a non-zero exit that is not a stop; runs from before ARC-DEV-400 "
+              f"are put in the lane they would take now, with no peer count)",
+              f"{'lane':<10}{'runs':>6}{'red':>5}{'rate':>8}   alone (red/runs)   beside others   unknown"]
+    for name in sorted(lanes):
+        row = lanes[name]
+        result.append(f"{name:<10}{row['runs']:>6}{row['red']:>5}{_percent(row['red'], row['runs']):>8}"
+                      f"   {row['alone'][1]}/{row['alone'][0]:<15} {row['beside'][1]}/{row['beside'][0]:<13} "
+                      f"{row['unknown'][1]}/{row['unknown'][0]}")
+    reds = sorted((item for row in lanes.values() for item in row["reds"]), key=lambda item: item.get("endedAt", 0))[-recent:]
+    for entry in reds:
+        stamp = time.strftime("%m-%d %H:%M", time.localtime(entry.get("enqueuedAt", 0)))
+        peers = f"{entry.get('peersStart', '?')}/{entry.get('peersEnd', '?')}"
+        result.append(f"red {stamp} #{entry.get('seq')} {lane_of_entry(entry)} exit={entry.get('exit')} peers {peers} "
+                      f"{_load_text(entry)} {Path(entry.get('cwd', '?')).name} \"{entry.get('label', '')}\"")
     return result
