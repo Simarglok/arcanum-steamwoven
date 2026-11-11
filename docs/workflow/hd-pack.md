@@ -119,8 +119,8 @@ The PNGs stay the pack's only content: you edit a PNG, `refresh` it into the man
   version (`HdAlphaCheck.Version`: bump it with any change of the rules), so the first successful bind of a frame appends a 24-byte record to
   `alpha-ok.v1` in the cache folder and every later bind of that frame (this run, the next start) skips the pass. Only passes are kept; the key, Legacy
   hash (still computed), size and file checks still run on every bind; `RemoveUnreferenced` drops the records of PNGs no longer in the pack, and deleting the
-  cache folder (or the file) only costs one pass per frame again. Not done: VRAM-compressed textures (a lossy encode would change what is drawn, so it needs
-  the owner's decision and a before/after image first; the lossless chain stays).
+  cache folder (or the file) only costs one pass per frame again. VRAM-compressed textures were studied and **not adopted** (owner decision 2026-11-11: the lossless chain stays; the
+  measurements and the methods that would fit are in [HD texture compression study](../research/hd-texture-compression-2026-11.md)).
 - Format and code: `HdOptimizedCache` (Godot-free store, header `ARCM` version 1, format 1) and `HdOptimizedStore` (viewer).
 
 ## Daily tasks
