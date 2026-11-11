@@ -44,6 +44,7 @@ public static class ChangeOfPlaceRules
     /// change keeps the sectors otherwise.
     /// </summary>
     [OriginalFunction(0x452650, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x561860, OriginalFunctionScope.Partial)]
     public static bool EmptiesCacheBeforeRequest(ChangeOfPlaceCaller caller) =>
         caller is ChangeOfPlaceCaller.TeleportSpell or ChangeOfPlaceCaller.WorldMapLanding;
 

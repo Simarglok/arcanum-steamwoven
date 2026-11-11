@@ -54,12 +54,13 @@ public partial class TerrainViewerApp
     /// <summary>The AI's moved NPCs' bodies (not the fallen ones) with the frame of their step and facing.</summary>
     private IReadOnlyList<AreaDrawCommand> AnimateAiMovers(AreaAiHost host, IReadOnlyList<AreaDrawCommand> commands, long now)
     {
-        if (_areaOverlay is not { } overlay) return commands;
+        if (_areaOverlay is null) return commands;
         var drawn = new List<AreaDrawCommand>(commands.Count);
         foreach (var command in commands)
         {
+            // ARC-DEV-370: a created critter's visual is not in the map's own (TryBodyVisual).
             if (command.Identity is not { } key || _fallenBodies.ContainsKey(key) || host.Scene.Npcs.FirstOrDefault(n => n.Row.Key == key) is not { } npc
-                || host.Movers.Of(npc.Entity) is not { } mover || !overlay.Visuals.TryGetValue(command.Visual, out var visual)) { drawn.Add(command); continue; }
+                || host.Movers.Of(npc.Entity) is not { } mover || !TryBodyVisual(command.Visual, out var visual)) { drawn.Add(command); continue; }
             var action = mover.Stepping(now) ? mover.Running ? ActorDiagnosticAction.Run : ActorDiagnosticAction.Walk : ActorDiagnosticAction.Idle;
             if (!_bodyCycles.TryGetValue(key, out var cycle)) _bodyCycles[key] = cycle = new AreaBodyCycle();
             var octant = DiagnosticGridActor.Octant(mover.Facing);
@@ -139,8 +140,7 @@ public partial class TerrainViewerApp
     {
         if (_readyArea is not { } area) return null;
         AreaFrames();
-        if (_areaOverlay is not { } overlay || !overlay.Bodies.TryGetValue(npc.Row.Key, out var command) || !overlay.Visuals.TryGetValue(command.Visual, out var visual))
-            return null;
+        if (NpcT0Body(npc.Row.Key) is not { } command || !TryBodyVisual(command.Visual, out var visual)) return null;
         var load = ArmedArt(area, visual, npc, wanted.Animation, wanted.Weapon, wanted.Shield);
         return load.Art is { } art ? new(load.Animation, load.Weapon, load.Shield, art.FramesPerGroup, art.ActionFrame, art.FramesPerSecond) : null;
     }
