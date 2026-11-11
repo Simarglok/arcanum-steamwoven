@@ -134,7 +134,7 @@ public partial class TerrainViewerApp
             // The NPC's hit points are measured from before the use to the end of the walk and the run; an NPC that is not in a fight with the hero has no other source of damage in the cave.
             TechProductsRequire(poisoned > 0 && recordDamage >= npcBefore && session.QueryLife(life).View!.Status.IsDead, $"the poison killed the NPC (record damage {recordDamage}, hit points {npcBefore} -> {NpcHitPoints()})");
 
-            // 4. A found schematic document: every document of the module for a discipline the hero has a degree in is read through the inventory's Read button (the schematic registers, the
+            // 4. A found schematic document: every document of the module for Therapeutics and Chemistry (the disciplines the stage bought degrees in) is read through the inventory's Read button (the schematic registers, the
             //    document is gone, a second copy of a known one stays), then the Found tab of the window lists the records and the first one the hero's expertise reaches is assembled.
             for (var i = 0; i < 1800 && _readingData is null; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); AdoptReadingData(); }
             TechProductsRequire(_readingData is { Status: AreaReadingDataStatus.Ready, Data: not null }, $"the reading data of the module ({_readingData?.Status} {_readingData?.Detail})");
@@ -149,8 +149,9 @@ public partial class TerrainViewerApp
                 var entity = TechSmokeGive(data, document.Prototype, new SessionItemKind(SessionItemType.Written, document.Prototype, 0, 0));
                 OpenInventory();
                 TechProductsRequire(InventoryOpen, "the inventory window opens for the document");
+                _readingStatus = null;
                 ReadItem(entity);
-                TechProductsRequire(!InventoryOpen || !TechSmokeHeld(session).Contains(entity), $"document {document.Prototype} was read: {_readingStatus}");
+                TechProductsRequire(_readingStatus is not null || _inventoryStatus is not null, $"document {document.Prototype} was read");
                 TechProductsRequire(session.QueryHeroFoundSchematics()!.Value.Contains(document.Number) && !TechSmokeHeld(session).Contains(entity),
                     $"reading document {document.Prototype} registered schematic {document.Number} and destroyed the document: {_readingStatus}");
                 if (InventoryOpen) EndInventory();
@@ -158,8 +159,10 @@ public partial class TerrainViewerApp
             TechProductsRequire(session.QueryHeroFoundSchematics()!.Value.Length == foundBefore + documents.Length, "each document registered one schematic");
             var again = TechSmokeGive(data, documents[0].Prototype, new SessionItemKind(SessionItemType.Written, documents[0].Prototype, 0, 0));
             OpenInventory();
+            TechProductsRequire(InventoryOpen, "the inventory window opens for the second copy");
+            _readingStatus = null;
             ReadItem(again);
-            TechProductsRequire(TechSmokeHeld(session).Contains(again) && session.QueryHeroFoundSchematics()!.Value.Length == foundBefore + documents.Length, $"a second copy of a known schematic is kept and registers nothing: {_readingStatus}");
+            TechProductsRequire(_readingStatus is not null && TechSmokeHeld(session).Contains(again) && session.QueryHeroFoundSchematics()!.Value.Length == foundBefore + documents.Length, $"a second copy of a known schematic is kept and registers nothing: {_readingStatus}");
             if (InventoryOpen) EndInventory();
             TechSmokeCraftResult? foundCraft = null; var buttons = new List<string>();
             foreach (var document in documents)

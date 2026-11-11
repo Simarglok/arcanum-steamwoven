@@ -128,9 +128,9 @@ public partial class TerrainViewerApp
         var read = data.Catalog.Read(record).Record;
         TechSmokeRequire(read is not null, $"the catalogue reads record {record}");
         var components = new[] { TechSmokeCheapest(data, read!.Component1.Bases), TechSmokeCheapest(data, read.Component2.Bases) };
-        var heldBefore = TechSmokeHeld(session);
         var given = components.Select(prototype => TechSmokeGive(data, prototype)).ToArray();
         var afterGive = TechSmokeHeld(session);
+        var kindsGiven = TechSmokeHeldKinds(session);
         TechSmokeRequire(given.All(afterGive.Contains), "the components are in the pack");
 
         OpenSchematics();
@@ -150,9 +150,12 @@ public partial class TerrainViewerApp
 
         var heldAfter = TechSmokeHeld(session);
         var made = heldAfter.Except(afterGive).OrderBy(e => e, StringComparer.Ordinal).ToArray();
+        // Leftover components of a refused probe may stand in the pack, so what was spent is counted by prototype, not by the entities given.
         var consumed = given.Where(e => !heldAfter.Contains(e)).ToArray();
+        var kindsAfter = TechSmokeHeldKinds(session);
+        var lost = components.GroupBy(p => p).All(g => kindsGiven.Count(k => k.Kind.Prototype == g.Key) - kindsAfter.Count(k => k.Kind.Prototype == g.Key) == g.Count());
         TechSmokeRequire(made.Length == read.Quantity, $"record {record} made {read.Quantity} product(s) ({made.Length})");
-        TechSmokeRequire(consumed.Length == given.Length, $"the components are gone ({consumed.Length} of {given.Length})");
+        TechSmokeRequire(lost, $"the two components are gone ({consumed.Length} of the given entities)");
         return new(record, components, made, consumed, message);
     }
 
