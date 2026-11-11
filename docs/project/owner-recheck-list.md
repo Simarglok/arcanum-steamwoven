@@ -742,3 +742,21 @@ Known differences (documented, not bugs):
 
 - Resting (the rest option click, 0x57B710) also ends the sleeper's maintained spells in the original, but the rest window is not built yet (missing-systems E3-a), so only travel is wired.
 
+
+## ARC-MAGIC-057 — The hero's spot trap roll (E6-a, spot half, 2026-11-12)
+
+The rules are in [trap state](../world/trap-state-runtime.md) (the Spot item) and the [ledger SP1–SP2](../research/ledger/technology.md#spot-trap-roll-arc-magic-057). Use a hero with a low and one with a high Spot Trap skill (and Perception), on a map with a hidden floor trap (a trap plate) or a trapped chest or door, in both games.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Walk along a route that crosses a hidden floor trap with a low-skill hero. Repeat on a reloaded save a few times. | Sometimes the walk stops one tile before the trap with the "trap spotted" line and the trap is shown; other times the hero steps on it and it goes off. The chance rises with the skill and Perception. | open |
+| 2 | The same with a high-skill hero (a master of Spot Trap if you have one). | The trap is spotted much more often; a master gets a second chance on every miss. | open |
+| 3 | Open a trapped chest or use a trapped door that you have not spotted. | Either the use is stopped with the "trap spotted" line (the trap now shows as known) or the trap goes off as you open it. | open |
+| 4 | Find a magical trap (a trap whose script is a spell) with a hero below Expert in Spot Trap. | It is never spotted; it goes off on the step or the use. From Expert on it can be spotted. | open |
+| 5 | Cast Sense Hidden (spell 8), then repeat step 1. | The trap is spotted without a roll every time (the spell flag), and the hero's Spot Trap level should also be higher while the spell runs (effect 157): compare the sheet's skill value in both games. | open |
+
+Known differences (documented, not bugs):
+
+- The light at the trap is taken as full: an untrained hero in the dark is not penalised yet (the original adds up to 30 against an untrained hero).
+- The item that adds a modifier to the roll (inventory location 1005, name 2866) is not modelled.
+- Companions' own spot attempts are not made; disarming a trap and the skill-bar button are the next slice.

@@ -236,6 +236,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="npc-ai-heal-skill-tool-arc-world-116"></a>[NPC AI heal skill tool (ARC-WORLD-116)](ledger/npc-ai.md#npc-ai-heal-skill-tool-arc-world-116) | [NPC AI](ledger/npc-ai.md) | HI1–HI2 |
 | <a id="npc-waypoints-and-standpoints-arc-dev-117"></a>[NPC waypoints and standpoints (ARC-DEV-117)](ledger/npc-ai.md#npc-waypoints-and-standpoints-arc-dev-117) | [NPC AI](ledger/npc-ai.md) | WS1–WS12 |
 | <a id="trap-state-arc-world-076"></a>[Trap state (ARC-WORLD-076)](ledger/technology.md#trap-state-arc-world-076) | [Technology](ledger/technology.md) | TT1–TT10 |
+| <a id="spot-trap-roll-arc-magic-057"></a>[Spot trap roll (ARC-MAGIC-057)](ledger/technology.md#spot-trap-roll-arc-magic-057) | [Technology](ledger/technology.md) | SP1–SP3 |
 | <a id="trap-effects-arc-world-107"></a>[Trap effects (ARC-WORLD-107)](ledger/technology.md#trap-effects-arc-world-107) | [Technology](ledger/technology.md) | TT11–TT16 |
 | <a id="technology-item-scripts-and-generic-item-flags-arc-res-112"></a>[Technology item scripts and generic item flags (ARC-RES-112)](ledger/technology.md#technology-item-scripts-and-generic-item-flags-arc-res-112) | [Technology](ledger/technology.md) | TI1–TI10 |
 | <a id="aptitude-and-expertise-consumers-arc-res-114"></a>[Aptitude and expertise consumers (ARC-RES-114)](ledger/technology.md#aptitude-and-expertise-consumers-arc-res-114) | [Technology](ledger/technology.md) | XA1–XA10 |

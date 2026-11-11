@@ -174,7 +174,7 @@ FR-CHAR-017, FR-CHAR-019. Skills plan slice **S10**, audit slice K6.
 
 | Slice | Content | Size | Needs |
 | --- | --- | --- | --- |
-| E6-a | Spot-trap roll on every path step and use, the master second roll; disarm action and the skill-bar button; the expert's device | M | — |
+| E6-a | Spot-trap roll on every path step and use, the master second roll (**done**, ARC-MAGIC-057); disarm action and the skill-bar button; the expert's device (open, read as [SP3](../research/ledger/technology.md#spot-trap-roll-arc-magic-057): the skill cursor, 4 action points, the follower substitution) | M | — |
 | E6-b | **Built (ARC-WORLD-124 timer bombs, ARC-WORLD-125 script traps).** Placed devices: use an item with the trap-device flag on an object or tile, the device is spent, the marker object, the NPC alarm for record 176 | M | E1-a |
 | E6-c | The native trap script 30002 (the shot) | S | E6-a |
 
