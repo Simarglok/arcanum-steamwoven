@@ -398,7 +398,7 @@ runtime's `_stricmp`: in the C locale A–Z fold to a–z, other bytes compare a
 ## Window key modifiers (ARC-INPUT-004)
 
 Source: the [WORLD keyboard route](../../input/diagnostic-palette.md) and
-[KM-07](../../requirements/original-keyboard-mouse.md#km-07--переносимость-key-identity-и-модификаторов). Question: do the
+[KM-07](../../requirements/original-keyboard-mouse.md#km-07--portability-of-key-identity-and-modifiers). Question: do the
 original's window letters (L, C, I, T, W, R and the other letters of the character table) act while Ctrl, Shift or Alt is
 held? Read on 2026-10-27 by this task and, independently, by a fresh agent that saw only the questions (method step 6);
 both agree on every row. Every direct branch stays inside `.text`; the indirect ones (the window procedure's message
