@@ -192,7 +192,7 @@ The AREA viewer (`--hero`, exterior, cave and `--area-map`) casts as the origina
    without playing the cast eye candy (since ARC-MAGIC-019; before, the eye candy played to the release frame's re-check).
 5. **Feedback.** The host's new log entries become one line in the status bar and the message window: spell.mes messages by
    number (the player's own texts, `SpellTexts.Message`), the fatigue paid, damage, healing, resistance and the component types
-   that are not ready. Eye candy is drawn ([below](#eye-candy-arc-magic-017)); only an eye candy's callback gets a line.
+   that are not ready. Eye candy is drawn ([below](#eye-candy-arc-magic-017)); a summon's refusal gets a line (ARC-DEV-352).
 6. **Events.** While the session holds a run, or the shown map's host exists, the event pump's passes go through the shown
    map's host (`SessionSpellCaster.ProcessEvents`, only a host of the pump's own session), so a run's later events run with the
    map's magic world and their payments are applied.
@@ -232,7 +232,7 @@ Godot-free (`Arcanum.Simulation.Magic.SpellEyeCandyRules`, ledger [EC rows](../r
    (callback 47/48, end callback 58/59, fire damage 75/76, reverse the twin; the callback flag wins) and the run starts beside the owner's main run
    (`AreaEyeCandyHost.Play`, no interrupt; a full list of the owner's 7 foreground, 7 background or 4 underlay places, or a duplicate with `check_already`, plays nothing;
    `stack` queues it under the previous run): frame k at k·pace (58/59 begin with no wait, so one frame earlier), the parts leave at frames·pace; an `anim_forever` entry's parts loop from frame 0 every
-   frames·pace until a Remove. A callback goal calls back once at the timing part's action frame (47/48) or at its end (58/59); the cast host does not wait for it yet (the host counts the calls). An AGoal component for goal 44
+   frames·pace until a Remove. A callback goal calls back once at the timing part's action frame (47/48) or at its end (58/59); since ARC-DEV-352 the viewer gives the call to the run (its CALLBACK or END_CALLBACK action, [summon](#summon-for-objects-arc-dev-352)). An AGoal component for goal 44
    (`Hover`) starts the object's hover run and an AGoalTerminate for 44 (`HoverEnded`) ends it.
 3. **The component (`SessionSpellCaster`, EC11).** An EyeCandy component of a run's pass logs `EyeCandyAdded` (skipped for a run forced
    to end) or `EyeCandyRemoved` with its target object, the entry (6·spell + its number) and its play flags; no target object,
@@ -525,7 +525,8 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | Queued casts whose goals never play (the stack ended through the end step or was interrupted) keep their runs in their slots, unbegun and unpaid, until the game ends (MG43). | The runs are freed, unpaid. | — (owner decision 2026-10-28: fix in both modes, no switch) |
 | A queued goal is the casting goal 26 with its own get-up, unconceal and facing nodes and subgoals (QC2). | The viewer's goals have no subgoals and no facing turn, so the stack index is the number of queued casts. | — (not ready: the facing turn) |
 | An eye candy's sound and light are played with it; a multi-rotation eye candy turns to its object's art; `can_autoscale` sizes it to a critter's body; an eye candy sits at its object's offsets. | None of these (EC9). | — (not ready) |
-| A callback play flag makes the run's CALLBACK action wait for the eye candy's animation (EC11). | The callback never comes: the eye candy is drawn and the run goes on as if none were asked. | — (not ready) |
+| An eye-candy entry with no art but the translucent or tint flag is "played" (0x43EF10, SUM13): a callback-flagged add waits. | Such an entry is "not played" and calls back at once (no installed record is known to have one). | — (not ready) |
+| A callback play flag makes the run's CALLBACK action wait for the eye candy's animation (EC11). | Since ARC-DEV-352 the same ([summon](#summon-for-objects-arc-dev-352)); an add the overlay host refuses after the cast host was told it plays (no free place, a duplicate, a full goal table) calls back on the next frame, not in the same pass. | — (one frame later) |
 | A foreground or background part is scaled by the object's scale too (EC12). | Every object is taken at 100 %. | — (not ready) |
 | An eye-candy ART with a frame rate of 0 divides by zero (EC8). | Treated as no eye candy: the release runs at once. | — (no installed ART has one) |
 | A spell missile whose goal ends before it arrives (its next leg's line refused, the goal stopped) frees nothing: its run keeps its slot, never begun (MG44). | The run is freed unpaid. | — (owner decision 2026-10-28: fix in both modes, no switch) |
@@ -666,6 +667,42 @@ the same ObjFlag component 0x454A10 and its reference count 0x455100.
 **Not ready.** The conversation host's dialog gates (`DialogState`) model only dead (surrender and mind control stay normal) and see as dead only NPCs of the shown map; the generic greeting (run default, ARC-DEV-324) is the builder's text as a floating line only (no log record, no speech sound, no duration or colour of the original's display 0x568540, GT223; the viewer still leaves combat mode and refuses a talk under attack before it knows no window opens, which the original's dialog-start callback does and this path does not reach), and a flagged body that is no dialog NPC (a plain critter without NPC fields) has no greeting facts and says nothing; the reader at 0x4C31A0 (GT217); an open conversation is not closed by the END in
 the part read.
 
+## Summon for objects (ARC-DEV-352)
+
+Slice E1-b of the [missing-systems plan](../project/missing-systems-plan.md#e1-summon-and-objects-created-at-run-time-priority), on the created scenery of
+[E1-a](../architecture/object-directory.md#e1-a-created-scenery-and-eye-candy-objects-arc-dev-347) and the reads of [ARC-RES-101](../research/summon-objects-res-101.md)
+(ledger [SUM1–SUM16](../research/ledger/spell-runs.md#summon-component-and-the-objects-it-creates-arc-res-101)); code `SessionSpellCasterSummon.cs`, viewer
+`TerrainViewerSummon.cs`, [tests](../../tests/Arcanum.Session.Tests/SessionSpellSummonTests.cs), smoke stages `summon-flash` and `summon-wall`.
+
+- **The component (0x452830, SUM1–SUM4).** On each list entry that passes its area test and is a tile (an object entry has no tile, TA9): the object of prototype file `Proto:` + 20 (SC7) is
+  created on the shown map at the tile, no offset, with spell flag `OSF_SUMMONED` (0x4000), the run's parent as its summoner and the run as its owner. Only a prototype of type 3 (scenery) is made; a
+  critter prototype and a list pick stay `ComponentNotReady` (E1-e). The cast host reads type, object flags and scenery flags of the prototype from the viewer (`SummonPrototypes`); a creation the
+  session refuses is logged (`SummonRefused`; the original exits, an unreachable bug, SUM2).
+- **Empty tiles (SUM9).** The area tests are the existing ones over a map that now lists the created objects too: `Tgt_Tile_Empty` (Fireflash) refuses a tile with blocking terrain or any object but an
+  item without `OF_NO_BLOCK`, a standing critter included, so a flash cast at a creature that still stands on its tile makes no flash; `Tgt_Tile_Empty_Immobiles` (Wall of Fire) counts only walls,
+  portals, scenery and traps.
+- **The summoned slot and list (SUM1, SUM7, TA10).** The last summoned object is reset once per action and is what a `Tgt_Summoned` re-aim names (the flash's eye candy); the run's summoned list is the
+  created objects naming the run, newest first; a freed run's slot lets go of them (they stay, with no run). The created objects are map objects of the cast host (type, flags and hit points from the
+  prototype, with 1 hit point: the viewer does not read the prototype's); they take no damage.
+- **Destroy (DS2, SUM8).** A Destroy on a created object removes it from the session (one revision) and the runs hear of it after the outer action (0x459740); the viewer ends its loop and its overlay runs.
+- **Eye-candy callbacks (EC11, EC14).** An EyeCandy Add with `callback` (0x8) or `end_callback` (0x10) asks the overlay host whether the entry plays (art, animating, a foreground or underlay part,
+  readable frames): played, the run waits and the goal's callback (47/48 at the action frame, 58/59 at the end) calls the run's CALLBACK or END_CALLBACK action; not played, the callback runs at once
+  (the END callback for `end_callback` alone). Fireflash's flash goes at the action frame of entry 2 (about 750 ms on the installed art, seen in the smoke); Wall of Fire's END line names an entry
+  with no art, so its END_CALLBACK Destroy runs at once and takes all five pieces in one action.
+- **The wall's burn (GT77, GT94, SUM4).** A created scenery whose start rule admits a loop gets one on the viewer's scenery host (goal 1, or goal 77 for `OSCF_IS_FIRE`) the first time it is shown, and is
+  drawn at the loop's frame. The burn of a summoned piece has the summoner as its source: the source and the NPCs led by a PC source are spared, the source's stat 16 × 5 / 100 − 1 is added before a
+  round's doubling (order F1-low), and the victim's AI hears the attack (0x4A9650); a spared victim does not spend the round gate. The source is the viewer's, not saved: the first loop of the object in a
+  session has it (after a load too, as the original saves the run with its slot), a loop started again on a new host (a window shown again, the sector reload) or after a sweep has none and burns
+  everyone, as the original's restarted run.
+- **Lost callbacks.** The overlay runs are not saved and are given up with their map or window. A run that can only be waiting for a callback (an END with END_CALLBACK components, or a processed BEGIN
+  with CALLBACK components and neither maintenance nor duration) that no callback goal will call is called back by the viewer after two frames, so a flash never outlives its run; a freed run's overlay
+  runs call nobody back (the run that takes the slot next is not theirs).
+
+**Not ready.** Critter summons (E1-e), a Dispel on a summoned object (SUM8), the summon branch of the object-gone endings (DS4: an active run whose summoned list holds a destroyed object ends by event;
+today only the run that destroys its own objects does so, and it is the one being processed), the network paths, the burn's experience, blame and witnesses, the blocking pieces of Wall of Stone and Wall of
+Force in the path and passability queries (they are created; nothing blocks on them yet), a lost callback of a timed or maintained run (it is not called back; its CALLBACK line does not run). A creation or
+destroy is a session change inside the run pass: a pass the session then refuses (a full event budget) leaves the object made or gone with the run unchanged.
+
 ## Not ready
 
 - A worn item dropped on the hotkey bar (the original takes it off the doll into the location 2000 + entry; the session refuses it);
@@ -680,8 +717,8 @@ the part read.
   the recent actions' starting skill-bar buttons (pick pocket and prowling; the session starts them empty), the skill bar as a drag source,
   the compact interface's bar, and the count's font.
 - The missile's light and sound (an NPC caster's missile flies since ARC-WORLD-105, its facing turn is the AI host's since ARC-WORLD-102).
-- Eye-candy sounds and lights, tinting, rotation, `can_autoscale`, the object's scale and offsets and the eye-candy callbacks
-  (EC9, EC11, EC12).
+- Eye-candy sounds and lights, tinting, rotation, `can_autoscale`, the object's scale and offsets
+  (EC9, EC12).
 - Other goals while a cast plays: the viewer ignores world presses and the stick until the goal and its queue end, and refuses F7
   meanwhile (the session saves no goal or queue).
 - Spells on an inventory item (the inventory bit: the original opens the inventory to pick the item) and the hotkey bar (0x54FCF0,
