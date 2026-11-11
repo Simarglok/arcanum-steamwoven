@@ -90,9 +90,9 @@ switch takes effect at once (the vicinity's list cap follows the run's script ru
 
 ## Not ready
 
-- Only items are created; a create of any other object type (none in the template scripts) refuses the run's effects. The one
+- Only items and (since ARC-DEV-371, [E1-c3](../architecture/object-directory.md#e1-c3-script-created-critters-arc-dev-371)) critters are created; a create of any other object type (none in the template scripts) refuses the run's effects. The one
   installed case map mode reaches is the start map's "snapping twig" tile script 1629 (130 tiles): it creates eight critters of prototype
-  28464 next to the PC, which stays undone until NPCs can be spawned.
+  28464 next to the PC, which the viewer creates since ARC-DEV-371 (the critters carry the encounter flag; their inventory is not generated yet).
 - The vicinity's order (which 100 objects the original keeps) is not read; the project keeps snapshot order.
 - The 15 own sector files that attach 30285 now run too; other use, tile and sector scripts that were refused only for random, loops,
   the vicinity or a counter index above 3 run as well (the real-data recount is in the [area map mode](../rendering/area-map-mode.md#tile-and-sector-scripts-arc-script-017)).

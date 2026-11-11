@@ -143,9 +143,11 @@ yet. Current state: the component catalogue
    2026-10-18, [plan](docs/research/original-oracle-research.md)). Read its code
    from the exports in `research-private/` first: search the decompiled C in
    `research-private/ghidra-export/c/` (`index.tsv`, `rg`; [Ghidra text
-   export](docs/workflow/toolchain.md#ghidra-text-export-arc-dev-377)) and any
-   further export beside it, and go to the executable itself only for a
-   function the exports lack (the pointer-only starts), for a detail the
+   export](docs/workflow/toolchain.md#ghidra-text-export-arc-dev-377)) and the
+   listing, tables and byte scans beside it (index
+   `research-private/ghidra-export/README.txt`; [what each
+   holds](docs/workflow/toolchain.md#exe-exports-beyond-the-decompiled-c-arc-dev-379)), and go to the executable itself only for a
+   function the exports lack, for a detail the
    decompiler's guesses leave open (operand width, signedness, wrap) or for run
    time behaviour (the emulator oracle, `./arcanum oracle`, ARC-DEV-007), per the
    [original executable check](docs/research/original-executable-check.md);

@@ -653,6 +653,7 @@ address,group,state,class,scope,level,name,domain,ours,direct_callers,pointer_ho
 0x4F5F10,G,not relevant,network,,F1,Matchmaker chatroom leave wrapper,,,0,0,gap-scan
 0x4F6130,G,not relevant,network,,F1,Matchmaker ping wrapper,,,0,0,ghidra-analysis
 0x4F61A0,G,not relevant,forwarder,,F1,Forwarder to sector script list init,,,0,0,gap-scan
+0x4F6320,G,not relevant,forwarder,,F1,thunk to one other function,,,1,0,thunk
 0x4F63B0,G,not relevant,startup,,F1,Free all nodes of a global linked list,,,0,0,ghidra-follow-up
 0x4F6440,G,not relevant,startup,,F1,Clear two-word list header,,,0,0,gap-scan
 0x4F68B0,G,not relevant,other,,F1,Split text at first whitespace,,,0,0,gap-scan
@@ -778,6 +779,8 @@ address,group,state,class,scope,level,name,domain,ours,direct_callers,pointer_ho
 0x539A80,I,not relevant,accessor,,F1,set one popup slot field,,,0,0,gap-scan
 0x53A340,I,not relevant,draw,,F1,write palette quantizer tables to a stream,,,0,0,ghidra-analysis
 0x53AB30,I,not relevant,network,,F1,free network server list,,,0,0,ghidra-analysis
+0x53BC36,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53BC3C,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
 0x53C260,I,not relevant,other,,F1,open archive entry by name (unreferenced),,,0,0,gap-scan
 0x53C2A0,I,not relevant,other,,F1,open archive entry into caller record (unreferenced),,,0,0,gap-scan
 0x53C340,I,not relevant,stub,,F1,buffer mode set forwarded to read-only stub,,,0,0,gap-scan
@@ -788,6 +791,16 @@ address,group,state,class,scope,level,name,domain,ours,direct_callers,pointer_ho
 0x53DE30,I,not relevant,editor,,F1,archive tool path stack push,,,0,0,gap-scan
 0x53DE70,I,not relevant,editor,,F1,archive tool path stack pop,,,0,0,gap-scan
 0x53E2D0,I,not relevant,editor,,F1,wildcard match entry with pattern check,,,0,0,gap-scan
+0x53E5B0,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53E5B6,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53E5BC,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53E5C2,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53E5C8,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53E5CE,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53E5D4,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53E5DA,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53E5E0,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53E5E6,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
 0x53FBE5,I,not relevant,not-code,,F1,alignment padding plus jump table of logbook list builder,,,0,0,gap-scan
 0x54073A,I,not relevant,not-code,,F1,alignment padding plus jump table,,,0,0,gap-scan
 0x541150,I,not relevant,other,,F1,reset main menu state (unreferenced),,,0,0,gap-scan
@@ -845,6 +858,7 @@ address,group,state,class,scope,level,name,domain,ours,direct_callers,pointer_ho
 0x56EF50,I,not relevant,startup,,F1,Action point bar module shutdown,,,0,0,ghidra-analysis
 0x571060,I,not relevant,other,,F1,Abbreviate large count as short text (unused),,,0,0,gap-scan
 0x572622,I,not relevant,not-code,,F1,Table bytes before barter open stock,,,0,0,gap-scan
+0x575C40,I,not relevant,forwarder,,F1,thunk to one other function,,,0,0,thunk
 0x579F90,I,not relevant,accessor,,F1,Read pending skill-bar skill,,,0,0,gap-scan
 0x57A1C0,I,not implemented,,,F1,"Skill-bar target picked, start skill, clear target",skills,,0,0,gap-scan
 0x57AF8D,I,implemented,,partial,F1,Basic skill minus refusal message choice,skills,AreaSheetRefusals.Number; CharacterPointRules.Refund,0,0,ghidra-analysis
@@ -945,3 +959,85 @@ address,group,state,class,scope,level,name,domain,ours,direct_callers,pointer_ho
 0x5941FF,I,not relevant,forwarder,,F1,Multibyte char test wrapper (ismbb),,,0,0,gap-scan
 0x594210,I,not relevant,crt,,F1,Japanese code page lead byte test (CRT),,,0,0,gap-scan
 0x59440A,I,not relevant,crt,,F1,String compare (strcmp),,,0,0,gap-scan
+0x595730,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595736,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59573C,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595742,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595748,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59574E,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595754,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59575A,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595760,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595766,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59576C,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595772,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595778,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59577E,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595784,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59578A,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595790,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595796,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59579C,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957A2,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957A8,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957AE,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957B4,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957BA,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957C0,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957C6,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957CC,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957D2,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957D8,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957DE,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957E4,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957EA,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957F0,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957F6,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957FC,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595802,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595808,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59580E,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595814,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59581A,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59589E,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958A4,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958AA,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958B0,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958B6,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958BC,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958C2,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958C8,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958CE,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958D4,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958DA,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958E0,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958E6,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958EC,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958F2,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958F8,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958FE,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595904,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59590A,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595910,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595916,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59591C,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595922,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595928,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59592E,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595934,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59593A,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595940,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595946,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59594C,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595952,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595958,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59595E,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595964,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59596A,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595970,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595976,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59597C,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595982,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595988,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595C96,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595C9C,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
