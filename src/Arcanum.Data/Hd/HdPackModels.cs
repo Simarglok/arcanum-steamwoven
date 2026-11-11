@@ -47,6 +47,9 @@ public enum HdPackOpenStatus
 /// and the recipe only, never a frame file.</summary>
 public sealed record HdPackOpenResult(HdPackOpenStatus Status, HdPack? Pack, string? Detail = null);
 
+/// <summary>ARC-DEV-376: the outcome of <see cref="HdPack.CheckPrepared"/> (no pixels: the caller already holds them).</summary>
+public sealed record HdPreparedResult(HdFrameStatus Status, HdInvalidReason Invalid, int Width, int Height);
+
 /// <summary>Outcome of binding one frame key. Every status other than <see cref="Hd"/> is a
 /// per-frame Legacy draw with that reason (ARC-RENDER-013, Frame binding).</summary>
 public enum HdFrameStatus { Hd, PackRejected, FrameMissing, SourceMismatch, FrameRejected, Invalid }

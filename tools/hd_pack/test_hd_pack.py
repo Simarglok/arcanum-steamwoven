@@ -499,6 +499,256 @@ class HdPackTests(unittest.TestCase):
         self.assertEqual(run("rollback", backup, "--installed", self.inst)[0], 2)
 
 
+class LayoutTests(unittest.TestCase):
+    """ARC-DEV-376: relayout, the layout map, index, refresh and the update of a laid-out pack, on synthetic names."""
+
+    MAP = "art\tscreen\tkind\tframes\nbtn\twindow-a\tbuttons\t3\nback\twindow-a\tpanels\t1\nico\twindow-b\ticons\t1\nfnt\tfonts\tfonts\t12\n"
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+        self.inst = self.tmp / "game" / "hd-packs" / "interface-redraw-4x"
+        self.backups = self.tmp / "game" / "hd-pack-backups"
+        self.map = self.tmp / "map.tsv"
+        self.map.write_text(self.MAP)
+        real_users = hp.pack_users  # the owner's game or a smoke may be running while the tests run
+        hp.pack_users = lambda pack: []
+        self.addCleanup(setattr, hp, "pack_users", real_users)
+        # old layout: two folders (one a Codex extra), a frame 0 and 1 of btn, a font frame, an unlisted menu file
+        self.inst.mkdir(parents=True)
+        entries = []
+        for art, folder, frame, slice_ in (("btn", "interface", 0, "interface"), ("btn", "interface", 1, "interface"), ("back", "refinement02", 0, "interface-refinement02-soft"),
+                                           ("ico", "character-hd114", 0, "character-hd114"), ("fnt", "interface", 31, "interface")):
+            body = png(8, 8) + fake(f"{art}{frame}")
+            rel = f"{folder}/{art}-f{frame}-{hashlib.sha256(body).hexdigest()[:8]}.png"
+            (self.inst / folder).mkdir(exist_ok=True)
+            (self.inst / rel).write_bytes(body)
+            e = entry(art, rel, body, frame)
+            e["slice"] = slice_
+            e["legacy"] = {"width": 2, "height": 2, "rgbaSha256": "0" * 64}
+            entries.append(e)
+        recipe = b'{"kind":"arcanum-steamwoven-hd-recipe"}'
+        (self.inst / "recipe.json").write_bytes(recipe)
+        (self.inst / "main-menu-16x9.png").write_bytes(png(1664, 936))
+        manifest = {"schema": 1, "kind": "arcanum-steamwoven-hd-pack", "id": "interface-redraw-4x", "scale": 4,
+                    "recipe": {"file": "recipe.json", "sha256": hashlib.sha256(recipe).hexdigest()}, "entries": entries}
+        (self.inst / "manifest.json").write_text(json.dumps(manifest, separators=(",", ":")))
+
+    def relayout(self, *extra):
+        return run("relayout", "--installed", self.inst, "--map", self.map, "--backup-root", self.backups, "--task", "ARC-TEST-376", *extra)
+
+    def manifest(self):
+        return json.loads((self.inst / "manifest.json").read_text())
+
+    def test_a_running_process_on_the_pack_blocks_the_move_until_allowed(self):
+        before = tree(self.inst)
+        hp.pack_users = lambda pack: ["4242 viewer ARC_HD_PACK=" + str(pack)]
+        try:
+            rc, _, err = self.relayout()
+            self.assertEqual(rc, 2)
+            self.assertIn("a process is using this pack", err)
+            self.assertEqual(tree(self.inst), before)
+            rc, out, _ = self.relayout("--dry-run")
+            self.assertEqual(rc, 0)
+            self.assertIn("WARNING", out)
+            self.assertEqual(self.relayout("--allow-running")[0], 0)
+        finally:
+            hp.pack_users = lambda pack: []
+
+    def test_names_and_places(self):
+        self.assertEqual(hp.layout.art_of("interface/magic-tech-penalty-f3-0123456789ab.png"), "magic-tech-penalty")
+        self.assertEqual(hp.layout.art_of("interface/screen/kind/btn-f001.png"), "btn")
+        self.assertEqual(hp.layout.art_of("interface/fonts/fonts/fnt/f031.png"), "fnt")
+        lm = hp.layout.LayoutMap.parse(self.MAP)
+        self.assertEqual(hp.layout.place("btn", {"frame": 2, "group": 0, "palette": 0}, lm), "interface/window-a/buttons/btn-f002.png")
+        self.assertEqual(hp.layout.place("fnt", {"frame": 31, "group": 0, "palette": 2}, lm), "interface/fonts/fonts/fnt/f031-p2.png")
+        with self.assertRaises(hp.layout.LayoutError):
+            hp.layout.LayoutMap.parse("art\tscreen\tkind\nBad\ta\tb\n")
+        with self.assertRaises(hp.layout.LayoutError):
+            hp.layout.LayoutMap.parse("art\tscreen\tkind\nx\ta\tb\nx\ta\tc\n")
+
+    def test_dry_run_changes_nothing(self):
+        before = tree(self.inst)
+        rc, out, _ = self.relayout("--dry-run")
+        self.assertEqual(rc, 0)
+        self.assertIn("5 of 5 entries move", out)
+        self.assertEqual(tree(self.inst), before)
+        self.assertFalse(self.backups.exists())
+
+    def test_relayout_moves_every_entry_and_keeps_unlisted_files_then_is_idempotent(self):
+        old = {e["sha256"]: e["file"] for e in self.manifest()["entries"]}
+        rc, out, err = self.relayout()
+        self.assertEqual(rc, 0, out + err)
+        files = {e["file"] for e in self.manifest()["entries"]}
+        self.assertEqual(files, {"interface/window-a/buttons/btn-f000.png", "interface/window-a/buttons/btn-f001.png", "interface/window-a/panels/back-f000.png",
+                                 "interface/window-b/icons/ico-f000.png", "interface/fonts/fonts/fnt/f031.png"})
+        self.assertEqual({e["sha256"] for e in self.manifest()["entries"]}, set(old))  # content unchanged
+        for folder in ("refinement02", "character-hd114"):
+            self.assertFalse((self.inst / folder).exists())
+        self.assertTrue((self.inst / "main-menu-16x9.png").is_file() and (self.inst / "recipe.json").is_file())
+        self.assertTrue((self.inst / "layout-map.tsv").is_file())
+        self.assertIn("window-a", (self.inst / "INDEX.md").read_text())
+        self.assertIn("btn", (self.inst / "index.tsv").read_text())
+        self.assertEqual(run("verify", "--installed", self.inst, "--deep")[0], 0)
+        rc, out, _ = run("relayout", "--installed", self.inst, "--backup-root", self.backups, "--task", "ARC-TEST-376b")
+        self.assertEqual(rc, 0)
+        self.assertIn("nothing to do", out)
+        rc, out, _ = run("status", "--installed", self.inst)
+        self.assertIn("interface/window-a 3", out)
+
+    def test_rollback_restores_a_byte_identical_tree(self):
+        before = tree(self.inst)
+        self.assertEqual(self.relayout()[0], 0)
+        backup = next(self.backups.iterdir())
+        self.assertEqual(run("rollback", backup, "--installed", self.inst, "--dry-run")[0], 0)
+        self.assertNotEqual(tree(self.inst), before)
+        rc, out, err = run("rollback", backup, "--installed", self.inst)
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual(tree(self.inst), before)
+        self.assertEqual(run("rollback", backup, "--installed", self.inst)[0], 2)  # already rolled back
+
+    def test_art_missing_from_the_map_collision_and_unlisted_target_are_refused_before_any_write(self):
+        before = tree(self.inst)
+        self.map.write_text("art\tscreen\tkind\nbtn\ta\tb\nback\ta\tb\n")
+        rc, _, err = self.relayout()
+        self.assertEqual(rc, 2)
+        self.assertIn("no row for the ART", err)
+        self.assertEqual(tree(self.inst), before)
+        self.map.write_text(self.MAP)
+        (self.inst / "interface" / "window-a").mkdir()
+        (self.inst / "interface" / "window-a" / "buttons").mkdir()
+        (self.inst / "interface" / "window-a" / "buttons" / "btn-f000.png").write_bytes(b"x")
+        rc, _, err = self.relayout()
+        self.assertEqual(rc, 2)
+        self.assertIn("not in its manifest", err)
+
+    def test_a_damaged_pack_is_not_relaid_out(self):
+        e = self.manifest()["entries"][0]
+        (self.inst / e["file"]).write_bytes(fake("other", len(fake("x"))))
+        rc, out, err = self.relayout()
+        self.assertEqual(rc, 2)
+        self.assertIn("already damaged", err)
+
+    def test_apply_on_a_laid_out_pack_keeps_places_and_places_new_entries_by_the_map(self):
+        self.assertEqual(self.relayout()[0], 0)
+        base = self.tmp / "base.json"
+        base.write_bytes((self.inst / "manifest.json").read_bytes())
+        stage = self.tmp / "local" / "pack-out" / "s"
+        (stage / "interface").mkdir(parents=True)
+        entries = []
+        for art, frame, v in (("btn", 0, "v2"), ("ico", 0, "v1"), ("newart", 0, "v1")):
+            body = png(8, 8) + fake(f"{art}{frame}{v}")
+            rel = f"interface/{art}-f{frame}-{hashlib.sha256(body).hexdigest()[:8]}.png"
+            (stage / rel).write_bytes(body)
+            entries.append(entry(art, rel, body, frame))
+        # staging has the same keys as the installed pack for btn f0 (changed) and ico f0 (the Codex slice: unchanged content differs only by slice rule)
+        (stage / "manifest.json").write_text(json.dumps({"schema": 1, "kind": "arcanum-steamwoven-hd-pack", "id": "interface-redraw-4x", "scale": 4,
+                                                          "recipe": {"file": "recipe.json", "sha256": "0" * 64}, "entries": entries}))
+        common = ("--installed", self.inst, "--staged", stage, "--backup-root", self.backups, "--task", "ARC-TEST-377", "--base", base, "--add-new")
+        rc, out, err = run("apply", *common)
+        self.assertEqual(rc, 2)  # newart has no row
+        self.assertIn("no row for the ART newart", err)
+        more = self.tmp / "more.tsv"
+        more.write_text("art\tscreen\tkind\nnewart\twindow-c\ticons\n")
+        before = tree(self.inst)
+        self.assertEqual(run("apply", *common, "--map", more, "--dry-run")[0], 0)
+        self.assertEqual(tree(self.inst), before)
+        rc, out, err = run("apply", *common, "--map", more)
+        self.assertEqual(rc, 0, out + err)
+        by_art = {e["file"]: e for e in self.manifest()["entries"]}
+        self.assertIn("interface/window-c/icons/newart-f000.png", by_art)
+        self.assertIn("interface/window-a/buttons/btn-f000.png", by_art)  # replaced in place
+        self.assertEqual(by_art["interface/window-a/buttons/btn-f000.png"]["sha256"], next(e for e in entries if e["file"].startswith("interface/btn-"))["sha256"])
+        self.assertIn("newart", (self.inst / "INDEX.md").read_text())
+        self.assertEqual(run("verify", "--installed", self.inst, "--deep")[0], 0)
+        # the Codex slice entry (ico, slice character-hd114) is kept unless --slices names it
+        self.assertEqual(by_art["interface/window-b/icons/ico-f000.png"]["slice"], "character-hd114")
+        rc, out, err = run("rollback", next(p for p in self.backups.iterdir() if "377" in p.name), "--installed", self.inst)
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual(tree(self.inst), before)
+
+    def test_an_interrupted_rollback_can_be_run_again(self):
+        before = tree(self.inst)
+        self.assertEqual(self.relayout()[0], 0)
+        backup = next(self.backups.iterdir())
+        # a rollback that stopped after writing the old manifest: old paths back, new files and the map still there
+        receipt = json.loads((backup / "RECEIPT.json").read_text())
+        for old, new, _ in receipt["moves"]:
+            hp.link_or_copy(self.inst / new, self.inst / old)
+        (self.inst / "manifest.json").write_bytes((backup / "manifest.json").read_bytes())
+        receipt["status"] = "rolling-back"
+        (backup / "RECEIPT.json").write_text(json.dumps(receipt))
+        rc, out, err = run("rollback", backup, "--installed", self.inst)
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual(tree(self.inst), before)
+        self.assertEqual(json.loads((backup / "RECEIPT.json").read_text())["status"], "rolled-back")
+        self.assertEqual(run("rollback", backup, "--installed", self.inst)[0], 2)
+
+    def test_the_packs_own_map_is_kept_byte_for_byte_and_apply_only_appends_rows(self):
+        self.assertEqual(self.relayout()[0], 0)
+        own = (self.inst / "layout-map.tsv")
+        own.write_text(own.read_text() + "# owner note\n")
+        rc, out, _ = run("relayout", "--installed", self.inst, "--backup-root", self.backups, "--task", "ARC-TEST-380")
+        self.assertEqual(rc, 0)
+        self.assertIn("nothing to do", out)
+        self.assertTrue(own.read_text().endswith("# owner note\n"))
+        more = self.tmp / "more.tsv"
+        more.write_text("art\tscreen\tkind\nbtn\tother\tother\nnewart\twindow-c\ticons\n")  # btn is already in the pack's map: the pack's row wins
+        stage = self.tmp / "local" / "pack-out" / "m"
+        (stage / "interface").mkdir(parents=True)
+        body = png(8, 8) + fake("newart")
+        rel = f"interface/newart-f0-{hashlib.sha256(body).hexdigest()[:8]}.png"
+        (stage / rel).write_bytes(body)
+        e = entry("newart", rel, body)
+        e["legacy"] = {"width": 2, "height": 2, "rgbaSha256": "0" * 64}
+        (stage / "manifest.json").write_text(json.dumps({"schema": 1, "kind": "arcanum-steamwoven-hd-pack", "id": "x", "scale": 4, "recipe": {"file": "recipe.json", "sha256": "0" * 64}, "entries": [e]}))
+        old_text = own.read_text()
+        rc, out, err = run("apply", "--installed", self.inst, "--staged", stage, "--backup-root", self.backups, "--task", "ARC-TEST-381", "--no-base-check", "--add-new", "--map", more)
+        self.assertEqual(rc, 0, out + err)
+        self.assertTrue(own.read_text().startswith(old_text))
+        self.assertIn("newart\twindow-c\ticons\t0", own.read_text())
+        self.assertNotIn("other", own.read_text())
+
+    def test_map_on_an_old_layout_pack_and_a_refresh_rollback_are_refused(self):
+        stage = self.tmp / "s"
+        stage.mkdir()
+        shutil.copy2(self.inst / "manifest.json", stage / "manifest.json")
+        rc, _, err = run("plan", "--installed", self.inst, "--staged", stage, "--map", self.map)
+        self.assertEqual(rc, 2)
+        self.assertIn("run relayout first", err)
+        self.assertEqual(self.relayout()[0], 0)
+        e = self.manifest()["entries"][0]
+        (self.inst / e["file"]).write_bytes(png(8, 8) + b"edit")
+        self.assertEqual(run("refresh", "--installed", self.inst, "--backup-root", self.backups, "--task", "ARC-TEST-382")[0], 0)
+        backup = next(p for p in self.backups.iterdir() if "refresh" in p.name)
+        rc, _, err = run("rollback", backup, "--installed", self.inst)
+        self.assertEqual(rc, 2)
+        self.assertIn("cannot be rolled back", err)
+
+    def test_refresh_takes_an_edited_png_into_the_manifest(self):
+        self.assertEqual(self.relayout()[0], 0)
+        e = self.manifest()["entries"][0]
+        edited = png(8, 8) + b"edited by the owner"
+        (self.inst / e["file"]).write_bytes(edited)
+        self.assertEqual(run("verify", "--installed", self.inst, "--deep")[0], 1)
+        rc, out, _ = run("refresh", "--installed", self.inst, "--backup-root", self.backups, "--task", "ARC-TEST-378", "--dry-run")
+        self.assertEqual(rc, 0)
+        self.assertEqual(run("verify", "--installed", self.inst, "--deep")[0], 1)
+        rc, out, err = run("refresh", "--installed", self.inst, "--backup-root", self.backups, "--task", "ARC-TEST-378")
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual(run("verify", "--installed", self.inst, "--deep")[0], 0)
+        self.assertEqual(self.manifest()["entries"][0]["sha256"], hashlib.sha256(edited).hexdigest())
+        self.assertIn("nothing to do", run("refresh", "--installed", self.inst, "--backup-root", self.backups, "--task", "ARC-TEST-379")[1])
+
+    def test_refresh_refuses_a_png_of_the_wrong_size(self):
+        e = json.loads((self.inst / "manifest.json").read_text())["entries"][0]
+        (self.inst / e["file"]).write_bytes(png(9, 8))
+        rc, _, err = run("refresh", "--installed", self.inst, "--backup-root", self.backups, "--task", "ARC-TEST-378")
+        self.assertEqual(rc, 2)
+        self.assertIn("needs 8-bit RGBA", err)
+
+
 class FontsPlanTests(unittest.TestCase):
     """ARC-DEV-361: `fonts-plan` names traced font frames for the importer; synthetic font folders only."""
 

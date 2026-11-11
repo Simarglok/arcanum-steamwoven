@@ -1224,6 +1224,7 @@ public partial class TerrainViewerApp : Node
         if (_exiting) return;
         _exiting = true;
         _walkPlanCancellation?.Cancel(); // ARC-WORLD-042: the walk smoke's background route plan
+        HdOptimizedStore.Stop(); // ARC-DEV-376: the background texture conversion must not be inside an engine call at shutdown
         _installCancel?.Cancel(); // ARC-DEV-074: closing the window stops a running innoextract (it would write on after the app)
         DropSectorChart(); // ARC-DEV-118: its task may be reading a sector, and its fallback port holds the game folder's stack open
         ExitWorld();

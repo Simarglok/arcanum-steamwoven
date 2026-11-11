@@ -49,6 +49,14 @@ files. Every pack file must be a non-empty regular file: an empty file, a FIFO o
 (which report length 0) is refused as unreadable without being opened. JSON files are UTF-8 without a byte-order mark; text that is not valid UTF-8 or
 holds an unpaired surrogate makes the file malformed.
 
+**Layout convention (ARC-DEV-376).** The reader reads every `file` as the manifest gives it and ignores unlisted files, so how a pack is laid out is
+not part of the format. The player's local interface pack keeps `interface/<screen>/<kind>/<art>-f<NNN>.png` with a `layout-map.tsv`, `INDEX.md` and
+`index.tsv` at its root; the rules, the map and the tool commands that keep it are in [`docs/workflow/hd-pack.md`](../workflow/hd-pack.md#pack-layout-arc-dev-376).
+
+**Optimized textures (ARC-DEV-376).** A device-local cache of mipmapped textures, named by each PNG's SHA-256, sits beside the game's data and never inside
+a pack; it is not part of the format ([workflow](../workflow/hd-pack.md#optimized-textures-arc-dev-376)). `HdPack.SpriteFileSha256`, `CheckPrepared`,
+`DecodeFrame` and `InterfaceSprites` are the calls it uses.
+
 Where packs live (discovery, `HdPack.Discover`): a **collection** is a folder whose
 subdirectories are packs (the game's own pack folder, e.g. `user://hd-packs/`, or
 `local/hd-packs/` in a checkout, which git ignores); a **pack location** is one pack

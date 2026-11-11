@@ -13,6 +13,9 @@ unlisted extras). Nothing here contains or produces original art; it moves local
   mirror     copy missing/different files from one pack to another (the iCloud copy, ARC-DEV-349); never deletes
   stage      run the importer into a staging folder that is never an installed pack
   fonts-plan write the importer plan for the traced font frames of tools/hd_font (ARC-DEV-361); files only, no pack touched
+  relayout   move every entry to its place of the layout map (interface/<screen>/<kind>/<art>-f<NNN>.png, ARC-DEV-376), with backup and receipt
+  index      rewrite the pack's INDEX.md and index.tsv from its manifest and layout-map.tsv
+  refresh    take edited PNGs into the manifest (new size and SHA-256 of the listed files that changed, ARC-DEV-376)
 
 Every command that writes takes --dry-run, which prints the same plan and changes nothing.
 """
@@ -28,6 +31,11 @@ import struct
 import subprocess
 import sys
 import time
+
+try:
+    from tools.hd_pack import layout
+except ImportError:  # run as a script: python3 tools/hd_pack/hd_pack.py
+    import layout  # type: ignore[no-redef]
 
 GAME_SUPPORT = Path.home() / "Library" / "Application Support" / "Arcanum Steamwoven Game"
 PACK_ID = "interface-redraw-4x"
@@ -200,8 +208,9 @@ def verify(pack: Path, deep: bool) -> tuple[list[str], dict]:
     files = set(snapshot(pack)) - {".hd-pack.lock"}
     info = {"manifestSha256": msha, "entries": len(manifest["entries"]), "id": manifest.get("id"), "scale": manifest.get("scale"),
             "perFolder": {}, "unlisted": sorted(files - listed - {"manifest.json"})}
+    laid_out = (pack / layout.MAP_FILE).is_file()
     for e in manifest["entries"]:
-        folder = e["file"].split("/")[0]
+        folder = "/".join(e["file"].split("/")[:2]) if laid_out else e["file"].split("/")[0]
         info["perFolder"][folder] = info["perFolder"].get(folder, 0) + 1
     return problems, info
 
@@ -256,17 +265,122 @@ def folder_prefixes(names: str | None) -> tuple[str, ...]:
     return tuple(out)
 
 
+def slice_names(names: str | None) -> tuple[str, ...]:
+    """`--slices character-hd114,interface-refinement02-soft`: extra slices a laid-out pack may replace besides `interface` (the Codex repairs, ARC-DEV-376)."""
+    out = ["interface"]
+    for name in (names or "").split(","):
+        name = name.strip()
+        if not name:
+            continue
+        if not all(c.isalnum() or c in "-_" for c in name):
+            raise PackError(f"--slices: {name!r} is not a slice name")
+        if name not in out:
+            out.append(name)
+    return tuple(out)
+
+
+def load_map_file(path: Path) -> "layout.LayoutMap":
+    try:
+        return layout.LayoutMap.parse(path.read_text(encoding="utf-8"), str(path))
+    except (OSError, ValueError, layout.LayoutError) as e:
+        raise PackError(f"layout map {path}: {e}") from e
+
+
+def pack_map(pack: Path) -> "layout.LayoutMap | None":
+    """The pack's own layout map, or None for a pack still in the old folder layout (character-hd114/, interface/ flat)."""
+    return load_map_file(pack / layout.MAP_FILE) if (pack / layout.MAP_FILE).is_file() else None
+
+
+def place_entry(e: dict, lm: "layout.LayoutMap") -> str:
+    try:
+        return layout.place(layout.art_of(e["file"]), e, lm)
+    except layout.LayoutError as err:
+        if str(err) == layout.art_of(e["file"]):
+            raise PackError(f"the layout map has no row for the ART {err}; add `{err}<TAB>screen<TAB>kind<TAB>folder` to {layout.MAP_FILE} (or pass --map FILE with it)") from None
+        raise PackError(str(err)) from err
+
+
+def write_index(pack: Path, manifest: dict) -> list[str]:
+    tsv, md = layout.render_index(manifest)
+    atomic_write(pack / layout.INDEX_TSV, tsv)
+    atomic_write(pack / layout.INDEX_MD, md)
+    return list(layout.INDEX_FILES)
+
+
+def append_map_rows(path: Path, rows: dict) -> bytes:
+    """The pack's own map file with the new rows appended, every other byte kept (comments, notes the owner wrote)."""
+    raw = path.read_bytes()
+    header = [h.strip() for h in raw.decode("utf-8").splitlines()[0].split("\t")] if raw else []
+    if header[:4] != ["art", "screen", "kind", "folder"]:
+        raise PackError(f"{path} has no header art, screen, kind, folder as its first four columns; cannot add rows to it (fix the header, or add the rows by hand)")
+    tail = b"" if raw.endswith(b"\n") else b"\n"
+    return raw + tail + "".join(f"{a}\t{s}\t{k}\t{1 if f else 0}\n" for a, (s, k, f) in sorted(rows.items())).encode()
+
+
+def link_or_copy(src: Path, dst: Path) -> None:
+    """A second name for the same bytes: a hard link where the file system allows it (no extra space), else a copy."""
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_name(f".{dst.name}.part")
+    tmp.unlink(missing_ok=True)
+    try:
+        os.link(src, tmp)
+    except OSError:
+        shutil.copy2(src, tmp)
+    os.replace(tmp, dst)
+
+
+def prune_empty_dirs(root: Path, rels: list[str]) -> list[str]:
+    """Remove the directories that the given (removed) files leave empty, deepest first; a lone .DS_Store goes with its folder."""
+    dirs = set()
+    for rel in rels:
+        for parent in Path(rel).parents:
+            if str(parent) != ".":
+                dirs.add(parent.as_posix())
+    gone = []
+    for d in sorted(dirs, key=lambda x: -x.count("/")):
+        p = root / d
+        if not p.is_dir() or p.is_symlink():
+            continue
+        left = [c.name for c in p.iterdir()]
+        if left == [".DS_Store"]:
+            (p / ".DS_Store").unlink()
+            left = []
+        if not left:
+            p.rmdir()
+            gone.append(d)
+    return gone
+
+
 def compute_plan(installed: Path, staged: Path, add_new: bool, base: dict | None = None, conflicts: str = "refuse",
-                 folders: tuple[str, ...] = (REPLACEABLE,)) -> dict:
+                 folders: tuple[str, ...] = (REPLACEABLE,), extra_map: "layout.LayoutMap | None" = None, slices: tuple[str, ...] = ("interface",)) -> dict:
     """Three-way: an entry is replaced only when the installed file is still the base's (nobody repaired it locally) and the
-    staging build differs. Without a base nothing can tell a stale staging from a repair, so every difference is taken and apply refuses."""
+    staging build differs. Without a base nothing can tell a stale staging from a repair, so every difference is taken and apply refuses.
+
+    A pack with a `layout-map.tsv` (ARC-DEV-376) keeps every entry where the map puts it: a replaced entry stays at its installed path, a new
+    one is placed by the map, and what may be replaced is chosen by the entry's slice (`slices`) instead of its folder (`folders`)."""
     mi, isha = load_manifest(installed)
     ms, ssha = load_manifest(staged)
     ki, ks = keyed(mi, "installed"), keyed(ms, "staged")
-    replace, entries, conflicted = [], [], []
+    lm = pack_map(installed)
+    if lm is None and extra_map is not None:
+        raise PackError("--map only applies to a pack with a layout-map.tsv (run relayout first)")
+    new_rows: dict = {}
+    if lm is not None and extra_map is not None:  # the pack's own rows win; the file only adds ARTs the pack's map lacks
+        new_rows = {art: row for art, row in extra_map.rows.items() if art not in lm.rows}
+        lm = layout.LayoutMap({**lm.rows, **new_rows})
+
+    def replaceable(e: dict, n: dict) -> bool:
+        if lm is None:
+            return e["file"].startswith(folders) and n["file"].startswith(folders)
+        return e.get("slice") in slices and n["file"].startswith(REPLACEABLE)
+
+    def new_ok(n: dict) -> bool:
+        return n["file"].startswith(folders) if lm is None else n["file"].startswith(REPLACEABLE)
+
+    replace, entries, conflicted, copies = [], [], [], []
     for e in mi["entries"]:
         n = ks.get(entry_key(e))
-        differs = n is not None and e["file"].startswith(folders) and n["file"].startswith(folders) and n["sha256"] != e["sha256"]
+        differs = n is not None and replaceable(e, n) and n["sha256"] != e["sha256"]
         if differs and base is not None:
             b = base.get(entry_key(e))
             if b is None or b["sha256"] != e["sha256"]:  # the installed entry is not the base's: a local repair (staging equal to the base would revert it)
@@ -275,41 +389,54 @@ def compute_plan(installed: Path, staged: Path, add_new: bool, base: dict | None
                     entries.append(e)
                     continue
         if differs:
-            replace.append((e, n))
-            entries.append(n)
+            final = n if lm is None else dict(n, file=e["file"])  # a laid-out pack keeps the entry where it is
+            replace.append((e, final))
+            copies.append((n["file"], final))
+            entries.append(final)
         else:
             entries.append(e)
     new = [n for k, n in ks.items() if k not in ki and not (base is not None and k in base)]  # one the base had and the installed pack dropped stays dropped
     if add_new:
-        entries += [n for n in new if n["file"].startswith(folders)]
+        for n in new:
+            if not new_ok(n):
+                continue
+            final = n if lm is None else dict(n, file=place_entry(n, lm))
+            entries.append(final)
+            copies.append((n["file"], final))
     for old, n in replace:
         safe_rel(old["file"])
         safe_rel(n["file"])
-    for n in new if add_new else []:
-        safe_rel(n["file"])
-    copies = [n for _, n in replace] + ([n for n in new if n["file"].startswith(folders)] if add_new else [])
+    for src, final in copies:
+        safe_rel(src)
+        safe_rel(final["file"])
     listed_now = {e["file"] for e in mi["entries"]}
-    for n in copies:  # a staged file must exist and match before anything is touched; a target must not be an unlisted file
-        if n["file"] not in listed_now and (installed / n["file"]).exists():
-            raise PackError(f"{n['file']} exists in the installed pack but is not in its manifest; refusing to overwrite it (move it away first)")
-        p = staged / n["file"]
-        if not p.is_file() or p.stat().st_size != n["bytes"] or sha256(p) != n["sha256"]:
-            raise PackError(f"staged file is missing or does not match its manifest entry: {n['file']}")
+    targets = [final["file"] for _, final in copies]
+    if len(set(targets)) != len(targets) or len({e["file"] for e in entries}) != len(entries):
+        raise PackError("two entries would land on the same file path; check the layout map")
+    for src, final in copies:  # a staged file must exist and match before anything is touched; a target must not be an unlisted file
+        if final["file"] not in listed_now and (installed / final["file"]).exists():
+            raise PackError(f"{final['file']} exists in the installed pack but is not in its manifest; refusing to overwrite it (move it away first)")
+        p = staged / src
+        if not p.is_file() or p.stat().st_size != final["bytes"] or sha256(p) != final["sha256"]:
+            raise PackError(f"staged file is missing or does not match its manifest entry: {src}")
     manifest = dict(mi, entries=entries)
     new_manifest = json.dumps(manifest, separators=(",", ":")).encode()
     return {"old": mi, "oldSha": isha, "stagedSha": ssha, "replace": replace, "conflicts": conflicted, "baseGiven": base is not None, "conflictMode": conflicts,
             "stagedManifest": json.dumps(ms, separators=(",", ":")).encode(), "copies": copies, "newEntries": new, "added": add_new,
-            "manifestBytes": new_manifest, "newManifestSha": hashlib.sha256(new_manifest).hexdigest(),
-            "keptExtra": sum(1 for e in mi["entries"] if not e["file"].startswith(folders)), "folders": folders,
+            "manifestBytes": new_manifest, "newManifestSha": hashlib.sha256(new_manifest).hexdigest(), "map": lm, "newMapRows": new_rows,
+            "keptExtra": sum(1 for e in mi["entries"] if not e["file"].startswith(folders)) if lm is None else sum(1 for e in mi["entries"] if e.get("slice") not in slices),
+            "folders": folders, "slices": slices,
             "stagedOnly": len(new), "installedOnly": sum(1 for k in ki if k not in ks)}
 
 
 def print_plan(plan: dict, verb: str) -> None:
     print(f"installed manifest {plan['oldSha'][:12]} -> {plan['newManifestSha'][:12]} (staged build {plan['stagedSha'][:12]})")
-    extra = [f.rstrip("/") for f in plan["folders"] if f != REPLACEABLE]
+    extra = [f.rstrip("/") for f in plan["folders"] if f != REPLACEABLE] if plan["map"] is None else [x for x in plan["slices"] if x != "interface"]
     where = "interface entries" if not extra else "entries (interface and " + ", ".join(extra) + ")"
     print(f"  {len(plan['replace'])} {where} differ and {verb} replaced; {plan['keptExtra']} entries of other folders and all unlisted files stay")
     print(f"  staged-only entries: {plan['stagedOnly']} ({'added' if plan['added'] else 'ignored; --add-new adds them'}); installed-only entries kept: {plan['installedOnly']}")
+    if plan["map"] is not None:
+        print(f"  layout map: entries keep their place; {len(plan['copies']) - len(plan['replace'])} new entries are placed by it (slices that may be replaced: {', '.join(plan['slices'])})")
     for old, new in plan["replace"][:12]:
         print(f"  replace {old['file']} -> {new['file']}")
     if len(plan["replace"]) > 12:
@@ -323,14 +450,14 @@ def print_plan(plan: dict, verb: str) -> None:
 
 def cmd_plan(a) -> int:
     guard_installed(a.installed, True)
-    print_plan(compute_plan(a.installed, a.staged, a.add_new, load_base(a.base), a.conflicts, folder_prefixes(a.folders)), "would be")
+    print_plan(compute_plan(a.installed, a.staged, a.add_new, load_base(a.base), a.conflicts, folder_prefixes(a.folders), load_map_file(a.map) if a.map else None, slice_names(a.slices)), "would be")
     return 0
 
 
 def cmd_apply(a) -> int:
     guard_installed(a.installed, a.allow_symlink)
     guard_backup(a.backup_root, a.installed)
-    plan = compute_plan(a.installed, a.staged, a.add_new, load_base(a.base), a.conflicts, folder_prefixes(a.folders))
+    plan = compute_plan(a.installed, a.staged, a.add_new, load_base(a.base), a.conflicts, folder_prefixes(a.folders), load_map_file(a.map) if a.map else None, slice_names(a.slices))
     backup = a.backup_root / f"{a.task}-{plan['oldSha'][:12]}"
     print_plan(plan, "would be" if a.dry_run else "will be")
     if backup.exists():
@@ -363,13 +490,22 @@ def cmd_apply(a) -> int:
         atomic_write(backup / "staged-manifest.json", plan["stagedManifest"])  # the --base of the next update from this staging line
         receipt = {"kind": "update", "task": a.task, "createdUtc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "status": "started",
                    "oldManifestSha256": plan["oldSha"], "newManifestSha256": plan["newManifestSha"], "stagedManifestSha256": plan["stagedSha"],
-                   "replaced": removed, "added": [n["file"] for n in plan["copies"]]}
+                   "replaced": removed, "added": [final["file"] for _, final in plan["copies"]],
+                   "mapBackup": bool(plan["newMapRows"])}
+        if receipt["mapBackup"] and (inst / layout.MAP_FILE).is_file():
+            atomic_copy(inst / layout.MAP_FILE, backup / layout.MAP_FILE)
         atomic_write(backup / "RECEIPT.json", json.dumps(receipt, indent=1).encode())
         gone: list[str] = []
+        extras: list[str] = []
         try:
-            for n in plan["copies"]:
-                atomic_copy(a.staged / n["file"], inst / n["file"])
+            for src, final in plan["copies"]:
+                atomic_copy(a.staged / src, inst / final["file"])
+            if plan["newMapRows"]:  # new ARTs were named by --map: the pack's own map gets their rows (appended; nothing else in the file changes)
+                atomic_write(inst / layout.MAP_FILE, append_map_rows(inst / layout.MAP_FILE, plan["newMapRows"]))
+                extras.append(layout.MAP_FILE)
             atomic_write(inst / "manifest.json", plan["manifestBytes"])
+            if plan["map"] is not None:
+                extras += write_index(inst, json.loads(plan["manifestBytes"]))
             referenced = {e["file"] for e in json.loads(plan["manifestBytes"])["entries"]}
             gone = [r["file"] for r in removed if r["file"] not in referenced and (inst / r["file"]).is_file()]
             for rel in gone:
@@ -379,7 +515,7 @@ def cmd_apply(a) -> int:
             atomic_write(backup / "RECEIPT.json", json.dumps(receipt, indent=1).encode())
             raise PackError(f"apply was interrupted ({e!r}); the pack may be half updated. Roll back with: python3 -B tools/hd_pack/hd_pack.py rollback {backup} --installed {inst}") from e
         after = snapshot(inst)
-        allowed = {"manifest.json"} | set(receipt["added"]) | set(gone)
+        allowed = {"manifest.json"} | set(receipt["added"]) | set(gone) | set(extras)
         stray = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k) and k not in allowed)
         problems, info = verify(inst, deep=False)
         bad = [p for p in problems] + [f"changed outside the plan: {k}" for k in stray]
@@ -408,8 +544,12 @@ def cmd_rollback(a) -> int:
     except (OSError, ValueError) as e:
         raise PackError(f"{a.backup}: no readable RECEIPT.json ({e})") from e
     inst = a.installed
-    if receipt.get("status") not in ("applied", "failed", "started") or receipt.get("kind") not in ("update", "menu"):
+    if receipt.get("kind") == "refresh":
+        raise PackError("a refresh cannot be rolled back: the edited PNGs are the only copy of your edits. Put an older PNG back from your own copy and run refresh again")
+    if receipt.get("status") not in ("applied", "failed", "started", "rolling-back", "rolled-back") or receipt.get("kind") not in ("update", "menu", "relayout"):
         raise PackError("receipt has an unknown kind or status")
+    if receipt["kind"] == "relayout":
+        return rollback_relayout(a, receipt)
     if receipt["kind"] == "menu":
         current = sha256(inst / MENU_FILE) if (inst / MENU_FILE).is_file() else None
         if current not in (receipt["newSha256"], receipt["oldSha256"]) or (current == receipt["oldSha256"] and receipt["status"] == "applied"):
@@ -453,12 +593,266 @@ def cmd_rollback(a) -> int:
         for rel in receipt["added"]:
             if rel not in keep and (inst / rel).is_file():
                 (inst / rel).unlink()
+        if receipt.get("mapBackup") and (a.backup / layout.MAP_FILE).is_file():
+            atomic_copy(a.backup / layout.MAP_FILE, inst / layout.MAP_FILE)
+        if (inst / layout.MAP_FILE).is_file():
+            write_index(inst, json.loads((a.backup / "manifest.json").read_text()))
+        if (inst / layout.MAP_FILE).is_file():  # a laid-out pack has no folders of its own to keep; an old-layout pack keeps its folders
+            prune_empty_dirs(inst, [rel for rel in receipt["added"] if rel not in keep])
     problems, _ = verify(inst, deep=False)
     for p in problems[:20]:
         print("FAIL", p)
     ok = not problems and sha256(inst / "manifest.json") == receipt["oldManifestSha256"]
     print(f"{'PASS' if ok else 'FAIL'} rollback")
     return 0 if ok else 1
+
+
+# ---- relayout / index / refresh (ARC-DEV-376) --------------------------------------------------
+
+def relayout_plan(inst: Path, lm: "layout.LayoutMap") -> dict:
+    manifest, msha = load_manifest(inst)
+    old_paths = {e["file"] for e in manifest["entries"]}
+    entries, moves, targets = [], [], {}
+    for e in manifest["entries"]:
+        target = safe_rel(place_entry(e, lm))
+        if target in targets:
+            raise PackError(f"{e['file']} and {targets[target]} would both land on {target}; check the layout map")
+        targets[target] = e["file"]
+        if target != e["file"]:
+            if target in old_paths:
+                raise PackError(f"{target} is the current path of another entry; a swap of two entries cannot be done in one step (move one aside first)")
+            if (inst / target).exists():
+                raise PackError(f"{target} exists in the pack but is not in its manifest; refusing to overwrite it (move it away first)")
+            moves.append((e["file"], target, e["sha256"]))
+        entries.append(dict(e, file=target))
+    new_manifest = dict(manifest, entries=entries)
+    raw = json.dumps(new_manifest, separators=(",", ":")).encode()
+    return {"old": manifest, "oldSha": msha, "new": new_manifest, "manifestBytes": raw, "newSha": hashlib.sha256(raw).hexdigest(), "moves": moves}
+
+
+def pack_users(pack: Path) -> list[str]:
+    """Processes that name the pack folder in their command line (a viewer or smoke started with ARC_HD_PACK=..., a launcher run on it) or are the packaged game:
+    a relayout moves every file, so a reader running at the same time would see missing frames. Best effort: the environment of a process is not read."""
+    try:
+        out = subprocess.run(["ps", "-axo", "pid=,args="], capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    needles = {str(pack), str(pack.resolve())}
+    found = []
+    for line in out.splitlines():
+        pid, _, args = line.strip().partition(" ")
+        if pid == str(os.getpid()) or "hd_pack.py" in args:
+            continue
+        if any(n in args for n in needles) or "Arcanum Steamwoven.app/Contents/MacOS" in args:
+            found.append(f"{pid} {args[:110]}")
+    return found
+
+
+def cmd_relayout(a) -> int:
+    guard_installed(a.installed, a.allow_symlink)
+    guard_backup(a.backup_root, a.installed)
+    inst = a.installed
+    lm = load_map_file(a.map) if a.map else pack_map(inst)
+    if lm is None:
+        raise PackError(f"no layout map: pass --map FILE (columns art, screen, kind, folder) or put {layout.MAP_FILE} in the pack")
+    plan = relayout_plan(inst, lm)
+    backup = a.backup_root / f"{a.task}-{plan['oldSha'][:12]}"
+    screens = {}
+    for e in plan["new"]["entries"]:
+        screens[layout.screen_kind(e["file"])[0]] = screens.get(layout.screen_kind(e["file"])[0], 0) + 1
+    print(f"relayout {inst}: manifest {plan['oldSha'][:12]} -> {plan['newSha'][:12]}, {len(plan['moves'])} of {len(plan['old']['entries'])} entries move; no PNG changes")
+    print("  frames per screen:", ", ".join(f"{k} {v}" for k, v in sorted(screens.items())))
+    for old, new, _ in plan["moves"][:6]:
+        print(f"  move {old} -> {new}")
+    if backup.exists():
+        raise PackError(f"backup folder exists, refusing to reuse it: {backup}")
+    own = (inst / layout.MAP_FILE).is_file() and not a.map  # without --map the pack's own map is the source and stays byte for byte
+    index_ok = (inst / layout.INDEX_TSV).is_file() and (inst / layout.INDEX_TSV).read_bytes() == layout.render_index(plan["new"])[0]
+    if not plan["moves"] and index_ok and (own or ((inst / layout.MAP_FILE).is_file() and (inst / layout.MAP_FILE).read_bytes() == lm.render())):
+        print("nothing to do")
+        return 0
+    if a.dry_run:
+        users = pack_users(inst)
+        if users:
+            print(f"WARNING: {len(users)} process(es) name this pack; the real run refuses until they end:", *users[:4], sep="\n  ")
+        print(f"DRY-RUN: would back up the manifest and a receipt of the {len(plan['moves'])} moves to {backup}, link or copy every file to its new path, write {layout.MAP_FILE}, "
+              f"{', '.join(layout.INDEX_FILES)} and the manifest, then remove the old paths and the folders they leave empty")
+        return 0
+    users = pack_users(inst)
+    if users and not a.allow_running:
+        raise PackError("a process is using this pack (close it, or pass --allow-running when it is known not to read frames):\n  " + "\n  ".join(users[:6]))
+    with Lock(inst.parent):
+        before = snapshot(inst)
+        if sha256(inst / "manifest.json") != plan["oldSha"]:
+            raise PackError("the installed manifest changed while planning; run again")
+        pre, _ = verify(inst, deep=True)
+        if pre:
+            raise PackError(f"the installed pack is already damaged ({pre[0]}; {len(pre)} problems); repair it first, nothing was changed")
+        backup.mkdir(parents=True)
+        shutil.copy2(inst / "manifest.json", backup / "manifest.json")
+        extras_before = {}
+        for name in (layout.MAP_FILE, *layout.INDEX_FILES):
+            if (inst / name).is_file():
+                extras_before[name] = sha256(inst / name)
+                atomic_copy(inst / name, backup / name)
+        receipt = {"kind": "relayout", "task": a.task, "createdUtc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "status": "started",
+                   "oldManifestSha256": plan["oldSha"], "newManifestSha256": plan["newSha"], "moves": [list(m) for m in plan["moves"]],
+                   "extrasBefore": extras_before}
+        atomic_write(backup / "RECEIPT.json", json.dumps(receipt, indent=1).encode())
+        gone: list[str] = []
+        try:
+            for old, new, _ in plan["moves"]:
+                link_or_copy(inst / old, inst / new)
+            if not own:
+                atomic_write(inst / layout.MAP_FILE, lm.render())  # the draft or an edited copy, normalised to the four columns
+            write_index(inst, plan["new"])
+            atomic_write(inst / "manifest.json", plan["manifestBytes"])
+            gone = [old for old, _, _ in plan["moves"] if (inst / old).is_file()]
+            for rel in gone:
+                (inst / rel).unlink()
+            pruned = prune_empty_dirs(inst, gone)
+        except (OSError, KeyboardInterrupt) as e:
+            receipt["status"] = "failed"
+            atomic_write(backup / "RECEIPT.json", json.dumps(receipt, indent=1).encode())
+            raise PackError(f"relayout was interrupted ({e!r}); the pack may be half moved. Roll back with: python3 -B tools/hd_pack/hd_pack.py rollback {backup} --installed {inst}") from e
+        after = snapshot(inst)
+        allowed = {"manifest.json", layout.MAP_FILE, *layout.INDEX_FILES} | {n for _, n, _ in plan["moves"]} | set(gone)
+        stray = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k) and k not in allowed)
+        problems, _ = verify(inst, deep=True)
+        bad = problems + [f"changed outside the plan: {k}" for k in stray]
+        if sha256(inst / "manifest.json") != plan["newSha"]:
+            bad.append("manifest hash differs from the plan")
+        receipt["status"] = "applied" if not bad else "failed"
+        atomic_write(backup / "RECEIPT.json", json.dumps(receipt, indent=1).encode())
+    for b in bad[:20]:
+        print("FAIL", b)
+    print(f"{'FAIL' if bad else 'PASS'} relayout: {len(plan['moves'])} files moved, {len(pruned)} old folders removed, manifest {plan['newSha'][:12]}, backup {backup}")
+    if bad:
+        print(f"roll back with: python3 -B tools/hd_pack/hd_pack.py rollback {backup} --installed {inst}")
+    return 1 if bad else 0
+
+
+def rollback_relayout(a, receipt: dict) -> int:
+    inst, backup = a.installed, a.backup
+    current = sha256(inst / "manifest.json")
+    status = receipt["status"]
+    resumable = status in ("started", "failed", "rolling-back")  # an interrupted relayout or an interrupted rollback: every step below can run again
+    if status == "rolled-back" or current not in (receipt["newManifestSha256"], receipt["oldManifestSha256"]) \
+            or (current == receipt["oldManifestSha256"] and not resumable):
+        raise PackError("the installed manifest is not the one this relayout produced (another change followed, or it was already rolled back); refusing to roll back over it")
+    if sha256(backup / "manifest.json") != receipt["oldManifestSha256"]:
+        raise PackError("the backup manifest does not match its receipt")
+    moves = receipt["moves"]
+    for old, new, digest in moves:
+        have = [p for p in (inst / old, inst / new) if p.is_file() and sha256(p) == digest]
+        if not have:
+            raise PackError(f"neither {old} nor {new} holds the file the receipt names; cannot roll back")
+    print(f"rollback relayout {receipt['task']}: restore manifest {receipt['oldManifestSha256'][:12]}, {len(moves)} files back to their old paths; remove the layout's new paths")
+    if a.dry_run:
+        print("DRY-RUN: nothing changed")
+        return 0
+    old_manifest = json.loads((backup / "manifest.json").read_text())
+    keep = {e["file"] for e in old_manifest["entries"]}
+    with Lock(inst.parent):
+        receipt["status"] = "rolling-back"
+        atomic_write(backup / "RECEIPT.json", json.dumps(receipt, indent=1).encode())
+        for old, new, digest in moves:
+            if not (inst / old).is_file() or sha256(inst / old) != digest:
+                link_or_copy(inst / new, inst / old)
+        atomic_write(inst / "manifest.json", (backup / "manifest.json").read_bytes())  # the old paths all exist again; the new ones are only leftovers now
+        removed = []
+        for old, new, _ in moves:
+            if new not in keep and (inst / new).is_file():
+                (inst / new).unlink()
+                removed.append(new)
+        prune_empty_dirs(inst, removed)
+        for name in (layout.MAP_FILE, *layout.INDEX_FILES):
+            if name in receipt.get("extrasBefore", {}):
+                atomic_copy(backup / name, inst / name)
+            elif (inst / name).is_file():
+                (inst / name).unlink()
+        receipt["status"] = "rolled-back"
+        atomic_write(backup / "RECEIPT.json", json.dumps(receipt, indent=1).encode())
+    problems, _ = verify(inst, deep=False)
+    for p in problems[:20]:
+        print("FAIL", p)
+    ok = not problems and sha256(inst / "manifest.json") == receipt["oldManifestSha256"]
+    print(f"{'PASS' if ok else 'FAIL'} rollback")
+    return 0 if ok else 1
+
+
+def cmd_index(a) -> int:
+    guard_installed(a.installed, a.allow_symlink)
+    if pack_map(a.installed) is None:
+        raise PackError(f"{a.installed} has no {layout.MAP_FILE}; run relayout first")
+    manifest, _ = load_manifest(a.installed)
+    tsv, md = layout.render_index(manifest)
+    same = all((a.installed / n).is_file() and (a.installed / n).read_bytes() == data for n, data in ((layout.INDEX_TSV, tsv), (layout.INDEX_MD, md)))
+    print(f"index {a.installed}: {len(manifest['entries'])} frames; " + ("up to date" if same else "would be rewritten" if a.dry_run else "rewritten"))
+    if same or a.dry_run:
+        return 0
+    with Lock(a.installed.parent):
+        write_index(a.installed, manifest)
+    return 0
+
+
+def cmd_refresh(a) -> int:
+    """Take PNGs the owner edited in place into the manifest: every listed file whose size or SHA-256 differs gets the new values.
+    The file must still be an 8-bit RGBA PNG of exactly the entry's HD size; whether its alpha passes the entry's rule is checked by the game."""
+    guard_installed(a.installed, a.allow_symlink)
+    guard_backup(a.backup_root, a.installed)
+    inst = a.installed
+    manifest, msha = load_manifest(inst)
+    scale = manifest["scale"]
+    changed, entries = [], []
+    for e in manifest["entries"]:
+        rel = safe_rel(e["file"])
+        p = inst / rel
+        if not p.is_file():
+            raise PackError(f"missing: {rel}; refresh only takes edits of listed files")
+        size = p.stat().st_size
+        digest = sha256(p)
+        if size == e["bytes"] and digest == e["sha256"]:
+            entries.append(e)
+            continue
+        w, h, depth, ctype, interlace = png_header(p)
+        want = (scale * e["legacy"]["width"], scale * e["legacy"]["height"])
+        if (w, h) != want or depth != 8 or ctype != 6 or interlace != 0:
+            raise PackError(f"{rel}: {w}x{h} depth {depth} type {ctype} interlace {interlace}; needs 8-bit RGBA, not interlaced, exactly {want[0]}x{want[1]}")
+        changed.append((rel, e["sha256"], digest))
+        entries.append(dict(e, sha256=digest, bytes=size))
+    print(f"refresh {inst}: {len(changed)} edited files")
+    for rel, old, new in changed[:12]:
+        print(f"  {rel}: {old[:12]} -> {new[:12]}")
+    if not changed:
+        print("nothing to do")
+        return 0
+    new_manifest = dict(manifest, entries=entries)
+    raw = json.dumps(new_manifest, separators=(",", ":")).encode()
+    backup = a.backup_root / f"{a.task}-refresh-{msha[:12]}"
+    if backup.exists():
+        raise PackError(f"backup folder exists, refusing to reuse it: {backup}")
+    if a.dry_run:
+        print(f"DRY-RUN: would back up the old manifest to {backup} and write the manifest {hashlib.sha256(raw).hexdigest()[:12]}; the PNG bytes are the owner's and stay")
+        return 0
+    with Lock(inst.parent):
+        if sha256(inst / "manifest.json") != msha:
+            raise PackError("the installed manifest changed while planning; run again")
+        for rel, _, digest in changed:  # a file edited again since the hash above is not written into the manifest with a stale hash
+            if sha256(inst / rel) != digest:
+                raise PackError(f"{rel} changed while refreshing; run again")
+        backup.mkdir(parents=True)
+        shutil.copy2(inst / "manifest.json", backup / "manifest.json")
+        atomic_write(backup / "RECEIPT.json", json.dumps({"kind": "refresh", "status": "applied", "task": a.task, "oldManifestSha256": msha,
+                                                           "newManifestSha256": hashlib.sha256(raw).hexdigest(), "changed": [list(c) for c in changed]}, indent=1).encode())
+        atomic_write(inst / "manifest.json", raw)
+        if (inst / layout.MAP_FILE).is_file():
+            write_index(inst, new_manifest)
+    problems, _ = verify(inst, deep=False)
+    for p in problems[:20]:
+        print("FAIL", p)
+    print(f"{'FAIL' if problems else 'PASS'} refresh: {len(changed)} entries updated, manifest {hashlib.sha256(raw).hexdigest()[:12]}, backup {backup} (the old manifest only: the edited PNGs are the new truth)")
+    return 1 if problems else 0
 
 
 # ---- menu art / mirror / stage ---------------------------------------------------------------
@@ -702,7 +1096,9 @@ def parser() -> argparse.ArgumentParser:
         s.add_argument("--add-new", action="store_true", help="also add entries only the staging build has")
         s.add_argument("--base", type=Path, help="the manifest the staging was last applied from (a pack folder or a manifest.json, e.g. a backup's staged-manifest.json or the oldest pre-repair backup)")
         s.add_argument("--conflicts", choices=("refuse", "skip", "overwrite"), default="refuse", help="entries repaired in the installed pack after the base: refuse the update, keep them, or overwrite them")
-        s.add_argument("--folders", help="comma list of extra folders whose entries may be replaced besides interface/ (a repair of a Codex entry, e.g. character-hd114); default: interface only")
+        s.add_argument("--folders", help="comma list of extra folders whose entries may be replaced besides interface/ (a repair of a Codex entry, e.g. character-hd114); default: interface only (a pack with a layout map chooses by --slices instead)")
+        s.add_argument("--slices", help="a pack with a layout map: comma list of extra slices whose entries may be replaced besides interface (e.g. character-hd114,interface-refinement02-soft)")
+        s.add_argument("--map", type=Path, help="a layout map with the rows of ARTs the update adds; merged into the pack's layout-map.tsv by apply")
 
     s = add("plan", cmd_plan, "show the diff-only update, write nothing"); installed(s); update_args(s)
     s = add("apply", cmd_apply, "diff-only update with backup"); installed(s); write(s); update_args(s)
@@ -717,6 +1113,11 @@ def parser() -> argparse.ArgumentParser:
     s = add("stage", cmd_stage, "run the importer into a staging folder")
     s.add_argument("--plan", type=Path, required=True); s.add_argument("--staging", type=Path, required=True)
     s.add_argument("--module", type=Path, default=DEFAULT_MODULE); s.add_argument("--fresh", action="store_true"); s.add_argument("--dry-run", action="store_true")
+    s = add("relayout", cmd_relayout, "move every entry to its place of the layout map (ARC-DEV-376)"); installed(s); write(s)
+    s.add_argument("--map", type=Path, help=f"the layout map (art, screen, kind, folder); default: the pack's own {layout.MAP_FILE}")
+    s.add_argument("--allow-running", action="store_true", help="relayout even when a process names the pack folder in its command line")
+    s = add("index", cmd_index, "rewrite INDEX.md and index.tsv in the pack"); installed(s); s.add_argument("--dry-run", action="store_true")
+    s = add("refresh", cmd_refresh, "take edited PNGs into the manifest (new size and SHA-256)"); installed(s); write(s)
     s = add("fonts-plan", cmd_fonts_plan, "write the importer plan for traced font frames (tools/hd_font)")
     s.add_argument("--fonts", type=Path, required=True, help="the hd_font output folder (local/hd-font/out)")
     s.add_argument("--out", type=Path, required=True, help="the plan file, a .json under local/")

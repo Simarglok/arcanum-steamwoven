@@ -30,6 +30,7 @@ public static class InterfaceHd
     {
         if (ReferenceEquals(pack, Pack) && enabled == Enabled) return false;
         Pack = pack; Enabled = enabled;
+        HdOptimizedStore.Attach(pack, enabled);
         lock (Textures)
         {
             for (var i = Textures.Count - 1; i >= 0; i--)
@@ -155,6 +156,14 @@ public partial class HdInterfaceTexture : Texture2D
         if (!ReferenceEquals(_hdFor, pack)) { _hdFor = pack; _hd = null; _hdCanvas = null; _failed = false; }
         if (_hdCanvas is null && !_failed)
         {
+            // ARC-DEV-376: a plain frame comes ready-made (decoded, with its mip chain) from the optimized cache when the cache holds its PNG.
+            var cached = !_greyscale && !_premultipliedAlpha ? HdOptimizedStore.TryBind(pack, query, _frame.Rgba) : null;
+            if (cached is not null)
+            {
+                using (cached) _hd = ImageTexture.CreateFromImage(cached);
+                _hdCanvas = new CanvasTexture { DiffuseTexture = _hd, TextureFilter = CanvasItem.TextureFilterEnum.LinearWithMipmaps };
+                return _hdCanvas;
+            }
             var result = pack.ResolveSprite(query, _frame.Rgba);
             if (result.Status == HdFrameStatus.Hd && result.Rgba is { } rgba)
             {
