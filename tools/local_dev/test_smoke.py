@@ -134,9 +134,15 @@ class PlanTests(unittest.TestCase):
         for argv in (("pr", "--stages", "walk,cast", "--all", "--no-build"),
                      ("map", "Arcanum1-024-fixed", "--stages", "container-click", "--all", "--no-build")):
             self.assertIn(smoke.ALL_ENV + "=1", self.plan(*argv)[-1].command)
-        for argv in (("pr", "--all", "--crash-site"), ("pr", "--stages", "cast", "--all"), ("map", "Arcanum1-024-fixed", "--all")):
-            with self.assertRaisesRegex(ValueError, "--all goes with --stages naming"):
+        for argv in (("pr", "--all", "--crash-site"), ("pr", "--stages", "cast", "--all"), ("pr", "--zones", "core", "--all"),
+                     ("map", "Arcanum1-024-fixed", "--all")):
+            with self.assertRaisesRegex(ValueError, "--all goes with"):
                 self.plan(*argv)
+        # a zone of a sampled stage takes --all too; the complete run always runs them in full
+        zone = self.plan("pr", "--zones", "walk", "--all", "--no-build")
+        self.assertTrue(any(smoke.ALL_ENV + "=1" in step.command for step in zone))
+        self.assertFalse(any(smoke.ALL_ENV + "=1" in step.command for step in self.plan("pr", "--zones", "walk", "--no-build")))
+        self.assertTrue(all(smoke.ALL_ENV + "=1" in step.command for step in self.plan("complete", "--no-build") if step.name.startswith("stages")))
         self.assertEqual(smoke.SAMPLED_STAGES, {"container-click", "walk"})
         # the viewer reads the same variable the runner sets, in the stage the walk shares it with
         viewer = REPO / "tools/terrain-viewer/Godot"
@@ -205,20 +211,29 @@ class PlanTests(unittest.TestCase):
             self.plan("pr", "--stages", "ai,menu,life", "--main-menu")
         with self.assertRaisesRegex(ValueError, "the whole map battery needs a hero"):
             self.plan("map", "Arcanum1-024-fixed", "--main-menu")
-        with self.assertRaisesRegex(ValueError, "stage menu, death runs from the main menu: add --main-menu"):
-            self.plan("pr", "--stages", "menu,death")
-        self.assertEqual(self.plan("pr", "--stages", "menu,death", "--main-menu", "--no-build")[0].requires, ("menu", "death"))
+        # ARC-DEV-391: a menu stage needs no --main-menu (it gets its own menu process), and with it a stage that needs a
+        # hero or a session is refused
+        menus = self.plan("pr", "--stages", "menu,death", "--no-build")
+        self.assertEqual([(step.name, step.requires) for step in menus], [("stages-menu", ("menu",)), ("stages-death", ("death",))])
+        self.assertEqual([(step.name, step.requires) for step in self.plan("pr", "--stages", "menu,death", "--main-menu", "--no-build")],
+                         [("stages-menu", ("menu",)), ("stages-death", ("death",))])
+        for step in menus:
+            self.assertIn("--main-menu", step.command)
+            self.assertNotIn("--hero", step.command)
+        with self.assertRaisesRegex(ValueError, "stage hover needs a session, and --main-menu starts without one"):
+            self.plan("pr", "--stages", "menu,hover", "--main-menu")
 
     def test_the_perf_stages_follow_their_kind(self) -> None:
         # ARC-DEV-367: `perf` plays a hero in a map window; `perf-menu` runs from the main menu, with no hero.
         step = self.plan("pr", "--stages", "perf", "--no-build")[0]
         self.assertEqual(step.requires, ("perf",))
         self.assertEqual(step.command[step.command.index("--hero") + 1], smoke.AUTO_HERO)
-        menu = self.plan("pr", "--stages", "perf-menu", "--main-menu", "--no-build")[0]
-        self.assertEqual(menu.requires, ("perf-menu",))
-        self.assertNotIn("--hero", menu.command)
-        with self.assertRaisesRegex(ValueError, "perf-menu runs from the main menu: add --main-menu"):
-            self.plan("pr", "--stages", "perf-menu")
+        self.assertEqual(step.command[step.command.index("--area-map-sector") + 1], smoke.TOWN)  # needs a map exit in the window
+        for argv in (("pr", "--stages", "perf-menu", "--main-menu", "--no-build"), ("pr", "--stages", "perf-menu", "--no-build")):
+            menu = self.plan(*argv)[0]
+            self.assertEqual(menu.requires, ("perf-menu",))
+            self.assertIn("--main-menu", menu.command)
+            self.assertNotIn("--hero", menu.command)
 
     def test_the_stages_that_run_only_without_map_get_their_own_run(self) -> None:
         steps = self.plan("pr", "--stages", "map,ai,cast,stream,barter", "--no-build")
@@ -241,6 +256,102 @@ class PlanTests(unittest.TestCase):
         self.assertIn("--headless", test.command)
         self.assertEqual(test.command[-1], "--self-test")
         self.assertEqual(self.plan("self-test", "--no-build")[0].kind, "window")
+
+    # ARC-DEV-391: the stage-to-configuration table, grouping and the early error
+
+    def arg(self, step: smoke.Step, name: str) -> str | None:
+        return step.command[step.command.index(name) + 1] if name in step.command else None
+
+    def test_every_stage_has_its_configuration_and_the_derived_sets_agree(self) -> None:
+        self.assertEqual(set(smoke.STAGE_NEEDS), set(smoke.map_stages()))
+        self.assertTrue(smoke.MENU_STAGES.isdisjoint(smoke.HERO_STAGES))  # the menu starts without a hero
+        for stage, needs in smoke.STAGE_NEEDS.items():
+            self.assertTrue(needs.map and (needs.sector is None or re.fullmatch(r"\d+,\d+", needs.sector)), stage)
+            self.assertTrue(needs.takes_map(needs.map) and needs.takes_sector(needs.map, needs.sector), stage)  # its default runs
+            self.assertFalse(needs.portable and (needs.own or needs.menu or needs.debug), stage)
+            if needs.menu:
+                self.assertTrue(needs.own, stage)  # each menu stage starts and ends a game of its own
+
+    def test_stages_are_grouped_by_configuration_into_the_fewest_processes(self) -> None:
+        said: list[str] = []
+        steps = smoke.plan(parse("pr", "--stages", "cast,plants,knockdown,altar,ai,report,npc-tile,saved-runs,resources",
+                                 "--no-build"), self.conf, self.prefs, ENVIRON, True, say=said.append)
+        self.assertEqual([step.name for step in steps], ["stages-main", "stages-wild", "stages-shrine", "stages-town"])
+        self.assertEqual([step.requires for step in steps],
+                         [("cast", "knockdown", "ai", "report", "resources"), ("plants",), ("altar", "npc-tile"), ("saved-runs",)])
+        self.assertEqual([self.arg(step, "--area-map-sector") for step in steps], [None, smoke.WILD, smoke.SHRINE, smoke.TOWN])
+        self.assertEqual([self.arg(step, "--hero") for step in steps], [smoke.AUTO_HERO, None, smoke.AUTO_HERO, smoke.AUTO_HERO])
+        self.assertEqual([step.settings for step in steps], [step.name for step in steps])
+        self.assertIn("SMOKE run stages-wild on map Arcanum1-024-fixed, sector 1384,239: plants", said)
+        # one configuration: the old names and one process
+        self.assertEqual([step.name for step in self.plan("pr", "--stages", "cast,ai,report", "--no-build")], ["stages"])
+        # a portable stage rides in the process that exists, else it makes one on the default configuration
+        self.assertEqual([step.requires for step in self.plan("pr", "--stages", "plants,report", "--no-build")], [("plants", "report")])
+        self.assertEqual([step.name for step in self.plan("pr", "--stages", "report,resources", "--no-build")], ["stages"])
+
+    def test_a_stage_that_must_have_its_own_process_gets_one(self) -> None:
+        steps = self.plan("pr", "--stages", "cast,walk,ai,perf,critter-fall,tech-craft", "--no-build")
+        self.assertEqual([(step.name, step.requires) for step in steps],
+                         [("stages-main", ("cast", "ai")),
+                          ("stages-main-walk", ("walk",)), ("stages-town-perf", ("perf",)),
+                          ("stages-main-critter-fall", ("critter-fall",)), ("stages-crash-site-cave-tech-craft", ("tech-craft",))])
+        self.assertEqual(self.arg(steps[4], "--area-map"), smoke.CAVE)
+        debug = self.plan("pr", "--stages", "debug-travel,cast", "--no-build")
+        self.assertEqual([(step.requires, "--debug-mode" in step.command) for step in debug],
+                         [(("debug-travel",), True), (("cast",), False)])  # the debug mode only where it is needed
+
+    def test_a_stage_given_the_wrong_configuration_is_refused_before_it_waits(self) -> None:
+        with self.assertRaisesRegex(ValueError, "stage plants does not run at --sector 1452,1291: it needs map Arcanum1-024-fixed at sector 1384,239"):
+            self.plan("pr", "--stages", "plants", "--sector", smoke.SHRINE)
+        with self.assertRaisesRegex(ValueError, "stage wreck does not run at --sector 1409,1314: it needs map Arcanum1-024-fixed at the start sector"):
+            self.plan("pr", "--stages", "wreck", "--sector", smoke.TOWN)
+        with self.assertRaisesRegex(ValueError, "stage tile-ghost does not run on map elven ruins: it needs map crash site cave"):
+            self.plan("map", "elven ruins", "--stages", "tile-ghost")
+        with self.assertRaisesRegex(ValueError, "stage scene does not run on map Arcanum1-024-fixed: it needs a map other than "
+                                                "Arcanum1-024-fixed \\(such as crematorium-lev 1\\) from the main menu"):
+            self.plan("pr", "--stages", "scene", "--map", smoke.MAIN_MAP)
+        with self.assertRaisesRegex(ValueError, "stage plants does not run at --sector.*; stage altar does not run at --sector"):
+            self.plan("pr", "--stages", "plants,altar", "--sector", smoke.TOWN)
+        with self.assertRaisesRegex(ValueError, "--no-config-check"):
+            self.plan("pr", "--stages", "plants", "--sector", smoke.SHRINE)
+        # a configuration the stage passes in is no error, and --no-config-check runs the request as given
+        self.assertEqual(self.arg(self.plan("pr", "--stages", "transfer,roundtrip", "--sector", smoke.TOWN, "--no-build")[0],
+                                  "--area-map-sector"), smoke.TOWN)
+        self.assertEqual(self.arg(self.plan("pr", "--stages", "plants", "--sector", smoke.SHRINE, "--no-config-check", "--no-build")[0],
+                                  "--area-map-sector"), smoke.SHRINE)
+        # no option: the stage's own configuration
+        scene = self.plan("pr", "--stages", "scene", "--no-build")[0]
+        self.assertEqual((self.arg(scene, "--area-map"), "--main-menu" in scene.command), (smoke.SCENE_MAP, True))
+        self.assertEqual(self.arg(self.plan("pr", "--stages", "plants", "--no-build")[0], "--area-map-sector"), smoke.WILD)
+        self.assertEqual(self.arg(self.plan("pr", "--stages", "door-close", "--no-build")[0], "--area-map-sector"), smoke.TOWN)
+
+    def test_a_pinned_map_or_sector_holds_for_every_stage_that_accepts_it(self) -> None:
+        steps = self.plan("pr", "--stages", "cast,report,junk", "--map", smoke.RUINS, "--no-build")
+        self.assertEqual([(step.name, self.arg(step, "--area-map"), self.arg(step, "--hero")) for step in steps],
+                         [("stages", smoke.RUINS, "elf-female")])
+        steps = self.plan("pr", "--stages", "cast,ai", "--sector", smoke.TOWN, "--no-build")
+        self.assertEqual([self.arg(step, "--area-map-sector") for step in steps], [smoke.TOWN])
+
+    def test_review_fixes_portable_map_spelling_sector_spelling_and_the_unchecked_run(self) -> None:
+        # a portable stage rides only in a process on its own map: `map` is not run on the cave because tile-ghost is
+        steps = self.plan("pr", "--stages", "map,resources,tile-ghost", "--no-build")
+        self.assertEqual([(step.name, step.requires, self.arg(step, "--area-map")) for step in steps],
+                         [("stages-crash-site-cave", ("tile-ghost",), smoke.CAVE), ("stages-main", ("map", "resources"), smoke.MAIN_MAP)])
+        steps = self.plan("pr", "--stages", "cast-multi,map", "--no-build")
+        self.assertEqual([(step.requires, self.arg(step, "--area-map")) for step in steps],
+                         [(("cast-multi",), smoke.RUINS), (("map",), smoke.MAIN_MAP)])
+        # the spelling of a map and of a sector does not matter
+        self.assertEqual(len(self.plan("map", "Crash Site Cave", "--stages", "tile-ghost", "--no-build")), 1)
+        self.assertEqual(self.arg(self.plan("pr", "--stages", "saved-runs", "--sector", "01409,01314", "--no-build")[0],
+                                  "--area-map-sector"), smoke.TOWN)
+        # --no-config-check also lets a stage without a hero run from the main menu; a hero stage never does
+        self.assertEqual(len(self.plan("pr", "--stages", "report", "--main-menu", "--no-config-check", "--no-build")), 1)
+        with self.assertRaisesRegex(ValueError, "needs a session"):
+            self.plan("pr", "--stages", "report", "--main-menu")
+        with self.assertRaisesRegex(ValueError, "needs a hero"):
+            self.plan("pr", "--stages", "cast", "--main-menu", "--no-config-check")
+        with self.assertRaisesRegex(ValueError, "not a regular expression"):
+            smoke.parse_known_failures([{"stage": "ranged", "symptom": "(", "task": "unassigned", "since": "2026-11-11"}])
 
 
 class ExecuteTests(unittest.TestCase):
@@ -315,6 +426,81 @@ class ExecuteTests(unittest.TestCase):
         code, _, lines = self.run_steps(steps, {"stages": 1}, {"stages": ""})  # a failed run keeps its own exit
         self.assertIn("  stages  FAIL exit=1", lines)
         self.assertFalse(any("stages not run" in line for line in lines))
+
+    # ARC-DEV-391: known failures on main
+
+    def test_the_known_failures_file_is_well_formed(self) -> None:
+        import json
+        entries = smoke.parse_known_failures(json.loads(smoke.KNOWN_FAILURES.read_text(encoding="utf-8")))
+        self.assertTrue(entries)
+        self.assertEqual(entries, smoke.load_known_failures())
+        for entry in entries:
+            self.assertIn(entry.stage, smoke.STAGE_PASS)
+        for bad in ({"stage": "nope", "symptom": "x", "task": "unassigned", "since": "2026-11-11"},
+                    {"stage": "ranged", "symptom": "x", "task": "COMBAT-26", "since": "2026-11-11"},
+                    {"stage": "ranged", "symptom": "x", "task": "unassigned", "since": "yesterday"},
+                    {"stage": "ranged", "symptom": "x", "task": "unassigned"}):
+            with self.assertRaises(ValueError):
+                smoke.parse_known_failures([bad])
+        with self.assertRaises(ValueError):
+            smoke.parse_known_failures({})
+        self.assertEqual(smoke.load_known_failures(Path(self.temp.name) / "missing.json"), ())
+
+    def test_a_failure_listed_for_main_is_reported_as_known_and_still_fails(self) -> None:
+        known = (smoke.KnownFailure("ranged", re.compile("ranged smoke FAIL: the dagger"), "ARC-COMBAT-026", "2026-11-11"),
+                 smoke.KnownFailure("crash-site", re.compile("crash site smoke FAIL: x"), "unassigned", "2026-11-11"))
+        steps = [smoke.Step("stages", "window", ("g",), requires=("cast", "ranged")), smoke.Step("map", "window", ("g",),
+                 requires=smoke.BATTERY_STAGES), smoke.Step("crash-site", "window", ("g",)), smoke.Step("other", "window", ("g",), requires=("cast",))]
+        logs = {"stages": f"{smoke.STAGE_PASS['cast']} x\nARC-COMBAT-015 ranged smoke FAIL: the dagger is picked up\n",
+                "map": f"{smoke.STAGE_PASS['map']} x\nARC-COMBAT-015 ranged smoke FAIL: the dagger is picked up\n",
+                "crash-site": "crash site smoke FAIL: x\n", "other": "something else failed\n"}
+        lines: list[str] = []
+
+        def runner(kind, command, *, label, timeout, quiet, start, log_sink) -> int:
+            name = label[len("smoke "):]
+            path = Path(self.temp.name) / f"{name}.log"
+            path.write_text(logs[name], encoding="utf-8")
+            log_sink(path)
+            return 1
+
+        code = smoke.execute(steps, runner, lines.append, known)
+        self.assertEqual(code, 1)  # the exit code is the same as without the list
+        self.assertIn("  known on main, not this PR: ranged (ARC-COMBAT-026, since 2026-11-11)", lines)
+        self.assertIn("  known on main, not this PR: crash-site (unassigned, since 2026-11-11)", lines)
+        self.assertIn("  stages      FAIL exit=1", lines)
+        self.assertIn("  only known failures on main (not this PR): stages, map, crash-site", lines)
+        self.assertEqual(lines[-1], "SMOKE FAIL 0 of 4 steps passed (3 of the 4 failed with only known failures on main)")
+        self.assertEqual([line for line in lines if line.startswith("  not run for another reason")], [])
+        # the summary lines still parse as before (daily.py reads them)
+        self.assertTrue(all(re.match(r"^\s+(\S+)\s+(PASS|FAIL) exit=(\d+)$", line) or not re.match(r"^\s+\S+\s+(PASS|FAIL)", line)
+                            for line in lines))
+
+    def test_a_known_failure_does_not_hide_another_one(self) -> None:
+        known = (smoke.KnownFailure("ranged", re.compile("the dagger"), "ARC-COMBAT-026", "2026-11-11"),)
+        step = smoke.Step("stages", "window", ("g",), requires=("cast", "ranged", "ai"))
+        log = {"stages": f"{smoke.STAGE_PASS['cast']} x\nranged smoke FAIL: the dagger\n"}
+        lines: list[str] = []
+
+        def runner(kind, command, *, label, timeout, quiet, start, log_sink) -> int:
+            path = Path(self.temp.name) / "stages.log"
+            path.write_text(log["stages"], encoding="utf-8")
+            log_sink(path)
+            return 1
+
+        smoke.execute([step], runner, lines.append, known)
+        self.assertIn("  known on main, not this PR: ranged (ARC-COMBAT-026, since 2026-11-11)", lines)
+        self.assertIn("  not run for another reason: ai", lines)  # ai is no known failure
+        self.assertNotIn("  only known failures on main (not this PR): stages", lines)
+        self.assertEqual(lines[-1], "SMOKE FAIL 0 of 1 steps passed")
+        # the symptom must show: the same stage failing another way is not known
+        lines.clear()
+        log["stages"] = f"{smoke.STAGE_PASS['cast']} x\nranged smoke FAIL: a new reason\n"
+        smoke.execute([step], runner, lines.append, known)
+        self.assertFalse(any("known on main" in line for line in lines))
+        # a passing step, a failed build and a stopped run are never called known
+        lines.clear()
+        smoke.execute([smoke.Step("build", "dotnet", ("sh",), gate=True)], lambda *a, **k: 1, lines.append, known)
+        self.assertFalse(any("known on main" in line for line in lines))
 
 
 class RunTests(unittest.TestCase):

@@ -181,6 +181,10 @@ Q6 is done in ARC-DEV-395: the default is a sample (`container-click` 8 containe
 A large item, not recommended now: a warm viewer process that runs several stage groups without restarting (saves the 10 s load per group, but each group
 then needs a reset of the session state, and the smokes are written to start from a fresh load).
 
+## Status
+
+Q4 and Q5 are done in ARC-DEV-391 (`STAGE_NEEDS`, `--stages` grouping, the early error, `smoke_known_failures.json`; [smoke runner](../workflow/toolchain.md#smoke-runner-arc-dev-061)). The zones themselves (option A) and Q8 are done in ARC-DEV-396 (`tools/local_dev/smoke_zones.py`, `./arcanum smoke pr --auto`, `./arcanum smoke complete`; [smoke zones](../workflow/toolchain.md#smoke-runner-arc-dev-061)): `core` is every stage no heavy zone holds, the heavy zones are `walk`, `container-click`, `crash-site` and `census`, and the daily run is now `complete` (every stage, not 15 of 76).
+
 ## Recommendation
 
 1. Do Q1, Q2 and Q3 first: they need no decision about coverage, cut the waiting (three quarters of every call) and make the rest measurable.

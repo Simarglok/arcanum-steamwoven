@@ -146,7 +146,9 @@ public partial class TerrainViewerApp
         }
         // ARC-DEV-375: this stage proves a reload runs on a fresh owner with fresh counters and that the retired generation is collectable, so the reload must
         // read everything again: the process-resident frame store and visual memo (which a map load fills and a later load is served from) start empty here.
-        AreaResidentFrames.Shared.Clear(); AreaResidentVisuals.Shared.Clear(); AreaResidentEditorRecords.Shared.Clear();
+        // ARC-COMBAT-027: the whole-file hash memo (ARC-DEV-374) is the same kind of process-resident store: a file hashed by the first load is not read again, so the
+        // reload's read counters (ReadReserved/ReadActual: 969790599 at the first load, 16567076 after) would differ; the memo starts empty here as well.
+        AreaResidentFrames.Shared.Clear(); AreaResidentVisuals.Shared.Clear(); AreaResidentEditorRecords.Shared.Clear(); VerifiedFileMemo.Reset();
         var baselineSamples = await ManagedSamples();
         var baseline = (Managed: baselineSamples.Min(), Resident: Resident(), Handles: Handles());
         // Overlapped production reloads: the second cancels the first, which
