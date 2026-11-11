@@ -146,6 +146,16 @@ public enum SpellCastEventKind
     SummonRefused,
     /// <summary>ARC-DEV-352 (DS2, SUM8): a Destroy component destroyed the summoned object <see cref="SpellCastEvent.Object"/>.</summary>
     SummonDestroyed,
+    /// <summary>ARC-MAGIC-032 (XR1, XR2): the hero's Identify component targeted the critter <see cref="SpellCastEvent.Object"/> (the value is its object type): the original opens the read-only NPC sheet for the casting player; the window is E8's, the viewer's answer is a line.</summary>
+    IdentifyCritter,
+    /// <summary>ARC-MAGIC-032 (XR1, XR3): the hero's Identify component targeted the container <see cref="SpellCastEvent.Object"/>: the original opens its inventory in mode 4 with no lock test; the window is E8's, the viewer's answer is a line.</summary>
+    IdentifyContainer,
+    /// <summary>ARC-MAGIC-032 (XR1, XR4): the hero's Identify component targeted another object, an item <see cref="SpellCastEvent.Object"/> (the value is its object type): the original shows its item description, the true one when it is identified.</summary>
+    IdentifyItem,
+    /// <summary>ARC-MAGIC-032 (XR4): an ObjFlag component set the identified item flag (0x1) on the item <see cref="SpellCastEvent.Object"/>; the session keeps it as an identification mark (<see cref="GameSessionOwner.QueryItemIdentified"/>).</summary>
+    ItemIdentified,
+    /// <summary>ARC-MAGIC-032: the session refused the identification mark of the item <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the spell goes on.</summary>
+    ItemIdentifyNotSaved,
 }
 
 /// <summary>

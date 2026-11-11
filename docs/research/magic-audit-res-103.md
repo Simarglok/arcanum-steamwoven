@@ -73,7 +73,7 @@ The components are the open part:
 | **Summon** | **18 (18)** | **Not built** | E1-a/b/c/e |
 | Destroy | 17 (17) | Lying items only; the 17 spells use it on their summoned objects (CALLBACK, END_CALLBACK), so it follows Summon | E1-b |
 | Trait | 10 (5) | Not built (Body spells, Polymorph) | MA-8 |
-| Identify | 3 (3) | Not built; item and container identification is not modelled in the session | MA-7 |
+| Identify | 3 (3) | **Taken since MA-7 (ARC-MAGIC-032)**: the hero's answer is a typed event and a text line, the item's identification is the session's mark; the windows are E8's ([result](#identify-ma-7-arc-magic-032)) | E8 |
 | Movement | 2 (2) | Not built; the area-change path of the session exists (MIG11) but nothing calls it | MA-5 |
 | Dispel | 2 (2) | Not built | MA-3 |
 
@@ -139,10 +139,10 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 | # | Spell | In the records (installed data) | Today | Missing | Needs |
 | --- | --- | --- | --- | --- | --- |
 | 5 | Sense Alignment (1) | 5 fat, maint 1@10; **B** Flag detecting_alignment on; **E** Flag detecting_alignment off | ✗ Cost and eye candy only; the hover window already reads flag 0x80 | `ObjFlag` writer for `OSF_DETECTING_ALIGNMENT` | MA-1 |
-| 6 | See Contents (2) | 10 fat; **B** Identify | ✗ Cost only | `Identify` on containers: the original opens the inventory window in its mode 4 with no lock test ([MA-R](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)); item and container identification state is not modelled | MA-7 |
-| 7 | Read Aura (3) | 15 fat; **B** Identify | ✗ Cost only | `Identify` on a critter: the original opens the read-only NPC sheet for the casting player ([MA-R](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)) | MA-7 |
+| 6 | See Contents (2) | 10 fat; **B** Identify | ◐ Cost, and since MA-7 the answer as a text line | `Identify` on containers: the original opens the inventory window in its mode 4 with no lock test ([MA-R](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)); the answer is a line, the window is E8's | E8 |
+| 7 | Read Aura (3) | 15 fat; **B** Identify | ◐ Cost, and since MA-7 the answer as a text line | `Identify` on a critter: the original opens the read-only NPC sheet for the casting player ([MA-R](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)); the answer is a line, the window is E8's | E8 |
 | 8 | Sense Hidden (4) | 25 fat, maint 5@10; **B** Flag detecting_invisible on, Flag detecting_traps on, Effect 157 add x1; **E** Flag detecting_invisible off, Flag detecting_traps off, Effect 157 rem x1 | ✗ Cost only | `ObjFlag` detecting invisible and traps; trap spotting is not built; effect 157 is a skill change (inert until the skills lane models skills) | MA-1, E6 |
-| 9 | Divine Magick (5) | 30 fat; **B** Flag identified on, Identify | ✗ Cost only | `ObjFlag` identified (item flags) and `Identify` | MA-7, MA-1 |
+| 9 | Divine Magick (5) | 30 fat; **B** Flag identified on, Identify | ◐ Cost, the identified mark and the text line (MA-7) | Picking an inventory item as the target (nothing targets an inventory item yet); the item description window is E8's | E8 |
 
 ### Air (spells 10-14)
 
@@ -330,7 +330,7 @@ census (MA-0) in the same PR.
 | **E1-c** Created critters | A critter from a prototype on a tile, hosted wherever it stands, saved; action 52 for critters | prerequisite | L | E1-a (done) | directory, AI host (no cast-host file) | FR-MAGIC-008, FR-AI-004 |
 | **MA-4** Social and AI flags (E4-b, MT14) | Charm (+30 / -30 through the reaction effects, animals on a separate path), mind control (follow, no flee, -50 for a PC on a non-summoned NPC, disband at END), undead, fleeing, blinded as AI and combat notifications; the illusion and familiar flags | 35, 38, 39, 50, 52, 66, 58; the flag half of 14, 19, 24, 29, 53, 57, 68, 71-74 | M-L | MA-1, E1-d | reaction, AI notices | FR-SOCIAL-001, FR-SOCIAL-003, FR-AI-002 |
 | **MA-8** Trait, body spells, Polymorph (E4-f, MT18) | `Trait`: art and palette, drop what the new art cannot wield, restore; MG10 as a technical bug under the owner rule; Body spells with their flags and effects | 13, 18, 23, 28, 49 | L | MA-1, MA-2, E1-d | render, equipment | FR-MAGIC-007 |
-| **MA-7** Identify (E4-d, part of E8) | The session state of identification for items, containers and critters and the answer of the spell; the identify window stays with E8 | 6, 7, 9 | M-L | MA-R | session, UI | FR-MAGIC-007, FR-MAGIC-012 |
+| **MA-7** Identify, ARC-MAGIC-032 ([result](#identify-ma-7-arc-magic-032)) (E4-d, part of E8) | The session state of identification for items, containers and critters and the answer of the spell; the identify window stays with E8 | 6, 7, 9 | M-L | MA-R | session, UI | FR-MAGIC-007, FR-MAGIC-012 |
 | **E1-e** Summon of critters | Prototype or list pick, summoned flags, palette, faction (MG8), run ends when the summon dies, summoned follower; the familiar hidden with the party on the world map (XR14 (b), decided by the owner: [Decisions](#decisions-for-the-owner)) | 14, 19, 24, 29, 53, 57, 68, 71, 72, 73, 74 | L | E1-c, MA-4 | Summon partial file | FR-MAGIC-008 |
 | **E6** Trap spotting | The spot roll and the detecting-traps flag (spell 8's second flag) | 8 | M | MA-1 | traps | FR-ITEM-016 |
 | **MA-9** Tempus Fugit | Implement what MA-R reads; the XR14 (a) fix decided by the owner ([Decisions](#decisions-for-the-owner)) | 79 | S-M | MA-R, MA-1 | to be read | FR-MAGIC-007 |
@@ -414,6 +414,17 @@ Done on 2026-11-11 ([contract](../world/durable-effects-runtime.md#consumers-of-
   its unchanged stats: both were one-line changes (`_owner.WithNpcEffects(npc.Combat)`), **made by MA-1 (ARC-DEV-358)**, which covers the fire half (the burn's `Combatant` goes through the same call). (2) An NPC's life facts do not read its effect-changed strength, constitution or resistance (its maximum hit points
   and the poison tick); the list's own maxima apply. (3) The character sheet's resistance lines do not show effect changes. (4) The hero's innate (race, gender) effects have no resistance changes in the session.
   (5) Per-spell runs of 30, 46, 76 and 77 are not done: no smoke stage names them.
+
+## Identify (MA-7, ARC-MAGIC-032)
+
+Done on 2026-11-11, by owner decision D5(a): magic builds the state and a text answer, the identify window is E8's ([contract](../world/spell-cast-host.md#identify-arc-magic-032), ledger [XR1 to XR5](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)).
+
+- **The original's Identify writes nothing.** It shows a window or a description to the casting local player only (XR1), so an NPC caster's Identify has no effect. The host now takes the component and, for the hero, logs one typed answer by the target's object type:
+  `IdentifyCritter` (the read-only NPC sheet, XR2), `IdentifyContainer` (the container's inventory in mode 4, no lock test, XR3), `IdentifyItem` (the item description, XR4); the viewer shows each as a line in the message log, E8 will read the same events and open the windows.
+- **Divine Magick's identified flag is the session's identification mark** (`MarkItemIdentified`), the one a barter window already sets and saves, so there is no schema step. Every reader of the mark now sees it: the item name and window lines, the hotkey bar, the barter worth and
+  the AI's item rule did already; the weapon's spell pane (slots, gauge, weapon button) now reads it too, which also fixes the pane of an item a barter window identified.
+- **The census** loses `Identify` on records 6, 7 and 9; record 9 keeps its `ObjFlag` on the census's critter targets (its line takes an item only).
+- **Left over, by name.** (1) Nothing picks an inventory item as a spell target (the inventory bit of the spell UI, `Tgt_Obj_Inven` in the target rules): spell 9 cannot be cast from the viewer; that is E8's pick. (2) The three windows (the NPC sheet for a spell, the container's inventory in mode 4, the item description). (3) What a press or release may move in inventory mode 4 (not read in MA-R, XR3). (4) A clear of the identified flag stays "not ready" (no installed record has one); an item whose own data has the flag stays identified whatever the mark says.
 
 ## Decisions for the owner
 
