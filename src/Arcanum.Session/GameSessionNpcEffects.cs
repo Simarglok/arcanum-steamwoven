@@ -8,8 +8,9 @@ namespace Arcanum.Session;
 /// <summary>Bounds of an NPC's durable effect list (ARC-DEV-348; project policy, the source has none, ledger EF1).</summary>
 public static class SessionNpcEffectLimits
 {
-    /// <summary>Entries one NPC holds, loaded ones included (the hero's capacity, <see cref="SessionEffectLimits.MaxHeroEffects"/>).</summary>
-    public const int MaxEntries = SessionEffectLimits.MaxHeroEffects;
+    /// <summary>Entries one NPC holds, loaded ones included (64: the hero's capacity before ARC-DEV-366 raised it for the tech books, which only the
+    /// hero carries through an item event).</summary>
+    public const int MaxEntries = 64;
     /// <summary>NPCs the session keeps a list for at once.</summary>
     public const int MaxCritters = 4096;
 }

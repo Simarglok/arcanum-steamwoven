@@ -1,6 +1,7 @@
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 
 namespace Arcanum.Session;
@@ -165,6 +166,7 @@ public sealed partial class GameSessionOwner
         {
             if (Failure != GameSessionFailure.None) return null;
             _reads.RatioReads = 0;
+            _reads.StatReads.Clear();
             var run = ScrDispatcher.RunObject(new(point, new ScrObjectRef(_map, attachee), new ScrObjectRef(_map, triggerer),
                 extra is null ? null : new ScrObjectRef(_map, extra)), _reads, new() { Rules = _owner._rules.Scripts, Admission = SessionItemScripts.Admission });
             _owner.ThrowIfDisposed();
@@ -184,15 +186,19 @@ public sealed partial class GameSessionOwner
             foreach (var write in slots)
                 if (write.Source != ScrSource.Object || write.Attachee is not { } item || item.Map != _map || !_items.ContainsKey(item.Code))
                     return GameSessionFailure.ItemScriptUnsupported;
-            var aptitude = HazardOf(run, _reads.RatioReads) ? Aptitude() : (int?)null;
+            var aptitude = HazardOf(run, _reads.RatioReads, Arcanum.Data.Scripts.ScrCatalogue.Action.MagickTechAdjustment) ? Aptitude() : (int?)null;
+            // ARC-DEV-366: the same for get stat, which reads the hero's stat; the stats it read are asked again after the run's changes.
+            var statReads = HazardOf(run, _reads.StatReads.Count, Arcanum.Data.Scripts.ScrCatalogue.Action.GetStat) ? _reads.StatReads.ToArray() : [];
             foreach (var change in effects.EffectChanges)
             {
                 var failure = Plan(change);
                 if (failure != GameSessionFailure.None) return failure;
             }
             // A ratio read after an effect change of the same run (or after a call-ex, whose order the trace does not show) would have
-            // read the changed aptitude in the original; the run read the aptitude before the change.
+            // read the changed aptitude in the original; the run read the aptitude before the change. A stat read is the same.
             if (aptitude is { } before && Aptitude() != before) return GameSessionFailure.ItemScriptUnsupported;
+            foreach (var (stat, value) in statReads)
+                if (HeroStat(stat) != value) return GameSessionFailure.ItemScriptUnsupported;
             foreach (var write in effects.GlobalFlags)
             {
                 _writes.Add(write);
@@ -208,20 +214,20 @@ public sealed partial class GameSessionOwner
             return GameSessionFailure.None;
         }
 
-        // A ratio read that may come after an effect change of the same run: the trace shows the outer run's order, but a call-ex callee's
-        // reads and changes are not in it, so a run with a call-ex and any ratio read counts too.
-        private static bool HazardOf(ScrRunResult run, int ratioReads)
+        // A read (a power ratio, or get stat) that may come after an effect change of the same run: the trace shows the outer run's order,
+        // but a call-ex callee's reads and changes are not in it, so a run with a call-ex and any such read counts too.
+        private static bool HazardOf(ScrRunResult run, int reads, int readAction)
         {
             var trace = run.Trace;
-            var lastRatio = -1; var firstChange = int.MaxValue; var callEx = false;
+            var lastRead = -1; var firstChange = int.MaxValue; var callEx = false;
             for (var i = 0; i < trace.Count; i++)
             {
                 var action = trace[i].Action;
-                if (action == Arcanum.Data.Scripts.ScrCatalogue.Action.MagickTechAdjustment) lastRatio = i;
+                if (action == readAction) lastRead = i;
                 if (action is Arcanum.Data.Scripts.ScrCatalogue.Action.AddEffect or Arcanum.Data.Scripts.ScrCatalogue.Action.RemoveEffect) firstChange = Math.Min(firstChange, i);
                 callEx |= action == Arcanum.Data.Scripts.ScrCatalogue.Action.CallScriptEx;
             }
-            return run.Effects.EffectChanges.Count > 0 && ratioReads > 0 && (callEx || firstChange < lastRatio);
+            return run.Effects.EffectChanges.Count > 0 && reads > 0 && (callEx || firstChange < lastRead);
         }
 
         // One effect action on the hero, checked as AddHeroEffect and RemoveHeroEffect check theirs (0x4E9F70, 0x4EA100); another object is
@@ -262,6 +268,15 @@ public sealed partial class GameSessionOwner
 
         // The hero's magick/tech aptitude under the effect list the runs left.
         private int Aptitude() => _steps.Count == 0 ? _owner.HeroAptitude() : _owner.TrialAptitude(_entries, _definitions);
+
+        /// <summary>
+        /// ARC-DEV-366 (GS1, GS3): the stat <paramref name="stat"/> of an object as get stat reads it (0x4B0490): the hero's, under the effect
+        /// list the move's earlier runs left; null for any other object and for a stat the session does not hold (GS3), which refuses the run.
+        /// </summary>
+        internal int? Stat(ScrObjectRef obj, int stat) =>
+            obj.Map != _map || obj.Code != SessionEventKinds.PlayerEntity ? null : HeroStat(stat);
+
+        private int? HeroStat(int stat) => _steps.Count == 0 ? _owner.QueryHeroScriptStat(stat) : _owner.TrialScriptStat(stat, _entries, _definitions);
 
         /// <summary>WE2: an item of the move and its owner's power ratio (0x461540): the hero's aptitude for the PC, 100 for an owner that is
         /// one of the move's items (not a critter); null for anything else.</summary>
@@ -336,8 +351,9 @@ public sealed partial class GameSessionOwner
     // flag outside the session's domain and a line the host cannot show do too. Host reads only.
     private GameSessionFailure ItemScriptEffects(ScrRunResult run, ISessionItemScriptHost scripts, List<SessionScriptMessage> messages)
     {
-        // A script file that exists but cannot be read is not the original's missing file: refused, not skipped.
-        if (run.Outcome == ScrOutcome.Refused || run.Stop == ScrStop.UnreadableScript) return GameSessionFailure.ItemScriptUnsupported;
+        // A script file that exists but cannot be read is not the original's missing file: refused, not skipped. ARC-DEV-366: a question the
+        // session cannot answer (get stat of a stat it does not hold, GS3) ends the dispatch as not modelled with nothing applied: refused too.
+        if (run.Outcome == ScrOutcome.Refused || run.Stop is ScrStop.UnreadableScript or ScrStop.NotModelled) return GameSessionFailure.ItemScriptUnsupported;
         var effects = run.Effects;
         if (effects.DestroyTrapObject is not null || effects.Dialog is not null || effects.StoryState is not null || effects.Calls.Count > 0)
             return GameSessionFailure.ItemScriptUnsupported;
@@ -365,12 +381,29 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
+    /// ARC-DEV-366: <see cref="QueryHeroScriptStat"/> with the hero's effect list replaced by <paramref name="entries"/> (a move's earlier runs
+    /// left it): the effective stat under them with the life's poison and crippled legs. The level and the alignment are the stored values
+    /// (effects on them are not read, GS3); null for a stat the session does not hold and without a hero.
+    /// </summary>
+    private int? TrialScriptStat(int stat, IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
+    {
+        if (_hero is null) return null;
+        if (stat is ScriptStatLevel or ScriptStatAlignment) return QueryHeroScriptStat(stat);
+        if (stat is not (>= 0 and <= 7 or ScriptStatAptitude) || QueryHeroLife() is not { } life) return null;
+        var trial = TrialHero();
+        foreach (var entry in entries) ApplyStats(trial.Stats, entry, definitions);
+        var state = life.Record.State;
+        var read = trial.Stats.Query(new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel), state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth)));
+        return read.Snapshot?.GetEffective(stat == ScriptStatAptitude ? CharacterStat.MagickTechAptitude : (CharacterStat)stat);
+    }
+
+    /// <summary>
     /// ARC-SCRIPT-013: the item script host with global flags read from the session; an unknown flag answers false and is recorded, and
     /// the session then refuses the move. ARC-SCRIPT-042: slots come from the move's earlier runs, then from the session's kept slots, then
     /// from the host; the identified test is the host's, the power ratio the session's, and the items are never being rewielded (the
     /// session has no rewield yet).
     /// </summary>
-    private sealed class SessionFlagReads(GameSessionOwner session, ISessionItemScriptHost host, ItemScriptRuns runs) : IScrHost, IScrItemQueries, IScrStoreQueries
+    private sealed class SessionFlagReads(GameSessionOwner session, ISessionItemScriptHost host, ItemScriptRuns runs) : IScrHost, IScrItemQueries, IScrStoreQueries, IScrStatQueries
     {
         internal bool UnknownFlag { get; private set; }
         /// <summary>An item question about an object the session and the host do not know.</summary>
@@ -458,5 +491,20 @@ public sealed partial class GameSessionOwner
         }
 
         public bool ItemsBeingRewielded() => false;
+
+        /// <summary>The stats (number, value as the host answered) the current run read through get stat, in order.</summary>
+        internal List<(int Stat, int? Value)> StatReads { get; } = [];
+
+        /// <summary>ARC-DEV-366 (GS1): the hero's stat under the move's effect changes so far; any other object, a stat the session does not hold
+        /// and a session without a hero answer null, which ends the run as not modelled and refuses the move.</summary>
+        public int? EffectiveStat(ScrObjectRef obj, int stat)
+        {
+            var value = runs.Stat(obj, stat);
+            if (value is not null) StatReads.Add((stat, value));
+            return value;
+        }
+
+        /// <summary>GS2: the dumb test's background rule, asked only for the hero (the one object <see cref="EffectiveStat"/> answers for).</summary>
+        public bool IsDumbByBackground(ScrObjectRef obj) => obj.Code == SessionEventKinds.PlayerEntity && session.QueryHeroDumbBackground();
     }
 }

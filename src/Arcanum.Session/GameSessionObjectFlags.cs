@@ -4,17 +4,18 @@ using Arcanum.Simulation.Magic;
 
 namespace Arcanum.Session;
 
-/// <summary>The two flag fields a spell's ObjFlag component writes on a critter (ARC-DEV-302): the spell flags (field 20, <c>obj_f_spell_flags</c>, 0x14) and the critter
-/// flags (field 218, <c>obj_f_critter_flags</c>, 0xDA).</summary>
-public enum SessionObjectFlagField { Spell, Critter }
+/// <summary>The flag fields a spell's ObjFlag component writes on a critter (ARC-DEV-302): the spell flags (field 20, <c>obj_f_spell_flags</c>, 0x14) and the critter
+/// flags (field 218, <c>obj_f_critter_flags</c>, 0xDA). ARC-DEV-358 (MA-1, schema 88): the object flags (field 19, <c>obj_f_flags</c>, 0x13), which the side effects of the spell flags
+/// (invisible, shrunk, water walking, stoned) and the don't-draw flag write.</summary>
+public enum SessionObjectFlagField { Spell, Critter, Object }
 
 /// <summary>
 /// ARC-DEV-302 (magic plan MT13 with the flag part of P1): what the session wrote on one critter's flag fields, as a change over the value its map data and prototype store. A bit of
 /// <see cref="SpellSet"/> is on whatever the data says, a bit of <see cref="SpellCleared"/> is off; the same for the critter flags. A bit is in at most one of each pair.
 /// </summary>
-public readonly record struct SessionObjectFlags(int SpellSet, int SpellCleared, int CritterSet, int CritterCleared)
+public readonly record struct SessionObjectFlags(int SpellSet, int SpellCleared, int CritterSet, int CritterCleared, int ObjectSet = 0, int ObjectCleared = 0)
 {
-    public bool IsEmpty => (SpellSet | SpellCleared | CritterSet | CritterCleared) == 0;
+    public bool IsEmpty => (SpellSet | SpellCleared | CritterSet | CritterCleared | ObjectSet | ObjectCleared) == 0;
 
     /// <summary>The spell flags now, over the value the data stores.</summary>
     public int Spell(int stored) => (stored & ~SpellCleared) | SpellSet;
@@ -22,8 +23,11 @@ public readonly record struct SessionObjectFlags(int SpellSet, int SpellCleared,
     /// <summary>The critter flags now, over the value the data stores.</summary>
     public int Critter(int stored) => (stored & ~CritterCleared) | CritterSet;
 
+    /// <summary>ARC-DEV-358: the object flags (<c>obj_f_flags</c>) now, over the value the data stores.</summary>
+    public int Object(int stored) => (stored & ~ObjectCleared) | ObjectSet;
+
     /// <summary>Whether the change is well formed: no bit both set and cleared in one field.</summary>
-    public bool IsValid => (SpellSet & SpellCleared) == 0 && (CritterSet & CritterCleared) == 0;
+    public bool IsValid => (SpellSet & SpellCleared) == 0 && (CritterSet & CritterCleared) == 0 && (ObjectSet & ObjectCleared) == 0;
 
     /// <summary>The change with <paramref name="mask"/> turned on or off in <paramref name="field"/>. With <paramref name="dataHas"/> (whether the data's value has the bits) a
     /// value equal to the data's keeps no change of those bits, so a hold that ended leaves nothing behind.</summary>
@@ -32,9 +36,12 @@ public readonly record struct SessionObjectFlags(int SpellSet, int SpellCleared,
         var neutral = dataHas == on;
         var set = neutral || !on ? 0 : mask;
         var cleared = neutral || on ? 0 : mask;
-        return field == SessionObjectFlagField.Spell
-            ? this with { SpellSet = (SpellSet & ~mask) | set, SpellCleared = (SpellCleared & ~mask) | cleared }
-            : this with { CritterSet = (CritterSet & ~mask) | set, CritterCleared = (CritterCleared & ~mask) | cleared };
+        return field switch
+        {
+            SessionObjectFlagField.Spell => this with { SpellSet = (SpellSet & ~mask) | set, SpellCleared = (SpellCleared & ~mask) | cleared },
+            SessionObjectFlagField.Object => this with { ObjectSet = (ObjectSet & ~mask) | set, ObjectCleared = (ObjectCleared & ~mask) | cleared },
+            _ => this with { CritterSet = (CritterSet & ~mask) | set, CritterCleared = (CritterCleared & ~mask) | cleared },
+        };
     }
 }
 

@@ -373,14 +373,15 @@ public static class SessionItemScripts
     /// the identified and rewielding conditions, add and remove effect, call-ex, the magick-tech adjustment, play script eye candy and play
     /// sound (82; the eye candy and the sound stay in the runs' effects for the host to show and play); ARC-DEV-152 adds the value kinds of the
     /// script stores (<see cref="ScrAdmissionSet.StoreValueKinds"/>: global variables, the hero's variables and flags, read and written as the
-    /// move's global flags are). A script outside it refuses the move.
+    /// move's global flags are); ARC-DEV-366 adds get stat (33, ledger GS1), which the session answers for the hero from the effect list the
+    /// move's earlier runs left (the tech books' insert script reads the holder's intelligence, XA9). A script outside it refuses the move.
     /// </summary>
     public static ScrAdmissionSet Admission { get; } = new("S14-item",
         ScrAdmissionSet.S6.Conditions.Concat([ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.ItemsBeingRewielded]),
         ScrAdmissionSet.S6.Actions.Where(action => action is not (ScrCatalogue.Action.Dialog or ScrCatalogue.Action.GetStoryState
             or ScrCatalogue.Action.SetStoryState or ScrCatalogue.Action.CallScriptIn or ScrCatalogue.Action.RemoveScriptCall))
             .Concat([ScrCatalogue.Action.AddEffect, ScrCatalogue.Action.RemoveEffect, ScrCatalogue.Action.CallScriptEx,
-                ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.PlaySound]),
+                ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.GetStat]),
         ScrAdmissionSet.S6.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds), ScrAdmissionSet.S6.FocusKinds);
 
     /// <summary>ARC-SCRIPT-042: how many item script slots a session keeps (<see cref="GameSessionLimits.PolicyMaxPcItems"/> items with

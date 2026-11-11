@@ -46,6 +46,7 @@ public static class KnockbackRules
     }
 
     /// <summary>The 10-pixel line from <paramref name="from"/> to <paramref name="destination"/> (the path node 0x4268F0 through 0x4201C0); null when the line is refused (more than 100 steps) or both are one tile.</summary>
+    [OriginalFunction(0x4268F0, OriginalFunctionScope.Partial)]
     public static ProjectileFlight? Line(CellCoord from, CellCoord destination) => ProjectileRules.Launch(from, destination);
 
     /// <summary>The line's size the collision damage reads: the steps of the line not yet taken, the blocked one counted (the step's index is not advanced when the block happens, GT61).</summary>
@@ -63,6 +64,7 @@ public static class KnockbackRules
     /// tile one step from it in the line's rotation <paramref name="rotation"/> (what the test 0x42FD70 looks at, GT61; at the map's edge nothing is tested), and when it answers a block the object stays on the tile it left.
     /// The slide ends in the very step that takes the line's last sample (<see cref="KnockbackTickKind.Exhausted"/>); a point off the map ends it too.
     /// </summary>
+    [OriginalFunction(0x42FA50, OriginalFunctionScope.Partial)]
     public static KnockbackTick Tick(ProjectileFlight flight, Func<CellCoord, bool> contains, int rotation, Func<CellCoord, CellCoord, KnockbackBlock> block)
     {
         ArgumentNullException.ThrowIfNull(flight);

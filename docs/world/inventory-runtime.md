@@ -176,6 +176,32 @@ ARC-SCRIPT-042, [wield events](equipment-runtime.md#wield-events-arc-script-042)
 [hero drop](#hero-drop-and-inventory-use-arc-ui-025)); the buy event (no barter);
 the scripts of a placed item's pickup (PI6); a container as recipient (putting items into containers is not modelled).
 
+## Tech books (ARC-DEV-366)
+
+The eight tech books (prototypes 15208 to 15215, one per discipline) carry the insert-item script 30017 and the remove-item script 30018
+([ledger XA9](../research/ledger/technology.md#aptitude-and-expertise-consumers-arc-res-114)). Their one effect is expertise in the book's discipline:
+while a book is in the hero's pack the discipline's expertise is higher by the hero's intelligence.
+
+- **The run.** The insertion (a pickup, a loot, a purchase, or a move of the book inside the grid) runs 30017: get stat (33) of the stat in
+  counter 3 (4, intelligence) of the triggerer into counter 0, then a loop that adds the effect of counter 1 (168 to 175, the item cause) as
+  often as counter 0 divided by counter 2 (1) says. The loop counts a local variable down, so counter 0 keeps the intelligence the insertion read.
+  The removal runs 30018, whose call-ex runs 30017 from line 6: it removes the effect counter 0 times. A move in the grid fires the removal and then
+  the insertion ([IW10](../research/ledger/items.md)), so it reads the intelligence again: a hero whose intelligence changed while carrying a book
+  has the count of the new intelligence after the move and the old one before it. The installed scripts run as they are (opt-in real-data test
+  `TechBookRealDataTests`); the effects 168 to 175 are read from `rules/effect.mes` (one change each: +1 expertise in the discipline).
+- **Host.** `SessionItemScripts.Admission` admits get stat. The session answers it for the hero only, under the effect list the move's earlier runs left
+  (`ItemScriptRuns.Stat`, `GameSessionOwner.QueryHeroScriptStat` when no run changed the list; the level and the alignment are the stored values,
+  GS3); another object, a stat the session does not hold and a session without a hero end the run as not modelled, which refuses the move
+  (`ItemScriptUnsupported`). A run that reads a stat after an effect change of the same run that moves the stat (the session applies a run's changes after it) is refused too;
+  the book reads before it adds. The viewer's `AreaInventoryHost.EffectRules` is the hero's effect tables (`AreaItemScriptHost.EffectDefinition`); until
+  ARC-DEV-366 the host knew no effect rule at all, so every item script that adds an effect was refused in the viewer.
+- **Room.** The original's effect list has no bound ([EF1](../research/ledger/character.md)); the session's bound for the hero is 1024 entries
+  (`SessionEffectLimits.MaxHeroEffects`; 64 before): eight books at the stat ceiling (100) need 800. The blessing and curse lists, the timed effects and an NPC's
+  list keep their 64.
+- **Not ready.** Taking a book out of the pack by a path that runs no removal (a drop, a sale, a gift, a theft, the placed-item pickup) is still refused
+  where it was ([above](#item-events-arc-script-041)), so a book's effects end only with the grid move above; where the books lie in the world is not
+  read ([RES-115](../research/technology-census-res-115.md)).
+
 ## Dialog seam
 
 `IDialogInventoryPort` (Scripting) takes the conversation's `GiveItemCommand`. When a host passes it as the last
@@ -726,7 +752,7 @@ recalculated here; a wear move, which keeps the weight, recalculates nothing in 
 
 | Step | Contract |
 | --- | --- |
-| Effect 158 | Every entry of effect 158 leaves the hero's list (whatever added it), then effect 158 with the item cause is added `CarryRules.EffectEntries(level)` times (one a level, eight at level 6), through the same trial as any effect. The rule comes from the host (`AttachEncumbranceEffect(definition)`, number 158, an admitted rule; never saved, attached again after a restore), else from the hero's saved entries of it; without either no entries are added. The session's list holds at most 64 entries, so a full list takes fewer; when the list's bounds refuse the additions, only the removals apply (no entries of effect 158 are left). |
+| Effect 158 | Every entry of effect 158 leaves the hero's list (whatever added it), then effect 158 with the item cause is added `CarryRules.EffectEntries(level)` times (one a level, eight at level 6), through the same trial as any effect. The rule comes from the host (`AttachEncumbranceEffect(definition)`, number 158, an admitted rule; never saved, attached again after a restore), else from the hero's saved entries of it; without either no entries are added. The session's list holds at most 1024 entries (`SessionEffectLimits.MaxHeroEffects`), so a full list takes fewer; when the list's bounds refuse the additions, only the removals apply (no entries of effect 158 are left). |
 | Message | `QueryHeroEncumbranceChange()` answers `SessionEncumbranceChange(Sequence, Level, Entries)` of the last change (sequence from 1, per owner; a restore shows none); the host shows line `11 + level` of `mes\critter.mes`, as the original shows it to the local PC (the original shows one per recalculation; the viewer shows the latest when several came between two frames). The original holds the message back while the inventory window drags an item; the viewer has no drag. |
 | Fatigue timer | A level with a drain interval (4: 600 s, 5: 60 s, 6: 5 s) sets the `life.hero.encumbrance` event unless one is pending (WEA2), see the [event queue](game-event-queue-runtime.md). |
 | Run | `SessionHeroCarry.CanRun`: only below level 4 (WE9); the fatigue test of a run stays the host's. |

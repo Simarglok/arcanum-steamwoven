@@ -68,10 +68,10 @@ internal static partial class Program
     // ARC-SCRIPT-041: the item events (get, drop, buy, insert-item, wield on and off, remove-item, transfer) and a copy of the
     // session's item set (SessionItemScripts.Admission: S6 without dialog, story state and deferred calls, and since ARC-SCRIPT-042 the
     // identified (47) and rewielding (50) conditions and add and remove effect (77, 78), call-ex (81), the magick-tech adjustment (91),
-    // play script eye candy (120) and play sound (82); focus triggerer, attachee, extra object and player).
+    // play script eye candy (120) and play sound (82), and since ARC-DEV-366 get stat (33); focus triggerer, attachee, extra object and player).
     private static readonly int[] CsItemPoints = [4, 5, 17, 21, 24, 25, 28, 32];
     private static readonly int[] CsItemConditions = [0, 3, 4, 5, 43, 18, 39, 47, 50];
-    private static readonly int[] CsItemActions = [0, 1, 2, 3, 5, 6, 8, 9, 10, 11, 12, 13, 14, 24, 100, 101, 77, 78, 81, 82, 91, 120];
+    private static readonly int[] CsItemActions = [0, 1, 2, 3, 5, 6, 8, 9, 10, 11, 12, 13, 14, 24, 100, 101, 77, 78, 81, 82, 91, 120, 33];
     private static readonly int[] CsItemFocusKinds = [0, 1, 12, 21];
 
     /// <summary>The first clause a run of <paramref name="number"/> from <paramref name="entry"/> reaches outside the item set (that
