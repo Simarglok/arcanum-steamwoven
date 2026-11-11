@@ -151,6 +151,7 @@ public partial class TerrainViewerApp
             var eye = caster.Log.Skip(from).Where(e => e.Kind == SpellCastEventKind.EyeCandyAdded && e.Object == entity).ToArray();
             Require(eye.Length == 1 && eye[0].Value == SpellEyeCandyRules.EntryIndex(ShieldOfProtectionSpell, SpellEyeCandyRules.Hit) && eye[0].Run == attempt.RunId && eye[0].Detail == 0,
                 $"a hit on the shielded critter logs the spell's hit eye candy: {string.Join(",", eye.Select(e => $"{e.Value}@{e.Run}"))}");
+            Require(ShownEyeCandyHost?.Shown().Any(o => o.Owner == entity && o.Eye.Entry == eye[0].Value) == true, "the eye candy host started the hit eye candy on the critter");
             GD.Print($"ARC-MAGIC-045 body-styles hit-eye-candy entry={eye[0].Value} run={eye[0].Run} overlays={ShownEyeCandyHost?.Shown().Count() ?? 0}");
             GD.Print("ARC-MAGIC-045 native-smoke body-styles PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = area.Snapshot.RuntimeMap, Width = plain.Destination.Width, Height = plain.Destination.Height }));
         }

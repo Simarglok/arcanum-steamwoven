@@ -198,7 +198,6 @@ public partial class TerrainCanvas
         _areaMoving = moving; _areaMovingKeys = (moving ?? []).Select(command => command.Identity).ToHashSet();
         _areaMovingStamp++; _areaView = null; QueueRedraw();
     }
-    /// <summary>ARC-WORLD-017: this map's companions that stand on another map, from the next submission (null = none).</summary>
     // ARC-MAGIC-045: the body styles the object flags a spell wrote ask for (don't-draw, invisible, translucent, shrunk), by body; the actor's own is applied to its marker.
     private IReadOnlyDictionary<AreaObjectKey, AreaBodyStyle>? _areaBodyStyles;
     private AreaBodyStyle? _actorBodyStyle;
@@ -220,6 +219,7 @@ public partial class TerrainCanvas
     private AreaBodyStyle? BodyStyleOf(AreaDrawCommand command) =>
         command.Identity is not { } key ? null : key == ActorSentinel ? _actorBodyStyle : _areaBodyStyles is { } styles && styles.TryGetValue(key, out var style) ? style : null;
 
+    /// <summary>ARC-WORLD-017: this map's companions that stand on another map, from the next submission (null = none).</summary>
     public void SetAreaAbsent(IReadOnlySet<AreaObjectKey>? absent)
     {
         if (absent is null or { Count: 0 } && _areaAbsent is null or { Count: 0 }) return;

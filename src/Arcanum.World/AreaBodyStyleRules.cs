@@ -48,7 +48,7 @@ public static class AreaBodyStyleRules
     public static int ConstantAlpha(int objectFlags, int blitFlags) =>
         (objectFlags & (Translucent | Invisible)) != 0 && (blitFlags & OwnBlitModes) == 0 ? TranslucentAlpha : 255;
 
-    /// <summary>The style that changes a body drawn as <paramref name="data"/> says (the data's own object flags) into the one <paramref name="now"/> asks for: what is left to apply to the commands the scene plan made.</summary>
+    /// <summary>(An un-shrink, a run clearing a 0x80 the data stored, is not built: the body stays half size.) The style that changes a body drawn as <paramref name="data"/> says (the data's own object flags) into the one <paramref name="now"/> asks for: what is left to apply to the commands the scene plan made.</summary>
     public static AreaBodyStyle Delta(AreaBodyStyle data, AreaBodyStyle now) =>
         new(now.Drawn, now.Shrunk && !data.Shrunk, now.Alpha);
 
