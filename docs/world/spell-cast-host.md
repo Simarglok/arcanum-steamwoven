@@ -756,11 +756,10 @@ code `SpellRunSystem.Dispel` (Simulation), `SessionSpellCasterDispel.cs`, the se
   its **target** or its **summoned list** (the objects its Summon components made, SUM7) holds it. A run matching two tests is told twice, as in the original. The endings are told after the outer action, as the destroyed
   objects' are (`_goneObjects`, the run rules cannot be re-entered from a component); they are events 1 ms later in the original as well, so only an ending of a never-processed BEGIN (freed at once there) comes a moment later
   here. The summoned-list test goes through the host port `ISpellRunHost.SummonedListHolds`, which this host answers from the objects its summon map holds for the run.
-- **The object's half (DP2).** For the hero and a critter this host knows: the stoned spell flag (0x10000) is cleared by a plain write (`Dispelled` with `DispelStonedCleared`: no reference count and no side effect, so
+- **The object's half (DP2).** For a portal or container (ARC-MAGIC-037, [below](#locks-and-holds-on-portals-and-containers-arc-magic-037)): the magically held bit is cleared by a plain write. For the hero and a critter this host knows: the stoned spell flag (0x10000) is cleared by a plain write (`Dispelled` with `DispelStonedCleared`: no reference count and no side effect, so
   the object flag stoned that Flesh to Stone's ObjFlag wrote stays, as in the original); a created critter the session holds with the summoned spell flag (0x4000) is destroyed (`Dispelled` with `DispelDestroyed`, then `SummonDestroyed`; the destroy waits until the runs' endings above are told, because the original reads the runs' summoned lists before 0x43CCA0, and the runs hear of it after that). A critter that is no created one of the session and holds 0x4000 logs `DispelDestroyNotReady` (no spell makes one before E1-e); the hero is never destroyed here (the original destroys a PC with the bit too). The stoned clear is not done for a created critter.
 - **`ObjectGone` fix (DP3).** The object-gone endings (0x459740) end the active runs **aimed at** the object (the run's target, +0xA0); the host read the run's other object (the attacker of an item's attack) before.
-- **Not ready.** The perma-polymorph undone with its Trait restore (critter flags 2 bit 0x400000: the session keeps no second critter flags field; MA-8), the magically held bit of a portal or container (the lock state and its
-  writer, Magelock: MA-6), the other object list of a run (+0x130; no host models it), summoned critters of the map's data, and the network packet. The host does not read the spell's resistance or reflection again: the
+- **Not ready.** The perma-polymorph undone with its Trait restore (critter flags 2 bit 0x400000: the session keeps no second critter flags field; MA-8), the other object list of a run (+0x130; no host models it), summoned critters of the map's data, and the network packet. The host does not read the spell's resistance or reflection again: the
   per-target stage ran before the component, as for every component.
 - **Census (MA-0).** Records 41 and 42 leave the not-ready list on both census targets (the real-data census table lost their rows).
 
@@ -836,3 +835,25 @@ Code `SessionSpellCasterMovement.cs` (the cast host), `ImmediatePathWalk` (Simul
 - **The relocation** is the host's, as the knockback is: the path request of the drop (`AreaDropMap.Path`, flags 0x10, the owner kind by the critter's side) gives a count of at most 8; the critter walks **that many tiles of the route and no further** (a far target leaves it on the eighth tile), its walks end, it is placed on the last
   tile, and the tile scripts run: every tile walked (tile script only, no jump point, no sector script) and the last tile once more with its jump point and sector script, as the placement's notification does. No route (equal tiles, a blocked or occupied destination) moves nothing.
 - **Not ready.** See MV rows: types 1 to 3, objects that are no critter, a created critter, the interrupt of goals other than walks, the scripts' order against the placement.
+
+## Locks and holds on portals and containers (ARC-MAGIC-037)
+
+Slice MA-6 of the [magic audit](../research/magic-audit-res-103.md), on the executable reads [LM1–LM6](../research/ledger/spell-runs.md#lock-flags-of-portals-and-containers-arc-magic-037) (0x454A10 tail re-read in the disassembly);
+code `SessionSpellCasterLocks.cs` (the cast host), `GameSessionOwner.WriteOpenableFlag` and `LockRules.WriteBit` (the lock state of [lock-state-runtime](lock-state-runtime.md)), `ISpellCastMap.Openable` and `AreaSpellCastMap`
+(the shown map's portals and containers), `AreaSpellCasting.Line`; tests `SessionSpellCasterLockTests`, `AreaSpellCastLockTests`. Records: Unlocking Cantrip (1), Magelock (75) and the Dispel of 41 and 42.
+
+- **The component** (`ObjFlag` on field 46 or 56, before the critter flags in the table) takes a portal or container the cast map names (`ISpellCastMap.Openable`: the session's lock identity, the T0 baseline and the row's lock
+  level, slot 37). A field of the other kind (46 on a container, 56 on a portal) and a critter target stay not ready.
+- **Every bit is a plain write** through the session's lock state (`WriteOpenableFlag`): one revision, **no Lock event** (LM1: the original writes the field, it does not call the lock function), so an object a spell unlocked stays
+  unlocked, and Magelock's held bit (set at BEGIN, cleared at END) is read by the open attempt, the door runs, the hover line and the target tests that already exist. There is no reference count: the first END of two Magelocks clears the bit.
+- **The clear of the locked bit** runs the unlock gate first (LM3: no parent or a parent that is no critter, or the per-pass fate flag, passes; a lock level of 19 or less passes; above it the run's captured parent aptitude must
+  reach the level). A refused gate leaves the lock and logs `UnlockRefused` (the value is the level) and the `Resisted` line with spell.mes 643 for the local player (0x45A520); a passed gate writes
+  (`OpenableFlagWritten`, value the bit, detail 0x1 on and 0x2 a container). **`LockGuardAlert` is logged in both cases** (LM2: 0x4AEE50 with loudness 0 and kind 2, on the object, by the run's parent) when the run has a parent.
+- **Dispel** clears the held bit of a portal or container by a plain write (LM5), with no gate and no line but `OpenableFlagWritten`.
+- **The fate flag** (`_spellAtMaximum`, 0x5E75A8): set by `UseSpellAtMaximum` and reset by `Collect`, the two calls that open each target pass.
+- **Target tests.** `AreaSpellCastMap` puts the session's lock flags (the baseline with the session's writes) into the portal or container target (`PortalFlags`, `ContainerFlags`), so the "locked", "not locked" and
+  "not magically held" tests of a spell's areas (TA8) see what an earlier spell or a key wrote. Magelock cannot target a held door; Unlocking Cantrip's area is the object, portal and container.
+- **Viewer lines** (the original tells none): "is unlocked", "is locked", "is held by magick", "is no longer held by magick"; the refusal is the "resists" line and message 643.
+- **Not ready.** The guard alert's witnesses (0x4AEE50; PL6 and the pick-locks witnesses are not built either), the screen refresh, and the stone-to-flesh pair of Flesh to Stone (48) for a portal that holds the stoned spell flag (the
+  session keeps written flags for the hero and mobile objects only; no installed record makes a stone portal; whether the installed maps store one was not checked).
+- **Census (MA-0).** Records 1 and 75 keep their `ObjFlag` rows: the census applies every component to a critter, and a lock flag of a portal or container is not ready on a critter by design; the slice's tests cover the objects.

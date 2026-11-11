@@ -1,5 +1,6 @@
 using Arcanum.Data.Magic;
 using Arcanum.Session;
+using Arcanum.Simulation.Locks;
 using Arcanum.Simulation.Magic;
 
 namespace Arcanum.World;
@@ -104,6 +105,10 @@ public static class AreaSpellCasting
             SpellCastEventKind.IdentifyItem => $"identify: {Who()} (the item description window is not built yet)",
             SpellCastEventKind.ItemIdentified => $"{Who()} is identified",
             SpellCastEventKind.ItemIdentifyNotSaved => "the identification was not saved",
+            // ARC-MAGIC-037 (MA-6): a lock flag a spell wrote on a portal or container (the original tells none of them; the lines are the viewer's); the refused unlock tells the "resisted" line of its own.
+            SpellCastEventKind.OpenableFlagWritten when entry.Value == LockRules.LockedBit => (entry.Detail & 0x1) != 0 ? $"{Who()} is locked" : $"{Who()} is unlocked",
+            SpellCastEventKind.OpenableFlagWritten when entry.Value == LockRules.MagicallyHeldBit => (entry.Detail & 0x1) != 0 ? $"{Who()} is held by magick" : $"{Who()} is no longer held by magick",
+            SpellCastEventKind.OpenableFlagNotSaved => "the lock change was not saved",
             _ => null,
         };
     }
