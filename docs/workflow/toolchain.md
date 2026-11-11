@@ -388,9 +388,11 @@ queue is the worst order for such a mix, and a project import waited for a windo
 - **Quick runs.** The project import of a new checkout and `./arcanum smoke self-test --headless` are `quick`: Godot
   without a window that ends in seconds, on its own checkout's project folder, so it runs beside the Godot slot (up to
   two at once) instead of waiting for it; a `window` or `headless` run of another checkout does not wait for a quick one,
-  and an export does. Two sessions in one checkout still never open its project folder at once: a quick run waits for a
-  running or earlier queued Godot or quick run of the same checkout, and a Godot run waits for a running quick run of its
-  checkout.
+  and an export does. Two sessions in one checkout still never open its project folder at once (the checkout is the folder
+  holding `.git` above the one the run was queued from): a quick run waits for a running or earlier queued Godot or quick
+  run of the same checkout and, held back so, takes no quick place from another checkout's run; a Godot run waits for a
+  running or earlier queued quick run of its checkout. `quick` is for a command that is itself one Godot run: a
+  `./arcanum run` inside a quick run is refused (it would wait for its own parent).
 - **Old wrappers.** Another checkout that has not merged ARC-DEV-390 yet queues tickets without an estimate and waits by
   number only; while any such ticket waits, every wrapper orders by number too (the old rule), so an old and a new waiter
   can never wait for each other, and the order by length returns when none is queued. An old wrapper ignores `quick` runs

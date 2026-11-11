@@ -234,6 +234,21 @@ def estimate_of(ticket: dict[str, Any]) -> float:
     return DEFAULT_ESTIMATE_SECONDS.get(ticket.get("kind", ""), DEFAULT_ESTIMATE_SECONDS["window"])
 
 
+def checkout_of(ticket: dict[str, Any]) -> str | None:
+    """The checkout a run belongs to (the folder holding `.git` above the folder it was queued from, else that folder):
+    two runs of one checkout share its Godot project folder and its `.godot` import. A ticket of an older wrapper has none."""
+    value = ticket.get("checkout")
+    return value if isinstance(value, str) and value else ticket.get("cwd")
+
+
+def _find_checkout(path: str) -> str:
+    here = Path(path)
+    for folder_ in (here, *here.parents):
+        if (folder_ / ".git").exists():
+            return str(folder_)
+    return path
+
+
 def _key(ticket: dict[str, Any]) -> tuple[int, float, int]:
     """The queue order (ARC-DEV-390): the owner's launches first, then by the arrival time plus ORDER_WEIGHT of the run's
     estimates, then by number. The key never changes while the ticket waits, so every waiter computes the same order;
@@ -264,11 +279,12 @@ def blocker(mine: dict[str, Any], live: Sequence[dict[str, Any]]) -> dict[str, A
     running = [ticket for ticket in others if ticket.get("startedAt")]
     order = order_of(live)
     ahead = [ticket for ticket in others if not ticket.get("startedAt") and order(ticket) < order(mine)]
+    mine_checkout = checkout_of(mine)
     if mine["kind"] in GODOT_KINDS:
-        # a quick run of the same checkout (its project folder) holds the slot's place while it runs: a window run there
-        # would open the project in the middle of its import
-        for ticket in running:
-            if ticket["kind"] == "quick" and mine.get("cwd") is not None and ticket.get("cwd") == mine["cwd"]:
+        # a quick run of the same checkout (its project folder) goes before a Godot run that is later in the order, and
+        # while it runs holds that checkout: a window run there would open the project in the middle of its import
+        for ticket in running + ahead:
+            if ticket["kind"] == "quick" and mine_checkout is not None and checkout_of(ticket) == mine_checkout:
                 return ticket
         for ticket in running + ahead:
             if ticket["kind"] in GODOT_KINDS:
@@ -286,13 +302,18 @@ def blocker(mine: dict[str, Any], live: Sequence[dict[str, Any]]) -> dict[str, A
             waits_for = blocker(ticket, live)
             if waits_for is None or waits_for["kind"] in SIDE_KINDS:
                 return ticket
-    if mine["kind"] == "quick" and mine.get("cwd") is not None:
+    if mine["kind"] == "quick" and mine_checkout is not None:
         # the same project folder is never imported or run twice at once: wait for a Godot or quick run of this checkout
         for ticket in running + ahead:
-            if ticket["kind"] in GODOT_KINDS | {"quick"} and ticket.get("cwd") == mine["cwd"]:
+            if ticket["kind"] in GODOT_KINDS | {"quick"} and checkout_of(ticket) == mine_checkout:
                 return ticket
     slots = DOTNET_SLOTS if mine["kind"] == "dotnet" else QUICK_SLOTS
     holders = [ticket for ticket in running + ahead if ticket["kind"] == mine["kind"]]
+    if mine["kind"] == "quick":
+        # a quick run held back by a run of its own checkout fills no place (it does not start before that run ends): it
+        # must not keep another checkout's import waiting behind a long window run
+        busy = {checkout_of(ticket) for ticket in running if ticket["kind"] in GODOT_KINDS | {"quick"}} - {None}
+        holders = [ticket for ticket in holders if ticket.get("startedAt") or checkout_of(ticket) not in busy]
     if len(holders) >= slots:
         return holders[len(holders) - slots]  # the one whose end frees the place this run takes
     return None
@@ -344,7 +365,8 @@ def _enqueue(kind: str, label: str, command: Sequence[str], priority: int, timeo
         hidden_counter.write_text(f"{seq}\n")
         os.replace(hidden_counter, counter)
         ticket = {"schema": SCHEMA, "seq": seq, "kind": kind, "label": label[:MAX_LABEL], "priority": priority,
-                  "command": " ".join(command)[:MAX_COMMAND], "cwd": os.getcwd(), "pid": os.getpid(),
+                  "command": " ".join(command)[:MAX_COMMAND], "cwd": os.getcwd(), "checkout": _find_checkout(os.getcwd()),
+                  "pid": os.getpid(),
                   "pidStart": _process_start(os.getpid()), "timeoutMinutes": timeout, "estimateSeconds": estimate,
                   "enqueuedAt": time.time(),
                   "startedAt": None, "childPid": None, "childStart": None}

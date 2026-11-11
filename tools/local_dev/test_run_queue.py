@@ -26,7 +26,7 @@ def ticket(seq: int, kind: str, started: bool = False, priority: int = run_queue
     if estimate is not None:
         result["estimateSeconds"] = estimate
     if cwd is not None:
-        result["cwd"] = cwd
+        result["cwd"] = cwd  # a ticket of the tests has no `.git` above its folder: the checkout is the folder
     return result
 
 
@@ -171,6 +171,29 @@ class QuickKindTests(unittest.TestCase):
         self.assertIsNone(run_queue.blocker(ticket(6, "quick", cwd="/b"), [window_running]))
         self.assertEqual(run_queue.blocker(ticket(7, "window", cwd="/a"), [first])["seq"], 1)  # the window waits for that import
         self.assertIsNone(run_queue.blocker(ticket(8, "window", cwd="/b"), [first]))
+
+    def test_a_quick_run_held_back_by_its_own_checkout_does_not_hold_up_another_checkouts(self) -> None:
+        window = ticket(1, "window", started=True, cwd="/a")
+        waiting_a1, waiting_a2 = ticket(2, "quick", cwd="/a"), ticket(3, "quick", cwd="/a")
+        other = ticket(4, "quick", cwd="/b")
+        live = [window, waiting_a1, waiting_a2, other]
+        self.assertEqual(run_queue.blocker(waiting_a2, live)["seq"], 1)
+        self.assertIsNone(run_queue.blocker(other, live))  # /b's import starts at once, behind nothing of /a's
+        # the checkout's own quick run goes before a later Godot run of that checkout, so a chain of windows cannot hold it back
+        later_window = ticket(5, "window", cwd="/a")
+        self.assertEqual(run_queue.blocker(later_window, [waiting_a1, later_window])["seq"], 2)
+        self.assertIsNone(run_queue.blocker(ticket(6, "window", cwd="/b"), [waiting_a1]))
+
+    def test_the_checkout_is_the_folder_with_git_above_the_queued_one(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            (root / "repo" / "tools" / "x").mkdir(parents=True)
+            (root / "repo" / ".git").write_text("gitdir: elsewhere\n")  # a worktree has a .git file
+            (root / "plain").mkdir()
+            self.assertEqual(run_queue._find_checkout(str(root / "repo" / "tools" / "x")), str(root / "repo"))
+            self.assertEqual(run_queue._find_checkout(str(root / "plain")), str(root / "plain"))
+        self.assertEqual(run_queue.checkout_of({"checkout": "/r", "cwd": "/r/x"}), "/r")
+        self.assertEqual(run_queue.checkout_of({"cwd": "/r/x"}), "/r/x")  # a ticket of an older wrapper
 
     def test_the_default_limit_of_a_quick_run_is_the_headless_runs(self) -> None:
         self.assertEqual(run_queue.DEFAULT_TIMEOUT_MINUTES["quick"], run_queue.DEFAULT_TIMEOUT_MINUTES["headless"])
@@ -328,12 +351,21 @@ class QueueRunTests(unittest.TestCase):
     def test_a_quick_run_starts_while_a_godot_run_holds_the_slot(self) -> None:
         other = self.root / "other-checkout"  # a quick run of the same checkout waits for its Godot run (same project folder)
         other.mkdir()
-        self.queued("window", "w", 2.0)
+        self.queued("window", "w", 5.0)
         self.until(lambda: self.log.exists())
         self.queued("quick", "q", 0.2, cwd=other)
         self.finish()
         found = self.events()
         self.assertLess(found["end q"], found["end w"])
+
+    def test_a_huge_estimate_is_capped_so_a_run_cannot_put_itself_last_for_ever(self) -> None:
+        self.queued("window", "running", 3.0)
+        self.until(lambda: self.log.exists())
+        self.queued("window", "huge", 0.1, estimate=1e12)
+        self.until(lambda: len(self.live()) == 2)
+        waiting = next(item for item in self.live() if item["label"] == "huge")
+        self.assertEqual(waiting["estimateSeconds"], run_queue.MAX_ESTIMATE_SECONDS)
+        self.finish()
 
     def test_an_estimate_must_not_be_negative(self) -> None:
         with self.assertRaisesRegex(ValueError, "--estimate"):
