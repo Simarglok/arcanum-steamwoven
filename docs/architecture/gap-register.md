@@ -1,7 +1,7 @@
 # Gap register: Steamwoven against the original's engine model
 
 Status: **Research**, work item ARC-RES-086 (2026-11-04), slice G1 of the
-[architecture audit](../research/architecture-audit-plan.md). Docs-only: no code changes
+[architecture audit](#7-spines-sp1-sp9-and-concept-documents-k1-k16). Docs-only: no code changes
 and no checks run. Reviewed after the audit by ARC-RES-088 in the [gap review](gap-review.md) (narrow, decision and
 intended rows). This document compares; the model Steamwoven moves to, the owner's
 choices and the migration order are in the [target model](target-model.md).
@@ -100,7 +100,7 @@ FR-SOCIAL ([004](../requirements/story-social-ai.md#fr-social-004),
 Each row names the original rows and Steamwoven rows it rests on, what goes wrong, the target
 element of the [target model](target-model.md) that closes it, and where the work goes: a
 migration slice (MIG) of the target model, a domain sweep (D1–D9) or a concept document
-(K1–K16) of the [audit plan](../research/architecture-audit-plan.md).
+(K1–K16) of the [audit plan](#7-spines-sp1-sp9-and-concept-documents-k1-k16).
 
 ### SP1 Object identity and fields
 
@@ -289,3 +289,9 @@ is implemented).
 K13 to K16 are new concept documents: the target model changes these parts enough that each
 needs its own design before its migration slice, as the plan's last paragraph of phase 4
 allows.
+
+## 7. Spines SP1-SP9 and concept documents K1-K16
+
+The audit plan (ARC-RES-077, executed) cut the engine into nine spines, named in the register's groups: SP1 object model and identity, SP2 residency and lifecycle, SP3 persistence, SP4 time and the frame, SP5 actions and goals, SP6 script attachment and state, SP7 relations between objects, SP8 authority and change routing, SP9 input and interface modes.
+
+The concept documents (K1-K16) the register's "Work" column names: K1 living world beyond the window (sector streaming and unloaded sectors), K2 generated main-map sectors in play, K3 NPC daily routine, standpoints, beds, doors and portals, K4 monster generators, respawn, body decay and random encounters, K5 summons and teleport effects, K6 traps and placed devices, K7 sleep and rest, K8 transition effects and time on transitions, K9 kill log, injury history and the companions screen, K10 newspapers and gambling, K11 network readiness, K12 movies, slides, endings and credits, K13 object directory and field store (MIG6), K14 one goal table for every animated object (MIG13), K15 clocks and the frame step (MIG12), K16 interface mode stack (MIG16). K10-K12 are for after the alpha.

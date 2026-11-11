@@ -1,4 +1,4 @@
-"""Outline tracing of 1x coverage masks into 4x coverage frames (ARC-DEV-355; method of docs/research/font-vectorization.md, section 3).
+"""Outline tracing of 1x coverage masks into 4x coverage frames (ARC-DEV-355; method in docs/workflow/hd-font.md).
 
 Needs numpy, scipy, Pillow and potracer (tools/hd_font/requirements.lock).  Deterministic: the same masks give the same bytes.
 
@@ -166,7 +166,7 @@ def trace_mask(mask: np.ndarray) -> GlyphTrace:
 
 def frame_pixels(coverage: np.ndarray) -> np.ndarray:
     """(h, w, 4) uint8: red = green = blue = coverage x 255, alpha 255 on every ink pixel and 0 elsewhere (the HD glyph frame
-    rule of docs/research/font-vectorization.md, option A)."""
+    rule of the research findings in docs/workflow/hd-font.md)."""
     value = np.rint(np.clip(coverage, 0.0, 1.0) * 255.0).astype(np.uint8)
     alpha = np.where(value > 0, 255, 0).astype(np.uint8)
     return np.stack([value, value, value, alpha], axis=-1)

@@ -19,7 +19,7 @@ The [integrated WORLD viewer](../rendering/terrain-viewer.md#integrated-world-di
 
 ## Authority and evidence
 
-The [dependency roadmap](roadmap.md) explains sequencing without creating tasks. Work starts only from explicit owner requests ([task workflow](../workflow/tasks.md)). A component may be implemented while original-runtime parity, human visual inspection or physical device behavior remains unverified.
+The [missing systems plan](missing-systems-plan.md) explains sequencing without creating tasks. Work starts only from explicit owner requests ([task workflow](../workflow/tasks.md)). A component may be implemented while original-runtime parity, human visual inspection or physical device behavior remains unverified.
 
 ## Considered and deferred alternatives
 

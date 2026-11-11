@@ -125,7 +125,7 @@ Nothing else under `artifacts/packages` is written by `daily` itself, so the bug
   (the app and its window), and a custom user folder "Arcanum Steamwoven Game", so `user://` is
   `~/Library/Application Support/Arcanum Steamwoven Game/` on macOS and `%APPDATA%\Arcanum Steamwoven Game\` on Windows.
   It is not the developer launcher's home `~/Library/Application Support/Arcanum Steamwoven`
-  ([launcher research](../research/launcher-settings.md)), and source runs and the endpoint exports keep Godot's
+  ([launcher research](../project/status/session.md)), and source runs and the endpoint exports keep Godot's
   default `app_userdata/Arcanum Terrain Viewer`.
 - **Build line**: the package step sets the MSBuild properties `ArcanumPackageCommit` and `ArcanumPackageDate` (as
   environment variables); the viewer project turns them into assembly metadata, and `ViewerBuildInfo` shows
@@ -139,6 +139,7 @@ Nothing else under `artifacts/packages` is written by `daily` itself, so the bug
   synthetic tests only), the main menu, the SmartScreen steps of the player instruction, a new game reaching the map and a
   save and load are still to be confirmed by the owner (map files are read on Windows since ARC-DEV-049, tested on macOS
   only); the Windows build is not signed (a free signature would need a free certificate route, none chosen).
+- Bundling `innoextract` into the package, so the player needs no separate install (the "A+" option of the GOG installer research, ARC-RES-087), is not built.
 - An app icon of the project's own (Godot's default icon is used), notarization (needs a paid Apple Developer ID),
   automatic updates.
 - Starting a downloaded (quarantined) copy was not tried: the instruction's "Open Anyway" steps follow Apple's

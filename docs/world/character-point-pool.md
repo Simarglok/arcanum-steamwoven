@@ -1,7 +1,7 @@
 # Character point pool (ARC-WORLD-052)
 
 Status: **Implemented bounded component**, wired by the AREA viewer's character sheet: the skills page (ARC-UI-009), the stats page (ARC-UI-034), the technology page (ARC-UI-076) and the spell page (ARC-MAGIC-008). Work item ARC-WORLD-052 (2026-10-21), task S5 of the
-[skills plan](../research/skills-plan.md) (rest of K1). The one spend-a-point / refund-a-point path over the hero's unspent
+skills plan (rest of K1). The one spend-a-point / refund-a-point path over the hero's unspent
 character points that the character editor uses, for primary stats, hit and fatigue points, basic and tech skills, and,
 through a lane each, spell ranks (the magic lane's MT3) and tech degrees (the technology lane's TECH-2). Godot-free: pure
 rules in `Arcanum.Simulation.Character` and the editor's floor in `Arcanum.Session`. No snapshot schema change. The AREA viewer's

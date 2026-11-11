@@ -65,7 +65,7 @@ NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 RESERVED = frozenset({"PATH", "DOTNET_ROOT", "HOME", "GODOT", "__GODOT_SHELL_ENV_SET"})  # the canonical start's own
 BATTERY_MINUTES = 60.0  # a whole map battery (no stage list) runs about 2 minutes; the queue's window default is 30
 # ARC-DEV-390: the seconds each step declares to the launch queue, which puts a short run ahead of a long one that arrived a
-# little before it (run_queue.ORDER_WEIGHT). Measured for docs/research/smoke-speed-diagnosis-2026-11.md: a run with no
+# little before it (run_queue.ORDER_WEIGHT). Measured for the smoke speed diagnosis (ARC-DEV-384, deleted; see docs/workflow/toolchain.md): a run with no
 # stage worth naming is its map load (about 20 s with start and exit) plus 0-2 s per cheap stage; the whole map battery
 # 25 s (declared with room for a loaded Mac); the self-test 24 s with a window and 12 s headless; the Crash Site smoke 98 s;
 # a project import 3 s warm; a viewer build 12 s warm, 45 s cold. The stages that stand out add their own time: `walk`
@@ -138,7 +138,7 @@ SKIP_LINE = re.compile(r"native-smoke .* (NONE|SKIP|NO-EXIT|SAME-MAP-ONLY)\b")
 # mode at launch, so only stages with the same configuration can share a process. The table (read by `--stages` to group the
 # stages into the fewest processes, and to refuse a stage given the wrong configuration before anything waits for the
 # queue) is the one place that says "this stage runs on this configuration"; the evidence is the stage's own NONE/SKIP
-# lines and the smoke speed diagnosis (docs/research/smoke-speed-diagnosis-2026-11.md, section 5). The hero is HERO_STAGES.
+# lines and the smoke speed diagnosis (ARC-DEV-384, deleted; the result is in docs/workflow/toolchain.md). The hero is HERO_STAGES.
 TOWN = "1409,1314"  # the town sector
 WILD = "1384,239"  # the generated wilderness sector (`plants`)
 SHRINE = "1452,1291"  # Virgil's altar sector (`altar`, `npc-tile`)

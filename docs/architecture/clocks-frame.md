@@ -1,7 +1,7 @@
 # Clocks and the frame step in the session (K15, MIG12, TM6, GR20–GR22)
 
 Status: **MIG12 finished (S1–S9 done). S2 (ARC-DEV-121) landed the pure clock rules, S3 (ARC-DEV-122) the session owning the three clocks (schema 70), S4 (ARC-DEV-123) the frame step and the event pump in `Arcanum.World`, S5 (ARC-DEV-124) the AI host as a participant and the NPC change-of-place ping as the `placePing`, S6 (ARC-DEV-125) the viewer's world time on the frame clocks, S7 (ARC-DEV-126) the pause by GQ3 A and the frozen frame, S8 (ARC-DEV-127) the real-time domain, S9 (ARC-DEV-128) the re-check of the time-dependent bugs and the closing of the status rows.** This page was written as slice S1 of MIG12 (ARC-DEV-120, docs-only, no checks run). Concept document K15 of the
-[architecture audit](../research/architecture-audit-plan.md) and design of MIG12 ([target model](target-model.md#migration-order), element TM6,
+[architecture audit](gap-register.md) and design of MIG12 ([target model](target-model.md#migration-order), element TM6,
 decision GQ3 chosen A). Behaviour of the original stays the rows TL1–TL46 of the [original time loop](original-time-loop.md) (read from the
 executable); this page fixes how the session represents them, in which assembly each part lives, the order of the code slices and what each must
 show. It follows the style of [residency](residency.md), [change of place](change-of-place.md) and [interface modes](interface-modes.md).

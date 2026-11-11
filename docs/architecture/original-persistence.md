@@ -1,7 +1,7 @@
 # The original's persistence: save layout, global and per-map state, load order and fix-ups
 
 Status: **Research**, work item ARC-RES-081 (2026-11-03), slice R3 of the
-[architecture audit](../research/architecture-audit-plan.md) (spine SP3). Docs-only: no
+[architecture audit](gap-register.md) (spine SP3). Docs-only: no
 code changes and no checks run. It is a reference model of the original game, not a
 comparison: the "Steamwoven today" column notes only the obvious differences; the full
 comparison, its classes and the target model are slice G1's.

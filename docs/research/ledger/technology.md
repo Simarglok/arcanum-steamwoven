@@ -310,7 +310,7 @@ slice chooses its rectangle).
 ## Technology item scripts and generic item flags (ARC-RES-112)
 
 Source: the [technology audit](../technology-audit-res-104.md#8-the-reads-this-audit-needs-mac-docs-only-each-ends-in-ledger-rows) read T-r1 and its
-[result note](../technology-item-scripts-res-112.md); earlier rows reused: [OH10, OH17](ui-audio.md), [SP12, SP14, AG15](npc-ai.md), [TW1–TW7](combat.md), the
+result note (ARC-RES-112, deleted); earlier rows reused: [OH10, OH17](ui-audio.md), [SP12, SP14, AG15](npc-ai.md), [TW1–TW7](combat.md), the
 script event catalogue of the [dispatcher research](../scr-event-dispatcher.md#2-event-catalogue-s) and the follow and attack actions of the
 [script surface](../npc-ai-script-surface.md). Read on 2026-11-11 by one reader (F1) and, for TI1 to TI5 and TI8's action, re-read blind by a second reader that saw only the questions (agreeing; see the note's section 6), in the retail 1.0.7.4 executable (SHA-256 `9bd80511…8d52`, re-hashed),
 about 300 direct branches, all inside `.text`; data from the project's prototype cache, the schematic catalogue and the installed scripts (numbers only).
@@ -363,4 +363,4 @@ did find is on the T-m side: the tech books' insert script 30017 uses get stat (
 real book). Admitting the action is not enough: the item-script reads host (`SessionFlagReads`) has no stat query (`IScrStatQueries`), so the dispatcher would refuse the script at build time; the host must also answer the effect
 definitions 168 to 175; the loop adds one effect entry per intelligence point against the hero list's limit (`SessionEffectLimits.MaxHeroEffects`, 64); and barter refuses an item with an insert-item script
 outright (`GameSessionBarter`, `GameSessionOwner`), so the books would stay unbuyable. T-m is therefore needed and gains the attach points 21 and 28 of the eight books beside the points 24, 25, 7 and 8 of T-r1 (the books' part, T-m3, is done by ARC-DEV-366, XA11: get stat is admitted and answered, the effect tables reach the viewer's item host and the hero's list holds 1024 entries; the barter refusals named here concern a gold pile's insert-item script, not an item's: a book bought from a merchant goes through the take's item events like any pickup, because the viewer's barter passes the script host); the
-[placement census](../technology-census-res-115.md) (ARC-RES-115, T-r4) does not place the books, so where they lie is still open. None of these rows is a bug of the original: no switch.
+[placement census](../technology-evidence.md) (ARC-RES-115, T-r4) does not place the books, so where they lie is still open. None of these rows is a bug of the original: no switch.

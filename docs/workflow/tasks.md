@@ -10,7 +10,7 @@ contract written from it, defines the code and title, context, goal, allowed
 scope, sources and provenance, dependencies, acceptance criteria, checks,
 documentation deliverables and publication authority. Record base, head,
 workspace and reviewer findings at handoff. Repository documents govern implementation;
-Obsidian holds research and discussions; the [roadmap](../project/roadmap.md) and
+Obsidian holds research and discussions; the [missing systems plan](../project/missing-systems-plan.md) and
 [vision](../project/vision.md) explain sequencing. None of them creates,
 prioritizes or dispatches work. Do not queue the whole product vision or start
 tasks as a side effect of project setup.
@@ -251,7 +251,11 @@ ready only when it follows these rules.
    ... `AC8` (at most eight). A human, physical-device or native-GUI observation
    is not an acceptance criterion of an agent work item: it goes into the
    separate owner-validation work item named in `Human-Gates`, which never blocks
-   merge. Saying that there is *no* such gate is fine.
+   merge. Saying that there is *no* such gate is fine. Independent headless, Data and
+   research work may proceed while graphical validation is unavailable where its
+   accepted contract permits; GUI, export and device gates stay required for scopes
+   that need them. A locked Mac is not proof of failure or completion and does not
+   justify substituting unrelated green checks.
 3. **Every proof is finite.** "Exhaustive", "certificate", "worst-case",
    "parity", "all possible" and similar are allowed only with an explicit bound on
    the same line: a number, a list of cases, a limit or a reference.
