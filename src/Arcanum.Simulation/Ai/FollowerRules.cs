@@ -104,6 +104,7 @@ public static class FollowerRules
     /// The taunt's kind for the end of one attack (0x4B6B90): with the setting on, a PC attacker, a struck object outside the PC's
     /// party and a hit, kind 0 for a critical hit on the aimed object, kind 1 for another object under record flag 0x8; else none.
     /// </summary>
+    [OriginalFunction(0x4B6B90, OriginalFunctionScope.Partial)]
     public static TauntKind? TauntKindOf(TauntFacts facts)
     {
         ArgumentNullException.ThrowIfNull(facts);
