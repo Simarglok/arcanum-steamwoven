@@ -38,6 +38,7 @@ public sealed partial class SessionSpellCaster
         [SpellComponentType.Terminate] = static (_, _, _, _) => TerminateComponent(),
         [SpellComponentType.ChargeNBranch] = static (c, run, component, _) => c.ChargeBranchComponent(run, component),
         [SpellComponentType.TestNBranch] = static (c, _, component, target) => c.TestBranchComponent(component, target),
+        [SpellComponentType.Use] = static (c, run, _, target) => c.UseComponent(run, target),
         [SpellComponentType.Effect] = static (c, run, component, target) => c.EffectComponent(run, component, target) ? SpellComponentOutcome.None : null,
     };
 
