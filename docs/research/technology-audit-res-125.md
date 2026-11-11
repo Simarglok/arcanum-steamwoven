@@ -57,8 +57,8 @@ A flag counts as read when a symbol outside the data tables uses it; behaviour a
 | Flee (148, 165), mind control (142, 194), undead (194) | yes (morale rules, attack resolver, AI host; `SessionSpellCasterSocial` is their writer) | MA-4 |
 | Magnetic inversion (182, 187) | yes (attack rules, equipment choice, skill check) | |
 | Enshroud (167) | yes (AI host, hostility rules) | |
-| **Drunk (172, 181)** | **no** | who reads the bit in the original is not on file |
-| **Shielded (209)** | **no** (the `shielded` in `HostilityRules` is the accidental-hit test, not the spell bit) | the resistance half of Shield of Protection came with MA-2; the bit's own consumer is unread |
+| **Drunk (172, 181)** | **no, and none in the original** | read in ARC-RES-126: no code of the executable and no installed record reads the bit ([SFR2](ledger/spell-runs.md#readers-of-the-drunk-and-shielded-spell-flags-arc-res-126)); nothing to build |
+| **Shielded (209)** | **no** (the `shielded` in `HostilityRules` is the accidental-hit test, not the spell bit) | read in ARC-RES-126: the only reader is the hit effect 0x459A30, a hit eye candy (SFR3); record 83 lists it in `Disallowed_TSF:`, which the session reads (SFR4) |
 | Don't-draw (178, 183, 200, 217) | written; `AreaAiHost` and traps read it | the viewer draw does not (MA-1 limit) |
 | Permanent polymorph (222) | **INERT**: needs the Trait component | MA-8 |
 
@@ -77,15 +77,15 @@ Labels are planning labels, not task codes (the coordinator hands codes out). Si
 | 1 | **T-m2** powered shield | The item-event set admits actions 54, 125 and 135; a deferred 15-second call checks the wear and uses one power-cell unit, saved with the game | Electric degree 3 shield (cannot be worn today) | S to M | the game event queue's script call kind ([game-event-queue](game-event-queue.md)), catalogue entry for action 135 | directory |
 | 2 | **T-m1** creature items | HIT and MISS item events at a thrown item's landing, actions 40, 21 and 36, the created critter as a follower or ally, viewer smoke step | Mechanical degrees 6 and 7 products | M to L | E1-c (done) | directory and viewer |
 | 3 | **E6-b** placed trap devices | The device use stops answering NOT READY: placing on an object or a tile, the device spent, marker 4047 or 4049, the delayed run after 88 000 ms (TP3), alarm for record 176, refusals IA13 | Mechanical degrees 1 and 5; the timed bombs: items 15154 (record 176) and 15193 (record 220) | M | T-g (done), E1-b (done) | directory |
-| 4 | **R-1** flag-reader read | Mac read: who reads the drunk bit and the shielded spell bit in the exe, and what they do; ledger rows only | 172, 181, 209 | S | none | none |
-| 5 | **E4-a2** drunk, shielded, don't-draw draw | The readers R-1 finds; the viewer's draw of hidden, shrunk and translucent critters and of don't-draw objects | 172, 181, 209, 178, 183, 200, 217 | M | R-1 | spell-cast and viewer |
+| 4 | **R-1** flag-reader read (**done, ARC-RES-126**) | Mac read: who reads the drunk bit and the shielded spell bit in the exe, and what they do; ledger rows only (SFR1 to SFR5) | 172, 181, 209 | S | none | none |
+| 5 | **E4-a2** shielded hit eye candy and don't-draw draw | R-1 found one reader: the hit effect 0x459A30 plays the run's hit eye candy for shielded (and magnetic inversion) at a hit on a PC or NPC (the entangled branch is built); drunk has none. Plus the viewer's draw of hidden, shrunk and translucent critters and of don't-draw objects | 172, 181, 209, 178, 183, 200, 217 | M | R-1 | spell-cast and viewer |
 | 6 | **E4-c** control components | ChargeNBranch, TestNBranch, Terminate, Use, NoOp with the cell branch and the TC1 switch (cell weapon spends one cell; maintained armour pays a cell a tick) | 147, 168, 184, 187, 188 | L (two slices) | none | spell-cast |
 | 7 | **E4-e** nested Cast | Nested Cast component | 203 | S to M | E4-c | spell-cast |
 | 8 | **MA-8** Trait and polymorph (E4-f) | Trait: art and palette, drop what the new art cannot wield, restore | 222 (and the Body spells of the magic queue) | L | MA-1, MA-2 (done) | render and equipment |
 | 9 | **E1-e** creature Summon with AIRedirect | Prototype or list pick, summoned flags, faction; AIRedirect (E4-b remainder) | 183 and 11 summon spells | L | E1-c (done), MA-4 (done) | Summon file |
 | 10 | **T-s** smoke extension | Section 5 gaps in `tech-craft` or a sibling stage | n/a | M | none (best after 1 to 3, which add steps to it) | smoke |
 | 11 | **R-2** record 214 | **Done, ARC-RES-127 (2026-11-11):** the original's effect list has no bound (ledger [EF11](ledger/character.md#durable-effects-arc-world-029)), so the NPC list was raised from 64 to 1024 entries and record 214 now RUNS; the census row is gone. Was: the record adds effect 334 eighty times; the effect list holds 64 and an NPC's write is refused (the census row says HERO). Read what the original does at overflow, then decide | 214 | S | none | read |
-| 12 | **T-c** creation editor degree buttons | Check that the character-creation editor offers the degree buttons and keeps the TC10 floor; fix or close the "not confirmed" note | n/a | S | none | UI |
+| 12 | **T-c** creation editor degree buttons | Check that the character-creation editor offers the degree buttons and keeps the TC10 floor; fix or close the "not confirmed" note. **Done, ARC-MAGIC-043:** the creation editor had no degree buttons (CM8 shows the page in the original); a tech page now spends and refunds through the technology lane with the snapshot floor and replays at Accept | n/a | S | none | UI |
 | 13 | **E1-f** AI summoning | Magic queue's last slice; touches no technology record | n/a | M | E1-e | AI host |
 
 Waves (a slice starts when its needs are done): **wave 0, now and in parallel:** T-m2, T-m1, E6-b (three different files: event queue and item events, created critters, trap code), R-1 and R-2 (reads) and T-c;

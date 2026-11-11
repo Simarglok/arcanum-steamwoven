@@ -247,6 +247,15 @@ public partial class TerrainViewerApp
             _editorPanel!.StatMinusForSelfTest(3).EmitSignal(BaseButton.SignalName.Pressed);
             Require(_editorPanel!.StatsForSelfTest is { UnspentPoints: 2 } && _editorPanel!.SkillMessageForSelfTest.StartsWith("refused: nothing bought", StringComparison.Ordinal)
                 && _mainMenu.Creation!.Presses.Count == 5, "the presses on the draft: " + _editorPanel!.SkillMessageForSelfTest);
+            // ARC-MAGIC-043: the tech page's + buys a degree (a point), its − gives it back, a second − is refused at the snapshot (TC10).
+            _editorPanel!.TechPlusForSelfTest(0).EmitSignal(BaseButton.SignalName.Pressed);
+            Require(_editorPanel!.StatsForSelfTest is { UnspentPoints: 1 } && _editorPanel.TechTextForSelfTest(0).StartsWith("Herbology: degree 1", StringComparison.Ordinal)
+                && _mainMenu.Creation!.Presses.Count == 6, "+ bought a degree on the draft: " + _editorPanel.TechTextForSelfTest(0) + " " + _editorPanel.SkillMessageForSelfTest);
+            _editorPanel.TechMinusForSelfTest(0).EmitSignal(BaseButton.SignalName.Pressed);
+            _editorPanel.TechMinusForSelfTest(0).EmitSignal(BaseButton.SignalName.Pressed);
+            Require(_editorPanel.StatsForSelfTest is { UnspentPoints: 2 } && _editorPanel.TechTextForSelfTest(0).StartsWith("Herbology: degree 0", StringComparison.Ordinal)
+                && _editorPanel.SkillMessageForSelfTest.StartsWith("refused: nothing bought", StringComparison.Ordinal) && _mainMenu.Creation!.Presses.Count == 7,
+                "− gave the degree back and stopped at the snapshot: " + _editorPanel.TechTextForSelfTest(0) + " " + _editorPanel.SkillMessageForSelfTest);
             // ARC-UI-036: Return opens the opening shop with the kit (120 gold, the clothes skipped); Back returns to the editor with
             // the points still free; Return twice starts the game with the kit.
             InventoryKey(Key.Enter);
@@ -259,7 +268,7 @@ public partial class TerrainViewerApp
             Require(_mainMenu!.Window == AreaMenuWindow.CharacterEditor && CharacterEditorShown && _mainMenu.Creation!.Kit is null, "Back returned to the editor");
             _editorPanel!.StatMinusForSelfTest(2).EmitSignal(BaseButton.SignalName.Pressed);
             _editorPanel!.StatPlusForSelfTest(2).EmitSignal(BaseButton.SignalName.Pressed);
-            Require(_mainMenu!.Creation!.Presses.Count == 7 && _editorPanel!.StatsForSelfTest is { UnspentPoints: 2 }, "the strength bought before the shop is still free");
+            Require(_mainMenu!.Creation!.Presses.Count == 9 && _editorPanel!.StatsForSelfTest is { UnspentPoints: 2 }, "the strength bought before the shop is still free");
             InventoryKey(Key.Enter);
             Require(_mainMenu!.Window == AreaMenuWindow.Shop, "Return opened the shop again");
             _mainMenuPanel.ShopPressForSelfTest(accept: true);

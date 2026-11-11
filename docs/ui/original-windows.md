@@ -241,6 +241,17 @@ A town map with a tile 000000 that does not decode is refused (WM73's fatal path
 Split: (a) done, the window, the picture, the scroll, the markers (ARC-UI-073); (b) done, the names and hover texts of the areas, the sector readout boxes, the
 continent view and the zoom and whole buttons (ARC-UI-083); (c) done, the town map window (ARC-UI-084) and the walked cells (ARC-WORLD-122); (d) done, the map view's waypoints: selecting, the drag, the release snap, Delete and the right release removing one (ARC-UI-085); (e) done, town waypoints and walking (ARC-UI-092); (f) town-map notes and the note quill (ARC-UI-093); the right release in the continent view is not read (WM98, F0).
 
+## Schematic window (done: ARC-UI-142)
+
+Entry: open 0x56D130 (`T`, the interface button, the dialog's `su`, script action 129; ledger [SW1–SW8](../research/ledger/technology.md#schematic-window-arc-technology-005)).
+Read in the build 0x56D310, the page draw 0x56DDC0, the slot draw 0x56E190, the handler 0x56D530 and the tables 0x5CA820..0x5CA97C (rows SW9–SW14). The
+window is 800 × 400 on art 365 at the screen's (0, 41): the page buttons (arts 372, 373, gone on the first and last page), the assemble button (art 357,
+its face 358 to 360 by state) and the two list tabs (art 6), the eight discipline tabs as one radio group (arts 355, 356, 361..364, 368, 369), the record's
+art, name (font 371), glyph (font 370) and description (font 229), two component slots with the found or missing overlay (831, 830), the item's picture
+and the required expertise (fonts 300 and 229), and the round view's lens (89 × 89 at (50, 26), art 231) whose release closes the window. The viewer
+([layout](../../src/Arcanum.World/AreaSchematicWindowLayout.cs), [view](../../tools/terrain-viewer/Godot/AreaSchematicWindowView.cs)) draws it when the arts read
+and keeps the diagnostic panel as the fallback; every action, sound and key of the diagnostic window is unchanged.
+
 ## Main menu (done: ARC-UI-058)
 
 The owner's bug report of 2026-10-29 (build `6e793c18`): the main menu and its windows (options, save and load, character creation)

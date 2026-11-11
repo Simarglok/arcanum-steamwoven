@@ -26,6 +26,7 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     private Label _skillMessage = null!;
     private readonly List<(Button Minus, Label Text, Button Plus)> _skillRows = [];
     private readonly List<(Button Minus, Label Text, Button Plus)> _statRows = [];
+    private readonly List<(Button Minus, Label Text, Button Plus)> _techRows = [];
     private AreaStatsPageView? _statsView;
     private readonly bool _creation;
     private Button? _accept;
@@ -95,6 +96,9 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     internal string SpellHintForSelfTest(int rank) => _spellRows[rank].TooltipText;
     internal string CollegeHintForSelfTest(int college) => _collegeTabs[college].TooltipText;
     internal AreaStatsPageView? StatsForSelfTest => _statsView;
+    internal Button TechPlusForSelfTest(int discipline) => _techRows[discipline].Plus;
+    internal Button TechMinusForSelfTest(int discipline) => _techRows[discipline].Minus;
+    internal string TechTextForSelfTest(int discipline) => _techRows[discipline].Text.Text;
     internal Button StatPlusForSelfTest(int row) => _statRows[row].Plus;
     internal Button StatMinusForSelfTest(int row) => _statRows[row].Minus;
     internal string StatTextForSelfTest(int row) => _statRows[row].Text.Text;
@@ -146,6 +150,7 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         }
         _pages.AddChild(skills);
         _pages.AddChild(BuildSpellsPage());
+        _pages.AddChild(BuildTechPage());
         _skillMessage = new Label { Modulate = new Color(.85f, .9f, .95f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _close = new Button { Name = "Close", Text = _creation ? "Cancel" : "Close", Alignment = HorizontalAlignment.Left, FocusMode = Control.FocusModeEnum.All };
         _close.Pressed += () => CloseRequested?.Invoke();
@@ -153,8 +158,8 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         {
             Modulate = new Color(.55f, .6f, .65f), AutowrapMode = TextServer.AutowrapMode.WordSmart,
             Text = _creation
-                ? "Return accepts (the opening shop), Escape cancels (back to the new-character window, which starts a new character) | PROJECT diagnostic window: stat, skill and spell points, no tech discipline buttons; original UI parity NOT_VERIFIED"
-                : "C, Escape or cancel closes | PROJECT diagnostic window: stat, skill and spell points (no tech discipline buttons); original UI parity NOT_VERIFIED",
+                ? "Return accepts (the opening shop), Escape cancels (back to the new-character window, which starts a new character) | PROJECT diagnostic window: stat, skill, spell and tech degree points; original UI parity NOT_VERIFIED"
+                : "C, Escape or cancel closes | PROJECT diagnostic window: stat, skill, spell and tech degree points; original UI parity NOT_VERIFIED",
         };
         var buttons = new HBoxContainer();
         if (_creation)
@@ -185,6 +190,27 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
             line.AddChild(minus); line.AddChild(text); line.AddChild(plus);
             page.AddChild(line);
             _statRows.Add((minus, text, plus));
+        }
+        return page;
+    }
+
+    /// <summary>ARC-MAGIC-043: the diagnostic tech page, the original's degree page of the same editor (CM8): one row for each of the eight
+    /// disciplines with its − and +; the − is refused below the snapshot the editor opened on (TC10).</summary>
+    private VBoxContainer BuildTechPage()
+    {
+        var page = new VBoxContainer { Name = "Tech", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        for (var discipline = 0; discipline < AreaTechPage.Labels.Count; discipline++)
+        {
+            var d = discipline;
+            var line = new HBoxContainer();
+            var minus = new Button { Text = "−", FocusMode = Control.FocusModeEnum.All, TooltipText = "give a degree back (down to the value when the editor opened)" };
+            var plus = new Button { Text = "+", FocusMode = Control.FocusModeEnum.All, TooltipText = "buy the next degree for one unspent point (needs the intelligence)" };
+            var text = new Label { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, MouseFilter = Control.MouseFilterEnum.Pass };
+            minus.Pressed += () => TechRefundRequested?.Invoke(d);
+            plus.Pressed += () => TechSpendRequested?.Invoke(d);
+            line.AddChild(minus); line.AddChild(text); line.AddChild(plus);
+            page.AddChild(line);
+            _techRows.Add((minus, text, plus));
         }
         return page;
     }
@@ -262,6 +288,13 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
             text.TooltipText = skill is null ? "" : string.Join("\n", new[] { skill.Name, skill.Description,
                 skill.NextPointKeyStat == 0 ? null : $"{skill.KeyStat}: {skill.NextPointKeyStat}" }.Where(part => !string.IsNullOrEmpty(part)));
             minus.Disabled = plus.Disabled = skills is not { EditorOpen: true };
+        }
+        for (var row = 0; row < _techRows.Count; row++)
+        {
+            var (minus, text, plus) = _techRows[row];
+            var discipline = tech?.Rows.FirstOrDefault(r => r.Discipline == row);
+            text.Text = discipline is null ? "" : AreaTechPage.Line(discipline);
+            minus.Disabled = plus.Disabled = tech is not { EditorOpen: true };
         }
         RenderSpells(spells);
         RenderArt(view, skills, tech);
