@@ -32,12 +32,12 @@ public partial class TerrainViewerApp
         LauncherSettingsRead();
         _ruleMode = _launcherSettings.Rules;
         GD.Print($"ARC-UI-014 rules {RuleModeNames.Name(_ruleMode)} from {(LauncherSettingsPath() is null ? "default (automated run)" : "launcher settings")}");
-        GD.Print($"ARC-UI-013 game settings difficulty={_gameSettings.Difficulty} turnBased={_gameSettings.TurnBased} autoAttack={_gameSettings.AutoAttack} floats={_gameSettings.Floats} floatSpeed={_gameSettings.FloatSpeed} hdInterface={_gameSettings.HdInterface} hdPack={HdPackSourceResolver.ModeName(_gameSettings.HdPackSource)} hdPackPath={(_gameSettings.HdPackPath is null ? "none" : "set")} from={_gameSettingsOrigin}");
+        GD.Print($"ARC-UI-013 game settings difficulty={_gameSettings.Difficulty} turnBased={_gameSettings.TurnBased} autoAttack={_gameSettings.AutoAttack} floats={_gameSettings.Floats} floatSpeed={_gameSettings.FloatSpeed} hdInterface={_gameSettings.HdInterface} generatedInterface={_gameSettings.GeneratedInterface} hdPack={HdPackSourceResolver.ModeName(_gameSettings.HdPackSource)} hdPackPath={(_gameSettings.HdPackPath is null ? "none" : "set")} from={_gameSettingsOrigin}");
     }
 
     /// <summary>The values the options window shows: the host's settings as they are now.</summary>
     private AreaGameOptions CurrentGameOptions() => new(_gameSettings.Difficulty, _turnBasedSetting ? 1 : 0, _gameSettings.AutoAttack, _alwaysRunOption,
-        _audioVolumes.Effects, _audioVolumes.Voice, _audioVolumes.Music, _ruleMode, _gameSettings.Floats, _gameSettings.FloatSpeed, HdGraphicsOption, _gameSettings.HdInterface, _gameSettings.HdPackSource);
+        _audioVolumes.Effects, _audioVolumes.Voice, _audioVolumes.Music, _ruleMode, _gameSettings.Floats, _gameSettings.FloatSpeed, HdGraphicsOption, _gameSettings.HdInterface, _gameSettings.HdPackSource, _gameSettings.GeneratedInterface);
 
     /// <summary>The options texts, read once a run (the game's files, or the project's with the reason).</summary>
     private AreaOptionsTexts OptionsTexts()
@@ -100,8 +100,9 @@ public partial class TerrainViewerApp
                 break;
             case AreaOption.HdInterface:
                 // ARC-UI-095: the interface art alone, saved with the game settings; it does not touch the visual profile (H, HD graphics).
-                if (value is not (0 or 1)) { refused = "out of range"; break; }
-                SaveGameSettings(_gameSettings with { HdInterface = value == 1 });
+                // ARC-UI-140: 2 is the generated interface (experimental); it keeps the HD redraws on for the pictures it does not generate.
+                if (value is not (0 or 1 or 2)) { refused = "out of range"; break; }
+                SaveGameSettings(_gameSettings with { HdInterface = value >= 1, GeneratedInterface = value == 2 });
                 break;
             case AreaOption.HdPack:
                 // ARC-DEV-350: where the HD pack is read from; saved at once, effective at the next start.
@@ -184,7 +185,7 @@ public partial class TerrainViewerApp
         _gameSettings = settings;
         var saved = _gameSettingsStore?.Save(settings) == true;
         _gameSettingsOrigin = saved ? "saved setting" : _gameSettingsStore?.Persistent == true ? "not saved" : "this run only";
-        GD.Print($"ARC-UI-013 game settings difficulty={settings.Difficulty} turnBased={settings.TurnBased} autoAttack={settings.AutoAttack} floats={settings.Floats} floatSpeed={settings.FloatSpeed} hdInterface={settings.HdInterface} hdPack={HdPackSourceResolver.ModeName(settings.HdPackSource)} hdPackPath={(settings.HdPackPath is null ? "none" : "set")} saved={saved}");
+        GD.Print($"ARC-UI-013 game settings difficulty={settings.Difficulty} turnBased={settings.TurnBased} autoAttack={settings.AutoAttack} floats={settings.Floats} floatSpeed={settings.FloatSpeed} hdInterface={settings.HdInterface} generatedInterface={settings.GeneratedInterface} hdPack={HdPackSourceResolver.ModeName(settings.HdPackSource)} hdPackPath={(settings.HdPackPath is null ? "none" : "set")} saved={saved}");
     }
 }
 

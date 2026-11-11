@@ -16,7 +16,10 @@ public partial class TerrainViewerApp
     {
         static void Require(bool value, string why) { if (!value) { GD.Print("ARC-UI-018 bar smoke FAIL " + why); throw new InvalidOperationException("ARC-UI-018 bar smoke: " + why); } }
         var savedInterfaceHd = _gameSettings.HdInterface;
-        var verifyHd = System.Environment.GetEnvironmentVariable("ARC_AREA_BAR_HD_VERIFY") == "1";
+        var savedGenerated = _gameSettings.GeneratedInterface;
+        // ARC-UI-140: the generated interface runs the HD path with the pack (pictures from its redraw) and the chrome generated.
+        var verifyGenerated = System.Environment.GetEnvironmentVariable("ARC_AREA_BAR_GENERATED_VERIFY") == "1";
+        var verifyHd = verifyGenerated || System.Environment.GetEnvironmentVariable("ARC_AREA_BAR_HD_VERIFY") == "1";
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
         _gameBarForSelfTest = true; _gameBarSoundsForSelfTest.Clear();
@@ -77,10 +80,12 @@ public partial class TerrainViewerApp
             if (verifyHd)
             {
                 Require(_canvas?.HdSource?.Pack is not null, "HD verification needs ARC_HD_PACK");
-                _gameSettings = _gameSettings with { HdInterface = true };
+                _gameSettings = _gameSettings with { HdInterface = true, GeneratedInterface = verifyGenerated };
                 SyncInterfaceHd();
+                if (verifyGenerated) await VerifyGeneratedInterfaceAsync(panel, Frames);
                 await VerifyTopBarHdAsync(panel, Frames, Move, Button);
             }
+            await CaptureHudAsync(verifyGenerated ? "generated" : verifyHd ? "hd" : "legacy", Frames);
             GD.Print($"ARC-UI-018 bar smoke bars factor={panel.Factor} top={panel.StripRectForSelfTest(AreaBarStrip.Top)} bottom={panel.StripRectForSelfTest(AreaBarStrip.Bottom)}");
 
             // Hover, press and release one button, watching its frames and sounds. ARC-UI-023: the name is a hover entry of the message
@@ -120,7 +125,7 @@ public partial class TerrainViewerApp
                     var sheetDir = System.IO.Path.GetFullPath(sheetCapture);
                     System.IO.Directory.CreateDirectory(sheetDir);
                     using var sheetImage = GetViewport().GetTexture().GetImage();
-                    Require(sheetImage is not null && sheetImage.SavePng(System.IO.Path.Combine(sheetDir, $"sheet-{(verifyHd ? "hd" : "legacy")}-{sheetImage.GetWidth()}x{sheetImage.GetHeight()}.png")) == Error.Ok, "sheet readback saved");
+                    Require(sheetImage is not null && sheetImage.SavePng(System.IO.Path.Combine(sheetDir, $"sheet-{(verifyGenerated ? "generated" : verifyHd ? "hd" : "legacy")}-{sheetImage.GetWidth()}x{sheetImage.GetHeight()}.png")) == Error.Ok, "sheet readback saved");
                 }
             }
             var sheetSize = DisplayServer.WindowGetSize();
@@ -195,7 +200,7 @@ public partial class TerrainViewerApp
                     AreaGameBarLayout.PressSound, AreaGameBarLayout.ReleaseSound,
                     AreaGameBarLayout.PressSound, AreaGameBarLayout.ReleaseSound,
                 }), $"{button} keeps the press and release sounds for cancellation, opening and closing");
-                var art = verifyHd ? "HD" : "Legacy";
+                var art = verifyGenerated ? "Generated" : verifyHd ? "HD" : "Legacy";
                 GD.Print($"ARC-UI-123 native {button} PASS held=Down quick-open=Down quick-close=Down settled=Hover canceled=Idle art={art}");
             }
             // The logbook laid out in the part the bars leave free, and its own close button is pressed with the bars shown.
@@ -298,7 +303,7 @@ public partial class TerrainViewerApp
                 "releasing outside clears the hold and leaves combat off");
             Require(_gameBarSoundsForSelfTest.Count(sound => sound.Id == AreaGameBarLayout.ReleaseSound) == releasesBeforeCombat + 2,
                 "only the two inside releases activated Combat, once each");
-            GD.Print($"ARC-UI-120 native Combat feedback PASS art={(verifyHd ? "HD" : "Legacy")} first-draw=Down held=Down settled=Hover canceled=Idle");
+            GD.Print($"ARC-UI-120 native Combat feedback PASS art={(verifyGenerated ? "Generated" : verifyHd ? "HD" : "Legacy")} first-draw=Down held=Down settled=Hover canceled=Idle");
             await Click(AreaBarButton.Spells);
             if (SpellMapActive)
             {
@@ -386,7 +391,7 @@ public partial class TerrainViewerApp
         }
         finally
         {
-            if (verifyHd) { _gameSettings = _gameSettings with { HdInterface = savedInterfaceHd }; SyncInterfaceHd(); }
+            if (verifyHd) { _gameSettings = _gameSettings with { HdInterface = savedInterfaceHd, GeneratedInterface = savedGenerated }; SyncInterfaceHd(); }
             _gameBarForSelfTest = false; _messageClockShiftForSelfTest = 0;
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }

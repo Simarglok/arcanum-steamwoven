@@ -309,6 +309,48 @@ Local observation, on the owner's Mac (Apple M4 Pro, Godot 4.7.2 .NET, GL Compat
   are one colour and crisp in the generated column and slightly mixed in the minified one; the vector lens looks the same in
   both (both are anti-aliased gradients), so its gain is the live parameters, not sharpness.
 
+## Viewer slice S1 (ARC-UI-140)
+
+The owner asked (2026-11-11) for the generated interface as a working third variant of the viewer's interface, with every
+element where the original puts it: only the drawing changes, not the UI or UX. S1 is the first slice.
+
+- **Setting.** The options window's HD interface line has a third value, **Generated (experimental)**
+  (`generatedInterface` in `game_settings_v1.json`, file version 5; older files read it as off). It keeps the HD interface on,
+  so frames without a recipe still draw from the HD pack.
+- **Where it plugs in.** `HdInterfaceTexture` (the texture the interface already draws through) asks
+  `InterfaceChromeRecipes.For(frame key)`; a frame with a recipe draws `InterfaceChromeRenderer.Render(...)` in place of its HD
+  or Legacy image. The texture keeps the Legacy frame's size and its Legacy pixels for the alpha test, so layout, hit areas
+  and button behaviour are the same code and the same numbers as in Legacy. A failed render logs once and draws HD or Legacy.
+  The setting is stored as on only together with the HD interface; it asks for no pack (without one the pictures are Legacy).
+- **What is generated.** Recipes cover the two HUD strips (`inttop.art`, `intbotom.art`) and the nine bar buttons
+  (`char_but`, `log_but`, `invn_but`, `tmap_but`, `lilgrnbut`, `combat_button`, `skills_button`, `spells_button`,
+  `schematics_button`). A panel recipe paints a procedural wood base (value noise, own hash, deterministic), iron plates,
+  sunk dark panels, rivets and the edge rims in our own palette; it finds the frame's holes from the Legacy alpha and gives a
+  rectangular hole a brass frame around its box and a round socket (a near-square hole filled like a circle) a brass ring
+  (anti-aliased, lit from the upper left); specks under 6 pixels get nothing, and transparent texels carry ink so the
+  mipmapped edges do not fringe. `Keep` rectangles
+  (the vials, the clock, the infinity sign, the hotkey cogs) copy the picture: the HD redraw when the HD pack has the frame at
+  4×, else the Legacy frame. A button recipe paints an ink outline, a brass bevel (inverted on its Down frame, lighter on its
+  Hover frame) and a generated face, and copies the glyph from the picture. Recipes hold only rectangles and colours of our own; no game art is in git.
+- **Resolution.** S1 renders each frame once at 4× the Legacy size and lets the existing mipmapped, trilinear HD path
+  minify it (like the HD pack). Rendering at the window's exact device scale on the grid rule of
+  [section 2](#2-device-pixel-grid-rule) is the next slice; so are the windows (one per slice).
+- **Checks.** `InterfaceChromeTests` (synthetic frames): recipes by name hash, hole finding, the Legacy silhouette kept,
+  determinism, keep and sunk regions, a button's rim lit when raised and shaded when down, its glyph and outline, bad input.
+  `AreaGameOptionsTests`: file version 5, a version 4 file, the third value and its wrap. The native bar smoke with
+  `ARC_AREA_BAR_GENERATED_VERIFY=1` and `ARC_HD_PACK` checks that both strips and every frame of every bar button draw
+  generated chrome at their Legacy size and place, then runs the whole bar smoke (hover, press, Down feedback, windows,
+  Combat, Spells, Fate Points, Sleep, the message log) in that mode; `ARC_AREA_BAR_CAPTURE=PREFIX` also saves the whole
+  viewport as `PREFIX-hud-MODE.png` (local, not in git).
+- **Limits of S1.** A frame is painted on the main thread at its first draw (no worker, unlike the HD warm-up), so the first
+  HUD after switching to Generated stalls about 1.2 s; each greyed copy of a frame paints again; the HD pack's frame is decoded
+  again for the picture; the interface's HD counters count generated frames as HD. The size and place checks of the smoke
+  hold by construction; the smoke's real check is that every bar texture draws generated chrome and the bar still behaves.
+- **Local observation** (owner's Mac, 1280 × 800 window, factor 1): the generated, HD and Legacy runs pass. Painting costs about 0.3 s for the top strip and 0.9 s
+  for the bottom strip once per pack change, a few milliseconds per button. The composite image (Legacy, HD, Generated, and
+  a 4× detail of the bottom strip) is in the task thread, not in git. Seen there: the generated wood is lighter and plainer
+  than the painted one, and a kept picture shows its rectangle where its own background differs from the generated wood.
+
 ## Synthetic comparison
 
 The task drew the corner of one synthetic frame (four bands of one UI unit, our own geometry and colours, no original
@@ -325,7 +367,7 @@ into in-between pixels at every `s` (5, 6 and 7 distinct colours in that row aga
   observed (see [Demo](#demo)). Retina, the macOS mixed-screen sizes, Windows effective DPI under system awareness and
   SteamOS (code only, by the owner's decision) were not run.
 - `B = 1.5` is a judgement from typical monitor sizes, not a measurement; the owner's eye decides.
-- The look of generated chrome against the original's painted panels is unknown until the demo.
+- The look of generated chrome against the original's painted panels: S1 shows it on the HUD strips and bar buttons only; the owner's eye decides.
 - The share of each panel that is illustration and not chrome, and the census of text baked into panel art, were not made.
 - Performance of one shader per component on the GL Compatibility renderer was not measured.
 
