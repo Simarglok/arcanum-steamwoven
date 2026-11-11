@@ -136,11 +136,14 @@ public sealed class RecordResolver
     /// <summary>Counts the sets of <see cref="SetCreated"/>: a reader that caches what it derived from the created critters asks again when it moves.</summary>
     public int CreatedVersion { get; private set; }
 
-    /// <summary>The NPC holders of the created critters standing on <paramref name="runtimeMap"/> (each with an empty list: a created critter's inventory is not generated yet).</summary>
+    /// <summary>The NPC holders of the created critters standing on <paramref name="runtimeMap"/> (each with an empty T0 list: what the session added to it is the session's, ARC-DEV-386).</summary>
     public IEnumerable<string> CreatedOn(int runtimeMap) => _created.Where(pair => pair.Value.RuntimeMap == runtimeMap).Select(pair => pair.Key);
 
     /// <summary>The map that lists the created critter <paramref name="entity"/>, or null.</summary>
     public AreaInventoryMap? CreatedMap(string entity) => _created.GetValueOrDefault(entity);
+
+    /// <summary>ARC-DEV-386: the one-row maps of the created critters standing on <paramref name="runtimeMap"/>, in no set order.</summary>
+    public IEnumerable<AreaInventoryMap> CreatedMapsOn(int runtimeMap) => _created.Values.Where(map => map.RuntimeMap == runtimeMap);
 
     /// <summary>The held map, or null; it does not read a map (a map read on demand counts as used).</summary>
     public AreaInventoryMap? Held(int runtimeMap)

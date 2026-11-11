@@ -80,7 +80,7 @@ The session now creates, saves and hosts a critter made from a prototype ([creat
 
 Known differences (documented, not bugs):
 
-- A created creature has an empty inventory (the original generates its inventory list at creation, OM16): that is E1-c4. Its tile script does fire where it is made since E1-c3.
+- A created creature's inventory is generated at creation since ARC-DEV-386 (OM16, RK16, RK17). Its tile script does fire where it is made since E1-c3.
 - Its teleport destination field (OM13) is not written; the field is not identified in the repository.
 - The state records of a destroyed created creature stay in the save (its entity is never given again).
 
@@ -381,8 +381,27 @@ Compare in both games with the same hero and spells.
 Known differences (reading only, no game step):
 
 - Polymorph (49) and a script's permanent polymorph (critter flags 2 bit 0x400000) are undone by the original's Dispel with the art restored; ours has neither (MA-8).
-- A portal or container held by Magelock (75) loses the hold in the original; ours has no such writer yet (MA-6).
+- A portal or container held by Magelock (75) loses the hold in the original; ours does the same since MA-6 ([steps below](#arc-magic-037--locks-and-holds-unlocking-cantrip-and-magelock-ma-6-2026-11-11)).
 - A summoned critter is destroyed by the original's Dispel; ours destroys one the session created, and no spell makes one before the creature summons (E1-e).
+
+## ARC-MAGIC-037 — Locks and holds: Unlocking Cantrip and Magelock (MA-6, 2026-11-11)
+
+The rules are in [Locks and holds](../world/spell-cast-host.md#locks-and-holds-on-portals-and-containers-arc-magic-037), the executable reading in [LM1–LM6](../research/ledger/spell-runs.md#lock-flags-of-portals-and-containers-arc-magic-037).
+No viewer smoke stage casts at a door, so every step here is by hand. Compare in both games with the same hero (a mage who knows Unlocking Cantrip of the Conveyance college and Magelock of the Temporal college), the same door and the same chest; use the hero's own "locked" door of a house and a locked chest, and a door with a high lock level for step 3 (pick it with lockpicks first to see how hard it is).
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast Unlocking Cantrip (1) on a locked door with a low lock level (below 20), then open it. Close it, wait more than one game hour (rest or let the clock run), and try the door again. | The door unlocks and opens. **It is still unlocked after the hour**: the spell writes the lock field itself and schedules no relock (a key or lockpicks relock an hour later). Ours does the same; if the original relocked it after an hour, note it here. | open |
+| 2 | Cast Unlocking Cantrip (1) on a locked chest with a low lock level and open it; then do the same with the lockpicks on a second locked chest and wait an hour. | The spell opens the chest and the chest stays unlocked for good; the lockpicked chest locks again after the hour (and, as before, a spilled or looted chest keeps its contents). Ours matches. | open |
+| 3 | Cast Unlocking Cantrip (1) with a hero of low magical aptitude on a door or chest whose lock level is above 19 and above the hero's aptitude (the character sheet's Magick aptitude line; the lock level is the lock's difficulty shown by the pick-locks check). Then raise the aptitude (an aptitude-giving item or a higher level) to at least the lock level and cast again. | The first cast fails: the lock stays and the "resisted" feedback (the resisted effect, spell.mes 643 for the player) plays on the door. At aptitude not below the level the lock opens. A lock of level 19 or lower opens at any aptitude. Ours matches (the "resists" line and message 643). | open |
+| 4 | Stand near a guard or the owner of the door (an NPC who watches it) and cast Unlocking Cantrip on it. | The original calls the object's witnesses (0x4AEE50) after the cast, whether the lock opened or not: NPCs within 10 tiles that guard the object (or are guards) and see or hear the caster react, an unlock making them hostile. A door or chest with no owner alerts nobody. **Ours does nothing yet** (the guards' reaction to a lock crime is not built; the cast log only has a line). Record what the original's guards do. | open |
+| 5 | Cast Magelock (75) on an unlocked, closed door, then try to open it. Cast it on an open door and try to close it. | The held door does not open (the locked sound plays, the hover line shows the held text) and a held open door cannot be closed either. When the spell ends (its duration or maintenance), the door works again. Ours matches. | open |
+| 6 | Cast Magelock on a door, then Disperse Magick (41) on the same door. Then cast Magelock on a door twice if the game lets you (two casters, or the spell again on a door it already holds). | Disperse Magick clears the hold at once. The area of Magelock excludes a door that is already held, so the second cast is refused at the target. If two holds stack (two casters), the first end clears the bit although the other spell goes on. Ours does the same; record whether the original allows the second target. | open |
+
+Known differences (reading only, no game step):
+
+- The guard alert's witnesses and the screen refresh after an unlock are not built; the stone-to-flesh pair of Flesh to Stone (48) on a portal that holds the stoned spell flag is not built either (no installed record makes a stone portal).
+- A container's magically held bit has no writer but Dispel (no installed record writes it).
 
 ## ARC-RES-120 — Function triage of the exe band 0x55-0x59 (2026-11-11)
 
@@ -502,16 +521,37 @@ start map is the "snapping twig" tile script (1629, 130 tiles): it creates eight
 | 1 | Walk onto a snapping-twig tile of the start map (130 tiles in the wilderness; one cluster is around tile (50851, 15844), far from the Crash Site; the smoke log lists the nearest five to the hero). | Eight creatures of one kind appear within three tiles of you, all at once, each on a tile of its own or sharing one when the search found no free tile. They stand a moment and then act as that kind does (hostile ones come at you). | open |
 | 2 | Walk away from them until they are far (a window move), then come back. | In the original an encounter creature that is left without a next AI tick outside a fight is destroyed: those that were left behind are gone, not standing where you left them. Compare how many remain. | open |
 | 3 | Step onto the same twig tile again, and onto the next twig tile. | Each step creates eight more; creatures made earlier are not removed by it. | open |
-| 4 | Kill one of them and look at what it leaves. | Here it leaves nothing (the inventory generation is E1-c4); the original gives it an inventory at creation when its prototype has an inventory source. Note what the original's creature drops. | open |
+| 4 | Kill one of them and look at what it leaves. | The snapping twig's creatures have no inventory source, so they leave nothing in the original too ([ARC-DEV-386](#arc-dev-386--created-critter-inventory-e1-c4-2026-11-11) gives a created creature its goods when its prototype has a source). Note what the original's creature drops. | open |
 | 5 | Stand a created creature on a tile that has a tile script (a trigger or a door-warning tile) if you can lure one. | It runs the tile script as any creature that walks onto the tile does. | open |
 | 6 | Save with the creatures alive and load. | They are where they last stood, and still count as encounter creatures. | open |
 
 Known differences (documented, not bugs):
 
 - The tile script of the tile a created creature is made on runs after the whole script has run, not inside the creating action, so a script that depends on it between two creations sees it one frame late.
-- A created creature's inventory is empty until E1-c4 (restock at creation, then the best-items wield).
+- A created creature's inventory is generated by ARC-DEV-386 (restock at creation, then the best-items wield); the twig's creatures have none to generate.
 - A script's vicinity lists (the "critters near" of a script) do not list created creatures yet.
 - The twig tile's own text ("snapping twig", if the original prints one) is the script's, printed as for any tile script.
+
+## ARC-DEV-386 — Created critter inventory (E1-c4, 2026-11-11)
+
+The creature a script creates gets its goods the way the original's creation finish gives them ([E1-c4](../architecture/object-directory.md#e1-c4-created-critter-inventory-arc-dev-386); the restock body when the prototype has an inventory source, then the best-items wield). The twig's creatures (start map, [ARC-DEV-371](#arc-dev-371--script-created-critters-e1-c3-2026-11-11)) have no source; the smoke log line `ARC-DEV-386 script-critters stocked prototype=... source=...` names one critter prototype that has one, which the stage makes next to the hero.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Make a creature whose prototype has an inventory source (a script that creates a guard, a bandit or a merchant-type creature) and kill it. | Its body holds goods at once: coins and the items of its inventory set, and the best of them worn (it is dressed as a map creature of the same kind is). Compare the kind of items, the coins and what it wears with a map creature of the same prototype. | open |
+| 2 | Kill a created creature that has goods and open its body. | The loot window lists its goods; taking them works as on a map creature's body. | open |
+| 3 | Make the same creature twice (two steps on the same tile, or two scripts). | Each gets its own set (the draws differ), not a copy of one list. | open |
+| 4 | Make a creature, walk away until its map is left, come back. | An encounter creature that is left behind is gone with its goods (nothing of it is left to loot). | open |
+| 5 | Save the game a moment after a creature was made and load. | The creature keeps the goods it had when it was saved; the one made in the same instant as the save may come back empty (documented below). | open |
+
+Known differences (documented, not bugs):
+
+- The goods are generated one frame after the creation, not inside the creating action: a script that reads the new creature's inventory in the same run sees it empty. A save written in that frame, or a creation in the first seconds after the module opens (the barter data is still loading), keeps the creature empty.
+- A creature whose prototype has no inventory source gets nothing, as in the original (it is not cleared or dressed either).
+- The prototype's own list of inventory entries is not read, and the holder has no script points (a transfer script of the prototype is not checked).
+- A created creature has no conversation or barter (no dialog identity yet).
+
+
 ## ARC-MAGIC-036 — Spatial Distortion moves the caster along the route, at most eight tiles (PR pending, 2026-11-11)
 
 Read in the original executable (ledger [MV1–MV3](../research/ledger/spell-runs.md#movement-component-and-the-immediate-path-relocation-arc-magic-036)): the Movement component of Spatial Distortion (spell 3) is no teleport. It asks the same
@@ -544,3 +584,33 @@ English label, not the game's text; the view is not re-centred; an NPC cast of t
 | 6 | Open the teleport map and pick an area that lies inside one of the ban regions. | The pick is refused with a message and the map stays open; nothing is paid. Pick another area to leave. | open |
 | 7 | Use the technology device that teleports to the area (record 218) on the main map, and in a map that is not the main one. | On the main map the hero is sent to the area's location with a blank screen and no wait orders; elsewhere to the main map at the location of the area that map belongs to. | open |
 | 8 | Walk with Spatial Distortion (spell 3) over a tile that has a script, starting from a tile next to it. | The script runs **before** the caster is put on the last tile: a message from it names the caster's old tile; the last tile's script runs once more afterwards. | open |
+
+
+## ARC-DEV-381 — Main menu opens before the start map (O1 of the performance diagnosis, 2026-11-11)
+
+The menu now opens as soon as its art is read, while the start map loads behind it ([early menu](../rendering/terrain-viewer.md#main-menu-arc-ui-011)). The original shows
+its menu before any map exists, so the comparison is about the order and the waiting, not about the menu's contents (they are unchanged). Compare on a start with the menu
+(`./arcanum area`, or a packaged build); the first build for this comparison is any build from `main` that contains this task.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Start the game and watch how soon the main menu appears. | Like the original: the menu is the first thing on screen, a second or two after the window opens, with no map shown behind it. The music of the menu starts a few seconds later, when the start map is ready. | open |
+| 2 | Open Single Player, New Game, Pick Character and browse the heroes at once, before the map is ready. | Everything works as in the original: the same windows, the same twelve heroes. Nothing waits. | open |
+| 3 | Press Start on a hero before the map is ready. | The menu shows that the world is still loading and the game starts by itself when it is ready (the original has no such wait, because it loads the map after the choice; this is the one visible difference). Escape takes the choice back. | open |
+| 4 | Press Load Game or Last Save at once, with a save present. | The same wait note, then the load as before. A started load never shows a game of another map under the menu. | open |
+| 5 | Press New Character at once, then go through the window, the editor and the shop. | The wait note first; then the windows work as before (the shop's merchant loads behind it). | open |
+| 6 | Open Options at once and change a setting, then Done. | The window works before the map is ready and the change holds; the main window returns. | open |
+
+Known differences (documented, not bugs):
+
+- A choice that needs the game world waits for the start map's load, which the original does not do. It is the price of showing the menu first.
+- The main thread is busy while the start map is published, for about a second after the load ends, so the menu may answer late then (O6 of the diagnosis).
+
+## ARC-RES-121 — Function audit wave 3, groups G and I (2026-11-11)
+
+The audit changes no behaviour. Two places where it read original behaviour that our code does not reproduce and that the export shows no caller for ([ledger GI-5](../research/ledger/census-triage-gi.md#findings-of-wave-3)); the comparison tells whether those functions are live.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Press F10 in the original game on a normal map. | The interface bar hides or shows (the compact interface toggle, 0x54ACB0) and the two gauge strips are redrawn. Ours only reserves the key. If nothing happens, the function is dead code. | open |
+| 2 | Start a game with a hero of intelligence 3 or 4, join a companion and type a party order with long words (Enter, the companion's name, a command). | Words of intelligence plus two letters or more are replaced by filler text (0x4C3120); for a hero with the dim flag every word is. Ours does not read typed orders yet. If the order arrives whole, the function is dead code. | open |

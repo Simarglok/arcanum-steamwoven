@@ -164,7 +164,8 @@ public sealed class AreaCombatHost : IAreaEventObjects
         if (_inventory.AttachReadMap(session, runtimeMap) is { } refused && _refusedAttach.Add(runtimeMap))
             Console.WriteLine($"ARC-DEV-072 record-map-attach refused map={runtimeMap} failure={refused}");
         var holders = session.QueryMapInventory(new(runtimeMap))?.Holders.ToDictionary(holder => holder.Entity, StringComparer.Ordinal) ?? [];
-        // ARC-DEV-359: the critters the session created on this map are NPC holders with an empty list (the session's seed of the map does not list them: they have no map data).
+        // ARC-DEV-359: the critters the session created on this map are NPC holders (ARC-DEV-386: the session's seed lists them with what it added; one the seed does not list yet, as before the map's seed is
+        // attached again, is an NPC holder with an empty list).
         foreach (var made in _resolver.CreatedOn(runtimeMap)) holders.TryAdd(made, new SessionHolderInventory(made, SessionHolderKind.Npc, false, []));
         var npcItems = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var holder in holders.Values.Where(holder => holder.Kind == SessionHolderKind.Npc))

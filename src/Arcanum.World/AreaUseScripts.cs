@@ -33,6 +33,8 @@ namespace Arcanum.World;
 /// ARC-DEV-371 (E1-c3): <see cref="Critter"/> says whether a script's prototype number (the basic number, <see cref="AreaPrototypeItems.PrototypeOffset"/> added for the file) names a critter prototype the
 /// session can create (a prototype file that reads as an NPC's), so a create object of it makes a critter (<see cref="GameSessionOwner.CreateCritterNear"/>) and not a ground item; without it a critter prototype is
 /// refused as before. <see cref="CreatedRow"/> answers a created critter's base record by its entity (the run's NPC rows are the shown map's and the loaded maps'; a critter created at run time has none of them).
+/// ARC-DEV-386 (E1-c4): <see cref="CritterMade"/> is told the entity of each critter the run created, right after it exists, so the host generates its inventory (the original's create finish runs the restock body 0x463C60, OM16, RK14);
+/// without it a created critter's list stays empty.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
@@ -40,7 +42,8 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Func<CellCoord, int?>? StartMapAreaAt = null, Func<string, CellCoord, bool, string>? ScriptWalk = null,
     Func<ScrObjectRef, int, bool>? HealFatigue = null, Func<string, int, string>? ScriptAnimate = null, Func<string, string, string>? ScriptSteal = null, Func<string, string>? ScriptProne = null,
     Func<string?, string, int, bool, bool, string>? ScriptCast = null, Func<string, int, int, bool, string>? ScriptDamage = null, Func<string, int, string>? ScriptHeal = null,
-    Func<string, bool>? ScriptDamageAsk = null, Func<int, bool>? Critter = null, Func<string, AreaObjectRecord?>? CreatedRow = null);
+    Func<string, bool>? ScriptDamageAsk = null, Func<int, bool>? Critter = null, Func<string, AreaObjectRecord?>? CreatedRow = null,
+    Action<string>? CritterMade = null);
 
 /// <summary>ARC-WORLD-081: one create object a run applied: the prototype number as the script named it, the object it was created next to,
 /// and the session's result (<see cref="InventoryMutationResult.Item"/> the new item; none under the Steamwoven limit).</summary>
@@ -1084,6 +1087,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
                     _world.DropMap()!, OwnerOf(request.Near));
                 _created.Add(new(request.Prototype, request.Near, new(made.Disposition, made.Failure, made.Object?.Entity, null, made.Version)) { Critter = made.Object?.Entity, Cell = made.Object?.Cell });
                 if (made.Disposition == GameSessionDisposition.Rejected) return false;
+                if (made.Object is { } critter) _world.CritterMade?.Invoke(critter.Entity);
                 continue;
             }
             var item = _world.Item(request.Prototype)!;
