@@ -649,7 +649,7 @@ public sealed partial class GameSessionOwner
     private int HeroStat(CharacterStat stat)
     {
         var state = _life.Hero!.Value.State;
-        return _hero!.Stats.Query(new(0, state.PoisonLevel, state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth))).Snapshot!.GetEffective(stat);
+        return _hero!.Stats.Query(new(0, state.PoisonLevel, state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth), SpeedShift: HeroTempusFugitShift())).Snapshot!.GetEffective(stat);
     }
 
     private bool CanAdvanceRoundClock()
