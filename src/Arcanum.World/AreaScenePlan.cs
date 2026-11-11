@@ -1,5 +1,6 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Terrain;
+using Arcanum.Simulation;
 
 namespace Arcanum.World;
 
@@ -340,6 +341,7 @@ public sealed class AreaScenePlan
 
     /// <summary>The ART rotation of an art id (the original's 0x502880): none for the art classes 0, 5, 6, 8, 10 and 11, bits 9..11
     /// for the classes 9 and 14, bits 11..13 for every other class.</summary>
+    [OriginalFunction(0x502880, OriginalFunctionScope.Full)]
     public static int ArtRotation(uint art) => (art >> 28) switch
     {
         0 or 5 or 6 or 8 or 10 or 11 => 0,
