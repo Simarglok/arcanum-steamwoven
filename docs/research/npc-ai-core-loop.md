@@ -1,7 +1,7 @@
 # NPC AI core loop
 
 Status: **Research**, work item ARC-RES-054 (2026-10-18), stage A1 of the
-[NPC combat AI plan](npc-combat-ai-plan.md#research-stages-source-reading-one-document-each)
+[NPC combat AI plan](npc-combat-ai-plan.md#phase-1-faithful-reconstruction)
 (source units S1–S5). It fixes, for one NPC, where the AI parameters come from and
 what each one feeds, when the AI runs in real time and in a turn-based round, the
 order of one AI pass, and the four danger states with every flag, script and side

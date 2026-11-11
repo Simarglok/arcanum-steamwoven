@@ -214,7 +214,7 @@ network branch (a client returns at once, a multiplayer PC reads its scheme else
 
 ## Character point pool (ARC-WORLD-052)
 
-Source: the [character point pool](../../world/character-point-pool.md) (task S5 of the [skills plan](../skills-plan.md)) and the
+Source: the [character point pool](../../world/character-point-pool.md) (task S5 of the skills plan) and the
 [skills study](../skills-evidence.md#2-ranks). Question: how the character editor buys and refunds stats, hit and fatigue points,
 skills, spell ranks and tech degrees, what value it refunds down to, and what its hints show. Read on 2026-10-21 by this task
 and, independently, by a second reader that saw only the questions (method step 6). Both agree on every row. The second

@@ -1,7 +1,7 @@
 # The original's scripts, change path and interface modes: state on the object, no command layer, one mode stack
 
 Status: **Research**, work item ARC-RES-084 (2026-11-04), slice R6 of the
-[architecture audit](../research/architecture-audit-plan.md) (spines SP6, SP8 and SP9,
+[architecture audit](gap-register.md) (spines SP6, SP8 and SP9,
 hypotheses H6 and H8). Docs-only: no code changes and no checks run. It is a reference
 model of the original game, not a comparison: the "Steamwoven today" column notes only
 the obvious differences; the full comparison, its classes and the target model are

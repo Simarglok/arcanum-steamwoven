@@ -7,7 +7,7 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 // ARC-DEV-369 (perf diagnosis O2): the art of the inventory, the character sheet and the logbook is made ready in the background after the map is
-// published, so their first opening is a warm one. docs/research/performance-diagnosis-2026-11.md measured 0.25-2.2 s for that first opening: the
+// published, so their first opening is a warm one. The performance diagnosis ARC-RES-102 (deleted) measured 0.25-2.2 s for that first opening: the
 // window's art files were read and decoded on the main thread (about half), and each HD frame was resolved (pack file read, SHA-256 of the Legacy
 // pixels, PNG decode, mask check) and given mipmaps inside the first draw (the other half).
 //

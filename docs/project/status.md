@@ -274,7 +274,7 @@ ARC-SCRIPT-003 was just delivered by merged PR #54 and is credited above even th
 
 ## Still missing for a playable game
 
-State of 2026-11-11 (main `52f66db`), checked against the code by ARC-RES-107 and the [missing systems plan](missing-systems-plan.md#3-map-of-the-systems) (sections 3.1 and 3.2 name each system with its file and symbol). This is a list of what the player cannot do yet, not of what exists: the viewer plays the opening map and the world map in the original's window, and the components in the tables above are integrated into it.
+State of 2026-11-11 (main `52f66db`), checked against the code by ARC-RES-107 and the [missing systems plan](missing-systems-plan.md#3-map-of-the-systems) (section 3.1 names each system with its file and symbol). This is a list of what the player cannot do yet, not of what exists: the viewer plays the opening map and the world map in the original's window, and the components in the tables above are integrated into it.
 
 What is integrated and working in the viewer (details in the [coverage matrix](../requirements/coverage.md)): whole-map rendering with passability and the sector cache, game lighting and the clock, cave entry and return, dialogue and barter, the inventory and equipment, the character sheet and creation, the hero's combat, ranged attacks and thrown items, NPC awareness and combat, spells from the hotkey bar and from items, the technology schematics, traps on maps, the logbook, the world map screen with travel and discovery, save and load, and the HD graphics and interface switches.
 
@@ -291,7 +291,7 @@ Not built or only stubbed (each has an epic in the plan):
 - Gamepad in the game UI, UI scale, and Windows, Linux and handheld validation (E9; the Windows package exists and was never run on Windows).
 - The network game, a second module and mods (E10, deferred by the owner).
 
-This is not yet a playable game. The [roadmap](roadmap.md) describes dependency gates; the [vision](vision.md) describes accepted direction. Requirements/product completeness and milestone scope need their own decisions.
+This is not yet a playable game. The [missing systems plan](missing-systems-plan.md) describes the order of the unbuilt systems; the [vision](vision.md) describes accepted direction. Requirements/product completeness and milestone scope need their own decisions.
 
 ## Maintaining this catalogue
 

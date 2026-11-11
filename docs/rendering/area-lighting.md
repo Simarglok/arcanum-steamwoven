@@ -95,7 +95,7 @@ original both give the same result on all 80 interiors (opt-in
 (`MapNotCatalogued`), 2 with sectors older than the metadata section
 (`SectorMetadataAbsent`). Since ARC-DATA-039 the two interiors that were unlit for an animated light ART and for
 the no-shadow bit 0x40 are lit too (an animated ART draws its frame 0 until its animation is implemented, V7c of
-[lights on all maps](../research/lights-on-all-maps.md)). Largest values against the caps: 79/256 core sectors, 3/32 schemes,
+[lights on all maps](#open-reads-f0)). Largest values against the caps: 79/256 core sectors, 3/32 schemes,
 207/512 stationary lights, 9/32 light frames (ARC-DATA-029 raised the lights from 256 for 1.5 times
 headroom, ARC-DATA-039 the frames from 16 for the object lights; [limits census](../world/limits-census.md)).
 
@@ -322,3 +322,7 @@ applied, terrain near lights and a lit body and a lit wall read back as
 `source × composed light / 255` (±2) at pixels where the lights change the colour
 beyond the plain ambient, at two hours, with the lattice unchanged between them
 (`ARC-RENDER-012 native-smoke cave lighting PASS`).
+
+## Open reads (F0)
+
+Not read in the executable yet (from the lights-on-all-maps research, ARC-RES-069, now ledger LT1-LT15): the lighter and darker buffers and their arithmetic (0x4DE900, which stay as the [time and lighting contract](../world/time-lighting-contract.md) reads them); what `OF_DONTLIGHT` (object flag 0x100000, carried by 3,152 sector objects) does in the object renderer; the shadow builder (0x4D9B20) and `art\light\shadowmap.bmp` (0x4DE5D0), read by the slice that draws shadows; whether a light listed twice (A2) is drawn twice; the light ART loading time.

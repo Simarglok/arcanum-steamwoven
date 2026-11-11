@@ -785,7 +785,7 @@ Movement and other components stay not ready (MT16, MT17).
 
 ## Spell run endings of a critter (ARC-DEV-301)
 
-Source: the entangle report of 2026-11-08 ([triage](../bug-reports-triage-2026-11-08.md), T1). Read on 2026-11-08 in the 1.0.7.4 executable
+Source: the entangle report of 2026-11-08 ([triage](../open-bugs.md), T1). Read on 2026-11-08 in the 1.0.7.4 executable
 (`llvm-objdump`; SHA-256 of the file checked) by this task alone (F1): the object-gone run endings 0x459740 and the two functions after it
 (0x4598D0, 0x459A20), the kill 0x45DA20, the fatigue setter 0x45D5A0 with the unconscious test 0x45D800, and every call site of 0x459740, 0x4598D0,
 0x457450 and 0x4574D0 in `.text`. Nothing was run, patched or copied; every direct branch stays inside `.text`.
@@ -803,7 +803,7 @@ left at F0 or not modelled: the routine around 0x4B5B38, the callers of 0x4598D0
 
 ## Centre of a radius cast (ARC-DEV-327)
 
-Source: the [spell cast host](../../world/spell-cast-host.md) and B12's open half ([the ARC-DEV-250 re-check](../open-bugs-resmoke-2026-11-04.md#re-check-by-the-stage-cast-multi-arc-dev-250-sm08-2026-11-08):
+Source: the [spell cast host](../../world/spell-cast-host.md) and B12's open half ([the ARC-DEV-250 re-check](../open-bugs.md):
 the area of a radius spell was gathered around the click's tile, and whether the original centres on the target's cell at the hit was not read).
 Read on 2026-11-10 in the 1.0.7.4 executable (`llvm-objdump`, SHA-256 `9bd80511…3d52` checked) by this task alone (F1): the target collection 0x4F40B0
 (the object-radius branch, 0x4F41FC–0x4F4415), the context initialiser 0x4F2600, the rectangle collector 0x440B40 and the picker's wrapper 0x4F2680
@@ -822,9 +822,9 @@ They confirm TA10/TA11 and SU17 and join them into one answer for the question.
 
 ## Summon component and the objects it creates (ARC-RES-101)
 
-Source: the [Summon research note](../summon-objects-res-101.md) (slice E1-r of the [missing-systems plan](../../project/missing-systems-plan.md): what the
+Source: the Summon research note (ARC-RES-101, deleted; rows SUM1-SUM15 below) (slice E1-r of the [missing-systems plan](../../project/missing-systems-plan.md): what the
 flash of Fireflash, the five pieces of Wall of Fire and the second line of Summon Undead are, B47 of the
-[2026-11-10 triage](../bug-reports-triage-2026-11-10.md)). Read on 2026-11-10 in the 1.0.7.4 executable (`Version.txt` `VERSION:1.0.7.4`;
+[2026-11-10 triage](../open-bugs.md)). Read on 2026-11-10 in the 1.0.7.4 executable (`Version.txt` `VERSION:1.0.7.4`;
 `llvm-objdump`; SHA-256 `9bd80511…8d52` checked) by this task alone (F1): the component's ProcFunc 0x452830 with the list pick 0x452900, the
 summon effect 0x450C40, its helpers 0x450C10, 0x4372B0 (with the run iterator 0x44D2F0/0x44D340), 0x4554B0, the run slot's free
 (0x455920 to 0x4559D5), the Dispel executor 0x451C40, the EyeCandy component 0x451FE0 with the play 0x4CCF70, the tile branches of the area
@@ -1066,7 +1066,7 @@ the session); the multiplayer packet.
 
 ## Control components (ARC-MAGIC-044)
 
-Source: slice E4-c of the [technology audit](../technology-audit-res-125.md#6-queue) and the [magic audit](../magic-audit-res-103.md#slices) (ARC-RES-125, ARC-RES-103; the magic plan's MT15). Read on 2026-11-11 in the 1.0.7.4 executable (`VERSION:1.0.7.4`; SHA-256 `9bd80511…8d52`) by this task alone (F1): the component table 0x5B0BA8 (slots 0, 5, 19, 20 and 24), the executors 0x452F00, 0x451850, 0x4529D0, 0x4529F0 and 0x452ED0, the field reader 0x406CA0 and the loop 0x4510F0 that consumes the jump, all from the Ghidra export and the data-dword table. Nothing was run in the emulator, patched or copied. [Technology evidence](../technology-evidence.md#charge-cells) already named 0x451850; the rows below are the re-read with the other four.
+Source: slice E4-c of the [technology audit](../technology-audit-res-125.md#6-queue) and the [magic audit](../magic-audit-res-103.md#slices) (ARC-RES-125, ARC-RES-103; the magic plan's MT15). Read on 2026-11-11 in the 1.0.7.4 executable (`VERSION:1.0.7.4`; SHA-256 `9bd80511…8d52`) by this task alone (F1): the component table 0x5B0BA8 (slots 0, 5, 19, 20 and 24), the executors 0x452F00, 0x451850, 0x4529D0, 0x4529F0 and 0x452ED0, the field reader 0x406CA0 and the loop 0x4510F0 that consumes the jump, all from the Ghidra export and the data-dword table. Nothing was run in the emulator, patched or copied. [Technology evidence](../technology-evidence.md#technological-items-fr-magic-010-fr-magic-011) already named 0x451850; the rows below are the re-read with the other four.
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |

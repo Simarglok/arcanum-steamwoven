@@ -355,9 +355,12 @@ public partial class TerrainViewerApp
         var map = new SessionMapId(CurrentAreaMap);
         var aiBefore = _aiForSmoke;
         _aiForSmoke = true;
+        // ARC-DEV-405: as in the created-critter stage (ARC-DEV-394), a stage run earlier in the process can leave the world's test time set, and then ProcessWorld does not run in a native smoke: the frame
+        // never reaches ProcessAreaAi, which hands the created critters to the AI host and runs the tile notifications of their creation (RunNpcTilePending). The frames of this stage run that AI pass
+        // themselves, so the stage does not depend on what ran before it.
         async Task Settle(int frames = 3)
         {
-            for (var i = 0; i < frames; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); SyncAreaInventory(); }
+            for (var i = 0; i < frames; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); ProcessAreaAi(); SyncAreaInventory(); }
         }
         var before = session.QueryCreatedObjects(map).Select(o => o.Entity).ToHashSet(StringComparer.Ordinal);
         try

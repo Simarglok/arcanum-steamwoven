@@ -1,7 +1,7 @@
 # Hero skills runtime (ARC-SKILLS-002)
 
 Status: **Implemented bounded component**, ARC-SKILLS-002 (2026-10-20), task S2 of the
-[skills plan](../research/skills-plan.md). The session answers the hero's sixteen skill levels and training, and the levelled
+skills plan. The session answers the hero's sixteen skill levels and training, and the levelled
 followers' from their saved sheets, through the [skill rules](skill-rules-runtime.md) (ARC-SKILLS-001), and every reader of
 a hero's skill uses them: its attack, dodge and backstab, the weapon speed, the best-items choice and the follow check. The
 race and gender effects' skill changes of a pre-made hero (ledger SH-09) are kept as the hero's innate skill changes and
@@ -44,7 +44,7 @@ fewer points for the same target, as in the original, where the race effect is i
 
 The hero gains `"innateSkills":[{"cause","skill","operator","value"}]` (cause `Race` or `Gender`, the `Skill` name, the effect
 operator name); the decoder checks the shape and at most 14 entries, the import every value. Schema 20 is refused like the
-earlier ones, not migrated ([game session](game-session-runtime.md#snapshot-schema-51)).
+earlier ones, not migrated ([game session](game-session-runtime.md#snapshot-schema-62)).
 
 ## Viewer host
 

@@ -260,15 +260,32 @@ class OutlineTests(unittest.TestCase):
                 self.assertEqual(result.coverage.shape, (mask.shape[0] * 4, mask.shape[1] * 4))
                 self.assertFalse(result.vanished)
                 self.assertGreater(result.nodes, 0)
-                self.assertLessEqual(result.level, 0.5)
+                self.assertLessEqual(result.level, outline.LEVEL_CAP)
                 ratio = result.traced_mass / result.mass
-                # A stroke under one pixel is quantized to whole 8x rows before the curve fit (docs/research/font-vectorization.md,
-                # section 5: one-pixel strokes recover poorly), so the bar gets a wider bound than the solid shapes.
-                upper = 1.2 if name == "bar" else 1.08
+                # A stroke under one pixel is quantized to whole 8x rows before the curve fit (see the research findings in docs/workflow/hd-font.md,
+                # section 5: one-pixel strokes recover poorly), so the bar gets a wider bound than the solid shapes.  The level cap
+                # 0.42 (ARC-UI-145, the owner's choice of a tighter edge) takes the binarization below the mass-preserving level
+                # wherever that is above 0.42, so the glyphs come out up to a third bolder in area (about 11 % over the player's
+                # fonts, a local observation); the next test holds the cap-free (0.5) trace to the conserved-ink bounds.
+                upper = 1.4 if name == "bar" else 1.3
                 lower = 0.85 if name == "bar" else 0.92
                 self.assertGreater(ratio, lower, f"{name} lost ink: {ratio}")
                 self.assertLess(ratio, upper, f"{name} gained ink: {ratio}")
-                self.assertLess(result.mean_abs_error, 0.1, f"{name} round trip error {result.mean_abs_error}")
+                # The cap's extra ink also raises the round-trip error of the thin shapes (0.14 and 0.16 here, 0.08 over the real fonts).
+                self.assertLess(result.mean_abs_error, 0.2 if name in ("bar", "dot") else 0.1, f"{name} round trip error {result.mean_abs_error}")
+
+    def test_a_cap_of_one_half_conserves_the_ink_as_before_ui_145(self) -> None:
+        saved = outline.LEVEL_CAP
+        outline.LEVEL_CAP = 0.5
+        try:
+            for name, mask in synthetic_font_masks().items():
+                with self.subTest(shape=name):
+                    result = self.trace(mask)
+                    ratio = result.traced_mass / result.mass
+                    self.assertLess(ratio, 1.2 if name == "bar" else 1.08, f"{name}: {ratio}")
+                    self.assertGreater(ratio, 0.85 if name == "bar" else 0.92, f"{name}: {ratio}")
+        finally:
+            outline.LEVEL_CAP = saved
 
     def test_the_ring_keeps_its_hole_and_the_disc_is_filled(self) -> None:
         masks = synthetic_font_masks()
@@ -416,6 +433,22 @@ class CommandTests(unittest.TestCase):
             self.assertEqual(self.run_trace(game, out), 0)  # re-running replaces only the tool's own folder, same bytes
             self.assertEqual(json.loads((folder / "font.json").read_text())["framesSha256"], first_run)
             self.assertEqual(len(masks), 5)
+
+    def test_the_command_line_defaults_are_the_tracers_constants_and_a_custom_run_is_recorded_and_undone(self) -> None:
+        defaults = hd_font.build_parser().parse_args(["trace", "--out", "x"])
+        self.assertEqual((defaults.alpha_max, defaults.level_cap, defaults.opt_tolerance),
+                         (outline.ALPHA_MAX, outline.LEVEL_CAP, outline.OPT_TOLERANCE))
+        art, _ = synthetic_font()
+        with tempfile.TemporaryDirectory() as temp:
+            game = build_game(Path(temp), art)
+            out = self.checkout(temp)
+            self.assertEqual(self.run_trace(game, out, "--alpha-max", "0.2", "--level-cap", "0.3", "--opt-tolerance", "0.1"), 0)
+            parameters = json.loads((out / "receipt.json").read_text())["parameters"]
+            self.assertEqual((parameters["alphaMax"], parameters["optTolerance"], parameters["levelRule"]),
+                             (0.2, 0.1, "mass-preserving, at most 0.3"))
+            self.assertEqual((outline.ALPHA_MAX, outline.LEVEL_CAP, outline.OPT_TOLERANCE), (0.6, 0.42, 0.2))  # restored for the next run
+            with self.assertRaises(SystemExit):
+                self.run_trace(game, out, "--level-cap", "0.99")
 
     def test_a_foreign_receipt_and_a_linked_frame_are_not_written_through(self) -> None:
         art, _ = synthetic_font()

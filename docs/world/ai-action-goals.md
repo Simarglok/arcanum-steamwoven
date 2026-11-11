@@ -1,7 +1,7 @@
 # NPC AI action goals: casting, items, skills, throws and pickups (ARC-WORLD-089)
 
 Status: **Implemented bounded component**, ARC-WORLD-089, NPC combat AI plan slice
-[I8b](../research/npc-combat-ai-plan.md#implementation-slices-proposals-after-the-matching-research) (split from I8 by the owner on
+[I8b](../research/npc-combat-ai-plan.md#phase-1-faithful-reconstruction) (split from I8 by the owner on
 2026-10-28). The goals that carry out what the [support rules](ai-support.md) (slice I8) choose, and the starters that create them,
 read in the retail 1.0.7.4 executable through its goal-type table: perform's cast, item and skill actions, the grenade's and a
 thrown weapon's throw, the item search's pickup, and the item use an AI-action item gets at once

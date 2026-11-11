@@ -1,6 +1,6 @@
 # HD font tracing: the player's interface fonts as 4× coverage frames (ARC-DEV-355)
 
-Slice 1 of the font vectorization research ([ARC-RES-100](../research/font-vectorization.md), section 7). The tool
+Slice 1 of the font vectorization research (ARC-RES-100 (deleted; its findings are at the end of "Method and limits"), section 7). The tool
 [`tools/hd_font`](../../tools/hd_font/hd_font.py) reads the interface bitmap fonts from the **player's own installation**, traces every
 glyph's coverage mask into an outline and renders it back as a 4× coverage frame. It writes **local files only**; it does not build
 or touch an HD pack. Slice 2 (ARC-DEV-361) puts the frames into the pack and the viewer draws text from them: [HD pack workflow](hd-pack.md#traced-fonts-in-the-pack-arc-dev-361). It needed no pack format change (the existing `masked` interface entries take the frames).
@@ -24,6 +24,7 @@ overrides it); a worktree has its own empty `local/`, so give `--out` the main c
 python3 -B tools/hd_font/hd_font.py trace --out local/hd-font/out --dry-run     # sources, fonts, planned files
 python3 -B tools/hd_font/hd_font.py trace --out local/hd-font/out               # arts 27, 229, 171, 327, 840 (under a minute)
 python3 -B tools/hd_font/hd_font.py trace --out local/hd-font/out --art 27,229  # other interface ART numbers: any font in interface.mes
+python3 -B tools/hd_font/hd_font.py trace --out local/hd-font/out-x --alpha-max 0.3 --level-cap 0.45   # a variant to compare (ARC-UI-145), below
 python3 -B tools/hd_font/hd_font.py self-test                                   # synthetic-fixture tests, inside the locked venv
 ```
 
@@ -46,8 +47,17 @@ its red level like the rest.
 ## Method and limits
 
 The method is the research's section 3: pad, cubic upsample to 8×, 6 rounds of iterative back-projection, the **mass-preserving
-level** (the level at or below 0.5 at which the binary area equals the mask's total coverage), Potrace curve fit (`turdsize` 24,
-`alphamax` 1.0, optimizing curves, tolerance 0.2), even-odd fill, rasterized at 16× and box-reduced to 4×. It is deterministic.
+level** (the level at or below the cap, **0.42**, at which the binary area equals the mask's total coverage), Potrace curve fit (`turdsize` 24,
+`alphamax` **0.6**, optimizing curves, tolerance 0.2), even-odd fill, rasterized at 16× and box-reduced to 4×. It is deterministic.
+
+**Sharper defaults (ARC-UI-145, tool version 2).** The first traces (ARC-DEV-355) used `alphamax` 1.0 and a cap of 0.5. The owner reported the HD text as too
+smooth (2026-11-11) and chose, from a labelled on-screen comparison of seven variants (character sheet and tooltip at 2560 × 1315: current, `alphamax` 0.6 and 0.3,
+`alphamax` 0.6 with cap 0.42, bilinear and nearest sampling without mipmaps, and the original), the trace `alphamax` 0.6 with cap 0.42 **and** bilinear sampling
+without mipmaps in the viewer ([HD pack workflow](hd-pack.md#traced-fonts-in-the-pack-arc-dev-361)). On the screen the sampling filter made most of the difference
+(the share of soft edge pixels in the text fell from 0.375 to 0.30), the `alphamax` change alone almost none (0.379), the cap a little (0.343). `--alpha-max`
+(0 to 1.3334), `--level-cap` (0.05 to 0.95) and `--opt-tolerance` set the parameters for a comparison run; the receipt records them. The cap is not
+free: below the mass-preserving level the glyphs get bolder, about 11 % more ink in area over the five fonts (median traced ink 1.107 of the mask's, against 0.998
+at cap 0.5) and a larger round-trip error (0.079 against 0.059 mean), a local observation of 2026-11-11. A cap of 0.5 gives back the first behaviour.
 
 - Dependencies: numpy, scipy, Pillow and **potracer** (GPLv2+, a port of Potrace), pinned with wheel hashes in
   [`requirements.lock`](../../tools/hd_font/requirements.lock) (macOS wheels, CPython 3.12 to 3.14). potracer is an external tool
@@ -60,3 +70,20 @@ level** (the level at or below 0.5 at which the binary area equals the mask's to
 - `interface.mes` is read in its simple `{number}{text}` form (first message of a number wins).
 - Pack and viewer support for the coverage frames is ARC-DEV-361 (`hd_pack.py fonts-plan`, importer `coverage` items, `AreaArtFontFace`); the owner's look at the result is slice 3.
 - Not done here (later slices): the remaining 23 fonts' review, runtime outlines.
+- **Research findings (ARC-RES-100, the research note is deleted).** The job is a deterministic trace, not a redraw: all 28 text fonts trace in about 70 s
+  of pure Python. On synthetic ground truth the traced outline matches the true one with IoU 0.87-0.94 for an unhinted source (0.79-0.86 if grid-fitted)
+  and 0.72-0.82 at 10-16 px; edge error at 4x is two to four times below nearest or bicubic upscaling. At exactly 4x a vector is not sharper than a
+  back-projected, thresholded 8x raster; its gain is size and scale freedom. A stroke under one pixel is quantized to whole 8x rows before the curve
+  fit. The original typefaces look like commercial designs and a licence review of derived outlines was not
+  done, so the outlines stay local like the rest of the pack. Not covered: other alphabets (the fonts hold Latin-1 only); runtime outlines (option B) are an optional later design.
+- **Sharper text (ARC-UI-145, the task note is deleted).** The owner found the HD text of ARC-DEV-361 too smooth. Seven variants were drawn in the real viewer
+  (local readbacks of the character sheet and a tooltip at 2560 x 1315): the share of soft edge pixels (luma 0.15 to 0.85 of the ink pixels, lower is crisper) was
+  0.375 for the installed fonts, 0.379 and 0.373 for trace `alphamax` 0.6 and 0.3 (no effect), 0.343 with a level cap of 0.42, 0.301 bilinear without mipmaps and
+  0.168 nearest (stair-stepped). The filter, not the trace, made the text soft. The owner chose `alphamax` 0.6 with cap 0.42 plus bilinear sampling without mipmaps
+  (0.279 in the viewer). Cost: the cap makes glyphs about 11 % bolder in area (median traced ink 1.107 of the mask's against 0.998) and raises the round-trip error
+  (0.079 against 0.059); without mipmaps a window smaller than about 2x may shimmer when text moves (not checked). `outline.py` holds `ALPHA_MAX` and `LEVEL_CAP`,
+  `hd_font.py` takes `--alpha-max`, `--level-cap` and `--opt-tolerance`, recorded in the receipt.
+- **Owner check (slice 3):** compare the traced text with the 1x text at UI scales 1, 1.5, 2, 3 and 4 on the main menu (327), options (27, 229), the
+  character sheet (27, 229, 171), the dialog box and floaters (229), the world map (840), save/load (27) and the pre-made browser (27, 171). The 6 to
+  9 px fonts (Garamond 6/8/9, Courier 10, Pork 12) stay bitmap or get the stroke-aware step first; the reading windows use some of them (ledger WR6-WR8:
+  480 Courier 10 for the telegram, 482 Garamond 8 in the newspaper masthead, 497 Pepper 20 for the note), so that text stays at 1x until then.

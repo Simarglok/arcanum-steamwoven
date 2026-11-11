@@ -160,7 +160,7 @@ opt-in test). Neither is executed by Data.
   at once. A stream passed to the owner may be read from a worker thread and must not call
   back into the owner while it is read: the owner's public getters take its lock, which
   the pass holds (`CurrentPhase` is an unsynchronized internal phase for tests).
-- Verified-file memo (ARC-DEV-374, O5a of the [performance diagnosis](../research/performance-diagnosis-2026-11.md); owner decision
+- Verified-file memo (ARC-DEV-374, O5a of the [performance diagnosis](../project/status/tools.md); owner decision
   2026-11-11, option A). The authentication rule above is "every input is hashed in full at every pass". For a file of at least
   1 MiB (`VerifiedFileMemo.MinBytes`: the archives and large loose inputs; prototypes, patches and small resources keep the
   full pass every time) the rule is now: **the first check of that file in the process hashes it in full**; every later check
@@ -295,7 +295,7 @@ Crash Site profile it reads about 1.2 GB of authentication instead of about 596 
 
 ## Resident frames and visuals across map loads (ARC-DEV-375)
 
-Status: **implemented by ARC-DEV-375** (design written before the code; measurements at the end of this section). O5c of the [load time diagnosis](../research/performance-diagnosis-2026-11.md); the owner
+Status: **implemented by ARC-DEV-375** (design written before the code; measurements at the end of this section). O5c of the [load time diagnosis](../project/status/tools.md); the owner
 approved keeping the decoded repository between loads of the same map). The rule "no persistent encoded/decoded frame cache between
 operations" above stays for the pinned exterior (the Crash Site smoke, `ExecuteExterior`) and for every load that passes no resident
 store. The map path (`AreaMapLoadOperation`, whole interiors and the main map's windows) passes two.
@@ -354,14 +354,14 @@ inserts nothing that was not committed). The main thread only reads the immutabl
 **Not kept, and why.** The strict snapshot of a plan, its scene plan and its step evidence. A window move loads another window (other sector files), so the
 whole snapshot differs; the part that was expensive and is shared, the ART work, is what the two stores keep. A reload of the *same* window (a cave return to
 the same arrival, a quick load in place) could keep the snapshot too; with the verified-file memo (ARC-DEV-374) merged the authentication no longer stands in its way, so a follow-up
-(snapshot keyed by plan, data rules and input identities and stamps) is open. The map's transitions are O5b ([DEV-368](../research/performance-diagnosis-2026-11.md)).
+(snapshot keyed by plan, data rules and input identities and stamps) is open. The map's transitions are O5b ([DEV-368](../project/status/tools.md)).
 
 **Measured (ARC-DEV-375, before the verified-file memo and the transitions cache were merged).** One `perf` smoke (Debug source, `--sector 1409,1314`, Mac under load: load average 15-24, so only ratios inside one run mean anything),
 the same build with `ARC_AREA_RESIDENT=0` (before) and without it (after). Worker of the **return to the main map** after a trip to a temple interior (the cave-return case),
 milliseconds: `read.strict` 3,120 -> 3,950, `read.copy` **1,809 -> 469**, and the copy's allocation 103.5 MiB -> 1.9 MiB; frames served 1,617 of 1,623 (6 read), visual records served
 2,459 of 2,466. The unchanged stages of the same leg (plan, transitions, open, verify) were 1.6x slower in the second run (3.2 s -> 5.2 s together), so the second run was the busier one; scaled by
 that factor the worker's read stage fell from about 5.1 s to about 2.8 s (an estimate, not a measurement). The strict build still takes seconds with every visual served: its remaining cost is not the ART
-decode, so it is the next thing to profile (the closing whole-input authentication, the per-object appearance resolution; not measured here). A later `perf` run on the final tree (with the verified-file memo and the transitions cache merged; load average 30, so only the stage sizes mean anything): the same return leg's frame copy took 36 ms (6 frames read), `verify` 0.3 ms, the temple leg's whole worker 2.1 s, while the main map's `read.strict` still took 7.6 s with 2,459 of 2,466 visual records served and 482 MiB allocated, so the strict build's cost is mostly not ART work; that was profiled by ARC-DEV-383 (the [follow-up in the diagnosis](../research/performance-diagnosis-2026-11.md#follow-up-the-strict-area-build-profiled-arc-dev-383): a per-object scan of every mapping name, per-entry inflaters and per-object lookups in lists, removed; the same records come out, no rule of this contract changed). The first load of a process is unchanged (nothing is resident), the
+decode, so it is the next thing to profile (the closing whole-input authentication, the per-object appearance resolution; not measured here). A later `perf` run on the final tree (with the verified-file memo and the transitions cache merged; load average 30, so only the stage sizes mean anything): the same return leg's frame copy took 36 ms (6 frames read), `verify` 0.3 ms, the temple leg's whole worker 2.1 s, while the main map's `read.strict` still took 7.6 s with 2,459 of 2,466 visual records served and 482 MiB allocated, so the strict build's cost is mostly not ART work; that was profiled by ARC-DEV-383 (the follow-up in the diagnosis: a per-object scan of every mapping name, per-entry inflaters and per-object lookups in lists, removed; the same records come out, no rule of this contract changed). The first load of a process is unchanged (nothing is resident), the
 temple's first visit read 76 of 242 frames (the main map's frames were in the store).
 
 **Relation to residency (K1).** This is art residency in the loader, not the sector cache of mobile objects ([residency](../architecture/residency.md)):
@@ -369,7 +369,7 @@ the two share no state, and the object residency's fold and heartbeat rules are 
 
 ## Resident editor records across map loads (ARC-DEV-388)
 
-Status: **implemented by ARC-DEV-388**, the follow-up the [strict build profile](../research/performance-diagnosis-2026-11.md#follow-up-the-strict-area-build-profiled-arc-dev-383)
+Status: **implemented by ARC-DEV-388**, the follow-up the [strict build profile](../project/status/tools.md)
 named: the editor `.mob` pass was still re-derived on every load. The owner approved keeping that data resident between loads.
 
 **What the pass does.** The strict build's I5 phase reads, inflates and wire-parses every `.mob` entry of the map module under the plan's sector prefix (one editor record per
@@ -401,7 +401,7 @@ temple's own 22 records were read in 0.7 ms.
 
 ## Map transitions kept on the device (ARC-DEV-392)
 
-Status: **implemented by ARC-DEV-392** (Q7 of the [smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md); the second half of O5b, whose first half
+Status: **implemented by ARC-DEV-392** (Q7 of the smoke speed diagnosis; the second half of O5b, whose first half
 `AreaMapTransitionsCache` of ARC-DEV-368 keeps a map's transitions only for one process). A smoke run is one process, so every run read the main map's sector files
 and scripts again (`ARC-WORLD-031 load stage=transitions ... cached=False`, 1.3-4.1 s on a loaded Mac, 1.8 s in the diagnosis's logs).
 

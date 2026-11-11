@@ -1,7 +1,7 @@
 # NPC danger state: the setter, the target lock and the enemy list (ARC-WORLD-079)
 
 Status: **Implemented bounded component**, ARC-WORLD-079, NPC combat AI plan slice
-[I3](../research/npc-combat-ai-plan.md#implementation-slices-proposals-after-the-matching-research).
+[I3](../research/npc-combat-ai-plan.md#phase-1-faithful-reconstruction).
 The danger state machine of the retail 1.0.7.4 executable ([core loop section 5](../research/npc-ai-core-loop.md#5-danger-state-machine),
 stage A1; [enemy list and target lock](../research/npc-ai-hostility.md#6-enemy-list-and-target-lock), stage A3;
 [ledger CL4, CL10](../research/ledger/npc-ai.md#npc-ai-core-loop-arc-res-054) and

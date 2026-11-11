@@ -108,12 +108,33 @@ history held about 500 runs of such copies of one template).
     ./arcanum smoke map NAME [--stages S,...] [--hero H] [--sector X,Y] [--main-menu] [--env NAME=VALUE] [--all]
     ./arcanum smoke crash-site [--hero H] [--env NAME=VALUE]   # the Crash Site smoke alone
     ./arcanum smoke self-test [--headless] [--env NAME=VALUE]  # the viewer's synthetic --self-test
-    # each also takes --no-build, --keep-settings and --dry-run; pr and map also --no-config-check
+    # each also takes --no-build, --keep-settings, --take-focus and --dry-run; pr and map also --no-config-check
 
+- **Smoke windows, focus and sound (ARC-DEV-403)** <a id="smoke-windows-and-focus-arc-dev-403"></a>. A smoke opens a real Godot
+  window, and Godot makes itself the foreground application when it starts (it asks for it through `TransformProcessType`,
+  `setActivationPolicy:`, `activateIgnoringOtherApps:` and `makeKeyAndOrderFront:`), which took the keyboard focus from the
+  owner on every smoke, and every lane's smoke does it again. Window flags do not stop that (Godot's `no_focus` and
+  `unfocusable` act after the application is already active; a minimized window stops drawing). So on macOS each
+  `./arcanum smoke` builds one small native library from `tools/local_dev/focus_guard_native/arcanum_nofocus.m` (clang,
+  about a second, into the run's settings folder, ad-hoc signed) and loads it into the Godot process of each window
+  smoke with `DYLD_INSERT_LIBRARIES` (the Godot app's entitlements allow it; a headless run does not need it). The library
+  turns those calls into a background-only process: it is never the active application, shows no Dock icon and no window
+  on the screen, and keeps drawing, so the viewer's own frame readbacks (viewport textures) work as before; the smokes
+  drive the viewer with synthetic input and simulate the window focus themselves. Only smoke runs load it, no player
+  package or hand-started viewer does. What it does not cover: a check that reads the real screen or needs a visible
+  window (none of the smokes does); watch a smoke by hand with `--take-focus`, which runs the old way. Off macOS the run is unchanged and silent; without
+  clang or when the build fails, it prints `SMOKE note: ...; the smoke windows may take the focus` and goes on without
+  the guard. The guard needs the Godot build's `allow-dyld-environment-variables` entitlement (the app in `/Applications` has it; a
+  `GODOT=` override without it silently runs unguarded), and a `--env DYLD_INSERT_LIBRARIES=...` replaces it. Smokes of
+  other checkouts get the guard once their branch has this change.
+  **Sound.** An automated run of the viewer (a smoke, a windowed self-test) mutes the Master audio bus at start (the log
+  line `ARC-DEV-403 automated run: Master bus muted`), so the tests are not heard: the audio device stays the real one,
+  the sounds still start and play, and the audio checks (`audible=True`, the loop and voice "is playing" checks) hold, as
+  they would not under the Dummy driver. `--env ARC_SMOKE_SOUND=1` on a smoke lets it be heard.
 - **Click and walk changes** ([smoke scope](tasks.md#smoke-scope), ARC-DEV-239). A PR that changes click or walk handling
   always runs `./arcanum smoke pr --stages map` and `./arcanum smoke self-test` (both, every such PR).
 - **Sampled stages (ARC-DEV-395, owner decision 2026-11-11).** `container-click` and `walk` took 675 s and 525 s of the
-  one Godot slot in that report (600 s and 363 s on an idle Mac when re-measured here) ([smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md)), so by default they check a
+  one Godot slot in that report (600 s and 363 s on an idle Mac when re-measured here) (ARC-DEV-384, deleted; the result is in this section), so by default they check a
   sample; `--all` (on `pr` and `map`, with a run of one of them by `--stages` or its zone; it sets the viewer's `ARC_SMOKE_ALL=1`) runs the
   full stage; the nightly `complete` run and `--zones complete` always run both in full. `container-click` clicks at most 8 containers of the window, spread over the (prototype, admitted open
   outcome) groups, the group of admitted rubbish bins and a locked container first (so at least one bin, and every bin only with `--all`) (`ARC-DEV-395 container-click SAMPLE n of N` names them); `walk` plans and walks the
@@ -138,9 +159,11 @@ history held about 500 runs of such copies of one template).
   time set (`RestoreWorldTestTime` keeps it at the session's time when that is ahead of the wall clock); while it is set,
   `ProcessWorld` returns early in a native smoke, so the frame never reaches `ProcessAreaAi`, and a later stage that waits for frames
   to sync the AI host sees nothing. A stage that needs the frame's AI work asks for it itself (`AreaAiHostNow()` in its wait, as
-  `created-critter` does); a stage that passes alone and fails after others can be this. Seen after the long stage list of the smoke
-  speed diagnosis and not fixed: `script-critters` (`the tile notifications of the creations ran`; it passes alone and fails after
-  `spirit-talk,created-scenery`) and `summon-wall` (`the summoner standing in its own wall is spared`; the cause is not looked at).
+  `created-critter` does, and `script-critters` runs `ProcessAreaAi` in its settle frames for the tile notifications, ARC-DEV-405); a stage
+  that passes alone and fails after others can be this. The test time is not reset between stages: its floor is what keeps the next
+  observation from being refused as late (`RestoreWorldTestTime`, ARC-WORLD-025). `summon-wall` read the hero's hit points before
+  and after the burn and failed once in the long list (`25 -> 30`, not reproduced alone or in shorter chains); it now checks the
+  hit-point damage the hero carries, which the wall's burn would raise (ARC-DEV-405).
 - **Every requested stage runs (ARC-DEV-063).** `PASS` means each requested stage ran: a map smoke passes only when
   its log holds the `PASS` line of every stage in its list (`STAGE_PASS` in `tools/local_dev/smoke.py`, checked against
   the viewer's sources by the tests), the whole map battery (`full`, `map` without `--stages`) that of `map` and
@@ -155,7 +178,7 @@ history held about 500 runs of such copies of one template).
   `--main-menu` (no hero) it is refused. A menu stage (`menu`, `scene`, `options`, `bar`, `death`, `perf-menu`) needs no
   `--main-menu`: it gets its own menu process. The stages the viewer runs only without `map` (`barter`, `menu`, `scene`, `options`, `plants`, `bar`,
   `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-tile`, `tile-ghost`, `container-click`, `fire-order`, `indoor-fade`, `npc-shot`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `placement-census`, `spell-end`, `hold-hero`, `movement`, `spirit-talk`, `created-scenery`, `worn-light`, `critter-light`, `summon-flash`, `summon-wall`, `tech-craft`, `tech-products`, `item-aim`, `perf`, `perf-menu`) get a run of their
-  own (step `stages-alone`, or `map-alone`) when `map` is in the list too. `tech-craft` (ARC-DEV-362, technology audit slice T-a) needs the bullets the map's bodies hold, so it runs on the cave: `./arcanum smoke map "crash site cave" --stages tech-craft` (on a map with no bullets of the crafted gun's type it fails with that message; its steps are the helpers of `TerrainViewerTechCraftHarness.cs`). `tech-products` (ARC-MAGIC-051, technology audit slice T-s) is `tech-craft`'s sibling on the same cave (`./arcanum smoke map "crash site cave" --stages tech-products`): it buys Therapeutics degrees 1 and 2 and Chemistry degree 1, assembles their first records, eats the two stat potions (the hero's effect list grows, record 158 adds +2 strength), uses the poison on a living NPC through the item cursor, and F7/F8 keep effects and items (same harness helpers; it needs a living NPC in the cave). `item-aim` (ARC-DEV-365, technology audit slice T-g) opens the item cursor with a script trap device from the use icon and presses a tile (goal 41) and an NPC (goal 39); it needs a hero and a map with a living NPC. A run whose stages include `debug-travel`, `follower-far` or `inv-carry`
+  own (step `stages-alone`, or `map-alone`) when `map` is in the list too. `tech-craft` (ARC-DEV-362, technology audit slice T-a) needs the bullets the map's bodies hold, so it runs on the cave: `./arcanum smoke map "crash site cave" --stages tech-craft` (on a map with no bullets of the crafted gun's type it fails with that message; its steps are the helpers of `TerrainViewerTechCraftHarness.cs`). `tech-products` (ARC-MAGIC-051, technology audit slice T-s) is `tech-craft`'s sibling on the same cave (`./arcanum smoke map "crash site cave" --stages tech-products`): it buys Therapeutics degrees 1 and 2 and Chemistry degree 1, assembles their first records, eats the two stat potions (the hero's effect list grows, record 158 adds +2 strength), uses the poison on a living NPC through the item cursor, reads the module's found schematic documents of those two disciplines through the inventory's Read button (each registers and is destroyed, a second copy of a known one is kept) and assembles the first found record the hero's expertise reaches from the window's Found tab, buys intelligence and Electric degrees up to 6, assembles the power cells (Chemistry degree 2), the powered shield (Electric degree 3: worn, its 15 s deferred call takes one cell and schedules the next) and the maintained armour (degree 6, record 168: a cell a tick), and F7/F8 keep effects, items, worn items and cells (same harness helpers; it needs a living NPC in the cave). `item-aim` (ARC-DEV-365, technology audit slice T-g) opens the item cursor with a script trap device from the use icon and presses a tile (goal 41) and an NPC (goal 39); it needs a hero and a map with a living NPC. A run whose stages include `debug-travel`, `follower-far` or `inv-carry`
   starts the viewer with `--debug-mode` (the stage needs the debug mode, ARC-DEV-050; ARC-WORLD-120).
 - **Stage configurations and grouping (ARC-DEV-391).** A viewer process fixes its map, start sector, hero, main menu and
   debug mode at launch, so only stages with the same configuration share a process. `STAGE_NEEDS` in
@@ -189,7 +212,7 @@ history held about 500 runs of such copies of one template).
   file keeps the newest 5,000 lines once it passes 2 MB. `stages` lists the requested stages (for a battery run the PASS names the step requires), `stageMs` the parts the viewer timed, so
   for a battery step the two differ; a stage's clock also holds the short work after it up to the next stage's start; a step stopped by a timeout or a signal prints no stage times (`stageMs` is empty). Only the map smokes print stage times: the Crash Site smoke, the self-test, the build and the import show their
   wait and run time only.
-- **Smoke zones (ARC-DEV-396).** Option A of the [smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md#zone-options),
+- **Smoke zones (ARC-DEV-396).** Option A of the smoke speed diagnosis (ARC-DEV-384, deleted),
   in `tools/local_dev/smoke_zones.py`. A zone is a set of stages a change can break together: `core` is every cheap stage (every
   stage no heavy zone holds, so a stage the viewer gains lands there until a heavy zone claims it; grouped by configuration into
   about twenty processes at this base), and the heavy zones are `walk` (the stage `walk`, about 1 minute as a sample, about 6 with `--all`), `container-click`
@@ -270,7 +293,7 @@ history held about 500 runs of such copies of one template).
 - **Godot** is `/Applications/Godot_mono.app/Contents/MacOS/Godot`, or `$GODOT`. The import writes the viewer's
   untracked `*.cs.uid` files into the checkout; never commit them (stage files by name).
 
-Measured speed of the smoke runner, the queue and each stage, and the options for faster runs and per-task zones: [smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md) (ARC-DEV-384).
+Measured speed of the smoke runner, the queue and each stage, and the options for faster runs and per-task zones: the smoke speed diagnosis (ARC-DEV-384, deleted); its results are the sections above.
 
 Tests: `python3 -B -m unittest tools.local_dev.test_smoke` (the stage names from the viewer, the per-PR and full plans,
 the settings folders and dropped variables, the start lines, the chain going on after a failure and ending on a failed
@@ -279,7 +302,7 @@ build or a stopped run, the stage table, the grouping and the early error, the k
 
 ## Timing probe and the `perf` stages (ARC-DEV-367)
 
-The standing probe of the performance diagnosis (O10 of [load time and window responsiveness](../research/performance-diagnosis-2026-11.md)):
+The standing probe of the performance diagnosis (O10 of [load time and window responsiveness](../project/status/tools.md)):
 `PerfProbe` in `src/Arcanum.World/PerfProbe.cs`, godot-free so the load worker and the viewer use the same one. It measures; it is not
 a budget or a regression gate. Other optimisations are shown with it: run before and after, compare the lines.
 
@@ -400,7 +423,7 @@ quiet, crashed and killed runs, limits, lockf, nesting, locales); they use their
 
 ### Queue order (ARC-DEV-390)
 
-[Smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md) measured 3/4 of a smoke call's time as waiting
+Smoke speed diagnosis measured 3/4 of a smoke call's time as waiting
 for the single Godot slot behind a few runs of 5 to 11 minutes (`walk`, `container-click`); a first-come first-served
 queue is the worst order for such a mix, and a project import waited for a window run to start 2.5 s of work.
 
@@ -702,7 +725,13 @@ Run from repository root:
 "$DOTNET" test Arcanum.Steamwoven.sln --no-build --filter "TestCategory!=RealData"
 python3 -B tools/research/dat_probe.py --self-test
 python3 -B tools/original-oracle/oracle.py --self-test
+python3 -B tools/docs_check.py
 ```
+
+`tools/docs_check.py` (ARC-DEV-406) needs only Python and the tracked files: it fails on a relative Markdown link whose file
+or heading does not exist, on a `docs/...` path that code, tests, tables or a page name and that does not exist, and on a page
+under `docs/` that no page links to; `--self-test` runs it on a synthetic tree. A change that moves, renames or deletes a
+page runs it and fixes every finding in the same PR.
 
 The `OriginalExe` tests are part of the solution run and stay inconclusive without
 `ARCANUM_EXE` and the oracle's files ([function oracle](#function-oracle)).
@@ -894,7 +923,7 @@ Original inputs remain read-only and local. Set only the inputs needed for the s
 | Prototype builder | `ARCANUM_EXE` and `ARCANUM_GAME_ROOT` (the installed game folder; inconclusive without it); the comparison also `ARCANUM_ORIGINAL_PROTO` (a folder of the 1,423 files the original wrote); `ARCANUM_PROTO_OUT` writes the built files for a look (refused inside a git repository) | Executable project, `FullyQualifiedName~PrototypeBuilderRealData`, `TestCategory=OriginalExe`; about one minute in Release (`-c Release`: Debug is several times slower), the builds run in parallel; [contract](../Arcanum.Executable.md#the-prototype-builder) |
 | DAT R1 | `DAT_ROOT`, eight documented candidates | Data project, `FullyQualifiedName~DatArchiveTests&TestCategory=RealData`; [DAT API/evidence](../Arcanum.Data.md) |
 | Resource precedence | `DAT_ROOT` = the installed game folder (with `modules/` and `data/`) | Data project, `FullyQualifiedName~ContentStackRealData&TestCategory=RealData`; probe `tools/research/Arcanum.ContentProbe` (`--self-test`, `--game-root`); [research/API](../research/content-precedence.md) |
-| GOG installer unpack (ARC-DEV-074) | `ARC_GOG_INSTALLER` = the GOG offline installer; `innoextract` installed (`PATH` or a Homebrew folder); unpacks into a temporary folder, about 1.2 GB | Session project, `FullyQualifiedName~GogInstallerUnpackerTests&TestCategory=RealData`; [research](../research/gog-installer-unpack.md) |
+| GOG installer unpack (ARC-DEV-074) | `ARC_GOG_INSTALLER` = the GOG offline installer; `innoextract` installed (`PATH` or a Homebrew folder); unpacks into a temporary folder, about 1.2 GB | Session project, `FullyQualifiedName~GogInstallerUnpackerTests&TestCategory=RealData`; [research](packaging.md) |
 | Map aggregate builder (ARC-DEV-082) | `ARCANUM_EXE` and `ARCANUM_GAME_ROOT` (an installation with the module and the prototype files); the comparison also `ARCANUM_ORIGINAL_MAPS` (the aggregates the original wrote, such as `modules/Arcanum/maps`); `ARCANUM_AGGREGATE_OUT` writes the built files for a look | Executable project, `FullyQualifiedName~MapAggregateBuilderRealData`, `TestCategory=OriginalExe`, `-c Release` (about 10 s); [contract](../Arcanum.Executable.md#the-map-aggregate-builder) |
 | Prototype provision (ARC-DEV-069) | `ARCANUM_GAME_ROOT` = an installation the original ran (its `Arcanum.exe` is read; a copy made of links without `data/proto` and `modules/Arcanum/maps` is built from, in a temporary settings folder (prototypes and the map aggregates); `ARCANUM_ORIGINAL_PROTO` is not needed: the installation's own `data/proto` is compared by name and length) | Session project, `FullyQualifiedName~A_fresh_copy&TestCategory=OriginalExe`, `-c Release` (about 30 s); [research](../research/prototype-extraction.md#e4-results-arc-dev-069) |
 | Technology census (ARC-DEV-363) | `DAT_ROOT` = the installed game folder | Session project, `FullyQualifiedName~TechCensusRealDataTests&TestCategory=RealData` (a few seconds); one state per technology record 140..222 (RUNS, HERO, PART, INERT) and the not-ready components on the hero and an NPC; a failure prints the changed rows to paste into the test; [technology audit](../research/technology-audit-res-104.md#7-smoke-and-test-coverage) |

@@ -2,7 +2,7 @@
 
 Status: **Research**, work items ARC-RES-078 (2026-11-03, slice R1: sections 1–6) and
 ARC-RES-080 (2026-11-03, slice R2: sections 7–9) of the
-[architecture audit](../research/architecture-audit-plan.md) (spines SP1 and SP7, then
+[architecture audit](gap-register.md) (spines SP1 and SP7, then
 SP2). Docs-only: no code changes and no checks run. It is a reference model of the
 original game, not a comparison: the "Steamwoven today" column notes only the obvious
 differences; the full comparison, its classes and the target model are slice G1's.
@@ -42,7 +42,7 @@ functions read stay inside `.text`; indirect calls go to jump tables, hook
 pointers and the `CoCreateGuid` import, none to `.IIDKing`. A row at **F2** has two
 readings that agree; **F1** has one reading; a disagreement is written in the row.
 Everything is read from the executable unless marked **(inference)**. Steamwoven
-facts come from the [audit plan](../research/architecture-audit-plan.md#layer-0-the-engine-spines)
+facts come from the [audit plan](gap-register.md)
 and the [Steamwoven model map](steamwoven-model.md) (M1; its row ids D, S, V, C, L and G
 are used as there) on `origin/main` d9c4fe44.
 

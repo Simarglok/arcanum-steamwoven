@@ -1,8 +1,8 @@
 # Wall of Fire: how the wall looks, and how many pieces (ARC-MAGIC-054)
 
-Status: **Bug fixed in part, one question open.** Owner report 2026-11-11, with two screenshots (the original game in a cave, Steamwoven on the main map).
+Status: **Bug fixed in part, one question open.** Register entry B55 in [open bugs](open-bugs.md). Owner report 2026-11-11, with two screenshots (the original game in a cave, Steamwoven on the main map).
 Requirements (reference only): [FR-MAGIC-008](../requirements/combat-magic-tech.md#fr-magic-008). Earlier reading:
-[ARC-RES-101](summon-objects-res-101.md#wall-of-fire-spell-21) (SUM11, SUM13).
+ledger [SUM11, SUM13](ledger/spell-runs.md#summon-component-and-the-objects-it-creates-arc-res-101).
 
 ## What the screenshots show
 

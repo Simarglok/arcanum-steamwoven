@@ -13,10 +13,12 @@ public partial class TerrainViewerApp
     internal const string ItemAimCode = "ARC-DEV-365";
 
     // ARC-DEV-365 (technology audit slice T-g) native observation (stage "item-aim", only when named, with --hero, on a map with a living NPC): the item cursor and the item use goals on the player's data.
-    // The item is a script trap device (prototype 15100: OIF_NEEDS_TARGET and OIF_NO_RANGED_USE, a trap device, no charges, IA16), whose own use is NOT READY (E6-b), so the stage observes the cursor and the walks only; ARC-WORLD-124 adds step 4, a timed bomb (item 15154) placed on a tile and its fuse.
+    // The item is a script trap device (prototype 15100: OIF_NEEDS_TARGET and OIF_NO_RANGED_USE, a trap device, no charges, IA16); since ARC-WORLD-125 (E6-c) its use arms a script trap: on a tile it makes a marker that carries the device's script
+    // and spends the device, on an NPC it is refused (mes\trap.mes 2) and stays, on a tile that holds a trap object (the marker of an earlier device) it is refused (mes\trap.mes 3) and stays. ARC-WORLD-124 adds step 4, a timed bomb (item 15154) placed on a tile and its fuse.
     //  1. The use icon with no Shift opens the item cursor (interface mode 16, mask object or tile, IA3, IA6) and the window closes; a right press cancels it (IA5).
     //  2. A left press on a tile three to eight cells away is the pick of the cursor's mask: the cursor closes, goal 41 (or goal 39 when an object stands there) walks the hero next to the target and the use's refusal shows.
-    //  3. A left press on the NPC (an object target with OIF_NO_RANGED_USE, IA8) starts goal 39: the hero walks next to it and the use runs (the refusal shows), the device staying in the pack.
+    //  3. A left press on the NPC (an object target with OIF_NO_RANGED_USE, IA8) starts goal 39: the hero walks next to it and the use runs (the refusal of an NPC target shows), the device staying in the pack.
+    //  5. (ARC-WORLD-125) Two script trap devices used on the same free tile: the first arms a marker of its script's prototype (26000..26007), the second is refused with line 3 and stays.
     private async Task RunAreaItemAimSmokeAsync()
     {
         static void Require(bool value, string why)
@@ -97,14 +99,21 @@ public partial class TerrainViewerApp
             Require(tile is not null, "a standable tile three to eight cells from the hero");
             OpenCursor();
             _itemAimLast = null;
+            LastScriptTrapUse = null;
             ItemAimClick(Screen(tile!.Value), ctrl: false, shift: false);
             Require(!ItemTargetOpen && TargetsMatchStack, "the press closed the cursor (IA5)");
             var pressNotice = _itemAimLast;
             Require(pressNotice is not null && (pressNotice.Contains("goal 41", StringComparison.Ordinal) || pressNotice.Contains("goal 39", StringComparison.Ordinal)), $"the press started an item use goal: {pressNotice}");
             var tileGoal = pressNotice!.Contains("goal 41", StringComparison.Ordinal);
             Require(HeroRunsHost()?.ItemUseRun is { } run && run.Bottom.Goal == (tileGoal ? Arcanum.Simulation.Goals.GoalType.UseItemOnTile : Arcanum.Simulation.Goals.GoalType.UseItem), "the hero holds the item use run");
-            RunUntil(() => _itemAimLast!.Contains("NOT READY", StringComparison.Ordinal), "the use ran at the end of the walk");
-            Require(HeroRunsHost()?.ItemUseRun is null && TechSmokeHeld(session).Contains(trap), "the run ended and the device stays");
+            RunUntil(() => LastScriptTrapUse is not null, "the use ran at the end of the walk");
+            Require(HeroRunsHost()?.ItemUseRun is null, "the run ended");
+            // A press on a bare tile (goal 41) arms a marker and spends the device; a press on an object (goal 39) is the object form: refused (the device stays) or armed on a portal or a container.
+            Require(tileGoal ? LastScriptTrapUse is { Outcome: SessionScriptTrapOutcome.Armed or SessionScriptTrapOutcome.TileRefused } : LastScriptTrapUse is { Outcome: SessionScriptTrapOutcome.Armed or SessionScriptTrapOutcome.TargetRefused },
+                $"the press's use answered: {LastScriptTrapUse?.Outcome} {_itemAimLast}");
+            Require(TechSmokeHeld(session).Contains(trap) == (LastScriptTrapUse!.Outcome != SessionScriptTrapOutcome.Armed), "the device is spent exactly when the trap was armed");
+            GD.Print($"ARC-WORLD-125 item-aim press outcome={LastScriptTrapUse.Outcome} marker={LastScriptTrapUse.Marker?.Prototype.ToString() ?? "-"} target={LastScriptTrapUse.Target ?? "-"}");
+            if (!TechSmokeHeld(session).Contains(trap)) trap = TechSmokeGive(data, 15100);
             if (tileGoal)
             {
                 var at = HeroCell()!.Value;
@@ -125,7 +134,7 @@ public partial class TerrainViewerApp
             Require(!ItemTargetOpen && TargetsMatchStack, "the apply closed the cursor");
             var inRange = Math.Max(Math.Abs(World(npc.Row).X - here.X), Math.Abs(World(npc.Row).Y - here.Y)) <= 1;
             Require(inRange || HeroRunsHost()?.ItemUseRun is { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.UseItem }, $"the NPC's press started goal 39: {_itemAimLast}");
-            RunUntil(() => _itemAimLast!.Contains("NOT READY", StringComparison.Ordinal), "goal 39 used the device at the NPC");
+            RunUntil(() => LastScriptTrapUse is { Outcome: SessionScriptTrapOutcome.TargetRefused }, "goal 39 used the device at the NPC: refused with mes\\trap.mes 2");
             Require(HeroRunsHost()?.ItemUseRun is null && TechSmokeHeld(session).Contains(trap), "goal 39 ended and the device stays");
             // 4. ARC-WORLD-124 (E6-b, ledger IA13, TP2, TP3): a timed bomb (item 15154, record 176) used on the tile of step 2 is destroyed, leaves its marker (prototype 4047) and sets the 88 s fuse; when the
             //    fuse ends (the session's game clock moved by it) the cast host's pass destroys the marker and casts the record at the tile with no source and no caster.
@@ -143,6 +152,25 @@ public partial class TerrainViewerApp
             Require(session.QueryTrapDevices().Count == 0 && session.QueryCreatedObjects(new SessionMapId(CurrentAreaMap)).Count == markers, "the fuse is spent and the marker destroyed");
             GD.Print($"ARC-WORLD-124 trap-bomb fuse spell={casts[0].Firing.Spell} outcome={casts[0].Outcome} run={casts[0].Run?.ToString() ?? "-"} tile={spot.X},{spot.Y}");
             Require(casts[0].Outcome == SpellCastAttemptOutcome.Started, $"the record's cast at the tile started: {casts[0].Outcome}");
+            // 5. ARC-WORLD-125 (E6-c, ledger IA13, TP2): two script trap devices on the same tile. The first arms a marker (prototype 26000..26007) that carries the device's own script and spends the device; the second is
+            //    refused with line 3 (a trap object stands there now) and stays. A tile whose map data holds a trap object refuses both.
+            var free = new SpellLocation(checked((uint)(spot.X + 1)), checked((uint)spot.Y));
+            var cellTwo = new CellCoord(spot.X + 1, spot.Y);
+            var first = TechSmokeGive(data, 15100);
+            PlaceTrapDeviceUse(first, null, free);
+            var armed = LastScriptTrapUse;
+            Require(armed is { Outcome: SessionScriptTrapOutcome.Armed or SessionScriptTrapOutcome.TileRefused }, $"the first device answered: {armed?.Outcome} {armed?.Failure}");
+            if (armed!.Outcome == SessionScriptTrapOutcome.Armed)
+            {
+                var marker = armed.Marker!;
+                Require(marker.Prototype is >= 26000 and <= 26007 && !TechSmokeHeld(session).Contains(first), $"a marker of the script's prototype was made and the device spent: {marker.Prototype}");
+                Require(session.QueryPlacedTrapScript(marker.Map, marker.Entity) is { Script: not 0 }, "the marker carries the script");
+                Require(session.QueryScriptTrapMarkers(marker.Map, cellTwo).Count == 1, "the session lists the marker on its tile");
+            }
+            var second = TechSmokeGive(data, 15100);
+            PlaceTrapDeviceUse(second, null, free);
+            Require(LastScriptTrapUse is { Outcome: SessionScriptTrapOutcome.TileRefused, Plan.RefusalLine: 3 } && TechSmokeHeld(session).Contains(second), $"the second device was refused with line 3 and stays: {LastScriptTrapUse?.Outcome}");
+            GD.Print($"ARC-WORLD-125 script-trap first={armed.Outcome} second={LastScriptTrapUse!.Outcome} tile={cellTwo.X},{cellTwo.Y}");
             GD.Print("ARC-DEV-365 native-smoke item-aim PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Tile = tileGoal, Npc = npc.Id, Notice = _itemAimLast }));
         }
         finally
