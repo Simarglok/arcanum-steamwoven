@@ -7,6 +7,7 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Reaction;
+using Arcanum.Simulation;
 
 namespace Arcanum.World;
 
@@ -109,6 +110,7 @@ public sealed record AreaBarterMerchant(string Entity, string Name, int Multipli
 
     /// <summary>ARC-WORLD-090: the merchant with its substitute container (0x45F650): an NPC with no leader (none at T0, not following the
     /// hero) whose container lies within <see cref="SubstituteRange"/> tiles of <paramref name="cell"/>, the merchant's (Chebyshev, 0x4B96F0).</summary>
+    [OriginalFunction(0x45F650, OriginalFunctionScope.Full)]
     public AreaBarterMerchant WithSubstitute(AreaSubstituteContainer? substitute, CellCoord cell, AreaBarterData data)
     {
         ArgumentNullException.ThrowIfNull(data);

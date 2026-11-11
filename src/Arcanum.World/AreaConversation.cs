@@ -9,6 +9,7 @@ using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Reaction;
+using Arcanum.Simulation;
 
 namespace Arcanum.World;
 
@@ -725,6 +726,7 @@ public sealed class AreaConversationHost
     // or (ledger NQ6): the speaker's origin is the session's set origin (npc.origin on the speaker's map), cleared when it equals the map data's; the live talk's reputation scope follows.
     private sealed class OriginPort(AreaConversationHost host) : IDialogOriginPort
     {
+        [OriginalFunction(0x45D2D0, OriginalFunctionScope.Full)]
         public DialogCommandResult Execute(SetOriginCommand command)
         {
             var at = command.Npc.Value - 1000;
@@ -946,6 +948,7 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     public int Alignment => _session.QueryHero()?.Alignment ?? _diagnosticAlignment;
     public bool Follows(int speaker) => _party.Contains(speaker)
         ? _session.QueryCompanion(_entities[speaker]).LedByPc : Read(speaker, FollowProperty) == 1;
+    [OriginalFunction(0x444F10, OriginalFunctionScope.Full)]
     public bool LocalFlag(int speaker, int bit) => (LocalFlags(speaker) & (1u << bit)) != 0;
     public int Reaction(int speaker) =>
         _session.QueryReaction(_entities[speaker], NpcFacts(), PcFactsFor(speaker)).View?.Effective ?? throw new InvalidOperationException("AREA_SESSION_REACTION_INVALID");
@@ -975,9 +978,11 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     private uint Counters(int speaker) => Read(speaker, AreaScriptHost.CountersProperty) is { } value ? checked((uint)value) : _baselineCounters.GetValueOrDefault(speaker);
 
     /// <summary>ARC-DEV-196 (KC1): the byte counter <paramref name="query"/> names in the speaker's dialog attachment, the session's value or the loaded one.</summary>
+    [OriginalFunction(0x444FD0, OriginalFunctionScope.Full)]
     public int Read(DialogCounterQuery query) => (int)((Counters(Speaker(query.Npc)) >> (8 * query.Index)) & 0xFF);
 
     /// <summary>ARC-DEV-196 (KC2): stores the low eight bits of the value in the counter; a value equal to the loaded one clears the session entry, as the flags do.</summary>
+    [OriginalFunction(0x445020, OriginalFunctionScope.Full)]
     public DialogCommandResult Execute(CounterWriteCommand command)
     {
         var speaker = Speaker(command.Npc);
@@ -1012,6 +1017,7 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     public LocalFlagReadResult Read(LocalFlagQuery query) =>
         LocalFlagReadResult.Found(LocalFlag(Speaker(query.Npc), query.Index) ? 1 : 0);
 
+    [OriginalFunction(0x444F60, OriginalFunctionScope.Full)]
     public DialogCommandResult Execute(LocalFlagWriteCommand command)
     {
         var speaker = Speaker(command.Npc);

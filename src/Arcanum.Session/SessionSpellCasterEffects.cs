@@ -79,6 +79,7 @@ public sealed partial class SessionSpellCaster
     /// critter's entangle ended now.
     /// </summary>
     [OriginalFunction(0x459A30, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x459170, OriginalFunctionScope.Partial)]
     public bool CritterHit(string victim)
     {
         ArgumentNullException.ThrowIfNull(victim);

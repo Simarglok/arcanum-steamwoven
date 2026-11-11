@@ -6,7 +6,7 @@ changes and no checks run (the data census and the admission check below ran loc
 checks). It answers the three questions of T-r1: what the generic item flag 0x20 means (two learned and three found products), which numeric bit the
 grenade flag is, and what the item scripts at attach points 24, 25, 7 and 8 on crafted gear do (scripts 28012 to 28015, 29016, 29017 and 1022) and whether
 Steamwoven's script host runs them. It ends in the verdict the audit asked for: whether the conditional slice T-m is needed (it is, as two slices) and
-what the read says about T-k (nothing: that one waits for T-r3).
+what the read says about T-k (nothing; T-r3, ARC-RES-114, has since dropped it).
 
 Requirements (reference only; three coverage rows get one added sentence each):
 [FR-ITEM-018](../requirements/items-economy.md#fr-item-018) (assembly: what the products do),
@@ -31,7 +31,7 @@ this note tells the story and hands it off.
 | What are the scripts at points 24 and 25 (28012 to 28015)? | Ordinary **wield-on and wield-off effect scripts** shared with magical armour: 28012/28013 add and remove an effect from the item's magick or tech adjustment, 28014/28015 the same with a fixed effect (137). Results are ignored by the equip code. Steamwoven's item-event set **admits all four** statically; whether each run is accepted at run time (effect 137, the adjustment entries, the aptitude check, the call-ex write-back) is unverified until T-a. |
 | What is script 29016 (point 24 only, the Electric degree-3 shield)? | A **15-second timer**. Wield-on schedules a call of itself, and each call, while the wearer still wears the item (name number 2866), **uses one unit of ammunition type 2 (a power cell) from the wearer** and schedules the next call (TI8). Steamwoven's item set refuses its actions (125, 54, 135), so **the shield cannot be worn at all today**: the wear move is refused as `ItemScriptUnsupported`. |
 | Does the SCR host run them? | 28012 to 28015: **they pass the static item-event admission** (the first real-data run, which also decides run-time acceptance, is the smoke stage T-a). 29016: **no, and it refuses the wear**. 29017, 1022, 1343, 30008, 30300: **no**; the actions 40, 21 and 36 are not admitted in any set, and Steamwoven's hero throw never fires points 7 and 8 (an existing "not ready" of the attack docs). A thrown creature item today just lands as an item. |
-| Are the conditional slices needed? | **T-m: yes, two slices** (T-m1 creature items, M to L; T-m2 the powered shield, S to M), section 5. **T-k: this read does not decide it** (nothing here reads aptitude or expertise); it waits for T-r3. |
+| Are the conditional slices needed? | **T-m: yes, two slices** (T-m1 creature items, M to L; T-m2 the powered shield, S to M), section 5. **T-k: this read does not touch it** (nothing here reads aptitude or expertise); T-r3 (ARC-RES-114) has dropped it. |
 
 ## Method and inputs
 
@@ -143,7 +143,7 @@ the set admitted the action. `SessionScriptPoint` has no hit or miss point, and 
 consequences: **the learned Electric degree-3 product cannot be put on**, and **a thrown creature item behaves like any thrown item** (it lands and stays an item).
 No other learned product is refused by the static admission; run-time refusals after admission (an unknown effect rule, an unstorable change, an aptitude change) are possible and are for T-a to show.
 
-## 5. Result for the plan: T-m is needed (two slices), T-k is not decided here
+## 5. Result for the plan: T-m is needed (two slices)
 
 Slice codes are the coordinator's; the labels below are planning labels.
 
@@ -155,7 +155,7 @@ Slice codes are the coordinator's; the labels below are planning labels.
 Acceptance for both: every installed script of the group runs to the result recorded in TI5 to TI8 (an opt-in real-data test over the scripts of this note), plus the smoke step of T-m1. Original behaviour in both
 modes: nothing here is a bug of the original under the bug rule (TI9), so no switch.
 
-**T-k** (expertise effects, aptitude readers): nothing in this read touches aptitude or expertise; its need is still T-r3's to decide. **Other audit rows** are
+**T-k** (expertise effects, aptitude readers): nothing in this read touches aptitude or expertise; T-r3 (ARC-RES-114) dropped it. The tech books' insert and remove scripts (points 21 and 28) that ARC-RES-114 adds are a third slice, T-m3, in the audit plan; they were not read here. **Other audit rows** are
 unchanged except the states in the matrix: the Electric ring, the Mechanical helmet and the Smithy gauntlets move from "scripts T-r1" to "EQUIP, scripts run",
 the Electric shield to "BLOCKED (29016, T-m2)" and the two flag-0x20 learned products to "INERT (creature on throw, T-m1)". The AI's grenade pick (T-h)
 is unaffected (a creature item has no grenade flag, so the AI never throws one: the only AI throw is the 0x10 rule).
