@@ -248,12 +248,13 @@ need every host in `PublishAreaReady` to tolerate frames running between its ste
 ## After O1 (ARC-DEV-381)
 
 `./arcanum smoke pr --stages perf-menu --main-menu --env ARC_PERF_PROBE=1`, Debug source run on a Mac shared with other threads' builds and smokes (the milliseconds
-rank, they do not measure; one run). `start-to-menu` is the probe's first frame drawn with the menu open, counted from the process start; the scene's own
+rank, they do not measure; two runs). `start-to-menu` is the probe's first frame drawn with the menu open, counted from the process start; the scene's own
 first frame is the least the former start to the menu could be (the menu opened after the publication, then needed its own first frame):
 
-| `start-to-menu` | Scene's first frame (`first-frame-at`) |
-| ---: | ---: |
-| 1625 ms | 8505 ms |
+| Run | `start-to-menu` | Scene's first frame (`first-frame-at`) |
+| --- | ---: | ---: |
+| 1 | 1625 ms | 8505 ms |
+| 2 (Mac under heavy load, after merging `main`) | 1664 ms | 19322 ms |
 
 The menu's art read (0.25–0.29 s, 45 MiB) is now the whole cost between the process start and the menu; the map's load and publication (6.6 s worker, 0.7 s
 publication) run behind it. A held choice such as Start waits for what is left of that. The main thread is still busy during the publication (O6).
