@@ -44,6 +44,7 @@ public partial class TerrainViewerApp
     {
         if (_schematicDataModule == arguments.ModulePath) return;
         _schematicDataModule = arguments.ModulePath; _schematicData = null;
+        BindAreaSchematicArt(arguments);
         var module = arguments.ModulePath;
         _schematicDataTask = Task.Run(() => AreaSchematics.LoadData(module));
     }
@@ -102,7 +103,10 @@ public partial class TerrainViewerApp
             _schematicsPanel.DisciplineRequested += SelectSchematicDiscipline;
             _schematicsPanel.PageRequested += TurnSchematicPage;
             _schematicsPanel.AssembleRequested += AssembleSchematic;
+            WireSchematicArt(_schematicsPanel);
         }
+        // ARC-UI-142: the original's window once its art has read (the first open before that, or without a game folder, shows the diagnostic layout).
+        AttachSchematicArt(_schematicsPanel);
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
         _schematicMessage = null;
@@ -163,7 +167,7 @@ public partial class TerrainViewerApp
     private void AssembleSchematic()
     {
         if (!SchematicsOpen || _schematicsPanel!.View is not { Placeholder: false } view || _schematicData?.Data is not { } data) return;
-        if (view.Button != AssemblyButton.CanAssemble) { _schematicMessage = view.ButtonText; Render(); return; }
+        if (view.Button != AssemblyButton.CanAssemble) { ShowSchematicMessage(view.ButtonText); Render(); return; }
         if (data.Catalog.Read(view.Record).Record is not { } record) return;
         // ARC-WORLD-085: the products have their prototypes' weight (not saved, so attached before each assembly).
         _areaSession!.AttachItemWeights(data.WeightOf);
@@ -174,13 +178,13 @@ public partial class TerrainViewerApp
                 _inventoryHost?.InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck, data.AmmoOf);
         if (result.Disposition == GameSessionDisposition.Changed)
         {
-            _schematicMessage = AreaSchematics.CompletedText(data, AreaHoverIndex.TextProfile) + AreaSchematics.OnGroundText(result, _schematicCrafter is not null);
+            ShowSchematicMessage(AreaSchematics.CompletedText(data, AreaHoverIndex.TextProfile) + AreaSchematics.OnGroundText(result, _schematicCrafter is not null));
             SchematicSound(AreaSchematics.CompletedSound(view.Discipline), "schematics assembled");
             GD.Print($"ARC-TECHNOLOGY-005 assembled crafter={view.Crafter ?? "hero"} record={view.Record} made={string.Join(",", result.Made)} ground={string.Join(",", result.OnGround)} consumed={string.Join(",", result.Consumed)}");
         }
         else
         {
-            _schematicMessage = "not assembled: " + AreaSchematics.Refused(result, _schematicCrafter is not null);
+            ShowSchematicMessage("not assembled: " + AreaSchematics.Refused(result, _schematicCrafter is not null));
             GD.Print($"ARC-TECHNOLOGY-005 assembly refused={result.Failure}");
         }
         SyncAreaSchematics(force: true);
