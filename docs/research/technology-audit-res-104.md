@@ -266,6 +266,8 @@ Five statements are contradicted by `origin/main`: (1) the coverage rows FR-CHAR
 (ARC-MAGIC-020 to -025 delivered them; the runtime path is `SessionItemTriggers`, the `TechDeviceCatalogue` has no consumer in `src`); (4) [item-durability-runtime.md](../world/item-durability-runtime.md) says no viewer shows an item's condition
 (broken art shows in the inventory, check when the slice runs); (5) the ledger's "no buttons in the sheet" note of degrees (S6). None is a behaviour change.
 
+**Fixed by ARC-RES-116** (docs-only; the coverage rows of (1) had already been refreshed by ARC-RES-107): (2) `tech-degrees-runtime.md` and the catalogue row of tech degrees now name the sheet's technology page as the caller; (3) `tech-devices-runtime.md` lists the item executor and the device spells as delivered by ARC-MAGIC-020 to ARC-MAGIC-025 (the trap-device path and a `TechDeviceCatalogue` consumer stay open); (4) `item-durability-runtime.md` states what the viewer shows of an item's condition; (5) the "no buttons" note is replaced in `docs/project/status/technology.md`, and the same stale claim in `character-point-pool.md` (skills, stats, technology and spell pages all have buttons).
+
 ## 10. Order of work
 
 Labels are planning labels, not task codes (the coordinator hands out codes). Sizes as in the plan: S about 200 lines, M one PR with a smoke stage.
