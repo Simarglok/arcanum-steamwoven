@@ -170,6 +170,7 @@ public sealed partial class GameSessionOwner
 
     // The replacing schedule (0x4AD730, its removal 0x4AD7D0 and the immediate insert of 0x4AD790).
     [OriginalFunction(0x4AD730, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4AD7D0, OriginalFunctionScope.Partial)]
     private void ScheduleTick(int map, string entity, long now, long delay, bool wakeUp)
     {
         // Replace: a tick of the same NPC on another map (none while ticks keep to the actor's map) is removed first.

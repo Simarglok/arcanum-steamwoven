@@ -37,6 +37,7 @@ public static class MoraleRules
     /// The level sum adds each member's own level (P2). A leader the world no longer knows counts as none.
     /// </summary>
     [OriginalFunction(0x4AE020, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4AE0A0, OriginalFunctionScope.Partial)]
     public static PartyStrength Party(IMoraleWorld world, string id, CombatAnomalyProfile profile)
     {
         ArgumentNullException.ThrowIfNull(world);

@@ -101,6 +101,7 @@ public static class HotkeyRules
     /// window closes (0x573440) and an item held before is put back (0x575770), unless the entry's own item is the one held already.
     /// </summary>
     [OriginalFunction(0x54FCF0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x462C30, OriginalFunctionScope.Partial)]
     public static HotkeyItemPlan PlanItem(HotkeyItemFacts entry, HotkeyItemFacts? sameKind, bool heldByPc, bool shiftHeld, string? onCursor)
     {
         if (!heldByPc) return new(HotkeyItemAction.Nothing);

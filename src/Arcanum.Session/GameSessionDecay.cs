@@ -1,5 +1,6 @@
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Items;
+using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 
@@ -28,6 +29,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>The item's pending Item Decay events are removed (a pickup, a deletion; ledger ID4).</summary>
+    [OriginalFunction(0x468110, OriginalFunctionScope.Partial)]
     internal void CancelDecay(string entity) => _events.RemoveAll(SessionEventKinds.ItemDecay, e => e.Payload.Entities[0].Code == entity);
 
     /// <summary>The pending Item Decay events (ARC-WORLD-062): the item, its map and the deadline, in queue order.</summary>

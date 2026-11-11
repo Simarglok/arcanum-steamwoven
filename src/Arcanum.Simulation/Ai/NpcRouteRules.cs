@@ -137,6 +137,7 @@ public static class NpcRouteRules
     /// NPC flag 0x200 on this branch; the flag is not state here, see ledger WS8.)
     /// </summary>
     [OriginalFunction(0x4ACDB0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4AD060, OriginalFunctionScope.Partial)]
     public static NpcRouteStep ForcedStandpoint(NpcRouteFacts facts)
     {
         ArgumentNullException.ThrowIfNull(facts);

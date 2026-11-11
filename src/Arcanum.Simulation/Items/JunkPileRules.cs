@@ -31,6 +31,7 @@ public static class InventoryGridRules
     /// writes past its buffer (crash class), and callers keep their slots inside it (<see cref="Fits"/>).
     /// </summary>
     [OriginalFunction(0x466260, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x466310, OriginalFunctionScope.Partial)]
     public static bool[] Occupied(IEnumerable<InventoryGridItem> items, int rows)
     {
         ArgumentNullException.ThrowIfNull(items);
