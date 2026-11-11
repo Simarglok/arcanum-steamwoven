@@ -58,7 +58,7 @@ public partial class TerrainViewerApp
             Require(summon is not null && summon.Prototype + SessionSpellCaster.PrototypeFileOffset == (spell == SummonFlashSpell ? SummonFlashFile : SummonWallFile),
                 $"the record's one Summon names the expected prototype: {summon?.Prototype}");
             var facts = SummonPrototypeOf(summon!.Prototype + SessionSpellCaster.PrototypeFileOffset);
-            GD.Print($"ARC-DEV-352 {stage} prototype={summon.Prototype + SessionSpellCaster.PrototypeFileOffset} type={facts?.Type} flags=0x{facts?.ObjectFlags ?? 0:X} scenery-flags=0x{facts?.SceneryFlags ?? 0:X}");
+            GD.Print($"ARC-DEV-352 {stage} prototype={summon.Prototype + SessionSpellCaster.PrototypeFileOffset} type={facts?.Type} flags=0x{facts?.ObjectFlags ?? 0:X} scenery-flags=0x{facts?.SceneryFlags ?? 0:X} blit=0x{CreatedPrototype(summon.Prototype + SessionSpellCaster.PrototypeFileOffset)?.Blit ?? 0:X}/{CreatedPrototype(summon.Prototype + SessionSpellCaster.PrototypeFileOffset)?.BlitAlpha ?? 0}");
             Require(facts is { Type: SessionSpellCaster.SceneryObjectType } && (facts.ObjectFlags & SpellTargetObject.NoBlock) != 0, "the piece is a scenery with OF_NO_BLOCK (SUM11)");
             Require(HeroPoolPlace() is not null, "the hero has a committed cell");
             var heroCell = HeroPoolPlace()!.Value.Cell;
@@ -87,7 +87,7 @@ public partial class TerrainViewerApp
                 FlushSpellLog(null);
                 return run;
             }
-            GD.Print($"ARC-DEV-352 {stage} hero={heroCell.X},{heroCell.Y} lines=" + string.Join(" ", record.Components.Select(c => $"{c.Action}/{c.Index}:{c.Type}:0x{c.Area.Targets:X}:0x{c.ApplyTargets:X}")) + " areas=" + string.Join(" ", record.Areas.Select(a => $"0x{a.Targets:X}/r{a.Radius}")));
+            GD.Print($"ARC-DEV-352 {stage} hero={heroCell.X},{heroCell.Y} lines=" + string.Join(" ", record.Components.Select(c => $"{c.Action}/{c.Index}:{c.Type}:0x{c.Area.Targets:X}/r{c.Area.Radius}/c{c.Area.Count}:0x{c.ApplyTargets:X}")) + " areas=" + string.Join(" ", record.Areas.Select(a => $"0x{a.Targets:X}/r{a.Radius}/c{a.Count}")));
             IReadOnlyList<SessionCreatedObject> Mine(int run) => session.QueryCreatedObjects(map).Where(o => o.Run == run).ToArray();
             bool Drawn(string entity) => _groundBodies.ContainsKey(PlacedKey(area.Snapshot.RuntimeMap, entity));
 
@@ -151,11 +151,21 @@ public partial class TerrainViewerApp
             var host = ShownSceneryHost;
             Require(host is not null && pieces.All(p => host.Owns(p.Entity) && host.GoalOf(p.Entity) == GoalType.AnimateLoopFireDamage), "every piece loops as goal 77 (OSCF_IS_FIRE)");
             Require(pieces.All(p => Drawn(p.Entity)), "every piece is drawn");
+            // ARC-MAGIC-054: the piece takes its prototype's additive blit (0x10) as a map body does: drawn additive and unlit.
+            Require(pieces.All(p => _groundBodies.TryGetValue(PlacedKey(area.Snapshot.RuntimeMap, p.Entity), out var drawn) && drawn is { Additive: true, Unlit: true, Multiply: false, Alpha: 255 }), "every piece is drawn additive and unlit (blit 0x10)");
             Require(host!.CreatedSource(pieces[0].Entity) == SessionSpellCaster.Hero, "the burn's source is the summoner");
             var frame0 = pieces.Select(p => host.CreatedFrame(p.Entity)).ToArray();
             var fireBefore = host.FireFrames;
             var hpBefore = session.QueryHeroLife()!.Status.HitPoints;
             Step(40);
+            // ARC-MAGIC-054: ARC_AREA_SUMMON_WALL_CAPTURE=PREFIX saves the drawn wall (a readback of the window's viewport; needs a window, not a headless run) to PREFIX-wall.png, for the owner's side-by-side look; nothing is committed.
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_SUMMON_WALL_CAPTURE") is { Length: > 0 } capture)
+            {
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                using var image = GetViewport().GetTexture().GetImage();
+                Require(image.SavePng($"{capture}-wall.png") == Error.Ok, "the capture is saved");
+            }
             Require(pieces.Select(p => host.CreatedFrame(p.Entity)).Zip(frame0).Any(f => f.First != f.Second), "the pieces' art loops");
             Require(host.FireFrames > fireBefore, "the burn steps ran");
             Require(session.QueryHeroLife()!.Status.HitPoints == hpBefore, $"the summoner standing in its own wall is spared: {hpBefore} -> {session.QueryHeroLife()!.Status.HitPoints}");
