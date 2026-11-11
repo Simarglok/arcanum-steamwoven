@@ -1416,9 +1416,12 @@ it is not part of a snapshot or quick save.
 **Interface art (ARC-UI-089, ARC-UI-095).** The HD redraws of the interface (the pack's `interface` slice, ARC-DEV-242) have their own
 switch: the Game page of the options window has two project lines next to Rules. **HD graphics: Off/On** requests the Legacy or HD
 profile exactly as the key does (saved, the same toggle protocol) and switches the sprites and terrain of an HD pack only.
-**HD interface: Off/On** (ARC-UI-095, default Off) is a separate saved setting (`hdInterface` of `game_settings_v1.json`, file version 3;
+**HD interface: Off/On/Generated (experimental)** (ARC-UI-095, default Off) is a separate saved setting (`hdInterface` of `game_settings_v1.json`, file version 3;
 version 1 and 2 files read it as Off); it draws the interface art alone and does not touch the visual profile, so the two can be
-combined freely (sprites HD with a Legacy interface, or the reverse). **HD pack: Auto/Game/Custom** (ARC-DEV-350, default Auto) is the
+combined freely (sprites HD with a Legacy interface, or the reverse). The third value (ARC-UI-140, `generatedInterface`, file version 5;
+version 1–4 files read it as off) is the experimental [generated interface](hd-interface-density.md#viewer-slice-s1-arc-ui-140): it keeps the
+HD interface on and draws the chrome of the two HUD strips and the bar buttons by code, with the pictures from the HD redraw (else from the
+Legacy frame); only the drawing changes, every frame keeps its Legacy size, place, alpha test and hit area. **HD pack: Auto/Game/Custom** (ARC-DEV-350, default Auto) is the
 third project line: where the active pack is read from, saved in the same file (`hdPack`, `hdPackPath`; file version 4, version 1–3 files
 read it as Auto). Auto prefers the player's iCloud pack folder (macOS, only when that folder exists on this device) when the pack in it
 is whole, and falls back to the installed copy in the game's own `user://hd-packs`; Game reads the installed copy alone; Custom opens the
@@ -1979,7 +1982,7 @@ keeps going under it too.
 With `--main-menu true` (launcher: `./arcanum area`, which opens it by default since ARC-UI-012 unless `--no-main-menu` or `--hero`, or `./arcanum map NAME --main-menu`; refused with
 `--hero`, as the menu picks the hero) the AREA viewer opens the original's main menu over the scene once it is ready,
 the first time in a run (when that first scene has no game session, for example a map outside the map list, the menu
-does not open and the log says so: `ARC-UI-011 main menu not opened`). The scene's session is the placeholder the original also has before its menu (its sound is the shop map's, not the scene's: the original's game init opens the shopping map and its sector pair 26/29 plays `arcanum.mp3`, ARC-DEV-332, [SN38](../research/audio-evidence.md)); the menu
+does not open and the log says so: `ARC-UI-011 main menu not opened`). The scene's session is the placeholder the original also has before its menu (its sound is not the scene's: the original's game init opens the shopping map and its sector pair 26/29 plays `arcanum.mp3`, ARC-DEV-332, [SN38](../research/audio-evidence.md); the viewer plays that pair through a scheme player of its own, without the session or the scene, from the menu's opening, ARC-UI-139, [scheme player](../audio/scheme-player.md)); the menu
 replaces it. The windows, buttons, texts, keys and back moves are the original's
 ([ledger MM1–MM7](../research/ledger/ui-audio.md#main-menu-arc-ui-011)); since ARC-UI-058 the button windows have the original's art
 and layout (below), the other windows the project's.
@@ -1989,7 +1992,8 @@ and layout (below), the other windows the project's.
   (`ARC-DEV-381 early main menu open`; the probe's `start-to-menu` in the packaged build went from the whole map's publication to about
   1.6 s on a loaded Mac, see the diagnosis). The menu is the same one: its windows, texts, art, keys and back moves are unchanged. No scene
   exists yet, so what opens a window the menu itself draws works at once (Single Player, New Game, the pre-made browser, Options, Exit
-  Game), and a choice that needs the scene is **held**: Start in the browser, New Character, Load Game and Last Save. A held choice shows
+  Game), and a choice that needs the scene is **held**: Start in the browser and New Character (Load Game and Last Save were held too until
+  ARC-DEV-387, below). A held choice shows
   a note, the menu takes no other input, Escape (or the browser's Back arrow) takes the choice back, and the scene's publication attaches the menu to
   it (`ARC-DEV-381 early main menu attached to the scene`): the menu takes the scene's answer for a new game (`NewGameRefusal`), plays the
   shop map's pair and runs the held choice as if it were pressed then. A start scene that fails to load closes the menu and shows the
@@ -1997,6 +2001,21 @@ and layout (below), the other windows the project's.
   that would not have opened. Later openings (after Quit, after a death, in play) open over a published scene, as before. Smoke: the `menu`
   stage checks that the menu opened before the publication and attached to it, then plays the waiting again on the published scene
   (a held choice, no other input, Escape taking it back, the attach running a held Last Save, a held Start starting nothing).
+- **The start map loads on demand (ARC-DEV-387, follow-up of O1).** In map mode (`--area-map`) with the menu the start map is not loaded at
+  the start at all: the menu opens (`ARC-DEV-381 early main menu open ... is not loaded yet`) and the map's load begins when the player
+  enters the New Game window, the way of a new game (`AreaMainMenu.NeedsStartScene`: New Game, the pre-made browser, New Character, the
+  editor, the shop; `ARC-DEV-387 start map load begins`). Single Player, Options, Load Game and Last Save need no start map. **Last Save**, and
+  **a save chosen in the load window**, load their own map at once instead: `AreaSaveLaunch` reads the save for the map it was made on (its
+  runtime number, through the game's map list) and that map loads as the scene the load runs on (the saved cell as the arrival tile, a map
+  too large to load whole opening its window around it; no hero, default data rules), then the save loads into it as a load on a published scene
+  does (`SceneFlowKind.LoadSave`, `ARC-DEV-387 save chosen before any scene`, one map load instead of the start map's and then the save's). While it
+  loads the menu stays, with the note "loading the save…", and takes no input; it goes when the save is in, and comes back with the reason
+  when the save does not load. A save chosen while the start map is already loading replaces that load. The start map loads when a new game's
+  way begins; a choice that needs it is held as above. Not changed: the exterior mode (no `--area-map`) loads the start scene at once and
+  holds every choice that needs it (ARC-DEV-381); a smoke takes the player's route (Single Player, New Game) itself to start the load, as its
+  stages run on the published scene. Known difference: the menu's own music is played through the start scene's session, so it starts when the start map is
+  loaded (at New Game) and the main window is silent before; a follow-up is needed to play it without a scene. Smoke: the `menu` stage checks the
+  held choices as above and then Last Save pressed while no scene stands (`last-save-before-scene`).
 - **Original look (ARC-UI-058,** [plan](../ui/original-windows.md#main-menu-done-arc-ui-058),
   [ledger MW1–MW6](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058); `AreaMenuArtLayout`, `AreaArtFont`, `AreaMenuArtView`):
   with the game's art the main, single-player, new-game and in-play windows draw their background (329 `MainMenuBack`, 331
@@ -2248,9 +2267,9 @@ project's, except as below.
   together with the difficulty. It is stored in the launcher's settings file (`launcher_v1.json`, `rules.active`),
   which the [launcher screen](#launcher-screen-arc-ui-014) writes too, and every ordinary run starts in it.
 - **Storage.** User preferences, never part of a save: difficulty, turn-based, auto attack, the floaters, HD interface and HD pack source in
-  `user://game_settings_v1.json` (`{"version":4,"difficulty":D,"turnBased":B,"autoAttack":B,"floats":F,"floatSpeed":S,"hdInterface":B,"hdPack":"auto|game|custom","hdPackPath":null|"FOLDER"}`;
+  `user://game_settings_v1.json` (`{"version":5,"difficulty":D,"turnBased":B,"autoAttack":B,"floats":F,"floatSpeed":S,"hdInterface":B,"hdPack":"auto|game|custom","hdPackPath":null|"FOLDER","generatedInterface":B}`;
   a version 1 file without the last three reads with their defaults, a version 2 file without `hdInterface` reads it as off and a
-  version 3 file without `hdPack` reads it as Auto (ARC-DEV-350); a
+  version 3 file without `hdPack` reads it as Auto (ARC-DEV-350) and a version 4 file without `generatedInterface` reads it as off (ARC-UI-140); a
   missing or invalid file reads as the original's defaults 1, off, on, 1, 2, off), Always Run and the volumes in their own files. Each change is saved at
   once (the original writes `arcanum.cfg` when the game exits). Space's toggle also saves the turn-based setting now. An
   automated run (self-test, native smoke) reads and writes no file; `GAME_SETTINGS_TEST_PATH` names one for a test.

@@ -22,10 +22,11 @@ and its link holds the detail.
   that changes original-game mechanics, the save schema or threading
   ([review model](docs/workflow/tasks.md#review-model)). Per PR, run only the
   smoke stages the change touches or is directly related to, the Crash Site
-  smoke only when related; the full map smoke chain runs only in the daily
-  package build (`./arcanum daily`), when main changed since the last package
-  ([smoke scope](docs/workflow/tasks.md#smoke-scope)). Run them with
-  `./arcanum smoke pr --stages S,... [--crash-site]` and `./arcanum smoke full`,
+  smoke only when related; the complete smoke run (every stage) runs only in
+  the daily package build (`./arcanum daily`), when main changed since the last
+  package ([smoke scope](docs/workflow/tasks.md#smoke-scope)). Run them with
+  `./arcanum smoke pr --auto` (the zones the diff selects, printed with the
+  reason; or `--stages S,... [--crash-site]`) and `./arcanum smoke complete`,
   never a scratch smoke script. Any PR that changes click or walk handling always
   runs `./arcanum smoke pr --stages map` and `./arcanum smoke self-test`, even
   when no other stage covers it ([smoke runner](docs/workflow/toolchain.md#smoke-runner-arc-dev-061)).

@@ -1,0 +1,14 @@
+[
+  {
+    "stage": "ranged",
+    "symptom": "ranged smoke FAIL: the dagger is picked up and wielded again",
+    "task": "ARC-COMBAT-026",
+    "since": "2026-11-11"
+  },
+  {
+    "stage": "created-critter",
+    "symptom": "created-critter smoke FAIL: the AI host holds the created critter",
+    "task": "unassigned",
+    "since": "2026-11-11"
+  }
+]

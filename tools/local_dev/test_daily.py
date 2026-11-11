@@ -189,7 +189,7 @@ class DailyTests(unittest.TestCase):
         self.assertEqual(commands["dotnet"][:4], ("./arcanum", "run", "--kind", "dotnet"))
         self.assertIn("--locked-mode", commands["dotnet"][-1])
         self.assertIn('--filter "TestCategory!=RealData"', commands["dotnet"][-1])
-        self.assertEqual(commands["smoke"], ("./arcanum", "smoke", "full"))
+        self.assertEqual(commands["smoke"], ("./arcanum", "smoke", "complete"))
         self.assertEqual(commands["package-mac"], ("./arcanum", "package", "mac", "--ref", self.commit, "--no-fetch",
                                                    "--map-smoke", "PASS (crash-site, main, town)"))
         self.assertEqual(commands["package-win"][2], "win")

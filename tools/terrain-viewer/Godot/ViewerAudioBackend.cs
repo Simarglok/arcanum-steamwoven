@@ -192,6 +192,14 @@ public sealed class ViewerAudioBackend : IDisposable
         foreach (var voice in _voices) if (voice.Player is not null) Release(voice);
     }
 
+    /// <summary>Stops every sound but the kept handles' (ARC-UI-139: a map opening under the main menu leaves the menu's song playing).</summary>
+    public void StopAllExcept(IEnumerable<ViewerAudioHandle> keep)
+    {
+        var kept = keep.ToHashSet();
+        for (var slot = 0; slot < _voices.Length; slot++)
+            if (_voices[slot].Player is not null && !kept.Contains(new(slot, _voices[slot].Generation))) Release(_voices[slot]);
+    }
+
     /// <summary>The original sets every live sound of a channel to the bare channel volume when its setting changes.</summary>
     public void FlattenChannel(AudioChannel channel, int channelVolume)
     {

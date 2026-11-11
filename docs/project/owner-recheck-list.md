@@ -597,7 +597,7 @@ its menu before any map exists, so the comparison is about the order and the wai
 | 1 | Start the game and watch how soon the main menu appears. | Like the original: the menu is the first thing on screen, a second or two after the window opens, with no map shown behind it. The music of the menu starts a few seconds later, when the start map is ready. | open |
 | 2 | Open Single Player, New Game, Pick Character and browse the heroes at once, before the map is ready. | Everything works as in the original: the same windows, the same twelve heroes. Nothing waits. | open |
 | 3 | Press Start on a hero before the map is ready. | The menu shows that the world is still loading and the game starts by itself when it is ready (the original has no such wait, because it loads the map after the choice; this is the one visible difference). Escape takes the choice back. | open |
-| 4 | Press Load Game or Last Save at once, with a save present. | The same wait note, then the load as before. A started load never shows a game of another map under the menu. | open |
+| 4 | Press Load Game or Last Save at once, with a save present. | Superseded by ARC-DEV-387 (below): they no longer wait for the start map. | superseded |
 | 5 | Press New Character at once, then go through the window, the editor and the shop. | The wait note first; then the windows work as before (the shop's merchant loads behind it). | open |
 | 6 | Open Options at once and change a setting, then Done. | The window works before the map is ready and the change holds; the main window returns. | open |
 
@@ -613,3 +613,50 @@ The audit changes no behaviour. It first named two places where the original beh
 | # | Step | Expected (from the original executable) | Status |
 | --- | --- | --- | --- |
 | 1 | Start the original game with `-fullscreen` and press F10 on a normal map (without that start option the toggle does nothing). | The interface hides or shows through the interface hide toggle 0x5578E0 (the main loop key handler's F10 branch; [UI ledger](../research/ledger/ui-audio.md) PA4). The older bar toggle 0x54ACB0 has no caller anywhere, so it is not what happens. Ours only reserves the key. | open |
+
+
+
+## ARC-DEV-387 — The start map loads only when a new game needs it (follow-up of ARC-DEV-381, 2026-11-11)
+
+The start map is no longer loaded when the game starts with the menu ([early menu](../rendering/terrain-viewer.md#main-menu-arc-ui-011)). It begins to load when you
+enter the New Game window (the pre-made heroes or New Character); Last Save and a save chosen in the Load Game window load the map of the save itself, once. The
+original loads the map after your choice, not before, so compare the order and the waiting. Compare on a start with the menu (`./arcanum area`, or a packaged
+build); the first build for this comparison is any build from `main` that contains this task. Have at least one save, ideally made on a map other than the start map
+(for example inside a town) and one made on the start map.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Start the game, open Single Player and Options, change a setting, go back; do not press New Game. Watch the machine (Activity Monitor) or the log line `ARC-DEV-387 start map load begins`. | The menu works at once and stays light: no map is loaded behind it, as in the original, which has no map before a choice. The menu has no music in this build (known difference: it plays through the start map's session, a follow-up). | open |
+| 2 | Press Last Save with a save made in a town. | The menu stays and says "loading the save…" and takes no other input; after the load the game is on the town map at the saved place with the saved hero. The start map is not shown at any point. The wait is one map load, not two. | open |
+| 3 | The same with Load Game and a row of the list (the window opens at once, before any map). | The same as step 2, for the chosen row. A row of a save on the start map works too. | open |
+| 4 | Press Last Save with no save at all. | The window stays and the menu says there is no save to continue from, with no wait and no map load (the original goes back to the window without a message; the wording is the project's). | open |
+| 5 | Press New Game, then the pre-made browser at once (before the map is ready) and browse; press Start. | The browser works at once. Start says the world is still loading and the game starts by itself when the map is ready (the one visible difference from the original). Escape takes it back. | open |
+| 6 | Press New Game, then Back out to Single Player and choose Last Save while the start map is still loading. | The save's own map loads instead and the game starts on it; the start map's load is given up. The result is the same as step 2. | open |
+| 7 | Press New Game, press New Character and go through the window, the editor and the shop. | The wait note first (the new character's window needs the map's start); then the windows work as before. | open |
+| 8 | Choose a save whose file is damaged or from another game (copy one and break it). | The menu comes back with the reason; nothing else changes. | open |
+
+Known differences (documented, not bugs):
+
+- A new game still waits for the start map, which now begins to load when the New Game window opens (one press later than in ARC-DEV-381).
+- The menu's music was silent until the start map was loaded; ARC-UI-139 (below) plays it from the start without a scene.
+- While a save's map loads the menu stays on screen with a note; the original shows its own loading screen.
+
+## ARC-UI-139 — The main menu's music plays without a scene (follow-up of ARC-DEV-387, 2026-11-11)
+
+The menu plays its music pair (the shop map's start sector, scheme 26 `arcanum.mp3`) through the scheme player of its own, without a game session or a scene, from the
+moment it opens until a game starts or a save loads ([scheme player](../audio/scheme-player.md#viewer-integration)). Compare on a start with the menu (`./arcanum area`, or a
+packaged build) with the music volume above 0, in both games.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Start the game and wait on the main menu without pressing anything for a minute or two. | The main theme plays from the first moment of the menu and loops without a gap or restart. | open |
+| 2 | Open Single Player, Options (change the music volume on the Sound page), New Game and the pre-made browser, then go back. | The theme goes on through every window, and the volume follows the slider. | open |
+| 3 | Press New Game, then New Character, so that the start map loads under the menu. | The theme does not stop and does not restart when the map has loaded (the original has no pause there either). | open |
+| 4 | Press Last Save, or choose a row in Load Game, while the theme plays. | The theme plays until the save is loaded, then the map's own music takes over. | open |
+| 5 | Start a new game with a pre-made hero. | The theme stops and the Crash Site's music (or its night ambience) starts; the theme does not come back. | open |
+| 6 | Press Esc in play and open the in-play menu. | The game's own music goes on (the theme is only the main menu's). | open |
+
+Known differences (documented, not bugs):
+
+- The hour of the menu's player is fixed (12) because the menu has no game clock; the installed pair plays at every hour, so no difference is expected.
+- A transition song in the menu's pair would play without the restore bookkeeping (the installed pair has none).

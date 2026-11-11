@@ -51,6 +51,10 @@ public partial class TerrainViewerApp : Node
         BugReportLogger.Install();
         // ARC-DEV-047: the packaged commit (or a source run) and the user:// folder this build reads and writes.
         GD.Print($"ARC-DEV-047 build {ViewerBuild.Current.Text} user={OS.GetUserDataDir()}");
+        // ARC-DEV-392: a map's transitions are kept on the device for the next process (a smoke run is one process); not in user://, which a smoke replaces.
+        // The deterministic self-test (synthetic content) writes nothing into the owner's folder.
+        if (!SelfTestBootstrap) AreaMapTransitionsStore.UseDeviceFolder();
+        GD.Print($"ARC-DEV-392 map-cache folder={AreaMapTransitionsStore.Root ?? "off"}");
         var canvas = new TerrainCanvas { Name = "TerrainCanvas" };
         AddChild(canvas);
         _canvas = canvas;
@@ -124,6 +128,15 @@ public partial class TerrainViewerApp : Node
         if (_hdPackProblem is not null) Callable.From(ShowStartupHdPackProblem).CallDeferred();
         _hud?.SetMode(_arguments.Mode);
         if (IsWorld) InitializeWorld();
+        // ARC-DEV-387: a player's start with the menu in map mode does not load the start map yet: the menu opens at once and the map
+        // loads when a new game's way begins (New Game), or the map of the save the player chooses loads instead.
+        if (DefersStartLoad(arguments))
+        {
+            _startLoadPending = true; _startLoadLazy = true;
+            OpenEarlyMainMenu();
+            if (_mainMenu is null) BeginStartLoad("the menu did not open");
+            return;
+        }
         _lastLoad = StartLoadAsync(_arguments);
         // ARC-DEV-381 (O1): the load runs on its worker; the main menu opens now, not after the whole start map is published.
         OpenEarlyMainMenu();
@@ -133,6 +146,7 @@ public partial class TerrainViewerApp : Node
     {
         if (_exiting) return;
         _hud?.SetMode(arguments.Mode);
+        _startLoadPending = false; // ARC-DEV-387: any load is the load the menu waited for (or replaces it)
         if (IsWorldMode(arguments.Mode)) { InitializeWorld(); QuarantineWorld(); }
         GD.Print($"ARC-RENDER-004 load stage=begin smoke={orchestrateSmoke}");
         PerfProbe.Mark("load.begin");

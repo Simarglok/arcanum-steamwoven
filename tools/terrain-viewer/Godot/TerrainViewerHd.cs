@@ -88,8 +88,9 @@ public partial class TerrainViewerApp
         }
         // ARC-DEV-350: a player who asked for HD and gets no usable pack is told (log and a box); the run draws Legacy and the settings stay.
         // An automated run (self-test, smoke) keeps its own pack arrangements: the HD toggle tests rely on a profile with no pack.
+        // ARC-UI-140: the generated interface needs no pack (it takes the Legacy pictures without one), so it alone asks nothing.
         var problem = AutomatedVisualRun ? HdPackProblem.None
-            : HdPackProblem.Check(profile == VisualProfile.Hd || _gameSettings.HdInterface, fromEnvironment, pack, open, _hdPackChoice);
+            : HdPackProblem.Check(profile == VisualProfile.Hd || (_gameSettings.HdInterface && !_gameSettings.GeneratedInterface), fromEnvironment, pack, open, _hdPackChoice);
         if (problem.Message is not null)
         {
             GD.Print("ARC-DEV-350 hd pack problem: " + problem.Message);
@@ -197,7 +198,7 @@ public partial class TerrainViewerApp
     {
         // Windows that draw interface textures by hand repaint once when the switch or the pack changed.
         HdOptimizedStore.ConversionAllowed = _visualStore?.Persistent == true; // ARC-DEV-376: an automated run reads the cache, never writes it
-        if (InterfaceHd.Configure(_canvas?.HdSource?.Pack, _gameSettings.HdInterface)) InterfaceHd.RedrawAll(GetTree().Root);
+        if (InterfaceHd.Configure(_canvas?.HdSource?.Pack, _gameSettings.HdInterface, _gameSettings.GeneratedInterface)) InterfaceHd.RedrawAll(GetTree().Root);
     }
 
     /// <summary>ARC-UI-089: whether the options window's HD graphics line shows On (the requested profile, so a pending switch shows at once).</summary>
