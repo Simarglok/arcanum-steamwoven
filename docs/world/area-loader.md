@@ -399,6 +399,37 @@ temple's own 22 records were read in 0.7 ms.
 
 **Not kept.** The aggregate records' own wire reads (I4, 0.1-0.2 s) depend on the map patch and the window, so they stay; the snapshot is as before.
 
+## Map transitions kept on the device (ARC-DEV-392)
+
+Status: **implemented by ARC-DEV-392** (Q7 of the [smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md); the second half of O5b, whose first half
+`AreaMapTransitionsCache` of ARC-DEV-368 keeps a map's transitions only for one process). A smoke run is one process, so every run read the main map's sector files
+and scripts again (`ARC-WORLD-031 load stage=transitions ... cached=False`, 1.3-4.1 s on a loaded Mac, 1.8 s in the diagnosis's logs).
+
+**What is kept.** One file per map in `map-cache/` of the device's Steamwoven folder (`~/Library/Application Support/Arcanum Steamwoven Game/` on a Mac,
+`%APPDATA%\Arcanum Steamwoven Game\` on Windows; not `user://`, which every smoke run replaces with a temporary folder): the map's `MapTransitionSet` (sites, issues,
+placed scripts, map-list entry, start-map flag; `MapTransitionSetCodec` in `Arcanum.Data`) and the map list's destinations (`AreaMapTransitionsStore` in `Arcanum.World`). The main map's file is 118 KB.
+The lookup order of `AreaMapLoadOperation.Transitions` is the process's memory cache, then the device file, then the content; a content read is written back.
+
+**The stamp** (a file is named by the SHA-256 of its key, holds the key, and counts only when the whole key is equal): the map name; the stack's identity (mount paths,
+each archive's size and last write time, the number of indexed names); a digest of every loose file's path, size and last write time as the disk shows them now
+(`ContentStack.LooseFilesFingerprint`, one stat each, 1,658 files on the owner's install; the in-process cache accepts that a loose file edited in place is not seen, a file that outlives
+the process cannot); and the identity of the code (the module version ids of `Arcanum.Data`, which holds the reader, and `Arcanum.World`, plus the codec and file layout versions), so any rebuilt reader
+meets no older file (a development checkout never serves records of another source state). The payload carries a SHA-256 of its bytes; a cut, flipped, foreign or trailing-byte file is a miss. Every
+disk failure (no folder, read-only, full, a path that is a file) is a miss, and no call throws: the store can only make a load faster, never fail or change it. A file is written under a temporary name and renamed, so
+two processes never see a half file; at most 96 files are kept, the least recently used going first (a used file is renewed after 6 hours).
+
+**Beside the resident caches.** The resident frames and visuals (ARC-DEV-375, ARC-DEV-383) and the editor-record memo (ARC-DEV-388) live in process memory and key by the module's bytes; this store shares no state, folder
+or key with them and reads none of them. The master switch `ARC_AREA_RESIDENT=0` (a load keeps nothing between loads, for before/after timing) turns this store off too, so a run under it still reads
+everything cold; `ARC_MAP_CACHE=0` turns only this store off, `ARC_MAP_CACHE_DIR` names another folder. The store is off until a host names a folder (`UseDeviceFolder`, called once by the viewer at start,
+printing `ARC-DEV-392 map-cache folder=...`), so tests and tools never write into the owner's folder.
+
+**Measured (ARC-DEV-392).** `./arcanum smoke pr --stages perf` on the main map (Debug source run, Mac under load average 8-12, runs spaced in the shared queue): `load stage=transitions` was
+**4147 ms and 1307 ms** with `ARC_MAP_CACHE=0` (two runs, `source=content`; `load.worker.transitions` span 1.39 s in the second), **1723 ms** on the first run that wrote the file (`source=content+stored`) and
+**33 ms** on the next run (`source=device`, 118 KB read, `load.worker.transitions` span 118 ms, 18.6 MiB allocated against 711 MiB). The worker's total to the end of the actor step fell from 7.08 s to 5.92 s in
+the pair of runs compared; the other steps vary by more than that between runs on this Mac, so read it as about 1.2-1.6 s per run, in line with the diagnosis's 1.8 s. Original behaviour is unchanged: the same records.
+
+**Not done.** Strict snapshot reuse, the 0.9 s `plan` step and the 0.5 s `open` step are untouched (the plan's own reads are a candidate for the same kind of stamp).
+
 ## Resource contract: bounds, reservations, observations
 
 Input-derived lengths, cardinality, arithmetic and admission checks precede the
