@@ -114,7 +114,7 @@ public sealed class SessionCritterCombat
     /// reads it) and that sheet's level; its other values stay the map data's.</summary>
     internal SessionCritterCombat WithSheet(AdvancementSheet sheet) => new(Entity, _stats, _worn, sheet.BasicSkills, sheet.TechSkills, _baseArmorClass,
         _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded, Experience, Monstrous, sheet.Level,
-        _natural, KillFacts, SessionSkills.Of(sheet, AdvancementModifiers.None), StoredEffects, _effectResistances) { UnarmedBody = UnarmedBody, DataSpellFlags = DataSpellFlags };
+        _natural, KillFacts, SessionSkills.Of(sheet, AdvancementModifiers.None), StoredEffects, _effectResistances) { UnarmedBody = UnarmedBody, DataSpellFlags = DataSpellFlags, SpeedShift = SpeedShift };
 
     /// <summary>
     /// ARC-DEV-358 (MA-1): the body spell its unarmed attacks add damage for, read from the spell flags it holds (<see cref="GameSessionOwner.UnarmedBodyOf"/>): Body of Earth, Fire or Water,
@@ -125,9 +125,23 @@ public sealed class SessionCritterCombat
     /// <summary>ARC-DEV-358: the spell flags (<c>obj_f_spell_flags</c>) the map data or prototype stores for this NPC; the body spell reads them with the session's written change.</summary>
     internal int DataSpellFlags { get; init; }
 
+    /// <summary>
+    /// ARC-MAGIC-056 (MA-9, Tempus Fugit): the speed change the NPC reads (+10 holding the spell, -10 otherwise while some critter holds it, else 0:
+    /// <see cref="GameSessionOwner.TempusFugitShiftOf"/>); the session sets it where it hands the NPC out under its effects (<see cref="GameSessionOwner.WithNpcEffects"/>).
+    /// </summary>
+    internal int SpeedShift { get; init; }
+
+    internal SessionCritterCombat WithSpeedShift(int shift) => shift == SpeedShift ? this : new(Entity, _stats, _worn, _basicSkills, _techSkills, _baseArmorClass,
+        _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded, Experience, Monstrous, Level,
+        _natural, KillFacts, _sheetSkills, StoredEffects, _effectResistances) { UnarmedBody = UnarmedBody, DataSpellFlags = DataSpellFlags, SpeedShift = shift };
+
+    // The stat context of a query under this life state: poison, crippled legs and the Tempus Fugit speed change.
+    private CharacterStatContext StatContext(LifeState state) => new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel),
+        state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth), SpeedShift: SpeedShift);
+
     internal SessionCritterCombat WithUnarmedBody(UnarmedBodySpell body) => body == UnarmedBody ? this : new(Entity, _stats, _worn, _basicSkills, _techSkills, _baseArmorClass,
         _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded, Experience, Monstrous, Level,
-        _natural, KillFacts, _sheetSkills, StoredEffects, _effectResistances) { UnarmedBody = body, DataSpellFlags = DataSpellFlags };
+        _natural, KillFacts, _sheetSkills, StoredEffects, _effectResistances) { UnarmedBody = body, DataSpellFlags = DataSpellFlags, SpeedShift = SpeedShift };
 
     // A throwaway owner of the same race and gender over the same base values with the entries applied (the shared one is never touched; the cause is of no consequence there,
     // the race and gender causes of a loaded list belong to the owner's setters and are applied as spell entries); null when the owner refuses anything.
@@ -161,7 +175,7 @@ public sealed class SessionCritterCombat
         var stats = _stats;
         if (modifiers.Length > 0 && ClonedStats(modifiers) is { } cloned) stats = cloned;
         return new(Entity, stats, _worn, _basicSkills, _techSkills, _baseArmorClass, _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded,
-            Experience, Monstrous, Level, _natural, KillFacts, _sheetSkills, StoredEffects, resistances) { UnarmedBody = UnarmedBody, DataSpellFlags = DataSpellFlags };
+            Experience, Monstrous, Level, _natural, KillFacts, _sheetSkills, StoredEffects, resistances) { UnarmedBody = UnarmedBody, DataSpellFlags = DataSpellFlags, SpeedShift = SpeedShift };
     }
 
     /// <summary>
@@ -318,8 +332,7 @@ public sealed class SessionCritterCombat
     /// </summary>
     public EquipmentChooser Chooser(LifeState state)
     {
-        var snapshot = _stats.Query(new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel),
-            state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth))).Snapshot!;
+        var snapshot = _stats.Query(StatContext(state)).Snapshot!;
         var dexterity = snapshot.GetEffective(CharacterStat.Dexterity);
         int Level(BasicCombatSkill skill, Skill sheet) =>
             _sheetSkills?[sheet].Level ?? CombatSkillRules.Level(skill, _basicSkills[(int)skill], dexterity, Monstrous);
@@ -342,7 +355,7 @@ public sealed class SessionCritterCombat
     /// <summary>ARC-MAGIC-014: an effective stat of the NPC in this life state (under its poison and crippled legs), as
     /// <see cref="Combatant"/> reads them.</summary>
     public int EffectiveStat(CharacterStat stat, LifeState state) =>
-        _stats.Query(new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel), state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth)))
+        _stats.Query(StatContext(state))
             .Snapshot!.GetEffective(stat);
 
     /// <summary>What the NPC defends as in this life state: effective stats under its poison and crippled legs, armour class
@@ -351,8 +364,7 @@ public sealed class SessionCritterCombat
     {
         ArgumentNullException.ThrowIfNull(status);
         ArgumentNullException.ThrowIfNull(profile);
-        var snapshot = _stats.Query(new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel),
-            state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth))).Snapshot!;
+        var snapshot = _stats.Query(StatContext(state)).Snapshot!;
         var dexterity = snapshot.GetEffective(CharacterStat.Dexterity);
         var aptitude = Math.Clamp(snapshot.GetEffective(CharacterStat.MagickTechAptitude), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);
         var equipment = EquipmentRules.Evaluate(_worn, aptitude, SkillTraining.None);
@@ -403,8 +415,7 @@ public sealed class SessionCritterCombat
     {
         var worn = wornNow is null ? _worn : _worn.Where(pair => wornNow.Contains(pair.Key)).ToDictionary(pair => pair.Key, pair => pair.Value);
         var combatant = Combatant(status, state, profile) with { Worn = CombatantRules.WornItems(worn.Keys) };
-        var snapshot = _stats.Query(new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel),
-            state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth))).Snapshot!;
+        var snapshot = _stats.Query(StatContext(state)).Snapshot!;
         var aptitude = Math.Clamp(snapshot.GetEffective(CharacterStat.MagickTechAptitude), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);
         var wielded = worn.TryGetValue(EquipmentSlot.Weapon, out var item) ? item : null;
         var skill = wielded?.Weapon?.Skill ?? CombatSkill.Melee;
@@ -425,8 +436,7 @@ public sealed class SessionCritterCombat
     public (int Level, SkillTraining Training) SkillValues(CombatSkill skill, LifeState state)
     {
         if (!Enum.IsDefined(skill)) throw new ArgumentOutOfRangeException(nameof(skill));
-        return SkillOf(skill, _stats.Query(new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel),
-            state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth))).Snapshot!);
+        return SkillOf(skill, _stats.Query(StatContext(state)).Snapshot!);
     }
 
     private (int Level, SkillTraining Training) SkillOf(CombatSkill skill, CharacterStatsSnapshot snapshot)
@@ -623,7 +633,7 @@ public sealed partial class GameSessionOwner
         var state = _life.Hero!.Value.State;
         var facts = HeroLifeFacts(state);
         var status = LifeRules.Evaluate(state, facts);
-        var snapshot = _hero.Stats.Query(new(0, state.PoisonLevel, state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth))).Snapshot!;
+        var snapshot = _hero.Stats.Query(new(0, state.PoisonLevel, state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth), SpeedShift: HeroTempusFugitShift())).Snapshot!;
         var aptitude = HeroAptitude();
         var skills = HeroSkills();
         var equipment = EquipmentRules.Evaluate(_equipment.Items(), aptitude, HeroWeaponTraining(skills));

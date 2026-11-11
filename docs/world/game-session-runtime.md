@@ -308,7 +308,7 @@ viewer) had a one-flag placeholder GF domain, so a migrated session could not ru
 dialog. ARC-WORLD-030 added the hero's experience and the NPCs' experience records as schema 14 and refuses schema 13.
 ARC-COMBAT-004 added the combat-mode flags as schema 15 and refuses schema 14
 ([real-time combat](real-time-combat-runtime.md#snapshot-schema-15)). ARC-DEV-009 binds the clock profile to the retail
-executable (`sourceRevision` is its SHA-256, [clock policy](game-clock-policy.md)) as schema 16, with no structural change, and
+executable (`sourceRevision` is its SHA-256, [clock policy](game-clock-runtime.md#original-clock-evidence-carried-from-the-res-020-policy)) as schema 16, with no structural change, and
 refuses schema 15. ARC-WORLD-035 added the hero's blessings and curses as schema 17 and refuses schema 16. ARC-WORLD-040
 added the sound state as schema 18 and refuses schema 17. ARC-UI-008 added the quelled rumors to the story domain as
 schema 19 and refuses schema 18 (a quick save of an older schema loads as incompatible; since ARC-UI-037 only below schema 56). ARC-WORLD-036 added the hero's

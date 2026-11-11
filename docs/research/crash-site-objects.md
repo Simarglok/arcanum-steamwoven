@@ -3,7 +3,7 @@
 ## Scope, source identities, and reproduction
 
 This is ARC-RES-007's bounded experiment on the one frozen base-sector entry
-already selected by `crash-site-slice.md`. It is not a general object format,
+already selected by `crash-site-framing.md`. It is not a general object format,
 a production loader, a runtime comparison, or an archive-precedence policy.
 The local original inputs were opened read-only, were fingerprinted before and
 after each run, and no original bytes, paths, names, text, or images are kept

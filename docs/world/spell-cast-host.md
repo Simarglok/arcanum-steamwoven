@@ -461,7 +461,7 @@ Code: [`MaintainBarRules`](../../src/Arcanum.Simulation/Magic/MaintainBarRules.c
    frame while held); an open empty slot its art 188 + i; a closed slot art 188 + i with SP_Plugged 628 + i one pixel up and left, and
    takes no pointer. The arts load with the bars' art, the icons with the hotkey bar's.
 7. **Closing** (MB8). When the open count drops, each slot it closes while showing a run is clicked, so its spell ends.
-8. **Saving** (MB9). The bar is not saved, like the runs (MT9b): a loaded game starts with an empty bar.
+8. **Saving** (MB9). The bar is saved with the settled runs it shows (ARC-DEV-210, schema 73): a loaded game shows the saved slots again.
 9. **Smoke.** Inside the cast stage, before the hotkey bar: the hero casts the first maintained college spell (no damage at BEGIN) at
    itself or the NPC, released at once; slot 0 shows its icon, the closed slots their plugged art, the open ones their slot art;
    hovering slot 0 describes the spell; a click plays 3000 and 3001, ends the spell and empties the slot (marker
@@ -509,6 +509,15 @@ step (0x4A8570 → 0x457450) and `ObjectGone` the NPC destroy's (`AreaAiHost.Des
 leave the hero with its caster. Smoke stage `spell-end` (`docs/rendering/area-map-mode.md`). Differences: the ending comes after the outer action (the original ends the runs inside
 the kill, so a run killing its own parent is left alone by the guard 0x5B0BA4 there and is ended here), and the summon variants (0x4598D0, the summon list) are MT17's. The loss of consciousness is the transition test of the life step (conscious before, unconscious after); the setter's other conditions (a new fatigue damage of 0, the object test 0x405BC0, a critter flagged 0x4 that the original never counts as unconscious where this test uses the Undead trait) are not modelled. The sink belongs to the newest cast host: endings queued in a host that a map change retired are not told, so a run can outlive its dead parent for the moment between the map change and the new host's build.
 
+### The world-map travel start (ARC-MAGIC-059)
+
+The world map's start check (0x565140, [ledger UE6](../research/ledger/spell-runs.md#spell-run-endings-of-a-critter-arc-dev-301)) runs when a journey is started and again where a segment ends and another follows
+(`AreaWorldMap.TravelCheck`, set by the viewer to `WorldMapTravelCheck`). It interrupts the hero's running actions at level 3 through the hero runs host (`Interrupt`: a walk or a swing ends with its end nodes, an
+attempted cast of priority 4 or 5 refuses) and, when none refused, calls `EndMaintainedSpells` for the hero: every run the hero is the source of ends (technology runs and item-trigger runs without a maintenance
+period stay). A refusal at the start leaves the PC where it is and the map showing the route (`AreaWorldMapRefusal.ActionsRefused`); a refusal between segments drops every remaining waypoint and lands the PC
+(`WorldJourney.Step`'s `continueJourney`). Smoke stage `worldmap` (it takes the hero since this slice) starts a maintained spell of the hero and checks it is gone after Enter. The rest option click (0x57B710)
+calls the same ending without the interrupt; the rest window is E3-a's, so only travel is wired.
+
 ## Differences from the original
 
 Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is documented.
@@ -550,7 +559,7 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | An inventory art that does not read leaves the bar with what the art library gives for it (not read). | The type icon. | — |
 | A broken item's inventory art carries the destroyed bit 10 (DU4), whose effect on the drawing was not read. | Drawn as stored; the bit is ignored. | — (not ready) |
 | A full maintain bar, or one with no open slot, writes the run into slot −1 (a neighbouring variable) and answers that it took it; more than five open slots (intelligence 24 and above) index past the table (MB3, MG12). | A full bar refuses the run, so the scheduler ends it; at most five slots open. With intelligence 24 and above the cap allows a sixth maintained spell, which ends at its first tick. | — (out-of-bounds write, fixed in both modes by the owner rule of 2026-10-17) |
-| The maintain bar is saved with the game (MB9). | Not saved, like the runs (MT9b). | — (not ready) |
+| The maintain bar is saved with the game (MB9). | Saved with its settled runs (ARC-DEV-210). | — |
 | Hovering a maintain slot also marks the run's target (or first target, or parent) as the hovered object (0x43C270, MB6). | Only the spell's description. | — (not ready) |
 | A freed run whose bar note never came keeps its slot, and the next run given its id shows there (no such path read). | A slot whose run the table no longer holds is emptied. | — (technical guard) |
 
@@ -712,7 +721,7 @@ destroy is a session change inside the run pass: a pass the session then refuses
   in `spells.objectFlags`, schema 88) and the critter flags (field 218) on the hero and a mobile critter, with the reference count (0x455100: a set stops while another run provides the bit, a clear while
   more than one does; spell flags only) and the original's side effects (ledger [OB1–OB5](../research/ledger/spell-runs.md#objflag-component-of-the-cast-host-arc-dev-358)): invisible writes the object flags invisible
   (not for the local player) and translucent; shrunk, water walking and stoned write their object flag; don't-draw writes the object flag and the paralysed critter flag of a critter (Disintegrate's vanishing body);
-  entangled and paralysed ask for the hold interrupt as before; the other bits (shielded, anti-magic shell, bonds of magick, full reflection, the four detection bits, the body flags, hardened hands, enshrouded, Tempus Fugit,
+  entangled and paralysed ask for the hold interrupt as before; the other bits (shielded, anti-magic shell, bonds of magick, full reflection, the four detection bits, the body flags, hardened hands, enshrouded, Tempus Fugit (read by the stat getter: [ARC-MAGIC-056](character-stats-runtime.md#tempus-fugit-speed-arc-magic-056)),
   illusion, familiar, spoken with the dead and the rest) are plain writes. The cast host's map (`FlagCastMap`) answers the object flags with the written ones, so the run rules, the target rules (a don't-draw object is no target)
   and the invisible-awareness readers see them; the AI host's hidden test, action gate and hostility facts read them too.
 - **Body spells feed the unarmed damage.** `GameSessionOwner.UnarmedBodyOf` picks Body of Earth, Fire, Water, else Hardened Hands from the spell flags a critter holds in the original's order (OB5);

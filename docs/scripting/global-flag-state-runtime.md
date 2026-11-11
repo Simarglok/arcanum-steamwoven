@@ -16,8 +16,8 @@ quest/QU, rumor/RU, UI or conversation implementation. Current
 LF/QU/RU grammar/limits. ARC-SCRIPT-005's separate
 [conversation runtime](dialog-conversation-runtime.md) reads and writes GF in DLG conditions
 and actions through this owner (Unknown is a frontier there). The
-[RES-019 contract](dialog-state-contract.md) remains research/proposal for all
-other seams and the eventual integrated trace.
+[original dialog evidence](dialog-conversation-runtime.md#original-dialog-evidence-carried-from-the-state-contract) holds the source readings; the
+retired RES-019 proposal for the other seams is [in git history](https://github.com/Simarglok/arcanum-steamwoven/blob/e4f18fd4bd5c7798aab3f451ed52dc24e8ec2420/docs/scripting/dialog-state-contract.md).
 
 `IVersionedGlobalFlagOwner` (ARC-SCRIPT-006) adds the current `Version` to
 `IGlobalFlagOwner`; `GlobalFlagOwner` and the game session's flag view implement it, and

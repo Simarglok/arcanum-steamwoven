@@ -3,8 +3,8 @@
 ## Result and classification boundary
 
 **Project policy/status**: one source-specification candidate, not production
-movement or real-data admission. The [contract](../world/grid-movement-contract.md)
-implements ratified P1–P8 as documentation; its independently authored
+movement or real-data admission. The [grid movement runtime](../world/grid-movement-runtime.md)
+holds the ratified P1–P8 policy; its independently authored
 [synthetic worksheet](../../tools/research/grid_movement_probe.py) exercises
 exact/rational examples.
 Original runtime, source-to-original fidelity and UX comfort are **NOT_VERIFIED**.
@@ -12,7 +12,7 @@ Original runtime, source-to-original fidelity and UX comfort are **NOT_VERIFIED*
 Subsequent [ARC-RES-014 cardinal evidence](cardinal-traversal-evidence.md) establishes
 a bounded source/data-only pair in a declared isolated context. It does not rerun
 or reclassify this historical motion worksheet, move an original actor, or establish
-runtime permits; the [readiness frontier](../world/grid-movement-contract.md#real-traversal-readiness-frontier)
+runtime permits; the [traversal research contract](../world/area-traversal-contract.md)
 links that narrow new admission separately.
 
 All claims use **Original/source-confirmed**, **Project policy**, **Hypothesis** or
@@ -80,11 +80,11 @@ identities and results, deliberately not presented as fresh command success:
 - ARC-RES-011 [historical probe](sector-passability-evidence.md#probe-evidence-and-finite-cases)
   reports **3033 tile-name Unknown**, deliberately without parsing names; 4096
   combined occupancies Unknown. It is not a current component regression.
-- ARC-DATA-006 [current documented component aggregate](terrain-obstruction-components-evidence.md#fixed-profile-aggregate-check)
+- ARC-DATA-006 [current documented component aggregate](../world/terrain-obstruction-components.md)
   reports class-0 cells: 0 Blocked, 2942 NoBlock, **91 Unknown/null**, total3033.
   Different admitted grammar/probe stage. Neither aggregate was rerun here, neither
   makes a complete cell/step Open. Ordinary-static evidence is destination-only,
-  not total collision, under [its contract](../world/static-obstruction-contract.md).
+  not total collision, under [its contract](../world/static-obstruction-components.md).
 - [Actor chain](actor-placement-evidence.md#reproducibility-and-privacy) retains
   actor-research-source-01, module ordinal643, current ART0xc9001810, Idle/Walk
   resource ordinals4753/4754 and requested-facing/group/flip bindings. Its historical

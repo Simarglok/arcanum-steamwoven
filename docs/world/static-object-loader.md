@@ -19,7 +19,7 @@ ARC-RES-012 consumes the existing `Inspect` records in its bounded research
 probe to assess one ordinary-static-scenery destination-cell component. That
 consumer does not widen this loader, add collision/navigation API surface, or
 turn `IsStatic` into a general collision verdict. See the separate
-[static-obstruction contract](static-obstruction-contract.md) and
+[static-obstruction components](static-obstruction-components.md) and
 [evidence](../research/static-obstruction-evidence.md).
 
 ## API
@@ -119,6 +119,45 @@ Slot 19 is not substituted for object flags. Direct instance offsets remain
 distinct from ART frame offsets/hotspots and the API does not project or
 rasterize either value.
 
+Prototype matching and limits (from the proposed contract this page now
+implements): the matching prototype must have the same serialized type and
+exact ObjectID; only canonical type-A IDs in the six-digit range are locatable.
+A duplicate, missing, malformed, type-mismatched or ID-mismatched file fails
+closed. No other prototype field is inherited, and nothing is concluded about
+defaults for skipped fields. The static predicate mirrors the cited source's
+type eligibility plus its `OF_DYNAMIC` check; it does not establish visual
+visibility, collision, passability, interaction, height, flatness semantics,
+occlusion or ordering.
+
+## Resolution support matrix
+
+What the frozen selected sector supports, with the validation each stage needs
+and the failure category when it is not met:
+
+| Stage | Observed selected support | Required validation | Failure result |
+| --- | --- | --- | --- |
+| Sector framing | 317 v119 records in `17140..47287` | exact terminal count, no trailing record bytes | reject input |
+| Record envelope | types `0..17` delimited synthetically; real slice type 3 only | version, object IDs, field count/masks, bounded optional/array strings | `invalid-record` |
+| Type classification | all real records type 3 | no type promotion or inferred aliases | `unsupported-type` |
+| Location | local coordinates present in the five handoff records | the optional field must be present for a coordinate record | `unresolved-location` |
+| Current ART | 288 direct, 29 inherited real values | direct field or exactly one valid prototype default | `unresolved-reference` |
+| Flags for the static predicate | 31 direct / 286 inherited effective flags from serialized slot 18 (enum ID 19) | direct slot or exactly one valid prototype default; never adjacent slot 19 spell flags | `unresolved-reference` |
+| Prototype file selection | six real files used | one canonical numeric candidate; unchanged fingerprint | `unresolved-reference` |
+| Scenery mapping | five real selected examples | one mapping key and a safe relative filename | `unresolved-resource` |
+| ART entry | five real selected examples | one normalized candidate in the explicit resource archive, 1 MiB cap | `unresolved-resource` |
+| ART metadata | five real selected examples | type/category/number, group/frame bounds, inspected metadata | `invalid-art-selector` |
+| Placement and ordering | none | separate evidence required | not part of this result |
+
+Only the five listed examples have an ART metadata chain; do not broaden that
+into a whole-art corpus claim without new evidence. Non-goals: never infer
+source precedence across DATs, patches, loose files or roots (the resource
+archive is an explicit caller input); never use hotspot, frame dimensions,
+source index or local location as an unproven visual anchor, sort key, baseline
+or occlusion value; never continue after malformed or truncated data merely to
+reach the terminal count; do not reuse this diagnostic for gameplay,
+navigation, collision, item/container/critter loading, scripts or runtime
+postprocessing.
+
 For source indexes 0 through 4 only, the selected-resource operation resolves
 the packed ART type,
 scenery mapping, unique normalized resource entry, physical group/frame, and
@@ -156,7 +195,7 @@ dotnet test tests/Arcanum.Data.Tests/Arcanum.Data.Tests.csproj --filter "FullyQu
 
 See [Crash Site objects](../research/crash-site-objects.md) for the frozen
 input identities, provenance, and evidence boundaries, and
-[the static-object contract](static-object-loader-contract.md) for the
+[scenery placement](../research/scenery-placement.md) for the
 unimplemented placement/renderer boundaries. The cited source readings remain
 specification evidence only (F0 unless the verification ledger lists them); this
 implementation is independently written.

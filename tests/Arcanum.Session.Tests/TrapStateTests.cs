@@ -1,5 +1,9 @@
+using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Skills;
 using Arcanum.Simulation.Traps;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using static Arcanum.Session.Tests.HeroStateTests;
 using static Arcanum.Session.Tests.SessionFixtures;
 
 namespace Arcanum.Session.Tests;
@@ -219,5 +223,87 @@ public sealed class TrapStateTests
         var step = owner.TriggerTrap(owner.Version, Plate, TrapPlate, TrapObserver.Player, SessionTrapCause.Step, false);
         Assert.AreEqual((GameSessionDisposition.Rejected, SessionTrapOutcome.NoTrap, (NativeTrapRun?)null), (step.Mutation.Disposition, step.Outcome, step.Run));
         Assert.IsTrue(owner.QueryTrap(Plate, TrapPlate).Trapped);
+    }
+
+    // ARC-MAGIC-057 (ledger SP1): the hero's spot trap roll. Perception and the skill's points and training are invented.
+    private static GameSessionOwner Spotter(int points, SkillTraining training, ulong seed = 0)
+    {
+        var stats = Defaults();
+        for (var i = 0; i < stats.Length; i++) stats[i] = 20;
+        int[] basic = new int[12];
+        basic[(int)Skill.SpotTrap] = points | (int)training << 6;
+        var hero = HalfElf(stats) with { Advancement = SessionHeroAdvancement.None with { BasicSkills = [.. basic] } };
+        var created = GameSessionOwner.Create(Descriptor() with { Hero = hero, RandomSeed = seed });
+        Assert.AreEqual(GameSessionFailure.None, created.Failure);
+        return created.Owner!;
+    }
+
+    [TestMethod]
+    public void A_spot_roll_is_made_only_when_the_gate_asks_for_it()
+    {
+        using var owner = Spotter(5, SkillTraining.Master);
+        var draws = owner.QueryRandom().Draws;
+        var revision = owner.Version.Revision;
+        // The detect flag, a known trap and an untrapped object need no roll: nothing is drawn.
+        foreach (var (baseline, flags) in new[] { (TrappedChest, TrapRules.DetectTrapsSpellFlag), (TrappedChest with { Script = 0 }, 0),
+            (TrappedChest with { ObjectFlags = TrapRules.SpottedFlag }, 0) })
+        {
+            var skipped = owner.RollHeroSpotTrap(owner.Version, Chest, baseline, flags);
+            Assert.AreEqual((GameSessionDisposition.NoChange, false), (skipped.Disposition, skipped.Spotted));
+        }
+        Assert.AreEqual((draws, revision), (owner.QueryRandom().Draws, owner.Version.Revision));
+        var rolled = owner.RollHeroSpotTrap(owner.Version, Chest, TrappedChest);
+        Assert.AreEqual(GameSessionDisposition.Changed, rolled.Disposition);
+        Assert.IsNotNull(rolled.Check);
+        Assert.AreEqual(revision + 1, owner.Version.Revision, "one revision per roll");
+        Assert.IsTrue(owner.QueryRandom().Draws >= draws + 2, "the check's two draws, and a master's second roll");
+        Assert.IsFalse(owner.QueryTrap(Chest, TrappedChest).Spotted, "the roll marks nothing: the caller does");
+    }
+
+    [TestMethod]
+    public void A_master_with_a_high_perception_spots_a_trap_and_an_unskilled_hero_mostly_does_not()
+    {
+        var master = 0;
+        var untrained = 0;
+        for (ulong seed = 0; seed < 200; seed++)
+        {
+            using var strong = Spotter(5, SkillTraining.Master, seed);
+            using var weak = Spotter(0, SkillTraining.None, seed);
+            var a = strong.RollHeroSpotTrap(strong.Version, Chest, TrappedChest);
+            var b = weak.RollHeroSpotTrap(weak.Version, Chest, TrappedChest);
+            master += a.Spotted ? 1 : 0;
+            untrained += b.Spotted ? 1 : 0;
+            Assert.IsFalse(b.SecondRoll, "no second roll below master");
+        }
+        Assert.IsTrue(master > 150, "a master's two rolls: " + master);
+        Assert.IsTrue(untrained < master, $"{untrained} against {master}");
+    }
+
+    [TestMethod]
+    public void A_magical_trap_is_spotted_only_from_expert_on()
+    {
+        var apprentice = 0;
+        var expert = 0;
+        for (ulong seed = 0; seed < 200; seed++)
+        {
+            using var low = Spotter(5, SkillTraining.Apprentice, seed);
+            using var high = Spotter(5, SkillTraining.Expert, seed);
+            apprentice += low.RollHeroSpotTrap(low.Version, Plate, TrapPlate).Spotted ? 1 : 0;
+            expert += high.RollHeroSpotTrap(high.Version, Plate, TrapPlate).Spotted ? 1 : 0;
+        }
+        Assert.AreEqual(0, apprentice);
+        Assert.IsTrue(expert > 0, "an expert spots some");
+    }
+
+    [TestMethod]
+    public void A_spot_roll_refuses_without_a_hero_for_an_invalid_object_or_light_and_a_stale_version()
+    {
+        using var heroless = Create();
+        Assert.AreEqual(GameSessionFailure.SkillsUnavailable, heroless.RollHeroSpotTrap(heroless.Version, Chest, TrappedChest).Failure);
+        using var owner = Spotter(5, SkillTraining.Expert);
+        Assert.AreEqual(GameSessionFailure.InvalidTrap, owner.RollHeroSpotTrap(owner.Version, Chest with { Entity = "" }, TrappedChest).Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidTrap, owner.RollHeroSpotTrap(owner.Version, Chest, TrappedChest, light: -1).Failure);
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.RollHeroSpotTrap(new(owner.Version.Owner, owner.Version.Revision + 1), Chest, TrappedChest).Failure);
+        Assert.AreEqual(0, owner.QueryRandom().Draws, "a refusal draws nothing");
     }
 }

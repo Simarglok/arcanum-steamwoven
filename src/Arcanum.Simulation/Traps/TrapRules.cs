@@ -1,3 +1,5 @@
+using Arcanum.Simulation.Combat;
+
 namespace Arcanum.Simulation.Traps;
 
 /// <summary>What carries a trap (ledger TT1): a trap object (type 17) on a tile, or another object (a container, a door,
@@ -119,13 +121,32 @@ public static class TrapRules
 
     /// <summary>The gate of a spot attempt (ledger TT3): a PC or NPC only, never on a trap device item, only on a trap; a
     /// known trap answers at once; the player's Detect Traps flag spots without a roll; otherwise the spot trap roll
-    /// (skill 7, the S10 slice) decides.</summary>
+    /// (skill 7, ledger SP1: `SpotCase` and the session's `RollHeroSpotTrap`) decides.</summary>
     [OriginalFunction(0x4BBE40, OriginalFunctionScope.Partial)]
     public static TrapSpotGate SpotGate(TrapObserver observer, bool trapDevice, TrapClass trap, int objectFlags, int playerSpellFlags)
     {
         if (observer == TrapObserver.NotCritter || trapDevice || trap == TrapClass.None) return TrapSpotGate.NoTrap;
         if (Known(observer, objectFlags)) return TrapSpotGate.Known;
         return (playerSpellFlags & DetectTrapsSpellFlag) != 0 ? TrapSpotGate.Detected : TrapSpotGate.Roll;
+    }
+
+    /// <summary>
+    /// The spot trap skill's own case after the shared check's two rolls (ledger SP1, case 7 of 0x4C7160). A failed check that is not a
+    /// critical failure, for a master (training 3), is rolled once more (<paramref name="secondRoll"/>, 1..100) and passes when
+    /// <paramref name="effectiveness"/> is not below that roll plus the check's total difficulty (<paramref name="total"/>); a second roll
+    /// that passes gives no critical. Then a source below expert (training under 2) never spots a magical trap, whichever roll passed, and
+    /// its critical flag is cleared. The first roll's critical flag is kept on every other path. The second roll is drawn only when needed.
+    /// </summary>
+    public static (bool Success, bool Critical) SpotCase(bool success, bool critical, SkillTraining training, TrapClass trap, int effectiveness, int total,
+        Func<int> secondRoll)
+    {
+        ArgumentNullException.ThrowIfNull(secondRoll);
+        if (!success)
+        {
+            if (critical || training != SkillTraining.Master) return (false, critical);
+            if (effectiveness < (long)secondRoll() + total) return (false, false);
+        }
+        return training < SkillTraining.Expert && trap == TrapClass.Magical ? (false, false) : (true, critical);
     }
 
     /// <summary>The spot mark (ledger TT4): only the player or an NPC led by a PC sets the spotted flag; a trap object also

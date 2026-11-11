@@ -1433,7 +1433,7 @@ combined freely (sprites HD with a Legacy interface, or the reverse). The third 
 version 1–4 files read it as off) is the experimental [generated interface](hd-interface-density.md#viewer-slice-s1-arc-ui-140): it keeps the
 HD interface on and draws the chrome of the two HUD strips and the bar buttons by code, with the pictures from the HD redraw (else from the
 Legacy frame); only the drawing changes, every frame keeps its Legacy size, place, alpha test and hit area. ARC-UI-141 paints the chrome at
-the window's exact whole device scale on a worker (the first draw no longer stalls), see [S2](hd-interface-density.md#viewer-slice-s2-arc-ui-141). **HD pack: Auto/Game/Custom** (ARC-DEV-350, default Auto) is the
+the window's exact whole device scale on a worker (the first draw no longer stalls), see [S2](hd-interface-density.md#viewer-slice-s2-arc-ui-141); ARC-UI-148 adds the inventory window's two frames at that window's own (fractional) device scale, see [S3](hd-interface-density.md#viewer-slice-s3-arc-ui-148) and the [plan for the other windows](hd-interface-density.md#generated-windows-plan-arc-ui-148155). **HD pack: Auto/Game/Custom** (ARC-DEV-350, default Auto) is the
 third project line: where the active pack is read from, saved in the same file (`hdPack`, `hdPackPath`; file version 4, version 1–3 files
 read it as Auto). Auto prefers the player's iCloud pack folder (macOS, only when that folder exists on this device) when the pack in it
 is whole, and falls back to the installed copy in the game's own `user://hd-packs`; Game reads the installed copy alone; Custom opens the
@@ -2023,7 +2023,9 @@ and layout (below), the other windows the project's.
   does (`SceneFlowKind.LoadSave`, `ARC-DEV-387 save chosen before any scene`, one map load instead of the start map's and then the save's). While it
   loads the menu stays, with the note "loading the save…", and takes no input; it goes when the save is in, and comes back with the reason
   when the save does not load. A save chosen while the start map is already loading replaces that load. The start map loads when a new game's
-  way begins; a choice that needs it is held as above. Not changed: the exterior mode (no `--area-map`) loads the start scene at once and
+  way begins; a choice that needs it is held as above. **The save folder follows the launch map (ARC-DEV-407):** the load window and Last Save read
+  `saves/map` from the start, not only once a scene stands (`AreaSaveFolder`; the lazy start used to read the Crash Site folder `saves`, so the Load Game list was
+  empty until the start map had loaded, bug reports 2026-11-11). Not changed: the exterior mode (no `--area-map`) loads the start scene at once and
   holds every choice that needs it (ARC-DEV-381); a smoke takes the player's route (Single Player, New Game) itself to start the load, as its
   stages run on the published scene. Known difference: the menu's own music is played through the start scene's session, so it starts when the start map is
   loaded (at New Game) and the main window is silent before; a follow-up is needed to play it without a scene. Smoke: the `menu` stage checks the

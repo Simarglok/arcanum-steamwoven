@@ -36,7 +36,7 @@ The world-map path entry (0x4207D0) and a separate 16×16 sector search sit besi
 
 No claim is made about undocumented flags, all animation call paths, fidelity of this reading to the running original, target interpretation, original terrain/collision data, movement animation timing, or path quality under real game content.
 
-ARC-RES-013 separately records a [grid movement contract](../world/grid-movement-contract.md)
+ARC-RES-013 separately records a [grid movement runtime](../world/grid-movement-runtime.md)
 and [motion evidence](../research/grid-movement-evidence.md). Its directed
 entry/commit, smooth-return/finish and timing law are Project policy, not conclusions
 from this route search. The normal move trace also qualifies universal Stand-at-end

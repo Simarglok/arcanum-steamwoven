@@ -631,5 +631,14 @@ class LauncherTests(unittest.TestCase):
         self.assertIn("not inside ./arcanum run", nested.stderr)
 
 
+class KnownTaskCodeTests(unittest.TestCase):
+    def test_known_failure_task_accepts_old_and_issue_number_codes(self) -> None:
+        # ARC-DEV-409: from 2026-11-12 a task code carries the GitHub issue number (four digits or more).
+        for code in ("ARC-DEV-061", "ARC-UI-1093", "unassigned"):
+            self.assertTrue(smoke.KNOWN_TASK.match(code), code)
+        for code in ("ARC-UI-12", "ARC-1093", "arc-ui-1093"):
+            self.assertFalse(smoke.KNOWN_TASK.match(code), code)
+
+
 if __name__ == "__main__":
     unittest.main()

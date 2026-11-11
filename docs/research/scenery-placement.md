@@ -125,6 +125,56 @@ behavior, transparency blend mode, or original rendered comparison was
 observed. A local diagnostic render and an F0 source reading are not
 original-game runtime observation.
 
+## Diagnostic consumer rules
+
+Carried from the retired static-scenery diagnostic contract. A diagnostic
+consumer places only the five named source-index records, may not treat the
+terrain viewer's Editor diagnostic facade order as a scenery rule, and is not a
+production renderer, archive-precedence policy or parity claim.
+
+Admission: a record is admitted only inside the exact finite evidence envelope
+(source index, local coordinate, selected ART identity/group/frame/palette,
+frame width/height/hot/offset, current-ART provenance and **both** direct
+instance offsets). It must not substitute prototype offsets, infer a missing
+offset as zero, pick another ART/resource winner or turn an unknown result into
+a plausible image. Absent offsets have no established prototype default. The
+resource input stays caller-selected and read-only; no original payload, path,
+frame or screenshot is persisted. The terrain viewer's `combined` mode
+(ARC-RENDER-004) consumes this envelope through a path-free resource identity
+(DAT ordinal, flags, declared decoded size, normalized-name hash); selected
+inspection reports five `Resolved` records and every other record
+`OutsideResourceScope`.
+
+Rectangle: with signed checked integer arithmetic, `anchor = (40*(y-x), 20*(y+x))
++ (ox,oy)` and `topLeft = anchor - (hx,hy)`. Camera origin, zoom, rounding,
+clipping and canvas baseline are caller policy. The frame's `(offsetX,offsetY)`
+is not the instance `(ox,oy)`; the fixture uses a nonzero `(9,-4)` to keep them
+apart.
+
+Raster policy (project policy, not recovered behavior): palette index zero /
+alpha zero leaves the destination unchanged; no crop is established, so draw the
+selected full frame inside its documented bounds; an explicit horizontal flip
+samples source X as `width - destinationX - 1` without moving the anchor or
+rectangle (no admitted record requests one); no Y flip, rotation, scale,
+lighting, grading, shadow, overlay, underlay, roof, wall or facade behavior is
+authorized; an application clip may discard pixels but not change the recorded
+anchor/rectangle.
+
+Ordering: sort key `(anchor.y, anchor.x, sourceIndex)` ascending, later opaque
+pixels overwrite earlier ones. This is a reproducibility policy, **not an
+original rule**; `sourceIndex` is a tie-breaker only (not a z-order discovery or
+serialized-order claim). Output using it is labelled "diagnostic" and
+normal-runtime ordering is reported unverified.
+
+Gates for a compliant consumer: verify immutable source identities before and
+after any original read; validate all five source-to-ART chains and reject any
+identity/selector/metadata/offset/frame mismatch; apply the rule without
+per-object corrections; keep ART offsets distinct from instance offsets; label
+transparency, flip and ordering as the stated policies or unknown; supply
+independent synthetic expectations for anchor, hotspot/offset, transparency,
+flip, overlap and exact-key ties; claim nothing about normal-runtime facades,
+walls, roofs, occlusion, lighting, palette or visual parity.
+
 ## Reproduction
 
 Use the project-pinned SDK where available. The current local focused evidence

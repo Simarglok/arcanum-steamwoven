@@ -13,7 +13,7 @@ researched separately in
 (ARC-RES-034).
 
 This note specifies only the inspected Crash Site sector described in
-[crash-site-slice.md](../research/crash-site-slice.md). The claims below are
+[crash-site-framing.md](../research/crash-site-framing.md). The claims below are
 not a universal map-file format specification.
 
 ## Verified container boundary

@@ -4,10 +4,11 @@ Status: Research / Proposed. `AREA_TRAVERSAL_RESEARCH_V1` is a research format,
 not a public Data API, movement permit, route search or executable admission.
 Whole-area loaded/live readiness is **NOT_READY**. A visual polygon does not
 establish physical permission. Original executable, graphical and controller
-parity are NOT_VERIFIED. Existing [cardinal assessment](cardinal-traversal-assessment.md),
-[cardinal contract](cardinal-traversal-contract.md), [grid contract](grid-movement-contract.md),
-[grid runtime](grid-movement-runtime.md) and [passability](passability-contract.md)
-retain their narrower policies without reinterpretation.
+parity are NOT_VERIFIED. The [cardinal assessment](cardinal-traversal-assessment.md)
+and the [grid runtime](grid-movement-runtime.md) retain their narrower policies
+without reinterpretation; the earlier proposal contracts (selected-sector
+passability, cardinal, grid) are retired and their live facts live in those two
+pages and below.
 
 ## Closure research (2026-10-15)
 
@@ -104,6 +105,42 @@ component applicability with null disposition. Open requires positive closure of
 all applicable dependencies. An unconditional **final terrain** blocker can be
 Supported/Blocked while retaining unrelated gaps and NOT_READY; an object blocker
 cannot bypass list registration closure. No boolean/truthy conversion is offered.
+
+## Result vocabulary, composition and readiness gate
+
+Every result keeps two independent dimensions: `Coverage = Supported | Unsupported
+| Unknown` and `Disposition = Open | Blocked | null`. `Unknown` never means Open.
+`Supported + Open` needs every required component admitted and nonblocking;
+`Supported + Blocked` needs an unconditional, non-overridable blocker in the
+declared context; `Unknown + null` keeps an in-profile missing, ambiguous,
+runtime-derived or unverified dependency; `Unsupported + null` is a request
+outside the profile (other sector, version, precedence, unsupported actor/state).
+Results carry machine-readable reason and provenance codes (source serialized
+base, art/MES name, runtime context, source gap, project policy), never an
+implied boolean. `PATH_FLAG_0x1000` is an unavailable source branch (the source
+is incomplete): reject or mark Unknown, never pick a default.
+
+Composition: evaluate every admitted component and retain all component results.
+The combined result may short-circuit to `Supported + Blocked` only for a blocker
+proven unconditional under the whole declared context; `Supported + Open` only
+when all terrain, facade/name, static-object, edge/diagonal, actor and state
+dependencies are admitted and nonblocking; otherwise `Unknown + null`. A source
+traversal cost (0x43FD70, 0x43FE00) is never reduced to an occupancy boolean:
+source/destination lists, wall/portal orientation, flags/state, portal/window
+capability, traps/fire and directed rotation are contract inputs or declared
+unknowns.
+
+A combined static result is implementation-ready only when all hold: (1) the
+exact base input and coordinate profile are fingerprinted and fixed; (2)
+block-mask shape, ordinal mapping, bit order and polarity are proven; (3) every
+tile/facade/name rule is resolved from admitted source data; (4) every static,
+dynamic and stateful object contributor is completely enumerated with its spatial
+contribution proven; (5) every direct/prototype field traversal needs is resolved
+to an exact serialized slot/default; (6) actor/context and state inputs are
+declared with no omitted dynamic override; (7) the cardinal edge and any admitted
+diagonal/corner rule are source-proven. If any fails, component facts stay useful
+but combined occupancy and step traversal stay Unknown. A census or a
+static subset is never promoted to total collision semantics.
 
 ## Canonical positional encoding
 

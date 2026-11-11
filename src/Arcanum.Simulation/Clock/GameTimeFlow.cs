@@ -2,7 +2,7 @@ namespace Arcanum.Simulation.Clock;
 
 /// <summary>
 /// Host adapter from monotonic host milliseconds to admitted game milliseconds (FR-LIGHT-002), kept apart
-/// from the clock authority. It follows the source's ping admission (docs/world/game-clock-policy.md, non-network path): an
+/// from the clock authority. It follows the source's ping admission (docs/world/game-clock-runtime.md, non-network path): an
 /// elapsed interval under <see cref="MinAdmittedMs"/> is not admitted and does not move the reference, an
 /// admitted interval moves the reference and is clamped to <see cref="MaxAdmittedMs"/> (the excess is
 /// discarded, not a backlog), and game time gains <see cref="GameMillisecondsPerHostMillisecond"/> times

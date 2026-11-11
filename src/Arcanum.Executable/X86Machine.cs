@@ -15,7 +15,7 @@ public enum X86Register
 
 /// <summary>
 /// ARC-DEV-067: an interpreter of the 32-bit integer subset of x86 that the original's prototype build reaches
-/// (<c>docs/research/prototype-extraction.md</c>; the subset, the flag choices and the limits are in <c>docs/Arcanum.Executable.md</c>).
+/// (<c>docs/research/prototype-extraction.md</c>; the subset, the flag choices and the limits are in <c>docs/project/components/Arcanum.Executable.md</c>).
 /// Flat memory (<see cref="MachineMemory"/>) with one optional FS base, no floating point, no system instructions, no
 /// exceptions or interrupts. A call runs until it returns to the sentinel or stops with a typed <see cref="MachineFault"/>:
 /// an instruction outside the subset, a control transfer outside executable memory that no hook answers, an access outside
