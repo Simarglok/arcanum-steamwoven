@@ -1,6 +1,6 @@
 # Documentation index
 
-Start with [current status](project/status.md), [vision](project/vision.md), the [missing systems plan](project/missing-systems-plan.md) and [toolchain](workflow/toolchain.md). Research documents retain historical claims and evidence boundaries; linked implementation pages describe current APIs. Active tasks come from the owner ([task workflow](workflow/tasks.md)).
+Pages are grouped below by kind: project (status, plans, decisions), development (workflow and tooling), formats and world contracts, rendering, input and scripting, research evidence, and player-facing pages. Start with [current status](project/status.md), [vision](project/vision.md), the [missing systems plan](project/missing-systems-plan.md) and [toolchain](workflow/toolchain.md). Research documents retain historical claims and evidence boundaries; linked implementation pages describe current APIs. Active tasks come from the owner ([task workflow](workflow/tasks.md)).
 
 ## Project
 
@@ -11,17 +11,21 @@ Start with [current status](project/status.md), [vision](project/vision.md), the
 - [Function audit against the original: state and plan](research/function-audit-plan.md)
 - [Full-game functional requirements and bounded implementation coverage (draft)](requirements/README.md)
 - [Architecture direction](architecture/decisions.md)
+- [Arcanum.Data: API, limits and commands](project/components/Arcanum.Data.md)
+- [Arcanum.Executable: the x86 interpreter of the player's Arcanum.exe](project/components/Arcanum.Executable.md)
+- [Arcanum.Godot viewer: shared-toolchain commands and known limits](project/components/Arcanum.Godot.md)
 
 ## Development
 
 - [Toolchain and verification entry points](workflow/toolchain.md)
 - [Private local diagnostic launch and build retention](workflow/local-development.md); [which builds may be deleted](workflow/build-retention.md)
+- [Packaged builds: prerequisites, commands, daily build](workflow/packaging.md)
 - [Task workflow](workflow/tasks.md) and [task naming](workflow/task-naming.md)
 - [Original executable check](research/original-executable-check.md): how original behaviour and bugs of the original game are classified, and the function oracle (emulating single functions of the executable)
 - [Original oracle and reconstruction removal (ARC-RES-051)](research/original-oracle-research.md): trial results, tools and plan for checking Steamwoven against the executable and removing the source reconstruction
 - [Prototype extraction (ARC-RES-085)](research/prototype-extraction.md): how the original builds its prototype files at its first start, and how Steamwoven builds them from the player's own executable on an installation the original never ran
-- [Arcanum.Data](Arcanum.Data.md)
-- [Arcanum.Godot viewer](Arcanum.Godot.md)
+- [Arcanum.Data](project/components/Arcanum.Data.md)
+- [Arcanum.Godot viewer](project/components/Arcanum.Godot.md)
 
 ## Formats and world
 
@@ -72,6 +76,11 @@ Start with [current status](project/status.md), [vision](project/vision.md), the
 - [ARC-RES-005 dialogue evidence record](research/dialog-evidence.md)
 - [Research method and R1 boundary](research/method.md)
 - [Crash Site scenery placement and overlap (ARC-RES-008)](research/scenery-placement.md)
+
+## Player
+
+- [Alpha install and first start](player/alpha-build.md)
+- [Hotkeys](player/hotkeys.md)
 
 ## Standalone labs
 

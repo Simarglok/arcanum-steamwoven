@@ -235,7 +235,7 @@ cave transition, DIF/PATCH или original-runtime parity. [Матрица по�
 
 Статусы показывают только покрытие на закреплённом срезе. `Нет` означает отсутствие компонента в проверенной ветке, а не опровержение поведения оригинальной игры. `Частично` ограничено пояснением в ячейке. Существующие bounded-тесты засчитываются только для указанного локального контракта. Единственный выполненный переход карт — Crash Site ↔ пещера в area viewer (ARC-WORLD-009); прочие переходы и original-data association не запускались. Чтение функций оригинала само по себе не считается runtime-проверкой.
 
-Проверки Data coordinates/neighbor selection и bounded movement относятся к разным слоям. Area fixtures/load подтверждают multisector metadata, а WORLD003 проверки — движение/отказ только внутри x4..8/y0..3. Cross-sector actor, connectors и map-transfer rollback не проверены. Новых runtime запусков в аудите нет; исторические candidate-specific receipts — в [каталоге](../project/status.md#verification-that-can-be-credited).
+Проверки Data coordinates/neighbor selection и bounded movement относятся к разным слоям. Area fixtures/load подтверждают multisector metadata, а WORLD003 проверки — движение/отказ только внутри x4..8/y0..3. Cross-sector actor, connectors и map-transfer rollback не проверены. Новых runtime запусков в аудите нет; исторические candidate-specific receipts — в истории git.
 
 ## Source inventory и непроверенные ветки
 
