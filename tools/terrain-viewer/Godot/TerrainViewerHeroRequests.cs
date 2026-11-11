@@ -191,6 +191,22 @@ public partial class TerrainViewerApp
             return host.PickLock(portal, item);
         }
 
+        public bool StartUseItem(string item, string target, bool run, bool noWalk)
+        {
+            if (app.HeroRunsHost() is not { } host || !host.MayTalk) return false;
+            app.StopWorldRoute("ROUTE_REPLACED_BY_ITEM_USE");
+            app._mapFarGoal = null;
+            return host.UseItem(item, target, run, noWalk);
+        }
+
+        public bool StartUseItemOnTile(string item, CellCoord tile)
+        {
+            if (app.HeroRunsHost() is not { } host || !host.MayTalk) return false;
+            app.StopWorldRoute("ROUTE_REPLACED_BY_ITEM_USE");
+            app._mapFarGoal = null;
+            return host.UseItemOnTile(item, tile);
+        }
+
         public bool StartPickPocket(string victim, string item, bool plant)
         {
             if (app.HeroRunsHost() is not { } host) return false;

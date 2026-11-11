@@ -426,6 +426,8 @@ public static class AreaMapPlans
             MaxSurvey = sectors, MaxPresentSectors = sectors, MaxAggregateRecords = Math.Max(1, mobiles),
             MaxAggregateBytes = (int)Math.Clamp(aggregateBytes, 16, int.MaxValue),
             MaxPrototypes = Math.Max(1, prototypes), MaxResourceInputs = resources, MaxTerrainTemplates = templates, MaxObjects = (int)Math.Clamp(objects + 1, 1, int.MaxValue), MaxVisuals = (int)visuals,
+            // ARC-DEV-375: every map plan (a whole interior or a window) shares the process's resident visual memo.
+            ResidentVisuals = AreaResidentVisuals.Enabled ? AreaResidentVisuals.Shared : null,
         };
     }
 
@@ -445,8 +447,9 @@ public static class AreaMapPlans
 
     private static AreaInputIdentity Identity(AreaInputKey key, string path)
     {
-        using var stream = File.OpenRead(path);
-        return new(key, stream.Length, Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant());
+        // ARC-DEV-374: a large input the process already hashed in full and that has not changed is not read again.
+        var (length, sha256) = VerifiedFileMemo.Identity(path);
+        return new(key, length, sha256);
     }
 
     private static string Hash(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();

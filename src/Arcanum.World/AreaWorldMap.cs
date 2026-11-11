@@ -272,7 +272,7 @@ public sealed class AreaWorldMap
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready)
             return new(found.Status == AreaContentRootStatus.MountFailed ? AreaWorldMapDataStatus.MountFailed : AreaWorldMapDataStatus.ModuleOutsideGameRoot, null, found.Detail);
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return new(AreaWorldMapDataStatus.StackFailed, null, opened.Status.ToString());
         using var stack = opened.Stack!;
         var catalog = WorldCatalog.Open(stack);

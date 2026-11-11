@@ -134,6 +134,19 @@ The triage changes no behaviour. These are the places where it found original NP
 | 3 | At night, move a sleeping NPC off its bed (push, teleport or leave the map and come back) and wait. | The sleeper is put back onto a bed object found at its night standpoint, else at its day one (0x4AD0B0, 0x4AD140). Ours leaves it where it is. | open |
 | 4 | Frighten an NPC with a fear effect, or let one surrender in a dialog. | It starts to flee from the source (the start-flee request 0x4AF130). Ours has only the stop-fleeing side. | open |
 
+## ARC-DEV-365 — Item cursor and the item use goals 39 and 41 (2026-11-11)
+
+The hero's use icon on an item that needs a target opens a cursor, and the use walks next to the target when the original does. The rules are those of [IA1–IA16](../research/ledger/items.md#item-aiming-and-use-with-a-target-arc-res-113). The comparison needs an item of each kind from the original data (the first four steps need a scroll or a food item with a spell, which the Mac's save can be given by a script).
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Hold a scroll whose spell asks for an object (a damage scroll), open the inventory and release the item on the use icon with no Shift. | The window closes and the spell cursor opens (the same cursor art as for a spell); a left press on a creature uses the scroll on it, a right press cancels the cursor. The cursor stays open after a press that finds no target. | open |
+| 2 | With the same cursor open, press a creature farther than the spell's range, then one inside it. | Inside the range the scroll is used at once from where the hero stands; outside it the hero walks next to the creature first and then uses it (item-use goal 39). | open |
+| 3 | Release a scroll or potion on the use icon with Shift held. | An item whose spell can target an object is used on the hero at once, with no cursor (and no "not on yourself" test, unlike the spell cursor). | open |
+| 4 | Open the cursor with a scroll whose spell has a tile in its target mask (a fire spell) and press an empty tile. | The scroll is used on the tile at once, from where the hero stands; it casts at the pressed tile, the scroll's level test and the item's use script do not run for a tile. | open |
+| 5 | Hold a script trap device (a spike trap) and release it on the use icon; press an empty tile three cells away, then a creature. | The cursor accepts an object or a tile (a trap device has no spell). The hero walks next to the tile (goal 41) or next to the creature (goal 39) first; the trap device itself is not placed yet (it stays in the pack, "not ready"). | open |
+| 6 | Release an item that needs a target but has no spell (a food item) on the use icon and press a creature. | The cursor accepts any object, and the item's use script sees the creature as its target. Ours runs the script without the target object. | open |
+
 ## ARC-RES-118 — Function triage of the exe band 0x42-0x43 (2026-11-11)
 
 The triage changes no behaviour. These are the places where the readers found original behaviour that our code differs from or lacks, each checked in the code ([ledger](../research/ledger/census-triage-b.md#findings-worth-a-task)); each step is to see the original do it, so that a follow-up task can be sized. The readings are F1 (one reader).
@@ -289,7 +302,7 @@ Compare in both games with the same hero and spells; a spell that also has a not
 | 1 | Cast Hardened Hands (45) on yourself, then hit a creature unarmed (no weapon in hand). | The unarmed damage gets +2 normal damage while the spell lasts, and loses it when it ends. Ours feeds the bonus from the flag; check the number in the combat log. | open |
 | 2 | Cast Body of Stone (18) on yourself and hit a creature unarmed. | +5 normal damage unarmed; the spell's art change (Trait) and its weight and speed side are not ready in ours, so the hero keeps its normal body. | open |
 | 3 | Cast Invisibility (69) on yourself and walk in front of an enemy that has already noticed you. | The original makes you translucent, and the enemy's awareness rules read the invisible flag. Ours writes the flags and the AI host reads them, but the viewer does not draw you translucent yet. | open |
-| 4 | Cast Dweomer Shield (42), then have a creature cast a harmful spell at you (or cast at yourself from a scroll). | The shell stops the spell at the per-target stage and the spell shows the shell message (602/603). Ours already read the flag before; now the spell writes it. Dispel (the other half of the spell) is not ready. | open |
+| 4 | Cast Dweomer Shield (42), then have a creature cast a harmful spell at you (or cast at yourself from a scroll). | The shell stops the spell at the per-target stage and the spell shows the shell message (602/603). Ours already read the flag before; now the spell writes it. Its Dispel half is built since ARC-MAGIC-034 (see the next section). | open |
 | 5 | Cast Bonds of Magick (43) on yourself and try to cast another spell. | The cast is refused at the invocation check while the flag holds. | open |
 | 6 | Cast Reflection Shield (44) on yourself and let a creature cast a hostile spell at you. | The spell is reflected to its caster. | open |
 | 7 | Cast Sanctuary (63) on yourself near a hostile creature that has not seen you yet. | The hostility rules read the enshrouded flag; compare which creatures still attack. | open |
@@ -353,6 +366,24 @@ Known differences (documented, not bugs):
 - The character sheet's Magick line still does not show effect changes (MA-2).
 - The AI caster weighs its cast with the same resistance, so enemies are a little less eager to cast at a target under Resist Magick than the original's.
 
+## ARC-MAGIC-034 — Dispel: Disperse Magick and Dweomer Shield (MA-3, 2026-11-11)
+
+The rules are in [Dispel](../world/spell-cast-host.md#dispel-arc-magic-034), the executable reading in [DP1–DP3](../research/ledger/spell-runs.md#dispel-component-arc-magic-034).
+Compare in both games with the same hero and spells.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast Shield of Protection (30) on yourself, then Dweomer Shield (42) on yourself. | The Dispel at the start ends your maintained spells (Shield of Protection ends, its bar slot frees); Dweomer Shield's own run is left and keeps its slot. Ours ends the runs the target is the source of or is aimed at, but never the dispelling run. | open |
+| 2 | Cast a maintained spell on a creature (for example Entangle), then cast Disperse Magick (41) on the creature. | The spell ends (its END runs: the flag is taken off). Ours ends the runs aimed at the creature the same way. | open |
+| 3 | Cast Flesh to Stone (48) on a creature, then Disperse Magick (41) on it. | The creature is no longer held (it acts again). The original clears the stoned spell flag by a plain write and leaves the stoned object flag set: look at whether the creature still looks like stone or acts; ours clears the same flag and leaves the same one. Record what you see. | open |
+| 4 | Cast Disperse Magick (41) on a creature that a companion or a creature cast a maintained spell on, and on a creature a technology item's effect holds. | The spells of a magic record end; the effects of a technological record (a gadget, a schematic) are never ended by it. | open |
+
+Known differences (reading only, no game step):
+
+- Polymorph (49) and a script's permanent polymorph (critter flags 2 bit 0x400000) are undone by the original's Dispel with the art restored; ours has neither (MA-8).
+- A portal or container held by Magelock (75) loses the hold in the original; ours has no such writer yet (MA-6).
+- A summoned critter is destroyed by the original's Dispel; ours destroys one the session created, and no spell makes one before the creature summons (E1-e).
+
 ## ARC-RES-120 — Function triage of the exe band 0x55-0x59 (2026-11-11)
 
 The triage changes no behaviour. These are the places where it found original interface and world-map behaviour that our code does not reproduce at all ([ledger H2-1 to H2-13](../research/ledger/census-triage-h2.md#what-the-reading-found-that-the-earlier-documents-did-not-say)); each is read from the executable, not seen in game, so each step says what the original is expected to do.
@@ -372,6 +403,61 @@ The triage changes no behaviour. These are the places where it found original in
 | 11 | Open Options from the main menu and in play. | Three pages of eight slots (module, difficulty, violence filter, combat mode, auto attack, auto switch weapons, always run, follower skills; brightness, text duration, floats, float speed, combat taunts; three volumes) and a combat mode with three values including fast turn-based (0x589280, 0x589610, 0x5896A0). Ours shows fewer slots and two combat values (ledger OP2). | open |
 | 12 | Maintain three spells and lower the hero's intelligence below the number maintained times four (a curse); stand across an hour change; let the hero die. | Slots close and their spells end (0x553670); the ambient light re-applies the hour every 3,600,000 ms of game time (0x57D620); a dead hero resets the game to the main menu after 5 s (0x57D410). | open |
 | 13 | Read a long book and a newspaper; right-click a follower portrait of a mind-controlled follower and of one that cannot speak. | The text wraps by pixels into page and column rectangles (ours cuts at about 700 characters, 0x56C800, 0x56CAA0, 0x56CB60); the menu greys Wait for a mind-controlled follower and Inventory when the can-open test refuses (0x56B970, 0x575080). | open |
+
+## ARC-UI-133 — Click on the hero's lens closes the world map (PR pending, 2026-11-11)
+
+Read in the original executable (ledger [WM140](../research/ledger/ui-audio.md), WM36): in the window's top left the executable registers a square, 89 × 89 pixels at window (25, 24), the hole of
+the background art, as the hero's lens (the same view-window mode as the logbook's lens). A left release inside that square closes the map, as the key `W` does. The circle in the brass ring is only
+what is drawn around the square; the click test is the whole square, corners included. Known differences, not to be re-reported: in the original the lens shows the game around the hero at half size
+with the cover art 198 over it; in ours the square still shows the world behind the window, unscaled, and no cover art (its own task, because it also decides the ARC-UI-126 look of the hole).
+In both rule modes the click behaves the same.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Open the world map (`W` or the bar's Map button) and click the small window in the top left of the brass frame, in the middle of the circle. | The map closes and the game world is shown again, on press and release of the left button (the release does it). | open |
+| 2 | Open the map, press the left button on the lens, keep it down, move the pointer out onto the wood and release there. | Nothing happens (the test is on the release, at the release point); the map stays open. | open |
+| 3 | Open the map and click in a corner of the square, outside the round ring (the corner where the wood shows through), and just outside the square on each side. | The corner of the square closes the map; a click one pixel outside the square does not. | open |
+| 4 | Open the map, start a journey (Travel), and click the lens while it runs. | The map closes through the same close as `W`; the walking party stops where it stands (WT12). In ours this lands the party at its current place. | open |
+| 5 | In a town-map sector (kind 2) and in the continent view (button below the zoom), click the lens. | The map closes in every view. | open |
+| 6 | With the HD interface switch on, repeat step 1. | The same as in the original look: the click works in HD too. | open |
+
+
+## ARC-MAGIC-035 — Social and AI flags: Charm, Dominate Will, Nightmare, Flash, Create Undead (MA-4, 2026-11-11)
+
+The rules are in [Social and AI flags](../world/spell-cast-host.md#social-and-ai-flags-arc-magic-035), read from the executable in [SO1 to SO8](../research/ledger/spell-runs.md#social-and-ai-flags-arc-magic-035). Compare them in both games with the same
+hero (a mage with these spells; a hero without the college can learn them from the spell book by cheat or lend them through a wand). No viewer smoke stage drives these spells, so these steps are the only run of the whole path.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast Charm (spell 35) on a calm human who is not yours, then talk to them. | Their reaction toward you is 30 higher than before the cast; when the spell ends it drops by 30 again. | open |
+| 2 | Cast Charm Beast (spell 50) on an animal that is attacking you. | The animal stops attacking you (peace with you). When it ends the reaction does not change except by the -30 of a charmed NPC. | open |
+| 3 | Cast Dominate Will (spell 39) on a hostile human. | Their reaction drops by 50 at once, they join you as a follower (they follow you and will not flee), and fight on your side. When the spell ends they leave your party (the reaction stays low). | open |
+| 4 | Cast Control Beast (spell 52) on an animal. | The same as step 3: the animal follows you and does not flee; at the end it is free again. | open |
+| 5 | Cast Nightmare (spell 38) on a human who fights you. | They run away from you (a flee goal) and do not attack while it lasts; at the end they stop fleeing. | open |
+| 6 | Cast Flash (spell 66) on a human who fights you, and watch their hits. | They are blinded (their melee is much worse); at the end, or by chance each AI pass, the blindness goes. | open |
+| 7 | Cast Create Undead (spell 58) on a corpse. | The creature rises under your control (it follows you), and at the spell's end it dies again. Note whether it is hurt by healing or poison as an undead would be. | open |
+| 8 | Dominate Will on a creature that is already your follower, and on one that is summoned. | A summoned creature does not lose reaction (no -50). | open |
+
+Known differences (documented, not bugs):
+
+- A charm adds the NPC flag "kill-on-sight override" in the original and never takes it off; ours does not keep that flag.
+- Mind control makes a follower only under the hero (a spell cast by another creature on a creature does not make a follower); a mind-controlled creature of the world map is not covered.
+- The undead flag a spell writes is not read by the combat or life rules yet, so step 7's undead behaviour may differ.
+## ARC-DEV-372 — Shared content index (O4 of the performance diagnosis, 2026-11-11)
+
+The viewer's readers now share one index of the game folder per run instead of each indexing it again. Nothing in the game's behaviour is meant to change, so the steps compare the
+start and the first window opens with the original game: the same texts, names and numbers, and nothing missing that the original shows.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Start a new game and read the first screen: the hero's name and stats, the first dialog, the inventory (`I`), the character sheet (`C`) and the logbook (`L`). | The texts, names and numbers are the ones the original shows for the same hero and map; no window opens empty or with a missing label. | open |
+| 2 | Open the world map (`W`), the spell pane (`M`) and the schematics (`T`) on the first map, then walk to a cave or another map and open the same windows again. | Same content as before the change; the second map's windows are as complete as the first's. | open |
+| 3 | Look at an NPC with a hover name, a book or note to read, a shop's barter window and a companion's greeting. | Names, texts and prices match the original; none is blank. | open |
+| 4 | Start the game, quit, and start it again. | The second start shows the same content as the first. | open |
+
+Known differences (documented, not bugs):
+
+- The index is read once per run (as the original reads its static installation): a file added or changed in the game folder while the game runs shows after the next start. An archive that changes in size or time is read again.
 
 ## ARC-DEV-371 — Script-created critters (E1-c3, 2026-11-11)
 

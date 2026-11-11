@@ -158,11 +158,11 @@ Gain is what the numbers above say it can remove (estimates unless stated); cost
 | O3 | Load the hero body ART (`SyncHeroBody`) on the worker in the load stage and only bind it on the main thread | −1.6–1.8 s of the 3.5 s main-thread freeze at start and at a cave return (little at a window move, where the body is already cached) | small–medium |
 | O5b | Compute and cache the map's transitions once per map and runtime (not on every load) | −1.0–1.6 s on every load, including each window move | small |
 | O2 | Warm every window's art off the main thread after the publication: decode ART and HD PNGs on workers into bytes, create textures on the main thread in small per-frame slices (or draw each window once off screen) | the cold hitches (0.25–1.1 s each, 8 windows) become warm opens | medium |
-| O4 | One shared reader of the module and resource archives for the session binders (companions, reputations, inventory seeds, item art sizes, sound), parsed on the worker; confirm the 90 MiB-per-consumer cause with an allocation profile first | up to −1.1–1.3 s of publication and −400 MiB allocation (packaged transitions lap 1.1–1.3 s) | medium |
+| O4 | **Done: ARC-DEV-372**, see [shared content index](../workflow/toolchain.md#shared-content-index-arc-dev-372). The cause was confirmed: every `ContentStack.Open` allocates 87.5 MiB (it indexes all archives and walks the loose files of the game folder) and the viewer opened about 25 per run. One shared index per mount plan for the session binders, the background binders, the ground bodies and the windows' art | up to −1.1–1.3 s of publication and −400 MiB allocation (packaged transitions lap 1.1–1.3 s) | medium |
 | O1 | Open the main menu as soon as the menu art is read and load the start map behind it (a new game then waits only for what is left) | start to menu from 12–15 s to about 2 s | medium, touches the start contract |
-| O5a | Skip repeated whole-archive SHA-256 passes inside one process when the file identity (size, modification time, first verification) is unchanged | −1.6–2.2 s of the worker (about 25%) on every load | medium, touches the authentication rule of the load contract (owner decision) |
+| O5a | Skip repeated whole-archive SHA-256 passes inside one process when the file identity (size, modification time, first verification) is unchanged. **Done: ARC-DEV-374** (owner option A, 2026-11-11): the first check of a file of 1 MiB or more hashes it in full, later checks reuse the hash while its stamp is unchanged, see [verified-file memo](../world/area-loader.md); measured with `perf`: map plan 1.0–1.3 s to 0.07–0.24 s on a repeat load, `open` 1.3–2.3 s to 0.4–0.5 s, `verify` 0.35–0.86 s to 0.0 s, a repeated map change worker 10 s to 1.3–6.2 s (shared Mac, so the baseline runs were noisier than the after runs; the removed work is the three passes above plus I7) | −1.6–2.2 s of the worker (about 25%) on every load | medium, touches the authentication rule of the load contract (owner decision) |
 | O8 | Saves list: list asynchronously, decode thumbnails lazily | −0.7 s first open (Debug source) | small |
-| O5c | Keep the decoded frame repository and strict snapshot across loads of the same map for window moves, cave return and a cross-map quick load | 6–9 s to about 2 s per map change; fewer hitches while walking | large, touches the residency design |
+| O5c | Keep the decoded frame repository and strict snapshot across loads of the same map for window moves, cave return and a cross-map quick load. **Done in part: ARC-DEV-375**, the decoded frames and visual records (not the snapshot) stay resident, see [resident frames and visuals](../world/area-loader.md#resident-frames-and-visuals-across-map-loads-arc-dev-375): the frame copy 1.8 s to 0.5 s and 103 MiB to 2 MiB on a cave return; the strict build's other cost and the snapshot reuse (after O5a) remain | 6–9 s to about 2 s per map change (not reached by the frames alone) | large, touches the residency design |
 | O6 | Split the publication into per-frame slices (after O3 and O4 it is mostly the first-frame upload) | removes the 0.1–0.7 s stall and the 0.48 s frame at a window move | medium |
 | O9 | HD: ship mipmapped or VRAM-compressed textures in the pack and skip the SHA-256 of the Legacy pixels on a warm pack | −0.2–0.6 s per window at first draw | large, pack format change |
 | O11 | Attribute the long frames around quick load and map change (probe in the game, not in a smoke stage) | unknown; decides whether save load has a real stall | small |
@@ -178,6 +178,25 @@ publication the swap and the quarantine make was tried and dropped: later ones c
 Recommended order: O10, then O3 and O5b together, then O2, then O4 and O1; O5a, O5c and O9 need the owner's decision on
 their contracts first; O11 can run beside any of them. Done in that order the main-thread freeze at start should fall
 from about 3.5 s to under 1 s (estimate) and the first window opens to warm opens, without touching original behaviour.
+
+## After O4 (ARC-DEV-372)
+
+The first publication of a run (`./arcanum smoke pr --stages perf --sector 1409,1314 --env ARC_PERF_PROBE=1`, Debug source run on a Mac with a load average of about 25, so the
+milliseconds are rough, the allocation is exact; the "after" column is two runs):
+
+| Step | Before | After |
+| --- | ---: | ---: |
+| `StartAreaTransitions` (publish.transitions) | 2.09 s, 486 MiB | 0.29-0.38 s, 38 MiB |
+| `BindAreaCompanions` (publish.companions) | 0.42 s, 92 MiB | 0.05-0.06 s, 3 MiB |
+| `SyncHeroBody` (publish.hero-body, with the twelve background binders' open and the ground bodies' open) | 4.68 s, 148 MiB | 0.48-0.63 s, 58 MiB |
+| whole publication | 7.86 s, 764 MiB | 1.12-1.32 s, 133-136 MiB |
+| inventory cold open (`I`), to first frame | 790 ms | 221 ms |
+| character sheet cold open (`C`) | 1387 ms | 246 ms |
+| logbook cold open (`L`) | 1243 ms | 162 ms |
+
+What is left in `StartAreaTransitions` is its own work (the session 0.09 s, the sound catalogue 0.07-0.08 s, the inventory seeds 0.05-0.07 s, the companion templates
+0.05 s). A later publication of the same run (window move, map change) was already cheap, since the viewer caches the icons and the sound catalogue per module. The load worker's
+read, plan and open steps are not touched (O5a, O5b). The first index open (about 0.5 s of the worker) now happens once per run.
 
 ## Follow-up: O2 done (ARC-DEV-369)
 

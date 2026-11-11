@@ -265,7 +265,7 @@ public sealed class AreaTownMapSource : IDisposable
         ArgumentNullException.ThrowIfNull(modulePath);
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready) { detail = $"not read ({found.Status})"; return null; }
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) { detail = $"not read (content stack {opened.Status})"; return null; }
         var stack = opened.Stack!;
         var candidate = ContentPhase.Candidate(stack, AreaTownMapTable.Path, ContentLoadPhase.ModuleLoaded) ?? stack.Resolve(AreaTownMapTable.Path).Winner;

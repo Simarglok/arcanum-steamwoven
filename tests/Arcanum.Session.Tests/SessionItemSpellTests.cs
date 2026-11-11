@@ -551,4 +551,37 @@ public sealed class SessionItemSpellTests
         Assert.AreEqual(GameSessionFailure.InvalidItem, owner.DestroyUsedItem(owner.Version, "").Failure);
         Assert.AreEqual(0, owner.Version.Revision);
     }
+    // ---- ARC-DEV-365 (T-g, ledger IA12): the item use on a tile (0x462FC0) ----
+
+    [TestMethod]
+    public void The_item_use_on_a_tile_casts_a_self_spell_at_the_holder_s_tile_with_no_target_for_the_used_trigger_and_spends_the_scroll()
+    {
+        var (owner, caster, _) = UseSession();
+        using var _ = owner;
+        var tileUse = new SessionItemTileUse(caster, new NoCombat());
+        var use = tileUse.UseItemOnTile(Scroll, new SpellLocation(50, 50));
+        Assert.AreEqual((SessionItemUseOutcome.Used, SessionItemUseCast.AtCaster, SpellCastAttemptOutcome.Started), (use.Outcome, use.Cast, use.Attempt!.Outcome),
+            "the activation casts a self spell at the caster's tile, whatever tile was clicked");
+        Assert.AreEqual(caster.Facts(SessionSpellCaster.Hero)!.Location, use.Attempt.Run!.Creation!.Run!.TargetTile);
+        Assert.IsTrue(use.Spent);
+        Assert.IsTrue(owner.IsItemDestroyed(Scroll));
+    }
+
+    [TestMethod]
+    public void The_item_use_on_a_tile_sends_a_target_spell_to_the_tile_and_reports_items_that_take_the_other_branches()
+    {
+        var (owner, caster, _) = UseSession();
+        using var _ = owner;
+        var wand = new SessionItemTileUse(caster, new NoCombat()).UseItemOnTile(Wand, new SpellLocation(60, 60));
+        Assert.AreEqual((SessionItemUseOutcome.Used, SessionItemUseCast.AtTarget), (wand.Outcome, wand.Cast), "an object spell's cast goes to the clicked tile");
+        Assert.IsNotNull(wand.Attempt);
+        Assert.IsFalse(wand.Spent, "a wand is not spent by its use");
+
+        var (empty, emptyCaster, _) = UseSession(wandCharges: 0);
+        using var __ = empty;
+        var tileUse = new SessionItemTileUse(emptyCaster, new NoCombat());
+        Assert.AreEqual(SessionItemUseOutcome.NoMagic, tileUse.UseItemOnTile(Wand, new SpellLocation(1, 1)).Outcome);
+        Assert.AreEqual(SessionItemUseOutcome.Unknown, tileUse.UseItemOnTile("kit:9", new SpellLocation(1, 1)).Outcome);
+        Assert.AreEqual(0, empty.Version.Revision);
+    }
 }
