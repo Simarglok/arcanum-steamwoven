@@ -886,6 +886,19 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         _castFacing.Clear(); _noRelease.Clear(); _queuedCasts.Clear(); _launched.Clear(); _playedCasts.Clear();
     }
 
+    /// <summary>
+    /// ARC-MAGIC-042 (T-m1, TI6): the script action attack (36, 0x447D2F): the attack event (0x4A9650) of <paramref name="attacker"/> on <paramref name="victim"/> with flags 2 (no fan-out: the attacker's and the victim's followers
+    /// are not told, a PC victim does not respond and no noise is raised) and loudness 1. The victim's own reaction follows as for any attack event: an NPC victim turns, records who hit it and reacts, a PC victim only loses its concealment. A side
+    /// this host does not hold ends at the event's own early exits (<see cref="AttackEventStop.Missing"/>), and an attack on itself at <see cref="AttackEventStop.Self"/>. The attacker is the host's NPC (a created critter must be synced
+    /// first, <see cref="SyncCreated"/>); returns the stop of the event's plan.
+    /// </summary>
+    public AttackEventStop ScriptAttack(string attacker, string victim)
+    {
+        ArgumentNullException.ThrowIfNull(attacker); ArgumentNullException.ThrowIfNull(victim);
+        AttackEvent(attacker, victim, AttackEventFlags.NoFanOut);
+        return Enum.TryParse<AttackEventStop>(Trace(victim).Event, out var stop) ? stop : AttackEventStop.None;
+    }
+
     private void AttackEvent(string attacker, string victim, AttackEventFlags flags = AttackEventFlags.None, Loudness loudness = Loudness.Normal)
     {
         var plan = HostilityRules.AttackEvent(this, attacker, victim, flags);

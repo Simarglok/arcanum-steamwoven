@@ -106,7 +106,8 @@ public static class ScrCatalogue
             ToggleState = 56, Kill = 58, DistanceBetween = 71, SetFaction = 134, FloatLine = 23, GetArea = 84, Destroy = 68, StopAttacking = 109, GetStat = 33, GetReaction = 29,
             UnfogTownMap = 113, WalkTo = 69, RunTo = 74, HealFatigue = 76, PerformAnimation = 62, StealCoins = 115, BecomeProne = 93,
             CastSpell = 48, CastSpellOn = 61, CastFreeSpell = 118, CastUnresistableSpellBy = 121, CastFreeUnresistableSpell = 122, CastUnresistableSpellOn = 136,
-            Damage = 60, DamageUnresistable = 138, HealHitPoints = 75, GiveSpellMastery = 112;
+            Damage = 60, DamageUnresistable = 138, HealHitPoints = 75, GiveSpellMastery = 112,
+            MakeFollow = 21, Attack = 36, TransformObject = 40;
     }
 
     /// <summary>Script file flags.</summary>

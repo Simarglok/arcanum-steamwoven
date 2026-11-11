@@ -453,8 +453,8 @@ public partial class TerrainViewerApp
             var result = owner.LandShot(owner.Version, projectile.Shot, CritterAttack(goal, 1, null));
             Ended(projectile, kind, goal.Entity, $"disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
                 + $" damage={result.Life?.HitPointDamage}");
-            // A refused strike leaves the shot in the session: it ends there too (a boomerang turns back).
-            end = StruckEnd(projectile);
+            // A refused strike leaves the shot in the session: it ends there too (a boomerang turns back). ARC-MAGIC-042: a thrown item's hit script runs for a hit, its miss script for anything else.
+            end = StruckEnd(projectile, result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Outcome is Arcanum.Simulation.Combat.AttackOutcome.Hit or Arcanum.Simulation.Combat.AttackOutcome.CriticalHit, goal.Entity);
             // ARC-DEV-292: the attack event of the aimed NPC was raised at the shot; an NPC the arrow met on the way gets its own at the strike (as an NPC's stray shot does, AreaAiHost.LandShot), before its pass.
             if (result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Refusal == AttackRefusal.None && !(struck.Key == projectile.Target.Key && projectile.Critter is AttackGoal)) _aiHost?.HeroAttacked(goal.Entity);
             if (result.Disposition != GameSessionDisposition.Rejected) FinishCritterHit(goal, result);
@@ -467,7 +467,7 @@ public partial class TerrainViewerApp
                 target.Attack(1, null, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with { DropMap = AreaDropMapNow(), TakingDamage = () => TakingDamageGoesOn(target.Entity, SessionSpellCaster.Hero) });
             Ended(projectile, kind, target.Entity, $"disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
                 + $" damage={result.Object?.Damage}");
-            end = StruckEnd(projectile);
+            end = StruckEnd(projectile, result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Outcome is Arcanum.Simulation.Combat.AttackOutcome.Hit or Arcanum.Simulation.Combat.AttackOutcome.CriticalHit, target.Entity);
             if (result.Disposition != GameSessionDisposition.Rejected) FinishObjectHit(null, target, result, true);
         }
         else if (struck.Type == 0)
@@ -492,21 +492,26 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
         }
         FireShotEnd(projectile, events);
+        RunThrownItemScriptAfterStrike();
         return end;
     }
 
     /// <summary>ARC-COMBAT-019: after a strike a boomerang turns back (the original's end runs just before the hit, PF8); any other
     /// projectile ends on its tile.</summary>
-    private ProjectileCrossResult StruckEnd(AreaProjectile projectile)
+    private ProjectileCrossResult StruckEnd(AreaProjectile projectile, bool hit = false, string? target = null)
     {
         if (projectile.Returns && !projectile.State.Returning) return TurnBack(projectile) ? ProjectileCrossResult.Turned : ProjectileCrossResult.Ended;
-        EndOnTile(projectile);
+        EndOnTile(projectile, hit ? Arcanum.Scripting.Scr.ScrPoint.Hit : Arcanum.Scripting.Scr.ScrPoint.Miss, target, afterStrike: true);
         return ProjectileCrossResult.Ended;
     }
 
     /// <summary>ARC-COMBAT-017: a shot ends on the tile the projectile is on: a thrown item lands there (0x4B2690, flag 0x40) and the
     /// ground is drawn again; any other shot is gone (after a strike the session holds it no more).</summary>
-    private void EndOnTile(AreaProjectile projectile)
+    /// <summary>
+    /// <paramref name="scriptPoint"/> (ARC-MAGIC-042, ledger TI4): the thrown item's script point (7 hit, 8 miss) to run where it landed; null for the goal's own end, which asks no item event (GT53). With <paramref name="afterStrike"/>
+    /// the run waits for the end of the strike (<see cref="RunThrownItemScriptAfterStrike"/>: the victim's own hit handling goes first, the original resolves the hit before the item's script); otherwise it runs at once.
+    /// </summary>
+    private void EndOnTile(AreaProjectile projectile, int? scriptPoint = null, string? scriptTarget = null, bool afterStrike = false)
     {
         _projectileHost?.Finish(projectile);
         var owner = projectile.Owner;
@@ -518,6 +523,21 @@ public partial class TerrainViewerApp
         if (!ReferenceEquals(owner, _areaSession)) return;
         _groundStamp = null;
         SyncAreaInventory();
+        // ARC-MAGIC-042 (TI4): the item's hit or miss script runs where it landed (the hero's throw; a failed landing runs nothing).
+        if (scriptPoint is not { } point || landed.Disposition == GameSessionDisposition.Rejected) return;
+        var tile = projectile.Flight.Tile;
+        if (afterStrike) _thrownScriptAfterStrike = () => RunThrownItemScript(projectile, thrown.Item, tile, point, scriptTarget);
+        else RunThrownItemScript(projectile, thrown.Item, tile, point, scriptTarget);
+    }
+
+    private Action? _thrownScriptAfterStrike;
+
+    /// <summary>Runs the thrown item's script a strike kept back (ARC-MAGIC-042): called at the end of <see cref="Strike"/>, after the victim's hit handling and the shot's end event.</summary>
+    private void RunThrownItemScriptAfterStrike()
+    {
+        var run = _thrownScriptAfterStrike;
+        _thrownScriptAfterStrike = null;
+        run?.Invoke();
     }
 
     /// <summary>A flight ends without a strike: beyond its range or off the map a thrown item lands on its last tile
@@ -528,7 +548,7 @@ public partial class TerrainViewerApp
     {
         var events = fireEnd ? ShotEndEvents(projectile) : [];
         _projectileHost?.Finish(projectile);
-        if (land) EndOnTile(projectile);
+        if (land) EndOnTile(projectile, fireEnd ? Arcanum.Scripting.Scr.ScrPoint.Miss : null);
         else projectile.Owner.EndShot(projectile.Shot);
         Ended(projectile, kind, struck, why);
         if (kind == ProjectileStrikeKind.RangeEnd) { _attackNotice = "the shot flew past"; RefreshAreaStatus(); }

@@ -29,7 +29,9 @@ public enum ScrSource { Object, Tile, Sector }
 /// <summary>The attachment points (0..35) the dispatcher treats by name.</summary>
 public static class ScrPoint
 {
-    public const int Examine = 0, Destroy = 2, Use = 1, Dialog = 9, FirstHeartbeat = 10, Dying = 12, Heartbeat = 19, TakingDamage = 23, Bust = 30, DialogOverride = 31, Count = 36;
+    public const int Examine = 0, Destroy = 2, Use = 1, Dialog = 9, FirstHeartbeat = 10, Dying = 12, Heartbeat = 19, TakingDamage = 23, Bust = 30, DialogOverride = 31, Count = 36,
+        // ARC-MAGIC-042 (TI4): the weapon's hit (7) and miss (8) points, run for a thrown item's strike or landing.
+        Hit = 7, Miss = 8;
 }
 
 /// <summary>
@@ -348,6 +350,13 @@ public enum ScrObjectStateChange
     /// <summary>ARC-MAGIC-029 (MT21a, SC5): give spell mastery in college (112) of the first object of its operand: <see cref="ScrObjectStateRequest.Value"/> the college as read (not range-checked in the original). The host
     /// writes it for a PC or an NPC that has no mastered college and at least five ranks of the college (0x4B1CF0, SB7), and does nothing else.</summary>
     GiveSpellMastery,
+    /// <summary>ARC-MAGIC-042 (T-m1, ledger TI5): transform into a basic prototype (40): the run's attachee (<see cref="ScrObjectStateRequest.Object"/>) is replaced by a new object of the basic prototype <see cref="ScrObjectStateRequest.Value"/> (the file
+    /// is that number + 20) at its place, carrying its hit-point percentage; the old object is destroyed and the new one is the attachee of every later request of the run. The host decides what the object is and when the creation fails (the action stops).</summary>
+    Transform,
+    /// <summary>ARC-MAGIC-042 (T-m1, ledger TI6): force follow (21): the first object of operand 0 (<see cref="ScrObjectStateRequest.Object"/>) follows the first object of operand 1 (<see cref="ScrObjectStateRequest.Other"/>) with the follow check skipped (0x45DE90, force 1).</summary>
+    MakeFollow,
+    /// <summary>ARC-MAGIC-042 (T-m1, ledger TI6): attack (36): <see cref="ScrObjectStateRequest.Other"/> (the first object of operand 1) attacks <see cref="ScrObjectStateRequest.Object"/>, one request per object of operand 0 in list order (the attack event 0x4A9650, loudness 1, flags 2).</summary>
+    Attack,
 }
 
 /// <summary>ARC-DEV-241: the invocation flags of a script cast (GT183): 0x2 casts free (the run's Free flag), 0x4 casts unresistable (the run's Unresistable flag).</summary>
@@ -712,7 +721,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S31"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S32"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -733,7 +742,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S31)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S31.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S32)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S32.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
