@@ -267,7 +267,9 @@ public partial class TerrainViewerApp
             // ARC-DEV-261 (GT198): a destroyed object's taking-damage script is asked all the same; the answer cannot change the outcome.
             code => TakingDamageGoesOn(code, null),
             // ARC-DEV-371 (E1-c3): a script's create object of a critter prototype makes a critter; a created critter's row is the session's (the maps' rows hold none).
-            ScriptCritterPrototype, entity => CreatedCrittersRow(entity));
+            ScriptCritterPrototype, entity => CreatedCrittersRow(entity),
+            // ARC-DEV-386 (E1-c4): the creation's finish generates the new critter's inventory (queued for the frame, see TakeCreatedInventories).
+            CritterMade: QueueCreatedInventory);
         var inventory = _inventoryHost;
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, inventory?.Maps ?? [], content, world)
         {
