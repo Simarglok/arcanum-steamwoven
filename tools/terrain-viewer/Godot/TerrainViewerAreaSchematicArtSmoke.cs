@@ -18,6 +18,25 @@ public partial class TerrainViewerApp
         for (var i = 0; i < 1800 && AdoptSchematicArt() is null; i++) await Frame();
         var content = AdoptSchematicArt();
         Require(content is { Ready: true }, "the window's art read: " + content?.Detail);
+        // ARC_AREA_SCHEMATIC_HD_VERIFY=1 (with ARC_HD_PACK naming a pack that holds the window's arts): the HD interface is switched on for this look, every window art
+        // frame the pack holds resolves to its HD frame, and a PATH-hd.png capture is saved; the switch is put back at the end.
+        var verifyHd = System.Environment.GetEnvironmentVariable("ARC_AREA_SCHEMATIC_HD_VERIFY") == "1";
+        var savedInterfaceHd = _gameSettings.HdInterface;
+        if (verifyHd)
+        {
+            Require(_canvas?.HdSource?.Pack is not null, "HD verification needs ARC_HD_PACK");
+            _gameSettings = _gameSettings with { HdInterface = true };
+            SyncInterfaceHd();
+            Require(InterfaceHd.Enabled, "the HD interface switch is on for this look");
+            var resolved = 0;
+            foreach (var load in content!.Art.Values.Where(load => AreaSchematicWindowLayout.ArtNumbers.Contains(load.Number)))
+                foreach (var frame in load.Frames.Where(f => f.Hd is not null))
+                    if (_canvas!.HdSource!.Pack!.ResolveSprite(frame.Hd!, frame.Rgba).Status == Arcanum.Data.Hd.HdFrameStatus.Hd) resolved++;
+            Require(resolved > 0, "the pack holds HD frames of the window's arts");
+            GD.Print($"ARC-UI-142 schematic window HD frames resolved={resolved}");
+        }
+        var pages = 0;
+        try {
         OpenSchematics();
         Require(SchematicsOpen && _schematicsPanel is { ArtMode: true, ArtViewForSelfTest.Visible: true }, "the window opens in the original's look: " + _schematicsStatus);
         var panel = _schematicsPanel!;
@@ -55,7 +74,7 @@ public partial class TerrainViewerApp
         var soundsBefore = _schematicSounds.Count;
         await Click(px + 2, py + 2);
         Require(panel.View is { Page: 0 } && _schematicSounds.Count == soundsBefore, "a click on the hidden previous button does nothing");
-        await Capture("-original");
+        await Capture(verifyHd ? "-hd" : "-original");
         // A discipline tab: Chemistry (1) then back to Herbology (0): the tab keeps the page 0 and the window follows.
         var (dx, dy) = AreaSchematicWindowLayout.DisciplineTab(1);
         await Click(dx + 4, dy + 4);
@@ -64,7 +83,7 @@ public partial class TerrainViewerApp
         await Click(dx + 4, dy + 4);
         Require(panel.View is { Discipline: 0, Page: 0 }, $"the art tab selects discipline 0 (shows {panel.View?.Discipline})");
         // The next button turns the page and the previous one comes back.
-        var pages = panel.View!.Pages;
+        pages = panel.View!.Pages;
         if (pages > 1)
         {
             var (nx, ny) = AreaSchematicWindowLayout.Next;
@@ -93,7 +112,7 @@ public partial class TerrainViewerApp
         SyncAreaSchematics(force: true);
         await Frame();
         Require(panel.View is { Component1.Found: true, Component2.Found: true, Button: AssemblyButton.CanAssemble }, $"the slots turn to found (button {panel.View?.Button})");
-        await Capture("-original-found");
+        await Capture((verifyHd ? "-hd" : "-original") + "-found");
         await Click(ax + 4, ay + 4);
         Require(_schematicMessage is { Length: > 0 } text && !text.StartsWith("not assembled", StringComparison.Ordinal), "a click on assemble assembled: " + _schematicMessage);
         Require(_messageLog.Shown is { Kind: AreaMessageKind.Message }, "the completion text is written to the text bar");
@@ -102,7 +121,7 @@ public partial class TerrainViewerApp
         Render();
         await Frame();
         Require(!panel.ArtMode && panel.ArtViewForSelfTest.Visible == false, "the diagnostic layout shows when asked");
-        await Capture("-diagnostic");
+        await Capture(verifyHd ? "-hd-diagnostic" : "-diagnostic");
         panel.DiagnosticLook = false;
         Render();
         await Frame();
@@ -111,6 +130,11 @@ public partial class TerrainViewerApp
         var (lx, ly, side, _) = AreaSchematicWindowLayout.RoundView;
         await Click(lx + side / 2.0, ly + side / 2.0);
         Require(!SchematicsOpen, "a release in the lens closes the window");
+        }
+        finally
+        {
+            if (verifyHd) { _gameSettings = _gameSettings with { HdInterface = savedInterfaceHd }; SyncInterfaceHd(); }
+        }
         GD.Print($"ARC-UI-142 native-smoke schematic-look PASS art={content!.Detail} pages={pages}");
     }
 }
