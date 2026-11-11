@@ -30,10 +30,13 @@ public partial class TerrainViewerApp
         {
             var strip = _traitEquipment.Dequeue();
             if (_areaSession is not { } session || _inventoryHost is not { } host || session.QueryHero() is null) { _traitEquipmentResult = "no session or inventory host"; continue; }
-            if (strip) StripHeroItems(session, host); else ChooseHeroItems(session, host);
+            try { if (strip) StripHeroItems(session, host); else ChooseHeroItems(session, host); }
+            catch (InvalidOperationException error) { _traitEquipmentResult = "failed: " + error.Message; GD.Print("ARC-MAGIC-046 trait-equipment FAIL " + error.Message); }
         }
         // ARC-MAGIC-046: a transformed NPC's body (or its restore) reaches the canvas at once; the record is already in the session when the cast host's line is flushed.
-        if (SyncTraitBodies()) PublishWorldSelection();
+        // This is cosmetic: a frame that cannot build it logs and goes on, it does not fail the world frame.
+        try { if (SyncTraitBodies()) PublishWorldSelection(); }
+        catch (InvalidOperationException error) { GD.Print("ARC-MAGIC-046 trait-bodies FAIL " + error.Message); }
     }
 
     // TR3: every slot, helmet to boots, taken off into the inventory. The original drops an item that stays (a refused take-off) on the holder's tile; the viewer leaves it worn and says so.

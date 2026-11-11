@@ -68,8 +68,10 @@ public partial class TerrainViewerApp
             }
             // Living hosted NPCs with a human body whose monster body (Polymorph's species 20) reads from the window's archives. The map's opening script kills some NPCs at their first heartbeat, which comes
             // when the hero's window reaches them, so each candidate gets the hero beside it and some frames, and the first one still alive is the target.
-            var candidates = host.Scene.Npcs.Where(n => Number(n.Row, CurrentArtSlot) is { } own && own >> 28 == 2 && n.Row.WorldX is not null && !session.QueryNpcDead(n.Entity)
-                && AreaCreatedCritterArt.Load(TraitArtId(own, new(20, 0)), area.ArtSources, extra.MappedName).Status == AreaCreatedCritterArtStatus.Ready).Take(16).ToArray();
+            var candidates = host.Scene.Npcs.Where(n => Number(n.Row, CurrentArtSlot) is { } own && own >> 28 is 2 or 14 && n.Row.WorldX is not null && !session.QueryNpcDead(n.Entity)
+                && AreaCreatedCritterArt.Load(TraitArtId(own, new(20, 0)), area.ArtSources, extra.MappedName).Status == AreaCreatedCritterArtStatus.Ready)
+                // A unique NPC art (class 14) keeps its rotation in other bits than a critter art (0x502880), so those candidates go first when the map has them.
+                .OrderBy(n => Number(n.Row, CurrentArtSlot) >> 28 == 14 ? 0 : 1).Take(16).ToArray();
             AreaAiNpc? npc = null;
             if (_worldActor.Session is AreaGridSession grid)
             {
@@ -90,8 +92,8 @@ public partial class TerrainViewerApp
             var key = npc.Row.Key;
             var before = AreaMovingCommands()?.FirstOrDefault(c => c.Identity == key);
             // A standing NPC is a static body of the map's canvas (no moving command) until it moves; a moving one is drawn as its own human body.
-            Require(before is null || before.ArtClass == 2, $"the critter is first drawn as its own human body (class {before?.ArtClass})");
-            GD.Print($"ARC-MAGIC-046 trait-body target={npc.Entity} key={key} before-moving={(before is null ? "static" : "class " + before.ArtClass)}");
+            Require(before is null || before.ArtClass is 2 or 14, $"the critter is first drawn as its own human body (class {before?.ArtClass})");
+            GD.Print($"ARC-MAGIC-046 trait-body target={npc.Entity} key={key} own-class={Number(npc.Row, CurrentArtSlot) >> 28} before-moving={(before is null ? "static" : "class " + before.ArtClass)}");
             await Shot("before");
             GD.Print($"ARC-MAGIC-046 trait-body target-dead-after-shot={session.QueryNpcDead(entity)}");
 
@@ -133,7 +135,7 @@ public partial class TerrainViewerApp
             await Until(() => session.QueryTraitArt(entity!) is null, "the END of Polymorph took the monster body off");
             await Settle(4);
             var restored = AreaMovingCommands()?.FirstOrDefault(c => c.Identity == key);
-            Require(restored is null || restored.ArtClass == 2, "the critter is drawn as its own human body again");
+            Require(restored is null || restored.ArtClass is 2 or 14, "the critter is drawn as its own human body again");
             Require(_traitBodies.Count == 0, "no monster body is kept");
             await Shot("restored");
 
