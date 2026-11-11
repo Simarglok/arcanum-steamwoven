@@ -164,6 +164,7 @@ public sealed class AreaRoofGrid
     }
 
     /// <summary>The piece of a roof art: its frame, plus 9 when mirrored.</summary>
+    [OriginalFunction(0x504840, OriginalFunctionScope.Partial)]
     public static int Piece(uint art) => (int)((art >> 14) & 31) + ((art & 1) != 0 ? 9 : 0);
 
     /// <summary>Sets the fill bit of the block at the tile and floods a change to the four neighbouring blocks. A flood

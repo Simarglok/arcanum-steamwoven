@@ -5,6 +5,8 @@ locally on the owner's Mac with a throwaway program outside the repository, not 
 of the [magic audit](magic-audit-res-103.md) (ARC-RES-103, merged: it leaves the technology records 140..222 to this document) and a companion of the [missing-systems plan](../project/missing-systems-plan.md) (ARC-RES-099):
 it does not repeat that plan's epics, it says which of their slices the technology content needs, what is left over, and in what order.
 
+Update 2026-11-11 (ARC-DEV-363): slice T-b is done: the opt-in test `TechCensusRealDataTests` runs all 83 technology records on the hero and on an NPC and pins one state per record (section 7). Its first run on the player's data **corrected section 5**: since ARC-MAGIC-027 (E1-d) the Effect component takes an NPC's effect list, so no record is `HERO` any more (the hero-only records run on both targets, except 214); since ARC-DEV-352 the Summon component makes a scenery from a basic prototype, so the grenade, gas and fire wall records that needed Summon alone now run, and what holds the others back is an ObjFlag bit (148, 177, 178, 200, 217), the control components, or a list pick of creatures (183, E1-e). Over the 65 carried records the tally is now 45 RUNS, 10 PART, 10 INERT; over all 83, 56, 13, 14. Record 214 (carried by a map item) adds an effect 80 times and the effect list holds 64 entries, so its write is refused (a new row, section 5). The tables below carry the corrected states.
+
 Update 2026-11-11 (ARC-DEV-362): slice T-a is done: the smoke stage `tech-craft` runs the chain on the player's data (section 7). It corrected one row of section 5: the Herbology degree 2 record 151 heals 20 **fatigue**, not a magic-typed amount.
 
 Requirements (reference only, no coverage row changes): [FR-ITEM-011](../requirements/items-economy.md#fr-item-011), [FR-ITEM-016](../requirements/items-economy.md#fr-item-016),
@@ -22,7 +24,7 @@ The original behaviour is in the [technology research](technology-evidence.md) (
 2. **What the item does when used is the open part.** Of the 31 learned products that carry a technology record (31 distinct records), by the component table of
    section 5: **8 run today** (the six Herbology heals and two Chemistry attacks), **8 work for the hero only** (the seven Therapeutics stat potions and Chemistry's poison
    draught: the Effect component keeps an effect list for the hero alone), **7 run partly** and **8 do nothing but play their eye candy**. Over all 65 carried records (not
-   only learned ones): 17 run, 18 hero-only, 16 partial, 14 inert.
+   only learned ones): 17 run, 18 hero-only, 16 partial, 14 inert. *(Counted when the audit was written; the census of ARC-DEV-363 gives, with the NPC effect list and the Summon of scenery built: of the 31 learned products, 22 run, 4 partly and 5 do nothing but play their eye candy, none hero-only; of the 65 carried records 45 run, 10 partly, 10 inert.)*
 3. **Four component groups explain every gap,** and all four are already in the missing-systems plan: **Summon** (13 records blocked by it alone, 19 in all: every
    grenade, gas, fire wall and the timed bombs) is E1-b; the remaining **ObjFlag bits** (blind, flee, fatigue limit, mind control, drunk, magnetic inversion, undead,
    enshroud, shield, don't-draw, permanent polymorph; 12 records blocked by them alone) are E4-a and E4-b; the **control components** (ChargeNBranch, TestNBranch, Terminate,
@@ -100,7 +102,7 @@ requirements (all components are in the schematic's own discipline; 24 component
 (slot 0, charges 1 unless noted) and what its components do; **State** is the verdict of the component classification:
 
 - **RUNS**: every component has a code path (Damage, Heal, EyeCandy, the knockback goal, ObjFlag for the bits that exist: entangled, stoned, paralysed, spoken-with-dead (only the entangle, the paralysis and the spoken-with-dead occur in a technology record), Destroy of a lying item).
-- **HERO**: runs for the hero (self-use); the Effect component keeps no effect list for an NPC (E1-d).
+- **HERO**: runs for the hero (self-use) but not for an NPC (the Effect component kept no effect list for an NPC until ARC-MAGIC-027, E1-d; **no record is HERO any more**, the word stays for the census of slice T-b).
 - **PART(x)**: some components run, the named groups do not.
 - **INERT**: only the eye-candy log runs.
 - **EQUIP**: no technology record; the product is ordinary equipment, ammunition or a tool, whose rules are built.
@@ -123,10 +125,10 @@ An eye-candy line is a presentation log in the viewer (no light, sound or tint y
 
 | Deg | Product | Needs | Record | State |
 | --- | --- | --- | --- | --- |
-| 1 | food, -75, x3 | 1 | 171 poison 290 damage plus an effect (id 359, absent from `effect.mes`: no change), 60 s, aggressive | HERO (Damage runs, the effect for the hero only) |
+| 1 | food, -75, x3 | 1 | 171 poison 290 damage plus an effect (id 359, absent from `effect.mes`: no change), 60 s, aggressive | RUNS (Damage and the effect, on an NPC too since ARC-MAGIC-027) |
 | 2 | power-cell ammunition, -30, x5 (its item discipline is Electric: the one mismatch, no effect) | 2 | none | EQUIP (ammunition; the cell stack is built) |
 | 3 | food, -85, x1 | 3 | 167 animal-enshroud critter flag, 338 s | INERT (ObjFlag enshroud) |
-| 4 | food, -70, x1 | 4 | 166 acid 10 to 100, a flash summon, destroy | PART(Summon) |
+| 4 | food, -70, x1 | 4 | 166 acid 10 to 100, a flash summon, destroy | RUNS (the flash summon and its destroy run since ARC-DEV-352) |
 | 5 | food, -85, x1 | 5 | 165 flee flag, 600 s, aggressive | INERT (ObjFlag fleeing) |
 | 6 | food, -80, x1 | 6 | 197 paralysis 6 s | RUNS |
 | 7 | food, -75, x1 | 7 | 196 magic damage with the "full" flag | RUNS |
@@ -143,17 +145,17 @@ An eye-candy line is a presentation log in the viewer (no light, sound or tint y
 | 6 | torso armour (3 alternatives), -80, x1 | 6 | 168 maintained every 5 s: **ChargeNBranch**, **TestNBranch** on hit points, heal 4 | PART(control: cell and test branches) |
 | 7 | power-cell firearm, -55, range 15, x1 | 7 | none | EQUIP (cells are ammunition type 2: built) |
 
-### Explosives (discipline 3): grenades, gases, bombs (every record needs Summon)
+### Explosives (discipline 3): grenades, gases, bombs (every record needs Summon, built for scenery since ARC-DEV-352)
 
 | Deg | Product | Needs | Record | State |
 | --- | --- | --- | --- | --- |
-| 1 | generic, -20, x1 | 1 | 219 fire and normal 3 to 15, knockback, flash summon, destroy | PART(Summon) |
-| 2 | generic flag 0x10, -15, x5 | 2 | 177 blinding flag 10 s, flash | INERT (ObjFlag blind, Summon) |
-| 3 | generic flag 0x10, -20, x5 | 3 | 178 smoke cloud 10 s (fog scenery), then clears don't-draw | INERT (ObjFlag don't-draw, Summon) |
-| 4 | generic flag 0x10, -30, x4 | 4 | 179 stun with a flash | PART(Summon) |
-| 5 | generic flag 0x10, -60, x3 | 5 | 175 fire and normal 5 to 30, knockback, flash | PART(Summon) |
-| 6 | generic flag 0x10, -45, x3 | 6 | 180 fire wall scenery 10 s | INERT (Summon) |
-| 7 | generic flag 0x4 (trap device), -85, x1, charges 0 | 7 | 176 fire 5 to 20 and normal 100 to 200, knockback, flash; slot 1 of a **timed trap device** (TP2, TP3) | PART(Summon) and E6-b |
+| 1 | generic, -20, x1 | 1 | 219 fire and normal 3 to 15, knockback, flash summon, destroy | RUNS (since ARC-DEV-352) |
+| 2 | generic flag 0x10, -15, x5 | 2 | 177 blinding flag 10 s, flash | PART(ObjFlag blind; the flash runs) |
+| 3 | generic flag 0x10, -20, x5 | 3 | 178 smoke cloud 10 s (fog scenery), then clears don't-draw | PART(ObjFlag don't-draw; the smoke scenery runs) |
+| 4 | generic flag 0x10, -30, x4 | 4 | 179 stun with a flash | RUNS |
+| 5 | generic flag 0x10, -60, x3 | 5 | 175 fire and normal 5 to 30, knockback, flash | RUNS |
+| 6 | generic flag 0x10, -45, x3 | 6 | 180 fire wall scenery 10 s | RUNS |
+| 7 | generic flag 0x4 (trap device), -85, x1, charges 0 | 7 | 176 fire 5 to 20 and normal 100 to 200, knockback, flash; slot 1 of a **timed trap device** (TP2, TP3) | RUNS as a spell (placing the device is E6-b) |
 
 ### Gun Smithy (discipline 4): seven firearms, no technology record
 
@@ -172,7 +174,7 @@ An eye-candy line is a presentation log in the viewer (no light, sound or tint y
 | Deg | Product | Needs | Record | State |
 | --- | --- | --- | --- | --- |
 | 1 | generic flag 0x4 (trap device), -20, x3, script 30001 at attach point 1 | 1 | none (the native trap script: normal damage) | EQUIP, device placement is E6-b |
-| 2 | generic, -50, x3 | 2 | 184 ends with a Use component after 4 s; its begin Destroy takes the pack item itself (also not ready: only lying items) | INERT (control: Use; Destroy of a held item, E4-c) |
+| 2 | generic, -50, x3 | 2 | 184 ends with a Use component after 4 s; its begin Destroy takes the pack item itself (also not ready: only lying items) | INERT (control: Use, E4-c; the Destroy of the pack item is outside the census) |
 | 3 | generic flag 0x2 (lockpick), -35, x1 | 2 | none | EQUIP (lockpicks work) |
 | 4 | helmet armour, -85, x1, scripts at 24 and 25 (the same two numbers as the Electric ring) | 3 | none | EQUIP (28012 and 28013 run, T-r1) |
 | 5 | generic flag 0x4 (trap device), -10, x3, script 30001 | 5 | none | EQUIP, E6-b |
@@ -191,17 +193,17 @@ An eye-candy line is a presentation log in the viewer (no light, sound or tint y
 | 6 | torso armour (3 alternatives), -20, x1 | 6 | none | EQUIP |
 | 7 | torso armour (3 alternatives), -20, x1 | 7 | none | EQUIP |
 
-### Therapeutics (discipline 7): seven potions of stat effects (all HERO)
+### Therapeutics (discipline 7): seven potions of stat effects (all RUNS since ARC-MAGIC-027; HERO when this audit was written)
 
 | Deg | Product | Needs | Record | State |
 | --- | --- | --- | --- | --- |
-| 1 | food, -56, x3 | 1 | 157 persuasion +2 | HERO |
-| 2 | food, -78, x3 | 2 | 158 strength +2 | HERO |
-| 3 | food, -40, x3 | 3 | 159 perception +2 | HERO |
-| 4 | food, -55, x3 | 4 | 160 dexterity +2 | HERO |
-| 5 | food, -85, x1 | 5 | 161 intelligence, perception, willpower, charisma +2 | HERO |
-| 6 | food, -92, x1 | 6 | 162 strength, dexterity, constitution, beauty +2 | HERO |
-| 7 | food, -90, x1 | 7 | 163 as 161 and 162 together | HERO |
+| 1 | food, -56, x3 | 1 | 157 persuasion +2 | RUNS |
+| 2 | food, -78, x3 | 2 | 158 strength +2 | RUNS |
+| 3 | food, -40, x3 | 3 | 159 perception +2 | RUNS |
+| 4 | food, -55, x3 | 4 | 160 dexterity +2 | RUNS |
+| 5 | food, -85, x1 | 5 | 161 intelligence, perception, willpower, charisma +2 | RUNS |
+| 6 | food, -92, x1 | 6 | 162 strength, dexterity, constitution, beauty +2 | RUNS |
+| 7 | food, -90, x1 | 7 | 163 as 161 and 162 together | RUNS |
 
 (The therapeutics effects have no duration of their own in the record, they end by `End` actions; the hero-side Effect component adds and removes them.)
 
@@ -209,21 +211,21 @@ An eye-candy line is a presentation log in the viewer (no light, sound or tint y
 
 | Discipline | Records | Products | With a technology record | Records and states |
 | --- | --- | --- | --- | --- |
-| Herbology | 4 | 3 food, 1 armour | 3 | 189 HERO, 190 RUNS, 192 RUNS |
-| Chemistry | 4 | 4 food | 4 | 193 HERO, 194 PART(flags: undead, mind control), 195 PART(fatigue limit; Effect), 197 RUNS (also learned) |
+| Herbology | 4 | 3 food, 1 armour | 3 | 189, 190, 192 RUNS |
+| Chemistry | 4 | 4 food | 4 | 193 RUNS, 194 PART(flags: undead, mind control), 195 PART(fatigue limit), 197 RUNS (also learned) |
 | Electric | 5 | 2 weapons, 2 armour, 1 ammunition | 0 | EQUIP |
-| Explosives | 14 | 9 generic, 3 weapons, 2 ammunition | 8 | 148 INERT, 198 to 202 PART(Summon), 203 INERT (nested Cast), 220 PART (timed bomb) |
+| Explosives | 14 | 9 generic, 3 weapons, 2 ammunition | 8 | 148 PART(ObjFlag), 198, 199, 201, 202 RUNS, 200 PART(ObjFlag don't-draw), 203 INERT (nested Cast), 220 RUNS (a timed bomb; placing it is E6-b) |
 | Gun Smithy | 12 | 12 weapons | 1 | 204 RUNS (magic damage on a weapon) |
 | Mechanical | 12 | 8 generic, 2 weapons, 2 armour | 0 | EQUIP |
 | Smithy | 7 | 4 weapons, 2 armour, 1 keyring | 0 | EQUIP |
-| Therapeutics | 4 | 4 food | 4 | 141 HERO, 142 INERT (mind control), 144 HERO, 206 HERO |
+| Therapeutics | 4 | 4 food | 4 | 141 RUNS, 142 INERT (mind control), 144 RUNS, 206 RUNS |
 
 Quantities: 56 records make one item, one makes 2, four make 3, one makes 5. Two found records (an Electric and a Mechanical one) have three alternatives in a component and the product; the learned ones with three are Electric degree 6 and Smithy degrees 6 and 7.
 
 ### Records that are not on any schematic
 
-Of the 65 carried records, 15 are carried only by items that no schematic makes (they lie on maps or in stock sets: 12 of the 15 on a map, 3 scrolls only through scripts of unplaced NPC prototypes, [placement census](technology-census-res-115.md)): 6 RUN (164, 169, 170, 191, 207, 208), 5 are HERO (173, 211 to 214), 3 are INERT (183, 210, 218), 1 is partial (172). Eighteen records are carried by no item: 9 RUN
-(140, 143, 146, 149, 174, 188, 215, 216, 221), 1 is HERO (145), 4 are partial (181, 185, 205, 209), 4 are inert (186, 187, 217, 222). They exist for scripts and the AI's lists; no installed item uses them. 270 items are technological in all
+Of the 65 carried records, 15 are carried only by items that no schematic makes (they lie on maps or in stock sets: 12 of the 15 on a map, 3 scrolls only through scripts of unplaced NPC prototypes, [placement census](technology-census-res-115.md)): 10 RUN (164, 169, 170, 173, 191, 207, 208, 211, 212, 213), 2 are partial (172, 214: its effect list write is refused, 80 entries over a capacity of 64), 3 are INERT (183, 210, 218); as the census of ARC-DEV-363 reads them (the audit counted 6 RUN, 5 HERO, 3 INERT, 1 partial). Eighteen records are carried by no item: 11 RUN
+(140, 143, 145, 146, 149, 174, 185, 205, 215, 216, 221), 3 are partial (181, 209, 217), 4 are inert (186, 187, 188, 222: 188 holds a NoOp component, not taken) (the audit counted 9 RUN, 1 HERO, 4 partial, 4 inert). They exist for scripts and the AI's lists; no installed item uses them. 270 items are technological in all
 (complexity below 0): 124 are craftable, 146 are not (per discipline 10, 15, 11, 11, 25, 22, 38, 14 not craftable); 61 of the 270 carry a technology record.
 
 ## 6. Gaps by component, with the plan slice that closes each (acceptance lists)
@@ -232,9 +234,9 @@ Every list below is the acceptance of the plan slice named: when that slice land
 
 | Gap | Records | Carried | Plan slice | Dependency | What the slice must show |
 | --- | --- | --- | --- | --- | --- |
-| Summon (flash 4050 ×15, smoke 4033, fire wall 4031, gas 4029, one list) with Destroy of the summoned and the don't-draw callback | blocked by Summon alone: 166, 175, 176, 179, 180, 185, 198, 199, 201, 202, 205, 219, 220; with another group: 148, 177, 178, 183, 200, 217 | 16 of 19 | E1-b (objects; E1-a, ARC-DEV-347, is merged), E1-e for 183's creature list | E1-a (done), ARC-RES-101 | one stage per kind: a thrown flash grenade (175, 176, 219), the smoke (178), the wall (180), the stun (179), the acid (166), a gas (200) |
+| Summon (flash 4050 ×15, smoke 4033, fire wall 4031, gas 4029, one list) with Destroy of the summoned and the don't-draw callback | blocked by Summon alone: 166, 175, 176, 179, 180, 185, 198, 199, 201, 202, 205, 219, 220; with another group: 148, 177, 178, 183, 200, 217 | 16 of 19 | **E1-b done for scenery (ARC-DEV-352; the census of T-b lists each record that needed Summon alone as RUNS)**; open: E1-e for 183's creature list | E1-a (done), ARC-RES-101 | one stage per kind: a thrown flash grenade (175, 176, 219), the smoke (178), the wall (180), the stun (179), the acid (166), a gas (200) |
 | ObjFlag bits other than entangle, paralysis, spoken-with-dead | fatigue limit 153, 195, 210; blind 177, 186; flee 148, 165; mind control 142, 194; drunk 172, 181; magnetic inversion 182, 187; enshroud 167; undead 194; shielded 209; don't-draw 178, 183, 200, 217; permanent polymorph 222 | 14 | E4-a (blind, don't-draw) and E4-b (flee, mind control, undead) as the plan names them; **drunk, fatigue limit, magnetic inversion, shielded and enshroud are in neither plan row and must be added to E4-a**; E4-f (polymorph 222) | E1-d | each bit as an object-flag write with its clear at the record's End |
-| Effect on any critter | 22 records (the HERO group plus 172, 181, 195) | 20 | E1-d, then E4-a | none | a stat potion given to a companion by a script or thrown; effect list saved |
+| Effect on any critter | 22 records (the HERO group plus 172, 181, 195; the count when the audit was written) | 20 | **E1-d done (ARC-MAGIC-027; the census of T-b lists no HERO record)**, then E4-a | none | a stat potion given to a companion by a script or thrown; effect list saved |
 | Control components: ChargeNBranch, TestNBranch, Terminate, Use, Cast, Movement, Trait, AIRedirect, NoOp | 147, 168, 184, 203, 218, plus 183, 187, 222 | 6 | E4-c (branches, Use, Terminate, NoOp), E4-e (teleport 218, nested Cast 203), E4-f (Trait 222), E4-b (AIRedirect 183) | E1-d | the cell weapon spends one cell (147), the maintained armour pays one cell a tick and tests hit points (168), the cell items refuse without cells |
 | Item aiming and use on a critter, object or tile | every aggressive carried record used as an item, and trap devices | n/a | **new: T-g** (T-r2 is done: [ledger IA1–IA16](ledger/items.md#item-aiming-and-use-with-a-target-arc-res-113)) | none | the item cursor of IA3 to IA6 (mask by item kind, interface mode 0x10, left release picks, right release cancels), the apply of IA8 (an object: a charged or magical item in the spell's range is used at once, out of range or with the no-ranged flag the hero walks next to the target first; any other item is used at once) and IA9 (a tile: charged items cast at once, a trap device walks to it as goal 41), the use on a tile of IA12 (no script, no scroll check), refusals and messages of IA14 |
 | Trap devices | Mechanical degree 1 and 5, Explosives degree 7 (176), 148 and 220 timed bombs | 3 learned products | E6-b (already in the plan) | E1-b for 176, T-g | a placed device spends itself, the marker, the delayed run at the tile after the original's 88 000 ms (TP3), and the refusals of IA13 (a script trap on a target that is not a free portal or container, or on a tile that already has a trap, keeps the device and shows trap.mes 2 or 3) |
@@ -251,7 +253,8 @@ Every list below is the acceptance of the plan slice named: when that slice land
   `./arcanum smoke self-test` (synthetic window, assembly and script-129 path) and by unit tests: `TechDegreeRulesTests`, `SchematicCatalogTests`, `SchematicAssemblyRulesTests`,
   `SchematicAssemblyRealDataTests` (all 118 recipes), `NpcAssemblyStateTests`, `AreaSchematicsTests`, `ChargeCellRulesTests`, `TechMaintainCellsTests`, `TechDeviceRealDataTests`, `ItemDurabilityRealDataTests`, `RepairStateTests`, the trap and throw test families.
 - Per component, the survey's evidence: Damage, Heal and EyeCandy are covered by `SessionSpellCasterTests` and the `cast` stages; ObjFlag and Effect by `SessionSpellEntangleTests`, `EffectStateTests` and `hold-hero`; Destroy of a lying item by `SessionSpellDestroyTests` and `grenade`.
-  The statuses of section 5 were computed from the component table, not by running each of the 31 learned records; slice T-b turns that into a test.
+  The statuses of section 5 were first computed from the component table, not by running each record; **slice T-b (ARC-DEV-363) turned that into a test.**
+- **Technology census `TechCensusRealDataTests`** (ARC-DEV-363, slice T-b; opt-in: `DAT_ROOT` = the game folder, category `RealData`, a few seconds): applies every component of every action of the 83 records 140..222 to the hero and to an NPC on a fresh session each (the harness of the magic census, [MA-0](magic-audit-res-103.md#spell-census-ma-0)), and gives each record a state word: **RUNS** (the host takes every component on both targets), **HERO** (on the hero alone), **PART** (a component is not taken, another that is not eye candy is), **INERT** (only the eye-candy line is). The test holds one row per record that is not RUNS, with the not-ready component types of both targets, and fails with the changed rows to paste when a slice moves one; it also counts the records carried by an installed item prototype (65) by state (**45 RUNS, 10 PART, 10 INERT**; over all 83: 56, 13, 14). Two readings are not taken off a creature target and so are made by rule: a **Destroy** acts on a created object or a lying item (covered by `SessionSpellDestroyTests`, `SessionSpellSummonTests` and the stages `grenade`, `summon-flash`, `summon-wall`), so it is left out of the lists; a **Summon** on an object entry summons nothing (TA9), so it is ready only when the record names a basic prototype whose file (+20) reads as a scenery in the installed prototypes, as `SessionSpellCaster.SummonComponent` asks, and is not ready for a list pick or a critter (183). A Destroy does not count as a component that ran (like eye candy), and the records that hold one are pinned (19). Limits: the census checks the host's component dispatch, not a cast (no area, save, run or smoke), and not the item side (the Begin Destroy of a pack item, 184). Records of the 83 that are not RUNS (27): 142, 147, 148, 153, 165, 167, 168, 172, 177, 178, 181 to 184, 186 to 188, 194, 195, 200, 203, 209, 210, 214, 217, 218, 222; a slice that makes a component ready edits its rows in its own pull request.
 
 ## 8. The reads this audit needs (Mac, docs-only; each ends in ledger rows)
 
@@ -282,7 +285,7 @@ Labels are planning labels, not task codes (the coordinator hands out codes). Si
 | T-r3 | read: aptitude and expertise consumers (**done**, ARC-RES-114) | S | Mac read | none |
 | T-r4 | census: where found schematics, `su` crafters and the non-craftable items are (**done**, ARC-RES-115: [placement census](technology-census-res-115.md)) | S to M | Mac data run | none |
 | T-a | **done (ARC-DEV-362)**: smoke stage `tech-craft` on real data: buy degree 1 and 2 on the sheet, assemble a Herbology heal and a Gun Smithy firearm, use the heal, equip and fire the gun, save and load once; asserts item counts, the heal, a firearm hit | M | none (T-r4 only helps with found documents) | viewer smoke |
-| T-b | opt-in real-data test: runs each of the 83 records with the hero as target and fails when the classification of section 5 disagrees with the code (it flips with the epic slices) | S to M | none | tests |
+| T-b | **done (ARC-DEV-363)**: opt-in real-data test `TechCensusRealDataTests`: runs each of the 83 records on the hero and on an NPC and fails when the state of section 5 disagrees with the code (it flips with the epic slices); its first run corrected section 5 (no HERO record, Summon of scenery runs) | S to M | none | tests |
 | T-j | the five documentation fixes of section 9 (inside E0-a, cloud, docs-only) | S | none | docs |
 | E1-b | Summon objects (plan), acceptance: section 6 first row | M | E1-a done | spell-cast lane |
 | E1-d | NPC effect list and flags (plan) | M | none | directory lane |
