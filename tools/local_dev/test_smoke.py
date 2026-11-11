@@ -492,13 +492,6 @@ class ExecuteTests(unittest.TestCase):
 
     # ARC-DEV-391: known failures on main
 
-    def test_a_known_failure_task_code_has_three_or_more_digits(self) -> None:
-        # ARC-DEV-409: a new code ends in its GitHub issue number (four digits and more).
-        for code in ("ARC-DEV-408", "ARC-MAGIC-2000", "unassigned"):
-            self.assertTrue(smoke.KNOWN_TASK.match(code), code)
-        for code in ("ARC-DEV-12", "arc-dev-408", "ARC-DEV-"):
-            self.assertFalse(smoke.KNOWN_TASK.match(code), code)
-
     def test_the_known_failures_file_is_well_formed(self) -> None:
         import json
         entries = smoke.parse_known_failures(json.loads(smoke.KNOWN_FAILURES.read_text(encoding="utf-8")))
@@ -636,6 +629,15 @@ class LauncherTests(unittest.TestCase):
                                 capture_output=True, text=True, env={"PATH": "/usr/bin:/bin", run_queue.TICKET_ENV: "3"})
         self.assertEqual(nested.returncode, 2)
         self.assertIn("not inside ./arcanum run", nested.stderr)
+
+
+class KnownTaskCodeTests(unittest.TestCase):
+    def test_known_failure_task_accepts_old_and_issue_number_codes(self) -> None:
+        # ARC-DEV-409: from 2026-11-12 a task code carries the GitHub issue number (four digits or more).
+        for code in ("ARC-DEV-061", "ARC-UI-1093", "unassigned"):
+            self.assertTrue(smoke.KNOWN_TASK.match(code), code)
+        for code in ("ARC-UI-12", "ARC-1093", "arc-ui-1093"):
+            self.assertFalse(smoke.KNOWN_TASK.match(code), code)
 
 
 if __name__ == "__main__":

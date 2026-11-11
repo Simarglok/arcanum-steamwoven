@@ -638,7 +638,7 @@ def parse_known_failures(raw: object) -> tuple[KnownFailure, ...]:
         if item["stage"] != "crash-site" and item["stage"] not in STAGE_PASS:
             raise ValueError(f"known failure of an unknown stage {item['stage']!r}")
         if not KNOWN_TASK.match(item["task"]) or not re.match(r"^\d{4}-\d{2}-\d{2}$", item["since"]):
-            raise ValueError(f"a known failure names its task (ARC-TYPE-N or unassigned) and its day: {item!r}")
+            raise ValueError(f"a known failure names its task (ARC-TYPE-NNN or unassigned) and its day: {item!r}")
         try:
             symptom = re.compile(item["symptom"])
         except re.error as error:

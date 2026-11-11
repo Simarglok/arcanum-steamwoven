@@ -5,19 +5,11 @@ commits carry them. The type registry below is canonical.
 
 ## Codes
 
-A work item code is `ARC-TYPE-NNN`. `NNN` (below also `N`) is a positive decimal
-number: for codes issued before 2026-11-11 zero-padded to three digits, from then
-on the number of the work item's GitHub issue, unpadded. `TYPE` identifies a product area; it does
+A work item code is `ARC-TYPE-NNN`. `NNN` is a positive decimal number,
+zero-padded to at least three digits; for codes from 2026-11-12 it is the
+GitHub issue number (four digits or more, no padding, see
+[below](#codes-from-2026-11-12-the-issue-number)). `TYPE` identifies a product area; it does
 not identify a worker, role, assignee or model.
-
-**Where the number comes from** (owner decision 2026-11-11, ARC-DEV-409). The
-backlog is the repository's [GitHub issues](backlog.md); a new work item's number
-is the number of its issue. Nobody chooses a number by hand: the issue is created first (label
-`type:<type>`), then its title is renamed to `ARC-TYPE-N: short English result`.
-GitHub numbers issues and pull requests from one counter that is already above
-1000, and every code issued before 2026-11-11 has at most three digits, so a new
-code never equals an old one and is never reused. (Example only: issue #2000 with
-the label `type:magic` is `ARC-MAGIC-2000`.) A PR for the item has its own number; its body says `Closes #N`.
 
 The type registry is `RES`, `DATA`, `RENDER`, `WORLD`, `INPUT`, `GPAD`, `UI`,
 `SCRIPT`, `DEV`, `AI`, `COMBAT`, `SKILLS`, `MAGIC` and `TECHNOLOGY`. Add a
@@ -39,15 +31,38 @@ The last five types were added by owner decision on 2026-10-16
 character state and the session runtime stay `WORLD`. Proposed convention, to
 be confirmed: research on these areas stays `RES`.
 
-Codes issued before 2026-11-11 (numbers up to three digits, including the ones
-reserved then for work in progress) stay valid and keep their form and their
-branches; they have no issue and their PRs have no `Closes`. Reuse the
-established code for work that belongs to it: a retry or an unfinished follow-up
-of the same item keeps its code (for a new-form code, its issue is reopened); a
-follow-up that is new work gets a new issue and a new code. The code is never
-reused for different work. A thread that receives a
-code confirms it with one check: the issue exists, is open and carries the label
-`type:<type>` of the code ([task code](tasks.md#task-code)).
+### Codes from 2026-11-12: the issue number
+
+Owner decision 2026-11-12 (ARC-DEV-409): the backlog lives in GitHub Issues of
+`Simarglok/arcanum-steamwoven` ([backlog](tasks.md#backlog-in-github-issues)).
+A new work item is an issue first, and its code is
+`ARC-<TYPE>-<issue number>`: the type is the issue's `type:*` label, the number
+is the number GitHub gave the issue. Issues and pull requests share one number
+sequence, so the number is atomic and never reused, and no search for a free
+code is needed. Example: issue #1093 with `type:ui` is `ARC-UI-1093`; its branch is
+`arc-ui-1093-short-slug`.
+
+- The code is built from the issue after it is created, so the issue title is
+  the short English result without a code; the thread title
+  `ARC-<TYPE>-<N> — Russian result` is made from the issue, and the Russian
+  text lives only in the thread title. The type is fixed when the code is
+  handed out: relabelling later does not change the code of work that has a
+  thread or branch; a wrong type is noted in a comment on the issue.
+- A code from before this rule (`ARC-TYPE-NNN`, all numbers below 1000) keeps
+  its meaning and stays in history; GitHub numbers are already past 1090, so a
+  new code cannot collide with an old one. Do not create a new issue for finished
+  or merged old work, and do not renumber it.
+- Reuse the established code for work that belongs to it: a retry or follow-up
+  of the same work item keeps its code (a follow-up that is its own result is a
+  new issue). A code is never reused for different work.
+- The owner or an owner-authorized session (the project's coordinator) creates
+  the issue and hands out the code. A thread that receives a code confirms it
+  with one check (for N of 1000 and more): `gh issue view N --json state,labels,title` shows the issue
+  open with the expected `type:*` label, and remote branches and a PR search
+  for the code show nothing else working on it ([task code](tasks.md#task-code)).
+- A code written without an issue (an old-style `ARC-TYPE-NNN` allocated by the
+  former rule, such as work already in progress on 2026-11-12) finishes under
+  that code; its PR still says `Closes #N` when an issue exists.
 
 Historical references keep their meaning: native `t_...` task IDs, stage codes
 such as `ARC-INPUT-001-PLAN-001` and `arcanum-steamwoven/t_<id>-arc-*` branches
@@ -61,6 +76,7 @@ The code comes first; a PR title or commit subject may put a short area prefix b
 | Where | Form | Example |
 | --- | --- | --- |
 | Human title (task, project thread) | `ARC-TYPE-NNN — short Russian result` | `ARC-INPUT-001 — Проверить доступ к диагностической палитре` |
+| Issue title (from 2026-11-12) | short English result, no code (the code is `ARC-TYPE-<issue number>`) | `Click-to-walk ignores a door in the path` |
 | Pull request title | `ARC-TYPE-NNN: short English result`, optionally after an area prefix | `ARC-WORLD-015: pre-made starting hero in the game session` |
 | Branch | `arc-type-nnn-short-slug`, unless the environment assigns a branch | `arc-world-015-starting-hero` |
 | Commit subject | `ARC-TYPE-NNN: ...`, optionally after an area prefix | `ARC-DATA-015: universal map catalogue over the content stack` |
@@ -72,4 +88,5 @@ original spelling, so the whole suffix need not be Cyrillic.
 
 A written task contract starts with `Work-Item: ARC-TYPE-NNN`, followed by the
 readiness headers and `AC<n>` criteria described in
-[tasks.md](tasks.md#definition-of-ready).
+[tasks.md](tasks.md#definition-of-ready). For an issue, the issue body is the
+contract and `Work-Item` is the code built from its number.

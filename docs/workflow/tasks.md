@@ -12,8 +12,10 @@ documentation deliverables and publication authority. Record base, head,
 workspace and reviewer findings at handoff. Repository documents govern implementation;
 Obsidian holds research and discussions; the [missing systems plan](../project/missing-systems-plan.md) and
 [vision](../project/vision.md) explain sequencing. None of them creates,
-prioritizes or dispatches work. Do not queue the whole product vision or start
-tasks as a side effect of project setup.
+prioritizes or dispatches work; neither does an issue of the [backlog](#backlog-in-github-issues)
+until it is launched in a thread on the owner's request (directly, or through
+the coordinator at the owner's request). Do not queue the
+whole product vision or start tasks as a side effect of project setup.
 
 Continue from the [merged component catalogue](../project/status.md) and current
 `origin/main`, not from a document's dated snapshot. Every work item has a code
@@ -25,13 +27,13 @@ Owner decision 2026-10-21: one Claude thread, and its session, works on exactly
 one `ARC-*` code. When that code's PR merges, is handed to the owner for review,
 or the owner cancels the code, the session posts its report, writes a handoff of
 at most 40 lines for the next item and ends. The handoff holds the handoff
-record above (base, head, workspace, reviewer findings) plus the next item's
-plan row verbatim, decisions taken, branch and open questions; it goes where the
-queue of follow-up work is kept (the next item's [backlog issue](backlog.md),
-or the plan or checklist that lists it). The next code starts in a new
+record above (base, head, workspace, reviewer findings) plus the next item
+(its issue `#N` for work from the [backlog](#backlog-in-github-issues), else its
+plan row verbatim), decisions taken, branch and open questions; it goes to the
+project's coordinator thread, which keeps the queue of follow-up work. The next code starts in a new
 thread with a fresh session from that handoff; a thread does not take a second
-code, even a small fix found on the way, which becomes a new backlog issue
-(label `tail`). Inside one task, do not clear or restart the context while it is still
+code, even a small fix found on the way, which goes back to the coordinator
+thread. Inside one task, do not clear or restart the context while it is still
 needed for correctness (part of the same decision).
 
 Sessions compact their context at 500k tokens: the committed
@@ -43,6 +45,62 @@ checks run, so a compaction keeps it.
 Why: a session carried across codes re-reads every earlier task's history on
 each step. The token audit of 2026-10-21 found lane sessions living 3.5 to 5
 days across 13 to 25 codes at a median context of about 550 thousand tokens.
+
+### Backlog in GitHub Issues
+
+Owner decision 2026-11-12 (ARC-DEV-409): everything planned and not yet started
+is an issue of `Simarglok/arcanum-steamwoven`; the issue number is the task
+code ([naming](task-naming.md#codes-from-2026-11-12-the-issue-number)).
+
+- **What is where.** The open issues are the queue of unstarted work. Documents
+  (`open-bugs.md`, `owner-recheck-list.md`, the audits, `missing-systems-plan`,
+  `function-audit-plan`, the coverage rows) keep the research, evidence and
+  status; when one lists pending work that has an issue, it links `#N` and does
+  not repeat the plan. New unstarted work is an issue, not a new list row.
+- **One issue is one work item**: the form `.github/ISSUE_TEMPLATE/task.yml`
+  has the headings `Goal` (one result, one PR), `Requirements` (FR ids or
+  groups, [functional requirements](#functional-requirements)), `Components` (at
+  most three), `Acceptance criteria` (draft `AC1`..`AC8`, a `Human gates` line),
+  `Blocked by` and `Sources and docs`. An issue made with `gh issue create
+  --body-file` uses the same headings. The criteria are fixed when work starts
+  ([Definition of Ready](#definition-of-ready)).
+- **Labels** (a personal repository has no issue types or custom fields):
+  `type:*` (one, the code's type: `res`, `data`, `render`, `world`, `input`,
+  `gpad`, `ui`, `script`, `dev`, `ai`, `combat`, `skills`, `magic`,
+  `technology`), `area:*` (the FR group of the coverage matrix, one or more),
+  `status:*` (one of `ready`: open, no open blocker, nobody working on it;
+  `blocked`: waits for its blockers; `in-progress`: a thread, branch or PR works
+  on it; `in-review`: the PR waits for the owner; the label is a cache, the
+  coordinator rechecks blockers and `gh issue view` at launch, and a closed
+  issue's `status:*` is ignored), `epic` (a parent issue of slices, never a task
+  and never `status:ready`), `bug` (the open-bugs rule keeps the original-bug
+  classification in the body), `owner-decision` (a decision of the owner comes
+  first; ask through the coordinator's decision card) and `recheck` (an owner
+  recheck or an item with no trace in the repository; the body asks for a
+  repeatable case).
+- **Dependencies** are GitHub relations, not only text:
+  `gh issue edit N --add-blocked-by M` (needs a gh with `--add-blocked-by`, 2.103 is checked, on the owner's Mac). A
+  cloud session (older `gh`, the GitHub MCP has no tool for it) sets the same
+  relation with the REST call `gh api -X POST repos/Simarglok/arcanum-steamwoven/issues/N/dependencies/blocked_by -F issue_id=<database id of M>`
+  (the `id` field of `gh api repos/.../issues/M`, not its number; checked from a
+  cloud session on 2026-11-11), and also writes `Blocked by` in the body. A blocked issue has `status:blocked`; the thread that
+  merges a blocker lists the issues it unblocks in its report, and the
+  coordinator moves them to `status:ready`. An epic is a parent issue
+  (`--parent`, label `epic`) of its slices; the parent carries no code of its own
+  and no PR.
+- **Life of an issue.** The coordinator creates it (labels `type:*`, `area:*`,
+  `status:*`; the form cannot set labels), hands out the code and launches a
+  thread on the owner's request; a direct owner request in a thread gets its
+  issue from the coordinator before work starts, and a session without `gh`
+  asks the coordinator for it; the thread sets
+  `status:in-progress`, opens one PR whose body says `Closes #N`, and merging
+  closes the issue. A cancelled, stale or duplicate issue is closed as not
+  planned with a comment saying why. Work already running when the backlog was
+  created (a thread, branch or PR) was not imported and keeps its old code.
+- **Finding work**: `gh issue list --label status:ready --label type:ui` (epics are not listed:
+  they carry no `status:ready`);
+  `gh issue view N`. Project boards are not used (they cannot be written from
+  a cloud session and labels are enough).
 
 ### Small search and read output
 
@@ -197,15 +255,18 @@ took long even on small fixes.
 
 ### Task code
 
-- Owner decision 2026-11-11 (ARC-DEV-409): a new code is `ARC-TYPE-N` with `N` the
-  number of the work item's GitHub issue, created first; no number is chosen or
-  checked by hand any more ([task naming](task-naming.md#codes), [backlog](backlog.md)).
-  The thread confirms with one check: the issue exists, is open and has the label
-  `type:<type>`.
-- Owner decision 2026-10-29 (ARC-DEV-057, token audit of 2026-10-29, item 7), now
-  for a code issued before 2026-11-11 (three digits at most): the thread confirms
-  with one check (remote branches and a PR search for the code), not a full
-  history search.
+From 2026-11-12 the code is `ARC-<TYPE>-<issue number>`, so the issue itself
+is the allocation; the thread confirms it with `gh issue view N --json
+state,labels,title` and the branch and PR search below
+([backlog](#backlog-in-github-issues)). `gh issue view N` is meaningful only for
+N of 1000 and more; an old code's number may match an unrelated old issue or
+PR. The rest of this section is the rule for codes allocated before then.
+
+Owner decision 2026-10-29 (ARC-DEV-057, token audit of 2026-10-29, item 7):
+
+- For a code allocated before 2026-11-12, the coordinator checks the code is unused before handing it out; the thread
+  confirms with one check (remote branches and a PR search for the code), not a
+  full history search ([task naming](task-naming.md)).
 - No checklist-only steps: a checklist update rides with other work
   ([fewer steps](#fewer-steps)).
 
@@ -251,6 +312,11 @@ ready only when it follows these rules.
    AC2. ...
    ```
 
+   An issue of the [backlog](#backlog-in-github-issues) is this contract: `Goal`
+   is the `Result`, `Components` and `Requirements` are the same lines, the
+   `Acceptance criteria` field holds `AC1`.. and `Human gates`, and `Work-Item`
+   is the code built from the issue number.
+
 2. **Only criteria an agent can check.** Acceptance criteria are labelled `AC1`
    ... `AC8` (at most eight). A human, physical-device or native-GUI observation
    is not an acceptance criterion of an agent work item: it goes into the
@@ -275,7 +341,7 @@ ready only when it follows these rules.
 Owner decision 2026-10-20: the [functional requirements register](../requirements/README.md)
 is checked when a task is created and kept current when a change lands.
 
-- **When creating a task**, find the requirements it serves in the
+- **When creating a task or an issue**, find the requirements it serves in the
   [coverage matrix](../requirements/coverage.md) and name them in the contract's
   `Requirements:` line (`none` with a reason for tooling, research method or
   workflow work that serves no requirement). Read each named requirement in its
