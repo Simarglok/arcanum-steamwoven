@@ -31,8 +31,9 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     /// <summary>ARC-UI-012: what the start scene does once it is published: open the main menu again, or start a new game as a hero.</summary>
-    private enum SceneFlowKind { Menu, NewGame }
-    private sealed record SceneFlowRequest(SceneFlowKind Kind, int Hero, string? Map, AreaNewCharacter? Creation = null);
+    /// <summary>ARC-DEV-387: <c>LoadSave</c> opens the scene a save from the menu was made on (the start map is not loaded for it) and loads the save into it.</summary>
+    private enum SceneFlowKind { Menu, NewGame, LoadSave }
+    private sealed record SceneFlowRequest(SceneFlowKind Kind, int Hero, string? Map, AreaNewCharacter? Creation = null, string? SaveName = null, string? SavePrefix = null);
     /// <summary>What a new game needs to make its session as this scene's launch made it.</summary>
     private sealed record NewGameRecipe(ProfileBinding Clock, Guid Module, AreaStepCell Spawn, int RuntimeMap, ReputationCatalog? Reputations);
 
@@ -66,6 +67,8 @@ public partial class TerrainViewerApp
             return;
         }
         // ARC-DEV-381: the menu opened before the scene was ready: it attaches to the scene now (and runs what it held).
+        // (a save's map loading under the menu is not this attach's scene: only its own flow's publication counts)
+        if (_menuLoadingSave) return;
         if (_menuAwaitsScene) { AttachEarlyMenuToScene(); return; }
         if (!arguments.MainMenu || _mainMenuShown) return;
         // Only the first published scene: a map without a session (unlit without a clock, or not in the map list) shows no menu,
@@ -197,6 +200,12 @@ public partial class TerrainViewerApp
             if (flow is not null && ReferenceEquals(_sceneFlow, flow))
             {
                 _sceneFlow = null;
+                // ARC-DEV-387: a save's map that did not publish (superseded or failed) gives the menu its input back.
+                if (flow.Kind == SceneFlowKind.LoadSave && _menuLoadingSave)
+                {
+                    _menuLoadingSave = false;
+                    if (_mainMenu is { } waiting) { waiting.Notice = "the save's map did not load"; RenderMainMenu(); }
+                }
                 // ARC-UI-038: the opening shop's session the flow carried goes with it.
                 flow.Creation?.DropShop();
                 GD.Print("ARC-UI-012 scene flow: the start scene was not published " + (_lastPublishedFailure ?? "(superseded)"));
@@ -210,6 +219,8 @@ public partial class TerrainViewerApp
     /// <summary>The start scene is published: the main menu opens again over it, or the new game starts.</summary>
     private void ContinueSceneFlow(SceneFlowRequest flow)
     {
+        // ARC-DEV-387: the scene a save from the menu was made on: the save loads into it.
+        if (flow.Kind == SceneFlowKind.LoadSave) { FinishSaveSceneFlow(flow); return; }
         if (!QuickKeysActive || _arguments is null)
         {
             GD.Print("ARC-UI-012 scene flow: the start scene has no game session");
@@ -316,7 +327,11 @@ public partial class TerrainViewerApp
         if (!MainMenuOpen || _mainMenu is null) return;
         // ARC-DEV-381: a choice that waits for the start scene takes no other input; Escape or Back takes it back.
         if (_menuDeferred is not null) { if (cancels) CancelDeferredMenuCommand(); return; }
+        // ARC-DEV-387: a save's map is loading under the menu; it takes no input until the save is in.
+        if (_menuLoadingSave) return;
         var command = step();
+        // ARC-DEV-387: the New Game window (or any window after it) is the moment the start map's load begins.
+        if (_startLoadPending && _mainMenu is { } entered && AreaMainMenu.NeedsStartScene(entered.Window)) BeginStartLoad("the player entered window " + entered.Window);
         if (_menuAwaitsScene && DefersUntilScene(command.Kind)) { DeferMenuCommand(command); return; }
         switch (command.Kind)
         {
@@ -333,6 +348,13 @@ public partial class TerrainViewerApp
                     _mainMenu.NoSave();
                     GD.Print("ARC-UI-011 main menu last save: none");
                     break;
+                }
+                // ARC-DEV-387: no scene yet (the start map is not loaded): the save's own map loads and the save loads into it.
+                if (_menuAwaitsScene)
+                {
+                    if (BeginSaveSceneFlow(latest.Name, "Last save ") is { } lastRefused) { _mainMenu.Notice = lastRefused; break; }
+                    ShowSaveLoadingNotice();
+                    return;
                 }
                 if (LoadGame(SaveLibrary.Slot(latest.Name), "Last save ", MainMenuTables(), AreaLoadMessageRoute.Result)) { EndMainMenu("last save " + latest.Name); return; }
                 _mainMenu.Notice = _quickSaveStatus;
@@ -585,7 +607,7 @@ public partial class TerrainViewerApp
     /// ledger SF4), otherwise it comes back.</summary>
     private void SaveListClosedUnderMainMenu(bool finished)
     {
-        if (_mainMenu is null || MainMenuOpen || !QuickKeysActive) return;
+        if (_mainMenu is null || MainMenuOpen || (!QuickKeysActive && !_menuAwaitsScene)) return;
         if (finished) { EndMainMenu("finished in the save list"); return; }
         _mainMenu.Resume(null);
         QuarantineWorld(); _quickKeys.Reset();
@@ -985,6 +1007,10 @@ public partial class TerrainViewerApp
             GD.Print("ARC-UI-033 native-smoke name and portrait PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Portraits = portraits.GameCount, FirstPortrait = firstPortrait, made.Portrait, NameBytes = made.PlayerName.Length,
                 DefaultNameBytes = creation.DefaultName.Length, Refusal = CharacterNameRules.RefusalMessage }));
+            // ARC-DEV-387: a game saved here, then Last Save before any scene: the save's own map loads and the save into it.
+            QuickKey(Key.F7);
+            Require(_saveLibraryForSelfTest.AutoSlot.Exists, "F7 saved the game for the last-save check: " + _quickSaveStatus);
+            await LastSaveBeforeSceneForSmoke(Require, Choose, texts);
         }
         finally
         {

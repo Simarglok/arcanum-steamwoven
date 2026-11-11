@@ -1989,7 +1989,8 @@ and layout (below), the other windows the project's.
   (`ARC-DEV-381 early main menu open`; the probe's `start-to-menu` in the packaged build went from the whole map's publication to about
   1.6 s on a loaded Mac, see the diagnosis). The menu is the same one: its windows, texts, art, keys and back moves are unchanged. No scene
   exists yet, so what opens a window the menu itself draws works at once (Single Player, New Game, the pre-made browser, Options, Exit
-  Game), and a choice that needs the scene is **held**: Start in the browser, New Character, Load Game and Last Save. A held choice shows
+  Game), and a choice that needs the scene is **held**: Start in the browser and New Character (Load Game and Last Save were held too until
+  ARC-DEV-387, below). A held choice shows
   a note, the menu takes no other input, Escape (or the browser's Back arrow) takes the choice back, and the scene's publication attaches the menu to
   it (`ARC-DEV-381 early main menu attached to the scene`): the menu takes the scene's answer for a new game (`NewGameRefusal`), plays the
   shop map's pair and runs the held choice as if it were pressed then. A start scene that fails to load closes the menu and shows the
@@ -1997,6 +1998,21 @@ and layout (below), the other windows the project's.
   that would not have opened. Later openings (after Quit, after a death, in play) open over a published scene, as before. Smoke: the `menu`
   stage checks that the menu opened before the publication and attached to it, then plays the waiting again on the published scene
   (a held choice, no other input, Escape taking it back, the attach running a held Last Save, a held Start starting nothing).
+- **The start map loads on demand (ARC-DEV-387, follow-up of O1).** In map mode (`--area-map`) with the menu the start map is not loaded at
+  the start at all: the menu opens (`ARC-DEV-381 early main menu open ... is not loaded yet`) and the map's load begins when the player
+  enters the New Game window, the way of a new game (`AreaMainMenu.NeedsStartScene`: New Game, the pre-made browser, New Character, the
+  editor, the shop; `ARC-DEV-387 start map load begins`). Single Player, Options, Load Game and Last Save need no start map. **Last Save**, and
+  **a save chosen in the load window**, load their own map at once instead: `AreaSaveLaunch` reads the save for the map it was made on (its
+  runtime number, through the game's map list) and that map loads as the scene the load runs on (the saved cell as the arrival tile, a map
+  too large to load whole opening its window around it; no hero, default data rules), then the save loads into it as a load on a published scene
+  does (`SceneFlowKind.LoadSave`, `ARC-DEV-387 save chosen before any scene`, one map load instead of the start map's and then the save's). While it
+  loads the menu stays, with the note "loading the save…", and takes no input; it goes when the save is in, and comes back with the reason
+  when the save does not load. A save chosen while the start map is already loading replaces that load. The start map loads when a new game's
+  way begins; a choice that needs it is held as above. Not changed: the exterior mode (no `--area-map`) loads the start scene at once and
+  holds every choice that needs it (ARC-DEV-381); a smoke takes the player's route (Single Player, New Game) itself to start the load, as its
+  stages run on the published scene. Known difference: the menu's own music is played through the start scene's session, so it starts when the start map is
+  loaded (at New Game) and the main window is silent before; a follow-up is needed to play it without a scene. Smoke: the `menu` stage checks the
+  held choices as above and then Last Save pressed while no scene stands (`last-save-before-scene`).
 - **Original look (ARC-UI-058,** [plan](../ui/original-windows.md#main-menu-done-arc-ui-058),
   [ledger MW1–MW6](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058); `AreaMenuArtLayout`, `AreaArtFont`, `AreaMenuArtView`):
   with the game's art the main, single-player, new-game and in-play windows draw their background (329 `MainMenuBack`, 331

@@ -51,6 +51,26 @@ public sealed class AreaMainMenuTests
     }
 
     [TestMethod]
+    public void The_start_scene_is_needed_from_the_new_game_window_on_and_not_by_the_other_windows()
+    {
+        // ARC-DEV-387: the start map's load begins when a new game's way does; Single Player, the options and the saves' windows need none.
+        var menu = Menu();
+        Assert.IsFalse(AreaMainMenu.NeedsStartScene(menu.Window), "the main window");
+        menu.Activate(0);
+        Assert.IsFalse(AreaMainMenu.NeedsStartScene(menu.Window), "Single Player (Load Game and Last Save are its buttons)");
+        menu.Activate(0);
+        Assert.AreEqual(AreaMenuWindow.NewGame, menu.Window);
+        Assert.IsTrue(AreaMainMenu.NeedsStartScene(menu.Window), "New Game");
+        menu.Activate(0);
+        Assert.AreEqual(AreaMenuWindow.PickCharacter, menu.Window);
+        Assert.IsTrue(AreaMainMenu.NeedsStartScene(menu.Window), "the pre-made browser");
+        foreach (var window in new[] { AreaMenuWindow.Main, AreaMenuWindow.InPlay, AreaMenuWindow.InPlayLimited, AreaMenuWindow.SinglePlayer, AreaMenuWindow.Options })
+            Assert.IsFalse(AreaMainMenu.NeedsStartScene(window), window.ToString());
+        foreach (var window in new[] { AreaMenuWindow.NewGame, AreaMenuWindow.NewCharacter, AreaMenuWindow.PickCharacter, AreaMenuWindow.CharacterEditor, AreaMenuWindow.Shop })
+            Assert.IsTrue(AreaMainMenu.NeedsStartScene(window), window.ToString());
+    }
+
+    [TestMethod]
     public void Hotkeys_are_the_label_message_plus_ten_upper_cased_and_only_shown_buttons_take_them()
     {
         var menu = Menu();
