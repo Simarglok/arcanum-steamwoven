@@ -39,7 +39,8 @@ public partial class TerrainViewerApp
         if (_areaSession is not { } session) return;
         foreach (var made in session.QueryCreatedObjects(new SessionMapId(CurrentAreaMap)))
         {
-            if (CreatedPrototype(made.Prototype) is not { } facts || frameOf(facts.Art, "created") is not { } frame)
+            // ARC-DEV-352: an animated scenery (a wall of fire's piece) shows its loop's frame.
+            if (CreatedPrototype(made.Prototype) is not { } facts || frameOf(CreatedArtNow(made.Entity, facts.Art), "created") is not { } frame)
             {
                 if (_groundReported.Add("nocreated:" + made.Entity)) GD.Print($"ARC-DEV-347 created-object entity={made.Entity} prototype={made.Prototype} not drawn: no art");
                 continue;

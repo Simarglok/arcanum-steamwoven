@@ -381,6 +381,9 @@ What it checks and what it does not:
 - **After ARC-MAGIC-027 (2026-11-11):** the Effect component takes an NPC's list, so every NPC `Effect` entry left the table (the college spells 10, 15, 20, 25, 37, 40, 46, 51, 67, 70, 76, 77 now leave nothing on either target, and so do records 85, 93-96, 104, 112, 114 and 138 outside the colleges on the NPC; the rest keep their ObjFlag, Trait, Summon, Destroy, Identify, Movement or Recharge rows).
 - **Lanes that will change it:** E1-b (ARC-DEV-352, #941) changes the Summon and Destroy rows of the scenery summons; DEV-348 the NPC's Effect rows; MA-1 the ObjFlag rows. The slice that merges
   second re-runs the census and updates the table.
+- **After ARC-DEV-352 (#941, 2026-11-11):** the Summon component is taken on both targets of every record. Its census targets are objects, and an object entry summons nothing in
+  the original (TA9: only a tile entry has a tile), so the census can no longer tell a scenery summon from a critter summon. A critter summon on a tile entry still logs `ComponentNotReady`
+  (E1-e); its unit tests, not the census, hold that. The Destroy rows stay: the census targets are a critter and the hero, not a summoned object.
 
 ## Effect consumers (MA-2, ARC-MAGIC-027)
 
