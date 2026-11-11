@@ -106,9 +106,20 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   warning that only that release is checked; otherwise what is missing, for example "no arcanum2.dat here"); a button
   for each other ready fixed candidate; "Choose folder…" (the system's folder dialog; `GameFolderLocator.Choose` also
   looks inside a chosen Wine wrapper `.app`, bottle or `drive_c`); the rules Steamwoven or Original (custom mixes
-  after alpha); "Show this screen at every start"; "Debug mode" (ARC-DEV-050, off by default:
+  after alpha); the options window's three HD lines (ARC-UI-143, below); "Show this screen at every start"; "Debug mode" (ARC-DEV-050, off by default:
   [debug mode](area-map-mode.md#debug-mode-arc-dev-050)); Play, Reset settings and Quit. The project's own look, not a
   window of the original's menu.
+- **HD lines (ARC-UI-143).** After the rules the screen has the Game page's three HD lines, one row of choices each: **HD graphics**
+  Off/On (the visual profile, `visual_profile_v1.json`), **HD interface** Off/On/Generated (experimental) and **HD pack** Auto/Game/Custom
+  (`hdInterface`, `generatedInterface`, `hdPack`, `hdPackPath` of `game_settings_v1.json`, [HD pack source](../workflow/hd-pack.md#hd-pack-source-arc-dev-350)).
+  They are the options window's settings, not a copy: a choice is saved at once in the same files (not at Play), the game that Play
+  starts reads them like any start, and the options window keeps its lines. The pack source applies at the next start, as in the options
+  window; the note under the rows says what that start will read (an automated run: that pack folders are not searched). Custom opens the
+  system folder dialog, with the same fallback note where there is none. The rows are off while the screen is busy; **Reset settings**
+  resets `launcher_v1.json` only and leaves the HD lines as they are. A run with no settings file (an automated run) keeps the choices
+  for the screen only: its start reads the files and finds the defaults. A choice that could not be written is named under the rows. Checked by the launcher self-test (defaults, each choice saved in the files, shown again by the next screen, read by
+  the start, Custom's folder, Reset) and by the launcher native smoke's HD lines and screenshot (`--native-smoke-screenshot PATH`
+  also writes `NAME-launcher.png` beside it, the screen before Play, where `PATH` is `NAME.png`).
 - **Install from GOG installer…** (ARC-DEV-074, [research](../research/gog-installer-unpack.md) option A) is for a player
   without Windows who has the GOG offline installer (`setup_arcanum_….exe`, Inno Setup 5.6.2, one file). It first looks for
   the free `innoextract` tool (zlib licence; `PATH`, then `/opt/homebrew/bin`, `/usr/local/bin`, `/opt/local/bin`,
@@ -2678,7 +2689,7 @@ on the live session; on a detached copy every quest and rumor that has a text is
 
 With the game's art and the message window's fonts read (`TextFonts`, ARC-DEV-156) the logbook shows the original's book instead of the list
 (`AreaLogbookArtLayout`, `AreaLogbookArtView`; ledger [LB14–LB17](../research/ledger/ui-audio.md#logbook-arc-ui-008), plan
-[original windows](../ui/original-windows.md#logbook-rumors-and-quests-done-arc-ui-074)): the side panel and the book with the page art, the seven tab
+[original windows](../ui/original-windows.md#logbook-all-seven-tabs-the-pc-lens-and-the-tab-hint-done-arc-ui-074-arc-ui-079082-arc-ui-098)): the side panel and the book with the page art, the seven tab
 buttons (the shown tab pressed), the previous and next page buttons, the title and the page numbers in the two page halves, and the entries of
 the tab laid out on the spread by the original's rules (one text line between entries, an entry that does not fit the column goes whole to the
 next column or spread, only the first entry of a fresh column is cut at the bottom) in the colours of their state with a strike-through for a

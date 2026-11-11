@@ -133,13 +133,20 @@ public partial class TerrainViewerApp
 
     private void ReportHdPackSource()
     {
+        var text = HdPackSourceText();
+        GD.Print("ARC-DEV-350 " + text);
+        if (_mainMenu is not null) _mainMenu.Notice = text;
+    }
+
+    /// <summary>What the next start will read for the saved HD pack source (the options window's note, ARC-UI-143: the launcher's too).</summary>
+    private string HdPackSourceText()
+    {
         // An automated run reads no pack folder (ARC-DEV-032); an ordinary run stats every pack file once, no frame is read.
         var text = AutomatedVisualRun
             ? $"HD pack source {HdPackSourceResolver.ModeName(_gameSettings.HdPackSource)}: pack folders are not searched in an automated run"
             : ResolveHdPack(_gameSettings.HdPackSource, _gameSettings.HdPackPath).Notice();
         if (!AutomatedVisualRun && !string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("ARC_HD_PACK"))) text += " (this run's ARC_HD_PACK overrides it)";
-        GD.Print("ARC-DEV-350 " + text);
-        if (_mainMenu is not null) _mainMenu.Notice = text;
+        return text;
     }
 
     /// <summary>ARC-DEV-350: the system folder dialog (a pack folder, or a folder of packs) for the Custom source; where there is none (a

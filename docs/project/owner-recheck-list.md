@@ -664,7 +664,7 @@ Known differences (documented, not bugs):
 ## ARC-WORLD-124 — Timed bombs: placing trap devices with a spell (E6-b, 2026-11-11)
 
 The rules are in [placed trap devices](../world/trap-device-runtime.md). Give the hero the timed bomb (item 15154, record 176; or 15193, record 220) and compare in both games. The script
-trap devices (15100, 15120) are the next slice (ARC-WORLD-125, [below](#arc-world-125--script-trap-devices-e6-c-2026-11-11)).
+trap devices (15100, 15120) are the next slice (ARC-WORLD-125, [below](#arc-world-125--script-trap-devices-arming-traps-on-objects-and-tiles-e6-c-2026-11-11)).
 
 | # | Step | Expected (from the original executable and data) | Status |
 | --- | --- | --- | --- |

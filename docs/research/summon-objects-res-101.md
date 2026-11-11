@@ -2,7 +2,7 @@
 
 Status: **Research**, work item ARC-RES-101 (2026-11-10), slice E1-r of the [missing-systems plan](../project/missing-systems-plan.md#e1-summon-and-objects-created-at-run-time-priority).
 Docs-only: no code changes and no checks run (the census below ran locally, not as a repository check). It answers the plan's questions for
-B47 of the [2026-11-10 triage](bug-reports-triage-2026-11-10.md#b47-the-summon-component-is-not-built-three-reports): what the Summon spell component
+B47 of the [2026-11-10 triage](open-bugs.md): what the Summon spell component
 (type 18, `magictech_effect_summon` 0x450C40, ProcFunc 0x452830) creates for Fireflash (spell 22), Wall of Fire (spell 21) and Summon Undead (spell 57),
 how those objects live and die, and which installed spells summon something other than a critter. It ends in a hand-off for the slices that
 build it: E1-a (created scenery and eye-candy objects) and E1-b (the Summon component for objects).
