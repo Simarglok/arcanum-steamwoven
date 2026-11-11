@@ -19,14 +19,14 @@ made ready by completing the contract before a thread starts it.
 | Label | Meaning |
 | --- | --- |
 | `type:res`, `type:data`, `type:render`, `type:world`, `type:input`, `type:gpad`, `type:ui`, `type:script`, `type:dev`, `type:ai`, `type:combat`, `type:skills`, `type:magic`, `type:technology` | The type of the [task code](task-naming.md#codes); exactly one per issue |
-| `status:ready` | Startable now: no open blocker, contract complete |
+| `status:ready` | Startable now: no open blocker; the starting thread completes the contract (Requirements, AC) before work |
 | `status:blocked` | Waits for another item; the body names it under `Blocked by` (the form's heading or a line `Blocked by: #N[, #M]`) |
 | `status:in-progress` | A thread or PR works on it (set by the thread that starts it, together with the assignee) |
 | `status:needs-owner` | Waits for an owner decision; the body says the question and the options |
 | `tail` | A leftover found while building something else |
 | `bug` | A defect (the id of an [open bug](../research/open-bugs.md), when it has one, is in the body) |
 | `owner-recheck` | The owner compares behaviour with the original game |
-| `epic` | The parent of a plan epic (for example E1 of the [missing systems plan](../project/missing-systems-plan.md)); its children are sub-issues |
+| `epic` | (no code) The parent of a plan epic (for example E1 of the [missing systems plan](../project/missing-systems-plan.md)); its children are sub-issues |
 | `opus` | Needs Opus (new executable reading, save schema, threading, audit) |
 
 At most one `status:*` label at a time. An issue with none is a note, not yet a
@@ -60,10 +60,12 @@ as `Plan ref:` so the plans keep resolving.
 
 ## Dependencies and parents
 
-- Native "blocked by" / "blocking" (GitHub CLI 2.94 or newer, on the Mac):
-  `gh issue edit N --add-blocked-by M`. The GitHub MCP in cloud sessions cannot set
-  it, so the `Blocked by:` line in the body is the record that every session can
-  read and write; whoever sets the native link also keeps the line.
+- Native "blocked by": on the Mac `gh issue edit N --add-blocked-by M` (GitHub CLI
+  2.94 or newer); from a cloud session (older `gh`, no GitHub MCP tool for it) use
+  the REST call `gh api -X POST repos/Simarglok/arcanum-steamwoven/issues/N/dependencies/blocked_by -F issue_id=<database id of M>`
+  (the database id is the `id` field of `gh api repos/.../issues/M`, not its
+  number). Also write the `Blocked by` line in the body, so that a reader and a text
+  search see it without the API.
 - When a blocker closes, the thread that merged it sets `status:ready` on the items
   that waited only for it (search `"Blocked by" "#N"` in issue bodies).
 - Epic parents use sub-issues (MCP `sub_issue_write`, `gh issue create --parent`).
