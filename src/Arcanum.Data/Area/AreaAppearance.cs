@@ -44,6 +44,21 @@ public sealed partial class AreaDataOwner
     /// (types 0 and 1), whose wall check and edge rules read their ART, keep the refusal.</summary>
     public static bool HasNoBody(int type, uint aid) => type is not 0 and not 1 && NamesNoArt(aid);
 
+    private Dictionary<uint, List<AreaArtBinding>>? _bindingsByArt;
+    private IReadOnlyList<AreaArtBinding> ArtBindingsFor(uint aid)
+    {
+        if (_bindingsByArt is null)
+        {
+            var index = new Dictionary<uint, List<AreaArtBinding>>();
+            foreach (var binding in _plan.ArtBindings)
+            {
+                if (!index.TryGetValue(binding.RawArt, out var list)) index.Add(binding.RawArt, list = []);
+                list.Add(binding);
+            }
+            _bindingsByArt = index;
+        }
+        return _bindingsByArt.TryGetValue(aid, out var found) ? found : [];
+    }
     private Request ObjectRequest(uint aid, Dictionary<AreaMappingRole, SortedDictionary<int, string>> maps, CancellationToken token)
     {
         var cls = aid >> 28; var frame = cls == 6 ? 0 : (int)((aid >> 14) & 31); var nominal = cls == 6 ? 0 : (int)((aid >> 11) & 7);
@@ -128,9 +143,10 @@ public sealed partial class AreaDataOwner
         }
         else throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
         AreaEntryIdentity entry; var badArt = false;
-        var explicitBindings = _plan.ArtBindings.Where(b => b.RawArt == aid).ToArray();
-        if (explicitBindings.Length > 1) throw Fail(AreaErrorCode.AmbiguousSource, AreaStage.Appearance);
-        if (explicitBindings.Length == 1)
+        // ARC-DEV-383: the plan's explicit bindings by raw ART, indexed once per owner (a scan of every binding per object cost a pass over the whole list).
+        var explicitBindings = ArtBindingsFor(aid);
+        if (explicitBindings.Count > 1) throw Fail(AreaErrorCode.AmbiguousSource, AreaStage.Appearance);
+        if (explicitBindings.Count == 1)
         {
             entry = Unique(explicitBindings[0].Entry.Source, path);
             if (entry != explicitBindings[0].Entry) throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Appearance);

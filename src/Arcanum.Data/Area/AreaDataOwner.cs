@@ -191,7 +191,7 @@ public sealed partial class AreaDataOwner : IDisposable
                 _sharedFrames = new();
                 _residentStaged = _limits.ResidentVisuals is null ? null : [];
                 try { inspection = Build(cancellationToken, output); }
-                finally { _missingMasks = null; _artHolders = null; _objectTiles = null; _sharedFrames = null; } // build-local (ARC-DATA-023/024)
+                finally { _missingMasks = null; _artHolders = null; _objectTiles = null; _sharedFrames = null; _longestFor = null; _elementCopies = null; } // build-local (ARC-DATA-023/024)
                 EndEntryMemo();
                 _budget.BeginPhase(AreaBudgetPhase.I7);
                 AuthenticateAll(cancellationToken);
@@ -291,7 +291,19 @@ public sealed partial class AreaDataOwner : IDisposable
     internal static long EntryCap(AreaSourcePlan plan) => 16L * 1048576;
     private void Alive() { if (_disposed) throw new ObjectDisposedException(nameof(AreaDataOwner)); }
     private static AreaException Fail(AreaErrorCode code, AreaStage stage, long? offset = null, int? index = null) => new(new(code, stage, offset, index));
-    private AreaInputIdentity Identity(AreaInputKey key) => _plan.Identities.SingleOrDefault(i => i.Key == key) ?? throw Fail(AreaErrorCode.MissingSource, AreaStage.Input);
+    // ARC-DEV-383: the plan's identities by key, built once per owner (the strict build asks for one per object).
+    private Dictionary<AreaInputKey, AreaInputIdentity>? _identityByKey;
+    private AreaInputIdentity Identity(AreaInputKey key)
+    {
+        if (_identityByKey is null)
+        {
+            var byKey = new Dictionary<AreaInputKey, AreaInputIdentity>(_plan.Identities.Count); var duplicate = new HashSet<AreaInputKey>();
+            foreach (var identity in _plan.Identities) if (!byKey.TryAdd(identity.Key, identity)) duplicate.Add(identity.Key);
+            foreach (var key2 in duplicate) byKey.Remove(key2); // SingleOrDefault's contract: a repeated key names no single identity
+            _identityByKey = byKey;
+        }
+        return _identityByKey.TryGetValue(key, out var found) ? found : _plan.Identities.SingleOrDefault(i => i.Key == key) ?? throw Fail(AreaErrorCode.MissingSource, AreaStage.Input);
+    }
     private DatArchive Archive(AreaInputKey key) => _archives.TryGetValue(key, out var archive) ? archive : throw Fail(AreaErrorCode.MissingSource, AreaStage.Input);
 
     private void AuthenticateAll(CancellationToken token) => AuthenticateMany(_plan.Identities, token);

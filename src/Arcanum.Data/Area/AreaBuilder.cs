@@ -278,8 +278,9 @@ public sealed partial class AreaDataOwner
             record = result.Record; patched = result.Application;
         }
         using var temporary = new AreaOwnership(_budget);
-        temporary.Allocate(checked(4096 + 160L * (prototype.Fields.Count + record.Fields.Count) + maps.Values.SelectMany(m => m.Values).Max(v => v.Length) * 16L));
-        var effective = new SortedDictionary<int, ObjectWireValue>(prototype.Fields.ToDictionary(p => p.Key, p => p.Value));
+        temporary.Allocate(checked(4096 + 160L * (prototype.Fields.Count + record.Fields.Count) + LongestMappedName(maps) * 16L));
+        var effective = new SortedDictionary<int, ObjectWireValue>();
+        foreach (var pair in prototype.Fields) effective[pair.Key] = pair.Value;
         foreach (var pair in record.Fields) effective[pair.Key] = pair.Value;
         long? directLocation = record.Fields.TryGetValue(1, out var direct) ? direct.Number : null;
         long? x = null, y = null;
@@ -342,7 +343,7 @@ public sealed partial class AreaDataOwner
                     }
                 }
                 if (!hidden || (flags & 0x3) == 0)
-                    foreach (var (slot, bit, size) in new[] { (5, 0x8000U, 7), (6, 0x8000U, 7), (7, 0x10000U, 4) })
+                    foreach (var (slot, bit, size) in OverlayLayers)
                     {
                         if (!effective.TryGetValue(slot, out var array)) throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, AreaStage.Appearance, offset, ordinal);
                         if ((flags & bit) == 0) continue;
@@ -366,6 +367,30 @@ public sealed partial class AreaDataOwner
         objects.Add(new(key, 119, record.Type, number, record.Parent.Sha256, prototype.Own.Sha256, record.Sha256, record.SemanticSha256, scope,
             directLocation, x, y, disposition, directFields, effectiveFields, ready, x.HasValue && y.HasValue, layersReady, patched));
     }
+    // ARC-DEV-383: the longest mapped name over every mapping table, scanned once per table set (AddObject charges it for every object;
+    // the scan of some thousand names per object was half of the strict build of a warm main map).
+    private Dictionary<AreaMappingRole, SortedDictionary<int, string>>? _longestFor;
+    private int _longest;
+    private int LongestMappedName(Dictionary<AreaMappingRole, SortedDictionary<int, string>> maps)
+    {
+        if (!ReferenceEquals(_longestFor, maps)) { _longest = maps.Values.SelectMany(m => m.Values).Max(v => v.Length); _longestFor = maps; }
+        return _longest;
+    }
+    private static readonly (int Slot, uint Bit, int Size)[] OverlayLayers = [(5, 0x8000U, 7), (6, 0x8000U, 7), (7, 0x10000U, 4)];
+    // ARC-DEV-383: the snapshot's copy of a field's sparse elements, made once per wire value of a build. A prototype's fields are the same
+    // wire values for every object of that prototype, so thousands of objects share one immutable copy instead of each making its own.
+    private Dictionary<ObjectWireValue, IReadOnlyList<AreaSparseElement>>? _elementCopies;
+    private static readonly IReadOnlyList<AreaSparseElement> NoElements = Array.AsReadOnly(Array.Empty<AreaSparseElement>());
+    private IReadOnlyList<AreaSparseElement> ElementsOf(ObjectWireValue value, bool shared)
+    {
+        if (value.Elements.Count == 0) return NoElements;
+        // An instance's own values belong to one object: copied, not remembered.
+        if (!shared) return Array.AsReadOnly(value.Elements.Select(e => new AreaSparseElement(e.Key, Array.AsReadOnly(e.Words.ToArray()))).ToArray());
+        _elementCopies ??= new(ReferenceEqualityComparer.Instance);
+        if (!_elementCopies.TryGetValue(value, out var copy))
+            _elementCopies.Add(value, copy = Array.AsReadOnly(value.Elements.Select(e => new AreaSparseElement(e.Key, Array.AsReadOnly(e.Words.ToArray()))).ToArray()));
+        return copy;
+    }
     private IReadOnlyList<AreaFieldValue> CopyFields(IReadOnlyDictionary<int, ObjectWireValue> fields, ObjectWireRecord instance, bool direct, AreaOwnership output)
     {
         var elements = fields.Values.Sum(v => v.Elements.Count * 160L);
@@ -375,7 +400,7 @@ public sealed partial class AreaDataOwner
         output.Allocate(checked(4096 + fields.Count * 128L + elements), checked(4096 + fields.Count * 320L + elements));
         return Array.AsReadOnly(fields.Select(p => new AreaFieldValue(p.Key, (AreaPresence)((int)p.Value.Presence + 1),
             direct || instance.Fields.ContainsKey(p.Key) ? AreaValueOrigin.Instance : AreaValueOrigin.Prototype, p.Value.Number,
-            Array.AsReadOnly(p.Value.Elements.Select(e => new AreaSparseElement(e.Key, Array.AsReadOnly(e.Words.ToArray()))).ToArray()), p.Value.Fingerprint)).ToArray());
+            ElementsOf(p.Value, !direct && !instance.Fields.ContainsKey(p.Key)), p.Value.Fingerprint)).ToArray());
     }
     private ObjectWireRecord ReadWire(ReadOnlySpan<byte> bytes, AreaStage stage, int offset, int index, bool prototype = false, AreaOwnership? ownership = null)
     {

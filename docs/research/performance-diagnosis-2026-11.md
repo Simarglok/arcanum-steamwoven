@@ -162,7 +162,7 @@ Gain is what the numbers above say it can remove (estimates unless stated); cost
 | O1 | **Done: ARC-DEV-381**, see [early menu](../rendering/terrain-viewer.md#main-menu-arc-ui-011). Open the main menu as soon as the menu art is read and load the start map behind it (a new game then waits only for what is left) | start to menu from 12–15 s to about 2 s | medium, touches the start contract |
 | O5a | Skip repeated whole-archive SHA-256 passes inside one process when the file identity (size, modification time, first verification) is unchanged. **Done: ARC-DEV-374** (owner option A, 2026-11-11): the first check of a file of 1 MiB or more hashes it in full, later checks reuse the hash while its stamp is unchanged, see [verified-file memo](../world/area-loader.md); measured with `perf`: map plan 1.0–1.3 s to 0.07–0.24 s on a repeat load, `open` 1.3–2.3 s to 0.4–0.5 s, `verify` 0.35–0.86 s to 0.0 s, a repeated map change worker 10 s to 1.3–6.2 s (shared Mac, so the baseline runs were noisier than the after runs; the removed work is the three passes above plus I7) | −1.6–2.2 s of the worker (about 25%) on every load | medium, touches the authentication rule of the load contract (owner decision) |
 | O8 | Saves list: list asynchronously, decode thumbnails lazily | −0.7 s first open (Debug source) | small |
-| O5c | Keep the decoded frame repository and strict snapshot across loads of the same map for window moves, cave return and a cross-map quick load. **Done in part: ARC-DEV-375**, the decoded frames and visual records (not the snapshot) stay resident, see [resident frames and visuals](../world/area-loader.md#resident-frames-and-visuals-across-map-loads-arc-dev-375): the frame copy 1.8 s to 0.5 s and 103 MiB to 2 MiB on a cave return; the strict build's other cost and the snapshot reuse (after O5a) remain | 6–9 s to about 2 s per map change (not reached by the frames alone) | large, touches the residency design |
+| O5c | Keep the decoded frame repository and strict snapshot across loads of the same map for window moves, cave return and a cross-map quick load. **Done in part: ARC-DEV-375**, the decoded frames and visual records (not the snapshot) stay resident, see [resident frames and visuals](../world/area-loader.md#resident-frames-and-visuals-across-map-loads-arc-dev-375): the frame copy 1.8 s to 0.5 s and 103 MiB to 2 MiB on a cave return; the strict build's other cost was profiled and cut by ARC-DEV-383 (see [the follow-up](#follow-up-the-strict-area-build-profiled-arc-dev-383)); the snapshot reuse remains | 6–9 s to about 2 s per map change (not reached by the frames alone) | large, touches the residency design |
 | O6 | Split the publication into per-frame slices (after O3 and O4 it is mostly the first-frame upload). **Measured, not built: ARC-DEV-380**, see [O6 measured](#follow-up-o6-measured-arc-dev-380): after O3, O4, O5a and O5b the whole first publication is 0.86 s and the canvas's own share 0.15–0.2 s, so a split would remove at most that | removes the 0.1–0.7 s stall and the 0.48 s frame at a window move | medium |
 | O9 | HD: ship mipmapped or VRAM-compressed textures in the pack and skip the SHA-256 of the Legacy pixels on a warm pack | −0.2–0.6 s per window at first draw | large, pack format change |
 | O11 | Attribute the long frames around quick load and map change (probe in the game, not in a smoke stage) | unknown; decides whether save load has a real stall | small |
@@ -258,3 +258,31 @@ first frame is the least the former start to the menu could be (the menu opened 
 
 The menu's art read (0.25–0.29 s, 45 MiB) is now the whole cost between the process start and the menu; the map's load and publication (6.6 s worker, 0.7 s
 publication) run behind it. A held choice such as Start waits for what is left of that. The main thread is still busy during the publication (O6).
+
+## Follow-up: the strict area build profiled (ARC-DEV-383)
+
+O5c (ARC-DEV-375) left the strict build at seconds on a return to the main map although 2,459 of 2,466 visual records came from the resident memo. This task profiled it
+with temporary stopwatches per build phase and per `AddObject` step (not committed; the standing `perf` stage's `load.worker.read.strict` span is the measurement). One
+`perf` smoke (`./arcanum smoke pr --stages perf --sector 1409,1314`, packaged-equivalent Debug source run, the Mac under load average 18-40 for the profile runs, so only ratios inside
+a run and the allocation, which does not depend on load, are comparable). The **return to the main map** (all visuals resident), strict build 1.4-1.8 s at the quieter profile runs (4.0 s at the busiest):
+
+| Phase of the build | Time (profile) | Finding |
+| --- | ---: | --- |
+| I3 sectors: `AddObject` of about 7,400 objects | 0.78-0.91 s | 0.89 s of it was one line per object: the charge for the longest mapped name was `maps.Values.SelectMany(m => m.Values).Max(v => v.Length)`, a pass over every name of every mapping table for each object |
+| I3 sectors: terrain (about 80,000 cells), entry read, parse | 0.1 s warm (0.8-1.7 s cold) | cold cost is the visual build itself (ART read, decode, pixel hash), already memoized |
+| I4 aggregate records (`ReadWire`, `AddObject` of the mobiles) | 0.15-0.25 s | |
+| I5 editor `.mob` correspondence | 0.3-0.4 s, 276 MiB allocated | one `Inflater` (32 KiB window and code tables) per entry, about 90 KiB each; `ReadEntry` 0.2-0.3 s, `ReadWire` 0.06-0.09 s |
+| I0 and I7 authentication | about 0 | the verified-file memo (O5a) skips the hashes |
+
+Changes: the longest mapped name is computed once per table set (`LongestMappedName`); the plan's identities by key and its explicit ART bindings by raw ART are dictionaries built
+once per owner (`Identity` and `ObjectRequest` scanned the lists per object); the snapshot's copy of a field's sparse elements is made once per wire value of a build (a prototype's fields
+are shared by all its objects) and the empty list is shared; the prototype's fields go straight into the effective map; the layer-slot table is static; `DatArchive` keeps one `Inflater` per archive,
+reset for each entry (reads are already serialized by the archive's gate). No authentication, admission or budget rule changed; the same records come out.
+
+Measured on the same smoke with the final tree: the return to the main map's `read.strict` **0.77 s and 206 MiB allocated** (before: 1.4-4.0 s and 482 MiB; the `AddObject` share 0.78-0.91 s to 0.14-0.21 s);
+the first load of the process **1.6 s and 294 MiB** (before: 3.5-8.6 s and 590 MiB), where the cold visual build remains. The worker as a whole is dominated by other stages now: plan, `open` and the frame copy on the first load,
+`open` (1.2 s) and `plan` on every map change.
+
+Left in the strict build (about 0.75 s on a return): the editor `.mob` pass (0.2-0.3 s) and the aggregate records' wire reads (0.1-0.2 s), both re-derived from the same authenticated module bytes on every load;
+a process-resident memo of their correspondence and wire records (the pattern of the visual memo, committed after the closing authentication) would remove most of it. Reusing the whole snapshot for a reload of the same
+window (a cave return to the arrival it left from) would remove the whole build, but the snapshot is bound to its owner and generation, which the load disposes; that is the larger design. Neither is built; the memo needs the owner's decision on the same terms as O5c.
