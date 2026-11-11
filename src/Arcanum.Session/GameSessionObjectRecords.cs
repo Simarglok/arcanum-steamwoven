@@ -1,3 +1,5 @@
+using Arcanum.Simulation.Movement;
+
 namespace Arcanum.Session;
 
 /// <summary>
@@ -163,6 +165,16 @@ internal sealed class ObjectRecords
     {
         if (!_createdByEntity.TryAdd(made.Entity, made)) throw new InvalidOperationException("CREATED_OBJECT_TWICE");
         _created.Add(made);
+    }
+
+    /// <summary>ARC-MAGIC-050: puts the record of created object <paramref name="entity"/> on <paramref name="map"/> at <paramref name="cell"/>, keeping its place in the creation order; false when there is none.</summary>
+    internal bool MoveCreated(string entity, SessionMapId map, CellCoord cell)
+    {
+        if (!_createdByEntity.TryGetValue(entity, out var held)) return false;
+        var moved = held with { Map = map, Cell = cell };
+        _createdByEntity[entity] = moved;
+        _created[_created.FindIndex(made => made.Entity == entity)] = moved;
+        return true;
     }
 
     /// <summary>ARC-DEV-347: removes a created object's record; false when there is none.</summary>

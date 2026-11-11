@@ -142,6 +142,10 @@ public partial class TerrainViewerApp
             _launcherPanel.RulesRequested += mode => LauncherChange(launcher => launcher.SelectRules(mode));
             _launcherPanel.ShowAtStartRequested += show => LauncherChange(launcher => launcher.SetShowAtStart(show));
             _launcherPanel.DebugModeRequested += on => LauncherChange(launcher => launcher.SetDebugMode(on));
+            // ARC-UI-143: the options window's HD lines, saved at once in the same files.
+            _launcherPanel.HdGraphicsRequested += LauncherHdGraphics;
+            _launcherPanel.HdInterfaceRequested += LauncherHdInterface;
+            _launcherPanel.HdPackRequested += LauncherHdPack;
             _launcherPanel.InstallRequested += LauncherInstallRequested;
             _launcherPanel.InstallChosen += (installer, target) => _ = LauncherInstallAsync(installer, target);
             _launcherPanel.CancelInstallRequested += () => { GD.Print("ARC-DEV-074/069 cancel requested (installer unpack or game data)"); _installCancel?.Cancel(); };
@@ -149,6 +153,7 @@ public partial class TerrainViewerApp
             _launcherPanel.ResetRequested += () => LauncherChange(LauncherReset);
             _launcherPanel.QuitRequested += () => { GD.Print("ARC-UI-014 launcher quit"); _installCancel?.Cancel(); GetTree().Quit(); };
         }
+        LauncherHdLoad();
         _launcherPanel.Render(screen);
         GD.Print($"ARC-UI-014 launcher open reason={screen.Reason} file={screen.FileStatus} folder={screen.Folder?.Status.ToString() ?? "none"} canPlay={screen.CanPlay}");
     }

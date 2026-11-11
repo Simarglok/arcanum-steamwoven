@@ -350,7 +350,7 @@ it is still the only measured method; no row has passed the formal gates for U3 
 | gauges (vials, bars) | **U3** (owner's choice; vials: set B is the crisper redraw; round 1: 98 % of blocks within 1 UI px); U2 is the fallback | `legacy` | (U2 numbers) colour lock matters (ΔE 3.2 → 1.1) | the 15 vial frames: only frame 0 is drawn (PA1); flicker across frames not measured |
 | icons | **U3** (owner's choice; small ammunition icons from sheet 13, fit within 0.8 UI px); the round 1 icons failed on content; U2 is the fallback | `legacy` | (U2 numbers) IoU 0.998 | U3 icon gates; the full icon set beyond sheet 13 is not redrawn |
 | cursors | **U0**, not in the pack, or a hand-drawn redraw | `legacy` | 24 × 27 px; smooth alpha IoU 0.904; ΔE 9–10 | hot points are integer UI px (CU4) |
-| fonts | not redrawn: **traced** from the Legacy coverage masks into 4× coverage frames ([font vectorization](../research/font-vectorization.md), ARC-DEV-355; `masked` entries, ARC-DEV-361) | `masked` | the glyphs are 4-bit coverage masks, so a deterministic trace replaces the redraw; layout stays the original's | the owner's look in the windows (slice 3 of the research); the 6 to 9 px fonts; the other 23 fonts |
+| fonts | not redrawn: **traced** from the Legacy coverage masks into 4× coverage frames ([font vectorization](../workflow/hd-font.md), ARC-DEV-355; `masked` entries, ARC-DEV-361) | `masked` | the glyphs are 4-bit coverage masks, so a deterministic trace replaces the redraw; layout stays the original's | the owner's look in the windows (slice 3 of the research); the 6 to 9 px fonts; the other 23 fonts |
 
 U1 alone is not recommended anywhere: U2 improves ΔE on every kind (cursors excepted, where neither is recommended)
 but trades a little luma MAE and sharpness on a few arts (`IntTop`: luma MAE 0.49 against 0.32, sharpness 0.73 against
@@ -410,7 +410,7 @@ No model was trained; no weight is added to the repository. Generated frames are
 - The ΔE and sharpness values depend on the Real-ESRGAN output of one GPU (M4 Pro); cross-GPU bit-exactness is not
   established (ARC-RES-033).
 - Seams are measured on the Legacy frames' columns; no 21:9 repeat metric exists beyond the mock-up.
-- Fonts (the bitmap arts 27, 229, 171, 327; see [font vectorization](../research/font-vectorization.md),
+- Fonts (the bitmap arts 27, 229, 171, 327; see [font vectorization](../workflow/hd-font.md),
   ARC-RES-100; their traced frames and the viewer's drawing of them are ARC-DEV-361), a scaling and anchoring layer, pack format changes, renderer changes,
   the build tool ARC-DEV-003 and the second Mac are outside this task.
 
@@ -429,6 +429,18 @@ multiplied by alpha before upload; the pack, mask, Legacy size, hit rectangles
 and art-font material stay unchanged. Other interface canvases keep their
 existing straight-alpha path. This is independent of ARC-UI-111 edge smoothing
 and ARC-UI-112 filtering.
+
+### Dialog box, menus and pre-made browser (ARC-UI-144)
+
+The same hazard stood on more canvases: the dialog box (the quit and death-load questions), the main menu's art views (menus, options controls), the
+pre-made browser, new-character and opening-shop windows, and the schematic window's slot pictures. These canvases are prepared by `AreaArtTextDraw.Prepare` (premultiplied-alpha
+material), but their art was built with the straight-alpha texture, so with the HD interface on the colour of the transparent texels of the round Accept and
+Cancel buttons (and of every other frame with transparent HD texels) was added to the background: a square behind each round button (report
+`2026-11-11_22-22-57`, "such squares were already fixed"). Their art is now built with `InterfaceHd.Texture(frame, premultipliedAlpha: true)`
+(`PremultipliedTexture` beside `HotkeyTexture`; the schematic slot pictures too), and `AreaShopArtView`, which shares the pre-made art's textures, prepares its canvas too. The rule of
+ARC-UI-126 stands: **every texture on a prepared canvas is the premultiplied variant, and every canvas that takes them is prepared.** The native
+self-test checks that the five art canvases are premultiplied; `ARC_AREA_DEATH_HD_VERIFY=1` runs the `death` stage with the HD interface switch on for a
+native look: `./arcanum smoke pr --stages death --env ARC_HD_PACK=<pack> --env ARC_AREA_DEATH_HD_VERIFY=1 --env ARC_AREA_DEATH_CAPTURE=<local png>`.
 
 Unavailable spell icons retain the HD texture wrapper when greyed. Each active
 frame uses the existing .299/.587/.114 luminance formula; the wrapper retains the
@@ -470,7 +482,7 @@ with `./arcanum smoke pr --stages bar --main-menu` and pass those variables
 with `--env`. Keep real packs and readbacks local.
 
 The local art, checks and installation of this strip and of the later local repairs (Phantasm, spell slots, Combat centring,
-Fate Points ring) are recorded in [HD interface local repairs](../verification/hd-interface-local-repairs.md).
+Fate Points ring) were done in the owner's ignored local folder and are not recorded in git; the pack's storage, backup and rollback are in the [HD pack workflow](../workflow/hd-pack.md).
 
 ## World map window (ARC-UI-126)
 

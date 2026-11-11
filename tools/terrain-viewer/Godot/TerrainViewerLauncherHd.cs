@@ -1,0 +1,108 @@
+using Arcanum.World;
+using Arcanum.TerrainViewer.Core;
+using Godot;
+
+namespace Arcanum.TerrainViewer;
+
+// ARC-UI-143: the HD lines of the options window (HD graphics, HD interface, HD pack) on the launcher screen, before the game starts. They are
+// the same settings in the same files (visual_profile_v1.json, game_settings_v1.json): a change is saved at once, and the game that Play
+// starts reads them like any start (the profile and the interface at once, the pack source from the next start, as in the options window).
+public partial class TerrainViewerApp
+{
+    private VisualProfile _launcherHdProfile = VisualProfile.Legacy;
+    // What the next start reads for the pack (and the environment overrides of this run), and why a choice was not saved; the screen shows both.
+    private string _launcherHdPackNote = "";
+    private string _launcherHdProblem = "";
+
+    /// <summary>Reads the saved settings (a run with no file keeps what the screen has) and shows them with the note on the pack.</summary>
+    private void LauncherHdLoad()
+    {
+        _gameSettingsStore ??= new GameSettingsStore(AutomatedVisualRun);
+        _visualStore ??= new VisualProfileSettingsStore(AutomatedVisualRun);
+        if (_gameSettingsStore.Persistent) _gameSettings = _gameSettingsStore.Load();
+        if (_visualStore.Persistent) _launcherHdProfile = _visualStore.Load();
+        _launcherHdPackNote = HdPackSourceText();
+        if (!string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("ARC_VISUAL_PROFILE")) && !AutomatedVisualRun)
+            _launcherHdPackNote += " (this run's ARC_VISUAL_PROFILE overrides HD graphics)";
+        _launcherHdProblem = "";
+        LauncherHdShow();
+    }
+
+    private void LauncherHdShow()
+    {
+        if (_launcherPanel is null) return;
+        _launcherPanel.Hd = new LauncherHdLines(_launcherHdProfile == VisualProfile.Hd,
+            _gameSettings.HdInterface ? (_gameSettings.GeneratedInterface ? 2 : 1) : 0, _gameSettings.HdPackSource,
+            _launcherHdProblem.Length == 0 ? _launcherHdPackNote : _launcherHdPackNote + " | " + _launcherHdProblem);
+    }
+
+    private void LauncherHdGraphics(bool on)
+    {
+        _launcherHdProfile = on ? VisualProfile.Hd : VisualProfile.Legacy;
+        var store = _visualStore;
+        var saved = store is { Persistent: true } && store.Save(_launcherHdProfile);
+        GD.Print($"ARC-UI-143 launcher HD graphics={(on ? "On" : "Off")} saved={saved}");
+        LauncherHdProblem(store is { Persistent: true } && !saved ? "the HD graphics setting could not be saved" : "");
+    }
+
+    private void LauncherHdInterface(int value)
+    {
+        if (value is < 0 or > 2) return;
+        SaveGameSettings(_gameSettings with { HdInterface = value >= 1, GeneratedInterface = value == 2 });
+        GD.Print($"ARC-UI-143 launcher HD interface={value}");
+        LauncherHdProblem(GameSettingsProblem());
+    }
+
+    private void LauncherHdPack(HdPackSourceMode mode)
+    {
+        if (!Enum.IsDefined(mode)) return;
+        SaveGameSettings(_gameSettings with { HdPackSource = mode });
+        _launcherHdPackNote = HdPackSourceText();
+        GD.Print($"ARC-UI-143 launcher HD pack={HdPackSourceResolver.ModeName(mode)}; " + _launcherHdPackNote);
+        LauncherHdProblem(GameSettingsProblem());
+        if (mode == HdPackSourceMode.Custom) LauncherAskHdPackFolder();
+    }
+
+    private void LauncherHdProblem(string problem)
+    {
+        _launcherHdProblem = problem;
+        LauncherHdShow();
+    }
+
+    /// <summary>Why the last game-settings save did not reach the file (a persistent run only), else empty.</summary>
+    private string GameSettingsProblem() => _gameSettingsStore is { Persistent: true } && _gameSettingsOrigin == "not saved" ? "the HD settings could not be saved" : "";
+
+    private void LauncherHdPackNoteAppend(string text)
+    {
+        _launcherHdPackNote += " | " + text;
+        LauncherHdShow();
+    }
+
+    /// <summary>The system folder dialog for the Custom source (a pack folder, or a folder of packs); where there is none the note names the setting.</summary>
+    private void LauncherAskHdPackFolder()
+    {
+        if (AutomatedVisualRun || DisplayServer.GetName() == "headless" || !DisplayServer.HasFeature(DisplayServer.Feature.NativeDialogFile))
+        {
+            LauncherHdPackNoteAppend("no folder dialog here: the folder is the hdPackPath of the game settings file");
+            return;
+        }
+        var start = _gameSettings.HdPackPath is { } saved && System.IO.Directory.Exists(saved) ? saved
+            : System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile);
+        var failure = DisplayServer.FileDialogShow("HD pack: a pack folder or a folder of packs", start, "", false, DisplayServer.FileDialogMode.OpenDir, [],
+            Callable.From<bool, string[], int>((ok, paths, _) => CallDeferred(MethodName.LauncherHdPackFolderChosen, ok && paths.Length > 0 ? paths[0] : "")));
+        if (failure != Error.Ok) LauncherHdProblem("the folder dialog did not open (" + failure + ")");
+    }
+
+    private void LauncherHdPackFolderChosen(string folder)
+    {
+        // Cancelled, the launcher closed meanwhile, or Play is under way (the rows are off then): the setting stays as it is.
+        if (folder.Length == 0 || _launcher is not { Busy: false }) return;
+        if (folder.Length > AreaGameSettingsCodec.MaxPath || !System.IO.Directory.Exists(folder)) { LauncherHdProblem("that folder cannot be used"); return; }
+        SaveGameSettings(_gameSettings with { HdPackSource = HdPackSourceMode.Custom, HdPackPath = folder });
+        _launcherHdPackNote = HdPackSourceText();
+        LauncherHdProblem(GameSettingsProblem());
+    }
+
+    /// <summary>The self-test's way to give the folder the dialog would return.</summary>
+    internal void LauncherHdPackFolderForSelfTest(string folder) => LauncherHdPackFolderChosen(folder);
+}

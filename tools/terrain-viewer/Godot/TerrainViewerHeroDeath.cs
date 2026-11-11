@@ -187,7 +187,7 @@ public partial class TerrainViewerApp
         if (_dialogBoxArt is { } built) return built;
         if (_dialogBoxContent.Font is null) return null;
         var art = _dialogBoxContent.Art;
-        IReadOnlyList<Texture2D> Frames(int number) => [.. art[number].Frames.Select(frame => (Texture2D)HotkeyTexture(frame))];
+        IReadOnlyList<Texture2D> Frames(int number) => [.. art[number].Frames.Select(frame => (Texture2D)PremultipliedTexture(frame))];
         return _dialogBoxArt = new AreaDialogBoxArt(Frames(AreaDialogBoxLayout.BackgroundArt)[0],
             new Dictionary<int, IReadOnlyList<Texture2D>> { [AreaDialogBoxLayout.AcceptArt] = Frames(AreaDialogBoxLayout.AcceptArt), [AreaDialogBoxLayout.CancelArt] = Frames(AreaDialogBoxLayout.CancelArt) },
             new AreaArtFontFace(art[AreaDialogBoxLayout.FontArt].Frames), _dialogBoxContent.LineHeight);

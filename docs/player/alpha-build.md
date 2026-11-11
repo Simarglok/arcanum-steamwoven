@@ -96,7 +96,7 @@ installed elsewhere is found through the registry; if it is not, press **Choose 
   unpacks it, checks that `Arcanum.exe` is the 1.0.7.4 one and chooses the folder (Play stores it). By hand, the same is
   `innoextract --gog -m -d ~/Games/Arcanum setup_arcanum_….exe`, then choose the folder that holds `Arcanum.exe` (for the
   1.0.7.4 installer the files land in the folder root, not in `app`). Tried on 2026-11-04 on the 1.0.7.4 installer
-  ([ARC-RES-087](../research/gog-installer-unpack.md)): the files unpack in seconds with `Arcanum.exe` in the folder
+  ([ARC-RES-087](../workflow/packaging.md)): the files unpack in seconds with `Arcanum.exe` in the folder
   root, game files byte-identical to a real installation. Such a folder has no `data/proto` (the original writes it at its own
   first start, which cannot run on a Mac): the first **Play** builds those files from your own `Arcanum.exe` (about half a minute,
   see below). The map's other first-start files are not built yet, so the first map may still refuse on such a folder.

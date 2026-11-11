@@ -174,6 +174,7 @@ public partial class TerrainViewerApp : Node
             // ARC-DEV-367: the main-thread publication, and the first frame drawn after it.
             if (_exiting || !_coordinator.TryPublish(requestGeneration, () => { using (PerfProbe.Span("load.publish")) PublishReadyResult(arguments, result); })) return;
             PerfMarkAfterDraw("load.first-frame");
+            TerrainViewerSmokeStageSet? stageClock = null; // ARC-DEV-399: ends the running stage's clock when the smoke fails
             if (!_exiting && _nativeSmoke && orchestrateSmoke)
             {
                 try
@@ -183,8 +184,9 @@ public partial class TerrainViewerApp : Node
                         // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, knockdown, ranged, container, junk, barter, menu, scene, options, plants, bar, ai, ai-turn-based, ai-follower, premade, life, floaters, death, debug-travel, report, hover)
                         // narrows a map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but
                         // walk, census, barter, menu, scene, options, plants, bar, ai, ai-turn-based, life, floaters and death run.
-                        var only = MapSmokeStages();
-                        bool Stage(string name) => only is null || only.Contains(name);
+                        TerrainViewerSmokeStageSet only = new(MapSmokeStages());
+                        stageClock = only;
+                        bool Stage(string name) => only!.Stage(name); // "!": the ?. tests below make the compiler see a captured non-null `only` as maybe null
                         if (_readyMapName is not null)
                         {
                             if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunAreaMapZoomFloorSmokeAsync(); await RunMapObjectLightSmokeAsync(); await RunLightAnimationSmokeAsync(); await RunSceneryAnimationSmokeAsync(); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLevelMessageSmokeAsync(); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunAreaReadingSmokeAsync(); await RunAreaNpcCrafterSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaCastSmokeAsync(result); await RunAreaTurnBasedSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaHeroKnockdownSmokeAsync(result); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); await RunAreaPortalSmokeAsync(); RunAreaDoorCloseSmoke(); await RunAreaGroundItemsSmokeAsync(); await RunAreaObjectAttackSmokeAsync(); await RunAreaFreedCellSmokeAsync(); await RunAreaFarClickSmokeAsync(); RunAreaFrameClockSmoke(); await RunAreaCriticalSmokeAsync(); await RunAreaLineOfFireSmokeAsync(); await RunAreaRangedSmokeAsync(); await RunAreaContainerLootSmokeAsync(); await RunAreaJunkPileSmokeAsync(); await RunAreaHoverWindowSmokeAsync(); await RunAreaBugReportSmokeAsync(); }
@@ -253,6 +255,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("tech-craft") == true) await RunAreaTechCraftSmokeAsync();
                                 // ARC-DEV-365 (technology audit T-g): only when named, the item cursor from the use icon, a press on a tile (goal 41) and on an NPC (goal 39) with a trap device (--hero, a map with a living NPC).
                                 if (only?.Contains("item-aim") == true) await RunAreaItemAimSmokeAsync();
+                                // ARC-MAGIC-051 (technology audit T-s): only when named, Therapeutics and Chemistry products assembled and used on the player's data (--hero, the Crash Site cave).
+                                if (only?.Contains("tech-products") == true) await RunAreaTechProductsSmokeAsync();
                                 // ARC-DEV-367 (O10): only when named, the timing probe's tables: the startup marks, six opens of each window, a map change out and back (--hero, a sector with a map exit).
                                 if (only?.Contains("perf") == true) await RunAreaPerfSmokeAsync();
                                 // ARC-DEV-367 (O10): only when named, the startup marks to the main menu's first frame and a new game from it (--main-menu).
@@ -351,6 +355,7 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && only?.Contains("inv-carry") == true) await RunAreaInvCarrySmokeAsync();
                         // ARC-RENDER-027: only when named, every map of the catalogue in turn (last: it leaves the last map shown).
                         if (only?.Contains("census") == true) await RunAreaMapCensusAsync();
+                        stageClock.Finish();
                         GetTree().Quit(0);
                     }
                     else await RunNativeSmokeAsync(result);
@@ -366,6 +371,7 @@ public partial class TerrainViewerApp : Node
                         Progress = result is null ? TerrainViewerProgress.Empty : ProgressFromResult(result)
                     });
                 }
+                finally { stageClock?.Finish(); }
             }
             GD.Print($"ARC-RENDER-004 load stage=complete generation={requestGeneration}");
         }

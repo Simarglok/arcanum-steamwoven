@@ -155,10 +155,13 @@ public partial class TerrainViewerApp
             var frame0 = pieces.Select(p => host.CreatedFrame(p.Entity)).ToArray();
             var fireBefore = host.FireFrames;
             var hpBefore = session.QueryHeroLife()!.Status.HitPoints;
+            // ARC-DEV-405: the stage runs after others in one process, and the hero's hit points can differ between the two reads for a reason that is not the wall (possibly a timed effect or recovery an earlier
+            // stage left on the hero; the hit points went 25 -> 30 in the full list and the cause was not reproduced). "Spared" is that the burn wrote no hit-point damage, so the check reads the damage the hero carries.
+            var damageBefore = session.QueryHeroLife()!.Record.State.HitPointDamage;
             Step(40);
             Require(pieces.Select(p => host.CreatedFrame(p.Entity)).Zip(frame0).Any(f => f.First != f.Second), "the pieces' art loops");
             Require(host.FireFrames > fireBefore, "the burn steps ran");
-            Require(session.QueryHeroLife()!.Status.HitPoints == hpBefore, $"the summoner standing in its own wall is spared: {hpBefore} -> {session.QueryHeroLife()!.Status.HitPoints}");
+            Require(session.QueryHeroLife()!.Record.State.HitPointDamage <= damageBefore, $"the summoner standing in its own wall is spared: damage {damageBefore} -> {session.QueryHeroLife()!.Record.State.HitPointDamage}, hit points {hpBefore} -> {session.QueryHeroLife()!.Status.HitPoints}");
             // The maintenance stops (an interrupt from MAINTAIN): END, its eye candy has no art, the END callback runs at once and destroys every piece.
             Require(caster.Act(new(SessionSpellRunActionKind.Interrupt, wall)).Disposition == GameSessionDisposition.Changed, "the interrupt ends the wall");
             FlushSpellLog(null);

@@ -1,7 +1,7 @@
 # Skill rules runtime (ARC-SKILLS-001)
 
 Status: **Implemented bounded component**, ARC-SKILLS-001 (2026-10-20), task S1 of the
-[skills plan](../research/skills-plan.md) (ARC-RES-061, slice K1 of the [skills research](../research/skills-evidence.md)).
+skills plan (ARC-RES-061, slice K1 of the [skills research](../research/skills-evidence.md)).
 One public, pure, Godot-free owner of the state rules of all sixteen skills: `SkillRules` in
 [`Arcanum.Simulation.Skills`](../../src/Arcanum.Simulation/Skills). The attack's `CombatSkillRules` and the auto-level
 purchases (`AutoLevelRules`) call it instead of keeping their own copies. No session, snapshot, viewer or dialog change.

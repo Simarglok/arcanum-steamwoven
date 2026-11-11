@@ -171,7 +171,7 @@ public sealed class DialogCodeCensusRealDataTests
         // Player actions were 14246 / 2398 / 1943 whole / stopped / outside and 5921 blocked fields). After ARC-DEV-180 (the quest log conditions admitted; after
         // ARC-DEV-179 the Player conditions were 9982 / 5530 / 5494 whole / stopped / outside, 7574 blocked fields; before it 8487 / 7025 / 6989,
         // 13210 / 3434 / 3047 and 4825 / 386 / 348, 10431 blocked fields). A later slice that admits a code lowers
-        // its stops; it then updates these numbers and the table of codes in docs/research/dialog-condition-codes-plan.md in the same change.
+        // its stops; it then updates these numbers and the DCX1 row in docs/research/ledger/scripts.md in the same change.
         Assert.AreEqual(709, dlgFiles);
         CollectionAssert.AreEqual(
             new[] { (15512, 15448, 64, 11), (2716, 0, 0, 0), (16644, 16463, 181, 8), (5211, 5204, 7, 1) },

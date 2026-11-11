@@ -60,6 +60,10 @@ public sealed class SpellRunRulesTests
         Assert.AreEqual(1, Create(new(AtOrc), table: created.Table).Run!.Id, "the next free slot");
         var wand = new SpellObjectFacts("wand", 5, new(3, 4));
         Assert.AreEqual(new SpellLocation(3, 4), Create(new(AtOrc with { Source = wand })).Run!.StartLocation, "the source's location, not the holder's");
+        // ARC-MAGIC-049: the Cast component's invocation has no source but the parent's location at +0x38, which is the run's start location.
+        Assert.AreEqual(new SpellLocation(9, 9), Create(new(AtOrc with { Source = null, SourceLocation = new SpellLocation(9, 9) })).Run!.StartLocation, "the invocation's own source location");
+        Assert.AreEqual(new SpellLocation(9, 9), Create(new(AtOrc with { Source = wand, SourceLocation = new SpellLocation(9, 9) })).Run!.StartLocation, "the explicit location wins over the source's");
+        Assert.AreEqual(SpellLocation.None, Create(new(AtOrc with { Source = null })).Run!.StartLocation, "no source and no location: none");
         Assert.AreEqual(SpellRunCreationStatus.Refused, Create(new(AtOrc with { Spell = 300 })).Status, "the invocation check first");
         Assert.IsNull(run.Other, "no other object without one");
         Assert.AreEqual(new SpellRunObject("orc", 16, 20), Create(new(AtOrc with { Other = Orc })).Run!.Other, "ARC-MAGIC-025: the invocation's other object");

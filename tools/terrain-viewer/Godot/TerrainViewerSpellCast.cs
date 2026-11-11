@@ -130,7 +130,10 @@ public partial class TerrainViewerApp
         _spellCaster = new SessionSpellCaster(owner, n => n >= 0 && n < records.Length ? records[n] : null, map, AreaEvents,
             id => HeroItemSpells(id, true) ?? _combatHost!.NpcItemSpells(owner, id));
         // ARC-UI-031: the host's own life steps (a spell's damage, a payment's fatigue, its passes) fire the worn items' spells.
-        _spellCaster.ItemTriggers = new SessionItemTriggers(_spellCaster, new AreaCombatWorld(runtimeMap, AreaScanCritters, AreaCombatantFacts));
+        var castCombat = new AreaCombatWorld(runtimeMap, AreaScanCritters, AreaCombatantFacts);
+        _spellCaster.ItemTriggers = new SessionItemTriggers(_spellCaster, castCombat);
+        // ARC-MAGIC-049 (E4-e): the goals of the casts a Cast component starts (goal 73) play in the same combat world (the action points of a turn-based round).
+        _spellCaster.CastCombat = castCombat;
         // ARC-DEV-254: a script's damage asks the victim's taking-damage script (point 0x17) first.
         _spellCaster.TakingDamage = TakingDamageGoesOn;
         // ARC-MAGIC-048 (E4-c): the Use component has its target run its own use script (the target is the triggerer too).

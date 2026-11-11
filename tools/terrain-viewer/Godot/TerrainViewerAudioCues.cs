@@ -230,7 +230,8 @@ public partial class TerrainViewerApp
             var (x, y) = placed.Source == SoundCueSource.Target ? (tx, ty) : (cell.X, cell.Y);
             PlayCueAt(placed.Cue, x, y, PositionalSize.Large, "attack");
         }
-        if (result.Life?.Events.HasFlag(Arcanum.Simulation.Combat.LifeEvents.Died) == true && result.Recipient != Arcanum.Simulation.Combat.DamageRecipient.Attacker)
+        // ARC-RENDER-042: a death of an NPC lying in its fall (knocked out before the killing blow) plays no dying animation (0x45D730), so no bark either.
+        if (result.Life?.Events.HasFlag(Arcanum.Simulation.Combat.LifeEvents.Died) == true && result.Recipient != Arcanum.Simulation.Combat.DamageRecipient.Attacker && !LyingInFall(targetEntity))
             PlayDyingBark(targetEntity, targetRow, AreaFallenPoses.Animation(result.Life.Death), _areaSession?.QueryLifeRecord(targetEntity)?.DeathTimeMs);
     }
 

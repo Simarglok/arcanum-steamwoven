@@ -15,8 +15,8 @@ public partial class TerrainViewerApp
     // ARC-MAGIC-042 (T-m1, ledger TI4–TI6) native observation (stage "creature-item", only when named, map mode with --hero): the two kinds of creature item of the installed data are thrown from the pack at a tile near a living
     // NPC. The pet item (the Mechanical degree-7 product, script 1022, creature 28460) becomes a critter that joins the hero; the aggressor item (the Mechanical degree-6 product, script 29017, creature 27391) becomes a critter that
     // raises the attack event on everyone around it. The items are made on the hero's feet by the session (as a script's create object does), picked up through the inventory host, lifted onto the game cursor and thrown. NONE
-    // when the map holds no living NPC with a clear throwing cell, or the module has no such item prototype. The critters are destroyed afterwards (the stage leaves the party and the map as it found them). What the critter does after it
-    // exists (its walk to the hero, its fight) is printed, not judged: the AI host runs it as an NPC the party leads, which is the slice's stated limit.
+    // when the map holds no living NPC with a clear throwing cell, or the module has no such item prototype. The critters are destroyed afterwards (the stage leaves the party and the map as it found them). The pet is a companion of the group (ARC-MAGIC-050): it is stood far from the hero and must walk back to it.
+    // What the aggressor does after it exists (its fight) is printed, not judged.
     private async Task RunAreaCreatureItemSmokeAsync()
     {
         if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _readyArea is not { } area || _inventoryHost is null
@@ -117,12 +117,46 @@ public partial class TerrainViewerApp
             Require(!session.QueryPlacedItems().Any(p => p.Entity == thrownPet.Item) && !session.QueryPcInventory().Any(i => i.Entity == thrownPet.Item), "pet: the item is gone");
             Require(session.QueryCreatedObject(petRun.Critter!) is { Kind: SessionCreatedKind.Critter } petMade && petMade.Prototype == 28460 + AreaPrototypeItems.PrototypeOffset,
                 "pet: the critter is the script's prototype (28460 + 20)");
+            // ARC-DEV-402 (TG9): the creation ended with the location notification of the cell the item lay on (the critter's own); the AI frame runs it (the tile's script, if any, runs with the critter as the triggerer).
+            var petCell = session.QueryCreatedObject(petRun.Critter!)!.Cell;
+            Require(_creationNoticesForSelfTest.Any(n => n.Entity == petRun.Critter && n.Cell.X == petCell.X && n.Cell.Y == petCell.Y), "pet: the creation queued its location notification on its own cell");
             Require(AreaAiHostNow() is { } hosted && (hosted.Scene.Npcs.Any(n => n.Entity == petRun.Critter) || hosted.Scene.Followers?.Npcs.Any(n => n.Entity == petRun.Critter) == true), "pet: the AI host runs the critter");
-            var petFirst = AreaAiHostNow()?.Tile(petRun.Critter!);
-            for (var frames = 0; frames < 400; frames++) Frame();
-            var petLater = AreaAiHostNow()?.Tile(petRun.Critter!);
-            var hero = LiveCell(grid) ?? standAt;
-            GD.Print($"ARC-MAGIC-042 creature-item pet-after critter={petRun.Critter} first={petFirst?.X},{petFirst?.Y} later={petLater?.X},{petLater?.Y} hero={hero.X},{hero.Y}"
+            // ARC-MAGIC-050: the pet is a companion of the shown map (its own body template), no NPC of the host: the group walks it after the hero.
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Frame();
+            var petCompanion = _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == petRun.Critter);
+            Require(petCompanion is { Template.Created: true }, "pet: the created critter is a companion of the group with a body template of its own");
+            Require(AreaAiHostNow() is { } petHost && petHost.RunCompanions.Contains(petRun.Critter!) && petHost.Scene.Npcs.All(n => n.Entity != petRun.Critter), "pet: the AI host runs it as a follower, not as an NPC");
+            Require(AreaMovingCommands()?.Count(c => c.Identity == petCompanion!.Key) == 1, "pet: one moving command draws it");
+            CellCoord PetCell() => new(checked((int)grid.Chart.ToWorld(petCompanion!.Grid.State.CommittedCell).X), checked((int)grid.Chart.ToWorld(petCompanion.Grid.State.CommittedCell).Y));
+            // The pet is stood eight to ten cells from the hero (the follow goal starts beyond four cells), where the hero can walk to (the route's test), as a placement the session records; the group is rebuilt over it.
+            // The actor session after the placement (the stage's first placement made a new one).
+            var gridNow = (AreaGridSession)_worldActor.Session!;
+            var heroAt = LiveCell(gridNow) ?? standAt;
+            CellCoord? far = null;
+            for (var d = 8; d <= 10 && far is null; d++)
+            for (var dy = -d; dy <= d && far is null; dy++)
+            for (var dx = -d; dx <= d && far is null; dx++)
+            {
+                if (Math.Max(Math.Abs(dx), Math.Abs(dy)) != d) continue;
+                var candidate = new CellCoord(heroAt.X + dx, heroAt.Y + dy);
+                var chartCell = grid.Chart.ToChart(new(candidate.X, candidate.Y));
+                if (grid.Chart.Contains(chartCell) && grid.Snapshot.IsAdmitted(grid.Chart.ToWorld(chartCell)) && ApproachCell(gridNow, heroAt.X, heroAt.Y, 12, c => c == chartCell) == chartCell) far = candidate;
+            }
+            Require(far is not null, "pet: a cell eight to ten cells from the hero to stand the pet on");
+            Require(session.ApplyChanges(session.Version, null, [AreaCompanionPlacement.Edit(petCompanion!.Template, new SessionMapId(runtime), far!.Value, NeighborDirection.XPlus)]).Disposition == GameSessionDisposition.Changed, "pet: the placement was recorded");
+            BindAreaCompanions();
+            petCompanion = _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == petRun.Critter);
+            Require(petCompanion is { Template.Created: true }, "pet: the group was rebuilt with the pet");
+            var petFirst = PetCell();
+            Require(petFirst == far, $"pet: it stands on the recorded cell ({petFirst.X},{petFirst.Y} wanted {far!.Value.X},{far.Value.Y})");
+            for (var frames = 0; frames < 800; frames++) Frame();
+            var petLater = PetCell();
+            Require(!_npcTilePending.Any(n => n.Npc == petRun.Critter), "pet: the creation notice was taken by the AI frame");
+            var hero = LiveCell((AreaGridSession)_worldActor.Session!) ?? standAt;
+            GD.Print($"ARC-MAGIC-050 creature-item pet-drive status={_areaCompanions?.Status()} held={AreaAiHostNow()?.Holds(petRun.Critter!)} danger={session.QueryDanger(petRun.Critter!).State} last={petCompanion!.LastUpdate.Action} goal={petCompanion.FollowGoal} time={petCompanion.Grid.State.Time.Value} pcTime={((AreaGridSession)_worldActor.Session!).State.Time.Value} heroCell={((AreaGridSession)_worldActor.Session!).State.CommittedCell} standAt={standAt.X},{standAt.Y}");
+            Require(Math.Max(Math.Abs(petLater.X - hero.X), Math.Abs(petLater.Y - hero.Y)) <= 6, $"pet: the pet stands near the hero after the follow ({petLater.X},{petLater.Y} hero {hero.X},{hero.Y})");
+            GD.Print($"ARC-MAGIC-042 creature-item pet-after critter={petRun.Critter} first={petFirst.X},{petFirst.Y} later={petLater.X},{petLater.Y} hero={hero.X},{hero.Y}"
                 + $" led={session.QueryCompanion(petRun.Critter!).LedByPc} standing={session.QueryCompanion(petRun.Critter!).Standing}");
 
             // The aggressor: thrown at the NPC's tile (a strike, or a flight that ended near it); its critter raises the attack event on everyone in the vicinity: the NPC, and the hero (who only loses concealment).
@@ -134,6 +168,7 @@ public partial class TerrainViewerApp
             Require(!attackRun.Followed && !session.QueryCompanion(attackRun.Critter!).LedByPc, "aggressor: the critter does not follow");
             Require(attackRun.Attacks.Any(a => a.Victim == npc.Entity) && attackRun.Attacks.All(a => a.Attacker == attackRun.Critter), "aggressor: the critter raised the attack event on the NPC next to it");
             Require(session.QueryCreatedObject(attackRun.Critter!)?.Prototype == 27391 + AreaPrototypeItems.PrototypeOffset, "aggressor: the critter is the script's prototype (27391 + 20)");
+            Require(_creationNoticesForSelfTest.Any(n => n.Entity == attackRun.Critter), "aggressor: the creation queued its location notification");
             for (var frames = 0; frames < 200; frames++) Frame();
             GD.Print($"ARC-MAGIC-042 native-smoke creature-item PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 RuntimeMap = runtime, Pet = petRun.Critter, PetPoint = petRun.Point, PetFollowed = petRun.Followed, Aggressor = attackRun.Critter, AggressorPoint = attackRun.Point,

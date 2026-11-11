@@ -175,6 +175,7 @@ def check_steps(python: str) -> list[Step]:
              "checks"),
         Step("dat-probe", (python, "-B", "tools/research/dat_probe.py", "--self-test"), "checks", CHECK_MINUTES),
         Step("oracle", (python, "-B", "tools/original-oracle/oracle.py", "--self-test"), "checks", CHECK_MINUTES),
+        Step("docs-check", (python, "-B", "tools/docs_check.py"), "checks", CHECK_MINUTES),
     ]
 
 

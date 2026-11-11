@@ -54,6 +54,13 @@ public sealed record SpellInvocation(int Spell, SpellObjectFacts? Parent, SpellO
     /// from the global 0x5FF618 that the attacks an opponent and attacks a location wrappers set (IC6, IC10); null for any other
     /// invocation. The check does not read it.</summary>
     public SpellObjectFacts? Other { get; init; }
+
+    /// <summary>ARC-MAGIC-049 (the Cast component 0x451740): the invocation's location of its source (+0x38) when it is not the source's own: the component's invocation has no source but the run's parent's location there, so
+    /// the BEGIN-area test's origin and the run's start location (+0x50) are the parent's. Null: the source's own location (0x455A20), none without a source.</summary>
+    public SpellLocation? SourceLocation { get; init; }
+
+    /// <summary>The location at +0x38: <see cref="SourceLocation"/>, else the source's, else none.</summary>
+    public SpellLocation Origin => SourceLocation ?? Source?.Location ?? SpellLocation.None;
 }
 
 /// <summary>A line-of-fire answer (0x4ADE00): the score (100 or more: no line of fire) and the first blocker on the line, if any.</summary>

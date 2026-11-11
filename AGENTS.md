@@ -10,7 +10,7 @@ Each rule below is stated in short; the linked section of `docs/workflow/` or
 - One task code per thread and session: when its PR merges, goes to the owner for review or is cancelled, report, write the handoff and end ([one task per thread](docs/workflow/tasks.md#one-task-per-thread), owner decision 2026-10-21).
 - Confirm task ID, scope, assigned workspace and existing changes before editing. Work in the task's isolated checkout and preserve unrelated work.
 - Read `docs/architecture/decisions.md`, `docs/research/method.md` and the relevant task references. Do not expand a bounded task into a full engine.
-- Work that builds, tests or runs code, Godot or original data runs natively on the owner's Mac. A docs-only task may run in a cloud checkout without .NET or Godot and runs no checks ([docs-only rule](docs/workflow/tasks.md#review-publication-and-merge)). Do not install Windows, run legacy executables (single functions in the [function emulation oracle](docs/research/original-executable-check.md#function-emulation-oracle) are allowed), patch the installed game, or change shared tool profiles/settings unless the task explicitly covers it.
+- Work that builds, tests or runs code, Godot or original data runs natively on the owner's Mac. A docs-only task may run in a cloud checkout without .NET or Godot and runs no checks except `tools/docs_check.py` ([docs-only rule](docs/workflow/tasks.md#review-publication-and-merge)). Do not install Windows, run legacy executables (single functions in the [function emulation oracle](docs/research/original-executable-check.md#function-emulation-oracle) are allowed), patch the installed game, or change shared tool profiles/settings unless the task explicitly covers it.
 - The former Hermes task board and Codex workflow are retired: do not read `~/.hermes` or run `hermes`.
 
 ## Task readiness (Definition of Ready)
@@ -41,12 +41,13 @@ Check a new work item against the [Definition of Ready](docs/workflow/tasks.md#d
 - Launcher sync: a change to a viewer mode's arguments or original inputs updates `tools/local_dev/launch.py` (`GAME_ROLES`, `MODE_ROLES`, `ROLE_FLAGS`), the root `./arcanum` launcher when it adds a mode, and [the launcher docs](docs/workflow/local-development.md#project-launcher) in the same PR; `tools/local_dev/test_launcher_sync.py` must pass.
 - Launch check: within the first minute confirm a Godot or launcher run started the intended mode, or stop it, fix the command and rerun (a quiet `./arcanum run` does this itself and fails a run that did not start); a run that did not start is not evidence, and a command given to the owner is first run or checked with `--dry-run` or `--help` ([checking that a run started](docs/workflow/toolchain.md#checking-that-a-run-started-arc-dev-029)).
 - Launch queue: every Godot run, export and `dotnet` build or test goes through `./arcanum run --kind window|headless|export|dotnet|quick -- COMMAND`, never two Godot runs at once and never the retired `lockf` rule ([launch queue](docs/workflow/toolchain.md#launch-queue-arc-dev-033), ARC-DEV-033).
-- Run the checks for the changed behaviour, the accepted task's checks and the root checks (none for a docs-only change):
+- Run the checks for the changed behaviour, the accepted task's checks and the root checks (for a docs-only change only `docs_check.py`):
 
   ```sh
   dotnet restore Arcanum.Steamwoven.sln --locked-mode && dotnet build --no-restore && dotnet test --no-build --filter "TestCategory!=RealData"
   python3 -B tools/research/dat_probe.py --self-test
   python3 -B tools/original-oracle/oracle.py --self-test
+  python3 -B tools/docs_check.py
   ```
 
   The oracle self-test installs its pinned Unicorn into an ignored local virtual environment on first use. The root solution leaves out the terrain viewer and its tests, `Arcanum.Input`, research probes and labs ([toolchain](docs/workflow/toolchain.md#root-solution-synthetic-checks)). Documentation or source inspection alone is not runtime verification.
@@ -57,4 +58,4 @@ Use the GitHub account `Simarglok`, not a bot or other account. Before GitHub op
 
 ## Delivery
 
-An independent review targets the exact candidate diff before the PR is opened. Publish a PR only when the accepted task authorizes it. The agent merges its own PR once the acceptance criteria, task and root checks pass (none for a docs-only change) and the review is addressed, unless the owner explicitly asked to review it ([review, publication and merge](docs/workflow/tasks.md#review-publication-and-merge)); a narrower task restriction still applies. Report Implemented, Not implemented, Remaining work, checks and material uncertainties. Never start new work based solely on an Obsidian note or a proposed milestone.
+An independent review targets the exact candidate diff before the PR is opened. Publish a PR only when the accepted task authorizes it. The agent merges its own PR once the acceptance criteria, task and root checks pass (only `docs_check.py` for a docs-only change) and the review is addressed, unless the owner explicitly asked to review it ([review, publication and merge](docs/workflow/tasks.md#review-publication-and-merge)); a narrower task restriction still applies. Report Implemented, Not implemented, Remaining work, checks and material uncertainties. Never start new work based solely on an Obsidian note or a proposed milestone.

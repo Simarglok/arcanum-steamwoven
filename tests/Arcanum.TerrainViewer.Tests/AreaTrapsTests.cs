@@ -105,6 +105,39 @@ public sealed class AreaTrapsTests
         });
     }
 
+    // ARC-WORLD-125: a script trap device writes its slot onto a container whose map data holds no use slot at all (the original's slot 1 element is empty); the host reads the written slot and the trap fires.
+    [TestMethod]
+    public void A_container_with_no_use_slot_in_its_data_takes_a_script_trap_device_s_written_slot()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var effects = new Effects();
+            var bare = new AreaObjectRecord(Key(7), 0, Scenery, 0, "p", "p", "r", "s", AreaScope.Core, null, 17, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true);
+            var (host, _) = Hosts(session, content, () => effects.Side, null, bare);
+            Assert.AreEqual(0, host.UseScriptOf(bare), "no slot: no script");
+            Assert.IsNull(host.TrapBaseline(bare));
+            Assert.IsNull(host.Slot(new ScrObjectRef(bare.Key.RuntimeMap, AreaUseScriptHost.EntityId(bare)), ScrPoint.Use), "and no slot is read before a write");
+            var map = AreaUseScriptHost.Trapped(bare).Map;
+            var entity = AreaUseScriptHost.EntityId(bare);
+            var written = session.ApplyChanges(session.Version, null,
+            [
+                new(map, MapChangeKey.ForEntity(entity, "use.script"), 30001), new(map, MapChangeKey.ForEntity(entity, "use.lf"), 0), new(map, MapChangeKey.ForEntity(entity, "use.counters"), 0x0000_0503),
+                new(map, MapChangeKey.ForEntity(entity, GameSessionOwner.TrapStateProperty), 5),
+            ]);
+            Assert.AreEqual(GameSessionDisposition.Changed, written.Disposition);
+            Assert.AreEqual(30001, host.UseScriptOf(bare));
+            Assert.AreEqual(new SessionTrapBaseline(TrapCarrier.TrappedObject, 30001, 0x1, 0x0000_0503, 0), host.TrapBaseline(bare));
+            Assert.IsTrue(host.TrapState(bare) is { Trapped: true, Spotted: true, PlacedByPc: true });
+            Assert.AreEqual(0x1u, host.TrapHeaderFlags(30001), "the header's trap class comes from the script file");
+            Assert.AreEqual(0u, host.TrapHeaderFlags(0));
+            Assert.AreEqual(0u, host.TrapHeaderFlags(4242), "a script the content lacks");
+            var used = host.Run(bare, session.Rules.Scripts);
+            Assert.IsTrue(used.Trap is { Outcome: SessionTrapOutcome.Fired, Cancels: true }, used.Detail);
+            Assert.AreEqual((30001, 0x0000_0503), (effects.Calls.Single().Run.Script, effects.Calls.Single().Counters));
+        });
+    }
+
     [TestMethod]
     public void A_native_trap_fires_on_a_use_and_cancels_the_use_script()
     {

@@ -58,6 +58,11 @@ public partial class TerrainViewerApp
         return next;
     }
 
+    /// <summary>Whether the NPC lies alive in its fall (knocked out or down; by entity, as a created critter's show is keyed by its own one-row map) as the last body sync showed it: its death is then not played and keeps the fall
+    /// (<see cref="ObserveLying"/>), so it has no dying bark.</summary>
+    private bool LyingInFall(string entity) => _lyingShows.Any(p => p.Key.Entity == entity && p.Value is { Dead: false } shown
+        && DyingAnimationRules.LiesFallen(shown.Load.Pose!.Animation));
+
     /// <summary>The frame of each lying body still playing its frames, for the fallen bodies' stamp (null when none plays).</summary>
     private string? LyingFramesStamp(long now)
     {

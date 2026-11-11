@@ -10,7 +10,7 @@ contract written from it, defines the code and title, context, goal, allowed
 scope, sources and provenance, dependencies, acceptance criteria, checks,
 documentation deliverables and publication authority. Record base, head,
 workspace and reviewer findings at handoff. Repository documents govern implementation;
-Obsidian holds research and discussions; the [roadmap](../project/roadmap.md) and
+Obsidian holds research and discussions; the [missing systems plan](../project/missing-systems-plan.md) and
 [vision](../project/vision.md) explain sequencing. None of them creates,
 prioritizes or dispatches work. Do not queue the whole product vision or start
 tasks as a side effect of project setup.
@@ -251,7 +251,11 @@ ready only when it follows these rules.
    ... `AC8` (at most eight). A human, physical-device or native-GUI observation
    is not an acceptance criterion of an agent work item: it goes into the
    separate owner-validation work item named in `Human-Gates`, which never blocks
-   merge. Saying that there is *no* such gate is fine.
+   merge. Saying that there is *no* such gate is fine. Independent headless, Data and
+   research work may proceed while graphical validation is unavailable where its
+   accepted contract permits; GUI, export and device gates stay required for scopes
+   that need them. A locked Mac is not proof of failure or completion and does not
+   justify substituting unrelated green checks.
 3. **Every proof is finite.** "Exhaustive", "certificate", "worst-case",
    "parity", "all possible" and similar are allowed only with an explicit bound on
    the same line: a number, a list of cases, a limit or a reference.
@@ -325,19 +329,20 @@ committed files. Do not copy the game or the full vault into each worktree.
   unless the owner explicitly asked to review it (in the task or later); then
   the agent leaves it open, reports the link and the owner merges. The agent
   merges only after the task's acceptance criteria, its checks and the root
-  checks pass (none for a docs-only change, below) and the review is
+  checks pass (only `docs_check.py` for a docs-only change, below) and the review is
   addressed, then reports which PR it merged. A PR body, a review PASS or a
   finished status alone never authorizes a merge.
-- Owner decision 2026-10-16: a **docs-only** change runs no checks. Docs-only
+- Owner decision 2026-10-16: a **docs-only** change runs no checks but the docs link check. Docs-only
   means the diff changes only Markdown documentation (`*.md`), not code,
   scripts, tests, project, build or configuration files. Markdown that a test
   reads is not docs-only (for example the size/SHA-256 tables in
   `docs/research/area-inventory.md` and `docs/research/dat-evidence.md`
   that `tools/local_dev/test_launcher_sync.py` checks). The root checks and the
-  task checks are not run; the PR says "docs-only, no checks run". The
+  task checks are not run, except `python3 -B tools/docs_check.py` (Python
+  only, the link and path check of ARC-DEV-406), which every docs-only PR runs;
+  the PR says "docs-only, no checks run except docs_check". The
   independent review still applies: it confirms that the diff is docs-only (no
-  changed file name appears in `tests/` or `tools/`) and that its relative
-  links resolve. Such a PR can run in a cloud checkout
+  changed file name appears in `tests/` or `tools/`). Such a PR can run in a cloud checkout
   without .NET or Godot.
 - An agent merge uses a merge commit for the exact reviewed head, for example
   `gh pr merge <url> --merge --match-head-commit <reviewed-sha>`, after checking
