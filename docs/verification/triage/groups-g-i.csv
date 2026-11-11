@@ -534,10 +534,10 @@ address,group,state,class,scope,level,name,domain,ours,direct_callers,pointer_ho
 0x4C0610,G,not relevant,editor,,F1,Toggle tile script marker visibility flag,,,0,0,gap-scan
 0x4C08E0,G,not relevant,editor,,F1,Move tile script to another tile,,,0,0,gap-scan
 0x4C2830,G,not relevant,other,,F1,Take a background's gold and items back,,,0,0,gap-scan
-0x4C3120,G,not implemented,,,F1,Garble typed order text of a dim speaker,ai,,0,0,gap-scan
+0x4C3120,G,not relevant,dead,,F1,Garble typed order text of a dim speaker,ai,,0,0,gap-scan
 0x4C6AD5,G,not relevant,not-code,,F1,Alignment bytes and switch table fragment,,,0,0,gap-scan
-0x4C6BF0,G,not implemented,,,F1,Snapshot training tiers of all skills,skills,,0,0,gap-scan
-0x4C6C50,G,not implemented,,,F1,Restore skill training tiers from snapshot,skills,,0,0,gap-scan
+0x4C6BF0,G,not relevant,dead,,F1,Snapshot training tiers of all skills,skills,,0,0,gap-scan
+0x4C6C50,G,not relevant,dead,,F1,Restore skill training tiers from snapshot,skills,,0,0,gap-scan
 0x4C70E0,G,not relevant,other,,F1,Refresh object ids of a skill invocation,,,0,0,gap-scan
 0x4C8161,G,not relevant,not-code,,F1,Alignment bytes and switch table fragment,,,0,0,gap-scan
 0x4C8EEA,G,implemented,,partial,F1,"Repair service tail: forced run, payment, refresh",items,ItemDurabilityRules.Repair,0,0,ghidra-analysis
@@ -616,12 +616,12 @@ address,group,state,class,scope,level,name,domain,ours,direct_callers,pointer_ho
 0x4EAE30,G,not relevant,accessor,,F1,Tile name count by two flags,,,0,0,gap-scan
 0x4EAE60,G,not relevant,forwarder,,F1,Tile name by index wrapper,,,0,0,gap-scan
 0x4EAEC2,G,not implemented,,,F1,Tile art id to tile art file name (tail),art,,0,0,ghidra-analysis
-0x4EBB50,G,not implemented,,,F1,Tile name flag test (bit 0 gated bit 2),world,,0,0,gap-scan
+0x4EBB50,G,not relevant,dead,,F1,Tile name flag test (bit 0 gated bit 2),world,,0,0,gap-scan
 0x4EC3C0,G,not relevant,accessor,,F1,Facade name count,,,0,0,gap-scan
 0x4EC3D0,G,not relevant,accessor,,F1,Facade name by index,,,0,0,gap-scan
 0x4EC3E0,G,not relevant,accessor,,F1,Facade name array base,,,0,0,gap-scan
-0x4EC460,G,not implemented,,,F1,Facade name to facade art id,art,,0,0,gap-scan
-0x4EC870,G,not implemented,,,F1,Portal art id to prototype id,art,,0,0,gap-scan
+0x4EC460,G,not relevant,dead,,F1,Facade name to facade art id,art,,0,0,gap-scan
+0x4EC870,G,not relevant,dead,,F1,Portal art id to prototype id,art,,0,0,gap-scan
 0x4ECBE0,G,not relevant,accessor,,F1,Wall name count,,,0,0,gap-scan
 0x4ECBF0,G,not relevant,accessor,,F1,Wall name by index,,,0,0,gap-scan
 0x4ED1A0,G,not relevant,accessor,,F1,Wall name secondary count,,,0,0,gap-scan
@@ -640,10 +640,10 @@ address,group,state,class,scope,level,name,domain,ours,direct_callers,pointer_ho
 0x4EFD2E,G,not relevant,not-code,,F1,Padding decoded as code,,,0,0,gap-scan
 0x4EFD40,G,not relevant,network,,F1,Network wrapper: guarded two-object call,,,0,0,gap-scan
 0x4F0630,G,not relevant,stub,,F1,Always-succeeds out-parameter zeroing stub,,,0,0,gap-scan
-0x4F0840,G,not implemented,,,F1,Refresh wall pieces on a portal's tile,world,,0,0,gap-scan
+0x4F0840,G,not relevant,dead,,F1,Refresh wall pieces on a portal's tile,world,,0,0,gap-scan
 0x4F11F0,G,not relevant,startup,,F1,Clear an empty sector object list table,,,0,0,gap-scan
-0x4F1E70,G,not implemented,,,F1,Find the tile bucket holding an object,objects,,0,0,gap-scan
-0x4F1F40,G,not implemented,,,F1,Restamp object locations of a sector list from sector id,world,,0,0,gap-scan
+0x4F1E70,G,not relevant,dead,,F1,Find the tile bucket holding an object,objects,,0,0,gap-scan
+0x4F1F40,G,not relevant,dead,,F1,Restamp object locations of a sector list from sector id,world,,0,0,gap-scan
 0x4F4DD0,G,not relevant,other,,F1,Unused target list snapshot builder,,,0,0,gap-scan
 0x4F5196,G,not relevant,network,,F1,Matchmaker hook caller returning success,,,0,0,ghidra-analysis
 0x4F5990,G,not relevant,network,,F1,Matchmaker reset or exit and unload,,,0,0,gap-scan
@@ -658,7 +658,7 @@ address,group,state,class,scope,level,name,domain,ours,direct_callers,pointer_ho
 0x4F6440,G,not relevant,startup,,F1,Clear two-word list header,,,0,0,gap-scan
 0x4F68B0,G,not relevant,other,,F1,Split text at first whitespace,,,0,0,gap-scan
 0x4F6940,G,not relevant,other,,F1,Advance word tokenizer to next token,,,0,0,gap-scan
-0x4F6E00,G,not implemented,,,F1,Check a facade walk mask file is valid,world,,0,0,gap-scan
+0x4F6E00,G,not relevant,dead,,F1,Check a facade walk mask file is valid,world,,0,0,gap-scan
 0x4F7190,G,not relevant,startup,,F1,Clear two-word list header,,,0,0,gap-scan
 0x4F7464,G,implemented,,partial,F1,Load a sector light list with relocation,lighting,Arcanum.Data.Maps.WorldCatalog.RelocateLight; Arcanum.Data.Area.AreaBuilder (48-byte light record read),0,0,ghidra-analysis
 0x4F7C10,G,not relevant,forwarder,,F1,Forwarder to sector tile list reset,,,0,0,gap-scan
@@ -820,7 +820,7 @@ address,group,state,class,scope,level,name,domain,ours,direct_callers,pointer_ho
 0x54AA50,I,not relevant,accessor,,F1,interface bar exists flag getter,,,0,0,gap-scan
 0x54AB70,I,not relevant,ui,,F1,bar scroll area create from art frame,,,0,0,gap-scan
 0x54AC90,I,not relevant,accessor,,F1,hidden interface flag getter,,,0,0,gap-scan
-0x54ACB0,I,not implemented,,,F1,F10 compact interface toggle,ui-rule,,0,0,gap-scan
+0x54ACB0,I,not relevant,dead,,F1,F10 compact interface toggle,ui-rule,,0,0,gap-scan
 0x54C726,I,not relevant,not-code,,F1,padding before switch table,,,0,0,gap-scan
 0x54C836,I,not relevant,not-code,,F1,padding before switch table,,,0,0,gap-scan
 0x54C859,I,not relevant,not-code,,F1,padding before switch table,,,0,0,gap-scan
@@ -860,7 +860,7 @@ address,group,state,class,scope,level,name,domain,ours,direct_callers,pointer_ho
 0x572622,I,not relevant,not-code,,F1,Table bytes before barter open stock,,,0,0,gap-scan
 0x575C40,I,not relevant,forwarder,,F1,thunk to one other function,,,0,0,thunk
 0x579F90,I,not relevant,accessor,,F1,Read pending skill-bar skill,,,0,0,gap-scan
-0x57A1C0,I,not implemented,,,F1,"Skill-bar target picked, start skill, clear target",skills,,0,0,gap-scan
+0x57A1C0,I,not relevant,dead,,F1,"Skill-bar target picked, start skill, clear target",skills,,0,0,gap-scan
 0x57AF8D,I,implemented,,partial,F1,Basic skill minus refusal message choice,skills,AreaSheetRefusals.Number; CharacterPointRules.Refund,0,0,ghidra-analysis
 0x57B02F,I,implemented,,partial,F1,Tech skill minus refusal message choice,skills,AreaSheetRefusals.Number; CharacterPointRules.Refund,0,0,ghidra-analysis
 0x57C470,I,implemented,,full,F1,Maintained spell bar reset,magic,MaintainBar.Empty,1,0,ghidra-analysis
