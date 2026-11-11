@@ -21,7 +21,7 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SpellCensusRealDataTests
 {
-    private const string Hero = SessionSpellCaster.Hero, Npc = "oid:census-npc";
+    internal const string Hero = SessionSpellCaster.Hero, Npc = "oid:census-npc";
     private static readonly SpellLocation HeroTile = new(5, 5), NpcTile = new(6, 5);
 
     /// <summary>The records whose components the host does not take on a target: (record, the hero's not-ready types, the NPC's), each a sorted comma list; a record not listed
@@ -104,7 +104,7 @@ public sealed class SpellCensusRealDataTests
         (135, "Destroy,ObjFlag", "Destroy,ObjFlag"),
     ];
 
-    private sealed class Map(GameSessionOwner owner, SpellCastCritter npc) : ISpellCastMap
+    internal sealed class Map(GameSessionOwner owner, SpellCastCritter npc) : ISpellCastMap
     {
         public SpellTargetObject? Object(string id) => id switch
         {
@@ -127,7 +127,7 @@ public sealed class SpellCensusRealDataTests
         public bool DamageObject(string id, AttackDamage damage) => false;
     }
 
-    private sealed class Events : ISessionEventWorld
+    internal sealed class Events : ISessionEventWorld
     {
         public LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
     }
@@ -185,11 +185,11 @@ public sealed class SpellCensusRealDataTests
         Assert.AreEqual("Dispel,Effect", NotReady(record, Hero, _ => null), "without the effect tables an adding Effect is not ready on the hero either");
     }
 
-    private const string AreaEffectsPath = "rules/effect.mes";
+    internal const string AreaEffectsPath = "rules/effect.mes";
 
     // Each component of the record, in file order, applied by a fresh host to the target as the run's action would (the hero the source and parent, no margin); the types the host
     // logged as not ready, sorted and distinct, and a session refusal of a taken component's write (ObjectFlagNotSaved, EffectNotSaved) by its event name, so it shows as a change too.
-    private static string NotReady(SessionSpellRecord record, string target, Func<int, SessionEffectDefinition?> effects)
+    internal static string NotReady(SessionSpellRecord record, string target, Func<int, SessionEffectDefinition?> effects)
     {
         using var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
         var fields = AttackStateTests.Npc(stats: AttackStateTests.Stats(), critterFlags: 0);
