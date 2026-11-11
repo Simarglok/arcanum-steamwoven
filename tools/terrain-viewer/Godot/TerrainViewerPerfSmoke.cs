@@ -53,12 +53,15 @@ public partial class TerrainViewerApp
         }
         if (_areaSession is not { } session || session.QueryHero() is null)
         { GD.Print($"ARC-DEV-367 native-smoke perf NONE map={_readyMapName} (no hero)"); return; }
+        // The stage waits for drawn frames; a headless run draws none.
+        if (DisplayServer.GetName() == "headless") { GD.Print("ARC-DEV-367 native-smoke perf NONE (headless: no frame is drawn)"); return; }
         PerfProbe.Enable();
         async Task Frame() => await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         async Task Draw() { await Frame(); await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw); }
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         _worldFocusSimulationForSelfTest = true;
-        _saveLibraryForSelfTest = new(System.IO.Directory.CreateTempSubdirectory("arc-dev-367-").FullName);
+        var saves = System.IO.Directory.CreateTempSubdirectory("arc-dev-367-").FullName;
+        _saveLibraryForSelfTest = new(saves);
         try
         {
             _worldFocused = true;
@@ -67,7 +70,11 @@ public partial class TerrainViewerApp
             for (var i = 0; i < 1200 && _worldMapData is null; i++) { await Frame(); AdoptWorldMapData(); }
 
             // The spell pane is not on the interface stack; every other window is.
-            bool Shown(Key key) => key == Key.M ? _spellPane?.Shown == true : AnyWindowOpen;
+            bool Shown(Key key) => key switch
+            {
+                Key.M => _spellPane?.Shown == true, Key.I => WindowOpen(InterfaceMode.Inventory), Key.C => WindowOpen(InterfaceMode.Character),
+                Key.L => WindowOpen(InterfaceMode.Logbook), Key.T => WindowOpen(InterfaceMode.Schematic), _ => WorldMapOpen,
+            };
             // The windows: the first open is cold, the next five are warm.
             var windows = new (Key Key, string Name)[] { (Key.I, "inventory"), (Key.C, "sheet"), (Key.L, "logbook"), (Key.T, "schematics"), (Key.W, "worldmap"), (Key.M, "spells") };
             var missing = new List<string>();
@@ -113,16 +120,22 @@ public partial class TerrainViewerApp
             Require(await Leg("back", site => site.DestinationRuntime == homeRuntime), "no exit back");
             GD.Print("ARC-DEV-367 native-smoke perf PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = home, Windows = windows.Length }));
         }
-        finally { _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused; }
+        finally
+        {
+            _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
+            _saveLibraryForSelfTest = null; _quickKeys.Reset();
+            try { System.IO.Directory.Delete(saves, true); } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
+        }
     }
 
     private async Task RunAreaPerfMenuSmokeAsync()
     {
+        if (DisplayServer.GetName() == "headless") { GD.Print("ARC-DEV-367 native-smoke perf-menu NONE (headless: no frame is drawn)"); return; }
         PerfProbe.Enable();
         for (var i = 0; i < 1200 && !MainMenuOpen; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         if (!MainMenuOpen) { GD.Print("ARC-DEV-367 native-smoke perf-menu NONE (the main menu did not open: " + _mainMenuStatus + ")"); return; }
         GD.Print(await PerfStartupLineAsync(GetTree(), menu: true));
-        // A new game from the menu (the first pre-made hero), through the menu's own start.
+        // A new game from the menu (the first pre-made hero), through the menu's own start; `game.new` is the synchronous call, a load it starts prints its own lines.
         var refused = StartNewGame(0, sceneFlow: false);
         for (var i = 0; i < 60; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         GD.Print($"{PerfProbe.Prefix} new-game ms={PerfText(PerfProbe.MillisecondsOf("game.new") ?? double.NaN)} refused={refused ?? "no"}");

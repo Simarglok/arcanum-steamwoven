@@ -88,7 +88,7 @@ public partial class TerrainViewerApp
         // ARC-UI-026: the death screen still covering the game is the one modal state the menu opens under (it fades in over it).
         if (!QuickKeysActive || MainMenuOpen || (PanelOutsideStackOpen && !HeroDeathCovering) || _mainMenu is not null) return;
         // ARC-DEV-367: the call, then the first frame drawn with the menu (the start to the menu of the first opening).
-        using var span = PerfProbe.Span("menu.open." + root);
+        using var span = PerfProbe.Enabled ? PerfProbe.Span("menu.open." + root) : default;
         PerfProbe.Mark("menu.open");
         PerfMarkAfterDraw("menu.first-frame");
         if (_mainMenuPanel is null)

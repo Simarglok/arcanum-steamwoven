@@ -6,8 +6,8 @@ namespace Arcanum.World;
 /// <summary>ARC-DEV-367 (O10 of the performance diagnosis): the standing timing probe. Off unless <c>ARC_PERF_PROBE</c> is set (not
 /// empty, not 0) or the smoke stage list names <c>perf</c> or <c>perf-menu</c> (<c>ARC_AREA_MAP_SMOKE_ONLY</c>); then each
 /// <see cref="Mark"/>, <see cref="Span"/> and <see cref="Lap"/> prints one line starting <c>ARC-DEV-367 perf</c> with the name, the time
-/// since the process started and, for a span, its milliseconds and the managed allocation and collections inside it. Off, every call is
-/// a flag test and nothing is printed or allocated. Lines are read from the log (<c>grep 'ARC-DEV-367 perf'</c>); the probe measures,
+/// since the process started and, for a span, its milliseconds and the managed allocation and collections inside it. Off, a call is
+/// a flag test (a lap allocates one small object) and nothing is printed. Lines are read from the log (<c>grep 'ARC-DEV-367 perf'</c>); the probe measures,
 /// it gates nothing. Names are dotted (<c>load.worker.plan</c>); a span measured on a worker thread counts that thread's allocation.</summary>
 public static class PerfProbe
 {
@@ -15,7 +15,7 @@ public static class PerfProbe
     public const string Prefix = "ARC-DEV-367 perf";
 
     private static readonly Stopwatch Clock = Stopwatch.StartNew();
-    private static readonly double ProcessOffsetMs = ProcessAgeMs();
+    private static double? _processOffsetMs;
     private static readonly object Gate = new();
     private static readonly Dictionary<string, double> Marked = [];
     private static readonly Dictionary<string, double> Measured = [];
@@ -30,7 +30,7 @@ public static class PerfProbe
     public static void Enable(bool on = true) => Enabled = on;
 
     /// <summary>Milliseconds since the process started (its start time read once at first use, then the monotonic clock).</summary>
-    public static double SinceProcessStartMs => ProcessOffsetMs + Clock.Elapsed.TotalMilliseconds;
+    public static double SinceProcessStartMs => (_processOffsetMs ??= ProcessAgeMs() - Clock.Elapsed.TotalMilliseconds) + Clock.Elapsed.TotalMilliseconds;
 
     /// <summary>A point in time: prints its name and the time since the process started; the latest time of a name is kept for <see cref="TimeOf"/>.</summary>
     public static void Mark(string name)
@@ -80,7 +80,7 @@ public static class PerfProbe
 
     private static double ProcessAgeMs()
     {
-        try { return Math.Max(0, (DateTime.Now - Process.GetCurrentProcess().StartTime).TotalMilliseconds); }
+        try { using var process = Process.GetCurrentProcess(); return Math.Max(0, (DateTime.Now - process.StartTime).TotalMilliseconds); }
         catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException) { return 0; }
     }
 }

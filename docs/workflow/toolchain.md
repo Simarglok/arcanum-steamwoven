@@ -180,7 +180,7 @@ The standing probe of the performance diagnosis (O10 of [load time and window re
 `PerfProbe` in `src/Arcanum.World/PerfProbe.cs`, godot-free so the load worker and the viewer use the same one. It measures; it is not
 a budget or a regression gate. Other optimisations are shown with it: run before and after, compare the lines.
 
-- **Switch.** Off by default (every call is a flag test, nothing printed or allocated). On with `ARC_PERF_PROBE=1` (a player's or a
+- **Switch.** Off by default (a call is a flag test, a lap allocates one small object, nothing is printed). On with `ARC_PERF_PROBE=1` (a player's or a
   `./arcanum map` run, or `--env ARC_PERF_PROBE=1` on a smoke) or when the stage list names `perf` or `perf-menu`.
 - **API.** `PerfProbe.Mark("name")` (a point in time), `using (PerfProbe.Span("name")) ...` (milliseconds, the managed bytes the
   thread allocated and the gen0/gen1/gen2 collections inside it), `PerfProbe.Measure(name, work)`, and `PerfProbe.Lap("group")` with
@@ -197,7 +197,8 @@ a budget or a regression gate. Other optimisations are shown with it: run before
   call, `to-first-frame` runs to the end of the next drawn frame; iteration 0 is the cold open, 1-5 are warm) and a `windows` line
   per key with the cold values and the warm medians, then `map-change` for a trip out through an exit and back (`total`, the worker,
   the publication and load begin to first frame). `PASS` means every measurement was taken: a window that did not open or a window
-  without an exit fails it.
+  without an exit fails it. `total` of a map change includes the stage's own placing, click and waiting for the use to be accepted
+  (the load's lines are the load); `M`, the spell pane, is not on the interface stack and has no `window.open` span; a headless run prints `NONE` (no frame is drawn).
 - **`perf-menu`** (a menu stage, `--main-menu`): `startup` to the main menu's first frame (`start-to-menu`) and a new game from the
   menu. `./arcanum smoke pr --stages perf-menu --main-menu`.
 - **Reading the numbers.** The Mac is shared and a Debug source run is slower than the packaged build: the diagnosis took medians
