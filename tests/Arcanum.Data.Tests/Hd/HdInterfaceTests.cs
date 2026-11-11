@@ -762,6 +762,79 @@ public sealed class HdInterfaceTests
             Assert.ThrowsExactly<FormatException>(() => HdInterfacePlan.Parse(Encoding.UTF8.GetBytes(bad)), bad);
     }
 
+    // ARC-DEV-361: a traced font's coverage frames. A 6x5 glyph with ink in two columns (palette index 0 is transparent: alpha 0, red 0).
+    private static HdLegacyRaster Glyph()
+    {
+        var rgba = new byte[6 * 5 * 4];
+        for (var y = 1; y < 4; y++)
+        foreach (var x in new[] { 2, 3 })
+        {
+            var at = (y * 6 + x) * 4;
+            rgba[at] = rgba[at + 1] = rgba[at + 2] = 200; rgba[at + 3] = 255;
+        }
+        return new(6, 5, rgba);
+    }
+
+    private static HdInterfacePlan CoveragePlan(params (string Art, string Image)[] tiles)
+        => new("fonts", 4, [new("", false, 8, [.. tiles.Select(t => new HdInterfaceFrameRef(t.Art, 0))], 0, [], 0, [.. tiles.Select(t => t.Image)], Lock: false, Coverage: true)]);
+
+    // 24 x 20 coverage: level 120 over the glyph's columns 2 and 3 (HD columns 8..15) between rows 5..14, a few levels at the edge, 0 elsewhere.
+    private static HdRgbImage Coverage(Action<float[]>? change = null)
+    {
+        var grey = new float[24 * 20];
+        for (var y = 5; y < 15; y++) for (var x = 8; x < 16; x++) grey[y * 24 + x] = y is 5 or 14 ? 40 : 120;
+        change?.Invoke(grey);
+        return new(24, 20, [.. grey.SelectMany(v => new[] { v, v, v })]);
+    }
+
+    [TestMethod]
+    public void A_coverage_item_takes_the_glyph_as_it_is_with_alpha_by_ink_and_the_pack_binds_it_as_masked()
+    {
+        var legacy = Glyph(); var art = Art("Font.ART", legacy);
+        var built = HdInterfaceImport.Build(CoveragePlan(("Font.ART", "g")), _ => art, _ => Coverage());
+        Assert.IsTrue(built.Ok, string.Join(";", built.Problems));
+        var frame = built.Frames.Single();
+        Assert.IsTrue(frame.Masked);
+        for (var i = 0; i < 24 * 20; i++)
+        {
+            var level = Coverage().Rgb[i * 3];
+            CollectionAssert.AreEqual(new[] { (byte)level, (byte)level, (byte)level, level > 0 ? (byte)255 : (byte)0 }, frame.Rgba[(i * 4)..(i * 4 + 4)], $"pixel {i}");
+        }
+        Assert.IsTrue(HdAlphaCheck.Matches(frame.Rgba, legacy.Rgba, 6, 5, 4, new(HdAlphaMode.Masked, 1000)));
+
+        // Written through the interface writer, the entry says "masked" and the pack binds the frame (the slice's own legacySmooth rule would refuse it).
+        var directory = Path.Combine(_root, "fonts-pack");
+        Assert.AreEqual(HdInterfaceWriteStatus.Written, HdInterfacePackWriter.Write(directory, "fonts", 4, built.Frames, DateTimeOffset.UnixEpoch).Status);
+        StringAssert.Contains(File.ReadAllText(Path.Combine(directory, "manifest.json")), "\"alpha\":\"masked\"");
+        var resolved = HdPack.Open(directory).Pack!.ResolveSprite(HdInterfaceKey.Query(art.Identity, 0, 6, 5, legacy.Rgba), legacy.Rgba);
+        Assert.AreEqual(HdFrameStatus.Hd, resolved.Status);
+        CollectionAssert.AreEqual(frame.Rgba, resolved.Rgba);
+    }
+
+    [TestMethod]
+    public void A_coverage_item_refuses_a_coloured_image_and_ink_beyond_one_legacy_texel_and_the_parser_refuses_bad_flags()
+    {
+        var art = Art("Font.ART", Glyph());
+        var coloured = new HdRgbImage(24, 20, [.. Coverage().Rgb.Select((v, i) => i % 3 == 1 && v > 0 ? v + 1 : v)]);
+        var colouredResult = HdInterfaceImport.Build(CoveragePlan(("Font.ART", "g")), _ => art, _ => coloured);
+        StringAssert.Contains(colouredResult.Problems.Single(), "not a grey coverage mask");
+        // HD column 20 lies in Legacy column 5, two texels from the glyph's last column (3): not within one texel.
+        var far = HdInterfaceImport.Build(CoveragePlan(("Font.ART", "g")), _ => art, _ => Coverage(grey => grey[10 * 24 + 20] = 90));
+        StringAssert.Contains(far.Problems.Single(), "farther than one Legacy texel");
+        // One texel away (Legacy column 4) is allowed: a trace may reach a little past the Legacy ink.
+        Assert.IsTrue(HdInterfaceImport.Build(CoveragePlan(("Font.ART", "g")), _ => art, _ => Coverage(grey => grey[10 * 24 + 16] = 90)).Ok);
+
+        const string good = """{"schema":1,"kind":"arcanum-steamwoven-hd-interface-plan","packId":"fonts","items":[{"mode":"ready","coverage":true,"images":["a.png"],"tiles":[{"art":"F.ART","frame":0}]}]}""";
+        var plan = HdInterfacePlan.Parse(Encoding.UTF8.GetBytes(good));
+        Assert.IsTrue(plan.Items[0].Coverage && plan.Items[0].Ready && !plan.Items[0].Lock);
+        foreach (var bad in new[]
+        {
+            good.Replace("\"mode\":\"ready\"", "\"mode\":\"exact\"").Replace("\"images\":[\"a.png\"]", "\"image\":\"a.png\""), good.Replace("\"coverage\":true", "\"coverage\":true,\"lock\":true"),
+            good.Replace("\"frame\":0", "\"frame\":0,\"ellipse\":[1,1,1,1]"),
+        })
+            Assert.ThrowsExactly<FormatException>(() => HdInterfacePlan.Parse(Encoding.UTF8.GetBytes(bad)), bad);
+    }
+
     [TestMethod]
     public void An_ellipse_keeps_only_the_button_circle_with_an_anti_aliased_edge_and_the_pack_binds_it_as_masked()
     {

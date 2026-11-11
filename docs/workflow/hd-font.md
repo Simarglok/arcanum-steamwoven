@@ -3,7 +3,7 @@
 Slice 1 of the font vectorization research ([ARC-RES-100](../research/font-vectorization.md), section 7). The tool
 [`tools/hd_font`](../../tools/hd_font/hd_font.py) reads the interface bitmap fonts from the **player's own installation**, traces every
 glyph's coverage mask into an outline and renders it back as a 4× coverage frame. It writes **local files only**; it does not build
-or touch an HD pack (that is slice 2, which needs the owner's call on a pack format change), and the viewer does not read the frames yet.
+or touch an HD pack. Slice 2 (ARC-DEV-361) puts the frames into the pack and the viewer draws text from them: [HD pack workflow](hd-pack.md#traced-fonts-in-the-pack-arc-dev-361). It needed no pack format change (the existing `masked` interface entries take the frames).
 
 ## Hard rules
 
@@ -58,4 +58,5 @@ level** (the level at or below 0.5 at which the binary area equals the mask's to
   yet have the stroke-aware step; art 840 has only three grey levels, so its trace is judged on its own. Frames whose ink is under a
   tenth of a pixel (placeholders such as Cloister's seven) may trace to nothing; `font.json` lists `vanished` frames above that mass.
 - `interface.mes` is read in its simple `{number}{text}` form (first message of a number wins).
-- Not done here (later slices): pack and viewer support for coverage frames, the remaining 23 fonts' review, runtime outlines.
+- Pack and viewer support for the coverage frames is ARC-DEV-361 (`hd_pack.py fonts-plan`, importer `coverage` items, `AreaArtFontFace`); the owner's look at the result is slice 3.
+- Not done here (later slices): the remaining 23 fonts' review, runtime outlines.

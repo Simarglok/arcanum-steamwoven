@@ -1445,6 +1445,16 @@ self-test interface HD switch PASS` (a synthetic 4× pack: Legacy size always, L
 draw of a white part of a half-black frame stays white within the edge bleed measured in that synthetic probe) and
 the options smoke's HD line.
 
+**Bitmap-font text (ARC-DEV-361).** `AreaArtFontFace` (the one source of every art-font glyph texture, drawn by `AreaArtTextDraw`) draws a glyph from
+its HD coverage frame when HD interface is on, the active pack holds an `interface` entry for that glyph's frame (a traced 4× coverage frame, `masked`
+entry, [format](../formats/hd-pack.md#interface-art-arc-dev-242)) and the blend is **Coverage**: the HD pixels go through the same layer maths as the
+Legacy ones (`AreaArtTextRules.LayerPixels`, cover as (w, w, w, w) on the premultiplied canvas), are built with mipmaps and drawn through their own
+`CanvasTexture` (trilinear, as ARC-UI-112) into the glyph's **Legacy-size** rectangle at the same integer position, so the layout, the integer
+advances, the colour and the blend are the original's and only the glyph edge differs. A glyph without an entry, a frame without a key, the Additive and
+Multiply blends and the switch off or no pack draw the Legacy frame exactly as before; the decoded HD glyphs are dropped when the pack or the switch
+changes. Check: `ARC-DEV-361 self-test HD font glyphs PASS` (synthetic 6 × 5 glyph: HD only with pack and switch on, never for another blend or a
+glyph without an entry, 254 against 199 on a black canvas at 1:1; the pixel checks need a window).
+
 - **Toggle.** `H` (no modifier; Cmd+H stays the system's) or the palette action **Visual Legacy/HD
   (H)** requests the other profile. `H` acts on a fresh press while the world owns input; under the
   palette or UI focus it is ignored and the HUD says so, and an open dialog or inventory window owns

@@ -499,5 +499,100 @@ class HdPackTests(unittest.TestCase):
         self.assertEqual(run("rollback", backup, "--installed", self.inst)[0], 2)
 
 
+class FontsPlanTests(unittest.TestCase):
+    """ARC-DEV-361: `fonts-plan` names traced font frames for the importer; synthetic font folders only."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+        (self.tmp / ".git").mkdir()  # the checkout root: local/ beside .git is the ignored folder
+        self.fonts = self.tmp / "local" / "hd-font" / "out"
+        self.out = self.tmp / "local" / "hd-font" / "fonts-plan.json"
+        (self.fonts).mkdir(parents=True)
+        (self.fonts / "receipt.json").write_text("{}")
+        self.font(27, "morph15font.art", [(0, True, False, False), (1, True, False, True), (2, False, False, True), (3, True, True, True)])
+        self.font(229, "Flare12Font.art", [(0, True, False, True)])
+
+    def font(self, number: int, file: str, frames: list[tuple[int, bool, bool, bool]]) -> Path:
+        """frames: (frame, ink, vanished, grey)"""
+        folder = self.fonts / f"{number}-{file.split('.')[0].lower()}"
+        folder.mkdir()
+        listed = []
+        for frame, ink, vanished, grey in frames:
+            body = fake(f"{number}:{frame}", 64)
+            (folder / f"frame-{frame:03d}.png").write_bytes(body)
+            listed.append({"frame": frame, "file": f"frame-{frame:03d}.png", "ink": ink, "vanished": vanished, "grey": grey, "pngSha256": hashlib.sha256(body).hexdigest()})
+        (folder / "font.json").write_text(json.dumps({"tool": "hd_font", "art": number, "file": file, "scale": 4, "frames": listed}))
+        return folder
+
+    def test_plan_names_only_grey_frames_with_ink_and_relative_paths(self):
+        rc, out, _ = run("fonts-plan", "--fonts", self.fonts, "--out", self.out, "--dry-run")
+        self.assertEqual(rc, 0)
+        self.assertIn("DRY-RUN", out)
+        self.assertFalse(self.out.exists())
+        rc, out, _ = run("fonts-plan", "--fonts", self.fonts, "--out", self.out)
+        self.assertEqual(rc, 0, out)
+        plan = json.loads(self.out.read_text())
+        self.assertEqual((plan["kind"], plan["packId"], plan["scale"]), (hp.FONT_PLAN_KIND, "interface-fonts", 4))
+        first, second = plan["items"]
+        self.assertTrue(first["mode"] == "ready" and first["coverage"] is True)
+        self.assertEqual([t["frame"] for t in first["tiles"]], [1])  # frame 0 is coloured, 2 has no ink, 3 vanished in the trace
+        self.assertEqual(first["tiles"][0]["art"], "morph15font.art")
+        self.assertEqual(first["images"], ["out/27-morph15font/frame-001.png"])
+        self.assertEqual((second["tiles"], second["images"]), ([{"art": "Flare12Font.art", "frame": 0}], ["out/229-flare12font/frame-000.png"]))
+
+    def test_plan_keys_are_the_importers(self):
+        run("fonts-plan", "--fonts", self.fonts, "--out", self.out)
+        plan = json.loads(self.out.read_text())
+        self.assertEqual(set(plan), {"schema", "kind", "packId", "scale", "items"})
+        self.assertEqual(set(plan["items"][0]), {"mode", "coverage", "images", "tiles"})  # HdInterfacePlan.Parse reads exactly these
+        self.assertEqual(set(plan["items"][0]["tiles"][0]), {"art", "frame"})
+        run("fonts-plan", "--fonts", self.fonts, "--out", self.out)  # an own plan is replaced
+        self.assertEqual(run("fonts-plan", "--fonts", self.fonts, "--out", self.out)[0], 0)
+
+    def test_malformed_frame_entries_are_refused_not_a_traceback(self):
+        meta = self.fonts / "27-morph15font" / "font.json"
+        data = json.loads(meta.read_text())
+        for bad in (["x"], [{"ink": True, "grey": True, "file": "frame-001.png", "frame": 1}], [{"ink": True, "grey": True, "file": 5, "frame": 1, "pngSha256": "a"}]):
+            meta.write_text(json.dumps(dict(data, frames=bad)))
+            self.assertEqual(run("fonts-plan", "--fonts", self.fonts, "--out", self.out)[0], 2, bad)
+
+    def test_art_filter_and_pack_id(self):
+        rc, _, _ = run("fonts-plan", "--fonts", self.fonts, "--out", self.out, "--art", "229", "--pack-id", "fonts-x")
+        self.assertEqual(rc, 0)
+        plan = json.loads(self.out.read_text())
+        self.assertEqual((plan["packId"], [t["tiles"][0]["art"] for t in plan["items"]]), ("fonts-x", ["Flare12Font.art"]))
+        self.assertEqual(run("fonts-plan", "--fonts", self.fonts, "--out", self.out, "--art", "999")[0], 2)
+        self.assertEqual(run("fonts-plan", "--fonts", self.fonts, "--out", self.out, "--art", "x")[0], 2)
+
+    def test_a_changed_frame_a_bad_location_and_a_foreign_file_are_refused(self):
+        next(self.fonts.glob("27-*/frame-001.png")).write_bytes(b"edited")
+        rc, _, err = run("fonts-plan", "--fonts", self.fonts, "--out", self.out)
+        self.assertEqual(rc, 2)
+        self.assertIn("SHA-256", err)
+        self.assertFalse(self.out.exists())
+        self.assertEqual(run("fonts-plan", "--fonts", self.fonts, "--out", self.tmp / "elsewhere" / "plan.json")[0], 2)  # not under local/
+        self.assertEqual(run("fonts-plan", "--fonts", self.fonts, "--out", self.tmp / "local" / "plan.txt")[0], 2)
+        self.assertEqual(run("fonts-plan", "--fonts", self.fonts, "--out", self.tmp / "local" / "game" / "hd-packs" / "p.json")[0], 2)
+        self.assertEqual(run("fonts-plan", "--fonts", self.fonts, "--out", self.tmp / "local" / "res095" / "pack-out" / "x" / "p.json")[0], 2)
+        self.assertEqual(run("fonts-plan", "--fonts", self.fonts, "--out", self.tmp / "src" / "local" / "p.json")[0], 2)  # a local/ that is not beside .git
+        main_plan = self.tmp / "local" / "ready" / "plan.json"  # the pipeline's own plan: right kind, no coverage items
+        main_plan.parent.mkdir()
+        main_plan.write_text(json.dumps({"kind": hp.FONT_PLAN_KIND, "items": [{"mode": "sheet"}]}))
+        rc, _, err = run("fonts-plan", "--fonts", self.fonts, "--out", main_plan)
+        self.assertEqual(rc, 2)
+        self.assertIn("refusing to overwrite", err)
+        self.assertIn("sheet", main_plan.read_text())
+        foreign = self.tmp / "local" / "other.json"
+        foreign.write_text('{"kind":"something-else"}')
+        rc, _, err = run("fonts-plan", "--fonts", self.fonts, "--out", foreign)
+        self.assertEqual(rc, 2)
+        self.assertIn("refusing to overwrite", err)
+        no_receipt = self.tmp / "local" / "plain"
+        no_receipt.mkdir()
+        self.assertEqual(run("fonts-plan", "--fonts", no_receipt, "--out", self.out)[0], 2)
+
+
 if __name__ == "__main__":
     unittest.main()
