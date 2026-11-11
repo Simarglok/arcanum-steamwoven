@@ -85,7 +85,7 @@ Labels are planning labels, not task codes (the coordinator hands codes out). Si
 | 9 | **E1-e** creature Summon with AIRedirect | Prototype or list pick, summoned flags, faction; AIRedirect (E4-b remainder) | 183 and 11 summon spells | L | E1-c (done), MA-4 (done) | Summon file |
 | 10 | **T-s** smoke extension | Section 5 gaps in `tech-craft` or a sibling stage | n/a | M | none (best after 1 to 3, which add steps to it) | smoke |
 | 11 | **R-2** record 214 | The record adds effect 334 eighty times; the effect list holds 64 and an NPC's write is refused (the census row says HERO). Read what the original does at overflow, then decide | 214 | S | none | read |
-| 12 | **T-c** creation editor degree buttons | Check that the character-creation editor offers the degree buttons and keeps the TC10 floor; fix or close the "not confirmed" note | n/a | S | none | UI |
+| 12 | **T-c** creation editor degree buttons | Check that the character-creation editor offers the degree buttons and keeps the TC10 floor; fix or close the "not confirmed" note. **Done, ARC-MAGIC-043:** the creation editor had no degree buttons (CM8 shows the page in the original); a tech page now spends and refunds through the technology lane with the snapshot floor and replays at Accept | n/a | S | none | UI |
 | 13 | **E1-f** AI summoning | Magic queue's last slice; touches no technology record | n/a | M | E1-e | AI host |
 
 Waves (a slice starts when its needs are done): **wave 0, now and in parallel:** T-m2, T-m1, E6-b (three different files: event queue and item events, created critters, trap code), R-1 and R-2 (reads) and T-c;

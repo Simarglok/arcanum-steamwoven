@@ -397,6 +397,65 @@ public sealed class AreaNewCharacterTests
         editor.Dispose();
     }
 
+    private static bool Did(SessionPointResult result) => result.Disposition == GameSessionDisposition.Changed;
+
+    [TestMethod]
+    public void The_editor_buys_tech_degrees_down_to_its_opening_and_the_start_replays_them()
+    {
+        // ARC-MAGIC-043 (CM8, TC10): the degree page of the creation editor spends and gives back through the technology lane, refuses below
+        // the snapshot the editor opened on, records only the presses that changed the character, and the start replays them.
+        var (creation, hero) = ElfWoman();
+        var draft = Session(hero);
+        Assert.IsNull(creation.ApplyChoices(draft, Effect));
+        using var editor = new AreaCreationEditor(creation, draft);
+        var floor = AreaTechPage.Build(draft)!;
+        Assert.IsTrue(floor.EditorOpen);
+        CollectionAssert.AreEqual(new int[8], floor.Rows.Select(row => row.FloorDegree).ToArray(), "a new character opens with no degrees");
+        var minus = editor.PressTech(0, spend: false);
+        Assert.AreEqual((GameSessionDisposition.Rejected, PointChangeStatus.AtFloor), (minus.Disposition, minus.Change!.Status), "nothing bought since the editor opened (TC10)");
+        Assert.AreEqual("refused: nothing bought since the sheet opened to refund", AreaTechPage.Press(minus, false).Message);
+        Assert.AreEqual(0, creation.Presses.Count, "a refused press is not recorded");
+
+        var first = editor.PressTech(4, spend: true);
+        Assert.IsTrue(Did(first), AreaTechPage.Press(first, true).Message);
+        Assert.AreEqual(1, AreaTechPage.Build(draft)!.Rows[4].Degree);
+        Assert.AreEqual(4, editor.Stats()!.UnspentPoints);
+        Assert.IsTrue(Did(editor.PressTech(4, spend: false)), "a degree bought in this editor can be given back");
+        Assert.IsFalse(Did(editor.PressTech(4, spend: false)), "and no further than the opening");
+        Assert.IsTrue(Did(editor.PressTech(0, spend: true)));
+        Assert.IsTrue(Did(editor.PressTech(4, spend: true)));
+        CollectionAssert.AreEqual(new[]
+        {
+            new AreaCreationPress(AdvancementTrack.TechDiscipline, 4, true), new(AdvancementTrack.TechDiscipline, 4, false),
+            new(AdvancementTrack.TechDiscipline, 0, true), new(AdvancementTrack.TechDiscipline, 4, true),
+        }, creation.Presses.ToArray());
+
+        using var started = Session(hero);
+        Assert.IsNull(creation.Apply(started, Effect));
+        var made = started.QueryHeroTechnology()!.Value;
+        Assert.AreEqual((1, 1, 0), (made[0].Degree, made[4].Degree, made[1].Degree));
+        Assert.AreEqual(draft.QueryHero()!.UnspentPoints, started.QueryHero()!.UnspentPoints);
+        Assert.IsFalse(started.HeroEditorOpen, "the game starts with the editor closed: no degree can be given back any more");
+        Assert.IsFalse(Did(started.RefundHeroPoint(started.Version, AdvancementTrack.TechDiscipline, 0, AreaSkillsPage.RefundClick)));
+    }
+
+    [TestMethod]
+    public void The_editor_refuses_a_degree_the_intelligence_does_not_allow_and_words_the_tech_page_in_the_window()
+    {
+        var (creation, hero) = ElfWoman();
+        var draft = Session(hero);
+        Assert.IsNull(creation.ApplyChoices(draft, Effect));
+        using var editor = new AreaCreationEditor(creation, draft);
+        Assert.IsTrue(Did(editor.PressTech(2, spend: true)));
+        // Degree 2 needs 8 intelligence, degree 3 needs 11: refused by the lane while the intelligence stays below 11, nothing recorded.
+        Assert.IsTrue(draft.QueryHero()!.Stats[(int)CharacterStat.Intelligence] < 11, "the new character's intelligence is below 11");
+        Assert.IsTrue(Did(editor.PressTech(2, spend: true)));
+        var third = editor.PressTech(2, spend: true);
+        Assert.AreEqual("refused: intelligence too low for the next degree", AreaTechPage.Press(third, true).Message);
+        Assert.AreEqual(2, creation.Presses.Count);
+        StringAssert.StartsWith(AreaTechPage.Line(AreaTechPage.Build(draft)!.Rows[2]), "Electric: degree 2, expertise ");
+    }
+
     [TestMethod]
     public void A_press_the_started_session_refuses_fails_the_start_and_closes_its_editor()
     {
