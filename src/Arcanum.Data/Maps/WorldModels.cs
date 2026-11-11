@@ -173,7 +173,7 @@ public sealed class WorldSector
     /// sector reset zeroes the field and its only reader is the aptitude stat (0x45A060, called from 0x4B0740 with the sector
     /// of the critter's location). Its writer (0x45A0A0) is never called or referenced in the 1.0.7.4 executable, so the
     /// number is whatever the file holds. The caller adds it to the aptitude of a critter standing in this sector; a location
-    /// whose sector is not resident or lies outside the map has 0.
+    /// outside the map, whose sector cannot be locked, has 0.
     /// </summary>
     [OriginalFunction(0x45A060, OriginalFunctionScope.Partial)]
     public int AptitudeAdjustment() => MetadataAndSound is { Count: >= 2 } words ? words[1] : 0;

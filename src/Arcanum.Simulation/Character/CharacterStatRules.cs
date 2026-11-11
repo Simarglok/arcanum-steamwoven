@@ -13,7 +13,7 @@ internal static class CharacterStatRules
     public const int MaxPoisonLevel = 1000;
     /// <summary>The mage backgrounds' block numbers (stat getter 0x4B0490, ledger BG6) and the magick points they move.</summary>
     public const int DayMageBackground = 62, NightMageBackground = 63, SkyMageBackground = 64, NatureMageBackground = 65, MageBackgroundPoints = 4;
-    /// <summary>The first and the last hour of the original's day (0x45ACF0: from 6 up to but not including 18).</summary>
+    /// <summary>The first hour of the original's day and the first hour of its night (0x45ACF0: from 6 up to but not including 18).</summary>
     public const int DayStartHour = 6, NightStartHour = 18;
 
     private static readonly int StatCount = Enum.GetValues<CharacterStat>().Length;

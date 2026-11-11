@@ -104,8 +104,8 @@ public sealed class TileSoundTable
 
     /// <summary>
     /// The two tile facts the Sky Mage and Nature Mage backgrounds read under a critter (stat getter 0x4B0490): whether the
-    /// tile art is outdoor (0x5038C0) and whether its name carries <see cref="NatureFlag"/> (0x4EBBA0). A null art id (no sector
-    /// resident where the critter stands: 0x4D70B0 answers -1) and the art id -1 itself give neither; a tile whose position
+    /// tile art is outdoor (0x5038C0) and whether its name carries <see cref="NatureFlag"/> (0x4EBBA0). A null art id (the sector cannot be locked where the critter
+    /// stands: 0x4D70B0 answers -1) and the art id -1 itself give neither; a tile whose position
     /// lies beyond its category has no flags (the original reads past its table) and is not nature.
     /// </summary>
     [OriginalFunction(0x4EBBA0, OriginalFunctionScope.Partial)]

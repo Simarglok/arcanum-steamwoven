@@ -283,7 +283,7 @@ Steamwoven: RE1 and RE2 both modes, no switch. **Not read:** the resistance wrap
 
 ## Aptitude inputs (ARC-MAGIC-028)
 
-Source: the retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…3d52`), read statically on 2026-11-11 for [FR-CHAR-020](../../requirements/characters-skills.md#fr-char-020) and plan slice MT4
+Source: the retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…8d52`), read statically on 2026-11-11 for [FR-CHAR-020](../../requirements/characters-skills.md#fr-char-020) and plan slice MT4
 ([magic plan](../magic-implementation-plan.md)); no function was run. The ledger rows BG1–BG6 ([character](character.md)) and SR14 ([skills](skills.md)) are the earlier readings of the same getter.
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |

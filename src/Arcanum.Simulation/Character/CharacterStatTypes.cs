@@ -74,7 +74,7 @@ public sealed record CharacterStatsDefinition(CharacterRace Race, CharacterGende
 /// which has none: 0x4C2690); 62 is the Day Mage (+4 from 6:00 to 17:59, else -4), 63 the Night Mage (the reverse), 64 the Sky
 /// Mage (+4 when the tile under it is outdoor, else -4) and 65 the Nature Mage (+4 on a tile whose name carries the <c>n</c>
 /// flag, else -4); any other value changes nothing. <paramref name="Hour"/> is the game hour 0..23, <paramref name="OutdoorTile"/>
-/// and <paramref name="NatureTile"/> are false where no sector is resident (the original reads no tile there).
+/// and <paramref name="NatureTile"/> are false where the sector cannot be locked (outside the map: the original reads art id -1 there).
 /// </summary>
 public readonly record struct CharacterStatContext(int SectorAptitudeAdjustment, int PoisonLevel = 0, bool CrippledLegs = false,
     int Background = 0, int Hour = 0, bool OutdoorTile = false, bool NatureTile = false);

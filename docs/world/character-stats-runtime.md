@@ -55,7 +55,7 @@ Derived formulas over effective inputs (C integer division, truncation toward ze
 - `Background`, `Hour`, `OutdoorTile` and `NatureTile`: the Day (62), Night (63), Sky (64) and Nature (65) Mage backgrounds move **magick points** by ±4 (+4 when the condition holds, −4 when
   not): Day by the hour 6..17, Night the reverse, Sky by an outdoor tile, Nature by a tile whose name has flag `n`. Aptitude reads the moved magick points. `Background` is the PC's
   background block (0 for an NPC and for any other background, which add nothing); `Hour` is 0..23 (an invalid hour is `InvalidContext`); the two tile facts come from
-  `TileSoundTable.MageGround` over `WorldSector.TileArt` and are false where no sector is resident.
+  `TileSoundTable.MageGround` over `WorldSector.TileArt` and are false where the sector cannot be locked (outside the map).
 
 The session and viewer callers still pass 0 and no background; reading the sector and the tile where the hero stands is the next wiring slice.
 
