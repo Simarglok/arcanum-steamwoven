@@ -28,7 +28,7 @@ The original behaviour is in the [technology research](technology-evidence.md) (
    enshroud, shield, don't-draw, permanent polymorph; 12 records blocked by them alone) are E4-a and E4-b; the **control components** (ChargeNBranch, TestNBranch, Terminate,
    Use, Cast, Movement, Trait, AIRedirect; 5 records alone) are E4-c and E4-e; the **Effect component on any critter** (22 records) is E1-d.
 4. **Technology adds six things the plan does not hold:** (a) an item **aiming cursor** and use on a critter, object or tile (the viewer uses an item on the hero only;
-   item targeting is "NOT READY"); (b) NPCs choosing and throwing **grenades** and using devices (`AreaAiHost.Grenade` answers "none"); (c) the generic item flag 0x20 (2 learned and 3 found products; flag 0x10 is the grenade flag the AI ledger SP14 already uses, its numeric bit never written down) and the **item scripts on crafted gear** (6 learned products, attach points 24, 25, 7, 8), neither of which has been read (ARC-RES-114 adds the eight tech books' insert and remove scripts, points 21 and 28, to that read, [ARC-RES-114](ledger/technology.md#aptitude-and-expertise-consumers-arc-res-114) XA9); (d) **smoke coverage**: no
+   item targeting is "NOT READY"); (b) NPCs choosing and throwing **grenades** and using devices (`AreaAiHost.Grenade` answers "none"); (c) the generic item flag 0x20 (2 learned and 3 found products; flag 0x10 is the grenade flag the AI ledger SP14 already uses, its numeric bit never written down) and the **item scripts on crafted gear** (6 learned products, attach points 24, 25, 7, 8), neither of which had been read when this audit was written; read since by [ARC-RES-112](technology-item-scripts-res-112.md) (the flag only shows an item's hit points; the scripts are creature-item HIT and MISS scripts and equipment scripts: two slices, T-m1 and T-m2, section 10); ARC-RES-114 adds the eight tech books' insert and remove scripts, points 21 and 28, to the item-script read, [ARC-RES-114](ledger/technology.md#aptitude-and-expertise-consumers-arc-res-114) XA9; (d) **smoke coverage**: no
    stage assembles anything, uses a technology item with a real record, or buys a degree (all three are covered by synthetic self-tests and unit tests only); (e) an opt-in
    **coverage test** that keeps the status table of section 5 true to the code; (f) a documentation refresh (five stale statements, section 9).
 5. **No missing piece is a hidden mechanic of the original.** Degrees give expertise only, expertise is read only by the sheet and the schematic gate, assembly has no roll, no
@@ -105,7 +105,7 @@ requirements (all components are in the schematic's own discipline; 24 component
 - **INERT**: only the eye-candy log runs.
 - **EQUIP**: no technology record; the product is ordinary equipment, ammunition or a tool, whose rules are built.
 
-An eye-candy line is a presentation log in the viewer (no light, sound or tint yet); it is not counted as a gap here. Scripts are item scripts at attach points; their effect is unread (T-r1).
+An eye-candy line is a presentation log in the viewer (no light, sound or tint yet); it is not counted as a gap here. Scripts are item scripts at attach points; their effect was read by [ARC-RES-112](technology-item-scripts-res-112.md) (T-r1, done).
 
 ### Herbology (discipline 0): seven food items
 
@@ -136,8 +136,8 @@ An eye-candy line is a presentation log in the viewer (no light, sound or tint y
 | Deg | Product | Needs | Record | State |
 | --- | --- | --- | --- | --- |
 | 1 | generic with flag 0x1 (the torch location), -20, x1 | 1 | none | EQUIP (a carried light: the worn-light work V7d, ARC-DEV-335, is the dependency) |
-| 2 | ring armour, -25, x1, scripts at 24 and 25 | 2 | none | EQUIP (scripts T-r1) |
-| 3 | shield armour, -40, x1, script at 24 | 3 | none | EQUIP (script T-r1) |
+| 2 | ring armour, -25, x1, scripts at 24 and 25 | 2 | none | EQUIP (28012 and 28013 run, T-r1) |
+| 3 | shield armour, -40, x1, script at 24 | 3 | none | BLOCKED (29016 refuses the wear, T-m2) |
 | 4 | melee weapon, -90, x1 | 4 | 147 electrical 1 to 10, **ChargeNBranch** (one cell per use), cell-powered | PART(control: cell branch) |
 | 5 | helmet armour, -50, x1 | 5 | 182 sets and clears magnetic inversion | INERT (ObjFlag magnetic inversion) |
 | 6 | torso armour (3 alternatives), -80, x1 | 6 | 168 maintained every 5 s: **ChargeNBranch**, **TestNBranch** on hit points, heal 4 | PART(control: cell and test branches) |
@@ -174,10 +174,10 @@ An eye-candy line is a presentation log in the viewer (no light, sound or tint y
 | 1 | generic flag 0x4 (trap device), -20, x3, script 30001 at attach point 1 | 1 | none (the native trap script: normal damage) | EQUIP, device placement is E6-b |
 | 2 | generic, -50, x3 | 2 | 184 ends with a Use component after 4 s; its begin Destroy takes the pack item itself (also not ready: only lying items) | INERT (control: Use; Destroy of a held item, E4-c) |
 | 3 | generic flag 0x2 (lockpick), -35, x1 | 2 | none | EQUIP (lockpicks work) |
-| 4 | helmet armour, -85, x1, scripts at 24 and 25 (the same two numbers as the Electric ring) | 3 | none | EQUIP (scripts T-r1) |
+| 4 | helmet armour, -85, x1, scripts at 24 and 25 (the same two numbers as the Electric ring) | 3 | none | EQUIP (28012 and 28013 run, T-r1) |
 | 5 | generic flag 0x4 (trap device), -10, x3, script 30001 | 5 | none | EQUIP, E6-b |
-| 6 | generic flag 0x20, -70, x2, script at 7 and 8 | 6 | none | EQUIP (flag and script T-r1) |
-| 7 | generic flag 0x20, -100, x1, script at 7 and 8 | 7 | none | EQUIP (flag and script T-r1) |
+| 6 | generic flag 0x20, -70, x2, script at 7 and 8 | 6 | none | INERT (a creature on throw, T-m1) |
+| 7 | generic flag 0x20, -100, x1, script at 7 and 8 | 7 | none | INERT (a creature on throw, T-m1) |
 
 ### Smithy (discipline 6): melee weapons and armour, no technology record
 
@@ -186,7 +186,7 @@ An eye-candy line is a presentation log in the viewer (no light, sound or tint y
 | 1 | generic, -20, x1 | 1 | none | EQUIP |
 | 2 | melee weapon, -5, x1 | 2 | none | EQUIP |
 | 3 | melee weapon, -20, x1 | 3 | none | EQUIP |
-| 4 | gauntlets, -15, x1, scripts at 24 and 25 | 4 | none | EQUIP (scripts T-r1) |
+| 4 | gauntlets, -15, x1, scripts at 24 and 25 | 4 | none | EQUIP (28014 and 28015 run, T-r1) |
 | 5 | helmet, -10, x1 | 2 | none | EQUIP |
 | 6 | torso armour (3 alternatives), -20, x1 | 6 | none | EQUIP |
 | 7 | torso armour (3 alternatives), -20, x1 | 7 | none | EQUIP |
@@ -239,7 +239,7 @@ Every list below is the acceptance of the plan slice named: when that slice land
 | Item aiming and use on a critter, object or tile | every aggressive carried record used as an item, and trap devices | n/a | **new: T-g** (T-r2 is done: [ledger IA1–IA16](ledger/items.md#item-aiming-and-use-with-a-target-arc-res-113)) | none | the item cursor of IA3 to IA6 (mask by item kind, interface mode 0x10, left release picks, right release cancels), the apply of IA8 (an object: a charged or magical item in the spell's range is used at once, out of range or with the no-ranged flag the hero walks next to the target first; any other item is used at once) and IA9 (a tile: charged items cast at once, a trap device walks to it as goal 41), the use on a tile of IA12 (no script, no scroll check), refusals and messages of IA14 |
 | Trap devices | Mechanical degree 1 and 5, Explosives degree 7 (176), 148 and 220 timed bombs | 3 learned products | E6-b (already in the plan) | E1-b for 176, T-g | a placed device spends itself, the marker, the delayed run at the tile after the original's 88 000 ms (TP3), and the refusals of IA13 (a script trap on a target that is not a free portal or container, or on a tile that already has a trap, keeps the device and shows trap.mes 2 or 3) |
 | NPC use of grenades and devices | the AI's grenade pick | n/a | **new: T-h** | E1-b, T-r2 (done) | an NPC picks a grenade from its pack and throws it. T-r2 found that no installed AI item entry is a trap device or a written item and the AI always passes a target (IA15, data-dependent), so those need no action; heal-with-item and the pick-locks goal are already read (SP2, PL7), and the chooser's use-at-once path for items with no spell (IA15 a) is the only other item path to check |
-| Item scripts and the flag 0x20 | 6 learned products with scripts (the Electric ring and shield, the Mechanical helmet and the two flag-0x20 items, the Smithy gauntlets), 2 with the flag, 3 found with the flag | n/a | **new: T-r1** (a read), then a slice named by its result | none | what the flag and scripts do and whether the SCR host runs them |
+| Item scripts and the flag 0x20 | 6 learned products with scripts (the Electric ring and shield, the Mechanical helmet and the two flag-0x20 items, the Smithy gauntlets), 2 with the flag, 3 found with the flag | n/a | **T-r1 done** ([ARC-RES-112](technology-item-scripts-res-112.md)): the flag shows hit points only; the equipment scripts 28012 to 28015 pass the static admission, 29016 refuses the wear, the creature items' HIT and MISS scripts do not run | **T-m1** (creature items), **T-m2** (the powered shield) | none | as the note's section 5 |
 
 ## 7. Smoke and test coverage
 
@@ -257,7 +257,7 @@ Every list below is the acceptance of the plan slice named: when that slice land
 
 | Label | Question | Size |
 | --- | --- | --- |
-| T-r1 | What the generic item flag 0x20 means (two learned Mechanical items and three found products) and the numeric bit of the grenade flag (0x10, read by AI SP14); what the item scripts do that sit at attach points 24, 25, 7 and 8 on crafted armour and devices (28012 to 28015, 29016, 29017, 1022); whether the SCR host runs them | S to M |
+| T-r1 **(done, [ARC-RES-112](technology-item-scripts-res-112.md))** | What the generic item flag 0x20 means (two learned Mechanical items and three found products) and the numeric bit of the grenade flag (0x10, read by AI SP14); what the item scripts do that sit at attach points 24, 25, 7 and 8 on crafted armour and devices (28012 to 28015, 29016, 29017, 1022); whether the SCR host runs them | S to M |
 | T-r2 | Item use with a target: the targeting cursor masks per item kind, what the use does on a critter, an object and a tile, and the NPC use of devices and heal items (the AI's grenade rule is already read, ledger SP14, 0x4AC910); refusal messages (**done**, ARC-RES-113: [ledger IA1–IA16](ledger/items.md#item-aiming-and-use-with-a-target-arc-res-113)) | M |
 | T-r3 | **Done (ARC-RES-114, [ledger XA1 to XA10](ledger/technology.md#aptitude-and-expertise-consumers-arc-res-114)).** Consumers of aptitude and expertise outside the combat and gate paths: callers of the aptitude stat (the getter 0x4B0490 with the literal 16; 0x4B0740 is its base level) in the AI and reaction code; effects in the installed data that target expertise in a discipline (race, background, items). Result: no unmodelled reader in the AI or the reactions; expertise has two consumers (the sheet and the gate); nine effect rules name an expertise, delivered by the Arsonist background and by eight tech books whose insert script the item-event admission refuses today | S |
 | T-r4 | **Done (ARC-RES-115, [placement census](technology-census-res-115.md)).** Placement census (installed maps, scripts, shop lists): where found schematic documents lie (five found records have no written prototype, O3 of the research), which NPCs have `su` dialogs and what degrees and inventories they carry (O5), where the 146 non-craftable technology items lie | S to M |
@@ -277,7 +277,7 @@ Labels are planning labels, not task codes (the coordinator hands out codes). Si
 
 | Slice | Content | Size | Needs | Lane |
 | --- | --- | --- | --- | --- |
-| T-r1 | read: flag 0x20, the grenade flag's bit, item scripts on crafted gear | S to M | Mac read | none |
+| T-r1 | read: flag 0x20, the grenade flag's bit, item scripts on crafted gear. **Done** ([ARC-RES-112](technology-item-scripts-res-112.md)): flag 0x20 is the item window's hit-point line only, the grenade bit is 0x10, and the scripts need T-m1 and T-m2 | S to M | Mac read | none |
 | T-r2 | read: item aiming, AI grenade pick and device use (**done**, ARC-RES-113) | M | Mac read | none |
 | T-r3 | read: aptitude and expertise consumers (**done**, ARC-RES-114) | S | Mac read | none |
 | T-r4 | census: where found schematics, `su` crafters and the non-craftable items are (**done**, ARC-RES-115: [placement census](technology-census-res-115.md)) | S to M | Mac data run | none |
@@ -293,10 +293,12 @@ Labels are planning labels, not task codes (the coordinator hands out codes). Si
 | E6-b | placed trap devices (plan), now also fed by the three trap-device products | M | E1-a, T-g | directory lane |
 | T-h | **new**: NPC picks and throws grenades (the rule is SP14; `AreaAiHost.Grenade` answers none today), uses heal items and the chooser's items (devices need nothing, IA15) | M | E1-b | AI lane |
 | T-k | **dropped by T-r3's result** (ARC-RES-114): the AI and reaction code have no unmodelled reader of aptitude or expertise, and the hero's expertise query already carries any expertise effect (only the Arsonist's 346 reaches it today; the book effects belong to T-m); nothing is left for a slice of this name | none | none | none |
-| T-m | **needed, wider than first named**: a slice named by T-r1 for flag 0x20 and the item scripts, **plus the tech books** (ARC-RES-114 XA9: the insert script 30017 of the eight books at attach point 21 gives +intelligence expertise, with the remove script 30018 at point 28; the host needs get stat (33) admitted in the item-event set with a stat query behind it, the effect definitions 168 to 175, room for one effect entry per intelligence point in the hero's list, and the barter refusal of insert-script items lifted) | S to M | T-r1 | by result |
+| T-m1 | **needed** (T-r1's result): creature items. HIT and MISS item events at a thrown item's landing, script actions 40, 21 and 36, the created creature in the directory and the follower rules, a viewer smoke step ([ARC-RES-112](technology-item-scripts-res-112.md) section 5) | M to L | E1-c created critters (planned; E1-a does not create critters) | directory lane and viewer |
+| T-m2 | **needed** (T-r1's result): the powered shield. Item-event set admits actions 54, 125 and 135, a deferred 15-second call that checks the wear and uses one power-cell unit, saved with the game; today the Electric degree-3 shield cannot be worn | S to M | the game event queue's script call kind, catalogue entries for action 135 | directory lane |
+| T-m3 | **needed** (ARC-RES-114 XA9): the tech books. The insert script 30017 of the eight books at attach point 21 gives +intelligence expertise, with the remove script 30018 at point 28; the host needs get stat (33) admitted in the item-event set with a stat query behind it, the effect definitions 168 to 175, room for one effect entry per intelligence point in the hero's list, and the barter refusal of insert-script items lifted | S to M | T-m2 (same item-event set) | directory lane |
 
 Waves (a label starts when its needs are done): **wave 0** T-r1 to T-r4, T-a, T-b, T-j (no mutual dependency; T-a and T-b share the viewer and session test harness, so one at a time on the Mac's single Godot slot);
-**wave 1** E1-b, E1-d, T-g (after T-r2), T-m (after T-r1; T-k is dropped); **wave 2** E4-a to E4-c, E6-b, T-h; **wave 3** E4-e, E4-f. The spell-cast lane is one writer at a time (the plan's conflict rule);
+**wave 1** E1-b, E1-d, T-g (after T-r2), T-m1, T-m2 and T-m3 (needed by T-r1 and ARC-RES-114; T-k is dropped); **wave 2** E4-a to E4-c, E6-b, T-h; **wave 3** E4-e, E4-f. The spell-cast lane is one writer at a time (the plan's conflict rule);
 T-g and T-a touch the viewer only; T-h the AI host. The plan's own waves place E1-d in wave 0 and E4-a and E4-c in wave 1; here they sit one wave later only because of the "starts when needs are done" rule, and nothing stops them earlier. This document only adds T-a, T-b, T-g and T-h in front of or beside it.
 
 ## 11. Decisions for the owner
