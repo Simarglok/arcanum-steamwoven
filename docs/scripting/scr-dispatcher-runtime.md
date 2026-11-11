@@ -481,7 +481,10 @@ or 91 implements `IScrItemQueries` (`ScrRunOptions.Validate` refuses one that do
   stops the caller's run.
 - **Hosts.** Only the session's item events run S14 commands (through `SessionItemScripts.Admission`, the
   [equipment's wield events](../world/equipment-runtime.md#wield-events-arc-script-042)); the viewer's use, tile, sector and dialog
-  sets do not hold them.
+  sets do not hold them. ARC-DEV-366: the item set also admits get stat (33, ledger [GS1](../research/ledger/scripts.md)), which the
+  session answers for the hero from the effect list the move's earlier runs left (`IScrStatQueries` on the session's run host); a run that
+  reads a stat after an effect change of its own that moves the stat, or a stat the session does not hold (GS3), refuses the move
+  (`ItemScriptUnsupported`; a dispatch that ends as `ScrStop.NotModelled` is refused, not skipped).
 
 ## World objects (ARC-WORLD-081, set S15)
 

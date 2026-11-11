@@ -265,3 +265,17 @@ Known differences (reading only, no game step):
 - Water walking (spells 13, 28): the flag and its object flag are written; the original's clear then tests the tile under the critter and may run a damage step (F0, MA-8). Ours does neither.
 - Mind control, charm, undead, fleeing and blinded (MA-4) and the locks (MA-6) are still not ready and show "not ready" in the spell line.
 - The viewer draws no translucent, shrunk or hidden critter from these flags yet.
+
+## ARC-DEV-366 — Tech books give expertise equal to intelligence (PR #980, 2026-11-11)
+
+The rules and what is built are in [tech books](../world/inventory-runtime.md#tech-books-arc-dev-366) and [ledger XA9, XA11](../research/ledger/technology.md#aptitude-and-expertise-consumers-arc-res-114).
+Where the eight books lie in the world is not read yet ([census](../research/technology-census-res-115.md)), so the first step is to find where one lies in the original; in ours it works wherever the viewer lets the hero pick up, loot or buy a book. Known differences, not to be re-reported: taking a book out of the pack by a drop, a sale or a gift is
+refused in ours (the removal script does not run there yet); a book picked up from the ground after the hero dropped it is refused likewise.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | With a hero of intelligence 8 to 10 and no degree in the discipline, open the character sheet's technology page, note the expertise of the book's discipline, pick up a tech book (for example the Herbology Manual) and look again. | The discipline's expertise rises by the hero's intelligence (not by 1) the moment the book is in the pack; the other disciplines do not change. | open |
+| 2 | Pick up a second copy of the same book, or a book of another discipline. | A second copy adds the intelligence again (the effects stack); another discipline's book raises that discipline. | open |
+| 3 | Raise the intelligence while carrying a book (a potion, an item or a level-up), look at the expertise, then move the book to another place in the pack grid and look again. | Before the move the expertise still counts the old intelligence; after the move (the original removes the book's effects and adds them again) it counts the new intelligence. | open |
+| 4 | Take the book out of the pack (drop it or sell it). | In the original the expertise falls back by the intelligence the book last counted. In ours the drop and the sale are refused for now (see above), so only the original can be compared here. | open |
+| 5 | Open the barter window of a merchant that sells a tech book and buy it. | The book enters the pack and the expertise rises as in step 1 (the purchase fires the same insertion). | open |

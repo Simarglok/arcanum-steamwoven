@@ -1,3 +1,4 @@
+using Arcanum.Data.Characters;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.GlobalFlags;
@@ -20,14 +21,27 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost
     private readonly GameSessionOwner _session;
     private readonly IReadOnlyCollection<AreaInventoryMap> _maps;
     private readonly ScriptContent? _content;
+    private readonly Func<int, EffectRule?>? _effectRules;
 
     /// <param name="content">The game's scripts; null when they could not be loaded, and then every script is missing and
     /// no line is printed. The host borrows it.</param>
-    public AreaItemScriptHost(GameSessionOwner session, IReadOnlyCollection<AreaInventoryMap> maps, ScriptContent? content)
+    /// <param name="effectRules">ARC-DEV-366: the effect rule of a number (the hero's effect tables, <c>rules/effect.mes</c> and the module's
+    /// <c>gameeffect.mes</c>), which an add-effect action of an item script names; null: no number has a rule, and the session refuses such a
+    /// script, as before.</param>
+    public AreaItemScriptHost(GameSessionOwner session, IReadOnlyCollection<AreaInventoryMap> maps, ScriptContent? content, Func<int, EffectRule?>? effectRules = null)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _maps = maps ?? throw new ArgumentNullException(nameof(maps));
         _content = content;
+        _effectRules = effectRules;
+    }
+
+    /// <summary>ARC-DEV-366: the rule of an effect number from the effect tables (the tech books' effects 168 to 175, ledger XA8), or null without
+    /// tables, for a number the tables do not hold or one the session refuses; the session then refuses the move.</summary>
+    public SessionEffectDefinition? EffectDefinition(int number)
+    {
+        try { return _effectRules?.Invoke(number) is { } rule ? SessionEffectDefinition.FromRule(rule) : null; }
+        catch (ArgumentException) { return null; }
     }
 
     /// <summary>The attachment a seed object's row loaded for the point: flags, counters and script of its effective
