@@ -19,6 +19,7 @@ public static class AreaSheetRefusals
         IntelligenceSpellPrerequisite = 29, IntelligenceDegreePrerequisite = 31, WillpowerSpellPrerequisite = 39;
 
     /// <summary>"You must raise your &lt;stat&gt; first" of a skill's key stat (SP7): one message per stat, 22 for any other.</summary>
+    [OriginalFunction(0x55F1C0, OriginalFunctionScope.Partial)]
     [OriginalFunction(0x55F200, OriginalFunctionScope.Partial)]
     public static int KeyStatMessage(CharacterStat? stat) => stat switch
     {
@@ -35,6 +36,8 @@ public static class AreaSheetRefusals
 
     /// <summary>The message number of a refused press, or null when the original shows none (a success, a silent refusal, or a refusal the
     /// page cannot reach because it hides the button). <paramref name="pressed"/> is the stat of a stat page's row (null for hit points and fatigue).</summary>
+    [OriginalFunction(0x57AF8D, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x57B02F, OriginalFunctionScope.Partial)]
     public static int? Number(AreaSheetPage page, bool spend, SessionPointResult result, CharacterStat? pressed = null)
     {
         ArgumentNullException.ThrowIfNull(result);

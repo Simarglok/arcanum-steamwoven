@@ -119,6 +119,16 @@ is claimed. Counts by candidate, including the small number of records without
 backslashes, are intentionally aggregate-only in the evidence record. No
 original paths, extracted bytes, or payload digests are committed.
 
+Entry flag `0x800` (ARC-RES-124): the original's archive lookup (0x53C1D0, caller
+0x53C260) finds an entry by binary search and, when the entry carries `0x800`,
+treats it as absent. A scan of all eight R1 candidates found no entry with
+`0x800` (nor any bit outside the observed mask), so the case does not occur in
+the player's data (the scan used `tools/research/dat_probe.py` on the eight
+files; it agrees with the per-candidate flag columns of the evidence record).
+`DatArchive.ReadEntry` keeps its typed refusal of every flag value except plain and
+zlib (a directory record `0x400` is metadata only, also refused); it is not aligned
+with the original, because no archive reaches the difference.
+
 Unresolved questions include:
 
 - semantic meaning and stability of the 16 opaque footer bytes;

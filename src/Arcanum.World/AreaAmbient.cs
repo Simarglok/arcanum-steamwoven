@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using Arcanum.Data.Area;
 using Arcanum.Data.Lighting;
 using Arcanum.Session;
+using Arcanum.Simulation;
 using Arcanum.Simulation.Clock;
 using Arcanum.World;
 
@@ -179,6 +180,7 @@ public sealed class AreaAmbientDriver
 
     /// <summary>Re-select for the active sector at the current hour (FR-LIGHT-007 sector change) and record
     /// the applied scheme in the session.</summary>
+    [OriginalFunction(0x57D6C0, OriginalFunctionScope.Partial)]
     public bool Apply(long activeSector)
     {
         var failure = _state.Apply(Clock.Hour, activeSector, out var changed);

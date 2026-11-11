@@ -1,6 +1,8 @@
 # Generated interface chrome and density-aware layout (ARC-RES-122)
 
-Status: **concept, research only, 2026-11-11; no code changed; the options in [Owner questions](#owner-questions) are open.**
+Status: **concept approved by the owner on 2026-11-11 (all recommended options; Linux narrowed to SteamOS, docs and code
+only); demo lab [`experiments/hd-ui-density-lab`](../../experiments/hd-ui-density-lab/README.md) built and checked
+([Demo](#demo)); the viewer is unchanged.**
 Work item ARC-RES-122, docs-only. Requirements: [FR-UI-007](../requirements/ui-media-lifecycle.md#fr-ui-007) (adaptive
 layout, high-DPI, chosen scale; status unchanged), [FR-UI-002](../requirements/ui-media-lifecycle.md#fr-ui-002) (HUD).
 Owner direction (Display, [decisions](../architecture/decisions.md)): modern resolution, high-DPI and scalable UI are
@@ -82,7 +84,8 @@ Source facts from the 4.7.2-stable tag unless marked; the files are `platform/ma
 | macOS | `allow_hidpi` (default `true`) gives a backing surface in device pixels | `screen_get_scale` = the screen's `backingScaleFactor` (2.0 Retina, else 1.0); `screen_get_max_scale` = the largest over all screens | documented as inaccurate under fractional display modes | `Window.dpi_changed` and `NOTIFICATION_WM_DPI_CHANGE` (implemented) | Retina is exact. The "looks like" modes of macOS render at 2× the logical size and the system resamples to the panel (Apple behaviour, judgement), so the app sees `k = 2` and cannot reach the panel's own pixels. Window positions and sizes are multiplied by `screen_get_max_scale` (all screens), so with a Retina and a non-Retina screen the non-Retina window's pixel sizes need a check on hardware. |
 | Windows | `allow_hidpi` calls `SetProcessDpiAwareness(PROCESS_SYSTEM_DPI_AWARE)`; `FEATURE_HIDPI` is reported | `screen_get_scale` not implemented (1.0) | `GetDpiForMonitor(MDT_DEFAULT)` = effective DPI, averaged x/y | none (no `WM_DPICHANGED` handler; `dpi_changed` is macOS and Wayland only) | `k = screen_get_dpi / 96` on the main monitor. System awareness means the DPI is the one at log-in, and on a monitor with another scale Windows stretches the window's bitmap (blur). Per-monitor-v2 would need an engine change or a manifest plus our own handling (not checked). |
 | Linux X11 (the default) | not applicable; `FEATURE_HIDPI` commented out | 1.0 | from XRandR monitor millimetres (EDID), else `DisplayWidthMM`, else 96 | none | No OS scale. The EDID DPI is the physical density, unreliable on some monitors; desktop hints (`Xft.dpi`, `GDK_SCALE`, `QT_SCALE_FACTOR`) are not read by Godot and would be ours to read (not checked). Under a Wayland session this driver runs through XWayland, where the compositor either upscales the window (blur) or leaves it unscaled. |
-| Linux Wayland | native; `FEATURE_HIDPI` | for `SCREEN_OF_MAIN_WINDOW`: the window's scale, fractional through `wp_fractional_scale_v1` with `wp_viewporter`; for a direct screen index: a rounded-up integer | from the output's millimetres | `dpi_changed` (implemented) | Exact fractional scale. Selected by `display/display_server/driver.linuxbsd = "wayland"` or `--display-driver wayland`; `"default"` picks X11 because X11 registers first (`os_linuxbsd.cpp`). The fallback when no Wayland compositor is present was not checked. |
+| SteamOS (the only Linux target, owner 2026-11-11) | Game Mode runs a game inside gamescope, Valve's compositor, which hosts it through Xwayland (judgement from gamescope's documentation, not checked here); the Desktop Mode is a KDE Plasma session | as X11 (1.0) | as X11 | none | No usable OS scale. The lab detects SteamOS by `ID=steamos` in `/etc/os-release` and uses the fit alone (`s = min(W / 800, H / 600) × min(u, 1)`): the 1280 × 800 handheld and a docked TV both want the full screen. Code only, never run (no VM by the owner's decision). |
+| Linux Wayland (other distributions, not a target) | native; `FEATURE_HIDPI` | for `SCREEN_OF_MAIN_WINDOW`: the window's scale, fractional through `wp_fractional_scale_v1` with `wp_viewporter`; for a direct screen index: a rounded-up integer | from the output's millimetres | `dpi_changed` (implemented) | Exact fractional scale. Selected by `display/display_server/driver.linuxbsd = "wayland"` or `--display-driver wayland`; `"default"` picks X11 because X11 registers first (`os_linuxbsd.cpp`). The fallback when no Wayland compositor is present was not checked. |
 
 Engine tools that matter (API reference, 4.7.2): `StyleBoxFlat` (borders, corners, shadow, anti-aliasing of
 `anti_aliasing_size` 1.0 at 100 %), canvas-item shaders (the project's `gl_compatibility` renderer supports them),
@@ -195,6 +198,15 @@ Generated chrome is sharp only if its text is too. Three ways: (a) keep the orig
 local only); (c) a free-licence font in git for the generated windows. Text baked into panel art (engraved titles, labels)
 has to become drawn text when its panel is generated; its census is open.
 
+### 7a. Vector shapes
+
+Round and curved parts (brass rings, lenses, round buttons, rivets, rounded plates, arcs) are vector shapes: a few numbers
+(centre, radii, ring width, bevel width, light direction, colours) evaluated as a signed distance per device pixel in a
+canvas shader, with a one-device-pixel anti-aliased edge. They stay sharp at any `s` and change live by changing their
+parameters, with no new art. Ornaments too complex for a formula can be authored as our own SVG and rasterized at the
+current `s` (Godot's experimental `DPITexture`, or a bake step of G2); that stays a later choice. The demo's brass ring
+with a glass lens is such a shape (`LensRing.gdshader`: ring width, light direction and glass tint change with keys).
+
 ### 8. Provenance and distribution
 
 The kit, the shaders, the default theme and our own swatches are code and data written for this project (MIT), so they can
@@ -204,6 +216,9 @@ original by measuring its art (colours, band widths) is derived from it and woul
 eye is ours (see Q2). Pictures keep their present rule (Legacy from the installation, HD pack local only).
 
 ## Owner questions
+
+**Decided 2026-11-11 by the owner: the recommended option of each question** (Q1 B, Q2 a, Q3 b with our own device-pixel
+metrics, Q5 a; Q4 replaced by SteamOS only), and the demo was approved.
 
 ### Q1 Direction
 
@@ -230,6 +245,10 @@ eye is ours (see Q2). Pictures keep their present rule (Legacy from the installa
 
 ### Q4 Linux driver
 
+**Decided 2026-11-11 by the owner: only SteamOS is a Linux target, through docs and code, with no VM run** (see the SteamOS
+row of [Platform facts](#platform-facts-godot-472)). The options below are kept for the record.
+
+
 - **a. Prefer Wayland** (`driver.linuxbsd = "wayland"`): exact fractional scale; the fallback without Wayland needs a check.
 - **b. Keep the default (X11):** scale from the player's `uiScale` and an EDID estimate; blurry or tiny under Wayland sessions.
 - Recommended: (a) after the demo checks it in the Linux VM.
@@ -240,7 +259,7 @@ eye is ours (see Q2). Pictures keep their present rule (Legacy from the installa
 - **b. Per-monitor-v2 through a custom manifest and our own `WM_DPICHANGED` handling:** needs engine-side work and a
   Windows test machine; a later task if the owner plays that way.
 
-## Demo plan (after approval)
+## Demo plan (as approved)
 
 From basic templates and solid-colour placeholders only, no original or derived art:
 
@@ -259,6 +278,37 @@ From basic templates and solid-colour placeholders only, no original or derived 
 If adopted, the viewer path would be slices: wire `uiScale` and `k` into one shared metrics object; the strips; one full
 window (inventory); then the rest window by window, each behind the existing HD interface switch until the owner accepts it.
 
+## Demo
+
+Built in [`experiments/hd-ui-density-lab`](../../experiments/hd-ui-density-lab/README.md) (2026-11-11): `Core/` (Godot-free)
+holds the scale rule (`DensityScale`: `k` per host, `B = 1.5`, the player's scale, the fit clamp, the SteamOS fit rule),
+the grid rule (`DeviceGrid`), the components (`Chrome`: frames of bands stacked by rounded widths, fills, sunk and raised
+bevels) and the mock screen (`MockScreen`: both strips at 0..41 and 441..600 units, centred with generated side fill,
+sockets and four buttons on the top strip (the bottom strip on the same 600-unit grid as the window, so the two never
+clash by a rounding pixel), two gauges, a message log, ten hotkey slots, three buttons and the vector lens on
+the bottom strip, one 800 × 400 window with a picture slot and a 10 × 7 slot grid, a tiled world placeholder). The Godot
+side draws it with whole-pixel rectangles, Godot's fallback font at the device size and the lens shader, reacts to resize,
+`dpi_changed` and a change of screen, and opens its window at 1280 × 800 logical points.
+
+Local observation, on the owner's Mac (Apple M4 Pro, Godot 4.7.2 .NET, GL Compatibility):
+
+- 17 MSTest tests over `Core/` pass: the scale table of [section 1](#1-one-scale-from-density) row by row, `k` per host, the
+  SteamOS rule, the player's and the forced scale, line rounding, shared edges of neighbouring slots at nine scales, equal
+  bands with no gap or overlap, skipped bands that do not fit, strip anchoring, no overlap of the window and the bottom strip on a full 600-unit screen at nine scales, button states,
+  the lens parameters.
+- The self-test renders the mock screen off screen at `s` = 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.75 and 4 and reads every frame
+  back: 54 of 54 checks pass (both sides of the window frame, the top and bottom of the top strip and the top of the bottom
+  strip are exactly their colours for exactly their rounded widths; the lens is drawn).
+- The interactive lab started on the Mac's only active screen, a 2560 × 1440 monitor that Godot reports as scale 1,
+  109 DPI, `screen_get_max_scale` 1: `k = 1`, the 1280 × 800 window gives `s = 1.333` (fit), full screen would give 1.5
+  (density). The Mac's built-in Retina panel was not active (one screen listed), so **Retina (`k = 2`), a move between a
+  Retina and a 1× screen and `dpi_changed` were not observed**; the lab prints every screen at start and opens on another
+  with Godot's `--screen N`.
+- The composite image of the demo (window corner and lens at `s` = 1.25, 1.5, 1.75, the lab's
+  render at `s` against its render at 4 box-minified to `s`) is in the task thread, not in git. Judgement: the frame bands
+  are one colour and crisp in the generated column and slightly mixed in the minified one; the vector lens looks the same in
+  both (both are anti-aliased gradients), so its gain is the live parameters, not sharpness.
+
 ## Synthetic comparison
 
 The task drew the corner of one synthetic frame (four bands of one UI unit, our own geometry and colours, no original
@@ -271,8 +321,9 @@ into in-between pixels at every `s` (5, 6 and 7 distinct colours in that row aga
 
 ## Not verified
 
-- Nothing was run on a display: every platform row is read from the 4.7.2 source and API reference. Windows effective DPI
-  under system awareness, the macOS mixed-screen sizes, the Wayland fallback and the X11 desktop hints need the demo.
+- The platform rows are read from the 4.7.2 source and API reference; on a display only the Mac with one 1× monitor was
+  observed (see [Demo](#demo)). Retina, the macOS mixed-screen sizes, Windows effective DPI under system awareness and
+  SteamOS (code only, by the owner's decision) were not run.
 - `B = 1.5` is a judgement from typical monitor sizes, not a measurement; the owner's eye decides.
 - The look of generated chrome against the original's painted panels is unknown until the demo.
 - The share of each panel that is illustration and not chrome, and the census of text baked into panel art, were not made.

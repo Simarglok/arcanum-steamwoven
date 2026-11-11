@@ -11,16 +11,17 @@ namespace Arcanum.Session;
 /// (<see cref="SpellRunSystem.Dispel"/>). The component runs inside the dispelling run's BEGIN, so the endings are told after the outer action, as the destroyed objects' are
 /// (<c>_goneObjects</c>); they are events 1 ms later in the original as well, so only the order against the component's own object half differs. A summoned critter the Dispel destroys
 /// is destroyed after those endings are told, because the original's loop reads the runs' summoned lists before the destroy (<c>_dispelDestroys</c>);</item>
-/// <item>the **object's**, for a PC or NPC: the stoned spell flag (0x10000) cleared by a plain write (no reference count and no side effect: the object flag stoned that the ObjFlag
-/// component writes stays as it is), the object **destroyed when its spell flags held the summoned bit** (0x4000, read before the clear), and a perma-polymorph undone (critter flags 2
+/// <item>the **object's**, for a PC or NPC: the stoned spell flag (0x10000) cleared by a plain write with no reference count, and then (ARC-MAGIC-039; the first read of 0x451C40 missed it) the
+/// object flag stoned (0x80000) cleared through the object flag clear 0x43D280 when it is set (that function also clears the render bit 0x2000000 of field 0x147, which the session does not keep: the viewer
+/// reads the object flags), the object **destroyed when its spell flags held the summoned bit** (0x4000, read before the clear), and a perma-polymorph undone (critter flags 2
 /// bit 0x400000, with the restore of its art; not modelled: the session keeps no second critter flags field and the Trait restore is MA-8's). A portal's or container's magically held bit
 /// (portal flags bit 4, container flags bit 4) is cleared by a plain write (ARC-MAGIC-037, MA-6: <c>SessionSpellCasterLocks.cs</c>).</item>
 /// </list>
 /// </summary>
 public sealed partial class SessionSpellCaster
 {
-    /// <summary>The detail bits of a <see cref="SpellCastEventKind.Dispelled"/> line: the stoned spell flag cleared, the summoned critter destroyed.</summary>
-    public const int DispelStonedCleared = 1, DispelDestroyed = 2;
+    /// <summary>The detail bits of a <see cref="SpellCastEventKind.Dispelled"/> line: the stoned spell flag cleared, the summoned critter destroyed, the stoned object flag cleared (ARC-MAGIC-039).</summary>
+    public const int DispelStonedCleared = 1, DispelDestroyed = 2, DispelObjectStonedCleared = 4;
 
     // The Dispel component on its target object.
     private SpellComponentOutcome? DispelComponent(SpellRun run, SpellRunTarget target)
@@ -43,7 +44,12 @@ public sealed partial class SessionSpellCaster
         // The spell flags are read once: the summoned bit is tested on that value after the stoned clear's write.
         var spell = created is { } made ? unchecked((int)made.SpellFlags) : CurrentFlags(id, SessionObjectFlagField.Spell);
         var detail = 0;
-        if (created is null && (spell & StonedSpellFlag) != 0 && WriteFlag(run, id, SessionObjectFlagField.Spell, StonedSpellFlag, false)) detail |= DispelStonedCleared;
+        if (created is null && (spell & StonedSpellFlag) != 0 && WriteFlag(run, id, SessionObjectFlagField.Spell, StonedSpellFlag, false))
+        {
+            detail |= DispelStonedCleared;
+            // 0x43D280 with 0x80000: the object flag stoned goes too when it is set (a plain flag write: the original's clear has no reference count), whatever the spell flag's own write did.
+            if ((CurrentFlags(id, SessionObjectFlagField.Object) & ObjectStoned) != 0 && WriteFlag(run, id, SessionObjectFlagField.Object, ObjectStoned, false, sideEffect: true)) detail |= DispelObjectStonedCleared;
+        }
         if ((spell & SpellTargetObject.Summoned) != 0 && id != Hero)
         {
             // The destroy waits for the runs' half (it reads the runs' summoned lists first, DP2).

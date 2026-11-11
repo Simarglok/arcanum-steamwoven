@@ -221,18 +221,41 @@ public sealed partial class AreaDataOwner
         var editorIds = new HashSet<string>(StringComparer.Ordinal);
         var editor = module.Entries.Where(e => Name(e).StartsWith(_plan.SectorPrefix, StringComparison.Ordinal) && Name(e).EndsWith(".mob", StringComparison.Ordinal)).ToArray();
         if (editor.Length > _limits.MaxAggregateRecords) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Correspondence);
-        foreach (var entry in editor)
+        // ARC-DEV-388: the facts of this module's editor records, derived by an earlier build of this process from the same authenticated module, are served
+        // instead of reading every entry again; the comparison with the aggregate below runs either way.
+        var editorClock = System.Diagnostics.Stopwatch.StartNew();
+        ResidentEditorKey residentKey = default; ResidentEditorFact[]? kept = null;
+        if (_limits.ResidentEditorRecords is { } editorMemo)
+        {
+            var moduleIdentity = Identity(moduleKey);
+            residentKey = new(moduleIdentity.Length, moduleIdentity.Sha256, _plan.SectorPrefix);
+            if (editorMemo.TryGet(residentKey, out var found) && found.Length == editor.Length && found.Select((f, i) => f.Ordinal == editor[i].Ordinal).All(same => same)) kept = found;
+        }
+        var derived = _limits.ResidentEditorRecords is not null && kept is null ? new List<ResidentEditorFact>(editor.Length) : null;
+        for (var i = 0; i < editor.Length; i++)
         {
             token.ThrowIfCancellationRequested();
-            using var payload = new AreaOwnership(_budget);
-            var bytes = ReadEntry(EntryIdentity(moduleKey, entry), token, payload);
-            using var wire = new AreaOwnership(_budget);
-            var record = ReadWire(bytes, AreaStage.Correspondence, 0, entry.Ordinal, ownership: wire);
-            construction.Allocate(512);
-            if (record.Own.Kind == 0) throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, AreaStage.Correspondence, 0, entry.Ordinal);
-            if (record.Length != bytes.Length || !editorIds.Add(record.Own.Sha256) || !aggregate.TryGetValue(record.Own.Sha256, out var other) || other != new Correspondence(record.Type, record.Parent.Number, record.SemanticSha256))
+            var entry = editor[i];
+            ResidentEditorFact fact;
+            if (kept is not null) { construction.Allocate(512); fact = kept[i]; }
+            else
+            {
+                using var payload = new AreaOwnership(_budget);
+                var bytes = ReadEntry(EntryIdentity(moduleKey, entry), token, payload);
+                using var wire = new AreaOwnership(_budget);
+                var record = ReadWire(bytes, AreaStage.Correspondence, 0, entry.Ordinal, ownership: wire);
+                construction.Allocate(512);
+                if (record.Own.Kind == 0) throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, AreaStage.Correspondence, 0, entry.Ordinal);
+                if (record.Length != bytes.Length) throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Correspondence, 0, entry.Ordinal);
+                fact = new(entry.Ordinal, record.Own.Sha256, record.Type, record.Parent.Number, record.SemanticSha256);
+                derived?.Add(fact);
+            }
+            if (!editorIds.Add(fact.OwnSha256) || !aggregate.TryGetValue(fact.OwnSha256, out var other) || other != new Correspondence(fact.Type, fact.Prototype, fact.Semantic))
                 throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Correspondence, 0, entry.Ordinal);
         }
+        // Staged for the owner: committed only after the build's closing authentication succeeded (AreaDataOwner.Inspect).
+        if (derived is not null) _residentEditorStaged = (residentKey, derived.ToArray());
+        _limits.ResidentEditorRecords?.Note(kept is not null, editorClock.Elapsed.TotalMilliseconds, editor.Length);
         if (editor.Length != aggregate.Count) issues.Add(new(AreaErrorCode.InputIdentityMismatch, AreaStage.Correspondence));
         _budget.BeginPhase(AreaBudgetPhase.I6);
         var reconciliation = new AreaReconciliation(survey.Count, core.Count, present.Length - core.Count, ring.Count - (present.Length - core.Count),

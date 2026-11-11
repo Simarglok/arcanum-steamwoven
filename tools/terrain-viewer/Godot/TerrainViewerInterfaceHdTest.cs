@@ -105,6 +105,9 @@ public static partial class TerrainViewerSelfTest
                 Require(resolved.Rgba is { } resolvedRgba && cachedImage!.GetData().AsSpan(0, resolvedRgba.Length).SequenceEqual(resolvedRgba), "ARC-DEV-376: the cached level 0 is the PNG's pixels");
             }
             Require(texture.IsHd, "ARC-DEV-376: the texture still draws HD");
+            // ARC-DEV-382: the first bind recorded the frame's alpha pass; the second one (same frame) binds the same image without repeating it.
+            Require(System.IO.File.Exists(System.IO.Path.Combine(cacheRoot, HdOptimizedCache.VerdictFile)), "ARC-DEV-382: the first cached bind recorded its alpha verdict");
+            using (var again = HdOptimizedStore.TryBind(pack, keyed.Hd!, legacy)) Require(again is not null && again.HasMipmaps(), "ARC-DEV-382: a repeated bind with a remembered verdict still binds");
             HdOptimizedStore.Attach(null, false);
             GD.Print("ARC-DEV-376 self-test optimized cache PASS");
 

@@ -152,7 +152,15 @@ public partial class TerrainViewerApp
             var worn = session.QueryEquipment().Worn.ToDictionary(w => w.Entity, w => w.Slot, StringComparer.Ordinal);
             var held = session.QueryHeroKit().Select(kit => (kit.Entity, kit.Kind)).Concat(session.QueryPcInventory().Select(pc => (pc.Entity, pc.Kind)))
                 .Where(item => item.Kind.Type is not (SessionItemType.Ammo or SessionItemType.Gold)).ToArray();
-            var item = held.FirstOrDefault(h => !worn.ContainsKey(h.Entity)).Entity;
+            // ARC-DEV-326 (HK22): an item whose examine script answers "skip default" has no item window (the hover describes nothing), so the check takes the first unworn item whose examine lets the description follow.
+            bool ExaminePasses(string entity)
+            {
+                Arcanum.Data.Area.AreaObjectRecord? examined = null;
+                foreach (var map in _inventoryHost?.Maps ?? [])
+                    if (map.TryGetRow(entity, out var found)) { examined = found; break; }
+                return examined is null || ExamineAllows(examined);
+            }
+            var item = held.Where(h => !worn.ContainsKey(h.Entity)).Select(h => h.Entity).FirstOrDefault(ExaminePasses);
             Arcanum.Simulation.Equipment.EquipmentSlot? lent = null;
             if (item is null && held.FirstOrDefault(h => worn.TryGetValue(h.Entity, out var at) && at != Arcanum.Simulation.Equipment.EquipmentSlot.Weapon).Entity is { } piece)
             {

@@ -231,8 +231,10 @@ public sealed class HdPack
     /// <summary>ARC-DEV-376: the checks of <see cref="ResolveSprite"/> for a frame whose HD pixels are already decoded (the level 0 of an optimized
     /// texture): the key, the Legacy frame, the review marks, the size and the alpha rule. It reads no file. The caller vouches that
     /// <paramref name="hdRgba"/> are the pixels of the PNG whose SHA-256 <see cref="SpriteFileSha256"/> returned (the cache is named by it), so
-    /// <see cref="HdInvalidReason.FileMissing"/>, hash and PNG problems cannot arise here.</summary>
-    public HdPreparedResult CheckPrepared(HdSpriteQuery query, ReadOnlySpan<byte> legacyRgba, ReadOnlySpan<byte> hdRgba)
+    /// <see cref="HdInvalidReason.FileMissing"/>, hash and PNG problems cannot arise here. ARC-DEV-382: with <paramref name="verdicts"/> a pass of the alpha rule
+    /// is remembered by (PNG, Legacy frame, policy, rule version) and a later call for the same triple skips the per-texel pass (the Legacy pixels are still
+    /// hashed against the query, about 1 ms for an 800 × 600 frame).</summary>
+    public HdPreparedResult CheckPrepared(HdSpriteQuery query, ReadOnlySpan<byte> legacyRgba, ReadOnlySpan<byte> hdRgba, HdOptimizedCache? verdicts = null)
     {
         ArgumentNullException.ThrowIfNull(query);
         if (query.Chunk is not null) throw new ArgumentException("A terrain chunk question is not prepared.", nameof(query));
@@ -242,7 +244,14 @@ public sealed class HdPack
         var (hdWidth, hdHeight) = ((long)Scale * entry.Legacy.Width, (long)Scale * entry.Legacy.Height);
         if (hdWidth * hdHeight > _options.MaxHdFramePixels) return new(HdFrameStatus.Invalid, HdInvalidReason.TooLarge, 0, 0);
         if (hdRgba.Length != hdWidth * hdHeight * 4) return new(HdFrameStatus.Invalid, HdInvalidReason.SizeMismatch, 0, 0);
-        if (!AlphaMatches(hdRgba.ToArray(), legacyRgba, entry.Legacy.Width, entry.Legacy.Height, AlphaOf(entry))) return new(HdFrameStatus.Invalid, HdInvalidReason.AlphaMismatch, 0, 0);
+        var policy = AlphaOf(entry);
+        // Everything the pass depends on besides the two pixel buffers (whose hashes are the PNG's and the Legacy frame's) is in the key; the manifest's byte size ties it to the file the manifest describes.
+        var policyKey = $"{policy.Mode}:{policy.MinSoftIoUPermille}:{entry.Legacy.Width}x{entry.Legacy.Height}x{Scale}:{entry.Bytes}";
+        if (verdicts is null || !verdicts.AlphaVerdictKnown(entry.Sha256, entry.Legacy.RgbaSha256, policyKey))
+        {
+            if (!AlphaMatches(hdRgba, legacyRgba, entry.Legacy.Width, entry.Legacy.Height, policy)) return new(HdFrameStatus.Invalid, HdInvalidReason.AlphaMismatch, 0, 0);
+            verdicts?.RecordAlphaVerdict(entry.Sha256, entry.Legacy.RgbaSha256, policyKey);
+        }
         return new(HdFrameStatus.Hd, HdInvalidReason.None, (int)hdWidth, (int)hdHeight);
     }
 
@@ -341,7 +350,7 @@ public sealed class HdPack
     private HdAlphaPolicy AlphaOf(HdPackEntry entry)
         => entry.AlphaMasked ? new(HdAlphaMode.Masked, 1000) : Recipe.Slices.FirstOrDefault(s => string.Equals(s.Name, entry.Slice, StringComparison.Ordinal))?.Alpha ?? Recipe.Alpha;
 
-    private bool AlphaMatches(byte[] hd, ReadOnlySpan<byte> legacy, int width, int height, HdAlphaPolicy policy)
+    private bool AlphaMatches(ReadOnlySpan<byte> hd, ReadOnlySpan<byte> legacy, int width, int height, HdAlphaPolicy policy)
         => HdAlphaCheck.Matches(hd, legacy, width, height, Scale, policy);
 
     private byte[]? ReadFrameFile(HdPackEntry entry, out HdInvalidReason problem)
