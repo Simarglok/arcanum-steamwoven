@@ -126,7 +126,6 @@ public partial class AreaInventoryGridArea : Control
     private void Background(AreaInventoryArtLook look, int number, AreaInventoryMode mode)
     {
         if (look.Art.GetValueOrDefault(number) is not { } texture) return;
-        if (texture is HdInterfaceTexture generated) generated.ScaleSource = _deviceScale ??= DeviceScale;
         Rect2 Scaled(float x, float y, float w, float h) => new(x * _scale, y * _scale, w * _scale, h * _scale);
         float width = texture.GetWidth(), height = texture.GetHeight();
         if (!_roundViewCut) { DrawTextureRect(texture, Scaled(0, 0, width, height), false); return; }
@@ -177,6 +176,12 @@ public partial class AreaInventoryGridArea : Control
     // ARC-UI-148: the generated interface paints a window's frames at the window's own device scale: the frame scale times the canvas transform's and the
     // viewport's stretch (the bars' own rule). The look's textures are shared by the inventory and the barter panel, so the area that draws a
     // background claims it at that draw (the last drawer wins, which is the window on screen).
+    private void ClaimScale(AreaInventoryArtLook look)
+    {
+        _deviceScale ??= DeviceScale;
+        foreach (var texture in look.Art.Values) if (texture is HdInterfaceTexture hd) hd.ScaleSource = _deviceScale;
+    }
+
     private float DeviceScale() =>
         GodotObject.IsInstanceValid(this) && IsInsideTree() ? _scale * GetGlobalTransformWithCanvas().Scale.X * GetViewport().GetStretchTransform().Scale.X : _scale;
 
@@ -470,6 +475,7 @@ public partial class AreaInventoryGridArea : Control
     // worn items and the empty slots' covers; then the held item on the cursor.
     private void DrawOriginal(AreaInventoryArtLook look)
     {
+        ClaimScale(look);
         Rect2 Scaled(float x, float y, float w, float h) => new(x * _scale, y * _scale, w * _scale, h * _scale);
         void Art(int number, float x, float y)
         {
@@ -551,6 +557,7 @@ public partial class AreaInventoryGridArea : Control
     // the drop and use boxes, the shown grid from y 168 (7 rows) and no Take all button.
     private void DrawLoot(AreaInventoryArtLook look)
     {
+        ClaimScale(look);
         var view = _view!;
         var barter = BarterLook ? _barter : null;
         Rect2 Scaled(float x, float y, float w, float h) => new(x * _scale, y * _scale, w * _scale, h * _scale);
