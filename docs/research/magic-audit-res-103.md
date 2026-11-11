@@ -404,10 +404,10 @@ Slice MA-3 (owner decisions D1–D6 of 2026-11-11), on the executable reads [DP1
 Dispel/Destroy address mix-up was already settled by DS1). Host: [Dispel](../world/spell-cast-host.md#dispel-arc-magic-034).
 
 - **Built.** The Dispel component of spells 41 and 42: every non-technological run but the dispelling one that the target is the source of, or that is aimed at it or lists it as summoned, ends by event; a hero's or
-  critter's stoned spell flag is cleared by a plain write; a summoned created critter is destroyed. Dweomer Shield's own run is the processed one and is left alone.
+  critter's stoned spell flag is cleared by a plain write (and, since ARC-MAGIC-039, its stoned object flag); a summoned created critter is destroyed. Dweomer Shield's own run is the processed one and is left alone.
 - **Found.** The run's object block at +0xA0 is its **target**, not its other object (0x455C30, DP3): the object-gone endings (0x459740) of the cast host ended the wrong runs and were fixed in the same slice.
 - **Left, by name.** The perma-polymorph with its Trait restore (MA-8; the session keeps no critter flags 2), (the magically held bit of a portal or container is taken since MA-6) the other object list of a run (+0x130),
-  and the original's stoned object flag, which Dispel leaves set (the spell flag alone is cleared).
+  (ARC-MAGIC-039 corrected MA-3's note that Dispel leaves the stoned object flag set: the original's 0x451C40 also clears it through 0x43D280 and so does the host now).
 
 ## Effect consumers (MA-2, ARC-MAGIC-027)
 
