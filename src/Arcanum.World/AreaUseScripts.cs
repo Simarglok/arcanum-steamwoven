@@ -890,6 +890,30 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         finally { _clicked = previous; }
     }
 
+    /// <summary>
+    /// ARC-MAGIC-048 (E4-c, ledger CN6, CN7): the use script (attachment point 1) of <paramref name="target"/>, an object of the shown map, run through the script dispatcher (0x441980) with any triggerer (<paramref name="triggerer"/>;
+    /// null: none) and any extra object (<paramref name="extra"/>), which is the seam the Use spell component (0x452ED0) needs: it passes the target in all three object pairs, so the object runs its own use script as if it had used itself. The attachee is the target,
+    /// line 0, under <see cref="Admission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>). An object that is not a row of the shown map, or has no use slot with a script, has none (no run: the original's dispatcher finds no
+    /// attachment). Not modelled: the trap preamble of the dispatcher's use point (0x4BBFE0, 0x4BBE40: a trapped target does not meet its trap here, <see cref="AreaTraps.Use"/> is the PC's) and a teleport the script asks for (it leaves
+    /// the run unapplied). One method per original address: the PC's use is <see cref="Run"/>.
+    /// </summary>
+    public AreaScriptedUse RunUseScript(string target, ScrObjectRef? triggerer, ScrObjectRef? extra, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(target); ArgumentNullException.ThrowIfNull(rules);
+        var attachee = new ScrObjectRef(_shownMap, target);
+        if (Row(attachee) is not { } row || Slot(attachee, ScrPoint.Use) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
+        var previous = _clicked;
+        _clicked = (target, row);
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, triggerer, extra), this, new() { Rules = rules, Admission = Admission });
+            return Finish(run, _ => "a teleport from a use component's script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+        }
+        finally { _clicked = previous; }
+    }
+
     /// <summary>ARC-DEV-326: whether an examine run (<see cref="RunExamine"/>) leaves the object without a description: the dispatcher's
     /// "skip default" (return 0 of 0x441980, 0x57CD9B), which includes a script that runs past its last line. A run that was not applied
     /// (refused by the admission, effects the viewer cannot apply, an unreadable or changed file, a requested teleport) or an object with no

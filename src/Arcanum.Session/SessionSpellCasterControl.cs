@@ -17,6 +17,22 @@ public sealed partial class SessionSpellCaster
     /// <c>Teleport_Tile</c> 242, <c>obj_f_critter_fleeing_from</c> 230) are not ready.</summary>
     public const int HitPointDamageField = 29;
 
+    /// <summary>
+    /// ARC-MAGIC-048 (CN6): the host's use-script call of the Use component (0x452ED0 → the dispatcher 0x441980, script point 1): the object whose own use script runs, with that object as its triggerer too (the original passes the
+    /// target in all three object arguments). True when a script ran, false when the object has none (the dispatcher finds no attachment, the answer of the original is ignored). Null: no host, so the component is not ready.
+    /// </summary>
+    public Func<string, bool>? UseObject { get; set; }
+
+    // 0x452ED0 (Use, type 24; the dispatcher's own code is the world's, 0x441980): acts only with a current target object (any type, the PC included: it has no script here); a tile does nothing. The call's answer is dropped, as the original drops it.
+    [OriginalFunction(0x452ED0, OriginalFunctionScope.Full)]
+    private SpellComponentOutcome? UseComponent(SpellRun run, SpellRunTarget target)
+    {
+        if (UseObject is not { } use) return null;
+        if (target.Object is not { } obj) return SpellComponentOutcome.None;
+        _log.Add(new(SpellCastEventKind.ObjectUsed, run.Id, use(obj.Id) ? 1 : 0, obj.Id));
+        return SpellComponentOutcome.None;
+    }
+
     [OriginalFunction(0x4529D0, OriginalFunctionScope.Full)]
     private static SpellComponentOutcome TerminateComponent() => new(JumpTo: SpellComponentOutcome.EndOfList);
 
