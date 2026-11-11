@@ -21,7 +21,7 @@ namespace Arcanum.World;
 public sealed class AreaSpellCastMap : ISpellCastMap
 {
     private const int ObjectFlagsSlot = 18, SpellFlagsSlot = 19, PcType = 15, NpcType = 16;
-    private const int DestroyedOrOff = 0x3;
+    private const int DestroyedOrOff = 0x3, LockLevelSlot = 37;
 
     private readonly GameSessionOwner _session;
     private readonly int _map;
@@ -392,6 +392,20 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         return null;
     }
 
+    /// <summary>
+    /// ARC-MAGIC-037 (MA-6): a portal or container row as the lock flags of a spell read it: the session's lock identity and T0 baseline (the object-attack host's, so a door the session
+    /// destroyed or switched off answers none) with the row's lock level (the portal's field 47, the container's 57: slot 37 of both).
+    /// </summary>
+    public SpellOpenable? Openable(string id)
+    {
+        ArgumentNullException.ThrowIfNull(id);
+        if (ObjectTarget(id) is not { Baseline.Openable: { } baseline } target || !_rows.TryGetValue(id, out var row)) return null;
+        return new(new(target.Map, target.Entity), baseline, (int)Math.Clamp(Number(row, LockLevelSlot), -GameSessionOwner.MaxLockDifficulty, GameSessionOwner.MaxLockDifficulty));
+    }
+
+    // The lock flags a portal or container row has now: the session's over its T0 baseline (the held and locked tests of a spell's target areas read these).
+    private int LockFlagsNow(string id) => Openable(id) is { } openable ? _session.QueryOpenable(openable.Openable, openable.Baseline).Flags : 0;
+
     private SessionObjectTarget? ObjectTarget(string id) =>
         _objects is not null && _rows.TryGetValue(id, out var row) && row.Type is not (NpcType or PcType) ? _objects(row)?.Object : null;
 
@@ -419,8 +433,13 @@ public sealed class AreaSpellCastMap : ISpellCastMap
             return new(id, NpcType, location, objectFlags, npc.SpellFlags, npc.CritterFlags, npc.CritterFlags2, life.Status.HitPoints,
                 life.Record.State.HitPointDamage, Poison: life.Record.State.PoisonLevel,
                 PcLeader: _session.QueryCompanion(id).LedByPc ? SessionSpellCaster.Hero : null);
-        return new(id, row.Type, location, objectFlags, Flags(row, SpellFlagsSlot), HitPoints: 1);
+        // ARC-MAGIC-037: a portal's or container's lock flags are the session's, so a spell's "locked" and "not magically held" area tests see what a spell wrote.
+        var lockFlags = row.Type is SpellTargetObject.Portal or SpellTargetObject.Container ? LockFlagsNow(id) : 0;
+        return new(id, row.Type, location, objectFlags, Flags(row, SpellFlagsSlot), HitPoints: 1,
+            PortalFlags: row.Type == SpellTargetObject.Portal ? lockFlags : 0, ContainerFlags: row.Type == SpellTargetObject.Container ? lockFlags : 0);
     }
+
+    private static long Number(AreaObjectRecord row, int slot) => row.EffectiveFields.FirstOrDefault(f => f.Slot == slot && f.Presence == AreaPresence.Value)?.Number ?? 0;
 
     private static int Flags(AreaObjectRecord row, int slot) =>
         unchecked((int)(row.EffectiveFields.FirstOrDefault(f => f.Slot == slot && f.Presence == AreaPresence.Value)?.Number ?? 0));

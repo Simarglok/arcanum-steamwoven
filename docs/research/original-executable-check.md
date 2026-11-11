@@ -58,7 +58,13 @@ on the original files.
   the disassembly and data listing (`listing/`), Ghidra tables of globals with
   their readers and writers, strings, imports (`data/`) and byte-level scans of
   strings, code-pointer tables and resources (`raw/`)
-  ([what each holds](../workflow/toolchain.md#exe-exports-beyond-the-decompiled-c-arc-dev-379)).
+  ([what each holds](../workflow/toolchain.md#exe-exports-beyond-the-decompiled-c-arc-dev-379));
+  and the derived extras (ARC-DEV-385): one listing file per function (`asm/funcs/`), the
+  source file and line of the original's asserts (`source-map/`), the name tables
+  such as the object field names, the decoded initial data, the constants the code
+  stores into globals and the indirect call sites (`tables/`), the project's names
+  beside Ghidra's (`names/`) and the PE summary of the install's other binaries
+  (`other-binaries/`) ([what each holds and what no tool can extract](../workflow/toolchain.md#exe-exports-derived-extras-arc-dev-385)).
   The decompiler's names, variables and types are a guess; they are checked, not
   trusted.
 - Only for what the exports lack: Xcode's `llvm-objdump` (`xcrun -f llvm-objdump`)

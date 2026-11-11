@@ -381,8 +381,27 @@ Compare in both games with the same hero and spells.
 Known differences (reading only, no game step):
 
 - Polymorph (49) and a script's permanent polymorph (critter flags 2 bit 0x400000) are undone by the original's Dispel with the art restored; ours has neither (MA-8).
-- A portal or container held by Magelock (75) loses the hold in the original; ours has no such writer yet (MA-6).
+- A portal or container held by Magelock (75) loses the hold in the original; ours does the same since MA-6 ([steps below](#arc-magic-037--locks-and-holds-unlocking-cantrip-and-magelock-ma-6-2026-11-11)).
 - A summoned critter is destroyed by the original's Dispel; ours destroys one the session created, and no spell makes one before the creature summons (E1-e).
+
+## ARC-MAGIC-037 — Locks and holds: Unlocking Cantrip and Magelock (MA-6, 2026-11-11)
+
+The rules are in [Locks and holds](../world/spell-cast-host.md#locks-and-holds-on-portals-and-containers-arc-magic-037), the executable reading in [LM1–LM6](../research/ledger/spell-runs.md#lock-flags-of-portals-and-containers-arc-magic-037).
+No viewer smoke stage casts at a door, so every step here is by hand. Compare in both games with the same hero (a mage who knows Unlocking Cantrip of the Conveyance college and Magelock of the Temporal college), the same door and the same chest; use the hero's own "locked" door of a house and a locked chest, and a door with a high lock level for step 3 (pick it with lockpicks first to see how hard it is).
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast Unlocking Cantrip (1) on a locked door with a low lock level (below 20), then open it. Close it, wait more than one game hour (rest or let the clock run), and try the door again. | The door unlocks and opens. **It is still unlocked after the hour**: the spell writes the lock field itself and schedules no relock (a key or lockpicks relock an hour later). Ours does the same; if the original relocked it after an hour, note it here. | open |
+| 2 | Cast Unlocking Cantrip (1) on a locked chest with a low lock level and open it; then do the same with the lockpicks on a second locked chest and wait an hour. | The spell opens the chest and the chest stays unlocked for good; the lockpicked chest locks again after the hour (and, as before, a spilled or looted chest keeps its contents). Ours matches. | open |
+| 3 | Cast Unlocking Cantrip (1) with a hero of low magical aptitude on a door or chest whose lock level is above 19 and above the hero's aptitude (the character sheet's Magick aptitude line; the lock level is the lock's difficulty shown by the pick-locks check). Then raise the aptitude (an aptitude-giving item or a higher level) to at least the lock level and cast again. | The first cast fails: the lock stays and the "resisted" feedback (the resisted effect, spell.mes 643 for the player) plays on the door. At aptitude not below the level the lock opens. A lock of level 19 or lower opens at any aptitude. Ours matches (the "resists" line and message 643). | open |
+| 4 | Stand near a guard or the owner of the door (an NPC who watches it) and cast Unlocking Cantrip on it. | The original calls the object's witnesses (0x4AEE50) after the cast, whether the lock opened or not: NPCs within 10 tiles that guard the object (or are guards) and see or hear the caster react, an unlock making them hostile. A door or chest with no owner alerts nobody. **Ours does nothing yet** (the guards' reaction to a lock crime is not built; the cast log only has a line). Record what the original's guards do. | open |
+| 5 | Cast Magelock (75) on an unlocked, closed door, then try to open it. Cast it on an open door and try to close it. | The held door does not open (the locked sound plays, the hover line shows the held text) and a held open door cannot be closed either. When the spell ends (its duration or maintenance), the door works again. Ours matches. | open |
+| 6 | Cast Magelock on a door, then Disperse Magick (41) on the same door. Then cast Magelock on a door twice if the game lets you (two casters, or the spell again on a door it already holds). | Disperse Magick clears the hold at once. The area of Magelock excludes a door that is already held, so the second cast is refused at the target. If two holds stack (two casters), the first end clears the bit although the other spell goes on. Ours does the same; record whether the original allows the second target. | open |
+
+Known differences (reading only, no game step):
+
+- The guard alert's witnesses and the screen refresh after an unlock are not built; the stone-to-flesh pair of Flesh to Stone (48) on a portal that holds the stoned spell flag is not built either (no installed record makes a stone portal).
+- A container's magically held bit has no writer but Dispel (no installed record writes it).
 
 ## ARC-RES-120 — Function triage of the exe band 0x55-0x59 (2026-11-11)
 
@@ -478,6 +497,20 @@ window drew, floaters included, where the original copies the game view alone; w
 | 7 | Click the lens, in the middle and in the corner. | The map closes (ARC-UI-133); the lens picture does not change that. | open |
 | 8 | With the HD interface switch on, repeat steps 1 and 4. | The same lens in the HD frame: the ring over the square; the corners of the square show wood, not a hole. If a corner still shows the world through, report it. | open |
 
+## ARC-UI-136 — One brass ring around the hero's lens in HD (PR pending, 2026-11-11)
+
+With the HD interface switch on, the lens on the world map showed a doubled brass edge at the ring's top and upper right: the ring of the window frame (outside the lens square) and the ring of the cover art 198 (inside it) were
+painted separately and did not coincide. The ring of the window frame `mapmain` is rebuilt from the cover's ring ([HD interface art](../rendering/hd-interface-art.md#world-map-window-arc-ui-126)); the Legacy art is untouched. The repair is a local pack change
+(`lens_ring.py`, then `hd_pack.py apply`, backup and rollback), and it is installed in the pack the game reads (manifest `696edbd2…`, backup `ARC-UI-136-v2-cde8a57839e6`, `hd_pack.py rollback` undoes it). The cause and the method are in the same section; no frame is in git. Known difference, not to be re-reported: the cover's corner wood and the
+window frame's wood have a slightly different grain, which leaves a faint square patch at the lens corners (not part of this repair).
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | In Legacy (HD interface off) open the world map (`W`) and look closely at the ring around the top-left lens, at the top and the right side. | The original: one clean brass ring, no second edge. | open |
+| 2 | With the HD interface on, open the world map and look at the same ring, top and right side, with the lens live and again during a journey (black lens). | One continuous brass ring like the original, no doubled edge at the top or at the right; the ring is the same width all around; no seam where the ring meets the square's border. | open |
+| 3 | Open the character sheet and the logbook in HD and look at their lens ring. | Unchanged (the cover art `pcwincvr` is not part of this repair). | open |
+| 4 | Compare the HD ring with the Legacy ring for colour. | The rebuilt top and side arcs are the same warm brass as the arcs that were not rebuilt; report a visibly paler or blurrier arc. | open |
+
 ## ARC-DEV-371 — Script-created critters (E1-c3, 2026-11-11)
 
 A script's create object (action 52) makes a critter when the prototype is a critter's ([E1-c3](../architecture/object-directory.md#e1-c3-script-created-critters-arc-dev-371)). The installed case on the
@@ -498,6 +531,42 @@ Known differences (documented, not bugs):
 - A created creature's inventory is empty until E1-c4 (restock at creation, then the best-items wield).
 - A script's vicinity lists (the "critters near" of a script) do not list created creatures yet.
 - The twig tile's own text ("snapping twig", if the original prints one) is the script's, printed as for any tile script.
+## ARC-MAGIC-036 — Spatial Distortion moves the caster along the route, at most eight tiles (PR pending, 2026-11-11)
+
+Read in the original executable (ledger [MV1–MV3](../research/ledger/spell-runs.md#movement-component-and-the-immediate-path-relocation-arc-magic-036)): the Movement component of Spatial Distortion (spell 3) is no teleport. It asks the same
+path request the item drop uses and walks **at most eight tiles** of the route, running the tile script of every tile it walks, then puts the caster on the last tile. Compare in both games with a hero who knows the spell
+(Conveyance college, rank 4), on any open ground such as the Crash Site. Both rule modes behave the same. Known differences, not to be re-reported: Teleportation (spell 4) and the other movement kinds are not built yet; the tile scripts run after the caster is placed here,
+before it in the original (the observable difference is only which tile the script sees the caster on); the view is not re-centred beyond the camera following the hero.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast spell 3 at a clear tile 3 tiles away in the open. | The caster stands on the target tile at once; a cast animation or flash plays on the caster. | open |
+| 2 | Cast spell 3 at a clear tile 15 tiles away in a straight line. | The caster ends on the eighth tile of the way, not on the target (the original cuts the route at eight). | open |
+| 3 | Cast it at a tile behind a wall or across a closed door where the way round is long. | Either the caster ends up to eight tiles along the walking route, or, when there is no route, nothing moves and the fatigue is still paid. | open |
+| 4 | Start a click-walk far away, then cast spell 3 at a near tile while the hero walks. | The walk stops with the move; the hero stands on the target and does not walk on. | open |
+| 5 | Cast it so that the route crosses or ends on a tile with a script (a trap-like tile, a door sill with a script). | The tile's script runs; the last tile's script runs twice (watch for a message that appears twice). | open |
+| 6 | Cast it at a tile with a creature on it. | `Tgt_Tile_Empty` refuses the tile: the cast does not pick it. | open |
+
+
+## ARC-DEV-381 — Main menu opens before the start map (O1 of the performance diagnosis, 2026-11-11)
+
+The menu now opens as soon as its art is read, while the start map loads behind it ([early menu](../rendering/terrain-viewer.md#main-menu-arc-ui-011)). The original shows
+its menu before any map exists, so the comparison is about the order and the waiting, not about the menu's contents (they are unchanged). Compare on a start with the menu
+(`./arcanum area`, or a packaged build); the first build for this comparison is any build from `main` that contains this task.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Start the game and watch how soon the main menu appears. | Like the original: the menu is the first thing on screen, a second or two after the window opens, with no map shown behind it. The music of the menu starts a few seconds later, when the start map is ready. | open |
+| 2 | Open Single Player, New Game, Pick Character and browse the heroes at once, before the map is ready. | Everything works as in the original: the same windows, the same twelve heroes. Nothing waits. | open |
+| 3 | Press Start on a hero before the map is ready. | The menu shows that the world is still loading and the game starts by itself when it is ready (the original has no such wait, because it loads the map after the choice; this is the one visible difference). Escape takes the choice back. | open |
+| 4 | Press Load Game or Last Save at once, with a save present. | The same wait note, then the load as before. A started load never shows a game of another map under the menu. | open |
+| 5 | Press New Character at once, then go through the window, the editor and the shop. | The wait note first; then the windows work as before (the shop's merchant loads behind it). | open |
+| 6 | Open Options at once and change a setting, then Done. | The window works before the map is ready and the change holds; the main window returns. | open |
+
+Known differences (documented, not bugs):
+
+- A choice that needs the game world waits for the start map's load, which the original does not do. It is the price of showing the menu first.
+- The main thread is busy while the start map is published, for about a second after the load ends, so the menu may answer late then (O6 of the diagnosis).
 
 ## ARC-RES-121 — Function audit wave 3, groups G and I (2026-11-11)
 
@@ -506,4 +575,4 @@ The audit changes no behaviour. Two places where it read original behaviour that
 | # | Step | Expected (from the original executable) | Status |
 | --- | --- | --- | --- |
 | 1 | Press F10 in the original game on a normal map. | The interface bar hides or shows (the compact interface toggle, 0x54ACB0) and the two gauge strips are redrawn. Ours only reserves the key. If nothing happens, the function is dead code. | open |
-| 2 | Start a game with a hero of intelligence 3 or 4, join a companion and type a party order with long words (Enter, the companion's name, a command). | Words of intelligence plus two letters or more are replaced by filler text (0x4C3120); for a hero with the dim flag every word does. Ours does not read typed orders yet. If the order arrives whole, the function is dead code. | open |
+| 2 | Start a game with a hero of intelligence 3 or 4, join a companion and type a party order with long words (Enter, the companion's name, a command). | Words of intelligence plus two letters or more are replaced by filler text (0x4C3120); for a hero with the dim flag every word is. Ours does not read typed orders yet. If the order arrives whole, the function is dead code. | open |

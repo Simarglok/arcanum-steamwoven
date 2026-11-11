@@ -65,6 +65,8 @@ public partial class TerrainViewerApp
             ContinueSceneFlow(flow);
             return;
         }
+        // ARC-DEV-381: the menu opened before the scene was ready: it attaches to the scene now (and runs what it held).
+        if (_menuAwaitsScene) { AttachEarlyMenuToScene(); return; }
         if (!arguments.MainMenu || _mainMenuShown) return;
         // Only the first published scene: a map without a session (unlit without a clock, or not in the map list) shows no menu,
         // and a later transfer does not open it in the middle of play.
@@ -82,11 +84,12 @@ public partial class TerrainViewerApp
         return _mainMenuTexts = texts;
     }
 
-    private void OpenMainMenu(AreaMainMenuTexts texts, AreaMenuWindow root = AreaMenuWindow.Main, bool reopened = false)
+    private void OpenMainMenu(AreaMainMenuTexts texts, AreaMenuWindow root = AreaMenuWindow.Main, bool reopened = false, bool early = false)
     {
         // A menu waiting under the save list (or for its window to open) is not replaced.
         // ARC-UI-026: the death screen still covering the game is the one modal state the menu opens under (it fades in over it).
-        if (!QuickKeysActive || MainMenuOpen || (PanelOutsideStackOpen && !HeroDeathCovering) || _mainMenu is not null) return;
+        // ARC-DEV-381: the early menu opens before the start scene has a session (see TerrainViewerAreaEarlyMenu.cs).
+        if ((!QuickKeysActive && !early) || MainMenuOpen || (PanelOutsideStackOpen && !HeroDeathCovering) || _mainMenu is not null) return;
         // ARC-DEV-367: the call, then the first frame drawn with the menu (the start to the menu of the first opening).
         using var span = PerfProbe.Enabled ? PerfProbe.Span("menu.open." + root) : default;
         PerfProbe.Mark("menu.open");
@@ -97,7 +100,7 @@ public partial class TerrainViewerApp
             _mainMenuPanel.ButtonPressed += index => MainMenuCommand(() => _mainMenu!.Activate(index));
             _mainMenuPanel.BrowseRequested += direction => MainMenuCommand(() => { _mainMenu!.Browse(direction); return AreaMenuCommand.Nothing; });
             _mainMenuPanel.StartRequested += () => MainMenuCommand(() => _mainMenu!.Start());
-            _mainMenuPanel.BackRequested += () => MainMenuCommand(() => { _mainMenu!.Back(); return AreaMenuCommand.Nothing; });
+            _mainMenuPanel.BackRequested += () => MainMenuCommand(() => { _mainMenu!.Back(); return AreaMenuCommand.Nothing; }, cancels: true);
             _mainMenuPanel.AnswerRequested += yes => MainMenuCommand(() => _mainMenu!.Answer(yes));
             _mainMenuPanel.OptionChangeRequested += (index, direction) => MainMenuCommand(() => _mainMenu!.Change(index, direction));
             _mainMenuPanel.SoundRequested += id => PlayBarSound(id, "menu button");
@@ -118,11 +121,11 @@ public partial class TerrainViewerApp
         StopWorldRoute("MAIN_MENU");
         // ARC-DEV-111: the menu opens over a window that stays open under it; its layer is the last child's, so it draws on top.
         if (_mainMenuPanel.GetParent() == this) MoveChild(_mainMenuPanel, GetChildCount() - 1);
-        _mainMenu = new AreaMainMenu(texts, root == AreaMenuWindow.Main ? NewGameRefusal() : null, root, reopened);
+        _mainMenu = new AreaMainMenu(texts, root == AreaMenuWindow.Main && !early ? NewGameRefusal() : null, root, reopened);
         _mainMenuStatus = null;
         GD.Print($"ARC-UI-011 main menu open window={root} reopened={reopened} newGame={_mainMenu.NewGameRefusal ?? "ready"}");
         // ARC-DEV-332: the main menu's soundtrack is the shop map's sector pair; the in-play menu keeps the game's music.
-        if (root == AreaMenuWindow.Main) EnterMainMenuSound();
+        if (root == AreaMenuWindow.Main && !early) EnterMainMenuSound();
         RenderMainMenu();
         RefreshReadyStatus();
     }
@@ -308,10 +311,13 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>Runs one step of the menu and then the command it returns.</summary>
-    private void MainMenuCommand(Func<AreaMenuCommand> step)
+    private void MainMenuCommand(Func<AreaMenuCommand> step, bool cancels = false)
     {
         if (!MainMenuOpen || _mainMenu is null) return;
+        // ARC-DEV-381: a choice that waits for the start scene takes no other input; Escape or Back takes it back.
+        if (_menuDeferred is not null) { if (cancels) CancelDeferredMenuCommand(); return; }
         var command = step();
+        if (_menuAwaitsScene && DefersUntilScene(command.Kind)) { DeferMenuCommand(command); return; }
         switch (command.Kind)
         {
             case AreaMenuCommandKind.LoadGame:
@@ -557,7 +563,8 @@ public partial class TerrainViewerApp
     /// list closing in the teardown does not bring it back.</summary>
     private void EndMainMenuForTeardown()
     {
-        if (_mainMenu is null) return;
+        // ARC-DEV-381: the early menu stands over no scene, so the first scene's publication tears nothing of it down.
+        if (_mainMenu is null || _menuAwaitsScene) return;
         GD.Print("ARC-UI-011 main menu closed: the scene ended (another map loads)");
         DropMainMenuShop();
         _mainMenu.DropEditor(); CloseCharacterEditor();
@@ -588,7 +595,7 @@ public partial class TerrainViewerApp
     /// <summary>Per frame: a session that is gone (a reset, map mode left) ends the menu.</summary>
     private void SyncMainMenu()
     {
-        if (_mainMenu is not null && !QuickKeysActive) { DropMainMenuShop(); _mainMenu.DropEditor(); CloseCharacterEditor(); _mainMenuPanel?.CloseView(); _mainMenu = null; }
+        if (_mainMenu is not null && !QuickKeysActive && !_menuAwaitsScene) { DropMainMenuShop(); _mainMenu.DropEditor(); CloseCharacterEditor(); _mainMenuPanel?.CloseView(); _mainMenu = null; }
         SyncShopBarter();
     }
 
@@ -608,7 +615,7 @@ public partial class TerrainViewerApp
     {
         if (!key.Pressed || key.Echo || _mainMenu is null) return;
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
-        if (routed == Key.Escape) { MainMenuCommand(() => _mainMenu.Escape()); return; }
+        if (routed == Key.Escape) { MainMenuCommand(() => _mainMenu.Escape(), cancels: true); return; }
         // The quit box takes Return as yes, as the original's yes/no box (SF3).
         if (routed is Key.Enter or Key.KpEnter && _mainMenu.QuitPending) { MainMenuCommand(() => _mainMenu.Answer(true)); return; }
         // ARC-UI-034: Return in the character editor goes on as its Accept does (the menu's key handler, CM5).
@@ -639,7 +646,7 @@ public partial class TerrainViewerApp
     private void HandleMainMenuPulse(IntentFrame intent)
     {
         if (_mainMenu is null) return;
-        if (intent.Cancel) MainMenuCommand(() => _mainMenu.Escape());
+        if (intent.Cancel) MainMenuCommand(() => _mainMenu.Escape(), cancels: true);
         else if (intent.Confirm) MainMenuCommand(() => _mainMenu.Confirm());
         else if (intent.MenuPressedDirection != 0)
             MainMenuCommand(() =>
@@ -712,6 +719,8 @@ public partial class TerrainViewerApp
             Require(texts.FromGame && texts.Text(10).Length > 0 && texts.Text(52).Length > 0, "the texts come from the game: " + texts.Detail);
             await MainMenuArtForSmoke(Require);
             Require(_mainMenu.NewGameRefusal is null, "a new game can start on this map: " + _mainMenu.NewGameRefusal);
+            // ARC-DEV-381 (O1): the menu opened while the start map loaded; the choices that need the scene wait for it.
+            EarlyMenuForSmoke(Require, Choose);
             var placeholder = _areaSession;
             // ARC-DEV-332: the menu plays the opening map's sector pair (the shop map's 26/29, "Main Menu"), not the scene's own scheme.
             if (_audio is not null && AreaSoundCatalog() is not null && SoundWorld().Maps is { } menuMaps && Arcanum.Data.Audio.MainMenuSound.Choose(menuMaps) is { } menuPlace)

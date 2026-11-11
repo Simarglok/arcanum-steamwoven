@@ -34,6 +34,23 @@ public sealed class AreaMainMenuTests
     }
 
     [TestMethod]
+    public void The_new_game_answer_can_come_after_the_menu_opened_and_changes_the_buttons_and_the_start()
+    {
+        // ARC-DEV-381: the menu opens while the start scene loads (no refusal yet, the browser works) and takes the scene's answer when it is published.
+        var menu = Menu();
+        menu.Activate(0); menu.Activate(0); menu.Activate(0);
+        Assert.AreEqual(AreaMenuWindow.PickCharacter, menu.Window);
+        Assert.AreEqual(AreaMenuCommandKind.StartNewGame, menu.Start().Kind);
+        menu.NewGameRefusal = "the shown map is another";
+        Assert.AreEqual(AreaMenuCommandKind.None, menu.Start().Kind, "a refusal that comes later stops the start");
+        Assert.IsTrue(menu.Back());
+        CollectionAssert.AreEqual(new[] { 422 }, menu.Shown.Select(button => button.Message).ToArray(), "the new game buttons are hidden with the reason");
+        Assert.IsTrue(menu.HiddenNotes.Any(note => note.Contains("the shown map is another", StringComparison.Ordinal)));
+        menu.NewGameRefusal = null;
+        CollectionAssert.AreEqual(new[] { 420, 421, 422 }, menu.Shown.Select(button => button.Message).ToArray(), "the answer ready again shows them");
+    }
+
+    [TestMethod]
     public void Hotkeys_are_the_label_message_plus_ten_upper_cased_and_only_shown_buttons_take_them()
     {
         var menu = Menu();

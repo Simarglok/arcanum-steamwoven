@@ -146,7 +146,8 @@ yet. Current state: the component catalogue
    export](docs/workflow/toolchain.md#ghidra-text-export-arc-dev-377)) and the
    listing, tables and byte scans beside it (index
    `research-private/ghidra-export/README.txt`; [what each
-   holds](docs/workflow/toolchain.md#exe-exports-beyond-the-decompiled-c-arc-dev-379)), and go to the executable itself only for a
+   holds](docs/workflow/toolchain.md#exe-exports-beyond-the-decompiled-c-arc-dev-379); the per-function `asm/`, `source-map/`, `tables/` and
+   `names/` extras: [derived extras](docs/workflow/toolchain.md#exe-exports-derived-extras-arc-dev-385)), and go to the executable itself only for a
    function the exports lack, for a detail the
    decompiler's guesses leave open (operand width, signedness, wrap) or for run
    time behaviour (the emulator oracle, `./arcanum oracle`, ARC-DEV-007), per the
