@@ -1,3 +1,4 @@
+using Arcanum.Simulation;
 using Arcanum.Simulation.Movement;
 
 namespace Arcanum.Session;
@@ -40,6 +41,7 @@ public sealed partial class GameSessionOwner
     /// could read (the objects the open notifies, in entity order). Nothing is written when no object carries a mark on the map
     /// (<see cref="GameSessionDisposition.NoChange"/>); the returned list is empty then. A stale version or a full revision counter is refused with nothing taken.
     /// </summary>
+    [OriginalFunction(0x410C50, OriginalFunctionScope.Partial)]
     public (GameSessionMutationResult Result, IReadOnlyList<SessionTeleportedObject> Objects) TakeTeleportedMarks(GameSessionVersion expected, SessionMapId map)
     {
         ThrowIfDisposed();

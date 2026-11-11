@@ -29,6 +29,23 @@ public sealed class AreaSpellCastingTests
         // ARC-DEV-304: spell 56's flag is no hold.
         Assert.AreEqual("Rat r1 can be spoken with", AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x2000000, "r1", 1), null, Name));
         Assert.AreEqual("Rat r1 can no longer be spoken with", AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x2000000, "r1", 0), null, Name));
+        // ARC-DEV-358 (MA-1): every other flag, and the object flags a side effect wrote, tell no line (the original tells none); a hold's bit in the object flags is no hold.
+        Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x1, "r1", 1), null, Name), "invisible");
+        Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x200, "r1", 5), null, Name), "the invisible object flag");
+        Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x40, "r1", 5), null, Name), "the translucent object flag is no paralysis");
+        Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x10, "r1", 3), null, Name), "a critter flag that is no hold");
+        Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x40, "r1", 3 | SessionSpellCaster.SideEffectDetail), null, Name), "the paralysed bit don't-draw writes is no hold line");
+    }
+
+    [TestMethod]
+    public void The_identify_answer_is_a_text_line_by_the_target_type_and_the_mark_a_line_of_its_own()
+    {
+        // ARC-MAGIC-032 (MA-7, D5(a)): the windows of the original are E8's; the line says what the window would show.
+        Assert.AreEqual("identify: Rat r1 (the character sheet window is not built yet)", AreaSpellCasting.Line(new(SpellCastEventKind.IdentifyCritter, 1, 16, "r1"), null, Name));
+        Assert.AreEqual("identify: the contents of Rat r2 (the inventory window is not built yet)", AreaSpellCasting.Line(new(SpellCastEventKind.IdentifyContainer, 1, 2, "r2"), null, Name));
+        Assert.AreEqual("identify: Rat kit:2 (the item description window is not built yet)", AreaSpellCasting.Line(new(SpellCastEventKind.IdentifyItem, 1, 5, "kit:2"), null, Name));
+        Assert.AreEqual("Rat kit:2 is identified", AreaSpellCasting.Line(new(SpellCastEventKind.ItemIdentified, 1, 1, "kit:2"), null, Name));
+        Assert.AreEqual("the identification was not saved", AreaSpellCasting.Line(new(SpellCastEventKind.ItemIdentifyNotSaved, 1, 3, "kit:2"), null, Name));
     }
 
     [TestMethod]

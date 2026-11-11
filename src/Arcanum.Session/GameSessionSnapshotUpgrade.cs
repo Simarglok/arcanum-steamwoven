@@ -511,6 +511,20 @@ public static partial class GameSessionSnapshotCodec
         // ARC-DEV-348 (schema 87): the effects section gains the effect lists of NPCs. No older build kept any, so the step adds the empty list. The effects section the older
         // schema carried must be there and an object.
         [86] = root => AddField(Section(root, "effects"), "$.effects", "critters", new JsonArray()),
+        // ARC-DEV-358 (schema 88): each written-flags row of the spells section gains the object-flags change (obj_f_flags: the invisible, shrunk, water-walking, stoned and don't-draw
+        // side effects of the spell flags). No older build wrote one, so the step adds both words as 0 to every row. The spells section and its rows the older schema carried must be there.
+        [87] = root =>
+        {
+            var spells = Section(root, "spells");
+            if (!spells.TryGetPropertyValue("objectFlags", out var rows)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.spells.objectFlags");
+            if (rows is not JsonArray array) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.spells.objectFlags");
+            for (var i = 0; i < array.Count; i++)
+            {
+                if (array[i] is not JsonObject row) throw new DecodeException(SnapshotDecodeFailure.WrongType, $"$.spells.objectFlags[{i}]");
+                AddField(row, $"$.spells.objectFlags[{i}]", "objectSet", 0);
+                AddField(row, $"$.spells.objectFlags[{i}]", "objectCleared", 0);
+            }
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

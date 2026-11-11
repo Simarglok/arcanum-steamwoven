@@ -78,6 +78,9 @@ threshold) and SP8 (the item spell's fatigue exemption). Both fix SP18 (an item 
 the original reads 4 bytes before the spell table) and SP19 (the identification rule uses the critter's current PC leader, where the
 Original cache's hit path builds with a request field that no cache function sets), as the owner's rule for out-of-bounds and
 uninitialised reads has it (SP18, SU8).
+Both also fix TH1 (the grenade's blast radius, 0x466230, tests the item's first spell slot the wrong way round, so every installed grenade reads
+radius 0 in the original and an NPC throws at a target beside it or its friends): the owner decided on 2026-11-11 (ARC-DEV-373) that it is a bug of
+the game fixed in both modes without a switch, so the radius is the Begin radius of the slot's spell (0 for a slot with none).
 
 ## Data probe
 

@@ -57,7 +57,9 @@ Derived formulas over effective inputs (C integer division, truncation toward ze
   background block (0 for an NPC and for any other background, which add nothing); `Hour` is 0..23 (an invalid hour is `InvalidContext`); the two tile facts come from
   `TileSoundTable.MageGround` over `WorldSector.TileArt` and are false where the sector cannot be locked (outside the map).
 
-The session and viewer callers still pass 0 and no background; reading the sector and the tile where the hero stands is the next wiring slice.
+The hero's callers read the context from the session (ARC-MAGIC-031): `GameSessionOwner.HeroStatContext(poison, crippledLegs)` adds the hero's background and the clock's hour to the ground the viewer supplies
+(`GameSessionOwner.HeroGround`, from `AreaHeroGround`: the sector adjustment of the hero's cell and its tile's outdoor and nature facts, neutral where the shown window holds none). NPC stat reads and the attack
+paths that copy a stat owner still pass 0 ([ledger AQ wiring note](../research/ledger/magic.md#aptitude-inputs-arc-magic-028)).
 
 ## Accepted departures
 

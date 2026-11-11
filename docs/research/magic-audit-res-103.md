@@ -68,12 +68,12 @@ The components are the open part:
 | Damage | 18 (13) | Ready: typed, `Scaled`, flags (stun, scars, weapon drop, cripples) pass to the damage step | - |
 | Heal | 7 (6) | Ready: hit points, poison, fatigue, full, scars, raise; the raise script (point 0x12) runs no SCR and allows | MA-10 (small) |
 | AGoal | 4 (2) | Knockback (43) and hover (44) requests ready; the host pushes NPCs, not the hero or companions | MA-0 checks |
-| **ObjFlag** | **101 (49)** | **4 of 35 pairs** ([flags](#spell-and-object-flags-the-objflag-component)) | MA-1, MA-4, MA-6, MA-8 |
+| **ObjFlag** | **101 (49)** | **Every spell-flag, object-flag and critter-flag bit on a critter except the social and AI ones (MA-1, ARC-DEV-358)** ([flags](#spell-and-object-flags-the-objflag-component)) | MA-4, MA-6, MA-8 |
 | **Effect** | **48 (20)** | **Hero only**; changes to stats, maximums and reaction run, resistances and skills are inert ([effects](#effect-numbers-the-effect-component)) | E1-d, MA-2 |
 | **Summon** | **18 (18)** | **Not built** | E1-a/b/c/e |
 | Destroy | 17 (17) | Lying items only; the 17 spells use it on their summoned objects (CALLBACK, END_CALLBACK), so it follows Summon | E1-b |
 | Trait | 10 (5) | Not built (Body spells, Polymorph) | MA-8 |
-| Identify | 3 (3) | Not built; item and container identification is not modelled in the session | MA-7 |
+| Identify | 3 (3) | **Taken since MA-7 (ARC-MAGIC-032)**: the hero's answer is a typed event and a text line, the item's identification is the session's mark; the windows are E8's ([result](#identify-ma-7-arc-magic-032)) | E8 |
 | Movement | 2 (2) | Not built; the area-change path of the session exists (MIG11) but nothing calls it | MA-5 |
 | Dispel | 2 (2) | Not built | MA-3 |
 
@@ -87,15 +87,15 @@ The columns say whether anything **reads** the flag today and whether the cast h
 | --- | --- | --- | --- | --- |
 | Entangled, stoned (spell flags); paralysed (critter flags); spoken with dead | 51; 48; 59, 78; 56 | Hold rules, walk refusals, hit re-save (ARC-DEV-302, 304) | **Ready** (stoned: render side effect not) | - |
 | Mind controlled | 14, 19, 24, 29, 39, 52, 53, 57, 58, 68, 71, 72, 73, 74 | Reaction and companion rules | No (follow, no flee, -50 reaction, disband at END are the side effects) | MA-4 |
-| Object "don't draw" (object flags) | 11, 14, 17, 19, 21, 24, 26, 27, 29, 32, 34, 53, 57, 68, 71-74 | AI host hidden test, target rules (the draw path was not re-checked) | No (all but 34 follow Summon) | MA-1, E1 |
+| Object "don't draw" (object flags) | 11, 14, 17, 19, 21, 24, 26, 27, 29, 32, 34, 53, 57, 68, 71-74 | AI host hidden test, target rules (the draw path was not re-checked) | **Ready on a critter (MA-1: the flag and the paralysed bit, [OB3](ledger/spell-runs.md#objflag-component-of-the-cast-host-arc-dev-358)); the rest follow Summon** | E1 |
 | Charmed | 35, 50 | None found | No (+30 reaction toward a PC, kill-on-sight override) | MA-4 |
-| Water walking; Body of air, earth, fire, water | 13, 28; 13, 18, 23, 28 | The unarmed body bonus (+2 hardened hands, body of earth, fire, water) exists and **no producer feeds it from the flags**; the AI's body-of-air start refusal reads a fact whose producer was not checked | No | MA-1, MA-8 |
-| Anti-magic shell, full reflection, bonds of magick | 42; 44; 43 | Per-target stage; invocation check | No | MA-1 |
-| Invisible; enshrouded | 69; 63 | Awareness and hostility rules | No (invisible: translucent render flags) | MA-1 |
-| Detecting alignment; detecting invisible; detecting traps | 5; 8; 8 | Hover window; target stage; none (trap spotting is not built) | No | MA-1, E6 |
-| Shielded | 30 | Hit eye candy only | No | MA-1 |
-| Hardened hands | 45 | Unarmed damage rule exists, unfed (see above) | No | MA-1 |
-| Shrunk; polymorphed | 47; 49 | Render and equipment rules partly | No | MA-1, MA-8 |
+| Water walking; Body of air, earth, fire, water | 13, 28; 13, 18, 23, 28 | The unarmed body bonus (+2 hardened hands, body of earth, fire, water) exists and **no producer feeds it from the flags**; the AI's body-of-air start refusal reads a fact whose producer was not checked | Flags written (MA-1); Trait and the water-walking clear's damage (OB2) are MA-8 | MA-8 |
+| Anti-magic shell, full reflection, bonds of magick | 42; 44; 43 | Per-target stage; invocation check | **Ready (MA-1)** | - |
+| Invisible; enshrouded | 69; 63 | Awareness and hostility rules | **Ready (MA-1: the object flags invisible and translucent are written; the viewer's draw of them is not read)** | - |
+| Detecting alignment; detecting invisible; detecting traps | 5; 8; 8 | Hover window; target stage; none (trap spotting is not built) | **Ready (MA-1)** | E6 |
+| Shielded | 30 | Hit eye candy only | **Ready (MA-1)** | - |
+| Hardened hands | 45 | Unarmed damage rule, fed from the flags since MA-1 ([OB5](ledger/spell-runs.md#objflag-component-of-the-cast-host-arc-dev-358)) | **Ready (MA-1)** | - |
+| Shrunk; polymorphed | 47; 49 | Render and equipment rules partly | Flags written (MA-1: shrunk with its object flag); Trait is MA-8 | MA-8 |
 | Fleeing; blinded; undead (critter flags) | 38; 66; 58 | AI rules read them | No (AI notification and combat effects are the side effects) | MA-4 |
 | Locked (portal and container); magically held (portal) | 1; 75 | Door and container state in the session (pick locks) | No | MA-6 |
 | Identified (item) | 9 | Not modelled | No | MA-7 |
@@ -116,7 +116,7 @@ modelled, and since MA-2 the resistance changes too; skills, tech skills and the
 | 156 | 49 | damage bonus capped at 1 | Modelled |
 | 160, 161, 162, 163, 326 | 10; 15; 20; 25; 46 | one primary stat +1 (326: strength -1) | Modelled |
 | 51, 52, 55 | 13; 18; 28 | speed or strength or damage cap, **plus resistances** | Stat half modelled; resistance half reaches the combat resolver (MA-2, ARC-MAGIC-027; normal, fire, electrical and poison; the magic part only the sheet) |
-| 54, 56, 154, 155 | 23; 40; 46; 30 | resistances only | Reach the combat resolver for the hero and NPCs (MA-2); 56 (Resist Magick) is magic resistance only, which the original's save does not read ([result](#effect-consumers-ma-2-arc-magic-027)) |
+| 54, 56, 154, 155 | 23; 40; 46; 30 | resistances only | Reach the combat resolver for the hero and NPCs (MA-2); 56 (Resist Magick) is magic resistance only, which the original's save does not read and Steamwoven's does (ARC-MAGIC-033, D6c, [result](#effect-consumers-ma-2-arc-magic-027)) |
 | 157 | 8 | spot-trap skill at least 20 | **Inert** (skills) |
 
 ## The matrix
@@ -139,10 +139,10 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 | # | Spell | In the records (installed data) | Today | Missing | Needs |
 | --- | --- | --- | --- | --- | --- |
 | 5 | Sense Alignment (1) | 5 fat, maint 1@10; **B** Flag detecting_alignment on; **E** Flag detecting_alignment off | ✗ Cost and eye candy only; the hover window already reads flag 0x80 | `ObjFlag` writer for `OSF_DETECTING_ALIGNMENT` | MA-1 |
-| 6 | See Contents (2) | 10 fat; **B** Identify | ✗ Cost only | `Identify` on containers: the original opens the inventory window in its mode 4 with no lock test ([MA-R](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)); item and container identification state is not modelled | MA-7 |
-| 7 | Read Aura (3) | 15 fat; **B** Identify | ✗ Cost only | `Identify` on a critter: the original opens the read-only NPC sheet for the casting player ([MA-R](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)) | MA-7 |
+| 6 | See Contents (2) | 10 fat; **B** Identify | ◐ Cost, and since MA-7 the answer as a text line | `Identify` on containers: the original opens the inventory window in its mode 4 with no lock test ([MA-R](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)); the answer is a line, the window is E8's | E8 |
+| 7 | Read Aura (3) | 15 fat; **B** Identify | ◐ Cost, and since MA-7 the answer as a text line | `Identify` on a critter: the original opens the read-only NPC sheet for the casting player ([MA-R](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)); the answer is a line, the window is E8's | E8 |
 | 8 | Sense Hidden (4) | 25 fat, maint 5@10; **B** Flag detecting_invisible on, Flag detecting_traps on, Effect 157 add x1; **E** Flag detecting_invisible off, Flag detecting_traps off, Effect 157 rem x1 | ✗ Cost only | `ObjFlag` detecting invisible and traps; trap spotting is not built; effect 157 is a skill change (inert until the skills lane models skills) | MA-1, E6 |
-| 9 | Divine Magick (5) | 30 fat; **B** Flag identified on, Identify | ✗ Cost only | `ObjFlag` identified (item flags) and `Identify` | MA-7, MA-1 |
+| 9 | Divine Magick (5) | 30 fat; **B** Flag identified on, Identify | ◐ Cost, the identified mark and the text line (MA-7) | Picking an inventory item as the target (nothing targets an inventory item yet); the item description window is E8's | E8 |
 
 ### Air (spells 10-14)
 
@@ -208,7 +208,7 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 
 | # | Spell | In the records (installed data) | Today | Missing | Needs |
 | --- | --- | --- | --- | --- | --- |
-| 40 | Resist Magick (1) | 5 fat, maint 1@10; **B** Effect 56 add x1, eye candy x2; **E** Effect 56 rem x1, eye candy x3 | ✅ Effect 56 on the hero and NPCs, removed at END; it changes the Magick resistance the sheet shows, as in the original, whose magic save reads the stored resistance alone ([MA-2 result](#effect-consumers-ma-2-arc-magic-027)) | Owner question: the original's spell does nothing for the saves | - |
+| 40 | Resist Magick (1) | 5 fat, maint 1@10; **B** Effect 56 add x1, eye candy x2; **E** Effect 56 rem x1, eye candy x3 | ✅ Effect 56 on the hero and NPCs, removed at END; it changes the Magick resistance the sheet shows, and counts in the magic save, which the original's does not (a bug of the game fixed in both modes, ARC-MAGIC-033, D6c; [MA-2 result](#effect-consumers-ma-2-arc-magic-027)) | The original's spell does nothing for the saves (RE2); fixed, no switch | - |
 | 41 | Disperse Magick (2) | 10 fat; **B** eye candy, Dispel | ✗ Eye candy only | `Dispel` | MA-3 |
 | 42 | Dweomer Shield (3) | 15 fat, maint 5@10; **B** Dispel, Flag anti_magic_shell on, eye candy x2; **E** Flag anti_magic_shell off, eye candy x3 | ✗ Cost and eye candy only (the shell consumer exists) | `Dispel` and the `ObjFlag` anti-magic shell | MA-1, MA-3 |
 | 43 | Bonds of Magick (4) | 35 fat, maint 5@10; **B** Flag bonds_magic on, eye candy x2; **E** Flag bonds_magic off, eye candy x3 | ✗ Cost only (the invocation check already reads the flag) | `ObjFlag` bonds of magick | MA-1 |
@@ -322,7 +322,7 @@ census (MA-0) in the same PR.
 | **MA-0** Spell census, ARC-DEV-356 ([result](#spell-census-ma-0)) | An opt-in `RealData` test (`DAT_ROOT`) that applies every record's BEGIN, MAINTAIN, END and callbacks (records 0..139) to a synthetic target in the cast host and asserts the exact set of `ComponentNotReady` components per record (the per-spell hero cast for the ✅ rows was left out, see the result). It is the living matrix: each slice below edits its expected set | verifies 0, 2, 12, 16, 31, 33, 36, 54, 59-62, 64, 65, 67, 78 | M | - | tests plus one test host; no production file | FR-MAGIC-007 |
 | **MA-5** Movement (E4-e) | `Movement` to a target tile and the teleport tile; no-teleport areas ([FR-TRAVEL-005](../requirements/world-travel-runtime.md#fr-travel-005)); followers after a teleport; Teleportation as a map change through the session path of MIG11 | 3, 4 | M-L | MA-1 (dispatch table) | new partial file; map transfer | FR-MAGIC-009, FR-TRAVEL-005 |
 | **MA-R** Executable reads (ARC-DEV-357, done: [ledger XR1-XR15](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)) | One Mac read (docs and ledger rows only): `Identify` on a critter, a container and an item (what each shows, what it writes); Tempus Fugit; the consumers of the illusion and familiar flags and of detecting traps; what magically-held does to a door; whether the speed stat reaches walking and action points; the weapon drop of the Disarm flag | 5-9, 75, 79, 0 | M | - | docs and ledger only | FR-MAGIC-007 |
-| **MA-1** Spell-flag writer (E4-a) | First splits the if-chain of `SessionSpellCaster.Apply` into a dispatch table with one partial file per component group; then generalises `ObjectFlag` from the four whitelisted bits to every `obj_f_spell_flags` and object-flag bit with the reference count it already has; per-flag side effects only where read (invisible render flags, shielded, shrunk, hardened hands and the body flags feed the unarmed rule); NPC targets once DEV-348 lands | 5, 43, 44, 45, 63, 69, 34, 47; part of 8, 30, 42 | M | - (NPC targets: DEV-348) | `SessionSpellCaster.Apply`, `SessionSpellCasterObjectFlags` | FR-MAGIC-007 |
+| **MA-1** Spell-flag writer (E4-a; **done**, ARC-DEV-358, 2026-11-11, [table](../world/spell-cast-host.md#the-objflag-component-and-the-component-table-arc-dev-358-ma-1)) | First splits the if-chain of `SessionSpellCaster.Apply` into a dispatch table with one partial file per component group; then generalises `ObjectFlag` from the four whitelisted bits to every `obj_f_spell_flags` and object-flag bit with the reference count it already has; per-flag side effects only where read (invisible render flags, shielded, shrunk, hardened hands and the body flags feed the unarmed rule); NPC targets once DEV-348 lands | 5, 43, 44, 45, 63, 69, 34, 47; part of 8, 30, 42 | M | - (NPC targets: DEV-348) | `SessionSpellCaster.Apply`, `SessionSpellCasterObjectFlags` | FR-MAGIC-007 |
 | **MA-6** Locks and holds on objects | `ObjFlag` on portal and container flags through the lock state pick locks already writes: Unlocking Cantrip, Magelock, and Flesh to Stone's reverse path on stone portals | 1, 75, 48 | S-M | MA-1 | door and container state | FR-MAGIC-007, FR-AI-003 |
 | **MA-3** Dispel (E4-c, narrowed) | Dispel: interrupt the runs sourced by, aimed at or listing the target, clear held, stoned and perma-polymorph, destroy a summoned target (exe read: MT15 lists the 0x451AF0 to 0x451C40 group for Dispel and Destroy together, so the Dispel function is confirmed first). The other control components are the technology lane's | 41, 42 | M | MA-1 | Dispel partial file, run host | FR-MAGIC-006, FR-MAGIC-007 |
 | **E1-b** Summon of scenery | The seven scenery summons: cloud, fog, ice cloud, walls, the flash and Wall of Fire (burning goal 77 exists); END and Dispel remove them; stage per group ([hand-off](summon-objects-res-101.md#e1-b-the-summon-component-for-objects-needs-e1-a)) | 11, 17, 21, 22, 26, 27, 32 | M | E1-a (done), MA-1 | Summon partial file | FR-MAGIC-008 |
@@ -330,7 +330,7 @@ census (MA-0) in the same PR.
 | **E1-c** Created critters | A critter from a prototype on a tile, hosted wherever it stands, saved; action 52 for critters | prerequisite | L | E1-a (done) | directory, AI host (no cast-host file) | FR-MAGIC-008, FR-AI-004 |
 | **MA-4** Social and AI flags (E4-b, MT14) | Charm (+30 / -30 through the reaction effects, animals on a separate path), mind control (follow, no flee, -50 for a PC on a non-summoned NPC, disband at END), undead, fleeing, blinded as AI and combat notifications; the illusion and familiar flags | 35, 38, 39, 50, 52, 66, 58; the flag half of 14, 19, 24, 29, 53, 57, 68, 71-74 | M-L | MA-1, E1-d | reaction, AI notices | FR-SOCIAL-001, FR-SOCIAL-003, FR-AI-002 |
 | **MA-8** Trait, body spells, Polymorph (E4-f, MT18) | `Trait`: art and palette, drop what the new art cannot wield, restore; MG10 as a technical bug under the owner rule; Body spells with their flags and effects | 13, 18, 23, 28, 49 | L | MA-1, MA-2, E1-d | render, equipment | FR-MAGIC-007 |
-| **MA-7** Identify (E4-d, part of E8) | The session state of identification for items, containers and critters and the answer of the spell; the identify window stays with E8 | 6, 7, 9 | M-L | MA-R | session, UI | FR-MAGIC-007, FR-MAGIC-012 |
+| **MA-7** Identify, ARC-MAGIC-032 ([result](#identify-ma-7-arc-magic-032)) (E4-d, part of E8) | The session state of identification for items, containers and critters and the answer of the spell; the identify window stays with E8 | 6, 7, 9 | M-L | MA-R | session, UI | FR-MAGIC-007, FR-MAGIC-012 |
 | **E1-e** Summon of critters | Prototype or list pick, summoned flags, palette, faction (MG8), run ends when the summon dies, summoned follower; the familiar hidden with the party on the world map (XR14 (b), decided by the owner: [Decisions](#decisions-for-the-owner)) | 14, 19, 24, 29, 53, 57, 68, 71, 72, 73, 74 | L | E1-c, MA-4 | Summon partial file | FR-MAGIC-008 |
 | **E6** Trap spotting | The spot roll and the detecting-traps flag (spell 8's second flag) | 8 | M | MA-1 | traps | FR-ITEM-016 |
 | **MA-9** Tempus Fugit | Implement what MA-R reads; the XR14 (a) fix decided by the owner ([Decisions](#decisions-for-the-owner)) | 79 | S-M | MA-R, MA-1 | to be read | FR-MAGIC-007 |
@@ -385,6 +385,19 @@ What it checks and what it does not:
   the original (TA9: only a tile entry has a tile), so the census can no longer tell a scenery summon from a critter summon. A critter summon on a tile entry still logs `ComponentNotReady`
   (E1-e); its unit tests, not the census, hold that. The Destroy rows stay: the census targets are a critter and the hero, not a summoned object.
 
+## ObjFlag writer (MA-1, ARC-DEV-358)
+
+Done on 2026-11-11 ([host contract](../world/spell-cast-host.md#the-objflag-component-and-the-component-table-arc-dev-358-ma-1), ledger [OB1 to OB5](ledger/spell-runs.md#objflag-component-of-the-cast-host-arc-dev-358)).
+
+- **The dispatch is a table** (`SessionSpellCasterComponents.cs`): the next slices (MA-3 Dispel, MA-5 Movement, MA-6 locks, MA-8 Trait, E1-c and E1-e Summon) each add a line and their own partial file.
+- **Every bit of the spell, object and critter flags is written on the hero and a mobile critter**, with the reference count and the original's side effects (invisible and translucent, shrunk, water walking, stoned, don't-draw with the paralysed bit).
+  The session keeps the object flags as a third written field (schema 88). Eleven college spells (5, 8, 30, 34, 43, 44, 45, 47, 63, 69, 79) leave no component not ready on a PC and an NPC target any more (census, below), and the ObjFlag line left the not-ready set of 11, 13, 17, 18, 21, 23, 26, 27, 28, 32, 42 and 49.
+- **Left, by name.** The social and AI flags (mind controlled and charmed with their reactions and follow; undead, fleeing and blinded: MA-4); the portal and container locks (MA-6); the item identified bit (MA-7);
+  the drowning damage of the water-walking clear and the function the don't-draw clear calls when critter flags 2 have bit 0x2 (F0 rows OB2 and OB3, MA-8); the viewer's draw of a translucent, shrunk or hidden critter
+  (the object flags are written and read by the AI host and the target rules; the render does not read them yet); the Trait component (MA-8) for the Body spells and Polymorph.
+- **The unarmed body bonus is fed** from the flags a spell wrote: Body of Earth, Fire, Water and Hardened Hands reach the hero's and every NPC's unarmed damage (OB5).
+- **Census (D4a: stays a permanent opt-in test, each slice edits its table).** After MA-1 the census table lost the rows of 5, 8, 30, 34, 43, 44, 45, 47, 63, 69 and 79 (college) and 83, 84, 105 and 134 (others); 11, 13, 17, 18, 21, 23, 26, 27, 28, 32, 42 and 49 keep one component each (Destroy, Trait or Dispel). The census checks the dispatch only: a spell it lists as taken may still be partial (the flag's reader, the render).
+
 ## Effect consumers (MA-2, ARC-MAGIC-027)
 
 Done on 2026-11-11 ([contract](../world/durable-effects-runtime.md#consumers-of-resistance-and-stat-changes-arc-magic-027), ledger [RE1 to RE3](ledger/magic.md#effect-consumers-arc-magic-027)).
@@ -393,14 +406,25 @@ Done on 2026-11-11 ([contract](../world/durable-effects-runtime.md#consumers-of-
   session's, else the loaded one under the host's rules) feed the `Combatant` of every attack, spell damage on the hero and the hero's poison tick. The NPC's stat changes (speed, strength) reach its combat values, its attack
   pause and the round's action points.
 - **The Effect component takes an NPC target** (`SessionSpellCasterEffects.cs`, the one `SessionSpellCaster*` file outside PR #941), so the census lost every NPC `Effect` row.
-- **The magic save does not read the effects (RE2).** The original's save reads the stored magic resistance, so Resist Magick (spell 40) and the magic parts of effects 51, 52, 55, 154 and 155 show on the sheet and roll in no save.
-  Steamwoven follows (O9, both modes). **Owner question (new, D6): should Resist Magick work?** (a) as the original: no effect on saves; (b) a bug of the game fixed in Steamwoven only, with an "Original" setting; (c) fixed in both
-  modes. Recommendation was (b): a spell that does nothing is a bug of the game a player meets, which the owner's bug rule (2026-10-28, ledger NW4) sends to an "Original" setting. **Decided 2026-11-11: (c), fixed in both modes with no "Original" setting.** Until the fix lands the code is (a).
+- **The magic save does not read the effects in the original (RE2).** The original's save reads the stored magic resistance, so Resist Magick (spell 40) and the magic parts of effects 51, 52, 55, 154 and 155 show on the sheet and roll in no save.
+  MA-2 followed it (O9, both modes); ARC-MAGIC-033 fixed it (below). **Owner question (new, D6): should Resist Magick work?** (a) as the original: no effect on saves; (b) a bug of the game fixed in Steamwoven only, with an "Original" setting; (c) fixed in both
+  modes. Recommendation was (b): a spell that does nothing is a bug of the game a player meets, which the owner's bug rule (2026-10-28, ledger NW4) sends to an "Original" setting. **Decided 2026-11-11: (c), fixed in both modes with no "Original" setting. Done by ARC-MAGIC-033 ([ledger RS11 to RS13](ledger/magic.md#resist-magick-in-the-magic-save-arc-magic-033)): the save reads the stored resistance under the target's `resistmagic` changes, for the hero and every NPC, and so does the AI's fail-chance predictor.**
 - **Speed.** The hero's speed already reached the attack pause and the turn-based action points; an NPC's does now. Walking is not speed-driven in the original (MA-R, XR), so nothing was added there.
 - **Left over, by name.** (1) `SessionSpellCaster.Combatant` and its stat getter (`SessionSpellCaster.cs` lines 550 and 1182) read an NPC without its list, so spell damage on an NPC ignores a Shield of Protection or Body spell it holds and a spell's save reads
-  its unchanged stats: both are one-line changes (`_owner.WithNpcEffects(npc.Combat)`) for after PR #941 merges, together with the fire half (`FireDamageRules`, burning) the coordinator held back. (2) An NPC's life facts do not read its effect-changed strength, constitution or resistance (its maximum hit points
+  its unchanged stats: both were one-line changes (`_owner.WithNpcEffects(npc.Combat)`), **made by MA-1 (ARC-DEV-358)**, which covers the fire half (the burn's `Combatant` goes through the same call). (2) An NPC's life facts do not read its effect-changed strength, constitution or resistance (its maximum hit points
   and the poison tick); the list's own maxima apply. (3) The character sheet's resistance lines do not show effect changes. (4) The hero's innate (race, gender) effects have no resistance changes in the session.
   (5) Per-spell runs of 30, 46, 76 and 77 are not done: no smoke stage names them.
+
+## Identify (MA-7, ARC-MAGIC-032)
+
+Done on 2026-11-11, by owner decision D5(a): magic builds the state and a text answer, the identify window is E8's ([contract](../world/spell-cast-host.md#identify-arc-magic-032), ledger [XR1 to XR5](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)).
+
+- **The original's Identify writes nothing.** It shows a window or a description to the casting local player only (XR1), so an NPC caster's Identify has no effect. The host now takes the component and, for the hero, logs one typed answer by the target's object type:
+  `IdentifyCritter` (the read-only NPC sheet, XR2), `IdentifyContainer` (the container's inventory in mode 4, no lock test, XR3), `IdentifyItem` (the item description, XR4); the viewer shows each as a line in the message log, E8 will read the same events and open the windows.
+- **Divine Magick's identified flag is the session's identification mark** (`MarkItemIdentified`), the one a barter window already sets and saves, so there is no schema step. Every reader of the mark now sees it: the item name and window lines, the hotkey bar, the barter worth and
+  the AI's item rule did already; the weapon's spell pane (slots, gauge, weapon button) now reads it too, which also fixes the pane of an item a barter window identified.
+- **The census** loses `Identify` on records 6, 7 and 9; record 9 keeps its `ObjFlag` on the census's critter targets (its line takes an item only).
+- **Left over, by name.** (1) Nothing picks an inventory item as a spell target (the inventory bit of the spell UI, `Tgt_Obj_Inven` in the target rules): spell 9 cannot be cast from the viewer; that is E8's pick. (2) The three windows (the NPC sheet for a spell, the container's inventory in mode 4, the item description). (3) What a press or release may move in inventory mode 4 (not read in MA-R, XR3). (4) A clear of the identified flag stays "not ready" (no installed record has one); an item whose own data has the flag stays identified whatever the mark says.
 
 ## Decisions for the owner
 

@@ -14,14 +14,19 @@ public static class SessionEffectLimits
     /// <summary>The source's effect tables hold numbers 0..399 (0..49 the module's <c>gameeffect.mes</c>, 50..399
     /// <c>effect.mes</c>); a larger number would read past them, so the session refuses it.</summary>
     public const int FirstNumber = 0, LastNumber = 399;
-    /// <summary>Durable entries the hero holds after its innate ones: the character owner's capacity.</summary>
-    public const int MaxHeroEffects = 64;
-    /// <summary>Pending timed effects (their END events) a session holds: as many as durable entries, though an END can
-    /// outlive the entries it would remove.</summary>
+    /// <summary>
+    /// Durable entries the hero holds after its innate ones (project policy: the original's list has no bound, ledger EF1). ARC-DEV-366: a
+    /// tech book's insert script adds one entry per point of the holder's intelligence (ledger XA9), so eight books at the stat ceiling
+    /// (<see cref="Arcanum.Simulation.Combat.LifeLimits.MaxStat"/>, 100) need 800 entries and the rest of the list keeps 224 more; the
+    /// hero's character owner holds as many applied (stat-changing) effects as this list admits entries.
+    /// </summary>
+    public const int MaxHeroEffects = 1024;
+    /// <summary>Pending timed effects (their END events) a session holds: 64, though an END can outlive the entries it would
+    /// remove (the bound the durable list had before ARC-DEV-366, which kept the two equal).</summary>
     public const int MaxTimedEffects = 64;
-    /// <summary>Entries of the hero's blessing list, and of its curse list (ARC-WORLD-035): each adds one effect entry, so no
-    /// more than the durable entries.</summary>
-    public const int MaxBlessings = MaxHeroEffects;
+    /// <summary>Entries of the hero's blessing list, and of its curse list (ARC-WORLD-035): each adds one effect entry; 64 as before
+    /// ARC-DEV-366, which raised the durable list's bound alone.</summary>
+    public const int MaxBlessings = 64;
     /// <summary>The longest duration: int.MaxValue real seconds at the game rate (8 game ms per real ms).</summary>
     public const long MaxDurationMs = int.MaxValue * 8000L;
     /// <summary>The largest magnitude of a change the hero's character owner, reaction and life rules admit.</summary>

@@ -111,6 +111,8 @@ public sealed partial class SessionSpellCaster
     {
         if (_items?.Invoke(id) is not { } item || item.Entity != id) return null;
         if (_heldBy is { } held && held.Item == id) item = item with { Holder = held.Holder };
+        // ARC-MAGIC-032: the session's identification mark (a barter window's, Divine Magick's) counts as the item flag 0x1 the pane reads (0x464370, 0x5506C0).
+        if (SessionValidation.Entity(id) && _owner.QueryItemIdentified(id)) item = item with { Flags = item.Flags | ItemSpellPaneRules.IdentifiedFlag };
         return _owner.QueryItemCharges(id) is { } left ? item with { Charges = left, Flags = item.Flags | SessionItemSpells.MagicalFlag } : item;
     }
 

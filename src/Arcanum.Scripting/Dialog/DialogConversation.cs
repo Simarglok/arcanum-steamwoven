@@ -112,6 +112,7 @@ public sealed class DialogConversation
         return Result();
     }
 
+    [OriginalFunction(0x414810, OriginalFunctionScope.Partial)]
     public DialogConversationStepResult Select(DialogOptionToken token)
     {
         if (Phase != DialogConversationPhase.AwaitingSelection)
@@ -365,6 +366,7 @@ public sealed class DialogConversation
     /// phrase is picked as its reply is offered, in that order (ARC-SCRIPT-043, 0x414E60 → 0x416C10), and kept for the turn: a
     /// rebuild of the same node's offers shows the phrase it showed (the original rebuilds with the random state it saved).</summary>
     [OriginalFunction(0x414E60, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x414F50, OriginalFunctionScope.Partial)]
     private void BuildOffers(StepPlan step)
     {
         var offers = new List<DialogOption>();

@@ -231,7 +231,7 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 /// the heal skill's rung and goal 40, pickups, a thrown item's flight, grenades, the back-off's away path, the attack order's target and pass, the comment lines, NPC
 /// ranged attacks, scripts at the AI points, routines and waypoints, saved NPC positions.
 /// </summary>
-public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, IAiPerformWorld, IMoraleWorld, IAiSupportWorld, IGoalStepHost
+public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, IAiPerformWorld, IMoraleWorld, IAiSupportWorld, IAiGrenadeWorld, IGoalStepHost
 {
     private const string Pc = AiSchedulerRules.Pc;
     // Object flags: destroyed, off, don't draw, invisible, invulnerable; critter flags; spell flags; NPC flags (HostilityCritter's bits).
@@ -265,6 +265,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private readonly ISessionScriptWorld _events;
     private readonly ISessionCombatWorld _round;
     private readonly Dictionary<string, AreaAiNpc> _npcs;
+    // ARC-DEV-359 (E1-c): the critters the session created that this host runs (a created critter has no window to give its row back, so a window move never forgets it).
+    private readonly HashSet<string> _created = new(StringComparer.Ordinal);
+    // A created critter whose first tick the session refused (the event budget): asked again at the next sync, since nothing else starts a chain for it.
+    private readonly HashSet<string> _createdUnticked = new(StringComparer.Ordinal);
     // ARC-WORLD-115: the companions the host runs (their cells are their walk's, never the movers'); ARC-WORLD-119: free ones too.
     private readonly Dictionary<string, AreaAiNpc> _followers;
     // ARC-WORLD-119: the companions the hero led at the host's last look (ObserveLeaves).
@@ -817,7 +821,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         // The NPCs the earlier windows gave that stand on their map data's cell and run nothing are forgotten (a window that holds them again gives their rows back): the
         // host keeps the NPCs that act, so the set stays that of the windows near the hero and the ones walking.
         foreach (var entity in _npcs.Keys.ToArray())
-            if (!AnimationRunning(entity) && Movers.Of(entity) is null && scene.Npcs.All(n => n.Entity != entity)) _npcs.Remove(entity);
+            if (!_created.Contains(entity) && !AnimationRunning(entity) && Movers.Of(entity) is null && scene.Npcs.All(n => n.Entity != entity)) _npcs.Remove(entity);
         var added = new HashSet<string>(StringComparer.Ordinal);
         foreach (var npc in scene.Npcs) { if (!_npcs.ContainsKey(npc.Entity)) added.Add(npc.Entity); _npcs[npc.Entity] = npc; }
         foreach (var companion in followers.Keys) _npcs.Remove(companion);
@@ -829,6 +833,48 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         // A row the host did not hold stands where the session recorded the NPC, as in a host built for it (the first step would overwrite the place).
         if (added.Count > 0) RestorePlaces(added);
         _listCache = AiListCache.Empty; _shown.Clear(); _shownRevision = -1;
+    }
+
+    /// <summary>
+    /// ARC-DEV-359 (E1-c, TM4): the critters the session created on this host's map, as the host runs them: a critter new to the host joins its NPCs (stands where the session recorded it, else on its
+    /// creation cell, as a host built for it would put it) and gets its heartbeat chain, the delayed first tick a created NPC gets (<see cref="SessionAiTickStart.Delayed"/>, no sector gate: a chain starts at creation);
+    /// a critter this host ran that the list no longer holds (the session destroyed it) is dropped: its goal runs end at the highest level, its mover goes and it is no NPC of the host. A row of another
+    /// map is skipped. Called whenever the session's created critters change (the viewer's frame, a load); a list with nothing new and nothing gone changes nothing. Answers the critters added.
+    /// </summary>
+    public int SyncCreated(IReadOnlyList<AreaAiNpc> created)
+    {
+        ArgumentNullException.ThrowIfNull(created);
+        // A created critter that joined the party is run as a follower (Rebind takes followers out of the NPCs): it is no NPC of this list.
+        var wanted = created.Where(npc => npc.Row.Key.RuntimeMap == _scene.RuntimeMap && !_followers.ContainsKey(npc.Entity)).GroupBy(npc => npc.Entity, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        var changed = false;
+        foreach (var entity in _created.ToArray())
+        {
+            if (wanted.ContainsKey(entity)) continue;
+            DropRun(entity);
+            _npcs.Remove(entity); _created.Remove(entity); _createdUnticked.Remove(entity); Movers.Remove(entity); _traces.Remove(entity);
+            changed = true;
+        }
+        var added = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (entity, npc) in wanted)
+        {
+            if (!_npcs.ContainsKey(entity)) added.Add(entity);
+            _npcs[entity] = npc; _created.Add(entity);
+        }
+        _createdUnticked.UnionWith(added);
+        if (added.Count == 0 && !changed && _createdUnticked.Count == 0) return 0;
+        if (added.Count > 0 || changed)
+        {
+            _scene = _scene with { Npcs = [.. _npcs.Values] };
+            RestorePlaces(added);
+            _listCache = AiListCache.Empty; _shown.Clear(); _shownRevision = -1;
+        }
+        foreach (var entity in _createdUnticked.ToArray())
+        {
+            if (!_created.Contains(entity) || _session.QueryAiTick(entity) is not null || Life(entity) is null) { _createdUnticked.Remove(entity); continue; }
+            var result = _session.ScheduleAiTick(_session.Version, new SessionAiTickRequest { Entity = entity, Start = SessionAiTickStart.Delayed, DistanceToPc = DistanceToPc(entity) });
+            if (result.Disposition != GameSessionDisposition.Rejected) _createdUnticked.Remove(entity);
+        }
+        return added.Count;
     }
 
     /// <summary>Ends the casting runs as dropped ones (their end nodes free the magic run) and forgets the cast bookkeeping: what a window move takes from under them.</summary>
@@ -1048,7 +1094,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool MapClearing => false;
     public bool Sleeping(string npc) => Fields(npc)?.Critter is { } critter && (critter.Flags & SleepingFlag) != 0;
     // Object flags 0x102: not drawn or switched off in its map data, or (ARC-WORLD-114) switched off by a script (gone from the scene).
-    public bool Hidden(string npc) => Fields(npc) is { } fields && (fields.Object.Flags & (DontDraw | OffObject)) != 0 || Gone(npc);
+    public bool Hidden(string npc) => Fields(npc) is { } fields && (ObjectFlagsOf(npc, fields.Object.Flags) & (DontDraw | OffObject)) != 0 || Gone(npc);
+
+    // ARC-DEV-358: an NPC's object flags (obj_f_flags) as the spells left them: the session's written change (invisible, translucent, shrunk, water walking, stoned, don't-draw) over its data's.
+    private uint SpellFlagsOf(string id, uint stored) => unchecked((uint)_session.QueryObjectFlags(id).Spell(unchecked((int)stored)));
+
+    private uint ObjectFlagsOf(string id, uint stored) => unchecked((uint)_session.QueryObjectFlags(id).Object(unchecked((int)stored)));
     public bool PcHidden => false;
     public AiConversation Conversation(string npc) => _scene.ConversationPartner?.Invoke() == npc ? AiConversation.Pc : AiConversation.None;
     // The dialog end callback 0x5F848C is stored once by the dialog UI's init (0x567377 → 0x4A84D0) and never cleared: it is always set (ARC-DEV-177, the S11e read GT138).
@@ -1514,6 +1565,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// The block test of the knockback's step from <paramref name="left"/> toward its neighbour <paramref name="tested"/> (0x42FD70, GT61): the terrain test of a walker's step (walls, doors, objects other than critters,
     /// the map data's blocked tiles), and a living critter other than the pushed NPC (the hero, a companion, an NPC) on that tile, on any tile change.
     /// </summary>
+    [OriginalFunction(0x42FD70, OriginalFunctionScope.Partial)]
     public KnockbackBlock PushBlock(string id, CellCoord left, CellCoord tested)
     {
         var chart = ToChart(left);
@@ -1903,6 +1955,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// casting animation (NPC ART is not read) or no eye candy: no play, so the release runs at once. A play whose action frame is never
     /// reached (EC7) answers its whole length, and its action frame then releases nothing.
     /// </summary>
+    [OriginalFunction(0x429F00, OriginalFunctionScope.Partial)]
     public AiCastSwing BeginCast(string id, int run, bool castAnimation)
     {
         if (_scene.Spells?.Invoke() is not { } caster || _session.QuerySpellRuns()[run] is not { } r) return new(false);
@@ -1994,6 +2047,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>The turn to an action's target object or tile (0x42C0F0, 0x42C390): refused for an object the host does not walk (the
     /// hero, a companion the host does not run), a target without a cell, object flag 0x10000 or a stunned or paralysed critter
     /// (critter flags 0x60, or the session's stun).</summary>
+    [OriginalFunction(0x42C0F0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x42C390, OriginalFunctionScope.Partial)]
     public bool FaceForAction(string id, string? target, CellCoord? tile)
     {
         if (!TryNpc(id, out var npc) || !CanAct(id)) return false;
@@ -2009,6 +2064,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// ARC-WORLD-113: goal 37's throw animation (14) to its action frame, the throw, and rest. The art is the fixed stand-in's (NPC ART
     /// is not read yet), played at its raw rate. An object flag 0x10000 or a stunned or paralysed critter cannot start.
     /// </summary>
+    [OriginalFunction(0x42BD40, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x42CB10, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x42D300, OriginalFunctionScope.Partial)]
     public AiActionSwing BeginAction(string id, AiActionAnimation animation)
     {
         if (!Walks(id) || !CanAct(id)) return new(AiActionStart.CannotStart);
@@ -2031,6 +2089,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// 0x40000 (ledger AK2). The pick pocket (skill 5) is <see cref="PickPocketAttempt"/> (ARC-DEV-246). NOT READY: every other skill (the other skills a script might start), which does nothing and
     /// answers false.
     /// </summary>
+    [OriginalFunction(0x42A2A0, OriginalFunctionScope.Partial)]
     public bool AttemptSkill(string id, string target, int skill, string? item)
     {
         if (skill == AiExecutorRules.PickpocketSkill) return PickPocketAttempt(id, target);
@@ -2116,7 +2175,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private bool CanAct(string id)
     {
         if (Fields(id) is not { } fields) return false;
-        if ((fields.Object.Flags & ActionRefusedObject) != 0 || fields.Critter is { } critter && (critter.Flags & StunnedCritter) != 0 || Paralysed(id)) return false;
+        if ((ObjectFlagsOf(id, fields.Object.Flags) & ActionRefusedObject) != 0 || fields.Critter is { } critter && (critter.Flags & StunnedCritter) != 0 || Paralysed(id)) return false;
         return !(LifeState(id)?.Conditions.HasFlag(LifeConditions.Stunned) ?? false);
     }
 
@@ -2136,6 +2195,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// a dead or unknown critter, and the hero on the line to another target (the line's map holds no hero): the item then lands on the
     /// tile, striking nothing.
     /// </summary>
+    [OriginalFunction(0x42AB90, OriginalFunctionScope.Partial)]
     public bool ThrowItem(string id, string item, CellCoord tile)
     {
         if (!Walks(id) || Build(id) is not { } thrower || Tile(id) is not { } from || LifeState(id) is not { } state) return false;
@@ -2325,6 +2385,14 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     public DangerState ReadDanger(string npc) => _session.QueryDanger(npc).State;
     public DangerFlags DangerBits(string npc) => _session.QueryDanger(npc).Flags;
+
+    /// <summary>The grenade step's bit write (the session's support-bit operations: only CHECK_GRENADE and the look-for bits may be cleared,
+    /// the support bits set).</summary>
+    public void WriteDangerBits(string npc, DangerFlags set, DangerFlags clear)
+    {
+        if (clear != DangerFlags.None) _session.ClearAiSupportBits(_session.Version, npc, clear);
+        if (set != DangerFlags.None) _session.SetAiSupportBits(_session.Version, npc, set);
+    }
     public BackOffRun BackOff(string npc, string? target) => MoraleRules.BackOff(this, npc, target ?? Pc, DangerBits(npc));
     // The back-off's away path (0x41F3C0 along the offsets) is not walked yet: no tile, so the back-off ends.
     public CellCoord? AwayTile(string npc, string? target, int range) => null;
@@ -2409,7 +2477,51 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         target is not null && MoraleRules.StartsBackOff(this, npc, target, _session.AiRolls)
         && _session.StartBackOff(_session.Version, npc).Disposition == GameSessionDisposition.Changed;
 
-    public AiGrenadeResult Grenade(string npc, string target) => new(AiGrenadeStop.NoGrenade);
+    /// <summary>
+    /// ARC-DEV-364 (T-h): combat perform's grenade step (0x4AC910, <see cref="AiGroundRules.Grenade"/>) over this host as the
+    /// <see cref="IAiGrenadeWorld"/>: the NPC's first generic item with the grenade flag (<see cref="Grenade(string)"/>), its throwing
+    /// points, the grenade's blast radius, the line of fire to the target's tile and the critters of the blast's square. A throw is then
+    /// the executor's goal 37 (<see cref="ThrowItem"/>). NOT READY: nothing; the original has no further test.
+    /// </summary>
+    public AiGrenadeResult Grenade(string npc, string target)
+    {
+        var result = AiGroundRules.Grenade(this, npc, target, _session.Rules.Combat);
+        Trace(npc).Grenade = $"grenade at {target}: {result.Stop}{(result.Grenade is { } item ? " " + item : "")}{(result.Protected is { } friend ? " friend " + friend : "")}";
+        return result;
+    }
+
+    /// <summary>The generic item flag of a grenade (generic flags 0x10, ledger TI3): the AI's throw takes the first such item of the NPC's list.</summary>
+    public const uint GrenadeItemFlag = 0x10;
+
+    /// <summary>The first generic item (type 14) of the NPC's list (fields 0xED/0xEE, listed or worn, in its order) whose generic flags hold
+    /// <see cref="GrenadeItemFlag"/> (0x462760, TI3); none for the hero.</summary>
+    public string? Grenade(string npc) =>
+        npc == Pc ? null : _scene.Combat.NpcItems(_session, npc).Where(item => GrenadeTool(item.Fields)).Select(item => item.Entity).FirstOrDefault();
+
+    private static bool GrenadeTool(CombatFields fields) =>
+        fields.Object.Type == AreaHealingItems.GenericType && fields.Generic is { } generic && (generic.Flags & GrenadeItemFlag) != 0;
+
+    /// <summary>The thrower's stored throwing points (basic skill 3, 0x4C5FA0, bits 0..5): at least one. An NPC without a sheet has none.</summary>
+    public bool HasThrowingPoints(string npc) => NpcSkill(npc, Skill.Throwing) is { Points: > 0 };
+
+    /// <summary>The grenade's blast radius (0x466230, <see cref="AiGroundRules.BlastRadius"/>): from the item's first spell slot and that
+    /// spell's Begin radius as the cast host's record gives it (0 without a cast host or a record).</summary>
+    public int BlastRadius(string grenade)
+    {
+        var slot = ItemFields(grenade)?.Item is { } item && item.Spells.Count > 0 ? item.Spells[0] : ItemSpellTriggerRules.NoSpell;
+        var caster = _scene.Spells?.Invoke();
+        return AiGroundRules.BlastRadius(slot, spell => caster?.SpellRecord(spell)?.Areas is { Length: > 0 } areas ? areas[0].Radius : 0);
+    }
+
+    /// <summary>The first object that stops the line of fire (0x4ADE00, cost ignored) from the NPC's tile to the target's; null when it is
+    /// clear or the host has no map. The trace skips the target tile's own non-wall objects (<see cref="LineOfFireRules.Trace{TObject}"/>), and any other blocker stops the throw, as in the original (TH2).</summary>
+    public string? LineOfFireBlocker(string npc, string target) =>
+        Line(npc, target, out _) is { Blocker: { } row } ? EntityOf(row.Key) ?? row.Key.ToString() : null;
+
+    /// <summary>The critters in the square of half-size <paramref name="halfSize"/> around the object (0x4AE4E0): the Original query asks
+    /// for NPCs only, so the hero is left out unless <paramref name="withPcs"/>.</summary>
+    public IReadOnlyList<string> SquareAround(string center, int halfSize, bool withPcs) =>
+        [.. Square(center, halfSize).Where(id => withPcs || id != Pc)];
 
     /// <summary>ARC-WORLD-113: the attack starter's throw (0x434B00, TW1, AG13): the item the NPC wears in its weapon slot (the session's
     /// view) when it is a weapon with the "default throws" flag (weapon flag 0x200) that the remove check (0x466DA0: no no-drop flag)
@@ -2465,7 +2577,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (id == Pc)
         {
             // The hero is a healer only in the heal step (not run yet): its stats without the poison's effect, as the setter's facts read them.
-            var stats = _session.QueryHeroStats(new(0))?.Snapshot;
+            var stats = _session.QueryHeroStats(_session.HeroStatContext())?.Snapshot;
             return new AiSupportCritter
             {
                 FatiguePercent = fatigue, CurrentFatigue = status?.Fatigue ?? 0, PoisonLevel = _session.QueryHeroLife()?.Record.State.PoisonLevel ?? 0,
@@ -2616,6 +2728,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                 InCombatMode = _session.QueryCombatMode(SessionCombatant.Hero), Level = _session.QueryHero()?.Level ?? 0,
                 HealthPercent = Percent(hero.Status),
                 Perception = _session.QueryHeroAttack()?.Combatant.Perception ?? 0,
+                // ARC-DEV-358: the spell flags the hero's spells wrote (Invisibility, Sense Hidden, Sanctuary).
+                InvisibleSpell = (SpellFlagsOf(Pc, 0) & InvisibleSpell) != 0, DetectsInvisible = (SpellFlagsOf(Pc, 0) & DetectsInvisibleSpell) != 0,
+                Enshrouded = (SpellFlagsOf(Pc, 0) & EnshroudedSpell) != 0,
             };
         }
         if (!_npcs.ContainsKey(id) && CompanionCell(id) is null) return null;
@@ -2627,16 +2742,16 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return new HostilityCritter
         {
             Id = id, Kind = HostilityKind.Npc,
-            Destroyed = Gone(id), DontDraw = (fields.Object.Flags & DontDraw) != 0, ObjectInvisible = (fields.Object.Flags & ObjectInvisible) != 0,
+            Destroyed = Gone(id), DontDraw = (ObjectFlagsOf(id, fields.Object.Flags) & DontDraw) != 0, ObjectInvisible = (ObjectFlagsOf(id, fields.Object.Flags) & ObjectInvisible) != 0,
             Invulnerable = (fields.Object.Flags & Invulnerable) != 0, NighInvulnerable = (critter.Flags2 & NighInvulnerable2) != 0,
             Dead = status?.IsDead ?? true, Unconscious = status?.IsUnconscious ?? false, Asleep = (critter.Flags & SleepingFlag) != 0,
             NonLethal = (critter.Flags & NonLethal) != 0, Undead = (critter.Flags & Undead) != 0, Animal = (critter.Flags & Animal) != 0,
             AnimalEnshrouded = (critter.Flags & AnimalEnshrouded) != 0, Monstrous = build.Monstrous,
             // The NO_FLEE the AI set (session bit, ARC-WORLD-086) is ORed into the critter's stored flag.
             NoFlee = (critter.Flags & NoFleeFlag) != 0 || danger.Flags.HasFlag(DangerFlags.NoFlee),
-            InvisibleSpell = (fields.Object.SpellFlags & InvisibleSpell) != 0, DetectsInvisible = (fields.Object.SpellFlags & DetectsInvisibleSpell) != 0,
+            InvisibleSpell = (SpellFlagsOf(id, fields.Object.SpellFlags) & InvisibleSpell) != 0, DetectsInvisible = (SpellFlagsOf(id, fields.Object.SpellFlags) & DetectsInvisibleSpell) != 0,
             Stoned = Stoned(id), Stunned = state.Conditions.HasFlag(LifeConditions.Stunned) || build.Facts.Traits.HasFlag(LifeTraits.Paralyzed) || Paralysed(id),
-            MindControlled = (fields.Object.SpellFlags & MindControlledSpell) != 0, Enshrouded = (fields.Object.SpellFlags & EnshroudedSpell) != 0,
+            MindControlled = (SpellFlagsOf(id, fields.Object.SpellFlags) & MindControlledSpell) != 0, Enshrouded = (SpellFlagsOf(id, fields.Object.SpellFlags) & EnshroudedSpell) != 0,
             AttemptingAttack = RunOf(id)?.Top.Goal is GoalType.AttemptAttack or GoalType.AttemptSpell or GoalType.AttemptSpellWithAnimation,
             InCombatMode = _session.QueryCombatMode(SessionCombatant.Critter(id)),
             Guard = npc.SocialClass == GuardClass, WaitingHere = (npc.Flags & WaitingHereNpc) != 0 || Waiting(id),
@@ -2964,6 +3079,8 @@ public sealed class AreaAiTrace
     public string? Skill { get; set; }
     /// <summary>ARC-WORLD-113: the last throw (or the attack starter's unwield).</summary>
     public string? Throw { get; set; }
+    /// <summary>ARC-DEV-364: the grenade step's last answer (0x4AC910): the stop, the grenade and a friend in the blast.</summary>
+    public string? Grenade { get; set; }
     /// <summary>ARC-DEV-117: its last fold step, waypoint or standpoint: what the rules decided and what the host did.</summary>
     public string? Route { get; set; }
 }

@@ -91,7 +91,7 @@ public partial class TerrainViewerApp
             string.Join(",", _areaCompanions?.Companions.Select(c => c.Entity) ?? []));
         if (_aiHost is { } kept && Equals(stamp, _aiHostStamp))
         {
-            if (ReferenceEquals(area, _aiHostArea)) return kept;
+            if (ReferenceEquals(area, _aiHostArea)) { SyncCreatedCritters(session, kept); return kept; }
             // ARC-DEV-119: the map's window moved; the host goes on over the scene the new window gives.
             var rebound = BuildAiScene(session, area, grid, map, combat, companions, () => _aiHost);
             kept.Rebind(rebound);
@@ -99,6 +99,7 @@ public partial class TerrainViewerApp
             if (windowed) StartSectorChart(session, CurrentAreaMap, area, grid);
             var late = kept.ScheduleTicks();
             GD.Print($"ARC-DEV-119 ai-host rebound map={CurrentAreaMap} npcs={kept.Scene.Npcs.Count} window-npcs={rebound.Npcs.Count} companions={kept.RunCompanions.Count} ticks-refused={late}");
+            SyncCreatedCritters(session, kept);
             return kept;
         }
         RetireAiHost();
@@ -121,6 +122,7 @@ public partial class TerrainViewerApp
         if (windowed) StartSectorChart(session, mapNumber, area, grid); else DropSectorChart();
         var refused = host.ScheduleTicks();
         GD.Print($"ARC-WORLD-092 ai-host map={mapNumber} npcs={scene.Npcs.Count} companions={host.RunCompanions.Count} ticks-refused={refused} table={scene.Parameters is not null}");
+        SyncCreatedCritters(session, host);
         return host;
     }
 
@@ -412,6 +414,18 @@ public partial class TerrainViewerApp
         if (ran.Run is not null || ran.Detail.StartsWith("nested", StringComparison.Ordinal))
             GD.Print($"ARC-DEV-254 taking-damage victim={victim} attacker={attacker ?? "-"} outcome={ran.Outcome} run={ran.Run?.Outcome} stop={ran.Run?.Stop} vetoed={vetoed} detail={ran.Detail}");
         return !vetoed;
+    }
+
+    /// <summary>ARC-MAGIC-031: hands the shown session the ground under the hero (<see cref="GameSessionOwner.HeroGround"/>: the sector's aptitude adjustment and the tile facts the mage backgrounds read) from the shown
+    /// area's snapshot, the hero's committed cell and the module's tile-name table; called wherever the viewer takes a session, with <see cref="AttachAreaDyingScript"/>.</summary>
+    private void AttachAreaHeroGround()
+    {
+        if (_areaSession is not { } session) return;
+        // The hero's cell is chart-relative and the snapshot's are world cells, so the chart goes with it. The shown area counts only while it is the session's map (the session is attached a moment before
+        // the area is shown on a map change).
+        var ground = new AreaHeroGround(() => _readyArea is { } area && area.Snapshot.RuntimeMap == session.QueryActor().Map.RuntimeMap ? area.Snapshot : null,
+            () => _worldActor.Session is AreaGridSession grid ? (grid.Chart, grid.State.CommittedCell) : null, () => CueContent().Tiles);
+        session.HeroGround = ground.Read;
     }
 
     /// <summary>ARC-DEV-312: hands the shown session the dying-script question (<see cref="GameSessionOwner.DyingScript"/>); called wherever the viewer takes a session (created, carried over a map change, loaded).</summary>

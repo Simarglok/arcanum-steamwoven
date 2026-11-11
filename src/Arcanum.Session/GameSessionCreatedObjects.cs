@@ -5,7 +5,7 @@ namespace Arcanum.Session;
 /// <summary>ARC-DEV-347 (E1-a): what a created object is. <see cref="Scenery"/> is a scenery object made from a prototype of object type 3 (a wall of fire's piece, a
 /// flash's marker): it is drawn and picked as scenery. <see cref="EyeCandy"/> is an object made only to be seen (an effect's art): it is drawn and never picked. The exact kind of
 /// each spell's creation is the research slice E1-r's (ledger rows), so the frame is generic by prototype.</summary>
-public enum SessionCreatedKind { Scenery, EyeCandy }
+public enum SessionCreatedKind { Scenery, EyeCandy, Critter }
 
 /// <summary>
 /// ARC-DEV-347 (E1-a, TM4): a scenery or eye-candy object the session created from a prototype on a map, a created object of the directory
@@ -33,11 +33,16 @@ public sealed record SessionCreatedObject(string Entity, SessionCreatedKind Kind
     /// <summary>The entity prefix of a created eye-candy object.</summary>
     public const string EyeCandyPrefix = "eyecandy:";
 
-    /// <summary>The entity prefix of a kind.</summary>
-    public static string PrefixOf(SessionCreatedKind kind) => kind == SessionCreatedKind.Scenery ? SceneryPrefix : EyeCandyPrefix;
+    /// <summary>The entity prefix of a created critter (ARC-DEV-359, E1-c). It starts with the mobile map object's prefix <c>oid:</c> on purpose: every per-object state of the session (damage, the off
+    /// and destroyed flags, a walking NPC's place, the effect list, the faction, the script attachments) is keyed by an <c>oid:</c> entity, so a created critter has all of it with no second vocabulary;
+    /// the directory still reads its own origin (<see cref="SessionObjectOrigin.Critter"/>) from the longer prefix.</summary>
+    public const string CritterPrefix = "oid:critter:";
 
-    /// <summary>The object's number in its entity, or null when the entity is not a created scenery or eye-candy object's.</summary>
-    public static int? Number(string? entity) => Number(entity, SceneryPrefix) ?? Number(entity, EyeCandyPrefix);
+    /// <summary>The entity prefix of a kind.</summary>
+    public static string PrefixOf(SessionCreatedKind kind) => kind switch { SessionCreatedKind.Scenery => SceneryPrefix, SessionCreatedKind.EyeCandy => EyeCandyPrefix, _ => CritterPrefix };
+
+    /// <summary>The object's number in its entity, or null when the entity is not a created object's.</summary>
+    public static int? Number(string? entity) => Number(entity, SceneryPrefix) ?? Number(entity, EyeCandyPrefix) ?? Number(entity, CritterPrefix);
 
     /// <summary>The number of a <paramref name="prefix"/> entity, or null.</summary>
     public static int? Number(string? entity, string prefix) =>
@@ -47,7 +52,8 @@ public sealed record SessionCreatedObject(string Entity, SessionCreatedKind Kind
 
     /// <summary>The kind an entity names (null when it is no created object's).</summary>
     public static SessionCreatedKind? KindOf(string? entity) =>
-        Number(entity, SceneryPrefix) is not null ? SessionCreatedKind.Scenery : Number(entity, EyeCandyPrefix) is not null ? SessionCreatedKind.EyeCandy : null;
+        Number(entity, SceneryPrefix) is not null ? SessionCreatedKind.Scenery : Number(entity, EyeCandyPrefix) is not null ? SessionCreatedKind.EyeCandy
+            : Number(entity, CritterPrefix) is not null ? SessionCreatedKind.Critter : null;
 }
 
 /// <summary>The outcome of <see cref="GameSessionOwner.CreateObject"/> and <see cref="GameSessionOwner.DestroyCreatedObject"/>: the object created or destroyed (Changed), or none
@@ -79,7 +85,7 @@ public sealed partial class GameSessionOwner
         return null;
     }
 
-    private static SessionObjectOrigin CreatedOrigin(SessionCreatedKind kind) => kind == SessionCreatedKind.Scenery ? SessionObjectOrigin.Scenery : SessionObjectOrigin.EyeCandy;
+    private static SessionObjectOrigin CreatedOrigin(SessionCreatedKind kind) => kind switch { SessionCreatedKind.Scenery => SessionObjectOrigin.Scenery, SessionCreatedKind.EyeCandy => SessionObjectOrigin.EyeCandy, _ => SessionObjectOrigin.Critter };
 
     /// <summary>
     /// ARC-DEV-347 (E1-a, TM4, GR4): creates a scenery or eye-candy object by <paramref name="prototype"/> on <paramref name="map"/> at <paramref name="cell"/> with the pixel offsets from
