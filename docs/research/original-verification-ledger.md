@@ -285,6 +285,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="function-triage-of-the-exe-bands-0x46-0x49-and-0x4a-arc-res-110"></a>[Function triage of the exe bands 0x46, 0x49 and 0x4A (ARC-RES-110)](ledger/census-triage-d.md#function-triage-of-the-exe-bands-0x46-0x49-and-0x4a-arc-res-110) | [Function triage, slice D](ledger/census-triage-d.md) | FT1–FT9 |
 | <a id="function-audit-0x4b0000-0x4cffff-arc-res-109"></a>[Function audit of 0x4B0000–0x4CFFFF (ARC-RES-109)](ledger/function-audit-4b-4c.md) | [Function audit, slice E of V1](ledger/function-audit-4b-4c.md) | one state per function start, 12 rows marked |
 | <a id="executable-triage-0x44-0x45-arc-res-108"></a>[Executable triage 0x44-0x45 (ARC-RES-108)](ledger/census-triage-0x44-0x45.md) | [Executable triage](ledger/census-triage-0x44-0x45.md) | 389 added: 95 implemented, 68 not implemented, 226 not relevant |
+| <a id="function-triage-of-0x420000-0x43ffff-arc-res-118"></a>[Function triage of 0x420000-0x43FFFF (ARC-RES-118)](ledger/census-triage-b.md#function-triage-of-0x420000-0x43ffff-arc-res-118) | [Function triage, slice B](ledger/census-triage-b.md) | 364 added: 38 implemented, 170 not implemented, 156 not relevant |
 
 ## Decisions to revisit
 

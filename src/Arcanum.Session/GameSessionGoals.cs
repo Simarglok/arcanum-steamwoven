@@ -305,6 +305,7 @@ public sealed partial class GameSessionOwner
     /// The flags are ORed in, nothing else changes. Refused (nothing changed): no such run (<see cref="SessionGoalFailure.NoRun"/>), the run being stepped (its step's answer would overwrite the flags:
     /// <see cref="SessionGoalFailure.InvalidRequest"/>), the spell-run rules holding the queue.
     /// </summary>
+    [OriginalFunction(0x436D50, OriginalFunctionScope.Partial)]
     public SessionGoalFailure TurnOnRunFlags(GoalHandle handle, GoalRunFlags flags)
     {
         ThrowIfDisposed();

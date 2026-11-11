@@ -1,5 +1,6 @@
 using Arcanum.Data.Area;
 using Arcanum.Session;
+using Arcanum.Simulation;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
@@ -138,6 +139,7 @@ public sealed class AreaProjectileHost : IAiProjectileWorld, IGoalStepHost
     /// for a flight at a tile), starts (the starter 0x435870: level-4 interrupt of the projectile's runs, none yet; no gate; its first step comes 5 animation milliseconds later). False, with the projectile given up
     /// (<see cref="IAreaProjectileViewer.GoalEnded"/> with no landing), when the object or the run could not be made (the original leaves an orphan on a full table, GT54).
     /// </summary>
+    [OriginalFunction(0x435870, OriginalFunctionScope.Partial)]
     public bool Launch(AreaProjectile projectile, CellCoord start, string? struck)
     {
         ArgumentNullException.ThrowIfNull(projectile);

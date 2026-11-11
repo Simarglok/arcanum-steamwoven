@@ -118,3 +118,15 @@ The triage changes no behaviour. These are the places where it found original NP
 | 2 | Watch NPCs whose AI row forbids opening portals next to a closed door on their route. | The AI parameter flag of slot 16 decides whether an NPC may open a portal; the player may always (0x4AEB10). Ours stores the flag and never asks it. | open |
 | 3 | At night, move a sleeping NPC off its bed (push, teleport or leave the map and come back) and wait. | The sleeper is put back onto a bed object found at its night standpoint, else at its day one (0x4AD0B0, 0x4AD140). Ours leaves it where it is. | open |
 | 4 | Frighten an NPC with a fear effect, or let one surrender in a dialog. | It starts to flee from the source (the start-flee request 0x4AF130). Ours has only the stop-fleeing side. | open |
+
+## ARC-RES-118 — Function triage of the exe band 0x42-0x43 (2026-11-11)
+
+The triage changes no behaviour. These are the places where the readers found original behaviour that our code differs from or lacks, each checked in the code ([ledger](../research/ledger/census-triage-b.md#findings-worth-a-task)); each step is to see the original do it, so that a follow-up task can be sized. The readings are F1 (one reader).
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Watch an NPC that wanders (a townsperson with the wander flag) once it has reached its standpoint, by day and in the dark. | It starts a wander goal (goal 65, in the dark goal 66) and walks to a destination near the standpoint (0x435E60, 0x436040). Ours starts none: the standpoint step of the route rules is marked not implemented, so the NPC stands still. | open |
+| 2 | Stack two critters on one tile (for example a refused attack start next to a follower, or a follower asked to step aside) and watch them. | The NPCs are asked to move away from each other (the step-apart request 0x4364D0, goal 68). Ours has an empty step-apart method, so they stay on one cell. | open |
+| 3 | In turn-based combat give the hero a throw and look at the action points spent. | In the Original setting the local player character pays nothing extra for a throw in a round and the Steamwoven setting charges 2 (0x433270); check that the Original setting really matches the original. | open |
+| 4 | Order a companion, or any NPC in a reaction, to walk during a round (a script walk or a route walk). | The start gate asks the can-act test and the NPC's reaction slot of the critter, not only whether it is the round's current participant (0x4339A0). Ours tests only the participant, so a critter in a reaction may be sent walking. | open |
+| 5 | Hit a creature with a weapon that has its own hit effect, and with a blow that draws blood. | The weapon's hit effect plays and may veto the damage effect (0x4377C0); the blood eye candy of the hit plays (0x433020). Ours plays neither (only the blood pool of a kill). | open |

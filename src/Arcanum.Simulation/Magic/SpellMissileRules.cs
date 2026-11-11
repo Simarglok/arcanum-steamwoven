@@ -92,6 +92,8 @@ public static class SpellMissileRules
     /// re-check then decides.
     /// </summary>
     [OriginalFunction(0x42A180, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x424D90, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x42BEC0, OriginalFunctionScope.Partial)]
     public static SpellMissileLegEnd LegEnd(CellCoord missile, CellCoord destination, bool hasTarget, CellCoord? targetTile)
     {
         if (missile != destination) return SpellMissileLegEnd.Replay;

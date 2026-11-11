@@ -595,6 +595,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     /// (<see cref="EndGoal"/>, 0x429CD0). Then a target destroyed or switched off ends the goal too (0x429BC0).
     /// </summary>
     [OriginalFunction(0x429B50, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x429BC0, OriginalFunctionScope.Partial)]
     public SpellCastGoalStart StartGoal(int run, ISessionCombatWorld combat)
     {
         ArgumentNullException.ThrowIfNull(combat);
