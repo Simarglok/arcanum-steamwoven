@@ -156,6 +156,11 @@ public enum SpellCastEventKind
     ItemIdentified,
     /// <summary>ARC-MAGIC-032: the session refused the identification mark of the item <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the spell goes on.</summary>
     ItemIdentifyNotSaved,
+    /// <summary>ARC-MAGIC-034 (MA-3, DP1–DP2): a Dispel component acted on <see cref="SpellCastEvent.Object"/>; <see cref="SpellCastEvent.Detail"/> is the sum of <see cref="SessionSpellCaster.DispelStonedCleared"/>
+    /// (the object's stoned spell flag was cleared) and <see cref="SessionSpellCaster.DispelDestroyed"/> (a summoned critter was destroyed). The runs it names are told after the outer action (their endings follow).</summary>
+    Dispelled,
+    /// <summary>ARC-MAGIC-034 (DP2): a Dispel component met a summoned critter (spell flag 0x4000) this host cannot destroy (not a created critter of the session): the object stays; the value is its object type.</summary>
+    DispelDestroyNotReady,
 }
 
 /// <summary>
@@ -471,7 +476,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
                 // An id the session would refuse for good is dropped, so it cannot hold up the endings behind it.
                 if (!SessionValidation.Entity(id)) { _goneObjects.RemoveAt(0); continue; }
                 var before = _owner.QuerySpellRuns();
-                var result = _owner.ActOnSpellRun(_owner.Version, this, new(kind, kind is SessionSpellRunActionKind.ObjectGone or SessionSpellRunActionKind.EndByEvent ? processing : -1, id));
+                var result = _owner.ActOnSpellRun(_owner.Version, this, new(kind, kind is SessionSpellRunActionKind.ObjectGone or SessionSpellRunActionKind.EndByEvent or SessionSpellRunActionKind.Dispel ? processing : -1, id));
                 if (result.Failure is GameSessionFailure.InvalidSpellRun or GameSessionFailure.StaleVersion) break;
                 _goneObjects.RemoveAt(0);
                 Apply(result.Notes, runId => _owner.QuerySpellRuns()[runId] ?? before[runId]);

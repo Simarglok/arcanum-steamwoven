@@ -75,7 +75,7 @@ The components are the open part:
 | Trait | 10 (5) | Not built (Body spells, Polymorph) | MA-8 |
 | Identify | 3 (3) | **Taken since MA-7 (ARC-MAGIC-032)**: the hero's answer is a typed event and a text line, the item's identification is the session's mark; the windows are E8's ([result](#identify-ma-7-arc-magic-032)) | E8 |
 | Movement | 2 (2) | Not built; the area-change path of the session exists (MIG11) but nothing calls it | MA-5 |
-| Dispel | 2 (2) | Not built | MA-3 |
+| Dispel | 2 (2) | **Taken since MA-3 (ARC-MAGIC-034)**: the runs' half (source, target, summoned list) and the stoned and summoned halves of the object; the perma-polymorph (MA-8) and the portal and container hold (MA-6) are left ([result](#dispel-ma-3-arc-magic-034)) | - |
 
 ## The flags and the effects the 80 spells use
 
@@ -209,8 +209,8 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 | # | Spell | In the records (installed data) | Today | Missing | Needs |
 | --- | --- | --- | --- | --- | --- |
 | 40 | Resist Magick (1) | 5 fat, maint 1@10; **B** Effect 56 add x1, eye candy x2; **E** Effect 56 rem x1, eye candy x3 | ✅ Effect 56 on the hero and NPCs, removed at END; it changes the Magick resistance the sheet shows, and counts in the magic save, which the original's does not (a bug of the game fixed in both modes, ARC-MAGIC-033, D6c; [MA-2 result](#effect-consumers-ma-2-arc-magic-027)) | The original's spell does nothing for the saves (RE2); fixed, no switch | - |
-| 41 | Disperse Magick (2) | 10 fat; **B** eye candy, Dispel | ✗ Eye candy only | `Dispel` | MA-3 |
-| 42 | Dweomer Shield (3) | 15 fat, maint 5@10; **B** Dispel, Flag anti_magic_shell on, eye candy x2; **E** Flag anti_magic_shell off, eye candy x3 | ✗ Cost and eye candy only (the shell consumer exists) | `Dispel` and the `ObjFlag` anti-magic shell | MA-1, MA-3 |
+| 41 | Disperse Magick (2) | 10 fat; **B** eye candy, Dispel | ◐ Dispel (MA-3, ARC-MAGIC-034): the runs sourced by, aimed at or listing the target end, the stoned spell flag goes, a summoned critter is destroyed; eye candy | The perma-polymorph and a held portal or container (MA-8, MA-6) | - |
+| 42 | Dweomer Shield (3) | 15 fat, maint 5@10; **B** Dispel, Flag anti_magic_shell on, eye candy x2; **E** Flag anti_magic_shell off, eye candy x3 | ✅ Dispel on its caster without ending its own run (MA-3, ARC-MAGIC-034), the anti-magic shell flag (MA-1) and the shell consumer | The same left parts as 41 | - |
 | 43 | Bonds of Magick (4) | 35 fat, maint 5@10; **B** Flag bonds_magic on, eye candy x2; **E** Flag bonds_magic off, eye candy x3 | ✗ Cost only (the invocation check already reads the flag) | `ObjFlag` bonds of magick | MA-1 |
 | 44 | Reflection Shield (5) | 30 fat, maint 5@10; **B** Flag full_reflection on, eye candy x2; **E** Flag full_reflection off, eye candy x3 | ✗ Cost only (the per-target stage already reads reflection) | `ObjFlag` full reflection | MA-1 |
 
@@ -324,7 +324,7 @@ census (MA-0) in the same PR.
 | **MA-R** Executable reads (ARC-DEV-357, done: [ledger XR1-XR15](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)) | One Mac read (docs and ledger rows only): `Identify` on a critter, a container and an item (what each shows, what it writes); Tempus Fugit; the consumers of the illusion and familiar flags and of detecting traps; what magically-held does to a door; whether the speed stat reaches walking and action points; the weapon drop of the Disarm flag | 5-9, 75, 79, 0 | M | - | docs and ledger only | FR-MAGIC-007 |
 | **MA-1** Spell-flag writer (E4-a; **done**, ARC-DEV-358, 2026-11-11, [table](../world/spell-cast-host.md#the-objflag-component-and-the-component-table-arc-dev-358-ma-1)) | First splits the if-chain of `SessionSpellCaster.Apply` into a dispatch table with one partial file per component group; then generalises `ObjectFlag` from the four whitelisted bits to every `obj_f_spell_flags` and object-flag bit with the reference count it already has; per-flag side effects only where read (invisible render flags, shielded, shrunk, hardened hands and the body flags feed the unarmed rule); NPC targets once DEV-348 lands | 5, 43, 44, 45, 63, 69, 34, 47; part of 8, 30, 42 | M | - (NPC targets: DEV-348) | `SessionSpellCaster.Apply`, `SessionSpellCasterObjectFlags` | FR-MAGIC-007 |
 | **MA-6** Locks and holds on objects | `ObjFlag` on portal and container flags through the lock state pick locks already writes: Unlocking Cantrip, Magelock, and Flesh to Stone's reverse path on stone portals | 1, 75, 48 | S-M | MA-1 | door and container state | FR-MAGIC-007, FR-AI-003 |
-| **MA-3** Dispel (E4-c, narrowed) | Dispel: interrupt the runs sourced by, aimed at or listing the target, clear held, stoned and perma-polymorph, destroy a summoned target (exe read: MT15 lists the 0x451AF0 to 0x451C40 group for Dispel and Destroy together, so the Dispel function is confirmed first). The other control components are the technology lane's | 41, 42 | M | MA-1 | Dispel partial file, run host | FR-MAGIC-006, FR-MAGIC-007 |
+| **MA-3** Dispel (E4-c, narrowed; **done**, ARC-MAGIC-034, 2026-11-11, [result](#dispel-ma-3-arc-magic-034)) | Dispel: interrupt the runs sourced by, aimed at or listing the target, clear held, stoned and perma-polymorph, destroy a summoned target (exe read: MT15 lists the 0x451AF0 to 0x451C40 group for Dispel and Destroy together, so the Dispel function is confirmed first). The other control components are the technology lane's | 41, 42 | M | MA-1 | Dispel partial file, run host | FR-MAGIC-006, FR-MAGIC-007 |
 | **E1-b** Summon of scenery | The seven scenery summons: cloud, fog, ice cloud, walls, the flash and Wall of Fire (burning goal 77 exists); END and Dispel remove them; stage per group ([hand-off](summon-objects-res-101.md#e1-b-the-summon-component-for-objects-needs-e1-a)) | 11, 17, 21, 22, 26, 27, 32 | M | E1-a (done), MA-1 | Summon partial file | FR-MAGIC-008 |
 | **MA-2** Effect consumers, ARC-MAGIC-027 ([result](#effect-consumers-ma-2-arc-magic-027)) | Resistance changes of effects (damage, fire, electrical, poison, magic) reach the combat resolver and the magic save for the hero and, after DEV-348, NPCs; check that speed reaches walking and action points; skills stay with the skills lane | 40, 30, 46, 13, 18, 23, 28 (the resistance half), 77, 76 | M | E1-d (NPC part) | `GameSessionEffects`, resolver | FR-CHAR-022, FR-COMBAT-008, FR-MAGIC-010 |
 | **E1-c** Created critters | A critter from a prototype on a tile, hosted wherever it stands, saved; action 52 for critters | prerequisite | L | E1-a (done) | directory, AI host (no cast-host file) | FR-MAGIC-008, FR-AI-004 |
@@ -396,7 +396,18 @@ Done on 2026-11-11 ([host contract](../world/spell-cast-host.md#the-objflag-comp
   the drowning damage of the water-walking clear and the function the don't-draw clear calls when critter flags 2 have bit 0x2 (F0 rows OB2 and OB3, MA-8); the viewer's draw of a translucent, shrunk or hidden critter
   (the object flags are written and read by the AI host and the target rules; the render does not read them yet); the Trait component (MA-8) for the Body spells and Polymorph.
 - **The unarmed body bonus is fed** from the flags a spell wrote: Body of Earth, Fire, Water and Hardened Hands reach the hero's and every NPC's unarmed damage (OB5).
-- **Census (D4a: stays a permanent opt-in test, each slice edits its table).** After MA-1 the census table lost the rows of 5, 8, 30, 34, 43, 44, 45, 47, 63, 69 and 79 (college) and 83, 84, 105 and 134 (others); 11, 13, 17, 18, 21, 23, 26, 27, 28, 32, 42 and 49 keep one component each (Destroy, Trait or Dispel). The census checks the dispatch only: a spell it lists as taken may still be partial (the flag's reader, the render).
+- **Census (D4a: stays a permanent opt-in test, each slice edits its table).** After MA-1 the census table lost the rows of 5, 8, 30, 34, 43, 44, 45, 47, 63, 69 and 79 (college) and 83, 84, 105 and 134 (others); 11, 13, 17, 18, 21, 23, 26, 27, 28, 32 and 49 keep one component each (Destroy or Trait); after MA-3 records 41 and 42 left the table too. The census checks the dispatch only: a spell it lists as taken may still be partial (the flag's reader, the render).
+
+## Dispel (MA-3, ARC-MAGIC-034)
+
+Slice MA-3 (owner decisions D1–D6 of 2026-11-11), on the executable reads [DP1–DP3](ledger/spell-runs.md#dispel-component-arc-magic-034) (the Dispel function 0x451C40 and its component 0x451B90 read whole; MT15's
+Dispel/Destroy address mix-up was already settled by DS1). Host: [Dispel](../world/spell-cast-host.md#dispel-arc-magic-034).
+
+- **Built.** The Dispel component of spells 41 and 42: every non-technological run but the dispelling one that the target is the source of, or that is aimed at it or lists it as summoned, ends by event; a hero's or
+  critter's stoned spell flag is cleared by a plain write; a summoned created critter is destroyed. Dweomer Shield's own run is the processed one and is left alone.
+- **Found.** The run's object block at +0xA0 is its **target**, not its other object (0x455C30, DP3): the object-gone endings (0x459740) of the cast host ended the wrong runs and were fixed in the same slice.
+- **Left, by name.** The perma-polymorph with its Trait restore (MA-8; the session keeps no critter flags 2), the magically held bit of a portal or container (MA-6, with Magelock), the other object list of a run (+0x130),
+  and the original's stoned object flag, which Dispel leaves set (the spell flag alone is cleared).
 
 ## Effect consumers (MA-2, ARC-MAGIC-027)
 

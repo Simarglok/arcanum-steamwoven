@@ -50,8 +50,6 @@ public sealed class SpellCensusRealDataTests
         (35, "ObjFlag", "ObjFlag"),
         (38, "ObjFlag", "ObjFlag"),
         (39, "ObjFlag", "ObjFlag"),
-        (41, "Dispel", "Dispel"),
-        (42, "Dispel", "Dispel"),
         (49, "Trait", "Trait"),
         (50, "ObjFlag", "ObjFlag"),
         (52, "ObjFlag", "ObjFlag"),
@@ -151,7 +149,7 @@ public sealed class SpellCensusRealDataTests
         Assert.AreEqual(0, differences.Count, "the census changed; the rows as they are now (a row of two empty lists is removed):\n" + string.Join("\n", differences));
     }
 
-    /// <summary>The census harness on a synthetic record (root checks): a ready Damage, a Dispel no slice builds, and an Effect the host takes on the hero and on an NPC.</summary>
+    /// <summary>The census harness on a synthetic record (root checks): a ready Damage, a Movement no slice builds, and an Effect the host takes on the hero and on an NPC.</summary>
     [TestMethod]
     public void The_census_lists_the_components_the_host_logs_as_not_ready_per_target()
     {
@@ -159,13 +157,13 @@ public sealed class SpellCensusRealDataTests
         var record = SessionSpellRecords.Translate(Record(number: 90, components:
         [
             Damage(SpellAction.Begin, 0, 1, 1, 0),
-            new(SpellAction.Begin, SpellComponentType.Dispel, area, 0, 0, null),
+            new(SpellAction.Begin, SpellComponentType.Movement, area, 0, 0, null),
             new(SpellAction.End, SpellComponentType.Effect, area, 0, 0, new EffectData(62, true, 1, (int)EffectCause.Spell, 0)),
         ]));
         SessionEffectDefinition? Effect(int number) => number == 62 ? new(62, [new EffectChange(EffectAttributeKind.Stat, 11, EffectChangeOperator.Add, -5)]) : null;
-        Assert.AreEqual("Dispel", NotReady(record, Hero, Effect));
-        Assert.AreEqual("Dispel", NotReady(record, Npc, Effect), "an NPC has an effect list too since ARC-DEV-348 (ARC-MAGIC-027 wired the component to it)");
-        Assert.AreEqual("Dispel,Effect", NotReady(record, Hero, _ => null), "without the effect tables an adding Effect is not ready on the hero either");
+        Assert.AreEqual("Movement", NotReady(record, Hero, Effect));
+        Assert.AreEqual("Movement", NotReady(record, Npc, Effect), "an NPC has an effect list too since ARC-DEV-348 (ARC-MAGIC-027 wired the component to it)");
+        Assert.AreEqual("Effect,Movement", NotReady(record, Hero, _ => null), "without the effect tables an adding Effect is not ready on the hero either");
     }
 
     internal const string AreaEffectsPath = "rules/effect.mes";

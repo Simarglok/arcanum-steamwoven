@@ -149,6 +149,10 @@ public interface ISpellRunHost
 
     /// <summary>The BEGIN cost a run freed before its BEGIN pays (0x4507D0); its payments.</summary>
     IReadOnlyList<SpellPayment> ChargeBegin(SpellRun run);
+
+    /// <summary>ARC-MAGIC-034 (MA-3, SUM7, 0x451C40): whether the run's summoned list (the original's +0x134, the objects the run's Summon components made) holds the object. A host that
+    /// keeps no such list answers false. The run's other list (+0x130, the objects a run applied to) is not modelled by any host.</summary>
+    bool SummonedListHolds(SpellRun run, string obj) => false;
 }
 
 /// <summary>
@@ -641,7 +645,7 @@ public sealed class SpellRunSystem
 
     /// <summary>ARC-DEV-259 (B14): the runs' share of an object's destruction (0x459740, called by the destroy 0x43CCA0): in slot order a run
     /// whose parent is the object ends by event (0x4571E0), else a run whose source is the object has its source cleared (0x457530);
-    /// then every active run whose other object (+0xA0) is the object ends by event. Every loop skips the slot the run rules are processing
+    /// then every active run whose target object (+0xA0, not the other object: 0x455C30 copies the invocation's target there, ARC-MAGIC-034 DP3) is the object ends by event. Every loop skips the slot the run rules are processing
     /// (<paramref name="processing"/>, the original's guard 0x5B0BA4: the Destroy component runs inside that run's BEGIN, so the run that
     /// destroyed the object is not touched and ends as it would have); the first and last loops test the run's active bit, the middle one
     /// does not. The first loop of the original also ends the runs that list a summoned object (spell flag 0x4000, the summon list at
@@ -657,7 +661,29 @@ public sealed class SpellRunSystem
             else if (run.Source?.Id == obj) ClearSource(run.Id);
         }
         foreach (var run in Table.Runs.ToArray())
-            if (run.Id != processing && (run.Flags & SpellRunFlags.Active) != 0 && run.Other?.Id == obj) EndByEvent(run.Id);
+            if (run.Id != processing && (run.Flags & SpellRunFlags.Active) != 0 && run.Target?.Id == obj) EndByEvent(run.Id);
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-034 (MA-3, ledger DP1–DP2): the runs' half of the Dispel (0x451C40, called with the run being processed and the object the component handed it). First every run
+    /// but the processed one whose source is the object, whatever its active bit, ends by event (0x4571E0); then every active run but the processed one whose target (+0xA0), summoned list
+    /// (+0x134) or other list (+0x130) holds it. The runs of a technological record (record flag 0x4) are never touched. A run is told once per test it matches (the original calls the
+    /// ending in each test; the second call finds a run the first freed gone). The object's own flags are the host's (<c>SessionSpellCaster</c>): stoned, summoned (destroyed), perma-polymorph, magically held.
+    /// The other list (+0x130) is not modelled.
+    /// </summary>
+    [OriginalFunction(0x451C40, OriginalFunctionScope.Partial)]
+    public void Dispel(string obj, int processing = -1)
+    {
+        ArgumentNullException.ThrowIfNull(obj);
+        foreach (var run in Table.Runs.ToArray())
+            if (run.Id != processing && run.Source?.Id == obj && !_host.Record(run.Spell).Technology) EndByEvent(run.Id);
+        foreach (var listed in Table.Runs.ToArray())
+        {
+            if (Table[listed.Id] is not { } run || (run.Flags & SpellRunFlags.Active) == 0 || run.Id == processing || _host.Record(run.Spell).Technology) continue;
+            if (run.Target?.Id == obj) EndByEvent(run.Id);
+            // The first ending may have freed the run (a BEGIN never processed), which empties its lists.
+            if (Table[run.Id] is { } still && _host.SummonedListHolds(still, obj)) EndByEvent(run.Id);
+        }
     }
 
     /// <summary>Interrupts the first run (in slot order) of <paramref name="spell"/> with that parent and target object

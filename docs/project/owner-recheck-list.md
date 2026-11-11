@@ -273,7 +273,7 @@ Compare in both games with the same hero and spells; a spell that also has a not
 | 1 | Cast Hardened Hands (45) on yourself, then hit a creature unarmed (no weapon in hand). | The unarmed damage gets +2 normal damage while the spell lasts, and loses it when it ends. Ours feeds the bonus from the flag; check the number in the combat log. | open |
 | 2 | Cast Body of Stone (18) on yourself and hit a creature unarmed. | +5 normal damage unarmed; the spell's art change (Trait) and its weight and speed side are not ready in ours, so the hero keeps its normal body. | open |
 | 3 | Cast Invisibility (69) on yourself and walk in front of an enemy that has already noticed you. | The original makes you translucent, and the enemy's awareness rules read the invisible flag. Ours writes the flags and the AI host reads them, but the viewer does not draw you translucent yet. | open |
-| 4 | Cast Dweomer Shield (42), then have a creature cast a harmful spell at you (or cast at yourself from a scroll). | The shell stops the spell at the per-target stage and the spell shows the shell message (602/603). Ours already read the flag before; now the spell writes it. Dispel (the other half of the spell) is not ready. | open |
+| 4 | Cast Dweomer Shield (42), then have a creature cast a harmful spell at you (or cast at yourself from a scroll). | The shell stops the spell at the per-target stage and the spell shows the shell message (602/603). Ours already read the flag before; now the spell writes it. Its Dispel half is built since ARC-MAGIC-034 (see the next section). | open |
 | 5 | Cast Bonds of Magick (43) on yourself and try to cast another spell. | The cast is refused at the invocation check while the flag holds. | open |
 | 6 | Cast Reflection Shield (44) on yourself and let a creature cast a hostile spell at you. | The spell is reflected to its caster. | open |
 | 7 | Cast Sanctuary (63) on yourself near a hostile creature that has not seen you yet. | The hostility rules read the enshrouded flag; compare which creatures still attack. | open |
@@ -336,3 +336,21 @@ Known differences (documented, not bugs):
 
 - The character sheet's Magick line still does not show effect changes (MA-2).
 - The AI caster weighs its cast with the same resistance, so enemies are a little less eager to cast at a target under Resist Magick than the original's.
+
+## ARC-MAGIC-034 — Dispel: Disperse Magick and Dweomer Shield (MA-3, 2026-11-11)
+
+The rules are in [Dispel](../world/spell-cast-host.md#dispel-arc-magic-034), the executable reading in [DP1–DP3](../research/ledger/spell-runs.md#dispel-component-arc-magic-034).
+Compare in both games with the same hero and spells.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast Shield of Protection (30) on yourself, then Dweomer Shield (42) on yourself. | The Dispel at the start ends your maintained spells (Shield of Protection ends, its bar slot frees); Dweomer Shield's own run is left and keeps its slot. Ours ends the runs the target is the source of or is aimed at, but never the dispelling run. | open |
+| 2 | Cast a maintained spell on a creature (for example Entangle), then cast Disperse Magick (41) on the creature. | The spell ends (its END runs: the flag is taken off). Ours ends the runs aimed at the creature the same way. | open |
+| 3 | Cast Flesh to Stone (48) on a creature, then Disperse Magick (41) on it. | The creature is no longer held (it acts again). The original clears the stoned spell flag by a plain write and leaves the stoned object flag set: look at whether the creature still looks like stone or acts; ours clears the same flag and leaves the same one. Record what you see. | open |
+| 4 | Cast Disperse Magick (41) on a creature that a companion or a creature cast a maintained spell on, and on a creature a technology item's effect holds. | The spells of a magic record end; the effects of a technological record (a gadget, a schematic) are never ended by it. | open |
+
+Known differences (reading only, no game step):
+
+- Polymorph (49) and a script's permanent polymorph (critter flags 2 bit 0x400000) are undone by the original's Dispel with the art restored; ours has neither (MA-8).
+- A portal or container held by Magelock (75) loses the hold in the original; ours has no such writer yet (MA-6).
+- A summoned critter is destroyed by the original's Dispel; ours destroys one the session created, and no spell makes one before the creature summons (E1-e).
