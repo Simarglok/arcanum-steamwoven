@@ -236,4 +236,34 @@ public sealed class ScriptTrapDeviceStateTests
         Assert.IsFalse(second.QueryTrap(chest, old).Removed);
         Assert.IsTrue(second.QueryTrap(chest, old).Trapped);
     }
+
+    [TestMethod]
+    public void A_disarmed_marker_frees_its_tile_for_the_next_device()
+    {
+        var (owner, caster) = Session();
+        using var _ = owner;
+        var marker = caster.UseScriptTrapDevice(Device, Native, TrapClass.Nonmagical, Spot, null, false).Marker!;
+        var refused = caster.UseScriptTrapDevice(Second, Native, TrapClass.Nonmagical, Spot, null, false);
+        Assert.AreEqual(SessionScriptTrapOutcome.TileRefused, refused.Outcome);
+        var disarm = owner.DisarmTrap(owner.Version, new(marker.Map, marker.Entity), MarkerBaseline(owner, marker), TrapObserver.Player, success: true, critical: false, disarmTraining: 0);
+        Assert.AreEqual(TrapDisarm.Removed, disarm.Outcome);
+        Assert.AreEqual(0, owner.QueryScriptTrapMarkers(marker.Map, new(9, 7)).Count, "a removed trap object is destroyed");
+        Assert.AreEqual(SessionScriptTrapOutcome.Armed, caster.UseScriptTrapDevice(Second, Native, TrapClass.Nonmagical, Spot, null, false).Outcome);
+    }
+
+    [TestMethod]
+    public void A_full_created_object_budget_refuses_a_marker_before_any_effect_and_keeps_the_device()
+    {
+        var (owner, _) = Session();
+        using var _ = owner;
+        var map = owner.QueryActor().Map;
+        for (var i = 0; i < SessionCreatedObject.MaxObjects; i++)
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.CreateObject(owner.Version, SessionCreatedKind.Scenery, 4047, map, new(1, 1)).Disposition);
+        var revision = owner.Version.Revision;
+        var full = owner.PlaceScriptTrapDevice(owner.Version, Device, map, new(2, 2), null, Native, 26001);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded), (full.Disposition, full.Failure));
+        Assert.AreEqual(revision, owner.Version.Revision);
+        Assert.IsFalse(owner.IsItemDestroyed(Device));
+        Assert.IsNull(owner.QueryPlacedTrapScript(map, "scenery:1"));
+    }
 }

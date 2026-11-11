@@ -46,6 +46,7 @@ public sealed partial class GameSessionOwner
         DestroyObject(device);
         SessionCreatedObject? marker = null;
         if (markerPrototype != 0) marker = CreateCreatedObject(SessionCreatedKind.Scenery, markerPrototype, map, cell, 0, 0, _clock.QueryClockSnapshot().GameTimestampMs);
+        System.Diagnostics.Debug.Assert(marker is null || marker.Entity == carrier, "the predicted marker entity is the allocated one");
         foreach (var change in effective) _maps.Set(change.Map, change.Key, change.Value!.Value);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, marker, target, Version);
@@ -68,7 +69,10 @@ public sealed partial class GameSessionOwner
     {
         ThrowIfDisposed();
         return Array.AsReadOnly(_inventory.Objects.Created.Where(made => made.Kind == SessionCreatedKind.Scenery && made.Map == map && made.Cell == cell &&
-            _maps.Get(map, MapChangeKey.ForEntity(made.Entity, UseScriptProperty)) is not null).ToArray());
+            _maps.Get(map, MapChangeKey.ForEntity(made.Entity, UseScriptProperty)) is not null &&
+            // A marker whose trap was removed (a disarm, or a native script that removes itself) is a destroyed trap object: the tile is free again.
+            ((_maps.Get(map, MapChangeKey.ForEntity(made.Entity, TrapStateProperty)) ?? 0) & TrapRemovedBit) == 0 &&
+            ((_maps.Get(map, MapChangeKey.ForEntity(made.Entity, ObjectConditionProperty)) ?? 0) & 0xFF) != (long)SessionObjectCondition.Destroyed).ToArray());
     }
 
     /// <summary>

@@ -92,6 +92,7 @@ executable's object form (0x4BC2E0) and tile form (0x4BC480) do ([ledger IA13](.
   it is a later slice; the session already holds its state (placed, spotted, script, counters), so the slice needs no new state. A marker is drawn as the created scenery of its prototype,
   whatever its spotted state. An object armed by a device does meet a use (a container's open, a portal's use), an attack that breaks it and the disarm rules.
 - The player gets lines 2 and 3 of `mes\trap.mes` in the viewer's status text, not in a message window, and no sound is read (IA13).
-- The tile check counts the shown map's trap objects (the rows of its data) and the session's markers; a trap object of another map is not asked (the hero uses a device where the hero stands).
+- The tile check counts the shown map's trap objects (the rows of its data) and the session's script trap markers that still stand (a disarmed or self-removed one is gone); the timed-bomb markers of
+  ARC-WORLD-124 (prototypes 4047 and 4049) are not counted, because their object type is not read here (the original counts only objects of type 17); a trap object of another map is not asked (the hero uses a device where the hero stands).
 - The spotted eye candy a native script plays on its object (TT4) and the object's drawing are not part of the placement.
 - An NPC's use of a device stays NOT READY (no installed AI item entry is a trap device, IA15).

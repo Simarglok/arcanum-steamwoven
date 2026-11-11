@@ -527,9 +527,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     {
         ArgumentNullException.ThrowIfNull(entity);
         var item = new ScrObjectRef(originMap, entity);
+        var before = _itemUse;
         _itemUse = item;
         try { return Row(item) is null ? null : Slot(item, ScrPoint.Use); }
-        finally { _itemUse = null; }
+        finally { _itemUse = before; }
     }
 
     /// <summary>ARC-WORLD-125: the script file header flags of a script number the content holds (0 for any other): the trap class of a device's script (<see cref="Arcanum.Simulation.Traps.TrapRules.Classify"/>).</summary>
@@ -1085,7 +1086,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         // need its loaded element; a point the host does not keep, or an object without the element (the original writes its sparse
         // attachment array), leaves the run unapplied, checked before anything applies.
         if (effects.SlotWrites.FirstOrDefault(w => w.Source != ScrSource.Object || !KeptAsMapChanges(w.Point) || w.Attachee is not { } owner
-            || Row(owner) is not { } held || LoadedSlot(held, w.Point) is null) is { } unkept)
+            || Row(owner) is not { } held || LoadedOrPlaced(held, owner.Code, w.Point) is null) is { } unkept)
             return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: the point {unkept.Point} slot of {unkept.Attachee?.Code ?? "no object"} a callee changed is not kept (no loaded element)");
         if (!Apply(effects, write)) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects");
         _floats.AddRange(floats);
@@ -1456,7 +1457,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     private bool WriteObjectSlot(ScrWriteback writeback, ScrObjectRef attachee)
     {
         if (writeback.Source != ScrSource.Object || !KeptAsMapChanges(writeback.Point) || writeback.Attachee != attachee
-            || Row(attachee) is not { } row || LoadedSlot(row, writeback.Point) is not { } loaded) return false;
+            || Row(attachee) is not { } row || LoadedOrPlaced(row, attachee.Code, writeback.Point) is not { } loaded) return false;
         var map = new SessionMapId(attachee.Map);
         // ARC-DEV-096: a part back at its loaded value is cleared where the object's record sits, which may be another map than the attachee's.
         MapChangeEdit Edit(string property, long value, long baseline)
