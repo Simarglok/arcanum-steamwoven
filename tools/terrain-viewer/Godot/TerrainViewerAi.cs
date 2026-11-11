@@ -553,7 +553,7 @@ public partial class TerrainViewerApp
         // ARC-DEV-371: the critters a heartbeat or another run created since the last frame are notified (a run that went through Awarded was noted at once).
         if (_useScriptHost is { } scripted) NoteScriptCreations(scripted.Host.TakeCreations());
         // ARC-DEV-371: the encounter creatures a tick destroyed are destroyed in the session here, from the frame, never from inside a tick.
-        if (_areaSession is { } scriptedSession) DrainEncounterDestroys(scriptedSession, host);
+        if (_areaSession is { } scriptedSession) { DrainEncounterDestroys(scriptedSession, host); TakeCreatedInventories(scriptedSession); }
         var steps = AiFrameParticipant.TakeSteps();
         // ARC-WORLD-095: in a round the runs' charges and subturn ends reach the round log and the status line's action points.
         var roundEvents = host.DrainRoundEvents();

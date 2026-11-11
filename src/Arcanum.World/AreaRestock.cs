@@ -67,8 +67,11 @@ public sealed class AreaRestockHost
         ArgumentNullException.ThrowIfNull(inventory);
         ArgumentNullException.ThrowIfNull(shown);
         var runtimeMap = session.QueryActor().Map.RuntimeMap;
-        if (inventory.Maps.FirstOrDefault(map => map.RuntimeMap == runtimeMap) is not { } map || !map.Seed.Holders.Any(holder => holder.Entity == shown))
-            return null;
+        var map = inventory.Maps.FirstOrDefault(found => found.RuntimeMap == runtimeMap);
+        // ARC-DEV-386 (E1-c4): a critter the session created on that map is a holder of its one-row map.
+        if (map is null || !map.Seed.Holders.Any(holder => holder.Entity == shown))
+            map = inventory.Resolver.CreatedMap(shown) is { } created && created.RuntimeMap == runtimeMap ? created : null;
+        if (map is null) return null;
         return session.ScheduleRestock(session.Version, shown, map.RestockSeed(shown).InventorySource != 0);
     }
 
@@ -84,6 +87,13 @@ public sealed class AreaRestockHost
             return new(RestockHolderKind.Npc, seed.InventorySource, _session.QueryNpcDead(entity), _session.QueryCompanion(entity).LedByPc, 0, false);
         return new(RestockHolderKind.Container, seed.InventorySource, false, false, seed.ContainerFlags, OnScreen(inventoryMap, entity));
     }
+
+    /// <summary>
+    /// ARC-DEV-386 (RK16, RK17): whether the restock body 0x463C60 that an object's creation runs does anything for <paramref name="entity"/>: a living NPC of the map with an inventory source and no PC leader
+    /// (<see cref="RestockRules.Fire"/>). Otherwise it returns before the clear (a source of 0 is not cleared or dressed).
+    /// </summary>
+    public bool GeneratesAtCreation(SessionMapId map, string entity) =>
+        Facts(map, entity) is { Kind: RestockHolderKind.Npc } facts && RestockRules.Fire(facts, null).Step == RestockStep.Regenerate;
 
     /// <summary>Whether the container's drawn body meets the game window (0x43DFD0 against 0x5E8808..0x5E8814): only on the shown map.</summary>
     [OriginalFunction(0x43DFD0, OriginalFunctionScope.Partial)]
@@ -199,9 +209,12 @@ public sealed class AreaRestockHost
     /// <summary>The kind of a new gold pile (prototype 9076).</summary>
     public SessionItemKind PileKind => _data?.GoldKind() ?? new(SessionItemType.Gold, AreaBarterData.GoldPrototype, 0, 0);
 
+    // ARC-DEV-386 (E1-c4): a critter the session created on the map is a holder of its one-row map the resolver was given (RecordResolver.SetCreated), which is no map of the host's own.
     private (AreaInventoryMap Map, SessionSeedHolder Holder)? Holder(int runtimeMap, string entity) =>
         _inventory.Maps.FirstOrDefault(map => map.RuntimeMap == runtimeMap) is { } map && map.Seed.Holders.FirstOrDefault(holder => holder.Entity == entity) is { } holder
-            ? (map, holder) : null;
+            ? (map, holder)
+            : _inventory.Resolver.CreatedMap(entity) is { } created && created.RuntimeMap == runtimeMap && created.Seed.Holders.FirstOrDefault(holder => holder.Entity == entity) is { } made
+                ? (created, made) : null;
 
     private static CellCoord? Cell(AreaInventoryMap map, string entity) =>
         map.Row(entity) is { WorldX: { } x, WorldY: { } y } && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue

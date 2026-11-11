@@ -305,6 +305,22 @@ The session runs it in `FireRestock` after each NPC regeneration that is not `Un
 wearer, chooser and item facts, and records what the NPC wears (`inventory.npcWorn`, snapshot schema 57); an item the session made for
 the NPC is then worn in the session's lists, a seed item it took off is in its pack.
 
+## Restock at an object's creation (ARC-DEV-386)
+
+Source: [object directory](../../architecture/object-directory.md#e1-c4-created-critter-inventory-arc-dev-386). Question: what does the object creation's finish
+do about the new object's inventory, and for which objects? Read on 2026-11-11 by this task alone (one reading, F1: the decompiled export of the retail
+1.0.7.4 executable): the creation finish 0x442260 (the restock call at 0x44239C), the restock body 0x463C60 and its helpers 0x4641A0, 0x45D8D0 and 0x45DDA0. Every
+direct branch stays inside `.text`. RK14 named the call; this reads both sides of it.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| RK16 | creation finish 0x442260 | When global 0x5E2F58 is clear (not identified further here) it marks the object dynamic (flag 0x2000 on its flags field) and, for a container or an NPC or PC, every entry of the object's own inventory list (fields 0x3B/0x3C of a container, 0xED/0xEE of a critter; a new object copied from its prototype holds the prototype's entries, an interpretation). Then, whatever that global, it adds the object to the object list of its sector (0x4F1210, when 0x43D990 says so or the sector is loaded, 0x4D04E0; for an NPC the first is 0), runs 0x4D9590 and, for an NPC (type 16) when the global is clear, 0x4AD6E0 (the heartbeat start, OM16). It then runs the restock body 0x463C60 **for every object it finishes, unconditionally**, and last 0x444270 and a notification callback (the location notification, TG9). The restock therefore comes after the object is in its sector and before its location notification. | Original (F1) |
+| RK17 | restock body 0x463C60 and its helpers | The body returns at once for no object, and for an object whose inventory source is 0 (0x4641A0 reads field 0x3D of a container and field 0xEF of an NPC (type 16) only; any other type, a PC included, has none). For an NPC it also returns when the object is dead or absent (0x45D8D0: hit points below 1) and when its leader chain reaches a PC (0x45DDA0 walks the leaders and stops at the first type 15). Otherwise (a living NPC, alone or led by an NPC, with a source) it runs the regeneration 0x463E20 (RK5–RK7: the clear, then the set's coins and lines) and then the best-items wield (RK15). A container takes the other branch (RK3: with flag 0x400 on field 0x38 it regenerates at once, else the on-screen test and the merchant search; the generate-once flag 0x200 is RK10's, inside 0x463E20). **An NPC created with no source gets nothing, not even the clear.** | Original (F1); the rule of `RestockRules.Fire` |
+
+The session runs it for a critter a script created (`GameSessionOwner.RegenerateInventory`, called by the viewer after the creation, `TakeCreatedInventories`): the critter's
+holder is in the map's seed, the host's facts are the prototype's source (field 0xEF), death and the leader, and the regeneration is the one of RK5–RK7 and the wield of RK15.
+What the creation does to the prototype's own inventory list (RK16: its entries made dynamic) is not modelled; no installed critter prototype is known to hold entries.
+
 ## Container loot window (ARC-WORLD-101)
 
 Source: [barter runtime](../../world/barter-runtime.md#container-loot-window-arc-world-101). Question: what does the inventory window's
