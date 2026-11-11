@@ -8,10 +8,11 @@ or touch an HD pack (that is slice 2, which needs the owner's call on a pack for
 ## Hard rules
 
 1. **No original or derived data in git.** The frames, `font.json` and `receipt.json` hold glyph shapes and metrics of the player's fonts.
-   The tool refuses an `--out` that is not under a `local/` folder (ignored by git) or that lies in an HD pack, a pack backup or
-   `artifacts/`. The tests draw their own font; no game byte and no system font is in the repository.
+   The tool accepts an `--out` only under `<checkout>/local/hd-font/` (a checkout holds `.git`, `local/` is ignored by git), after
+   resolving links, so the frames cannot land in git, an HD pack, its staging or backup folders, `artifacts/` or the game folder. The
+   tests draw their own font; no game byte and no system font is in the repository.
 2. **Read-only on the installation.** Nothing writes into the game folder, the installed HD pack or the iCloud copy.
-3. **Own folders only.** A font folder is written only when it is empty, absent, or holds this tool's `font.json`; anything else is refused.
+3. **Own folders only.** A font folder is written only when it is empty, absent, or holds this tool's `font.json`, `receipt.json` only when absent or the tool's own, and a symbolic link in the way is refused. A venv is replaced only when it carries this tool's marker.
 4. **`--dry-run` first.** It reads the sources and fonts, prints what would be written and writes nothing; it needs no dependencies.
 
 ## Commands
@@ -21,7 +22,7 @@ overrides it); a worktree has its own empty `local/`, so give `--out` the main c
 
 ```sh
 python3 -B tools/hd_font/hd_font.py trace --out local/hd-font/out --dry-run     # sources, fonts, planned files
-python3 -B tools/hd_font/hd_font.py trace --out local/hd-font/out               # arts 27, 229, 171, 327, 840 (about 20 s)
+python3 -B tools/hd_font/hd_font.py trace --out local/hd-font/out               # arts 27, 229, 171, 327, 840 (under a minute)
 python3 -B tools/hd_font/hd_font.py trace --out local/hd-font/out --art 27,229  # other interface ART numbers: any font in interface.mes
 python3 -B tools/hd_font/hd_font.py self-test                                   # synthetic-fixture tests, inside the locked venv
 ```

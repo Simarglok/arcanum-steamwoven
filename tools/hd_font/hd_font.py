@@ -33,7 +33,8 @@ TOOL_VERSION = 1
 DEFAULT_GAME_DIR = "/Applications/Arcanum"
 DEFAULT_MODULE = "Arcanum"
 DEFAULT_ARTS = (27, 229, 171, 327, 840)  # morph15font, Flare12Font, Cloister18Font, Morph30Font, NewTimes16Font
-FORBIDDEN_OUT_PARTS = ("hd-packs", "hd_pack", "hd-pack-backups", "artifacts")
+OUT_ROOT_NAME = "hd-font"
+VENV_MARKER = ".hd-font-venv"
 
 
 def log(message: str) -> None:
@@ -43,7 +44,8 @@ def log(message: str) -> None:
 # --- private venv ----------------------------------------------------------------------------------------------------
 
 def replaceable_venv(environment: Path) -> bool:
-    return not environment.exists() and not environment.is_symlink() or (environment / "pyvenv.cfg").is_file()
+    """Only an absent folder or a venv this tool created (it carries the marker) may be (re)created with clear=True."""
+    return not environment.exists() and not environment.is_symlink() or (environment / VENV_MARKER).is_file()
 
 
 def _deps_ready() -> bool:
@@ -67,9 +69,10 @@ def ensure_venv(argv: list[str]) -> None:
     lock_sha = hashlib.sha256(LOCK.read_bytes()).hexdigest()
     if not python.exists() or not stamp.exists() or stamp.read_text().strip() != lock_sha:
         if not replaceable_venv(environment):
-            raise SystemExit(f"hd_font: {environment} exists and is not a virtual environment; refusing to replace it")
+            raise SystemExit(f"hd_font: {environment} exists and was not created by this tool (no {VENV_MARKER}); refusing to replace it")
         log(f"hd_font: installing the locked dependencies from {LOCK.relative_to(REPO)} into {environment}")
         venv.EnvBuilder(clear=True, with_pip=True).create(environment)
+        (environment / VENV_MARKER).write_text("created by tools/hd_font/hd_font.py\n")
         install = [str(python), "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "--no-input",
                    "--require-hashes", "--only-binary=:all:", "--no-deps", "-r", str(LOCK)]
         if subprocess.call(install) != 0:
@@ -91,14 +94,38 @@ def parse_arts(text: str) -> list[int]:
 
 
 def checked_out_dir(path: str) -> Path:
-    """The output folder must lie under a `local/` folder (ignored by git) and never inside an HD pack, a backup or `artifacts/`."""
+    """The output folder must be `<checkout>/local/hd-font/...` (a checkout is a folder holding `.git`; `local/` is ignored by git).
+    That keeps the frames out of git, out of every HD pack, backup and staging folder, and out of the game folder."""
     resolved = Path(path).expanduser().resolve()
-    parts = [part.lower() for part in resolved.parts]
-    if "local" not in parts:
-        raise SystemExit(f"hd_font: --out {resolved} must be under a `local/` folder (ignored by git); derived font data never goes into git")
-    if any(part in FORBIDDEN_OUT_PARTS for part in parts):
-        raise SystemExit(f"hd_font: --out {resolved} lies in an HD pack, backup or build-retention folder; frames are built into local/hd-font/ only")
-    return resolved
+    for index, part in enumerate(resolved.parts):
+        if part == "local" and index + 1 < len(resolved.parts) and resolved.parts[index + 1] == OUT_ROOT_NAME \
+                and (Path(*resolved.parts[:index]) / ".git").exists():
+            return resolved
+    raise SystemExit(f"hd_font: --out {resolved} must be under <checkout>/local/{OUT_ROOT_NAME}/ (a checkout holds .git; local/ is ignored by git); "
+                     "derived font data never goes into git, a pack or the game folder")
+
+
+def write_file(path: Path, data: bytes | str) -> None:
+    """Writes one output file; a symbolic link in the way is refused, never followed."""
+    if path.is_symlink():
+        raise SystemExit(f"hd_font: {path} is a symbolic link; refusing to write through it")
+    if isinstance(data, str):
+        path.write_text(data)
+    else:
+        path.write_bytes(data)
+
+
+def check_receipt(out: Path) -> None:
+    receipt = out / "receipt.json"
+    if receipt.is_symlink() or (receipt.exists() and not receipt.is_file()):
+        raise SystemExit(f"hd_font: {receipt} is not a plain file")
+    if receipt.is_file():
+        try:
+            ours = json.loads(receipt.read_text()).get("tool") == "hd_font"
+        except (OSError, ValueError, AttributeError):
+            ours = False
+        if not ours:
+            raise SystemExit(f"hd_font: {receipt} was not written by this tool; refusing to overwrite it")
 
 
 def font_dir_name(number: int, file: str) -> str:
@@ -133,6 +160,7 @@ def load_fonts(args: argparse.Namespace):
 
 def command_trace(args: argparse.Namespace) -> int:
     out = checked_out_dir(args.out)
+    check_receipt(out)
     sys.path.insert(0, str(HERE))
     fonts, content = load_fonts(args)
     log("hd_font: sources (highest priority first): " + "; ".join(f"{source.label}" for source in content.sources))
@@ -162,7 +190,7 @@ def command_trace(args: argparse.Namespace) -> int:
             result = tracer.trace_mask(mask)
             png = tracer.png_bytes(tracer.frame_pixels(result.coverage))
             name = f"frame-{index:03d}.png"
-            (folder / name).write_bytes(png)
+            write_file(folder / name, png)
             digest.update(png)
             entries.append({
                 "frame": index, "character": index + 31, "file": name, "width": frame.width, "height": frame.height,
@@ -184,7 +212,7 @@ def command_trace(args: argparse.Namespace) -> int:
             "source": font.source, "artSha256": sha256_hex(font.raw), "framesSha256": digest.hexdigest(),
             "summary": summary, "frames": entries,
         }
-        (folder / "font.json").write_text(json.dumps(meta, indent=1, sort_keys=True) + "\n")
+        write_file(folder / "font.json", json.dumps(meta, indent=1, sort_keys=True) + "\n")
         receipt_fonts.append({"art": font.number, "file": font.file, "folder": folder.name, "artSha256": meta["artSha256"],
                               "framesSha256": meta["framesSha256"], "summary": summary})
         log(f"hd_font: art {font.number} {font.file}: {summary['withInk']} glyphs traced, {summary['nodesPerGlyph']} nodes each, "
@@ -194,7 +222,7 @@ def command_trace(args: argparse.Namespace) -> int:
                               "alphaMax": tracer.ALPHA_MAX, "optTolerance": tracer.OPT_TOLERANCE, "outputScale": tracer.OUTPUT_SCALE,
                               "levelRule": "mass-preserving, at most 0.5"},
                "fonts": receipt_fonts}
-    (out / "receipt.json").write_text(json.dumps(receipt, indent=1, sort_keys=True) + "\n")
+    write_file(out / "receipt.json", json.dumps(receipt, indent=1, sort_keys=True) + "\n")
     log(f"hd_font: PASS {len(fonts)} fonts written under {out}")
     return 0
 
@@ -211,8 +239,8 @@ def command_self_test(_args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="hd_font.py", description=__doc__.split("\n\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)
-    trace = commands.add_parser("trace", help="trace the player's interface fonts into 4x coverage frames under local/")
-    trace.add_argument("--out", required=True, help="output folder, under a local/ folder; one sub-folder per font")
+    trace = commands.add_parser("trace", help="trace the player's interface fonts into 4x coverage frames under local/hd-font/")
+    trace.add_argument("--out", required=True, help="output folder, under <checkout>/local/hd-font/; one sub-folder per font")
     trace.add_argument("--art", default=",".join(str(number) for number in DEFAULT_ARTS),
                        help="comma-separated interface ART numbers (default: 27,229,171,327,840)")
     trace.add_argument("--game-dir", help=f"the player's game folder (default: $ARCANUM_GAME_DIR or {DEFAULT_GAME_DIR})")

@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from PIL import Image, ImageChops, ImageDraw
+from PIL import Image
 from scipy import ndimage
 import potrace
 
@@ -109,19 +109,34 @@ def outline_paths(binary: np.ndarray, factor: int = UPSAMPLE) -> tuple[list[np.n
 
 
 def rasterize(polygons: list[np.ndarray], shape: tuple[int, int], scale: int, supersample: int = SUPERSAMPLE) -> np.ndarray:
-    """Even-odd area coverage of closed polygons (1x units) on a grid `scale` times finer than 1x: each path is filled
-    on its own and XOR-ed in, which is the even-odd rule.  `shape` is the 1x (height, width)."""
+    """Even-odd area coverage of closed polygons (1x units) on a grid `scale` times finer than 1x, sampled at `supersample` x
+    `supersample` points per output pixel.  `shape` is the 1x (height, width).
+
+    Exact scanline fill: a sample is inside when its centre is, so a pixel-aligned square covers exactly its area (no edge is
+    included twice, unlike a drawing library's inclusive polygon fill).  Every polygon edge toggles the parity of the samples to its
+    right on the rows whose centre it crosses; the running parity along a row is the even-odd rule over all paths together."""
     height, width = shape
     fine = scale * supersample
-    size = (width * fine, height * fine)
-    combined = Image.new("1", size, 0)
+    rows_total, cols_total = height * fine, width * fine
+    toggles = np.zeros((rows_total, cols_total + 1), dtype=np.int32)
     for polygon in polygons:
         if len(polygon) < 3:
             continue
-        layer = Image.new("1", size, 0)
-        ImageDraw.Draw(layer).polygon([(float(x) * fine, float(y) * fine) for x, y in polygon], fill=1)
-        combined = ImageChops.logical_xor(combined, layer)
-    samples = np.asarray(combined, dtype=np.float64)
+        start = np.asarray(polygon, dtype=np.float64) * fine
+        end = np.roll(start, -1, axis=0)
+        for (x0, y0), (x1, y1) in zip(start, end):
+            if y0 == y1:
+                continue
+            low, high = (y0, y1) if y0 < y1 else (y1, y0)
+            first = max(0, int(np.ceil(low - 0.5)))
+            last = min(rows_total, int(np.ceil(high - 0.5)))  # exclusive: a sample row whose centre is at the top end is outside
+            if first >= last:
+                continue
+            rows = np.arange(first, last)
+            crossing = x0 + (rows + 0.5 - y0) * (x1 - x0) / (y1 - y0)
+            columns = np.clip(np.ceil(crossing - 0.5).astype(np.int64), 0, cols_total)
+            np.add.at(toggles, (rows, columns), 1)
+    samples = (np.cumsum(toggles, axis=1) % 2)[:, :cols_total].astype(np.float64)
     return samples.reshape(height * scale, supersample, width * scale, supersample).mean(axis=(1, 3))
 
 

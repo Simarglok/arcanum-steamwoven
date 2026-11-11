@@ -55,7 +55,6 @@ def discover_sources(game_dir: Path, module: str = "Arcanum") -> list[Source]:
     game_dir = game_dir.resolve()
     if not game_dir.is_dir():
         raise FontError(f"game folder not found: {game_dir}")
-    modules = game_dir / "modules"
     found: list[Source] = []
 
     def case_file(folder: Path, name: str) -> Path | None:
@@ -64,6 +63,7 @@ def discover_sources(game_dir: Path, module: str = "Arcanum") -> list[Source]:
     def case_dir(folder: Path, name: str) -> Path | None:
         return next((entry for entry in folder.iterdir() if entry.name.lower() == name.lower() and entry.is_dir()), None) if folder.is_dir() else None
 
+    modules = case_dir(game_dir, "modules") or game_dir / "modules"
     if (folder := case_dir(modules, module)) is not None:
         found.append(Source("dir", folder, f"module folder {module}"))
     module_dat = case_file(modules, f"{module}.dat")
@@ -150,7 +150,7 @@ def _case_insensitive(candidate: Path, root: Path, key: str) -> Path | None:
 
 
 def _read_entry(archive: "dat_probe.Archive", entry: "dat_probe.Entry") -> bytes:
-    """`dat_probe.read_bounded_entry` has a 1 MiB cap; font ART files are far below it, anything bigger is refused."""
+    """`dat_probe.read_bounded_entry` caps an entry at 1 MiB (below `MAX_ART_BYTES` for DAT members); font ART files are far below it."""
     return dat_probe.read_bounded_entry(archive, entry)
 
 
@@ -178,6 +178,8 @@ def interface_art_name(content: Content, number: int) -> tuple[str, str]:
     name = messages.get(number)
     if not name:
         raise FontError(f"{INTERFACE_INDEX} has no message {number}")
+    if "/" in name or "\\" in name or ".." in name or name.startswith("."):
+        raise FontError(f"{INTERFACE_INDEX} message {number} is not a plain file name")
     return name, found[1]
 
 

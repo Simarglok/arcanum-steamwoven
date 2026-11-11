@@ -170,12 +170,13 @@ Each is a proposal; none starts until the owner agrees, and codes come from the 
    requirements lock with hashes, a synthetic-fixture test (a font built from drawn shapes in the test, not a game font), `--dry-run`. First
    output: art 27, 229, 171, 327, 840 (they are the viewer's fonts). Art 840 has only 3 grey levels, so the 16-level results of section 5
    do not cover it; judge its trace separately.
-   First run (2026-11-11, local observation, frames only under `local/hd-font/out`, 225 frames per font, about 16 s for the five): nodes per
-   glyph 25.5 / 20.5 / 32.4 / 44.8 / 32.3 for arts 27 / 229 / 171 / 327 / 840; mean per-glyph round-trip error 0.072 / 0.055 / 0.066 / 0.047 /
-   0.067 (the tool averages per glyph, section 4 pools all pixels, so the figures are not compared); median traced/original ink 1.04 / 1.03 /
-   1.02 for arts 27 / 171 / 840 (the other two were not computed) and no glyph with ink above a tenth of a pixel lost; the only frames under 85 % ink are Cloister's seven
-   placeholder frames (a faint pixel, mass 0.06). Art 840 (three grey levels) traced to a legible, slightly rough outline; its look is the
-   owner's check (slice 3).
+   First run (2026-11-11, local observation, frames only under `local/hd-font/out`, 225 frames per font, about 20 s for the five): nodes per
+   glyph 25.5 / 20.5 / 32.4 / 44.8 / 32.3 for arts 27 / 229 / 171 / 327 / 840; mean per-glyph round-trip error 0.069 / 0.053 / 0.063 / 0.045 /
+   0.067 (the tool averages per glyph, section 4 pools all pixels, so the figures are not compared); median traced/original ink 1.00 / 1.00 /
+   1.00 / 1.00 / 0.99 and no glyph with ink above a tenth of a pixel lost; the only frames under 85 % ink are Cloister's seven placeholder
+   frames (a faint pixel, mass 0.06). The tool's own first version, with a boundary-inclusive polygon fill, gave medians of 1.02 to 1.04 on three of these fonts; the review found
+   that bias and the tool now fills with an exact scanline rule (a sample is inside when its centre is). Art 840 (three grey levels) traced to a legible, slightly rough outline; its
+   look is the owner's check (slice 3).
 2. **Pack and viewer support for coverage frames** (type RENDER/UI, Claude, Mac): first try the existing `masked` alpha and an importer
    item with `lock: false`; only if that fails, a new alpha mode or a `font` flag on the interface slice (the owner's call, a pack format
    change). `AreaArtFontFace` reading HD glyphs with the Coverage blend and a sampling choice for scales below 4 (mipmaps or per-scale

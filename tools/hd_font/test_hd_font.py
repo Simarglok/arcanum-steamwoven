@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 import re
 import struct
 import sys
@@ -26,6 +27,9 @@ import artfont  # noqa: E402
 import dat_probe  # noqa: E402
 import hd_font  # noqa: E402
 import outline  # noqa: E402
+
+# main() re-executes itself inside the locked venv unless this is set; the tests only ever run inside it (self-test).
+os.environ.setdefault(hd_font.IN_VENV, "1")
 
 
 # --- synthetic data ----------------------------------------------------------------------------------------------------
@@ -227,6 +231,19 @@ class ContentTests(unittest.TestCase):
             with self.assertRaises(artfont.FontError):
                 artfont.load_font(content, 8)
 
+    def test_a_capitalised_modules_folder_is_found_and_a_path_like_name_is_refused(self) -> None:
+        art, _ = synthetic_font()
+        with tempfile.TemporaryDirectory() as temp:
+            game = build_game(Path(temp), art)
+            (game / "modules").rename(game / "Modules")
+            (game / "Modules" / "Arcanum.dat").write_bytes(make_dat({"art\\interface\\interface.mes": mes((7, "TestFont.ART"), (8, "../secret.art"))}))
+            sources = artfont.discover_sources(game, "Arcanum")
+            self.assertIn("module Arcanum", [source.label for source in sources])
+            content = artfont.Content(sources)
+            self.assertEqual(artfont.load_font(content, 7).file, "TestFont.ART")
+            with self.assertRaises(artfont.FontError):
+                artfont.load_font(content, 8)
+
     def test_a_missing_game_folder_is_a_typed_failure(self) -> None:
         with self.assertRaises(artfont.FontError):
             artfont.discover_sources(Path("/nonexistent/arcanum-hd-font-test"))
@@ -247,10 +264,11 @@ class OutlineTests(unittest.TestCase):
                 ratio = result.traced_mass / result.mass
                 # A stroke under one pixel is quantized to whole 8x rows before the curve fit (docs/research/font-vectorization.md,
                 # section 5: one-pixel strokes recover poorly), so the bar gets a wider bound than the solid shapes.
-                upper = 1.3 if name == "bar" else 1.15
-                self.assertGreater(ratio, 0.85, f"{name} lost ink: {ratio}")
+                upper = 1.2 if name == "bar" else 1.08
+                lower = 0.85 if name == "bar" else 0.92
+                self.assertGreater(ratio, lower, f"{name} lost ink: {ratio}")
                 self.assertLess(ratio, upper, f"{name} gained ink: {ratio}")
-                self.assertLess(result.mean_abs_error, 0.12, f"{name} round trip error {result.mean_abs_error}")
+                self.assertLess(result.mean_abs_error, 0.1, f"{name} round trip error {result.mean_abs_error}")
 
     def test_the_ring_keeps_its_hole_and_the_disc_is_filled(self) -> None:
         masks = synthetic_font_masks()
@@ -276,6 +294,22 @@ class OutlineTests(unittest.TestCase):
         self.assertEqual(result[4 * 12, 4 * 6], 0.0)  # below it
         inside = result[4 * 2 + 1:4 * 11 - 1, 4 * 3 + 1:4 * 10 - 1]
         self.assertGreater(inside.min(), 0.9)
+
+    def test_rasterizer_is_exact_for_aligned_squares_holes_and_triangles(self) -> None:
+        def square(low: float, high: float) -> np.ndarray:
+            return np.array([[low, low], [high, low], [high, high], [low, high]], dtype=float)
+
+        area = lambda polygons, shape: outline.rasterize(polygons, shape, 4).sum() / 16  # 4x pixels -> 1x pixels
+        self.assertEqual(area([square(1, 5)], (8, 8)), 16.0)  # no inclusive edge: not 16.5
+        self.assertEqual(area([square(2, 3)], (6, 6)), 1.0)
+        self.assertEqual(area([square(0, 6), square(2, 4)], (8, 8)), 32.0)  # even-odd: the inner square is a hole
+        triangle = np.array([[1.3, 1.1], [6.7, 2.2], [3.1, 7.9]])
+        x, y = triangle[:, 0], triangle[:, 1]
+        exact = 0.5 * abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1)))
+        self.assertAlmostEqual(area([triangle], (10, 10)), exact, delta=0.02 * exact / 17)
+        covered = outline.rasterize([square(1, 5)], (8, 8), 4)
+        self.assertEqual(float(covered[4 * 5:, :].sum() + covered[:, 4 * 5:].sum()), 0.0)  # nothing past the right and bottom edges
+        self.assertEqual(float(covered[:4, :].sum() + covered[:, :4].sum()), 0.0)  # nor before the left and top edges
 
     def test_an_empty_mask_gives_an_empty_glyph(self) -> None:
         result = outline.trace_mask(np.zeros((5, 4)))
@@ -309,14 +343,36 @@ def synthetic_font_masks() -> dict[str, np.ndarray]:
 
 
 class CommandTests(unittest.TestCase):
+    @staticmethod
+    def checkout(temp: str) -> Path:
+        """A fake checkout (it holds .git) with its ignored local/hd-font folder; returns the output folder."""
+        base = Path(temp).resolve()
+        (base / ".git").mkdir(exist_ok=True)
+        return base / "local" / "hd-font" / "out"
+
     def run_trace(self, game: Path, out: Path, *extra: str) -> int:
         return hd_font.main(["trace", "--game-dir", str(game), "--module", "Arcanum", "--art", "7", "--out", str(out), *extra])
 
     def test_out_folder_must_be_under_local_and_never_in_a_pack(self) -> None:
-        for bad in ("/tmp/hd-font-out", "/x/local/hd-packs/out", "/x/local/artifacts/out", "/x/local/hd_pack/out"):
-            with self.subTest(out=bad), self.assertRaises(SystemExit):
-                hd_font.checked_out_dir(bad)
-        self.assertEqual(hd_font.checked_out_dir("/x/local/hd-font/out"), Path("/x/local/hd-font/out").resolve())
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp).resolve()
+            good = self.checkout(temp)
+            self.assertEqual(hd_font.checked_out_dir(str(good)), good)
+            elsewhere = root / "elsewhere"
+            elsewhere.mkdir()
+            (root / "local" / "hd-font").mkdir(parents=True)
+            (root / "local" / "res095").mkdir()
+            (root / "local" / "link").symlink_to(elsewhere)
+            (root / "local" / "hd-font" / "via-link").symlink_to(root / "local" / "res095")
+            for bad in (root / "local" / "out", root / "local" / "hd-packs" / "out", root / "local" / "res095" / "pack-out" / "interface-redraw-4x",
+                        root / "local" / "hd-font-x", root / "out", root / "docs" / "local" / "hd-font" / "out",
+                        root / "local" / "link" / "hd-font", root / "local" / "hd-font" / "via-link", Path("/usr/local/hd-font/out"),
+                        Path("/tmp/local/hd-font/out")):
+                with self.subTest(out=str(bad)), self.assertRaises(SystemExit):
+                    hd_font.checked_out_dir(str(bad))
+            (root / ".git").rmdir()
+            with self.assertRaises(SystemExit):  # not inside a checkout
+                hd_font.checked_out_dir(str(good))
 
     def test_art_list_validation(self) -> None:
         self.assertEqual(hd_font.parse_arts("27, 229"), [27, 229])
@@ -328,7 +384,7 @@ class CommandTests(unittest.TestCase):
         art, _ = synthetic_font()
         with tempfile.TemporaryDirectory() as temp:
             game = build_game(Path(temp), art)
-            out = Path(temp) / "local" / "out"
+            out = self.checkout(temp)
             self.assertEqual(self.run_trace(game, out, "--dry-run"), 0)
             self.assertFalse(out.exists())
 
@@ -336,7 +392,7 @@ class CommandTests(unittest.TestCase):
         art, masks = synthetic_font()
         with tempfile.TemporaryDirectory() as temp:
             game = build_game(Path(temp), art)
-            out = Path(temp) / "local" / "out"
+            out = self.checkout(temp)
             self.assertEqual(self.run_trace(game, out), 0)
             folder = out / "7-testfont"
             meta = json.loads((folder / "font.json").read_text())
@@ -361,11 +417,42 @@ class CommandTests(unittest.TestCase):
             self.assertEqual(json.loads((folder / "font.json").read_text())["framesSha256"], first_run)
             self.assertEqual(len(masks), 5)
 
+    def test_a_foreign_receipt_and_a_linked_frame_are_not_written_through(self) -> None:
+        art, _ = synthetic_font()
+        with tempfile.TemporaryDirectory() as temp:
+            game = build_game(Path(temp), art)
+            out = self.checkout(temp)
+            out.mkdir(parents=True)
+            (out / "receipt.json").write_text("{}")
+            with self.assertRaises(SystemExit):
+                self.run_trace(game, out)
+            self.assertEqual((out / "receipt.json").read_text(), "{}")
+            (out / "receipt.json").unlink()
+            self.assertEqual(self.run_trace(game, out), 0)
+            victim = Path(temp) / "victim.png"
+            victim.write_bytes(b"keep")
+            frame = out / "7-testfont" / "frame-000.png"
+            frame.unlink()
+            frame.symlink_to(victim)
+            with self.assertRaises(SystemExit):
+                self.run_trace(game, out)
+            self.assertEqual(victim.read_bytes(), b"keep")
+
+    def test_a_foreign_venv_is_not_replaced(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            foreign = Path(temp) / "venv"
+            foreign.mkdir()
+            (foreign / "pyvenv.cfg").write_text("home = x\n")
+            self.assertFalse(hd_font.replaceable_venv(foreign))
+            (foreign / hd_font.VENV_MARKER).write_text("ours\n")
+            self.assertTrue(hd_font.replaceable_venv(foreign))
+            self.assertTrue(hd_font.replaceable_venv(Path(temp) / "absent"))
+
     def test_a_foreign_non_empty_folder_is_not_overwritten(self) -> None:
         art, _ = synthetic_font()
         with tempfile.TemporaryDirectory() as temp:
             game = build_game(Path(temp), art)
-            out = Path(temp) / "local" / "out"
+            out = self.checkout(temp)
             (out / "7-testfont").mkdir(parents=True)
             (out / "7-testfont" / "mine.txt").write_text("keep")
             with self.assertRaises(SystemExit):
