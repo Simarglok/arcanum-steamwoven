@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S30"/>.
+/// <see cref="ScrAdmissionSet.S31"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -209,6 +209,12 @@ internal sealed class ScrInterpreter
         // host does not know stops the run.
         ScrCatalogue.Condition.IsDead => ListHolds(c, obj => _shared.Killed.Contains(obj) || (States.IsDead(obj) ?? throw new MissingObjectStop(line))),
         ScrCatalogue.Condition.IsSwitchedOff => ListHolds(c, obj => _shared.Toggled.Contains(obj) != (States.IsSwitchedOff(obj) ?? throw new MissingObjectStop(line))),
+        // SC1: the four body bits (0x3C) of the spell flags (case 0x4458D5, field 0x14 through 0x406CA0), over the operand's objects by the list rule of SG6.
+        ScrCatalogue.Condition.HasBodySpell => ListHolds(c, obj => ((Spells.SpellFlags(obj) ?? throw new MissingObjectStop(line)) & BodySpellFlags) != 0),
+        // SC2: influenced by (0x459380) the spell of operand 1, SC3: knows (0x4B1950) the spell of operand 1, SC4: its mastered college (0x4B1CB0) equals operand 1 (−1 matches an object with no mastery, and any object that is not a PC or NPC).
+        ScrCatalogue.Condition.InfluencedBySpell => SpellHolds(c, line, (obj, spell) => Spells.IsInfluencedBy(obj, spell)),
+        ScrCatalogue.Condition.KnowsSpell => SpellHolds(c, line, (obj, spell) => Spells.KnowsSpell(obj, spell)),
+        ScrCatalogue.Condition.MasteredSpellCollege => SpellHolds(c, line, (obj, college) => Spells.MasteredCollege(obj) is { } mastered ? mastered == college : null),
         _ => throw new InvalidOperationException("Condition outside the interpreter's set."),
     };
 
@@ -510,6 +516,14 @@ internal sealed class ScrInterpreter
                 var y = Get(a, 2);
                 var change = a.Type == ScrCatalogue.Action.WalkTo ? ScrObjectStateChange.WalkTo : ScrObjectStateChange.RunTo;
                 if (OptionalObject(a, 0) is { } obj) _shared.ObjectStates.Add(new(change, obj, x, y));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.GiveSpellMastery:
+            {
+                // SC5: the first object of operand 0 (0x44B960) and the college of operand 1 go to the mastery setter (0x4EF080, then 0x4B1CF0); the run goes on. An absent object changes nothing (a project choice: the original reads
+                // the null handle's type field). The college is not range-checked.
+                var college = Get(a, 1);
+                if (OptionalObject(a, 0) is { } obj) _shared.ObjectStates.Add(new(ScrObjectStateChange.GiveSpellMastery, obj, college));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.Damage:
@@ -964,6 +978,19 @@ internal sealed class ScrInterpreter
             or ScrFocusKind.AnyoneInVicinity or ScrFocusKind.AnyoneInGroup or ScrFocusKind.AnySceneryInVicinity or ScrFocusKind.AnyContainerInVicinity
             or ScrFocusKind.AnyPortalInVicinity or ScrFocusKind.AnyItemInVicinity);
     }
+
+    /// <summary>SC1: the four body-spell bits of the spell flags: body of air 0x4, earth 0x8, fire 0x10, water 0x20.</summary>
+    private const int BodySpellFlags = 0x3C;
+
+    // SC2–SC4: the value of operand 1 is read once before the list is walked (0x44BA70, as the original does), then the host answers per object; a null stops the run.
+    private bool SpellHolds(ScrClause c, int line, Func<ScrObjectRef, int, bool?> test)
+    {
+        var value = Get(c, 1);
+        return ListHolds(c, obj => test(obj, value) ?? throw new MissingObjectStop(line));
+    }
+
+    private IScrSpellQueries Spells => _host as IScrSpellQueries
+        ?? throw new InvalidOperationException("SCR_SPELL_QUERIES_REQUIRED: the admission set holds a spell condition and the host cannot answer it.");
 
     private IScrObjectStateQueries States => _host as IScrObjectStateQueries
         ?? throw new InvalidOperationException("SCR_OBJECT_STATE_QUERIES_REQUIRED: the admission set holds the dead or switched-off condition and the host cannot answer it.");
