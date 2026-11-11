@@ -166,6 +166,25 @@ public sealed class WorldSector
     public IReadOnlyList<IReadOnlyList<int>> TileScripts { get; }
     public IReadOnlyList<int>? SectorScript { get; }
     public IReadOnlyList<int>? MetadataAndSound { get; }
+
+    /// <summary>
+    /// ARC-MAGIC-028 (FR-CHAR-020): the sector's aptitude adjustment, the second word (+0x4644) of the metadata that sector
+    /// versions 0xAA0003 and later store after the tile scripts and the sector script; 0 for an older version. The original's
+    /// sector reset zeroes the field and its only reader is the aptitude stat (0x45A060, called from 0x4B0740 with the sector
+    /// of the critter's location). Its writer (0x45A0A0) is never called or referenced in the 1.0.7.4 executable, so the
+    /// number is whatever the file holds. The caller adds it to the aptitude of a critter standing in this sector; a location
+    /// outside the map, whose sector cannot be locked, has 0.
+    /// </summary>
+    [OriginalFunction(0x45A060, OriginalFunctionScope.Partial)]
+    public int AptitudeAdjustment() => MetadataAndSound is { Count: >= 2 } words ? words[1] : 0;
+
+    /// <summary>
+    /// The art id of the tile slot at a location inside this sector, from the tile index <c>(y &amp; 63) &lt;&lt; 6 | x &amp; 63</c>
+    /// (0x4D7090, 0x4D70B0). The sector-from-location step is the caller's.
+    /// </summary>
+    [OriginalFunction(0x4D70B0, OriginalFunctionScope.Partial)]
+    public uint TileArt(int x, int y) => Tiles[(y & 63) << 6 | (x & 63)];
+
     public TerrainSerializedBlockMask? BlockMask { get; }
     public int DeclaredObjects { get; }
     /// <summary>Objects read before any refusal; complete when <see cref="ObjectIssue"/> is null.</summary>

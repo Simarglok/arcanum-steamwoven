@@ -157,6 +157,8 @@ public sealed class SectorCacheState
     /// <summary>The eviction history, oldest first, at most <see cref="SectorCacheLimits.HistoryCapacity"/>.</summary>
     public ImmutableArray<SectorEvictionRecord> History { get; }
 
-    /// <summary>Whether <paramref name="sector"/> is loaded.</summary>
+    /// <summary>Whether <paramref name="sector"/> is loaded (the original's loaded test 0x4D04E0: the sector is in the sorted index and its slot does not
+    /// carry the not-loaded-yet bit 0x80000000, which a load that completes inside the lock never leaves set).</summary>
+    [OriginalFunction(0x4D04E0, OriginalFunctionScope.Partial)]
     public bool IsLoaded(long sector) => SectorCacheRules.IndexOf(Slots, sector) >= 0;
 }

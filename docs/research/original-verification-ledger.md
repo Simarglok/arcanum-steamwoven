@@ -204,6 +204,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="body-armour-art-arc-world-112"></a>[Body armour art (ARC-WORLD-112)](ledger/items.md#body-armour-art-arc-world-112) | [Items and inventory](ledger/items.md) | BA1–BA6 |
 | <a id="weapon-art-arc-render-037"></a>[Weapon art (ARC-RENDER-037)](ledger/items.md#weapon-art-arc-render-037) | [Items and inventory](ledger/items.md) | WA1–WA10 |
 | <a id="keys-on-the-heros-ring-arc-world-123"></a>[Keys on the hero's ring (ARC-WORLD-123)](ledger/items.md#keys-on-the-heros-ring-arc-world-123) | [Items and inventory](ledger/items.md) | KY1–KY5 |
+| <a id="item-aiming-and-use-with-a-target-arc-res-113"></a>[Item aiming and use with a target (ARC-RES-113)](ledger/items.md#item-aiming-and-use-with-a-target-arc-res-113) | [Items and inventory](ledger/items.md) | IA1–IA16 |
 | <a id="main-menu-arc-ui-011"></a>[Main menu (ARC-UI-011)](ledger/ui-audio.md#main-menu-arc-ui-011) | [Interface windows and audio](ledger/ui-audio.md) | MM1–MM7 |
 | <a id="hero-death-arc-ui-026"></a>[Hero death (ARC-UI-026)](ledger/ui-audio.md#hero-death-arc-ui-026) | [Interface windows and audio](ledger/ui-audio.md) | PD1–PD9 |
 | <a id="companion-walks-through-critters-arc-world-075"></a>[Companion walks through critters (ARC-WORLD-075)](ledger/world.md#companion-walks-through-critters-arc-world-075) | [World, maps and movement](ledger/world.md) | LR10–LR11 |
@@ -280,6 +281,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="same-tile-draw-order-arc-dev-173"></a>[Same-tile draw order (ARC-DEV-173)](ledger/world.md#same-tile-draw-order-arc-dev-173) | [World, maps and movement](ledger/world.md) | SO1–SO3 |
 | <a id="world-map-window-arc-ui-073"></a>[World map window (ARC-UI-073)](ledger/ui-audio.md#world-map-window-arc-ui-073) | [Interface windows and audio](ledger/ui-audio.md) | WM1–WM139 |
 | <a id="screen-size-and-layout-arc-res-093"></a>[Screen size and layout (ARC-RES-093)](ledger/ui-audio.md#screen-size-and-layout-arc-res-093) | [Interface windows and audio](ledger/ui-audio.md) | SZ1–SZ14 |
+| <a id="function-audit-0x4b0000-0x4cffff-arc-res-109"></a>[Function audit of 0x4B0000–0x4CFFFF (ARC-RES-109)](ledger/function-audit-4b-4c.md) | [Function audit, slice E of V1](ledger/function-audit-4b-4c.md) | one state per function start, 12 rows marked |
 
 ## Decisions to revisit
 

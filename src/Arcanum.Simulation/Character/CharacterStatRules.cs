@@ -2,7 +2,8 @@ namespace Arcanum.Simulation.Character;
 
 /// <summary>
 /// Fixed rules profile <see cref="RulesId"/>. Numbers are the claims of docs/world/character-stats-runtime.md, not yet
-/// checked in the retail executable (evidence level F0, docs/verification/functions.csv); retail parity is NOT_VERIFIED.
+/// checked in the retail executable (evidence level F0, docs/verification/functions.csv); retail parity is NOT_VERIFIED. The limits of
+/// <see cref="Range"/> were compared with the executable's tables (0x4B0FC0, 0x4B0FD0; ARC-RES-109, F1).
 /// </summary>
 internal static class CharacterStatRules
 {
@@ -11,6 +12,10 @@ internal static class CharacterStatRules
     public const int MaxSectorAptitudeAdjustment = 100;
     /// <summary>The poison level stat's range in the source (0..1000).</summary>
     public const int MaxPoisonLevel = 1000;
+    /// <summary>The mage backgrounds' block numbers (stat getter 0x4B0490, ledger BG6) and the magick points they move.</summary>
+    public const int DayMageBackground = 62, NightMageBackground = 63, SkyMageBackground = 64, NatureMageBackground = 65, MageBackgroundPoints = 4;
+    /// <summary>The first hour of the original's day and the first hour of its night (0x45ACF0: from 6 up to but not including 18).</summary>
+    public const int DayStartHour = 6, NightStartHour = 18;
 
     private static readonly int StatCount = Enum.GetValues<CharacterStat>().Length;
 
@@ -31,6 +36,8 @@ internal static class CharacterStatRules
 
     public static int Default(CharacterStat stat) => IsPrimary(stat) ? 8 : 0;
 
+    [OriginalFunction(0x4B0FC0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4B0FD0, OriginalFunctionScope.Partial)]
     public static StatRange Range(CharacterRace race, CharacterStat stat) => stat switch
     {
         <= CharacterStat.Charisma => new(1, RacialPrimaryMaximum(race, stat)),
@@ -103,16 +110,38 @@ internal static class CharacterStatRules
 
     /// <summary>
     /// Part of the original's situational adjustment of a base value before effects: poison lowers strength and dexterity by
-    /// <c>min(3, poison / 100)</c>, crippled legs lower speed by 5 (the stat getter 0x4B0490, ledger IF12; Tempus Fugit,
-    /// the follower bonus and the background adjustments are not modelled).
+    /// <c>min(3, poison / 100)</c>, crippled legs lower speed by 5, and the four mage backgrounds move magick points by 4
+    /// (<see cref="MageBackgroundAdjustment"/>) (the stat getter 0x4B0490, ledger IF12, BG6; Tempus Fugit, the follower bonus
+    /// and the other backgrounds' adjustments (66, 67, 68) are not modelled).
     /// </summary>
     [OriginalFunction(0x4B0490, OriginalFunctionScope.Partial)]
     public static int Situational(CharacterStat stat, CharacterStatContext context) => stat switch
     {
         CharacterStat.Strength or CharacterStat.Dexterity => -Math.Min(3, context.PoisonLevel / 100),
         CharacterStat.Speed => context.CrippledLegs ? -5 : 0,
+        CharacterStat.MagickPoints => MageBackgroundAdjustment(context),
         _ => 0,
     };
+
+    /// <summary>
+    /// The magick points of the Day, Night, Sky and Nature Mage backgrounds (62..65) at read time (0x4B0490, the magick-points
+    /// branch): each is +4 when its condition holds and -4 when it does not (a fixed 8-point swing, not "+4 or nothing").
+    /// The Day Mage's condition is the hour from 6 up to 17 (0x45ACF0), the Night Mage's its opposite, the Sky Mage's an outdoor
+    /// tile under the critter (0x5038C0) and the Nature Mage's the <c>n</c> flag of the tile's name (0x4EBBA0). Any other
+    /// background, and every NPC, adds nothing.
+    /// </summary>
+    public static int MageBackgroundAdjustment(CharacterStatContext context)
+    {
+        var day = context.Hour is >= DayStartHour and < NightStartHour;
+        return context.Background switch
+        {
+            DayMageBackground => day ? MageBackgroundPoints : -MageBackgroundPoints,
+            NightMageBackground => day ? -MageBackgroundPoints : MageBackgroundPoints,
+            SkyMageBackground => context.OutdoorTile ? MageBackgroundPoints : -MageBackgroundPoints,
+            NatureMageBackground => context.NatureTile ? MageBackgroundPoints : -MageBackgroundPoints,
+            _ => 0,
+        };
+    }
 
     /// <summary>
     /// Applies every modifier for <paramref name="stat"/> with the source's aggregation (<see cref="EffectModifiers.Apply"/>,
