@@ -105,6 +105,43 @@ public sealed class ObjectSoundTests
     }
 
     [TestMethod]
+    public void Tile_name_flags_and_the_ground_facts_of_the_sky_and_nature_mage_backgrounds()
+    {
+        // ARC-MAGIC-028: letters after the '/' up to the first space add b 1, s 2, f 5, i 8, n 0x10, p 0x20 (0x4EB2E0); the nature
+        // flag is 0x10 (0x4EBBA0) and outdoor is bit 8 of a tile and bit 25 of a facade (0x5038C0).
+        var table = Table(new()
+        {
+            [0] = "grs/n 0", [1] = "snd/sn 1", [5] = "stn/b3", [6] = "all/bsfinp 2", [100] = "wtr/s  4", [101] = "abc7", [200] = "wod/p 5 junk", [300] = "flr 3",
+            [301] = "cav/", [302] = "ntr/n -2",
+        });
+        uint Tile(bool outdoor, bool flippable, int position) => (uint)(position << 22) | (outdoor ? 0x100u : 0) | (flippable ? 0x80u : 0);
+        uint Facade(bool outdoor, bool flippable, int position) => 0xB0000000u | (uint)(position << 11) | (outdoor ? 1u << 25 : 0) | (flippable ? 1u << 26 : 0);
+        Assert.AreEqual(0x10, table.NameFlags(Tile(true, true, 0)));
+        Assert.AreEqual(0x12, table.NameFlags(Tile(true, true, 1)));
+        Assert.AreEqual(1, table.NameFlags(Tile(true, true, 2)), "a letter run: b, then the digit adds nothing");
+        Assert.AreEqual(0x3F, table.NameFlags(Tile(true, true, 3)), "b 1 | s 2 | f 5 | i 8 | n 0x10 | p 0x20");
+        Assert.AreEqual(2, table.NameFlags(Tile(true, false, 0)));
+        Assert.AreEqual(0, table.NameFlags(Tile(true, false, 1)), "a bare name has no flags");
+        Assert.AreEqual(0x20, table.NameFlags(Tile(false, true, 0)));
+        Assert.AreEqual(0, table.NameFlags(Tile(false, false, 1)), "a slash with no letters");
+        Assert.AreEqual(0x10, table.NameFlags(Tile(false, false, 2)));
+        Assert.IsNull(table.NameFlags(Tile(false, true, 1)), "a position beyond its category");
+
+        Assert.AreEqual((true, true), table.MageGround(Tile(true, true, 0)), "outdoor tile with the nature flag");
+        Assert.AreEqual((true, false), table.MageGround(Tile(true, true, 2)), "outdoor, no nature flag");
+        Assert.AreEqual((false, true), table.MageGround(Tile(false, false, 2)), "indoor tile with the nature flag");
+        Assert.AreEqual((false, false), table.MageGround(Tile(false, true, 0)));
+        Assert.AreEqual((false, false), table.MageGround(Tile(false, true, 1)), "beyond its category: no flags");
+        Assert.AreEqual((true, true), table.MageGround(Facade(true, true, 0)), "a facade is outdoor by bit 25");
+        Assert.AreEqual((false, false), table.MageGround(Facade(false, true, 0)));
+        Assert.AreEqual((false, false), table.MageGround(Tile(true, true, 0) | 0x10000000), "any other art type is indoor, position 0, category 3");
+        Assert.AreEqual((false, false), table.MageGround(null), "no sector resident: the original reads no tile");
+        Assert.AreEqual((false, false), table.MageGround(uint.MaxValue), "art id -1");
+        Assert.IsTrue(TileSoundTable.IsOutdoor(Tile(true, false, 0)) && !TileSoundTable.IsOutdoor(Tile(false, false, 0)));
+        Assert.IsFalse(TileSoundTable.IsOutdoor(Facade(false, false, 0) | 0x100), "a facade ignores bit 8");
+    }
+
+    [TestMethod]
     public void A_tile_name_table_without_a_category_start_or_with_a_short_bare_name_is_refused()
     {
         var full = new Dictionary<int, string> { [0] = "grs", [100] = "dirt", [200] = "wod", [300] = "flr" };
