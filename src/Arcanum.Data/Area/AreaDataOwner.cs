@@ -190,6 +190,7 @@ public sealed partial class AreaDataOwner : IDisposable
                 AreaInspection inspection;
                 _sharedFrames = new();
                 _residentStaged = _limits.ResidentVisuals is null ? null : [];
+                _residentEditorStaged = null;
                 try { inspection = Build(cancellationToken, output); }
                 finally { _missingMasks = null; _artHolders = null; _objectTiles = null; _sharedFrames = null; _longestFor = null; _elementCopies = null; } // build-local (ARC-DATA-023/024)
                 EndEntryMemo();
@@ -198,6 +199,8 @@ public sealed partial class AreaDataOwner : IDisposable
                 cancellationToken.ThrowIfCancellationRequested();
                 // ARC-DEV-375: the records this build derived were derived inside a bracket whose closing authentication has now passed.
                 if (inspection.IsComplete && _residentStaged is { Count: > 0 } staged) _limits.ResidentVisuals!.Commit(staged);
+                // ARC-DEV-388: the editor record facts of a pass that completed, on the same terms.
+                if (inspection.IsComplete && _residentEditorStaged is { } editorPass) _limits.ResidentEditorRecords!.Commit(editorPass.Key, editorPass.Facts);
                 if (inspection.IsComplete)
                 {
                     var oldBytes = _publishedBytes;
@@ -215,7 +218,7 @@ public sealed partial class AreaDataOwner : IDisposable
             { output.Dispose(); return new(null, [new(error.Code == StaticObjectErrorCode.UnsupportedVersion ? AreaErrorCode.UnsupportedVersionOrSchema : error.Code == StaticObjectErrorCode.LimitExceeded ? AreaErrorCode.BudgetExceeded : AreaErrorCode.MalformedRecord, AreaStage.Aggregate, error.Offset, error.SourceIndex)], _budget.Usage); }
             catch (Exception error) when (error is DatException or IOException or UnauthorizedAccessException or OverflowException or ArgumentOutOfRangeException)
             { output.Dispose(); return new(null, [new(AreaErrorCode.MalformedRecord, AreaStage.Input)], _budget.Usage); }
-            finally { _residentStaged = null; EndEntryMemo(); _budget.EndFrame(); }
+            finally { _residentStaged = null; _residentEditorStaged = null; EndEntryMemo(); _budget.EndFrame(); }
         }
     }
     public AreaSnapshot LoadStrict(CancellationToken cancellationToken = default)

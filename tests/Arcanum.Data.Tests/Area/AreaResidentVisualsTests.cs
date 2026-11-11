@@ -99,6 +99,49 @@ public sealed class AreaResidentVisualsTests
         for (var i = 0; i < cold.Length; i++) CollectionAssert.AreEqual(cold[i], served[i]);
     }
 
+    private static byte[] GuidId(byte first) { var id = Id(2); for (var i = 0; i < 16; i++) id[8 + i] = (byte)(first + i); return id; }
+
+    [TestMethod]
+    public void A_later_build_serves_the_editor_records_from_the_memo_and_matches_a_build_without_one()
+    {
+        byte[][] records = [Record(GuidId(0), 274877907008), Record(GuidId(16), 274877907009)];
+        var memo = new AreaResidentEditorRecords();
+        AreaReconciliation cold;
+        using (var plain = new Fixture([(67108865, [])], records)) cold = plain.Owner.LoadStrict().Reconciliation;
+        using (var one = new Fixture([(67108865, [])], records, limits: new() { ResidentEditorRecords = memo }))
+            Assert.AreEqual(cold, one.Owner.LoadStrict().Reconciliation);
+        Assert.AreEqual(1, memo.Count, "a complete build commits its pass"); Assert.AreEqual(2, memo.Facts); Assert.AreEqual(0, memo.Lookups.Hits);
+        using (var two = new Fixture([(67108865, [])], records, limits: new() { ResidentEditorRecords = memo }))
+        {
+            var served = two.Owner.LoadStrict();
+            Assert.AreEqual(1, memo.Lookups.Hits, "the second build meets the first's editor records");
+            Assert.AreEqual(cold, served.Reconciliation);
+            Assert.AreEqual(2, served.Objects.Count);
+        }
+    }
+
+    [TestMethod]
+    public void Editor_records_of_another_module_are_not_served_and_a_mismatch_still_fails_and_commits_nothing()
+    {
+        byte[][] records = [Record(GuidId(0), 274877907008), Record(GuidId(16), 274877907009)];
+        var memo = new AreaResidentEditorRecords();
+        using (var one = new Fixture([(67108865, [])], records, limits: new() { ResidentEditorRecords = memo })) one.Owner.LoadStrict();
+        // Another module (an editor record that is not the aggregate's): another identity, so the pass is read again and the mismatch is found.
+        using (var bad = new Fixture([(67108865, [])], records, [records[0], Record(GuidId(32))], limits: new() { ResidentEditorRecords = memo }))
+        {
+            var report = bad.Owner.Inspect();
+            Assert.IsFalse(report.IsComplete);
+            Assert.IsTrue(report.Issues.Any(i => i.Code == AreaErrorCode.InputIdentityMismatch && i.Stage == AreaStage.Correspondence));
+        }
+        Assert.AreEqual(0, memo.Lookups.Hits, "the other module did not hit"); Assert.AreEqual(1, memo.Count, "a failed pass commits nothing");
+        // A served pass is still compared with the aggregate: the same module bytes against another aggregate fail on a hit.
+        using (var other = new Fixture([(67108865, [])], [records[0], Record(GuidId(48))], records, limits: new() { ResidentEditorRecords = memo }))
+        {
+            Assert.IsFalse(other.Owner.Inspect().IsComplete);
+        }
+        Assert.AreEqual(1, memo.Count);
+    }
+
     [TestMethod]
     public void A_build_that_is_cancelled_or_whose_input_changed_commits_nothing()
     {
