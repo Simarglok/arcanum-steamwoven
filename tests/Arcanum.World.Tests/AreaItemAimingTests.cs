@@ -31,6 +31,7 @@ public sealed class AreaItemAimingTests
         Assert.AreEqual(AreaItemAimBegin.NoActionPoints, AreaItemAiming.Begin(Object, true, false, false));
         Assert.AreEqual(AreaItemAimBegin.OpenCursor, AreaItemAiming.Begin(Object, true, false, true));
         Assert.AreEqual(AreaItemAimBegin.InventoryTarget, AreaItemAiming.Begin(SpellUiRules.InventoryBit | Object, true, false, true));
+        Assert.AreEqual(AreaItemAimBegin.UseAtOwnTile, AreaItemAiming.Begin(SpellUiRules.InventoryBit | SpellUiRules.SelfBit, true, false, true), "IA4: the at-once test still applies with the inventory bit");
     }
 
     [TestMethod]

@@ -486,12 +486,12 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
 
     /// <summary>
     /// ARC-DEV-365 (T-g, ledger IA8, IA11): the item use goal 39 (<paramref name="target"/> an object) or 41 (a tile) the item cursor's apply starts: the movement gate, the generic starter (a level-3 interrupt of the hero's runs),
-    /// the run flag when the always-run rule turns running on, and the no-walk flag 0x100 for a goal 39 started with Shift (the hero acts from where it stands, IA8). False when the gate or a run's refusal stopped it.
+    /// the run flag 0x4000 (the starter 0x435450 always sets it), the run flag when the always-run rule turns running on, and the no-walk flag 0x100 for a goal 39 started with Shift (the hero acts from where it stands, IA8). False when the gate or a run's refusal stopped it.
     /// </summary>
     public bool UseItem(string item, string target, bool run, bool noWalk)
     {
         if (!MayTalk) return false;
-        var flags = (run ? GoalRunFlags.Running : GoalRunFlags.None) | (noWalk ? GoalRunFlags.NoWalk : GoalRunFlags.None);
+        var flags = GoalRunFlags.NearOccupied | (run ? GoalRunFlags.Running : GoalRunFlags.None) | (noWalk ? GoalRunFlags.NoWalk : GoalRunFlags.None);
         var started = _session.StartGoal(new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(GoalType.UseItem, target) { Item = item }, flags), _ports);
         foreach (var end in started.Ended) EndNodes(end, "ROUTE_REPLACED_BY_ITEM_USE");
         return started.Started;

@@ -68,8 +68,9 @@ public static class AreaItemAiming
     public static AreaItemAimBegin Begin(ulong mask, bool userActive, bool shiftHeld, bool actionPointsAllow)
     {
         if (!userActive) return AreaItemAimBegin.Nothing;
-        if (SpellUiRules.TargetsInventory(mask)) return AreaItemAimBegin.InventoryTarget;
+        // IA4: the inventory bit only decides whether the window stays open; the at-once test still applies.
         if (SpellUiRules.CastsAtOnce(mask)) return AreaItemAimBegin.UseAtOwnTile;
+        if (SpellUiRules.TargetsInventory(mask)) return AreaItemAimBegin.InventoryTarget;
         if (!actionPointsAllow) return AreaItemAimBegin.NoActionPoints;
         return shiftHeld && (mask & SpellUiRules.ObjectBit) != 0 ? AreaItemAimBegin.UseOnPlayer : AreaItemAimBegin.OpenCursor;
     }

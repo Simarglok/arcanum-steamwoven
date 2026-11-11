@@ -280,7 +280,7 @@ public partial class TerrainViewerApp
         DrainDoorEnds();
         if (_areaPortals is not { } portals || _areaSession is not { } session || _readyArea is not { } area) { if (_portalBodies.Count > 0) _portalBodies = []; return; }
         // ARC-DEV-185: the lock pick goal 67 asked for lies here until the frame's safe point; a door that is no more (another map) drops it.
-        ProcessLockpickPending();
+        ProcessLockpickPending(); ProcessItemUsePending();
         AreaFrames();
         var overlay = _areaOverlay ?? throw new InvalidOperationException("AREA_OVERLAY_REQUIRED");
         var bodies = new Dictionary<AreaObjectKey, AreaDrawCommand>();

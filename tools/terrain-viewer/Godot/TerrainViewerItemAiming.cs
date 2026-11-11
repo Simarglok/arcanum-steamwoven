@@ -72,10 +72,12 @@ public partial class TerrainViewerApp
         int? spell = spells is { Spells.Count: > 0 } && spells.Spells[0] is var slot && slot is >= 0 and < SpellPaymentRules.Spells && SpellRecordsNow() is { } records && slot < records.Length ? slot : null;
         ulong? begin = spell is { } s ? (SpellRecordsNow()![s].Areas is { Length: > 0 } areas ? areas[0].Targets : 0) : null;
         var mask = AreaItemAiming.Mask(charged, facts.TrapDevice, begin);
+        // IA2: the picker returns silently for a user that cannot act, before the window closes.
+        var (dead, unconscious) = HeroDownState();
+        if (dead || unconscious) { _inventoryStatus = "nothing happens: the hero cannot act"; _inventoryPanel!.Render(InventoryView(_inventoryPanel.Holder), _inventoryStatus); return; }
         if (!SpellUiRules.TargetsInventory(mask)) EndInventory();
         CancelPendingOrder("an item cursor opened");
         CancelSpellTargeting("an item cursor opened");
-        var (dead, unconscious) = HeroDownState();
         var shift = Godot.Input.IsKeyPressed(Key.Shift);
         var decision = AreaItemAiming.Begin(mask, !dead && !unconscious, shift, session.QueryActionPointCheck(SessionCombatant.Hero, TurnBasedRules.UseItemCost));
         var name = _inventoryHost!.ItemName(session, item, _hoverNames?.Catalog);
@@ -196,13 +198,16 @@ public partial class TerrainViewerApp
 
     // ---- the item use goals 39 and 41 (the hero's table ports) ----
 
+    // Only the hero's own item use run reads the cast host's objects as targets of the walk and the range test; every other goal keeps its own target kinds.
+    private bool ItemAimRunTargets(string target) => HeroRunsHost()?.ItemUseRun is { } run && run.Bottom.Target == target;
+
     /// <summary>The cell of an object of the cast host's map, for the goals' range test and approach (a target picked by the item cursor is named by the cast host's id).</summary>
     private CellCoord? ItemAimObjectCell(string target) =>
-        SpellCasterNow()?.Facts(target)?.Location is { } at && at != SpellLocation.None ? new(checked((int)at.X), checked((int)at.Y)) : null;
+        ItemAimRunTargets(target) && SpellCasterNow()?.Facts(target)?.Location is { } at && at != SpellLocation.None ? new(checked((int)at.X), checked((int)at.Y)) : null;
 
     /// <summary>The cell the hero walks to so as to stand next to the cast host's object <paramref name="target"/> (goal 8 under goal 39).</summary>
     private CellCoord? ItemAimApproach(string target, int range) =>
-        _worldActor.Session is AreaGridSession grid && SpellCasterNow()?.Facts(target)?.Location is { } at && at != SpellLocation.None
+        ItemAimRunTargets(target) && _worldActor.Session is AreaGridSession grid && SpellCasterNow()?.Facts(target)?.Location is { } at && at != SpellLocation.None
             && ApproachCell(grid, at.X, at.Y, range) is { } cell ? WorldTileOf(grid, cell) : null;
 
     /// <summary>The cell the hero walks to so as to stand next to a tile (goal 41's walk).</summary>
@@ -215,20 +220,23 @@ public partial class TerrainViewerApp
         return new(checked((int)world.X), checked((int)world.Y));
     }
 
-    /// <summary>The last node of goal 39 (0x428CD0): the use of the item on the object, run at the frame's table step; the item must still be the hero's.</summary>
-    internal void HeroUseItem(string item, string target)
-    {
-        if (_areaSession is not { } session || _inventoryHost is null) return;
-        var facts = _inventoryHost.UseFacts(session, item, _areaKitUse);
-        // The goal's node 3 (0x428CD0) needs the item to be the user's: facts that do not read mean it left the hero's hands.
-        ItemAimNotice(facts is null ? "not used: the item is no longer the hero's" : ItemAimUse(item, facts, target, null));
-    }
+    // The use goals 39 and 41 ask for the use; it is made at the frame's next safe point (the cast it may start, the item it may destroy and the windows it may open change runs, so they do not run inside the table's step).
+    private (string Item, string? Target, CellCoord? Tile)? _itemUsePending;
 
-    /// <summary>The last node of goal 41 (0x429040): the use of the item on the tile.</summary>
-    internal void HeroUseItemOnTile(string item, CellCoord tile)
+    /// <summary>The last node of goal 39 (0x428CD0): the use of the item on the object is asked for.</summary>
+    internal void HeroUseItem(string item, string target) => _itemUsePending = (item, target, null);
+
+    /// <summary>The last node of goal 41 (0x429040): the use of the item on the tile is asked for.</summary>
+    internal void HeroUseItemOnTile(string item, CellCoord tile) => _itemUsePending = (item, null, tile);
+
+    /// <summary>The frame's safe point of the item use goals: the use they asked for is made; the item must still be the hero's (node 3 of the goals: facts that do not read mean it left the hero's hands). Also run before a save.</summary>
+    private void ProcessItemUsePending()
     {
+        if (_itemUsePending is not { } asked) return;
+        _itemUsePending = null;
         if (_areaSession is not { } session || _inventoryHost is null) return;
-        var facts = _inventoryHost.UseFacts(session, item, _areaKitUse);
-        ItemAimNotice(facts is null ? "not used: the item is no longer the hero's" : ItemAimUse(item, facts, null, new SpellLocation(checked((uint)tile.X), checked((uint)tile.Y))));
+        var facts = _inventoryHost.UseFacts(session, asked.Item, _areaKitUse);
+        if (facts is null) { ItemAimNotice("not used: the item is no longer the hero's"); return; }
+        ItemAimNotice(ItemAimUse(asked.Item, facts, asked.Target, asked.Tile is { } t ? new SpellLocation(checked((uint)t.X), checked((uint)t.Y)) : null));
     }
 }

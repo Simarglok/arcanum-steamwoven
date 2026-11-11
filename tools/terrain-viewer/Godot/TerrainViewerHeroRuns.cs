@@ -223,7 +223,8 @@ public partial class TerrainViewerApp
             // ARC-DEV-184: the victim of a pick pocket is named by its session entity (the steal window's holder).
             if (app.PickPocketRowOf(target) is { } victim) { var (vx, vy) = app.LiveWorldCell(victim); return new(new(checked((int)vx), checked((int)vy))); }
             // ARC-DEV-365: an object the item cursor picked is named by the cast host's id; goal 39 reads its cell here.
-            if (app.SpeakerOfTarget(target) is not { } speaker || !app.SpeakerPresent(speaker)) return app.ItemAimObjectCell(target) is { } aimed ? new(aimed) : null;
+            if (app.SpeakerOfTarget(target) is not { } speaker) return app.ItemAimObjectCell(target) is { } aimed ? new(aimed) : null;
+            if (!app.SpeakerPresent(speaker)) return null;
             var (x, y) = app.SpeakerCell?.Invoke(speaker) ?? (speaker.WorldX, speaker.WorldY);
             return new(new(checked((int)x), checked((int)y)));
         }
