@@ -824,6 +824,18 @@ tests `SessionSpellCasterSocialTests`. The five flags the ObjFlag component of M
 - NPC casters' weapons; the sector kind; paths.
 - The raise and taking-damage scripts run no SCR.
 
+## Movement component (ARC-MAGIC-036)
+
+Slice MA-5 of the [magic audit](../research/magic-audit-res-103.md#movement-ma-5-arc-magic-036) (owner decision D3b: tile movement first), on the executable reads [MV1–MV3](../research/ledger/spell-runs.md#movement-component-and-the-immediate-path-relocation-arc-magic-036).
+Code `SessionSpellCasterMovement.cs` (the cast host), `ImmediatePathWalk` (Simulation, the path walk), `AreaAiHost.RelocateAlongPath` (NPCs and companions), `TerrainViewerMovement.cs` (the viewer's host: the hero and the dispatch), `AreaMapTransfers.Enter` with its
+`jumpPoint` argument; tests `SessionSpellCasterMovementTests`, `ImmediatePathWalkTests`, `AreaAiPathRelocationTests`, the smoke stage `movement`.
+
+- **The component.** Type 0 (`Move_Location: Target_Tile`, Spatial Distortion, spell 3) on the hero or a critter the host knows, with a run whose margin is 0 and a target tile other than (0, 0): the host logs `SpellCastEventKind.Movement` (the critter, the tile's x in the value, y in the detail) and answers
+  "taken". A resisted run, a (0, 0) tile and a missing target object do nothing and are not "not ready". Types 1 to 3 and a target that is no known critter stay `ComponentNotReady`.
+- **The relocation** is the host's, as the knockback is: the path request of the drop (`AreaDropMap.Path`, flags 0x10, the owner kind by the critter's side) gives a count of at most 8; the critter walks **that many tiles of the route and no further** (a far target leaves it on the eighth tile), its walks end, it is placed on the last
+  tile, and the tile scripts run: every tile walked (tile script only, no jump point, no sector script) and the last tile once more with its jump point and sector script, as the placement's notification does. No route (equal tiles, a blocked or occupied destination) moves nothing.
+- **Not ready.** See MV rows: types 1 to 3, objects that are no critter, a created critter, the interrupt of goals other than walks, the scripts' order against the placement.
+
 ## Locks and holds on portals and containers (ARC-MAGIC-037)
 
 Slice MA-6 of the [magic audit](../research/magic-audit-res-103.md), on the executable reads [LM1–LM6](../research/ledger/spell-runs.md#lock-flags-of-portals-and-containers-arc-magic-037) (0x454A10 tail re-read in the disassembly);

@@ -183,6 +183,9 @@ public enum SpellCastEventKind
     /// <summary>ARC-MAGIC-037 (LM2): the guard alert (0x4AEE50 with loudness 0 and kind 2) the lock-clearing branch always calls, after the gate and whether or not the lock opened, on the portal or container
     /// <see cref="SpellCastEvent.Object"/> by the run's parent; <see cref="SpellCastEvent.Detail"/> is 1 when the unlock was refused. The guards who see or hear it (PL6) are not modelled: the host acts on this line.</summary>
     LockGuardAlert,
+    /// <summary>ARC-MAGIC-036 (MA-5, MV1–MV3): a Movement component of type 0 (the target tile, 0x4524C0 → the immediate relocation 0x455350) asks the host to relocate <see cref="SpellCastEvent.Object"/> along the path request to the run's
+    /// target tile, whose x is <see cref="SpellCastEvent.Value"/> and y <see cref="SpellCastEvent.Detail"/>: the host asks the path, runs the tiles' scripts on the way and places the object on the last tile. It needs the map's paths, so this host logs the request.</summary>
+    Movement,
 }
 
 /// <summary>
