@@ -50,7 +50,7 @@ function of ours have to be checked?
 | Function oracle | The original's function run in an emulator on 10,000+ seeded inputs, compared with ours, mutants planted | 38 receipts at F3, 12 of them `full` |
 | `Arcanum.Executable` | Interprets the integer subset of x86 so that the original's own prototype code runs, not a transcription | prototypes only ([doc](../Arcanum.Executable.md)) |
 | Smoke stages | The viewer drives a scenario on real data and asserts | 64 map stages (`./arcanum smoke pr`, `full`) |
-| Requirement matrix | A status per functional requirement | 191 rows, fully re-checked 2026-10-20 (partial corrections to 2026-10-27): 4 implemented, 154 partial in the viewer |
+| Requirement matrix | A status per functional requirement | 191 rows, fully re-checked against code 2026-11-11 (ARC-RES-107, V4a): 4 implemented, 164 partial in the viewer, 6 partial without a host, 14 researched, 3 not started |
 | Architecture audit | Mismatches at the level of identity, residency, persistence, time, goals, scripts | closed (R1–R6, G1, MIG1–MIG16) |
 | Behaviour walks | A person-like pass through a school or discipline against the original | RES-103 (magic by school) and RES-104 (technology by discipline), running |
 
