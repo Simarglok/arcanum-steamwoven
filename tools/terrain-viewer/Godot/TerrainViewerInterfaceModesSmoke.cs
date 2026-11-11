@@ -99,14 +99,20 @@ public partial class TerrainViewerApp
 
             // ARC-DEV-200 (SA44, 0x551F70 table 0x5C72B4): the arrow keys scroll the game view in the dialog's mode (no scroll hook is set there)
             // and in no other window's mode. A stack-only dialog stands in for the conversation, whose own panel needs an NPC.
+            string ScrollWhy() => $"anchor {WorldAnchor}, limit {ScrollLimitDistance()}, focused={_worldFocused} pointerIn={_pointerInWindow} pointer={_worldPointer} modal={WorldModal} uiFocus={WorldUiFocus} lifecycle={_worldLifecycleSession is not null} transfer={AreaTransferPending} scrollsView={WorldScrollsGameView} activeDevice={_worldReducer.ActiveDevice?.ToString() ?? "none"} testTime={_worldTestTime}";
             Vector2 CameraAt() => new((float)_camera!.State.X, (float)_camera.State.Y);
             RawInputFrame Arrow() => new(-1, default) { Keyboard = true, KeyboardCamera = new(1, 0), KeyboardCameraHeld = true, CompleteObservation = true, FrameObservationId = (long)Time.GetTicksMsec() };
+            RawInputFrame Idle() => new(-1, default) { CompleteObservation = true, FrameObservationId = (long)Time.GetTicksMsec() };
+            // The reducer is armed only by two complete neutral frames after a quarantine, and an earlier stage in the same process leaves it
+            // quarantined (it releases the simulated pad or changes focus); a keyboard frame then gives an empty intent and the view does not
+            // scroll (ARC-DEV-401). The scroll steps below do not depend on what ran before: arm it first.
+            for (var frame = 0; frame < 3; frame++) WorldObservation(() => ApplyWorldObservedFrame(.1, true, Idle(), [], "ARC-DEV-401 smoke: arm the reducer"));
             try
             {
                 Require(OpenWindowMode(InterfaceMode.Dialog, () => { }, () => { }) && _interfaceWindows.ScrollsGameView && WorldModal, "the stack-only dialog stands: " + State());
                 var before = CameraAt();
                 for (var frame = 0; frame < 3; frame++) WorldObservation(() => ApplyWorldObservedFrame(.1, true, Arrow(), [], "ARC-DEV-200 smoke: complete-level frame"));
-                Require(CameraAt() != before, $"the arrow key scrolled the view under the dialog ({before} -> {CameraAt()})");
+                Require(CameraAt() != before, $"the arrow key scrolled the view under the dialog ({before} -> {CameraAt()}; {ScrollWhy()})");
                 CloseWindowMode(InterfaceMode.Dialog);
                 Require(StackText() == "Game", "the stack-only dialog closed: " + State());
                 await Press(Key.L);
@@ -122,7 +128,6 @@ public partial class TerrainViewerApp
 
             // ARC-UI-099 (SA44, 0x401F50): the pointer on the exact border pixel scrolls the view through the same table as the arrows; the pixel
             // next to the border does not. The pointer position is the one a mouse event reported (set here), no frame holds a key.
-            RawInputFrame Idle() => new(-1, default) { CompleteObservation = true, FrameObservationId = (long)Time.GetTicksMsec() };
             var edgeSize = WorldViewport;
             var east = new Vector2(edgeSize.X - 1, (float)Math.Floor(edgeSize.Y / 2));
             try
@@ -135,7 +140,7 @@ public partial class TerrainViewerApp
                 WorldPointerForSelfTest(east);
                 for (var frame = 0; frame < 3; frame++) WorldObservation(() => ApplyWorldObservedFrame(.1, true, Idle(), [], "ARC-UI-099 smoke: complete-level frame"));
                 var scrolled = CameraAt();
-                Require(scrolled.X > before.X && scrolled.Y == before.Y, $"the east border pixel scrolled the view east under the dialog ({before} -> {scrolled})");
+                Require(scrolled.X > before.X && scrolled.Y == before.Y, $"the east border pixel scrolled the view east under the dialog ({before} -> {scrolled}; {ScrollWhy()})");
                 // ARC-UI-100 (0x40E0A0, 0x40E940): a step is the original's constant 20 pixels across (level 1), once per 16 ms, 24 and 12 on a diagonal.
                 WorldPointerForSelfTest(null);
                 WorldObservation(() => ApplyWorldObservedFrame(.1, true, Idle(), [], "ARC-UI-100 smoke: pause"));
