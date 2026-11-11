@@ -73,7 +73,7 @@ The target functions' questions (MT8) over the shown map:
 
 Stand-ins, each a later slice's:
 - one sector kind for the whole map (the indoor/outdoor test of an NPC's fallback tile);
-- a path to every admitted tile;
+- a path to every tile the terrain verdict does not block (objects and reachability are not tested; ARC-MAGIC-055: before, every admitted tile);
 - NPCs stand on their map cells, except the companions: since ARC-MAGIC-021 a companion's row stands on its committed cell and on
   none while it is on another map (no target and no critter then); since ARC-DEV-076 (MIG3) a visitor from another map is a target,
   a party member of the hero and a critter too, found by identity through the record resolver (`AreaSpellCastMap`'s `visitors`: the
@@ -687,7 +687,7 @@ Slice E1-b of the [missing-systems plan](../project/missing-systems-plan.md#e1-s
   created on the shown map at the tile, no offset, with spell flag `OSF_SUMMONED` (0x4000), the run's parent as its summoner and the run as its owner. Only a prototype of type 3 (scenery) is made; a
   critter prototype and a list pick stay `ComponentNotReady` (E1-e). The cast host reads type, object flags and scenery flags of the prototype from the viewer (`SummonPrototypes`); a creation the
   session refuses is logged (`SummonRefused`; the original exits, an unreachable bug, SUM2).
-- **Empty tiles (SUM9).** The area tests are the existing ones over a map that now lists the created objects too: `Tgt_Tile_Empty` (Fireflash) refuses a tile with blocking terrain or any object but an
+- **Empty tiles (SUM9).** The area tests are the existing ones over a map that now lists the created objects too: `Tgt_Tile_Empty` (Fireflash) refuses a tile with blocking terrain (the step evidence's terrain verdict since ARC-MAGIC-055; before, only an unadmitted sector refused) or any object but an
   item without `OF_NO_BLOCK`, a standing critter included, so a flash cast at a creature that still stands on its tile makes no flash; `Tgt_Tile_Empty_Immobiles` (Wall of Fire) counts only walls,
   portals, scenery and traps.
 - **The summoned slot and list (SUM1, SUM7, TA10).** The last summoned object is reset once per action and is what a `Tgt_Summoned` re-aim names (the flash's eye candy); the run's summoned list is the
@@ -721,7 +721,7 @@ destroy is a session change inside the run pass: a pass the session then refuses
   in `spells.objectFlags`, schema 88) and the critter flags (field 218) on the hero and a mobile critter, with the reference count (0x455100: a set stops while another run provides the bit, a clear while
   more than one does; spell flags only) and the original's side effects (ledger [OB1–OB5](../research/ledger/spell-runs.md#objflag-component-of-the-cast-host-arc-dev-358)): invisible writes the object flags invisible
   (not for the local player) and translucent; shrunk, water walking and stoned write their object flag; don't-draw writes the object flag and the paralysed critter flag of a critter (Disintegrate's vanishing body);
-  entangled and paralysed ask for the hold interrupt as before; the other bits (shielded, anti-magic shell, bonds of magick, full reflection, the four detection bits, the body flags, hardened hands, enshrouded, Tempus Fugit,
+  entangled and paralysed ask for the hold interrupt as before; the other bits (shielded, anti-magic shell, bonds of magick, full reflection, the four detection bits, the body flags, hardened hands, enshrouded, Tempus Fugit (read by the stat getter: [ARC-MAGIC-056](character-stats-runtime.md#tempus-fugit-speed-arc-magic-056)),
   illusion, familiar, spoken with the dead and the rest) are plain writes. The cast host's map (`FlagCastMap`) answers the object flags with the written ones, so the run rules, the target rules (a don't-draw object is no target)
   and the invisible-awareness readers see them; the AI host's hidden test, action gate and hostility facts read them too.
 - **Body spells feed the unarmed damage.** `GameSessionOwner.UnarmedBodyOf` picks Body of Earth, Fire, Water, else Hardened Hands from the spell flags a critter holds in the original's order (OB5);

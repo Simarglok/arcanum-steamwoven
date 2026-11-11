@@ -75,9 +75,11 @@ public sealed record CharacterStatsDefinition(CharacterRace Race, CharacterGende
 /// Mage (+4 when the tile under it is outdoor, else -4) and 65 the Nature Mage (+4 on a tile whose name carries the <c>n</c>
 /// flag, else -4); any other value changes nothing. <paramref name="Hour"/> is the game hour 0..23, <paramref name="OutdoorTile"/>
 /// and <paramref name="NatureTile"/> are false where the sector cannot be locked (outside the map: the original reads art id -1 there).
+/// ARC-MAGIC-056 (MA-9, Tempus Fugit): <paramref name="SpeedShift"/> is added to speed before the effects (+10 for a critter that holds the spell, -10 for every other critter while some critter holds it,
+/// <see cref="CharacterStatRules.TempusFugitShift"/>); the caller works it out from the spell flags.
 /// </summary>
 public readonly record struct CharacterStatContext(int SectorAptitudeAdjustment, int PoisonLevel = 0, bool CrippledLegs = false,
-    int Background = 0, int Hour = 0, bool OutdoorTile = false, bool NatureTile = false);
+    int Background = 0, int Hour = 0, bool OutdoorTile = false, bool NatureTile = false, int SpeedShift = 0);
 
 public readonly record struct AppliedEffectId(long Value);
 public readonly record struct AppliedEffect(AppliedEffectId Id, EffectCause Cause, StatEffectDefinition Definition);

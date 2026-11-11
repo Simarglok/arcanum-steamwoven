@@ -20,7 +20,7 @@ for this comparison was `artifacts/packages/macos` at commit d2899817a; any late
 | --- | --- | --- | --- |
 | 1 | Cast Fireflash (spell 22) at empty ground. | A flash appears on the strike tile for about 0.75 s and goes away by itself. | open |
 | 2 | Cast Fireflash at a creature that stands on a tile. | No flash object, because the tile is not empty (`Tgt_Tile_Empty`). Note also what the creature itself gets (eye candy, damage): the Summon rules do not decide that, so it is part of the comparison. The owner does not remember this empty-tile rule, so it is the main thing to check. | open |
-| 3 | Cast Wall of Fire (spell 21), once on open ground and once next to a wall. | A straight line of 5 pieces centred on the target tile; the line runs along the direction from the caster to the target (TA12). A tile with a wall gets no piece (`Tgt_Tile_Empty_Immobiles`); creatures do not stop a piece. Also check that the line runs along the cast direction, not across it. ARC-MAGIC-054: the pieces are drawn additive, as the original's translucent flames; the owner's 2026-11-11 screenshot of the original shows **3** pieces where the rules read give 5, so count the pieces on open ground and say how many appear ([note](../research/wall-of-fire-look-magic-054.md)). | open |
+| 3 | Cast Wall of Fire (spell 21), once on open ground and once next to a wall. | A straight line of 5 pieces centred on the target tile; the line runs along the direction from the caster to the target (TA12). A tile with a wall gets no piece (`Tgt_Tile_Empty_Immobiles`); creatures do not stop a piece. Also check that the line runs along the cast direction, not across it. ARC-MAGIC-054: the pieces are drawn additive, as the original's translucent flames; the owner's 2026-11-11 screenshot of the original shows **3** pieces where the rules read give 5, so count the pieces on open ground and say how many appear (and in the cave: which map, where; ARC-MAGIC-055 now drops pieces on blocking terrain) ([note](../research/wall-of-fire-look-magic-054.md)). | open |
 | 4 | Walk the hero or a creature through the wall. | The pieces do not block passage: their prototype carries the "no block" flag in the data. | open |
 | 5 | Stand the caster and a companion in the wall, then a hostile creature. | The caster and creatures led by the caster's party are not burned. Other creatures burn each step, and in turn-based mode once per round. | open |
 | 6 | Stop maintaining Wall of Fire (or let it run out). | All pieces disappear at the same moment. | open |
@@ -760,3 +760,34 @@ Known differences (documented, not bugs):
 - The light at the trap is taken as full: an untrained hero in the dark is not penalised yet (the original adds up to 30 against an untrained hero).
 - The item that adds a modifier to the roll (inventory location 1005, name 2866) is not modelled.
 - Companions' own spot attempts are not made; disarming a trap and the skill-bar button are the next slice.
+
+## ARC-MAGIC-056 — Tempus Fugit speed (spell 79)
+
+Rules: [contract](../world/character-stats-runtime.md#tempus-fugit-speed-arc-magic-056), ledger [TF1–TF3](../research/ledger/spell-runs.md#tempus-fugit-speed-arc-magic-056). Compare in both games with the same hero (any Temporal hero with Tempus Fugit) and a hostile or neutral creature near.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast Tempus Fugit (spell 79) on the hero. Open the character sheet (speed line) and the inventory window. | The hero's speed is 10 higher while the spell is maintained, and back to the old value when it ends. | open |
+| 2 | Cast it, then fight a creature in turn-based mode, and compare the action points of the hero and of the creature with and without the spell. | The hero has 10 more action points; every other creature has 10 fewer (at least the game's minimum of 5). | open |
+| 3 | Cast it and fight in real time; compare the pause between attacks of the hero and of the creature with and without the spell. | The hero attacks faster, the creature slower. Walking speed does not change. | open |
+| 4 | Have a companion with the hero when casting. | The companion is in the spell's area and gains the same +10 as the hero; a companion that joins after the cast does not (not built, XR7). | open |
+
+Known differences (documented, not bugs):
+
+- An NPC that casts Tempus Fugit (record 79 carries a flee priority for the AI) changes speeds even when the player does not hold the spell: the owner decided on 2026-11-11 that the original's player-only test is a bug of the game, fixed in both modes. In the original such a cast does nothing to anyone's speed.
+- The follower join and leave flag writes (XR7) are not built: a companion that joins after the cast gains nothing, and one that leaves keeps the flag until the spell ends.
+
+## ARC-MAGIC-060 — Item spells on the hero's hit, the cell weapon (PR #1184, 2026-11-12)
+
+The hero's melee swings and shots now fire the combat events of the worn items (before, they did not in the game). The cell weapon of Electric degree 4 (record 147) is the one installed item that shows it; armour 8215 (record 87) answers a hit too. Compare in both games.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | With Electric degree 4 and power cells in the pack, assemble the degree-4 melee weapon, wield it and hit an NPC. | Each hit that lands takes cells from the pack (a technologist pays up to double) and adds an electrical shock to the weapon's own damage; a missed swing takes nothing. In the original the shock's own damage fires the weapon again until the NPC dies or the cells run out (MG46), here once per hit: only the first shock and its cells are compared. | open |
+| 2 | Hit with no cells in the pack. | The weapon still hits for its own damage; no shock, no cells. | open |
+| 3 | Kill an NPC with the weapon. | The killing hit pays the cells of its firing; nothing is expected to fire after the NPC is dead (the original's repeat per MG46 ends with the kill). | open |
+
+Known differences (documented, not bugs):
+
+- An NPC's own worn items still fire nothing when it attacks (no trigger host on the NPC attack path yet).
+- A chain of item spells answers once per item (owner decision 2026-10-28, MG46), where the original repeats until the target dies.

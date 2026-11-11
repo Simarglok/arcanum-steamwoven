@@ -27,9 +27,11 @@ public partial class TerrainViewerApp
     //  4. Found schematic: the module's found documents of those two disciplines are read through the inventory's Read button (each registers its schematic and is destroyed; a second copy of a known
     //     one is kept), and the Found tab of the schematic window assembles the first record the hero's expertise reaches.
     //  5. Charge cells: Chemistry degree 2 makes power cells; with intelligence bought to 17 and Electric degrees 1 to 6 the powered shield (degree 3) and the maintained armour (degree 6, record 168) are assembled and
-    //     worn: the shield's 15 s call takes one cell, the armour's maintained run a cell a tick (ChargeNBranch). The cell weapon (degree 4, record 147) is not here: its record fires when its wearer is hit, a later step.
+    //     worn: the shield's 15 s call takes one cell, the armour's maintained run a cell a tick (ChargeNBranch).
     //  6. NPC crafter: the window queued the way `su` queues it for the cave NPC (given a Herbology degree by the stage: the cave's NPCs have none) assembles a learned record from the NPC's own list; products to the NPC, hero's pack unchanged.
     //  7. Explosives: the degree-1 grenade (record 219) is assembled, thrown at a cave NPC from three to six cells (item event, run, damage on a cave NPC, grenade gone).
+    //  7b. Cell weapon (ARC-MAGIC-060): the Electric degree-4 weapon (record 147, Target_Hit) is wielded with the armour off and swung at the cave NPC until it dies; the firing of a hit pays its cell(s) and shocks the NPC through the record
+    //     (the original fires Target_Hit on the items of the one who damages an opponent, 0x4CBE70). The weapon comes off and the armour goes back on.
     //  8. F7 and F8: the hero's effect list, held and worn items, cells and degrees, and the NPC's list are the same after the load.
     // The hero's hit points and the cave NPCs' lives (all of them, after the grenade) are put back; the rest (effects, points, degrees, items) is the stage's own state, not restored: the stage runs alone (smoke.py) and its F8 replaces the session.
     private async Task RunAreaTechProductsSmokeAsync()
@@ -349,6 +351,65 @@ public partial class TerrainViewerApp
             foreach (var id in caveNpcs) if (_combatHost.Target(session, runtime, area.Snapshot.Objects.First(r => r.Type == 16 && SpellPickId(r.Key) == id).Key) is { Build.Combat: not null } hurtTarget)
                 session.Heal(session.Version, hurtTarget.Build.Combat!.Target, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
 
+            // The cell weapon (Electric degree 4, record 147, event Target_Hit|Target_Attacker): the original fires Target_Hit on the items of the one that damages an opponent (0x4CBE70 walks the attacker's worn
+            // items), so the wielded weapon pays its cell(s) through ChargeNBranch and shocks the struck NPC at each hit, once per hit. The armour comes off so that only the weapon's run takes cells.
+            OpenInventory();
+            TakeOffItem(EquipmentSlot.Armor);
+            EndInventory();
+            TechProductsRequire(session.QueryEquipment().Worn.All(w => w.Slot != EquipmentSlot.Armor), "the maintained armour is off");
+            var weaponRecord = SchematicCatalog.LearnedNumber(TechDisciplineElectric, 4);
+            var weapon = TechSmokeCraft(data, TechDisciplineElectric, weaponRecord).Made[0];
+            OpenInventory();
+            TechProductsRequire(InventoryOpen && _inventoryHost.Wearable(session, weapon, _areaKitWear) is not null, "the made cell weapon has wear values");
+            WearItem(weapon, EquipmentSlot.Weapon);
+            EndInventory();
+            TechProductsRequire(session.QueryEquipment().Worn.Any(w => w.Entity == weapon && w.Slot == EquipmentSlot.Weapon), $"the cell weapon is wielded: {_inventoryStatus}");
+            const int CellWeaponSpell = 147;
+            GD.Print($"{TechProductsCode} tech-products cell-weapon spell={CellWeaponSpell} begin=" + string.Join(";", SpellRecordsNow()![CellWeaponSpell]!.Of(SpellRunAction.Begin).Select(c => c.Type + (c.Damage is { } d ? $":{d.Minimum}-{d.Maximum}/type{d.DamageType}" : ""))));
+            var weaponSpells = HeroItemSpells(weapon);
+            TechProductsRequire(weaponSpells is not null && weaponSpells.Spells.Contains(CellWeaponSpell) && SpellRecordsNow()![CellWeaponSpell] is { } weaponSpell && (weaponSpell.Data.ItemTriggers & 0x40000u) != 0,
+                $"the made weapon (schematic {weaponRecord}) carries spell {CellWeaponSpell} with the Target_Hit event ({string.Join(",", weaponSpells?.Spells ?? [])})");
+            session.Heal(session.Version, life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000 });
+            var swingTarget = _combatHost.Target(session, runtime, npc.Row.Key);
+            TechProductsRequire(swingTarget is { Build.Combat: not null }, "the cave NPC is an attack target again");
+            AreaSmokePlace(map, AreaSmokeStandable(map, map.Chart.ToChart(new(World(npc.Row).X, World(npc.Row).Y)), 1));
+            _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+            PublishWorldSelection();
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (!HeroInCombatMode) ToggleCombatMode();
+            var cellsBeforeSwing = Cells(); var weaponLog = SpellCasterNow()!.Log.Count; var weaponLifeBefore = NpcHitPoints();
+            CancelAreaAttack(null);
+            _attack = new(swingTarget!, swingTarget!.Build.Combat!, null);
+            StartAttackGoal(_attack);
+            AttackSettleForSelfTest();
+            var swings = new List<string>(); var weaponFirings = 0; var lastSeen = _lastCritterAttackForSelfTest;
+            void Swung()
+            {
+                if (_lastCritterAttackForSelfTest is not { } now || ReferenceEquals(now, lastSeen)) return;
+                lastSeen = now;
+                var started = now.ItemSpells.Count(f => f.Item == weapon && (f.Mask & 0x40000u) != 0 && f.Result.Spells.Count > 0);
+                weaponFirings += started;
+                swings.Add($"{now.Resolution?.Outcome}:{started}");
+            }
+            for (var frames = 0; frames < 20000 && _attack is not null && !session.QueryLife(life).View!.Status.IsDead; frames++) { Frame(); Swung(); }
+            for (var frames = 0; frames < 200; frames++) { Frame(); Swung(); }
+            CancelAreaAttack(null);
+            var shocks = SpellCasterNow()!.Log.Skip(weaponLog).Count(e => e.Kind == SpellCastEventKind.Damaged && e.Object == npcId);
+            var cellsSpent = cellsBeforeSwing - Cells();
+            GD.Print($"{TechProductsCode} tech-products cell-weapon record={weaponRecord} cells={cellsBeforeSwing}->{Cells()} shocks={shocks} swings={string.Join(",", swings)} weapon-firings={weaponFirings} npc-hit-points={weaponLifeBefore}->{NpcHitPoints()} notice={_attackNotice}");
+            // The cave NPCs have a few hit points: the first hit may kill, so the record's electrical damage on the (then dead) NPC is not always logged; the cell paid before it is.
+            // A cell-powered source pays the cost times (1 + power / complexity) (TC1, original bug): one cell or up to double for a technologist, per firing.
+            TechProductsRequire(weaponFirings > 0 && cellsSpent >= weaponFirings && cellsSpent <= 2 * weaponFirings, $"each hit's firing of the cell weapon paid its cells ({cellsBeforeSwing} -> {Cells()}, {weaponFirings} firings, shocks {shocks}: {_attackNotice})");
+            TechProductsRequire(NpcHitPoints() < weaponLifeBefore, $"the NPC lost hit points ({weaponLifeBefore} -> {NpcHitPoints()}, {cellsSpent} cells, {shocks} shocks logged)");
+            if (HeroInCombatMode) ToggleCombatMode();
+            // The hands and the body as the later steps expect them: the weapon off, the maintained armour on again.
+            OpenInventory();
+            TakeOffItem(EquipmentSlot.Weapon);
+            WearItem(armour, EquipmentSlot.Armor);
+            EndInventory();
+            TechProductsRequire(session.QueryEquipment().Worn.Any(w => w.Entity == armour) && session.QueryEquipment().Worn.All(w => w.Slot != EquipmentSlot.Weapon), $"the weapon is off and the armour is on again: {_inventoryStatus}");
+
             // 8. F7 and F8: the same effects and items after the load.
             string[] State(GameSessionOwner s) => [.. s.QueryHeroEffects()!.Effects.Select(e => "effect=" + e.Number).OrderBy(l => l, StringComparer.Ordinal), .. TechSmokeHeldLines(s), "npc-items=" + string.Join("+", s.QueryNpcInventory(npcId).Select(i => i.Entity).OrderBy(e => e, StringComparer.Ordinal)), "cells=" + s.QueryHeroAmmo().Where(a => a.AmmoType == 2).Sum(a => a.Units), .. s.QueryEquipment().Worn.Select(w => $"worn={w.Slot}:{w.Entity}"),
                 .. Enumerable.Range(0, 8).Select(d => "degree" + d + "=" + TechSmokeDegree(s, d))];
@@ -366,7 +427,7 @@ public partial class TerrainViewerApp
             var loaded = State(_areaSession!);
             TechProductsRequire(loaded.SequenceEqual(saved), $"the load restored the effects, items and degrees: lost {string.Join(", ", saved.Except(loaded))}; new {string.Join(", ", loaded.Except(saved))}");
             GD.Print("ARC-MAGIC-051 native-smoke tech-products PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Map = _readyMapName, Intelligence = intelligence, Therapeutics = potions, Chemistry = new { Record = chemRecord, Product = poisonProduct, Damage = recordDamage }, Found = new { Documents = documents.Length, Assembled = foundCraft!.Record }, Cells = new { Shield = shieldRecord, Armour = armourRecord }, NpcCrafter = npcRecord, Grenade = grenadeRecord, StateLines = saved.Length }));
+                Map = _readyMapName, Intelligence = intelligence, Therapeutics = potions, Chemistry = new { Record = chemRecord, Product = poisonProduct, Damage = recordDamage }, Found = new { Documents = documents.Length, Assembled = foundCraft!.Record }, Cells = new { Shield = shieldRecord, Armour = armourRecord, Weapon = weaponRecord, Shocks = shocks }, NpcCrafter = npcRecord, Grenade = grenadeRecord, StateLines = saved.Length }));
         }
         finally
         {
