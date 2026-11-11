@@ -36,9 +36,12 @@ public partial class TerrainViewerApp
     /// <summary>ARC-DEV-403: an automated run (smoke, self-test) plays into a muted Master bus, so the owner does not hear the
     /// tests all day; the sounds still start and play, so the audio checks hold (the driver stays the real one, not Dummy).
     /// ARC_SMOKE_SOUND=1 (`./arcanum smoke ... --env ARC_SMOKE_SOUND=1`) lets a smoke be heard.</summary>
-    private void MuteAutomatedRun()
+    private void MuteAutomatedRun() { if (AutomatedVisualRun) MuteMasterForTests(); }
+
+    /// <summary>The mute itself, also for the self-test's own audio stage (it makes its own backend and plays real tones).</summary>
+    internal static void MuteMasterForTests()
     {
-        if (!AutomatedVisualRun || System.Environment.GetEnvironmentVariable("ARC_SMOKE_SOUND") == "1") return;
+        if (System.Environment.GetEnvironmentVariable("ARC_SMOKE_SOUND") == "1") return;
         AudioServer.SetBusMute(0, true);
         GD.Print("ARC-DEV-403 automated run: Master bus muted (ARC_SMOKE_SOUND=1 unmutes)");
     }
