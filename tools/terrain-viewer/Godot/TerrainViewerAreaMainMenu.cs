@@ -87,6 +87,10 @@ public partial class TerrainViewerApp
         // A menu waiting under the save list (or for its window to open) is not replaced.
         // ARC-UI-026: the death screen still covering the game is the one modal state the menu opens under (it fades in over it).
         if (!QuickKeysActive || MainMenuOpen || (PanelOutsideStackOpen && !HeroDeathCovering) || _mainMenu is not null) return;
+        // ARC-DEV-367: the call, then the first frame drawn with the menu (the start to the menu of the first opening).
+        using var span = PerfProbe.Span("menu.open." + root);
+        PerfProbe.Mark("menu.open");
+        PerfMarkAfterDraw("menu.first-frame");
         if (_mainMenuPanel is null)
         {
             _mainMenuPanel = new AreaMainMenuPanel { DebugMode = DebugMode }; AddChild(_mainMenuPanel);
@@ -411,6 +415,7 @@ public partial class TerrainViewerApp
     /// <param name="creation">ARC-UI-030: start as this new character instead (<paramref name="index"/> is then ignored).</param>
     private string? StartNewGame(int index, bool sceneFlow = true, AreaNewCharacter? creation = null)
     {
+        using var span = PerfProbe.Span("game.new");
         AreaHeroLoad hero;
         if (creation is null) hero = MainMenuHero(index);
         // ARC-UI-036: the new character starts with the opening shop's kit.

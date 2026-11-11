@@ -128,9 +128,9 @@ history held about 500 runs of such copies of one template).
   `container`, `junk`, `barter`, `life`, `floaters`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`) gets
   the full chain's hero of that map (`elf-female` on `elven ruins`), else `--hero human-male`, when no `--hero` is
   given, and says so (`SMOKE hero human-male (auto): ...`); with
-  `--main-menu` (no hero) it is refused, as is a menu stage (`menu`, `scene`, `options`, `bar`, `death`) without
+  `--main-menu` (no hero) it is refused, as is a menu stage (`menu`, `scene`, `options`, `bar`, `death`, `perf-menu`) without
   `--main-menu`. The stages the viewer runs only without `map` (`barter`, `menu`, `scene`, `options`, `plants`, `bar`,
-  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-tile`, `tile-ghost`, `container-click`, `fire-order`, `indoor-fade`, `npc-shot`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `placement-census`, `spell-end`, `hold-hero`, `spirit-talk`, `created-scenery`, `worn-light`, `critter-light`, `summon-flash`, `summon-wall`, `tech-craft`) get a run of their
+  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-tile`, `tile-ghost`, `container-click`, `fire-order`, `indoor-fade`, `npc-shot`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `placement-census`, `spell-end`, `hold-hero`, `spirit-talk`, `created-scenery`, `worn-light`, `critter-light`, `summon-flash`, `summon-wall`, `tech-craft`, `perf`, `perf-menu`) get a run of their
   own (step `stages-alone`, or `map-alone`) when `map` is in the list too. `tech-craft` (ARC-DEV-362, technology audit slice T-a) needs the bullets the map's bodies hold, so it runs on the cave: `./arcanum smoke map "crash site cave" --stages tech-craft` (on a map with no bullets of the crafted gun's type it fails with that message; its steps are the helpers of `TerrainViewerTechCraftHarness.cs`). A run whose stages include `debug-travel`, `follower-far` or `inv-carry`
   starts the viewer with `--debug-mode` (the stage needs the debug mode, ARC-DEV-050; ARC-WORLD-120).
 - **Targets of the combat stages (ARC-DEV-089).** The stages that fight an NPC (`attack` in `map`, `cast`, `turn-based`, `ai`) do not take the
@@ -173,6 +173,39 @@ history held about 500 runs of such copies of one template).
 Tests: `python3 -B -m unittest tools.local_dev.test_smoke` (the stage names from the viewer, the per-PR and full plans,
 the settings folders and dropped variables, the start lines, the chain going on after a failure and ending on a failed
 build or a stopped run, the launcher command).
+
+## Timing probe and the `perf` stages (ARC-DEV-367)
+
+The standing probe of the performance diagnosis (O10 of [load time and window responsiveness](../research/performance-diagnosis-2026-11.md)):
+`PerfProbe` in `src/Arcanum.World/PerfProbe.cs`, godot-free so the load worker and the viewer use the same one. It measures; it is not
+a budget or a regression gate. Other optimisations are shown with it: run before and after, compare the lines.
+
+- **Switch.** Off by default (every call is a flag test, nothing printed or allocated). On with `ARC_PERF_PROBE=1` (a player's or a
+  `./arcanum map` run, or `--env ARC_PERF_PROBE=1` on a smoke) or when the stage list names `perf` or `perf-menu`.
+- **API.** `PerfProbe.Mark("name")` (a point in time), `using (PerfProbe.Span("name")) ...` (milliseconds, the managed bytes the
+  thread allocated and the gen0/gen1/gen2 collections inside it), `PerfProbe.Measure(name, work)`, and `PerfProbe.Lap("group")` with
+  `lap.Step("a")` for consecutive steps (a span `group.a`, `group.b`, ... and one `group`). Names are dotted.
+- **Lines** (grep `ARC-DEV-367 perf` in the run's log): `mark name=N t=MS` and `span name=N ms=MS alloc-kib=KIB gc=G0/G1/G2 t=MS`;
+  `t` is milliseconds since the process started. The funnel is instrumented: `load.begin`, `load.worker.{stack,plan,transitions,open,
+  read,actor,lighting,verify,scene}` and `load.worker` (the worker, a map load), `load.decoded`, `publish.{checks,state,transitions,
+  conversations,companions,binders,ambient,hero-body,selection,menu}` inside `load.publish` (the main thread), `load.first-frame`
+  (the first frame drawn after a publication), `window.open.MODE` (the interface stack's opener, the panel's own open included),
+  `menu.open`, `menu.open.WINDOW`, `menu.first-frame`, `game.new`, `game.load`, `window.open.SaveList`.
+- **`perf`** (a hero stage, own run; needs a window with a map exit: the Crash Site window has none, so
+  `./arcanum smoke pr --stages perf --sector 1409,1314`): `startup` (process to load begin, worker, publication and first frame),
+  one `window` line per open of each window key I C L T W M, six each through the production key route (`open-sync` is the key's
+  call, `to-first-frame` runs to the end of the next drawn frame; iteration 0 is the cold open, 1-5 are warm) and a `windows` line
+  per key with the cold values and the warm medians, then `map-change` for a trip out through an exit and back (`total`, the worker,
+  the publication and load begin to first frame). `PASS` means every measurement was taken: a window that did not open or a window
+  without an exit fails it.
+- **`perf-menu`** (a menu stage, `--main-menu`): `startup` to the main menu's first frame (`start-to-menu`) and a new game from the
+  menu. `./arcanum smoke pr --stages perf-menu --main-menu`.
+- **Reading the numbers.** The Mac is shared and a Debug source run is slower than the packaged build: the diagnosis took medians
+  over several runs and looked at the load average. A packaged build needs the probe's switch in the environment (`ARC_PERF_PROBE=1`);
+  HD runs need `ARC_HD_PACK` and settings files as the diagnosis's reproduction says.
+
+Tests: `PerfProbeTests` (the probe off and on, the lap names, the thread's allocation, the environment switches) in
+`tests/Arcanum.World.Tests`; `test_smoke` covers the stage kinds.
 
 ## Launch queue (ARC-DEV-033)
 
