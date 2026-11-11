@@ -68,7 +68,7 @@ every pre-made hero's prototype does (ARC-RES-027 SH-03); their stat changes are
 | Entry | Contract |
 | --- | --- |
 | `QueryHeroEffects()` | The innate entries, the durable entries, the rule of each number in use and the pending timed effects; `Count(number)` counts the whole list. Null without a hero. |
-| `AddHeroEffect(expected, definition, cause, count = 1)` | The add (0x4E9F70) `count` times. Refusals in order: no hero (`EffectsUnavailable`); a rule the session does not admit, a cause of the race and gender setters or the life domain's scars (injury), a count below 1 (`InvalidEffect`); an innate number (`InnateEffect`: its typed removal would meet the innate entry first); a number in use with other changes (`EffectMismatch`); the version; more than 64 durable entries (`EffectCapacityExceeded`); entries that could leave the consumers' bounds once some of them are removed (`InvalidEffect`, below); the event budget and revision. One revision. |
+| `AddHeroEffect(expected, definition, cause, count = 1)` | The add (0x4E9F70) `count` times. Refusals in order: no hero (`EffectsUnavailable`); a rule the session does not admit, a cause of the race and gender setters or the life domain's scars (injury), a count below 1 (`InvalidEffect`); an innate number (`InnateEffect`: its typed removal would meet the innate entry first); a number in use with other changes (`EffectMismatch`); the version; more than 1024 durable entries (`SessionEffectLimits.MaxHeroEffects`, 64 before ARC-DEV-366; `EffectCapacityExceeded`); entries that could leave the consumers' bounds once some of them are removed (`InvalidEffect`, below); the event budget and revision. One revision. |
 | `AddHeroTimedEffect(expected, definition, cause, count, durationMs)` | The same, and an END event (`effect.hero.end`) after 1 ms up to `int.MaxValue × 8000` ms of game time (a `Duration:` in real seconds × 8000); at most 64 pending ENDs. The result's `TimedEffect` is its queue sequence. |
 | `RemoveHeroEffect(expected, number, count = 1)` | The typed removal (0x4EA100) `count` times; an innate number is `InnateEffect`; NoChange when nothing matches. |
 | `RemoveAllHeroEffects(expected, number)`, `RemoveHeroEffectsCausedBy(expected, cause, all)` | The other three removals; race, gender and injury causes are `InvalidEffect`. |
@@ -174,7 +174,7 @@ original, and no switch is needed (owner decision 2026-10-20).
 
 **Session.** `QueryHeroBlessings(kind)`, `AddHeroBlessing(expected, kind, number, effect)` and
 `RemoveHeroBlessing(expected, kind, number)` with `SessionBlessingKind` `Blessing` or `Curse`. Add: the hero, the version,
-NoChange when held (the effect is not looked at), at most 64 entries per list (`EffectCapacityExceeded`), then
+NoChange when held (the effect is not looked at), at most 64 entries per list (`SessionEffectLimits.MaxBlessings`, `EffectCapacityExceeded`), then
 `AddHeroEffect`'s checks and step with the bless or curse cause; the host passes the effect rule it read for the number
 (`BlessingRules.EffectOf`, then `EffectRules.ReadAny`, `SessionEffectDefinition.FromRule`) and shows the received message on a
 change. Remove: NoChange when not held; else the entry leaves the list and the first effect entry of the effect number it
@@ -257,11 +257,13 @@ Magic audit slice MA-2 ([audit](../research/magic-audit-res-103.md)): what the c
   (the turn-based action points through `AreaCombatWorld.Facts`, the attack pause through `AttackValues`), strength, armour class adjustment and the other stats read through it, and so do the NPC's attacks and defences in the
   session (`Levelled` of `GameSessionNpcAttack`, the hero's attack on an NPC) and the AI host (`Build`). The viewer's round facts take it too.
 - **The Effect component.** `SessionSpellCaster.EffectComponent` adds and removes on an NPC target through `AddNpcEffect` and `RemoveNpcEffect` (the census no longer lists the NPC's Effect: the college spells 10, 15, 20, 25, 37, 40, 46, 51, 67, 70, 76, 77, the NPC half of the Body spells and Shield of Protection, and the same records outside the colleges).
-- **The magic save does not read the effects (RE2).** The original's spell resistance (0x4537B0) reads the **stored** magic resistance (the object's resistance array, index 4) directly, not the effective one, so the
-  `resistmagic` changes of effects 56 (Resist Magick), 154, 155, 51, 52 and 55 change what the character sheet's Magick line shows and nothing a save rolls. Steamwoven follows the original (O9, both modes) and
-  whether Resist Magick should work is an open owner question ([audit](../research/magic-audit-res-103.md#effect-consumers-ma-2-arc-magic-027)).
+- **The magic save reads the effects (RE2 fixed, ARC-MAGIC-033).** The original's spell resistance (0x4537B0) reads the **stored** magic resistance (the object's resistance array, index 4) directly, not the effective one, so the
+  `resistmagic` changes of effects 56 (Resist Magick), 154, 155, 51, 52 and 55 change what the character sheet's Magick line shows and nothing a save rolls. That is a bug of the game, and the owner decided (D6c, 2026-11-11) to fix it
+  **in both modes with no switch**: `SpellResistanceRules.ResistanceUnderEffects` is the stored value under the effect aggregation (no change: the stored value exactly), cut to 0..95 for a PC and an ordinary NPC but never outside a wider
+  stored value (an immune NPC stays immune), a monstrous NPC cut to the resolver's ±1000 only; the hero stores none, so its value is the effects alone (`GameSessionOwner.HeroSaveMagicResistance`, `SessionCritterCombat.SaveMagicResistance`).
+  `SessionSpellCaster.ResistTarget` builds the facts with it, so the save, the entangle re-resistance and the AI's fail-chance predictor read the same value ([ledger RS11–RS13](../research/ledger/magic.md#resist-magick-in-the-magic-save-arc-magic-033)).
 - **Not done.** An NPC's life facts (maximum hit points under its strength, the normal resistance a poison tick meets) are not re-read from its effect-changed stats and resistances: the list's own maxima apply (ARC-DEV-348), a strength or
   constitution change does not move them; the spell host's own NPC combatant (`SessionSpellCaster.Combatant`, line 550) and its stat getter (line 1182) still read the NPC without its list until ARC-DEV-352 (#941) is merged, since that
   file is that slice's; the character sheet's resistance lines (hero and NPC) do not show effect changes; encumbrance and walking speed stay as they were (the original's walking does not read the speed stat, ledger XR rows of the audit).
 - **Tests.** `EffectConsumerStateTests` (resistances of the hero and of an NPC, the clamp, monstrous NPCs, stat changes of an NPC's list, a loaded list with a host rule), `CombatSkillRulesTests.ResistanceEffectsAreAggregatedOverTheSumAndUnderTheClamp`,
-  `SessionSpellEntangleTests` (the component on an NPC victim) and the spell census `SpellCensusRealDataTests`.
+  `SessionSpellEntangleTests` (the component on an NPC victim), the spell census `SpellCensusRealDataTests`, and for the magic save `SessionSpellCasterResistMagickTests` and `SpellResistanceRulesTests` (ARC-MAGIC-033).

@@ -47,6 +47,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
     // the session or its revision changes.
     // ARC-DEV-072: one entry per map (a visiting companion's holder lies on its home map, the shown map's NPCs on the shown one).
     private (GameSessionOwner Session, long Revision)? _holdersStamp;
+    private int _holdersCreated;
     private readonly HashSet<int> _refusedAttach = [];
     private readonly Dictionary<int, (Dictionary<string, SessionHolderInventory> Holders, Dictionary<string, string> NpcItems)> _holders = [];
 
@@ -99,6 +100,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
     public AreaCombatTarget? Target(GameSessionOwner session, int runtimeMap, AreaObjectKey key)
     {
         ArgumentNullException.ThrowIfNull(session);
+        if (key.RuntimeMap == runtimeMap && CreatedRecord(key) is { } created) return Target(session, created);
         if (!Held(runtimeMap, out var map) || !map.TryGetEntity(key, out var entity)
             || !Holders(session, runtimeMap).TryGetValue(entity, out var holder) || holder.Kind != SessionHolderKind.Npc)
             return null;
@@ -133,18 +135,28 @@ public sealed class AreaCombatHost : IAreaEventObjects
     public AreaCombatTarget? Target(GameSessionOwner session, AreaObjectKey key)
     {
         ArgumentNullException.ThrowIfNull(session);
+        if (CreatedRecord(key) is { } created) return Target(session, created);
         if (!Held(key.RuntimeMap, out var map) || !map.TryGetEntity(key, out var entity)) return null;
         return Target(session, new ResolvedRecord(entity, map.RuntimeMap, map, map.Row(entity)));
+    }
+
+    // ARC-DEV-359: the row a created critter's key names (its one-row map answers by the key it was built with), or null for any other key.
+    private ResolvedRecord? CreatedRecord(AreaObjectKey key)
+    {
+        if (key.SourceSha256 != Arcanum.Data.Objects.CreatedObjectRows.Source) return null;
+        var entity = "oid:" + key.ObjectIdSha256;
+        return _resolver.CreatedMap(entity) is { } map && map.TryGetRow(entity, out var row) && row.Key == key ? new ResolvedRecord(entity, map.RuntimeMap, map, row) : null;
     }
 
     private Dictionary<string, SessionHolderInventory> Holders(GameSessionOwner session, int runtimeMap) => HolderIndex(session, runtimeMap).Holders;
 
     private (Dictionary<string, SessionHolderInventory> Holders, Dictionary<string, string> NpcItems) HolderIndex(GameSessionOwner session, int runtimeMap)
     {
-        if (_holdersStamp is not { } stamp || !ReferenceEquals(stamp.Session, session) || stamp.Revision != session.Version.Revision)
+        if (_holdersStamp is not { } stamp || !ReferenceEquals(stamp.Session, session) || stamp.Revision != session.Version.Revision || _holdersCreated != _resolver.CreatedVersion)
         {
             _holders.Clear();
             _holdersStamp = (session, session.Version.Revision);
+            _holdersCreated = _resolver.CreatedVersion;
         }
         if (_holders.TryGetValue(runtimeMap, out var cached)) return cached;
         // ARC-DEV-072: a map the resolver read on demand has no seed in the session until it is first asked about (a given map's was
@@ -152,6 +164,8 @@ public sealed class AreaCombatHost : IAreaEventObjects
         if (_inventory.AttachReadMap(session, runtimeMap) is { } refused && _refusedAttach.Add(runtimeMap))
             Console.WriteLine($"ARC-DEV-072 record-map-attach refused map={runtimeMap} failure={refused}");
         var holders = session.QueryMapInventory(new(runtimeMap))?.Holders.ToDictionary(holder => holder.Entity, StringComparer.Ordinal) ?? [];
+        // ARC-DEV-359: the critters the session created on this map are NPC holders with an empty list (the session's seed of the map does not list them: they have no map data).
+        foreach (var made in _resolver.CreatedOn(runtimeMap)) holders.TryAdd(made, new SessionHolderInventory(made, SessionHolderKind.Npc, false, []));
         var npcItems = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var holder in holders.Values.Where(holder => holder.Kind == SessionHolderKind.Npc))
             foreach (var item in holder.Items) npcItems.TryAdd(item.Entity, holder.Entity);

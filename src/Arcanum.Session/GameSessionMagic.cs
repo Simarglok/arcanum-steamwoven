@@ -13,6 +13,16 @@ public sealed partial class GameSessionOwner
     public ISpellRollSource SpellRolls { get { ThrowIfDisposed(); return new SessionSpellRolls(this); } }
 
     /// <summary>
+    /// ARC-MAGIC-033 (D6c): the magic resistance a spell's save reads for the hero: the hero stores none, so the durable effects' <c>resistmagic</c> changes over 0 (Resist Magick on the
+    /// hero works), cut as a PC's resistance is (<see cref="SpellResistanceRules.ResistanceUnderEffects"/>). 0 with no hero or no such change.
+    /// </summary>
+    public int HeroSaveMagicResistance()
+    {
+        ThrowIfDisposed();
+        return _hero is null ? 0 : SpellResistanceRules.ResistanceUnderEffects(0, EffectDomain.Resistances(_effects.Entries, _effects.Definitions).Magic, false);
+    }
+
+    /// <summary>
     /// The hero's fate save against magick for <see cref="SpellResistanceRules.Resist"/> when the hero is the target (ARC-MAGIC-005,
     /// MG13): asking it uses the armed <see cref="FateKind.SaveAgainstMagick"/> through <see cref="UseHeroFate"/> (0x4F5270, one
     /// revision when it fires) and answers whether it was armed; without a hero, or with that fate not armed, it answers false. A

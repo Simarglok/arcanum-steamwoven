@@ -1,4 +1,5 @@
 using Arcanum.Session;
+using Arcanum.Simulation;
 
 namespace Arcanum.World;
 
@@ -60,6 +61,7 @@ public static class AreaHeldCursor
     /// the pointer, in one image grown to hold both; its hot point is the pointer's place in it. Null when either is empty or the image
     /// would exceed <see cref="MaxSide"/>.
     /// </summary>
+    [OriginalFunction(0x5736E0, OriginalFunctionScope.Partial)]
     public static AreaInterfaceFrame? Compose(int itemWidth, int itemHeight, byte[] itemRgba, AreaInterfaceFrame cursor)
     {
         ArgumentNullException.ThrowIfNull(itemRgba);

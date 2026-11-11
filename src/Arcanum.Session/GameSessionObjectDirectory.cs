@@ -12,7 +12,7 @@ namespace Arcanum.Session;
 /// ARC-DEV-140: <c>projectile:n</c> is a projectile of the ranged path in flight, an object of the same kind (<see cref="SessionProjectile"/>).
 /// ARC-DEV-347 (E1-a): <c>scenery:n</c> and <c>eyecandy:n</c> are scenery and eye-candy objects the session created from a prototype on a map (<see cref="SessionCreatedObject"/>), saved with the objects section; the two share one counter.
 /// </summary>
-public enum SessionObjectOrigin { MapObject, Kit, Made, JunkPile, BloodPool, Missile, Projectile, Scenery, EyeCandy }
+public enum SessionObjectOrigin { MapObject, Kit, Made, JunkPile, BloodPool, Missile, Projectile, Scenery, EyeCandy, Critter }
 
 /// <summary>ARC-DEV-084: where an object is now (the directory's one answer to "where is X").</summary>
 public enum SessionObjectPlace
@@ -55,6 +55,8 @@ public sealed partial class GameSessionOwner
         if (SessionProjectile.Number(entity) is not null) return SessionObjectOrigin.Projectile;
         if (SessionCreatedObject.Number(entity, SessionCreatedObject.SceneryPrefix) is not null) return SessionObjectOrigin.Scenery;
         if (SessionCreatedObject.Number(entity, SessionCreatedObject.EyeCandyPrefix) is not null) return SessionObjectOrigin.EyeCandy;
+        // ARC-DEV-359: a created critter's entity starts with oid: (its per-object state is keyed so) and is read before the map object it would otherwise be taken for.
+        if (SessionCreatedObject.Number(entity, SessionCreatedObject.CritterPrefix) is not null) return SessionObjectOrigin.Critter;
         return SessionObjectOrigin.MapObject;
     }
 
@@ -92,7 +94,7 @@ public sealed partial class GameSessionOwner
             SessionObjectOrigin.BloodPool => _inventory.Objects.Pools.Select(pool => pool.Entity),
             SessionObjectOrigin.Missile => _missileObjects.Keys,
             SessionObjectOrigin.Projectile => _projectileObjects.Keys,
-            SessionObjectOrigin.Scenery or SessionObjectOrigin.EyeCandy => _inventory.Objects.Created.Select(made => made.Entity),
+            SessionObjectOrigin.Scenery or SessionObjectOrigin.EyeCandy or SessionObjectOrigin.Critter => _inventory.Objects.Created.Select(made => made.Entity),
             _ => _inventory.Pc.Select(item => item.Entity).Concat(_inventory.Taken).Concat(_durability.Destroyed)
                 .Concat(_inventory.Placed.Select(item => item.Entity)).Concat(_inventory.Hero.GivenAll.Select(given => given.Entity)),
         };
@@ -140,7 +142,7 @@ public sealed partial class GameSessionOwner
         SessionObjectOrigin.Missile => _lastMissileNumber + 1,
         SessionObjectOrigin.Projectile => _lastProjectileNumber + 1,
         // ARC-DEV-347: scenery and eye-candy objects share one counter (one past the saved mark and every number held now).
-        SessionObjectOrigin.Scenery or SessionObjectOrigin.EyeCandy => (int)Math.Min(int.MaxValue, 1L + Math.Max(_inventory.Objects.LastCreatedNumber,
+        SessionObjectOrigin.Scenery or SessionObjectOrigin.EyeCandy or SessionObjectOrigin.Critter => (int)Math.Min(int.MaxValue, 1L + Math.Max(_inventory.Objects.LastCreatedNumber,
             _inventory.Objects.Created.Select(made => SessionCreatedObject.Number(made.Entity) ?? 0).DefaultIfEmpty(0).Max())),
         _ => throw new ArgumentOutOfRangeException(nameof(origin)),
     };
@@ -152,7 +154,7 @@ public sealed partial class GameSessionOwner
         var number = NextObjectNumber(origin);
         if (origin == SessionObjectOrigin.JunkPile) _inventory.Objects.LastJunkNumber = number;
         else if (origin == SessionObjectOrigin.BloodPool) _inventory.Objects.LastPoolNumber = number;
-        else if (origin is SessionObjectOrigin.Scenery or SessionObjectOrigin.EyeCandy) _inventory.Objects.LastCreatedNumber = number;
+        else if (origin is SessionObjectOrigin.Scenery or SessionObjectOrigin.EyeCandy or SessionObjectOrigin.Critter) _inventory.Objects.LastCreatedNumber = number;
         return number;
     }
 
@@ -161,8 +163,10 @@ public sealed partial class GameSessionOwner
         var origin = ObjectOriginOf(entity);
         if (origin == SessionObjectOrigin.JunkPile)
             return _inventory.Objects.Pile(entity) is { } pile ? new(entity, origin, SessionObjectPlace.Ground, pile.Map, pile.Cell) : null;
-        if (origin is SessionObjectOrigin.Scenery or SessionObjectOrigin.EyeCandy)
-            return _inventory.Objects.CreatedObject(entity) is { } made ? new(entity, origin, SessionObjectPlace.Ground, made.Map, made.Cell) : null;
+        if (origin is SessionObjectOrigin.Scenery or SessionObjectOrigin.EyeCandy or SessionObjectOrigin.Critter)
+            // ARC-DEV-359: a created critter stands where the session last placed it on its map (the AI host's step), else on its creation cell.
+            return _inventory.Objects.CreatedObject(entity) is { } made
+                ? new(entity, origin, SessionObjectPlace.Ground, made.Map, origin == SessionObjectOrigin.Critter && QueryNpcPlace(entity) is { } at && at.Map == made.Map ? at.World : made.Cell) : null;
         if (origin == SessionObjectOrigin.Missile)
             return _missileObjects.TryGetValue(entity, out var missile) ? new(entity, origin, SessionObjectPlace.Ground, missile.Map, missile.Cell) : null;
         if (origin == SessionObjectOrigin.Projectile)

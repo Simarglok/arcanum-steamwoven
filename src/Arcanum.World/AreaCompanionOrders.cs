@@ -1,5 +1,6 @@
 using Arcanum.Data.Area;
 using Arcanum.Session;
+using Arcanum.Simulation;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Party;
 
@@ -113,6 +114,7 @@ public static class AreaCompanionOrders
 
     /// <summary>ARC-WORLD-117: the attack order's target, the highlighted object <paramref name="key"/> (0x43C570) as its session
     /// entity on the shown map; null without one (the order then does nothing, FO3).</summary>
+    [OriginalFunction(0x43C570, OriginalFunctionScope.Partial)]
     public static SessionCombatant? Target(AreaCombatHost combat, int runtimeMap, AreaObjectKey? key)
     {
         ArgumentNullException.ThrowIfNull(combat);

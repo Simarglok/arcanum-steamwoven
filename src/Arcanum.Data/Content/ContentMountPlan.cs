@@ -32,6 +32,8 @@ public sealed class ContentMountPlan
     /// <c>.dat</c>, its <c>.patch0</c>..<c>.patch9</c> (only when the <c>.dat</c> exists) and its
     /// folder. Each later mount sits above the earlier ones. Names resolve ASCII
     /// case-insensitively; two names differing only in case are refused as ambiguous.</summary>
+    [OriginalFunction(0x404C10, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x404A20, OriginalFunctionScope.Partial)]
     public static ContentMountDiscovery Discover(string gameRoot, string moduleName = DefaultModule)
     {
         ArgumentNullException.ThrowIfNull(gameRoot);
