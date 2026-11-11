@@ -1,7 +1,7 @@
 # NPC AI scheduler: the tick, the pass and the subturn hook (ARC-WORLD-084)
 
 Status: **Implemented bounded component**, ARC-WORLD-084, NPC combat AI plan slice
-[I6](../research/npc-combat-ai-plan.md#implementation-slices-proposals-after-the-matching-research).
+[I6](../research/npc-combat-ai-plan.md#phase-1-faithful-reconstruction).
 The scheduling half of the retail 1.0.7.4 executable's AI core loop ([core loop](../research/npc-ai-core-loop.md), stage A1;
 ledger [CL1–CL13](../research/ledger/npc-ai.md#npc-ai-core-loop-arc-res-054), two readers, re-read by this task): when an NPC
 thinks, what one AI pass checks before it acts, and how a turn-based round hands an NPC its subturn. The rules are drivers in

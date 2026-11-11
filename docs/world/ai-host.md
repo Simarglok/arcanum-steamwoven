@@ -1,7 +1,7 @@
 # NPC AI viewer host: the first fight (ARC-WORLD-092)
 
 Status: **Implemented bounded component**, ARC-WORLD-092, first part of NPC combat AI plan slice
-[I10](../research/npc-combat-ai-plan.md#implementation-slices-proposals-after-the-matching-research) ("first fight"): in the AREA
+[I10](../research/npc-combat-ai-plan.md#phase-1-faithful-reconstruction) ("first fight"): in the AREA
 viewer, NPCs of the shown map fight the hero in real time with their melee attack. It is the first host of the scheduler
 ([AI scheduler](ai-scheduler.md), I6), the executor ([AI executor](ai-executor.md), I7), the danger, hostility and morale rules
 ([danger state](ai-danger-state.md), [hostility](ai-hostility.md), [morale](ai-morale.md), I3–I5), and it adds the session's NPC

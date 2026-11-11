@@ -1,7 +1,7 @@
 # NPC AI script and dialog surface
 
 Status: **Research**, work item ARC-RES-070 (2026-10-21), stage A8 of the
-[NPC combat AI plan](npc-combat-ai-plan.md#research-stages-source-reading-one-document-each)
+[NPC combat AI plan](npc-combat-ai-plan.md#phase-1-faithful-reconstruction)
 (source unit S21). It lists every script attachment point (SAP) the AI fires or
 whose result it uses, every SCR condition and action that reads or writes AI
 state, and every dialog path that reads or writes it: the danger state and its

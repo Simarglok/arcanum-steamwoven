@@ -1,7 +1,7 @@
 # NPC AI awareness
 
 Status: **Research**, work item ARC-RES-056 (2026-10-20), stage A2 of the
-[NPC combat AI plan](npc-combat-ai-plan.md#research-stages-source-reading-one-document-each)
+[NPC combat AI plan](npc-combat-ai-plan.md#phase-1-faithful-reconstruction)
 (source units S6–S9). It fixes, as pure functions with integer arithmetic, when
 a critter sees or hears another, how the straight line between two tiles is
 priced for sound and for missiles (the line-of-fire test of combat open
