@@ -126,7 +126,7 @@ public partial class TerrainViewerApp
         var busy = QuickBusyReason();
         if (busy != QuickBusy.None) { SetQuickStatus(prefix + "save refused: " + Describe(busy)); return null; }
         // ARC-DEV-321: an attempt goal 86 or 67 asked for in the last frame waits for the next frame's safe point, after its run popped; it is made now, so the save holds its outcome instead of losing it.
-        ProcessPickPocketPending(); ProcessLockpickPending();
+        ProcessPickPocketPending(); ProcessLockpickPending(); ProcessItemUsePending();
         // The attempt may run a caught-thief script that starts a transfer: the busy check again.
         if ((busy = QuickBusyReason()) != QuickBusy.None) { SetQuickStatus(prefix + "save refused: " + Describe(busy)); return null; }
         // ARC-DEV-318 (MIG14 S9c): the hero's casting goal and the casts queued beneath it are saved with their runs (the gate ARC-MAGIC-015 set is gone).

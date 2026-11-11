@@ -1,6 +1,7 @@
 using Arcanum.Session;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Magic;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
@@ -143,7 +144,7 @@ public partial class TerrainViewerApp
     /// closes or re-renders the window waits in <see cref="After"/> until the use returns. A use script that cannot run here aborts the
     /// use: nothing more happens and no action points are charged (<see cref="Aborted"/>).
     /// </summary>
-    private sealed class HeroItemUse(TerrainViewerApp app, AreaItemUseFacts facts) : IItemUseWorld
+    private sealed class HeroItemUse(TerrainViewerApp app, AreaItemUseFacts facts) : IItemUseTileWorld
     {
         public string? Message { get; private set; }
         public Action? After { get; private set; }
@@ -164,12 +165,23 @@ public partial class TerrainViewerApp
 
         public void OpenTargeting(string user, string item)
         {
-            // The targeting cursor (0x4EE060): lockpicks arm the viewer's lock pick; any other item's cursor is not built.
+            // The targeting cursor (0x4EE060): lockpicks arm the viewer's lock pick (IA7); any other item opens the item cursor (ARC-DEV-365, IA3 to IA9).
             if (facts.Lockpick) After = () => app.ArmLockpick(item);
-            else Message = "not used: the item needs a target (the item targeting cursor is NOT READY)";
+            else After = () => app.OpenItemAiming(item, facts);
         }
 
-        public void UseTrapDevice(string user, string item, string? target) => Message = "not used: a trap device's use is NOT READY";
+        public void UseTrapDevice(string user, string item, string? target) => Message = "not used: a trap device's use is NOT READY (the device stays; placed devices are slice E6-b)";
+
+        // ARC-DEV-365 (IA12, IA13): the tile forms. A trap device keeps its place in the pack until slice E6-b builds the marker and the delayed run.
+        public void UseTrapDeviceOnTile(string user, string item, SpellLocation tile) => Message = "not used: a trap device's use on a tile is NOT READY (the device stays; placed devices are slice E6-b)";
+
+        public void UseItemMagicOnTile(string user, string item, SpellLocation tile)
+        {
+            if (app.ItemTileUseNow() is not { } triggers) { Message = "not used: the item's magic needs the map's cast host"; Aborted = true; return; }
+            var used = triggers.UseItemOnTile(item, tile);
+            GD.Print($"ARC-DEV-365 use-magic-tile item={item} outcome={used.Outcome} cast={used.Cast} spent={used.Spent}");
+            if (used.Outcome != SessionItemUseOutcome.Used) { Message = $"not used: {used.Outcome}"; Aborted = true; }
+        }
 
         public void ReadWritten(string user, string item) => After = () => app.ReadItem(item, scriptRan: facts.UseScript);
 

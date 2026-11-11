@@ -77,7 +77,7 @@ public sealed class ScriptContent : IDisposable
     public static ScriptContentOpenResult Open(ContentMountPlan plan, ContentStackOptions? options = null, ScrReaderOptions? scripts = null, DlgReaderOptions? dialogs = null,
         DlgDataFixCatalogue? fixes = null)
     {
-        var opened = ContentStack.Open(plan, options);
+        var opened = ContentStack.OpenShared(plan, options);
         if (opened.Status != ContentStackStatus.Ready) return new(opened.Status, null, opened.Detail);
         try { return new(ContentStackStatus.Ready, new ScriptContent(opened.Stack!, true, scripts, dialogs, fixes)); }
         catch { opened.Stack!.Dispose(); throw; }

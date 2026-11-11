@@ -6,7 +6,8 @@ namespace Arcanum.Data.Content;
 /// resolves to the first source in search order that holds it, which is what the original
 /// runtime opens on a static installation (derivation and dynamic limits in
 /// docs/research/content-precedence.md). Archive indexes and loose files are captured at
-/// <see cref="Open"/>; later changes on disk are not observed.</summary>
+/// <see cref="Open"/>; later changes on disk are not observed. ARC-DEV-372: a viewer run may share one index between its readers
+/// (<see cref="OpenShared"/>); each reader still holds and disposes its own handle.</summary>
 public sealed class ContentStack : IDisposable
 {
     private const uint DirectoryFlag = 0x400;
@@ -16,6 +17,7 @@ public sealed class ContentStack : IDisposable
     private readonly Dictionary<ContentSource, DatArchive> _archives;
     private readonly HashSet<ContentCandidate> _issued;
     private readonly ContentStackOptions _options;
+    private readonly Share _share;
     private bool _disposed;
 
     private ContentStack(ContentMountPlan plan, ContentStackOptions options, Dictionary<string, List<ContentCandidate>> index,
@@ -24,6 +26,33 @@ public sealed class ContentStack : IDisposable
         Plan = plan; _options = options; _index = index; _archives = archives;
         _issued = new HashSet<ContentCandidate>(index.Values.SelectMany(list => list), ReferenceEqualityComparer.Instance);
         ExcludedCacheFiles = cacheFiles; SkippedLooseFiles = skippedLoose;
+        _share = new(archives);
+    }
+
+    /// <summary>Another handle on the same index and archives (the caller has acquired the share).</summary>
+    private ContentStack(ContentStack origin)
+    {
+        Plan = origin.Plan; _options = origin._options; _index = origin._index; _archives = origin._archives; _issued = origin._issued;
+        ExcludedCacheFiles = origin.ExcludedCacheFiles; SkippedLooseFiles = origin.SkippedLooseFiles; _share = origin._share;
+    }
+
+    /// <summary>The archives of one index, closed when the last handle on it is disposed.</summary>
+    private sealed class Share(Dictionary<ContentSource, DatArchive> archives)
+    {
+        private int _handles = 1;
+
+        public bool TryAcquire()
+        {
+            for (var seen = Volatile.Read(ref _handles); seen > 0; seen = Volatile.Read(ref _handles))
+                if (Interlocked.CompareExchange(ref _handles, seen + 1, seen) == seen) return true;
+            return false;
+        }
+
+        public void Release()
+        {
+            if (Interlocked.Decrement(ref _handles) != 0) return;
+            foreach (var archive in archives.Values) archive.Dispose();
+        }
     }
 
     public ContentMountPlan Plan { get; }
@@ -139,7 +168,102 @@ public sealed class ContentStack : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        foreach (var archive in _archives.Values) archive.Dispose();
+        _share.Release();
+    }
+
+    // ARC-DEV-372: the index of a game folder is the same for every reader of a run (the original reads its static installation once), yet
+    // each of the viewer's ~25 readers opened its own (about 87 MiB allocated and 0.3-0.4 s each, in parallel for the background binders).
+    // A viewer run enables sharing; OpenShared then keeps one index per mount plan (at most two plans) and hands out handles on it.
+    private const int SharedPlans = 2;
+    private static readonly object SharedGate = new();
+    private static readonly List<SharedEntry> SharedEntries = [];
+    private static bool _sharing;
+
+    private sealed class SharedEntry(string key)
+    {
+        public string Key { get; } = key;
+        public object Gate { get; } = new();
+        public string? Signature;
+        public ContentStack? Held;
+    }
+
+    /// <summary>True while <see cref="OpenShared"/> shares an index; false (the default) it opens a private one as <see cref="Open"/> does.</summary>
+    public static bool SharingEnabled { get { lock (SharedGate) return _sharing; } }
+
+    /// <summary>The viewer's start: turns sharing on, or off (the held indexes are released, handles in use stay valid).</summary>
+    public static void EnableSharing(bool on = true)
+    {
+        lock (SharedGate) _sharing = on;
+        if (!on) ResetShared();
+    }
+
+    /// <summary>Releases every held index, so the next <see cref="OpenShared"/> indexes the disk again: the host changed what is mounted
+    /// (<see cref="PrototypeCacheMount.Use"/> calls it). Handles still open keep their index until they are disposed.</summary>
+    public static void ResetShared()
+    {
+        SharedEntry[] gone;
+        lock (SharedGate) { gone = SharedEntries.ToArray(); SharedEntries.Clear(); }
+        foreach (var entry in gone) Drop(entry);
+    }
+
+    private static void Drop(SharedEntry entry)
+    {
+        ContentStack? held;
+        lock (entry.Gate) { held = entry.Held; entry.Held = null; entry.Signature = null; }
+        held?.Dispose();
+    }
+
+    /// <summary>Like <see cref="Open"/>, but while <see cref="SharingEnabled"/> and with the default options the caller gets a handle on the index
+    /// an earlier call opened for the same plan, which is indexed once, even when several threads ask at the same moment. The index is reopened
+    /// when an archive's size or time changed; loose files are indexed at that first open only (as in any stack), and the host calls
+    /// <see cref="ResetShared"/> when it changes what is mounted. The caller disposes its handle as for <see cref="Open"/>.</summary>
+    public static ContentStackOpenResult OpenShared(ContentMountPlan plan, ContentStackOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        if (options is not null || !SharingEnabled) return Open(plan, options);
+        var key = plan.GameRoot + "|" + plan.ModuleName + "|" + string.Join('|', plan.SearchOrder.Select(source => $"{(int)source.Role}:{source.Number}:{source.Path}"));
+        SharedEntry? entry = null;
+        List<SharedEntry> evicted = [];
+        lock (SharedGate)
+        {
+            // Sharing switched off between the first test and here: no entry is registered after the reset that came with it.
+            if (_sharing)
+            {
+                entry = SharedEntries.Find(known => known.Key == key) ?? new SharedEntry(key);
+                SharedEntries.Remove(entry); SharedEntries.Add(entry);
+                while (SharedEntries.Count > SharedPlans) { evicted.Add(SharedEntries[0]); SharedEntries.RemoveAt(0); }
+            }
+        }
+        if (entry is null) return Open(plan);
+        foreach (var old in evicted) Drop(old);
+        lock (entry.Gate)
+        {
+            var signature = ArchiveSignature(plan);
+            if (entry.Held is { } held && entry.Signature == signature && held._share.TryAcquire()) return new(ContentStackStatus.Ready, new ContentStack(held));
+            var stale = entry.Held; entry.Held = null;
+            stale?.Dispose();
+            var opened = Open(plan);
+            if (opened.Status != ContentStackStatus.Ready) return opened;
+            lock (SharedGate)
+            {
+                // A reset or an eviction that came while this thread indexed leaves the entry unregistered: nothing is kept for it.
+                if (!SharedEntries.Contains(entry) || !opened.Stack!._share.TryAcquire()) return opened;
+            }
+            entry.Held = new ContentStack(opened.Stack!); entry.Signature = signature;
+            return opened;
+        }
+    }
+
+    private static string ArchiveSignature(ContentMountPlan plan)
+    {
+        var text = new StringBuilder();
+        foreach (var source in plan.SearchOrder.Where(source => source.Kind == ContentSourceKind.Archive))
+        {
+            // An ignore list beside the archive decides what Open indexes (it refuses the archive), so its presence is part of the signature.
+            try { var info = new FileInfo(source.Path); text.Append(info.Length).Append('/').Append(info.LastWriteTimeUtc.Ticks).Append(HasIgnoreList(source.Path) ? "!" : "").Append(';'); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { text.Append("?;"); }
+        }
+        return text.ToString();
     }
 
     /// <summary>The original lowercases member names and looks them up by binary search, so a

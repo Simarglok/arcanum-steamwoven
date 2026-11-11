@@ -186,7 +186,7 @@ public sealed class AreaCombatTexts
         ArgumentNullException.ThrowIfNull(modulePath);
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready) return Project($"{CombatPath} not read ({found.Status} {found.Detail})");
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return Project($"{CombatPath} not read (content stack {opened.Status})");
         using var stack = opened.Stack!;
         if (AreaStartingHero.Table(stack, CombatPath, ContentLoadPhase.GameStart, required: true, out var detail) is not { } table)

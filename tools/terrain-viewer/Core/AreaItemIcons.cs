@@ -63,7 +63,7 @@ public sealed class AreaItemIcons : IDisposable
         ArgumentNullException.ThrowIfNull(modulePath);
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready) { detail = $"not read ({found.Status} {found.Detail})"; return null; }
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) { detail = $"not read (content stack {opened.Status})"; return null; }
         detail = "content stack open";
         try { return new(opened.Stack!); }

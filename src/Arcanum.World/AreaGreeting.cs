@@ -24,7 +24,7 @@ public sealed record AreaGreetingTexts(AreaGreetingTextsStatus Status, Generated
     public static AreaGreetingTexts Load(ContentMountPlan plan)
     {
         ArgumentNullException.ThrowIfNull(plan);
-        var opened = ContentStack.Open(plan);
+        var opened = ContentStack.OpenShared(plan);
         if (opened.Status != ContentStackStatus.Ready) return new(AreaGreetingTextsStatus.StackFailed, null, [], opened.Status.ToString());
         using var stack = opened.Stack!;
         var files = GeneratedDialogFiles.Load(stack);

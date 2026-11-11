@@ -322,4 +322,142 @@ public sealed class ContentStackTests
         catch (UnauthorizedAccessException) { }
         Assert.AreEqual(ContentStackStatus.LooseUnreadable, OpenResult("Mod").Status);
     }
+
+    // ARC-DEV-372: one shared index per mount plan, handles with their own lifetime.
+    private ContentStack Shared(string module)
+    {
+        var result = ContentStack.OpenShared(Plan(module));
+        Assert.AreEqual(ContentStackStatus.Ready, result.Status, result.Detail);
+        return result.Stack!;
+    }
+
+    private static bool SameIndex(ContentStack a, ContentStack b, string key) => ReferenceEquals(a.Resolve(key).Winner, b.Resolve(key).Winner);
+
+    private void SharedLayout()
+    {
+        Dat("tig.dat");
+        Directory.CreateDirectory(Path.Combine(_root, "modules", "Mod"));
+        Directory.CreateDirectory(Path.Combine(_root, "data"));
+        Dat("arcanum1.dat", ("a/x.mes", "one"));
+    }
+
+    [TestMethod, DoNotParallelize]
+    public void OpenShared_opens_a_private_index_until_sharing_is_enabled()
+    {
+        SharedLayout();
+        Assert.IsFalse(ContentStack.SharingEnabled);
+        using var first = Shared("Mod");
+        using var second = Shared("Mod");
+        Assert.IsFalse(SameIndex(first, second, "a/x.mes"));
+        Assert.AreEqual("one", Text(second.Read(second.Resolve("a/x.mes").Winner!)));
+    }
+
+    [TestMethod, DoNotParallelize]
+    public void OpenShared_hands_out_handles_on_one_index_that_close_together()
+    {
+        SharedLayout();
+        ContentStack.EnableSharing();
+        try
+        {
+            var first = Shared("Mod");
+            using var second = Shared("Mod");
+            Assert.IsTrue(SameIndex(first, second, "a/x.mes"));
+            Assert.AreEqual(first.KeyCount, second.KeyCount);
+            var winner = second.Resolve("a/x.mes").Winner!;
+            first.Dispose(); first.Dispose();
+            Assert.ThrowsExactly<ObjectDisposedException>(() => first.Resolve("a/x.mes"));
+            Assert.AreEqual("one", Text(second.Read(winner)), "a handle outlives the one that opened the index");
+            using var third = Shared("Mod");
+            Assert.IsTrue(SameIndex(second, third, "a/x.mes"));
+            Assert.AreEqual("one", Text(third.Read(winner)));
+
+            var custom = ContentStack.OpenShared(Plan("Mod"), new());
+            using var own = custom.Stack!;
+            Assert.IsFalse(SameIndex(second, own, "a/x.mes"), "own options mean an own index");
+        }
+        finally { ContentStack.EnableSharing(false); }
+    }
+
+    [TestMethod, DoNotParallelize]
+    public void OpenShared_indexes_again_after_a_reset_an_archive_change_or_switching_sharing_off()
+    {
+        SharedLayout();
+        ContentStack.EnableSharing();
+        try
+        {
+            using var before = Shared("Mod");
+            Loose("data/a/y.mes", "loose");
+            using var kept = Shared("Mod");
+            Assert.IsTrue(SameIndex(before, kept, "a/x.mes"));
+            Assert.AreEqual(ContentResolutionStatus.NotFound, kept.Resolve("a/y.mes").Status, "loose files are indexed once");
+
+            ContentStack.ResetShared();
+            using var reset = Shared("Mod");
+            Assert.IsFalse(SameIndex(before, reset, "a/x.mes"));
+            Assert.AreEqual("loose", Text(reset.Read(reset.Resolve("a/y.mes").Winner!)));
+            Assert.AreEqual("one", Text(before.Read(before.Resolve("a/x.mes").Winner!)), "a handle in use survives the reset");
+
+            Dat("arcanum1.dat", ("a/x.mes", "changed"));
+            using var changed = Shared("Mod");
+            Assert.IsFalse(SameIndex(reset, changed, "a/x.mes"), "an archive of another size is read again");
+            Assert.AreEqual("changed", Text(changed.Read(changed.Resolve("a/x.mes").Winner!)));
+            using var again = Shared("Mod");
+            Assert.IsTrue(SameIndex(changed, again, "a/x.mes"));
+
+            PrototypeCacheMount.Use(null);
+            using var remounted = Shared("Mod");
+            Assert.IsFalse(SameIndex(changed, remounted, "a/x.mes"), "mounting another prototype folder resets");
+        }
+        finally { ContentStack.EnableSharing(false); }
+        Assert.IsFalse(ContentStack.SharingEnabled);
+    }
+
+    [TestMethod, DoNotParallelize]
+    public void OpenShared_reads_an_archive_again_when_only_its_time_or_ignore_list_changed()
+    {
+        SharedLayout();
+        ContentStack.EnableSharing();
+        try
+        {
+            using var first = Shared("Mod");
+            var archive = Path.Combine(_root, "arcanum1.dat");
+            File.SetLastWriteTimeUtc(archive, File.GetLastWriteTimeUtc(archive).AddMinutes(5));
+            using var touched = Shared("Mod");
+            Assert.IsFalse(SameIndex(first, touched, "a/x.mes"), "a new modification time is read again");
+            using var again = Shared("Mod");
+            Assert.IsTrue(SameIndex(touched, again, "a/x.mes"));
+
+            File.WriteAllText(archive + ".ignore", "x");
+            var refused = ContentStack.OpenShared(Plan("Mod"));
+            Assert.AreEqual(ContentStackStatus.IgnoreListUnsupported, refused.Status, "an ignore list added later is seen");
+        }
+        finally { ContentStack.EnableSharing(false); }
+    }
+
+    [TestMethod, DoNotParallelize]
+    public void OpenShared_indexes_once_for_threads_that_ask_together_and_keeps_two_plans()
+    {
+        SharedLayout();
+        Dat("modules/Other.dat", ("a/z.mes", "z"));
+        Dat("modules/Third.dat", ("a/t.mes", "t"));
+        ContentStack.EnableSharing();
+        try
+        {
+            var plan = Plan("Mod");
+            var stacks = Enumerable.Range(0, 8).AsParallel().WithDegreeOfParallelism(8)
+                .Select(_ => ContentStack.OpenShared(plan).Stack!).ToArray();
+            try { Assert.IsTrue(stacks.All(stack => SameIndex(stacks[0], stack, "a/x.mes"))); }
+            finally { foreach (var stack in stacks) stack.Dispose(); }
+
+            using var mod = Shared("Mod");
+            using var other = Shared("Other");
+            Assert.AreEqual(ContentResolutionStatus.NotFound, mod.Resolve("a/z.mes").Status);
+            Assert.AreEqual("z", Text(other.Read(other.Resolve("a/z.mes").Winner!)));
+            using var third = Shared("Third");
+            using var modAgain = Shared("Mod");
+            Assert.AreEqual("one", Text(modAgain.Read(modAgain.Resolve("a/x.mes").Winner!)), "an evicted plan opens again");
+            Assert.AreEqual("one", Text(mod.Read(mod.Resolve("a/x.mes").Winner!)), "a handle of an evicted plan stays valid");
+        }
+        finally { ContentStack.EnableSharing(false); }
+    }
 }
