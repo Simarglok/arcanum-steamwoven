@@ -157,7 +157,7 @@ internal sealed class EffectDomain
     /// pinned death damage in either direction even when the bounds that hold them and the changes that pull the other way
     /// are removed (a hero's maximum before effects is between 0 and <see cref="HeroMaximumCeiling"/>).
     /// </summary>
-    internal static bool Bounded(IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
+    internal static bool Bounded(IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions, long ceiling = HeroMaximumCeiling)
     {
         foreach (var special in new[] { EffectSpecial.Reaction, EffectSpecial.GoodReaction, EffectSpecial.BadReaction })
             if (Modifiers(entries, definitions, special).Length > ReactionLimits.MaxModifiers) return false;
@@ -166,9 +166,9 @@ internal sealed class EffectDomain
             var modifiers = Modifiers(entries, definitions, special);
             long Sum(StatModifierOperator op, bool positive) =>
                 modifiers.Where(m => m.Operator == op && m.Value > 0 == positive).Sum(m => (long)m.Value);
-            var highest = HeroMaximumCeiling * (100 + Sum(StatModifierOperator.Percent, true)) / 100 + Sum(StatModifierOperator.Add, true);
+            var highest = ceiling * (100 + Sum(StatModifierOperator.Percent, true)) / 100 + Sum(StatModifierOperator.Add, true);
             var fall = 100 + Sum(StatModifierOperator.Percent, false);
-            var lowest = (fall < 0 ? HeroMaximumCeiling * fall / 100 : 0) + Sum(StatModifierOperator.Add, false);
+            var lowest = (fall < 0 ? ceiling * fall / 100 : 0) + Sum(StatModifierOperator.Add, false);
             foreach (var m in modifiers)
             {
                 if (m.Operator == StatModifierOperator.Minimum) highest = Math.Max(highest, m.Value);

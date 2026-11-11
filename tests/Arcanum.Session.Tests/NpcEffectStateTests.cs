@@ -221,4 +221,40 @@ public sealed class NpcEffectStateTests
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
         Assert.AreEqual(owner.QueryObjectFlags(Wolf), restored.QueryObjectFlags(Wolf));
     }
+
+    [TestMethod]
+    public void A_removal_that_adopts_a_loaded_list_takes_a_place_in_the_capped_lists()
+    {
+        using var owner = Create();
+        for (var i = 0; i < SessionNpcEffectLimits.MaxCritters; i++)
+            Ok(owner.AddNpcEffect(owner.Version, Target($"oid:npc{i}"), Strong, EffectCause.Spell), 1);
+        var extra = Target("oid:extra", stored: [new(120, EffectCause.Item)]);
+        Refused(owner.RemoveNpcEffect(owner.Version, extra, 120), GameSessionFailure.EffectCapacityExceeded);
+        Assert.AreEqual(SessionNpcEffectLimits.MaxCritters, owner.Capture().Effects.Critters.Count);
+        // A removal that finds nothing adopts nothing and needs no place.
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.RemoveNpcEffect(owner.Version, extra, 121).Disposition);
+    }
+
+    [TestMethod]
+    public void The_bound_follows_the_NPCs_own_facts_so_a_removal_is_never_refused_and_later_facts_never_throw()
+    {
+        using var owner = Create();
+        // A big NPC: 5000 hit-point points and an adjustment of 5000 (base maximum 25030, above the hero's ceiling of about 800).
+        var big = new LifeFacts { HitPointPoints = 5000, HitPointAdjustment = 5000 };
+        var target = SessionLifeTarget.Critter(Wolf, big, default, []);
+        var half = new SessionEffectDefinition(140, [Special(0, -50, EffectChangeOperator.Percent)]);
+        var plus = new SessionEffectDefinition(141, [Special(0, 50, EffectChangeOperator.Percent)]);
+        Ok(owner.AddNpcEffect(owner.Version, target, half, EffectCause.Spell), 1);
+        // +50 % beside −50 % is valid as a whole, but removing the −50 % would leave 37 545 (past the life rules' bound): refused at the add, so no removal ever is.
+        Refused(owner.AddNpcEffect(owner.Version, target, plus, EffectCause.Spell), GameSessionFailure.InvalidEffect);
+        Assert.AreEqual(1, owner.QueryNpcEffects(target)!.Entries.Count);
+        Ok(owner.RemoveNpcEffect(owner.Version, target, 140), 1);
+
+        // +25 % and +600 on the same NPC: 31 887, valid. Over facts that grew (level 51, strength and willpower 100) the life rules refuse the combined maximum (32 357): the host's maxima stand, nothing throws.
+        var quarter = new SessionEffectDefinition(142, [Special(0, 25, EffectChangeOperator.Percent), Special(0, 600)]);
+        Ok(owner.AddNpcEffect(owner.Version, target, quarter, EffectCause.Spell), 1);
+        Assert.AreEqual(31_887, Status(owner, target).MaxHitPoints);
+        var stronger = SessionLifeTarget.Critter(Wolf, big with { Strength = 100, Level = 51, Willpower = 100 }, default, []);
+        Assert.AreEqual(25_406, Status(owner, stronger).MaxHitPoints);
+    }
 }

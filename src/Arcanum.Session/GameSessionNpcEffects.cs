@@ -121,8 +121,13 @@ public sealed partial class GameSessionOwner
         };
 
     // The session's list laid over the host's facts, when it holds one for the NPC (the hold flags are WithWrittenHolds').
-    private LifeFacts WithWrittenEffects(string entity, LifeFacts facts) =>
-        _effects.Critters.TryGetValue(entity, out var list) ? WithCritterEffects(facts, list.Entries, list.Definitions) : facts;
+    // Facts the life rules refuse with the list laid over them (a level-up or a stronger stat after the add) keep the host's maxima: the life API never throws for a list.
+    private LifeFacts WithWrittenEffects(string entity, LifeFacts facts)
+    {
+        if (!_effects.Critters.TryGetValue(entity, out var list)) return facts;
+        var combined = WithCritterEffects(facts, list.Entries, list.Definitions);
+        return LifeRules.IsValid(combined) ? combined : facts;
+    }
 
     // One add or one removal run (the steps the hero's Commit takes), on a trial list: each step moves the damage by the change of the maxima, the life rules must admit
     // the facts after each, then the budgets; nothing is written before every check passed.
@@ -157,7 +162,6 @@ public sealed partial class GameSessionOwner
             return RejectEffect(GameSessionFailure.EffectMismatch);
         if (!IsCurrent(expected)) return RejectEffect(GameSessionFailure.StaleVersion);
         if (add is not null && addCount > SessionNpcEffectLimits.MaxEntries - entries.Count) return RejectEffect(GameSessionFailure.EffectCapacityExceeded);
-        if (!held && add is not null && _effects.Critters.Count >= SessionNpcEffectLimits.MaxCritters) return RejectEffect(GameSessionFailure.EffectCapacityExceeded);
 
         var steps = new List<EffectStep>();
         if (add is not null)
@@ -173,6 +177,8 @@ public sealed partial class GameSessionOwner
             }
         }
         if (steps.Count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, 0, null, null, Version);
+        // A change adopts the loaded list: an add or a removal alike takes a place in the session's lists.
+        if (!held && _effects.Critters.Count >= SessionNpcEffectLimits.MaxCritters) return RejectEffect(GameSessionFailure.EffectCapacityExceeded);
         if (add is not null) definitions[add.Number] = add;
 
         var recorded = _life.Critters.TryGetValue(entity, out var life);
@@ -195,7 +201,10 @@ public sealed partial class GameSessionOwner
         }
         var used = entries.Select(e => e.Number).ToHashSet();
         foreach (var number in definitions.Keys.Where(n => !used.Contains(n)).ToArray()) definitions.Remove(number);
-        if (!EffectDomain.Bounded(entries, definitions)) return RejectEffect(GameSessionFailure.InvalidEffect);
+        // Bounded for any subset of the entries, over the largest base maximum this NPC's facts give (not the hero's ceiling): no later removal can be refused for the maxima.
+        var bare = WithCritterEffects(host, [], definitions);
+        var ceiling = Math.Max(0L, Math.Max(LifeRules.MaxHitPoints(bare, 0), LifeRules.MaxFatigue(bare)));
+        if (!EffectDomain.Bounded(entries, definitions, ceiling)) return RejectEffect(GameSessionFailure.InvalidEffect);
 
         var lifeChanged = state != life.State;
         if (lifeChanged && !recorded && _life.Critters.Count >= _limits.MaxLifeRecords) return RejectEffect(GameSessionFailure.BudgetExceeded);
@@ -204,6 +213,9 @@ public sealed partial class GameSessionOwner
         var timers = lifeChanged
             ? Timers(false, life.State, state, null).Select(timer => TimerEvent(timer, target, map, now, 1)).Where(pending => !IsPending(pending.Kind, entity)).ToArray()
             : [];
+        // One map per NPC's timers (as every life step keeps it): a change on another map than its pending timers' takes them along; that needs the queue outside a pass.
+        var stray = lifeChanged ? StrayMaps(entity, map) : [];
+        if (stray.Length > 0 && _passWorld is not null) return RejectEffect(GameSessionFailure.InvalidEventPass);
         if (timers.Length > 0 && (_events.Count > _events.Limits.MaxPending - timers.Length || _events.NextSequence > long.MaxValue - timers.Length ||
             now > long.MaxValue - SessionEventKinds.RestingDelayMs)) return RejectEffect(GameSessionFailure.EventBudgetExceeded);
         if (_revision == long.MaxValue) return RejectEffect(GameSessionFailure.RevisionExhausted);
@@ -216,6 +228,9 @@ public sealed partial class GameSessionOwner
         _effects.Critters[entity] = record;
         var next2 = new SessionLifeRecord(state, life.DeathTimeMs);
         if (lifeChanged) _life.Critters[entity] = next2;
+        foreach (var from in stray)
+            if (_events.Relocate(from, map, e => e.Code == entity).Failure != GameEventFailure.None)
+                throw new InvalidOperationException("Timer relocation failed after admission.");
         foreach (var (kind, payload) in timers)
             if (_events.ScheduleAfter(kind, payload, SessionEventKinds.Delay(TimerOf(kind)), EventClocks(now)).Disposition != GameEventScheduleDisposition.Added)
                 throw new InvalidOperationException("Timer scheduling failed after admission.");
@@ -225,7 +240,8 @@ public sealed partial class GameSessionOwner
         static int Shift(int damage, long change) => (int)Math.Clamp(damage + change, 0, LifeLimits.MaxDamage);
     }
 
-    // A save's NPC lists: ascending distinct mobile NPC entities, each list within the bound with a rule admitted, bounded and in use for every number, causes the source's.
+    // A save's NPC lists: ascending distinct mobile NPC entities, each list within the bound with a rule admitted and in use for every number, causes the source's. The maxima's bound depends on the NPC's
+    // facts, which a restore does not have: the overlay checks the combined facts on use (WithWrittenEffects).
     private static GameSessionFailure ImportCritterEffects(IReadOnlyList<SessionCritterEffectRecord> saved, EffectDomain effects)
     {
         if (saved.Count > SessionNpcEffectLimits.MaxCritters) return GameSessionFailure.EffectCapacityExceeded;
@@ -249,7 +265,7 @@ public sealed partial class GameSessionOwner
                 list.Entries.Add(entry);
             }
             var used = list.Entries.Select(e => e.Number).ToHashSet();
-            if (list.Definitions.Keys.Any(number => !used.Contains(number)) || !EffectDomain.Bounded(list.Entries, list.Definitions)) return GameSessionFailure.InvalidEffect;
+            if (list.Definitions.Keys.Any(number => !used.Contains(number))) return GameSessionFailure.InvalidEffect;
             effects.Critters.Add(record.Entity, list);
         }
         return GameSessionFailure.None;
