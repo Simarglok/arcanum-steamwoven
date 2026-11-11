@@ -15,7 +15,7 @@ Retina on macOS, display scaling on Windows and the X11/Wayland equivalents on L
 for the owner; a demo from basic templates and solid-colour placeholders follows only after the owner approves.
 
 Evidence vocabulary as in ARC-RES-033: **source fact** (read in the cited code or document), **code fact** (read in this
-repository at `origin/main` d402d0e27), **judgement**. Godot facts are from the Godot **4.7.2-stable** tag (the version
+repository at `origin/main` 9d35814d8), **judgement**. Godot facts are from the Godot **4.7.2-stable** tag (the version
 pinned by the toolchain) and the `GodotSharp.xml` API reference of the installed 4.7.2 .NET package; nothing was run.
 
 ## Summary
@@ -61,12 +61,12 @@ pinned by the toolchain) and the `GodotSharp.xml` API reference of the installed
 
 | Area | Today |
 | --- | --- |
-| Window scaling | `project.godot` has `stretch/mode="canvas_items"` with a 1280 × 800 base, but the area viewer switches the window to `ContentScaleMode.Disabled` at start (`TerrainViewerWorld.cs`); the smokes force the same (`TerrainViewerArea.cs`, `TerrainViewerAreaMap.cs`). `display/window/dpi/allow_hidpi` is not set, so Godot's default `true` applies (source fact, `main/main.cpp`). |
+| Window scaling | `project.godot` has `stretch/mode="canvas_items"` with a 1280 × 800 base, but the area viewer switches the window to `ContentScaleMode.Disabled` at start (`TerrainViewerWorld.cs`); the automated observation and smoke paths force the same (`TerrainViewerArea.cs`, `TerrainViewerAreaMap.cs`). `display/window/dpi/allow_hidpi` is not set, so Godot's default `true` applies (source fact, `main/main.cpp`). |
 | Interface scale | per window, from the window size: `ScreenFactor` (`AreaGameBarPanel.cs`) whole, `FittedWindow` fractional for HD art; applied as `Control.Scale` on art views (`AreaMenuArtView.PlateFit`, `AreaWorldMapArtView.Place`); re-layout on `Viewport.SizeChanged`. |
 | User scale | `LauncherDisplay.UiScalePercent` (`uiScale`, 50–300, default 100) is stored, validated and written, never applied. |
 | OS scale and DPI | not read anywhere outside `experiments/display-ui-lab` (which shows them in a diagnostic overlay). No `dpi_changed` handler, no screen-change handler. |
 | Interface art | `InterfaceHd` / `HdInterfaceTexture` draw the pack's 4× frame in place of the Legacy frame, hit tests and layout in Legacy sizes; HD frames trilinear with mipmaps (ARC-UI-112), Legacy frames Nearest. |
-| Procedural drawing | already present but plain: `StyleBoxFlat` panel backgrounds of the main menu forms, character sheet rows, launcher and diagnostic panels; Godot `Label`/`Button`/containers; no `ShaderMaterial`, `NinePatchRect` or `Theme` in the viewer. |
+| Procedural drawing | already present but plain: `StyleBoxFlat` panel backgrounds of the main menu forms, character sheet rows, launcher and diagnostic panels; Godot `Label`/`Button`/containers; no `NinePatchRect` or `Theme` in the viewer; shaders exist only for object blending (`AreaDrawItem`) and the round-view hole (`AreaRoundView`), none for interface chrome. |
 | Fonts | the original's bitmap fonts drawn as ART glyph frames (`AreaArtTextDraw`), traced 4× coverage frames when the pack has them (ARC-DEV-361); Godot's fallback font for the procedural panels. |
 | Earlier lab | `experiments/display-ui-lab` (ARC-UI-001): HiDPI allowed, content scaling disabled, UI scale as theme metrics (fonts, padding, targets) rather than `ContentScaleFactor` or `Control.Scale`; simulated layouts only, no physical-display evidence. |
 
@@ -103,7 +103,7 @@ at the same `s`; the world view takes what is left.
 made for; a Windows logical point at 96 DPI is 0.265 mm, so 1.5 points is about 0.40 mm. On a 14" MacBook Pro at its default
 mode (1512 × 982 points, about 0.20 mm a point) 1.5 points is 0.30 mm and 600 units take 900 of 982 points.
 
-| Screen (OS setting) | `k` | Today, HD (fit) | Concept `s` | Interface height |
+| Screen (OS setting) | `k` | Today, HD art (fractional fit; Legacy art takes its floor) | Concept `s` | Interface height |
 | --- | ---: | ---: | ---: | --- |
 | 14" MacBook Pro, default (3024 × 1964 device px) | 2 | 3.27 | 3.0 | 1800 of 1964 px |
 | 27" 4K on macOS, "looks like 2560 × 1440" (5120 × 2880) | 2 | 4.8 | 3.0 | 1800 of 2880 px |
