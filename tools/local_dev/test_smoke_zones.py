@@ -79,6 +79,21 @@ class SelectionTests(unittest.TestCase):
                      "tools/terrain-viewer/Godot/Main.tscn"):
             self.assertEqual(self.select(path, "docs/a.md").zones, (COMPLETE,), path)
 
+    def test_a_no_smoke_area_vetoes_the_generic_project_rows_but_the_viewers_own_files_still_select(self) -> None:
+        for path in ("tests/Arcanum.World.Tests/Arcanum.World.Tests.csproj", "tests/Arcanum.World.Tests/packages.lock.json",
+                     "experiments/gamepad-lab/GamepadLab.sln", "tools/research/Arcanum.ArtProbe/packages.lock.json",
+                     "src/Arcanum.Godot/Arcanum.Godot.sln", "src/Arcanum.Godot/Main.tscn", ".claude/settings.json",
+                     "tools/terrain-viewer/Godot/AreaBarterPanel.cs.uid"):
+            self.assertEqual(self.select(path).zones, (), path)
+        self.assertEqual(self.select("tools/terrain-viewer/Godot/Arcanum.TerrainViewer.csproj").zones, (COMPLETE,))
+        self.assertEqual(self.select("src/Arcanum.Executable/PeImage.cs", "src/Arcanum.Input.Godot/GodotInputAdapter.cs",
+                                     "tests/Arcanum.TerrainViewer.Tests/GridWireFixture.cs", "arcanum").zones, (CORE,))
+
+    def test_neighbouring_walk_and_click_files_add_their_zones(self) -> None:
+        for path in ("src/Arcanum.World/AreaRealSteps.cs", "src/Arcanum.Simulation/Travel/WorldRoute.cs",
+                     "tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs", "src/Arcanum.Session/GameSessionTransfer.cs"):
+            self.assertIn(WALK, self.select(path).zones, path)
+
     def test_a_file_no_row_names_selects_the_complete_run(self) -> None:
         selection = self.select("some/new/place/file.txt", "src/Arcanum.Session/GameSessionHeal.cs")
         self.assertEqual(selection.zones, (COMPLETE,))
@@ -86,13 +101,20 @@ class SelectionTests(unittest.TestCase):
 
     def test_the_runner_and_its_own_files_select_the_core_and_the_other_launcher_tooling_none(self) -> None:
         self.assertEqual(self.select("tools/local_dev/smoke.py", "tools/local_dev/smoke_zones.py").zones, (CORE,))
-        self.assertEqual(self.select("tools/local_dev/daily.py", "tools/local_dev/test_smoke.py", "arcanum").zones, ())
-        self.assertEqual(self.select("src/Arcanum.Executable/X86Machine.cs").zones, ())
+        self.assertEqual(self.select("tools/local_dev/daily.py", "tools/local_dev/test_smoke.py").zones, ())
+        self.assertEqual(self.select("arcanum", "tools/local_dev/test_smoke.py").zones, (CORE,))  # the launcher wires the smoke command
+        self.assertEqual(self.select("src/Arcanum.Godot/ViewerApp.HdReview.cs").zones, ())
 
     def test_a_stage_registration_alone_does_not_pull_in_the_shared_zones(self) -> None:
         viewer = "tools/terrain-viewer/Godot/"
         registered = lambda path: ['    if (only?.Contains("new-stage") == true) await RunNewStageAsync();', ""]
         self.assertEqual(self.select(viewer + "TerrainViewerApp.cs", lines=registered).zones, (CORE,))
+        commented = lambda path: ["// ARC-DEV-1 native observation (stage new, only when named):",
+                                  'if (Stage("death")) await RunAreaDeathSmokeAsync(result);',
+                                  'if (_readyMapName is not null && only?.Contains("walk") == true) await RunAreaMapWalkSmokeAsync();']
+        self.assertEqual(self.select(viewer + "TerrainViewerApp.cs", lines=commented).zones, (CORE,))
+        rewritten = lambda path: ["return stages.All(MapSmokeStageNames.Contains) ? stages : throw new Exception();"]
+        self.assertEqual(self.select(viewer + "TerrainViewerAreaMapStream.cs", lines=rewritten).zones, (CORE, WALK))
         stage_list = lambda path: ["    private static readonly string[] MapSmokeStageNames = [...];"]
         self.assertEqual(self.select(viewer + "TerrainViewerAreaMapStream.cs", lines=stage_list).zones, (CORE,))
         other = lambda path: ["    int streamMargin = 9;"]
@@ -183,6 +205,13 @@ class ZonePlanTests(unittest.TestCase):
         self.assertEqual(sorted(self.stages(steps)), ["hover", "walk"])
         with self.assertRaisesRegex(ValueError, "go with --stages, not with the zones"):
             self.plan("pr", "--zones", "core", "--sector", "1409,1314", "--no-build")
+        with self.assertRaisesRegex(ValueError, "go with --stages, not with the zones"):
+            self.plan("pr", "--zones", "complete", "--stages", "cast", "--map", "elven ruins", "--no-build")
+        steps = self.plan("pr", "--zones", "census", "--stages", "cast", "--map", "elven ruins", "--no-build")
+        self.assertEqual([(step.name, step.requires) for step in steps],
+                         [("zones-census", ("census",)), ("stages", ("cast",))])  # the pin holds for the named stage only
+        self.assertIn("elven ruins", steps[1].command)
+        self.assertNotIn("elven ruins", steps[0].command)
         with self.assertRaisesRegex(ValueError, "unknown smoke zone"):
             self.plan("pr", "--zones", "fast")
 

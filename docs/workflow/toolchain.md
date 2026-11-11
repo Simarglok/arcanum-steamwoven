@@ -164,16 +164,20 @@ history held about 500 runs of such copies of one template).
   smoke and the batteries of `full`, then every stage but `map` and `resources` (the batteries vouch for those) grouped as
   usual, the heavy stages last. That is what `./arcanum daily` runs, so the daily run now checks every stage the viewer accepts
   (before, 15 of 76), and a stage that fails on main (see the known failures) blocks the day's packages as any failure does.
-  `--zones` and `--stages` combine (the union); `--map`, `--hero`, `--sector`, `--main-menu` and `--env` go with `--stages` only.
+  `--zones` and `--stages` combine (the union); `--map`, `--hero`, `--sector`, `--main-menu` and `--env` go with `--stages` only: with zones
+  chosen they apply to the `--stages` group (its own step `stages`) and the zones' stages keep their configurations (step `zones-...`);
+  without `--stages`, or with `complete`, they are refused. The batteries of `complete` vouch only for `map` and `resources`, so the
+  other stages they also run (`cast`, `ranged`, ...) run again in their groups.
   **`--auto`** reads the diff: the merge base with `--base` (default `origin/main`; fetch first) to the working tree, untracked
-  files included, and picks the zones by the table `TRIGGERS` (the first matching rows of a path, as a union): ordinary game and
+  files included, and picks the zones by the table `TRIGGERS` (all matching rows of a path, as a union; a "no smoke" row such as `tests/` or
+  `experiments/` beats the generic project-file rows `*.csproj`, `*.sln`, `*.props`, `*.tscn` and the lock files): ordinary game and
   viewer code (`src/Arcanum.Simulation|Session|World|Scripting|Input`, `tools/terrain-viewer`) selects `core`, the files of a
   heavy zone add that zone (route, movement, residency, window load and hero walk files: `walk`; picking, hover, roofs, locks and
   container loot: `container-click`; the Crash Site profile, transitions, portals and area start: `crash-site`; the census stage
   and the map row readers: `census`), a file of the shared data readers, the presentation, the save schema (`GameSaveLibrary`,
   `GameSessionSnapshot*`), the render and shared UI files or a project, package or build file selects `complete`, and so does a
   file no row names (a missing row is a safe miss, never a silent skip). A file no smoke can cover (documents, unit tests, research,
-  HD, oracle and inspect tools, the launcher tooling but the runner itself, the executable interpreter) selects nothing; a diff of
+  HD, oracle and inspect tools, the launcher tooling but the runner itself, the HD review viewer) selects nothing; a diff of
   such files prints `no smoke zone covers this diff` and the run passes without building anything. The viewer's start and stage
   dispatch file and its stage list file also hold shared logic, so for them a change to a line that is more than a stage's
   registration adds `complete` or `walk`. `--auto` prints each zone with the files that chose it (the three first), the PR report

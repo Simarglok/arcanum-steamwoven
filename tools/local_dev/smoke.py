@@ -496,18 +496,24 @@ def plan(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mappin
             zones = tuple(dict.fromkeys((*zones, *selection.zones)))
             if not zones and not stages and not args.crash_site:
                 return []  # no smoke covers the diff: nothing to run, not even the build
-        if zones and (args.map is not None or args.hero or args.sector or args.main_menu or extra):
-            raise ValueError("--map, --hero, --sector, --main-menu and --env go with --stages, not with the zones")
+        pinned = args.map is not None or args.hero or args.sector or args.main_menu or extra
+        if zones and pinned and (not stages or smoke_zones.COMPLETE in zones):
+            raise ValueError("--map, --hero, --sector, --main-menu and --env go with --stages, not with the zones (the "
+                             "zones run on the configuration each stage needs; add --stages for the pinned ones)")
         args.zones_chosen = zones
         if smoke_zones.COMPLETE in zones:
             complete_chain()
             return steps
         if args.crash_site or smoke_zones.CRASH_SITE in zones:
             steps.append(crash_site_step(inputs, conf, prefs_root, environ, godot, CRASH_SITE_HERO))
-        stages = tuple(dict.fromkeys((*smoke_zones.stages_of(zones, known), *stages)))
+        zoned = smoke_zones.stages_of(zones, known)
+        if pinned and zoned:  # the pins hold for the named stages only, the zones' stages keep their own configurations
+            stage_steps("zones", tuple(stage for stage in zoned if stage not in stages), Pins())
+        else:
+            stages = tuple(dict.fromkeys((*zoned, *stages)))
         if stages:
             stage_steps("stages", stages, Pins(args.map, normal_sector(args.sector), args.main_menu))
-        elif args.map is not None or args.hero or args.sector or args.main_menu or extra:
+        elif pinned:
             raise ValueError("--map, --hero, --sector, --main-menu and --env go with --stages (the touched stages)")
         if len(steps) == prepared:
             raise ValueError("nothing to run: give --stages (the touched stages) or --crash-site")

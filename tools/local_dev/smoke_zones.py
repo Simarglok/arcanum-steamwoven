@@ -16,11 +16,13 @@ packaging tools) selects nothing, and a diff of such files runs no smoke and say
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from fnmatch import fnmatchcase
 import re
 import subprocess
 from typing import Callable, Iterable, Sequence
 
+ROOT = Path(__file__).resolve().parents[2]
 CORE, WALK, CONTAINER_CLICK, CRASH_SITE, CENSUS, COMPLETE = ("core", "walk", "container-click", "crash-site", "census",
                                                            "complete")
 
@@ -80,21 +82,24 @@ TRIGGERS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     # no smoke covers these
     ("docs/", _NONE, "documents"), ("*.md", _NONE, "documents"), ("tests/", _NONE, "unit tests"),
     ("experiments/", _NONE, "labs"), (".gitattributes", _NONE, "repository settings"),
-    (".gitignore", _NONE, "repository settings"), ("LICENSE", _NONE, "licence"), ("arcanum", _NONE, "launcher script"),
+    (".gitignore", _NONE, "repository settings"), ("LICENSE", _NONE, "licence"), 
     ("tools/research/", _NONE, "research probes"), ("tools/hd_pack/", _NONE, "HD pack tool"),
     ("tools/hd-interface-import/", _NONE, "HD import tool"), ("tools/hd_font/", _NONE, "font tool"),
     ("tools/original-oracle/", _NONE, "oracle"), ("tools/terrain-inspect/", _NONE, "inspect tool"),
-    ("tools/arcanum-local", _NONE, "launcher"), ("tools/local_dev/*", _NONE, "launcher tooling"),
-    ("src/Arcanum.Executable/", _NONE, "the executable interpreter (no viewer project uses it)"),
-    ("src/Arcanum.Godot/", _NONE, "the HD review viewer"), ("src/Arcanum.Input.Godot/", _NONE, "the lab input adapter"),
+    ("tools/local_dev/*", _NONE, "launcher tooling"), (".claude/", _NONE, "assistant settings"), ("*.uid", _NONE, "Godot ids"),
+    (_V + "tools/", _NONE, "viewer export and validation scripts"),
+    ("src/Arcanum.Godot/", _NONE, "the HD review viewer (its own project, no smoke)"),
     # the runner itself: one zone proves it still runs
     ("tools/local_dev/smoke*", (CORE,), "smoke runner"), ("tools/local_dev/launch.py", (CORE,), "viewer arguments"),
     ("tools/local_dev/run_queue.py", (CORE,), "queue"), ("tools/local_dev/start_check.py", (CORE,), "start check"),
-    ("tools/local_dev/config.py", (CORE,), "inputs"),
+    ("tools/local_dev/config.py", (CORE,), "inputs"), ("arcanum", (CORE,), "launcher script"), ("tools/arcanum-local", (CORE,), "launcher"),
+    ("src/Arcanum.Executable/", (CORE,), "the executable interpreter (Session reads prototypes through it at every start)"),
+    ("src/Arcanum.Input.Godot/", (CORE,), "the input adapter the viewer compiles"),
+    ("tests/Arcanum.TerrainViewer.Tests/*Fixture.cs", (CORE,), "fixtures the viewer compiles"),
     # the cheap stages: ordinary game and viewer code
     ("src/Arcanum.Simulation/", (CORE,), "simulation"), ("src/Arcanum.Session/", (CORE,), "session"),
     ("src/Arcanum.World/", (CORE,), "world"), ("src/Arcanum.Scripting/", (CORE,), "scripting"),
-    ("src/Arcanum.Input/", (CORE,), "input"), (_V + "*", (CORE,), "viewer"), ("tools/terrain-viewer/Core/", (CORE,), "viewer core"),
+    ("src/Arcanum.Input/", (CORE,), "input"), (_V + "*.cs", (CORE,), "viewer"), ("tools/terrain-viewer/Core/", (CORE,), "viewer core"),
     # shared code every stage draws or loads through
     ("src/Arcanum.Data/", _ALL, "shared data readers"), ("src/Arcanum.Presentation/", _ALL, "shared presentation"),
     ("src/Arcanum.Session/GameSaveLibrary.cs", _ALL, "save schema"), ("src/Arcanum.Session/GameSessionSnapshot*", _ALL, "save schema"),
@@ -119,6 +124,12 @@ TRIGGERS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("src/Arcanum.Simulation/Residency/", (WALK,), "sector residency"),
     ("src/Arcanum.Simulation/Ai/ExecutorHeroWalkGoals.cs", (WALK,), "hero walk goals"),
     ("src/Arcanum.Simulation/Party/CompanionFollow.cs", (WALK,), "follow routes"),
+    (_V + "TerrainViewerMovement.cs", (WALK,), "movement"), (_V + "TerrainViewerBodyMoves.cs", (WALK,), "body moves"),
+    (_V + "TerrainViewerAreaMapTransfer.cs", (WALK,), "window transfers"),
+    ("src/Arcanum.World/AreaRealSteps.cs", (WALK,), "steps"), ("src/Arcanum.World/AreaBodyMoves.cs", (WALK,), "body moves"),
+    ("src/Arcanum.World/AreaAiMovers.cs", (WALK,), "movers"), ("src/Arcanum.Simulation/Travel/", (WALK,), "travel routes"),
+    ("src/Arcanum.Simulation/Ai/NpcRouteRules.cs", (WALK,), "NPC routes"),
+    ("src/Arcanum.Session/GameSessionTransfer.cs", (WALK,), "transfers"), ("src/Arcanum.Session/GameSessionChangeOfPlaceMovers.cs", (WALK,), "movers"),
     ("src/Arcanum.World/AreaRoute*", (WALK,), "routes"), ("src/Arcanum.World/AreaResiden*", (WALK,), "residency"),
     ("src/Arcanum.World/AreaMapLoad*", (WALK,), "window load"), ("src/Arcanum.World/AreaLoad*", (WALK,), "window load"),
     ("src/Arcanum.World/AreaMapTransfers.cs", (WALK,), "window transfers"), ("src/Arcanum.World/Terrain*", (WALK,), "terrain loader"),
@@ -156,8 +167,9 @@ TRIGGERS: tuple[tuple[str, tuple[str, ...], str], ...] = (
 # logic: the viewer's start and stage dispatch, and the window moves. They select `core`; only a change to a line that is
 # more than such a registration adds the zones here (always, when the diff's lines cannot be read).
 REGISTRATIONS: dict[str, tuple[re.Pattern[str], tuple[str, ...]]] = {
-    _V + "TerrainViewerApp.cs": (re.compile(r"only\??\.Contains\(\"|^\s*$"), (COMPLETE,)),
-    _V + "TerrainViewerAreaMapStream.cs": (re.compile(r"MapSmokeStageNames|^\s*$"), (WALK,)),
+    _V + "TerrainViewerApp.cs": (re.compile(r"^\s*$|^\s*//|^[\s}{]*(else )?if \((\w+ is not null && )?(Stage\(|only\??\.Contains\()\"[a-z0-9-]+\"\)( == true)?\) *[{]? *await \w+\([^;]*\);"),
+                                 (COMPLETE,)),
+    _V + "TerrainViewerAreaMapStream.cs": (re.compile(r"^\s*$|MapSmokeStageNames\s*=\s*\["), (WALK,)),
 }
 
 
@@ -188,8 +200,10 @@ def select_zones(paths: Iterable[str], lines: Callable[[str], Sequence[str]] | N
     because: dict[str, list[str]] = {}
     uncovered = []
     for path in paths:
-        hit = [zones for pattern, zones, _ in TRIGGERS if pattern_matches(pattern, path)]
-        chosen = {zone for zones in hit for zone in zones} if hit else {COMPLETE}
+        rows = [(pattern, zones) for pattern, zones, _ in TRIGGERS if pattern_matches(pattern, path)]
+        vetoed = any(not zones for _, zones in rows)  # a `none` row beats the generic rows (`*.csproj`, ...)
+        hit = [zones for pattern, zones in rows if not (vetoed and pattern.startswith("*"))]
+        chosen = {zone for zones in hit for zone in zones} if rows else {COMPLETE}
         if path in REGISTRATIONS:
             plain, extra = REGISTRATIONS[path]
             changed = lines(path) if lines is not None else None
@@ -206,7 +220,7 @@ def select_zones(paths: Iterable[str], lines: Callable[[str], Sequence[str]] | N
 
 
 def git_output(*args: str) -> str:
-    done = subprocess.run(("git", *args), capture_output=True, text=True, check=False)
+    done = subprocess.run(("git", "-C", str(ROOT), *args), capture_output=True, text=True, check=False)
     if done.returncode != 0:
         raise ValueError(f"git {' '.join(args)} failed: {done.stderr.strip() or done.stdout.strip()}")
     return done.stdout
