@@ -66,13 +66,20 @@ public partial class TerrainViewerApp
     private GameSessionOwner? _createdInventorySession;
     private readonly Dictionary<string, SessionRegenerateResult> _createdInventoryDone = new(StringComparer.Ordinal);
 
-    private void QueueCreatedInventory(string entity) => _createdInventoryPending.Add(entity);
+    /// <summary>The queued critters whose restock runs before they join the party (a summoned creature, ARC-MAGIC-053): the PC leader its mind-control line gives it is not read by the gate.</summary>
+    private readonly HashSet<string> _createdInventoryBeforeLeader = new(StringComparer.Ordinal);
+
+    private void QueueCreatedInventory(string entity, bool beforeLeader = false)
+    {
+        _createdInventoryPending.Add(entity);
+        if (beforeLeader) _createdInventoryBeforeLeader.Add(entity);
+    }
 
     /// <summary>Generates the inventory of each queued created critter once the restock host is ready (the barter data loaded or failed); one regeneration per critter, logged.</summary>
     private void TakeCreatedInventories(GameSessionOwner session)
     {
         // A replaced session (a load) has none of the queued critters: the queue and the results belong to one session.
-        if (!ReferenceEquals(_createdInventorySession, session)) { _createdInventorySession = session; _createdInventoryPending.Clear(); _createdInventoryDone.Clear(); }
+        if (!ReferenceEquals(_createdInventorySession, session)) { _createdInventorySession = session; _createdInventoryPending.Clear(); _createdInventoryBeforeLeader.Clear(); _createdInventoryDone.Clear(); }
         if (_createdInventoryPending.Count == 0 || RestockHostNow() is not { } restock || _inventoryHost is not { } inventory || _createdPrototypeRead is not { } read) return;
         // The resolver answers the restock host for a critter created since the last sync.
         var map = new SessionMapId(CurrentAreaMap);
@@ -80,11 +87,12 @@ public partial class TerrainViewerApp
         foreach (var entity in _createdInventoryPending.ToArray())
         {
             // A critter the session no longer holds is dropped; one of another map than the shown one waits until its map is shown (the regeneration runs on the actor's map).
-            if (session.QueryCreatedObject(entity) is not { } held) { _createdInventoryPending.Remove(entity); continue; }
+            if (session.QueryCreatedObject(entity) is not { } held) { _createdInventoryPending.Remove(entity); _createdInventoryBeforeLeader.Remove(entity); continue; }
             if (held.Map != map) continue;
             _createdInventoryPending.Remove(entity);
+            var beforeLeader = _createdInventoryBeforeLeader.Remove(entity);
             // RK3 (0x463C60): the body does nothing for an NPC without an inventory source, a dead one or one with a PC leader (the source is read first, 0x4641A0); only then it clears and generates.
-            if (!restock.GeneratesAtCreation(map, entity))
+            if (!restock.GeneratesAtCreation(map, entity, beforeLeader))
             {
                 GD.Print($"ARC-DEV-386 created-critter-inventory entity={entity} nothing (no inventory source, dead, led by the PC or not a holder here: source={restock.Facts(map, entity)?.InventorySource.ToString() ?? "-"})");
                 continue;

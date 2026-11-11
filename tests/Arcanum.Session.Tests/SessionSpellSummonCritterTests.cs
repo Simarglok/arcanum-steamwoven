@@ -138,6 +138,14 @@ public sealed class SessionSpellSummonCritterTests
         using var ___ = third;
         Cast(third, thirdCaster, thirdRecord);
         Assert.AreEqual(0, Made(third).Count);
+        Assert.IsTrue(thirdCaster.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady && e.Value == (int)SpellComponentType.Summon), "Clear_Faction on a critter: not ready");
+
+        // A weighted list (0) draws once over 0..total-1 through the run's roll and picks an entry of the list.
+        var (fourth, fourthCaster, _, fourthRecord) = Setup(Shaped(ListSpell, new SummonData(0, 0, 0, 0)));
+        using var ____ = fourth;
+        Cast(fourth, fourthCaster, fourthRecord);
+        var picked = Made(fourth).Single().Prototype - 20;
+        CollectionAssert.Contains(SummonLists.EntriesOf(0).Select(e => e.Prototype).ToArray(), picked, "list 0 picks one of its entries");
     }
 
     [TestMethod]
@@ -151,7 +159,8 @@ public sealed class SessionSpellSummonCritterTests
         // The kill (0x45DA20) tells the runs the creature is gone (0x459740); the first loop ends the run that lists it (SUM7), whose END reaches its END_CALLBACK Destroy.
         Assert.IsTrue(((ISpellRunHost)caster).SummonedListHolds(owner.QuerySpellRuns()[run]!, critter.Entity), "the run's summoned list holds the creature");
         var queued = owner.QueryEvents().Count(e => e.Kind == SessionEventKinds.SpellRun);
-        caster.ObjectGone(critter.Entity);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, SessionLifeTarget.Critter(critter.Entity, new LifeFacts(), default), new LifeDamage { HitPoints = 1000 }).Disposition, "the real kill path");
+        caster.FireItemEvents([]); // the host's next call tells the runs the object is gone (the kill only queues it, SessionSpellRunEndTests)
         Assert.AreEqual(queued + 1, owner.QueryEvents().Count(e => e.Kind == SessionEventKinds.SpellRun), "the run's interrupt is queued (0x4571E0 only queues it): " + Trail(caster));
         // The queued interrupt fires: the run goes to END, whose callback does not wait here, and its END_CALLBACK Destroy takes the creature.
         Assert.AreEqual(GameSessionDisposition.Changed, caster.Act(new(SessionSpellRunActionKind.Interrupt, run)).Disposition);

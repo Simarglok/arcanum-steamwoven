@@ -1,5 +1,6 @@
 using Arcanum.Data.Magic;
 using Arcanum.Session;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Godot;
@@ -135,18 +136,11 @@ public partial class TerrainViewerApp
             Step(20);
             await Capture("later");
             Require(session.QuerySpellRuns()[run] is not null, "the maintained run goes on");
-            // The creature dies (the kill tells the runs the object is gone, 0x459740): the run that made it ends, its END_CALLBACK destroys it, the party forgets it.
-            var queued = session.QueryEvents().Count(e => e.Kind == SessionEventKinds.SpellRun);
-            caster.ObjectGone(entity);
-            Require(session.QueryEvents().Count(e => e.Kind == SessionEventKinds.SpellRun) > queued, "the run's interrupt was queued by the death");
+            // The creature is killed through the session's life step (the kill tells the runs the object is gone, 0x459740): the run that made it ends, its END_CALLBACK destroys it, the party forgets it.
+            var killed = session.ApplyDamage(session.Version, SessionLifeTarget.Critter(entity, new LifeFacts(), default), new LifeDamage { HitPoints = 100000 });
+            Require(killed.Disposition == GameSessionDisposition.Changed && killed.Outcome!.Events.HasFlag(LifeEvents.Died), $"the killing damage kills it ({killed.Failure})");
             var ended = 0;
             for (; ended < 80 && session.QuerySpellRuns()[run] is not null; ended++) Step();
-            if (session.QuerySpellRuns()[run] is not null)
-            {
-                GD.Print("ARC-MAGIC-053 summon-undead the stage's clock did not fire the queued interrupt: it is given directly");
-                Require(caster.Act(new(SessionSpellRunActionKind.Interrupt, run)).Disposition == GameSessionDisposition.Changed, "the interrupt ends the run");
-                FlushSpellLog(null);
-            }
             Step(3);
             Require(session.QuerySpellRuns()[run] is null, "the run ended with its creature");
             Require(session.QueryCreatedObject(entity) is null, "the END_CALLBACK Destroy took the creature away");

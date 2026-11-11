@@ -50,7 +50,7 @@ public static class SummonLists
         if (byAptitude)
         {
             foreach (var entry in entries) if (aptitude <= entry.Value) return entry.Prototype;
-            return entries[0].Prototype;
+            return entries[^1].Prototype;
         }
         var roll = draw(0, Total(list) - 1);
         foreach (var entry in entries)

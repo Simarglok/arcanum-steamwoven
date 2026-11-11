@@ -59,7 +59,7 @@ public partial class TerrainViewerApp
         if (_areaSession is not { } owner || owner.QueryCreatedObject(entity) is not { } made || made.Map != new SessionMapId(CurrentAreaMap)) return;
         if (AreaAiHostNow() is { } ai) SyncCreatedCritters(owner, ai);
         else if (_createdPrototypeRead is { } read && _inventoryHost is { } inventory) inventory.Resolver.SetCreated(CreatedCrittersOf(owner, read).Maps(new SessionMapId(CurrentAreaMap)));
-        QueueCreatedInventory(entity);
+        QueueCreatedInventory(entity, beforeLeader: true);
         QueueCreationNotice(entity, made.Cell);
         _summonedCrittersForSelfTest.Add(entity);
         if (_summonedCrittersForSelfTest.Count > 64) _summonedCrittersForSelfTest.RemoveAt(0);
