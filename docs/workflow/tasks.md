@@ -79,9 +79,11 @@ code ([naming](task-naming.md#codes-from-2026-11-12-the-issue-number)).
   recheck or an item with no trace in the repository; the body asks for a
   repeatable case).
 - **Dependencies** are GitHub relations, not only text:
-  `gh issue edit N --add-blocked-by M` (needs a gh with `--add-blocked-by`, 2.103 is checked, on the owner's Mac; a
-  cloud session writes `Blocked by` in the body and the coordinator sets the
-  relation on the Mac). A blocked issue has `status:blocked`; the thread that
+  `gh issue edit N --add-blocked-by M` (needs a gh with `--add-blocked-by`, 2.103 is checked, on the owner's Mac). A
+  cloud session (older `gh`, the GitHub MCP has no tool for it) sets the same
+  relation with the REST call `gh api -X POST repos/Simarglok/arcanum-steamwoven/issues/N/dependencies/blocked_by -F issue_id=<database id of M>`
+  (the `id` field of `gh api repos/.../issues/M`, not its number; checked from a
+  cloud session on 2026-11-11), and also writes `Blocked by` in the body. A blocked issue has `status:blocked`; the thread that
   merges a blocker lists the issues it unblocks in its report, and the
   coordinator moves them to `status:ready`. An epic is a parent issue
   (`--parent`, label `epic`) of its slices; the parent carries no code of its own

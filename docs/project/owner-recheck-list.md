@@ -694,6 +694,22 @@ Known differences (documented, not bugs):
 
 - The hover hints of the buttons and values are not shown in the editor (the original shows them in the game's text bar).
 
+## ARC-UI-148 — Generated interface: the inventory window (S3, 2026-11-12)
+
+The rules are in [viewer slice S3](../rendering/hd-interface-density.md#viewer-slice-s3-arc-ui-148). Set the HD interface line on the launcher screen to **Generated (experimental)**, start a game
+and press `I`. Compare with the same window under **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open the inventory in a 1280 × 800 window, then press `I` again. | The pack grid, the doll grid, the count bars and the name box are drawn by code in the same places as in HD; the grid cells, the slots and every click land where they did. | open |
+| 2 | Drag the window's edge to make it bigger and smaller while the inventory is open. | The frame redraws at the new size (the previous picture stays until it is ready); the lines of the grid stay sharp and one unit wide at every size. | open |
+| 3 | Pick up an item and drop it into a cell and into a wear slot. | Same behaviour as in HD and Legacy. | open |
+| 4 | Look at the drop and use boxes. | Still the original's picture (the glow and the green or red corners show the state). | open |
+
+Known differences (documented, not bugs):
+
+- The curved flourishes at the corners of the original's boxes are not drawn in Generated: the boxes are plain rectangles with a brass rim.
+
 ## ARC-MAGIC-058 — Spell runs at the hero's change of map (2026-11-12)
 
 The hero's change to another map (a jump point, the Crash Site cave, a map-mode exit) ends every spell run that names an object that does not travel with the hero (the hero, the followers that go along and what they hold); runs of the hero and of the followers that travel go on. Built from the executable (functions 0x45C720, 0x44F7A0, 0x44FA70, 0x44FC30; [rules](../world/spell-run-rules.md#runs-at-the-players-change-of-map-arc-magic-058-mt9b)). Compare in both games.
