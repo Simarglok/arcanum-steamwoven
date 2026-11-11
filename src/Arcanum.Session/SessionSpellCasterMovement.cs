@@ -23,9 +23,9 @@ public sealed partial class SessionSpellCaster
         if (component.Movement is not { Location: SpellComponentTables.TargetTile }) return null;
         // No current target object (0x5E6D48 and 0x5E6D4C both 0): the component does nothing, and it is not "not ready".
         if (target.Object is not { } obj) return SpellComponentOutcome.None;
-        if (obj.Id != Hero && !CritterKnown(obj.Id)) return null;
         // A resisted run (the margin, +0x144, written by the per-target stage) moves nothing, and a target tile of (0, 0) is no tile (the original tests the pair for zero).
         if (run.Margin != 0 || run.TargetTile is { X: 0, Y: 0 }) return SpellComponentOutcome.None;
+        if (obj.Id != Hero && !CritterKnown(obj.Id)) return null;
         _log.Add(new(SpellCastEventKind.Movement, run.Id, unchecked((int)run.TargetTile.X), obj.Id, unchecked((int)run.TargetTile.Y)));
         return SpellComponentOutcome.None;
     }
