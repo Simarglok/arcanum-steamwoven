@@ -32,6 +32,8 @@ public sealed partial class AreaDataOwner
     private Dictionary<(AreaEntryIdentity Entry, int Group, int Frame, int Palette, bool SingleRotationClass, string? Policy), AreaVisualRecord>? _sharedFrames;
     // ARC-DEV-375: the records this build derived for the resident memo, committed after the build's closing authentication (null without a memo).
     private List<KeyValuePair<ResidentVisualKey, AreaVisualRecord>>? _residentStaged;
+    // ARC-DEV-388: the editor record facts this build derived for the resident editor memo, committed on the same terms.
+    private (ResidentEditorKey Key, ResidentEditorFact[] Facts)? _residentEditorStaged;
     private static readonly string[] CritterRoots = ["art/critter/", "art/monster/", "art/unique_npc/"];
 
     /// <summary>The file a critter (2), monster (12) or unique NPC (13) art id names in the

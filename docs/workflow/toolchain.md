@@ -208,7 +208,7 @@ a budget or a regression gate. Other optimisations are shown with it: run before
 - **Resident art across map loads (ARC-DEV-375).** A map load keeps decoded frames and visual records for the next one ([design](../world/area-loader.md#resident-frames-and-visuals-across-map-loads-arc-dev-375)).
   The load worker's read prints `load.worker.read.{strict,scene,copy}` spans and `ARC-DEV-375 visuals ...` / `ARC-DEV-375 frames resident-hits=H read=R ...` lines
   (hits against frames actually read, the store's size). `ARC_AREA_RESIDENT=0` in the environment (`--env ARC_AREA_RESIDENT=0` on a smoke) turns both stores off
-  for a before/after comparison; nothing else depends on it.
+  for a before/after comparison; nothing else depends on it. The editor `.mob` facts (ARC-DEV-388) have their own store, off with `ARC_AREA_RESIDENT_EDITOR=0` or `ARC_AREA_RESIDENT=0`, and the worker prints `ARC-DEV-388 editor-records served=B ms=T ...`.
 - **Reading the numbers.** The Mac is shared and a Debug source run is slower than the packaged build: the diagnosis took medians
   over several runs and looked at the load average. A packaged build needs the probe's switch in the environment (`ARC_PERF_PROBE=1`);
   HD runs need `ARC_HD_PACK` and settings files as the diagnosis's reproduction says.
