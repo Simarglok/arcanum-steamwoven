@@ -233,6 +233,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("critter-light") == true) await RunAreaCritterLightSmokeAsync();
                                 // ARC-DEV-362 (technology audit T-a): only when named, degrees bought on the sheet, a Herbology heal and a Gun Smithy gun assembled, used and loaded again (--hero, best on the map "crash site cave").
                                 if (only?.Contains("tech-craft") == true) await RunAreaTechCraftSmokeAsync();
+                                // ARC-DEV-365 (technology audit T-g): only when named, the item cursor from the use icon, a press on a tile (goal 41) and on an NPC (goal 39) with a trap device (--hero, a map with a living NPC).
+                                if (only?.Contains("item-aim") == true) await RunAreaItemAimSmokeAsync();
                                 // ARC-DEV-367 (O10): only when named, the timing probe's tables: the startup marks, six opens of each window, a map change out and back (--hero, a sector with a map exit).
                                 if (only?.Contains("perf") == true) await RunAreaPerfSmokeAsync();
                                 // ARC-DEV-367 (O10): only when named, the startup marks to the main menu's first frame and a new game from it (--main-menu).

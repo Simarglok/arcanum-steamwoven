@@ -13,13 +13,15 @@ public sealed record AreaItemUseFacts(string Entity, int Type, uint ItemFlags, u
 {
     public const int FoodType = 9, ScrollType = 10, WrittenType = 13, GenericType = 14;
     /// <summary>OIF_IS_MAGICAL, OIF_CAN_USE_BOX, OIF_NEEDS_TARGET and OIF_USE_IS_THROW (bit order of the item flag names).</summary>
-    public const uint MagicalFlag = 0x4, CanUseBoxFlag = 0x80, NeedsTargetFlag = 0x100, UseIsThrowFlag = 0x10000;
+    public const uint MagicalFlag = 0x4, CanUseBoxFlag = 0x80, NeedsTargetFlag = 0x100, UseIsThrowFlag = 0x10000, NoRangedUseFlag = 0x100000;
     /// <summary>The generic flags of lockpicks, a trap device and a healing kit (ledger TP1, ARC-SKILLS-005/006).</summary>
     public const uint ShieldLocationFlag = 0x1, LockpickFlag = 0x2, TrapDeviceFlag = 0x4, HealingKitFlag = 0x8;
     private const int WeaponType = 5, ArmorType = 7;
 
     public bool CanUseBox => (ItemFlags & CanUseBoxFlag) != 0;
     public bool NeedsTarget => (ItemFlags & NeedsTargetFlag) != 0;
+    /// <summary>ARC-DEV-365: <c>OIF_NO_RANGED_USE</c> (IA8): the use walks next to the target first.</summary>
+    public bool NoRangedUse => (ItemFlags & NoRangedUseFlag) != 0;
     public bool UseIsThrow => (ItemFlags & UseIsThrowFlag) != 0;
     public bool Magical => (ItemFlags & MagicalFlag) != 0;
     public bool Lockpick => Type == GenericType && (GenericFlags & LockpickFlag) != 0;
