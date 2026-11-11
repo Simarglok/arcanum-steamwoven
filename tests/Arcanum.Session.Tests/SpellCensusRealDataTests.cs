@@ -2,6 +2,7 @@ using Arcanum.Data.Characters;
 using Arcanum.Data.Content;
 using Arcanum.Data.Magic;
 using Arcanum.Data.Messages;
+using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Magic;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -91,7 +92,8 @@ public sealed class SpellCensusRealDataTests
         (79, "ObjFlag", "ObjFlag"),
         (83, "ObjFlag", "Effect,ObjFlag"),
         (84, "ObjFlag", "ObjFlag"),
-        (85, "", "Effect"),
+        // 85 adds effect 145 with the cause injury (7), which the session refuses as a spell effect cause (EffectDomain.OwnCause).
+        (85, "EffectNotSaved", "Effect"),
         (88, "Trait", "Trait"),
         (89, "AGoal", "AGoal"),
         (91, "ObjFlag", "ObjFlag"),
@@ -162,8 +164,13 @@ public sealed class SpellCensusRealDataTests
         var read = stack.Read(source);
         Assert.AreEqual(ContentReadStatus.Read, read.Status);
         var effects = MesFile.Parse(read.Bytes!, new()).File ?? throw new AssertFailedException($"{AreaEffectsPath} not parsed");
-        // The viewer's rule of a number (TerrainViewerSpellCast: SessionEffectDefinition.FromRule over the effect tables); every effect a record 0..139 names is 50 or more.
-        SessionEffectDefinition? Effect(int number) => EffectRules.Read(effects, number).Rule is { } rule ? SessionEffectDefinition.FromRule(rule) : null;
+        // The viewer's rule of a number (TerrainViewerSpellCast: SessionEffectDefinition.FromRule over the effect tables, a rule the session refuses is none). Numbers 0..49 come from
+        // the module's gameeffect.mes there; the records 0..139 name none of them (asserted below), so effect.mes alone answers here.
+        SessionEffectDefinition? Effect(int number)
+        {
+            try { return EffectRules.Read(effects, number).Rule is { } rule ? SessionEffectDefinition.FromRule(rule) : null; }
+            catch (ArgumentException) { return null; }
+        }
 
         var expected = Expected.ToDictionary(e => e.Record, e => (e.Hero, e.Npc));
         Assert.AreEqual(Expected.Length, expected.Count, "one row per record");
@@ -172,6 +179,7 @@ public sealed class SpellCensusRealDataTests
         for (var number = 0; number < SpellRecord.FirstTechnology; number++)
         {
             var record = SessionSpellRecords.Translate(spells.Data!.Records[number]);
+            Assert.IsFalse(record.Components.Any(c => c.Effect is { Effect: < EffectRules.FirstNumber }), $"record {number} names a module effect (0..49)");
             var actual = (Hero: NotReady(record, Hero, Effect), Npc: NotReady(record, Npc, Effect));
             if (number < SpellRecord.CollegeSpells && actual is ("", "")) ready++;
             if (actual != expected.GetValueOrDefault(number, ("", ""))) differences.Add($"        ({number}, \"{actual.Hero}\", \"{actual.Npc}\"),");
@@ -189,7 +197,7 @@ public sealed class SpellCensusRealDataTests
         [
             Damage(SpellAction.Begin, 0, 1, 1, 0),
             new(SpellAction.Begin, SpellComponentType.Summon, area, 0, 0, new SummonData(1, 0, 0, 0)),
-            new(SpellAction.End, SpellComponentType.Effect, area, 0, 0, new EffectData(62, true, 1, 0, 0)),
+            new(SpellAction.End, SpellComponentType.Effect, area, 0, 0, new EffectData(62, true, 1, (int)EffectCause.Spell, 0)),
         ]));
         SessionEffectDefinition? Effect(int number) => number == 62 ? new(62, [new EffectChange(EffectAttributeKind.Stat, 11, EffectChangeOperator.Add, -5)]) : null;
         Assert.AreEqual("Summon", NotReady(record, Hero, Effect));
@@ -200,7 +208,7 @@ public sealed class SpellCensusRealDataTests
     private const string AreaEffectsPath = "rules/effect.mes";
 
     // Each component of the record, in file order, applied by a fresh host to the target as the run's action would (the hero the source and parent, no margin); the types the host
-    // logged as not ready, sorted and distinct.
+    // logged as not ready, sorted and distinct, and a session refusal of a taken component's write (ObjectFlagNotSaved, EffectNotSaved) by its event name, so it shows as a change too.
     private static string NotReady(SessionSpellRecord record, string target, Func<int, SessionEffectDefinition?> effects)
     {
         using var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
@@ -212,6 +220,7 @@ public sealed class SpellCensusRealDataTests
         var tile = target == Hero ? HeroTile : NpcTile;
         foreach (var c in record.Components)
             caster.Apply(new SpellRun(0, record.Data.Number, c.Action, hero, hero, HeroTile, to, tile, null, SpellRunFlags.Active), c.Index, new(to, tile));
-        return string.Join(",", caster.Log.Where(e => e.Kind == SpellCastEventKind.ComponentNotReady).Select(e => ((SpellComponentType)e.Value).ToString()).Distinct().Order(StringComparer.Ordinal));
+        return string.Join(",", caster.Log.Where(e => e.Kind is SpellCastEventKind.ComponentNotReady or SpellCastEventKind.ObjectFlagNotSaved or SpellCastEventKind.EffectNotSaved)
+            .Select(e => e.Kind == SpellCastEventKind.ComponentNotReady ? ((SpellComponentType)e.Value).ToString() : e.Kind.ToString()).Distinct().Order(StringComparer.Ordinal));
     }
 }
