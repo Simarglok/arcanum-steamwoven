@@ -128,9 +128,23 @@ public sealed class MockScreenTests
             Assert.AreEqual(0, model.TopStripOuter.Y);
             Assert.AreEqual(DeviceGrid.Edge(800, s), model.TopStripOuter.Width);
             Assert.AreEqual((width - DeviceGrid.Edge(800, s)) / 2, model.TopStripOuter.X);
-            Assert.AreEqual(height, model.PlayArea.Bottom + DeviceGrid.Edge(MockScreen.BottomStripUnits, s));
+            Assert.AreEqual(height, model.BottomStripOuter.Bottom);
+            Assert.AreEqual(model.BottomStripOuter.Y, model.PlayArea.Bottom);
             Assert.IsTrue(model.WindowOuter.Y >= model.PlayArea.Y && model.WindowOuter.Bottom <= model.PlayArea.Bottom, $"s={s}");
             Assert.IsTrue(model.Ops.All(o => o.Rect.X >= 0 && o.Rect.Y >= 0 && o.Rect.Right <= width && o.Rect.Bottom <= height), $"s={s}");
+        }
+    }
+
+    [TestMethod]
+    public void WindowNeverOverlapsTheBottomStripOnAFullScreen()
+    {
+        foreach (var s in new[] { 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 3.75, 4.0 })
+        {
+            var model = MockScreen.Build(DeviceGrid.Round(960 * s), DeviceGrid.Round(600 * s), s, Interaction.None);
+            Assert.AreEqual(model.HeightPx, model.BottomStripOuter.Bottom, $"s={s}");
+            Assert.AreEqual(DeviceGrid.Edge(441, s), model.BottomStripOuter.Y, $"s={s}: bottom strip on the 600-unit grid");
+            Assert.IsTrue(model.WindowOuter.Bottom <= model.BottomStripOuter.Y, $"s={s}: window {model.WindowOuter} strip {model.BottomStripOuter}");
+            Assert.IsTrue(model.WindowOuter.Y >= model.TopStripOuter.Bottom, $"s={s}");
         }
     }
 

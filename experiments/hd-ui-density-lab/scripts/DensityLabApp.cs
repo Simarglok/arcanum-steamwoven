@@ -23,6 +23,7 @@ public partial class DensityLabApp : Control
     public override void _Ready()
     {
         _host = DetectHost();
+        MouseFilter = MouseFilterEnum.Ignore;
         _canvas = new MockCanvas();
         AddChild(_canvas);
         SetAnchorsPreset(LayoutPreset.FullRect);

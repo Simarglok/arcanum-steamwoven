@@ -284,19 +284,21 @@ Built in [`experiments/hd-ui-density-lab`](../../experiments/hd-ui-density-lab/R
 holds the scale rule (`DensityScale`: `k` per host, `B = 1.5`, the player's scale, the fit clamp, the SteamOS fit rule),
 the grid rule (`DeviceGrid`), the components (`Chrome`: frames of bands stacked by rounded widths, fills, sunk and raised
 bevels) and the mock screen (`MockScreen`: both strips at 0..41 and 441..600 units, centred with generated side fill,
-sockets and four buttons on the top strip, two gauges, a message log, ten hotkey slots, three buttons and the vector lens on
+sockets and four buttons on the top strip (the bottom strip on the same 600-unit grid as the window, so the two never
+clash by a rounding pixel), two gauges, a message log, ten hotkey slots, three buttons and the vector lens on
 the bottom strip, one 800 × 400 window with a picture slot and a 10 × 7 slot grid, a tiled world placeholder). The Godot
 side draws it with whole-pixel rectangles, Godot's fallback font at the device size and the lens shader, reacts to resize,
 `dpi_changed` and a change of screen, and opens its window at 1280 × 800 logical points.
 
 Local observation, on the owner's Mac (Apple M4 Pro, Godot 4.7.2 .NET, GL Compatibility):
 
-- 16 MSTest tests over `Core/` pass: the scale table of [section 1](#1-one-scale-from-density) row by row, `k` per host, the
+- 17 MSTest tests over `Core/` pass: the scale table of [section 1](#1-one-scale-from-density) row by row, `k` per host, the
   SteamOS rule, the player's and the forced scale, line rounding, shared edges of neighbouring slots at nine scales, equal
-  bands with no gap or overlap, skipped bands that do not fit, strip anchoring, button states, the lens parameters.
+  bands with no gap or overlap, skipped bands that do not fit, strip anchoring, no overlap of the window and the bottom strip on a full 600-unit screen at nine scales, button states,
+  the lens parameters.
 - The self-test renders the mock screen off screen at `s` = 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.75 and 4 and reads every frame
-  back: 45 of 45 checks pass (both sides of the window frame and the top and bottom of the top strip are exactly their
-  colours for exactly their rounded widths; the lens is drawn).
+  back: 54 of 54 checks pass (both sides of the window frame, the top and bottom of the top strip and the top of the bottom
+  strip are exactly their colours for exactly their rounded widths; the lens is drawn).
 - The interactive lab started on the Mac's only active screen, a 2560 × 1440 monitor that Godot reports as scale 1,
   109 DPI, `screen_get_max_scale` 1: `k = 1`, the 1280 × 800 window gives `s = 1.333` (fit), full screen would give 1.5
   (density). The Mac's built-in Retina panel was not active (one screen listed), so **Retina (`k = 2`), a move between a

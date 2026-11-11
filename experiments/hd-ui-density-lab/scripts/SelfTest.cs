@@ -14,6 +14,21 @@ internal static class SelfTest
 
     internal static async Task RunAsync(Node host, HostKind hostKind, string? captureDir)
     {
+        try
+        {
+            await RunChecksAsync(host, hostKind, captureDir);
+        }
+        catch (Exception e)
+        {
+            GD.PrintErr($"ARC-RES-122 self-test result=FAIL exception={e.GetType().Name}: {e.Message}");
+            host.GetTree().Quit(1);
+        }
+    }
+
+    private static async Task RunChecksAsync(Node host, HostKind hostKind, string? captureDir)
+    {
+        if (captureDir is not null && !Path.IsPathRooted(captureDir))
+            throw new ArgumentException($"--capture needs an absolute directory, got '{captureDir}'");
         var reading = (DisplayServer.WindowGetSize(), DisplayServer.ScreenGetScale(), DisplayServer.ScreenGetDpi());
         GD.Print($"ARC-RES-122 self-test start host={hostKind} driver={DisplayServer.GetName()} window={reading.Item1.X}x{reading.Item1.Y} reportedScale={F(reading.Item2)} dpi={reading.Item3}");
         if (captureDir is not null) Directory.CreateDirectory(captureDir);
@@ -39,8 +54,13 @@ internal static class SelfTest
             for (var i = 0; i < 3; i++)
                 await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             var image = viewport.GetTexture().GetImage();
+            if (image is null || image.IsEmpty() || image.GetWidth() != width || image.GetHeight() != height)
+                throw new InvalidOperationException($"no frame read back at s={F(s)} (a headless or dummy renderer cannot run this test)");
             if (captureDir is not null)
-                image.SavePng(Path.Combine(captureDir, $"res122-s{s.ToString("0.00", CultureInfo.InvariantCulture)}.png"));
+            {
+                var saved = image.SavePng(Path.Combine(captureDir, $"res122-s{s.ToString("0.00", CultureInfo.InvariantCulture)}.png"));
+                if (saved != Error.Ok) throw new IOException($"capture at s={F(s)} failed: {saved}");
+            }
 
             foreach (var (name, problem) in Check(model, image))
             {
@@ -82,6 +102,12 @@ internal static class SelfTest
             stripBands.Select(b => b.Lit).ToArray(), stripWidths, Token.Wood, interior));
         yield return ("strip-bottom", Runs(image, column, strip.Bottom - 1, 0, -1,
             stripBands.Select(b => b.Shaded).ToArray(), stripWidths, Token.Wood, interior));
+
+        var lower = model.BottomStripOuter;
+        var lowerColumn = lower.X + DeviceGrid.Edge(605, s);
+        var lowerInterior = lower.Height - 2 * stripWidths.Sum();
+        yield return ("lower-strip-top", Runs(image, lowerColumn, lower.Y, 0, 1,
+            stripBands.Select(b => b.Lit).ToArray(), stripWidths, Token.Wood, lowerInterior));
 
         var lens = model.Lenses[0];
         var centre = image.GetPixel(lens.CenterX, lens.CenterY);

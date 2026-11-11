@@ -24,16 +24,18 @@ From the repository root, through the [launch queue](../../docs/workflow/toolcha
 
     L=experiments/hd-ui-density-lab
     ./arcanum run --kind dotnet -- sh -c '$HOME/.local/share/dotnet/dotnet restore '$L'/Arcanum.Experiments.HdUiDensityLab.csproj --locked-mode && $HOME/.local/share/dotnet/dotnet restore '$L'/tests/Arcanum.Experiments.HdUiDensityLab.Tests.csproj --locked-mode && $HOME/.local/share/dotnet/dotnet build --no-restore '$L'/Arcanum.Experiments.HdUiDensityLab.csproj && $HOME/.local/share/dotnet/dotnet test --no-restore '$L'/tests/Arcanum.Experiments.HdUiDensityLab.Tests.csproj'
-    ./arcanum run --kind window --expect 'ARC-RES-122 self-test start' -- env __GODOT_SHELL_ENV_SET=1 DOTNET_ROOT=$HOME/.local/share/dotnet PATH=$HOME/.local/share/dotnet:/usr/bin:/bin:/usr/sbin:/sbin /Applications/Godot_mono.app/Contents/MacOS/Godot --path $L -- --self-test [--capture DIR]
+    ./arcanum run --kind window --expect 'ARC-RES-122 self-test start' -- env __GODOT_SHELL_ENV_SET=1 DOTNET_ROOT=$HOME/.local/share/dotnet PATH=$HOME/.local/share/dotnet:/usr/bin:/bin:/usr/sbin:/sbin /Applications/Godot_mono.app/Contents/MacOS/Godot --path $L -- --self-test [--capture ABSOLUTE_DIR]
     ./arcanum run --kind window --expect 'ARC-RES-122 lab start' -- env __GODOT_SHELL_ENV_SET=1 DOTNET_ROOT=$HOME/.local/share/dotnet PATH=$HOME/.local/share/dotnet:/usr/bin:/bin:/usr/sbin:/sbin /Applications/Godot_mono.app/Contents/MacOS/Godot --path $L [--screen N]
 
 The self-test renders the mock screen off screen at `s` = 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.75 and 4, reads each frame back
-and checks that the window frame (both sides) and the top strip (top and bottom) are exactly their token colours for
-exactly their rounded widths, and that the lens was drawn (45 checks). `--capture DIR` saves the frames; they are
-synthetic, keep them outside git anyway. Godot's `--screen N` opens the interactive lab on another screen (a Retina panel
+and checks that the window frame (both sides), the top strip (top and bottom) and the top of the bottom strip are exactly
+their token colours for exactly their rounded widths, and that the lens was drawn (54 checks). `--capture ABSOLUTE_DIR`
+saves the frames (a relative path is refused: Godot runs in the project folder); they are synthetic, keep them outside
+git anyway. Any exception or a frame that cannot be read back ends the run with `result=FAIL` and exit 1. Godot's `--screen N` opens the interactive lab on another screen (a Retina panel
 and a 1× monitor give different `k`).
 
 ## Not covered
 
+A forced `s` (key `S`) is not clamped to the window: above the fit the strips run off screen, as intended for a lab.
 Windows and SteamOS paths are code only (no run); physical readability and the look against the original are the owner's
 judgement; performance was not measured.

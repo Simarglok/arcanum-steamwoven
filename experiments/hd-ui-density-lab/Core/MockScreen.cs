@@ -33,6 +33,7 @@ public sealed record ScreenModel(
     IReadOnlyList<HitTarget> Buttons,
     DeviceRect WindowOuter,
     DeviceRect TopStripOuter,
+    DeviceRect BottomStripOuter,
     DeviceRect PlayArea);
 
 /// <summary>The lab's mock screen: the two HUD strips at the original's rectangles (top 0..41, bottom 441..600 UI units,
@@ -73,9 +74,11 @@ public static class MockScreen
         }
         Text(texts, "TOP STRIP 800 x 41 units", 180, 12, 13, Token.Text, s, blockX, 0);
 
-        // Bottom strip, anchored to the bottom edge.
-        var bottomY = heightPx - DeviceGrid.Edge(BottomStripUnits, s);
-        var bottom = DeviceGrid.Place(new UnitRect(0, 0, DensityScale.UnitsWide, BottomStripUnits), s, blockX, bottomY);
+        // Bottom strip, anchored to the bottom edge on the same unit grid as a full 600-unit screen, so that its top edge is
+        // Edge(441) whenever the screen is exactly 600 units high (no 1 px clash with the 400-unit window).
+        var gridY = heightPx - DeviceGrid.Edge(DensityScale.UnitsHigh, s);
+        var bottom = DeviceGrid.Place(new UnitRect(0, DensityScale.UnitsHigh - BottomStripUnits, DensityScale.UnitsWide, BottomStripUnits), s, blockX, gridY);
+        var bottomY = bottom.Y;
         SideFill(ops, widthPx, bottom);
         Chrome.Fill(ops, Chrome.Frame(ops, bottom, Chrome.ButtonFrame, s), Token.Wood);
         Gauge(ops, new UnitRect(14, 12, 30, 104), 0.7, Token.GaugeRed, s, blockX, bottomY);
@@ -107,7 +110,8 @@ public static class MockScreen
         var playArea = new DeviceRect(0, top.Bottom, widthPx, Math.Max(0, bottomY - top.Bottom));
         var windowHeight = DeviceGrid.Edge(400, s);
         var windowY = top.Bottom + Math.Max(0, (playArea.Height - windowHeight) / 2);
-        var window = DeviceGrid.Place(new UnitRect(0, 0, 800, 400), s, blockX, windowY);
+        var placed = DeviceGrid.Place(new UnitRect(0, 0, 800, 400), s, blockX, windowY);
+        var window = placed with { Height = Math.Max(0, Math.Min(placed.Bottom, Math.Max(bottomY, top.Bottom)) - placed.Y) };
         Chrome.Fill(ops, Chrome.Frame(ops, window, Chrome.PanelFrame, s), Token.Wood);
         Text(texts, "INVENTORY (placeholder layout)", 16, 10, 14, Token.Text, s, blockX, windowY);
         Button(ops, texts, buttons, interaction, "close", "X", new UnitRect(764, 8, 26, 22), s, blockX, windowY, enabled: true);
@@ -121,7 +125,7 @@ public static class MockScreen
             Chrome.Fill(ops, Chrome.Frame(ops, slot, Chrome.SunkFrame, s), Token.WoodDark);
         }
 
-        return new ScreenModel(widthPx, heightPx, s, ops, texts, lenses, buttons, window, top, playArea);
+        return new ScreenModel(widthPx, heightPx, s, ops, texts, lenses, buttons, window, top, bottom, playArea);
     }
 
     private static void World(List<ChromeOp> ops, int widthPx, int heightPx, double s)
