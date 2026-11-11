@@ -2,7 +2,8 @@ namespace Arcanum.Simulation.Character;
 
 /// <summary>
 /// Fixed rules profile <see cref="RulesId"/>. Numbers are the claims of docs/world/character-stats-runtime.md, not yet
-/// checked in the retail executable (evidence level F0, docs/verification/functions.csv); retail parity is NOT_VERIFIED.
+/// checked in the retail executable (evidence level F0, docs/verification/functions.csv); retail parity is NOT_VERIFIED. The limits of
+/// <see cref="Range"/> were compared with the executable's tables (0x4B0FC0, 0x4B0FD0; ARC-RES-109, F1).
 /// </summary>
 internal static class CharacterStatRules
 {
@@ -35,6 +36,8 @@ internal static class CharacterStatRules
 
     public static int Default(CharacterStat stat) => IsPrimary(stat) ? 8 : 0;
 
+    [OriginalFunction(0x4B0FC0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4B0FD0, OriginalFunctionScope.Partial)]
     public static StatRange Range(CharacterRace race, CharacterStat stat) => stat switch
     {
         <= CharacterStat.Charisma => new(1, RacialPrimaryMaximum(race, stat)),
