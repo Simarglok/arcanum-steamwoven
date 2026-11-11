@@ -1,0 +1,923 @@
+address,state,class,level,name,domain,basis
+0x4D0090,not implemented,,F2,sector rectangle helper,residency,read: TB13 combat.md
+0x4D02E0,not yet read,,F0,sector rectangle helper,residency,census only
+0x4D0400,not yet read,,F0,sector cache list helper,residency,census only
+0x4D0440,not yet read,,F0,sector cache list helper,residency,census only
+0x4D04A0,not yet read,,F0,sector file name,residency,census only; named in world.md
+0x4D04E0,implemented,,F1,sector loaded test,residency,read in this task; marked Arcanum.Simulation.Residency.SectorCacheState.IsLoaded
+0x4D0540,registered,,F2,sector lock,residency,registry row (partial)
+0x4D0AE0,not implemented,,F2,sector unlock,residency,read: WM65 ui-audio.md
+0x4D0B40,registered,,F2,sector evict all,residency,registry row (partial)
+0x4D0BC0,registered,,F2,sector save and evict,residency,registry row (partial)
+0x4D0DE0,not implemented,,F1,sector cache limit check,residency,read: RL12 original-object-model.md
+0x4D0E70,not yet read,,F0,sector cache slot helper,residency,census only
+0x4D0EE0,not yet read,,F0,blocked sector test,maps,census only; named in ui-audio.md
+0x4D0F00,not yet read,,F0,blocked sector list helper,maps,census only
+0x4D0F40,not yet read,,F0,blocked sector list helper,maps,census only
+0x4D0F50,not implemented,,F1,blocked sector list helper,maps,read: PS25 original-persistence.md
+0x4D0F70,not yet read,,F0,blocked sector list helper,maps,census only
+0x4D1040,not yet read,,F0,sector counter helper,residency,census only
+0x4D1050,not yet read,,F0,sector counter helper,residency,census only
+0x4D1060,not implemented,,F2,lighting refresh over the loaded sectors,lighting,read: LT5 world.md
+0x4D10C0,not yet read,,F0,sector history helper,residency,census only
+0x4D10D0,not implemented,,F1,sector history helper,residency,read: PS8 original-persistence.md
+0x4D10E0,not yet read,,F0,sector history helper,residency,census only
+0x4D1100,not yet read,,F0,sector history helper,residency,census only
+0x4D1150,registered,,F2,sector history save,residency,registry row (partial)
+0x4D12B0,registered,,F2,sector history load,residency,registry row (partial)
+0x4D1310,not yet read,,F0,sector index helper,residency,census only
+0x4D13A0,not yet read,,F0,sector index helper,residency,census only
+0x4D13D0,not yet read,,F0,sector index helper,residency,census only
+0x4D1400,registered,,F2,sector slot free,residency,registry row (partial)
+0x4D1530,not relevant,editor,,editor sector loader,persistence,"level editor or tool only (named editor in its reading, or reached only from the editor callbacks)"
+0x4D1A30,registered,,F2,game sector load,maps,registry row (partial)
+0x4D22E0,not relevant,editor,,editor sector callback,persistence,"level editor or tool only (named editor in its reading, or reached only from the editor callbacks)"
+0x4D2460,not relevant,editor,,editor sector writer,persistence,"level editor or tool only (named editor in its reading, or reached only from the editor callbacks)"
+0x4D2750,not implemented,,F2,sector difference save,persistence,read: FM11 social.md
+0x4D2C00,not relevant,debug,,object system validation,objects,"validation, assertion or log output; fires on corruption or writes a debug file"
+0x4D2C30,not relevant,debug,,object system validation failure,objects,"validation, assertion or log output; fires on corruption or writes a debug file"
+0x4D2CA0,not implemented,,F1,sector index search,residency,read: the reading of this task census-triage-4d-4f.md
+0x4D2D30,not yet read,,F0,sector cache index helper,residency,census only
+0x4D2D70,not implemented,,F1,sector window loader,residency,read: RL12 original-object-model.md
+0x4D2EA0,not yet read,,F0,sector cache slot helper,residency,census only
+0x4D2ED0,not yet read,,F0,sector cache slot helper,residency,census only
+0x4D2F80,not yet read,,F0,sector cache slot helper,residency,census only
+0x4D2F90,not yet read,,F0,sector cache slot helper,residency,census only
+0x4D2FB0,not yet read,,F0,sector cache slot helper,residency,census only
+0x4D2FC0,not yet read,,F0,blocked sector list helper,maps,census only
+0x4D3000,not yet read,,F0,blocked sector list helper,maps,census only
+0x4D3050,not yet read,,F0,blocked sector list helper,maps,census only
+0x4D30A0,not implemented,,F1,blocked sector list save,maps,read: PS25 original-persistence.md
+0x4D31C0,not implemented,,F1,blocked sector list load,maps,read: PS25 original-persistence.md
+0x4D32D0,not yet read,,F0,change of place request helper,world,census only; named in source-coverage.md
+0x4D3300,not yet read,,F0,change of place request helper,world,census only
+0x4D3320,not yet read,,F0,change of place request helper,world,census only
+0x4D3330,registered,,F2,change of place ping,world,registry row (partial)
+0x4D3380,registered,,F2,change of place request,world,registry row (partial)
+0x4D3410,not yet read,,F0,change of place traveller list helper,world,census only
+0x4D3420,not implemented,,F2,change of place traveller list helper,world,read: FM8 social.md
+0x4D3460,registered,,F2,change of place process,world,registry row (partial)
+0x4D3760,not implemented,,F2,change of place scheduler,world,read: NI4 items.md
+0x4D39A0,not implemented,,F2,change of place payload writer,world,read: NI4 items.md
+0x4D3D60,not implemented,,F2,change of place npc preparation,world,read: NI4 items.md
+0x4D3E20,not implemented,,F2,change of place npc preparation,world,read: NI4 items.md
+0x4D3E80,not implemented,,F2,change of place traveller counter,world,read: NI4 items.md
+0x4D3EB0,not yet read,,F0,change of place move list helper,world,census only
+0x4D3EE0,not yet read,,F0,change of place move list helper,world,census only
+0x4D3F00,not yet read,,F0,change of place move list helper,world,census only
+0x4D3F30,not yet read,,F0,change of place move list helper,world,census only; named in source-coverage.md
+0x4D3F60,not implemented,,F2,item effect text loader,text,read: OH18 ui-audio.md
+0x4D3FE0,not yet read,,F0,item effect text loader,text,census only; named in combat-domain-load-map.md
+0x4D3FF0,not implemented,,F2,module item effect text loader,text,read: OH18 ui-audio.md
+0x4D4050,not yet read,,F0,module item effect text loader,text,census only; named in combat-domain-load-map.md
+0x4D4080,not implemented,,F2,item effect text,text,read: OH13 ui-audio.md
+0x4D40D0,not yet read,,F0,object description text loader,text,census only; named in items-economy.md
+0x4D4150,not yet read,,F0,object description text loader,text,census only; named in mes-reader.md
+0x4D4160,not yet read,,F0,object description text loader,text,census only; named in mes-reader.md
+0x4D41D0,not yet read,,F0,object description text loader,text,census only; named in mes-reader.md
+0x4D4210,implemented,,F1,object description text,text,read in this task; marked Arcanum.Data.Messages.LogbookTexts.DescriptionName
+0x4D4260,implemented,,F1,key name text,text,read in this task; marked Arcanum.Data.Messages.LogbookTexts.KeyName
+0x4D4290,not yet read,,F0,message file reader,text,census only; named in data.md
+0x4D43A0,registered,,F2,mes entry fetch,dialogue,registry row (partial)
+0x4D4420,not yet read,,F0,message file reader,text,census only
+0x4D4460,not yet read,,F0,message file reader,text,census only; named in virgil-follow-consent.md
+0x4D44E0,not yet read,,F0,message file reader,text,census only
+0x4D4500,not yet read,,F0,message file reader,text,census only
+0x4D4550,registered,,F2,mes run count,dialogue,registry row (full)
+0x4D45E0,not yet read,,F0,message file reader,text,census only; named in area-passability-closure.md
+0x4D4630,not yet read,,F0,message file reader,text,census only; named in prototype-extraction.md
+0x4D46D0,not yet read,,F0,message file reader,text,census only
+0x4D46F0,not yet read,,F0,message file reader,text,census only; named in area-passability-closure.md
+0x4D4840,not yet read,,F0,message file reader,text,census only
+0x4D4920,not yet read,,F0,message file reader,text,census only; named in mes-reader.md
+0x4D4A60,not yet read,,F0,message file reader,text,census only; named in content-product.md
+0x4D4B50,not yet read,,F0,message file reader,text,census only; named in mes-reader.md
+0x4D4C70,not yet read,,F0,message file reader,text,census only
+0x4D4C90,not yet read,,F0,message file reader,text,census only
+0x4D4CA0,not yet read,,F0,message file reader,text,census only; named in mes-reader.md
+0x4D4D10,not yet read,,F0,message file reader,text,census only
+0x4D4D30,not yet read,,F0,message file reader,text,census only
+0x4D4D70,not yet read,,F0,message file reader,text,census only
+0x4D4DD0,not yet read,,F0,message file reader,text,census only; named in source-coverage.md
+0x4D4E20,not implemented,,F2,floater init,ui,read: CH10 ui-audio.md
+0x4D5050,not yet read,,F0,floater setting helper,ui,census only
+0x4D5090,not yet read,,F0,floater setting helper,ui,census only
+0x4D50A0,not yet read,,F0,floater setting helper,ui,census only
+0x4D5130,not yet read,,F0,floater setting helper,ui,census only; named in ui-audio.md
+0x4D5150,not yet read,,F0,floater setting helper,ui,census only
+0x4D5160,not yet read,,F0,floater setting helper,ui,census only
+0x4D5180,not implemented,,F2,floater setting getter,ui,read: CH10 ui-audio.md
+0x4D5190,registered,,F2,floater tick,ui,registry row (partial)
+0x4D5310,not yet read,,F0,floater line update,ui,census only; named in ui-audio.md
+0x4D5450,registered,,F2,floater create,ui,registry row (partial)
+0x4D5570,not yet read,,F0,text floater helper,ui,census only; named in goal-table.md
+0x4D5620,not yet read,,F0,text floater helper,ui,census only; named in scripts.md
+0x4D56C0,not yet read,,F0,text floater helper,ui,census only
+0x4D5780,not yet read,,F0,text floater helper,ui,census only
+0x4D57E0,not yet read,,F0,text floater helper,ui,census only
+0x4D5820,not yet read,,F0,text floater helper,ui,census only
+0x4D5850,not yet read,,F0,text floater helper,ui,census only
+0x4D5870,not yet read,,F0,text floater helper,ui,census only
+0x4D58C0,registered,,F2,floater box,ui,registry row (partial)
+0x4D5950,not yet read,,F0,text floater helper,ui,census only
+0x4D59D0,not yet read,,F0,text floater helper,ui,census only
+0x4D59F0,not yet read,,F0,text floater helper,ui,census only
+0x4D5A30,not yet read,,F0,text floater helper,ui,census only
+0x4D5A60,registered,,F2,floater line rect,ui,registry row (partial)
+0x4D5AA0,registered,,F2,floater fade,ui,registry row (full)
+0x4D5B10,not implemented,,F2,floater setting,ui,read: CH10 ui-audio.md
+0x4D5B40,not implemented,,F2,floater setting,ui,read: CH10 ui-audio.md
+0x4D5B60,not implemented,,F2,floater setting,ui,read: CH10 ui-audio.md
+0x4D5B80,not implemented,,F2,speech bubble init,ui,read: SZ4 ui-audio.md
+0x4D5DB0,not yet read,,F0,speech bubble helper,ui,census only
+0x4D5DC0,not yet read,,F0,speech bubble helper,ui,census only; named in source-coverage.md
+0x4D5E20,not yet read,,F0,speech bubble helper,ui,census only
+0x4D5E60,not yet read,,F0,speech bubble helper,ui,census only
+0x4D5E80,not yet read,,F0,speech bubble helper,ui,census only
+0x4D5EB0,not implemented,,F1,speech bubble tick,ui,read: TL6 original-time-loop.md
+0x4D5F10,not yet read,,F0,speech bubble helper,ui,census only; named in ui-media-lifecycle.md
+0x4D5FE0,not yet read,,F0,speech bubble helper,ui,census only; named in goal-table.md
+0x4D6160,not yet read,,F0,speech bubble helper,ui,census only; named in goal-table.md
+0x4D6210,not yet read,,F0,speech bubble helper,ui,census only; named in goal-table.md
+0x4D62B0,not yet read,,F0,speech bubble helper,ui,census only; named in goal-table.md
+0x4D6320,not yet read,,F0,speech bubble helper,ui,census only
+0x4D6350,not yet read,,F0,speech bubble helper,ui,census only
+0x4D63B0,not yet read,,F0,speech bubble helper,ui,census only
+0x4D6410,not yet read,,F0,speech bubble helper,ui,census only
+0x4D67F0,not yet read,,F0,speech bubble setting,ui,census only; named in combat-magic-tech.md
+0x4D6840,not yet read,,F0,tile module setup,maps,census only; named in generated-wilderness-evidence.md
+0x4D68A0,not yet read,,F0,tile module setup,maps,census only
+0x4D68C0,not yet read,,F0,tile module setup,maps,census only
+0x4D6900,not yet read,,F0,tile module setup,maps,census only
+0x4D6950,not yet read,,F0,tile view loader,maps,census only; named in original-object-model.md
+0x4D7090,not implemented,,F1,tile index in a sector,maps,read: SA18 original-scripts-authority.md
+0x4D70B0,not implemented,,F2,tile art at a location,maps,read: LR6 world.md
+0x4D7110,not implemented,,F2,tile blocked test,maps,read: FC3 items.md
+0x4D7180,not implemented,,F1,tile soundproof test at a location,maps,read: the reading of this task census-triage-4d-4f.md
+0x4D71A0,not implemented,,F1,tile flag 2 test at a location,maps,read: the reading of this task census-triage-4d-4f.md
+0x4D71C0,not implemented,,F1,tile flag 8 test at a location,maps,read: the reading of this task census-triage-4d-4f.md
+0x4D71E0,not yet read,,F0,tile helper,maps,census only
+0x4D7480,not yet read,,F0,tile helper,maps,census only; named in generated-wilderness-evidence.md
+0x4D7590,not yet read,,F0,tile helper,maps,census only
+0x4D7820,not yet read,,F0,tile helper,maps,census only
+0x4D7980,not yet read,,F0,tile helper,maps,census only
+0x4D79C0,not yet read,,F0,tile helper,maps,census only
+0x4D7A00,not yet read,,F0,tile helper,maps,census only
+0x4D7A40,not yet read,,F0,tile helper,maps,census only
+0x4D7A90,not yet read,,F0,tile helper,maps,census only
+0x4D7AC0,not yet read,,F0,tile helper,maps,census only
+0x4D7C70,not yet read,,F0,tile helper,maps,census only
+0x4D7CB0,not yet read,,F0,tile helper,maps,census only
+0x4D7E90,not yet read,,F0,tile helper,maps,census only; named in generated-wilderness-evidence.md
+0x4D7F30,not implemented,,F2,light module init,lighting,read: SZ4 ui-audio.md
+0x4D8120,not yet read,,F0,light module setup,lighting,census only
+0x4D8160,not yet read,,F0,light module setup,lighting,census only
+0x4D81B0,not yet read,,F0,light module setup,lighting,census only
+0x4D81F0,not yet read,,F0,light module setup,lighting,census only
+0x4D8210,not yet read,,F0,light bounds helper,lighting,census only
+0x4D8320,not yet read,,F0,light bounds helper,lighting,census only
+0x4D8350,not yet read,,F0,light bounds helper,lighting,census only
+0x4D84B0,not yet read,,F0,light colour helper,lighting,census only
+0x4D84D0,not yet read,,F0,light colour helper,lighting,census only
+0x4D8500,not yet read,,F0,light colour helper,lighting,census only
+0x4D8530,not yet read,,F0,light colour helper,lighting,census only
+0x4D8560,not yet read,,F0,light colour helper,lighting,census only; named in lighting-time.md
+0x4D8590,not implemented,,F2,light animation,lighting,read: LT6 world.md
+0x4D8620,not implemented,,F2,light animation,lighting,read: LT6 world.md
+0x4D8660,not implemented,,F2,light animation,lighting,read: LT6 world.md
+0x4D89E0,not implemented,,F2,light draw and sampling,lighting,read: LT14 world.md
+0x4D9240,not yet read,,F0,light sample helper,lighting,census only; named in ui-audio.md
+0x4D9310,not implemented,,F2,light create and insert,lighting,read: LT2 world.md
+0x4D93B0,not implemented,,F2,light destroy,lighting,read: LT11 world.md
+0x4D94B0,not yet read,,F0,light list helper,lighting,census only
+0x4D94C0,not yet read,,F0,light list helper,lighting,census only
+0x4D94D0,not yet read,,F0,light list helper,lighting,census only
+0x4D94F0,not yet read,,F0,light list helper,lighting,census only
+0x4D9510,not yet read,,F0,light list helper,lighting,census only
+0x4D9570,not yet read,,F0,light list helper,lighting,census only; named in original-time-loop.md
+0x4D9590,registered,,F2,object lights,lighting,registry row (partial)
+0x4D9990,not implemented,,F2,light write back,lighting,read: LT11 world.md
+0x4D9A90,not implemented,,F2,light free,lighting,read: LT11 world.md
+0x4D9B20,not implemented,,F2,light shadow builder,lighting,read: LT14 world.md
+0x4DA310,not relevant,renderer,,light draw helper,lighting,drawing of the original's 2D pipeline (light and cursor blits); the viewer draws its own
+0x4DA360,not relevant,renderer,,light draw routine,lighting,drawing of the original's 2D pipeline (light and cursor blits); the viewer draws its own
+0x4DC210,not implemented,,F2,light draw and sampling,lighting,read: LT14 world.md
+0x4DCE10,not yet read,,F0,light object helper,lighting,census only; named in skills.md
+0x4DCEA0,not yet read,,F0,light object helper,lighting,census only
+0x4DCF60,not yet read,,F0,light object helper,lighting,census only
+0x4DD020,not implemented,,F2,light move,lighting,read: LT10 world.md
+0x4DD0A0,not implemented,,F2,light move,lighting,read: LT10 world.md
+0x4DD110,not yet read,,F0,light list helper,lighting,census only
+0x4DD130,not yet read,,F0,light list helper,lighting,census only
+0x4DD150,not implemented,,F2,light flags,lighting,read: LT8 world.md
+0x4DD230,not implemented,,F2,light flags,lighting,read: LT8 world.md
+0x4DD310,not yet read,,F0,light move,lighting,census only
+0x4DD320,not implemented,,F2,light move,lighting,read: LT10 world.md
+0x4DD500,not implemented,,F2,light offsets,lighting,read: LT10 world.md
+0x4DD720,not implemented,,F2,light frame step,lighting,read: LT7 world.md
+0x4DD830,not implemented,,F2,light frame step,lighting,read: LT7 world.md
+0x4DDA40,not yet read,,F0,light list helper,lighting,census only
+0x4DDA60,not yet read,,F0,light list helper,lighting,census only
+0x4DDA70,not yet read,,F0,light list helper,lighting,census only
+0x4DDAB0,not yet read,,F0,light list helper,lighting,census only
+0x4DDB70,not yet read,,F0,light list helper,lighting,census only
+0x4DDB80,not implemented,,F2,light colour set,lighting,read: LT9 world.md
+0x4DDD20,not implemented,,F2,light list reader,lighting,read: LT3 world.md
+0x4DDD70,not yet read,,F0,light list reader,lighting,census only
+0x4DDD90,not implemented,,F2,lighting refresh,lighting,read: LT5 world.md
+0x4DDF20,not relevant,renderer,,light shadow setup,lighting,drawing of the original's 2D pipeline (light and cursor blits); the viewer draws its own
+0x4DDF50,not relevant,renderer,,light shadow setup,lighting,drawing of the original's 2D pipeline (light and cursor blits); the viewer draws its own
+0x4DE060,not relevant,renderer,,light shadow setup,lighting,drawing of the original's 2D pipeline (light and cursor blits); the viewer draws its own
+0x4DE0B0,not yet read,,F0,light palette callback,lighting,census only; named in time-lighting-contract.md
+0x4DE200,not relevant,renderer,,light blit helper,lighting,drawing of the original's 2D pipeline (light and cursor blits); the viewer draws its own
+0x4DE250,not relevant,renderer,,light blit helper,lighting,drawing of the original's 2D pipeline (light and cursor blits); the viewer draws its own
+0x4DE290,not yet read,,F0,light footprint,lighting,census only; named in time-lighting-contract.md
+0x4DE390,not implemented,,F2,light tint,lighting,read: LT15 world.md
+0x4DE4D0,not yet read,,F0,light helper,lighting,census only
+0x4DE4F0,not yet read,,F0,light helper,lighting,census only
+0x4DE5D0,not yet read,,F0,shadow map loader,lighting,census only; named in lights-on-all-maps.md
+0x4DE730,not yet read,,F0,light shadow helper,lighting,census only
+0x4DE770,not yet read,,F0,light shadow helper,lighting,census only
+0x4DE7A0,not yet read,,F0,light shadow helper,lighting,census only
+0x4DE7C0,not yet read,,F0,light shadow helper,lighting,census only
+0x4DE7F0,not yet read,,F0,light shadow helper,lighting,census only
+0x4DE820,not yet read,,F0,lighting toggle refresh,lighting,census only
+0x4DE870,not implemented,,F2,light create,lighting,read: LT2 world.md
+0x4DE900,not implemented,,F2,light draw and sampling,lighting,read: LT14 world.md
+0x4DF1D0,not yet read,,F0,light helper,lighting,census only
+0x4DF310,not yet read,,F0,light helper,lighting,census only; named in generated-wilderness-evidence.md
+0x4DF390,not implemented,,F2,wall module helper,scene,read: SZ4 ui-audio.md
+0x4DF460,not yet read,,F0,wall module helper,scene,census only
+0x4DF480,not yet read,,F0,wall module helper,scene,census only
+0x4DF4C0,not yet read,,F0,wall module helper,scene,census only
+0x4DF500,not yet read,,F0,wall module helper,scene,census only; named in scene.md
+0x4DF740,not yet read,,F0,wall handler,scene,census only; named in original-object-model.md
+0x4E0240,not yet read,,F0,wall handler,scene,census only; named in original-object-model.md
+0x4E1490,not yet read,,F0,wall break handler,scene,census only; named in combat.md
+0x4E18F0,not yet read,,F0,wall handler,scene,census only; named in original-object-model.md
+0x4E1C00,not yet read,,F0,wall helper,scene,census only
+0x4E1EB0,not yet read,,F0,wall helper,scene,census only
+0x4E20A0,not yet read,,F0,wall handler,scene,census only; named in original-object-model.md
+0x4E25B0,not yet read,,F0,wall handler,scene,census only; named in original-object-model.md
+0x4E2C50,not yet read,,F0,wall piece update,scene,census only; named in source-coverage.md
+0x4E2FB0,not yet read,,F0,jump point list helper,maps,census only; named in source-coverage.md
+0x4E3020,not yet read,,F0,jump point list helper,maps,census only
+0x4E3030,not yet read,,F0,jump point list helper,maps,census only
+0x4E3040,not yet read,,F0,jump point list helper,maps,census only
+0x4E3050,not yet read,,F0,jump point list helper,maps,census only
+0x4E30A0,not implemented,,F1,jump point list load,maps,read: PS25 original-persistence.md
+0x4E3140,not yet read,,F0,jump point list helper,maps,census only
+0x4E3270,not implemented,,F2,jump point list save,maps,read: PS22 original-persistence.md
+0x4E32D0,not yet read,,F0,jump point list helper,maps,census only
+0x4E3320,not yet read,,F0,jump point list helper,maps,census only
+0x4E3450,not implemented,,F2,jump point get,maps,read: TR5 world.md
+0x4E36A0,not yet read,,F0,jump point list helper,maps,census only
+0x4E36D0,not yet read,,F0,jump point list helper,maps,census only
+0x4E3800,not yet read,,F0,jump point list helper,maps,census only; named in world-transitions.md
+0x4E3890,not implemented,,F1,jump point list save,maps,read: PS25 original-persistence.md
+0x4E3900,not yet read,,F0,object index helper,objects,census only; named in world-travel-runtime.md
+0x4E3950,not yet read,,F0,object index helper,objects,census only
+0x4E3980,not implemented,,F1,object index helper,objects,read: RL4 original-object-model.md
+0x4E39F0,not implemented,,F1,object index helper,objects,read: RL4 original-object-model.md
+0x4E3A70,not implemented,,F1,object index helper,objects,read: RL4 original-object-model.md
+0x4E3B30,not yet read,,F0,object index helper,objects,census only; named in character.md
+0x4E3BA0,not yet read,,F0,object index helper,objects,census only; named in character.md
+0x4E3BE0,not yet read,,F0,object index helper,objects,census only
+0x4E3C60,not yet read,,F0,object index helper,objects,census only
+0x4E3CB0,not yet read,,F0,object index helper,objects,census only
+0x4E3D10,not yet read,,F0,object index helper,objects,census only
+0x4E3D30,not implemented,,F2,object index helper,objects,read: TB13 combat.md
+0x4E3D60,not yet read,,F0,object index helper,objects,census only
+0x4E3DD0,not yet read,,F0,object index helper,objects,census only
+0x4E3E10,not yet read,,F0,object index helper,objects,census only
+0x4E3E90,not yet read,,F0,object index helper,objects,census only
+0x4E3F40,not yet read,,F0,object index helper,objects,census only; named in world-travel-runtime.md
+0x4E3F80,not yet read,,F0,object counter helper,objects,census only; named in source-coverage.md
+0x4E3F90,not yet read,,F0,object counter helper,objects,census only
+0x4E3FA0,not yet read,,F0,object field array helper,objects,census only; named in source-coverage.md
+0x4E4000,not implemented,,F2,object field array helper,objects,read: SA1 original-scripts-authority.md
+0x4E4180,not implemented,,F2,object field array helper,objects,read: QL3 scripts.md
+0x4E4280,not implemented,,F2,object field array helper,objects,read: SA1 original-scripts-authority.md
+0x4E4360,not yet read,,F0,object field array helper,objects,census only; named in crash-site-npc-dialog-evidence.md
+0x4E44F0,not yet read,,F0,object field array helper,objects,census only; named in original-persistence.md
+0x4E4660,not yet read,,F0,object field array helper,objects,census only
+0x4E47E0,not implemented,,F1,object field array helper,objects,read: SA17 original-scripts-authority.md
+0x4E4990,not yet read,,F0,object field array helper,objects,census only
+0x4E4B70,not yet read,,F0,object field array helper,objects,census only
+0x4E4BA0,not yet read,,F0,object field array helper,objects,census only
+0x4E4BD0,not yet read,,F0,object field array helper,objects,census only
+0x4E4C00,not yet read,,F0,object field array helper,objects,census only
+0x4E4C50,not yet read,,F0,object field array helper,objects,census only
+0x4E4C80,not yet read,,F0,object field array helper,objects,census only
+0x4E4CD0,not yet read,,F0,object pool setup,objects,census only; named in source-coverage.md
+0x4E4DB0,not yet read,,F0,object pool setup,objects,census only; named in original-object-model.md
+0x4E4E60,not implemented,,F2,object pool and handle helper,objects,read: OM2 original-object-model.md
+0x4E4F80,not implemented,,F1,object pool and handle helper,objects,read: OM1 original-object-model.md
+0x4E4FA0,not implemented,,F1,object pool and handle helper,objects,read: OM1 original-object-model.md
+0x4E4FB0,not implemented,,F2,object pool and handle helper,objects,read: OM2 original-object-model.md
+0x4E4FD0,not implemented,,F2,object pool and handle helper,objects,read: FM4 social.md
+0x4E50E0,not implemented,,F2,object pool and handle helper,objects,read: NI2 items.md
+0x4E5280,not yet read,,F0,object pool and handle helper,objects,census only
+0x4E52F0,not implemented,,F1,object pool and handle helper,objects,read: OM6 original-object-model.md
+0x4E5300,not implemented,,F1,object pool and handle helper,objects,read: OM6 original-object-model.md
+0x4E53C0,not yet read,,F0,object pool and handle helper,objects,census only
+0x4E5420,not yet read,,F0,object pool and handle helper,objects,census only
+0x4E5470,not implemented,,F1,object pool and handle helper,objects,read: SA20 original-scripts-authority.md
+0x4E5530,not yet read,,F0,object pool and handle helper,objects,census only
+0x4E5640,not yet read,,F0,object pool and handle helper,objects,census only
+0x4E56A0,not implemented,,F2,object pool and handle helper,objects,read: OM2 original-object-model.md
+0x4E56E0,not yet read,,F0,object pool and handle helper,objects,census only
+0x4E5770,not yet read,,F0,object pool and handle helper,objects,census only
+0x4E57E0,not implemented,,F1,object pool and handle helper,objects,read: OM5 original-object-model.md
+0x4E58C0,not yet read,,F0,object pool and handle helper,objects,census only
+0x4E5900,not implemented,,F1,object pool and handle helper,objects,read: OM1 original-object-model.md
+0x4E5920,not yet read,,F0,object pool and handle helper,objects,census only
+0x4E5960,not implemented,,F1,object pool and handle helper,objects,read: OM1 original-object-model.md
+0x4E5980,not yet read,,F0,sparse array helper,objects,census only
+0x4E59A0,not yet read,,F0,sparse array helper,objects,census only; named in source-coverage.md
+0x4E59B0,not yet read,,F0,sparse array helper,objects,census only
+0x4E5A50,not yet read,,F0,sparse array helper,objects,census only
+0x4E5AA0,not yet read,,F0,sparse array helper,objects,census only
+0x4E5B40,not yet read,,F0,sparse array helper,objects,census only
+0x4E5BF0,not yet read,,F0,sparse array helper,objects,census only
+0x4E5C60,not yet read,,F0,sparse array helper,objects,census only
+0x4E5CE0,not yet read,,F0,sparse array helper,objects,census only
+0x4E5D30,not yet read,,F0,sparse array helper,objects,census only
+0x4E5DB0,not yet read,,F0,sparse array helper,objects,census only
+0x4E5E20,not yet read,,F0,sparse array helper,objects,census only; named in original-persistence.md
+0x4E5E80,not yet read,,F0,sparse array helper,objects,census only
+0x4E5F10,not yet read,,F0,sparse array helper,objects,census only
+0x4E5F30,not yet read,,F0,sparse array helper,objects,census only
+0x4E5F70,not yet read,,F0,sparse array helper,objects,census only
+0x4E5FE0,not yet read,,F0,sparse array helper,objects,census only
+0x4E6040,not yet read,,F0,sparse array helper,objects,census only
+0x4E6130,not yet read,,F0,sparse array helper,objects,census only
+0x4E61B0,not yet read,,F0,sparse array helper,objects,census only
+0x4E61E0,not yet read,,F0,sparse array helper,objects,census only
+0x4E61F0,not yet read,,F0,sparse array helper,objects,census only
+0x4E6210,not yet read,,F0,sparse array helper,objects,census only
+0x4E6240,not yet read,,F0,sparse array helper,objects,census only; named in source-coverage.md
+0x4E62A0,not implemented,,F2,object id helper,objects,read: FM4 social.md
+0x4E62D0,not implemented,,F2,object id helper,objects,read: FM4 social.md
+0x4E6340,not implemented,,F2,object id helper,objects,read: OM3 original-object-model.md
+0x4E6360,not implemented,,F1,object id helper,objects,read: OM5 original-object-model.md
+0x4E6490,not yet read,,F0,object id helper,objects,census only
+0x4E6540,not implemented,,F2,object id helper,objects,read: OM3 original-object-model.md
+0x4E6570,not yet read,,F0,object id helper,objects,census only; named in area-passability-closure.md
+0x4E66B0,not implemented,,F2,object id helper,objects,read: MP3 data.md
+0x4E67A0,not implemented,,F2,object id helper,objects,read: MP3 data.md
+0x4E6970,not yet read,,F0,object id helper,objects,census only
+0x4E6A60,not yet read,,F0,object id helper,objects,census only
+0x4E6AA0,not implemented,,F2,object id helper,objects,read: MP3 data.md
+0x4E6B00,not yet read,,F0,object file helper,objects,census only; named in source-coverage.md
+0x4E6B60,not yet read,,F0,object file helper,objects,census only; named in source-coverage.md
+0x4E6BC0,not yet read,,F0,object file helper,objects,census only; named in prototype-extraction.md
+0x4E6D10,not yet read,,F0,object file writer,persistence,census only
+0x4E7010,not yet read,,F0,object file writer helper,persistence,census only; named in prototype-extraction.md
+0x4E7030,not yet read,,F0,object file writer helper,persistence,census only
+0x4E7050,not yet read,,F0,object file writer helper,persistence,census only
+0x4E70C0,not yet read,,F0,object file writer helper,persistence,census only
+0x4E71B0,not yet read,,F0,object file handle lookup,persistence,census only; named in source-coverage.md
+0x4E72B0,not yet read,,F0,object name text loader,text,census only; named in combat-domain-load-map.md
+0x4E72F0,not yet read,,F0,object name text loader,text,census only; named in combat-domain-load-map.md
+0x4E7320,not yet read,,F0,object name text loader,text,census only; named in combat-domain-load-map.md
+0x4E7390,not yet read,,F0,object name text loader,text,census only; named in combat-domain-load-map.md
+0x4E7400,not yet read,,F0,object name text,text,census only; named in prototype-extraction.md
+0x4E7430,not yet read,,F0,sparse array helper,objects,census only; named in source-coverage.md
+0x4E7470,not yet read,,F0,sparse array helper,objects,census only
+0x4E74A0,not implemented,,F2,sparse array helper,objects,read: SA3 original-scripts-authority.md
+0x4E7500,not yet read,,F0,sparse array helper,objects,census only
+0x4E7590,not yet read,,F0,sparse array helper,objects,census only; named in source-coverage.md
+0x4E75E0,not yet read,,F0,sparse array helper,objects,census only; named in source-coverage.md
+0x4E7610,not yet read,,F0,sparse array helper,objects,census only
+0x4E7640,not yet read,,F0,sparse array helper,objects,census only
+0x4E76C0,not implemented,,F2,sparse array helper,objects,read: Field inheritance world.md
+0x4E7740,not yet read,,F0,sparse array helper,objects,census only
+0x4E7760,not yet read,,F0,sparse array helper,objects,census only
+0x4E77A0,not yet read,,F0,sparse array helper,objects,census only
+0x4E77B0,not yet read,,F0,sparse array helper,objects,census only
+0x4E77E0,not yet read,,F0,sparse array helper,objects,census only
+0x4E7820,not yet read,,F0,sparse array helper,objects,census only
+0x4E78F0,not yet read,,F0,sparse array helper,objects,census only; named in original-persistence.md
+0x4E7990,not yet read,,F0,sparse array helper,objects,census only
+0x4E79F0,not yet read,,F0,sparse array helper,objects,census only
+0x4E7A50,not yet read,,F0,sparse array helper,objects,census only
+0x4E7A60,not yet read,,F0,sparse array helper,objects,census only; named in original-persistence.md
+0x4E7A70,not yet read,,F0,sparse array helper,objects,census only
+0x4E7AB0,not yet read,,F0,sparse array helper,objects,census only; named in source-coverage.md
+0x4E7B00,not implemented,,F2,terrain module setup,maps,read: TR1 world.md
+0x4E7B50,not yet read,,F0,terrain module setup,maps,census only
+0x4E7B60,not yet read,,F0,terrain module setup,maps,census only
+0x4E7B90,not yet read,,F0,terrain module setup,maps,census only
+0x4E7CB0,not implemented,,F1,terrain file reader,maps,read: PS25 original-persistence.md
+0x4E7E80,not yet read,,F0,terrain file helper,maps,census only
+0x4E80C0,not yet read,,F0,terrain sector word loader,maps,census only
+0x4E84C0,registered,,F2,terrain template path,maps,registry row (partial)
+0x4E86F0,not yet read,,F0,terrain fill,maps,census only; named in generated-wilderness-evidence.md
+0x4E8740,not implemented,,F2,terrain file writer,maps,read: PS22 original-persistence.md
+0x4E87F0,registered,,F2,terrain word,maps,registry row (full)
+0x4E88C0,not yet read,,F0,terrain template helper,maps,census only
+0x4E8920,not yet read,,F0,terrain template helper,maps,census only
+0x4E8B20,registered,,F2,terrain type name,maps,registry row (full)
+0x4E8B60,not yet read,,F0,terrain type name helper,maps,census only
+0x4E8BE0,not yet read,,F0,terrain type name helper,maps,census only
+0x4E8CE0,not relevant,editor,,terrain editor encoder,maps,"level editor or tool only (named editor in its reading, or reached only from the editor callbacks)"
+0x4E8D60,not yet read,,F0,terrain template helper,maps,census only
+0x4E8DC0,not implemented,,F2,terrain word field,maps,read: TR4 world.md
+0x4E8DD0,not implemented,,F2,terrain word field,maps,read: TR4 world.md
+0x4E8DE0,not implemented,,F2,terrain word field,maps,read: TR4 world.md
+0x4E8DF0,not implemented,,F2,terrain word field,maps,read: TR4 world.md
+0x4E8E00,registered,,F2,terrain blocked for travel,travel,registry row (full)
+0x4E8E60,registered,,F2,terrain variant slot,maps,registry row (full)
+0x4E8EA0,registered,,F2,terrain type names,maps,registry row (full)
+0x4E8F40,registered,,F2,terrain type count,maps,registry row (partial)
+0x4E90B0,not yet read,,F0,terrain transition table,maps,census only; named in world.md
+0x4E9240,not yet read,,F0,terrain transition table,maps,census only; named in generated-wilderness-evidence.md
+0x4E92B0,not yet read,,F0,terrain template helper,maps,census only
+0x4E9310,not yet read,,F0,terrain template helper,maps,census only
+0x4E93A0,not yet read,,F0,terrain template helper,maps,census only
+0x4E93E0,not yet read,,F0,terrain template helper,maps,census only
+0x4E9410,not yet read,,F0,terrain row cache,maps,census only; named in generated-wilderness-evidence.md
+0x4E9470,not yet read,,F0,terrain row cache,maps,census only; named in generated-wilderness-evidence.md
+0x4E9490,not yet read,,F0,terrain row cache,maps,census only; named in generated-wilderness-evidence.md
+0x4E9540,not yet read,,F0,terrain row cache,maps,census only; named in generated-wilderness-evidence.md
+0x4E9580,not relevant,editor,,terrain editor decompress,maps,"level editor or tool only (named editor in its reading, or reached only from the editor callbacks)"
+0x4E9680,not yet read,,F0,terrain file compressor,maps,census only; named in generated-wilderness-evidence.md
+0x4E9920,not yet read,,F0,object list node pool,objects,census only; named in source-coverage.md
+0x4E9930,not yet read,,F0,object list node pool,objects,census only; named in source-coverage.md
+0x4E9940,not yet read,,F0,object list node pool,objects,census only; named in source-coverage.md
+0x4E9970,not yet read,,F0,object list node pool,objects,census only; named in source-coverage.md
+0x4E9990,not implemented,,F1,object list node pool,objects,read: RL12 original-object-model.md
+0x4E99F0,not implemented,,F2,effect table loader,effects,read: LP1 data.md
+0x4E9AE0,not yet read,,F0,effect table loader,effects,census only; named in virgil-follow-consent.md
+0x4E9B40,not yet read,,F0,effect table loader,effects,census only
+0x4E9BB0,not yet read,,F0,effect table loader,effects,census only; named in combat-domain-load-map.md
+0x4E9C20,registered,,F2,effect parse,effects,registry row (partial)
+0x4E9F70,registered,,F2,effect add,effects,registry row (partial)
+0x4EA100,registered,,F2,typed effect removal,effects,registry row (partial)
+0x4EA200,registered,,F2,typed effect removal of all,effects,registry row (partial)
+0x4EA2E0,registered,,F2,effect removal by cause,effects,registry row (partial)
+0x4EA3C0,registered,,F2,effect removal of all by cause,effects,registry row (partial)
+0x4EA4A0,registered,,F2,effect count,effects,registry row (full)
+0x4EA520,not implemented,,F2,effect removal internal,effects,read: EF5 character.md
+0x4EA690,not yet read,,F0,effect adjustment accessor,effects,census only; named in npc-ai.md
+0x4EA6C0,registered,,F2,effect aggregation,effects,registry row (full)
+0x4EA930,not yet read,,F0,effect aggregation of a stat,effects,census only; named in character.md
+0x4EA960,not implemented,,F2,skill effect adjustment,effects,read: SR10 skills.md
+0x4EA990,not implemented,,F2,technology effect adjustment,effects,read: SR10 skills.md
+0x4EA9C0,not implemented,,F1,effect adjustment of table 0x603ac4,effects,read: the reading of this task census-triage-4d-4f.md
+0x4EA9F0,not implemented,,F1,effect adjustment of table 0x603acc,effects,read: the reading of this task census-triage-4d-4f.md
+0x4EAA20,not implemented,,F1,special effect adjustment 0,effects,read: the reading of this task census-triage-4d-4f.md
+0x4EAA50,not implemented,,F1,special effect adjustment 1,effects,read: the reading of this task census-triage-4d-4f.md
+0x4EAA80,not implemented,,F2,reaction effect adjustment,effects,read: R1 effects social.md
+0x4EAAB0,not implemented,,F2,good bad reaction effect adjustment,effects,read: R2 effects social.md
+0x4EAB00,not implemented,,F1,special effect adjustment 3,effects,read: the reading of this task census-triage-4d-4f.md
+0x4EAB30,not implemented,,F1,special effect adjustment 4,effects,read: the reading of this task census-triage-4d-4f.md
+0x4EAB60,not implemented,,F1,special effect adjustment 5,effects,read: the reading of this task census-triage-4d-4f.md
+0x4EAB90,not implemented,,F1,special effect adjustment 6,effects,read: the reading of this task census-triage-4d-4f.md
+0x4EABC0,not implemented,,F1,special effect adjustment 9,effects,read: the reading of this task census-triage-4d-4f.md
+0x4EABF0,not yet read,,F0,effect list reset,effects,census only; named in magic-core-evidence.md
+0x4EAC80,not implemented,,F2,tile name loader,names,read: LP1 data.md
+0x4EAD50,not yet read,,F0,tile name loader,names,census only
+0x4EAE90,not implemented,,F2,tile name loader,names,read: MA8 data.md
+0x4EAF70,not yet read,,F0,tile name loader,names,census only; named in crash-site-terrain-resolution.md
+0x4EB0C0,not yet read,,F0,tile name loader,names,census only
+0x4EB160,not yet read,,F0,tile name loader,names,census only
+0x4EB270,not yet read,,F0,tile name loader,names,census only; named in crash-site-terrain-resolution.md
+0x4EB2E0,registered,,F1,tile names load,audio,registry row (partial)
+0x4EB5E0,not yet read,,F0,tile name loader,names,census only; named in crash-site-terrain-resolution.md
+0x4EB770,not yet read,,F0,tile name loader,names,census only
+0x4EB7D0,not yet read,,F0,tile name loader,names,census only
+0x4EB860,not yet read,,F0,tile name loader,names,census only
+0x4EB8D0,not yet read,,F0,tile name table helper,names,census only
+0x4EB970,not yet read,,F0,tile name table helper,names,census only
+0x4EBA30,not yet read,,F0,tile name table helper,names,census only
+0x4EBAB0,not yet read,,F0,tile name flags,names,census only; named in world.md
+0x4EBAD0,not yet read,,F0,tile name flags,names,census only; named in area-passability-closure.md
+0x4EBB30,not implemented,,F1,tile name flag 2 test,names,read: the reading of this task census-triage-4d-4f.md
+0x4EBB80,not implemented,,F1,tile name flag 8 test,names,read: the reading of this task census-triage-4d-4f.md
+0x4EBBA0,not implemented,,F1,tile name flag 10 test,names,read: the reading of this task census-triage-4d-4f.md
+0x4EBBC0,not implemented,,F1,tile name flag 20 test,names,read: the reading of this task census-triage-4d-4f.md
+0x4EBBE0,registered,,F1,tile sound class,audio,registry row (partial)
+0x4EBC40,not yet read,,F0,tile name table helper,names,census only
+0x4EBE90,not yet read,,F0,tile name table helper,names,census only
+0x4EBEF0,not yet read,,F0,tile name table helper,names,census only
+0x4EC020,not implemented,,F2,tile art directory helper,names,read: SA25 original-scripts-authority.md
+0x4EC0C0,not yet read,,F0,tile art directory helper,names,census only
+0x4EC160,not yet read,,F0,tile art directory helper,names,census only
+0x4EC190,not implemented,,F2,item art name table loader,names,read: LP5 data.md
+0x4EC250,not yet read,,F0,item art name table loader,names,census only
+0x4EC290,registered,,F1,item art name,rendering,registry row (partial)
+0x4EC370,not implemented,,F2,facade name loader,names,read: LP5 data.md
+0x4EC390,not yet read,,F0,facade name loader,names,census only
+0x4EC3F0,not yet read,,F0,facade name loader,names,census only; named in crash-site-terrain-resolution.md
+0x4EC430,not yet read,,F0,facade name loader,names,census only
+0x4EC4B0,not yet read,,F0,facade name loader,names,census only
+0x4EC5A0,not implemented,,F2,portal name loader,names,read: LP5 data.md
+0x4EC610,not yet read,,F0,portal name loader,names,census only
+0x4EC620,not yet read,,F0,portal name loader,names,census only; named in first-building-evidence.md
+0x4EC670,not yet read,,F0,portal name loader,names,census only
+0x4EC830,not implemented,,F2,busted portal art,names,read: LK12 world.md
+0x4EC8F0,not yet read,,F0,portal name helper,names,census only; named in first-building-evidence.md
+0x4EC940,not yet read,,F0,portal name helper,names,census only
+0x4EC9B0,not implemented,,F2,wall name loader,names,read: LP5 data.md
+0x4EC9E0,not yet read,,F0,wall name loader,names,census only
+0x4ECA60,not yet read,,F0,wall name loader,names,census only; named in cave-transition-evidence.md
+0x4ECB80,not yet read,,F0,wall name loader,names,census only
+0x4ECC00,not yet read,,F0,wall name loader,names,census only
+0x4ECC10,not yet read,,F0,wall name loader,names,census only; named in cave-transition-evidence.md
+0x4ECD10,not yet read,,F0,wall name loader,names,census only
+0x4ECEB0,not implemented,,F2,wall art name,names,read: MA7 data.md
+0x4ECFC0,not implemented,,F2,wall file name,names,read: MA7 data.md
+0x4ED030,not yet read,,F0,wall name helper,names,census only
+0x4ED070,not yet read,,F0,wall name helper,names,census only; named in cave-transition-evidence.md
+0x4ED180,not yet read,,F0,wall name helper,names,census only
+0x4ED1E0,not implemented,,F2,light name loader,names,read: LP1 data.md
+0x4ED220,not yet read,,F0,light name loader,names,census only
+0x4ED250,not yet read,,F0,light name loader,names,census only
+0x4ED2F0,not yet read,,F0,roof name loader,names,census only
+0x4ED310,not yet read,,F0,roof name loader,names,census only
+0x4ED370,not yet read,,F0,roof name loader,names,census only
+0x4ED3A0,not yet read,,F0,roof name loader,names,census only; named in first-building-evidence.md
+0x4ED3E0,not yet read,,F0,roof name loader,names,census only; named in first-building-evidence.md
+0x4ED440,not yet read,,F0,roof name loader,names,census only; named in crash-site-evidence.md
+0x4ED510,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4ED630,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4ED6C0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4ED720,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4ED780,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4ED8B0,registered,,F2,object creation,technology,registry row (partial)
+0x4ED9E0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EDA60,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EDB70,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EDC00,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EDC70,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EDCE0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EDD50,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EDDB0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EDDE0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EDE40,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EDE80,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EDEE0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EDF20,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EDFF0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EE060,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EE0F0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EE190,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EE1D0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EE230,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EE290,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EE310,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EE3A0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EE430,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EE4C0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EE550,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EE5E0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EEB90,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EEBD0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EEC10,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EEC80,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EECB0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EED00,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EED80,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EEE00,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EEE50,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EEEC0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EEF20,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EEF80,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EEFE0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EF010,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EF060,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EF080,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EF0F0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EF120,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EF170,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EF190,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EF1D0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EF1E0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EF260,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EF320,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EF3D0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EF540,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EF5C0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EF630,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EF690,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EF6F0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EF790,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EF830,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EF8B0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EF920,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EFA10,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EFA70,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EFAB0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EFAE0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EFB50,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EFBA0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EFBE0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EFC30,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EFCD0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EFDD0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EFE50,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EFEE0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EFF50,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4EFFC0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F0070,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F0150,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F01D0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F0270,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F02F0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F0360,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F03E0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F0470,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F0500,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F0570,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F05F0,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F0640,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F0690,not relevant,multiplayer,,network wrapper of a rule,scripts,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F06E0,registered,,F2,portal bust,locks,registry row (partial)
+0x4F0790,not yet read,,F0,wall piece teardown,scene,census only; named in original-object-model.md
+0x4F08C0,not implemented,,F2,portal open test,locks,read: LK10 world.md
+0x4F08F0,registered,,F2,portal toggle,locks,registry row (partial)
+0x4F0950,registered,,F2,portal open,locks,registry row (partial)
+0x4F0A90,registered,,F2,portal close,locks,registry row (partial)
+0x4F0BF0,registered,,F2,item sound,audio,registry row (partial)
+0x4F0ED0,registered,,F2,critter sound,audio,registry row (partial)
+0x4F0FD0,registered,,F2,container sound,audio,registry row (full)
+0x4F1010,registered,,F2,portal sound,audio,registry row (full)
+0x4F1050,registered,,F2,misc object sound,audio,registry row (full)
+0x4F1150,not yet read,,F0,object list helper,objects,census only; named in crash-site-slice.md
+0x4F1170,not implemented,,F1,object list helper,objects,read: RL7 original-object-model.md
+0x4F1200,not yet read,,F0,object list helper,objects,census only
+0x4F1210,not implemented,,F1,object list bucket add,objects,read: RL3 original-object-model.md
+0x4F1260,not implemented,,F1,object list remove,objects,read: RL3 original-object-model.md
+0x4F12C0,not implemented,,F1,object list remove,objects,read: RL3 original-object-model.md
+0x4F1350,registered,,F2,sector object list load,maps,registry row (partial)
+0x4F1590,not implemented,,F1,sector object list loader,persistence,read: PS24 original-persistence.md
+0x4F1960,not yet read,,F0,sector object list save helper,persistence,census only
+0x4F1A20,not implemented,,F2,sector object dirty test,persistence,read: FM11 social.md
+0x4F1A90,not implemented,,F1,sector object writer,persistence,read: PS24 original-persistence.md
+0x4F1CD0,registered,,F2,sector fold,residency,registry row (partial)
+0x4F1D80,not relevant,debug,,object list consistency check,objects,"validation, assertion or log output; fires on corruption or writes a debug file"
+0x4F1F00,not yet read,,F0,object list art precache,objects,census only; named in crash-site-objects.md
+0x4F2020,not implemented,,F2,object list insert,objects,read: AS1 world.md
+0x4F20A0,not implemented,,F2,tile list insert,scene,read: SO2 world.md
+0x4F2230,not implemented,,F2,tile list rank,scene,read: SO2 world.md
+0x4F22B0,not implemented,,F1,object list find and unlink,objects,read: RL3 original-object-model.md
+0x4F2330,not implemented,,F2,sector changed notification,scripts,"read: X3, sector scripts.md"
+0x4F24F0,not implemented,,F2,spell picker helper,magic,read: SZ4 ui-audio.md
+0x4F2560,not yet read,,F0,spell picker helper,magic,census only
+0x4F2570,not yet read,,F0,spell picker helper,magic,census only; named in spell-runs.md
+0x4F2580,not yet read,,F0,spell picker helper,magic,census only; named in screen-size-and-ui-layout.md
+0x4F25B0,not yet read,,F0,spell picker helper,magic,census only; named in spell-runs.md
+0x4F25D0,not yet read,,F0,spell picker helper,magic,census only; named in spell-runs.md
+0x4F25E0,not yet read,,F0,spell picker helper,magic,census only
+0x4F2600,not implemented,,F2,spell picker helper,magic,read: TA1 spell-runs.md
+0x4F2680,registered,,F2,spell picker test,magic,registry row (partial)
+0x4F27F0,not implemented,,F2,spell picker helper,magic,read: SU17 spell-runs.md
+0x4F2810,not implemented,,F2,spell picker helper,magic,read: IU5 spell-runs.md
+0x4F2830,not implemented,,F2,spell picker helper,magic,read: SU16 spell-runs.md
+0x4F28A0,registered,,F2,spell cursor pick,magic,registry row (partial)
+0x4F2C60,registered,,F2,target stand-in,magic,registry row (partial)
+0x4F2CB0,not implemented,,F2,spell picker helper,magic,read: OH1 ui-audio.md
+0x4F2D10,not implemented,,F2,spell picker helper,magic,read: SU10 spell-runs.md
+0x4F2D20,registered,,F3,spell area test,magic,registry row (partial)
+0x4F3F10,registered,,F2,target list add,magic,registry row (partial)
+0x4F3FD0,registered,,F2,target list add any,magic,registry row (partial)
+0x4F4050,registered,,F2,target list add tile,magic,registry row (partial)
+0x4F40B0,registered,,F3,spell target collection,magic,registry row (partial)
+0x4F4E40,registered,,F2,drop tile try,items,registry row (partial)
+0x4F5090,registered,,F3,fate armed,fate,registry row (full)
+0x4F50C0,registered,,F3,fate arm,fate,registry row (partial)
+0x4F51B0,registered,,F3,fate undo,fate,registry row (partial)
+0x4F5270,registered,,F3,fate use,fate,registry row (partial)
+0x4F52D0,registered,,F2,fate full heal,fate,registry row (partial)
+0x4F5320,not yet read,,F0,fate window refresh setter,fate,census only; named in skills.md
+0x4F5330,registered,,F2,kill log write,ui,registry row (partial)
+0x4F5590,not implemented,,F2,kill log slot getter,ui,read: LB21 ui-audio.md
+0x4F5690,registered,,F2,injury log write,ui,registry row (partial)
+0x4F5770,not implemented,,F2,injury log getter,ui,read: LB21 ui-audio.md
+0x4F57C0,not implemented,,F2,injury log getter,ui,read: LB21 ui-audio.md
+0x4F5820,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F5910,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F59E0,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F5A30,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F5A90,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F5B20,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F5B70,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F5BC0,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F5C90,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F5CE0,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F5D30,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F5D80,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F5DD0,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F5E20,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F5E70,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F5EC0,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F5F50,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F5FA0,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F5FF0,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F6040,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F6090,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F60E0,not relevant,multiplayer,,online matchmaker call,multiplayer,"network layer: a packet writer or receiver, a wrapper that applies the raw rule and sends the packet when networked, or the online matchmaker; single player takes only the raw call, which has its own row"
+0x4F6170,not yet read,,F0,sector script list helper,scripts,census only; named in multiplayer-evidence.md
+0x4F6180,not yet read,,F0,sector script list helper,scripts,census only
+0x4F61B0,not yet read,,F0,sector script list helper,scripts,census only
+0x4F61C0,not implemented,,F2,sector script list helper,scripts,read: SA19 original-scripts-authority.md
+0x4F61F0,not implemented,,F2,sector script list helper,scripts,read: SA19 original-scripts-authority.md
+0x4F6220,not yet read,,F0,sector script list helper,scripts,census only; named in story-social-ai.md
+0x4F6250,not yet read,,F0,sector script list helper,scripts,census only; named in crash-site-framing.md
+0x4F6270,not yet read,,F0,sector script list helper,scripts,census only; named in story-social-ai.md
+0x4F62A0,not yet read,,F0,sector script list helper,scripts,census only
+0x4F62B0,not yet read,,F0,sector script list helper,scripts,census only; named in original-persistence.md
+0x4F62E0,not yet read,,F0,sector script list helper,scripts,census only; named in source-coverage.md
+0x4F6310,not yet read,,F0,sector script list helper,scripts,census only; named in virgil-script-attachments.md
+0x4F6330,not yet read,,F0,tile script list helper,scripts,census only
+0x4F6360,not yet read,,F0,tile script list helper,scripts,census only
+0x4F6380,not yet read,,F0,tile script list helper,scripts,census only
+0x4F63E0,not yet read,,F0,tile script list helper,scripts,census only
+0x4F6400,not yet read,,F0,tile script list helper,scripts,census only
+0x4F6460,not yet read,,F0,tile script list helper,scripts,census only
+0x4F6470,not implemented,,F2,tile script list insert,scripts,read: TS1 scripts.md
+0x4F6520,not implemented,,F1,tile script list store,scripts,read: SA18 original-scripts-authority.md
+0x4F6570,not implemented,,F2,tile script list search,scripts,read: TS1 scripts.md
+0x4F65B0,not yet read,,F0,tile script list load,scripts,census only; named in crash-site-framing.md
+0x4F6630,not yet read,,F0,tile script list helper,scripts,census only
+0x4F66C0,not yet read,,F0,tile script list helper,scripts,census only
+0x4F66D0,not yet read,,F0,tile script list load,scripts,census only; named in original-persistence.md
+0x4F6750,not yet read,,F0,tile script list save,scripts,census only; named in virgil-script-attachments.md
+0x4F67D0,not yet read,,F0,speech text filter,dialogue,census only; named in source-coverage.md
+0x4F6820,not yet read,,F0,speech text filter,dialogue,census only
+0x4F6840,not yet read,,F0,speech text filter,dialogue,census only; named in story-social-ai.md
+0x4F6920,not yet read,,F0,speech text filter,dialogue,census only; named in story-social-ai.md
+0x4F69B0,not yet read,,F0,speech text filter,dialogue,census only; named in story-social-ai.md
+0x4F69D0,not yet read,,F0,speech text filter,dialogue,census only
+0x4F6B20,not yet read,,F0,speech text filter,dialogue,census only
+0x4F6B70,not yet read,,F0,speech text filter,dialogue,census only; named in story-social-ai.md
+0x4F6BB0,not yet read,,F0,speech text filter,dialogue,census only; named in source-coverage.md
+0x4F6CF0,not yet read,,F0,walk mask loader,maps,census only; named in world-travel-runtime.md
+0x4F6E60,not yet read,,F0,walk mask loader,maps,census only
+0x4F6E90,not yet read,,F0,walk mask loader,maps,census only; named in world-travel-runtime.md
+0x4F6F60,not yet read,,F0,walk mask loader,maps,census only
+0x4F6FC0,not yet read,,F0,walk mask loader,maps,census only
+0x4F7020,not yet read,,F0,walk mask loader,maps,census only; named in world-travel-runtime.md
+0x4F7110,not yet read,,F0,sector object list helper,maps,census only; named in generated-wilderness-evidence.md
+0x4F7130,not implemented,,F1,sector light stop,lighting,read: TL33 original-time-loop.md
+0x4F71B0,not yet read,,F0,sector light insert,lighting,census only
+0x4F71C0,not implemented,,F2,sector light insert,lighting,read: LT3 world.md
+0x4F7200,not yet read,,F0,sector light list helper,lighting,census only; named in lighting-time.md
+0x4F7250,not yet read,,F0,sector light list helper,lighting,census only; named in lighting-time.md
+0x4F72C0,registered,,F2,sector light list load,maps,registry row (partial)
+0x4F7440,not yet read,,F0,sector light list loader,lighting,census only; named in original-persistence.md
+0x4F7610,not implemented,,F2,sector light list save,lighting,read: LT3 world.md
+0x4F7710,not yet read,,F0,sector light list writer,lighting,census only
+0x4F7760,not yet read,,F0,sector light list writer,lighting,census only
+0x4F7940,registered,,F2,sector light fold,lighting,registry row (partial)
+0x4F7B40,not yet read,,F0,sector tile list helper,maps,census only
+0x4F7B50,not yet read,,F0,sector tile list helper,maps,census only; named in generated-wilderness-evidence.md
+0x4F7BA0,not yet read,,F0,sector tile list helper,maps,census only; named in crash-site-slice.md
+0x4F7BE0,not yet read,,F0,sector tile list helper,maps,census only
+0x4F7C20,not yet read,,F0,sector tile list helper,maps,census only
+0x4F7C30,not yet read,,F0,sector tile list helper,maps,census only; named in crash-site-terrain-resolution.md
+0x4F7C50,not yet read,,F0,sector tile list helper,maps,census only
+0x4F7C80,not yet read,,F0,sector tile list helper,maps,census only
+0x4F7CA0,not yet read,,F0,sector tile list helper,maps,census only
+0x4F7CC0,not yet read,,F0,sector tile list helper,maps,census only
+0x4F7CE0,not yet read,,F0,sector tile list helper,maps,census only; named in crash-site-framing.md
+0x4F7D10,not yet read,,F0,sector tile list helper,maps,census only
+0x4F7D40,not yet read,,F0,sector tile list helper,maps,census only; named in original-persistence.md
+0x4F7DF0,not yet read,,F0,sector tile list helper,maps,census only; named in crash-site-slice.md
+0x4F7F20,not yet read,,F0,sector roof list helper,maps,census only; named in source-coverage.md
+0x4F7F40,not yet read,,F0,sector roof list helper,maps,census only
+0x4F7F70,not yet read,,F0,sector roof list helper,maps,census only
+0x4F7F80,not yet read,,F0,sector roof list helper,maps,census only
+0x4F7FA0,not yet read,,F0,sector roof list helper,maps,census only
+0x4F7FC0,not yet read,,F0,sector roof list helper,maps,census only; named in first-building-evidence.md
+0x4F7FD0,not yet read,,F0,sector roof list helper,maps,census only; named in first-building-evidence.md
+0x4F7FE0,not yet read,,F0,sector roof list helper,maps,census only; named in first-building-evidence.md
+0x4F7FF0,not yet read,,F0,sector roof list helper,maps,census only
+0x4F8020,not yet read,,F0,sector roof list helper,maps,census only; named in crash-site-framing.md
+0x4F8090,not yet read,,F0,sector roof list helper,maps,census only; named in source-coverage.md
+0x4F80E0,not yet read,,F0,sector roof list helper,maps,census only; named in source-coverage.md
+0x4F8100,not yet read,,F0,sector roof list helper,maps,census only
+0x4F8120,not yet read,,F0,sector roof list helper,maps,census only
+0x4F8130,not yet read,,F0,sector roof list helper,maps,census only
+0x4F8150,not yet read,,F0,sector section helper,maps,census only; named in original-persistence.md
+0x4F8180,not yet read,,F0,sector section helper,maps,census only; named in resources-and-playback-contract.md
+0x4F81B0,not yet read,,F0,sector section helper,maps,census only
+0x4F81C0,not yet read,,F0,sector section helper,maps,census only; named in original-persistence.md
+0x4F81D0,not yet read,,F0,sector section helper,maps,census only; named in original-persistence.md
+0x4F81E0,not yet read,,F0,sector section helper,maps,census only; named in area-passability-closure.md
+0x4F8200,not yet read,,F0,sector section helper,maps,census only; named in area-passability-closure.md
+0x4F8230,not yet read,,F0,sector section helper,maps,census only; named in area-passability-closure.md
+0x4F8250,not yet read,,F0,sector section helper,maps,census only; named in crash-site-framing.md
+0x4F8290,not yet read,,F0,sector section helper,maps,census only
+0x4F82D0,not yet read,,F0,sector section helper,maps,census only; named in original-persistence.md
+0x4F8300,not yet read,,F0,sector section helper,maps,census only
+0x4F8330,not yet read,,F0,sector section helper,maps,census only
+0x4F8340,not yet read,,F0,sector section helper,maps,census only
+0x4F8350,not relevant,library,,compression buffer helper,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4F8380,not relevant,library,,compression buffer helper,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4F83A0,not relevant,library,,compression buffer helper,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4F8400,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4F8450,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4F84A0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4F85B0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4F85D0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4F8B90,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4F8BC0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4F8EC0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4F9010,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4F92C0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4F92F0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4F9370,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4F95D0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4F9670,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4F97D0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4F9900,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4F9980,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4F9CB0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4F9E20,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FA250,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FA2D0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FA370,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FB080,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FB0C0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FB100,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FB110,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FB270,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FB290,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FB2A0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FB320,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FB330,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FB3A0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FB460,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FB6E0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FB910,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FBB50,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FBC30,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FBE60,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FBEE0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FBF50,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FC040,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FC2B0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FC8E0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FCD20,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FCDA0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FCDC0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FCE50,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FCED0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FCF70,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FCFB0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FD750,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FD770,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FD820,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FDCF0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FDE80,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FDEB0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FDFF0,not relevant,library,,compression library,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FE380,not relevant,library,,memory manager,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FE3A0,not relevant,library,,memory manager,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FE500,not relevant,library,,memory manager,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FE790,not relevant,library,,memory manager,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FE7A0,not relevant,library,,memory manager,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FE990,not relevant,library,,memory manager,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FEA30,not relevant,library,,memory manager,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FEA60,not relevant,library,,memory manager,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FEAA0,not relevant,library,,memory manager,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FEB10,not relevant,library,,memory manager,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FEB60,not relevant,library,,memory manager helper,library,generic library code (zlib 1.1.2 and the TIG memory manager); no game rule
+0x4FEB70,not relevant,debug,,debug log write,debug,"validation, assertion or log output; fires on corruption or writes a debug file"
+0x4FEBC0,not relevant,debug,,debug log write,debug,"validation, assertion or log output; fires on corruption or writes a debug file"
+0x4FEC00,not relevant,debug,,debug output,debug,"validation, assertion or log output; fires on corruption or writes a debug file"
+0x4FEC10,not relevant,debug,,debug output,debug,"validation, assertion or log output; fires on corruption or writes a debug file"
+0x4FED60,not relevant,debug,,debug output,debug,"validation, assertion or log output; fires on corruption or writes a debug file"
+0x4FEDA0,not relevant,debug,,debug output,debug,"validation, assertion or log output; fires on corruption or writes a debug file"
+0x4FEDF0,not relevant,debug,,debug output,debug,"validation, assertion or log output; fires on corruption or writes a debug file"
+0x4FEE10,not relevant,debug,,debug output,debug,"validation, assertion or log output; fires on corruption or writes a debug file"
+0x4FEE50,not relevant,debug,,debug output,debug,"validation, assertion or log output; fires on corruption or writes a debug file"
+0x4FEE60,not relevant,debug,,debug output,debug,"validation, assertion or log output; fires on corruption or writes a debug file"
+0x4FEE90,not relevant,debug,,debug output,debug,"validation, assertion or log output; fires on corruption or writes a debug file"
+0x4FEEC0,not relevant,debug,,debug output,debug,"validation, assertion or log output; fires on corruption or writes a debug file"
+0x4FEF00,not relevant,debug,,debug output,debug,"validation, assertion or log output; fires on corruption or writes a debug file"
+0x4FF020,not relevant,platform,,mouse library helper,input,"window and mouse glue of the original engine, replaced by Godot input"
+0x4FF0B0,not relevant,platform,,mouse library helper,input,"window and mouse glue of the original engine, replaced by Godot input"
+0x4FF2A0,not relevant,platform,,mouse library helper,input,"window and mouse glue of the original engine, replaced by Godot input"
+0x4FF2D0,not relevant,platform,,mouse library helper,input,"window and mouse glue of the original engine, replaced by Godot input"
+0x4FF310,not relevant,platform,,mouse library helper,input,"window and mouse glue of the original engine, replaced by Godot input"
+0x4FF340,not relevant,platform,,mouse library helper,input,"window and mouse glue of the original engine, replaced by Godot input"
+0x4FF350,not relevant,platform,,mouse library helper,input,"window and mouse glue of the original engine, replaced by Godot input"
+0x4FF390,not implemented,,F2,mouse message helper,input,read: HK15 spell-runs.md
+0x4FF3B0,not yet read,,F0,mouse message helper,input,census only; named in goal-table.md
+0x4FF410,not yet read,,F0,mouse message helper,input,census only; named in goal-table.md
+0x4FF5A0,registered,,F1,polled mouse repeat,goals,registry row (partial)
+0x4FF9B0,not relevant,platform,,mouse library helper,input,"window and mouse glue of the original engine, replaced by Godot input"
+0x4FF9F0,not yet read,,F0,mouse press helper,input,census only; named in goal-table.md
+0x4FFA30,not relevant,platform,,mouse library helper,input,"window and mouse glue of the original engine, replaced by Godot input"
+0x4FFA70,not relevant,platform,,mouse library helper,input,"window and mouse glue of the original engine, replaced by Godot input"
+0x4FFAB0,not relevant,platform,,mouse library helper,input,"window and mouse glue of the original engine, replaced by Godot input"
+0x4FFB40,not relevant,renderer,,cursor drawing,input,drawing of the original's 2D pipeline (light and cursor blits); the viewer draws its own
+0x4FFBF0,not relevant,renderer,,cursor drawing,input,drawing of the original's 2D pipeline (light and cursor blits); the viewer draws its own
+0x4FFD60,not relevant,renderer,,cursor drawing,input,drawing of the original's 2D pipeline (light and cursor blits); the viewer draws its own
+0x4FFEA0,not relevant,renderer,,cursor helper,input,drawing of the original's 2D pipeline (light and cursor blits); the viewer draws its own
+0x4FFEC0,not implemented,,F2,cursor art setup,input,read: CU4 ui-audio.md
+0x4FFFE0,not implemented,,F2,cursor set,input,read: CU4 ui-audio.md

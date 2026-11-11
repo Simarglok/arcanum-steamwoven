@@ -56,6 +56,8 @@ CMP_LIMIT_RE = re.compile(r"^\w+, 0x([0-9a-f]+)$")
 PAD_MNEMONICS = ("int3", "nop")
 # Documents that describe the census itself: their addresses are not citations (and would change the CSV on every edit).
 CITED_EXCLUDED = ("verification/README.md", "research/function-audit-plan.md")
+# The V1 triage ledgers list the addresses they sort (ARC-RES-111 and the slices after it): a triage is not a citation either.
+CITED_EXCLUDED_PREFIXES = ("research/ledger/census-triage-",)
 
 
 class Pe:
@@ -324,7 +326,8 @@ def cited_addresses(docs_root: Path) -> dict[int, int]:
     """Address -> number of Markdown documents under docs/ that cite it as 0xNNNNNN."""
     counts: Counter[int] = Counter()
     for md in sorted(docs_root.rglob("*.md")):
-        if md.relative_to(docs_root).as_posix() in CITED_EXCLUDED:
+        rel = md.relative_to(docs_root).as_posix()
+        if rel in CITED_EXCLUDED or rel.startswith(CITED_EXCLUDED_PREFIXES):
             continue
         seen = {int(m.group(1), 16) for m in ADDR_CITE_RE.finditer(md.read_text(encoding="utf-8", errors="replace"))}
         counts.update(seen)
