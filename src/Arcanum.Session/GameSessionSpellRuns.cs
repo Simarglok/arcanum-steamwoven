@@ -261,6 +261,9 @@ public sealed partial class GameSessionOwner
         _maintainBar = MaintainBarAfter(system, bar);
         _spellRuns = system.Table;
         _spellLastCost = system.LastCostCharged;
+        // ARC-DEV-352 (SUM7): a freed run's summoned list goes with its slot; the objects stay.
+        foreach (var note in system.Notes)
+            if (note.Kind == SpellRunNoteKind.Freed) _inventory.Objects.ReleaseRun(note.Run);
         foreach (var run in system.RemovedEvents)
             _events.RemoveAll(SessionEventKinds.SpellRun, e => e.Payload.Values[1] == run);
         foreach (var run in system.RemovedTicks)

@@ -74,14 +74,16 @@ public sealed class SessionCritterCombat
     private readonly CharacterRace _race;
     private readonly CharacterGender _gender;
     private readonly DamageRanges _natural;
+    private readonly EffectResistances _effectResistances;
 
     private SessionCritterCombat(string entity, CharacterStatsOwner stats, IReadOnlyDictionary<EquipmentSlot, EquipmentItem> worn,
         IReadOnlyList<int> basicSkills, IReadOnlyList<int> techSkills, int baseArmorClass, DamageResistances storedResistances, LightEmission ownLight,
         CombatantFlags flags, ObjectMaterial material, int criticalBody, CharacterRace race, CharacterGender gender, LifeFacts facts, LifeState loaded,
         SessionNpcExperience experience, bool monstrous, int level, DamageRanges natural, SessionKillFacts killFacts, SessionSkills? sheetSkills = null,
-        IReadOnlyList<SessionEffect>? storedEffects = null)
+        IReadOnlyList<SessionEffect>? storedEffects = null, EffectResistances? effectResistances = null)
     {
         StoredEffects = storedEffects ?? [];
+        _effectResistances = effectResistances ?? EffectResistances.None;
         _natural = natural; KillFacts = killFacts;
         Entity = entity; _stats = stats; _worn = worn; _basicSkills = basicSkills; _techSkills = techSkills; _sheetSkills = sheetSkills; _baseArmorClass = baseArmorClass;
         _storedResistances = storedResistances; _ownLight = ownLight; _flags = flags; _material = material; _criticalBody = criticalBody;
@@ -112,7 +114,41 @@ public sealed class SessionCritterCombat
     /// reads it) and that sheet's level; its other values stay the map data's.</summary>
     internal SessionCritterCombat WithSheet(AdvancementSheet sheet) => new(Entity, _stats, _worn, sheet.BasicSkills, sheet.TechSkills, _baseArmorClass,
         _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded, Experience, Monstrous, sheet.Level,
-        _natural, KillFacts, SessionSkills.Of(sheet, AdvancementModifiers.None), StoredEffects);
+        _natural, KillFacts, SessionSkills.Of(sheet, AdvancementModifiers.None), StoredEffects, _effectResistances);
+
+    // A throwaway owner of the same race and gender over the same base values with the entries applied (the shared one is never touched; the cause is of no consequence there,
+    // the race and gender causes of a loaded list belong to the owner's setters and are applied as spell entries); null when the owner refuses anything.
+    private CharacterStatsOwner? ClonedStats(StatEffectDefinition[] modifiers)
+    {
+        var created = CharacterStatsOwner.Create(new(_race, _gender, InnateEffectTable.Empty, CharacterStatLimits.Default));
+        if (created.Owner is not { } owner) return null;
+        var plain = _stats.Query(new(0)).Snapshot!;
+        foreach (var (stat, _) in StoredStats())
+            if (owner.SetBase(stat, plain.GetBase(stat)).Disposition == CharacterStatsDisposition.Rejected) return null;
+        foreach (var modifier in modifiers)
+            if (owner.AddEffect(modifier, EffectCause.Spell).Disposition == CharacterStatsDisposition.Rejected) return null;
+        return owner;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-027 (MA-2): the same NPC under an effect list (the session's, else the loaded one: <see cref="GameSessionOwner.QueryNpcEffects"/>): the stat changes of the entries are
+    /// applied to its stats (so its speed, strength, armour class adjustment and the rest read through them: the turn-based action points, the attack pause, the combat values) and
+    /// its resistance changes to the effective resistances (0x43D6D0) it defends with. The numbers of the loaded list the host gave no rule for have none. The skills of a levelled
+    /// sheet and the NPC's life facts (maximum hit points under its strength, the normal resistance a poison tick meets) are not re-read from the stats and resistances: ledger EF1 consequences stay with the life record.
+    /// </summary>
+    internal SessionCritterCombat WithEffects(IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        ArgumentNullException.ThrowIfNull(definitions);
+        if (entries.Count == 0) return this;
+        var resistances = EffectDomain.Resistances(entries, definitions);
+        var modifiers = entries.Select(entry => definitions.TryGetValue(entry.Number, out var rule) ? EffectDomain.Stats(rule) : null).OfType<StatEffectDefinition>().ToArray();
+        // A stat refusal (more applied entries than the owner admits) keeps the base stats but not the resistances' loss: the resistance changes still apply.
+        var stats = _stats;
+        if (modifiers.Length > 0 && ClonedStats(modifiers) is { } cloned) stats = cloned;
+        return new(Entity, stats, _worn, _basicSkills, _techSkills, _baseArmorClass, _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded,
+            Experience, Monstrous, Level, _natural, KillFacts, _sheetSkills, StoredEffects, resistances);
+    }
 
     /// <summary>
     /// Builds the values of the NPC <paramref name="entity"/> from its fields and the fields of the items it carries
@@ -312,7 +348,7 @@ public sealed class SessionCritterCombat
             MagickTechAptitude = aptitude,
             ArmorClass = AttackRules.ArmorClass(_baseArmorClass, equipment.ArmorClassAdjustment, snapshot.GetEffective(CharacterStat.AcAdjustment),
                 value => value, profile),
-            Resistances = CombatantRules.Resistances(_storedResistances, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), Monstrous),
+            Resistances = CombatantRules.Resistances(_storedResistances, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), Monstrous, _effectResistances),
             Conditions = CombatantRules.Conditions(status, state, Facts.Traits, _flags),
             LightEmission = _ownLight,
             Material = _material,
@@ -581,7 +617,9 @@ public sealed partial class GameSessionOwner
             MagickTechAptitude = aptitude,
             ArmorClass = AttackRules.ArmorClass(0, equipment.ArmorClassAdjustment, snapshot.GetEffective(CharacterStat.AcAdjustment), value => value,
                 _rules.Combat),
-            Resistances = CombatantRules.Resistances(DamageResistances.None, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), false),
+            // ARC-MAGIC-027: the hero's durable effects' resistance changes (the innate entries' are not modelled).
+            Resistances = CombatantRules.Resistances(DamageResistances.None, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), false,
+                EffectDomain.Resistances(_effects.Entries, _effects.Definitions)),
             Conditions = CombatantRules.Conditions(status, state, facts.Traits, CombatantFlags.None),
             LightEmission = equipment.Light,
             DodgeLevel = skills[Skill.Dodge].Level,
@@ -619,7 +657,7 @@ public sealed partial class GameSessionOwner
         if (Resolve(target.Target, out var record, out var facts, out _) != GameSessionFailure.None) return null;
         BoomerangHero(ref hero);
         var status = LifeRules.Evaluate(record.State, facts!);
-        var defending = _advancement.Npcs.TryGetValue(target.Entity, out var levelled) ? target.WithSheet(levelled.Sheet) : target;
+        var defending = Levelled(target);
         try
         {
             var defender = defending.Combatant(status, record.State, _rules.Combat);
@@ -734,7 +772,7 @@ public sealed partial class GameSessionOwner
 
         var targetStatus = LifeRules.Evaluate(record.State, facts!);
         // A follower the session levelled defends with its saved sheet's skills and level (ARC-SKILLS-002).
-        var defending = _advancement.Npcs.TryGetValue(target.Entity, out var levelled) ? target.WithSheet(levelled.Sheet) : target;
+        var defending = Levelled(target);
         Combatant defender;
         try { defender = defending.Combatant(targetStatus, record.State, _rules.Combat); }
         catch (ArgumentException) { return RejectAttack(GameSessionFailure.InvalidAttack); }

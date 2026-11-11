@@ -1244,7 +1244,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // An NPC that joined the hero since the host was built is the companions' (it counts as gone here); ARC-WORLD-115: a companion the
     // host runs is its own.
     public SessionLifeTarget? AiLifeTarget(string entity) =>
-        !_followers.ContainsKey(entity) && _session.QueryCompanion(entity).LedByPc ? null : Build(entity)?.Target;
+        !_followers.ContainsKey(entity) && _session.QueryCompanion(entity).LedByPc ? null : RawBuild(entity)?.Target;
 
     // ARC-DEV-135 (MIG13 S5): an interrupt of every run of the NPC at a level (0x424070, GS17; the first refusal stops the walk) with the end nodes of each run it ended. True: it
     // freed a run (or marked the stepped one done); Succeeded is the original's answer (no run, a no-interrupt goal left running and a run that ended all succeed; a refusal, or the
@@ -1664,7 +1664,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     public void ClearStunned(string id)
     {
-        if (id != Pc && Build(id) is { } build && LifeState(id) is { } state && state.Conditions.HasFlag(LifeConditions.Stunned)) _session.ClearStun(_session.Version, build.Target);
+        if (id != Pc && RawBuild(id) is { } build && LifeState(id) is { } state && state.Conditions.HasFlag(LifeConditions.Stunned)) _session.ClearStun(_session.Version, build.Target);
     }
 
     public void DyingFinished(string id) { }
@@ -1804,7 +1804,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (trace.Blocker is not { Type: 15 or 16 } blocker || blocker.Key == Key(target)) return target;
         var other = AreaConversationState.EntityId(blocker);
         // The host must know where the blocker stands (a critter it neither walks nor runs as a companion would be hit point-blank with no line of its own).
-        if (other == id || other == target || Build(other) is null || Status(other) is not { IsDead: false } || Tile(other) is null) return target;
+        if (other == id || other == target || RawBuild(other) is null || Status(other) is not { IsDead: false } || Tile(other) is null) return target;
         return other;
     }
 
@@ -2101,7 +2101,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         refusal = "";
         if (Build(id) is not { } healer || _scene.NpcSheet?.Invoke(id) is not { } sheet) { refusal = "no sheet"; return null; }
-        var life = target == Pc ? SessionLifeTarget.Hero : Build(target)?.Target;
+        var life = target == Pc ? SessionLifeTarget.Hero : RawBuild(target)?.Target;
         if (life is null) { refusal = "no target"; return null; }
         if (item is null || _scene.Combat.HeldItemFields(_session, id, item) is not { } fields
             || AreaHealingItems.From(item, fields) is not { } healing)
@@ -2809,15 +2809,19 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private int? Faction(string id) => Fields(id)?.Npc?.Faction is not { } loaded ? null
         : _session.QueryMapChange(new SessionMapId(_scene.RuntimeMap), MapChangeKey.ForEntity(id, AreaUseScriptHost.FactionProperty)) is { } set ? unchecked((int)set) : loaded;
 
-    private SessionCritterCombat? Build(string id) => id == Pc ? null : _scene.Combat.Build(_session, id).Combat;
+    // The NPC's build as the map data gives it: enough for readers of its target, life status and life state (no list applied).
+    private SessionCritterCombat? RawBuild(string id) => id == Pc ? null : _scene.Combat.Build(_session, id).Combat;
 
-    private LifeState? LifeState(string id) => Build(id) is { } build ? _session.QueryLife(build.Target).View?.Record.State : null;
+    // ARC-MAGIC-027: the NPC's combat values under its effect list (speed, strength and the rest, resistances), for the readers of its combat values.
+    private SessionCritterCombat? Build(string id) => RawBuild(id) is { } combat ? _session.WithNpcEffects(combat) : null;
+
+    private LifeState? LifeState(string id) => RawBuild(id) is { } build ? _session.QueryLife(build.Target).View?.Record.State : null;
 
     private LifeStatus? Status(string id) => id == Pc ? _session.QueryHeroLife()?.Status
-        : Build(id) is { } build ? _session.QueryLife(build.Target).View?.Status : null;
+        : RawBuild(id) is { } build ? _session.QueryLife(build.Target).View?.Status : null;
 
     private (SessionCombatant Who, SessionLifeTarget Life)? Life(string id) =>
-        Build(id) is { } build && Status(id) is { IsDead: false } ? (SessionCombatant.Critter(id), build.Target) : null;
+        RawBuild(id) is { } build && Status(id) is { IsDead: false } ? (SessionCombatant.Critter(id), build.Target) : null;
 
     private SessionNpcAttackValues? Values(string id)
     {

@@ -569,10 +569,13 @@ public sealed partial class GameSessionOwner
         };
     }
 
-    /// <summary>The hero's effective normal resistance for its life facts: the worn armour's adjustment (the base of a pre-made PC
-    /// and resistance effects are not session state), clamped 0..95 like the source's resistance.</summary>
-    private int HeroNormalResistance() => _hero is null || _equipment.Worn.Count == 0 ? 0
-        : Math.Clamp(EquipmentRules.ResistanceAdjustments(_equipment.Items().Values, HeroAptitude()).Normal, 0, 95);
+    /// <summary>The hero's effective normal resistance for its life facts (0x43D6D0): the worn armour's adjustment (the base of a pre-made PC is not session state) under the
+    /// durable effects' normal resistance changes (ARC-MAGIC-027), clamped 0..95 like the source's resistance.</summary>
+    private int HeroNormalResistance() => HeroNormalResistance(_effects.Entries, _effects.Definitions);
+
+    private int HeroNormalResistance(IEnumerable<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions) =>
+        _hero is null ? 0 : Math.Clamp(EffectModifiers.Apply(_equipment.Worn.Count == 0 ? 0
+            : EquipmentRules.ResistanceAdjustments(_equipment.Items().Values, HeroAptitude()).Normal, EffectDomain.Resistances(entries, definitions).Normal), 0, 95);
 
     // Each worn item must be one the hero holds, of a matching type, in one slot, the slot its values belong in, and valid.
     private static GameSessionFailure ImportEquipment(SessionEquipmentState saved, InventoryDomain inventory, bool hero, out EquipmentDomain equipment)

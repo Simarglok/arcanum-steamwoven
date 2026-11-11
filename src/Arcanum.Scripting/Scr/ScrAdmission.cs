@@ -310,6 +310,18 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S30 { get; } = new("S30", S29.Conditions,
         S29.Actions.Concat([ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.HealHitPoints]), S29.ValueKinds, S29.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The spell condition set (ARC-MAGIC-029, magic plan slice MT21a, ledger SC1–SC6): <see cref="S30"/> plus the conditions obj has body spell (14), obj is influenced by spell (35), knows spell (48) and mastered spell
+    /// college (49), which a host answers through <see cref="IScrSpellQueries"/>, and give spell mastery in college (112), which hands one <see cref="ScrObjectStateRequest"/> (<see cref="ScrObjectStateChange.GiveSpellMastery"/>) to the host.
+    /// </summary>
+    public static ScrAdmissionSet S31 { get; } = new("S31", S30.Conditions.Concat([ScrCatalogue.Condition.HasBodySpell, ScrCatalogue.Condition.InfluencedBySpell, ScrCatalogue.Condition.KnowsSpell,
+            ScrCatalogue.Condition.MasteredSpellCollege]),
+        S30.Actions.Append(ScrCatalogue.Action.GiveSpellMastery), S30.ValueKinds, S30.FocusKinds, counterIndexWraps: true);
+
+    /// <summary>The conditions of <see cref="S31"/> a host answers through <see cref="IScrSpellQueries"/>.</summary>
+    public static IReadOnlySet<int> SpellQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.HasBodySpell, ScrCatalogue.Condition.InfluencedBySpell, ScrCatalogue.Condition.KnowsSpell,
+        ScrCatalogue.Condition.MasteredSpellCollege };
+
     /// <summary>The actions of <see cref="S15"/>, <see cref="S18"/> and <see cref="S19"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int>
         { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.FloatLine };

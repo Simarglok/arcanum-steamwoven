@@ -40,7 +40,7 @@ public sealed partial class SessionSpellCaster
     /// The Effect component (0x451F20, EF9) on its target object: the entry count is <c>Count:</c> plus, for a <c>Scaled:</c> above 0 and a PC or NPC parent, <c>Scaled × the parent's
     /// aptitude cached with the run / 100</c> (toward zero; 100 when the PC's armed "spell at maximum" fired, the run's parent carries it); a count of 0 or less does nothing. An add runs the
     /// effect add (0x4E9F70) that many times with the record's cause, a removal the typed removal (0x4EA100: the first entry of the number, whoever added it) that many times. A null target does nothing.
-    /// Only the hero has an effect list in the session: an NPC target is not ready (false: the caller logs the component), and an object that is no critter takes nothing (the effect
+    /// The hero and every NPC have an effect list in the session (ARC-DEV-348, <see cref="GameSessionOwner.AddNpcEffect"/>); an object that is no critter takes nothing (the effect
     /// functions test the critter themselves). The session's refusals (a full list, a rule it does not admit) are logged and the spell goes on, as the original's add has no error answer.
     /// </summary>
     [OriginalFunction(0x451F20, OriginalFunctionScope.Partial)]
@@ -51,17 +51,20 @@ public sealed partial class SessionSpellCaster
         var count = data.Count;
         if (data.Scaled > 0 && run.Parent is { IsCritter: true } parent) count = unchecked(count + data.Scaled * parent.Aptitude / 100);
         if (count <= 0) return true;
-        if (obj.Id != Hero) return KindOf(obj.Id) == SpellTargetKind.Other;
+        var isHero = obj.Id == Hero;
+        // ARC-MAGIC-027 (MA-2): an NPC target has its own list since ARC-DEV-348; an object that is no critter takes nothing (the effect functions test the critter themselves).
+        var npc = isHero ? null : _map.Critter(obj.Id);
+        if (!isHero && npc is null) return KindOf(obj.Id) == SpellTargetKind.Other;
         if (data.Add)
         {
             var cause = Enum.IsDefined((EffectCause)data.Cause) ? (EffectCause)data.Cause : EffectCause.Spell;
             if (EffectDefinitions?.Invoke(data.Effect) is not { } definition) return false;
-            var added = _owner.AddHeroEffect(_owner.Version, definition, cause, count);
+            var added = isHero ? _owner.AddHeroEffect(_owner.Version, definition, cause, count) : _owner.AddNpcEffect(_owner.Version, npc!.Combat.Target, definition, cause, count);
             _log.Add(added.Disposition == GameSessionDisposition.Changed ? new(SpellCastEventKind.EffectAdded, run.Id, data.Effect, obj.Id, count)
                 : new(SpellCastEventKind.EffectNotSaved, run.Id, (int)added.Failure, obj.Id, data.Effect));
             return true;
         }
-        var removed = _owner.RemoveHeroEffect(_owner.Version, data.Effect, count);
+        var removed = isHero ? _owner.RemoveHeroEffect(_owner.Version, data.Effect, count) : _owner.RemoveNpcEffect(_owner.Version, npc!.Combat.Target, data.Effect, count);
         if (removed.Disposition == GameSessionDisposition.Changed) _log.Add(new(SpellCastEventKind.EffectRemoved, run.Id, data.Effect, obj.Id, count));
         else if (removed.Disposition == GameSessionDisposition.Rejected) _log.Add(new(SpellCastEventKind.EffectNotSaved, run.Id, (int)removed.Failure, obj.Id, data.Effect));
         return true;

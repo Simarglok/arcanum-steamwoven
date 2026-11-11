@@ -561,11 +561,16 @@ button state.
   [owner decisions](#owner-decisions-2026-10-20)), not by a game trace; ARC-WORLD-052 read the reason, the tech page's
   draw hides the button at the editor-open degree (ledger CP2).
 - **O3** The 5 found schematics without a written prototype: placed on maps or
-  given by scripts (map instances and scripts were not counted).
+  given by scripts (map instances and scripts were not counted). Answered by the
+  [placement census](technology-census-res-115.md) (ARC-RES-115): they have no written prototype, so nothing
+  can give them (records 4810, 4900, 5270, 5280, 5430).
 - **O4** Answered by a follow-up count: no record lists the same prototype in
   both component lists (TC4 is latent).
 - **O5** Degrees and inventories of the NPCs whose dialogs use `su`: set by
-  map instances and their auto-level schemes; needs a pass over map instances.
+  map instances and their auto-level schemes; needs a pass over map instances. Answered by the
+  [placement census](technology-census-res-115.md#4-npcs-with-su-dialogs-o5) (ARC-RES-115): six NPC
+  instances carry the five dialogs (auto-level scheme 0 on all six prototypes), with stored degrees and one to five items each, none holding
+  both components of any record their window lists.
 - **O6** Buy prices (0x462230, 0x4C1150) were not re-read (ledger R9 and O6
   stay with their tasks).
 - **O7** The button state codes: answered by ARC-TECHNOLOGY-004 (code 2 expertise lacking, code 1 an item missing; [ledger SA2](ledger/technology.md#schematic-assembly-arc-technology-004)).
