@@ -128,6 +128,27 @@ internal sealed class AreaPathStream : Stream
             opened.Changed != _opened.Changed || opened.ChangedNanos != _opened.ChangedNanos)
             throw Changed();
     }
+    /// <summary>The path this stream is bound to.</summary>
+    internal string BoundPath => _path;
+    /// <summary>The file identity this stream was bound to at open (ARC-DEV-374); <see cref="Check"/> has proved the handle and the
+    /// path still show it, so it is the stamp of the file the path resolves to as of the last check.</summary>
+    internal FileStamp Stamp => _binding == AreaPathBinding.Windows
+        ? new(0, 0, _openedBytes, _openedWritten.Ticks, 0, 0, 0)
+        : new(_opened.Device, _opened.Inode, _opened.Size, _opened.Modified, _opened.ModifiedNanos, _opened.Changed, _opened.ChangedNanos);
+    /// <summary>The stamp of the file an open handle refers to, on this machine's binding; false when the system cannot say.</summary>
+    internal static bool TryStamp(SafeFileHandle handle, out FileStamp stamp)
+    {
+        stamp = default;
+        if (CurrentBinding() == AreaPathBinding.Windows)
+        {
+            if (!HandleWritten(handle, out var bytes, out var written)) return false;
+            stamp = new(0, 0, bytes, written.Ticks, 0, 0, 0);
+            return true;
+        }
+        if (FileStatus(handle, out var status) != 0) return false;
+        stamp = new(status.Device, status.Inode, status.Size, status.Modified, status.ModifiedNanos, status.Changed, status.ChangedNanos);
+        return true;
+    }
     private static bool HandleWritten(SafeFileHandle handle, out long bytes, out DateTime written)
     {
         try { bytes = RandomAccess.GetLength(handle); written = File.GetLastWriteTimeUtc(handle); return true; }

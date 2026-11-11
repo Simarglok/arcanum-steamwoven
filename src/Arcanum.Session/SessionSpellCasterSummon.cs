@@ -87,13 +87,15 @@ public sealed partial class SessionSpellCaster
     /// ARC-DEV-352 (DS2, SUM8): a Destroy component on a summoned object this session created: the object goes (one revision) and the runs hear of it after the outer action (0x459740). False when the
     /// session refuses (the caller logs the component as not done).
     /// </summary>
-    private bool DestroyCreated(SpellRun run, string entity)
+    private bool DestroyCreated(SpellRun run, string entity) => DestroyCreated(run.Id, entity);
+
+    private bool DestroyCreated(int run, string entity)
     {
         var destroyed = _owner.DestroyCreatedObject(_owner.Version, entity);
         if (destroyed.Disposition == GameSessionDisposition.NoChange) return true;
         if (destroyed.Disposition != GameSessionDisposition.Changed) return false;
-        _goneObjects.Add((SessionSpellRunActionKind.ObjectGone, entity, run.Id));
-        _log.Add(new(SpellCastEventKind.SummonDestroyed, run.Id, destroyed.Object?.Prototype ?? 0, entity));
+        _goneObjects.Add((SessionSpellRunActionKind.ObjectGone, entity, run));
+        _log.Add(new(SpellCastEventKind.SummonDestroyed, run, destroyed.Object?.Prototype ?? 0, entity));
         return true;
     }
 

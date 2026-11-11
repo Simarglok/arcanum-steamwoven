@@ -66,7 +66,7 @@ FR-CONTENT-008, FR-NET-001…008, FR-SOCIAL-006 (the [requirements register](../
 | Sleep and rest (PC) | **Absent in the viewer** (rules for the rest heal exist; the game bar says "sleep: the window is not built") | `LifeRules.RestHeal`, `TerrainViewerAreaGameBar.cs:130` | Partly (hour and heal rules; the window is not) | E3 |
 | NPC hourly day (beds, sleep, walking between day and night standpoints) | **Partial:** waypoints and standpoints are placed on the fold and wake-up tick only | `NpcRouteRules.cs`, `SchedulerRules.cs:92-101` | Waypoint rules read; schedule consumers not | E3 |
 | HUD clock or date | **Absent** (only the load screen has clock art) | survey | UI ledger | E3 |
-| Spell components Movement (teleport), Cast, Polymorph, Dispel, Interrupt, Terminate, branches, Identify, Recharge, Use, EnvFlag, AIRedirect | **Stub** (17 of 25 component types parse but never run) | `SessionSpellCaster.Apply` | Most read ([magic plan](../research/magic-implementation-plan.md), MT15–MT18) | E4 |
+| Spell components Movement (teleport), Cast, Polymorph, Interrupt, Terminate, branches, Identify, Recharge, Use, EnvFlag, AIRedirect | **Stub** (17 of 25 component types parse but never run) | `SessionSpellCaster.Apply` | Most read ([magic plan](../research/magic-implementation-plan.md), MT15–MT18) | E4 |
 | Remaining ObjFlag flags (charm, mind control, invisible, blind, fleeing, summoned, shrunk, water walking…) | **Stub**; only entangled, stoned, paralysed, spoken-with-dead are written | `SessionSpellCasterObjectFlags.cs` | Read (MT13, MT14) | E4 |
 | Item recharge | **Absent** | survey | Charges read ([technology](../research/technology-evidence.md)) | E4 |
 | Spell-run endings on rest and world-map travel; runs of other maps; callback runs | **Absent / not saved** | survey: the snapshot saves the goal runs and spell runs of the active map only (`GameSessionTypes.cs`, `CaptureSpells`) | Read (MT11, MT9b) | E3, E4 |
@@ -174,7 +174,7 @@ FR-MAGIC-011, FR-TRAVEL-005, FR-SCRIPT-002.
 | --- | --- | --- | --- |
 | E4-a | Remaining ObjFlag flags with render and movement effects (invisible, shrunk, water walking, "don't draw", blind), Effect on NPCs | M | E1-d |
 | E4-b | Social and AI flags: charm (+30/−30), mind control, undead, fleeing, blinded as AI notifications; reaction adjustments; AIRedirect | M–L | E4-a |
-| E4-c | Control components: Dispel, Interrupt, Terminate, TestNBranch, ChargeNBranch, Noop, EnvFlag, TraitIdx, Trait64, Use; Destroy for critters and containers | L (two slices) | E1-d |
+| E4-c | Control components: Dispel (built, ARC-MAGIC-034, MA-3), Interrupt, Terminate, TestNBranch, ChargeNBranch, Noop, EnvFlag, TraitIdx, Trait64, Use; Destroy for critters and containers | L (two slices) | E1-d |
 | E4-d | Item recharge and Identify components | S–M | E4-c |
 | E4-e | Movement: teleport to a tile, a random tile, the world map; no-teleport area data (FR-TRAVEL-005); what a teleport does to followers; nested Cast | M–L | E4-c |
 | E4-f | Polymorph (Trait): drop what the new art cannot wield, monster art and palette, restore (MG10 as a technical bug) | M | E4-a |
