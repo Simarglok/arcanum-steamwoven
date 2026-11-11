@@ -236,7 +236,16 @@ public sealed class AreaSpellCastMap : ISpellCastMap
 
     private static bool Matches(AreaObjectRecord row, int typeMask) => row.Type is >= 0 and < 32 && (typeMask & (1 << row.Type)) != 0;
 
-    public bool TileBlocked(SpellLocation tile) => !_steps.IsAdmitted(new(tile.X, tile.Y));
+    /// <summary>
+    /// 0x4D7110 from the evidence (ARC-MAGIC-055, PB1): a tile is blocked when the sector's block mask says so or its tile name does, which is the step evidence's own terrain verdict;
+    /// a tile outside the admitted sectors, or one the evidence cannot speak for, counts as blocked (as <see cref="AreaDropMap"/> and the path request count it). Before, only the
+    /// sector test was made, so <c>Tgt_Tile_Empty</c> and <c>Tgt_Tile_Empty_Immobiles</c> (Wall of Fire, Wall of Stone, Fireflash) never refused a tile of blocking terrain.
+    /// </summary>
+    public bool TileBlocked(SpellLocation tile)
+    {
+        var cell = new AreaStepCell(tile.X, tile.Y);
+        return !_steps.IsAdmitted(cell) || _steps.Terrain(cell) is not { Coverage: CardinalTraversalCoverage.Supported, Disposition: CardinalTraversalDisposition.Open };
+    }
 
     public bool PathExists(SpellTargetObject source, SpellLocation tile) => !TileBlocked(tile);
 
