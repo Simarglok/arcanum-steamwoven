@@ -143,6 +143,12 @@ class PlanTests(unittest.TestCase):
         self.assertTrue(any(smoke.ALL_ENV + "=1" in step.command for step in zone))
         self.assertFalse(any(smoke.ALL_ENV + "=1" in step.command for step in self.plan("pr", "--zones", "walk", "--no-build")))
         self.assertTrue(all(smoke.ALL_ENV + "=1" in step.command for step in self.plan("complete", "--no-build") if step.name.startswith("stages")))
+        # with --auto the diff picks the zones, so --all is ignored (with a line) when none of them is sampled
+        with mock.patch.object(smoke.smoke_zones, "changed_files", return_value=("abc", ("src/Arcanum.Session/GameSessionHeal.cs",))), \
+                mock.patch.object(smoke.smoke_zones, "changed_lines", return_value=[]):
+            self.said.clear()
+            self.assertFalse(any(smoke.ALL_ENV + "=1" in step.command for step in self.plan("pr", "--auto", "--all", "--no-build")))
+        self.assertTrue(any("--all ignored" in line for line in self.said))
         self.assertEqual(smoke.SAMPLED_STAGES, {"container-click", "walk"})
         # the viewer reads the same variable the runner sets, in the stage the walk shares it with
         viewer = REPO / "tools/terrain-viewer/Godot"

@@ -112,10 +112,10 @@ history held about 500 runs of such copies of one template).
 - **Click and walk changes** ([smoke scope](tasks.md#smoke-scope), ARC-DEV-239). A PR that changes click or walk handling
   always runs `./arcanum smoke pr --stages map` and `./arcanum smoke self-test` (both, every such PR).
 - **Sampled stages (ARC-DEV-395, owner decision 2026-11-11).** `container-click` and `walk` took 675 s and 525 s of the
-  one Godot slot ([smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md)), so by default they check a
+  one Godot slot in that report (600 s and 363 s on an idle Mac when re-measured here) ([smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md)), so by default they check a
   sample; `--all` (on `pr` and `map`, with a run of one of them by `--stages` or its zone; it sets the viewer's `ARC_SMOKE_ALL=1`) runs the
   full stage; the nightly `complete` run and `--zones complete` always run both in full. `container-click` clicks at most 8 containers of the window, spread over the (prototype, admitted open
-  outcome) groups, admitted rubbish bins and a locked container first (`ARC-DEV-395 container-click SAMPLE n of N` names them); `walk` plans and walks the
+  outcome) groups, the group of admitted rubbish bins and a locked container first (so at least one bin, and every bin only with `--all`) (`ARC-DEV-395 container-click SAMPLE n of N` names them); `walk` plans and walks the
   route to a goal about 10 window moves from the start (the full route has 71) instead of to the town sector. What the sample no longer proves: for
   `container-click`, the click path of the containers left out (a pick lost behind another object or a roof, a wrong
   hover, a refused or locked answer of that container) and the "every rubbish bin opens" rule over the whole window (it
@@ -170,8 +170,8 @@ history held about 500 runs of such copies of one template).
 - **Smoke zones (ARC-DEV-396).** Option A of the [smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md#zone-options),
   in `tools/local_dev/smoke_zones.py`. A zone is a set of stages a change can break together: `core` is every cheap stage (every
   stage no heavy zone holds, so a stage the viewer gains lands there until a heavy zone claims it; grouped by configuration into
-  about twenty processes at this base), and the heavy zones are `walk` (the stage `walk`, about 9 minutes), `container-click`
-  (the stage of that name, about 11 minutes), `crash-site` (the Crash Site smoke, not a stage) and `census` (the stage `census`).
+  about twenty processes at this base), and the heavy zones are `walk` (the stage `walk`, about 1 minute as a sample, about 6 with `--all`), `container-click`
+  (the stage of that name, about 2 minutes as a sample, about 10 with `--all`), `crash-site` (the Crash Site smoke, not a stage) and `census` (the stage `census`).
   `--zones core,walk` runs those; `complete` stands for all of them and runs what `./arcanum smoke complete` runs: the Crash Site
   smoke and the batteries of `full`, then every stage but `map` and `resources` (the batteries vouch for those) grouped as
   usual, the heavy stages last. That is what `./arcanum daily` runs, so the daily run now checks every stage the viewer accepts

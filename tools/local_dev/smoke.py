@@ -515,9 +515,12 @@ def plan(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mappin
         zoned = smoke_zones.stages_of(zones, known)
         if wants_all:
             # ARC-DEV-395: the sampled stages of this run (named or of a zone) run in full.
-            if not SAMPLED_STAGES & {*zoned, *stages}:
+            if SAMPLED_STAGES & {*zoned, *stages}:
+                extra = (*extra, (ALL_ENV, "1"))
+            elif getattr(args, "auto", False):
+                say(f"SMOKE --all ignored: no {' or '.join(sorted(SAMPLED_STAGES))} run is selected")
+            else:
                 raise ValueError(f"--all goes with a run of {' or '.join(sorted(SAMPLED_STAGES))} (--stages or the zone of the same name)")
-            extra = (*extra, (ALL_ENV, "1"))
         if pinned and zoned:  # the pins hold for the named stages only, the zones' stages keep their own configurations
             stage_steps("zones", tuple(stage for stage in zoned if stage not in stages), Pins())
         else:
