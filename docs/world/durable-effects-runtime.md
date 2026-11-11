@@ -68,7 +68,7 @@ every pre-made hero's prototype does (ARC-RES-027 SH-03); their stat changes are
 | Entry | Contract |
 | --- | --- |
 | `QueryHeroEffects()` | The innate entries, the durable entries, the rule of each number in use and the pending timed effects; `Count(number)` counts the whole list. Null without a hero. |
-| `AddHeroEffect(expected, definition, cause, count = 1)` | The add (0x4E9F70) `count` times. Refusals in order: no hero (`EffectsUnavailable`); a rule the session does not admit, a cause of the race and gender setters or the life domain's scars (injury), a count below 1 (`InvalidEffect`); an innate number (`InnateEffect`: its typed removal would meet the innate entry first); a number in use with other changes (`EffectMismatch`); the version; more than 64 durable entries (`EffectCapacityExceeded`); entries that could leave the consumers' bounds once some of them are removed (`InvalidEffect`, below); the event budget and revision. One revision. |
+| `AddHeroEffect(expected, definition, cause, count = 1)` | The add (0x4E9F70) `count` times. Refusals in order: no hero (`EffectsUnavailable`); a rule the session does not admit, a cause of the race and gender setters or the life domain's scars (injury), a count below 1 (`InvalidEffect`); an innate number (`InnateEffect`: its typed removal would meet the innate entry first); a number in use with other changes (`EffectMismatch`); the version; more than 1024 durable entries (`SessionEffectLimits.MaxHeroEffects`, 64 before ARC-DEV-366; `EffectCapacityExceeded`); entries that could leave the consumers' bounds once some of them are removed (`InvalidEffect`, below); the event budget and revision. One revision. |
 | `AddHeroTimedEffect(expected, definition, cause, count, durationMs)` | The same, and an END event (`effect.hero.end`) after 1 ms up to `int.MaxValue × 8000` ms of game time (a `Duration:` in real seconds × 8000); at most 64 pending ENDs. The result's `TimedEffect` is its queue sequence. |
 | `RemoveHeroEffect(expected, number, count = 1)` | The typed removal (0x4EA100) `count` times; an innate number is `InnateEffect`; NoChange when nothing matches. |
 | `RemoveAllHeroEffects(expected, number)`, `RemoveHeroEffectsCausedBy(expected, cause, all)` | The other three removals; race, gender and injury causes are `InvalidEffect`. |
@@ -174,7 +174,7 @@ original, and no switch is needed (owner decision 2026-10-20).
 
 **Session.** `QueryHeroBlessings(kind)`, `AddHeroBlessing(expected, kind, number, effect)` and
 `RemoveHeroBlessing(expected, kind, number)` with `SessionBlessingKind` `Blessing` or `Curse`. Add: the hero, the version,
-NoChange when held (the effect is not looked at), at most 64 entries per list (`EffectCapacityExceeded`), then
+NoChange when held (the effect is not looked at), at most 64 entries per list (`SessionEffectLimits.MaxBlessings`, `EffectCapacityExceeded`), then
 `AddHeroEffect`'s checks and step with the bless or curse cause; the host passes the effect rule it read for the number
 (`BlessingRules.EffectOf`, then `EffectRules.ReadAny`, `SessionEffectDefinition.FromRule`) and shows the received message on a
 change. Remove: NoChange when not held; else the entry leaves the list and the first effect entry of the effect number it

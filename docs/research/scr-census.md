@@ -186,6 +186,8 @@ no wield-on or remove-item script; the wield-on scripts stop first at `items are
 magic-tech adjustment (91, 17), the wield-off scripts at call-ex (81, 43)
 ([item events](../world/inventory-runtime.md#item-events-arc-script-041)).
 
+ARC-DEV-366: the probe's copy of the item set gained get stat (33), as `SessionItemScripts.Admission` did (the tech books' insert script 30017 reads the holder's intelligence); earlier counts above are as measured then.
+
 **Wield pairs (ARC-SCRIPT-042).** The item set copy now holds the item-effect commands (47, 50, 77, 78, 81, 91, 120) and play
 sound (82). Each item point also reports `reached_scripts` and, by type, how many of the attached or called scripts a run reaches a
 condition (`live_conditions`) or action (`live_actions`) in; the report's `wield_pairs` checks each object's wield-on and wield-off
