@@ -163,8 +163,8 @@ public sealed partial class GameSessionOwner
         internal IReadOnlyList<SessionItemScriptRun> Runs => _runs.AsReadOnly();
         internal IReadOnlyList<SessionScriptMessage> Messages => _messages.AsReadOnly();
         /// <summary>Whether committing changes the session: a flag write, a script store cell that differs from the session's (ARC-DEV-152),
-        /// a slot or an effect change.</summary>
-        internal bool Changes => _writes.Count > 0 || _slots.Count > 0 || _steps.Count > 0 || _calls.Count > 0 || _reads.StoreChanges;
+        /// a slot or an effect change, a deferred call to schedule or one to remove that is pending (ARC-MAGIC-041).</summary>
+        internal bool Changes => _writes.Count > 0 || _slots.Count > 0 || _steps.Count > 0 || _owner.ScriptCallsChange(_calls) || _reads.StoreChanges;
 
         internal ScrRunResult? Run(int point, string attachee, string triggerer, string? extra)
         {
@@ -378,6 +378,11 @@ public sealed partial class GameSessionOwner
         }
         return GameSessionFailure.None;
     }
+
+    /// <summary>ARC-MAGIC-041: whether applying these call requests would change the queue: any schedule, or a removal of a call that is pending now.</summary>
+    private bool ScriptCallsChange(IReadOnlyList<ScrCallRequest> calls) => calls.Any(call => call.Kind == ScrCallKind.Schedule ||
+        _events.QueryPending().Any(e => e.Kind == SessionEventKinds.ScriptCall && SessionEventKinds.Call(e.Payload) is var pending && pending.Script == call.Script &&
+            pending.Attachee?.Entity == RoleOf(call.Attachee)?.Entity));
 
     private static SessionScriptRole? RoleOf(ScrObjectRef? obj) => obj is { } o ? new SessionScriptRole(new SessionMapId(o.Map), o.Code) : null;
 

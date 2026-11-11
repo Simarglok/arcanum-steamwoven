@@ -82,10 +82,10 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public ScrAdmissionSet AdmissionFor(ScrObjectRef? attachee) =>
         attachee is { } obj && _state.IsCarried(obj.Code) ? (_session.QueryHero() is null ? Admission : SkillAdmission) : RunAdmission;
 
-    /// <summary>ARC-MAGIC-041 (TI8): the set a deferred call of the event queue runs under: <see cref="AdmissionFor"/> plus use ammunition units (135), which the call of the powered shield's
+    /// <summary>ARC-MAGIC-041 (TI8): the set a deferred call of the event queue runs under: <see cref="AdmissionFor"/> plus wields an item named (21, which <see cref="WieldedItemName"/> answers for the hero without a use host) and use ammunition units (135), which the call of the powered shield's
     /// script uses (<see cref="Apply"/> spends the cells through the session). A dialog script does not get it.</summary>
-    public ScrAdmissionSet CallAdmissionFor(ScrObjectRef? attachee) => AmmoSets.GetOrAdd(AdmissionFor(attachee), set => new(set.Id + "-ammo", set.Conditions,
-        set.Actions.Append(ScrCatalogue.Action.UseAmmoUnits), set.ValueKinds, set.FocusKinds, set.CounterIndexWraps));
+    public ScrAdmissionSet CallAdmissionFor(ScrObjectRef? attachee) => AmmoSets.GetOrAdd(AdmissionFor(attachee), set => new(set.Id + "-ammo",
+        set.Conditions.Append(ScrCatalogue.Condition.IsWieldingItem), set.Actions.Append(ScrCatalogue.Action.UseAmmoUnits), set.ValueKinds, set.FocusKinds, set.CounterIndexWraps));
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<ScrAdmissionSet, ScrAdmissionSet> AmmoSets = new();
 
@@ -110,7 +110,17 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public bool HoldsItemNamed(ScrObjectRef obj, int name) => Answering.HoldsItemNamed(obj, name);
     public int NameOf(ScrObjectRef obj) => Answering.NameOf(obj);
     public bool IsMindControlled(ScrObjectRef obj) => Answering.IsMindControlled(obj);
-    public int? WieldedItemName(ScrObjectRef obj, int location) => Answering.WieldedItemName(obj, location);
+    public int? WieldedItemName(ScrObjectRef obj, int location) => Queries is not null ? Answering.WieldedItemName(obj, location) : IsPc(obj) ? HeroWielded(location) : null;
+
+    // ARC-MAGIC-041 (TI8): the wear question of a deferred call when no use host of this map answers (the powered shield's timer must not die
+    // because the shown map changed): the hero's own kit and carried items, as the use host reads them (AreaUseScriptHost.WieldedItemName, SG4).
+    private int? HeroWielded(int location)
+    {
+        var worn = _session.QueryEquipment().Worn.FirstOrDefault(item => (int)item.Slot == location);
+        if (worn is null) return null;
+        return _session.QueryHeroKit().Where(item => item.Entity == worn.Entity).Select(item => (int?)item.Kind.Name)
+            .Concat(_session.QueryPcInventory().Where(item => item.Entity == worn.Entity).Select(item => (int?)item.Kind.Name)).FirstOrDefault();
+    }
     public bool HasReputation(ScrObjectRef obj, int reputation) => Answering.HasReputation(obj, reputation);
     public int? ObjectType(ScrObjectRef obj) => Answering.ObjectType(obj);
     public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre) => Answering.SceneryInVicinity(centre);
@@ -361,13 +371,14 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
             else _sounds.Add(sound);
         // ARC-MAGIC-041 (TI8): each use ammunition units request in action order, before the deferred calls (the powered shield's call spends a
         // cell and then schedules the next call). The original ignores the answer of the unit use: a holder with too few units loses none and
-        // the script goes on; an object the session has no ammunition for (not the hero, not an NPC it lists) stops the later steps, as a
-        // refused call request does.
+        // the script goes on, and so it does for an object the session holds no ammunition for (not the hero, not an NPC it lists): nothing is
+        // spent. Only a session limit (the record budget, the revision) stops the later steps, as a refused call request does.
         foreach (var use in effects.AmmoUses)
         {
             var holder = IsPc(use.Holder) ? SessionAmmoHolder.Hero : new SessionAmmoHolder(use.Holder.Code);
             var spent = _session.SpendAmmo(_session.Version, holder, use.AmmoType, use.Count);
-            if (spent.Disposition == GameSessionDisposition.Rejected && spent.Failure != GameSessionFailure.AmmoShort) return false;
+            if (spent.Disposition == GameSessionDisposition.Rejected
+                && spent.Failure is GameSessionFailure.BudgetExceeded or GameSessionFailure.RevisionExhausted) return false;
         }
         // ARC-WORLD-039: deferred calls go to the session's queue in action order (the viewer pumps it); a refused request
         // stops the later steps, as a refused flag write does.

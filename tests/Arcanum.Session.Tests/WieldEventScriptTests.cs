@@ -3,6 +3,8 @@ using Arcanum.Data.Characters;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Clock;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.HeroStateTests;
@@ -341,7 +343,7 @@ public sealed class WieldEventScriptTests
     }
     // ARC-MAGIC-041 (ledger TI8): the installed shield's script shape at point 24: line 0 removes the pending call of the script for the attachee,
     // line 1 schedules the script at line 3 in 15 seconds with the wearer as triggerer, line 2 returns (the call's own lines are run by the world's
-    // host: AreaScriptHostTests).
+    // host: AreaPoweredShieldCallTests).
     private const int Shield = 710;
     private static readonly ScrProgram ShieldTimer = Program(
         Do(C(ScrCatalogue.Action.RemoveScriptCall, N(Shield), (Attachee, 0))),
@@ -389,5 +391,29 @@ public sealed class WieldEventScriptTests
         var refused = owner.Equip(owner.Version, "kit:3", EquipmentSlot.Ring1, Wearable(3, Ring(1), SessionScriptPoint.WieldOn), Drawn, Accept, host);
         Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.EventBudgetExceeded), (refused.Disposition, refused.Failure));
         Assert.AreEqual((before, 0, SessionEventKinds.MaxScriptCalls), (owner.Version, owner.QueryEquipment().Worn.Count, owner.QueryScriptCalls().Count));
+    }
+    private sealed class MapRows : ISessionScriptWorld
+    {
+        public List<SessionScriptCall> Ran { get; } = [];
+        public LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
+        // As the viewer's world answers: the player and the objects of the map's rows; a kit or made item of the hero is no row.
+        public bool ObjectExists(SessionMapId map, string entity) => entity == SessionEventKinds.PlayerEntity;
+        public bool RunScriptCall(SessionScriptCall call) { Ran.Add(call); return true; }
+    }
+
+    [TestMethod]
+    public void A_due_shield_call_names_an_item_the_hero_holds_and_runs_where_the_map_rows_list_no_such_item()
+    {
+        var (owner, host) = Owner();
+        using var _ = owner;
+        host.Programs[Shield] = ShieldTimer;
+        host.Slots[("kit:3", SessionScriptPoint.WieldOn)] = Shield;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Equip(owner.Version, "kit:3", EquipmentSlot.Ring1, Wearable(3, Ring(1), SessionScriptPoint.WieldOn), Drawn, Accept, host).Disposition);
+        Assert.AreEqual(ClockMutationDisposition.Changed, owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 15 * 8_000L, ClockAdvanceReason.OrdinaryAdvance).Disposition);
+        var world = new MapRows();
+        var pass = owner.ProcessEvents(world);
+        Assert.AreEqual(1, pass.ScriptCalls.Count);
+        Assert.IsTrue(pass.ScriptCalls.Single().Ran, "the call is not dropped as a missing object");
+        Assert.AreEqual("kit:3", world.Ran.Single().Attachee?.Entity);
     }
 }
