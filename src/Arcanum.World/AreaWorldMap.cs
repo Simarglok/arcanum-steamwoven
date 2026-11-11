@@ -17,7 +17,7 @@ public enum AreaWorldMapDataStatus { Ready, ModuleOutsideGameRoot, MountFailed, 
 public sealed class AreaWorldMapData
 {
     public AreaWorldMapData(string startMap, int startRuntime, WorldAreaTable areas, WorldTravelSectors sectors, long width, int pictureSize, byte[] picture,
-        IReadOnlyDictionary<TravelSector, int>? areaTownMaps = null)
+        IReadOnlyDictionary<TravelSector, int>? areaTownMaps = null, AntiTeleportZones? antiTeleport = null, IReadOnlyDictionary<int, int>? mapAreas = null)
     {
         ArgumentNullException.ThrowIfNull(startMap);
         ArgumentNullException.ThrowIfNull(areas);
@@ -27,7 +27,15 @@ public sealed class AreaWorldMapData
         StartMap = startMap; StartRuntime = startRuntime; Areas = areas; Sectors = sectors; Width = width; PictureSize = pictureSize; Picture = picture;
         TravelAreas = Array.AsReadOnly(areas.Areas.Select(a => new TravelArea(new(a.Location.X, a.Location.Y), a.Radius)).ToArray());
         AreaTownMaps = areaTownMaps ?? new Dictionary<TravelSector, int>();
+        AntiTeleport = antiTeleport;
+        MapAreas = mapAreas ?? new Dictionary<int, int>();
     }
+
+    /// <summary>ARC-MAGIC-038 (ledger TP1): the anti-teleport module (<c>Rules\AntiTeleport.mes</c>, 0x4BD9E0); null when the module has no such file (the original then allows every teleport).</summary>
+    public AntiTeleportZones? AntiTeleport { get; }
+
+    /// <summary>ARC-MAGIC-038: the area of each runtime map from the map list (0x40FFE0); a map without a row has none (0).</summary>
+    public IReadOnlyDictionary<int, int> MapAreas { get; }
 
     /// <summary>ARC-DEV-178 (ledger GA3): the town map of the sector each area's location lies in (the sector's metadata field 0x4640; 0 for a
     /// sector without its own file), for the area at a location (<see cref="WorldTravelGeometry.AreaAt"/>). Keyed by sector.</summary>
@@ -293,7 +301,12 @@ public sealed class AreaWorldMap
         var size = checked((int)((width + PictureScale - 1) / PictureScale));
         var picture = Draw(width, size, grid, table, sectors);
         var townMaps = ReadAreaTownMaps(catalog, map, area, token);
-        return new(AreaWorldMapDataStatus.Ready, new(map.Name, entry.Runtime, area, sectors, width, size, picture, townMaps),
+        var list = MapList.Read(stack);
+        var mapAreas = list.Entries.ToDictionary(e => e.Runtime, e => e.Area);
+        // A missing file switches the module off; one the grammar does not admit is refused and read as off too (project policy: the detail names it).
+        var antiTeleport = AntiTeleportTable.Open(stack).Table is { } zones
+            ? new AntiTeleportZones(zones.Regions.Select(r => new AntiTeleportZone(new(r.X, r.Y), r.Radius)).ToArray(), zones.DisabledMaps) : null;
+        return new(AreaWorldMapDataStatus.Ready, new(map.Name, entry.Runtime, area, sectors, width, size, picture, townMaps, antiTeleport, mapAreas),
             $"map {map.Name}, {width} sectors, areas {area.Areas.Count}");
     }
 

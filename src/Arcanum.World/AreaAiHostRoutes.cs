@@ -339,6 +339,11 @@ public sealed partial class AreaAiHost
         return $"{facts.Location.X},{facts.Location.Y} -> {cell.X},{cell.Y}";
     }
 
+    /// <summary>ARC-MAGIC-038 (ledger TP5): the viewer's runner of the tile scripts of the tiles an immediate path relocation (<see cref="RelocateAlongPath"/>) walks. The original runs them (0x4C0980) before it
+    /// interrupts and places the object (0x455350); the hook gets the NPC and the tiles in walk order and runs them with the NPC still on its old tile. Without it the host queues <see cref="AreaAiNoticeKind.Entered"/> notices
+    /// for them after the placement.</summary>
+    public Action<string, IReadOnlyList<CellCoord>>? BeforeRelocationScripts { get; set; }
+
     /// <summary>
     /// ARC-MAGIC-036 (MA-5, MV1–MV3): the spell Movement component's immediate path relocation (0x455350) of an NPC or companion this host runs: the path request from its tile to <paramref name="destination"/>
     /// (<see cref="ImmediatePathWalk"/>, its owner kind by its leader: a PC's side with a PC leader, else an NPC's), the NPC's walk runs interrupted (the original's level-5 interrupt 0x424070; here
@@ -357,6 +362,18 @@ public sealed partial class AreaAiHost
         if (tiles.Count == 0) return (0, "no route");
         var last = tiles[^1];
         if (!PlaceHeld(last)) return (tiles.Count, $"arrival {last.X},{last.Y} not held by the shown map");
+        // 0x455350 runs the tile script of every tile it steps onto before it interrupts and places the object: the viewer's hook runs them now, with the NPC on its old tile. Without the hook the
+        // notices below carry them after the placement (the project's earlier order).
+        var scripted = BeforeRelocationScripts is not null;
+        if (BeforeRelocationScripts is { } run)
+        {
+            run(npc, tiles);
+            if (Gone(npc) || DeadCritter(npc)) return (tiles.Count, "gone during the walk's tile scripts");
+            // A tile script may have made the NPC join or leave the group, or taken the destination tile.
+            follower = _followers.ContainsKey(npc);
+            if (!follower && !_npcs.ContainsKey(npc)) return (tiles.Count, "no longer run by the host after the walk's tile scripts");
+            if (!PlaceHeld(last)) return (tiles.Count, $"arrival {last.X},{last.Y} not held by the shown map after the walk's tile scripts");
+        }
         InterruptForHold(npc);
         if (follower)
         {
@@ -368,9 +385,26 @@ public sealed partial class AreaAiHost
             Movers.Restore(npc, row.Row.Key, row.Origin, last, Movers.FacingOf(npc, NeighborDirection.XPlus));
             RecordPlace(npc);
         }
-        foreach (var tile in tiles) _notices.Add(new(AreaAiNoticeKind.Entered, npc, null) { Cell = tile });
+        if (!scripted) foreach (var tile in tiles) _notices.Add(new(AreaAiNoticeKind.Entered, npc, null) { Cell = tile });
         _notices.Add(new(AreaAiNoticeKind.Entered, npc, null) { Cell = last });
         return (tiles.Count, $"{from.X},{from.Y} -> {last.X},{last.Y}");
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-038 (ledger TP3, 0x4524C0 case 1): the spell Movement component's Random_Tile_In_Radius for an NPC or companion this host runs: the placement 0x4F4E40 once (<see cref="DropPlacementRules.PlaceOnce"/>) from its
+    /// tile with the direction the cast host drew, its owner kind by its leader, then the same immediate path relocation to the tile it found (<see cref="RelocateAlongPath"/>). Nothing moves when a step of the radius walk leaves
+    /// the map (the original's output stays zero) or when the placement keeps the NPC's own tile.
+    /// </summary>
+    public (int Tiles, string Result) RelocateToRandomTile(string npc, int radius, int direction, IDropMap map)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(npc);
+        ArgumentNullException.ThrowIfNull(map);
+        if (!_followers.ContainsKey(npc) && !_npcs.ContainsKey(npc)) return (0, "not run by the host");
+        if (Tile(npc) is not { } from) return (0, "no tile");
+        if (radius < 0 || direction is < 0 or > DropPlacementRules.MaxDirection) return (0, $"radius {radius} direction {direction} out of range");
+        var chosen = DropPlacementRules.PlaceOnce(from, radius, Leader(npc) is null ? DropOwner.Npc : DropOwner.PcSide, map, direction);
+        if (chosen is not { } to) return (0, "a step of the radius walk leaves the map");
+        return to == from ? (0, "the placement kept the tile") : RelocateAlongPath(npc, to, map);
     }
 
     // Whether the shown map holds a resident on this world cell: it lies on the chart (a map with a loaded-sector chart, the main map's windows: anywhere on the map, ARC-DEV-119),

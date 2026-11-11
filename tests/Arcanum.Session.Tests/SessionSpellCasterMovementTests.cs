@@ -107,7 +107,8 @@ public sealed class SessionSpellCasterMovementTests
     [TestMethod]
     public void The_other_move_locations_and_an_object_the_host_cannot_move_are_not_ready()
     {
-        foreach (var location in new[] { SpellComponentTables.RandomTileInRadius, SpellComponentTables.TeleportTile, SpellComponentTables.TeleportAreaPortal })
+        // ARC-MAGIC-038: the types 2 and 3 are the teleport host's: without one they are not ready.
+        foreach (var location in new[] { SpellComponentTables.TeleportTile, SpellComponentTables.TeleportAreaPortal })
         {
             var (owner, caster, _) = Session(location);
             using var _ = owner;
@@ -119,5 +120,132 @@ public sealed class SessionSpellCasterMovementTests
         Apply(strangerCaster, Stranger, Aimed);
         Assert.IsFalse(strangerCaster.Log.Any(e => e.Kind == SpellCastEventKind.Movement), "a scenery is no critter the host moves");
         Assert.IsTrue(strangerCaster.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady && e.Value == (int)SpellComponentType.Movement), Trail(strangerCaster));
+    }
+
+    // ---- ARC-MAGIC-038 (MA-5 second half, ledger TP1–TP5): the teleport types ----
+
+    private sealed class Teleport : ISpellTeleportHost
+    {
+        public bool Allow = true;
+        public SpellPortalPlan Plan = new(3, true, new(700, 800));
+        public readonly List<string> Asked = [];
+        public bool Allowed(string subject, SpellLocation? target) { Asked.Add(subject); return Allow; }
+        public SpellPortalPlan Portal(string subject) { Asked.Add("portal:" + subject); return Plan; }
+    }
+
+    private static SpellComponentOutcome? ApplyTeleport(SessionSpellCaster caster, string target, int spell = 3, int margin = 0, bool noParent = false, bool noObject = false)
+    {
+        var hero = caster.RunObject(Hero)!;
+        var to = caster.RunObject(target)!;
+        var run = new SpellRun(0, spell, SpellRunAction.Begin, hero, noParent ? null : hero, HeroTile, to, new(0, 0), null, SpellRunFlags.Active) with { Margin = margin };
+        return caster.Apply(run, 0, new(noObject ? null : to, new(0, 0)));
+    }
+
+    [TestMethod]
+    public void The_area_portal_sends_an_object_to_the_start_map_at_its_areas_location_through_the_host()
+    {
+        var (owner, caster, _) = Session(SpellComponentTables.TeleportAreaPortal);
+        using var _ = owner;
+        var host = new Teleport();
+        caster.Teleport = host;
+        Assert.AreEqual(SpellComponentOutcome.None, ApplyTeleport(caster, Hero));
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.TeleportPortal, -1, 700, Hero, 800), caster.Log.Single(), Trail(caster));
+        Assert.AreEqual("portal:" + Hero, host.Asked.Single());
+    }
+
+    [TestMethod]
+    public void The_area_portal_with_no_area_or_a_refusal_shows_message_10000_to_the_local_player_only()
+    {
+        var (owner, caster, _) = Session(SpellComponentTables.TeleportAreaPortal);
+        using var _ = owner;
+        var host = new Teleport { Plan = new(0, true, default) };
+        caster.Teleport = host;
+        ApplyTeleport(caster, Hero);
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.Message, -1, SessionSpellCaster.TeleportRefusedMessage), caster.Log.Single(), "no area: the local player is told");
+        host.Plan = new(3, false, new(700, 800));
+        ApplyTeleport(caster, Hero);
+        Assert.AreEqual(2, caster.Log.Count(e => e.Kind == SpellCastEventKind.Message && e.Value == 10000), "the test refuses");
+        var before = caster.Log.Count;
+        ApplyTeleport(caster, Npc);
+        Assert.AreEqual(before, caster.Log.Count, "an NPC is told nothing and nothing happens: " + Trail(caster));
+    }
+
+    [TestMethod]
+    public void The_teleports_do_nothing_for_a_resisted_run_or_without_a_target_object()
+    {
+        foreach (var location in new[] { SpellComponentTables.TeleportAreaPortal, SpellComponentTables.TeleportTile })
+        {
+            var (owner, caster, _) = Session(location);
+            using var _ = owner;
+            caster.Teleport = new Teleport();
+            Assert.AreEqual(SpellComponentOutcome.None, ApplyTeleport(caster, Hero, margin: 3));
+            Assert.AreEqual(SpellComponentOutcome.None, ApplyTeleport(caster, Hero, noObject: true));
+            Assert.AreEqual(0, caster.Log.Count, Trail(caster));
+        }
+    }
+
+    [TestMethod]
+    public void The_teleport_tile_tests_the_runs_parent_then_opens_the_world_maps_teleport_mode()
+    {
+        var (owner, caster, _) = Session(SpellComponentTables.TeleportTile);
+        using var _ = owner;
+        var host = new Teleport();
+        caster.Teleport = host;
+        Assert.AreEqual(SpellComponentOutcome.None, ApplyTeleport(caster, Hero));
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.TeleportMap, 0, 3, Hero), caster.Log.Single(), "the source and the spell for the world map; nothing moves here");
+        Assert.AreEqual(Hero, host.Asked.Single());
+    }
+
+    [TestMethod]
+    public void The_teleport_tile_refused_by_the_test_shows_message_10000_whoever_the_parent_is()
+    {
+        var (owner, caster, _) = Session(SpellComponentTables.TeleportTile);
+        using var _ = owner;
+        caster.Teleport = new Teleport { Allow = false };
+        ApplyTeleport(caster, Hero);
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.Message, 0, 10000), caster.Log.Single());
+        // A run with no parent has no handle to test: refused as well (0x4BDD30 refuses a zero handle).
+        var (second, other, _) = Session(SpellComponentTables.TeleportTile);
+        using var _2 = second;
+        other.Teleport = new Teleport();
+        ApplyTeleport(other, Hero, noParent: true);
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.Message, 0, 10000), other.Log.Single(), Trail(other));
+    }
+
+    [TestMethod]
+    public void The_teleport_cost_is_paid_when_the_world_map_confirms_and_only_for_the_local_player()
+    {
+        var (owner, caster, _) = Session(SpellComponentTables.TeleportTile);
+        using var _ = owner;
+        Assert.IsTrue(caster.PayTeleportCost(Npc, 3), "another payer is not charged here");
+        Assert.AreEqual(0, caster.Log.Count);
+        Assert.IsTrue(caster.PayTeleportCost(Hero, 3), Trail(caster));
+        Assert.IsTrue(caster.Log.Any(e => e.Kind == SpellCastEventKind.FatiguePaid && e.Object == Hero), Trail(caster));
+    }
+
+    [TestMethod]
+    public void The_random_tile_type_draws_the_direction_and_asks_the_host_to_walk_the_radius()
+    {
+        var (owner, caster, _) = Session(SpellComponentTables.RandomTileInRadius);
+        using var _ = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, Apply(caster, Hero, Aimed));
+        var entry = caster.Log.Single();
+        Assert.AreEqual((SpellCastEventKind.MovementRandom, 0, 3, Hero), (entry.Kind, entry.Run, entry.Value, entry.Object), "the radius of the component's Tile_Radius: in the value, the run's object");
+        Assert.IsTrue(entry.Detail is >= 0 and <= 8, $"the one draw of 0x4CEF00 over 0..8, got {entry.Detail}");
+        // The type ignores the run's target tile: a (0, 0) tile moves it all the same.
+        Apply(caster, Npc, new(0, 0));
+        Assert.AreEqual(SpellCastEventKind.MovementRandom, caster.Log[^1].Kind);
+    }
+
+    [TestMethod]
+    public void The_random_tile_type_of_a_resisted_run_or_without_a_target_object_does_nothing_and_a_scenery_is_not_ready()
+    {
+        var (owner, caster, _) = Session(SpellComponentTables.RandomTileInRadius);
+        using var _ = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, Apply(caster, Hero, Aimed, margin: 1));
+        Assert.AreEqual(SpellComponentOutcome.None, Apply(caster, Hero, Aimed, noObject: true));
+        Assert.AreEqual(0, caster.Log.Count, Trail(caster));
+        Apply(caster, Stranger, Aimed);
+        Assert.IsTrue(caster.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady && e.Value == (int)SpellComponentType.Movement), Trail(caster));
     }
 }

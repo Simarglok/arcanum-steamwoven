@@ -323,6 +323,28 @@ public partial class TerrainViewerApp
         // The original fires a jump point or tile script on every tile the player enters (ledger TR3), in step order; since
         // ARC-SCRIPT-017 every tile script runs through the session, then the script of a sector the step enters.
         // ARC-SCRIPT-046: a conversation a run opened holds the steps still queued for a later frame.
+        RunMapEnteredSteps();
+        // ARC-DEV-204: a change that waits for its fade-out is the only one: another request met meanwhile is dropped, not queued behind it.
+        if (TransitionFadePending) { _mapTransfers.Clear(); return false; }
+        if (_mapTransfers.Pending is null) ProcessAreaMapStream(session);
+        if (_mapTransfers.Pending is not { } transfer || WorldModal || session.State.Phase != MovementPhase.Settled) return false;
+        _mapTransfers.Clear();
+        // A map change leaves combat mode, as the source's teleport does (ARC-COMBAT-004).
+        LeaveCombatModeForMapChange();
+        // ARC-DEV-113 (MIG11 S2): with a session the transfer is the session's change of place, requested and run by this frame's ping.
+        if (_areaSession is { } owner) return RequestMapChange(owner, transfer, session);
+        if (transfer.SameMap) { MoveOnThisMap(transfer, session); return true; }
+        BeginMapLoadTransfer(transfer, session);
+        return true;
+    }
+
+    /// <summary>
+    /// The tiles the hero entered, in step order: each one's tile script (and, for a full entry, jump point and the script of the sector it enters) runs through the map-transfer step. ARC-MAGIC-038 runs it
+    /// at once for the tiles an immediate relocation walks, before the hero is placed (the original's order, 0x455350 then 0x43E770).
+    /// </summary>
+    private void RunMapEnteredSteps()
+    {
+        if (_mapTransfers is null) return;
         while (!ConversationOpen && _mapEntered.TryDequeue(out var step))
         {
             var queued = false;
@@ -361,18 +383,6 @@ public partial class TerrainViewerApp
             }
             if (queued) { StopWorldRoute("ROUTE_REPLACED_BY_TRANSFER"); _mapEntered.Clear(); }
         }
-        // ARC-DEV-204: a change that waits for its fade-out is the only one: another request met meanwhile is dropped, not queued behind it.
-        if (TransitionFadePending) { _mapTransfers.Clear(); return false; }
-        if (_mapTransfers.Pending is null) ProcessAreaMapStream(session);
-        if (_mapTransfers.Pending is not { } transfer || WorldModal || session.State.Phase != MovementPhase.Settled) return false;
-        _mapTransfers.Clear();
-        // A map change leaves combat mode, as the source's teleport does (ARC-COMBAT-004).
-        LeaveCombatModeForMapChange();
-        // ARC-DEV-113 (MIG11 S2): with a session the transfer is the session's change of place, requested and run by this frame's ping.
-        if (_areaSession is { } owner) return RequestMapChange(owner, transfer, session);
-        if (transfer.SameMap) { MoveOnThisMap(transfer, session); return true; }
-        BeginMapLoadTransfer(transfer, session);
-        return true;
     }
 
     /// <summary>The actor stands on the same-map arrival of <paramref name="transfer"/> (the session, when there is one, placed it).</summary>

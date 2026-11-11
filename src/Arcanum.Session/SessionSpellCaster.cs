@@ -186,6 +186,15 @@ public enum SpellCastEventKind
     /// <summary>ARC-MAGIC-036 (MA-5, MV1–MV3): a Movement component of type 0 (the target tile, 0x4524C0 → the immediate relocation 0x455350) asks the host to relocate <see cref="SpellCastEvent.Object"/> along the path request to the run's
     /// target tile, whose x is <see cref="SpellCastEvent.Value"/> and y <see cref="SpellCastEvent.Detail"/>: the host asks the path, runs the tiles' scripts on the way and places the object on the last tile. It needs the map's paths, so this host logs the request.</summary>
     Movement,
+    /// <summary>ARC-MAGIC-038 (MA-5 second half, TP1–TP5): a Movement component of type 3 (Teleport_Area_Portal, the helper 0x452650) sends <see cref="SpellCastEvent.Object"/> to the start map at the area's location, x in
+    /// <see cref="SpellCastEvent.Value"/> and y in <see cref="SpellCastEvent.Detail"/>, with the change of place's flags 0x120: the host makes the change of place.</summary>
+    TeleportPortal,
+    /// <summary>ARC-MAGIC-038: a Movement component of type 2 (Teleport_Tile, Teleportation) that the anti-teleport test allowed calls the world map's teleport mode (0x4608B0 → 0x560790) with the run's source
+    /// (<see cref="SpellCastEvent.Object"/>) and spell (<see cref="SpellCastEvent.Value"/>): the host opens the world map for the player to pick an area, and pays with <see cref="SessionSpellCaster.PayTeleportCost"/>.</summary>
+    TeleportMap,
+    /// <summary>ARC-MAGIC-038: a Movement component of type 1 (Random_Tile_In_Radius, 0x4524C0 → the placement 0x4F4E40) asks the host to relocate <see cref="SpellCastEvent.Object"/> to a tile
+    /// <see cref="SpellCastEvent.Value"/> steps (the component's <c>Tile_Radius:</c>) away in the direction <see cref="SpellCastEvent.Detail"/> (0..8, the one draw): the host asks the path, walks and places as for type 0.</summary>
+    MovementRandom,
 }
 
 /// <summary>
@@ -849,12 +858,16 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         var target = targetObject is null ? null : Facts(targetObject);
         if (targetObject is not null && target is null) return new(SpellCastAttemptOutcome.Nothing);
         var invocation = new SpellInvocation(spell, facts, sourceFacts, target, target is null ? targetTile : SpellLocation.None,
-            item is null ? null : ItemPower(Item(item)!, facts), ParentIsLocalPlayer: caster == Hero);
+            item is null ? null : ItemPower(Item(item)!, facts), TeleportAllowed: TeleportAllowedFor(spell, caster), ParentIsLocalPlayer: caster == Hero);
         var world = InvocationWorld();
         if (!SpellInvocationRules.HasLineOfFire(invocation, world)) return Refused(SpellCastAttemptOutcome.NoLineOfFire, SpellUiRules.NoLineOfFireMessage);
         var started = _owner.StartSpellRun(_owner.Version, new(invocation), record.Run, world, _owner.SpellRolls);
         if (started.Disposition != GameSessionDisposition.Changed || started.Creation?.Run is not { } run)
+        {
+            // ARC-MAGIC-038 (0x4564E0): the anti-teleport refusal of Teleportation shows message 10000 to the local player only.
+            if (started.Creation?.Check is { ShowsTeleportMessage: true }) _log.Add(new(SpellCastEventKind.Message, -1, TeleportRefusedMessage));
             return new(SpellCastAttemptOutcome.Refused, null, started);
+        }
         _itemChains.Remove(run.Id);
         return new(SpellCastAttemptOutcome.Started, null, started, run.Id);
     }

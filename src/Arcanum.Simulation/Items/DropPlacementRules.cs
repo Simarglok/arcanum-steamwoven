@@ -84,6 +84,24 @@ public static class DropPlacementRules
         return owner;
     }
 
+    /// <summary>
+    /// ARC-MAGIC-038 (ledger TP3, 0x4524C0 case 1): the one call of 0x4F4E40 the spell Movement component's Random_Tile_In_Radius makes for the object's tile, with the direction already drawn by the caller
+    /// (<paramref name="direction"/>, 0..8: the one draw of 0x4CEF00): <paramref name="radius"/> steps in it, the owner's path to that tile, the same refusals and the same walk as one try of <see cref="Place"/>.
+    /// Null when a step leaves the map: the component then relocates nothing at all (the original's output stays zero); otherwise the tile to relocate to, the owner's own when nothing is to happen.
+    /// </summary>
+    public static CellCoord? PlaceOnce(CellCoord owner, int radius, DropOwner who, IDropMap map, int direction)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        if (!Enum.IsDefined(who)) throw new ArgumentOutOfRangeException(nameof(who));
+        if (radius < 0) throw new ArgumentOutOfRangeException(nameof(radius));
+        return Try(owner, radius, who, map, new FixedDirection(direction));
+    }
+
+    private sealed class FixedDirection(int direction) : IDropRolls
+    {
+        public int Roll(DropRoll purpose, int min, int max) => direction;
+    }
+
     /// <summary>The create action's distance per try: 1..3 steps (0x447220 case 52, ledger PG1).</summary>
     public const int MinCreateDistance = 1, MaxCreateDistance = 3;
 

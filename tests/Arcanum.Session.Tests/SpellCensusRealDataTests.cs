@@ -30,7 +30,6 @@ public sealed class SpellCensusRealDataTests
     [
         // 1 and 75 (ARC-MAGIC-037, MA-6): the lock flags of a portal or container are taken on those objects (SessionSpellCasterLockTests); on a critter, which the census targets, they stay not ready by design.
         (1, "ObjFlag", "ObjFlag"),
-        (4, "Movement", "Movement"),
         (9, "ObjFlag", "ObjFlag"),
         (11, "Destroy", "Destroy"),
         (13, "Trait", "Trait"),
@@ -99,6 +98,13 @@ public sealed class SpellCensusRealDataTests
     internal sealed class Events : ISessionEventWorld
     {
         public LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
+    }
+
+    /// <summary>ARC-MAGIC-038 (MA-5 second half): the viewer wires a teleport host (<see cref="ISpellTeleportHost"/>); the census has one that allows every teleport and finds an area.</summary>
+    internal sealed class CensusTeleport : ISpellTeleportHost
+    {
+        public bool Allowed(string subject, SpellLocation? target) => true;
+        public SpellPortalPlan Portal(string subject) => new(1, true, new(10, 10));
     }
 
     /// <summary>ARC-MAGIC-035 (MA-4): the viewer wires the AI host as the cast host's social host (<see cref="ISpellSocialHost"/>); the census has one that runs every step, so the NPC rows say what the wired host takes.</summary>
@@ -172,7 +178,7 @@ public sealed class SpellCensusRealDataTests
         using var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
         var fields = AttackStateTests.Npc(stats: AttackStateTests.Stats(), critterFlags: 0);
         var caster = new SessionSpellCaster(owner, n => n == record.Data.Number ? record : null,
-            new Map(owner, new(SessionCritterCombat.From(Npc, fields).Combat!, 0, 0, 0, 0, 0)), new Events()) { EffectDefinitions = effects, Social = new CensusSocial() };
+            new Map(owner, new(SessionCritterCombat.From(Npc, fields).Combat!, 0, 0, 0, 0, 0)), new Events()) { EffectDefinitions = effects, Social = new CensusSocial(), Teleport = new CensusTeleport() };
         var hero = caster.RunObject(Hero)!;
         var to = caster.RunObject(target)!;
         var tile = target == Hero ? HeroTile : NpcTile;

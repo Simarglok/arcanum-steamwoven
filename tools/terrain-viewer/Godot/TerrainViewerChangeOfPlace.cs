@@ -65,9 +65,11 @@ public partial class TerrainViewerApp
     /// is emptied by the first host that opens one. The blanking, the pre-cache and the other presentation are NOT READY (B16).
     /// </summary>
     private void RequestWorldMapLanding(GameSessionOwner owner, AreaGridSession grid, TerrainViewerArguments origin, TerrainViewerArguments next,
-        string target, int startRuntime, CellCoord landing, bool sameMap)
+        string target, int startRuntime, CellCoord landing, bool sameMap, ChangeOfPlaceCaller caller = ChangeOfPlaceCaller.WorldMapLanding,
+        ChangeOfPlaceFlags flags = AreaChangeOfPlace.LandingFlags)
     {
-        var submitted = owner.RequestHeroChangeOfPlace(ChangeOfPlaceCaller.WorldMapLanding, startRuntime, landing, AreaChangeOfPlace.LandingFlags, 0,
+        // ARC-MAGIC-038 (CP10, ledger TP4): the area portal is a teleport spell's request (flags 0x120: no wait orders, blank screen), the world map's landing the blank screen alone.
+        var submitted = owner.RequestHeroChangeOfPlace(caller, startRuntime, landing, flags, 0,
             map => map == startRuntime);
         if (!submitted.Accepted) { RefuseLanding($"{submitted.Status} {submitted.Failure}"); return; }
         // ARC-DEV-204 (B16, CP1): the landing's request blanks the screen at once; the ping or the load's end gives the draw back.
