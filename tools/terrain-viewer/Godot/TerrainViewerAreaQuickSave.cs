@@ -301,6 +301,9 @@ public partial class TerrainViewerApp
         if (_areaTransitions?.Cancel() is { } dropped) GD.Print($"ARC-WORLD-011 {reason} dropped the queued transfer to=" + dropped.ToMap);
         if (_mapTransfers?.Clear() is { } queued) GD.Print($"ARC-WORLD-038 {reason} dropped the queued transfer to=" + queued.To.Name);
         var actor = loaded.QueryActor();
+        // ARC-DEV-354: the loaded session's carried items this host has no row for (taken in a window of the main map it never showed) are read
+        // before the session is set, whose item art sizes read those rows.
+        _inventoryHost?.ReadCarriedRows(loaded);
         ReplaceAreaSession(loaded, maps, actor.Map.RuntimeMap, talk);
         var runtime = maps[actor.Map.RuntimeMap];
         _readyArea = _caveLoad is { } cave && runtime.RuntimeMap == cave.Area.Snapshot.RuntimeMap ? cave.Area : _exteriorArea ?? _readyArea;

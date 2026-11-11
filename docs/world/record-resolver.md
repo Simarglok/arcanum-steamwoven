@@ -98,6 +98,17 @@ resolver finds his record there, so the AI no longer keeps him out of its rules 
   (`EntityHomes.RecordedHomeOf`). The extra windows are not held maps: `AttachHolderMap` (the negative IN of a companion carried here, ARC-DEV-087) does not
   attach them, so such a companion's item moves still find no holder (NOT READY). A failure the resolver meets (no stored cell yet) is kept by it for the
   scene. MIG9 (residency) reads such windows through the sector model.
+- ARC-DEV-354 does the same for the items the hero carries. An item has no `npc.home`: when the record source has no cell recorded for the entity,
+  `AreaMapRecords.LoadAround` centres the window on the cell the map's mobile aggregate gives the object (`AreaMobileCells`: the aggregate read once per
+  process and map, without `map.patch`, which is the location a window plan keeps an aggregate object by). The original holds every mobile object of the
+  open map whatever sector it stands in (ledger SS7, PS7), and an inventory is a list of item objects that each keep their own record (PS17, PS20), so
+  an item taken in one window keeps its name and fields in every other. `AreaInventoryHost.ReadCarriedRows` reads, by identity from the origin map the
+  session names, the row of every carried item (the PC's items, items the hero gave an NPC, the hero's items placed on a shown map) that neither a held map
+  nor the rows handed over at a window move (ARC-DEV-314) give; the viewer calls it when it adopts a session on a host: a new host (a fresh run, a load
+  into another window or map, a map change) and a load the host keeps. Before, a fresh run that loaded a save with a note taken in another window of the
+  main map had no row for it: "[unknown object]", no facts, no use (B51 follow-up). A row read is kept with the host and handed over at the next window
+  move like the others; an item whose row does not read is counted in the log (`ARC-DEV-354 carried-rows read=N missing=M`). The cost is one window read
+  per distinct window of the carried items, at a load only.
 - The rows are what the resolver needs: a body or frame that does not read leaves the read with its rows and no bodies (named in the read's detail).
 - A home map that was not held is read on the calling thread, once (a window read takes the strict publication of 25 sectors: about 3 s for the main map's window in the `transfer` smoke); MIG9 owns moving reads
   off the frame. A map change is where it normally happens.

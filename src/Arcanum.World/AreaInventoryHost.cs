@@ -175,6 +175,47 @@ public sealed class AreaInventoryHost
         return GameSessionFailure.None;
     }
 
+    /// <summary>
+    /// ARC-DEV-354: the items whose row this host keeps when it can read it, with the map the session names as each one's origin: the items the PC
+    /// holds, the items the hero gave an NPC (one taken from the world) and the hero's items placed on a map this host holds. The original names an
+    /// object and reads its fields from its own record wherever it is (PS17, PS20: inventories are object fields, every item a record of its own).
+    /// </summary>
+    private IEnumerable<(string Entity, int Origin)> Carried(GameSessionOwner session)
+    {
+        foreach (var item in session.QueryPcInventory()) yield return (item.Entity, item.Origin.RuntimeMap);
+        foreach (var given in session.QueryGivenItems())
+            if (given.Origin is { } origin) yield return (given.Entity, origin.RuntimeMap);
+        foreach (var placed in session.QueryPlacedItems())
+            if (placed.Origin is { } origin && _maps.ContainsKey(placed.Map.RuntimeMap)) yield return (placed.Entity, origin.RuntimeMap);
+    }
+
+    /// <summary>
+    /// ARC-DEV-354: the rows of the carried items (<see cref="Carried"/>) that neither a held map nor <see cref="Retain"/> gave this host, read by
+    /// identity through the resolver from the map the session names as their origin: a window of the main map other than the shown one is read around
+    /// the object's stored cell (<see cref="AreaMobileCells"/>), any other map whole. A fresh run (or a load into another window or map) has no rows
+    /// handed over, so an item the hero took in another window of the main map had no row at all: no name ("[unknown object]"), no facts, no use.
+    /// An item whose row still does not read stays without one, and the log says how many. The viewer calls it once the session it adopts is bound to
+    /// this host (a new host after <see cref="Attach"/>, or a load this host keeps), not from <see cref="Attach"/>: a load to another map attaches its
+    /// session to the host it is about to drop first, which would read the same windows for nothing. Returns how many rows were read and how many not.
+    /// </summary>
+    public (int Read, int Missing) ReadCarriedRows(GameSessionOwner session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        int read = 0, missing = 0;
+        foreach (var (entity, origin) in Carried(session))
+        {
+            if (RowOf(entity) is not null || session.IsItemDestroyed(entity)) continue;
+            if (_resolver.Resolve(entity, origin).Record is { } found)
+            {
+                _held[entity] = new(found.Row, found.Map.Seed.Items.FirstOrDefault(item => item.Entity == entity) is { } listed ? listed.Facts.Weight : null);
+                read++;
+            }
+            else missing++;
+        }
+        if (read + missing > 0) Console.WriteLine($"ARC-DEV-354 carried-rows read={read} missing={missing}");
+        return (read, missing);
+    }
+
     /// <summary>ARC-DEV-072: a map the resolver read on demand has no seed in the session until it is first asked about (a given map's is
     /// attached with the host, and a restore attaches them again): attaches it now. The session's refusal, or null when there was nothing to
     /// attach (a given map, one already attached, one not read) or the seed was accepted.</summary>
@@ -314,6 +355,10 @@ public sealed class AreaInventoryHost
         return "[unknown object]";
     }
 
+    /// <summary>ARC-DEV-354: the row this host knows for <paramref name="entity"/> without reading anything: a held map's, else a carried item's
+    /// (<see cref="Retain"/>, <see cref="ReadCarriedRows"/>); null when it knows none.</summary>
+    public AreaObjectRecord? KnownRow(string entity) => RowOf(entity ?? throw new ArgumentNullException(nameof(entity)));
+
     /// <summary>The row of an entity among the held maps, else among the rows of items the hero carried out of a window of the same map (<see cref="Retain"/>).</summary>
     private AreaObjectRecord? RowOf(string entity)
     {
@@ -332,8 +377,9 @@ public sealed class AreaInventoryHost
     {
         ArgumentNullException.ThrowIfNull(session);
         var rows = new Dictionary<string, AreaHeldRow>(StringComparer.Ordinal);
-        foreach (var item in session.QueryPcInventory())
-            if (RowOf(item.Entity) is { } row) rows[item.Entity] = new(row, Weight(item.Entity));
+        // ARC-DEV-354: every carried item (given and placed ones too), not only those the PC holds.
+        foreach (var (entity, _) in Carried(session))
+            if (RowOf(entity) is { } row) rows[entity] = new(row, Weight(entity));
         return rows;
     }
 

@@ -33,10 +33,12 @@ public sealed class AreaMapRecords(TerrainViewerArguments launch, AreaHomeDirect
     }
 
     /// <summary>ARC-DEV-337 (B52): the window of a map that opens only as a window, read around <paramref name="entity"/>'s own stored cell
-    /// (<c>nearEntity</c>; none known: a typed failure, nothing is guessed). A whole map has no other window: null.</summary>
+    /// (<c>nearEntity</c>; ARC-DEV-354: else the cell the map's mobile aggregate gives the object, <see cref="AreaMobileCells"/>, so an item the hero
+    /// took in another window, which has no recorded cell, is read too; none known: a typed failure, nothing is guessed). A whole map has no other window: null.</summary>
     public MapRecordsLoad LoadAround(int runtimeMap, string entity, CancellationToken token)
     {
-        if (nearEntity?.Invoke(runtimeMap, entity) is not { } at) return new(null, "no stored cell is recorded for the entity");
+        if ((nearEntity?.Invoke(runtimeMap, entity) ?? AreaMobileCells.Of(launch.GameRoot, runtimeMap, entity)) is not { } at)
+            return new(null, "no stored cell is recorded for the entity");
         var load = homes is not null ? homes.Home(runtimeMap, at, token) : _own.Read(runtimeMap, at, token);
         return load.Read is { } read && read.CoreSectors is not null ? new(read.Rows, load.Detail) : new(null, load.Read is null ? load.Detail : "the map is read whole");
     }

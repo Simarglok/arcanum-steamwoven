@@ -17,6 +17,8 @@ public partial class TerrainViewerApp
     // the town unlisted), and F7, a step away and F8 bring the same hero back. After every step the multiset is unchanged, the inventory window opens and lists every held item,
     // the worn slots are unchanged and the made item still has its wear facts. ARC-DEV-314 adds plan step 5, the report's own map change: the window moves to the Shrouded Hills town area, an exit object there is used into the
     // Panarii temple map, F7 and F8 are done inside it, and the exit back is used; the same checks run after each, and the window's text of every held item stays the same.
+    // ARC-DEV-354 adds step 6, a load into another window as a fresh run does it: F7 in the town window, the window moves to the far area, and F8 opens the town window with a new
+    // host that was handed no rows; the note, which the town window does not list, has its row read from the window it was taken in, and the same checks pass.
     private const string ReportNoteEntity = "oid:385e7e885ab0ea9f85b35e3fb2b0fef166e70562766f5d163d7aa1ddcd72cc7a";
 
     private async Task RunAreaInvCarrySmokeAsync()
@@ -203,6 +205,31 @@ public partial class TerrainViewerApp
             Require(outside is not null && _readyMapName?.Contains("panarii temple", StringComparison.OrdinalIgnoreCase) != true, $"the exit back to the town was used from {_readyMapName}: {outside?.To}");
             Settle();
             checks.Add(Check("back from the temple map"));
+
+            // Step 6 (ARC-DEV-354): a load into another window, as a fresh run loads the save: saved in the town window, loaded from the far one. The load
+            // opens the town window with a new host and no rows handed over (a quick load keeps none), and the town window does not list the note, so its
+            // row has to be read by identity from the window it was taken in.
+            QuickKey(Key.F7);
+            Require(_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved in the town window: " + _quickSaveStatus);
+            for (var i = 0; i < 3; i++) AreaSmokeFrame();
+            InventoryKey(Key.W);
+            Require(WorldMapOpen && _worldMap is not null, "W opened the world map before the far area again: " + _worldMapStatus);
+            var townSession = _areaSession!;
+            _worldMapPanel!.TeleportForSelfTest(target);
+            Require(!WorldMapOpen && _mapHandoff is not null, "Teleport to the far area started the load again: " + _worldMapPanel.MessageForSelfTest);
+            for (var i = 0; i < 36000 && (_mapHandoff is not null || !ReferenceEquals(_areaSession, townSession)); i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(_mapHandoff is null && ReferenceEquals(_areaSession, townSession), "the far area loaded again with the session carried");
+            Settle();
+            running = _areaSession;
+            QuickKey(Key.F8);
+            Require(_mapHandoff is not null, "F8 loads the town window's save with its window (a load into another window): " + _quickSaveStatus);
+            await (_lastLoad ?? Task.CompletedTask);
+            for (var i = 0; i < 36000 && _mapHandoff is not null; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(_mapHandoff is null && !ReferenceEquals(running, _areaSession) && _areaSession is not null, "the load into the town window published a new session: " + _quickSaveStatus);
+            Require(_inventoryHost is not null && !_inventoryHost.Maps.Any(shown => shown.TryGetRow(note, out _)), "the town window does not list the note (its row is read, not shown)");
+            Require(_inventoryHost!.KnownRow(note) is not null, "the note's row was read from the window it was taken in");
+            Settle();
+            checks.Add(Check("after a load into another window"));
         }
         finally
         {
