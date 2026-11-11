@@ -40,6 +40,18 @@ public sealed class NpcEffectStateTests
         return life.View!.Status;
     }
 
+    /// <summary>ARC-RES-127 (EF11): the original's list has no bound, so an NPC takes the 80 entries one spell component adds (record 214), and the first entry of the number comes off (EF2).</summary>
+    [TestMethod]
+    public void An_npc_takes_eighty_entries_of_one_number_and_gives_one_back()
+    {
+        using var owner = Create();
+        var wolf = Target();
+        Ok(owner.AddNpcEffect(owner.Version, wolf, Strong, EffectCause.Spell, 80), 80);
+        Assert.AreEqual(80, owner.QueryNpcEffects(wolf)!.Entries.Count);
+        Ok(owner.RemoveNpcEffect(owner.Version, wolf, Strong.Number), 1);
+        Assert.AreEqual(79, owner.QueryNpcEffects(wolf)!.Entries.Count);
+    }
+
     [TestMethod]
     public void An_add_keeps_the_current_values_by_moving_the_damage_by_the_change_of_the_maxima()
     {
