@@ -223,7 +223,7 @@ public sealed class SessionSpellCasterTraitTests
         Assert.AreEqual(0, upgraded.Snapshot.Spells.TraitArt.Count);
         Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(upgraded.Snapshot));
         var damaged = GameSessionSnapshotCodec.TryDecode(older.Replace("\"spells\":", "\"spellz\":"));
-        Assert.IsNull(damaged.Snapshot);
+        Assert.AreEqual((SnapshotDecodeFailure.MissingField, "$.spells"), (damaged.Failure, damaged.Path));
     }
 
     [TestMethod]

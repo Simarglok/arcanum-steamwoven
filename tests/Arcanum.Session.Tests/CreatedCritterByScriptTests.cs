@@ -54,6 +54,19 @@ public sealed class CreatedCritterByScriptTests
     }
 
     [TestMethod]
+    public void A_monster_body_a_Trait_component_put_on_a_created_critter_goes_with_it_when_it_is_destroyed()
+    {
+        // ARC-MAGIC-040 (review): the written-flags bound is kept by removing a destroyed critter's record; the monster body is per-critter state with the same bound.
+        using var owner = Create();
+        var critter = owner.CreateCritterNear(owner.Version, Prototype, Exterior, new CellCoord(100, 201), new OpenMap()).Object!;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteTraitArt(owner.Version, critter.Entity, new(20, 1)).Disposition);
+        Assert.AreEqual(new SessionTraitArt(20, 1), owner.QueryTraitArt(critter.Entity));
+        owner.DestroyObject(critter.Entity);
+        Assert.IsNull(owner.QueryTraitArt(critter.Entity));
+        Assert.AreEqual(0, owner.QueryAllTraitArt().Count);
+    }
+
+    [TestMethod]
     public void The_tile_comes_from_the_sessions_generator_so_the_same_save_makes_the_same_critters()
     {
         using var a = Create();
