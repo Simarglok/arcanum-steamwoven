@@ -28,7 +28,7 @@ internal static class AreaMapLoadOperation
         var mapName = arguments.AreaMapName ?? throw new InvalidOperationException("AREA_MAP_REQUIRED");
         var discovery = ContentMountPlan.Discover(arguments.GameRoot ?? throw new InvalidOperationException("AREA_MAP_GAME_ROOT_REQUIRED"));
         if (discovery.Status != ContentMountStatus.Ready) throw new InvalidOperationException("AREA_MAP_MOUNT_" + discovery.Status.ToString().ToUpperInvariant());
-        var opened = ContentStack.Open(discovery.Plan!);
+        var opened = ContentStack.OpenShared(discovery.Plan!);
         if (opened.Status != ContentStackStatus.Ready) throw new InvalidOperationException("AREA_MAP_STACK_" + opened.Status.ToString().ToUpperInvariant());
         using var stack = opened.Stack!;
         // The viewer's own archive arguments must be the stack's sources the plan reads.
@@ -343,7 +343,7 @@ public static class AreaMapWalk
         var mapName = arguments.AreaMapName ?? throw new InvalidOperationException("AREA_MAP_REQUIRED");
         var discovery = ContentMountPlan.Discover(arguments.GameRoot ?? throw new InvalidOperationException("AREA_MAP_GAME_ROOT_REQUIRED"));
         if (discovery.Status != ContentMountStatus.Ready) throw new InvalidOperationException("AREA_MAP_MOUNT_" + discovery.Status.ToString().ToUpperInvariant());
-        var opened = ContentStack.Open(discovery.Plan!);
+        var opened = ContentStack.OpenShared(discovery.Plan!);
         if (opened.Status != ContentStackStatus.Ready) throw new InvalidOperationException("AREA_MAP_STACK_" + opened.Status.ToString().ToUpperInvariant());
         using var stack = opened.Stack!;
         return AreaWindowRoute.Plan(stack, WorldCatalog.Open(stack), mapName, from, to, token: token, stepOpen: StepOpen(overlay));
@@ -383,7 +383,7 @@ public static class AreaMapCensus
     {
         var discovery = ContentMountPlan.Discover(arguments.GameRoot ?? throw new InvalidOperationException("AREA_MAP_GAME_ROOT_REQUIRED"));
         if (discovery.Status != ContentMountStatus.Ready) throw new InvalidOperationException("AREA_MAP_MOUNT_" + discovery.Status.ToString().ToUpperInvariant());
-        var opened = ContentStack.Open(discovery.Plan!);
+        var opened = ContentStack.OpenShared(discovery.Plan!);
         if (opened.Status != ContentStackStatus.Ready) throw new InvalidOperationException("AREA_MAP_STACK_" + opened.Status.ToString().ToUpperInvariant());
         using var stack = opened.Stack!;
         var catalog = WorldCatalog.Open(stack);

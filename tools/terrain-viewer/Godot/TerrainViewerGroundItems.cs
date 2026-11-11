@@ -39,7 +39,7 @@ public partial class TerrainViewerApp
         _createdPrototypeRead = null; _createdPrototypeNumbers = []; _createdPrototypes.Clear();
         var found = AreaContentRoot.Discover(module);
         if (found.Status != AreaContentRootStatus.Ready) { _extraArtFailure = $"{found.Status}"; }
-        else if (ContentStack.Open(found.Plan!) is { Status: ContentStackStatus.Ready, Stack: { } stack })
+        else if (ContentStack.OpenShared(found.Plan!) is { Status: ContentStackStatus.Ready, Stack: { } stack })
         {
             var prototypes = ContentPrototypes.Open(stack);
             _junkPileArt = Arcanum.Data.Audio.ObjectSoundReader.ReadPrototype(prototypes.Read, Arcanum.Simulation.Items.JunkPileRules.Prototype).Fields?.CurrentArt;
@@ -69,7 +69,7 @@ public partial class TerrainViewerApp
         if (_prototypeItemsModule == module) return _prototypeItems;
         _prototypeItems?.Dispose(); _prototypeItems = null; _prototypeItemsModule = module;
         var found = AreaContentRoot.Discover(module);
-        if (found.Status == AreaContentRootStatus.Ready && ContentStack.Open(found.Plan!) is { Status: ContentStackStatus.Ready, Stack: { } stack }) _prototypeItems = new(stack);
+        if (found.Status == AreaContentRootStatus.Ready && ContentStack.OpenShared(found.Plan!) is { Status: ContentStackStatus.Ready, Stack: { } stack }) _prototypeItems = new(stack);
         GD.Print($"ARC-WORLD-081 prototype-items {(_prototypeItems is null ? "unavailable " + found.Status : "ready")}");
         return _prototypeItems;
     }

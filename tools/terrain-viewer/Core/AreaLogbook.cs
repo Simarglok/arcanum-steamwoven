@@ -71,7 +71,7 @@ public static class AreaLogbook
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready)
             return new(found.Status == AreaContentRootStatus.MountFailed ? AreaLogbookTextsStatus.MountFailed : AreaLogbookTextsStatus.ModuleOutsideGameRoot, null, found.Detail);
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return new(AreaLogbookTextsStatus.StackFailed, null, opened.Status.ToString());
         using var stack = opened.Stack!;
         var loaded = LogbookTexts.Load(stack);

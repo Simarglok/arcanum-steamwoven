@@ -144,6 +144,9 @@ public partial class TerrainViewerApp
             }
             return samples;
         }
+        // ARC-DEV-375: this stage proves a reload runs on a fresh owner with fresh counters and that the retired generation is collectable, so the reload must
+        // read everything again: the process-resident frame store and visual memo (which a map load fills and a later load is served from) start empty here.
+        AreaResidentFrames.Shared.Clear(); AreaResidentVisuals.Shared.Clear();
         var baselineSamples = await ManagedSamples();
         var baseline = (Managed: baselineSamples.Min(), Resident: Resident(), Handles: Handles());
         // Overlapped production reloads: the second cancels the first, which

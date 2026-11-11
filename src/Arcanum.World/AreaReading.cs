@@ -59,7 +59,7 @@ public static class AreaReading
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready)
             return new(found.Status == AreaContentRootStatus.MountFailed ? AreaReadingDataStatus.MountFailed : AreaReadingDataStatus.ModuleOutsideGameRoot, null, found.Detail);
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return new(AreaReadingDataStatus.StackFailed, null, opened.Status.ToString());
         using var stack = opened.Stack!;
         var texts = WrittenTexts.Open(stack);

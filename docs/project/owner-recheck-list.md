@@ -409,3 +409,19 @@ In both rule modes the click behaves the same.
 | 5 | In a town-map sector (kind 2) and in the continent view (button below the zoom), click the lens. | The map closes in every view. | open |
 | 6 | With the HD interface switch on, repeat step 1. | The same as in the original look: the click works in HD too. | open |
 
+## ARC-DEV-372 — Shared content index (O4 of the performance diagnosis, 2026-11-11)
+
+The viewer's readers now share one index of the game folder per run instead of each indexing it again. Nothing in the game's behaviour is meant to change, so the steps compare the
+start and the first window opens with the original game: the same texts, names and numbers, and nothing missing that the original shows.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Start a new game and read the first screen: the hero's name and stats, the first dialog, the inventory (`I`), the character sheet (`C`) and the logbook (`L`). | The texts, names and numbers are the ones the original shows for the same hero and map; no window opens empty or with a missing label. | open |
+| 2 | Open the world map (`W`), the spell pane (`M`) and the schematics (`T`) on the first map, then walk to a cave or another map and open the same windows again. | Same content as before the change; the second map's windows are as complete as the first's. | open |
+| 3 | Look at an NPC with a hover name, a book or note to read, a shop's barter window and a companion's greeting. | Names, texts and prices match the original; none is blank. | open |
+| 4 | Start the game, quit, and start it again. | The second start shows the same content as the first. | open |
+
+Known differences (documented, not bugs):
+
+- The index is read once per run (as the original reads its static installation): a file added or changed in the game folder while the game runs shows after the next start. An archive that changes in size or time is read again.
+
