@@ -128,7 +128,8 @@ Not investigated here (the rule is to name them and go on); recorded because a z
 | `ranged` and so `map` battery | `ARC-COMBAT-015 ranged smoke FAIL: the dagger is picked up and wielded again` (COMBAT-026 is fixing it) |
 | Crash Site smoke | FAIL (exit 1, 98 s), the known one |
 | `barter` (main map, Crash Site) | `InvalidOperationException` after `barter-art PASS` (frontier=InvalidOperationException, stage=Upload). Fixed by ARC-DEV-393: run alone, the stage's first awaited frames started the map's scenery loops (four goal runs, one session revision) inside the look's "changed nothing" check; the smoke now waits for the loops to start before its baseline. The game was right |
-| `created-critter` | `AI host holds the created critter` FAIL |
+| `created-critter` | `AI host holds the created critter` FAIL (only after other stages; fixed in ARC-DEV-394, see [toolchain](../workflow/toolchain.md#smoke-runner-arc-dev-061)) |
+| `script-critters`, `summon-wall` (after the long list) | `the tile notifications of the creations ran`, `the summoner standing in its own wall is spared` (found by ARC-DEV-394; fixed in ARC-DEV-405, see [toolchain](../workflow/toolchain.md#smoke-runner-arc-dev-061)) |
 | `menu` then `options` (`--main-menu`) | `options smoke FAILED: the menu is open over the start map` (stage order or configuration; `menu` passed, `options` followed it in one process) |
 | `scene` (`--main-menu` on the main map) | `the launch map ... is not the start map, and a new game is offered there` (a configuration that needs another map) |
 | `inv-carry` (Crash Site), `critter-light` (town), `door-close` (Crash Site) | `NONE`, which the runner turns into FAIL exit 3: the map lacks what the stage needs (`door-close` passed on the town sector) |
@@ -182,6 +183,8 @@ A large item, not recommended now: a warm viewer process that runs several stage
 then needs a reset of the session state, and the smokes are written to start from a fresh load).
 
 ## Status
+
+Q3 is done in ARC-DEV-399, with the stage list in a file of its own beside the history instead of in the queue label (the viewer prints a time per stage, the runner writes `smoke-stages.jsonl` beside the queue history with the stage list, each stage's time and the queue wait; [stage times](../workflow/toolchain.md#smoke-runner-arc-dev-061)).
 
 Q4 and Q5 are done in ARC-DEV-391 (`STAGE_NEEDS`, `--stages` grouping, the early error, `smoke_known_failures.json`; [smoke runner](../workflow/toolchain.md#smoke-runner-arc-dev-061)). The zones themselves (option A) and Q8 are done in ARC-DEV-396 (`tools/local_dev/smoke_zones.py`, `./arcanum smoke pr --auto`, `./arcanum smoke complete`; [smoke zones](../workflow/toolchain.md#smoke-runner-arc-dev-061)): `core` is every stage no heavy zone holds, the heavy zones are `walk`, `container-click`, `crash-site` and `census`, and the daily run is now `complete` (every stage, not 15 of 76).
 

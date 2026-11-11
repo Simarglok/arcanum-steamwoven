@@ -42,7 +42,12 @@ public partial class TerrainViewerApp
             return;
         }
         var world = new AreaThrownItemWorld(ScriptCritterPrototype, ScriptCrittersNear, () => _worldActor.Session is AreaGridSession grid ? LiveCell(grid) : null,
-            CritterMade: entity => { SyncCreatedCritters(owner, ai); QueueCreatedInventory(entity); },
+            CritterMade: entity =>
+            {
+                SyncCreatedCritters(owner, ai); QueueCreatedInventory(entity);
+                // ARC-DEV-402 (TG9): the transform's creation (0x4ED8B0 → 0x442260) ends with the location notification like any other creation.
+                if (owner.QueryCreatedObject(entity) is { } made) QueueCreationNotice(entity, made.Cell);
+            },
             Attack: (attacker, victim) => $"{ai.ScriptAttack(attacker, victim)}");
         var ran = new AreaThrownItemScripts(owner, items, world, CurrentAreaMap).Run(point, item, tile, target);
         if (ran.Outcome == AreaThrownItemOutcome.NoScript) { GD.Print($"ARC-MAGIC-042 thrown-item-script item={item} point={point}: no script at the point"); return; }

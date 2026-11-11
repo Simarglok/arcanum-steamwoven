@@ -127,6 +127,15 @@ public static partial class TerrainViewerSelfTest
             rect.Material = null; rect.Texture = texture;
             GD.Print("ARC-UI-114 self-test HD premultiplied canvas PASS" + (native ? "" : " (pixel checks skipped: headless)"));
 
+            // ARC-UI-144: every art canvas fed the premultiplied textures blends premultiplied (the shop shares the pre-made browser's textures).
+            foreach (Control canvas in new Control[] { new AreaShopArtView(), new AreaDialogBoxView(), new AreaMenuArtView(), new AreaPremadeBrowserArtView(), new AreaNewCharacterArtView() })
+            {
+                viewport.AddChild(canvas);
+                Require(canvas.Material is CanvasItemMaterial { BlendMode: CanvasItemMaterial.BlendModeEnum.PremultAlpha }, "ARC-UI-144: " + canvas.GetType().Name + " is a premultiplied art canvas");
+                viewport.RemoveChild(canvas); canvas.QueueFree();
+            }
+            GD.Print("ARC-UI-144 self-test art canvases premultiplied PASS");
+
             sides.Set(texture, 0, 0);
             Require(!sides.DrawsHd, "no margin, no side tiles (a 4:3 screen)");
             sides.Set(texture, 40, 40);
