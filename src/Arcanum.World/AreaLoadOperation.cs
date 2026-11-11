@@ -326,8 +326,9 @@ internal static class AreaLoadOperation
     private static void VerifyFile(string path, AreaInputIdentity identity, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        if (stream.Length != identity.Length || Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant() != identity.Sha256)
+        // ARC-DEV-374: the file's hash comes from the process's memo of whole-file hashes while the file is unchanged, else from a full read.
+        var (length, sha256) = VerifiedFileMemo.Identity(path, token);
+        if (length != identity.Length || sha256 != identity.Sha256)
             throw new AreaException(new(AreaErrorCode.InputChangedDuringRead, AreaStage.Input));
         token.ThrowIfCancellationRequested();
     }

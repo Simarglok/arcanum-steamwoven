@@ -438,6 +438,11 @@ PR; the owner's 2026-11-08 instruction for ARC-UI-114 to use only Codex sub-agen
 - **Stale staging reverts repairs.** See the base paragraph above; never `apply --no-base-check` to the real pack
   with a staging build older than the last repair.
 
+- **A repaint over a Legacy hole is rejected silently.** The alpha check allows an HD frame to be opaque only within one Legacy texel of the Legacy
+  silhouette (also for `"alpha": "masked"`). A frame that fills a Legacy-clear area installs and verifies (the manifest and hashes are fine) but fails
+  `AlphaMismatch` when the game opens it, and the game draws that frame as Legacy. Look at a native shot of the frame after every install
+  (ARC-UI-126, 2026-11-11, rolled back).
+
 - **iCloud symlink** (`local/hd-packs`, the only name; the old second link `local/hd_pack` was removed by ARC-DEV-346 and nothing may name it): see above; the tool refuses a symlinked installed pack
   unless `--allow-symlink`, and refuses any symlink inside a pack.
 - **Superseded local scripts.** `local/res095/tools/rebuild_hd.sh` (now stubbed to refuse), `apply_update.sh`, `merge_update.py` and `full_hd.sh`

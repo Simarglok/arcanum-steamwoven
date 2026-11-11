@@ -238,7 +238,7 @@ public partial class TerrainViewerApp
             InventoryKey(Key.C);
             Require(SheetOpen && WorldModal && _sheetPanel!.ViewForSelfTest is not null, "C opened the sheet: " + _sheetStatus);
             var state = session.QueryHeroLife()!.Record.State;
-            var stats = session.QueryHeroStats(new(0, state.PoisonLevel, state.Conditions.HasFlag(Arcanum.Simulation.Combat.LifeConditions.CrippledLegsBoth)))!.Value.Snapshot!;
+            var stats = session.QueryHeroStats(session.HeroStatContext(state.PoisonLevel, state.Conditions.HasFlag(Arcanum.Simulation.Combat.LifeConditions.CrippledLegsBoth)))!.Value.Snapshot!;
             Arcanum.Simulation.Character.CharacterStat[] order = [Arcanum.Simulation.Character.CharacterStat.Strength, Arcanum.Simulation.Character.CharacterStat.Constitution,
                 Arcanum.Simulation.Character.CharacterStat.Dexterity, Arcanum.Simulation.Character.CharacterStat.Beauty, Arcanum.Simulation.Character.CharacterStat.Intelligence,
                 Arcanum.Simulation.Character.CharacterStat.Willpower, Arcanum.Simulation.Character.CharacterStat.Perception, Arcanum.Simulation.Character.CharacterStat.Charisma];

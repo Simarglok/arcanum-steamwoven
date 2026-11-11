@@ -89,6 +89,8 @@ public partial class AreaWorldMapArtView : Control
     public event Action<AreaWorldMapKind, AreaTownNotes>? WorldNotesChanged;
     /// <summary>A hovered button's hint for the message window ("Action", a new line and the button's text, WM61), null when the pointer left it.</summary>
     public event Action<string?>? HintRequested;
+    /// <summary>ARC-UI-133 (WM36): a left release in the PC lens asks the app to close the window, as the key W does.</summary>
+    public event Action? CloseRequested;
     /// <summary>Asked before the arrow poll; false while another window owns the keys.</summary>
     public Func<bool>? PollGate { get; set; }
 
@@ -130,6 +132,8 @@ public partial class AreaWorldMapArtView : Control
     internal void LeftForSelfTest(Vector2 windowPoint, bool pressed) =>
         MouseLeft(new InputEventMouseButton { Position = windowPoint, GlobalPosition = windowPoint, Pressed = pressed, ButtonIndex = MouseButton.Left });
     internal void RightReleaseForSelfTest() => RightRelease();
+    /// <summary>The screen point of a point of the 800 × 400 window, as the pointer gives it (the window is scaled and placed between the bars).</summary>
+    internal Vector2 WindowPointForSelfTest(double x, double y) => GetGlobalTransform() * new Vector2((float)x, (float)y);
     /// <summary>A mouse move inside the view during a drag (the edge scroll of WM99).</summary>
     internal void DragForSelfTest(Vector2 windowPoint) { _pointer = windowPoint; if (_dragging) DragEdgeScroll(windowPoint); }
     internal void SetOffsetForSelfTest((int X, int Y) offset) { _offset = AreaWorldMapArtLayout.Clamp(offset, _max); Redraw(); }
@@ -554,6 +558,14 @@ public partial class AreaWorldMapArtView : Control
                 ClearDescription();
             }
             _pressedInView = false;
+            // ARC-UI-133 (WM36, 0x561DF5): every left release ends in the lens test (0x551000) after the kind's own work, in every kind and tool state; inside the
+            // lens the window closes (0x560F40, the close of the key W). The close frees this view's state, so nothing runs after it.
+            if (AreaWorldMapArtLayout.LensContains(button.Position.X, button.Position.Y))
+            {
+                Redraw();
+                CloseRequested?.Invoke();
+                return;
+            }
         }
         Redraw();
     }

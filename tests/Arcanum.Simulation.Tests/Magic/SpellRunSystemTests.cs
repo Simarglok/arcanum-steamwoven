@@ -62,6 +62,9 @@ public sealed class SpellRunSystemTests
         public int? Stat(SpellRunObject who, int stat) => stat == 4 ? Intelligence : 8;
         public bool MaintainBarHasSlot(SpellRun run) => BarFree;
         public IReadOnlyList<SpellPayment> ChargeBegin(SpellRun run) => [new(SpellPaymentStatus.Paid, 3, [], 3, false, false, null)];
+        /// <summary>ARC-MAGIC-034: the summoned lists (+0x134) by run: the objects each run's Summon components made.</summary>
+        public Dictionary<int, HashSet<string>> Summoned { get; } = [];
+        public bool SummonedListHolds(SpellRun run, string obj) => Summoned.TryGetValue(run.Id, out var list) && list.Contains(obj);
     }
 
     private sealed class NoCells : ISpellCellSource
@@ -296,18 +299,19 @@ public sealed class SpellRunSystemTests
     }
 
     // ARC-DEV-259 (B14): the runs' share of an object's destruction (0x459740): the parent's runs end by event, the source's runs lose their
-    // source, the active runs that name it as the other object end by event; the run being processed (the guard 0x5B0BA4) is left alone.
+    // source, the active runs aimed at it (the target object, +0xA0; ARC-MAGIC-034 DP3) end by event; the run being processed (the guard 0x5B0BA4) is left alone.
     [TestMethod]
-    public void AnObjectGoneEndsItsParentRunsClearsItsSourceRunsAndEndsTheRunsNamingItAsOtherExceptTheProcessedOne()
+    public void AnObjectGoneEndsItsParentRunsClearsItsSourceRunsAndEndsTheRunsAimedAtItExceptTheProcessedOne()
     {
         var host = new Host();
         host.Records[7] = Record();
         var processed = SpellRunFlags.Active | SpellRunFlags.Processed;
-        var naming = new SpellRun(3, 7, SpellRunAction.Begin, Hero, Hero, SpellLocation.None, Orc, SpellLocation.None, Wand, processed);
+        var naming = new SpellRun(3, 7, SpellRunAction.Begin, Hero, Hero, SpellLocation.None, Wand, SpellLocation.None, Orc, processed);
+        var other = new SpellRun(5, 7, SpellRunAction.Begin, Hero, Hero, SpellLocation.None, Orc, SpellLocation.None, Wand, processed);
         var system = System(host, Run(0, source: Wand, parent: Wand, flags: processed), Run(1, source: Wand, parent: Hero, flags: processed),
-            Run(2, flags: processed), naming, Run(4, source: Wand, parent: Wand, flags: processed));
+            Run(2, flags: processed), naming, Run(4, source: Wand, parent: Wand, flags: processed), other);
         system.ObjectGone("wand", processing: 4);
-        CollectionAssert.AreEqual(new[] { 0, 3 }, system.Queued.Select(e => e.Run).ToArray(), "the parent's run and the run naming it as other end by event; the processed run does not");
+        CollectionAssert.AreEqual(new[] { 0, 3 }, system.Queued.Select(e => e.Run).ToArray(), "the parent's run and the run aimed at it end by event; the processed run and a run that merely has it as the other object do not");
         Assert.AreEqual("wand", system.Table[0]!.Source?.Id, "an ended run keeps its source (the interrupt follows)");
         Assert.AreEqual((null, "hero"), (system.Table[1]!.Source?.Id, system.Table[1]!.Parent?.Id), "a source-only run loses its source and goes on");
         Assert.AreEqual("hero", system.Table[2]!.Source?.Id, "another object's run is left");
@@ -316,6 +320,56 @@ public sealed class SpellRunSystemTests
         none.ObjectGone("elsewhere");
         Assert.AreEqual(0, none.Queued.Count);
         Assert.IsFalse(none.Changed(none.Table));
+    }
+
+    // ARC-MAGIC-034 (MA-3, 0x451C40; ledger DP1–DP2): the Dispel's runs: every run but the processed one whose source is the object ends by event (whatever its active bit), then every active
+    // run whose target or summoned list holds it; a technological record's run is never touched; a run that only has the object as its parent or other object is left.
+    [TestMethod]
+    public void ADispelEndsTheRunsSourcedByAimedAtOrListingTheObjectExceptTheProcessedAndTechnologicalOnes()
+    {
+        var host = new Host();
+        host.Records[7] = Record();
+        host.Records[8] = new(Duration: new(0), Technology: true) { ActionComponents = [1, 0, 0, 0, 0] };
+        var live = SpellRunFlags.Active | SpellRunFlags.Processed;
+        var source = Run(0, source: Wand, parent: Hero, flags: live);
+        var idleSource = Run(1, source: Wand, parent: Hero, flags: SpellRunFlags.Free, action: SpellRunAction.Maintain);
+        var aimed = new SpellRun(2, 7, SpellRunAction.Begin, Hero, Hero, SpellLocation.None, Wand, SpellLocation.None, null, live);
+        var summoner = Run(3, flags: live);
+        host.Summoned[3] = ["wand"];
+        var processed = Run(4, source: Wand, parent: Wand, flags: live);
+        var tech = Run(5, source: Wand, parent: Wand, spell: 8, flags: live);
+        var other = new SpellRun(6, 7, SpellRunAction.Begin, Hero, Wand, SpellLocation.None, Orc, SpellLocation.None, Wand, live);
+        var system = System(host, source, idleSource, aimed, summoner, processed, tech, other);
+        system.Dispel("wand", processing: 4);
+        CollectionAssert.AreEqual(new[] { 0, 1, 2, 3 }, system.Queued.Select(e => e.Run).ToArray(), "the source's runs (an inactive one too), then the aimed-at and listing runs end by event; not the processed, technological or other-object runs");
+        Assert.IsTrue(system.Queued.All(e => e.Code == SpellRunEventCode.Interrupt && e.DelayMs == SpellRunSystem.InterruptDelayMs));
+        var none = System(host, Run(0, flags: live));
+        none.Dispel("elsewhere", processing: 9);
+        Assert.AreEqual(0, none.Queued.Count);
+        var noRun = System(host, source);
+        noRun.Dispel("wand", processing: -1);
+        Assert.AreEqual(0, noRun.Queued.Count, "no run being processed: the original returns at once");
+    }
+
+    // ARC-MAGIC-034: a run is told once per test it matches, but a run the first ending freed (a BEGIN never processed) is gone for the rest; an inactive run is skipped by the target and list tests.
+    [TestMethod]
+    public void ADispelTellsARunOncePerMatchingTestAndSkipsAFreedOrInactiveRun()
+    {
+        var host = new Host();
+        host.Records[7] = Record();
+        var live = SpellRunFlags.Active | SpellRunFlags.Processed;
+        // Sourced by the object and aimed at it: two tests, two endings (the interrupts are separate events).
+        var both = new SpellRun(0, 7, SpellRunAction.Maintain, Wand, Hero, SpellLocation.None, Wand, SpellLocation.None, null, live);
+        // Aimed at it and listing it, never processed: the first ending frees it; the list test finds it gone.
+        var fresh = new SpellRun(1, 7, SpellRunAction.Begin, Hero, Hero, SpellLocation.None, Wand, SpellLocation.None, null, SpellRunFlags.Active);
+        host.Summoned[1] = ["wand"];
+        // Aimed at it but not active.
+        var idle = new SpellRun(2, 7, SpellRunAction.Maintain, Hero, Hero, SpellLocation.None, Wand, SpellLocation.None, null, SpellRunFlags.Free);
+        var system = System(host, both, fresh, idle);
+        system.Dispel("wand", processing: 9);
+        CollectionAssert.AreEqual(new[] { 0, 0 }, system.Queued.Select(e => e.Run).ToArray());
+        Assert.IsNull(system.Table[1], "a BEGIN never processed is freed by the ending");
+        Assert.IsNotNull(system.Table[2]);
     }
 
     // ARC-MAGIC-011: the stage's cancels, the per-target stage and the resistance in the run system.

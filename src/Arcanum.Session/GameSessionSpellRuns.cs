@@ -26,9 +26,11 @@ public sealed record SessionSpellRunFiring(GameEvent Event, int Run, SpellRunEve
 public enum SessionSpellRunActionKind
 {
     Begin, Callback, EndCallback, Interrupt, ForceEnd, Free, FreeCharged, EndByEvent, DetachSource, ClearSource, Demaintain, ClearSources, ObjectGone,
+    /// <summary>ARC-MAGIC-034 (MA-3): the runs' half of the Dispel (0x451C40) on the object, the run being processed (<see cref="SessionSpellRunAction.Run"/>, -1 none) left alone.</summary>
+    Dispel,
 }
 
-/// <summary>One action: its kind and the run it names (for <see cref="SessionSpellRunActionKind.ObjectGone"/>, the run being processed, left alone; -1 none), or the object for <see cref="SessionSpellRunActionKind.Demaintain"/> and
+/// <summary>One action: its kind and the run it names (for <see cref="SessionSpellRunActionKind.ObjectGone"/> and <see cref="SessionSpellRunActionKind.Dispel"/>, the run being processed, left alone; -1 none), or the object for <see cref="SessionSpellRunActionKind.Demaintain"/> and
 /// <see cref="SessionSpellRunActionKind.ClearSources"/>.</summary>
 public sealed record SessionSpellRunAction(SessionSpellRunActionKind Kind, int Run = -1, string? Object = null);
 
@@ -142,7 +144,7 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(host);
         ArgumentNullException.ThrowIfNull(action);
-        var objectScoped = action.Kind is SessionSpellRunActionKind.Demaintain or SessionSpellRunActionKind.ClearSources or SessionSpellRunActionKind.ObjectGone;
+        var objectScoped = action.Kind is SessionSpellRunActionKind.Demaintain or SessionSpellRunActionKind.ClearSources or SessionSpellRunActionKind.ObjectGone or SessionSpellRunActionKind.Dispel;
         if (!Enum.IsDefined(action.Kind) || (objectScoped ? !SessionValidation.Entity(action.Object) : action.Run is < 0 or >= SpellRunTable.Slots)
             || _spellRunsBusy)
             return RejectRun(GameSessionFailure.InvalidSpellRun);
@@ -197,6 +199,7 @@ public sealed partial class GameSessionOwner
             case SessionSpellRunActionKind.Demaintain: system.Demaintain(action.Object!); break;
             case SessionSpellRunActionKind.ClearSources: system.ClearSources(action.Object!); break;
             case SessionSpellRunActionKind.ObjectGone: system.ObjectGone(action.Object!, action.Run); break;
+            case SessionSpellRunActionKind.Dispel: system.Dispel(action.Object!, action.Run); break;
         }
     }
 
@@ -244,7 +247,7 @@ public sealed partial class GameSessionOwner
     {
         if (QueryHeroLife() is not { } life) return null;
         var state = life.Record.State;
-        return QueryHeroStats(new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel), state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth)))?.Snapshot?.GetEffective(stat);
+        return QueryHeroStats(HeroStatContext(Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel), state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth)))?.Snapshot?.GetEffective(stat);
     }
 
     private SpellRunSystem NewSpellSystem(ISpellRunHost host) =>

@@ -146,6 +146,21 @@ public enum SpellCastEventKind
     SummonRefused,
     /// <summary>ARC-DEV-352 (DS2, SUM8): a Destroy component destroyed the summoned object <see cref="SpellCastEvent.Object"/>.</summary>
     SummonDestroyed,
+    /// <summary>ARC-MAGIC-032 (XR1, XR2): the hero's Identify component targeted the critter <see cref="SpellCastEvent.Object"/> (the value is its object type): the original opens the read-only NPC sheet for the casting player; the window is E8's, the viewer's answer is a line.</summary>
+    IdentifyCritter,
+    /// <summary>ARC-MAGIC-032 (XR1, XR3): the hero's Identify component targeted the container <see cref="SpellCastEvent.Object"/>: the original opens its inventory in mode 4 with no lock test; the window is E8's, the viewer's answer is a line.</summary>
+    IdentifyContainer,
+    /// <summary>ARC-MAGIC-032 (XR1, XR4): the hero's Identify component targeted another object, an item <see cref="SpellCastEvent.Object"/> (the value is its object type): the original shows its item description, the true one when it is identified.</summary>
+    IdentifyItem,
+    /// <summary>ARC-MAGIC-032 (XR4): an ObjFlag component set the identified item flag (0x1) on the item <see cref="SpellCastEvent.Object"/>; the session keeps it as an identification mark (<see cref="GameSessionOwner.QueryItemIdentified"/>).</summary>
+    ItemIdentified,
+    /// <summary>ARC-MAGIC-032: the session refused the identification mark of the item <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the spell goes on.</summary>
+    ItemIdentifyNotSaved,
+    /// <summary>ARC-MAGIC-034 (MA-3, DP1–DP2): a Dispel component acted on <see cref="SpellCastEvent.Object"/>; <see cref="SpellCastEvent.Detail"/> is the sum of <see cref="SessionSpellCaster.DispelStonedCleared"/>
+    /// (the object's stoned spell flag was cleared) and <see cref="SessionSpellCaster.DispelDestroyed"/> (a summoned created critter is destroyed once the runs' endings are told; <see cref="SummonDestroyed"/> follows). The runs it names are told after the outer action (their endings follow).</summary>
+    Dispelled,
+    /// <summary>ARC-MAGIC-034 (DP2): a Dispel component met a summoned critter (spell flag 0x4000) this host cannot destroy (not a created critter of the session): the object stays; the value is its object type.</summary>
+    DispelDestroyNotReady,
 }
 
 /// <summary>
@@ -184,6 +199,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     // ARC-DEV-301: the same list holds the endings a critter's life step calls for (death: object gone, going unconscious: demaintain) and those the AI gate and the object destroy ask for.
     private readonly List<(SessionSpellRunActionKind Kind, string Id, int Processing)> _goneObjects = [];
     private bool _tellingGone;
+    // ARC-MAGIC-034: the summoned created critters a Dispel destroys once its run endings are told (the dispelling run, the entity).
+    private readonly List<(int Run, string Entity)> _dispelDestroys = [];
     private const int MaxPendingRunEnds = 256;
     // ARC-MAGIC-025, MG46: the chain of the item event being fired (null outside a firing) and, per run an item event started, the
     // chain it was started in with its source (a slot reused by any other run is dropped); not saved: a restored item run (schema 73) restarts with an empty chain.
@@ -328,8 +345,10 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         var kind = KindOf(obj.Id);
         var npc = obj.Id == Hero ? null : _map.Critter(obj.Id);
         var statValue = record.HasSave ? Stat(obj, record.ResistStat) ?? 0 : 0;
-        // The hero stores no magic resistance of its own in the session (its pre-made fields hold none).
-        return new(obj.Id == parent, kind, ((npc?.CritterFlags2 ?? 0) & 0x2000) != 0, npc?.StoredMagicResistance ?? 0,
+        // The hero stores no magic resistance of its own in the session (its pre-made fields hold none). ARC-MAGIC-033 (D6c, both modes): the save reads the resistance under the target's
+        // resistmagic effect changes (Resist Magick works), which the original's save does not (RE2).
+        var resistance = obj.Id == Hero ? _owner.HeroSaveMagicResistance() : npc is null ? 0 : _owner.WithNpcEffects(npc.Combat).SaveMagicResistance(npc.StoredMagicResistance);
+        return new(obj.Id == parent, kind, ((npc?.CritterFlags2 ?? 0) & 0x2000) != 0, resistance,
             obj.Id == Hero ? HeroStat(CharacterStat.MagickTechAptitude) ?? 0 : npc is null ? 0 : NpcStat(npc, CharacterStat.MagickTechAptitude) ?? 0,
             statValue, record.ResistStat is >= 0 and <= 7 && statValue >= CharacterStatRules.ExtraordinaryThreshold);
     }
@@ -453,13 +472,21 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         _tellingGone = true;
         try
         {
-            while (_goneObjects.Count > 0)
+            while (_goneObjects.Count > 0 || _dispelDestroys.Count > 0)
             {
+                // ARC-MAGIC-034 (DP2): a Dispel destroys its summoned critter only after the runs' half (loop 2 reads the runs' summoned lists before 0x43CCA0); the endings the destroy queues follow in this loop.
+                if (_goneObjects.Count == 0)
+                {
+                    var (run, entity) = _dispelDestroys[0];
+                    _dispelDestroys.RemoveAt(0);
+                    DestroyCreated(run, entity);
+                    continue;
+                }
                 var (kind, id, processing) = _goneObjects[0];
                 // An id the session would refuse for good is dropped, so it cannot hold up the endings behind it.
                 if (!SessionValidation.Entity(id)) { _goneObjects.RemoveAt(0); continue; }
                 var before = _owner.QuerySpellRuns();
-                var result = _owner.ActOnSpellRun(_owner.Version, this, new(kind, kind is SessionSpellRunActionKind.ObjectGone or SessionSpellRunActionKind.EndByEvent ? processing : -1, id));
+                var result = _owner.ActOnSpellRun(_owner.Version, this, new(kind, kind is SessionSpellRunActionKind.ObjectGone or SessionSpellRunActionKind.EndByEvent or SessionSpellRunActionKind.Dispel ? processing : -1, id));
                 if (result.Failure is GameSessionFailure.InvalidSpellRun or GameSessionFailure.StaleVersion) break;
                 _goneObjects.RemoveAt(0);
                 Apply(result.Notes, runId => _owner.QuerySpellRuns()[runId] ?? before[runId]);
@@ -468,6 +495,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         catch
         {
             _goneObjects.Clear();
+            _dispelDestroys.Clear();
             throw;
         }
         finally { _tellingGone = false; }

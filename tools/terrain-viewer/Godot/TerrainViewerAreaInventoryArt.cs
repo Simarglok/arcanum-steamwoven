@@ -31,14 +31,14 @@ public partial class TerrainViewerApp
         var module = _arguments?.ModulePath;
         if (_inventoryArtContent is not null && module == _inventoryArtModule) return _inventoryArtLook;
         _inventoryArtModule = module;
-        _inventoryArtContent = SelfTestBootstrap || module is null ? AreaInventoryArtContent.Empty("self-test: no game folder") : AreaInventoryArtContent.Load(module);
+        _inventoryArtContent = SelfTestBootstrap || module is null ? AreaInventoryArtContent.Empty("self-test: no game folder")
+            : WarmedWindowArt(module, slots => slots.Inventory) ?? AreaInventoryArtContent.Load(module);
         _inventoryItemArtCache.Clear();
         _inventoryArtLook = null;
         if (_inventoryArtContent.ArtReady)
         {
             InventoryItemIcons();
-            var art = _inventoryArtContent.Art.Values.Where(load => load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0)
-                .ToDictionary(load => load.Number, load => (Texture2D)HotkeyTexture(load.Frames[0]));
+            var art = InventoryLookLoads(_inventoryArtContent).ToDictionary(load => load.Number, load => (Texture2D)HotkeyTexture(load.Frames[0]));
             _inventoryArtLook = new(art, InventoryItemArt, _inventoryArtContent.Texts)
                 { LootReady = _inventoryArtContent.LootArtReady, BarterReady = _inventoryArtContent.BarterArtReady };
             GD.Print($"ARC-UI-051 inventory art ready {_inventoryArtContent.Detail}; item art {_inventoryItemIconsDetail}; ARC-UI-052 loot art ready={_inventoryArtContent.LootArtReady}; ARC-UI-064 barter art ready={_inventoryArtContent.BarterArtReady}");
@@ -46,6 +46,10 @@ public partial class TerrainViewerApp
         else GD.Print($"ARC-UI-051 inventory art not ready: {_inventoryArtContent.Detail}");
         return _inventoryArtLook;
     }
+
+    /// <summary>The arts the inventory look turns into textures: those that read, each by its first frame.</summary>
+    private static IEnumerable<AreaInterfaceArtLoad> InventoryLookLoads(AreaInventoryArtContent content) =>
+        content.Art.Values.Where(load => load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0);
 
     /// <summary>The item art reader of the current module (ARC-UI-051 drawing, ARC-UI-055 sizes), opened on first use; null without a game
     /// folder (the synthetic self-tests) or when its content stack does not open.</summary>

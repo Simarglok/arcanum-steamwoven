@@ -118,7 +118,8 @@ public sealed partial class AreaDataOwner
             }
             sectors.Add(new(sectorKey, coordinate, scope, true, row?.Entry.Ordinal, townmap, framing.LightCount, framing.RoofDiscriminator, framing.Placeholder,
                 framing.ObjectWindow.TerminalObjectCount, Array.AsReadOnly(framing.Ranges.OrderBy(p => p.Key).Select(p => new AreaByteRange(p.Value.Offset, p.Value.Length)).ToArray()), lights.AsReadOnly(),
-                row is null ? null : EntryIdentity(moduleKey, row.Entry), ObjectWireReader.Hash(bytes), template));
+                row is null ? null : EntryIdentity(moduleKey, row.Entry), ObjectWireReader.Hash(bytes), template)
+                { AptitudeAdjustment = framing[TerrainSection.MetadataAndSound] is { Length: >= 8 } meta ? BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(meta.Offset + 4)) : 0 });
             // A roof list stays in the sector record (RoofDiscriminator); its roofs are read below when the plan binds the
             // two roof tables (ARC-RENDER-021).
             for (var ordinal = 0; ordinal < 4096; ordinal++)
