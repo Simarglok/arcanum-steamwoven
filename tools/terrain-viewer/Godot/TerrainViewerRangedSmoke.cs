@@ -84,9 +84,9 @@ public partial class TerrainViewerApp
         var lent = false;
         bool Wear(EquipmentItem item)
         {
-            if (session.Unequip(session.Version, EquipmentSlot.Weapon, _ => SessionInsertVerdict.Accepted).Disposition == GameSessionDisposition.Rejected) return false;
+            if (session.Unequip(session.Version, EquipmentSlot.Weapon, _ => SessionInsertVerdict.Accepted, null, ItemTriggersNow()).Disposition == GameSessionDisposition.Rejected) return false;
             return session.Equip(session.Version, wielded.Entity, EquipmentSlot.Weapon, new(kit.Kind, [], false, item), (_, _) => true,
-                _ => SessionInsertVerdict.Accepted).Disposition == GameSessionDisposition.Changed;
+                _ => SessionInsertVerdict.Accepted, null, ItemTriggersNow()).Disposition == GameSessionDisposition.Changed;
         }
         try
         {
@@ -186,7 +186,7 @@ public partial class TerrainViewerApp
             // A thrown kit weapon still on the ground goes back to the hand before the kit weapon is restored.
             if (lent && !session.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon)
                 && session.PickUpItem(session.Version, wielded.Entity, _ => SessionInsertVerdict.Accepted).Disposition == GameSessionDisposition.Changed)
-                session.Equip(session.Version, wielded.Entity, EquipmentSlot.Weapon, new(kit.Kind, [], false, wielded.Item), (_, _) => true, _ => SessionInsertVerdict.Accepted);
+                session.Equip(session.Version, wielded.Entity, EquipmentSlot.Weapon, new(kit.Kind, [], false, wielded.Item), (_, _) => true, _ => SessionInsertVerdict.Accepted, null, ItemTriggersNow());
             if (lent && !Wear(wielded.Item)) GD.Print("ARC-COMBAT-015 ranged smoke could not restore the kit weapon");
             Heal();
             _areaSmokeTime = (_areaSmokeTime + 19) / 20;
@@ -467,9 +467,10 @@ public partial class TerrainViewerApp
                 if (!hit) scatters.Add($"{result.Scatter!.Value.X},{result.Scatter.Value.Y}:{end.Strike}");
                 SyncAreaGroundBodies();
                 landings.Add($"{end.Strike}:{landing.Tile.X},{landing.Tile.Y}:drawn={_groundBodies.ContainsKey(PlacedKey(runtime, wielded.Entity))}");
+                // The viewer's wield passes the item-trigger host (ItemTriggersNow); a thrown dagger whose end spell (a Summon run) is still alive is not wielded without it.
                 Require(session.PickUpItem(session.Version, wielded.Entity, _ => SessionInsertVerdict.Accepted).Disposition == GameSessionDisposition.Changed
                     && session.Equip(session.Version, wielded.Entity, EquipmentSlot.Weapon, new(kit.Kind, [], false, dagger), (_, _) => true,
-                        _ => SessionInsertVerdict.Accepted).Disposition == GameSessionDisposition.Changed, "the dagger is picked up and wielded again");
+                        _ => SessionInsertVerdict.Accepted, null, ItemTriggersNow()).Disposition == GameSessionDisposition.Changed, "the dagger is picked up and wielded again");
             }
             // The pre-made heroes barely train throwing: a hit is reported, not required (the session's tests strike with one).
             Require(hiddenChecked, $"a throw was seen in flight ({string.Join(",", landings)})");
@@ -632,7 +633,7 @@ public partial class TerrainViewerApp
                 throws.Add($"{outcome?.ToString() ?? "unrolled"}:{_projectileEndsForSelfTest.LastOrDefault().Strike}:{landing.Tile.X},{landing.Tile.Y}");
                 Require(session.PickUpItem(session.Version, wielded.Entity, _ => SessionInsertVerdict.Accepted).Disposition == GameSessionDisposition.Changed
                     && session.Equip(session.Version, wielded.Entity, EquipmentSlot.Weapon, new(kit.Kind, [], false, wielded.Item), (_, _) => true,
-                        _ => SessionInsertVerdict.Accepted).Disposition == GameSessionDisposition.Changed, "the weapon is picked up and wielded again");
+                        _ => SessionInsertVerdict.Accepted, null, ItemTriggersNow()).Disposition == GameSessionDisposition.Changed, "the weapon is picked up and wielded again");
             }
             GD.Print($"ARC-UI-063 native-smoke cursor-throw PASS map={_readyMapName} target={pick.Target.Entity} lifts={string.Join(",", lifts)}"
                 + $" cursor={(cursorShown ? "held-art" : "NONE (no cursor or item art)")} hit={hit} throws={string.Join(",", throws)}");
