@@ -125,7 +125,7 @@ public sealed record AreaPortraitContent(IReadOnlyDictionary<int, AreaInterfaceA
         if (known is not null && wanted.Length == 0) return known;
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready) return Failed(known, wanted, $"not read ({found.Status} {found.Detail})");
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return Failed(known, wanted, $"not read (content stack {opened.Status})");
         using var stack = opened.Stack!;
         var art = known?.Art ?? AreaInterfaceArt.Load(stack, AreaFollowerFrameLayout.ArtNumbers);

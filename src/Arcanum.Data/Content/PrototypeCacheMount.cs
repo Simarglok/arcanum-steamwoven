@@ -22,5 +22,7 @@ public static class PrototypeCacheMount
         if (folder is not null && (!Path.IsPathFullyQualified(folder) || folder.Any(char.IsControl) || folder.Length > GameFolderLocator.MaxPathLength))
             throw new ArgumentException("A full path without control characters is required.", nameof(folder));
         Volatile.Write(ref _folder, folder is null ? null : Path.TrimEndingDirectorySeparator(folder));
+        // ARC-DEV-372: the host may have built files into the folder since an index was shared, so the next reader indexes again.
+        ContentStack.ResetShared();
     }
 }

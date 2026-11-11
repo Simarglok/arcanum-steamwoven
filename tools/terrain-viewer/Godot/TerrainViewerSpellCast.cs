@@ -137,6 +137,8 @@ public partial class TerrainViewerApp
         _spellCaster.AiNotice = (attacker, victim) => _aiHost?.SpellAttacked(attacker, victim);
         // ARC-DEV-292: and a damage that took effect on an NPC gives it its immediate AI pass (0x4B52FC), after the life step.
         _spellCaster.AiStruck = victim => _aiHost?.Struck(victim);
+        // ARC-MAGIC-035 (MA-4): the social and AI flags (charm and mind control's reactions and peace, fear's flight) run through the AI host.
+        _spellCaster.Social = new AreaSpellSocial(() => _aiHost);
         // ARC-DEV-303 (EF9): the Effect component asks the hero's effect tables (effect.mes, the module's gameeffect.mes) for the rule of a number (Entangle's effect 62: speed -5); a rule the session refuses is none.
         _spellCaster.EffectDefinitions = number =>
         {

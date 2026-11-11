@@ -43,7 +43,7 @@ public partial class TerrainViewerApp
         if (plan.Status != AreaContentRootStatus.Ready) detail = $"{plan.Status}: {plan.Detail}";
         else
         {
-            var opened = ContentStack.Open(plan.Plan!);
+            var opened = ContentStack.OpenShared(plan.Plan!);
             if (opened.Status != ContentStackStatus.Ready) detail = $"stack {opened.Status}";
             else
             {

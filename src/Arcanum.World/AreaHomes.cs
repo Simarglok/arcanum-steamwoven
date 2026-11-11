@@ -190,7 +190,7 @@ public sealed class AreaMapHomes(TerrainViewerArguments launch, Func<AreaSpeaker
     {
         var discovery = ContentMountPlan.Discover(launch.GameRoot ?? throw new InvalidOperationException("AREA_HOMES_GAME_ROOT_REQUIRED"));
         if (discovery.Status != ContentMountStatus.Ready) return new(null, "mount " + discovery.Status);
-        var opened = ContentStack.Open(discovery.Plan!);
+        var opened = ContentStack.OpenShared(discovery.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return new(null, "stack " + opened.Status);
         using var stack = opened.Stack!;
         var list = MapList.Read(stack);

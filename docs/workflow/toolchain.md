@@ -130,8 +130,8 @@ history held about 500 runs of such copies of one template).
   given, and says so (`SMOKE hero human-male (auto): ...`); with
   `--main-menu` (no hero) it is refused, as is a menu stage (`menu`, `scene`, `options`, `bar`, `death`, `perf-menu`) without
   `--main-menu`. The stages the viewer runs only without `map` (`barter`, `menu`, `scene`, `options`, `plants`, `bar`,
-  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-tile`, `tile-ghost`, `container-click`, `fire-order`, `indoor-fade`, `npc-shot`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `placement-census`, `spell-end`, `hold-hero`, `spirit-talk`, `created-scenery`, `worn-light`, `critter-light`, `summon-flash`, `summon-wall`, `tech-craft`, `perf`, `perf-menu`) get a run of their
-  own (step `stages-alone`, or `map-alone`) when `map` is in the list too. `tech-craft` (ARC-DEV-362, technology audit slice T-a) needs the bullets the map's bodies hold, so it runs on the cave: `./arcanum smoke map "crash site cave" --stages tech-craft` (on a map with no bullets of the crafted gun's type it fails with that message; its steps are the helpers of `TerrainViewerTechCraftHarness.cs`). A run whose stages include `debug-travel`, `follower-far` or `inv-carry`
+  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-tile`, `tile-ghost`, `container-click`, `fire-order`, `indoor-fade`, `npc-shot`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `placement-census`, `spell-end`, `hold-hero`, `spirit-talk`, `created-scenery`, `worn-light`, `critter-light`, `summon-flash`, `summon-wall`, `tech-craft`, `item-aim`, `perf`, `perf-menu`) get a run of their
+  own (step `stages-alone`, or `map-alone`) when `map` is in the list too. `tech-craft` (ARC-DEV-362, technology audit slice T-a) needs the bullets the map's bodies hold, so it runs on the cave: `./arcanum smoke map "crash site cave" --stages tech-craft` (on a map with no bullets of the crafted gun's type it fails with that message; its steps are the helpers of `TerrainViewerTechCraftHarness.cs`). `item-aim` (ARC-DEV-365, technology audit slice T-g) opens the item cursor with a script trap device from the use icon and presses a tile (goal 41) and an NPC (goal 39); it needs a hero and a map with a living NPC. A run whose stages include `debug-travel`, `follower-far` or `inv-carry`
   starts the viewer with `--debug-mode` (the stage needs the debug mode, ARC-DEV-050; ARC-WORLD-120).
 - **Targets of the combat stages (ARC-DEV-089).** The stages that fight an NPC (`attack` in `map`, `cast`, `turn-based`, `ai`) do not take the
   map's weakest NPC blindly: they take the first one (weakest first, at most 24 tried) the hero can stand next to and, with the hero placed there,
@@ -201,12 +201,30 @@ a budget or a regression gate. Other optimisations are shown with it: run before
   (the load's lines are the load); `M`, the spell pane, is not on the interface stack and has no `window.open` span; a headless run prints `NONE` (no frame is drawn).
 - **`perf-menu`** (a menu stage, `--main-menu`): `startup` to the main menu's first frame (`start-to-menu`) and a new game from the
   menu. `./arcanum smoke pr --stages perf-menu --main-menu`.
+- **Resident art across map loads (ARC-DEV-375).** A map load keeps decoded frames and visual records for the next one ([design](../world/area-loader.md#resident-frames-and-visuals-across-map-loads-arc-dev-375)).
+  The load worker's read prints `load.worker.read.{strict,scene,copy}` spans and `ARC-DEV-375 visuals ...` / `ARC-DEV-375 frames resident-hits=H read=R ...` lines
+  (hits against frames actually read, the store's size). `ARC_AREA_RESIDENT=0` in the environment (`--env ARC_AREA_RESIDENT=0` on a smoke) turns both stores off
+  for a before/after comparison; nothing else depends on it.
 - **Reading the numbers.** The Mac is shared and a Debug source run is slower than the packaged build: the diagnosis took medians
   over several runs and looked at the load average. A packaged build needs the probe's switch in the environment (`ARC_PERF_PROBE=1`);
   HD runs need `ARC_HD_PACK` and settings files as the diagnosis's reproduction says.
 
 Tests: `PerfProbeTests` (the probe off and on, the lap names, the thread's allocation, the environment switches) in
 `tests/Arcanum.World.Tests`; `test_smoke` covers the stage kinds.
+
+## Shared content index (ARC-DEV-372)
+
+`ContentStack.Open` indexes every archive and walks the loose files of the game folder: about 87 MiB allocated and 0.3-0.4 s each (the allocation profile
+of the performance diagnosis, O4), and the viewer used to open one per reader (the load worker's two, five in `StartAreaTransitions`, the portraits, twelve
+background binders at once, the ground bodies, every window's art). The viewer's readers now call `ContentStack.OpenShared`:
+
+- **Sharing is opt-in.** Off by default, so tests and tools open private indexes as before; the viewer turns it on at its start (`ContentStack.EnableSharing`,
+  not in a self-test). With it on, `OpenShared(plan)` hands out a handle on the one index held for that mount plan (at most two plans are held), even when several threads
+  ask together; each handle is disposed by its reader as before and the archives close with the last handle. A call with its own `ContentStackOptions` opens a private index.
+- **Staleness.** The index is kept for the run (the original reads its static installation once). An archive whose size or modification time changed is read again;
+  `ContentStack.ResetShared()` drops the held indexes (`PrototypeCacheMount.Use` calls it, since the launcher may have built files into that folder).
+- **Measuring.** `./arcanum smoke pr --stages perf --sector 1409,1314 --env ARC_PERF_PROBE=1`; the publication's `transitions.NAME` steps print
+  next to `publish.NAME`. Reading the numbers: the allocation columns are exact, the milliseconds move with the Mac's load.
 
 ## Launch queue (ARC-DEV-033)
 

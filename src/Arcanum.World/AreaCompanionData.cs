@@ -38,7 +38,7 @@ public sealed class AreaCompanionData
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready)
             return (found.Status == AreaContentRootStatus.MountFailed ? AreaCompanionDataStatus.MountFailed : AreaCompanionDataStatus.ModuleOutsideGameRoot, null, found.Detail);
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return (AreaCompanionDataStatus.StackFailed, null, opened.Status.ToString());
         using var stack = opened.Stack!;
         var table = AiParameterTable.Open(stack);

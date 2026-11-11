@@ -126,6 +126,15 @@ public interface IAiHeroWalkWorld
     void HeroPickPocket(string target, string item, bool plant) { }
     /// <summary>ARC-DEV-185 (S12e): the lock pick attempt on the portal named <paramref name="target"/> with the lockpicks <paramref name="item"/>: the viewer makes it at its next safe point.</summary>
     void HeroPickLock(string target, string item) { }
+
+    // ---- ARC-DEV-365 (T-g): the hero's item use goals 39 (on an object) and 41 (on a tile) ----
+
+    /// <summary>The cell the hero walks to so as to stand next to <paramref name="tile"/> (goal 41's approach, range <paramref name="range"/>); null when there is none.</summary>
+    CellCoord? ItemTileApproach(CellCoord tile, int range) => null;
+    /// <summary>The last node of goal 39 (0x428CD0): the use of <paramref name="item"/> on <paramref name="target"/> (0x462CC0), run when the item is still the hero's; the viewer applies it at the frame's next safe point.</summary>
+    void HeroUseItem(string item, string target) { }
+    /// <summary>The last node of goal 41 (0x429040): the use of <paramref name="item"/> on <paramref name="tile"/> (0x462FC0).</summary>
+    void HeroUseItemOnTile(string item, CellCoord tile) { }
 }
 
 public static partial class AiExecutorRules
@@ -134,7 +143,7 @@ public static partial class AiExecutorRules
     public const int HeroRoutePollMs = 16;
 
     /// <summary>The goals the hero's walk stepper interprets: the walk to a tile (3), the run to a tile (4), the walk step goal (5), the pause (6) and the rotate (53) the walk pushes, and (ARC-DEV-169) the talk (21) and the approach to an object (8).</summary>
-    public static bool IsHeroWalkGoal(GoalType goal) => goal is GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.MoveToPause or GoalType.Rotate or GoalType.Talk or GoalType.MoveNear or GoalType.Attack or GoalType.AttemptAttack or GoalType.ThrowItem or GoalType.CastSpell or GoalType.AttemptSpell or GoalType.UseSkill or GoalType.AttemptPickpocket or GoalType.AttemptPickLocks or GoalType.UseObject or GoalType.UseContainer or GoalType.PickupItem or GoalType.AttemptPickup or GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor;
+    public static bool IsHeroWalkGoal(GoalType goal) => goal is GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.MoveToPause or GoalType.Rotate or GoalType.Talk or GoalType.MoveNear or GoalType.Attack or GoalType.AttemptAttack or GoalType.ThrowItem or GoalType.CastSpell or GoalType.AttemptSpell or GoalType.UseSkill or GoalType.AttemptPickpocket or GoalType.AttemptPickLocks or GoalType.UseItem or GoalType.UseItemOnTile or GoalType.UseObject or GoalType.UseContainer or GoalType.PickupItem or GoalType.AttemptPickup or GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor;
 
     /// <summary>
     /// One step of the hero's walk run (the stepper 0x423560 over the walk nodes read in ARC-DEV-148): the nodes run until one waits or the run ends. Goal 3 (goal 4 has the extra first node that sets the run flag when
@@ -223,6 +232,8 @@ public static partial class AiExecutorRules
         GoalType.Attack => HeroAttackNode(goal, world),
         GoalType.AttemptAttack => HeroAttemptAttackNode(goal, world),
         GoalType.ThrowItem => HeroThrowNode(goal, world),
+        GoalType.UseItem => HeroUseItemNode(goal, state, world),
+        GoalType.UseItemOnTile => HeroUseItemOnTileNode(goal, world),
         GoalType.CastSpell => HeroCastNode(goal, world),
         GoalType.UseSkill => HeroUseSkillNode(goal, world),
         GoalType.AttemptPickpocket => HeroAttemptPickpocketNode(goal, world),
