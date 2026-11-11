@@ -11,12 +11,16 @@ in the executable first (owner decision 2026-10-20). First used by ARC-COMBAT-00
 ([combat anomalies A1–A10](combat-core-evidence.md#original-executable-check-arc-combat-001)).
 
 Where a task must say how **the original game** behaves, or where an earlier
-reading (F0) looks wrong, read the original executable at the function's address
-in the retail 1.0.7.4 `Arcanum.exe`. Addresses come from the
+reading (F0) looks wrong, read the original code at the function's address in
+the retail 1.0.7.4 `Arcanum.exe`. Addresses come from the
 [function registry](../verification/functions.csv), the research documents and
-the [verification ledger](original-verification-ledger.md). A reading is static:
-nothing is run, patched or copied. The oracle runs single functions of the
-unchanged file in an emulator under the rules below.
+the [verification ledger](original-verification-ledger.md). The code is read in
+the exports of the executable kept in `research-private/` (the decompiled C of
+the [Ghidra text export](../workflow/toolchain.md#ghidra-text-export-arc-dev-377)
+and any further export beside it), searched as text; the executable itself is
+read only for what the exports lack (below). A reading is static: nothing is
+run, patched or copied. The oracle runs single functions of the unchanged file
+in an emulator under the rules below.
 
 ## When to use it
 
@@ -46,23 +50,48 @@ on the original files.
   checked function branches into.
 - The function's address (see above) and the project's own records of the
   callees, globals and constants it uses.
-- Xcode's `llvm-objdump` (`xcrun -f llvm-objdump`). Ghidra (Apache-2.0) may be
-  used instead for the same reading, headless and with names from the project's
-  own records; its project stays in `research-private/`. Only free tools with
-  free licences are used (owner decision 2026-10-17); paid or licence-restricted
-  tools such as IDA are not.
+- The exports in `research-private/` (owner's Mac, never in git; index
+  `research-private/ghidra-export/README.txt`): the decompiled C of every
+  function, `research-private/ghidra-export/c/` with `index.tsv` and
+  `funcs/<address>.c`, searched with `rg`
+  ([how-to](../workflow/toolchain.md#ghidra-text-export-arc-dev-377)); beside it
+  the disassembly and data listing (`listing/`), Ghidra tables of globals with
+  their readers and writers, strings, imports (`data/`) and byte-level scans of
+  strings, code-pointer tables and resources (`raw/`)
+  ([what each holds](../workflow/toolchain.md#exe-exports-beyond-the-decompiled-c-arc-dev-379)).
+  The decompiler's names, variables and types are a guess; they are checked, not
+  trusted.
+- Only for what the exports lack: Xcode's `llvm-objdump` (`xcrun -f llvm-objdump`)
+  on the executable, or Ghidra (Apache-2.0) headless with names from the
+  project's own records; its project stays in `research-private/`. Only free
+  tools with free licences are used (owner decision 2026-10-17); paid or
+  licence-restricted tools such as IDA are not.
 
 ## Steps
 
-1. Find the function's start address; the stop address is the start of the
-   next function in the executable (Ghidra's analysis, or the prologue and call
-   target scan of the [oracle research](original-oracle-research.md#findings)).
-   The listing shows no names (calls read `<.text+0x5ca0>`), so note the
-   callees' and globals' addresses from the registry and the research documents
-   too (for example the object field getter 0x406CA0 and the PC leader getter
-   0x45DDA0).
-2. Disassemble only that function, read-only, into the session scratchpad or
-   the ignored `research-private/` folder, never into tracked files:
+1. Search the exports first. The function at an address: open
+   `research-private/ghidra-export/c/funcs/<address>.c` (eight lowercase hex
+   digits) or look the address up in `index.tsv`; its callers: `rg -l
+   "FUN_<address>" research-private/ghidra-export/c/funcs`; a constant or string:
+   `rg -n` over `funcs`. Note the callees' and globals' addresses from the
+   registry and the research documents too (for example the object field getter
+   0x406CA0 and the PC leader getter 0x45DDA0): the export names are Ghidra's.
+   Every census start has a file except 43 thunks (jump stubs, of 139 in the image, kept in
+   `data/functions-all.tsv` with their target) and one start inside another
+   function (some files are fragments, see the limits in the how-to). For any
+   other address without a file check `listing/text.asm` and `extra/gaps.asm` before
+   concluding that the executable has no such function. Globals and tables: a
+   global's readers and writers are in `data/globals.tsv`, its bytes in
+   `listing/data.txt`; a string's users in `data/strings.tsv` and
+   `raw/strings-raw.tsv`; handler and jump tables in `raw/ptr-tables.tsv`.
+2. Only for a function the exports still lack, or for a detail of an exported one that the
+   decompiled C leaves open (operand width, signed or unsigned compare, a
+   wrapping sum or product, a division), disassemble that one function,
+   read-only, into the session scratchpad or the ignored `research-private/`
+   folder, never into tracked files. The stop address is the start of the next
+   function (the census or Ghidra's analysis, or the prologue and call target
+   scan of the [oracle research](original-oracle-research.md#findings)); the
+   listing shows no names (calls read `<.text+0x5ca0>`):
 
    ```bash
    "$(xcrun -f llvm-objdump)" -d --x86-asm-syntax=intel --start-address=0x4B7EB0 --stop-address=0x4B8040 "$DAT_ROOT/Arcanum.exe" > "$SCRATCH/sort_combat_list.asm"
@@ -71,14 +100,16 @@ on the original files.
 3. Resolve constants from the project's own records: object field indices and
    flag bits in the format documents (`docs/formats`), stat numbers and inventory
    slots in the domain contracts, and values the oracle observed in real calls.
-4. Compare the instruction flow with the recorded reading in question: which values
+4. Compare the code flow with the recorded reading in question: which values
    are tested, which handle is passed, what is written back, which calls are
    made and in what order. Check the arithmetic too: operand width (8, 16 or 32
    bits), signed or unsigned compares and division, where a product or sum can
    wrap, and how a division rounds. A reading that names only the formula can
    miss a 32-bit wrap (ledger XP3).
 5. Check that the function is not patched: its branches stay inside `.text`
-   and never reach `.IIDKing`.
+   and never reach `.IIDKing`. A direct call into `.IIDKing` shows in the
+   decompiled text as a call to an address in that range; indirect calls and
+   jumps through a table are checked in the function's disassembly.
 6. Have a fresh agent repeat the reading independently before the verdict is
    used; record disagreements instead of picking one.
 
@@ -153,7 +184,7 @@ code changes after its receipt.
 | Level | Evidence |
 | --- | --- |
 | F0 | Implemented from an earlier reading only, not checked in the executable (NOT_VERIFIED) |
-| F1 | One reading of the whole function in the executable |
+| F1 | One reading of the whole function in the executable (its decompiled export, or its disassembly) |
 | F2 | Two independent readings (step 6) |
 | F3 | Oracle: the function and Steamwoven compared on recorded inputs, mutants caught |
 | F4 | Observed in the running game (a scenario trace or save) |

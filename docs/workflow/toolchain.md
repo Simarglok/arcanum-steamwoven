@@ -191,6 +191,10 @@ a budget or a regression gate. Other optimisations are shown with it: run before
   conversations,companions,binders,ambient,hero-body,selection,menu}` inside `load.publish` (the main thread), `load.first-frame`
   (the first frame drawn after a publication), `window.open.MODE` (the interface stack's opener, the panel's own open included),
   `menu.open`, `menu.open.WINDOW`, `menu.first-frame`, `game.new`, `game.load`, `window.open.SaveList`.
+  ARC-DEV-380 adds the laps inside the publication's selection step, printed for the first selection after a scene publication: `selection.{ambient,walls,roofs,combat,ground,portals,moving,canvas}`,
+  `canvas.publish.{chunks,upright,index,view}` (a new plan) and `canvas.view.{cull,chunks,upload,hd,items}` (its first view): the canvas's own work; `roofs.{bind,follow,publish}`, `walls.{bind,recalc}`,
+  `hero-swap.{upload,profile,plan,select}` (the body swap, not the selection it triggers) and `ground.{stamp,frames,busted,extra-art,items,blood,created,critters}` (each time the ground bodies are
+  computed from nothing, so also after a reset; a step names the region that follows it, so a first open of the extra art inside a busted-object loop counts under `busted`).
 - **`perf`** (a hero stage, own run; needs a window with a map exit: the Crash Site window has none, so
   `./arcanum smoke pr --stages perf --sector 1409,1314`): `startup` (process to load begin, worker, publication and first frame),
   one `window` line per open of each window key I C L T W M, six each through the production key route (`open-sync` is the key's
@@ -559,34 +563,67 @@ python3 -B tools/research/exe_census.py --exe "$DAT_ROOT/Arcanum.exe"
 
 ## Ghidra text export (ARC-DEV-377)
 
-Checks against the original executable start with a plain text search instead of reading the file again: a one-time headless
-Ghidra export of the decompiled C of every function Ghidra found (4,365 of the pinned 1.0.7.4 `Arcanum.exe`, about 19 MB, 53 s to
+Checks against the original executable start with a plain text search instead of reading the file again: a headless Ghidra
+export of the decompiled C of every function (6,711 of the pinned 1.0.7.4 `Arcanum.exe`, about 26 MB, under two minutes to
 generate) lives in `research-private/ghidra-export/c/` on the owner's Mac. It is derived from the original executable, so it is never
 committed, quoted or copied into git or a PR; a check still records only behaviour in prose (see the
 [original executable check](../research/original-executable-check.md)). The decompiler's variables and types are a guess: confirm
-anything that matters in the disassembly or with the [function oracle](#function-oracle).
+anything that matters in the disassembly (`listing/text.asm`, [below](#exe-exports-beyond-the-decompiled-c-arc-dev-379)) or with the
+[function oracle](#function-oracle). The first pass (ARC-DEV-377, 4,365 functions) was extended by ARC-DEV-379: the census starts
+missing from the project, a wrongly non-returning function and the code Ghidra never disassembled were added, so `c/` covers every
+[census](#function-census) start.
 
 - `index.tsv`: address, name, size in bytes, status, file, signature, one row per function; names are Ghidra's (`FUN_<address>`, or
-  library names such as `_malloc`), the project's own names are not applied.
+  library names such as `_malloc`), the project's own names are not applied. `extra/function-origins.tsv` says where each
+  function came from (below).
 - `funcs/<address>.c`: one file per function (eight lowercase hex digits); line 1 is the address, name and size, line 2 the callee
   names, then the C.
 - Search with `rg`: callers of a function `rg -l "FUN_0040da50" research-private/ghidra-export/c/funcs`; a constant or string
   `rg -n "0x3ec" research-private/ghidra-export/c/funcs`; the function at an address `cat .../funcs/004a6900.c` or
   `awk -F'\t' '$1=="004a6900"' .../index.tsv`.
-- Gap: 1,498 of the 5,815 [census](#function-census) starts are not in the Ghidra project (functions reached only through pointers,
-  such as the goal-round handler 0x4B7150, among them), so a missing file does not mean the executable has no such function; read it
-  with `llvm-objdump` or run it in the oracle.
-- Regenerate (after a Ghidra upgrade or a re-analysis; the project is opened read-only, no analysis is repeated): the export script
-  (`scripts/ExportAll.java`) and `run.sh` sit in `research-private/ghidra-export/` (not in git; all paths here are relative to the
-  owner's main checkout, which holds `research-private/`), run through the headless queue:
+- Limits: 6 rows have status `fail` (2-3 byte fragments); functions that came from the gap scan (origin `gap-scan`) are orphan
+  code that nothing in the image calls or points at, some of them pieces of a larger function, so read them as fragments; 13 bodies
+  could not be extended without merging functions (the C runtime near the end of the code and a few game functions, listed in
+  `extra/bodies.tsv` with `overlap`); the pre-ARC-DEV-379 export is kept as `c-first-pass/` until the owner deletes it.
 
-  ```sh
-  ./arcanum run --kind headless --expect 'ghidra export start' -- research-private/ghidra-export/run.sh OUTDIR [LIMIT]
-  ```
+## Exe exports beyond the decompiled C (ARC-DEV-379)
 
-  `run.sh` sets `JAVA_HOME` to `openjdk@25` (without it `analyzeHeadless` stops with a "no TTY" error) and calls
-  `/opt/homebrew/opt/ghidra/libexec/support/analyzeHeadless research-private/ghidra-proj ArcanumExe -process Arcanum.exe -noanalysis
-  -readOnly -scriptPath research-private/ghidra-export/scripts -postScript ExportAll.java OUTDIR [LIMIT]`.
+What a reader of the executable needs besides the C, all in `research-private/ghidra-export/` (never in git; `README.txt` there is the
+index and is the first thing to read). The sources are Ghidra 12.2 (Apache-2.0) and `python3` scans of the file; nothing else was
+installed (no radare2/rizin; `llvm-objdump` from Xcode only for the leftover gap ranges).
+
+| Folder | What it holds | Use it for |
+| --- | --- | --- |
+| `listing/` | Ghidra listing of every block: `text.asm` (code, jump tables inline, `; FUNCTION` markers), `data.txt`, `rdata.txt`, `idata.txt`, `rsrc.txt`, `Headers.txt`, `reloc.txt`, `IIDKing.asm`; typed data and strings shown, untyped bytes as `db[N]` hex rows | the exact instructions behind a decompiled line (operand width, signedness); data tables and constants by address |
+| `data/` | `sections.tsv`, `functions-all.tsv` (with its 139 thunks, which have no file in `c/`), `imports.tsv`, `strings.tsv` (strings Ghidra defined), `symbols.tsv`, `globals.tsv` (every referenced address outside the code with its readers, writers and pointer holders) | who reads or writes a global, who references a string, imported functions |
+| `raw/` | `pe-info.txt`, `resources.tsv` and `resources/` (8 PE resources: icons, version info), `strings-raw.tsv` (every ASCII run of 4+ characters, with referencing dwords), `pointers.tsv` (every dword equal to a function entry), `ptr-tables.tsv` (runs of code pointers: jump and handler tables) | strings Ghidra did not define, handler/vtable-like tables, the header |
+| `extra/` | `function-origins.tsv`, the logs of each creation step, `gaps.tsv` and `gaps.asm` (the 126 ranges, 711 bytes, of code that no function covers; `llvm-objdump` text of each), `noreturn.tsv` | what was added and what is still open |
+
+The executable has no relocation table (the `.reloc` section is empty), so xrefs are Ghidra's plus the raw dword scans above; a code
+address built in a register is invisible to both. `.rdata` is 16 KB, the tables live in `.data` and, for jump tables, inside `.text`.
+
+How `c/` reaches every census start (ARC-DEV-379; the Ghidra project copy is `research-private/ghidra-proj-full`, the first-pass project
+`ghidra-proj` is untouched; the scripts are in `ghidra-export/scripts/`, run with `run-full.sh [-ro] SCRIPT.java ARGS` through the headless
+queue):
+
+1. `CreateCensusFunctions.java census.csv out.tsv`: disassemble and create a function at each census start that is no function yet
+   (1,474 created, 0 failed, 3 inside other functions; 1,452 are still separate functions after step 2, the rest were absorbed into larger bodies).
+2. Ghidra had marked one function (`FUN_00406d40`, about 950 call sites) non-returning, which cut every caller after the call and left about
+   240 KB of code undisassembled. `FixNoReturn.java 00406d40` clears the flag, `FixCallOverrides.java 00406d40` removes the "call,
+   return" override of each call site, `RecomputeBodies.java` re-flows every function body (180 grew). Do not run `analyzeChanges` or
+   the analysers afterwards: they infer the flag again.
+3. `exe_tables.py`/`gap_ranges.py` find the remaining undisassembled code (a `db[N]` row of `text.asm` that is not padding): the gap
+   starts some dword points at get a function (`CreateAtList.java`, 50), every other gap start gets one from `CreateGapFunctions.java`
+   (929 created, 834 of them still separate functions at the end, 120 starts rejected as not code). What is left is in `extra/gaps.*`.
+
+Regenerate every export from the project (about two minutes; `OUTDIR` must not exist; the `c/` files differ from a previous run only in the
+order of the callee names on line 2):
+
+```sh
+./arcanum run --kind headless --expect 'ghidra full start' -- research-private/ghidra-export/export-all.sh OUTDIR
+```
+
+A Ghidra upgrade or a new analysis needs steps 1-3 again on a copy of the project, in that order.
 
 ## Function oracle
 

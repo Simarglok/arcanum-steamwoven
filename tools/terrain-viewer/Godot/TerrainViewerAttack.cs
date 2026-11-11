@@ -302,6 +302,8 @@ public partial class TerrainViewerApp
         var occupancy = AreaPcOccupancy() ?? AreaOccupancy.None;
         static CellCoord World(AreaGridSession s, CellCoord chart) { var w = s.Chart.ToWorld(chart); return new(checked((int)w.X), checked((int)w.Y)); }
         var live = occupancy.Occupied.Select(c => World(session, c)).Append(World(session, session.State.CommittedCell)).ToHashSet();
+        // ARC-DEV-371: the critters the session created stand on their cells as the map's critters do (a created critter has no row in the map's objects).
+        foreach (var made in owner.QueryCreatedObjects(new SessionMapId(CurrentAreaMap))) if (made.Kind == SessionCreatedKind.Critter) live.Add(made.Cell);
         var gone = ObjectTargets()?.Gone(owner) ?? new HashSet<AreaObjectKey>();
         var map = CurrentAreaMap;
         return new(session.Snapshot, area.Snapshot.Objects, occupancy.Moved, live, row => gone.Contains(row.Key),

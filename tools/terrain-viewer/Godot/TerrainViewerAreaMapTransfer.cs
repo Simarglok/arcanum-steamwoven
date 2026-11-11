@@ -206,11 +206,25 @@ public partial class TerrainViewerApp
         foreach (var award in host.TakeAwards()) LevelAreaFollowers(award);
         // ARC-DEV-298 (B20): the float lines of the run (the ghost of Brego's) over their speakers, floated by the next frame.
         foreach (var line in host.TakeFloats()) _tileScriptFloats.Enqueue((line.Speaker == host.Pc ? HeroFloater : line.Speaker.Code, line.Text));
-        // ARC-WORLD-081: the items the run created (or did not, at the Steamwoven limit or a refusal) are logged.
-        foreach (var created in host.TakeCreations())
-            GD.Print("ARC-WORLD-081 created " + System.Text.Json.JsonSerializer.Serialize(new { created.Prototype, Near = created.Near.Code,
-                Disposition = created.Result.Disposition.ToString(), Failure = created.Result.Failure.ToString(), created.Result.Item }));
+        NoteScriptCreations(host.TakeCreations());
         return ran;
+    }
+
+    /// <summary>
+    /// ARC-WORLD-081: the items a run created (or did not, at the Steamwoven limit or a refusal) are logged. ARC-DEV-371 (E1-c3, ledger TG9, OM16): a critter it created is notified of its location at once
+    /// (0x442260 ends with the location notification, mode 2, for a type 15 or 16 object, unconditionally), so the script of the tile it stands on runs with it as the triggerer (the AI frame runs the notice
+    /// as it runs an NPC's step: after an open conversation, once the AI host holds the critter). The original runs it inside the action, before the script's next one; here it follows the run.
+    /// </summary>
+    private void NoteScriptCreations(IReadOnlyList<AreaScriptCreation> created)
+    {
+        foreach (var made in created)
+        {
+            GD.Print("ARC-WORLD-081 created " + System.Text.Json.JsonSerializer.Serialize(new { made.Prototype, Near = made.Near.Code,
+                Disposition = made.Result.Disposition.ToString(), Failure = made.Result.Failure.ToString(), made.Result.Item, made.Critter }));
+            if (made.Critter is not { } entity || made.Cell is not { } cell) continue;
+            if (_npcTilePending.Count >= 256) _npcTilePending.Dequeue();
+            _npcTilePending.Enqueue((entity, null, new(cell.X, cell.Y)));
+        }
     }
 
     private AreaUseScriptHost? UseScriptHost(AreaSnapshot snapshot)
@@ -252,7 +266,9 @@ public partial class TerrainViewerApp
             // ARC-DEV-243 (S14g): a script's damage and heal of hit points go through the cast host's damage step and the session's life step.
             DamageByScript, HealHitPointsByScript,
             // ARC-DEV-261 (GT198): a destroyed object's taking-damage script is asked all the same; the answer cannot change the outcome.
-            code => TakingDamageGoesOn(code, null));
+            code => TakingDamageGoesOn(code, null),
+            // ARC-DEV-371 (E1-c3): a script's create object of a critter prototype makes a critter; a created critter's row is the session's (the maps' rows hold none).
+            ScriptCritterPrototype, entity => CreatedCrittersRow(entity));
         var inventory = _inventoryHost;
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, inventory?.Maps ?? [], content, world)
         {
@@ -262,6 +278,8 @@ public partial class TerrainViewerApp
         // ARC-WORLD-110: a use meets the object's trap first; the walk and the steps meet the same host's traps.
         _areaTraps = new AreaTraps(owner, host, snapshot.Objects, world.Gone, AreaTrapEffectsNow);
         host.Traps = _areaTraps.Use;
+        // ARC-DEV-371: creations a replaced host had not handed over yet keep their tile notification when it is the same map's.
+        if (_useScriptHost is { } replaced && replaced.Snapshot.RuntimeMap == snapshot.RuntimeMap && ReferenceEquals(replaced.Session, owner)) NoteScriptCreations(replaced.Host.TakeCreations());
         _useScriptHost = (snapshot, owner, content, _inventoryHost, host);
         return host;
     }
