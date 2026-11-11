@@ -334,6 +334,9 @@ public partial class TerrainViewerApp
         _aiHost = null; _aiHostStamp = null; _aiPcOccupancy = null;
         var previous = _areaSession;
         _areaSession = session;
+        // ARC-DEV-354: the carried items this host has no row for (taken in a window of the main map it never showed) are read once the session is the
+        // running one (the record source's callbacks read it) and before the item art sizes, which read those rows.
+        _inventoryHost?.ReadCarriedRows(session);
         AttachAreaEncumbranceEffect();
         AttachAreaDyingScript();
         AttachAreaItemArtSizes();

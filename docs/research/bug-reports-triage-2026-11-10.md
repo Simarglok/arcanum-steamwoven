@@ -173,6 +173,9 @@ with the refusal above, with it it passes at all seven checks.
 **Not fixed (open, a new task):** a fresh run that loads a save holding a note taken in another window of the main map has no row of it at all (name
 "[unknown object]", facts missing, use refused): reproduced on the report's own save (`ARC_B51_SAVE` probe, not committed). It needs the
 row of an object by identity outside the loaded window (the base-record lookup gap, MIG9); it is not the report's own flow (a window move in one run).
+**Fixed by ARC-DEV-354:** the host of the shown window reads the row of every carried item it has none for from the item's origin map, a window of
+the main map around the cell the map's mobile aggregate gives the object (`AreaInventoryHost.ReadCarriedRows`, `AreaMobileCells`); the stage
+`inv-carry` adds step 6, a load into another window with no rows handed over (the path of a fresh run), where the note's name, facts and reading are checked.
 
 ### B52: a follower's portrait bars are empty
 

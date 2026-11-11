@@ -488,7 +488,7 @@ Run on `main` `5321e8449` plus this change, hero `human-male`, `Arcanum1-024-fix
 
 | Bug | Before | Now | Evidence |
 | --- | --- | --- | --- |
-| B51, B32 | Present: a taken note cannot be read after the window moved | **Fixed in the source** (ARC-DEV-336) for the window move in one run; the fresh load of a save stays open | The stage's PASS line; `AreaInventoryHostHeldRowsTests` |
+| B51, B32 | Present: a taken note cannot be read after the window moved | **Fixed in the source** (ARC-DEV-336) for the window move in one run; the fresh load of a save by ARC-DEV-354 (the row read from the origin window, stage step 6) | The stage's PASS line; `AreaInventoryHostHeldRowsTests` |
 
 ## Re-check of B07 by the stage `placement-census` (ARC-DEV-308, SM07, 2026-11-08)
 
