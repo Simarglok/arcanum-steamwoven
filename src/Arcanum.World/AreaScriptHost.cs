@@ -82,6 +82,13 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public ScrAdmissionSet AdmissionFor(ScrObjectRef? attachee) =>
         attachee is { } obj && _state.IsCarried(obj.Code) ? (_session.QueryHero() is null ? Admission : SkillAdmission) : RunAdmission;
 
+    /// <summary>ARC-MAGIC-041 (TI8): the set a deferred call of the event queue runs under: <see cref="AdmissionFor"/> plus use ammunition units (135), which the call of the powered shield's
+    /// script uses (<see cref="Apply"/> spends the cells through the session). A dialog script does not get it.</summary>
+    public ScrAdmissionSet CallAdmissionFor(ScrObjectRef? attachee) => AmmoSets.GetOrAdd(AdmissionFor(attachee), set => new(set.Id + "-ammo", set.Conditions,
+        set.Actions.Append(ScrCatalogue.Action.UseAmmoUnits), set.ValueKinds, set.FocusKinds, set.CounterIndexWraps));
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<ScrAdmissionSet, ScrAdmissionSet> AmmoSets = new();
+
     /// <summary>
     /// ARC-SCRIPT-050: the shown map's use host (<see cref="AreaUseScriptHost"/>), which answers this host's object, world and area
     /// questions as it answers a use or heartbeat run's: the objects' items, names and reputations, the session's random draws labelled
@@ -352,6 +359,16 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         foreach (var sound in effects.Sounds)
             if (sound.Kind == ScrSoundKind.Scheme) _session.PlaySoundScheme(_session.Version, sound.Id, sound.Ambient);
             else _sounds.Add(sound);
+        // ARC-MAGIC-041 (TI8): each use ammunition units request in action order, before the deferred calls (the powered shield's call spends a
+        // cell and then schedules the next call). The original ignores the answer of the unit use: a holder with too few units loses none and
+        // the script goes on; an object the session has no ammunition for (not the hero, not an NPC it lists) stops the later steps, as a
+        // refused call request does.
+        foreach (var use in effects.AmmoUses)
+        {
+            var holder = IsPc(use.Holder) ? SessionAmmoHolder.Hero : new SessionAmmoHolder(use.Holder.Code);
+            var spent = _session.SpendAmmo(_session.Version, holder, use.AmmoType, use.Count);
+            if (spent.Disposition == GameSessionDisposition.Rejected && spent.Failure != GameSessionFailure.AmmoShort) return false;
+        }
         // ARC-WORLD-039: deferred calls go to the session's queue in action order (the viewer pumps it); a refused request
         // stops the later steps, as a refused flag write does.
         foreach (var request in effects.Calls)

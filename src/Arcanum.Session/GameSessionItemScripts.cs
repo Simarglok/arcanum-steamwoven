@@ -3,6 +3,7 @@ using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Events;
 
 namespace Arcanum.Session;
 
@@ -137,6 +138,9 @@ public sealed partial class GameSessionOwner
         private readonly List<SessionItemScriptRun> _runs = [];
         private readonly List<SessionScriptMessage> _messages = [];
         private readonly List<ScrFlagWrite> _writes = [];
+        // ARC-MAGIC-041 (TI8): the deferred call requests of the runs (call script in, remove script call), in action order; the commit puts
+        // them in the session's event queue.
+        private readonly List<ScrCallRequest> _calls = [];
         // ARC-SCRIPT-042: the items of the move with their magick/tech complexity (the objects whose slots and power ratios the runs may
         // use), the slots the runs changed, and the hero's effect list as the runs leave it with the steps that lead there.
         private readonly IReadOnlyDictionary<string, int> _items;
@@ -160,7 +164,7 @@ public sealed partial class GameSessionOwner
         internal IReadOnlyList<SessionScriptMessage> Messages => _messages.AsReadOnly();
         /// <summary>Whether committing changes the session: a flag write, a script store cell that differs from the session's (ARC-DEV-152),
         /// a slot or an effect change.</summary>
-        internal bool Changes => _writes.Count > 0 || _slots.Count > 0 || _steps.Count > 0 || _reads.StoreChanges;
+        internal bool Changes => _writes.Count > 0 || _slots.Count > 0 || _steps.Count > 0 || _calls.Count > 0 || _reads.StoreChanges;
 
         internal ScrRunResult? Run(int point, string attachee, string triggerer, string? extra)
         {
@@ -211,6 +215,7 @@ public sealed partial class GameSessionOwner
             foreach (var write in effects.PcVariables) if (SessionScriptLimits.IsHero(write.Pc)) _reads.PendingPcVariables[write.Index] = write.Value;
             foreach (var write in effects.PcFlags) if (SessionScriptLimits.IsHero(write.Pc)) _reads.PendingPcFlags[write.Index] = write.Value;
             foreach (var write in slots) _slots[(write.Attachee!.Value.Code, write.Point)] = write.Slot;
+            _calls.AddRange(effects.Calls);
             return GameSessionFailure.None;
         }
 
@@ -326,6 +331,7 @@ public sealed partial class GameSessionOwner
                 return;
             }
             if (_steps.Count > 0) Failure = _owner.PrepareEffects([.. _steps], _definitions, 0, out _prepared);
+            if (Failure == GameSessionFailure.None && _calls.Count > 0) Failure = _owner.CheckScriptCalls(_calls);
         }
 
         /// <summary>Applies the prepared changes, without a revision: the flags, the script stores (ARC-DEV-152), the kept slots and the
@@ -343,6 +349,7 @@ public sealed partial class GameSessionOwner
             _reads.CommitStores();
             foreach (var (key, slot) in _planned ?? throw new InvalidOperationException("ITEM_SCRIPT_COMMIT_UNPREPARED")) _owner._inventory.ScriptSlots[key] = slot;
             if (_prepared is not null) _owner.ApplyEffects(_prepared);
+            if (_calls.Count > 0) _owner.ApplyScriptCalls(_calls);
         }
     }
 
@@ -355,7 +362,8 @@ public sealed partial class GameSessionOwner
         // session cannot answer (get stat of a stat it does not hold, GS3) ends the dispatch as not modelled with nothing applied: refused too.
         if (run.Outcome == ScrOutcome.Refused || run.Stop is ScrStop.UnreadableScript or ScrStop.NotModelled) return GameSessionFailure.ItemScriptUnsupported;
         var effects = run.Effects;
-        if (effects.DestroyTrapObject is not null || effects.Dialog is not null || effects.StoryState is not null || effects.Calls.Count > 0)
+        // ARC-MAGIC-041: the deferred calls are the session's now (the move puts them in the event queue as it commits).
+        if (effects.DestroyTrapObject is not null || effects.Dialog is not null || effects.StoryState is not null || effects.AmmoUses.Count > 0)
             return GameSessionFailure.ItemScriptUnsupported;
         foreach (var write in effects.GlobalFlags)
         {
@@ -369,6 +377,54 @@ public sealed partial class GameSessionOwner
             if (printed.Status == SessionPrintedLineStatus.Shown) messages.Add(new(line.Script, line.Line, line.Kind, printed.Text ?? string.Empty));
         }
         return GameSessionFailure.None;
+    }
+
+    private static SessionScriptRole? RoleOf(ScrObjectRef? obj) => obj is { } o ? new SessionScriptRole(new SessionMapId(o.Map), o.Code) : null;
+
+    /// <summary>
+    /// ARC-MAGIC-041 (TI8): checks, before anything is applied, that the session can take an item run's deferred call requests: the roles and
+    /// delays as <see cref="ScheduleScriptCall"/> checks them and the room in the event queue for the calls the move schedules (the calls it
+    /// removes are not counted as free room: a move that needs the room fails, never half-applies).
+    /// </summary>
+    private GameSessionFailure CheckScriptCalls(IReadOnlyList<ScrCallRequest> calls)
+    {
+        var scheduled = 0;
+        var now = _clock.QueryClockSnapshot().GameTimestampMs;
+        foreach (var call in calls)
+        {
+            if (!ValidRole(RoleOf(call.Triggerer)) || !ValidRole(RoleOf(call.Attachee))) return GameSessionFailure.InvalidEvents;
+            if (call.Kind != ScrCallKind.Schedule) continue;
+            if (call.DelayMs is < 1 or > SessionEventKinds.MaxScriptCallDelayMs) return GameSessionFailure.InvalidEvents;
+            if (now > long.MaxValue - call.DelayMs) return GameSessionFailure.EventBudgetExceeded;
+            scheduled++;
+        }
+        if (scheduled == 0) return GameSessionFailure.None;
+        return _events.QueryPending().Count(e => e.Kind == SessionEventKinds.ScriptCall) + scheduled > SessionEventKinds.MaxScriptCalls ||
+            _events.Count + scheduled > _events.Limits.MaxPending ? GameSessionFailure.EventBudgetExceeded : GameSessionFailure.None;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-041 (TI8): puts an item run's deferred call requests in the event queue, in action order, with no revision of their own (the
+    /// move takes one): a schedule as <see cref="ScheduleScriptCall"/> does, a removal as <see cref="RemoveScriptCall"/> does (the first
+    /// pending call of the script whose attachee is the named object, none matching: nothing). <see cref="CheckScriptCalls"/> checked them.
+    /// </summary>
+    private void ApplyScriptCalls(IReadOnlyList<ScrCallRequest> calls)
+    {
+        foreach (var call in calls)
+        {
+            var attachee = RoleOf(call.Attachee);
+            if (call.Kind == ScrCallKind.Remove)
+            {
+                _events.RemoveFirst(SessionEventKinds.ScriptCall, e => SessionEventKinds.Call(e.Payload) is var pending && pending.Script == call.Script && pending.Attachee?.Entity == attachee?.Entity);
+                continue;
+            }
+            var now = _clock.QueryClockSnapshot().GameTimestampMs;
+            var scheduled = _events.ScheduleAfter(SessionEventKinds.ScriptCall,
+                SessionEventKinds.Payload(new SessionScriptCall(call.Script, call.Line, RoleOf(call.Triggerer), attachee), now, call.DelayMs, _actor.Map.RuntimeMap),
+                call.DelayMs, EventClocks(now));
+            // Checked before the commit; a refusal here would be a broken invariant of the event queue.
+            if (scheduled.Disposition != GameEventScheduleDisposition.Added) throw new InvalidOperationException("ITEM_SCRIPT_CALL_" + scheduled.Disposition);
+        }
     }
 
     /// <summary>ARC-SCRIPT-042: the hero's magick/tech aptitude, as <see cref="HeroAptitude"/> reads it, with the hero's effect list

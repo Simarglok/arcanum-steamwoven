@@ -368,8 +368,10 @@ public static class SessionItemScripts
 {
     /// <summary>
     /// The commands an item event's script may use: <see cref="ScrAdmissionSet.S6"/> without the dialog action (no
-    /// conversation starts from a transfer), the story-state actions (the session has no story-state number) and the
-    /// deferred calls (not applied from a transfer yet); ARC-SCRIPT-042 adds the item-effect commands of <see cref="ScrAdmissionSet.S14"/>:
+    /// conversation starts from a transfer) and the story-state actions (the session has no story-state number); ARC-MAGIC-041 (TI8) keeps the
+    /// deferred calls, call script in (54) and remove script call (125), which the move schedules and removes in the session's event queue as it
+    /// commits (<c>ItemScriptRuns.Commit</c>); use ammunition units (135) stays out, since the only script that uses it runs it from a deferred call
+    /// (a host of its own), never from the event; ARC-SCRIPT-042 adds the item-effect commands of <see cref="ScrAdmissionSet.S14"/>:
     /// the identified and rewielding conditions, add and remove effect, call-ex, the magick-tech adjustment, play script eye candy and play
     /// sound (82; the eye candy and the sound stay in the runs' effects for the host to show and play); ARC-DEV-152 adds the value kinds of the
     /// script stores (<see cref="ScrAdmissionSet.StoreValueKinds"/>: global variables, the hero's variables and flags, read and written as the
@@ -379,7 +381,7 @@ public static class SessionItemScripts
     public static ScrAdmissionSet Admission { get; } = new("S14-item",
         ScrAdmissionSet.S6.Conditions.Concat([ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.ItemsBeingRewielded]),
         ScrAdmissionSet.S6.Actions.Where(action => action is not (ScrCatalogue.Action.Dialog or ScrCatalogue.Action.GetStoryState
-            or ScrCatalogue.Action.SetStoryState or ScrCatalogue.Action.CallScriptIn or ScrCatalogue.Action.RemoveScriptCall))
+            or ScrCatalogue.Action.SetStoryState))
             .Concat([ScrCatalogue.Action.AddEffect, ScrCatalogue.Action.RemoveEffect, ScrCatalogue.Action.CallScriptEx,
                 ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.GetStat]),
         ScrAdmissionSet.S6.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds), ScrAdmissionSet.S6.FocusKinds);
