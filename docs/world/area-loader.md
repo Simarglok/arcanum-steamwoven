@@ -392,6 +392,11 @@ module has another SHA-256 and so another key; nothing is written to disk. A hit
 **Switches and diagnostics.** `ARC_AREA_RESIDENT_EDITOR=0` (or `ARC_AREA_RESIDENT=0`, which turns every resident store off) reads every editor record in every build. The load worker prints
 `ARC-DEV-388 editor-records served=B ms=T records=N resident-hits=H misses=M passes=P facts=F` after the strict snapshot (`T` is the editor pass alone). The viewer's `resources` smoke stage empties this store with the others.
 
+**Measured (ARC-DEV-388).** One `perf` smoke per setting (Debug source, `--sector 1409,1314`, Mac under load average 9-17, two separate runs, so only the sizes mean anything), the second with
+`ARC_AREA_RESIDENT_EDITOR=0`. The editor pass of the main map (7,399 records) took **365 ms** read cold (first load of the process, the first run's own line) and **3.4 ms** served on the return from a temple. The return leg's
+`read.strict` was **795 ms and 206.8 MiB allocated without the memo** and **529 ms and 164.1 MiB with it**, the leg's whole worker 2,476 -> 2,222 ms. The first load is unchanged (nothing is resident), the
+temple's own 22 records were read in 0.7 ms.
+
 **Not kept.** The aggregate records' own wire reads (I4, 0.1-0.2 s) depend on the map patch and the window, so they stay; the snapshot is as before.
 
 ## Resource contract: bounds, reservations, observations
