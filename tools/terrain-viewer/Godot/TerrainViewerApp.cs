@@ -241,6 +241,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("spirit-talk") == true) await RunAreaSpiritTalkSmokeAsync(result);
                                 // ARC-DEV-347 (E1-a): only when named, a scenery and an eye-candy object the session creates by prototype are drawn, picked or not, resident, saved and destroyed (--hero, a map window).
                                 if (only?.Contains("created-scenery") == true) await RunAreaCreatedSceneryStageAsync();
+                                // ARC-DEV-370 (E1-c2): only when named, a critter the session creates by prototype is drawn, picked, moved by the AI's movers with a walk frame and gone once destroyed (--hero, a map window with the inventory).
+                                if (only?.Contains("created-critter") == true) await RunAreaCreatedCritterStageAsync();
                                 // ARC-DEV-352 (E1-b): only when named, Fireflash's flash on an empty tile and none on an occupied one; Wall of Fire's pieces, their burn and their END (--hero, a map window).
                                 if (only?.Contains("summon-flash") == true) await RunAreaSummonSmokeAsync(SummonFlashSpell);
                                 if (only?.Contains("summon-wall") == true) await RunAreaSummonSmokeAsync(SummonWallSpell);
@@ -1061,7 +1063,7 @@ public partial class TerrainViewerApp : Node
             // ARC-DEV-204 (B16): the change-of-place screen moves on the frame's real time, a map load's too; a hero change that waited
             // for the black screen runs now.
             TickTransitionScreen(delta * 1000);
-            try { TickAreaClock(); TickLightAnimation(); TickCarriedLight(); SyncHeroBody(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaWorldMap(); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncInterfaceHd(); SyncGameBar(); RefreshHeroGauges(); TickFloaters(); }
+            try { TickAreaClock(); TickLightAnimation(); TickCarriedLight(); SyncHeroBody(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaWorldMap(); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncInterfaceHd(); TickWindowArtWarm(); SyncGameBar(); RefreshHeroGauges(); TickFloaters(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");

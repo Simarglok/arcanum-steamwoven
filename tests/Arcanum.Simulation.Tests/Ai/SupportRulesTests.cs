@@ -648,6 +648,7 @@ public sealed class SupportRulesTests
         w.GrenadeItem = "grenade";
         w.Radius = 4;
         Assert.AreEqual(AiGrenadeStop.TooClose, Throw(Steamwoven));
+        Assert.AreEqual(AiGrenadeStop.TooClose, Throw(Original), "the radius reading is the same in both modes (ARC-DEV-373)");
         w.Radius = 3;
         w.Blocker = "orc";
         Assert.AreEqual(AiGrenadeStop.LineBlocked, Throw(Steamwoven), "any blocker");
@@ -664,20 +665,17 @@ public sealed class SupportRulesTests
         Assert.AreEqual((AiGrenadeStop.FriendInBlast, "pc"), (guarded.Stop, guarded.Protected));
     }
 
-    // ARC-DEV-364 (TH1): the radius getter 0x466230 tests the first item spell slot the wrong way round.
+    // ARC-DEV-364 (TH1), ARC-DEV-373: the original's inverted slot test is a bug the owner fixed in both modes.
     [TestMethod]
-    public void GrenadeBlastRadiusIsTheInvertedSlotTestOfTheOriginalAndTheSlotsSpellInSteamwoven()
+    public void GrenadeBlastRadiusIsTheSlotsSpellRadiusInBothModes()
     {
         int Radius(int spell) => spell == 175 ? 3 : spell == 16 ? 1 : 0;
-        // Original: a grenade with a spell reads 0; an item with no spell (10000, low byte 16) reads Stone Throw's radius.
-        Assert.AreEqual(0, AiGroundRules.BlastRadius(175, Radius, Original));
-        Assert.AreEqual(1, AiGroundRules.BlastRadius(10000, Radius, Original));
-        // Steamwoven: the radius of the slot's spell; an item with no spell reads 0.
-        Assert.AreEqual(3, AiGroundRules.BlastRadius(175, Radius, Steamwoven));
-        Assert.AreEqual(0, AiGroundRules.BlastRadius(10000, Radius, Steamwoven));
-        // A record-less spell and a negative radius read 0 in both settings.
-        Assert.AreEqual(0, AiGroundRules.BlastRadius(222, _ => -1, Steamwoven));
-        Assert.AreEqual(3, AiGroundRules.BlastRadius(175 + 256, Radius, Steamwoven), "the spell is the slot's low byte (0x4CB790)");
+        // A grenade with a spell reads that spell's Begin radius; an item with no spell (10000, low byte 16) reads 0, never Stone Throw's radius.
+        Assert.AreEqual(3, AiGroundRules.BlastRadius(175, Radius));
+        Assert.AreEqual(0, AiGroundRules.BlastRadius(10000, Radius));
+        // A record-less spell and a negative radius read 0.
+        Assert.AreEqual(0, AiGroundRules.BlastRadius(222, _ => -1));
+        Assert.AreEqual(3, AiGroundRules.BlastRadius(175 + 256, Radius), "the spell is the slot's low byte (0x4CB790)");
     }
 
     // ---- redirect ----

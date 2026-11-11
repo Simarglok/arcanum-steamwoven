@@ -3,6 +3,7 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Randomness;
 using Arcanum.Simulation.Skills;
+using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 
@@ -28,6 +29,7 @@ public sealed partial class GameSessionOwner
     /// (<see cref="GameSessionFailure.RepairUnavailable"/>), an invalid item or baseline (<see cref="GameSessionFailure.InvalidItem"/>),
     /// an item the hero does not hold or the session deleted (<see cref="GameSessionFailure.ItemNotAvailable"/>), the version.
     /// </summary>
+    [OriginalFunction(0x57A1F0, OriginalFunctionScope.Partial)]
     public SessionRepairResult RepairWithSkill(GameSessionVersion expected, string entity, ItemCondition baseline)
     {
         ThrowIfDisposed();

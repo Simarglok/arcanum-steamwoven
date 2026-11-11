@@ -218,6 +218,7 @@ public sealed class AreaBarter
     }
 
     /// <summary>The hero buys a merchant's item (all units of a stack) at its quote.</summary>
+    [OriginalFunction(0x575200, OriginalFunctionScope.Partial)]
     public AreaBarterTrade Buy(string entity)
     {
         var line = View().Wares.FirstOrDefault(item => item.Entity == entity);

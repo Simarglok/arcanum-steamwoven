@@ -91,7 +91,7 @@ public partial class TerrainViewerApp
         _areaKitThrowWeight = heroTables?.KitThrowWeight;
         _areaKitItemSpells = heroTables?.KitItemSpells;
         _areaKitUse = heroTables?.KitUse;
-        if (carried is not null) { _areaSession = carried; AttachAreaEncumbranceEffect(); AttachAreaDyingScript(); SyncTurnBasedSetting(carried); }
+        if (carried is not null) { _areaSession = carried; AttachAreaEncumbranceEffect(); AttachAreaDyingScript(); AttachAreaHeroGround(); SyncTurnBasedSetting(carried); }
         else
         {
             // The game-generated object file carries an empty module GUID here, so the session's module id is
@@ -106,7 +106,7 @@ public partial class TerrainViewerApp
                 result.Hero, reputations.Catalog, NewSessionSeed());
             _areaSession = created.Owner ?? throw new InvalidOperationException("AREA_SESSION_" + created.Failure);
             AttachAreaEncumbranceEffect();
-            AttachAreaDyingScript();
+            AttachAreaDyingScript(); AttachAreaHeroGround();
             ApplySessionSettings(_areaSession);
             // ARC-UI-011: the main menu's new game makes its session the same way, with the hero the player picks.
             _newGameRecipe = new(clock!.Value, new Guid(header), area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn), area.Snapshot.RuntimeMap, reputations.Catalog);
@@ -116,6 +116,8 @@ public partial class TerrainViewerApp
         AttachAreaPrototypeScripts(_areaSession!);
         lap.Step("inventory");
         BindAreaInventory(arguments, result, keepLeft: carried is not null && _mapHandoff is { Kind: not MapHandoffKind.QuickLoad });
+        // ARC-DEV-368 (O3): the hero's body reads on a worker while the rest of the publication binds its hosts.
+        PrefetchHeroBody();
         // ARC-UI-055: the inventory art sizes read the seeds' rows, so they are attached once the seeds are.
         lap.Step("item-art-sizes");
         AttachAreaItemArtSizes();
@@ -161,7 +163,7 @@ public partial class TerrainViewerApp
             EndLevelMessages(_areaSession);
             _areaSession?.Dispose();
         }
-        _newGameRecipe = null;
+        _newGameRecipe = null; _heroBodyPrefetch = null;
         _areaTransitions = null; _areaSession = null; _useOpenPending = null; _useTargets.Clear(); _mapTransfers = null; _mapEntered.Clear(); _useScriptHost = null;
         _exteriorArea = null; _exteriorSteps = null; _caveLoad = null; _areaUseStatus = "cave: not loaded"; _companionTemplates = [];
         _audio?.StopAll(); _schemePlayer = null; _schemeVoices.Clear(); _combatStinger = _combatLoop = null; _soundSector = null;

@@ -56,7 +56,7 @@ public static class AreaStatsPage
             return null;
         var state = life.Record.State;
         // The effective read of the sheet (AreaCharacterSheet.Build): poison and both crippled legs as the source reads them.
-        var stats = session.QueryHeroStats(new(0, state.PoisonLevel, state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth)))!.Value.Snapshot;
+        var stats = session.QueryHeroStats(session.HeroStatContext(state.PoisonLevel, state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth)))!.Value.Snapshot;
         var floor = session.QueryHeroEditorFloor();
         var sheet = new AdvancementSheet(hero.Race, false, [.. hero.Stats.Take(AutoLevelRules.PrimaryStats)], hero.Stats[8], hero.Stats[9],
             hero.Level, hero.UnspentPoints, hero.Advancement.BasicSkills, hero.Advancement.TechSkills, hero.Advancement.Colleges,

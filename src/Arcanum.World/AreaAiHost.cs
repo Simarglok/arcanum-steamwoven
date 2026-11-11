@@ -1094,7 +1094,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool MapClearing => false;
     public bool Sleeping(string npc) => Fields(npc)?.Critter is { } critter && (critter.Flags & SleepingFlag) != 0;
     // Object flags 0x102: not drawn or switched off in its map data, or (ARC-WORLD-114) switched off by a script (gone from the scene).
-    public bool Hidden(string npc) => Fields(npc) is { } fields && (fields.Object.Flags & (DontDraw | OffObject)) != 0 || Gone(npc);
+    public bool Hidden(string npc) => Fields(npc) is { } fields && (ObjectFlagsOf(npc, fields.Object.Flags) & (DontDraw | OffObject)) != 0 || Gone(npc);
+
+    // ARC-DEV-358: an NPC's object flags (obj_f_flags) as the spells left them: the session's written change (invisible, translucent, shrunk, water walking, stoned, don't-draw) over its data's.
+    private uint SpellFlagsOf(string id, uint stored) => unchecked((uint)_session.QueryObjectFlags(id).Spell(unchecked((int)stored)));
+
+    private uint ObjectFlagsOf(string id, uint stored) => unchecked((uint)_session.QueryObjectFlags(id).Object(unchecked((int)stored)));
     public bool PcHidden => false;
     public AiConversation Conversation(string npc) => _scene.ConversationPartner?.Invoke() == npc ? AiConversation.Pc : AiConversation.None;
     // The dialog end callback 0x5F848C is stored once by the dialog UI's init (0x567377 → 0x4A84D0) and never cleared: it is always set (ARC-DEV-177, the S11e read GT138).
@@ -1560,6 +1565,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// The block test of the knockback's step from <paramref name="left"/> toward its neighbour <paramref name="tested"/> (0x42FD70, GT61): the terrain test of a walker's step (walls, doors, objects other than critters,
     /// the map data's blocked tiles), and a living critter other than the pushed NPC (the hero, a companion, an NPC) on that tile, on any tile change.
     /// </summary>
+    [OriginalFunction(0x42FD70, OriginalFunctionScope.Partial)]
     public KnockbackBlock PushBlock(string id, CellCoord left, CellCoord tested)
     {
         var chart = ToChart(left);
@@ -1949,6 +1955,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// casting animation (NPC ART is not read) or no eye candy: no play, so the release runs at once. A play whose action frame is never
     /// reached (EC7) answers its whole length, and its action frame then releases nothing.
     /// </summary>
+    [OriginalFunction(0x429F00, OriginalFunctionScope.Partial)]
     public AiCastSwing BeginCast(string id, int run, bool castAnimation)
     {
         if (_scene.Spells?.Invoke() is not { } caster || _session.QuerySpellRuns()[run] is not { } r) return new(false);
@@ -2040,6 +2047,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>The turn to an action's target object or tile (0x42C0F0, 0x42C390): refused for an object the host does not walk (the
     /// hero, a companion the host does not run), a target without a cell, object flag 0x10000 or a stunned or paralysed critter
     /// (critter flags 0x60, or the session's stun).</summary>
+    [OriginalFunction(0x42C0F0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x42C390, OriginalFunctionScope.Partial)]
     public bool FaceForAction(string id, string? target, CellCoord? tile)
     {
         if (!TryNpc(id, out var npc) || !CanAct(id)) return false;
@@ -2055,6 +2064,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// ARC-WORLD-113: goal 37's throw animation (14) to its action frame, the throw, and rest. The art is the fixed stand-in's (NPC ART
     /// is not read yet), played at its raw rate. An object flag 0x10000 or a stunned or paralysed critter cannot start.
     /// </summary>
+    [OriginalFunction(0x42BD40, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x42CB10, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x42D300, OriginalFunctionScope.Partial)]
     public AiActionSwing BeginAction(string id, AiActionAnimation animation)
     {
         if (!Walks(id) || !CanAct(id)) return new(AiActionStart.CannotStart);
@@ -2077,6 +2089,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// 0x40000 (ledger AK2). The pick pocket (skill 5) is <see cref="PickPocketAttempt"/> (ARC-DEV-246). NOT READY: every other skill (the other skills a script might start), which does nothing and
     /// answers false.
     /// </summary>
+    [OriginalFunction(0x42A2A0, OriginalFunctionScope.Partial)]
     public bool AttemptSkill(string id, string target, int skill, string? item)
     {
         if (skill == AiExecutorRules.PickpocketSkill) return PickPocketAttempt(id, target);
@@ -2162,7 +2175,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private bool CanAct(string id)
     {
         if (Fields(id) is not { } fields) return false;
-        if ((fields.Object.Flags & ActionRefusedObject) != 0 || fields.Critter is { } critter && (critter.Flags & StunnedCritter) != 0 || Paralysed(id)) return false;
+        if ((ObjectFlagsOf(id, fields.Object.Flags) & ActionRefusedObject) != 0 || fields.Critter is { } critter && (critter.Flags & StunnedCritter) != 0 || Paralysed(id)) return false;
         return !(LifeState(id)?.Conditions.HasFlag(LifeConditions.Stunned) ?? false);
     }
 
@@ -2182,6 +2195,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// a dead or unknown critter, and the hero on the line to another target (the line's map holds no hero): the item then lands on the
     /// tile, striking nothing.
     /// </summary>
+    [OriginalFunction(0x42AB90, OriginalFunctionScope.Partial)]
     public bool ThrowItem(string id, string item, CellCoord tile)
     {
         if (!Walks(id) || Build(id) is not { } thrower || Tile(id) is not { } from || LifeState(id) is not { } state) return false;
@@ -2496,7 +2510,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         var slot = ItemFields(grenade)?.Item is { } item && item.Spells.Count > 0 ? item.Spells[0] : ItemSpellTriggerRules.NoSpell;
         var caster = _scene.Spells?.Invoke();
-        return AiGroundRules.BlastRadius(slot, spell => caster?.SpellRecord(spell)?.Areas is { Length: > 0 } areas ? areas[0].Radius : 0, _session.Rules.Combat);
+        return AiGroundRules.BlastRadius(slot, spell => caster?.SpellRecord(spell)?.Areas is { Length: > 0 } areas ? areas[0].Radius : 0);
     }
 
     /// <summary>The first object that stops the line of fire (0x4ADE00, cost ignored) from the NPC's tile to the target's; null when it is
@@ -2563,7 +2577,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (id == Pc)
         {
             // The hero is a healer only in the heal step (not run yet): its stats without the poison's effect, as the setter's facts read them.
-            var stats = _session.QueryHeroStats(new(0))?.Snapshot;
+            var stats = _session.QueryHeroStats(_session.HeroStatContext())?.Snapshot;
             return new AiSupportCritter
             {
                 FatiguePercent = fatigue, CurrentFatigue = status?.Fatigue ?? 0, PoisonLevel = _session.QueryHeroLife()?.Record.State.PoisonLevel ?? 0,
@@ -2714,6 +2728,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                 InCombatMode = _session.QueryCombatMode(SessionCombatant.Hero), Level = _session.QueryHero()?.Level ?? 0,
                 HealthPercent = Percent(hero.Status),
                 Perception = _session.QueryHeroAttack()?.Combatant.Perception ?? 0,
+                // ARC-DEV-358: the spell flags the hero's spells wrote (Invisibility, Sense Hidden, Sanctuary).
+                InvisibleSpell = (SpellFlagsOf(Pc, 0) & InvisibleSpell) != 0, DetectsInvisible = (SpellFlagsOf(Pc, 0) & DetectsInvisibleSpell) != 0,
+                Enshrouded = (SpellFlagsOf(Pc, 0) & EnshroudedSpell) != 0,
             };
         }
         if (!_npcs.ContainsKey(id) && CompanionCell(id) is null) return null;
@@ -2725,16 +2742,16 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return new HostilityCritter
         {
             Id = id, Kind = HostilityKind.Npc,
-            Destroyed = Gone(id), DontDraw = (fields.Object.Flags & DontDraw) != 0, ObjectInvisible = (fields.Object.Flags & ObjectInvisible) != 0,
+            Destroyed = Gone(id), DontDraw = (ObjectFlagsOf(id, fields.Object.Flags) & DontDraw) != 0, ObjectInvisible = (ObjectFlagsOf(id, fields.Object.Flags) & ObjectInvisible) != 0,
             Invulnerable = (fields.Object.Flags & Invulnerable) != 0, NighInvulnerable = (critter.Flags2 & NighInvulnerable2) != 0,
             Dead = status?.IsDead ?? true, Unconscious = status?.IsUnconscious ?? false, Asleep = (critter.Flags & SleepingFlag) != 0,
             NonLethal = (critter.Flags & NonLethal) != 0, Undead = (critter.Flags & Undead) != 0, Animal = (critter.Flags & Animal) != 0,
             AnimalEnshrouded = (critter.Flags & AnimalEnshrouded) != 0, Monstrous = build.Monstrous,
             // The NO_FLEE the AI set (session bit, ARC-WORLD-086) is ORed into the critter's stored flag.
             NoFlee = (critter.Flags & NoFleeFlag) != 0 || danger.Flags.HasFlag(DangerFlags.NoFlee),
-            InvisibleSpell = (fields.Object.SpellFlags & InvisibleSpell) != 0, DetectsInvisible = (fields.Object.SpellFlags & DetectsInvisibleSpell) != 0,
+            InvisibleSpell = (SpellFlagsOf(id, fields.Object.SpellFlags) & InvisibleSpell) != 0, DetectsInvisible = (SpellFlagsOf(id, fields.Object.SpellFlags) & DetectsInvisibleSpell) != 0,
             Stoned = Stoned(id), Stunned = state.Conditions.HasFlag(LifeConditions.Stunned) || build.Facts.Traits.HasFlag(LifeTraits.Paralyzed) || Paralysed(id),
-            MindControlled = (fields.Object.SpellFlags & MindControlledSpell) != 0, Enshrouded = (fields.Object.SpellFlags & EnshroudedSpell) != 0,
+            MindControlled = (SpellFlagsOf(id, fields.Object.SpellFlags) & MindControlledSpell) != 0, Enshrouded = (SpellFlagsOf(id, fields.Object.SpellFlags) & EnshroudedSpell) != 0,
             AttemptingAttack = RunOf(id)?.Top.Goal is GoalType.AttemptAttack or GoalType.AttemptSpell or GoalType.AttemptSpellWithAnimation,
             InCombatMode = _session.QueryCombatMode(SessionCombatant.Critter(id)),
             Guard = npc.SocialClass == GuardClass, WaitingHere = (npc.Flags & WaitingHereNpc) != 0 || Waiting(id),

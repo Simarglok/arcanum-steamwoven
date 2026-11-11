@@ -1,6 +1,7 @@
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Magic;
+using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 
@@ -41,6 +42,7 @@ public sealed partial class GameSessionOwner
 
     /// <summary>Closes the editor and drops its floor: nothing spent so far can be refunded any more (owner rule 2026-10-20). A closed
     /// editor is <see cref="GameSessionDisposition.NoChange"/>.</summary>
+    [OriginalFunction(0x55A150, OriginalFunctionScope.Partial)]
     public GameSessionMutationResult CloseHeroEditor()
     {
         ThrowIfDisposed();

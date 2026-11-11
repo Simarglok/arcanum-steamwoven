@@ -25,13 +25,15 @@ public partial class TerrainViewerApp
         var module = _arguments?.ModulePath;
         if (_portraitContent is null || module != _portraitModule)
         {
-            _portraitModule = module; _portraitTextures.Clear();
+            _portraitModule = module; _portraitTextures.Clear(); _portraitArtUnbound = false;
             _portraitContent = SelfTestBootstrap || module is null ? AreaPortraitContent.Empty("self-test: no game folder") : AreaPortraitContent.Load(module, ids);
             _followerPortraits?.Bind(InterfaceTextures(_portraitContent.Art));
             GD.Print($"ARC-UI-024 follower frames art ready={_portraitContent.ArtReady} {_portraitContent.Detail}");
             return;
         }
         if (SelfTestBootstrap || module is null) return;
+        // ARC-DEV-369: content a warm-up adopted before the follower panel existed gets its frame art bound now.
+        if (_portraitArtUnbound && _followerPortraits is { } panel) { panel.Bind(InterfaceTextures(_portraitContent.Art)); _portraitArtUnbound = false; }
         var wanted = ids.Where(id => !_portraitContent.Portraits.ContainsKey(id)).ToArray();
         if (wanted.Length == 0) return;
         _portraitContent = AreaPortraitContent.Load(module, wanted, _portraitContent);

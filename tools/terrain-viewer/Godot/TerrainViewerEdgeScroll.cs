@@ -78,7 +78,7 @@ public partial class TerrainViewerApp
         var life = session.QueryHeroLife();
         if (life is null) return 0;
         var state = life.Record.State;
-        var stats = session.QueryHeroStats(new(0, state.PoisonLevel, state.Conditions.HasFlag(Arcanum.Simulation.Combat.LifeConditions.CrippledLegsBoth)));
+        var stats = session.QueryHeroStats(session.HeroStatContext(state.PoisonLevel, state.Conditions.HasFlag(Arcanum.Simulation.Combat.LifeConditions.CrippledLegsBoth)));
         return stats?.Snapshot is { } snapshot ? OriginalScroll.LimitDistance(snapshot.GetEffective(Arcanum.Simulation.Character.CharacterStat.Perception)) : 0;
     }
     private int? _scrollLimitForSelfTest;

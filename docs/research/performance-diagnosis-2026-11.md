@@ -167,6 +167,14 @@ Gain is what the numbers above say it can remove (estimates unless stated); cost
 | O9 | HD: ship mipmapped or VRAM-compressed textures in the pack and skip the SHA-256 of the Legacy pixels on a warm pack | −0.2–0.6 s per window at first draw | large, pack format change |
 | O11 | Attribute the long frames around quick load and map change (probe in the game, not in a smoke stage) | unknown; decides whether save load has a real stall | small |
 
+**Done (ARC-DEV-368).** O5b: a map's transitions and the map list's destinations are read once per process for the same content stack
+(`AreaMapTransitionsCache`, keyed by map and the stack's mounted sources, archive sizes and modification times); measured on the main map in a
+Debug source run the stage went from 0.95–1.6 s to 0–1 ms on every later load. O3, in part: the hero's wanted body is read and decoded on a worker
+(`PrefetchHeroBody`, started once the session and inventory exist) while the publication binds its other hosts; in the same run the main thread waited 0 ms
+for a dressed dwarf body that took 0.5 s on it before (the worker read it in 134 ms). The first `PublishAreaReady` was still 4.0 s against 4.2 s
+before: the rest of it, the first publication of the scene to the canvas (inside the body swap before, in the final publication now), is O6. A duplicate
+publication the swap and the quarantine make was tried and dropped: later ones cost 0.1–0.3 s and removing them showed no gain. Original behaviour is unchanged.
+
 Recommended order: O10, then O3 and O5b together, then O2, then O4 and O1; O5a, O5c and O9 need the owner's decision on
 their contracts first; O11 can run beside any of them. Done in that order the main-thread freeze at start should fall
 from about 3.5 s to under 1 s (estimate) and the first window opens to warm opens, without touching original behaviour.
@@ -189,6 +197,14 @@ milliseconds are rough, the allocation is exact; the "after" column is two runs)
 What is left in `StartAreaTransitions` is its own work (the session 0.09 s, the sound catalogue 0.07-0.08 s, the inventory seeds 0.05-0.07 s, the companion templates
 0.05 s). A later publication of the same run (window move, map change) was already cheap, since the viewer caches the icons and the sound catalogue per module. The load worker's
 read, plan and open steps are not touched (O5a, O5b). The first index open (about 0.5 s of the worker) now happens once per run.
+
+## Follow-up: O2 done (ARC-DEV-369)
+
+O2 is implemented: the art of the inventory, the sheet and the logbook, with its HD redraws, is prepared on workers after the publication and the textures are
+created in small per-frame slices ([window art warm-up](../rendering/terrain-viewer.md#window-art-warm-up-arc-dev-369)). Measured with a local probe on the same
+Mac and settings as above (source viewer, HD interface on, one run each on a loaded machine): first opening to the next drawn frame 1069 / 2124 / 1764 ms
+(inventory / sheet / logbook) with the warm-up off, 85 / 119 / 70 ms with it on; Legacy, before the portrait was added to the warm-up, 531 / 1211 / 604 ms cold and
+124 / 322 / 72 ms warmed up. The remaining cold items of this table (world map, saves list, main menu art) are not covered by it.
 
 ## Reproducing
 
