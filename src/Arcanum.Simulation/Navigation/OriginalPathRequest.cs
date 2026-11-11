@@ -74,6 +74,7 @@ public static class OriginalPathRequest
     }
 
     // 0x41F840: toward the target one rotation at a time, each step tested; a failure keeps the completed steps.
+    [OriginalFunction(0x41F840, OriginalFunctionScope.Partial)]
     private static int Direct(IOriginalPathMap map, CellCoord from, CellCoord to, int[] rotations, bool intoGoal, out int partial)
     {
         partial = 0;
@@ -98,6 +99,7 @@ public static class OriginalPathRequest
     private readonly record struct SearchResult(int Length, OriginalPathEnd End, bool WindowEdge, int Expansions);
 
     // 0x41F9F0 over the 64 × 64 window: every round the open tile of the smallest estimate (the first in index order on a tie).
+    [OriginalFunction(0x41F9F0, OriginalFunctionScope.Partial)]
     private static SearchResult Search(IOriginalPathMap map, CellCoord from, CellCoord to, int budget, int[] rotations, bool intoGoal)
     {
         long dx = Math.Abs((long)from.X - to.X), dy = Math.Abs((long)from.Y - to.Y);

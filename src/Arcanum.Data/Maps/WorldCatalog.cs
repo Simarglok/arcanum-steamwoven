@@ -524,6 +524,7 @@ public sealed class WorldCatalog
 
         /// <summary>The original reads <c>Key:Value</c> lines and acts on LightScheme and
         /// SoundScheme (music, ambient); other lines are ignored, so they are only counted.</summary>
+        [OriginalFunction(0x4115D0, OriginalFunctionScope.Partial)]
         private static WorldMapInfo MapInfo(byte[] text, string path, List<WorldIssue> issues)
         {
             int? light = null, music = null, ambient = null; var unknown = 0;

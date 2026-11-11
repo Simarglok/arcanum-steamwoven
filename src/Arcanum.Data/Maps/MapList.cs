@@ -43,6 +43,7 @@ public sealed class MapList
     public IReadOnlyList<MapListEntry> Entries { get; }
 
     /// <summary>The first row naming the map folder, compared without case; null when none does.</summary>
+    [OriginalFunction(0x4127A0, OriginalFunctionScope.Full)]
     public MapListEntry? Find(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -52,6 +53,7 @@ public sealed class MapList
     public MapListEntry? ByCatalogue(int catalogue) =>
         catalogue - FirstCatalogue is var index && index >= 0 && index < Entries.Count ? Entries[index] : null;
 
+    [OriginalFunction(0x40FEE0, OriginalFunctionScope.Full)]
     public MapListEntry? ByRuntime(int runtime) => ByCatalogue(runtime + FirstCatalogue - 1);
 
     /// <summary>ARC-UI-038: the map of a type (0x40FF50): the last row the load gave that type, as each typed row overwrites the

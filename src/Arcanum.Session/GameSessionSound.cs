@@ -97,6 +97,7 @@ internal sealed class SoundDomain
     internal bool SameAs(SoundDomain other) => Capture() == other.Capture() && LockDepth == other.LockDepth && CombatStarts == other.CombatStarts
         && _preLock.SequenceEqual(other._preLock);
 
+    [OriginalFunction(0x41B1D0, OriginalFunctionScope.Partial)]
     internal SessionSoundState Capture() => new(_slots[0], _slots[1], _restorePending, _restore[0], _restore[1], _combat, _preCombat[0], _preCombat[1]);
 
     internal static bool Valid(SessionSoundState state) =>
@@ -137,6 +138,7 @@ internal sealed class SoundDomain
         return Capture() != before;
     }
 
+    [OriginalFunction(0x41BD10, OriginalFunctionScope.Full)]
     private int SlotOf(int id) => id == 0 ? -1 : _slots[0] == id ? 0 : _slots[1] == id ? 1 : -1;
 
     // The slot half of the original's scheme load (0x41BE20); its parsing half is the catalogue's (registry row).
