@@ -525,6 +525,9 @@ public static partial class GameSessionSnapshotCodec
                 AddField(row, $"$.spells.objectFlags[{i}]", "objectCleared", 0);
             }
         },
+        // ARC-MAGIC-040 (schema 89): the spells section gains the monster bodies of the Trait component. No older build kept any, so the step adds the empty list. The spells section the
+        // older schema carried must be there and an object.
+        [88] = root => AddField(Section(root, "spells"), "$.spells", "traitArt", new JsonArray()),
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from
