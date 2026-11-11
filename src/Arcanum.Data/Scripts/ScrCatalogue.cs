@@ -88,7 +88,8 @@ public static class ScrCatalogue
     public static class Condition
     {
         public const int True = 0, LocalFlag = 3, Equal = 4, LessOrEqual = 5, PcQuestState = 6, HasItemNamed = 17, FollowingPc = 18, IsNamed = 20,
-            IsWieldingItem = 21, IsDead = 22, IsSwitchedOff = 27, HasReputation = 33, Jilted = 39, GlobalFlag = 43, Identified = 47, ItemsBeingRewielded = 50;
+            IsWieldingItem = 21, IsDead = 22, IsSwitchedOff = 27, HasReputation = 33, Jilted = 39, GlobalFlag = 43, Identified = 47, ItemsBeingRewielded = 50,
+            HasBodySpell = 14, InfluencedBySpell = 35, KnowsSpell = 48, MasteredSpellCollege = 49;
     }
 
     /// <summary>Action types the project reads by name.</summary>
@@ -105,7 +106,7 @@ public static class ScrCatalogue
             ToggleState = 56, Kill = 58, DistanceBetween = 71, SetFaction = 134, FloatLine = 23, GetArea = 84, Destroy = 68, StopAttacking = 109, GetStat = 33, GetReaction = 29,
             UnfogTownMap = 113, WalkTo = 69, RunTo = 74, HealFatigue = 76, PerformAnimation = 62, StealCoins = 115, BecomeProne = 93,
             CastSpell = 48, CastSpellOn = 61, CastFreeSpell = 118, CastUnresistableSpellBy = 121, CastFreeUnresistableSpell = 122, CastUnresistableSpellOn = 136,
-            Damage = 60, DamageUnresistable = 138, HealHitPoints = 75;
+            Damage = 60, DamageUnresistable = 138, HealHitPoints = 75, GiveSpellMastery = 112;
     }
 
     /// <summary>Script file flags.</summary>
