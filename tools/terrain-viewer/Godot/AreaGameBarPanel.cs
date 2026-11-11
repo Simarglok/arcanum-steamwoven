@@ -58,8 +58,25 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// height between the strips, and the window stays on the bottom strip instead of hanging under the top strip with a gap above the HUD.
     /// With the bars hidden the window keeps the top inset (0).
     /// </summary>
-    public static float DockedWindowTop(Vector2 size, int factor, int heightUnits) =>
+    public static float DockedWindowTop(Vector2 size, float factor, int heightUnits) =>
         BottomInset > 0 ? MathF.Max(TopInset, MathF.Round(size.Y - BottomInset - heightUnits * factor)) : TopInset;
+
+    /// <summary>
+    /// ARC-UI-132: the scale and position of a window of <paramref name="widthUnits"/> × <paramref name="heightUnits"/> original pixels that
+    /// fills the whole height between the strips and keeps its aspect ratio (the free height at 16:9 is wider than the window, so only the side
+    /// margins stay). The scale is the free height over the window's (at most the window width over its width), never below the bars' whole
+    /// factor. A redrawn 4× art keeps its quality at a fractional scale (mipmapped linear sampling), so with <paramref name="fractional"/> the
+    /// scale is exact; the original's bitmaps stay on a whole scale (the largest that fits, standing on the bottom strip as ARC-UI-127 set).
+    /// With the bars hidden the bars' factor and the top inset apply, as before.
+    /// </summary>
+    public static (float Scale, Vector2 Position) FittedWindow(Vector2 size, int widthUnits, int heightUnits, bool fractional)
+    {
+        var factor = ScreenFactor(size);
+        if (BottomInset <= 0) return (factor, new Vector2(ScreenLeft(size, factor), TopInset));
+        var fit = MathF.Min((size.Y - TopInset - BottomInset) / heightUnits, size.X / widthUnits);
+        var scale = MathF.Max(factor, fractional ? fit : MathF.Floor(fit));
+        return (scale, new Vector2(MathF.Round((size.X - widthUnits * scale) / 2), DockedWindowTop(size, scale, heightUnits)));
+    }
 
     /// <summary>The window x of the original screen's left edge, centred at <paramref name="factor"/>.</summary>
     public static float ScreenLeft(Vector2 size, int factor) => MathF.Round((size.X - AreaGameBarLayout.ScreenWidth * factor) / 2);
