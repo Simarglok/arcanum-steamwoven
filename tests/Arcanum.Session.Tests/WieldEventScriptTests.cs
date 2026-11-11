@@ -3,6 +3,8 @@ using Arcanum.Data.Characters;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Clock;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.HeroStateTests;
@@ -338,5 +340,80 @@ public sealed class WieldEventScriptTests
         // The dialog-override point decodes but is no slot of an item event.
         var overridden = GameSessionSnapshotCodec.TryDecode(text.Replace("\"point\":24", "\"point\":31", StringComparison.Ordinal));
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(overridden.Snapshot!, RestoreOptions()).Failure);
+    }
+    // ARC-MAGIC-041 (ledger TI8): the installed shield's script shape at point 24: line 0 removes the pending call of the script for the attachee,
+    // line 1 schedules the script at line 3 in 15 seconds with the wearer as triggerer, line 2 returns (the call's own lines are run by the world's
+    // host: AreaPoweredShieldCallTests).
+    private const int Shield = 710;
+    private static readonly ScrProgram ShieldTimer = Program(
+        Do(C(ScrCatalogue.Action.RemoveScriptCall, N(Shield), (Attachee, 0))),
+        Do(C(ScrCatalogue.Action.CallScriptIn, N(Shield), N(3), (Triggerer, 0), (Attachee, 0), N(15))),
+        Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+
+    private static SessionScriptRole Role(GameSessionOwner owner, string entity) => new(owner.QueryActor().Map, entity);
+
+    [TestMethod]
+    public void A_powered_shield_s_wield_on_puts_one_deferred_call_in_the_event_queue_in_the_wear_s_revision()
+    {
+        var (owner, host) = Owner();
+        using var _ = owner;
+        host.Programs[Shield] = ShieldTimer;
+        host.Slots[("kit:3", SessionScriptPoint.WieldOn)] = Shield;
+        var shield = Wearable(3, Ring(1), SessionScriptPoint.WieldOn);
+        var worn = owner.Equip(owner.Version, "kit:3", EquipmentSlot.Ring1, shield, Drawn, Accept, host);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, 1L), (worn.Disposition, worn.Failure, owner.Version.Revision), "the call joins the wear's one revision");
+        var call = owner.QueryScriptCalls().Single();
+        Assert.AreEqual(new SessionScriptCall(Shield, 3, Role(owner, SessionEventKinds.PlayerEntity), Role(owner, "kit:3")), call.Call);
+        var due = call.DeadlineMs;
+        Assert.AreEqual(15 * 8_000L, due - owner.QueryClockSnapshot().GameTimestampMs, "15 seconds, as the call-in action builds its delay: game milliseconds are eight to a real one (TE1)");
+
+        // Wearing it again (the other ring slot): the run removes the pending call and schedules a new one; never two.
+        var moved = owner.Equip(owner.Version, "kit:3", EquipmentSlot.Ring2, shield, Drawn, Accept, host);
+        Assert.AreEqual(GameSessionDisposition.Changed, moved.Disposition);
+        Assert.AreEqual(1, owner.QueryScriptCalls().Count);
+        Assert.AreEqual(call.Call, owner.QueryScriptCalls().Single().Call);
+
+        // The call is saved with the game (the event queue's section) and a restored session still holds it.
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(owner.QueryScriptCalls().Single(), restored.QueryScriptCalls().Single());
+    }
+
+    [TestMethod]
+    public void A_powered_shield_s_wear_is_refused_with_nothing_changed_when_the_event_queue_has_no_room()
+    {
+        var (owner, host) = Owner();
+        using var _ = owner;
+        host.Programs[Shield] = ShieldTimer;
+        host.Slots[("kit:3", SessionScriptPoint.WieldOn)] = Shield;
+        for (var i = 0; i < SessionEventKinds.MaxScriptCalls; i++)
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.ScheduleScriptCall(owner.Version, new(1, 0, null, null), 1000 + i).Disposition);
+        var before = owner.Version;
+        var refused = owner.Equip(owner.Version, "kit:3", EquipmentSlot.Ring1, Wearable(3, Ring(1), SessionScriptPoint.WieldOn), Drawn, Accept, host);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.EventBudgetExceeded), (refused.Disposition, refused.Failure));
+        Assert.AreEqual((before, 0, SessionEventKinds.MaxScriptCalls), (owner.Version, owner.QueryEquipment().Worn.Count, owner.QueryScriptCalls().Count));
+    }
+    private sealed class MapRows : ISessionScriptWorld
+    {
+        public List<SessionScriptCall> Ran { get; } = [];
+        public LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
+        // As the viewer's world answers: the player and the objects of the map's rows; a kit or made item of the hero is no row.
+        public bool ObjectExists(SessionMapId map, string entity) => entity == SessionEventKinds.PlayerEntity;
+        public bool RunScriptCall(SessionScriptCall call) { Ran.Add(call); return true; }
+    }
+
+    [TestMethod]
+    public void A_due_shield_call_names_an_item_the_hero_holds_and_runs_where_the_map_rows_list_no_such_item()
+    {
+        var (owner, host) = Owner();
+        using var _ = owner;
+        host.Programs[Shield] = ShieldTimer;
+        host.Slots[("kit:3", SessionScriptPoint.WieldOn)] = Shield;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Equip(owner.Version, "kit:3", EquipmentSlot.Ring1, Wearable(3, Ring(1), SessionScriptPoint.WieldOn), Drawn, Accept, host).Disposition);
+        Assert.AreEqual(ClockMutationDisposition.Changed, owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 15 * 8_000L, ClockAdvanceReason.OrdinaryAdvance).Disposition);
+        var world = new MapRows();
+        var pass = owner.ProcessEvents(world);
+        Assert.AreEqual(1, pass.ScriptCalls.Count);
+        Assert.IsTrue(pass.ScriptCalls.Single().Ran, "the call is not dropped as a missing object");
+        Assert.AreEqual("kit:3", world.Ran.Single().Attachee?.Entity);
     }
 }

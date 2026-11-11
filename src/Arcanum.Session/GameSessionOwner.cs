@@ -1445,7 +1445,9 @@ public sealed partial class GameSessionOwner : IDisposable
                     // A host that knows objects answers for every kind; otherwise a Lock event's object exists while the
                     // session records its lock state (ARC-WORLD-050), and a waiting NPC while the session records it waiting
                     // (ARC-WORLD-045).
-                    : world is ISessionScriptWorld scripts ? scripts.ObjectExists(new(entity.Map), entity.Code)
+                    // ARC-MAGIC-041: an item the hero holds is an object a deferred call may name (the powered shield's attachee): the host's map
+                    // rows do not list the hero's kit and made items.
+                    : world is ISessionScriptWorld scripts ? scripts.ObjectExists(new(entity.Map), entity.Code) || HeroHeld().Any(item => item.Entity == entity.Code)
                     : LockObjectExists(entity) || RespawnObjectExists(entity) || _party.Get(entity.Code).Standing == CompanionStanding.Waiting)));
         }
         finally
