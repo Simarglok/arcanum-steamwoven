@@ -378,7 +378,7 @@ What it checks and what it does not:
   (speed, MA-2). No row disagrees in the other direction.
 - **Records 80..139:** the same gaps, and three not-ready cases the colleges do not have: `Recharge` (103), `NoOp` (129, 130) and an AGoal goal other than 43 and 44 (89). Record 85
   adds effect 145 with the cause injury (7), and the session refuses that cause from a spell (`EffectNotSaved` on the hero); whether the original's effect add takes it is left to MA-2.
-- **After ARC-MAGIC-027 (2026-11-11):** the Effect component takes an NPC's list, so every NPC `Effect` entry left the table (spells 10, 15, 20, 25, 37, 40, 46, 51, 67, 70, 76, 77 now leave nothing on either target; the rest keep their ObjFlag, Trait, Summon, Destroy, Identify, Movement or Recharge rows).
+- **After ARC-MAGIC-027 (2026-11-11):** the Effect component takes an NPC's list, so every NPC `Effect` entry left the table (the college spells 10, 15, 20, 25, 37, 40, 46, 51, 67, 70, 76, 77 now leave nothing on either target, and so do records 85, 93-96, 104, 112, 114 and 138 outside the colleges on the NPC; the rest keep their ObjFlag, Trait, Summon, Destroy, Identify, Movement or Recharge rows).
 - **Lanes that will change it:** E1-b (ARC-DEV-352, #941) changes the Summon and Destroy rows of the scenery summons; DEV-348 the NPC's Effect rows; MA-1 the ObjFlag rows. The slice that merges
   second re-runs the census and updates the table.
 

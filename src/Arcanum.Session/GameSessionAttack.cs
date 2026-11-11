@@ -115,11 +115,25 @@ public sealed class SessionCritterCombat
         _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded, Experience, Monstrous, sheet.Level,
         _natural, KillFacts, SessionSkills.Of(sheet, AdvancementModifiers.None), StoredEffects, _effectResistances);
 
+    // A throwaway owner of the same race and gender over the same base values with the entries applied (the shared one is never touched; the cause is of no consequence there,
+    // the race and gender causes of a loaded list belong to the owner's setters and are applied as spell entries); null when the owner refuses anything.
+    private CharacterStatsOwner? ClonedStats(StatEffectDefinition[] modifiers)
+    {
+        var created = CharacterStatsOwner.Create(new(_race, _gender, InnateEffectTable.Empty, CharacterStatLimits.Default));
+        if (created.Owner is not { } owner) return null;
+        var plain = _stats.Query(new(0)).Snapshot!;
+        foreach (var (stat, _) in StoredStats())
+            if (owner.SetBase(stat, plain.GetBase(stat)).Disposition == CharacterStatsDisposition.Rejected) return null;
+        foreach (var modifier in modifiers)
+            if (owner.AddEffect(modifier, EffectCause.Spell).Disposition == CharacterStatsDisposition.Rejected) return null;
+        return owner;
+    }
+
     /// <summary>
     /// ARC-MAGIC-027 (MA-2): the same NPC under an effect list (the session's, else the loaded one: <see cref="GameSessionOwner.QueryNpcEffects"/>): the stat changes of the entries are
     /// applied to its stats (so its speed, strength, armour class adjustment and the rest read through them: the turn-based action points, the attack pause, the combat values) and
     /// its resistance changes to the effective resistances (0x43D6D0) it defends with. The numbers of the loaded list the host gave no rule for have none. The skills of a levelled
-    /// sheet and the NPC's life facts (maximum hit points under its strength) are not re-read from the stats: ledger EF1 consequences stay with the life record.
+    /// sheet and the NPC's life facts (maximum hit points under its strength, the normal resistance a poison tick meets) are not re-read from the stats and resistances: ledger EF1 consequences stay with the life record.
     /// </summary>
     internal SessionCritterCombat WithEffects(IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
     {
@@ -128,20 +142,9 @@ public sealed class SessionCritterCombat
         if (entries.Count == 0) return this;
         var resistances = EffectDomain.Resistances(entries, definitions);
         var modifiers = entries.Select(entry => definitions.TryGetValue(entry.Number, out var rule) ? EffectDomain.Stats(rule) : null).OfType<StatEffectDefinition>().ToArray();
+        // A stat refusal (more applied entries than the owner admits) keeps the base stats but not the resistances' loss: the resistance changes still apply.
         var stats = _stats;
-        if (modifiers.Length > 0)
-        {
-            // A throwaway owner of the same race and gender over the same base values with the entries applied (the shared one is never touched; the cause is of no
-            // consequence there, the race and gender causes of a loaded list belong to the owner's setters and are applied as spell entries).
-            var created = CharacterStatsOwner.Create(new(_race, _gender, InnateEffectTable.Empty, CharacterStatLimits.Default));
-            if (created.Owner is not { } owner) return this;
-            var plain = _stats.Query(new(0)).Snapshot!;
-            foreach (var (stat, _) in StoredStats())
-                if (owner.SetBase(stat, plain.GetBase(stat)).Disposition == CharacterStatsDisposition.Rejected) return this;
-            foreach (var modifier in modifiers)
-                if (owner.AddEffect(modifier, EffectCause.Spell).Disposition == CharacterStatsDisposition.Rejected) return this;
-            stats = owner;
-        }
+        if (modifiers.Length > 0 && ClonedStats(modifiers) is { } cloned) stats = cloned;
         return new(Entity, stats, _worn, _basicSkills, _techSkills, _baseArmorClass, _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded,
             Experience, Monstrous, Level, _natural, KillFacts, _sheetSkills, StoredEffects, resistances);
     }
