@@ -17,6 +17,7 @@ public sealed partial class SessionSpellCaster
     /// <c>Teleport_Tile</c> 242, <c>obj_f_critter_fleeing_from</c> 230) are not ready.</summary>
     public const int HitPointDamageField = 29;
 
+    [OriginalFunction(0x4529D0, OriginalFunctionScope.Full)]
     private static SpellComponentOutcome TerminateComponent() => new(JumpTo: SpellComponentOutcome.EndOfList);
 
     // A failed branch goes to Branch: (a value of −1, and any negative one, ends the list; the original indexes the list with a smaller negative value, not a data case).

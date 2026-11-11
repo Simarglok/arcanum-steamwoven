@@ -890,3 +890,16 @@ Slice MA-8 (first slice) of the [magic audit](../research/magic-audit-res-103.md
   restore, clears them, draws the stored body again and chooses the best items for every slot. The session half tells all of it by the two lines; nothing acts on them yet, so a polymorphed critter still looks as before. The equipment rules already refuse to wear an item while the polymorph or "body of" flag is set
   ([equipment](equipment-runtime.md)).
 - **Census (MA-0).** The Trait rows of records 13, 18, 23, 28, 49, 88, 110 and 111 leave the not-ready list on both census targets.
+
+## Control components (ARC-MAGIC-044)
+
+Slice E4-c of the [technology audit](../research/technology-audit-res-125.md#6-queue) on the executable reads [CN1–CN6](../research/ledger/spell-runs.md#control-components-arc-magic-044) (0x452F00, 0x4529D0, 0x451850, 0x4529F0, the loop 0x4510F0). Code `SessionSpellCasterControl` (the table of `SessionSpellCasterComponents`), tests `SessionSpellCasterControlTests`. The four components steer the list of **one target**; the jump is the run system's (`SpellComponentOutcome.JumpTo`, `EndOfList`), which runs component `n + 1` after a jump to `n`.
+
+| Component | What the cast host does |
+| --- | --- |
+| NoOp (0x452F00) | Nothing, and it is not "not ready". |
+| Terminate (0x4529D0) | Ends the list of this target (the next target's list starts; the run goes on). |
+| ChargeNBranch (0x451850) | With a run source that has a payer: the payment of `Cost:` (apply on, the run's spell, so a cell record spends cells through the cell source and TC1; an item source spends a charge, saved as a BEGIN's is; a critter pays fatigue), no mastery halving. A failed payment jumps to `Branch:` (−1: the end of the list). No source, a source with no payer or a cost of 0 does nothing. |
+| TestNBranch (0x4529F0) | For a PC or NPC target object: the target's **hit-point damage** (field 29: maximum hit points minus current) against `TestVal:` by the comparison (equal, greater, greater or equal, less, less or equal); a passing test goes on, a failing one (or an unknown comparison index) jumps to `Branch:`. A tile or a non-critter target does nothing. The other three fields (`art_num`, `Teleport_Tile`, `fleeing_from`) are logged not ready. |
+
+**Not ready here:** the Use component (0x452ED0: it runs the target's own use script with the target as its triggerer; the viewer's script host is its half; record 184), and the three other TestNBranch fields. The installed records with the four: 147 (a cell weapon, one cell per use), 168 (maintained armour: a cell a tick and a test on hit-point damage), 187 (a cell at BEGIN), and 188 (a NoOp).
