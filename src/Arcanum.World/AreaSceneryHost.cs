@@ -1,4 +1,5 @@
 using Arcanum.Session;
+using Arcanum.Simulation;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Animation;
 using Arcanum.Simulation.Clock;
@@ -145,6 +146,7 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
     /// The starter 0x433580 for every loop: a scenery that has a main run already is left as it is, the others start goal 1 (or 77) through the level-1 plan that starts anyway (GS12: the starter is one of the three whose refused interrupt does not refuse it; it ends nothing, the gate excluded a main run);
     /// the first step comes 5 animation milliseconds later. Returns how many runs started.
     /// </summary>
+    [OriginalFunction(0x433580, OriginalFunctionScope.Partial)]
     public int Start()
     {
         var started = 0;

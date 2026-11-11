@@ -24,6 +24,7 @@ public static partial class AiExecutorRules
     /// The fire damage node (0x42A720) of a burning goal: the round gate of the run's slot 19 (<see cref="FireDamageRules.Gate"/>), the burn, and the frame with the round id stored when a burn in a round reached a victim. The damage is
     /// normal for frame flag 0x4000 (the eye candy's burn), else fire (goal 77). Always answers true in the original; the frame is the only result.
     /// </summary>
+    [OriginalFunction(0x42A720, OriginalFunctionScope.Partial)]
     public static GoalFrame FireDamage(string burner, GoalFrame goal, IAiFireWorld world)
     {
         ArgumentNullException.ThrowIfNull(goal);

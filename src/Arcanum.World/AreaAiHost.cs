@@ -1565,6 +1565,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// The block test of the knockback's step from <paramref name="left"/> toward its neighbour <paramref name="tested"/> (0x42FD70, GT61): the terrain test of a walker's step (walls, doors, objects other than critters,
     /// the map data's blocked tiles), and a living critter other than the pushed NPC (the hero, a companion, an NPC) on that tile, on any tile change.
     /// </summary>
+    [OriginalFunction(0x42FD70, OriginalFunctionScope.Partial)]
     public KnockbackBlock PushBlock(string id, CellCoord left, CellCoord tested)
     {
         var chart = ToChart(left);
@@ -1954,6 +1955,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// casting animation (NPC ART is not read) or no eye candy: no play, so the release runs at once. A play whose action frame is never
     /// reached (EC7) answers its whole length, and its action frame then releases nothing.
     /// </summary>
+    [OriginalFunction(0x429F00, OriginalFunctionScope.Partial)]
     public AiCastSwing BeginCast(string id, int run, bool castAnimation)
     {
         if (_scene.Spells?.Invoke() is not { } caster || _session.QuerySpellRuns()[run] is not { } r) return new(false);
@@ -2045,6 +2047,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>The turn to an action's target object or tile (0x42C0F0, 0x42C390): refused for an object the host does not walk (the
     /// hero, a companion the host does not run), a target without a cell, object flag 0x10000 or a stunned or paralysed critter
     /// (critter flags 0x60, or the session's stun).</summary>
+    [OriginalFunction(0x42C0F0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x42C390, OriginalFunctionScope.Partial)]
     public bool FaceForAction(string id, string? target, CellCoord? tile)
     {
         if (!TryNpc(id, out var npc) || !CanAct(id)) return false;
@@ -2060,6 +2064,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// ARC-WORLD-113: goal 37's throw animation (14) to its action frame, the throw, and rest. The art is the fixed stand-in's (NPC ART
     /// is not read yet), played at its raw rate. An object flag 0x10000 or a stunned or paralysed critter cannot start.
     /// </summary>
+    [OriginalFunction(0x42BD40, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x42CB10, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x42D300, OriginalFunctionScope.Partial)]
     public AiActionSwing BeginAction(string id, AiActionAnimation animation)
     {
         if (!Walks(id) || !CanAct(id)) return new(AiActionStart.CannotStart);
@@ -2082,6 +2089,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// 0x40000 (ledger AK2). The pick pocket (skill 5) is <see cref="PickPocketAttempt"/> (ARC-DEV-246). NOT READY: every other skill (the other skills a script might start), which does nothing and
     /// answers false.
     /// </summary>
+    [OriginalFunction(0x42A2A0, OriginalFunctionScope.Partial)]
     public bool AttemptSkill(string id, string target, int skill, string? item)
     {
         if (skill == AiExecutorRules.PickpocketSkill) return PickPocketAttempt(id, target);
@@ -2187,6 +2195,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// a dead or unknown critter, and the hero on the line to another target (the line's map holds no hero): the item then lands on the
     /// tile, striking nothing.
     /// </summary>
+    [OriginalFunction(0x42AB90, OriginalFunctionScope.Partial)]
     public bool ThrowItem(string id, string item, CellCoord tile)
     {
         if (!Walks(id) || Build(id) is not { } thrower || Tile(id) is not { } from || LifeState(id) is not { } state) return false;
