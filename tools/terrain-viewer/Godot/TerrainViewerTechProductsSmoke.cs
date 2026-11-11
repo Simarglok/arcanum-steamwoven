@@ -31,7 +31,7 @@ public partial class TerrainViewerApp
     //  6. NPC crafter: the window queued the way `su` queues it for the cave NPC (given a Herbology degree by the stage: the cave's NPCs have none) assembles a learned record from the NPC's own list; products to the NPC, hero's pack unchanged.
     //  7. Explosives: the degree-1 grenade (record 219) is assembled, thrown at a cave NPC from three to six cells (item event, run, damage on a cave NPC, grenade gone).
     //  8. F7 and F8: the hero's effect list, held and worn items, cells and degrees, and the NPC's list are the same after the load.
-    // The NPC's life and the hero's hit points are put back; the rest (effects, points, degrees, items) is the stage's own state, not restored: the stage runs alone (smoke.py) and its F8 replaces the session.
+    // The hero's hit points and the cave NPCs' lives (all of them, after the grenade) are put back; the rest (effects, points, degrees, items) is the stage's own state, not restored: the stage runs alone (smoke.py) and its F8 replaces the session.
     private async Task RunAreaTechProductsSmokeAsync()
     {
         if (_areaSession is not { } session || session.QueryHero() is null || _inventoryHost is null || _combatHost is null || _readyArea is not { } area
@@ -315,6 +315,11 @@ public partial class TerrainViewerApp
             for (; grenades < 3 && grenadeHurt.Length == 0; grenades++)
             {
                 session.Heal(session.Version, life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+                session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000 });
+                AreaSmokePlace(map, map.Chart.ToChart(new(throwFrom!.Value.X, throwFrom.Value.Y)));
+                _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+                PublishWorldSelection();
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 grenade = TechSmokeCraft(data, TechDisciplineExplosives, grenadeRecord).Made[0];
                 SyncAreaInventory();
                 var grenadeSpells = HeroItemSpells(grenade);
@@ -368,6 +373,7 @@ public partial class TerrainViewerApp
             if (InventoryOpen) EndInventory();
             if (SheetOpen) EndSheet();
             if (SchematicsOpen) EndSchematics();
+            TechSmokeAmmoNpc = null;
             CancelArmedLockpicks("the smoke ended");
             HeroRunsHost()?.LoseAll("SMOKE_TECH_PRODUCTS_END");
             if (_mapHandoff is not null) await (_lastLoad ?? Task.CompletedTask);
