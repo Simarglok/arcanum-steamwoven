@@ -73,7 +73,7 @@ The target functions' questions (MT8) over the shown map:
 
 Stand-ins, each a later slice's:
 - one sector kind for the whole map (the indoor/outdoor test of an NPC's fallback tile);
-- a path to every admitted tile;
+- a path to every tile the terrain verdict does not block (objects and reachability are not tested; ARC-MAGIC-055: before, every admitted tile);
 - NPCs stand on their map cells, except the companions: since ARC-MAGIC-021 a companion's row stands on its committed cell and on
   none while it is on another map (no target and no critter then); since ARC-DEV-076 (MIG3) a visitor from another map is a target,
   a party member of the hero and a critter too, found by identity through the record resolver (`AreaSpellCastMap`'s `visitors`: the
@@ -687,7 +687,7 @@ Slice E1-b of the [missing-systems plan](../project/missing-systems-plan.md#e1-s
   created on the shown map at the tile, no offset, with spell flag `OSF_SUMMONED` (0x4000), the run's parent as its summoner and the run as its owner. Only a prototype of type 3 (scenery) is made; a
   critter prototype and a list pick stay `ComponentNotReady` (E1-e). The cast host reads type, object flags and scenery flags of the prototype from the viewer (`SummonPrototypes`); a creation the
   session refuses is logged (`SummonRefused`; the original exits, an unreachable bug, SUM2).
-- **Empty tiles (SUM9).** The area tests are the existing ones over a map that now lists the created objects too: `Tgt_Tile_Empty` (Fireflash) refuses a tile with blocking terrain or any object but an
+- **Empty tiles (SUM9).** The area tests are the existing ones over a map that now lists the created objects too: `Tgt_Tile_Empty` (Fireflash) refuses a tile with blocking terrain (the step evidence's terrain verdict since ARC-MAGIC-055; before, only an unadmitted sector refused) or any object but an
   item without `OF_NO_BLOCK`, a standing critter included, so a flash cast at a creature that still stands on its tile makes no flash; `Tgt_Tile_Empty_Immobiles` (Wall of Fire) counts only walls,
   portals, scenery and traps.
 - **The summoned slot and list (SUM1, SUM7, TA10).** The last summoned object is reset once per action and is what a `Tgt_Summoned` re-aim names (the flash's eye candy); the run's summoned list is the

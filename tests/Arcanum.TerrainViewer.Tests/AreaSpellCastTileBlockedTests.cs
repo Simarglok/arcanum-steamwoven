@@ -29,6 +29,7 @@ public sealed class AreaSpellCastTileBlockedTests
         Assert.IsTrue(map.TileBlocked(new SpellLocation(2, 0)), "terrain the evidence cannot speak for counts as blocked, as the drop map and the path request count it");
         Assert.IsTrue(map.TileBlocked(new SpellLocation(3, 0)), "an admitted sector's tile without a verdict");
         Assert.IsTrue(map.TileBlocked(new SpellLocation(64, 0)), "a sector that is not admitted");
+        Assert.IsTrue(map.PathExists(new SpellTargetObject("s", 16, new SpellLocation(0, 0)), new SpellLocation(0, 0)), "a path to an open tile");
         Assert.IsFalse(map.PathExists(new SpellTargetObject("s", 16, new SpellLocation(0, 0)), new SpellLocation(1, 0)), "no path to a blocked tile");
     }
 }

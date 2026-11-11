@@ -15,7 +15,7 @@ namespace Arcanum.World;
 /// <c>row:</c> kind and source index — on their world cells (a carried item, object flag 0x1000, on none), the hero (<see cref="SessionSpellCaster.Hero"/>) on its live cell, and (ARC-DEV-259) an item the session lists as lying on the map, from the session's entry for it. An NPC's facts
 /// are its combat values (<see cref="AreaCombatHost"/>) and stored fields with its life in the session; the line of fire is the
 /// original's (<see cref="LineOfFireRules.Trace"/>, ARC-COMBAT-012) over the map's live <see cref="AreaLineOfFire"/>.
-/// Stand-ins, each documented in the contract: the sector kind is one for the whole map, a path exists to every admitted tile, NPCs other than
+/// Stand-ins, each documented in the contract: the sector kind is one for the whole map, a path exists to every tile the terrain verdict does not block (objects and the walk are not tested; ARC-MAGIC-055), NPCs other than
 /// the companions stand on their map cells (a companion where it stands, none while on another map: ARC-MAGIC-021), and an NPC wields no weapon for a spell's context. Damage to objects other than critters reaches doors, windows, containers, scenery and traps (ARC-DEV-255) and items lying on the ground or worn (ARC-COMBAT-025).
 /// </summary>
 public sealed class AreaSpellCastMap : ISpellCastMap
