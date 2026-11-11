@@ -110,7 +110,7 @@ public partial class TerrainViewerApp
     /// <summary>The name the PC knows a companion by: its hover name on the shown map, else its dialog script.</summary>
     private string CompanionName(AreaCompanion companion) =>
         _hoverIndex is { } index && ReferenceEquals(_hoverIndexArea, _readyArea) && index.Contains(companion.Key) && index.Name(companion.Key) is { Length: > 0 } name
-            ? name : $"script {companion.Speaker.ScriptId}";
+            ? name : companion.Template.Created ? companion.Entity : $"script {companion.Speaker.ScriptId}";
 
     /// <summary>Shows a portrait per follower in the array (in its order) while the session party is wired; none while a modal window
     /// is open (its menu closes and a pending walk order is dropped). Rebuilt only when the session, its revision, the group or the

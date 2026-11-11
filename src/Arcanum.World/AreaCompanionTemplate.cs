@@ -13,11 +13,34 @@ namespace Arcanum.World;
 /// <summary>
 /// ARC-WORLD-017: the home-map T0 data of one roster companion, enough to stand, draw, light and pick it on any loaded
 /// map: its speaker row, its T0 body commands with their visuals, and its T0 chart cell on the home map. The body keeps
-/// the T0 frame, flip and alpha wherever it stands.
+/// the T0 frame, flip and alpha wherever it stands. ARC-MAGIC-050: <paramref name="Created"/> marks the template of a critter the session
+/// created (<see cref="ForCreated"/>): its "home" is the map it stands on, and a change of map moves the whole object in the session
+/// (the original moves an object whole, FM1/FM3), so its placement keeps no away change and no stored home cell.
 /// </summary>
 public sealed record AreaCompanionTemplate(AreaSpeaker Speaker, AreaCompanionFacts Facts, SessionMapId Home, CellCoord HomeOrigin,
-    CellCoord HomeWorld, IReadOnlyList<AreaDrawCommand> Commands, IReadOnlyDictionary<AreaVisualKey, AreaVisualRecord> Visuals)
+    CellCoord HomeWorld, IReadOnlyList<AreaDrawCommand> Commands, IReadOnlyDictionary<AreaVisualKey, AreaVisualRecord> Visuals, bool Created = false)
 {
+    /// <summary>The first <see cref="AreaSpeaker.Index"/> of a created critter's speaker (the index only names its grid actor: no map has this many dialog NPCs).</summary>
+    public const int CreatedIndexBase = 1_000_000;
+
+    /// <summary>
+    /// ARC-MAGIC-050: the body template of the critter the session created, standing on <paramref name="map"/> at the cell of its row, drawn with
+    /// <paramref name="body"/> (its stand pose, key = the row's) and <paramref name="visual"/>. It has no dialog script (speaker script 0). <paramref name="number"/>
+    /// is the critter's creation number; <paramref name="facts"/> gives the follow facts of the speaker (null when its AI row or fields do not read: no template).
+    /// </summary>
+    public static AreaCompanionTemplate? ForCreated(int number, AreaObjectRecord row, Func<AreaSpeaker, AreaCompanionFacts?> facts, SessionMapId map, AreaChart chart,
+        AreaDrawCommand body, AreaVisualRecord visual)
+    {
+        ArgumentNullException.ThrowIfNull(row); ArgumentNullException.ThrowIfNull(facts); ArgumentNullException.ThrowIfNull(chart);
+        ArgumentNullException.ThrowIfNull(body); ArgumentNullException.ThrowIfNull(visual);
+        if (row.WorldX is not { } x || row.WorldY is not { } y) throw new ArgumentException("AREA_COMPANION_CREATED_CELL_REQUIRED", nameof(row));
+        if (body.Identity != row.Key || body.Visual != visual.Key) throw new ArgumentException("AREA_COMPANION_CREATED_BODY_MISMATCH", nameof(body));
+        var speaker = new AreaSpeaker(CreatedIndexBase + number, row, 0, x, y);
+        if (facts(speaker) is not { } known) return null;
+        return new(speaker, known, map, chart.ToChart(new AreaStepCell(x, y)), new(checked((int)x), checked((int)y)), Array.AsReadOnly([body]),
+            new ReadOnlyDictionary<AreaVisualKey, AreaVisualRecord>(new Dictionary<AreaVisualKey, AreaVisualRecord> { [visual.Key] = visual }), true);
+    }
+
     public string Entity => AreaConversationState.EntityId(Speaker.Row);
     public AreaObjectKey Key => Speaker.Row.Key;
 

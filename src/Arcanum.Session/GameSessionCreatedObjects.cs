@@ -194,6 +194,23 @@ public sealed partial class GameSessionOwner
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Array.AsReadOnly(held), new(_identity, _revision));
     }
 
+    /// <summary>
+    /// ARC-MAGIC-050 (FM1, FM3, FM12): the created critters among <paramref name="entities"/> (the followers a PC's change of place carries) stand on the destination <paramref name="map"/> at the arrival
+    /// <paramref name="cell"/> now: the original moves each object whole, with its inventory, and a created critter is an object like any other. Its record moves (the creation order stays), and it is a
+    /// holder of the destination's seed instead of the source's (a seed attached later adds it itself). The caller's revision covers it; nothing happens for an entity that is no created critter or is on the map already.
+    /// </summary>
+    private void RehomeCreatedCritters(IEnumerable<string> entities, SessionMapId map, CellCoord cell)
+    {
+        foreach (var entity in entities)
+        {
+            if (_inventory.Objects.CreatedObject(entity) is not { Kind: SessionCreatedKind.Critter } held || held.Map == map) continue;
+            _inventory.Objects.MoveCreated(entity, map, cell);
+            foreach (var (seedMap, seed) in _inventory.Seeds)
+                if (seedMap != map && seed.RemoveCreatedHolder(entity)) _inventory.SeedGeneration++;
+            if (_inventory.Seeds.TryGetValue(map, out var destination) && destination.AddCreatedHolder(entity)) _inventory.SeedGeneration++;
+        }
+    }
+
     /// <summary>ARC-DEV-347: the created scenery and eye-candy objects lying on <paramref name="map"/> now, in the order they were created.</summary>
     public IReadOnlyList<SessionCreatedObject> QueryCreatedObjects(SessionMapId map)
     {
