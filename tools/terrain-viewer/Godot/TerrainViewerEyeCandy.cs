@@ -150,6 +150,8 @@ public partial class TerrainViewerApp
         if (EyeCandyHostNow() is not { } host) return;
         var started = host.Play(obj, index, play, run);
         if (started) GD.Print($"ARC-MAGIC-017 eye-candy-play object={obj} entry={index} run={run} play=0x{play:X} goal={AiExecutorRules.EyeCandyGoalOf(play)}");
+        // ARC-DEV-352 (EC11): a callback-flagged add the run waits for that could not play after all calls back at once.
+        else EyeCandyNotPlayed(index, run, play);
     }
 
     /// <summary>An EyeCandy component's Remove (0x4CD940): the entry's eye candy off the object, this run's only unless no_id.</summary>
@@ -270,6 +272,8 @@ public partial class TerrainViewerApp
     private CellCoord? EyeCandyCell(GameSessionOwner owner, string obj)
     {
         if (obj == SessionSpellCaster.Hero) return HeroWorldCell();
+        // ARC-DEV-352: a summoned object (the flash) at its cell.
+        if (CreatedCell(owner, obj) is { } created) return created;
         return _spellCastMap?.Row(obj) is { } row ? LiveCell(owner, row) : null;
     }
 }

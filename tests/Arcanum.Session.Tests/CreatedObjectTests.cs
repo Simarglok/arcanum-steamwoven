@@ -125,13 +125,14 @@ public sealed class CreatedObjectTests
         StringAssert.Contains(text, "\"spellFlags\":16384,\"summoner\":\"pc\",\"run\":7}");
         StringAssert.Contains(text, "\"spellFlags\":0,\"summoner\":\"\",\"run\":-1}");
         using var back = Restore(Decode(text));
-        CollectionAssert.AreEqual(owner.QueryCreatedObjects(Exterior).ToArray(), back.QueryCreatedObjects(Exterior).ToArray());
+        // ARC-DEV-352 (SUM7): the save holds no spell run 7, so after the restore the pieces are on no run's list; everything else is kept.
+        CollectionAssert.AreEqual(owner.QueryCreatedObjects(Exterior).Select(o => o with { Run = null }).ToArray(), back.QueryCreatedObjects(Exterior).ToArray());
         // One Destroy, all five: one revision; a piece already gone is skipped; an entity that names no created object refuses the whole step.
         var revision = back.Version.Revision;
         var list = pieces.Select(p => p.Entity).Append("scenery:99").ToArray();
         var gone = back.DestroyCreatedObjects(back.Version, list);
         Assert.AreEqual(GameSessionDisposition.Changed, gone.Disposition);
-        CollectionAssert.AreEqual(pieces.ToArray(), gone.Objects.ToArray());
+        CollectionAssert.AreEqual(pieces.Select(p => p with { Run = null }).ToArray(), gone.Objects.ToArray());
         Assert.AreEqual(revision + 1, back.Version.Revision);
         CollectionAssert.AreEqual(new[] { plain }, back.QueryCreatedObjects(Exterior).ToArray());
         Assert.AreEqual(GameSessionDisposition.NoChange, back.DestroyCreatedObjects(back.Version, list).Disposition, "all gone already");

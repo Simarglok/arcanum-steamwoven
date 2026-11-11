@@ -119,8 +119,8 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// ARC-DEV-347 (ARC-RES-101 hand-off): destroys the created objects <paramref name="entities"/> names in one step, one revision: the wall of fire's five pieces go together at the run's END_CALLBACK Destroy,
-    /// as the original's one Destroy component does for its whole summoned list. An entity that is no object the session holds is skipped (a piece already gone, the original's skip of destroyed objects).
+    /// ARC-DEV-347 (ARC-RES-101 hand-off): destroys the created objects <paramref name="entities"/> names in one step, one revision (a caller that removes a list at once; the spell's Destroy component, ARC-DEV-352,
+    /// destroys one object per list entry, as the original's component does, so a wall's five pieces go in one action with five revisions). An entity that is no object the session holds is skipped (a piece already gone, the original's skip of destroyed objects).
     /// Changed with the objects destroyed (in the order given) when any was; NoChange with none; Rejected for a stale version, a list over <see cref="SessionCreatedObject.MaxObjects"/>
     /// or an entity that is no created object's name at all (nothing destroyed then).
     /// </summary>
