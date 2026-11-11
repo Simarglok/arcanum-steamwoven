@@ -460,3 +460,21 @@ Known differences (documented, not bugs):
 
 - The index is read once per run (as the original reads its static installation): a file added or changed in the game folder while the game runs shows after the next start. An archive that changes in size or time is read again.
 
+## ARC-UI-134 — The hero's lens on the world map shows the game around the hero (PR pending, 2026-11-11)
+
+Read in the original executable (ledger [WM141](../research/ledger/ui-audio.md), WM140): the square in the window's top left is the same view-window lens as the logbook's, the inventory's
+and the barter window's. While the map is open it shows the game around the hero, scaled to half size (178 game pixels become the 89-pixel square), with the ring art 198 over it; the open
+centres the camera on the hero first. While a journey runs the square is black under the ring art, and the live view returns when the journey ends. Both rule modes behave the same; with the
+HD interface switch on the frame, the ring and the buttons are the HD art and the lens is the same picture. Known differences, not to be re-reported: the copy reads what the layers under the
+window drew, floaters included, where the original copies the game view alone; whether the HD frame's square cutout against the brass ring looks right is reported separately (ARC-UI-126).
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Stand somewhere with scenery and creatures around the hero and open the world map (`W` or the bar's Map button). | The top-left square shows the game around the hero at half size, the hero in the middle of it (the middle is slightly below the centre of the view), under the brass ring; the map itself is unchanged. | open |
+| 2 | Move the hero's neighbours (wait a few turns, or stand beside a walking creature or a flame), then open the map and look at the lens for a moment. | The lens is live: animations in it keep running while the map is open. | open |
+| 3 | Open the map twice from different places (the second time after walking a few tiles). | The lens always centres on the hero; the game view under it was centred on the hero by the open. | open |
+| 4 | Set a waypoint and press Travel. | The square turns black under the ring at once and stays black for the whole journey. | open |
+| 5 | End a journey (arrival, or the right button or Delete during it). | After a right button or Delete the live view is back in the lens; on arrival the map closes. | open |
+| 6 | Open the map in a town-map sector and switch kinds (zoom, whole map, `Z`), and use the note quill (`Q`). | The lens stays live in every kind and with the quill; only a journey blackens it. | open |
+| 7 | Click the lens, in the middle and in the corner. | The map closes (ARC-UI-133); the lens picture does not change that. | open |
+| 8 | With the HD interface switch on, repeat steps 1 and 4. | The same lens in the HD frame: the ring over the square; the corners of the square show wood, not a hole. If a corner still shows the world through, report it. | open |

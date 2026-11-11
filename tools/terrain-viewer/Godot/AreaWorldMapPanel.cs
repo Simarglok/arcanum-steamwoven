@@ -59,6 +59,12 @@ public partial class AreaWorldMapPanel : CanvasLayer
     /// <summary>ARC-UI-073: the window shows the original look (art) instead of the diagnostic panel.</summary>
     public bool ArtMode { get; private set; }
     internal AreaWorldMapArtView ArtView => _artView;
+    // ARC-UI-134: the lens's round view of the game, on a layer under the window (the component the inventory, barter and logbook windows share).
+    private AreaRoundView _roundView = null!;
+    /// <summary>ARC-UI-134: the PC lens's holder, the hero: its foot point in canvas units and the game view's zoom, or null for none (no lens view).</summary>
+    public Func<(Vector2 Foot, float Zoom)?>? HolderView { get; set; }
+    /// <summary>ARC-UI-134: the lens shows the game view around the hero under the window.</summary>
+    internal bool RoundViewShown => _roundView.Visible;
     internal string StatusForSelfTest => _status.Text;
     internal string MessageForSelfTest => _message.Text;
     /// <summary>ARC-DEV-050: the area list and Teleport are shown (debug mode only).</summary>
@@ -113,6 +119,7 @@ public partial class AreaWorldMapPanel : CanvasLayer
         _hint = new Label { Modulate = new Color(.3f, .3f, .3f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
         foreach (var control in new Control[] { _header, body, buttons, _status, _message, _hint }) contents.AddChild(control);
         // ARC-UI-073: the original-look window; it forwards its waypoints and Travel to the same events as the diagnostic panel.
+        _roundView = new AreaRoundView(); AddChild(_roundView);
         _artView = new AreaWorldMapArtView();
         AddChild(_artView);
         _artView.WaypointRequested += pixel => { if (_map is { OnStartMap: true }) WaypointRequested?.Invoke(pixel); };
@@ -180,7 +187,16 @@ public partial class AreaWorldMapPanel : CanvasLayer
         Render(null);
     }
 
-    public void CloseView() { Hide(); _artView.CloseView(); _map = null; _known = null; _debugMode = false; ArtMode = false; }
+    public void CloseView() { Hide(); _artView.CloseView(); _roundView.Visible = false; _map = null; _known = null; _debugMode = false; ArtMode = false; }
+
+    /// <summary>ARC-UI-134 (WM140, WM141): the lens shows the game view around the hero, at half size, while the original look is up and no journey runs; the view
+    /// keeps up with the hero and the window's place every frame (the executable copies on every redraw of the game view, IW33).</summary>
+    public override void _Process(double delta)
+    {
+        var holder = IsOpen && ArtMode && _map is not null && !_artView.LensFrozen ? HolderView?.Invoke() : null;
+        var (origin, side) = _artView.LensOnScreen;
+        _roundView.Update(origin, side, holder);
+    }
 
     /// <summary>Re-renders the marks, the area list's known marks, the buttons and the texts.</summary>
     public void Render(string? message)
