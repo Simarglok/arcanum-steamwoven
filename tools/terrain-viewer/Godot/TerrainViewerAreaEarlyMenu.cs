@@ -91,7 +91,9 @@ public partial class TerrainViewerApp
         // A scene that is not a start scene a new game can use: the browser the player sits in cannot start, so the window goes back.
         if (refusal is not null) while (menu.Window == AreaMenuWindow.PickCharacter && menu.Back()) { }
         var needsNewGame = held?.Kind is AreaMenuCommandKind.StartNewGame or AreaMenuCommandKind.OpenNewCharacter;
-        menu.Notice = refusal is not null && needsNewGame ? "new game refused: " + refusal : null;
+        // Only the hold's own note (or a refusal) is replaced: a note an option change left (the HD pack source's) stays.
+        if (refusal is not null && needsNewGame) menu.Notice = "new game refused: " + refusal;
+        else if (held is not null) menu.Notice = null;
         EnterMainMenuSound();
         if (_earlyMenuRecord is { } record) { record.Attached = true; record.AttachedMsec = Time.GetTicksMsec(); record.Refusal = refusal; }
         GD.Print($"ARC-DEV-381 early main menu attached to the scene newGame={refusal ?? "ready"} held={held?.Kind.ToString() ?? "none"}");
@@ -108,6 +110,8 @@ public partial class TerrainViewerApp
         GD.Print("ARC-DEV-381 early main menu closed: the start scene did not load");
         if (_mainMenu is not null) { _mainMenu.DropEditor(); _mainMenuPanel?.CloseView(); _mainMenu = null; }
         _mainMenuStatus = "closed: the start scene did not load";
+        // The first opening is still owed: a later successful publication of the start scene opens the menu as before.
+        _mainMenuShown = false;
     }
 
     /// <summary>The smoke's check of the early menu (the <c>menu</c> stage, on the menu that opened over the loading start map): it opened

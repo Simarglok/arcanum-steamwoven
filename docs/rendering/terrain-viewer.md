@@ -1990,10 +1990,11 @@ and layout (below), the other windows the project's.
   1.6 s on a loaded Mac, see the diagnosis). The menu is the same one: its windows, texts, art, keys and back moves are unchanged. No scene
   exists yet, so what opens a window the menu itself draws works at once (Single Player, New Game, the pre-made browser, Options, Exit
   Game), and a choice that needs the scene is **held**: Start in the browser, New Character, Load Game and Last Save. A held choice shows
-  a note, the menu takes no other input, Escape or a Back press takes the choice back, and the scene's publication attaches the menu to
+  a note, the menu takes no other input, Escape (or the browser's Back arrow) takes the choice back, and the scene's publication attaches the menu to
   it (`ARC-DEV-381 early main menu attached to the scene`): the menu takes the scene's answer for a new game (`NewGameRefusal`), plays the
   shop map's pair and runs the held choice as if it were pressed then. A start scene that fails to load closes the menu and shows the
-  failure's own screen. Later openings (after Quit, after a death, in play) open over a published scene, as before. Smoke: the `menu`
+  failure's own screen (a later successful publication of it opens the menu as before); a first scene with no game session closes the menu again, as one
+  that would not have opened. Later openings (after Quit, after a death, in play) open over a published scene, as before. Smoke: the `menu`
   stage checks that the menu opened before the publication and attached to it, then plays the waiting again on the published scene
   (a held choice, no other input, Escape taking it back, the attach running a held Last Save, a held Start starting nothing).
 - **Original look (ARC-UI-058,** [plan](../ui/original-windows.md#main-menu-done-arc-ui-058),
