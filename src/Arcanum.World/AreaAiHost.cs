@@ -1914,6 +1914,70 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (id != Pc) _session.SetNoFlee(_session.Version, id);
     }
 
+    // ARC-MAGIC-035: the interrupt of the helpers 0x44E050 and 0x44E4D0 ends only the runs that test true, not every run of the NPC (an eye candy or a burning run beside it is left): each at the level, with its end nodes.
+    private bool InterruptRunsWhere(string npc, int level, Func<GoalRun, bool> test)
+    {
+        var ended = false;
+        foreach (var run in RunsOf(npc).Where(r => !AiExecutorRules.IsOverlayRunGoal(r.Bottom.Goal) && test(r)).ToArray())
+        {
+            var change = _session.InterruptGoal(run.Handle, level);
+            EndNodes(change.Steps);
+            ended |= change.Succeeded;
+        }
+        return ended;
+    }
+
+    // ---- the social flags of a spell (ARC-MAGIC-035, MA-4: the steps 0x454A10 calls; ledger SO1 to SO8) ----
+
+    /// <summary>
+    /// ARC-MAGIC-035: the reaction change of an NPC this host runs toward the hero (0x4C0DE0: <see cref="GameSessionOwner.AdjustReaction"/> with the NPC's and the hero's facts). False: the NPC is not run
+    /// here, no facts are known, or the session refused (the cast host logs it).
+    /// </summary>
+    public bool SpellReaction(string npc, int delta)
+    {
+        if (npc == Pc || !TryNpc(npc, out _) || ReactionFacts(npc) is not { } facts) return false;
+        var result = _session.AdjustReaction(_session.Version, npc, facts.Npc, facts.Pc, delta);
+        Trace(npc).Setter = $"spell reaction {delta} {result.Disposition} {result.Failure}";
+        return result.Failure == GameSessionFailure.None;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-035: peace (0x4AA300) of an NPC with the side of <paramref name="with"/> (an animal's charm): the session's peace (focus and last attacker cleared, the danger state NONE, the followers' lists), then the host's
+    /// part of it: the NPC's attack run (goal 18 or 19) at that side is interrupted at level 5, as the helper 0x44E050 does. False: the NPC is not run here or the session refused.
+    /// </summary>
+    public bool SpellPeace(string npc, string with)
+    {
+        if (npc == Pc || !TryNpc(npc, out _) || Combatant(with) is not { } other) return false;
+        var result = _session.MakePeace(_session.Version, new SessionPeaceRequest { Entity = npc, Other = other, Facts = OrderFacts(npc) });
+        Trace(npc).Setter = $"spell peace {with} {result.Disposition} {result.Failure}";
+        if (result.Failure != GameSessionFailure.None) return false;
+        // The head is the hero for the hero's side (the hero or a follower of it), else the other itself.
+        if (RunOf(npc) is { Bottom: { Goal: GoalType.Attack or GoalType.AttemptAttack, Target: { } at } } run && (at == with || with == Pc && Leader(at) == Pc))
+            InterruptRunsWhere(npc, 5, r => r.Handle == run.Handle);
+        return true;
+    }
+
+    /// <summary>ARC-MAGIC-035: flee (0x4AF130): the danger setter asked for FLEE from <paramref name="from"/>, with the NPC's own facts. False: the NPC is not run here or the setter refused.</summary>
+    public bool SpellFlee(string npc, string from)
+    {
+        if (npc == Pc || !TryNpc(npc, out _)) return false;
+        var result = SetDanger(npc, DangerState.Flee, from);
+        return result.Failure == GameSessionFailure.None;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-035: stop fleeing (0x4AF170): an NPC in FLEE goes to NONE through the setter, then every run of the NPC whose bottom or top goal is flee (25) is ended at level 6 whatever its state was
+    /// (the helper 0x44E4D0; an eye candy or a burning run is left). False: the NPC is not run here or the session refused.
+    /// </summary>
+    public bool SpellStopFleeing(string npc)
+    {
+        if (npc == Pc || !TryNpc(npc, out _)) return false;
+        var result = _session.StopFleeing(_session.Version, npc, SetterFacts(npc));
+        // The flee goals end whatever the setter did (0x4AF170 calls 0x44E4D0 after it), so a refused setter does not keep them: only the runs whose bottom or top goal is 25 end, at level 6.
+        InterruptRunsWhere(npc, GoalInterruptRules.MaxLevel, r => r.Bottom.Goal == GoalType.Flee || r.Frames[^1].Goal == GoalType.Flee);
+        return result.Failure == GameSessionFailure.None;
+    }
+
     // ---- the casting goals (ARC-WORLD-102) ----
 
     /// <summary>The casting goal's start (0x429B50 → 0x429BC0 → 0x42C850) through the cast host (<see cref="SessionSpellCaster.StartGoal"/>):
