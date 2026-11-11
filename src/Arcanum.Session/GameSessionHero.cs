@@ -228,7 +228,9 @@ internal sealed class HeroDomain
             : ImmutableDictionary<CharacterRace, StatEffectDefinition>.Empty.Add(race, raceEffect);
         var genders = genderEffect is null ? ImmutableDictionary<CharacterGender, StatEffectDefinition>.Empty
             : ImmutableDictionary<CharacterGender, StatEffectDefinition>.Empty.Add(gender, genderEffect);
-        var created = CharacterStatsOwner.Create(new(race, gender, new(races, genders), CharacterStatLimits.Default));
+        var created = CharacterStatsOwner.Create(new(race, gender, new(races, genders),
+            // ARC-DEV-366: the owner holds as many applied effects as the session's list admits (the character owner's default 64 would refuse the 65th stat effect after the session admitted it).
+            CharacterStatLimits.Default with { MaxAppliedEffects = SessionEffectLimits.MaxHeroEffects }));
         if (created.Owner is not { } owner) return null;
         for (var index = 0; index < values.Length; index++)
             if (owner.SetBase(SessionHeroLimits.StoredStats[index], values[index]).Disposition == CharacterStatsDisposition.Rejected) return null;

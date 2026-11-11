@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Text;
 using Arcanum.Data.Area;
+using Arcanum.Data.Characters;
 using Arcanum.Data.Content;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Scr;
@@ -49,6 +50,42 @@ public sealed class AreaItemScriptHostTests
         return bytes;
     }
 
+    // ARC-DEV-366: a tech book's insert script in short: get stat 4 (intelligence) of the triggerer into a local, then add effect 168 with the item cause.
+    private static byte[] TomeScript()
+    {
+        (int Type, (byte Kind, int Value)[] Operands)[] lines =
+        [
+            (ScrCatalogue.Action.GetStat, [(3, 4), (0, 0), (2, 0)]),
+            (ScrCatalogue.Action.AddEffect, [(0, 0), (3, TomeEffect), (3, 5)]),
+            (ScrCatalogue.Action.ReturnRunDefault, []),
+        ];
+        var bytes = new byte[64 + lines.Length * 132];
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(52), lines.Length);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(56), lines.Length);
+        for (var line = 0; line < lines.Length; line++)
+        {
+            var slot = bytes.AsSpan(64 + line * 132 + 44, 44);
+            BinaryPrimitives.WriteInt32LittleEndian(slot, lines[line].Type);
+            for (var i = 0; i < lines[line].Operands.Length; i++)
+            {
+                slot[4 + i] = lines[line].Operands[i].Kind;
+                BinaryPrimitives.WriteInt32LittleEndian(slot[(12 + 4 * i)..], lines[line].Operands[i].Value);
+            }
+        }
+        return bytes;
+    }
+
+    private const int TomeEffect = 168;
+
+    // The tome lies on the ground with the insert-item script 510.
+    private static AreaInventoryMap TomeMap() => new(1,
+        new([], [new SessionSeedItem(Entity(0), Facts(10), new CellCoord(10, 20))]),
+        new Dictionary<string, AreaObjectRecord> { [Entity(0)] = Row(0, 7, 10, 20, 510) });
+
+    // "+1 expertise in a discipline" for the one number the tables hold.
+    private static EffectRule? Tables(int number) => number == TomeEffect
+        ? new(TomeEffect, true, [new(EffectAttributeKind.TechDiscipline, 3, EffectChangeOperator.Add, 1)]) : null;
+
     private static T WithContent<T>(Func<ScriptContent, T> test)
     {
         var root = Directory.CreateTempSubdirectory("arc-script-013-");
@@ -63,6 +100,7 @@ public sealed class AreaItemScriptHostTests
             Write("tig.dat", AreaOwnerFixture.Dat());
             Write("modules/Syn.dat", AreaOwnerFixture.Dat());
             foreach (var name in new[] { "00500plain", "00501named", "00502silent", "00503acting" }) Write($"scr/{name}.scr", PrintAndSkip());
+            Write("scr/00510tome.scr", TomeScript());
             Write("dlg/00500plain.dlg", Encoding.Latin1.GetBytes("{1}{It hums for @pcname@.}{It hums softly.}{}{}{}{}"));
             Write("dlg/00501named.dlg", Encoding.Latin1.GetBytes("{1}{@npcname@ hums.}{}{}{}{}{}"));
             Write("dlg/00503acting.dlg", Encoding.Latin1.GetBytes("{1}{It hums.}{}{}{}{}{gf 5 1}"));
@@ -120,6 +158,42 @@ public sealed class AreaItemScriptHostTests
             Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, host.PickUp(session, Entity(3)).Failure);
             Assert.AreEqual(string.Empty, AreaInventoryHost.Printed(default));
             CollectionAssert.AreEqual(new[] { Entity(0), Entity(2) }, session.QueryPcInventory().Select(item => item.Entity).ToArray());
+            return 0;
+        });
+    }
+
+    [TestMethod]
+    public void The_host_answers_an_effect_rule_only_from_its_tables()
+    {
+        using var session = ConversationSessionFixture.Create();
+        Assert.IsNull(new AreaItemScriptHost(session, [Map()], null).EffectDefinition(TomeEffect), "no tables, no rule");
+        var host = new AreaItemScriptHost(session, [Map()], null, Tables);
+        var rule = host.EffectDefinition(TomeEffect)!;
+        Assert.AreEqual(new SessionEffectDefinition(TomeEffect, [new(EffectAttributeKind.TechDiscipline, 3, EffectChangeOperator.Add, 1)]).Changes.Length, rule.Changes.Length);
+        Assert.IsTrue(rule.SameAs(new SessionEffectDefinition(TomeEffect, [new(EffectAttributeKind.TechDiscipline, 3, EffectChangeOperator.Add, 1)])));
+        Assert.IsNull(host.EffectDefinition(169), "a number the tables do not hold");
+        Assert.IsNull(new AreaItemScriptHost(session, [Map()], null, number => throw new ArgumentException("outside the tables")).EffectDefinition(5), "a number the tables refuse");
+    }
+
+    [TestMethod]
+    public void An_item_script_that_reads_a_stat_and_adds_an_effect_runs_through_the_inventory_host()
+    {
+        WithContent(content =>
+        {
+            // Without the effect tables the add-effect action has no rule: the pickup is refused, as before (the host knows nothing of effect 168).
+            using var refusing = ConversationSessionFixture.CreateWithHero();
+            var bare = new AreaInventoryHost([TomeMap()], scripts: content);
+            Assert.AreEqual(GameSessionFailure.None, bare.Attach(refusing));
+            Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, bare.PickUp(refusing, Entity(0)).Failure);
+
+            // With them the run reads the hero's intelligence (get stat is admitted) and adds the effect with the item cause.
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var host = new AreaInventoryHost([TomeMap()], scripts: content) { EffectRules = Tables };
+            Assert.AreEqual(GameSessionFailure.None, host.Attach(session));
+            var picked = host.PickUp(session, Entity(0));
+            Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (picked.Disposition, picked.Failure));
+            CollectionAssert.AreEqual(new[] { new SessionEffect(TomeEffect, Arcanum.Simulation.Character.EffectCause.Item) }, session.QueryHeroEffects()!.Effects.ToArray());
+            Assert.AreEqual(1, session.QueryHeroTechnology()!.Value[3].Expertise - session.QueryHeroTechnology()!.Value[2].Expertise);
             return 0;
         });
     }

@@ -115,6 +115,7 @@ public static partial class AiExecutorRules
     /// started a run in its subturn hook or ended its subturn there, and the gate refuses every other critter.
     /// </summary>
     [OriginalFunction(0x4B4320, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x435BD0, OriginalFunctionScope.Partial)]
     public static bool FidgetAfterRun(IAiPerformWorld world, string id, bool combatMode, bool autoAnimates, bool animating, bool artAllows)
     {
         ArgumentNullException.ThrowIfNull(world);
@@ -156,6 +157,7 @@ public static partial class AiExecutorRules
     /// (<see cref="LineOfFireRules.Rotation"/>, one of eight; 5 on the same tile) and the tile <c>range + 1</c> steps from the
     /// source in that direction, on the line through the NPC beyond it. The map's bounds are the planner's.
     /// </summary>
+    [OriginalFunction(0x426A80, OriginalFunctionScope.Partial)]
     public static CellCoord EscapeDestination(CellCoord source, CellCoord npc, int range)
     {
         if (range < 0) throw new ArgumentOutOfRangeException(nameof(range));

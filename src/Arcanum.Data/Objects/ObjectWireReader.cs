@@ -10,6 +10,8 @@ namespace Arcanum.Data.Objects;
 // finite loader supplies the shared type descriptors, not creation defaults.
 internal static class ObjectWireReader
 {
+    [OriginalFunction(0x409AA0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4097B0, OriginalFunctionScope.Partial)]
     internal static ObjectWireRecord Read(ReadOnlySpan<byte> bytes, StaticObjectLoaderOptions limits, bool prototype = false, Action<long>? reserve = null, int maxRecordBytes = int.MaxValue)
     {
         // Fixed schema/map/hash envelope; variable sparse graphs reserved below

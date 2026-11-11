@@ -1,4 +1,5 @@
 using Arcanum.Session;
+using Arcanum.Simulation;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
@@ -120,6 +121,7 @@ public sealed class AreaMissileHost : IAiMissileWorld, IGoalStepHost
     /// gate; its first step comes 5 animation milliseconds later). A missile of an earlier run in the same slot (freed meanwhile) is dropped first. False, with the cast's run freed unpaid (MG44), when the object or
     /// the run could not be made.
     /// </summary>
+    [OriginalFunction(0x4248A0, OriginalFunctionScope.Partial)]
     public bool Launch(ISpellMissileCaster caster, string casterObject, int map, CellCoord start, CellCoord destination, int run, int spell, string? target, uint art, int stepsPerTick, int paceMs)
     {
         ArgumentNullException.ThrowIfNull(caster);

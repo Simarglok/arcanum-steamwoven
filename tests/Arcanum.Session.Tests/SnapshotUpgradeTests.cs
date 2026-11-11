@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":87,\"world\"";
+    private const string Current = "\"schemaVersion\":88,\"world\"";
+    private const string Current87 = "\"schemaVersion\":87,\"world\"";
     private const string Current86 = "\"schemaVersion\":86,\"world\"";
     private const string Current85 = "\"schemaVersion\":85,\"world\"";
     private const string Current84 = "\"schemaVersion\":84,\"world\"";
@@ -173,13 +174,23 @@ public sealed class SnapshotUpgradeTests
         return text.Replace(Current86, Current85);
     }
 
+    // ARC-DEV-358: the schema 87 text of a schema 88 one with no object-flags change on any written-flags row: each row loses its two zero words at its end. A text whose rows
+    // carry an object-flags change has no older literal: no build before wrote one.
+    internal static string Schema87(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.IsFalse(System.Text.RegularExpressions.Regex.IsMatch(text, "\"objectSet\":[1-9-]|\"objectCleared\":[1-9-]"), "a row with an object-flags change has no schema 87 text");
+        return text.Replace(",\"objectSet\":0,\"objectCleared\":0}", "}").Replace(Current, Current87);
+    }
+
     // ARC-DEV-348: the schema 86 text of a schema 87 one with no NPC effect list: the effects section loses its empty list of NPC lists at its end. A text with a list has no older
     // literal: no build before saved one.
     internal static string Schema86(string text)
     {
-        StringAssert.Contains(text, Current);
+        text = Schema87(text);
+        StringAssert.Contains(text, Current87);
         Assert.AreEqual(1, text.Split(NoCritterEffects + "},\"experience\"").Length - 1, "the effects section ends with an empty list of NPC effect lists");
-        return text.Replace(NoCritterEffects + "},\"experience\"", "},\"experience\"").Replace(Current, Current86);
+        return text.Replace(NoCritterEffects + "},\"experience\"", "},\"experience\"").Replace(Current87, Current86);
     }
 
     // ARC-DEV-348: a current text as a text without NPC effect lists in its effects section (the older schemas').
@@ -579,6 +590,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":88,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":89,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

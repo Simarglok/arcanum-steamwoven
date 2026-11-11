@@ -62,26 +62,26 @@ public sealed class AreaAiThrowTests
 
     // ARC-DEV-258 (MIG13 S14n): a grenade, a generic item (type 14) the NPC carries in its list (no inventory location).
     private static readonly SessionItemKind GrenadeKind = new(SessionItemType.Generic, 5640, 4102, 4103);
-    private static AreaObjectRecord Grenade(int index) => new(Key(index), 0, 14, 5640, "p", "p", "r", "s",
+    private static AreaObjectRecord Grenade(int index, long genericFlags = 0x1) => new(Key(index), 0, 14, 5640, "p", "p", "r", "s",
         AreaScope.Core, null, null, null, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
         [
             Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 10), Field(27, 0), Field(28, 0), Field(29, 4),
             Array(30), Empty(31),
             Field(36, 0), Field(38, 3), Field(39, 0), Field(40, 1), Field(41, 0), Field(42, 0x60000000), Field(43, 0), Field(44, 0x60000000), Field(45, 0),
             Field(46, 0), Field(49, 10000), Field(50, 10000), Field(51, 10000), Field(52, 10000), Field(53, 10000), Field(54, 0), Field(55, 0),
-            Field(59, 0x1), Field(60, 0), Field(61, 1),
+            Field(59, genericFlags), Field(60, 0), Field(61, 1),
         ], true, true, true);
 
     private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, string Npc, string Item);
 
-    private static Scene Open(uint weaponFlags = 0x200, bool grenade = false, Func<string, SessionShot, CellCoord, CellCoord, bool>? launch = null)
+    private static Scene Open(uint weaponFlags = 0x200, bool grenade = false, long grenadeFlags = 0x1, Func<string, SessionShot, CellCoord, CellCoord, bool>? launch = null)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
         var created = GameSessionOwner.Create(new(ConversationSessionFixture.Clock, AreaStartingHero.NewGameFlags(identity, new OwnerEpoch(Guid.NewGuid()), null),
             new(new(1), HeroCell, NeighborDirection.XPlus), Hero: hero));
         var session = created.Owner ?? throw new AssertFailedException($"session {created.Failure}");
-        var rows = grenade ? new[] { Npc(0), Item(1, weaponFlags), Grenade(2) } : new[] { Npc(0), Item(1, weaponFlags) };
+        var rows = grenade ? new[] { Npc(0), Item(1, weaponFlags), Grenade(2, grenadeFlags) } : new[] { Npc(0), Item(1, weaponFlags) };
         var map = new AreaInventoryMap(1,
             new([new(Entity(0), SessionHolderKind.Npc, false, false, [], grenade ? [Entity(1), Entity(2)] : [Entity(1)])],
                 grenade ? [new SessionSeedItem(Entity(1), new(Dagger, 15, 0, 1004, null, []), null), new SessionSeedItem(Entity(2), new(GrenadeKind, 3, 0, 0, null, []), null)]
@@ -99,6 +99,7 @@ public sealed class AreaAiThrowTests
         {
             RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = [new(Entity(0), Npc(0), NpcCell)], Combat = combat,
             HeroCell = () => HeroCell, LaunchThrown = launch,
+            NpcSheet = entity => combat.Fields(entity) is { } fields ? AreaAdvancement.Npc(entity, fields, _ => null) : null,
         };
         var host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null), new AreaCombatWorld(1, () => [], _ => null));
         return new(session, host, Entity(0), Entity(1));
@@ -212,5 +213,45 @@ public sealed class AreaAiThrowTests
         Assert.AreEqual(0, session.QueryShotsInFlight().Count);
         Assert.IsFalse(session.EndShot(shot));
         Assert.IsTrue(host.TraceOf(npc)!.Throw!.Contains("lands at once", StringComparison.Ordinal));
+    }
+
+    // ---- ARC-DEV-364 (T-h): the grenade step over the host ----
+
+    // The danger setter sets CHECK_GRENADE when a fight starts (SP14, the enter bits): a fight on another critter keeps the setup free of the hero's reaction.
+    private static void SetCheckGrenade(GameSessionOwner session, string npc)
+    {
+        var focus = session.SetDangerState(session.Version, new SessionDangerRequest { Entity = npc, State = DangerState.CombatFocus, Target = SessionCombatant.Critter(Entity(9)) });
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (focus.Disposition, focus.Failure));
+        Assert.IsTrue(session.QueryDanger(npc).Flags.HasFlag(DangerFlags.CheckGrenade), "the fight start set CHECK_GRENADE");
+    }
+
+    [TestMethod]
+    public void The_grenade_step_takes_the_first_generic_item_with_the_grenade_flag_and_starts_the_throw_goal_at_the_target()
+    {
+        var (session, host, npc, _) = Open(grenade: true, grenadeFlags: 0x10 | 0x1);
+        Assert.AreEqual(Entity(2), host.Grenade(npc), "the first generic item holding generic flag 0x10 (TI3)");
+        Assert.IsNull(host.Grenade(AiSchedulerRules.Pc), "the hero's items are not the AI's");
+        Assert.IsTrue(host.HasThrowingPoints(npc), "5 points of throwing");
+        Assert.AreEqual(0, host.BlastRadius(Entity(2)), "no cast host, no spell radius");
+        Assert.IsNull(host.LineOfFireBlocker(npc, AiSchedulerRules.Pc), "no map, no blocker");
+        Assert.AreEqual(0, host.DangerBits(npc).HasFlag(DangerFlags.CheckGrenade) ? 1 : 0);
+
+        // Without CHECK_GRENADE the step does nothing; with it, the step clears the bit and chooses the throw.
+        Assert.AreEqual(AiGrenadeStop.NoCheck, host.Grenade(npc, AiSchedulerRules.Pc).Stop);
+        SetCheckGrenade(session, npc);
+        var result = host.Grenade(npc, AiSchedulerRules.Pc);
+        Assert.AreEqual((AiGrenadeStop.Throw, Entity(2)), (result.Stop, result.Grenade), host.TraceOf(npc)?.Grenade);
+        Assert.IsFalse(host.DangerBits(npc).HasFlag(DangerFlags.CheckGrenade), "one consideration per fight start (SP14)");
+    }
+
+    [TestMethod]
+    public void A_grenade_without_the_flag_or_an_npc_without_throwing_points_is_not_thrown()
+    {
+        var (session, host, npc, _) = Open(grenade: true, grenadeFlags: 0x1);
+        Assert.IsNull(host.Grenade(npc), "a generic item without flag 0x10 is no grenade");
+        SetCheckGrenade(session, npc);
+        Assert.AreEqual(AiGrenadeStop.NoGrenade, host.Grenade(npc, AiSchedulerRules.Pc).Stop);
+        var (_, plain, other, _) = Open();
+        Assert.IsNull(plain.Grenade(other), "a dagger is not a generic item");
     }
 }
