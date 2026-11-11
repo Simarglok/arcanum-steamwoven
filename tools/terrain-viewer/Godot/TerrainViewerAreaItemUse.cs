@@ -170,10 +170,13 @@ public partial class TerrainViewerApp
             else After = () => app.OpenItemAiming(item, facts);
         }
 
-        public void UseTrapDevice(string user, string item, string? target) => Message = "not used: a trap device's use is NOT READY (the device stays; placed devices are slice E6-b)";
+        // ARC-WORLD-124 (E6-b): a device with a slot-1 spell is placed; a script trap (slot 1 empty) stays NOT READY until ARC-WORLD-125.
+        public void UseTrapDevice(string user, string item, string? target) =>
+            Message = app.PlaceTrapDeviceUse(item, target, null) ?? "not used: a script trap device's use is NOT READY (the device stays; ARC-WORLD-125)";
 
         // ARC-DEV-365 (IA12, IA13): the tile forms. A trap device keeps its place in the pack until slice E6-b builds the marker and the delayed run.
-        public void UseTrapDeviceOnTile(string user, string item, SpellLocation tile) => Message = "not used: a trap device's use on a tile is NOT READY (the device stays; placed devices are slice E6-b)";
+        public void UseTrapDeviceOnTile(string user, string item, SpellLocation tile) =>
+            Message = app.PlaceTrapDeviceUse(item, null, tile) ?? "not used: a script trap device's use on a tile is NOT READY (the device stays; ARC-WORLD-125)";
 
         public void UseItemMagicOnTile(string user, string item, SpellLocation tile)
         {

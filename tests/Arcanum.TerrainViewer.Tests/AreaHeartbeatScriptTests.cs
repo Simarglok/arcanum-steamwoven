@@ -506,6 +506,37 @@ public sealed class AreaHeartbeatScriptTests
     }
 
     [TestMethod]
+    public void A_use_script_runs_for_any_object_with_any_triggerer_and_only_with_a_script_at_the_use_point()
+    {
+        // ARC-MAGIC-048 (E4-c, CN6, CN7): the Use component's call runs the point-1 script of an object of the shown map (an NPC 16, a door 3 and scenery 2 here) with the object itself as the triggerer, or with none, or with another
+        // object; an object with no script at the use point (script 0, a heartbeat slot only) or not a row of the shown map has none and no run. The answer is the run's own: skip default, run default, off the end.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var skips = Row(1, 16, 801, point: ScrPoint.Use);
+            var allows = Row(2, 16, 802, point: ScrPoint.Use);
+            var door = Row(3, 3, 801, point: ScrPoint.Use);
+            var scenery = Row(4, 2, 802, point: ScrPoint.Use);
+            var falls = Row(5, 16, 803, point: ScrPoint.Use);
+            var none = Row(6, 16, 0, point: ScrPoint.Use);
+            var other = Row(7, 16, 801); // a script at the heartbeat point only
+            var host = Host(session, content, null, skips, allows, door, scenery, falls, none, other);
+            var rules = session.Rules.Scripts;
+            AreaScriptedUse Use(AreaObjectRecord row, ScrObjectRef? by) => host.RunUseScript(AreaUseScriptHost.EntityId(row), by, by, rules);
+            Assert.AreEqual(ScrOutcome.SkipDefault, Use(skips, Ref(1)).Run!.Outcome, "the object as its own triggerer");
+            Assert.AreEqual(ScrOutcome.SkipDefault, Use(skips, null).Run!.Outcome, "no triggerer");
+            Assert.AreEqual(ScrOutcome.SkipDefault, Use(skips, Ref(2)).Run!.Outcome, "another object as the triggerer");
+            Assert.AreEqual(ScrOutcome.RunDefault, Use(allows, Ref(2)).Run!.Outcome);
+            Assert.AreEqual(ScrOutcome.SkipDefault, Use(door, Ref(3)).Run!.Outcome, "a door's script runs too");
+            Assert.AreEqual(ScrOutcome.RunDefault, Use(scenery, Ref(4)).Run!.Outcome, "scenery's script runs too");
+            Assert.AreEqual(ScrOutcome.SkipDefault, Use(falls, Ref(5)).Run!.Outcome, "a script that ends without a return skips the default");
+            Assert.IsNull(Use(none, Ref(6)).Run, "script 0");
+            Assert.IsNull(Use(other, Ref(7)).Run, "no slot at the use point");
+            Assert.IsNull(host.RunUseScript("oid:nobody", null, null, rules).Run, "not a row of the shown map");
+        });
+    }
+
+    [TestMethod]
     public void An_examine_script_leaves_an_object_without_a_description_only_when_it_skips_the_default()
     {
         // ARC-DEV-326 (B18, HK22): the examine point 0 runs for any object type (an NPC 16, a door 3 and scenery 2 here) with the hero as the triggerer; skip default

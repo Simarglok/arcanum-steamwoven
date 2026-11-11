@@ -57,7 +57,7 @@ it blocking in one step and read its result; this satisfies the one-minute rule.
 A failed start adds `start check: REASON` under the `FAIL` line on stdout, before the log lines. Fix the command and run
 it again; a failed start is never a result of the change under test.
 
-- **Start lines.** Each log line is checked in order (a line rewritten with `\r` counts as a line). For `window`, `headless` and `export` runs: the viewer's `ARC-DEV-059 viewer start mode=M map=NAME main-menu=B smoke=B`
+- **Start lines.** Each log line is checked in order (a line rewritten with `\r` counts as a line). For `window`, `headless`, `export` and `quick` runs: the viewer's `ARC-DEV-059 viewer start mode=M map=NAME main-menu=B smoke=B`
   (printed when its arguments resolved a mode; check that `M`, `NAME` and `smoke` are the intended ones, since a viewer
   that did not get its arguments starts from the launcher settings instead), `ARC-RENDER-004 load stage=begin` (a build
   from before ARC-DEV-059), the self-test's first `ARC-DEV-043 self-test stage`, the phase lines of the export
@@ -99,24 +99,41 @@ Known pitfalls:
 The viewer's smokes on the original data run through one shared runner; do not write a scratch smoke script (the queue
 history held about 500 runs of such copies of one template).
 
-    ./arcanum smoke pr [--stages S,...] [--map NAME] [--hero H] [--sector X,Y] [--main-menu] [--env NAME=VALUE] [--crash-site]
-    ./arcanum smoke full                       # the full map smoke chain
-    ./arcanum smoke map NAME [--stages S,...] [--hero H] [--sector X,Y] [--main-menu] [--env NAME=VALUE]
+    ./arcanum smoke pr [--stages S,...] [--map NAME] [--hero H] [--sector X,Y] [--main-menu] [--env NAME=VALUE] [--all] [--crash-site]
+    ./arcanum smoke pr --auto [--base REF]     # the zones the diff against origin/main selects (ARC-DEV-396)
+    ./arcanum smoke pr --zones core,walk,...   # named zones: core, walk, container-click, crash-site, census, complete
+    ./arcanum smoke full                       # the full map smoke chain (the batteries)
+    ./arcanum smoke complete                   # the nightly run: the chain, then every stage
+    # pr and complete also take --retry / --no-retry (default: off for pr, on for complete)
+    ./arcanum smoke map NAME [--stages S,...] [--hero H] [--sector X,Y] [--main-menu] [--env NAME=VALUE] [--all]
     ./arcanum smoke crash-site [--hero H] [--env NAME=VALUE]   # the Crash Site smoke alone
     ./arcanum smoke self-test [--headless] [--env NAME=VALUE]  # the viewer's synthetic --self-test
-    # each also takes --no-build, --keep-settings and --dry-run
+    # each also takes --no-build, --keep-settings and --dry-run; pr and map also --no-config-check
 
 - **Click and walk changes** ([smoke scope](tasks.md#smoke-scope), ARC-DEV-239). A PR that changes click or walk handling
   always runs `./arcanum smoke pr --stages map` and `./arcanum smoke self-test` (both, every such PR).
+- **Sampled stages (ARC-DEV-395, owner decision 2026-11-11).** `container-click` and `walk` took 675 s and 525 s of the
+  one Godot slot in that report (600 s and 363 s on an idle Mac when re-measured here) ([smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md)), so by default they check a
+  sample; `--all` (on `pr` and `map`, with a run of one of them by `--stages` or its zone; it sets the viewer's `ARC_SMOKE_ALL=1`) runs the
+  full stage; the nightly `complete` run and `--zones complete` always run both in full. `container-click` clicks at most 8 containers of the window, spread over the (prototype, admitted open
+  outcome) groups, the group of admitted rubbish bins and a locked container first (so at least one bin, and every bin only with `--all`) (`ARC-DEV-395 container-click SAMPLE n of N` names them); `walk` plans and walks the
+  route to a goal about 10 window moves from the start (the full route has 71) instead of to the town sector. What the sample no longer proves: for
+  `container-click`, the click path of the containers left out (a pick lost behind another object or a roof, a wrong
+  hover, a refused or locked answer of that container) and the "every rubbish bin opens" rule over the whole window (it
+  holds for the sampled bins); for `walk`, the walk's tail (the 60 or so window moves after the tenth, the arrival at
+  the town, the planner on the full 88-sector route). Run `--all` when a change touches picking, containers or the click
+  path (`container-click`), or the route planner, the follower, the window loader or the far end of the route (`walk`),
+  and before reporting a stage that failed as sampled as fixed. The sampled run reads the same zones: `--auto` selects the `walk` and `container-click` zones as before and they run as a sample unless `--all`.
 - **Scope** ([smoke scope](tasks.md#smoke-scope)). `pr` is the per-PR run: only the stages the change touches or is
   directly related to (`--stages`, the viewer's `ARC_AREA_MAP_SMOKE_ONLY` names; checked against its
-  `MapSmokeStageNames` before anything waits for the queue) on `--map` (default `Arcanum1-024-fixed`, opened at the
-  Crash Site, or at `--sector`), with the Crash Site smoke first only when the change is related to it
-  (`--crash-site`); with neither it refuses (nothing to run). `full` is the chain of the daily package build
-  (`./arcanum daily`, [daily package build](packaging.md#daily-package-build-arc-dev-062), when main changed since the last package): the Crash Site smoke, then the whole map battery (no stage list) on the main map with
+  `MapSmokeStageNames` before anything waits for the queue) on `--map` and `--sector` when given, else on the
+  configuration each stage needs (stage configurations below; most run on
+  `Arcanum1-024-fixed` opened at the Crash Site), with the Crash Site smoke first only when the change is related to it
+  (`--crash-site`); with neither it refuses (nothing to run). `full` is the chain of batteries: the Crash Site smoke, then the whole map battery (no stage list) on the main map with
   `--hero human-male` at the Crash Site, at the town sector (1409, 1314) and at the generated wilderness sector
   (1384, 239), and on `elven ruins` with `--hero elf-female` (the elf-male's boomerang cannot break a container for
-  the junk pile stage).
+  the junk pile stage). The daily package build (`./arcanum daily`, [daily package build](packaging.md#daily-package-build-arc-dev-062),
+  when main changed since the last package) runs `complete`: that chain, then every stage ([smoke zones](#smoke-runner-arc-dev-061)).
 - **Stage order matters (ARC-DEV-394).** The stages of one process run in the viewer's order, and a stage can leave the world's test
   time set (`RestoreWorldTestTime` keeps it at the session's time when that is ahead of the wall clock); while it is set,
   `ProcessWorld` returns early in a native smoke, so the frame never reaches `ProcessAreaAi`, and a later stage that waits for frames
@@ -135,11 +152,73 @@ history held about 500 runs of such copies of one template).
   `container`, `junk`, `barter`, `life`, `floaters`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`) gets
   the full chain's hero of that map (`elf-female` on `elven ruins`), else `--hero human-male`, when no `--hero` is
   given, and says so (`SMOKE hero human-male (auto): ...`); with
-  `--main-menu` (no hero) it is refused, as is a menu stage (`menu`, `scene`, `options`, `bar`, `death`, `perf-menu`) without
-  `--main-menu`. The stages the viewer runs only without `map` (`barter`, `menu`, `scene`, `options`, `plants`, `bar`,
+  `--main-menu` (no hero) it is refused. A menu stage (`menu`, `scene`, `options`, `bar`, `death`, `perf-menu`) needs no
+  `--main-menu`: it gets its own menu process. The stages the viewer runs only without `map` (`barter`, `menu`, `scene`, `options`, `plants`, `bar`,
   `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-tile`, `tile-ghost`, `container-click`, `fire-order`, `indoor-fade`, `npc-shot`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `placement-census`, `spell-end`, `hold-hero`, `movement`, `spirit-talk`, `created-scenery`, `worn-light`, `critter-light`, `summon-flash`, `summon-wall`, `tech-craft`, `item-aim`, `perf`, `perf-menu`) get a run of their
   own (step `stages-alone`, or `map-alone`) when `map` is in the list too. `tech-craft` (ARC-DEV-362, technology audit slice T-a) needs the bullets the map's bodies hold, so it runs on the cave: `./arcanum smoke map "crash site cave" --stages tech-craft` (on a map with no bullets of the crafted gun's type it fails with that message; its steps are the helpers of `TerrainViewerTechCraftHarness.cs`). `item-aim` (ARC-DEV-365, technology audit slice T-g) opens the item cursor with a script trap device from the use icon and presses a tile (goal 41) and an NPC (goal 39); it needs a hero and a map with a living NPC. A run whose stages include `debug-travel`, `follower-far` or `inv-carry`
   starts the viewer with `--debug-mode` (the stage needs the debug mode, ARC-DEV-050; ARC-WORLD-120).
+- **Stage configurations and grouping (ARC-DEV-391).** A viewer process fixes its map, start sector, hero, main menu and
+  debug mode at launch, so only stages with the same configuration share a process. `STAGE_NEEDS` in
+  `tools/local_dev/smoke.py` is the one table that says which configuration each of the viewer's stages runs in (default
+  map and sector; whether another map or sector fails it, so `only_map`/`only_sector`; main menu, debug mode; a process of
+  its own; portable). `--stages` reads it: with no `--map`, `--sector` or `--main-menu` each stage gets its own
+  configuration, the stages are grouped into the fewest processes (one per configuration, in order of first appearance;
+  the step is named `stages-main`, `stages-wild`, `stages-town`, `stages-shrine`, `stages-crash-site-cave` ... when there
+  are several, `stages` when there is one), a *portable* stage (`map`, `resources`, `report`, `knockdown`, `inv-arrange`,
+  `created-*`, `summon-*`, `item-aim`) rides in a process that already exists on its map (else it gets one), and the stages that end a game, move
+  the window, leave state behind or run long (the menu family, `walk`, `census`, `container-click`, `perf`,
+  `dead-window`, `critter-fall`, `tech-craft`, `debug-travel`, `follower-far`, `inv-carry`) each get a process of
+  their own (`stages-main-walk`). `--map`, `--sector` and `--main-menu` pin that dimension for every stage; a pinned
+  value a stage cannot pass in is refused before anything waits for the queue (`stage plants does not run at --sector
+  1452,1291: it needs map ... at sector 1384,239`), and so is `--main-menu` with a stage that needs a hero or a session.
+  `--no-config-check` runs the request as given (the grouping stays). The table holds only what is known: where a stage
+  was only seen to pass in one place its default is that place and another one is not refused. `inv-carry` and
+  `critter-light` have no configuration seen to pass yet (the diagnosis saw `NONE` at the Crash Site and in the town). A new stage needs a row
+  (the tests fail without one); the zones below are built on this table.
+- **Smoke zones (ARC-DEV-396).** Option A of the [smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md#zone-options),
+  in `tools/local_dev/smoke_zones.py`. A zone is a set of stages a change can break together: `core` is every cheap stage (every
+  stage no heavy zone holds, so a stage the viewer gains lands there until a heavy zone claims it; grouped by configuration into
+  about twenty processes at this base), and the heavy zones are `walk` (the stage `walk`, about 1 minute as a sample, about 6 with `--all`), `container-click`
+  (the stage of that name, about 2 minutes as a sample, about 10 with `--all`), `crash-site` (the Crash Site smoke, not a stage) and `census` (the stage `census`).
+  `--zones core,walk` runs those; `complete` stands for all of them and runs what `./arcanum smoke complete` runs: the Crash Site
+  smoke and the batteries of `full`, then every stage but `map` and `resources` (the batteries vouch for those) grouped as
+  usual, the heavy stages last. That is what `./arcanum daily` runs, so the daily run now checks every stage the viewer accepts
+  (before, 15 of 76), and a stage that fails on main (see the known failures) blocks the day's packages as any failure does.
+  `--zones` and `--stages` combine (the union); `--map`, `--hero`, `--sector`, `--main-menu` and `--env` go with `--stages` only: with zones
+  chosen they apply to the `--stages` group (its own step `stages`) and the zones' stages keep their configurations (step `zones-...`);
+  without `--stages`, or with `complete`, they are refused. The batteries of `complete` vouch only for `map` and `resources`, so the
+  other stages they also run (`cast`, `ranged`, ...) run again in their groups.
+  **`--retry`** (ARC-DEV-396; default on for `complete` and for the zone `complete`, off for other `pr` runs; not after a viewer that did not start, exit 125): a viewer process ends at its first failing stage, so the
+  stages after it never ran, and a stage can fail only because of what the stages before it left behind (the 2026-11-11 daily run:
+  `ai-cast` and `npc-door` failed in their groups and passed alone). With `--retry`, a failed stage process is followed by one
+  process per unfinished stage (steps `STEP-retry-STAGE`; the failing stage included); the summary says `passes alone, so it fails
+  only after the other stages of STEP` or `fails alone too`. The failed step stays failed (the exit code and the daily gate do not
+  change); the retries only add what ran, so no stage goes unchecked behind a failure and an order-dependent stage is named.
+  **`--auto`** reads the diff: the merge base with `--base` (default `origin/main`; fetch first) to the working tree, untracked
+  files included, and picks the zones by the table `TRIGGERS` (all matching rows of a path, as a union; a "no smoke" row such as `tests/` or
+  `experiments/` beats the generic project-file rows `*.csproj`, `*.sln`, `*.props`, `*.tscn` and the lock files): ordinary game and
+  viewer code (`src/Arcanum.Simulation|Session|World|Scripting|Input`, `tools/terrain-viewer`) selects `core`, the files of a
+  heavy zone add that zone (route, movement, residency, window load and hero walk files: `walk`; picking, hover, roofs, locks and
+  container loot: `container-click`; the Crash Site profile, transitions, portals and area start: `crash-site`; the census stage
+  and the map row readers: `census`), a file of the shared data readers, the presentation, the save schema (`GameSaveLibrary`,
+  `GameSessionSnapshot*`), the render and shared UI files or a project, package or build file selects `complete`, and so does a
+  file no row names (a missing row is a safe miss, never a silent skip). A file no smoke can cover (documents, unit tests, research,
+  HD, oracle and inspect tools, the launcher tooling but the runner itself, the HD review viewer) selects nothing; a diff of
+  such files prints `no smoke zone covers this diff` and the run passes without building anything. The viewer's start and stage
+  dispatch file and its stage list file also hold shared logic, so for them a change to a line that is more than a stage's
+  registration adds `complete` or `walk`. `--auto` prints each zone with the files that chose it (the three first), the PR report
+  names the zones (the last line `SMOKE zones: ...`), `--crash-site` and `--stages` add to them, and `--dry-run` shows the
+  plan. A click or walk change still runs `--stages map` and `smoke self-test` as before (`core` holds `map`; the self-test is its
+  own target). A new heavy stage or a new path gets a row in `TRIGGERS` in the same PR (the tests check that every row matches a
+  tracked file and that every stage is in exactly one zone).
+- **Known failures on main (ARC-DEV-391).** `tools/local_dev/smoke_known_failures.json` lists failures seen on clean
+  `origin/main`: the stage (or `crash-site`), a regex for the line its log holds, the owning task (`ARC-TYPE-NNN` or
+  `unassigned`) and the day. A failed step whose requested stage did not pass and whose log holds that line is reported
+  `known on main, not this PR` (with the task), and the summary adds `only known failures on main` when every missing stage is
+  listed; the step and the run still fail and the exit code is the same, so the PR report names the stage as a known
+  failure and goes on ([smoke scope](tasks.md#smoke-scope)). A failure with another line, or another stage failing beside
+  it, is not hidden. Add an entry only for a failure seen on clean main with its exact log line, and delete it in the PR
+  that fixes the failure.
 - **Targets of the combat stages (ARC-DEV-089).** The stages that fight an NPC (`attack` in `map`, `cast`, `turn-based`, `ai`) do not take the
   map's weakest NPC blindly: they take the first one (weakest first, at most 24 tried) the hero can stand next to and, with the hero placed there,
   see (`AreaSmokeFightableStartAsync`: a roof-covered or walled-in NPC is skipped), and print `NO-TARGET` when none is, which the battery tolerates (so a regression that hides every target shows only in a `--stages` run, which reports the stage as not run; a limit). A stage
@@ -150,9 +229,9 @@ history held about 500 runs of such copies of one template).
   it needs the pinned Crash Site inputs that `./arcanum setup` recorded.
 - **Steps.** Each step is its own quiet run of the [launch queue](#launch-queue-arc-dev-033) from this checkout: the
   viewer build (`dotnet restore` and `build` of `tools/terrain-viewer/Godot/Arcanum.TerrainViewer.sln`, kind
-  `dotnet`; `--no-build` skips it when the checkout's viewer is already built), a project import (kind `headless`)
+  `dotnet`; `--no-build` skips it when the checkout's viewer is already built), a project import (kind `quick`, beside the Godot slot)
   when the project was never imported (no `.godot` folder), then each smoke as a `window` run (the self-test with
-  `--headless` as a `headless` run). The viewer arguments come from the launcher configuration
+  `--headless` as a `quick` run). The viewer arguments come from the launcher configuration
   (`launch.map_arguments`, `launch.terrain_arguments`), as for `./arcanum map`.
 - **Start check.** A smoke's start line is the viewer's `ARC-DEV-059 viewer start mode=area map=NAME
   main-menu=B smoke=True` with the intended map (`-` for the Crash Site smoke) given as `--expect`
@@ -181,7 +260,8 @@ Measured speed of the smoke runner, the queue and each stage, and the options fo
 
 Tests: `python3 -B -m unittest tools.local_dev.test_smoke` (the stage names from the viewer, the per-PR and full plans,
 the settings folders and dropped variables, the start lines, the chain going on after a failure and ending on a failed
-build or a stopped run, the launcher command).
+build or a stopped run, the stage table, the grouping and the early error, the known failures file, the launcher command) and
+`tools.local_dev.test_smoke_zones` (the zone table, the trigger rows, the selection from a diff, the zone and complete plans).
 
 ## Timing probe and the `perf` stages (ARC-DEV-367)
 
@@ -218,6 +298,12 @@ a budget or a regression gate. Other optimisations are shown with it: run before
   The load worker's read prints `load.worker.read.{strict,scene,copy}` spans and `ARC-DEV-375 visuals ...` / `ARC-DEV-375 frames resident-hits=H read=R ...` lines
   (hits against frames actually read, the store's size). `ARC_AREA_RESIDENT=0` in the environment (`--env ARC_AREA_RESIDENT=0` on a smoke) turns both stores off
   for a before/after comparison; nothing else depends on it. The editor `.mob` facts (ARC-DEV-388) have their own store, off with `ARC_AREA_RESIDENT_EDITOR=0` or `ARC_AREA_RESIDENT=0`, and the worker prints `ARC-DEV-388 editor-records served=B ms=T ...`.
+- **Map transitions kept on the device (ARC-DEV-392).** The map's transitions and the map list's destinations are written to `map-cache/` in the device's
+  Steamwoven folder (`~/Library/Application Support/Arcanum Steamwoven Game/map-cache/` on a Mac; not `user://`, which every smoke replaces with a temporary
+  folder), so the next process, above all the next smoke run, skips the 1.8 s read ([design](../world/area-loader.md#map-transitions-kept-on-the-device-arc-dev-392)).
+  The viewer's start line `ARC-DEV-392 map-cache folder=...` names the folder, and the load's `ARC-WORLD-031 load stage=transitions` line says `source=memory|device|content|content+stored`.
+  `ARC_MAP_CACHE=0` (`--env ARC_MAP_CACHE=0` on a smoke) turns only this store off, `ARC_AREA_RESIDENT=0` turns it off with the resident stores, `ARC_MAP_CACHE_DIR=<folder>`
+  names another folder; a smoke drops the owner's `ARC_*` variables, so pass them with `--env`. Deleting the folder only costs one read; at most 96 files are kept.
 - **Reading the numbers.** The Mac is shared and a Debug source run is slower than the packaged build: the diagnosis took medians
   over several runs and looked at the load average. A packaged build needs the probe's switch in the environment (`ARC_PERF_PROBE=1`);
   HD runs need `ARC_HD_PACK` and settings files as the diagnosis's reproduction says.
@@ -242,24 +328,27 @@ background binders at once, the ground bodies, every window's art). The viewer's
 ## Launch queue (ARC-DEV-033)
 
 Several threads work on the owner's Mac at once. Every Godot run, every export and every `dotnet` build or test goes
-through one first-in, first-out queue, so Godot windows never open over each other, timing-sensitive runs are not
-starved, and an export gets a quiet Mac in its turn instead of waiting for one. It replaces the earlier
-`lockf /tmp/arcanum-godot-window.lock` rule, which was not first-in, first-out and covered windows only.
+through one queue, so Godot windows never open over each other, timing-sensitive runs are not
+starved, and an export gets a quiet Mac in its turn instead of waiting for one. Runs are ordered by arrival and their
+declared length ([order](#queue-order-arc-dev-390)): a short run is not stuck behind a long one that arrived a little
+before it. It replaces the earlier
+`lockf /tmp/arcanum-godot-window.lock` rule, which was not a queue and covered windows only.
 
-    ./arcanum run --kind window|headless|export|dotnet [--timeout MIN] [--label TEXT] [--expect REGEX] [--start-within SEC] [--verbose] -- COMMAND [ARGS...]
+    ./arcanum run --kind window|headless|export|dotnet|quick [--estimate SEC] [--timeout MIN] [--label TEXT] [--expect REGEX] [--start-within SEC] [--verbose] -- COMMAND [ARGS...]
     ./arcanum queue                 # the runs holding a place, then the waiters in order
     ./arcanum queue --history N     # the last N finished runs: waited, ran, exit
 
 | Kind | Use it for | Rule | Default limit |
 |---|---|---|---|
-| `window` | any Godot run with a window: native smokes, the viewer self-test, labs | the single Godot slot, in arrival order | 30 min |
-| `headless` | `Godot --headless`, a project import | the same Godot slot | 30 min |
+| `window` | any Godot run with a window: native smokes, the viewer self-test, labs | the single Godot slot, in [queue order](#queue-order-arc-dev-390) | 30 min |
+| `headless` | `Godot --headless` that runs for a while (a lab, a long probe) | the same Godot slot | 30 min |
+| `quick` (ARC-DEV-390) | a Godot run with no window that ends in seconds: a project `--import`, the headless viewer self-test (`./arcanum smoke` uses it for both) | two quick places beside the Godot slot (it neither waits for nor holds the slot), one at a time per checkout; waits for an export that is running or next | 30 min |
 | `export` | an export endpoint (`tools/arcanum-local ... export`, the validation commands that export) | the Godot slot; when it is next, new `dotnet` runs wait and running ones finish, then it runs alone | 180 min |
 | `dotnet` | `dotnet restore/build/test`; give the root checks as one command (`sh -c '... && ... && ...'`) | two dotnet places (waits for a free one, [limits](#dotnet-memory-limits-arc-dev-300)); runs alongside Godot runs; waits for an export that is running or next | 45 min |
 
-- **Order and gaps.** Places are numbered as runs arrive; a waiter checks the queue every 0.25 s, so the next run
-  starts within that of the previous one ending. An export has no priority: it waits for its turn like any run, and
-  its turn always comes. Other commands (git, Python self-tests, reading logs) are not queued.
+- **Order and gaps.** Places are numbered as runs arrive and ordered as [described below](#queue-order-arc-dev-390); a
+  waiter checks the queue every 0.25 s, so the next run starts within that of the previous one ending. An export has
+  no priority: it waits for its turn like any run, and its turn always comes. Other commands (git, Python self-tests, reading logs) are not queued.
 - **Start check.** The wrapper prints `ARCANUM_QUEUE queued ticket=N kind=K ahead=A waiting-for=#M ...` while it waits
   (again when its position changes), `ARCANUM_QUEUE start ticket=N kind=K waited=Ss` when the command starts, and
   `ARCANUM_QUEUE end ticket=N exit=E ran=Ss` at the end, on stderr; a [quiet](#quiet-output-arc-dev-037) run also
@@ -281,8 +370,8 @@ starved, and an export gets a quiet Mac in its turn instead of waiting for one. 
   blocks the queue. Process start times are compared in the C locale and UTC, so lanes with different locales agree;
   when `ps` cannot answer, the run counts as alive. Never delete ticket files by hand; `history.jsonl` there records every run.
 - **Nesting.** A queued command that calls `./arcanum run` again (or `./arcanum area|world|map`) runs inside its
-  parent's place when that place covers it: an export covers every kind, a `window` or `headless` run covers Godot
-  and `dotnet` runs, a `dotnet` run covers `dotnet` runs. Any other nesting (an export inside a Godot run, a Godot
+  parent's place when that place covers it: an export covers every kind, a `window` or `headless` run covers Godot,
+  `quick` and `dotnet` runs, a `quick` run covers `quick` runs, a `dotnet` run covers `dotnet` runs. Any other nesting (an export inside a Godot run, a Godot
   run inside a `dotnet` run) would wait for its own parent and is refused: queue it on its own.
 - **The owner's viewer.** `./arcanum area`, `world` and `map` take the Godot slot first in line (after the run holding
   it), with no time limit, and keep it until the viewer window closes; the command stays in the terminal until then.
@@ -291,8 +380,41 @@ starved, and an export gets a quiet Mac in its turn instead of waiting for one. 
 - **Lanes still on lockf.** While some threads still use the lockf rule, a run holding the Godot slot also takes
   `/tmp/arcanum-godot-window.lock`, so the two never overlap (a queued run then prints that it waits for a lockf user).
 
-Tests: `python3 -B -m unittest tools.local_dev.test_run_queue` (order, gaps, export quiet, crashed and killed runs,
-limits, lockf, nesting, locales); they use their own `ARCANUM_LOCAL_HOME` and lock file.
+Tests: `python3 -B -m unittest tools.local_dev.test_run_queue` (arrival and length order, quick runs, gaps, export
+quiet, crashed and killed runs, limits, lockf, nesting, locales); they use their own `ARCANUM_LOCAL_HOME` and lock file.
+
+### Queue order (ARC-DEV-390)
+
+[Smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md) measured 3/4 of a smoke call's time as waiting
+for the single Godot slot behind a few runs of 5 to 11 minutes (`walk`, `container-click`); a first-come first-served
+queue is the worst order for such a mix, and a project import waited for a window run to start 2.5 s of work.
+
+- **Declared length.** Every run carries an estimate in seconds: `--estimate SEC` on `./arcanum run`, or the kind's default
+  (`window` 60, `headless` 60, `export` 300, `dotnet` 60, `quick` 15) when none is given. `./arcanum smoke` declares its
+  own per step (`smoke.estimate`: a viewer run is about 20 s plus 3 s per stage, the whole map battery 60 s, the Crash
+  Site smoke 110 s, `walk` 540 s, `container-click` 700 s, `census` 900 s as an assumption). The estimate only orders
+  the queue; it is not a limit (`--timeout` is) and a wrong one costs its run a different place, nothing else.
+- **Order.** The key of a waiting run is its arrival time plus 3 times its estimate (`ORDER_WEIGHT`); the lowest key goes
+  first, equal keys by number, and the owner's own viewer launches stay first of all. A 20 s run that arrives within
+  about 30 minutes of a 10 minute run therefore starts before it, runs with equal estimates keep the arrival order, and
+  no run is passed by a run that arrives more than 3 of its estimates after it, so none starves. The key is fixed when
+  the run is queued, so every waiter computes the same order. `./arcanum queue` lists the waiters in this order.
+- **Quick runs.** The project import of a new checkout and `./arcanum smoke self-test --headless` are `quick`: Godot
+  without a window that ends in seconds, on its own checkout's project folder, so it runs beside the Godot slot (up to
+  two at once) instead of waiting for it; a `window` or `headless` run of another checkout does not wait for a quick one,
+  and an export does. Two sessions in one checkout still never open its project folder at once (the checkout is the folder
+  holding `.git` above the one the run was queued from): a quick run waits for a running or earlier queued Godot or quick
+  run of the same checkout and, held back so, takes no quick place from another checkout's run; a Godot run waits for a
+  running or earlier queued quick run of its checkout. `quick` is for a command that is itself one Godot run: a
+  `./arcanum run` inside a quick run is refused (it would wait for its own parent).
+- **Old wrappers.** Another checkout that has not merged ARC-DEV-390 yet queues tickets without an estimate and waits by
+  number only; while any such ticket waits, every wrapper orders by number too (the old rule), so an old and a new waiter
+  can never wait for each other, and the order by length returns when none is queued. An old wrapper ignores `quick` runs
+  (an old export may start while a 3 to 12 s quick run of another checkout ends); merge main before queueing.
+- **Replay.** The 4,971 runs of 2026-11-07 to 11 replayed on one slot: first come first served 142 s mean wait (62
+  person-hours in all); this order with the declared lengths about 83 s (about 38 hours), open-loop, so a
+  projection; the long runs wait longer (a 10 minute run about 100 s more on average). `history.jsonl` now records each
+  run's `estimateSeconds`.
 
 ### dotnet memory limits (ARC-DEV-300)
 

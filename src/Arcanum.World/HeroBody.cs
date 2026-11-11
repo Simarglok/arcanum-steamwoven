@@ -22,8 +22,19 @@ namespace Arcanum.World;
 /// <param name="Weapon">The art id's weapon part (bits 0..3, 0..14): 0 out of combat mode; in it the wielded weapon's use-art subtype, 1
 /// bare-handed (<see cref="Armed"/>, ARC-RENDER-037, ledger WA1).</param>
 /// <param name="Shield">The art id's shield bit (19): 1 in combat mode with a shield worn (WA1).</param>
-public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int Palette = 0, int Weapon = 0, int Shield = 0)
+/// <param name="MonsterSpecies">ARC-MAGIC-052: the monster species (art id bits 23..27, 0..31) the Trait component put on the hero (Polymorph, the body spells), or -1 for the hero's own body; the body is then a
+/// monster art (class 12) of that species and <see cref="Palette"/>, and the human fields are unused (<see cref="Monster"/>).</param>
+public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int Palette = 0, int Weapon = 0, int Shield = 0, int MonsterSpecies = -1)
 {
+    /// <summary>ARC-MAGIC-052: whether this is a monster body (the hero polymorphed by a Trait component).</summary>
+    public bool IsMonster => MonsterSpecies >= 0;
+
+    /// <summary>ARC-MAGIC-052 (ledger TR4): the monster body of a species (0..31) and palette (0..3): no armour, shield or weapon part.</summary>
+    public static HeroBody Monster(int species, int palette) => new(0, 0, 0, palette, 0, 0, species);
+
+    /// <summary>ARC-MAGIC-052: the art id of this monster body for an animation: class 12, the species, the animation and the palette (no armour, shield, weapon, rotation or frame).</summary>
+    public uint MonsterSelector(int animation) => (12u << 28) | ((uint)MonsterSpecies << 23) | ((uint)animation << 6) | ((uint)Palette << 4);
+
     private static readonly string[] BodyCodes = ["HM", "DF", "GH", "HG", "EF"];
     private static readonly string[] ArmorCodes = ["UW", "V1", "LA", "CM", "PM", "RB", "PC", "BN", "CD"];
     private const string WeaponCodes = "ABCDEFGHIJKXYNZ";
@@ -80,7 +91,7 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
 
     /// <summary>The folder and file prefix of this body's critter ART (for example <c>EFM</c>). Plate armour (4, 6) has one
     /// sexless art per body and none for the elf or halfling body, which take the human and dwarf ones (rule N1).</summary>
-    public string Label => Armor is 4 or 6 ? BodyCodes[Body switch { 4 => 0, 2 => 1, _ => Body }] + "X" : BodyCodes[Body] + (Gender == 0 ? "F" : "M");
+    public string Label => IsMonster ? $"monster{MonsterSpecies}" : Armor is 4 or 6 ? BodyCodes[Body switch { 4 => 0, 2 => 1, _ => Body }] + "X" : BodyCodes[Body] + (Gender == 0 ? "F" : "M");
 
     /// <summary>Dwarf and halfling bodies add 4 to every walk and run frame rate (research L6; the rate 0x437990 asks the art id's
     /// body, 0x503EA0, for 1 or 2).</summary>

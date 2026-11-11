@@ -84,6 +84,19 @@ public sealed class AreaCreationEditor : IDisposable
         return press;
     }
 
+    /// <summary>
+    /// ARC-MAGIC-043: + (<paramref name="spend"/>) or − of a technological discipline's degree on the tech page: the pool's technology
+    /// lane on the draft (the original's degree page of the same editor, CM8; refused below the snapshot the editor opened on, TC10),
+    /// recorded when it changed the character. The caller words the result (<c>AreaTechPage</c>).
+    /// </summary>
+    public SessionPointResult PressTech(int discipline, bool spend)
+    {
+        var result = spend ? Draft.SpendHeroPoint(Draft.Version, AdvancementTrack.TechDiscipline, discipline)
+            : Draft.RefundHeroPoint(Draft.Version, AdvancementTrack.TechDiscipline, discipline, AreaSkillsPage.RefundClick);
+        if (result.Disposition == GameSessionDisposition.Changed) Creation.Record(new(AdvancementTrack.TechDiscipline, discipline, spend));
+        return result;
+    }
+
     public void Dispose()
     {
         if (Disposed) return;

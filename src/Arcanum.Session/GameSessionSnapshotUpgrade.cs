@@ -525,6 +525,22 @@ public static partial class GameSessionSnapshotCodec
                 AddField(row, $"$.spells.objectFlags[{i}]", "objectCleared", 0);
             }
         },
+        // ARC-MAGIC-040 (schema 89): the spells section gains the monster bodies of the Trait component. No older build kept any, so the step adds the empty list. The spells section the
+        // older schema carried must be there and an object.
+        [88] = root => AddField(Section(root, "spells"), "$.spells", "traitArt", new JsonArray()),
+        // ARC-MAGIC-047 (schema 90): each written-flags row of the spells section gains the second critter flags and the blit flags change (the Trait component's elemental flags, MG10). No older
+        // build wrote one, so the step adds the four words as 0 to every row. The spells section and its rows the older schema carried must be there.
+        [89] = root =>
+        {
+            var spells = Section(root, "spells");
+            if (!spells.TryGetPropertyValue("objectFlags", out var rows)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.spells.objectFlags");
+            if (rows is not JsonArray array) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.spells.objectFlags");
+            for (var i = 0; i < array.Count; i++)
+            {
+                if (array[i] is not JsonObject row) throw new DecodeException(SnapshotDecodeFailure.WrongType, $"$.spells.objectFlags[{i}]");
+                foreach (var name in new[] { "critter2Set", "critter2Cleared", "blitSet", "blitCleared" }) AddField(row, $"$.spells.objectFlags[{i}]", name, 0);
+            }
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

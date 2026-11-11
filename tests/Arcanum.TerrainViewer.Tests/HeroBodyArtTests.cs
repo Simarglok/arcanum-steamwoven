@@ -138,6 +138,33 @@ public sealed class HeroBodyArtTests
         Assert.AreEqual(1u, man.Selector(human.Attack.Selector) & 15u);
     }
 
+    // ARC-MAGIC-052 (TR4): the monster body of the hero is the art id the Trait component builds: class 12, the species, the animation, the palette.
+    [TestMethod]
+    public void TheMonsterBodyIsAClassTwelveArtIdOfTheSpeciesAndPalette()
+    {
+        var sheep = HeroBody.Monster(20, 1);
+        Assert.IsTrue(sheep.IsMonster);
+        Assert.IsFalse(HeroBody.HumanFemale.IsMonster);
+        Assert.AreEqual("monster20", sheep.Label);
+        Assert.AreEqual(0xCA000010u, sheep.MonsterSelector(0));
+        Assert.AreEqual(0xCA000050u, sheep.MonsterSelector(1));
+        Assert.AreEqual(0xCA000190u, sheep.MonsterSelector(6));
+        Assert.AreEqual(0xCF8000B0u, HeroBody.Monster(31, 3).MonsterSelector(2), "species 31 (bits 23 to 27), palette 3 and animation 2 fill their fields");
+        Assert.AreNotEqual(sheep, HeroBody.Monster(20, 2), "the palette is part of the body");
+    }
+
+    [TestMethod]
+    public void AMonsterBodyThatCannotBeReadIsRefusedWithATypedFailure()
+    {
+        string? Name(Arcanum.Data.Area.AreaMappingRole role, int number) => "shp";
+        // No archive holds the species' ARTs: the stand is required.
+        var none = Assert.Throws<TerrainViewerException>(() => HeroBodyArt.LoadMonster([], HeroBody.Monster(20, 0), Name));
+        Assert.AreEqual(TerrainViewerErrorCode.ActorMetadata, none.Error.Code);
+        // A body that is no monster, a species or palette the art id cannot hold.
+        foreach (var body in new[] { HeroBody.HumanFemale, HeroBody.Monster(32, 0), HeroBody.Monster(20, 4) })
+            Assert.AreEqual(TerrainViewerErrorCode.ActorInput, Assert.Throws<TerrainViewerException>(() => HeroBodyArt.LoadMonster([], body, Name)).Error.Code, body.ToString());
+    }
+
     [TestMethod, TestCategory("RealData")]
     public void EveryCreatableBodyLoadsFromTheInstalledArt()
     {

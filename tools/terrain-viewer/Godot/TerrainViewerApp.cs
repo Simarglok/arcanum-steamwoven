@@ -51,6 +51,10 @@ public partial class TerrainViewerApp : Node
         BugReportLogger.Install();
         // ARC-DEV-047: the packaged commit (or a source run) and the user:// folder this build reads and writes.
         GD.Print($"ARC-DEV-047 build {ViewerBuild.Current.Text} user={OS.GetUserDataDir()}");
+        // ARC-DEV-392: a map's transitions are kept on the device for the next process (a smoke run is one process); not in user://, which a smoke replaces.
+        // The deterministic self-test (synthetic content) writes nothing into the owner's folder.
+        if (!SelfTestBootstrap) AreaMapTransitionsStore.UseDeviceFolder();
+        GD.Print($"ARC-DEV-392 map-cache folder={AreaMapTransitionsStore.Root ?? "off"}");
         var canvas = new TerrainCanvas { Name = "TerrainCanvas" };
         AddChild(canvas);
         _canvas = canvas;
@@ -124,6 +128,15 @@ public partial class TerrainViewerApp : Node
         if (_hdPackProblem is not null) Callable.From(ShowStartupHdPackProblem).CallDeferred();
         _hud?.SetMode(_arguments.Mode);
         if (IsWorld) InitializeWorld();
+        // ARC-DEV-387: a player's start with the menu in map mode does not load the start map yet: the menu opens at once and the map
+        // loads when a new game's way begins (New Game), or the map of the save the player chooses loads instead.
+        if (DefersStartLoad(arguments))
+        {
+            _startLoadPending = true; _startLoadLazy = true;
+            OpenEarlyMainMenu();
+            if (_mainMenu is null) BeginStartLoad("the menu did not open");
+            return;
+        }
         _lastLoad = StartLoadAsync(_arguments);
         // ARC-DEV-381 (O1): the load runs on its worker; the main menu opens now, not after the whole start map is published.
         OpenEarlyMainMenu();
@@ -133,6 +146,7 @@ public partial class TerrainViewerApp : Node
     {
         if (_exiting) return;
         _hud?.SetMode(arguments.Mode);
+        _startLoadPending = false; // ARC-DEV-387: any load is the load the menu waited for (or replaces it)
         if (IsWorldMode(arguments.Mode)) { InitializeWorld(); QuarantineWorld(); }
         GD.Print($"ARC-RENDER-004 load stage=begin smoke={orchestrateSmoke}");
         PerfProbe.Mark("load.begin");
@@ -249,6 +263,7 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("created-scenery") == true) await RunAreaCreatedSceneryStageAsync();
                                 // ARC-DEV-370 (E1-c2): only when named, a critter the session creates by prototype is drawn, picked, moved by the AI's movers with a walk frame and gone once destroyed (--hero, a map window with the inventory).
                                 if (only?.Contains("created-critter") == true) await RunAreaCreatedCritterStageAsync();
+                                if (only?.Contains("trait-body") == true) await RunAreaTraitBodyStageAsync();
                                 // ARC-DEV-371 (E1-c3): only when named, the installed tile script 1629 creates critters next to the hero (--hero, a map window with the inventory): flagged, hosted by the AI host, notified, destroyed.
                                 if (only?.Contains("script-critters") == true) await RunAreaScriptCrittersStageAsync();
                                 // ARC-DEV-352 (E1-b): only when named, Fireflash's flash on an empty tile and none on an occupied one; Wall of Fire's pieces, their burn and their END (--hero, a map window).
@@ -320,6 +335,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && only?.Contains("route-barrel") == true) await RunAreaRouteBarrelSmokeAsync();
                         // ARC-DEV-249 (B14, SM12): only when named (with --hero), a real grenade thrown from the pack explodes where it lands, hurts the NPCs around and is gone.
                         if (_readyMapName is not null && only?.Contains("grenade") == true) await RunAreaGrenadeSmokeAsync();
+                        // ARC-MAGIC-042 (T-m1): only when named (with --hero), a creature item thrown from the pack becomes a critter that follows the hero, or one that attacks everyone around it.
+                        if (_readyMapName is not null && only?.Contains("creature-item") == true) await RunAreaCreatureItemSmokeAsync();
                         // ARC-DEV-282: only when named (with --hero), an NPC archer of the map shoots the hero: the arrow flies as a projectile and strikes through the AI host.
                         if (_readyMapName is not null && only?.Contains("npc-shot") == true) await RunAreaNpcShotSmokeAsync();
                         // ARC-UI-048: after the stream, as the landing loads the start map around another place.
@@ -1072,7 +1089,7 @@ public partial class TerrainViewerApp : Node
             // ARC-DEV-204 (B16): the change-of-place screen moves on the frame's real time, a map load's too; a hero change that waited
             // for the black screen runs now.
             TickTransitionScreen(delta * 1000);
-            try { TickAreaClock(); TickLightAnimation(); TickCarriedLight(); SyncHeroBody(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaWorldMap(); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncInterfaceHd(); TickWindowArtWarm(); SyncGameBar(); RefreshHeroGauges(); TickFloaters(); }
+            try { TickAreaClock(); TickLightAnimation(); TickCarriedLight(); DrainTraitEquipment(); SyncHeroBody(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaWorldMap(); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncInterfaceHd(); TickWindowArtWarm(); SyncGameBar(); RefreshHeroGauges(); TickFloaters(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");

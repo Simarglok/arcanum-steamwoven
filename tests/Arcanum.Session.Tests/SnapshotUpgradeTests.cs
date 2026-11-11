@@ -9,7 +9,9 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":88,\"world\"";
+    private const string Current = "\"schemaVersion\":90,\"world\"";
+    private const string Current89 = "\"schemaVersion\":89,\"world\"";
+    private const string Current88 = "\"schemaVersion\":88,\"world\"";
     private const string Current87 = "\"schemaVersion\":87,\"world\"";
     private const string Current86 = "\"schemaVersion\":86,\"world\"";
     private const string Current85 = "\"schemaVersion\":85,\"world\"";
@@ -178,9 +180,29 @@ public sealed class SnapshotUpgradeTests
     // carry an object-flags change has no older literal: no build before wrote one.
     internal static string Schema87(string text)
     {
-        StringAssert.Contains(text, Current);
+        text = Schema88(text);
+        StringAssert.Contains(text, Current88);
         Assert.IsFalse(System.Text.RegularExpressions.Regex.IsMatch(text, "\"objectSet\":[1-9-]|\"objectCleared\":[1-9-]"), "a row with an object-flags change has no schema 87 text");
-        return text.Replace(",\"objectSet\":0,\"objectCleared\":0}", "}").Replace(Current, Current87);
+        return text.Replace(",\"objectSet\":0,\"objectCleared\":0}", "}").Replace(Current88, Current87);
+    }
+
+    // ARC-MAGIC-040: the schema 88 text of a schema 89 one with no monster body: the spells section loses its empty list of monster bodies at its end. A text with a body has no older literal: no
+    // build before wrote one.
+    internal static string Schema88(string text)
+    {
+        text = Schema89(text);
+        StringAssert.Contains(text, Current89);
+        Assert.AreEqual(1, text.Split(NoTraitArt + "}").Length - 1, "the spells section ends with an empty list of monster bodies");
+        return text.Replace(NoTraitArt + "}", "}").Replace(Current89, Current88);
+    }
+
+    // ARC-MAGIC-047: the schema 89 text of a schema 90 one with no second critter flags or blit flags change on any written-flags row: each row loses its four zero words at its end. A text whose rows carry
+    // such a change has no older literal: no build before wrote one.
+    internal static string Schema89(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.IsFalse(System.Text.RegularExpressions.Regex.IsMatch(text, "\"(critter2|blit)(Set|Cleared)\":[1-9-]"), "a row with a critter flags 2 or blit flags change has no schema 89 text");
+        return text.Replace(",\"critter2Set\":0,\"critter2Cleared\":0,\"blitSet\":0,\"blitCleared\":0}", "}").Replace(Current, Current89);
     }
 
     // ARC-DEV-348: the schema 86 text of a schema 87 one with no NPC effect list: the effects section loses its empty list of NPC lists at its end. A text with a list has no older
@@ -590,6 +612,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":89,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":91,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

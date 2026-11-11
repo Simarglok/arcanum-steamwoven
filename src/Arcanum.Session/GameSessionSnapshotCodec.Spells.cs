@@ -7,8 +7,9 @@ public static partial class GameSessionSnapshotCodec
 {
     // ARC-DEV-210 (schema 73): the settled spell runs, the maintain bar and the last charged cost.
     // ARC-DEV-302 (schema 83): the flags the spell components wrote on critters.
-    private static readonly string[] SpellsFields = ["runs", "bar", "lastCost", "objectFlags"];
-    private static readonly string[] ObjectFlagFields = ["entity", "spellSet", "spellCleared", "critterSet", "critterCleared", "objectSet", "objectCleared"];
+    private static readonly string[] SpellsFields = ["runs", "bar", "lastCost", "objectFlags", "traitArt"];
+    private static readonly string[] TraitArtFields = ["entity", "species", "palette"];
+    private static readonly string[] ObjectFlagFields = ["entity", "spellSet", "spellCleared", "critterSet", "critterCleared", "objectSet", "objectCleared", "critter2Set", "critter2Cleared", "blitSet", "blitCleared"];
     private static readonly string[] SpellRunFields =
         ["id", "spell", "action", "source", "parent", "start", "target", "targetTile", "other", "flags", "triggers", "margin", "triggerCount", "setSpellFlags"];
     private static readonly string[] SpellObjectFields = ["id", "type", "aptitude"];
@@ -60,6 +61,20 @@ public static partial class GameSessionSnapshotCodec
             w.WriteNumber("critterCleared", record.Flags.CritterCleared);
             w.WriteNumber("objectSet", record.Flags.ObjectSet);
             w.WriteNumber("objectCleared", record.Flags.ObjectCleared);
+            w.WriteNumber("critter2Set", record.Flags.Critter2Set);
+            w.WriteNumber("critter2Cleared", record.Flags.Critter2Cleared);
+            w.WriteNumber("blitSet", record.Flags.BlitSet);
+            w.WriteNumber("blitCleared", record.Flags.BlitCleared);
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+        w.WriteStartArray("traitArt");
+        foreach (var record in spells.TraitArt.OrderBy(r => r.Entity, StringComparer.Ordinal))
+        {
+            w.WriteStartObject();
+            w.WriteString("entity", record.Entity);
+            w.WriteNumber("species", record.Art.Species);
+            w.WriteNumber("palette", record.Art.Palette);
             w.WriteEndObject();
         }
         w.WriteEndArray();
@@ -131,9 +146,22 @@ public static partial class GameSessionSnapshotCodec
             if (i > 0 && string.CompareOrdinal(objectFlags[i - 1].Entity, entity) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, at + ".entity");
             objectFlags[i] = new(entity, new(Int(o["spellSet"], at + ".spellSet", int.MinValue, int.MaxValue), Int(o["spellCleared"], at + ".spellCleared", int.MinValue, int.MaxValue),
                 Int(o["critterSet"], at + ".critterSet", int.MinValue, int.MaxValue), Int(o["critterCleared"], at + ".critterCleared", int.MinValue, int.MaxValue),
-                Int(o["objectSet"], at + ".objectSet", int.MinValue, int.MaxValue), Int(o["objectCleared"], at + ".objectCleared", int.MinValue, int.MaxValue)));
+                Int(o["objectSet"], at + ".objectSet", int.MinValue, int.MaxValue), Int(o["objectCleared"], at + ".objectCleared", int.MinValue, int.MaxValue),
+                Int(o["critter2Set"], at + ".critter2Set", int.MinValue, int.MaxValue), Int(o["critter2Cleared"], at + ".critter2Cleared", int.MinValue, int.MaxValue),
+                Int(o["blitSet"], at + ".blitSet", int.MinValue, int.MaxValue), Int(o["blitCleared"], at + ".blitCleared", int.MinValue, int.MaxValue)));
         }
-        return new(runs, bar, Int(f["lastCost"], p + ".lastCost", 0, int.MaxValue)) { ObjectFlags = objectFlags };
+        // The monster bodies ascending by entity; which entities may carry one is Restore's.
+        var artRows = Array(f["traitArt"], p + ".traitArt", GameSessionOwner.MaxTraitArtCritters);
+        var traitArt = new SessionTraitArtRecord[artRows.Length];
+        for (var i = 0; i < artRows.Length; i++)
+        {
+            var at = $"{p}.traitArt[{i}]";
+            var o = Fields(artRows[i], at, TraitArtFields);
+            var entity = Entity(o["entity"], at + ".entity");
+            if (i > 0 && string.CompareOrdinal(traitArt[i - 1].Entity, entity) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, at + ".entity");
+            traitArt[i] = new(entity, new(Int(o["species"], at + ".species", 0, SessionTraitArt.SpeciesLimit - 1), Int(o["palette"], at + ".palette", 0, SessionTraitArt.PaletteLimit - 1)));
+        }
+        return new(runs, bar, Int(f["lastCost"], p + ".lastCost", 0, int.MaxValue)) { ObjectFlags = objectFlags, TraitArt = traitArt };
     }
 
     private static SpellRunObject? SpellObjectOf(JsonElement element, string p)

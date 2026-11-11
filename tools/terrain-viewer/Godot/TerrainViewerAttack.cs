@@ -608,7 +608,9 @@ public partial class TerrainViewerApp
         { _attackBeginNotice = null; return null; } // the unpaid attack kills the run (the goal says why through HeroAttackEnds)
         // ARC-RENDER-037: the rate is the art id's weapon slot's (the hero's body shows its weapon in combat mode, WA1): the attack ART's
         // (the throw's file drops the weapon, the art id keeps it).
-        var weapon = (AttackArtWeapon)Arcanum.Simulation.Equipment.WeaponArtRules.Weapon(_worldActor.Profile.Attack!.Selector);
+        // ARC-MAGIC-052: a monster body's stand-in attack ART carries the weapon part 15 (no file names it), which is no weapon: it rates as no weapon.
+        var weaponPart = (AttackArtWeapon)Arcanum.Simulation.Equipment.WeaponArtRules.Weapon(_worldActor.Profile.Attack!.Selector);
+        var weapon = Enum.IsDefined(weaponPart) ? weaponPart : AttackArtWeapon.NoWeapon;
         var rate = RealTimeCombatRules.AttackFramesPerSecond(rateTable, weapon, Math.Clamp(hero.Speed, 1, RealTimeCombatRules.MaxStat),
             art.RawFramesPerSecond);
         var clip = new AttackClip(art.FramesPerGroup, art.ActionFrame, RealTimeCombatRules.AttackFramePauseMs(rate, hero.WeaponSpeed), weapon);
@@ -1007,13 +1009,16 @@ public partial class TerrainViewerApp
         if (AiMoverCommands() is { Count: > 0 } walked)
             companions = [.. companions ?? [], .. walked.Where(c => companions?.Any(o => o.Identity == c.Identity) != true)];
         if ((_fallenBodies.Count == 0 && _portalBodies.Count == 0 && _groundBodies.Count == 0 && _projectileBodies.Count == 0 && _eyeCandyBodies.Count == 0
-            && _spellMissileBodies.Count == 0 && _sceneryBodies.Count == 0)
+            && _spellMissileBodies.Count == 0 && _sceneryBodies.Count == 0 && _traitBodies.Count == 0)
             || _readyArea is null || _areaOverlay?.Area != _readyArea) return companions;
         var moving = companions?.ToList() ?? [];
         var taken = moving.Select(c => c.Identity).ToHashSet();
         moving.AddRange(_fallenBodies.Values.Where(c => !taken.Contains(c.Identity)));
         // ARC-DEV-370: a fallen created critter hides its standing body (kept among the ground bodies).
         foreach (var down in _fallenBodies.Values) taken.Add(down.Identity);
+        // ARC-MAGIC-046: the transformed NPCs that stand where the plan draws them, in their monster body (a fallen body or an AI mover of the same NPC wins).
+        moving.AddRange(_traitBodies.Values.Where(c => !taken.Contains(c.Identity)));
+        foreach (var monster in _traitBodies.Values) taken.Add(monster.Identity);
         // ARC-WORLD-051: doors and windows off their T0 frame.
         moving.AddRange(_portalBodies.Values);
         // ARC-RENDER-035: animated scenery off its T0 frame (a busted scenery's ground body wins).

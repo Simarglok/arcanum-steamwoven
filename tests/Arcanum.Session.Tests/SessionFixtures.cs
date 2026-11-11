@@ -76,7 +76,7 @@ internal static class SessionFixtures
     // and recorded lighting (scheme 1 at 15:00), with an empty party and inventory, no hero, no roll from seed 0 and no life record.
     internal const string LightingTail = ",\"lighting\":{\"schemeId\":1,\"hour\":15}}";
     internal const string GoldenJson =
-        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":88," +
+        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":90," +
         "\"world\":\"11111111-1111-1111-1111-111111111111\",\"module\":\"22222222-2222-2222-2222-222222222222\",\"revision\":2," +
         "\"clock\":{\"schemaVersion\":1,\"policyId\":\"steamwoven-normalized-clock-v1\"," +
         "\"sourceRevision\":\"9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52\"," +
@@ -145,8 +145,9 @@ internal static class SessionFixtures
     internal const string NoGoals = ",\"goals\":{\"nextRunId\":1,\"runs\":[]}";
     // ARC-DEV-302 (schema 83): the spells section ends with the list of written flags; NoSpells82 is the section of schemas 73..82.
     internal const string NoObjectFlags = ",\"objectFlags\":[]";
+    internal const string NoTraitArt = ",\"traitArt\":[]";
     internal const string NoSpells82 = ",\"spells\":{\"runs\":[],\"bar\":[{\"run\":-1,\"state\":0},{\"run\":-1,\"state\":0},{\"run\":-1,\"state\":0},{\"run\":-1,\"state\":0},{\"run\":-1,\"state\":0}],\"lastCost\":0}";
-    internal const string NoSpells = ",\"spells\":{\"runs\":[],\"bar\":[{\"run\":-1,\"state\":0},{\"run\":-1,\"state\":0},{\"run\":-1,\"state\":0},{\"run\":-1,\"state\":0},{\"run\":-1,\"state\":0}],\"lastCost\":0" + NoObjectFlags + "}";
+    internal const string NoSpells = ",\"spells\":{\"runs\":[],\"bar\":[{\"run\":-1,\"state\":0},{\"run\":-1,\"state\":0},{\"run\":-1,\"state\":0},{\"run\":-1,\"state\":0},{\"run\":-1,\"state\":0}],\"lastCost\":0" + NoObjectFlags + NoTraitArt + "}";
     // ARC-DEV-230 (schema 74): the newspaper queue of a new game (four words of -1, the head 5000, the rest 0, count 5).
     internal const string NoNewspaper = ",\"newspaper\":{\"entries\":[-1,-1,-1,-1,5000,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"count\":5}";
     // ARC-DEV-288 (schema 80): no projectile in flight, both counters at a new game's 0.

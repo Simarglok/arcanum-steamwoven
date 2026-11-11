@@ -653,8 +653,10 @@ public sealed class GameSessionSnapshot
     /// Schema 86 adds the object field <c>obj.teleported</c>, the mark a change of place to another map leaves on a carried object (ARC-DEV-351).
     /// Schema 87 adds the effect lists of NPCs to the effects section (<see cref="SessionEffectState.Critters"/>, ARC-DEV-348).
     /// Schema 88 adds the object-flags change (<c>obj_f_flags</c>) to each critter's written flags in the spells section (<see cref="SessionObjectFlags.ObjectSet"/>, ARC-DEV-358).
-    /// Schemas 1..55 are refused, not migrated; schemas 56 to 87 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 88;
+    /// Schema 89 adds the monster bodies of the Trait component (Polymorph, the body spells) to the spells section (<see cref="SessionSpellState.TraitArt"/>, ARC-MAGIC-040).
+    /// Schema 90 adds the second critter flags and the blit flags change to each critter's written flags (<see cref="SessionObjectFlags.Critter2Set"/>, <see cref="SessionObjectFlags.BlitSet"/>, ARC-MAGIC-047).
+    /// Schemas 1..55 are refused, not migrated; schemas 56 to 89 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 90;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

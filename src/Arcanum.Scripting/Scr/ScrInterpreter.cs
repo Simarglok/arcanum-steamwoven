@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S31"/>.
+/// <see cref="ScrAdmissionSet.S33"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -46,6 +46,8 @@ internal sealed class ScrInterpreter
         public readonly List<ScrFloatLine> Floats = new();
         // ARC-DEV-205: the town maps unfog town map asked to reveal (UF1).
         public readonly List<int> TownMaps = new();
+        // ARC-MAGIC-041: the use ammunition units requests (TI8).
+        public readonly List<ScrAmmoUse> AmmoUses = new();
         // ARC-SCRIPT-042: the slots call-ex runs changed, in order, and the latest of each, which a later call-ex run of the same slot reads.
         public readonly List<ScrWriteback> SlotWrites = new();
         public readonly Dictionary<(ScrObjectRef, int), ScrSlot> Slots = new();
@@ -184,7 +186,8 @@ internal sealed class ScrInterpreter
             _shared.Creations.Count == 0 ? null : Array.AsReadOnly(_shared.Creations.ToArray()),
             _shared.ObjectStates.Count == 0 ? null : Array.AsReadOnly(_shared.ObjectStates.ToArray()),
             _shared.Floats.Count == 0 ? null : Array.AsReadOnly(_shared.Floats.ToArray()), stores,
-            _shared.TownMaps.Count == 0 ? null : Array.AsReadOnly(_shared.TownMaps.ToArray()));
+            _shared.TownMaps.Count == 0 ? null : Array.AsReadOnly(_shared.TownMaps.ToArray()),
+            _shared.AmmoUses.Count == 0 ? null : Array.AsReadOnly(_shared.AmmoUses.ToArray()));
     }
 
     private bool Condition(ScrClause c, int line) => c.Type switch
@@ -346,6 +349,16 @@ internal sealed class ScrInterpreter
                 var number = Get(a, 0);
                 if (OptionalObject(a, 1) is { } obj)
                     _states.Add(new(a.Type == ScrCatalogue.Action.MarkMapLocation ? ScrStateKind.KnownArea : ScrStateKind.Rumor, obj, number));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.UseAmmoUnits:
+            {
+                // TI8 (ARC-MAGIC-041; 0x44A9BA): operand 0 is the count, operand 1 the object; the original calls the unit use (0x4658E0) with the
+                // object as the source, no destination, the count and the type 2 (the power cells). An absent object, or a count of 0, does nothing.
+                // The project's reading: a negative count is asked for nothing either (the original would add units to the source; no installed
+                // script has one).
+                var count = Get(a, 0);
+                if (OptionalObject(a, 1) is { } holder && count > 0) _shared.AmmoUses.Add(new(holder, count, PowerCellAmmoType));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.UnfogTownMap:
@@ -518,6 +531,27 @@ internal sealed class ScrInterpreter
                 var y = Get(a, 2);
                 var change = a.Type == ScrCatalogue.Action.WalkTo ? ScrObjectStateChange.WalkTo : ScrObjectStateChange.RunTo;
                 if (OptionalObject(a, 0) is { } obj) _shared.ObjectStates.Add(new(change, obj, x, y));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.TransformObject:
+            {
+                // TI5: the run's attachee becomes a new object of the basic prototype of operand 0. The host applies it and reads the attachee in the later requests of the run as that object; an absent attachee changes nothing (a project choice:
+                // the original reads the null handle's location).
+                var prototype = Get(a, 0);
+                if (_roles.Attachee is { } attachee) _shared.ObjectStates.Add(new(ScrObjectStateChange.Transform, attachee, prototype));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.MakeFollow:
+            {
+                // TI6: the first object of operand 0 follows the first object of operand 1, the follow check skipped (force 1); nothing without both (a project choice: the original reads null handles). The run goes on.
+                if (OptionalObject(a, 0) is { } follower && OptionalObject(a, 1) is { } leader) _shared.ObjectStates.Add(new(ScrObjectStateChange.MakeFollow, follower, Other: leader));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.Attack:
+            {
+                // TI6: the first object of operand 1 attacks every object of operand 0 in list order; nothing without an attacker (a project choice). The run goes on.
+                if (OptionalObject(a, 1) is { } attacker)
+                    foreach (var victim in Objects(a, 0)) _shared.ObjectStates.Add(new(ScrObjectStateChange.Attack, victim, Other: attacker));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.GiveSpellMastery:
@@ -966,6 +1000,8 @@ internal sealed class ScrInterpreter
 
     // The basic (0..11) and tech (12..15) skill numbers.
     private const int SkillNumbers = 16;
+    // ARC-MAGIC-041 (TI8): the ammunition type the use ammunition units action spends: the power cells.
+    private const int PowerCellAmmoType = 2;
 
     private IScrSkillQueries Skills => _host as IScrSkillQueries
         ?? throw new InvalidOperationException("SCR_SKILL_QUERIES_REQUIRED: the admission set holds get skill and the host cannot answer it.");

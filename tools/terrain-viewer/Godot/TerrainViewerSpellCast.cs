@@ -133,6 +133,8 @@ public partial class TerrainViewerApp
         _spellCaster.ItemTriggers = new SessionItemTriggers(_spellCaster, new AreaCombatWorld(runtimeMap, AreaScanCritters, AreaCombatantFacts));
         // ARC-DEV-254: a script's damage asks the victim's taking-damage script (point 0x17) first.
         _spellCaster.TakingDamage = TakingDamageGoesOn;
+        // ARC-MAGIC-048 (E4-c): the Use component has its target run its own use script (the target is the triggerer too).
+        _spellCaster.UseObject = UseScriptOfCast;
         // ARC-DEV-281 (B08): an aggressive spell tells the AI of its target that the caster attacked it (the attack event), before the damage lands.
         _spellCaster.AiNotice = (attacker, victim) => _aiHost?.SpellAttacked(attacker, victim);
         // ARC-DEV-292: and a damage that took effect on an NPC gives it its immediate AI pass (0x4B52FC), after the life step.
@@ -897,6 +899,7 @@ public partial class TerrainViewerApp
             TakeMovementEvent(entry);
             TakeTeleportEvent(entry);
             TakeHoldEvent(entry);
+            TakeTraitEvent(entry);
             if (AreaSpellCasting.Line(entry, texts, SpellObjectName) is { } line) lines.Add(line);
         }
         if (lines.Count == 0) return;

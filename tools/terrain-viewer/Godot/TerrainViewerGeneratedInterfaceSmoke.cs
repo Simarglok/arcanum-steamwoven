@@ -1,0 +1,115 @@
+using Arcanum.TerrainViewer.Core;
+using Godot;
+
+namespace Arcanum.TerrainViewer;
+
+public partial class TerrainViewerApp
+{
+    // ARC-UI-140: opt-in part of the native bar smoke (ARC_AREA_BAR_GENERATED_VERIFY=1). Both strips and every bar button have a
+    // recipe, so each draws generated chrome at the same size and place as its Legacy frame; the layout and hit tests are unchanged.
+    private async Task VerifyGeneratedInterfaceAsync(AreaGameBarPanel panel, Func<int, Task> frames)
+    {
+        static void Require(bool ok, string why)
+        {
+            if (ok) return;
+            GD.Print("ARC-UI-140 generated interface smoke FAIL " + why);
+            throw new InvalidOperationException("ARC-UI-140 generated interface smoke: " + why);
+        }
+        await frames(2);
+        Require(InterfaceHd.Generated, "the generated interface is on");
+        // ARC-UI-141: the frames are painted on workers at the window's exact device scale; ask for every one, then wait for the swap (at most ~20 s).
+        var wanted = new List<HdInterfaceTexture>();
+        foreach (var strip in new[] { AreaBarStrip.Top, AreaBarStrip.Bottom })
+            if (panel.GetNode<TextureRect>($"{strip}Strip/Art").Texture is HdInterfaceTexture stripTexture) wanted.Add(stripTexture);
+        foreach (var spec in AreaGameBarLayout.Buttons)
+            wanted.AddRange((panel.ArtFrames(spec.Art) ?? []).OfType<HdInterfaceTexture>());
+        long slowestFrame = 0;
+        async Task WaitPaintedAsync()
+        {
+            for (var wait = 0; wait < 1200 && (wanted.Any(texture => !texture.IsGenerated) || InterfaceHd.GeneratedPending > 0); wait++)
+            {
+                var clock = System.Diagnostics.Stopwatch.StartNew();
+                await frames(1);
+                slowestFrame = Math.Max(slowestFrame, clock.ElapsedMilliseconds);
+            }
+            await frames(2);
+        }
+        await WaitPaintedAsync();
+        var scale = panel.Factor * GetViewport().GetFinalTransform().Scale.X;
+        Require(InterfaceHd.GeneratedScale == Math.Clamp((int)Math.Round(scale), 1, InterfaceChromeRenderer.MaxScale) && InterfaceHd.GeneratedPending == 0,
+            $"the chrome is painted at the device scale {scale} (painted at {InterfaceHd.GeneratedScale}, pending {InterfaceHd.GeneratedPending})");
+        var checkedCount = 0;
+        foreach (var strip in new[] { AreaBarStrip.Top, AreaBarStrip.Bottom })
+        {
+            var art = panel.GetNode<TextureRect>($"{strip}Strip/Art");
+            Require(art.Texture is HdInterfaceTexture { IsGenerated: true } texture
+                && texture.GetSize() == new Vector2(AreaGameBarLayout.ScreenWidth, strip == AreaBarStrip.Top ? AreaGameBarLayout.TopHeight : AreaGameBarLayout.BottomHeight),
+                $"the {strip} strip draws generated chrome at its Legacy size");
+            var pixels = ((HdInterfaceTexture)art.Texture!).GeneratedPixelSize;
+            Require(pixels == new Vector2I(AreaGameBarLayout.ScreenWidth * InterfaceHd.GeneratedScale, (strip == AreaBarStrip.Top ? AreaGameBarLayout.TopHeight : AreaGameBarLayout.BottomHeight) * InterfaceHd.GeneratedScale),
+                $"the {strip} strip's pixels are its Legacy size times the device scale ({pixels})");
+            checkedCount++;
+        }
+        foreach (var spec in AreaGameBarLayout.Buttons)
+        {
+            var frames0 = panel.ArtFrames(spec.Art);
+            Require(frames0 is { Length: > 0 }, $"{spec.Button} has art");
+            foreach (var frame in frames0!)
+            {
+                Require(frame is HdInterfaceTexture { IsGenerated: true }, $"{spec.Button} frame draws generated chrome");
+                checkedCount++;
+            }
+            var control = panel.GetNode<TextureRect>($"{spec.Strip}Strip/{spec.Button}");
+            var (left, top, _, _) = AreaGameBarLayout.StripRect(spec.Strip);
+            Require(control.Position == new Vector2(spec.X - left, spec.Y - top) && control.Size == control.Texture?.GetSize(),
+                $"{spec.Button} stays at its Legacy place and size");
+        }
+        Require(InterfaceHd.GeneratedCount() >= wanted.Distinct().Count(), $"the generated frames are counted ({InterfaceHd.GeneratedCount()} of {wanted.Distinct().Count()})");
+        // ARC-UI-141: a bigger window (1600 x 1200 = factor 2) paints the chrome again at the new exact scale, every pixel 1:1; then the window goes back.
+        // A screen too small to hold it is reported and skipped.
+        var originalSize = DisplayServer.WindowGetSize();
+        var originalFactor = panel.Factor;
+        var doubleSize = new Vector2I(2 * AreaGameBarLayout.ScreenWidth, 2 * AreaGameBarLayout.ScreenHeight);
+        Vector2I StripPixels(AreaBarStrip strip) => ((HdInterfaceTexture)panel.GetNode<TextureRect>($"{strip}Strip/Art").Texture!).GeneratedPixelSize;
+        Vector2I StripUnits(AreaBarStrip strip) => new(AreaGameBarLayout.ScreenWidth, strip == AreaBarStrip.Top ? AreaGameBarLayout.TopHeight : AreaGameBarLayout.BottomHeight);
+        try
+        {
+            DisplayServer.WindowSetSize(doubleSize);
+            for (var wait = 0; wait < 120 && panel.Factor < 2; wait++) await frames(1);
+            if (panel.Factor >= 2)
+            {
+                await WaitPaintedAsync();
+                var scale2 = panel.Factor * GetViewport().GetFinalTransform().Scale.X;
+                Require(InterfaceHd.GeneratedScale == (int)Math.Round(scale2) && InterfaceHd.GeneratedPending == 0, $"the chrome is painted again at the device scale {scale2}");
+                foreach (var strip in new[] { AreaBarStrip.Top, AreaBarStrip.Bottom })
+                    Require(StripPixels(strip) == StripUnits(strip) * InterfaceHd.GeneratedScale, $"the {strip} strip is repainted at the bigger scale ({StripPixels(strip)})");
+                await CaptureHudAsync("generated-x" + panel.Factor, frames);
+                GD.Print($"ARC-UI-141 generated interface repainted at factor={panel.Factor} device-scale={InterfaceHd.GeneratedScale}");
+            }
+            else GD.Print($"ARC-UI-141 generated interface bigger window skipped: factor stayed {panel.Factor} at {DisplayServer.WindowGetSize()}");
+        }
+        finally
+        {
+            DisplayServer.WindowSetSize(originalSize);
+            for (var wait = 0; wait < 120 && panel.Factor != originalFactor; wait++) await frames(1);
+        }
+        await WaitPaintedAsync();
+        Require(panel.Factor == originalFactor && InterfaceHd.GeneratedScale == (int)Math.Round(originalFactor * GetViewport().GetFinalTransform().Scale.X), "the window and the scale went back");
+        foreach (var strip in new[] { AreaBarStrip.Top, AreaBarStrip.Bottom })
+            Require(StripPixels(strip) == StripUnits(strip) * InterfaceHd.GeneratedScale, $"the {strip} strip is back at the first scale ({StripPixels(strip)})");
+        GD.Print($"ARC-UI-141 slowest frame while the chrome was painted: {slowestFrame} ms");
+        GD.Print($"ARC-UI-140 native generated interface PASS textures={checkedCount} factor={panel.Factor} device-scale={InterfaceHd.GeneratedScale}");
+    }
+
+    // ARC_AREA_BAR_CAPTURE=PREFIX also saves the whole viewport with the bars as PREFIX-hud-MODE.png (a local, ignored path).
+    private async Task CaptureHudAsync(string mode, Func<int, Task> frames)
+    {
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_BAR_CAPTURE") is not { Length: > 0 } capture) return;
+        await frames(2);
+        var path = System.IO.Path.GetFullPath(capture) + $"-hud-{mode}.png";
+        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+        using var image = GetViewport().GetTexture().GetImage();
+        if (image is null || image.SavePng(path) != Error.Ok) throw new InvalidOperationException("ARC-UI-140 HUD readback not saved: " + path);
+        GD.Print($"ARC-UI-140 HUD capture {mode} {image.GetWidth()}x{image.GetHeight()}");
+    }
+}

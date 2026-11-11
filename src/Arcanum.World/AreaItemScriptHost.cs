@@ -56,6 +56,9 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost
         return new((int)element.Words[2], (uint)element.Words[0], (uint)element.Words[1]);
     }
 
+    /// <summary>ARC-MAGIC-042: whether the host has the game's scripts (without them every script is missing).</summary>
+    public bool HasContent => _content is not null;
+
     public ScrScriptLookup Script(int number) => AreaScriptHost.Lookup(_content, number);
 
     public bool GlobalFlag(int index)

@@ -217,7 +217,7 @@ def queued(args: argparse.Namespace) -> int:
     if check is not None and args.verbose and not os.environ.get(run_queue.TICKET_ENV):  # a nested run is never checked
         run_queue.say("note: a --verbose run has no start check; check its start yourself")
     return run_queue.run(args.kind, command, label=args.label or "", timeout=args.timeout, quiet=not args.verbose,
-                         start=check)
+                         start=check, estimate=args.estimate)
 
 
 def package_build(args: argparse.Namespace) -> int:
@@ -336,8 +336,14 @@ def parser() -> argparse.ArgumentParser:
                                   "arrival order, an export also waits for running dotnet runs (ARC-DEV-033); a quiet Godot run "
                                   "checks its own start and fails one that did not start (ARC-DEV-059)")
     command.add_argument("--kind", required=True, choices=run_queue.KINDS,
-                         help="window: Godot with a window; headless: Godot --headless or an import; export: an export "
-                              "endpoint; dotnet: dotnet build/test (runs alongside others, waits only for an export)")
+                         help="window: Godot with a window; headless: Godot --headless; export: an export "
+                              "endpoint; dotnet: dotnet build/test (runs alongside others, waits only for an export); "
+                              "quick: a Godot run with no window that ends in seconds (a project --import, the headless "
+                              "self-test), beside the Godot slot, up to " + str(run_queue.QUICK_SLOTS) + " at once (ARC-DEV-390)")
+    command.add_argument("--estimate", type=float, metavar="SEC",
+                         help="the seconds the run is expected to take, for the queue order (ARC-DEV-390): a short run "
+                              "is not queued behind a long one that arrived a little before it (default "
+                              + ", ".join(f"{kind} {value:g}" for kind, value in run_queue.DEFAULT_ESTIMATE_SECONDS.items()) + ")")
     command.add_argument("--timeout", type=float, metavar="MIN",
                          help="minutes before the run is stopped (default " + ", ".join(
                              f"{kind} {value:g}" for kind, value in run_queue.DEFAULT_TIMEOUT_MINUTES.items()) + "; 0: no limit)")
@@ -360,8 +366,9 @@ def parser() -> argparse.ArgumentParser:
     command.set_defaults(func=queued)
     # ARC-DEV-061: the shared smoke runner (docs/workflow/toolchain.md#smoke-runner-arc-dev-061).
     command = commands.add_parser("smoke", help="run the viewer's smokes from this checkout through the launch queue, each "
-                                  "with its own settings folder and start check: pr (Crash Site + touched stages), full (the "
-                                  "full map smoke chain), map NAME, crash-site, self-test (ARC-DEV-061)")
+                                  "with its own settings folder and start check: pr (touched stages or zones, --auto from the diff), "
+                                  "full (the full map smoke chain), complete (the nightly run: every stage), map NAME, "
+                                  "crash-site, self-test (ARC-DEV-061, ARC-DEV-396)")
     smoke.configure(command)
     command.set_defaults(func=smoke.run)
     command = commands.add_parser("package", help="build the packaged alpha for a player from a fresh commit of origin/main "

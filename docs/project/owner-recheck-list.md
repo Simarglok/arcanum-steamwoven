@@ -265,7 +265,7 @@ hero with the technology points for the degrees named, or the items from a map o
 | 2 | Throw a stun grenade (Explosives degree 4) and a smoke grenade (degree 3) at a group. | The stun grenade stuns creatures in its radius with a flash; the smoke grenade makes a smoke cloud for about 10 s, then it goes. The smoke grenade also sets the don't-draw flag on creatures, which is not built (the census lists it as partly running). | open |
 | 3 | Drink a Therapeutics potion (any of the seven stat potions) as the hero, and give the same potion to a companion by a script or by throwing it. | The stat bonus (+2 to the stat or stats named) appears on the sheet and goes away when the potion ends. On a companion the census says the effect list is written; compare the numbers shown or their effects in a fight. | open |
 | 4 | Use Chemistry degree 1 (poison draught) on a creature, and Chemistry degree 4 (acid) on a creature. | The poison does 290 damage over its duration; the acid does 10 to 100 damage and makes a flash. Compare the damage numbers with the original. | open |
-| 5 | Find a map item that carries the record 214 (a technology item on a map; see the placement census) and use it as the hero. | The original adds an effect 80 times; our effect list holds 64 entries, so nothing is added here (refused). Note what the original does to the sheet. | open |
+| 5 | Find a map item that carries the record 214 (a technology item on a map; see the placement census) and use it as the hero. | The original adds effect 334 80 times (its list has no bound). Since ARC-RES-127 our hero and NPC lists take the 80 entries (the list holds 1024). Note what the original does to the sheet and compare. | open |
 
 Known differences (documented, not bugs):
 
@@ -380,7 +380,7 @@ Compare in both games with the same hero and spells.
 
 Known differences (reading only, no game step):
 
-- Polymorph (49) and a script's permanent polymorph (critter flags 2 bit 0x400000) are undone by the original's Dispel with the art restored; ours has neither (MA-8).
+- Polymorph (49) and a script's permanent polymorph (critter flags 2 bit 0x400000) are undone by the original's Dispel with the art restored; ours has neither (MA-8). Since ARC-MAGIC-040 the Trait component keeps the monster body of Polymorph and the body spells in the session and tells the host, and since ARC-MAGIC-046 the viewer draws a polymorphed NPC as its monster body and takes the hero's worn items off and chooses them again at the END; the hero's own monster body is drawn since ARC-MAGIC-052 (a species without a stand or walk ART, such as the air elemental, keeps the hero's own body). Since ARC-MAGIC-047 the elemental bodies write the critter flags 2 and blit flags (MG10: assigned in Original mode, added in Steamwoven mode) and Dispel undoes a perma-polymorph in the session (the redraw of a map NPC whose data body is the polymorph is not built).
 - A portal or container held by Magelock (75) loses the hold in the original; ours does the same since MA-6 ([steps below](#arc-magic-037--locks-and-holds-unlocking-cantrip-and-magelock-ma-6-2026-11-11)).
 - A summoned critter is destroyed by the original's Dispel; ours destroys one the session created, and no spell makes one before the creature summons (E1-e).
 
@@ -597,7 +597,7 @@ its menu before any map exists, so the comparison is about the order and the wai
 | 1 | Start the game and watch how soon the main menu appears. | Like the original: the menu is the first thing on screen, a second or two after the window opens, with no map shown behind it. The music of the menu starts a few seconds later, when the start map is ready. | open |
 | 2 | Open Single Player, New Game, Pick Character and browse the heroes at once, before the map is ready. | Everything works as in the original: the same windows, the same twelve heroes. Nothing waits. | open |
 | 3 | Press Start on a hero before the map is ready. | The menu shows that the world is still loading and the game starts by itself when it is ready (the original has no such wait, because it loads the map after the choice; this is the one visible difference). Escape takes the choice back. | open |
-| 4 | Press Load Game or Last Save at once, with a save present. | The same wait note, then the load as before. A started load never shows a game of another map under the menu. | open |
+| 4 | Press Load Game or Last Save at once, with a save present. | Superseded by ARC-DEV-387 (below): they no longer wait for the start map. | superseded |
 | 5 | Press New Character at once, then go through the window, the editor and the shop. | The wait note first; then the windows work as before (the shop's merchant loads behind it). | open |
 | 6 | Open Options at once and change a setting, then Done. | The window works before the map is ready and the change holds; the main window returns. | open |
 
@@ -613,3 +613,68 @@ The audit changes no behaviour. It first named two places where the original beh
 | # | Step | Expected (from the original executable) | Status |
 | --- | --- | --- | --- |
 | 1 | Start the original game with `-fullscreen` and press F10 on a normal map (without that start option the toggle does nothing). | The interface hides or shows through the interface hide toggle 0x5578E0 (the main loop key handler's F10 branch; [UI ledger](../research/ledger/ui-audio.md) PA4). The older bar toggle 0x54ACB0 has no caller anywhere, so it is not what happens. Ours only reserves the key. | open |
+
+
+
+## ARC-DEV-387 — The start map loads only when a new game needs it (follow-up of ARC-DEV-381, 2026-11-11)
+
+The start map is no longer loaded when the game starts with the menu ([early menu](../rendering/terrain-viewer.md#main-menu-arc-ui-011)). It begins to load when you
+enter the New Game window (the pre-made heroes or New Character); Last Save and a save chosen in the Load Game window load the map of the save itself, once. The
+original loads the map after your choice, not before, so compare the order and the waiting. Compare on a start with the menu (`./arcanum area`, or a packaged
+build); the first build for this comparison is any build from `main` that contains this task. Have at least one save, ideally made on a map other than the start map
+(for example inside a town) and one made on the start map.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Start the game, open Single Player and Options, change a setting, go back; do not press New Game. Watch the machine (Activity Monitor) or the log line `ARC-DEV-387 start map load begins`. | The menu works at once and stays light: no map is loaded behind it, as in the original, which has no map before a choice. The menu has no music in this build (known difference: it plays through the start map's session, a follow-up). | open |
+| 2 | Press Last Save with a save made in a town. | The menu stays and says "loading the save…" and takes no other input; after the load the game is on the town map at the saved place with the saved hero. The start map is not shown at any point. The wait is one map load, not two. | open |
+| 3 | The same with Load Game and a row of the list (the window opens at once, before any map). | The same as step 2, for the chosen row. A row of a save on the start map works too. | open |
+| 4 | Press Last Save with no save at all. | The window stays and the menu says there is no save to continue from, with no wait and no map load (the original goes back to the window without a message; the wording is the project's). | open |
+| 5 | Press New Game, then the pre-made browser at once (before the map is ready) and browse; press Start. | The browser works at once. Start says the world is still loading and the game starts by itself when the map is ready (the one visible difference from the original). Escape takes it back. | open |
+| 6 | Press New Game, then Back out to Single Player and choose Last Save while the start map is still loading. | The save's own map loads instead and the game starts on it; the start map's load is given up. The result is the same as step 2. | open |
+| 7 | Press New Game, press New Character and go through the window, the editor and the shop. | The wait note first (the new character's window needs the map's start); then the windows work as before. | open |
+| 8 | Choose a save whose file is damaged or from another game (copy one and break it). | The menu comes back with the reason; nothing else changes. | open |
+
+Known differences (documented, not bugs):
+
+- A new game still waits for the start map, which now begins to load when the New Game window opens (one press later than in ARC-DEV-381).
+- The menu's music was silent until the start map was loaded; ARC-UI-139 (below) plays it from the start without a scene.
+- While a save's map loads the menu stays on screen with a note; the original shows its own loading screen.
+
+## ARC-UI-139 — The main menu's music plays without a scene (follow-up of ARC-DEV-387, 2026-11-11)
+
+The menu plays its music pair (the shop map's start sector, scheme 26 `arcanum.mp3`) through the scheme player of its own, without a game session or a scene, from the
+moment it opens until a game starts or a save loads ([scheme player](../audio/scheme-player.md#viewer-integration)). Compare on a start with the menu (`./arcanum area`, or a
+packaged build) with the music volume above 0, in both games.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Start the game and wait on the main menu without pressing anything for a minute or two. | The main theme plays from the first moment of the menu and loops without a gap or restart. | open |
+| 2 | Open Single Player, Options (change the music volume on the Sound page), New Game and the pre-made browser, then go back. | The theme goes on through every window, and the volume follows the slider. | open |
+| 3 | Press New Game, then New Character, so that the start map loads under the menu. | The theme does not stop and does not restart when the map has loaded (the original has no pause there either). | open |
+| 4 | Press Last Save, or choose a row in Load Game, while the theme plays. | The theme plays until the save is loaded, then the map's own music takes over. | open |
+| 5 | Start a new game with a pre-made hero. | The theme stops and the Crash Site's music (or its night ambience) starts; the theme does not come back. | open |
+| 6 | Press Esc in play and open the in-play menu. | The game's own music goes on (the theme is only the main menu's). | open |
+
+Known differences (documented, not bugs):
+
+- The hour of the menu's player is fixed (12) because the menu has no game clock; the installed pair plays at every hour, so no difference is expected.
+- A transition song in the menu's pair would play without the restore bookkeeping (the installed pair has none).
+
+## ARC-WORLD-124 — Timed bombs: placing trap devices with a spell (E6-b, 2026-11-11)
+
+The rules are in [placed trap devices](../world/trap-device-runtime.md). Give the hero the timed bomb (item 15154, record 176; or 15193, record 220) and compare in both games. The script
+trap devices (15100, 15120) are the next slice (ARC-WORLD-125) and still answer NOT READY.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Use the bomb from the inventory (Use icon) and click an empty tile a few cells away. | The hero walks next to the tile, the bomb leaves the pack and a marker object stands on the tile; nothing else happens at once. | open |
+| 2 | Wait 88 game seconds (about 11 s of play at the normal speed). | The marker disappears and the explosion goes off on the tile: fire and normal damage to everything within two tiles, a flash, no knockback. | open |
+| 3 | Place the record 176 bomb (15154) with a few people awake within ten tiles that can see the hero, then wait. | They turn on the hero as soon as the bomb is placed (not when it goes off); people who cannot see or hear it, and companions, do not. | open |
+| 4 | Use the bomb on a critter or on a scenery object instead of a tile. | The bomb is spent with no check of the target and there is no marker; the explosion goes off at that object's place after the same 88 s. | open |
+| 5 | Save while the fuse runs, load, and wait. | The marker is still there and the bomb goes off at the same moment. | open |
+
+Known differences (documented, not bugs):
+
+- The line the original shows when the marker is spotted (`mes\trap.mes` line 0) appears in the viewer's status text, not in a message window.
+- The marker is a plain scenery in Steamwoven: it cannot be spotted, disarmed or triggered by a step (the original's marker has no script either).

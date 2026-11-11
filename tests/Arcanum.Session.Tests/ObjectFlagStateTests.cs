@@ -88,8 +88,8 @@ public sealed class ObjectFlagStateTests
         owner.WriteObjectFlag(owner.Version, SessionSpellCaster.Hero, SessionObjectFlagField.Object, 0x200, true);
         owner.WriteObjectFlag(owner.Version, SessionSpellCaster.Hero, SessionObjectFlagField.Object, 0x80, false);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        var list = "\"objectFlags\":[{\"entity\":\"" + Npc + "\",\"spellSet\":0,\"spellCleared\":0,\"critterSet\":64,\"critterCleared\":0,\"objectSet\":0,\"objectCleared\":0},"
-            + "{\"entity\":\"pc\",\"spellSet\":16777216,\"spellCleared\":65536,\"critterSet\":0,\"critterCleared\":0,\"objectSet\":512,\"objectCleared\":128}]";
+        var list = "\"objectFlags\":[{\"entity\":\"" + Npc + "\",\"spellSet\":0,\"spellCleared\":0,\"critterSet\":64,\"critterCleared\":0,\"objectSet\":0,\"objectCleared\":0,\"critter2Set\":0,\"critter2Cleared\":0,\"blitSet\":0,\"blitCleared\":0},"
+            + "{\"entity\":\"pc\",\"spellSet\":16777216,\"spellCleared\":65536,\"critterSet\":0,\"critterCleared\":0,\"objectSet\":512,\"objectCleared\":128,\"critter2Set\":0,\"critter2Cleared\":0,\"blitSet\":0,\"blitCleared\":0}]";
         StringAssert.Contains(text, list);
         using var restored = Restore(Decode(text));
         Assert.AreEqual(new SessionObjectFlags(0x1000000, 0x10000, 0, 0, 0x200, 0x80), restored.QueryObjectFlags(SessionSpellCaster.Hero));
@@ -104,7 +104,7 @@ public sealed class ObjectFlagStateTests
         void Refused(string damaged) => Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(Decode(damaged), RestoreOptions()).Failure);
         Fails(text.Replace("\"entity\":\"pc\"", "\"entity\":\"" + Npc + "\""), SnapshotDecodeFailure.NotCanonical, "$.spells.objectFlags[1].entity");
         Fails(text.Replace("\"critterSet\":64", "\"critterSet\":\"64\""), SnapshotDecodeFailure.WrongType, "$.spells.objectFlags[0].critterSet");
-        Fails(text.Replace(",\"objectSet\":512,\"objectCleared\":128}]", "}]"), SnapshotDecodeFailure.MissingField, "$.spells.objectFlags[1].objectSet");
+        Fails(text.Replace(",\"objectSet\":512,\"objectCleared\":128,\"critter2Set\":0,\"critter2Cleared\":0,\"blitSet\":0,\"blitCleared\":0}]", "}]"), SnapshotDecodeFailure.MissingField, "$.spells.objectFlags[1].objectSet");
         Fails(text.Replace("\"objectCleared\":128", "\"objectCleared\":\"128\""), SnapshotDecodeFailure.WrongType, "$.spells.objectFlags[1].objectCleared");
         Refused(text.Replace("\"entity\":\"pc\"", "\"entity\":\"sector:1:2\""));
         Refused(text.Replace("\"critterSet\":64,\"critterCleared\":0", "\"critterSet\":64,\"critterCleared\":64"));
@@ -127,6 +127,44 @@ public sealed class ObjectFlagStateTests
         owner.WriteObjectFlag(owner.Version, Npc, SessionObjectFlagField.Object, 0x200, false, dataHas: false);
         owner.WriteObjectFlag(owner.Version, Npc, SessionObjectFlagField.Object, 0x80, true, dataHas: true);
         Assert.IsTrue(owner.QueryObjectFlags(Npc).IsEmpty);
+    }
+
+    // ARC-MAGIC-047 (schema 90): the second critter flags and the blit flags are a fourth and fifth field of the written flags; an assignment (MG10) is a word whose every bit is set or cleared.
+    [TestMethod]
+    public void The_critter_flags_2_and_the_blit_flags_are_written_assigned_saved_and_restored()
+    {
+        using var owner = Create();
+        Changed(owner.WriteObjectFlag(owner.Version, Npc, SessionObjectFlagField.Critter2, 0x400000, true), owner, 1);
+        Changed(owner.AssignObjectFlag(owner.Version, SessionSpellCaster.Hero, SessionObjectFlagField.Critter2, 2), owner, 2);
+        Changed(owner.AssignObjectFlag(owner.Version, SessionSpellCaster.Hero, SessionObjectFlagField.Blit, 0x10), owner, 3);
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.AssignObjectFlag(owner.Version, SessionSpellCaster.Hero, SessionObjectFlagField.Blit, 0x10).Disposition);
+        var hero = owner.QueryObjectFlags(SessionSpellCaster.Hero);
+        Assert.AreEqual(2, hero.Critter2(0x400080), "the assignment wipes the data's bits");
+        Assert.AreEqual(0x10, hero.Blit(0xFF), "the blit flags word is exactly the value");
+        Assert.AreEqual(0x400000 | 0x80, owner.QueryObjectFlags(Npc).Critter2(0x80));
+        Assert.AreEqual(GameSessionFailure.InvalidChangeKey, owner.AssignObjectFlag(owner.Version, "sector:1:2", SessionObjectFlagField.Blit, 1).Failure);
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        StringAssert.Contains(text, "\"critter2Set\":2,\"critter2Cleared\":-3,\"blitSet\":16,\"blitCleared\":-17");
+        using var restored = Restore(Decode(text));
+        Assert.AreEqual(hero, restored.QueryObjectFlags(SessionSpellCaster.Hero));
+        Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()), "canonical");
+    }
+
+    [TestMethod]
+    public void The_eighty_nine_to_ninety_step_gives_every_row_the_zero_critter_flags_2_and_blit_flags_and_refuses_a_row_that_has_them()
+    {
+        using var owner = Create();
+        owner.WriteObjectFlag(owner.Version, Npc, SessionObjectFlagField.Critter, 0x40, true);
+        var current = GameSessionSnapshotCodec.Encode(owner.Capture());
+        var older = SnapshotUpgradeTests.Schema89(current);
+        StringAssert.Contains(older, "\"schemaVersion\":89,\"world\"");
+        Assert.IsFalse(older.Contains("critter2Set", StringComparison.Ordinal));
+        var upgraded = Decode(older);
+        Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, upgraded.SchemaVersion);
+        Assert.AreEqual(new SessionObjectFlags(0, 0, 0x40, 0), upgraded.Spells.ObjectFlags.Single().Flags);
+        Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(upgraded));
+        var damaged = GameSessionSnapshotCodec.TryDecode(older.Replace("\"objectCleared\":0}]", "\"objectCleared\":0,\"blitSet\":0}]"));
+        Assert.AreEqual((SnapshotDecodeFailure.UnknownField, "$.spells.objectFlags[0].blitSet"), (damaged.Failure, damaged.Path));
     }
 
     [TestMethod]

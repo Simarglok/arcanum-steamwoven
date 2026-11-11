@@ -127,7 +127,7 @@ Not investigated here (the rule is to name them and go on); recorded because a z
 | --- | --- |
 | `ranged` and so `map` battery | `ARC-COMBAT-015 ranged smoke FAIL: the dagger is picked up and wielded again` (COMBAT-026 is fixing it) |
 | Crash Site smoke | FAIL (exit 1, 98 s), the known one |
-| `barter` (main map, Crash Site) | `InvalidOperationException` after `barter-art PASS` (frontier=InvalidOperationException, stage=Upload) |
+| `barter` (main map, Crash Site) | `InvalidOperationException` after `barter-art PASS` (frontier=InvalidOperationException, stage=Upload). Fixed by ARC-DEV-393: run alone, the stage's first awaited frames started the map's scenery loops (four goal runs, one session revision) inside the look's "changed nothing" check; the smoke now waits for the loops to start before its baseline. The game was right |
 | `created-critter` | `AI host holds the created critter` FAIL (only after other stages; fixed in ARC-DEV-394, see [toolchain](../workflow/toolchain.md#smoke-runner-arc-dev-061)) |
 | `script-critters`, `summon-wall` (after the long list) | `the tile notifications of the creations ran`, `the summoner standing in its own wall is spared` (found by ARC-DEV-394, not investigated) |
 | `menu` then `options` (`--main-menu`) | `options smoke FAILED: the menu is open over the start map` (stage order or configuration; `menu` passed, `options` followed it in one process) |
@@ -174,11 +174,17 @@ section 4 hole stays.
 | Q4 | A stage-to-configuration table in code (map, sector, hero, menu, debug mode), used by `--stages` to group stages into the fewest processes and to fail early on a mismatch | about 8 s saved per extra process avoided, no more "needs --sector" rediscovery | small to medium |
 | Q5 | Known failures on `origin/main`: a small file of stage, symptom, owning task, read by the runner so a failing stage that is listed is reported as "known on main, not this PR" | no hunting and no reruns on clean main (the coordinator's list above is today's manual version) | small |
 | Q6 | Make the two slow stages cheaper by default: `container-click` clicks a sample (for example 12 containers across the types) unless `--all`; `walk` stops after N window moves unless `--all` | 675 s to about 60 s, 525 s to about 150 s (estimates, depend on the sample) | medium; changes what a stage vouches for, owner decision |
-| Q7 | A cross-process cache of the map's transitions (O5b of the load diagnosis is done per process only, so every smoke run still computes them: 1.8 s in the logs) | about 1.8 s of the 10 s load of every smoke run | small; needs a stamp so it cannot go stale |
+| Q7 (**done: ARC-DEV-392**, [design](../world/area-loader.md#map-transitions-kept-on-the-device-arc-dev-392)) | A cross-process cache of the map's transitions (O5b of the load diagnosis is done per process only, so every smoke run still computes them: 1.8 s in the logs) | about 1.8 s of the 10 s load of every smoke run | small; needs a stamp so it cannot go stale |
 | Q8 | The daily run switches from `full` to `complete` of option A (or to `full` plus the stages the battery lacks) | closes the section 4 hole; costs about 25 minutes of slot a day at night | follows A |
+
+Q6 is done in ARC-DEV-395: the default is a sample (`container-click` 8 containers, `walk` a route cell 10 window moves out), `--all` keeps the full stage; [what the sample no longer proves](../workflow/toolchain.md#smoke-runner-arc-dev-061).
 
 A large item, not recommended now: a warm viewer process that runs several stage groups without restarting (saves the 10 s load per group, but each group
 then needs a reset of the session state, and the smokes are written to start from a fresh load).
+
+## Status
+
+Q4 and Q5 are done in ARC-DEV-391 (`STAGE_NEEDS`, `--stages` grouping, the early error, `smoke_known_failures.json`; [smoke runner](../workflow/toolchain.md#smoke-runner-arc-dev-061)). The zones themselves (option A) and Q8 are done in ARC-DEV-396 (`tools/local_dev/smoke_zones.py`, `./arcanum smoke pr --auto`, `./arcanum smoke complete`; [smoke zones](../workflow/toolchain.md#smoke-runner-arc-dev-061)): `core` is every stage no heavy zone holds, the heavy zones are `walk`, `container-click`, `crash-site` and `census`, and the daily run is now `complete` (every stage, not 15 of 76).
 
 ## Recommendation
 

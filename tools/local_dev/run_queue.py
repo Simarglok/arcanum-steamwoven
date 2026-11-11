@@ -4,7 +4,11 @@ The rule is docs/workflow/toolchain.md#launch-queue-arc-dev-033. Every Godot run
 single Godot slot in arrival order; an export also runs quiet: once it is next for the slot, new dotnet runs wait and
 running ones finish first. dotnet runs share DOTNET_SLOTS places (ARC-DEV-300): they run side by side with Godot
 runs, wait only for an export and for a free dotnet place, and leave no build servers behind (BUILD_ENVIRONMENT,
-shutdown_build_servers). There is no daemon. Each ticket is a file in the queue folder whose flock its wrapper (and,
+shutdown_build_servers). ARC-DEV-390: the Godot slot is no longer strictly first come first served: every run declares
+how long it expects to take, and a run counts as having arrived ORDER_WEIGHT of its estimates later than it did, so a
+12 s run is not queued behind a 10 minute run that arrived a minute before it, while no run is passed by runs that arrive
+after that delay; and a `quick` run (a project import, a headless self-test: short Godot runs with no window) takes a
+place of its own beside the Godot slot, as a dotnet run does. There is no daemon. Each ticket is a file in the queue folder whose flock its wrapper (and,
 for Godot kinds, the command it started) holds for its whole life, so the kernel frees the place of a run that crashed
 or was killed; a waiter checks the queue every POLL_SECONDS, so the next run starts within that of the last one ending.
 While lanes still use the retired `lockf /tmp/arcanum-godot-window.lock` rule, a Godot holder takes that lock too.
@@ -14,6 +18,7 @@ from __future__ import annotations
 import errno
 import fcntl
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -25,13 +30,24 @@ from typing import Any, Callable, Sequence
 from . import config, run_log, start_check
 
 SCHEMA = "arcanum-run-queue-v1"
-KINDS = ("window", "headless", "export", "dotnet")
+KINDS = ("window", "headless", "export", "dotnet", "quick")
 GODOT_KINDS = frozenset({"window", "headless", "export"})
+HOLD_KINDS = GODOT_KINDS | {"quick"}  # the kinds whose command is Godot and holds the ticket lock
+SIDE_KINDS = frozenset({"dotnet", "quick"})  # the runs beside the Godot slot: they wait only for an export and a place of their kind
 # Minutes a run may hold its place; --timeout replaces it, 0 means no limit (the owner's own viewer launches).
-DEFAULT_TIMEOUT_MINUTES = {"window": 30.0, "headless": 30.0, "export": 180.0, "dotnet": 45.0}
+DEFAULT_TIMEOUT_MINUTES = {"window": 30.0, "headless": 30.0, "export": 180.0, "dotnet": 45.0, "quick": 30.0}
+# ARC-DEV-390: `quick` runs (Godot without a window that ends by itself in seconds: the project import, the headless self-test)
+# that may run at once; they wait only for an export, never for the Godot slot. The pinned Godot of each checkout is its
+# own project folder, so two of them never write the same `.godot` folder.
+QUICK_SLOTS = 2
 # ARC-DEV-300: dotnet runs that may run at once. Every dotnet process of a run costs 50-950 MB; on 2026-11-08 about
 # 150 orphaned MSBuild nodes and compiler servers of many lanes exhausted the Mac's memory and froze it.
 DOTNET_SLOTS = 2
+# ARC-DEV-390: the seconds a run is expected to take when its caller declares none (a smoke declares its own, see
+# smoke.estimate), and how many estimates later than its arrival a run counts in the queue order.
+DEFAULT_ESTIMATE_SECONDS = {"window": 60.0, "headless": 60.0, "export": 300.0, "dotnet": 60.0, "quick": 15.0}
+ORDER_WEIGHT = 3.0
+MAX_ESTIMATE_SECONDS = 86400.0  # a day: a longer declaration is capped, so no run puts itself last for ever
 # ARC-DEV-300: no build server may outlive its run: no reused MSBuild worker nodes, no MSBuild server, no shared
 # Roslyn compiler (VBCSCompiler, about 1 GB and shared by every worktree).
 BUILD_ENVIRONMENT = {"MSBUILDDISABLENODEREUSE": "1", "DOTNET_CLI_USE_MSBUILD_SERVER": "0", "UseSharedCompilation": "false"}
@@ -205,39 +221,103 @@ def tickets(prune: bool = True) -> list[tuple[Path, dict[str, Any]]]:
                         _unlink(path)
                 except FileNotFoundError:
                     pass
-    result.sort(key=lambda item: (item[1].get("priority", NORMAL), item[1]["seq"]))
+    order = order_of([item for _, item in result])
+    result.sort(key=lambda item: order(item[1]))
     return result
 
 
-def _key(ticket: dict[str, Any]) -> tuple[int, int]:
-    return ticket.get("priority", NORMAL), ticket["seq"]
+def estimate_of(ticket: dict[str, Any]) -> float:
+    """The seconds a ticket declared (a ticket of an older wrapper declared none: its kind's default)."""
+    value = ticket.get("estimateSeconds")
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0:
+        return float(value)
+    return DEFAULT_ESTIMATE_SECONDS.get(ticket.get("kind", ""), DEFAULT_ESTIMATE_SECONDS["window"])
+
+
+def checkout_of(ticket: dict[str, Any]) -> str | None:
+    """The checkout a run belongs to (the folder holding `.git` above the folder it was queued from, else that folder):
+    two runs of one checkout share its Godot project folder and its `.godot` import. A ticket of an older wrapper has none."""
+    value = ticket.get("checkout")
+    return value if isinstance(value, str) and value else ticket.get("cwd")
+
+
+def _find_checkout(path: str) -> str:
+    here = Path(path)
+    for folder_ in (here, *here.parents):
+        if (folder_ / ".git").exists():
+            return str(folder_)
+    return path
+
+
+def _key(ticket: dict[str, Any]) -> tuple[int, float, int]:
+    """The queue order (ARC-DEV-390): the owner's launches first, then by the arrival time plus ORDER_WEIGHT of the run's
+    estimates, then by number. The key never changes while the ticket waits, so every waiter computes the same order;
+    a run is passed only by runs whose own delayed arrival is earlier than its, so it is never passed by a run that
+    arrives more than ORDER_WEIGHT x its estimate after it, and none waits for ever."""
+    return (ticket.get("priority", NORMAL), ticket.get("enqueuedAt", 0.0) + ORDER_WEIGHT * estimate_of(ticket),
+            ticket["seq"])
+
+
+def _arrival_key(ticket: dict[str, Any]) -> tuple[int, float, int]:
+    """The order of a wrapper from before ARC-DEV-390: by number only (the middle part is constant)."""
+    return ticket.get("priority", NORMAL), 0.0, ticket["seq"]
+
+
+def order_of(live: Sequence[dict[str, Any]]) -> Callable[[dict[str, Any]], tuple[int, float, int]]:
+    """The key function for the waiting runs among `live`. A waiting ticket with no `estimateSeconds` comes from a wrapper
+    of the old code (another checkout that has not merged ARC-DEV-390 yet), which waits for every smaller number; ordering
+    by length while one is queued could make a new and an old waiter wait for each other for ever (new A passed by a
+    shorter B, old B behind the smaller number A), so while any such ticket waits everyone orders by number, as before."""
+    if any(not ticket.get("startedAt") and "estimateSeconds" not in ticket for ticket in live):
+        return _arrival_key
+    return _key
 
 
 def blocker(mine: dict[str, Any], live: Sequence[dict[str, Any]]) -> dict[str, Any] | None:
     """The ticket this one waits for, or None when it may start now (the admission rule)."""
     others = [ticket for ticket in live if ticket["seq"] != mine["seq"]]
     running = [ticket for ticket in others if ticket.get("startedAt")]
-    ahead = [ticket for ticket in others if not ticket.get("startedAt") and _key(ticket) < _key(mine)]
+    order = order_of(live)
+    ahead = [ticket for ticket in others if not ticket.get("startedAt") and order(ticket) < order(mine)]
+    mine_checkout = checkout_of(mine)
     if mine["kind"] in GODOT_KINDS:
+        # a quick run of the same checkout (its project folder) goes before a Godot run that is later in the order, and
+        # while it runs holds that checkout: a window run there would open the project in the middle of its import
+        for ticket in running + ahead:
+            if ticket["kind"] == "quick" and mine_checkout is not None and checkout_of(ticket) == mine_checkout:
+                return ticket
         for ticket in running + ahead:
             if ticket["kind"] in GODOT_KINDS:
                 return ticket
         if mine["kind"] == "export":
-            return next((ticket for ticket in running if ticket["kind"] == "dotnet"), None)
+            return next((ticket for ticket in running if ticket["kind"] in SIDE_KINDS), None)
         return None
-    # dotnet waits for a running export or one that is draining (next for the Godot slot), then for a free dotnet
-    # place: the running dotnet runs and the dotnet runs ahead of it fill DOTNET_SLOTS (ARC-DEV-300).
+    # dotnet and quick runs wait for a running export or one that is draining (next for the Godot slot), then for a free
+    # place of their own kind: the running runs of the kind and those of it ahead fill its slots (ARC-DEV-300, 390).
     for ticket in running:
         if ticket["kind"] == "export":
             return ticket
     for ticket in others:
         if ticket["kind"] == "export" and not ticket.get("startedAt"):
             waits_for = blocker(ticket, live)
-            if waits_for is None or waits_for["kind"] == "dotnet":
+            # draining: the export waits for nothing, or only for a side run that is already running (a quick run of its
+            # own checkout that is still queued is not that: it would wait for the export in turn)
+            if waits_for is None or (waits_for["kind"] in SIDE_KINDS and waits_for.get("startedAt")):
                 return ticket
-    holders = [ticket for ticket in running + ahead if ticket["kind"] == "dotnet"]
-    if len(holders) >= DOTNET_SLOTS:
-        return holders[len(holders) - DOTNET_SLOTS]  # the one whose end frees the place this run takes
+    if mine["kind"] == "quick" and mine_checkout is not None:
+        # the same project folder is never imported or run twice at once: wait for a Godot or quick run of this checkout
+        for ticket in running + ahead:
+            if ticket["kind"] in GODOT_KINDS | {"quick"} and checkout_of(ticket) == mine_checkout:
+                return ticket
+    slots = DOTNET_SLOTS if mine["kind"] == "dotnet" else QUICK_SLOTS
+    holders = [ticket for ticket in running + ahead if ticket["kind"] == mine["kind"]]
+    if mine["kind"] == "quick":
+        # a quick run held back by a run of its own checkout fills no place (it does not start before that run ends): it
+        # must not keep another checkout's import waiting behind a long window run
+        busy = {checkout_of(ticket) for ticket in running if ticket["kind"] in GODOT_KINDS | {"quick"}} - {None}
+        holders = [ticket for ticket in holders if ticket.get("startedAt") or checkout_of(ticket) not in busy]
+    if len(holders) >= slots:
+        return holders[len(holders) - slots]  # the one whose end frees the place this run takes
     return None
 
 
@@ -272,7 +352,8 @@ def _history(entry: dict[str, Any]) -> None:
             os.replace(hidden, path)
 
 
-def _enqueue(kind: str, label: str, command: Sequence[str], priority: int, timeout: float) -> tuple[int, Path, dict[str, Any]]:
+def _enqueue(kind: str, label: str, command: Sequence[str], priority: int, timeout: float,
+             estimate: float) -> tuple[int, Path, dict[str, Any]]:
     with _QueueLock():
         base = _open_folder()
         counter = base / "counter"
@@ -286,8 +367,10 @@ def _enqueue(kind: str, label: str, command: Sequence[str], priority: int, timeo
         hidden_counter.write_text(f"{seq}\n")
         os.replace(hidden_counter, counter)
         ticket = {"schema": SCHEMA, "seq": seq, "kind": kind, "label": label[:MAX_LABEL], "priority": priority,
-                  "command": " ".join(command)[:MAX_COMMAND], "cwd": os.getcwd(), "pid": os.getpid(),
-                  "pidStart": _process_start(os.getpid()), "timeoutMinutes": timeout, "enqueuedAt": time.time(),
+                  "command": " ".join(command)[:MAX_COMMAND], "cwd": os.getcwd(), "checkout": _find_checkout(os.getcwd()),
+                  "pid": os.getpid(),
+                  "pidStart": _process_start(os.getpid()), "timeoutMinutes": timeout, "estimateSeconds": estimate,
+                  "enqueuedAt": time.time(),
                   "startedAt": None, "childPid": None, "childStart": None}
         hidden = base / f".new-{seq}-{os.getpid()}"
         fd = os.open(hidden, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
@@ -308,7 +391,8 @@ def _wait_turn(fd: int, ticket: dict[str, Any], sleep: Callable[[float], None]) 
                 ticket["startedAt"] = time.time()
                 _write(fd, ticket)
                 return
-        position = sum(1 for item in live if not item.get("startedAt") and _key(item) < _key(ticket))
+        order = order_of(live)
+        position = sum(1 for item in live if not item.get("startedAt") and order(item) < order(ticket))
         state = (waiting_for["seq"], position)
         if state != last:
             say(f"queued ticket={ticket['seq']} kind={ticket['kind']} ahead={position} waiting-for={_describe(waiting_for)}")
@@ -343,9 +427,11 @@ def _legacy_hold() -> int:
 
 
 # Which nested kinds a running parent's place already covers: an export covers everything, a Godot run covers Godot
-# runs and dotnet runs (no export can drain while it holds the slot), a dotnet run covers dotnet runs.
-COVERS = {"export": frozenset(KINDS), "window": frozenset({"window", "headless", "dotnet"}),
-          "headless": frozenset({"window", "headless", "dotnet"}), "dotnet": frozenset({"dotnet"})}
+# runs, quick runs and dotnet runs (no export can drain while it holds the slot), a quick run covers quick runs, a dotnet
+# run covers dotnet runs.
+COVERS = {"export": frozenset(KINDS), "window": frozenset({"window", "headless", "dotnet", "quick"}),
+          "headless": frozenset({"window", "headless", "dotnet", "quick"}), "dotnet": frozenset({"dotnet"}),
+          "quick": frozenset({"quick"})}
 
 
 def nested(kind: str) -> bool:
@@ -413,7 +499,8 @@ def shutdown_build_servers(environment: dict[str, str], live: Sequence[dict[str,
 
 def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | None = None, priority: int = NORMAL,
         hold: Callable[[], None] | None = None, sleep: Callable[[float], None] = time.sleep, quiet: bool = False,
-        start: start_check.StartCheck | None = None, log_sink: Callable[[Path], None] | None = None) -> int:
+        start: start_check.StartCheck | None = None, log_sink: Callable[[Path], None] | None = None,
+        estimate: float | None = None) -> int:
     """Wait for this run's turn, run the command, give the place to the next run. Returns the command's exit code,
     TIMEOUT_EXIT when it ran out of time, or 128+N when this wrapper was stopped by signal N. `hold`, called after the
     command succeeded, keeps the place while something the command left running is still open (the detached viewer).
@@ -421,7 +508,9 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
     (run_log.summary) on stdout; a nested run ignores it, its output goes wherever its parent's goes. `start`
     (ARC-DEV-059) watches a quiet run's log for its start line and stops a run that did not start (FAILED_START_EXIT);
     a nested or --verbose run is not checked. `log_sink` is told a quiet run's log file (ARC-DEV-063: the smoke runner
-    reads its stages' PASS lines there)."""
+    reads its stages' PASS lines there). `estimate` (ARC-DEV-390) is the seconds the command is expected to take, for the
+    queue order (the kind's default when None): a short run is not queued behind a long one that arrived a little
+    before it."""
     if kind not in KINDS:
         raise ValueError(f"kind must be one of {', '.join(KINDS)}")
     if not command:
@@ -429,13 +518,17 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
     minutes = DEFAULT_TIMEOUT_MINUTES[kind] if timeout is None else timeout
     if minutes < 0:
         raise ValueError("--timeout must be 0 (no limit) or a positive number of minutes")
+    seconds = DEFAULT_ESTIMATE_SECONDS[kind] if estimate is None else estimate
+    if not math.isfinite(seconds) or seconds < 0:
+        raise ValueError("--estimate must be a finite number of seconds, 0 or more")
+    seconds = min(seconds, MAX_ESTIMATE_SECONDS)
     if nested(kind):
         say(f"nested ticket={os.environ[TICKET_ENV]} (runs inside its place)")
         code = subprocess.call(list(command))
         if code == 0 and hold is not None:
             hold()
         return code
-    fd, path, ticket = _enqueue(kind, label, command, priority, minutes)
+    fd, path, ticket = _enqueue(kind, label, command, priority, minutes, seconds)
     log = None
     reason: list[str] = []
     if quiet:
@@ -477,13 +570,13 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
         critical[0] = True
         if log is None:
             child = subprocess.Popen(list(command), env=environment, start_new_session=True,
-                                     pass_fds=(fd,) if kind in GODOT_KINDS else ())
+                                     pass_fds=(fd,) if kind in HOLD_KINDS else ())
         else:
             output = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
             try:  # the child keeps its own copy of the descriptor
                 child = subprocess.Popen(list(command), env=environment, start_new_session=True, stdin=subprocess.DEVNULL,
                                          stdout=output, stderr=subprocess.STDOUT,
-                                         pass_fds=(fd,) if kind in GODOT_KINDS else ())
+                                         pass_fds=(fd,) if kind in HOLD_KINDS else ())
             finally:
                 os.close(output)
         critical[0] = False
@@ -512,7 +605,8 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
             ran = ended - ticket["startedAt"]
             say(f"end ticket={ticket['seq']} exit={exit_code} ran={ran:.0f}s")
         _history({"seq": ticket["seq"], "kind": kind, "label": ticket["label"], "cwd": ticket["cwd"],
-                  "command": ticket["command"], "enqueuedAt": ticket["enqueuedAt"], "startedAt": ticket.get("startedAt"),
+                  "command": ticket["command"], "estimateSeconds": ticket["estimateSeconds"], "enqueuedAt": ticket["enqueuedAt"],
+                  "startedAt": ticket.get("startedAt"),
                   "endedAt": ended, "exit": exit_code})
         try:
             path.unlink()
