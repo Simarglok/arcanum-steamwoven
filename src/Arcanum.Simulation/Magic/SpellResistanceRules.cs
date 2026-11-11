@@ -270,7 +270,7 @@ public static class SpellResistanceRules
     /// <c>resistmagic</c> effect changes (Resist Magick, spell 40, effect 56, and the magic parts of effects 51, 52, 55, 154 and 155) count. The original's save
     /// reads <paramref name="stored"/> alone (0x4537B0, RE2). With no change the value is <paramref name="stored"/> exactly (an immune 100 stays 100). With changes it is the effect
     /// aggregation over the stored value (0x4EA6C0, as the sheet's Magick line does: 0x43D6D0 puts the effects after the stored value) cut to 0..95 for a PC and an
-    /// ordinary NPC, but never below an already higher stored value, so a blessing cannot make an immune NPC less resistant; a monstrous NPC is cut to the resolver's ±1000 only.
+    /// ordinary NPC, but never outside an already wider stored value (a stored 100 or a stored −30 keeps its side), so a blessing cannot make an immune NPC less resistant; a monstrous NPC is cut to the resolver's ±1000 only.
     /// </summary>
     public static int ResistanceUnderEffects(int stored, IReadOnlyList<EffectModifier> magic, bool unclamped)
     {
@@ -278,7 +278,7 @@ public static class SpellResistanceRules
         if (magic.Count == 0) return stored;
         var value = EffectModifiers.Apply(stored, magic);
         return unclamped ? Math.Clamp(value, -AttackResolver.MaxResistance, AttackResolver.MaxResistance)
-            : Math.Clamp(value, 0, Math.Max(CombatantRules.MaxResistance, stored));
+            : Math.Clamp(value, Math.Min(0, stored), Math.Max(CombatantRules.MaxResistance, stored));
     }
 
     // The stored resistance, scaled for a negative aptitude unless fate-maximised (toward zero, 32-bit).

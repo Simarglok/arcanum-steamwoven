@@ -171,6 +171,8 @@ public sealed class SpellResistanceRulesTests
         Assert.AreEqual(90, SpellResistanceRules.ResistanceUnderEffects(40, [Add(25), Add(25)], false), "the entries are summed");
         Assert.AreEqual(95, SpellResistanceRules.ResistanceUnderEffects(40, [Add(80)], false), "a PC and an ordinary NPC are cut at 95");
         Assert.AreEqual(0, SpellResistanceRules.ResistanceUnderEffects(10, [Add(-50)], false), "a curse takes it down to 0");
+        Assert.AreEqual(-30, SpellResistanceRules.ResistanceUnderEffects(-30, [Add(-10)], false), "a curse never makes a negative stored value more resistant");
+        Assert.AreEqual(-5, SpellResistanceRules.ResistanceUnderEffects(-30, [Add(25)], false), "a blessing lifts it, as the sum says");
         Assert.AreEqual(100, SpellResistanceRules.ResistanceUnderEffects(100, [Add(10)], false), "a blessing never lowers an already higher stored value");
         Assert.AreEqual(60, SpellResistanceRules.ResistanceUnderEffects(100, [Add(-40)], false), "a curse lowers it");
         Assert.AreEqual(300, SpellResistanceRules.ResistanceUnderEffects(100, [Add(200)], true), "a monstrous NPC is not cut at 95");
