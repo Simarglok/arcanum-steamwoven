@@ -370,6 +370,46 @@ public sealed class CombatFieldReaderTests
         Assert.ThrowsExactly<OperationCanceledException>(() => CombatFieldReader.ReadArea(Snapshot(objects), cancelled.Token));
     }
 
+    // ARC-DEV-359 (E1-c): the row of a critter created from a prototype, built by the rule a map object's row is (prototype fields, the object's own location written over).
+    [TestMethod]
+    public void CreatedCritterRowCarriesThePrototypeFieldsAndItsLocation()
+    {
+        var files = Files((29001, Npc, NpcValues()));
+        var made = CreatedObjectRows.Critter(files, 29001, "oid:critter:7", 3, 412, 377);
+        Assert.AreEqual(CreatedRowFailure.None, made.Failure);
+        var row = made.Row!;
+        Assert.AreEqual((Npc, 29001, 3, 412L, 377L), (row.Type, row.PrototypeNumber, row.Key.RuntimeMap, row.WorldX, row.WorldY));
+        Assert.AreEqual("oid:critter:7", "oid:" + row.Key.ObjectIdSha256);
+        Assert.AreEqual(AreaSourceKind.Mobile, row.Key.Kind);
+        Assert.IsTrue(row.SchemaReady && row.PlacementReady && row.RequiredLayersReady);
+        // The object's own fields are the ones the original's create writes (OM13, OM16): the location (the packed cell, x low and y high), OF_DYNAMIC on the flags, both standpoints and NPC flag 0x2.
+        var packed = 412L | (377L << 32);
+        Assert.IsTrue(row.DirectFields.All(f => f.Origin == AreaValueOrigin.Instance && f.Presence == AreaPresence.Value));
+        CollectionAssert.AreEqual(new[] { (1, packed), (18, 0x1000L | 0x2000), (69, 0x1306L | 0x2), (78, packed), (79, packed) }, row.DirectFields.Select(f => (f.Slot, f.Number!.Value)).ToArray());
+        CollectionAssert.AreEquivalent(row.DirectFields.Select(f => f.Slot).ToArray(), row.EffectiveFields.Where(f => f.Origin == AreaValueOrigin.Instance).Select(f => f.Slot).ToArray());
+        Assert.IsTrue(row.EffectiveFields.Where(f => f.Origin == AreaValueOrigin.Prototype).All(f => row.DirectFields.All(d => d.Slot != f.Slot)));
+        CollectionAssert.AreEqual(row.EffectiveFields.Select(f => f.Slot).Order().ToArray(), row.EffectiveFields.Select(f => f.Slot).ToArray());
+        // The combat fields read from the row are the prototype's own (the row an NPC of a map has).
+        var fromRow = CombatFieldReader.Read(row);
+        var fromPrototype = CombatFieldReader.ReadPrototype(files, 29001);
+        Assert.AreEqual(CombatFieldFailure.None, fromRow.Failure, fromRow.Detail?.ToString());
+        Assert.AreEqual(fromPrototype.Fields!.Critter!.BaseStats[0], fromRow.Fields!.Critter!.BaseStats[0]);
+        Assert.AreEqual(fromPrototype.Fields.Npc!.Faction, fromRow.Fields.Npc!.Faction);
+    }
+
+    [TestMethod]
+    public void CreatedCritterRowRefusesWhatIsNoCritterOrNoPrototype()
+    {
+        var files = Files((29001, Npc, NpcValues()), (6218, Weapon, WeaponValues()));
+        Assert.AreEqual(CreatedRowFailure.NotACritter, CreatedObjectRows.Critter(files, 6218, "oid:critter:1", 3, 5, 5).Failure);
+        Assert.AreEqual(CreatedRowFailure.PrototypeMissing, CreatedObjectRows.Critter(files, 29002, "oid:critter:1", 3, 5, 5).Failure);
+        Assert.AreEqual(CreatedRowFailure.PrototypeInvalid,
+            CreatedObjectRows.Critter(n => new(PrototypeFileStatus.Found, [1, 2, 3]), 29001, "oid:critter:1", 3, 5, 5).Failure);
+        foreach (var (prototype, entity, map, x, y) in new[] { (0, "oid:critter:1", 3, 5, 5), (1_000_000, "oid:critter:1", 3, 5, 5), (29001, "critter:1", 3, 5, 5), (29001, "oid:", 3, 5, 5),
+                     (29001, "oid:critter:1", 0, 5, 5), (29001, "oid:critter:1", 3, -1, 5), (29001, "oid:critter:1", 3, 5, -1) })
+            Assert.AreEqual(CreatedRowFailure.InvalidArguments, CreatedObjectRows.Critter(files, prototype, entity, map, x, y).Failure, $"{prototype} {entity} {map} {x} {y}");
+    }
+
     private static (CombatFieldFailure, int) Refusal(CombatFieldRead read)
     {
         Assert.IsNull(read.Fields);
