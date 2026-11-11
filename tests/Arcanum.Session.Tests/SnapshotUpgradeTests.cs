@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":86,\"world\"";
+    private const string Current = "\"schemaVersion\":87,\"world\"";
+    private const string Current86 = "\"schemaVersion\":86,\"world\"";
     private const string Current85 = "\"schemaVersion\":85,\"world\"";
     private const string Current84 = "\"schemaVersion\":84,\"world\"";
     private const string Current83 = "\"schemaVersion\":83,\"world\"";
@@ -167,9 +168,22 @@ public sealed class SnapshotUpgradeTests
     // inverse is the schema number alone. A text with the field has its own hand-made schema 85 literal (TeleportedMarkStateTests).
     internal static string Schema85(string text)
     {
-        StringAssert.Contains(text, Current);
-        return text.Replace(Current, Current85);
+        text = Schema86(text);
+        StringAssert.Contains(text, Current86);
+        return text.Replace(Current86, Current85);
     }
+
+    // ARC-DEV-348: the schema 86 text of a schema 87 one with no NPC effect list: the effects section loses its empty list of NPC lists at its end. A text with a list has no older
+    // literal: no build before saved one.
+    internal static string Schema86(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.AreEqual(1, text.Split(NoCritterEffects + "},\"experience\"").Length - 1, "the effects section ends with an empty list of NPC effect lists");
+        return text.Replace(NoCritterEffects + "},\"experience\"", "},\"experience\"").Replace(Current, Current86);
+    }
+
+    // ARC-DEV-348: a current text as a text without NPC effect lists in its effects section (the older schemas').
+    internal static string WithoutCritterEffects(string text) => text.Replace(NoCritterEffects + "},\"experience\"", "},\"experience\"");
 
     internal const string NoCreated = ",\"created\":[],\"lastCreatedNumber\":0}";
 
@@ -565,6 +579,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":87,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":88,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

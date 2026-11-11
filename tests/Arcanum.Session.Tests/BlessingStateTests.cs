@@ -125,7 +125,7 @@ public sealed class BlessingStateTests
         Changed(owner.AddHeroBlessing(owner.Version, SessionBlessingKind.Blessing, 55, Strong), owner, 1);
         Changed(owner.AddHeroBlessing(owner.Version, SessionBlessingKind.Curse, 52, Nothing), owner, 1);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, $"\"blessings\":[{{\"number\":55,\"effect\":120,\"timeMs\":{T0}}}],\"curses\":[{{\"number\":52,\"effect\":4,\"timeMs\":{T0}}}]}}");
+        StringAssert.Contains(text, $"\"blessings\":[{{\"number\":55,\"effect\":120,\"timeMs\":{T0}}}],\"curses\":[{{\"number\":52,\"effect\":4,\"timeMs\":{T0}}}],\"critters\":[]}}");
         using (var restored = Restore(Decode(text)))
         {
             Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));

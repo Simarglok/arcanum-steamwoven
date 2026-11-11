@@ -641,7 +641,7 @@ the re-resistance 0x459C10, [ledger ER1–ER9](../research/ledger/magic.md#effec
 | The resistance term of the save is subtracted (MG4). | Added. | `SaveSubtractsResistance` (MG4, shared) |
 | The aptitude scaling of the resistance reads the "fate-maximised" flag of the last processed action. | The scaling applies (the flag is not kept). | — (not ready) |
 
-**Not ready.** An NPC's effects (the session keeps an effect list for the hero only: an Effect component on an NPC target stays logged as not ready; entangle's speed −5 on an NPC is not
+**Not ready.** An NPC's effects (the session keeps an NPC's effect list since ARC-DEV-348, [NPC effect lists](durable-effects-runtime.md#npc-effect-lists-arc-dev-348), but the caster does not call it yet: an Effect component on an NPC target stays logged as not ready; entangle's speed −5 on an NPC is not
 applied, and neither are the other spells' buffs on NPCs); a spell's own damage as a hit (0x451AE2 asks it only when the packet's flag 0x200000 is set, whose origin is not read), the
 burn, trap and script damage (0x4B122B's conditions), a hit by a weapon with its own hit effect (0x4377C0: the original runs nothing after it), any hit path that reaches neither `FinishCritterHit` nor the AI host's three paths; the hit effect's eye candy for the spell flags 0x400 and 0x400000; the run finder's two object lists; the AI notice of the willpower
 branch (stale globals; no installed record reaches it); a hit on an entangled companion that the companion group walks.
