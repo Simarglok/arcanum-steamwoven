@@ -34,7 +34,7 @@ Requirements (reference only; no coverage row changes status): [FR-MAGIC-006](..
   After each wave the number of working spells is 24, 33, 53, 68 and 80 ([waves](#waves-what-is-parallel-and-what-is-not)).
 - **Whole colleges:** after wave 1 Necromantic (white) works completely; after wave 2 four more (Conveyance, Force, Meta, Temporal); after wave 3 two more (Mental, Morph); after wave 4 the other nine (Air, Earth, Fire,
   Water, Divination, Nature, Necromantic (black), Phantasm, Summoning), which wait on created critters, Identify or trap spotting.
-- **Decisions for the owner** are five and sit in a table at the end ([decisions](#decisions-for-the-owner)); only D4 touches a wave 1 slice (the form of MA-0), and wave 1 can start on the others meanwhile.
+- **Decisions for the owner** are six (D6 added by MA-2) and sit in a table at the end ([decisions](#decisions-for-the-owner)); only D4 touches a wave 1 slice (the form of MA-0), and wave 1 can start on the others meanwhile.
 
 ## Method and limits
 
@@ -103,8 +103,8 @@ The columns say whether anything **reads** the flag today and whether the cast h
 
 ### Effect numbers (the `Effect` component)
 
-Effects live in the hero's list only (the list of any other critter is DEV-348). What an effect does in the session: stat, maximum hit points and fatigue, reaction and experience changes are
-modelled; skills, tech skills, resistances and the level and alignment group are inert ([durable effects](../world/durable-effects-runtime.md)).
+Effects live in the hero's list and, since DEV-348, in every NPC's. What an effect does in the session: stat, maximum hit points and fatigue, reaction and experience changes are
+modelled, and since MA-2 the resistance changes too; skills, tech skills and the level and alignment group are inert ([durable effects](../world/durable-effects-runtime.md)).
 
 | Effect | Spells | Changes | Runs today |
 | --- | --- | --- | --- |
@@ -115,8 +115,8 @@ modelled; skills, tech skills, resistances and the level and alignment group are
 | 63, 159 | 30; 67 | armour class +1 (x10, x30) | Modelled |
 | 156 | 49 | damage bonus capped at 1 | Modelled |
 | 160, 161, 162, 163, 326 | 10; 15; 20; 25; 46 | one primary stat +1 (326: strength -1) | Modelled |
-| 51, 52, 55 | 13; 18; 28 | speed or strength or damage cap, **plus resistances** | Stat half modelled; resistance half inert |
-| 54, 56, 154, 155 | 23; 40; 46; 30 | resistances only | **Inert** |
+| 51, 52, 55 | 13; 18; 28 | speed or strength or damage cap, **plus resistances** | Stat half modelled; resistance half reaches the combat resolver (MA-2, ARC-MAGIC-027; normal, fire, electrical and poison; the magic part only the sheet) |
+| 54, 56, 154, 155 | 23; 40; 46; 30 | resistances only | Reach the combat resolver for the hero and NPCs (MA-2); 56 (Resist Magick) is magic resistance only, which the original's save does not read ([result](#effect-consumers-ma-2-arc-magic-027)) |
 | 157 | 8 | spot-trap skill at least 20 | **Inert** (skills) |
 
 ## The matrix
@@ -151,7 +151,7 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 | 10 | Vitality of Air (1) | 5 fat, maint 1@10; **B** Effect 160 add x4, eye candy; **E** Effect 160 rem x4, eye candy | ◐ Effect 160 (CN +1 x4) on the hero, removed at END | Companions and NPCs as targets (no effect list) | E1-d |
 | 11 | Poison Vapours (2) | 10 fat, maint 5@10, save constitution 0; **B** Damage poison 15-50 (scaled), Damage magic 2-8 (scaled), Summon proto 4029, eye candy x2; **M** Damage poison 15-50 (scaled), Damage magic 1-8 (scaled); **E** eye candy x3; **C** Flag dontdraw off; **EC** Destroy | ◐ Poison and magic damage at BEGIN and at each MAINTAIN tick | The cloud scenery (proto 4029) and its removal; affected area of later ticks unverified | E1-b |
 | 12 | Call Winds (3) | 15 fat, save constitution -5; **B** Goal 43 x2, Damage normal 30-50, eye candy | ✅ Knockback request and normal damage in a square "cone" | Per-spell run | - |
-| 13 | Body of Air (4) | 25 fat, maint 2@10; **B** Trait art 28, Flag body_air on, Flag water_walking on, Effect 51 add x1, eye candy; **E** Flag body_air off, Trait restore, Flag water_walking off, Effect 51 rem x1, eye candy x2 | ◐ Effect 51 on the hero: speed +10 and damage-bonus cap modelled; its four resistance changes are inert | `Trait` (art 28), flags body-of-air and water-walking, resistance consumers | MA-1, MA-2, MA-8 |
+| 13 | Body of Air (4) | 25 fat, maint 2@10; **B** Trait art 28, Flag body_air on, Flag water_walking on, Effect 51 add x1, eye candy; **E** Flag body_air off, Trait restore, Flag water_walking off, Effect 51 rem x1, eye candy x2 | ◐ Effect 51 on the hero and NPCs: speed +10, the damage-bonus cap and its four resistance changes (normal, fire, electrical, poison reach the resolver; MA-2) | `Trait` (art 28), flags body-of-air and water-walking | MA-1, MA-8 |
 | 14 | Call Air Elemental (5) | 50 fat, maint 5@10; **B** Summon proto 28310, Flag mind_controlled on, eye candy; **E** eye candy; **C** Flag dontdraw off; **EC** Destroy | ✗ Cost only | `Summon` critter (proto 28310), mind-control flag on the summoned | E1-c, E1-e, MA-4 |
 
 ### Earth (spells 15-19)
@@ -161,7 +161,7 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 | 15 | Strength of Earth (1) | 5 fat, maint 1@10; **B** Effect 161 add x4, eye candy; **E** Effect 161 rem x4, eye candy | ◐ Effect 161 (ST +1 x4) on the hero | Companions and NPCs as targets | E1-d |
 | 16 | Stone Throw (2) | 10 fat, save constitution -5; **B** Damage normal 1-50 (scaled), eye candy | ✅ Damage normal, `Scaled` | Per-spell run | - |
 | 17 | Wall of Stone (3) | 15 fat, maint 1@10; **B** Summon proto 4032, eye candy x2; **E** eye candy x3; **C** Flag dontdraw off; **EC** Destroy | ✗ Cost and eye candy only | `Summon` scenery (proto 4032) on the wall tiles, END removal | E1-b |
-| 18 | Body of Stone (4) | 25 fat, maint 2@10; **B** Trait art 3, Flag body_earth on, Effect 61 add x1, Effect 52 add x1, eye candy; **E** Flag body_earth off, Trait restore, Effect 61 rem x1, Effect 52 rem x1, eye candy x2 | ◐ Effect 61 (speed -5) and 52 (ST +10) on the hero; 52 also has resistance changes (inert) | `Trait` (art 3), flag body-of-earth, the unarmed body rule is not fed from flags | MA-1, MA-2, MA-8 |
+| 18 | Body of Stone (4) | 25 fat, maint 2@10; **B** Trait art 3, Flag body_earth on, Effect 61 add x1, Effect 52 add x1, eye candy; **E** Flag body_earth off, Trait restore, Effect 61 rem x1, Effect 52 rem x1, eye candy x2 | ◐ Effect 61 (speed -5) and 52 (ST +10, resistances) on the hero and NPCs (MA-2) | `Trait` (art 3), flag body-of-earth, the unarmed body rule is not fed from flags | MA-1, MA-8 |
 | 19 | Call Earth Elemental (5) | 50 fat, maint 5@10; **B** Summon proto 28311, Flag mind_controlled on, eye candy; **E** eye candy; **C** Flag dontdraw off; **EC** Destroy | ✗ Cost only | `Summon` critter (proto 28311), mind-control flag | E1-c, E1-e, MA-4 |
 
 ### Fire (spells 20-24)
@@ -171,7 +171,7 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 | 20 | Agility of Fire (1) | 5 fat, maint 1@10; **B** Effect 162 add x4, eye candy; **E** Effect 162 rem x4, eye candy | ◐ Effect 162 (DX +1 x4) on the hero | Companions and NPCs as targets | E1-d |
 | 21 | Wall of Fire (2) | 10 fat, maint 1@10; **B** Summon proto 4031, eye candy x2; **E** eye candy x3; **C** Flag dontdraw off; **EC** Destroy | ✗ Cost and eye candy only (B47) | `Summon` scenery (proto 4031) x5 that burns (goal 77 exists), END removal | E1-b |
 | 22 | Fireflash (3) | 15 fat, save constitution -5; **B** Damage fire 15-45 (scaled), eye candy x3, Summon proto 4050; **C** Destroy | ◐ Fire damage in radius 2 (B47) | The flash scenery (proto 4050, needs an empty tile) and its callback `Destroy` | E1-b |
-| 23 | Body of Fire (4) | 25 fat, maint 10@10; **B** Trait art 26, Effect 54 add x1, Flag body_fire on, eye candy; **E** Flag body_fire off, Effect 54 rem x1, Trait restore, eye candy x2 | ✗ Effect 54 only changes resistances (inert); cost and eye candy | `Trait` (art 26), flag body-of-fire, resistance consumers | MA-1, MA-2, MA-8 |
+| 23 | Body of Fire (4) | 25 fat, maint 10@10; **B** Trait art 26, Effect 54 add x1, Flag body_fire on, eye candy; **E** Flag body_fire off, Effect 54 rem x1, Trait restore, eye candy x2 | ◐ Effect 54 (resistances, the fire one among them) on the hero and NPCs (MA-2); cost and eye candy | `Trait` (art 26), flag body-of-fire; fire damage of a spell cast reads the fire resistance after ARC-DEV-352 (#941) | MA-1, MA-8 |
 | 24 | Call Fire Elemental (5) | 50 fat, maint 5@10; **B** Summon proto 28312, Flag mind_controlled on, eye candy; **E** eye candy; **C** Flag dontdraw off; **EC** Destroy | ✗ Cost only | `Summon` critter (proto 28312), mind-control flag | E1-c, E1-e, MA-4 |
 
 ### Water (spells 25-29)
@@ -181,14 +181,14 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 | 25 | Purity of Water (1) | 5 fat, maint 1@10; **B** Effect 163 add x4, eye candy; **E** Effect 163 rem x4, eye candy | ◐ Effect 163 (BE +1 x4) on the hero | Companions and NPCs as targets | E1-d |
 | 26 | Call Fog (2) | 10 fat, maint 1@10; **B** Summon proto 4033, eye candy x2; **E** eye candy x3; **C** Flag dontdraw off; **EC** Destroy | ✗ Cost and eye candy only | `Summon` scenery (proto 4033) | E1-b |
 | 27 | Squall of Ice (3) | 15 fat, maint 5@10, save constitution -5; **B** Damage normal 3-12 (scaled), Summon proto 4034, eye candy x2; **M** Damage normal 1-1 (scaled), Damage normal 3-12; **E** eye candy x3; **C** Flag dontdraw off; **EC** Destroy | ◐ Normal damage at BEGIN and at each MAINTAIN tick | The ice cloud scenery (proto 4034) | E1-b |
-| 28 | Body of Water (4) | 25 fat, maint 2@10; **B** Trait art 27, Effect 55 add x1, Flag body_water on, Flag water_walking on, Effect 62 add x1, eye candy; **E** Flag body_water off, Effect 55 rem x1, Trait restore, Flag water_walking off, Effect 62 rem x1, eye candy x2 | ◐ Effects 55 (resistances, inert), 62 (speed -5) on the hero | `Trait` (art 27), flags body-of-water and water-walking | MA-1, MA-2, MA-8 |
+| 28 | Body of Water (4) | 25 fat, maint 2@10; **B** Trait art 27, Effect 55 add x1, Flag body_water on, Flag water_walking on, Effect 62 add x1, eye candy; **E** Flag body_water off, Effect 55 rem x1, Trait restore, Flag water_walking off, Effect 62 rem x1, eye candy x2 | ◐ Effects 55 (resistances), 62 (speed -5) on the hero and NPCs (MA-2) | `Trait` (art 27), flags body-of-water and water-walking | MA-1, MA-8 |
 | 29 | Call Water Elemental (5) | 50 fat, maint 5@10; **B** Summon proto 28313, Flag mind_controlled on, eye candy; **E** eye candy; **C** Flag dontdraw off; **EC** Destroy | ✗ Cost only | `Summon` critter (proto 28313), mind-control flag | E1-c, E1-e, MA-4 |
 
 ### Force (spells 30-34)
 
 | # | Spell | In the records (installed data) | Today | Missing | Needs |
 | --- | --- | --- | --- | --- | --- |
-| 30 | Shield of Protection (1) | 5 fat, maint 1@10; **B** Effect 63 add x10, Effect 155 add x25, eye candy x2, Flag shielded on; **E** Effect 63 rem x10, Effect 155 rem x25, eye candy x3, Flag shielded off | ◐ Effect 63 (AC +1 x10) on the hero; effect 155 (resistances) is inert | `ObjFlag` shielded (hit eye candy), resistance consumers, companions | MA-1, MA-2, E1-d |
+| 30 | Shield of Protection (1) | 5 fat, maint 1@10; **B** Effect 63 add x10, Effect 155 add x25, eye candy x2, Flag shielded on; **E** Effect 63 rem x10, Effect 155 rem x25, eye candy x3, Flag shielded off | ◐ Effect 63 (AC +1 x10) and effect 155 (resistances) on the hero and NPCs (MA-2) | `ObjFlag` shielded (hit eye candy) | MA-1 |
 | 31 | Jolt (2) | 10 fat, save constitution -10; **B** Damage electrical 2-25 (scaled), eye candy x2 | ✅ Electrical damage in radius 1 around self | Per-spell run | - |
 | 32 | Wall of Force (3) | 15 fat, maint 2@10; **B** Summon proto 4030, eye candy x2; **E** eye candy x3; **C** Flag dontdraw off; **EC** Destroy | ✗ Cost and eye candy only | `Summon` scenery (proto 4030) on the wall tiles | E1-b |
 | 33 | Bolt of Lightning (4) | 25 fat, save constitution -5; **B** Damage electrical 20-70 (scaled), eye candy x2 | ✅ Electrical damage | Per-spell run | - |
@@ -208,7 +208,7 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 
 | # | Spell | In the records (installed data) | Today | Missing | Needs |
 | --- | --- | --- | --- | --- | --- |
-| 40 | Resist Magick (1) | 5 fat, maint 1@10; **B** Effect 56 add x1, eye candy x2; **E** Effect 56 rem x1, eye candy x3 | ✗ Effect 56 accepted but it only changes magic resistance (inert) | Resistance consumers: effects do not reach the magic save | MA-2, E1-d |
+| 40 | Resist Magick (1) | 5 fat, maint 1@10; **B** Effect 56 add x1, eye candy x2; **E** Effect 56 rem x1, eye candy x3 | ✅ Effect 56 on the hero and NPCs, removed at END; it changes the Magick resistance the sheet shows, as in the original, whose magic save reads the stored resistance alone ([MA-2 result](#effect-consumers-ma-2-arc-magic-027)) | Owner question: the original's spell does nothing for the saves | - |
 | 41 | Disperse Magick (2) | 10 fat; **B** eye candy, Dispel | ✗ Eye candy only | `Dispel` | MA-3 |
 | 42 | Dweomer Shield (3) | 15 fat, maint 5@10; **B** Dispel, Flag anti_magic_shell on, eye candy x2; **E** Flag anti_magic_shell off, eye candy x3 | ✗ Cost and eye candy only (the shell consumer exists) | `Dispel` and the `ObjFlag` anti-magic shell | MA-1, MA-3 |
 | 43 | Bonds of Magick (4) | 35 fat, maint 5@10; **B** Flag bonds_magic on, eye candy x2; **E** Flag bonds_magic off, eye candy x3 | ✗ Cost only (the invocation check already reads the flag) | `ObjFlag` bonds of magick | MA-1 |
@@ -219,7 +219,7 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 | # | Spell | In the records (installed data) | Today | Missing | Needs |
 | --- | --- | --- | --- | --- | --- |
 | 45 | Hardened Hands (1) | 5 fat, maint 1@10; **B** Flag hardened_hands on, eye candy x2; **E** Flag hardened_hands off, eye candy x3 | ✗ Cost only | `ObjFlag` hardened hands; the resolver has the rule but nothing feeds it from flags | MA-1 |
-| 46 | Weaken (2) | 15 fat, maint 2@10, save constitution -5; **B** Effect 154 add x25, Effect 326 add x5, eye candy x2; **E** Effect 154 rem x25, Effect 326 rem x5, eye candy x2 | ✗ Cost only | Effects 154 and 326 on an NPC; resistance part inert | E1-d, MA-2 |
+| 46 | Weaken (2) | 15 fat, maint 2@10, save constitution -5; **B** Effect 154 add x25, Effect 326 add x5, eye candy x2; **E** Effect 154 rem x25, Effect 326 rem x5, eye candy x2 | ◐ Effects 154 (resistances) and 326 (strength -5) on an NPC target; the strength reaches its combat values, not its maximum hit points (MA-2) | Save and the NPC life facts under a strength change; nothing else | - |
 | 47 | Shrink (3) | 20 fat, maint 2@10, save constitution -5; **B** Flag shrunk on, Effect 60 add x1, eye candy; **E** Flag shrunk off, Effect 60 rem x1, eye candy x2 | ✗ Cost only | `ObjFlag` shrunk, effect 60 on an NPC, shrunk render | MA-1, E1-d |
 | 48 | Flesh to Stone (4) | 20 fat, dur 10 s, save constitution -5; **B** eye candy x2, Flag stoned on, Flag stoned off; **E** eye candy x2, Flag stoned off, Flag stoned on | ◐ Stoned flag on critters (hold, ARC-DEV-302), timed 10 s | Stone render side effect, and the reverse path on stone objects and portals | MA-6 |
 | 49 | Polymorph (5) | 30 fat, maint 5@10, save constitution -5; **B** Flag polymorphed on, eye candy, Trait art 20, Effect 156 add x1; **E** Flag polymorphed off, Trait restore, Effect 156 rem x1 | ✗ Cost only | `Trait` (art 20), flag polymorphed, effect 156; MG10 is a technical bug under the owner rule | MA-1, MA-8, E1-d |
@@ -279,8 +279,8 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 | # | Spell | In the records (installed data) | Today | Missing | Needs |
 | --- | --- | --- | --- | --- | --- |
 | 75 | Magelock (1) | 5 fat, maint 1@10; **B** Flag magically_held on, eye candy x2; **E** Flag magically_held off, eye candy x3 | ✗ Cost and eye candy only | `ObjFlag` magically-held on portals | MA-6 |
-| 76 | Congeal Time (2) | 10 fat, maint 2@10, save willpower -5; **B** Effect 57 add x1, eye candy x2; **E** Effect 57 rem x1, eye candy x3 | ✗ Cost and eye candy only | Effect 57 (speed -50 %) on NPCs in radius 9; speed use unchecked | E1-d, MA-2 |
-| 77 | Hasten (3) | 20 fat, maint 3@10; **B** Effect 58 add x1, eye candy x2; **E** Effect 58 rem x1, eye candy x3 | ◐ Effect 58 (speed +100 %) on the hero | Companions as targets; the speed stat reaching walk speed and action points is unchecked | E1-d, MA-2 |
+| 76 | Congeal Time (2) | 10 fat, maint 2@10, save willpower -5; **B** Effect 57 add x1, eye candy x2; **E** Effect 57 rem x1, eye candy x3 | ◐ Effect 57 (speed -50 %) on NPCs in the area; the NPC's speed reads under its list: turn-based action points and attack pause (MA-2). Walking is not speed-driven in the original (XR) | Per-spell run; the host's round must read the list (the viewer does) | - |
+| 77 | Hasten (3) | 20 fat, maint 3@10; **B** Effect 58 add x1, eye candy x2; **E** Effect 58 rem x1, eye candy x3 | ◐ Effect 58 (speed +100 %) on the hero and companions (MA-2); speed reaches the action points and the attack pause, not walking (XR) | Per-spell run | - |
 | 78 | Stasis (4) | 25 fat, maint 4@10, save willpower -10; **B** Flag paralyzed on, eye candy x2; **E** Flag paralyzed off, eye candy x3 | ✅ Paralysis flag (hold) on a critter, maintained | Per-spell run | - |
 | 79 | Tempus Fugit (5) | 40 fat, maint 5@10; **B** Flag tempus_fugit on, eye candy; **E** Flag tempus_fugit off, eye candy x2 | ✗ Cost and eye candy only | `ObjFlag` Tempus Fugit; no code reads it; in the original it gives +10 speed to its holders and -10 to every other critter while the player holds it ([MA-R](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)) | MA-9, MA-1 |
 
@@ -326,7 +326,7 @@ census (MA-0) in the same PR.
 | **MA-6** Locks and holds on objects | `ObjFlag` on portal and container flags through the lock state pick locks already writes: Unlocking Cantrip, Magelock, and Flesh to Stone's reverse path on stone portals | 1, 75, 48 | S-M | MA-1 | door and container state | FR-MAGIC-007, FR-AI-003 |
 | **MA-3** Dispel (E4-c, narrowed) | Dispel: interrupt the runs sourced by, aimed at or listing the target, clear held, stoned and perma-polymorph, destroy a summoned target (exe read: MT15 lists the 0x451AF0 to 0x451C40 group for Dispel and Destroy together, so the Dispel function is confirmed first). The other control components are the technology lane's | 41, 42 | M | MA-1 | Dispel partial file, run host | FR-MAGIC-006, FR-MAGIC-007 |
 | **E1-b** Summon of scenery | The seven scenery summons: cloud, fog, ice cloud, walls, the flash and Wall of Fire (burning goal 77 exists); END and Dispel remove them; stage per group ([hand-off](summon-objects-res-101.md#e1-b-the-summon-component-for-objects-needs-e1-a)) | 11, 17, 21, 22, 26, 27, 32 | M | E1-a (done), MA-1 | Summon partial file | FR-MAGIC-008 |
-| **MA-2** Effect consumers | Resistance changes of effects (damage, fire, electrical, poison, magic) reach the combat resolver and the magic save for the hero and, after DEV-348, NPCs; check that speed reaches walking and action points; skills stay with the skills lane | 40, 30, 46, 13, 18, 23, 28 (the resistance half), 77, 76 | M | E1-d (NPC part) | `GameSessionEffects`, resolver | FR-CHAR-022, FR-COMBAT-008, FR-MAGIC-010 |
+| **MA-2** Effect consumers, ARC-MAGIC-027 ([result](#effect-consumers-ma-2-arc-magic-027)) | Resistance changes of effects (damage, fire, electrical, poison, magic) reach the combat resolver and the magic save for the hero and, after DEV-348, NPCs; check that speed reaches walking and action points; skills stay with the skills lane | 40, 30, 46, 13, 18, 23, 28 (the resistance half), 77, 76 | M | E1-d (NPC part) | `GameSessionEffects`, resolver | FR-CHAR-022, FR-COMBAT-008, FR-MAGIC-010 |
 | **E1-c** Created critters | A critter from a prototype on a tile, hosted wherever it stands, saved; action 52 for critters | prerequisite | L | E1-a (done) | directory, AI host (no cast-host file) | FR-MAGIC-008, FR-AI-004 |
 | **MA-4** Social and AI flags (E4-b, MT14) | Charm (+30 / -30 through the reaction effects, animals on a separate path), mind control (follow, no flee, -50 for a PC on a non-summoned NPC, disband at END), undead, fleeing, blinded as AI and combat notifications; the illusion and familiar flags | 35, 38, 39, 50, 52, 66, 58; the flag half of 14, 19, 24, 29, 53, 57, 68, 71-74 | M-L | MA-1, E1-d | reaction, AI notices | FR-SOCIAL-001, FR-SOCIAL-003, FR-AI-002 |
 | **MA-8** Trait, body spells, Polymorph (E4-f, MT18) | `Trait`: art and palette, drop what the new art cannot wield, restore; MG10 as a technical bug under the owner rule; Body spells with their flags and effects | 13, 18, 23, 28, 49 | L | MA-1, MA-2, E1-d | render, equipment | FR-MAGIC-007 |
@@ -378,11 +378,29 @@ What it checks and what it does not:
   (speed, MA-2). No row disagrees in the other direction.
 - **Records 80..139:** the same gaps, and three not-ready cases the colleges do not have: `Recharge` (103), `NoOp` (129, 130) and an AGoal goal other than 43 and 44 (89). Record 85
   adds effect 145 with the cause injury (7), and the session refuses that cause from a spell (`EffectNotSaved` on the hero); whether the original's effect add takes it is left to MA-2.
+- **After ARC-MAGIC-027 (2026-11-11):** the Effect component takes an NPC's list, so every NPC `Effect` entry left the table (the college spells 10, 15, 20, 25, 37, 40, 46, 51, 67, 70, 76, 77 now leave nothing on either target, and so do records 85, 93-96, 104, 112, 114 and 138 outside the colleges on the NPC; the rest keep their ObjFlag, Trait, Summon, Destroy, Identify, Movement or Recharge rows).
 - **Lanes that will change it:** E1-b (ARC-DEV-352, #941) changes the Summon and Destroy rows of the scenery summons; DEV-348 the NPC's Effect rows; MA-1 the ObjFlag rows. The slice that merges
   second re-runs the census and updates the table.
 - **After ARC-DEV-352 (#941, 2026-11-11):** the Summon component is taken on both targets of every record. Its census targets are objects, and an object entry summons nothing in
   the original (TA9: only a tile entry has a tile), so the census can no longer tell a scenery summon from a critter summon. A critter summon on a tile entry still logs `ComponentNotReady`
   (E1-e); its unit tests, not the census, hold that. The Destroy rows stay: the census targets are a critter and the hero, not a summoned object.
+
+## Effect consumers (MA-2, ARC-MAGIC-027)
+
+Done on 2026-11-11 ([contract](../world/durable-effects-runtime.md#consumers-of-resistance-and-stat-changes-arc-magic-027), ledger [RE1 to RE3](ledger/magic.md#effect-consumers-arc-magic-027)).
+
+- **Resistance changes reach the combat resolver.** The effective resistance (0x43D6D0) puts the effects after the armour and the poison bonus and before the clamp to 0..95 (RE1). The hero's durable effects and any NPC's list (the
+  session's, else the loaded one under the host's rules) feed the `Combatant` of every attack, spell damage on the hero and the hero's poison tick. The NPC's stat changes (speed, strength) reach its combat values, its attack
+  pause and the round's action points.
+- **The Effect component takes an NPC target** (`SessionSpellCasterEffects.cs`, the one `SessionSpellCaster*` file outside PR #941), so the census lost every NPC `Effect` row.
+- **The magic save does not read the effects (RE2).** The original's save reads the stored magic resistance, so Resist Magick (spell 40) and the magic parts of effects 51, 52, 55, 154 and 155 show on the sheet and roll in no save.
+  Steamwoven follows (O9, both modes). **Owner question (new, D6): should Resist Magick work?** (a) as the original: no effect on saves; (b) a bug of the game fixed in Steamwoven only, with an "Original" setting; (c) fixed in both
+  modes. Recommendation (b): a spell that does nothing is a bug of the game a player meets, which the owner's bug rule (2026-10-28, ledger NW4) sends to an "Original" setting. Until decided the code is (a).
+- **Speed.** The hero's speed already reached the attack pause and the turn-based action points; an NPC's does now. Walking is not speed-driven in the original (MA-R, XR), so nothing was added there.
+- **Left over, by name.** (1) `SessionSpellCaster.Combatant` and its stat getter (`SessionSpellCaster.cs` lines 550 and 1182) read an NPC without its list, so spell damage on an NPC ignores a Shield of Protection or Body spell it holds and a spell's save reads
+  its unchanged stats: both are one-line changes (`_owner.WithNpcEffects(npc.Combat)`) for after PR #941 merges, together with the fire half (`FireDamageRules`, burning) the coordinator held back. (2) An NPC's life facts do not read its effect-changed strength, constitution or resistance (its maximum hit points
+  and the poison tick); the list's own maxima apply. (3) The character sheet's resistance lines do not show effect changes. (4) The hero's innate (race, gender) effects have no resistance changes in the session.
+  (5) Per-spell runs of 30, 46, 76 and 77 are not done: no smoke stage names them.
 
 ## Decisions for the owner
 
@@ -393,6 +411,7 @@ What it checks and what it does not:
 | D3 | Teleportation scope: one slice, or split? | (a) one slice (MA-5) with tile movement, the world-map teleport, the no-teleport areas and followers; (b) split MA-5: tile movement first (spell 3), the rest second | (b): spell 3 needs no area data; the bans and the followers need the FR-TRAVEL-005 data |
 | D4 | Keep the census (MA-0) as a permanent opt-in real-data check in the toolchain table? | (a) yes; (b) one-off script, not kept | (a): it is the only way the matrix stays true; it adds one row to the opt-in table and runs only with `DAT_ROOT` |
 | D5 | Identify (spells 6, 7, 9) needs a window the original has and the viewer does not: inside the magic lane or inside E8? | (a) magic lane builds session state and a text answer, E8 the window; (b) the whole thing in E8; (c) both in the magic lane | (a) |
+| D6 | Resist Magick (40) does nothing for the saves in the original (RE2). Fix it? | (a) as the original; (b) fixed in Steamwoven only, "Original" setting; (c) fixed in both modes | (b) |
 
 **Decided by the owner (2026-11-11): the two XR14 anomalies are bugs of the game, fixed in both modes with no switch** (the owner's bug rule of 2026-10-28: no "Original"/"Steamwoven" (D8) setting for either):
 
