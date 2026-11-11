@@ -112,8 +112,8 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
 - **HD lines (ARC-UI-143).** After the rules the screen has three HD lines (the Game page of the options window had them until ARC-UI-146), one row of choices each: **HD graphics**
   Off/On (the visual profile, `visual_profile_v1.json`), **HD interface** Off/On/Generated (experimental) and **HD pack** Auto/Game/Custom
   (`hdInterface`, `generatedInterface`, `hdPack`, `hdPackPath` of `game_settings_v1.json`, [HD pack source](../workflow/hd-pack.md#hd-pack-source-arc-dev-350)).
-  They are the only place that sets them (the options window has no HD line since ARC-UI-146; the `H` key and the palette still switch the
-  visual profile in play): a choice is saved at once in the files (not at Play) and the game that Play
+  They are the only saved-settings screen for them (the options window has no HD line since ARC-UI-146; the `H` key and the palette still
+  switch the visual profile in play, HD interface and HD pack change only here, with Shift held at the start): a choice is saved at once in the files (not at Play) and the game that Play
   starts reads them like any start. The pack source applies at the next start; the note under the rows says what that start will read (an automated run: that pack folders are not searched). Custom opens the
   system folder dialog, with the same fallback note where there is none. The rows are off while the screen is busy; **Reset settings**
   resets `launcher_v1.json` only and leaves the HD lines as they are. A run with no settings file (an automated run) keeps the choices
@@ -1437,8 +1437,8 @@ the window's exact whole device scale on a worker (the first draw no longer stal
 third project line: where the active pack is read from, saved in the same file (`hdPack`, `hdPackPath`; file version 4, version 1–3 files
 read it as Auto). Auto prefers the player's iCloud pack folder (macOS, only when that folder exists on this device) when the pack in it
 is whole, and falls back to the installed copy in the game's own `user://hd-packs`; Game reads the installed copy alone; Custom opens the
-system folder dialog (a pack folder or a folder of packs) and reads that folder, then the installed copy. The choice applies at the next
-start (the pack is chosen once at startup); the window's note says now what the next start will read, or why a source was skipped. The
+system folder dialog (a pack folder or a folder of packs) and reads that folder, then the installed copy (the launcher screen's line, ARC-UI-143). The choice applies at the next
+start (the pack is chosen once at startup); the launcher screen's note says now what the next start will read, or why a source was skipped. The
 rules, the file check and the log line are in [HD pack source](../workflow/hd-pack.md#hd-pack-source-arc-dev-350). `InterfaceHd` holds the active pack and the HD interface setting
 (synced each frame); every interface frame with a key (`AreaInterfaceFrame.Hd`, built in
 `AreaInterfaceArt.ReadFile`) is an `HdInterfaceTexture`: it reports its **Legacy** size and Legacy pixels to every reader (layout,

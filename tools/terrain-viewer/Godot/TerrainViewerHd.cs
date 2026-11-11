@@ -151,7 +151,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-DEV-350: what the pack source would choose now (a stat of every pack file, no frame read), for the startup and for the
-    /// options window's note.</summary>
+    /// launcher screen's note.</summary>
     private static HdPackSourceChoice ResolveHdPack(HdPackSourceMode mode, string? customPath) =>
         HdPackSourceResolver.Resolve(mode, customPath, PackFolders(), new HdFileProbe());
 
@@ -159,7 +159,7 @@ public partial class TerrainViewerApp
     /// reports it. The canvas commits it once the visible frames are ready, or after the bounded wait.</summary>
     private VisualRequestOutcome RequestVisualToggle(string via) => _canvas is null ? VisualRequestOutcome.NoOp : RequestVisualProfile(_canvas.ToggledVisualProfile, via);
 
-    /// <summary>ARC-UI-089: requests <paramref name="target"/> (the options window's HD graphics line asks for a profile, not a toggle).</summary>
+    /// <summary>ARC-UI-089: requests <paramref name="target"/> (the launcher's HD graphics line asks for a profile, not a toggle).</summary>
     private VisualRequestOutcome RequestVisualProfile(VisualProfile target, string via)
     {
         if (_canvas is null) return VisualRequestOutcome.NoOp;
