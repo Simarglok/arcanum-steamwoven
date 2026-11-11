@@ -168,6 +168,20 @@ history held about 500 runs of such copies of one template).
   was only seen to pass in one place its default is that place and another one is not refused. `inv-carry` and
   `critter-light` have no configuration seen to pass yet (the diagnosis saw `NONE` at the Crash Site and in the town). A new stage needs a row
   (the tests fail without one); the zones below are built on this table.
+- **Stage times (ARC-DEV-399, Q3 of the diagnosis).** The viewer's map smoke times each stage it runs
+  (`TerrainViewerSmokeStageSet`: the chain's own question "does this stage run" is the stage's start, the next one its end) and prints
+  `ARC-DEV-399 stage-time NAME ms=N` as each ends (a failing run prints the interrupted stage's too; a whole-battery run with no
+  `--stages` times its `map`, `resources`, `transfer`, `roundtrip`, `stream` and `worldmap` parts, `map` being about eighty sub-smokes in one). After
+  each step the runner (`tools/local_dev/smoke_history.py`) reads those lines from the step's log and appends one line to
+  `smoke-stages.jsonl` in the launch queue's folder, next to `history.jsonl` and keyed by the same ticket number (`seq`): the step
+  name, kind, checkout, the requested stages, `stageMs` (each stage's milliseconds in run order), `waitSeconds` (enqueue to start:
+  the queue wait), `ranSeconds`, `outsideStagesSeconds` (the process start, the map load and the exit, which no stage clock covers),
+  the exit code. The summary of `./arcanum smoke` prints the same as `SMOKE times`; `python3 -B -m tools.local_dev.smoke_history [N]`
+  prints the last N recorded steps. The queue itself (`run_queue.py`) and its `history.jsonl` are unchanged (its labels stay
+  `smoke STEP-NAME`; the stage list lives in this file), and a failure to write the record is a note, never a failed smoke. The
+  file keeps the newest 5,000 lines once it passes 2 MB. `stages` lists the requested stages (for a battery run the PASS names the step requires), `stageMs` the parts the viewer timed, so
+  for a battery step the two differ; a stage's clock also holds the short work after it up to the next stage's start; a step stopped by a timeout or a signal prints no stage times (`stageMs` is empty). Only the map smokes print stage times: the Crash Site smoke, the self-test, the build and the import show their
+  wait and run time only.
 - **Smoke zones (ARC-DEV-396).** Option A of the [smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md#zone-options),
   in `tools/local_dev/smoke_zones.py`. A zone is a set of stages a change can break together: `core` is every cheap stage (every
   stage no heavy zone holds, so a stage the viewer gains lands there until a heavy zone claims it; grouped by configuration into

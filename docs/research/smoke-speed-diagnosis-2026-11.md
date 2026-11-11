@@ -183,6 +183,8 @@ then needs a reset of the session state, and the smokes are written to start fro
 
 ## Status
 
+Q3 is done in ARC-DEV-399, with the stage list in a file of its own beside the history instead of in the queue label (the viewer prints a time per stage, the runner writes `smoke-stages.jsonl` beside the queue history with the stage list, each stage's time and the queue wait; [stage times](../workflow/toolchain.md#smoke-runner-arc-dev-061)).
+
 Q4 and Q5 are done in ARC-DEV-391 (`STAGE_NEEDS`, `--stages` grouping, the early error, `smoke_known_failures.json`; [smoke runner](../workflow/toolchain.md#smoke-runner-arc-dev-061)). The zones themselves (option A) and Q8 are done in ARC-DEV-396 (`tools/local_dev/smoke_zones.py`, `./arcanum smoke pr --auto`, `./arcanum smoke complete`; [smoke zones](../workflow/toolchain.md#smoke-runner-arc-dev-061)): `core` is every stage no heavy zone holds, the heavy zones are `walk`, `container-click`, `crash-site` and `census`, and the daily run is now `complete` (every stage, not 15 of 76).
 
 ## Recommendation

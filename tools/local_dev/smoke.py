@@ -26,7 +26,7 @@ import sys
 import tempfile
 from typing import Callable, Mapping, Sequence
 
-from . import config, launch, run_queue, smoke_zones, start_check
+from . import config, launch, run_queue, smoke_history, smoke_zones, start_check
 
 ROOT = Path(__file__).resolve().parents[2]
 VIEWER = Path("tools/terrain-viewer/Godot")
@@ -675,6 +675,7 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
     known = load_known_failures() if known is None else known
     results: list[tuple[str, int]] = []
     only_known: list[str] = []
+    timed: list[dict] = []  # ARC-DEV-399: the stage and queue times of each step that ran, for the summary
 
     def run_step(step: Step) -> tuple[int, Path | None]:
         say(f"SMOKE step {step.name} kind={step.kind}")
@@ -699,6 +700,13 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
                     say(f"  not run for another reason: {', '.join(others)}")
                 else:
                     only_known.append(step.name)
+        try:  # ARC-DEV-399: what the step ran and each stage's time, into the queue folder; never changes the result
+            record = smoke_history.entry_of(step.name, step.kind, step.requires, code, logs[-1] if logs else None)
+            if record is not None:
+                smoke_history.append(record)
+                timed.append(record)
+        except Exception as error:  # noqa: BLE001 - a record must never fail the smoke, whatever a history line held
+            say(f"  note: the stage times of {step.name} were not recorded: {error}")
         results.append((step.name, code))
         return code, logs[-1] if logs else None
 
@@ -732,6 +740,11 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
     skipped = [step.name for step in steps[done:]]
     if skipped:
         say("  not run: " + ", ".join(skipped))
+    if timed:
+        say("SMOKE times (queue wait, run time, each stage; the history is smoke-stages.jsonl in the queue folder)")
+        for record in timed:
+            for line in smoke_history.table(record):
+                say(line)
     failed = [name for name, code in results if code != 0]
     if only_known:
         say("  only known failures on main (not this PR): " + ", ".join(only_known))
