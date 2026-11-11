@@ -161,6 +161,8 @@ public sealed partial class GameSessionOwner
                 _inventory.Objects.RemoveCreated(entity);
                 // ARC-DEV-371: the flags written on it (the encounter flag every script-made critter carries) go with it, so a long run of created critters does not fill the written-flags bound; its other state records stay (E1-c1).
                 _objectFlags = _objectFlags.Remove(entity);
+                // ARC-MAGIC-040: the monster body a Trait component put on it goes too (the same bound).
+                _traitArt = _traitArt.Remove(entity);
                 return;
             case SessionObjectOrigin.Missile:
                 _missileObjects.Remove(entity);

@@ -45,7 +45,7 @@ and its link holds the detail.
   a cloud clone without .NET or Godot and runs **no checks**; its PR says
   "docs-only, no checks run", and the independent review still applies.
 - **Runs on the Mac.** Every Godot run, export and `dotnet` build/test goes
-  through the FIFO queue `./arcanum run --kind window|headless|export|dotnet -- COMMAND`
+  through the launch queue `./arcanum run --kind window|headless|export|dotnet|quick -- COMMAND`
   (`./arcanum queue` shows it; it replaces `lockf`)
   ([launch queue](docs/workflow/toolchain.md#launch-queue-arc-dev-033)). It is
   quiet: the whole output goes to a log file, stdout keeps PASS/FAIL and the

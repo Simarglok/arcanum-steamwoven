@@ -19,10 +19,13 @@ public sealed record SessionSpellState(IReadOnlyList<SpellRun> Runs, IReadOnlyLi
 {
     public static SessionSpellState Empty { get; } = new([], [.. Enumerable.Repeat(MaintainSlot.Empty, MaintainBarRules.Slots)], 0);
 
-    public bool IsEmpty => Runs.Count == 0 && LastCost == 0 && ObjectFlags.Count == 0;
+    public bool IsEmpty => Runs.Count == 0 && LastCost == 0 && ObjectFlags.Count == 0 && TraitArt.Count == 0;
 
     /// <summary>ARC-DEV-302 (schema 83): the flags the spell components wrote on critters (<see cref="GameSessionOwner.QueryObjectFlags"/>), ascending by entity.</summary>
     public IReadOnlyList<SessionObjectFlagRecord> ObjectFlags { get; init; } = [];
+
+    /// <summary>ARC-MAGIC-040 (schema 89): the monster bodies the Trait component put on critters (<see cref="GameSessionOwner.QueryTraitArt"/>), ascending by entity.</summary>
+    public IReadOnlyList<SessionTraitArtRecord> TraitArt { get; init; } = [];
 }
 
 public sealed partial class GameSessionOwner
@@ -42,7 +45,7 @@ public sealed partial class GameSessionOwner
     {
         var saved = SavedSpellRunSlots();
         var bar = _maintainBar.Slots.Select(slot => slot.State != MaintainSlotState.Empty && saved.Contains(slot.Run) ? slot : MaintainSlot.Empty).ToArray();
-        return new([.. _spellRuns.Runs.Where(run => saved.Contains(run.Id))], bar, _spellLastCost) { ObjectFlags = CaptureObjectFlags() };
+        return new([.. _spellRuns.Runs.Where(run => saved.Contains(run.Id))], bar, _spellLastCost) { ObjectFlags = CaptureObjectFlags(), TraitArt = CaptureTraitArt() };
     }
 
     // Shapes the codec cannot know: the run table's slots, the entity strings of the objects a run names, the actions the build saves, and a bar that shows only runs that exist.

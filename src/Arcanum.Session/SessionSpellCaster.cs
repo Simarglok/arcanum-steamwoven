@@ -195,6 +195,13 @@ public enum SpellCastEventKind
     /// <summary>ARC-MAGIC-038: a Movement component of type 1 (Random_Tile_In_Radius, 0x4524C0 → the placement 0x4F4E40) asks the host to relocate <see cref="SpellCastEvent.Object"/> to a tile
     /// <see cref="SpellCastEvent.Value"/> steps (the component's <c>Tile_Radius:</c>) away in the direction <see cref="SpellCastEvent.Detail"/> (0..8, the one draw): the host asks the path, walks and places as for type 0.</summary>
     MovementRandom,
+    /// <summary>ARC-MAGIC-040 (MA-8, TR1–TR6): a Trait component of art type (0x452B00) put the monster body of species <see cref="SpellCastEvent.Value"/> on <see cref="SpellCastEvent.Object"/> (the palette in the low two bits of
+    /// <see cref="SpellCastEvent.Detail"/>, <see cref="SessionSpellCaster.TraitElemental"/> for the three elemental bodies, <see cref="SessionSpellCaster.TraitStateChanged"/> when the session's record changed): the host takes
+    /// every worn item off (the nine slots, the original unwields each and drops what stays), draws the body and, for the elemental bodies, sets the elemental critter and blit flags.</summary>
+    TraitApplied,
+    /// <summary>ARC-MAGIC-040: a Trait component with the value −1 (0x452CD0) took the monster body of <see cref="SpellCastEvent.Object"/> off (<see cref="SpellCastEvent.Value"/> is the species it had, −1 when the session had none;
+    /// the detail bits are those of <see cref="TraitApplied"/> without the palette): the host draws the stored body again, clears the elemental flags and chooses the best items for every slot again (0x4654F0).</summary>
+    TraitRestored,
 }
 
 /// <summary>
