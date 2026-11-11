@@ -484,6 +484,16 @@ child MSBuild witnesses; SOURCE/EXPORT authority, writer and registration retain
 the complete candidate-map guard. Missing, altered or cross-project pins reject.
 No tracked lock is excluded or restored after a build/export.
 
+## HD font tracing
+
+ARC-DEV-355, [`tools/hd_font`](../../tools/hd_font/hd_font.py), page [HD font tracing](hd-font.md). Python tool, standard library plus
+four locked packages (numpy, scipy, Pillow and the GPLv2+ potracer, wheel hashes in `tools/hd_font/requirements.lock`) installed into
+`local/hd-font/venv` on the first real run; `--dry-run` needs none. It runs no Godot and no `dotnet`, so it does not use the launch queue.
+
+```sh
+python3 -B tools/hd_font/hd_font.py self-test    # task check: synthetic fonts drawn by the test, no game file; a failed install is a failed check
+```
+
 ## Function oracle
 
 ARC-DEV-007, [`tools/original-oracle`](../../tools/original-oracle/README.md), method in the
@@ -521,6 +531,7 @@ Original inputs remain read-only and local. Set only the inputs needed for the s
 | GOG installer unpack (ARC-DEV-074) | `ARC_GOG_INSTALLER` = the GOG offline installer; `innoextract` installed (`PATH` or a Homebrew folder); unpacks into a temporary folder, about 1.2 GB | Session project, `FullyQualifiedName~GogInstallerUnpackerTests&TestCategory=RealData`; [research](../research/gog-installer-unpack.md) |
 | Map aggregate builder (ARC-DEV-082) | `ARCANUM_EXE` and `ARCANUM_GAME_ROOT` (an installation with the module and the prototype files); the comparison also `ARCANUM_ORIGINAL_MAPS` (the aggregates the original wrote, such as `modules/Arcanum/maps`); `ARCANUM_AGGREGATE_OUT` writes the built files for a look | Executable project, `FullyQualifiedName~MapAggregateBuilderRealData`, `TestCategory=OriginalExe`, `-c Release` (about 10 s); [contract](../Arcanum.Executable.md#the-map-aggregate-builder) |
 | Prototype provision (ARC-DEV-069) | `ARCANUM_GAME_ROOT` = an installation the original ran (its `Arcanum.exe` is read; a copy made of links without `data/proto` and `modules/Arcanum/maps` is built from, in a temporary settings folder (prototypes and the map aggregates); `ARCANUM_ORIGINAL_PROTO` is not needed: the installation's own `data/proto` is compared by name and length) | Session project, `FullyQualifiedName~A_fresh_copy&TestCategory=OriginalExe`, `-c Release` (about 30 s); [research](../research/prototype-extraction.md#e4-results-arc-dev-069) |
+| Spell census (ARC-DEV-356) | `DAT_ROOT` = the installed game folder | Session project, `FullyQualifiedName~SpellCensusRealDataTests&TestCategory=RealData` (a few seconds); a failure prints the changed rows to paste into the test; [census](../research/magic-audit-res-103.md#spell-census-ma-0) |
 | DLG reader | `DAT_ROOT` | Data project, `TestCategory=DlgRealData`; [DLG reader](../formats/dlg-reader.md) |
 | Dialog transition | `DAT_ROOT` | Scripting project, `TestCategory=DlgRuntimeRealData`; [runtime](../scripting/dialog-transition-runtime.md) |
 | Terrain | `ARCANUM_TERRAIN_MODULE`, `ARCANUM_TERRAIN_RESOURCE` | Data project, `FullyQualifiedName~TerrainLoaderTests&TestCategory=RealData`; [loader](../world/terrain-loader.md) |
