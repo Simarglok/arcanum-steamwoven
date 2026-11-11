@@ -130,7 +130,7 @@ public sealed partial class GameSessionOwner
     /// pile no longer stays by a path that skipped the check).</item>
     /// <item><b>A junk pile</b>: the pile's record only; its items stay on the ground where they lie.</item>
     /// <item><b>A pool of blood</b>: the pool's record (a decayed pool is purged here; its number is never given again).</item>
-    /// <item><b>A created scenery or eye-candy object</b> (ARC-DEV-347): its record; its number is never given again.</item>
+    /// <item><b>A created scenery or eye-candy object</b> (ARC-DEV-347): its record; its number is never given again. <b>A created critter</b> (ARC-DEV-359, ARC-DEV-371): its record and its written flags.</item>
     /// </list>
     /// <paramref name="windowShowsContainer"/> is a caller that knows the host's loot window shows a container (the check then waits for
     /// the close); the session also reads it from the event world of the pass it runs in (the decay), and outside a pass it knows none, so
@@ -151,8 +151,16 @@ public sealed partial class GameSessionOwner
                 return;
             case SessionObjectOrigin.Scenery:
             case SessionObjectOrigin.EyeCandy:
-            case SessionObjectOrigin.Critter:
                 _inventory.Objects.RemoveCreated(entity);
+                return;
+            case SessionObjectOrigin.Critter:
+                // ARC-DEV-386 (E1-c4): what the critter holds is destroyed with it (the original destroys an object's inventory with it, 0x43CCA0 on each entry), and its holder leaves the seed.
+                foreach (var held in _inventory.AddedTo(entity).Select(item => item.Entity).ToArray()) Discard(held);
+                _inventory.NpcWorn.Remove(entity);
+                foreach (var seed in _inventory.Seeds.Values) if (seed.RemoveCreatedHolder(entity)) _inventory.SeedGeneration++;
+                _inventory.Objects.RemoveCreated(entity);
+                // ARC-DEV-371: the flags written on it (the encounter flag every script-made critter carries) go with it, so a long run of created critters does not fill the written-flags bound; its other state records stay (E1-c1).
+                _objectFlags = _objectFlags.Remove(entity);
                 return;
             case SessionObjectOrigin.Missile:
                 _missileObjects.Remove(entity);

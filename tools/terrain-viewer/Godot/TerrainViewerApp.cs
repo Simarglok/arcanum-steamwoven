@@ -125,6 +125,8 @@ public partial class TerrainViewerApp : Node
         _hud?.SetMode(_arguments.Mode);
         if (IsWorld) InitializeWorld();
         _lastLoad = StartLoadAsync(_arguments);
+        // ARC-DEV-381 (O1): the load runs on its worker; the main menu opens now, not after the whole start map is published.
+        OpenEarlyMainMenu();
     }
 
     private async Task StartLoadAsync(TerrainViewerArguments arguments, bool orchestrateSmoke = true)
@@ -227,6 +229,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("spell-end") == true) await RunAreaSpellEndSmokeAsync(result);
                                 // ARC-DEV-304 (B11, SM09): only when named, the spell holds (stone, paralysis, entangle) written on the hero stop its steps, drop its clicks and let a walk resume after the END (--hero, Crash Site).
                                 if (only?.Contains("hold-hero") == true) await RunAreaHoldHeroSmokeAsync(result);
+                                // ARC-MAGIC-036 (MA-5): only when named, Spatial Distortion's Movement component relocates the hero along the path request, at most eight tiles (--hero, Crash Site).
+                                if (only?.Contains("movement") == true) await RunAreaMovementSmokeAsync(result);
                                 // ARC-DEV-335 (V7d, B50): only when named, a light worn by the hero lights the area around it (with --hero, a lit map).
                                 if (only?.Contains("worn-light") == true) await RunAreaWornLightSmokeAsync(result);
                                 // ARC-DEV-353 (V7d second part): only when named, an NPC's light is carried with the NPC (AI on, a lit map with an NPC that carries a light).
@@ -245,6 +249,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("created-scenery") == true) await RunAreaCreatedSceneryStageAsync();
                                 // ARC-DEV-370 (E1-c2): only when named, a critter the session creates by prototype is drawn, picked, moved by the AI's movers with a walk frame and gone once destroyed (--hero, a map window with the inventory).
                                 if (only?.Contains("created-critter") == true) await RunAreaCreatedCritterStageAsync();
+                                // ARC-DEV-371 (E1-c3): only when named, the installed tile script 1629 creates critters next to the hero (--hero, a map window with the inventory): flagged, hosted by the AI host, notified, destroyed.
+                                if (only?.Contains("script-critters") == true) await RunAreaScriptCrittersStageAsync();
                                 // ARC-DEV-352 (E1-b): only when named, Fireflash's flash on an empty tile and none on an occupied one; Wall of Fire's pieces, their burn and their END (--hero, a map window).
                                 if (only?.Contains("summon-flash") == true) await RunAreaSummonSmokeAsync(SummonFlashSpell);
                                 if (only?.Contains("summon-wall") == true) await RunAreaSummonSmokeAsync(SummonWallSpell);
@@ -465,6 +471,7 @@ public partial class TerrainViewerApp : Node
     private void PublishFailure(TerrainViewerMode mode, TerrainViewerError error)
     {
         _lastPublishedFailure = $"{error.Stage}/{error.Code}";
+        EarlyMenuSceneFailed();
         if (IsWorldMode(mode))
         {
             _worldGate.Close(); _worldReducer.Quarantine();

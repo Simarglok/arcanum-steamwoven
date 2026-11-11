@@ -244,7 +244,9 @@ public partial class TerrainViewerApp
     private bool AiHeartbeat(AiScriptPoint point, string npc)
     {
         if (_readyArea is not { } area || _areaSession is not { } session || UseScriptHost(area.Snapshot) is not { } host
-            || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map || !map.TryGetRow(npc, out var row)) return true;
+            || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map) return true;
+        // ARC-DEV-371: a critter created at run time runs its prototype's heartbeat too (its row is the session's, the map holds none).
+        if ((map.TryGetRow(npc, out var held) ? held : CreatedCrittersRow(npc)) is not { } row) return true;
         var scrPoint = point == AiScriptPoint.Heartbeat ? Arcanum.Scripting.Scr.ScrPoint.Heartbeat : Arcanum.Scripting.Scr.ScrPoint.FirstHeartbeat;
         if (host.Slot(new(CurrentAreaMap, npc), scrPoint) is not { Script: > 0 }) return true;
         var ran = host.RunHeartbeat(row, scrPoint, session.Rules.Scripts);
@@ -548,6 +550,10 @@ public partial class TerrainViewerApp
         if (AreaAiHostNow() is not { } host) return;
         // The view's sectors are touched in every frame the world runs, whether or not the frame step did (a smoke's frames call it only when they say so).
         TouchAreaView();
+        // ARC-DEV-371: the critters a heartbeat or another run created since the last frame are notified (a run that went through Awarded was noted at once).
+        if (_useScriptHost is { } scripted) NoteScriptCreations(scripted.Host.TakeCreations());
+        // ARC-DEV-371: the encounter creatures a tick destroyed are destroyed in the session here, from the frame, never from inside a tick.
+        if (_areaSession is { } scriptedSession) { DrainEncounterDestroys(scriptedSession, host); TakeCreatedInventories(scriptedSession); }
         var steps = AiFrameParticipant.TakeSteps();
         // ARC-WORLD-095: in a round the runs' charges and subturn ends reach the round log and the status line's action points.
         var roundEvents = host.DrainRoundEvents();
@@ -659,7 +665,9 @@ public partial class TerrainViewerApp
     private bool RunNpcTilePending()
     {
         var changed = false;
-        while (_npcTilePending.Count > 0 && !ConversationOpen)
+        // A tile script that creates a critter onto a tile with the same script would queue another notice for each run: at most 64 runs a frame, the rest wait for the next one.
+        var budget = 64;
+        while (_npcTilePending.Count > 0 && !ConversationOpen && budget-- > 0)
         {
             var (npc, homeMap, at) = _npcTilePending.Dequeue();
             // A companion carried here is the group's (its record may be unresolved for the host, which then reads as dead): its death is the session's.

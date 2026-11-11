@@ -61,7 +61,8 @@ output is kept small.
   find the row in the area folder, grep only that row and cut it
   (`| cut -c1-300`); their rows run to thousands of characters.
 - Subagents (executable readers, reviewers) get the diff or exact file ranges
-  and a short brief; they never read a catalogue, matrix or ledger file whole.
+  and a short brief (a reader gets the address and the export path, not the
+  whole export); they never read a catalogue, matrix or ledger file whole.
 
 Why: in the token audit of 2026-10-21, search and read output (`grep`, `find`,
 `sed`, `cat`) was the largest share of re-read tokens in the three audited
@@ -327,5 +328,13 @@ committed files. Do not copy the game or the full vault into each worktree.
   as a workaround, and never force-push. If the merge is refused or its result is
   unclear, read the PR state first instead of retrying. After a merge, read back
   the MERGED state and merge commit, and report the merged PR.
+- Owner rule 2026-11-11: a change that alters what the player sees (a drawn
+  element, an HD art, a layout, a colour) shows the result before it is merged:
+  one **composite image** in the thread with every version labelled (before,
+  after and each alternative that was tried), so the owner compares them at a
+  glance. When the owner must choose between versions, the thread forwards the
+  image to the coordinator for a decision card. The images contain original
+  art, so they are posted in the thread and kept local, never committed to git
+  ([HD pack rule](hd-pack.md)); the PR text says which thread holds them.
 - Report Implemented, Not implemented, Remaining work, the checks run with their
   results, and material uncertainties.

@@ -30,7 +30,7 @@ the [ledger](../research/original-verification-ledger.md) has two readings, F0 w
 executable). Since ARC-DEV-025 no implemented row is at F0: the twelve that were F0 have been read by two readers
 ([ledger IF1–IF12](../research/ledger/data.md#implemented-functions-arc-dev-025)). Since 2026-10-20
 (owner decision, ARC-DEV-030) a new implemented row starts at F1 or higher: the implementing task reads the function in
-the executable first. A host method that
+the exports of the executable (or the executable itself) first. A host method that
 only calls the registered rule carries no mark (one method per address). Other domains add their rows when they are migrated.
 
 ## OriginalFunction attribute
@@ -121,6 +121,9 @@ V1 of the [function audit plan](../research/function-audit-plan.md#5-recommendat
 | A (ARC-RES-117) | 0x400000-0x41FFFF | 402 added: 37 implemented, 68 not implemented, 297 not relevant | [census-triage-a](../research/ledger/census-triage-a.md) |
 | H1 (ARC-RES-119) | 0x500000-0x54FFFF | 933 added (50 of the band's 983 had rows): 17 implemented, 225 not implemented, 691 not relevant | [census-triage-h1](../research/ledger/census-triage-h1.md) |
 | H2 (ARC-RES-120) | 0x550000-0x59FFFF | 1,143 added (93 had rows): 41 implemented, 152 not implemented, 950 not relevant | [census-triage-h2](../research/ledger/census-triage-h2.md) |
+| G and I (ARC-RES-121) | the export functions that are not census starts: G = 0x470000-0x49FFFF and the other 0x400000-0x4FFFFF, I = 0x500000-0x59FFFF | 1,042 read (docs-only, no registry rows or marks yet): 1,011 not relevant, 17 not implemented, 14 implemented | [census-triage-gi](../research/ledger/census-triage-gi.md), [`triage/groups-g-i.csv`](triage/groups-g-i.csv) |
+
+**Groups G and I (wave 3).** The slices above took the census rows of an address band. The Ghidra text export of ARC-DEV-377 and ARC-DEV-379 lists 6,717 functions with a C file and 139 thunks where the census lists 5,815, so wave 3 gives a state to the 1,042 export functions that are not census starts: **group G** is every such function in 0x470000-0x49FFFF (the census has no row of 0x47 and 0x48 and 30 of 0x49: the giant prototype fill switch, split into case blocks) and every other such function in 0x400000-0x4FFFFF; **group I** is every such function in 0x500000-0x59FFFF. The 44 census starts that have no C file (43 thunks, one inside another function) are a finding of the ledger section, not a group. Because that task was docs-only its record is the [CSV](triage/groups-g-i.csv) (state, class, callers and pointer holders per address) and the ledger section; no registry row or mark was added.
 
 ## Rule-mode switches
 

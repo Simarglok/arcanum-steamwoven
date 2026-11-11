@@ -26,7 +26,8 @@ public partial class TerrainViewerApp
     private readonly Queue<MapEntry> _mapEntered = new();
     // ARC-DEV-351: a tile the hero entered (a step, a push) or was placed on (an arrival). RequestsRefused: the notification of a same-map change of place runs inside it, while the
     // hero's own request is pending, so the jump point and the tile's teleport ask for nothing (ledger TG9, RL21).
-    private readonly record struct MapEntry(AreaStepCell From, AreaStepCell To, bool RequestsRefused = false);
+    // ARC-MAGIC-036: TileScriptOnly is a tile the spell Movement component's path walk (0x455350) stepped the hero onto: only its tile script runs (0x4C0980), no jump point and no sector entry.
+    private readonly record struct MapEntry(AreaStepCell From, AreaStepCell To, bool RequestsRefused = false, bool TileScriptOnly = false);
     // ARC-DEV-328: the followers that arrived with the actor, whose arrival tile's script has not run yet (entity, home map, the cell).
     private readonly List<(string Entity, int HomeMap, AreaStepCell Cell)> _arrivalTilePending = [];
     private string? _lastPublishedFailure;
@@ -205,11 +206,25 @@ public partial class TerrainViewerApp
         foreach (var award in host.TakeAwards()) LevelAreaFollowers(award);
         // ARC-DEV-298 (B20): the float lines of the run (the ghost of Brego's) over their speakers, floated by the next frame.
         foreach (var line in host.TakeFloats()) _tileScriptFloats.Enqueue((line.Speaker == host.Pc ? HeroFloater : line.Speaker.Code, line.Text));
-        // ARC-WORLD-081: the items the run created (or did not, at the Steamwoven limit or a refusal) are logged.
-        foreach (var created in host.TakeCreations())
-            GD.Print("ARC-WORLD-081 created " + System.Text.Json.JsonSerializer.Serialize(new { created.Prototype, Near = created.Near.Code,
-                Disposition = created.Result.Disposition.ToString(), Failure = created.Result.Failure.ToString(), created.Result.Item }));
+        NoteScriptCreations(host.TakeCreations());
         return ran;
+    }
+
+    /// <summary>
+    /// ARC-WORLD-081: the items a run created (or did not, at the Steamwoven limit or a refusal) are logged. ARC-DEV-371 (E1-c3, ledger TG9, OM16): a critter it created is notified of its location at once
+    /// (0x442260 ends with the location notification, mode 2, for a type 15 or 16 object, unconditionally), so the script of the tile it stands on runs with it as the triggerer (the AI frame runs the notice
+    /// as it runs an NPC's step: after an open conversation, once the AI host holds the critter). The original runs it inside the action, before the script's next one; here it follows the run.
+    /// </summary>
+    private void NoteScriptCreations(IReadOnlyList<AreaScriptCreation> created)
+    {
+        foreach (var made in created)
+        {
+            GD.Print("ARC-WORLD-081 created " + System.Text.Json.JsonSerializer.Serialize(new { made.Prototype, Near = made.Near.Code,
+                Disposition = made.Result.Disposition.ToString(), Failure = made.Result.Failure.ToString(), made.Result.Item, made.Critter }));
+            if (made.Critter is not { } entity || made.Cell is not { } cell) continue;
+            if (_npcTilePending.Count >= 256) _npcTilePending.Dequeue();
+            _npcTilePending.Enqueue((entity, null, new(cell.X, cell.Y)));
+        }
     }
 
     private AreaUseScriptHost? UseScriptHost(AreaSnapshot snapshot)
@@ -251,7 +266,11 @@ public partial class TerrainViewerApp
             // ARC-DEV-243 (S14g): a script's damage and heal of hit points go through the cast host's damage step and the session's life step.
             DamageByScript, HealHitPointsByScript,
             // ARC-DEV-261 (GT198): a destroyed object's taking-damage script is asked all the same; the answer cannot change the outcome.
-            code => TakingDamageGoesOn(code, null));
+            code => TakingDamageGoesOn(code, null),
+            // ARC-DEV-371 (E1-c3): a script's create object of a critter prototype makes a critter; a created critter's row is the session's (the maps' rows hold none).
+            ScriptCritterPrototype, entity => CreatedCrittersRow(entity),
+            // ARC-DEV-386 (E1-c4): the creation's finish generates the new critter's inventory (queued for the frame, see TakeCreatedInventories).
+            CritterMade: QueueCreatedInventory);
         var inventory = _inventoryHost;
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, inventory?.Maps ?? [], content, world)
         {
@@ -261,6 +280,8 @@ public partial class TerrainViewerApp
         // ARC-WORLD-110: a use meets the object's trap first; the walk and the steps meet the same host's traps.
         _areaTraps = new AreaTraps(owner, host, snapshot.Objects, world.Gone, AreaTrapEffectsNow);
         host.Traps = _areaTraps.Use;
+        // ARC-DEV-371: creations a replaced host had not handed over yet keep their tile notification when it is the same map's.
+        if (_useScriptHost is { } replaced && replaced.Snapshot.RuntimeMap == snapshot.RuntimeMap && ReferenceEquals(replaced.Session, owner)) NoteScriptCreations(replaced.Host.TakeCreations());
         _useScriptHost = (snapshot, owner, content, _inventoryHost, host);
         return host;
     }
@@ -328,11 +349,11 @@ public partial class TerrainViewerApp
                 queued |= entered.Outcome == AreaUseOutcome.Accepted;
             }
             if (step.From == step.To) GD.Print($"ARC-DEV-351 hero arrival tile {step.To.X},{step.To.Y} requestsRefused={step.RequestsRefused}");
-            foreach (var entered in _mapTransfers.Enter(step.To, step.RequestsRefused)) Note(entered);
+            foreach (var entered in _mapTransfers.Enter(step.To, step.RequestsRefused, !step.TileScriptOnly)) Note(entered);
             PostScriptedLines();
             // ARC-SCRIPT-046: a run that asked for a conversation opens it (a later one is not opened while it is).
             if (_mapTransfers.LastScripted?.Dialog is { } tileTalk) BeginScriptedConversation(tileTalk);
-            if (_mapTransfers.EnterSector(step.From, step.To) is { } sector)
+            if (!step.TileScriptOnly && _mapTransfers.EnterSector(step.From, step.To) is { } sector)
             {
                 Note(sector);
                 PostScriptedLines();

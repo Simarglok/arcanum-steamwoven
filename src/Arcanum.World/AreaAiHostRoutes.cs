@@ -5,6 +5,7 @@ using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.ChangeOfPlace;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Goals;
+using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 
@@ -336,6 +337,40 @@ public sealed partial class AreaAiHost
         RecordPlace(npc);
         NoteEntered(npc, cell);
         return $"{facts.Location.X},{facts.Location.Y} -> {cell.X},{cell.Y}";
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-036 (MA-5, MV1–MV3): the spell Movement component's immediate path relocation (0x455350) of an NPC or companion this host runs: the path request from its tile to <paramref name="destination"/>
+    /// (<see cref="ImmediatePathWalk"/>, its owner kind by its leader: a PC's side with a PC leader, else an NPC's), the NPC's walk runs interrupted (the original's level-5 interrupt 0x424070; here
+    /// the walk runs, as for a hold: the spell's own run is not the host's to end), the NPC placed on the last tile of the walk with its facing kept (a companion by its walk's jump), and the tile
+    /// script run for every tile walked and once more for the last one, as the relocation's notification does (TG2, TG9). Answers what happened, for the log: nothing moves without a route or when the shown map
+    /// does not hold the last tile.
+    /// </summary>
+    public (int Tiles, string Result) RelocateAlongPath(string npc, CellCoord destination, IDropMap map)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(npc);
+        ArgumentNullException.ThrowIfNull(map);
+        var follower = _followers.ContainsKey(npc);
+        if (!follower && !_npcs.ContainsKey(npc)) return (0, "not run by the host");
+        if (Tile(npc) is not { } from) return (0, "no tile");
+        var tiles = ImmediatePathWalk.Tiles(map, from, destination, Leader(npc) is null ? DropOwner.Npc : DropOwner.PcSide);
+        if (tiles.Count == 0) return (0, "no route");
+        var last = tiles[^1];
+        if (!PlaceHeld(last)) return (tiles.Count, $"arrival {last.X},{last.Y} not held by the shown map");
+        InterruptForHold(npc);
+        if (follower)
+        {
+            if (_scene.Followers is not { } followers || !followers.Jump(npc, last)) return (tiles.Count, "the companion's walk refused the jump");
+        }
+        else
+        {
+            var row = _npcs[npc];
+            Movers.Restore(npc, row.Row.Key, row.Origin, last, Movers.FacingOf(npc, NeighborDirection.XPlus));
+            RecordPlace(npc);
+        }
+        foreach (var tile in tiles) _notices.Add(new(AreaAiNoticeKind.Entered, npc, null) { Cell = tile });
+        _notices.Add(new(AreaAiNoticeKind.Entered, npc, null) { Cell = last });
+        return (tiles.Count, $"{from.X},{from.Y} -> {last.X},{last.Y}");
     }
 
     // Whether the shown map holds a resident on this world cell: it lies on the chart (a map with a loaded-sector chart, the main map's windows: anywhere on the map, ARC-DEV-119),

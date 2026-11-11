@@ -264,8 +264,15 @@ public sealed class AreaInventoryHost
     public AreaInventoryTarget? Target(GameSessionOwner session, int runtimeMap, AreaObjectKey key)
     {
         ArgumentNullException.ThrowIfNull(session);
-        if (!_maps.TryGetValue(runtimeMap, out var map) || !map.TryGetEntity(key, out var entity)
-            || session.QueryMapInventory(new(runtimeMap)) is not { } current) return null;
+        // ARC-DEV-386 (E1-c4): a critter the session created on the map is found by its row's key in its one-row map.
+        var map = _maps.GetValueOrDefault(runtimeMap);
+        string? entity = null;
+        if (map is null || !map.TryGetEntity(key, out entity!))
+        {
+            map = _resolver.CreatedMapsOn(runtimeMap).FirstOrDefault(created => created.TryGetEntity(key, out _));
+            if (map is null || !map.TryGetEntity(key, out entity!)) return null;
+        }
+        if (session.QueryMapInventory(new(runtimeMap)) is not { } current) return null;
         if (current.Ground.Any(ground => ground.Item.Entity == entity)) return new(AreaInventoryTargetKind.GroundItem, entity, map.Row(entity));
         return current.Holders.FirstOrDefault(holder => holder.Entity == entity) switch
         {
@@ -319,7 +326,7 @@ public sealed class AreaInventoryHost
     // ARC-DEV-238: the cell of an NPC on the shown maps (its map row's, as the substitute container's range reads it), for the item a refused hand-over lays down.
     private CellCoord? NpcCell(string npc)
     {
-        foreach (var map in _maps.Values)
+        foreach (var map in _maps.Values.Concat(_resolver.CreatedMap(npc) is { } created ? [created] : []))
             if (map.TryGetRow(npc, out var row) && row.WorldX is { } x && row.WorldY is { } y && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue)
                 return new((int)x, (int)y);
         return null;
@@ -372,6 +379,8 @@ public sealed class AreaInventoryHost
     {
         foreach (var map in _maps.Values)
             if (map.TryGetRow(entity, out var row)) return row;
+        // ARC-DEV-386: a created critter's row, so its loot window and name read it as a map NPC's.
+        if (_resolver.CreatedMap(entity) is { } created && created.TryGetRow(entity, out var made)) return made;
         return _held.TryGetValue(entity, out var held) ? held.Row : null;
     }
 
@@ -505,7 +514,10 @@ public sealed class AreaInventoryHost
 
     private (int? Image, bool Container) HolderLook(int runtimeMap, string holder)
     {
-        if (!_maps.TryGetValue(runtimeMap, out var map) || !map.TryGetRow(holder, out var row)) return (null, false);
+        AreaObjectRecord? row = null;
+        if (_maps.TryGetValue(runtimeMap, out var map) && map.TryGetRow(holder, out var own)) row = own;
+        else if (_resolver.CreatedMap(holder) is { } created && created.RuntimeMap == runtimeMap && created.TryGetRow(holder, out var made)) row = made;
+        if (row is null) return (null, false);
         var container = row.Type == CombatFieldReader.ContainerType;
         if (container) return (AreaLootArtLayout.HolderImage(row.Type, 0, -1, row.PrototypeNumber - 20), true);
         return CombatFieldReader.Read(row).Fields is { Critter: { } critter } fields

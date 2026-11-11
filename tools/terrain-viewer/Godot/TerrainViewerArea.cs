@@ -78,6 +78,7 @@ public partial class TerrainViewerApp
         // safety reset cannot clear the fresh camera's actor tracking.
         // ARC-UI-039: the session hero's body before the first publication, so the fixed human never shows for a frame.
         lap.Step("hero-body");
+        _perfFirstSelection = true;
         SyncHeroBody();
         lap.Step("selection");
         QuarantineWorld(); PublishWorldSelection();

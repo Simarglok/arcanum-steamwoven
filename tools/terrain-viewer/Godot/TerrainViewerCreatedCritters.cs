@@ -26,6 +26,9 @@ public partial class TerrainViewerApp
     {
         if (_createdPrototypeRead is not { } read || _inventoryHost is not { } inventory) return;
         var critters = CreatedCrittersOf(session, read);
+        // ARC-DEV-371: the hero left the map these critters were made on: the original's encounter creatures are destroyed when their sector is no longer loaded, and a map change unloads them all.
+        if (_createdCrittersMap != 0 && _createdCrittersMap != CurrentAreaMap && ReferenceEquals(_createdCrittersSession, session))
+            DestroyEncounterCritters(session, new SessionMapId(_createdCrittersMap), "left-map");
         var revision = session.Version.Revision;
         if (revision == _createdCrittersRevision && ReferenceEquals(_createdCrittersHost, host) && _createdCrittersMap == CurrentAreaMap) return;
         _createdCrittersRevision = revision; _createdCrittersHost = host; _createdCrittersMap = CurrentAreaMap;
@@ -34,6 +37,84 @@ public partial class TerrainViewerApp
         var added = host.SyncCreated(critters.Npcs(map));
         foreach (var (entity, failure) in critters.TakeNewRefusals()) GD.Print($"ARC-DEV-359 created-critter entity={entity} not hosted: {failure}");
         if (added > 0) GD.Print($"ARC-DEV-359 created-critters map={CurrentAreaMap} hosted={added} npcs={host.Scene.Npcs.Count}");
+    }
+
+    // ARC-DEV-371: whether a script's prototype number names a critter prototype (a file that reads as an NPC's), per module (the cache goes with the prototype reader).
+    private Dictionary<int, bool> _scriptCritterPrototypes = [];
+    private Func<int, Arcanum.Data.Characters.PrototypeFile>? _scriptCritterPrototypesRead;
+
+    /// <summary>ARC-DEV-371 (PG1, PG8): the script's prototype number (the file is the number + 20) names a critter prototype the session can create.</summary>
+    private bool ScriptCritterPrototype(int number)
+    {
+        if (_createdPrototypeRead is not { } read || number < 0 || number > SessionCreatedObject.MaxPrototype - AreaPrototypeItems.PrototypeOffset) return false;
+        if (!ReferenceEquals(_scriptCritterPrototypesRead, read)) { _scriptCritterPrototypes = []; _scriptCritterPrototypesRead = read; }
+        if (_scriptCritterPrototypes.TryGetValue(number, out var known)) return known;
+        var built = CreatedObjectRows.Critter(read, number + AreaPrototypeItems.PrototypeOffset, SessionCreatedObject.CritterPrefix + "1", CurrentAreaMap, 0, 0);
+        return _scriptCritterPrototypes[number] = built.Row is not null;
+    }
+
+    /// <summary>ARC-DEV-371: the base record of a critter the session created on the shown map (null for any other entity).</summary>
+    private AreaObjectRecord? CreatedCrittersRow(string entity) =>
+        _areaSession is { } session && _createdPrototypeRead is { } read && SessionCreatedObject.KindOf(entity) == SessionCreatedKind.Critter
+            ? CreatedCrittersOf(session, read).Row(new SessionMapId(CurrentAreaMap), entity) : null;
+
+    // ARC-DEV-386 (E1-c4, OM16, RK14): the critters a script created whose inventory is not generated yet. The original's create finish runs the restock body at once (a living NPC with an inventory source and
+    // no PC leader gets its goods); the viewer queues the entity from the script's callback and generates from the frame (the restock host needs the barter data, which loads in the background, and the
+    // call is the session's, never made from inside a run's callback). A critter the session no longer holds, or one of a map left, is dropped; a save taken before the frame keeps it empty (a limit).
+    private readonly SortedSet<string> _createdInventoryPending = new(StringComparer.Ordinal);
+
+    private GameSessionOwner? _createdInventorySession;
+    private readonly Dictionary<string, SessionRegenerateResult> _createdInventoryDone = new(StringComparer.Ordinal);
+
+    private void QueueCreatedInventory(string entity) => _createdInventoryPending.Add(entity);
+
+    /// <summary>Generates the inventory of each queued created critter once the restock host is ready (the barter data loaded or failed); one regeneration per critter, logged.</summary>
+    private void TakeCreatedInventories(GameSessionOwner session)
+    {
+        // A replaced session (a load) has none of the queued critters: the queue and the results belong to one session.
+        if (!ReferenceEquals(_createdInventorySession, session)) { _createdInventorySession = session; _createdInventoryPending.Clear(); _createdInventoryDone.Clear(); }
+        if (_createdInventoryPending.Count == 0 || RestockHostNow() is not { } restock || _inventoryHost is not { } inventory || _createdPrototypeRead is not { } read) return;
+        // The resolver answers the restock host for a critter created since the last sync.
+        var map = new SessionMapId(CurrentAreaMap);
+        inventory.Resolver.SetCreated(CreatedCrittersOf(session, read).Maps(map));
+        foreach (var entity in _createdInventoryPending.ToArray())
+        {
+            // A critter the session no longer holds is dropped; one of another map than the shown one waits until its map is shown (the regeneration runs on the actor's map).
+            if (session.QueryCreatedObject(entity) is not { } held) { _createdInventoryPending.Remove(entity); continue; }
+            if (held.Map != map) continue;
+            _createdInventoryPending.Remove(entity);
+            // RK3 (0x463C60): the body does nothing for an NPC without an inventory source, a dead one or one with a PC leader (the source is read first, 0x4641A0); only then it clears and generates.
+            if (!restock.GeneratesAtCreation(map, entity))
+            {
+                GD.Print($"ARC-DEV-386 created-critter-inventory entity={entity} nothing (no inventory source, dead, led by the PC or not a holder here: source={restock.Facts(map, entity)?.InventorySource.ToString() ?? "-"})");
+                continue;
+            }
+            var result = session.RegenerateInventory(session.Version, entity, AreaEvents);
+            var done = result.Regeneration;
+            _createdInventoryDone[entity] = result;
+            GD.Print($"ARC-DEV-386 created-critter-inventory entity={entity} disposition={result.Disposition} failure={result.Failure} outcome={done?.Outcome} coins={done?.Coins} items={done?.Created.Count ?? 0} " +
+                $"refused={done?.Refused ?? 0} skipped={done?.Skipped ?? 0} wield-steps={done?.Wield?.Steps.Count ?? 0}");
+        }
+    }
+
+    /// <summary>ARC-DEV-371 (PG1): applies the destroys the AI host's ticks queued for encounter creatures (a tick holds the session, so this runs from the frame, not from a sync that a script's callback may reach).</summary>
+    private void DrainEncounterDestroys(GameSessionOwner session, AreaAiHost host)
+    {
+        foreach (var gone in host.TakeDestroyedCreated())
+        {
+            var destroyed = session.DestroyCreatedObject(session.Version, gone);
+            GD.Print($"ARC-DEV-371 encounter-creature-destroyed entity={gone} disposition={destroyed.Disposition} failure={destroyed.Failure}");
+        }
+    }
+
+    /// <summary>The critters of <paramref name="map"/> that carry the encounter flag are destroyed in the session.</summary>
+    private void DestroyEncounterCritters(GameSessionOwner session, SessionMapId map, string why)
+    {
+        foreach (var made in session.QueryCreatedObjects(map).Where(o => o.Kind == SessionCreatedKind.Critter && (session.QueryObjectFlags(o.Entity).CritterSet & SessionCreatedObject.EncounterCritterFlag) != 0).ToArray())
+        {
+            var destroyed = session.DestroyCreatedObject(session.Version, made.Entity);
+            GD.Print($"ARC-DEV-371 encounter-creature-destroyed entity={made.Entity} why={why} disposition={destroyed.Disposition} failure={destroyed.Failure}");
+        }
     }
 
     private AreaCreatedCritters CreatedCrittersOf(GameSessionOwner session, Func<int, Arcanum.Data.Characters.PrototypeFile> read)
@@ -183,6 +264,102 @@ public partial class TerrainViewerApp
         {
             if (made is not null && session.QueryCreatedObject(made.Entity) is not null) session.DestroyCreatedObject(session.Version, made.Entity);
             if (AreaAiHostNow() is { } after) after.Movers.Remove(made?.Entity ?? "");
+            SyncAreaInventory();
+            _aiForSmoke = aiBefore;
+            if (!aiBefore) { RetireAiHost(); _aiHostStamp = null; }
+        }
+    }
+
+    // The installed "snapping twig" tile script (130 tiles of the start map): it creates eight critters of one prototype next to the PC (docs/world/template-sector-plants-runtime.md).
+    private const int SnappingTwigScript = 1629;
+
+    /// <summary>
+    /// ARC-DEV-371 (E1-c3) native observation (stage "script-critters", only when named, with --hero, on a map window with the inventory active): the installed tile script 1629 (the snapping twig, which
+    /// creates critters next to the PC through the script action create object) runs for the hero as a tile's script does, through the map's own placed-script runner. The stage checks that each critter it made is
+    /// a created critter of the session next to the hero (within three tiles, PG12), carries the encounter flag 0x20000 (PG1), is held by the AI host with its row, and that the tile notification of its creation
+    /// ran (nothing is left queued), then destroys them. NONE when the run made no critter (the script's own conditions).
+    /// </summary>
+    private async Task RunAreaScriptCrittersStageAsync()
+    {
+        for (var wait = 0; wait < 1800 && (ExtraArt() is null || _createdPrototypeRead is null || !InventoryActive); wait++)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        if (_areaSession is not { } session || session.QueryHero() is null || _readyArea is not { } area || !InventoryActive || _createdPrototypeRead is null || _mapTransfers is null)
+        { GD.Print("ARC-DEV-371 native-smoke script-critters SKIP (needs --hero, an area session, the inventory, the map's transfers and the module's content)"); return; }
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print("ARC-DEV-371 script-critters smoke FAIL: " + why);
+            throw new InvalidOperationException("AREA_SCRIPT_CRITTERS_SMOKE_FAILED");
+        }
+        if (HeroPoolPlace() is not { } hero) { GD.Print("ARC-DEV-371 native-smoke script-critters SKIP (the hero has no committed cell)"); return; }
+        var map = new SessionMapId(CurrentAreaMap);
+        var aiBefore = _aiForSmoke;
+        _aiForSmoke = true;
+        async Task Settle(int frames = 3)
+        {
+            for (var i = 0; i < frames; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); SyncAreaInventory(); }
+        }
+        var before = session.QueryCreatedObjects(map).Select(o => o.Entity).ToHashSet(StringComparer.Ordinal);
+        try
+        {
+            for (var wait = 0; wait < 600 && AreaAiHostNow() is null; wait++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(AreaAiHostNow() is not null, "the AI host is built");
+            // Where the map's own snapping-twig tiles are (for the owner's re-check): the nearest ones to the hero.
+            var twigs = _mapTransfers.ScriptTiles.Where(cell => _mapTransfers.TileScript(cell) is { Script: SnappingTwigScript })
+                .OrderBy(cell => Math.Abs(cell.X - hero.Cell.X) + Math.Abs(cell.Y - hero.Cell.Y)).ToArray();
+            GD.Print($"ARC-DEV-371 script-critters twig-tiles={twigs.Length} hero={hero.Cell.X},{hero.Cell.Y} nearest={string.Join(";", twigs.Take(5).Select(c => $"{c.X},{c.Y}"))}");
+            var placed = new Arcanum.Data.Maps.MapPlacedScript(Arcanum.Data.Maps.MapTransitionTrigger.TileEntry, new(0, 0), -1, new(hero.Cell.X, hero.Cell.Y), 0, 0, SnappingTwigScript);
+            var ran = _mapTransfers.PlacedRunner?.Invoke(placed, _ => "a teleport is not part of this stage");
+            Require(ran is not null, "the map has a placed-script runner");
+            GD.Print($"ARC-DEV-371 script-critters run outcome={ran!.Outcome} detail={ran.Detail}");
+            var critters = session.QueryCreatedObjects(map).Where(o => o.Kind == SessionCreatedKind.Critter && !before.Contains(o.Entity)).ToArray();
+            if (critters.Length == 0) { GD.Print($"ARC-DEV-371 native-smoke script-critters NONE (script {SnappingTwigScript} made no critter here: {ran.Outcome} {ran.Detail})"); return; }
+            Require(ran.Outcome == AreaScriptedUseOutcome.NoTeleport, "the run applied");
+            Require(critters.Select(c => c.Prototype).Distinct().Count() == 1 && ScriptCritterPrototype(critters[0].Prototype - AreaPrototypeItems.PrototypeOffset), "the critters are of one critter prototype");
+            Require(critters.All(c => Math.Abs(c.Cell.X - hero.Cell.X) <= 3 && Math.Abs(c.Cell.Y - hero.Cell.Y) <= 3), "each critter is within three tiles of the hero (PG12)");
+            Require(critters.All(c => session.QueryObjectFlags(c.Entity).CritterSet == SessionCreatedObject.EncounterCritterFlag), "each carries the encounter flag 0x20000 (PG1)");
+            await Settle(6);
+            var host = AreaAiHostNow()!;
+            Require(critters.All(c => host.Scene.Npcs.Any(n => n.Entity == c.Entity) && host.IsEncounterCreature(c.Entity)), "the AI host holds each as an encounter creature");
+            Require(critters.All(c => CreatedCrittersRow(c.Entity) is not null), "each has its row");
+            Require(_npcTilePending.Count == 0, "the tile notifications of the creations ran");
+            // ARC-DEV-386 (E1-c4): each is a holder of the map's seed and its inventory was generated by the creation's restock body (the frame takes it once the barter data is loaded).
+            for (var wait = 0; wait < 900 && _createdInventoryPending.Count > 0; wait++) await Settle(1);
+            Require(_createdInventoryPending.Count == 0, "the inventories of the created critters were taken (the restock host is ready)");
+            var current = session.QueryMapInventory(map);
+            Require(critters.All(c => current?.Holders.Any(h => h.Entity == c.Entity && h.Kind == SessionHolderKind.Npc) == true), "each is an NPC holder of the map's seed");
+            Require(_createdInventoryDone.Values.All(r => r.Disposition != GameSessionDisposition.Rejected), "no restock body was refused");
+            var goods = critters.Select(c => $"{c.Entity}:source={(CreatedCrittersRow(c.Entity) is { } row ? Arcanum.Data.Combat.CombatFieldReader.Read(row).Fields?.Critter?.InventorySource ?? -1 : -2)}" +
+                $",outcome={(_createdInventoryDone.TryGetValue(c.Entity, out var r) ? r.Regeneration?.Outcome.ToString() ?? "-" : "none")},items={current!.Holders.First(h => h.Entity == c.Entity).Items.Count}").ToArray();
+            GD.Print($"ARC-DEV-386 script-critters inventories {string.Join(" ", goods)}");
+            // The twig's critters have no inventory source; the first critter prototype of the module that has one is made next to the hero, as a script's create object makes it, and its goods are checked.
+            var withSource = Enumerable.Range(1, 40000).Select(n => (Number: n, Row: CreatedObjectRows.Critter(_createdPrototypeRead, n + AreaPrototypeItems.PrototypeOffset, SessionCreatedObject.CritterPrefix + "1", CurrentAreaMap, 0, 0).Row))
+                .Where(pair => pair.Row is not null && (Arcanum.Data.Combat.CombatFieldReader.Read(pair.Row).Fields?.Critter?.InventorySource ?? 0) != 0).Cast<(int Number, AreaObjectRecord? Row)>().FirstOrDefault();
+            if (withSource.Row is null) GD.Print("ARC-DEV-386 script-critters no critter prototype with an inventory source was found");
+            else
+            {
+                var source = Arcanum.Data.Combat.CombatFieldReader.Read(withSource.Row).Fields!.Critter!.InventorySource;
+                var made = session.CreateCritterNear(session.Version, withSource.Number + AreaPrototypeItems.PrototypeOffset, map, new(hero.Cell.X, hero.Cell.Y), AreaDropMapNow()!);
+                Require(made.Object is not null, "a critter with an inventory source is made");
+                var stocked = made.Object!;
+                QueueCreatedInventory(stocked.Entity);
+                for (var wait = 0; wait < 900 && _createdInventoryPending.Count > 0; wait++) await Settle(1);
+                _createdInventoryDone.TryGetValue(stocked.Entity, out var stock);
+                Require(_createdInventoryPending.Count == 0 && stock is not null && stock.Disposition == GameSessionDisposition.Changed, "its restock body ran");
+                var items = session.QueryMapInventory(map)!.Holders.First(h => h.Entity == stocked.Entity).Items;
+                GD.Print($"ARC-DEV-386 script-critters stocked prototype={withSource.Number} source={source} outcome={stock!.Regeneration?.Outcome} coins={stock.Regeneration?.Coins} items={items.Count} wield-steps={stock.Regeneration?.Wield?.Steps.Count ?? 0}");
+                Require(session.DestroyCreatedObject(session.Version, stocked.Entity).Disposition == GameSessionDisposition.Changed, "the stocked critter is destroyed");
+                Require(session.QueryMapInventory(map)!.Holders.All(h => h.Entity != stocked.Entity) && session.QueryNpcGold(stocked.Entity) is null, "its holder and its goods went with it");
+            }
+            GD.Print($"ARC-DEV-371 script-critters made={critters.Length} prototype={critters[0].Prototype} cells={string.Join(";", critters.Select(c => $"{c.Cell.X},{c.Cell.Y}"))} tile-runs={_npcTileRuns.Count(r => critters.Any(c => c.Entity == r.Npc))}");
+            foreach (var critter in critters) Require(session.DestroyCreatedObject(session.Version, critter.Entity).Disposition == GameSessionDisposition.Changed, "a critter is destroyed");
+            await Settle(6);
+            Require(critters.All(c => host.Scene.Npcs.All(n => n.Entity != c.Entity)) && session.QueryAllObjectFlags().All(f => critters.All(c => c.Entity != f.Entity)), "the host dropped them and their flags went");
+            GD.Print("ARC-DEV-371 native-smoke script-critters PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = area.Snapshot.RuntimeMap, Script = SnappingTwigScript, Made = critters.Length, Prototype = critters[0].Prototype }));
+        }
+        finally
+        {
+            foreach (var made in session.QueryCreatedObjects(map).Where(o => o.Kind == SessionCreatedKind.Critter && !before.Contains(o.Entity)).ToArray()) session.DestroyCreatedObject(session.Version, made.Entity);
             SyncAreaInventory();
             _aiForSmoke = aiBefore;
             if (!aiBefore) { RetireAiHost(); _aiHostStamp = null; }

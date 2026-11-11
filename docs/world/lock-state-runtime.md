@@ -22,6 +22,7 @@ project's record slot 36 for both), with the same bits for both kinds. The bits 
 | `IsLocked(flags, hour)` | 0x441D40 | False for a busted or never-locked object. "Locked by day" holds only in hours 7..21 and "locked by night" only outside them. Otherwise the locked bit decides. Always locked is not read. |
 | `SetLocked(flags, locked, hour)` | 0x441DD0 | Writes the locked bit. Unlocking a locked object schedules the Lock event one game hour later. |
 | `SetJammed(flags, jammed, hour)` | 0x441F10 | Writes the jammed bit. Jamming an object that was not jammed schedules the Lock event one game day later. |
+| `WriteBit(flags, bit, on, hour)` | 0x406D40 | ARC-MAGIC-037: one lock bit by a plain field write, as a spell's ObjFlag component and Dispel do; schedules no Lock event whatever the bit. |
 | `AfterReset(flags)` | 0x441E90 (flags) | The flags after a Lock event: locked and not jammed. |
 | `KeyFits(lockKey, itemKey)` | 0x463340 | 0 never fits. A lock of 1 takes any key and a key of 1 opens any lock. Otherwise the two ids must be equal. |
 | `Attempt(input)` | 0x4AEB70, 0x4AED80 | The open attempt, checked in the original's order. For a portal: busted, not a critter, unlock script, jammed, magically held, then (unless always locked) an NPC without a PC leader or a step leaving a building, then the lock and the party's keys. A container has no walker test and no exemptions, and a junk pile always opens. |
@@ -52,6 +53,9 @@ whether it is a junk pile.
   entity: `lock.kind`, `lock.flags` and `lock.frame`. The snapshot already carries map changes,
   so the domain adds no schema version. A junk pile has no lock, so a lock or jam write to it
   changes nothing.
+- **Plain bit writes (ARC-MAGIC-037).** `WriteOpenableFlag` turns one lock bit on or off as the original's field write
+  does for a spell's ObjFlag component and Dispel ([spell cast host](spell-cast-host.md#locks-and-holds-on-portals-and-containers-arc-magic-037)):
+  the same three map changes, one revision, and **no Lock event**, so a spell's unlock is not undone an hour later.
 - **Lock event.** It is the `lock.reset` event kind, game time and saved. It is scoped to the
   object's map, so it waits while another map is active and fires on return, as the original's
   parked events do. Any number can be pending, at most 1,024 (project policy). The registry
