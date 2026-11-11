@@ -93,5 +93,5 @@ Owner decision 2026-10-20: every difference is documented. This slice adds no ru
 
 - The viewer's caller is the character sheet's spells page (ARC-MAGIC-008, MT19,
   [viewer](../rendering/terrain-viewer.md#spells-page-arc-magic-008)): its + and − learn and unlearn through the pool, and a
-  refusal names the failing check. The script conditions and the give-mastery action are MT21a (ARC-MAGIC-029, set S31, [ledger SC1–SC6](../research/ledger/scripts.md#spell-conditions-and-the-spell-mastery-action-arc-magic-029-mt21a)); their host (asking `KnowsSpell` and the mastered college, calling `MasterHeroCollege`) is not wired yet; the AI's use of the book is slice I8.
+  refusal names the failing check. The script conditions and the give-mastery action are MT21a (ARC-MAGIC-029, set S31, [ledger SC1–SC6](../research/ledger/scripts.md#spell-conditions-and-the-spell-mastery-action-arc-magic-029-mt21a)); their host is wired by ARC-MAGIC-030 (MT21b, [ledger SC7–SC9](../research/ledger/scripts.md#spell-conditions-and-the-spell-mastery-action-arc-magic-029-mt21a): the use and talk script hosts read the book and call `MasterHeroCollege` or `MasterNpcCollege`); the AI's use of the book is slice I8.
 - The spell bar and the maintained spells of an unlearned rank are MT20.

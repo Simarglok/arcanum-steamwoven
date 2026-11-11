@@ -89,6 +89,12 @@ public sealed class AreaAiMovers
 
     public void Clear() { _movers.Clear(); Version++; }
 
+    /// <summary>ARC-DEV-359: forgets the NPC's mover (a created critter that left the world); none for an NPC with no mover.</summary>
+    public void Remove(string entity)
+    {
+        if (_movers.Remove(entity)) Version++;
+    }
+
     /// <summary>Ends the slides done by <paramref name="nowMs"/>: the cell a mover left is no longer held.</summary>
     public void Settle(long nowMs)
     {

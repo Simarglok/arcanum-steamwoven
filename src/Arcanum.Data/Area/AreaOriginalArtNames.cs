@@ -34,6 +34,7 @@ public sealed partial class AreaDataOwner
 
     /// <summary>The file a critter (2), monster (12) or unique NPC (13) art id names in the
     /// original: normalized (N1), with the missing-art repair (N2) applied first.</summary>
+    [OriginalFunction(0x41D510, OriginalFunctionScope.Partial)]
     private string OriginalCritterPath(uint cls, uint aid, Dictionary<AreaMappingRole, SortedDictionary<int, string>> maps, CancellationToken token)
     {
         var state = CritterState.From(cls, aid);
@@ -83,6 +84,7 @@ public sealed partial class AreaDataOwner
 
     /// <summary>The missing-art repair (N2, MA1): the checked pairs in order, each against the
     /// animation as replaced so far.</summary>
+    [OriginalFunction(0x41DA40, OriginalFunctionScope.Partial)]
     private (int Animation, int Weapon) RepairMissingArt(uint cls, int number, int animation, int weapon,
         Dictionary<AreaMappingRole, SortedDictionary<int, string>> maps, CancellationToken token)
     {
@@ -110,6 +112,9 @@ public sealed partial class AreaDataOwner
     /// <summary>The masks of <c>art/missing.dat</c> when its header equals the current count of
     /// critter, monster and unique NPC ART files and it holds every mask; otherwise rebuilt by
     /// checking each pair's file, as the original rebuilds a stale or absent file (N3, MA4).</summary>
+    [OriginalFunction(0x41D2C0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x41D1F0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x41CE60, OriginalFunctionScope.Partial)]
     private uint[] MissingMasks(Dictionary<AreaMappingRole, SortedDictionary<int, string>> maps, CancellationToken token)
     {
         if (_missingMasks is not null) return _missingMasks;

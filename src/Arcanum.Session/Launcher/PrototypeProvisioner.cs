@@ -1,3 +1,4 @@
+using Arcanum.Simulation;
 using System.Security.Cryptography;
 using Arcanum.Data.Content;
 using Arcanum.Data.Maps;
@@ -179,6 +180,7 @@ public static class PrototypeProvisioner
             .Count(map => ContentPhase.Candidate(stack, "maps/" + WorldCatalog.AggregateName(map), ContentLoadPhase.ModuleLoaded) is null);
 
     /// <summary>The module's GUID the way the original reads it (0x53BC50): from the end of the module's <c>.dat</c>; null when the module is not an archive of the kind.</summary>
+    [OriginalFunction(0x53BC50, OriginalFunctionScope.Partial)]
     internal static byte[]? ModuleGuid(ContentMountPlan plan)
     {
         if (plan.SearchOrder.FirstOrDefault(source => source.Role == ContentSourceRole.ModuleArchive) is not { } module) return null;

@@ -284,7 +284,9 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="screen-size-and-layout-arc-res-093"></a>[Screen size and layout (ARC-RES-093)](ledger/ui-audio.md#screen-size-and-layout-arc-res-093) | [Interface windows and audio](ledger/ui-audio.md) | SZ1–SZ14 |
 | <a id="function-triage-of-the-exe-bands-0x46-0x49-and-0x4a-arc-res-110"></a>[Function triage of the exe bands 0x46, 0x49 and 0x4A (ARC-RES-110)](ledger/census-triage-d.md#function-triage-of-the-exe-bands-0x46-0x49-and-0x4a-arc-res-110) | [Function triage, slice D](ledger/census-triage-d.md) | FT1–FT9 |
 | <a id="function-audit-0x4b0000-0x4cffff-arc-res-109"></a>[Function audit of 0x4B0000–0x4CFFFF (ARC-RES-109)](ledger/function-audit-4b-4c.md) | [Function audit, slice E of V1](ledger/function-audit-4b-4c.md) | one state per function start, 12 rows marked |
+| <a id="function-triage-of-the-exe-bands-0x50-to-0x54-arc-res-119"></a>[Function triage of the exe bands 0x50 to 0x54 (ARC-RES-119)](ledger/census-triage-h1.md#function-triage-of-the-exe-bands-0x50-to-0x54-arc-res-119) | [Function triage, slice H1](ledger/census-triage-h1.md) | FH1–FH15 |
 | <a id="executable-triage-0x44-0x45-arc-res-108"></a>[Executable triage 0x44-0x45 (ARC-RES-108)](ledger/census-triage-0x44-0x45.md) | [Executable triage](ledger/census-triage-0x44-0x45.md) | 389 added: 95 implemented, 68 not implemented, 226 not relevant |
+| <a id="executable-triage-of-0x40-0x41-arc-res-117"></a>[Executable triage of 0x40-0x41 (ARC-RES-117)](ledger/census-triage-a.md#executable-triage-of-0x40-0x41-arc-res-117) | [Executable triage, slice A](ledger/census-triage-a.md) | 402 added: 37 implemented, 68 not implemented, 297 not relevant |
 
 ## Decisions to revisit
 
