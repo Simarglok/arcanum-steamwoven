@@ -164,6 +164,12 @@ public sealed class SessionCritterCombat
     }
 
     /// <summary>
+    /// ARC-MAGIC-033 (D6c): the magic resistance a spell's save reads for this NPC: <paramref name="stored"/> (its stored resistance 4) under the <c>resistmagic</c> changes of the effect list
+    /// it was handed out with (<see cref="WithEffects"/>), both modes (<see cref="SpellResistanceRules.ResistanceUnderEffects"/>). The stored value itself for an NPC with no such change.
+    /// </summary>
+    public int SaveMagicResistance(int stored) => SpellResistanceRules.ResistanceUnderEffects(stored, _effectResistances.Magic, Monstrous);
+
+    /// <summary>
     /// Builds the values of the NPC <paramref name="entity"/> from its fields and the fields of the items it carries
     /// (<paramref name="carried"/>; only those whose stored inventory location is a wear slot, 1000..1008, count). Never throws for data.
     /// </summary>

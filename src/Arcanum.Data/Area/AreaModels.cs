@@ -68,7 +68,12 @@ public sealed record AreaByteRange(int Start, int Length);
 /// <param name="Template">ARC-DATA-032: the <see cref="AreaSourceRole.TerrainTemplate"/> input a generated sector was read
 /// from (its objects placed and its lights moved into this sector); null for a sector read from the module archive.</param>
 public sealed record AreaSectorRecord(AreaSectorKey Key, AreaSectorCoordinate Coordinate, AreaScope Scope, bool Present, int? DatOrdinal, int? Townmap, int LightCount, int RoofDiscriminator, int Placeholder, int TerminalCount, IReadOnlyList<AreaByteRange> Sections, IReadOnlyList<IReadOnlyList<int>> Lights, AreaEntryIdentity? Entry, string? PayloadSha256,
-    AreaInputKey? Template = null);
+    AreaInputKey? Template = null)
+{
+    /// <summary>ARC-MAGIC-031 (FR-CHAR-020): the sector's aptitude adjustment, the second word of its metadata (sector versions 0xAA0003 and later; 0 for an older file), as
+    /// <see cref="Maps.WorldSector.AptitudeAdjustment"/> reads it; a critter standing in the sector adds it to its aptitude.</summary>
+    public int AptitudeAdjustment { get; init; }
+}
 public sealed record AreaTerrainRecord(AreaVisualKey Key, int LocalX, int LocalY, long WorldX, long WorldY, uint RawArt, uint LookupArt, AreaScope Scope, AreaVisualKey SelectedVisual);
 public sealed record AreaObjectRecord(AreaObjectKey Key, int Version, int Type, int PrototypeNumber, string PrototypeReferenceSha256, string PrototypeOwnSha256, string RawSha256, string SemanticSha256, AreaScope Scope, long? SerializedLocation, long? WorldX, long? WorldY, AreaDisposition Disposition, IReadOnlyList<AreaFieldValue> DirectFields, IReadOnlyList<AreaFieldValue> EffectiveFields, bool SchemaReady, bool PlacementReady, bool RequiredLayersReady,
     Maps.MapPatchApplication? MapPatch = null);
