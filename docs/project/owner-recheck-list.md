@@ -265,7 +265,7 @@ hero with the technology points for the degrees named, or the items from a map o
 | 2 | Throw a stun grenade (Explosives degree 4) and a smoke grenade (degree 3) at a group. | The stun grenade stuns creatures in its radius with a flash; the smoke grenade makes a smoke cloud for about 10 s, then it goes. The smoke grenade also sets the don't-draw flag on creatures, which is not built (the census lists it as partly running). | open |
 | 3 | Drink a Therapeutics potion (any of the seven stat potions) as the hero, and give the same potion to a companion by a script or by throwing it. | The stat bonus (+2 to the stat or stats named) appears on the sheet and goes away when the potion ends. On a companion the census says the effect list is written; compare the numbers shown or their effects in a fight. | open |
 | 4 | Use Chemistry degree 1 (poison draught) on a creature, and Chemistry degree 4 (acid) on a creature. | The poison does 290 damage over its duration; the acid does 10 to 100 damage and makes a flash. Compare the damage numbers with the original. | open |
-| 5 | Find a map item that carries the record 214 (a technology item on a map; see the placement census) and use it as the hero. | The original adds an effect 80 times; our effect list holds 64 entries, so nothing is added here (refused). Note what the original does to the sheet. | open |
+| 5 | Find a map item that carries the record 214 (a technology item on a map; see the placement census) and use it as the hero. | The original adds effect 334 80 times (its list has no bound). Since ARC-RES-127 our hero and NPC lists take the 80 entries (the list holds 1024). Note what the original does to the sheet and compare. | open |
 
 Known differences (documented, not bugs):
 
@@ -638,5 +638,25 @@ build); the first build for this comparison is any build from `main` that contai
 Known differences (documented, not bugs):
 
 - A new game still waits for the start map, which now begins to load when the New Game window opens (one press later than in ARC-DEV-381).
-- The menu's music is silent until the start map is loaded; the original plays it from the start (a follow-up: play the menu's pair without a scene).
+- The menu's music was silent until the start map was loaded; ARC-UI-139 (below) plays it from the start without a scene.
 - While a save's map loads the menu stays on screen with a note; the original shows its own loading screen.
+
+## ARC-UI-139 — The main menu's music plays without a scene (follow-up of ARC-DEV-387, 2026-11-11)
+
+The menu plays its music pair (the shop map's start sector, scheme 26 `arcanum.mp3`) through the scheme player of its own, without a game session or a scene, from the
+moment it opens until a game starts or a save loads ([scheme player](../audio/scheme-player.md#viewer-integration)). Compare on a start with the menu (`./arcanum area`, or a
+packaged build) with the music volume above 0, in both games.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Start the game and wait on the main menu without pressing anything for a minute or two. | The main theme plays from the first moment of the menu and loops without a gap or restart. | open |
+| 2 | Open Single Player, Options (change the music volume on the Sound page), New Game and the pre-made browser, then go back. | The theme goes on through every window, and the volume follows the slider. | open |
+| 3 | Press New Game, then New Character, so that the start map loads under the menu. | The theme does not stop and does not restart when the map has loaded (the original has no pause there either). | open |
+| 4 | Press Last Save, or choose a row in Load Game, while the theme plays. | The theme plays until the save is loaded, then the map's own music takes over. | open |
+| 5 | Start a new game with a pre-made hero. | The theme stops and the Crash Site's music (or its night ambience) starts; the theme does not come back. | open |
+| 6 | Press Esc in play and open the in-play menu. | The game's own music goes on (the theme is only the main menu's). | open |
+
+Known differences (documented, not bugs):
+
+- The hour of the menu's player is fixed (12) because the menu has no game clock; the installed pair plays at every hour, so no difference is expected.
+- A transition song in the menu's pair would play without the restore bookkeeping (the installed pair has none).

@@ -1416,9 +1416,12 @@ it is not part of a snapshot or quick save.
 **Interface art (ARC-UI-089, ARC-UI-095).** The HD redraws of the interface (the pack's `interface` slice, ARC-DEV-242) have their own
 switch: the Game page of the options window has two project lines next to Rules. **HD graphics: Off/On** requests the Legacy or HD
 profile exactly as the key does (saved, the same toggle protocol) and switches the sprites and terrain of an HD pack only.
-**HD interface: Off/On** (ARC-UI-095, default Off) is a separate saved setting (`hdInterface` of `game_settings_v1.json`, file version 3;
+**HD interface: Off/On/Generated (experimental)** (ARC-UI-095, default Off) is a separate saved setting (`hdInterface` of `game_settings_v1.json`, file version 3;
 version 1 and 2 files read it as Off); it draws the interface art alone and does not touch the visual profile, so the two can be
-combined freely (sprites HD with a Legacy interface, or the reverse). **HD pack: Auto/Game/Custom** (ARC-DEV-350, default Auto) is the
+combined freely (sprites HD with a Legacy interface, or the reverse). The third value (ARC-UI-140, `generatedInterface`, file version 5;
+version 1–4 files read it as off) is the experimental [generated interface](hd-interface-density.md#viewer-slice-s1-arc-ui-140): it keeps the
+HD interface on and draws the chrome of the two HUD strips and the bar buttons by code, with the pictures from the HD redraw (else from the
+Legacy frame); only the drawing changes, every frame keeps its Legacy size, place, alpha test and hit area. **HD pack: Auto/Game/Custom** (ARC-DEV-350, default Auto) is the
 third project line: where the active pack is read from, saved in the same file (`hdPack`, `hdPackPath`; file version 4, version 1–3 files
 read it as Auto). Auto prefers the player's iCloud pack folder (macOS, only when that folder exists on this device) when the pack in it
 is whole, and falls back to the installed copy in the game's own `user://hd-packs`; Game reads the installed copy alone; Custom opens the
@@ -1979,7 +1982,7 @@ keeps going under it too.
 With `--main-menu true` (launcher: `./arcanum area`, which opens it by default since ARC-UI-012 unless `--no-main-menu` or `--hero`, or `./arcanum map NAME --main-menu`; refused with
 `--hero`, as the menu picks the hero) the AREA viewer opens the original's main menu over the scene once it is ready,
 the first time in a run (when that first scene has no game session, for example a map outside the map list, the menu
-does not open and the log says so: `ARC-UI-011 main menu not opened`). The scene's session is the placeholder the original also has before its menu (its sound is the shop map's, not the scene's: the original's game init opens the shopping map and its sector pair 26/29 plays `arcanum.mp3`, ARC-DEV-332, [SN38](../research/audio-evidence.md)); the menu
+does not open and the log says so: `ARC-UI-011 main menu not opened`). The scene's session is the placeholder the original also has before its menu (its sound is not the scene's: the original's game init opens the shopping map and its sector pair 26/29 plays `arcanum.mp3`, ARC-DEV-332, [SN38](../research/audio-evidence.md); the viewer plays that pair through a scheme player of its own, without the session or the scene, from the menu's opening, ARC-UI-139, [scheme player](../audio/scheme-player.md)); the menu
 replaces it. The windows, buttons, texts, keys and back moves are the original's
 ([ledger MM1–MM7](../research/ledger/ui-audio.md#main-menu-arc-ui-011)); since ARC-UI-058 the button windows have the original's art
 and layout (below), the other windows the project's.
@@ -2264,9 +2267,9 @@ project's, except as below.
   together with the difficulty. It is stored in the launcher's settings file (`launcher_v1.json`, `rules.active`),
   which the [launcher screen](#launcher-screen-arc-ui-014) writes too, and every ordinary run starts in it.
 - **Storage.** User preferences, never part of a save: difficulty, turn-based, auto attack, the floaters, HD interface and HD pack source in
-  `user://game_settings_v1.json` (`{"version":4,"difficulty":D,"turnBased":B,"autoAttack":B,"floats":F,"floatSpeed":S,"hdInterface":B,"hdPack":"auto|game|custom","hdPackPath":null|"FOLDER"}`;
+  `user://game_settings_v1.json` (`{"version":5,"difficulty":D,"turnBased":B,"autoAttack":B,"floats":F,"floatSpeed":S,"hdInterface":B,"hdPack":"auto|game|custom","hdPackPath":null|"FOLDER","generatedInterface":B}`;
   a version 1 file without the last three reads with their defaults, a version 2 file without `hdInterface` reads it as off and a
-  version 3 file without `hdPack` reads it as Auto (ARC-DEV-350); a
+  version 3 file without `hdPack` reads it as Auto (ARC-DEV-350) and a version 4 file without `generatedInterface` reads it as off (ARC-UI-140); a
   missing or invalid file reads as the original's defaults 1, off, on, 1, 2, off), Always Run and the volumes in their own files. Each change is saved at
   once (the original writes `arcanum.cfg` when the game exits). Space's toggle also saves the turn-based setting now. An
   automated run (self-test, native smoke) reads and writes no file; `GAME_SETTINGS_TEST_PATH` names one for a test.
@@ -2381,8 +2384,11 @@ snapshot every refund stops at, so the five starting points can be spent and tak
   a transfer or a load) cannot open the editor and names the reason.
 - **Pages.** The character sheet in its creation mode above the main menu's backdrop: the sheet's values, the stats page
   (hit points, fatigue, the eight stats), the skills page and the spells page with their `−` and `+` (the in-game sheet's
-  rules and texts, [skills page](#skills-page-arc-ui-009)), and Cancel and Accept. Each press that changes the draft is
-  recorded; a refused one is not.
+  rules and texts, [skills page](#skills-page-arc-ui-009)) and, since ARC-MAGIC-043, a tech page with the eight disciplines'
+  `−` and `+` (the original's degree page of the same editor, CM8; the pool's technology lane, refused below the snapshot the
+  editor opened on, TC10; project labels, the original look of the page is not drawn in the creation window), and Cancel and
+  Accept. Each press that changes the draft is recorded (the replay at Accept is by track, so degrees replay like the other
+  points); a refused one is not.
 - **Accept** (or Return, CM5) opens the [opening shop](#opening-shop-arc-ui-036) (window 15, CM2), whose Accept starts the new
   game as Start does for a pre-made hero, then replays the recorded presses on the new session inside an editor of its own
   opened on the same start (`AreaNewCharacter.Apply`), and closes that editor: the game starts with nothing refundable. A press
@@ -2717,7 +2723,8 @@ buttons by mouse, spreads, an unbuilt tab, the diagnostic switch); the native sm
 
 The original Technical schematics key `T` (logical key down; the original's in-game key handler opens the window for the local
 PC as crafter and viewer, ledger [SW1](../research/ledger/technology.md#schematic-window-arc-technology-005)) toggles
-a diagnostic schematic window of the session's hero in area (exterior, cave and `--area-map`), with the learned and
+the schematic window of the session's hero (ARC-UI-142: in the original's look, art 365 with the page buttons, the discipline tabs, the record's art and
+text, the two component slots, the assemble button and the lens over the game view, when its art reads; else a diagnostic layout) in area (exterior, cave and `--area-map`), with the learned and
 found tabs, the eight discipline tabs, Previous and Next, the record's name and description, the two components (found or
 missing, the expertise they need), the product and quantity, and the Assemble button with its state. Contract:
 [schematic window runtime](../world/schematic-window-runtime.md).

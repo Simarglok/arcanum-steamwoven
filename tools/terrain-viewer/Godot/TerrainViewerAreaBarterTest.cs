@@ -435,6 +435,11 @@ public partial class TerrainViewerApp
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
         try
         {
+            // The scenery loops of a newly shown map start on its first frame with a hero cell (ProcessAreaSceneryAnimation), a retry later when the
+            // goal table was busy: four goal runs, one session revision. Let that happen before the baseline revision, or the look's frames below
+            // pay for it (stage alone, ARC-DEV-393).
+            for (var i = 0; i < 1200 && (ShownSceneryHost is not { StartPending: false }); i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(ShownSceneryHost is { StartPending: false }, "the scenery loops started within 1200 frames (the first frame with a hero cell)");
             var revision = session.Version.Revision;
             QueueDialogBarter(talk, (chosen.Entity, chosen.Index));
             TakeDialogBarter();

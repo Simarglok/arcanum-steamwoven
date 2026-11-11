@@ -39,8 +39,8 @@ class Zone:
 
 ZONES: dict[str, Zone] = {zone.name: zone for zone in (
     Zone(CORE, "every cheap stage, grouped into a few processes by configuration"),
-    Zone(WALK, "the long walk over the main map's window moves (about 9 minutes)", stages=("walk",)),
-    Zone(CONTAINER_CLICK, "every container of the town window clicked as the player does (about 11 minutes)",
+    Zone(WALK, "the walk over the main map's window moves (a sample of about 1 minute, the whole route with --all: about 6 minutes)", stages=("walk",)),
+    Zone(CONTAINER_CLICK, "containers of the town window clicked as the player does (a sample of about 2 minutes, every container with --all: about 10 minutes)",
          stages=("container-click",)),
     Zone(CRASH_SITE, "the Crash Site smoke: the pinned exterior and the cave", crash_site=True),
     Zone(CENSUS, "every map of the catalogue opened in turn", stages=("census",)),

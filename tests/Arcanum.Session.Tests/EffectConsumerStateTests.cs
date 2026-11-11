@@ -101,6 +101,18 @@ public sealed class EffectConsumerStateTests
         Assert.AreEqual(new DamageResistances(10, 0, 0, 20), Defends(owner.WithNpcEffects(wolf)));
     }
 
+    /// <summary>ARC-RES-127 (EF11): an NPC's list is no longer capped at 64, and the stat owner the combat values are read through admits as many entries, so more than 64 stat entries still reach the stats.</summary>
+    [TestMethod]
+    public void More_than_sixty_four_stat_entries_of_an_NPC_still_reach_its_stats()
+    {
+        using var owner = Owner();
+        var wolf = Npc();
+        var plain = wolf.EffectiveStat(CharacterStat.Speed, LifeState.Unharmed);
+        Assert.IsTrue(plain >= 4, "the fixture's speed leaves room to halve");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, wolf.Target, Slow, EffectCause.Spell, 70).Disposition);
+        Assert.IsTrue(owner.WithNpcEffects(wolf).EffectiveStat(CharacterStat.Speed, LifeState.Unharmed) < plain, "70 entries: the stat changes are applied, not dropped");
+    }
+
     [TestMethod]
     public void A_monstrous_NPC_is_not_clamped_and_an_ordinary_one_is()
     {

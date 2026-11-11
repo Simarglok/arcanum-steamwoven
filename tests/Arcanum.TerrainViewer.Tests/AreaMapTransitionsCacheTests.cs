@@ -67,4 +67,49 @@ public sealed class AreaMapTransitionsCacheTests
         CollectionAssert.AreEqual(first.Transitions!.Sites.Select(site => site.ToString()).ToArray(), fresh.Transitions!.Sites.Select(site => site.ToString()).ToArray());
         CollectionAssert.AreEquivalent(first.Destinations!.ToArray(), fresh.Destinations!.ToArray());
     }
+
+    /// <summary>ARC-DEV-392: a second process takes the main map's transitions from the device store, and they equal a fresh read of the content.</summary>
+    [TestMethod, TestCategory("RealData"), DoNotParallelize]
+    public void A_map_kept_for_the_next_process_comes_back_equal_to_a_fresh_read_of_the_content()
+    {
+        if (Environment.GetEnvironmentVariable("DAT_ROOT") is not { Length: > 0 } root) { Assert.Inconclusive("DAT_ROOT is required for the opt-in store check; this is not a synthetic pass."); return; }
+        var folder = Directory.CreateTempSubdirectory("arc-dev-392-real-");
+        var saved = AreaMapTransitionsStore.Root;
+        try
+        {
+            AreaMapTransitionsStore.Root = folder.FullName;
+            using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+            var catalog = WorldCatalog.Open(stack);
+            var map = catalog.Find("Arcanum1-024-fixed")!;
+            AreaMapTransitionsCache.Clear();
+            var first = AreaMapLoadOperation.Transitions(stack, catalog, map, out var firstSource);
+            Assert.AreEqual("content+stored", firstSource);
+            // A new process has an empty memory cache.
+            AreaMapTransitionsCache.Clear();
+            var reads = AreaMapTransitionsCache.Reads;
+            var kept = AreaMapLoadOperation.Transitions(stack, catalog, map, out var keptSource);
+            Assert.AreEqual("device", keptSource);
+            Assert.AreEqual(reads, AreaMapTransitionsCache.Reads, "the content was not read");
+            Assert.AreNotSame(first.Transitions, kept.Transitions);
+            Assert.AreEqual(first.Transitions!.Sites.Count, kept.Transitions!.Sites.Count);
+            Assert.AreEqual(first.Transitions.IsStartMap, kept.Transitions.IsStartMap);
+            Assert.AreEqual(first.Transitions.Entry, kept.Transitions.Entry);
+            for (var i = 0; i < first.Transitions.Sites.Count; i++)
+            {
+                var (a, b) = (first.Transitions.Sites[i], kept.Transitions.Sites[i]);
+                Assert.AreEqual(a with { Chain = Array.Empty<int>() }, b with { Chain = Array.Empty<int>() }, $"site {i}");
+                CollectionAssert.AreEqual(a.Chain.ToArray(), b.Chain.ToArray(), $"chain {i}");
+            }
+            CollectionAssert.AreEqual(first.Transitions.Issues.ToArray(), kept.Transitions.Issues.ToArray());
+            CollectionAssert.AreEqual(first.Transitions.Placed.ToArray(), kept.Transitions.Placed.ToArray());
+            CollectionAssert.AreEquivalent(first.Destinations!.ToArray(), kept.Destinations!.ToArray());
+            // The memory cache now answers, and a store off reads the content again.
+            AreaMapLoadOperation.Transitions(stack, catalog, map, out var third);
+            Assert.AreEqual("memory", third);
+            AreaMapTransitionsCache.Clear(); AreaMapTransitionsStore.Root = null;
+            AreaMapLoadOperation.Transitions(stack, catalog, map, out var off);
+            Assert.AreEqual("content", off);
+        }
+        finally { AreaMapTransitionsStore.Root = saved; AreaMapTransitionsCache.Clear(); folder.Delete(recursive: true); }
+    }
 }

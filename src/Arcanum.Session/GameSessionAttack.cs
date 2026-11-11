@@ -133,7 +133,8 @@ public sealed class SessionCritterCombat
     // the race and gender causes of a loaded list belong to the owner's setters and are applied as spell entries); null when the owner refuses anything.
     private CharacterStatsOwner? ClonedStats(StatEffectDefinition[] modifiers)
     {
-        var created = CharacterStatsOwner.Create(new(_race, _gender, InnateEffectTable.Empty, CharacterStatLimits.Default));
+        var created = CharacterStatsOwner.Create(new(_race, _gender, InnateEffectTable.Empty,
+            CharacterStatLimits.Default with { MaxAppliedEffects = SessionNpcEffectLimits.MaxEntries }));
         if (created.Owner is not { } owner) return null;
         var plain = _stats.Query(new(0)).Snapshot!;
         foreach (var (stat, _) in StoredStats())

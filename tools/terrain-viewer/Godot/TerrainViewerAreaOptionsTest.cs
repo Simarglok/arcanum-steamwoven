@@ -113,8 +113,12 @@ public partial class TerrainViewerApp
             panel.ChangeForSelfTest(5, 1);
             Require(Controls()[5] == "HD graphics: On" && Controls()[6] == "HD interface: On" && _canvas?.VisualProfile == VisualProfile.Hd, "both on: " + string.Join("|", Controls()));
             panel.ChangeForSelfTest(5, 1);
+            // ARC-UI-140: the third value, the generated interface, keeps HD on for the pictures; one more step wraps to Off.
             panel.ChangeForSelfTest(6, 1);
-            Require(Controls()[6] == "HD interface: Off" && !_gameSettings.HdInterface && Controls()[5] == "HD graphics: Off" && _canvas?.VisualProfile == VisualProfile.Legacy,
+            Require(Controls()[6] == "HD interface: Generated (experimental)" && _gameSettings.HdInterface && _gameSettings.GeneratedInterface,
+                "generated interface: " + string.Join("|", Controls()));
+            panel.ChangeForSelfTest(6, 1);
+            Require(Controls()[6] == "HD interface: Off" && !_gameSettings.HdInterface && !_gameSettings.GeneratedInterface && Controls()[5] == "HD graphics: Off" && _canvas?.VisualProfile == VisualProfile.Legacy,
                 "HD interface wrapped to Off: " + string.Join("|", Controls()));
 
             // ARC-UI-021: the Video page's floating text level and speed apply at once.

@@ -186,12 +186,15 @@ public sealed class AreaGameOptionsTests
         Assert.AreEqual(0, (Values with { HdGraphics = true }).Value(AreaOption.HdInterface), "independent of HD graphics");
         Assert.AreEqual(0, (Values with { HdInterface = true }).Value(AreaOption.HdGraphics), "and HD graphics of it");
         Assert.AreEqual(1, (Values with { HdInterface = true }).Value(AreaOption.HdInterface));
+        Assert.AreEqual(2, (Values with { HdInterface = true, GeneratedInterface = true }).Value(AreaOption.HdInterface), "ARC-UI-140: the third value");
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.HdInterface, Value: 1), menu.Change(6, 1));
         menu.SetOptions(Values with { HdInterface = true });
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.HdInterface, Value: 2), menu.Change(6, 1), "On then Generated");
+        menu.SetOptions(Values with { HdInterface = true, GeneratedInterface = true });
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.HdInterface, Value: 0), menu.Change(6, 1), "the list wraps");
         var game = AreaOptionsTexts.From((_, _) => "game text", "test");
         Assert.AreEqual("HD interface", game.Label(line), "the project's text, never a game message");
-        Assert.AreEqual("Off", game.Value(line, 0)); Assert.AreEqual("On", game.Value(line, 1));
+        Assert.AreEqual("Off", game.Value(line, 0)); Assert.AreEqual("On", game.Value(line, 1)); Assert.AreEqual("Generated (experimental)", game.Value(line, 2));
     }
 
     [TestMethod]
@@ -262,7 +265,13 @@ public sealed class AreaGameOptionsTests
     {
         var settings = new AreaGameSettings(2, true, false) { Floats = 2, FloatSpeed = 7, HdInterface = true };
         Assert.AreEqual(settings, AreaGameSettingsCodec.Deserialize(AreaGameSettingsCodec.Serialize(settings)));
-        Assert.AreEqual("""{"version":4,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2,"hdInterface":false,"hdPack":"auto","hdPackPath":null}""", AreaGameSettingsCodec.Serialize(AreaGameSettings.Defaults));
+        var generated = settings with { GeneratedInterface = true };
+        Assert.AreEqual(generated, AreaGameSettingsCodec.Deserialize(AreaGameSettingsCodec.Serialize(generated)), "ARC-UI-140 round-trips");
+        Assert.AreEqual("""{"version":5,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2,"hdInterface":false,"hdPack":"auto","hdPackPath":null,"generatedInterface":false}""", AreaGameSettingsCodec.Serialize(AreaGameSettings.Defaults));
+        Assert.AreEqual(AreaGameSettings.Defaults with { HdInterface = true }, AreaGameSettingsCodec.Deserialize("""{"version":4,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2,"hdInterface":true,"hdPack":"auto","hdPackPath":null}"""),
+            "an ARC-DEV-350 file reads with the generated interface off (ARC-UI-140)");
+        Assert.AreEqual(AreaGameSettings.Defaults, AreaGameSettingsCodec.Deserialize("""{"version":5,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2,"hdInterface":false,"hdPack":"auto","hdPackPath":null,"generatedInterface":true}"""),
+            "the generated interface is on only with the HD interface (ARC-UI-140)");
         Assert.AreEqual(AreaGameSettings.Defaults, AreaGameSettingsCodec.Deserialize("""{"version":3,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2,"hdInterface":false}"""),
             "an ARC-UI-095 file reads with the HD pack source Auto (ARC-DEV-350)");
         Assert.AreEqual(AreaGameSettings.Defaults, AreaGameSettingsCodec.Deserialize("""{"version":2,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2}"""),
@@ -278,6 +287,9 @@ public sealed class AreaGameOptionsTests
             """{"version":4,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2,"hdInterface":true,"hdPack":"custom","hdPackPath":""}""",
             """{"version":4,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2,"hdInterface":true,"hdPack":1,"hdPackPath":null}""",
             """{"version":2,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2,"hdInterface":true}""",
+            """{"version":5,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2,"hdInterface":true,"hdPack":"auto","hdPackPath":null}""",
+            """{"version":5,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2,"hdInterface":true,"hdPack":"auto","hdPackPath":null,"generatedInterface":1}""",
+            """{"version":6,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2,"hdInterface":true,"hdPack":"auto","hdPackPath":null,"generatedInterface":true}""",
             """{"version":2,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":3,"floatSpeed":2}""", """{"version":2,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":11}""",
             """{"version":1,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2}""",
             """{"version":1,"difficulty":3,"turnBased":false,"autoAttack":true}""", """{"version":1,"difficulty":1,"turnBased":0,"autoAttack":true}""",

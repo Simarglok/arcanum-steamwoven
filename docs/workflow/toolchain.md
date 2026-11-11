@@ -99,18 +99,30 @@ Known pitfalls:
 The viewer's smokes on the original data run through one shared runner; do not write a scratch smoke script (the queue
 history held about 500 runs of such copies of one template).
 
-    ./arcanum smoke pr [--stages S,...] [--map NAME] [--hero H] [--sector X,Y] [--main-menu] [--env NAME=VALUE] [--crash-site]
+    ./arcanum smoke pr [--stages S,...] [--map NAME] [--hero H] [--sector X,Y] [--main-menu] [--env NAME=VALUE] [--all] [--crash-site]
     ./arcanum smoke pr --auto [--base REF]     # the zones the diff against origin/main selects (ARC-DEV-396)
     ./arcanum smoke pr --zones core,walk,...   # named zones: core, walk, container-click, crash-site, census, complete
     ./arcanum smoke full                       # the full map smoke chain (the batteries)
     ./arcanum smoke complete                   # the nightly run: the chain, then every stage
-    ./arcanum smoke map NAME [--stages S,...] [--hero H] [--sector X,Y] [--main-menu] [--env NAME=VALUE]
+    ./arcanum smoke map NAME [--stages S,...] [--hero H] [--sector X,Y] [--main-menu] [--env NAME=VALUE] [--all]
     ./arcanum smoke crash-site [--hero H] [--env NAME=VALUE]   # the Crash Site smoke alone
     ./arcanum smoke self-test [--headless] [--env NAME=VALUE]  # the viewer's synthetic --self-test
     # each also takes --no-build, --keep-settings and --dry-run; pr and map also --no-config-check
 
 - **Click and walk changes** ([smoke scope](tasks.md#smoke-scope), ARC-DEV-239). A PR that changes click or walk handling
   always runs `./arcanum smoke pr --stages map` and `./arcanum smoke self-test` (both, every such PR).
+- **Sampled stages (ARC-DEV-395, owner decision 2026-11-11).** `container-click` and `walk` took 675 s and 525 s of the
+  one Godot slot in that report (600 s and 363 s on an idle Mac when re-measured here) ([smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md)), so by default they check a
+  sample; `--all` (on `pr` and `map`, with a run of one of them by `--stages` or its zone; it sets the viewer's `ARC_SMOKE_ALL=1`) runs the
+  full stage; the nightly `complete` run and `--zones complete` always run both in full. `container-click` clicks at most 8 containers of the window, spread over the (prototype, admitted open
+  outcome) groups, the group of admitted rubbish bins and a locked container first (so at least one bin, and every bin only with `--all`) (`ARC-DEV-395 container-click SAMPLE n of N` names them); `walk` plans and walks the
+  route to a goal about 10 window moves from the start (the full route has 71) instead of to the town sector. What the sample no longer proves: for
+  `container-click`, the click path of the containers left out (a pick lost behind another object or a roof, a wrong
+  hover, a refused or locked answer of that container) and the "every rubbish bin opens" rule over the whole window (it
+  holds for the sampled bins); for `walk`, the walk's tail (the 60 or so window moves after the tenth, the arrival at
+  the town, the planner on the full 88-sector route). Run `--all` when a change touches picking, containers or the click
+  path (`container-click`), or the route planner, the follower, the window loader or the far end of the route (`walk`),
+  and before reporting a stage that failed as sampled as fixed. The sampled run reads the same zones: `--auto` selects the `walk` and `container-click` zones as before and they run as a sample unless `--all`.
 - **Scope** ([smoke scope](tasks.md#smoke-scope)). `pr` is the per-PR run: only the stages the change touches or is
   directly related to (`--stages`, the viewer's `ARC_AREA_MAP_SMOKE_ONLY` names; checked against its
   `MapSmokeStageNames` before anything waits for the queue) on `--map` and `--sector` when given, else on the
@@ -158,8 +170,8 @@ history held about 500 runs of such copies of one template).
 - **Smoke zones (ARC-DEV-396).** Option A of the [smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md#zone-options),
   in `tools/local_dev/smoke_zones.py`. A zone is a set of stages a change can break together: `core` is every cheap stage (every
   stage no heavy zone holds, so a stage the viewer gains lands there until a heavy zone claims it; grouped by configuration into
-  about twenty processes at this base), and the heavy zones are `walk` (the stage `walk`, about 9 minutes), `container-click`
-  (the stage of that name, about 11 minutes), `crash-site` (the Crash Site smoke, not a stage) and `census` (the stage `census`).
+  about twenty processes at this base), and the heavy zones are `walk` (the stage `walk`, about 1 minute as a sample, about 6 with `--all`), `container-click`
+  (the stage of that name, about 2 minutes as a sample, about 10 with `--all`), `crash-site` (the Crash Site smoke, not a stage) and `census` (the stage `census`).
   `--zones core,walk` runs those; `complete` stands for all of them and runs what `./arcanum smoke complete` runs: the Crash Site
   smoke and the batteries of `full`, then every stage but `map` and `resources` (the batteries vouch for those) grouped as
   usual, the heavy stages last. That is what `./arcanum daily` runs, so the daily run now checks every stage the viewer accepts
@@ -272,6 +284,12 @@ a budget or a regression gate. Other optimisations are shown with it: run before
   The load worker's read prints `load.worker.read.{strict,scene,copy}` spans and `ARC-DEV-375 visuals ...` / `ARC-DEV-375 frames resident-hits=H read=R ...` lines
   (hits against frames actually read, the store's size). `ARC_AREA_RESIDENT=0` in the environment (`--env ARC_AREA_RESIDENT=0` on a smoke) turns both stores off
   for a before/after comparison; nothing else depends on it. The editor `.mob` facts (ARC-DEV-388) have their own store, off with `ARC_AREA_RESIDENT_EDITOR=0` or `ARC_AREA_RESIDENT=0`, and the worker prints `ARC-DEV-388 editor-records served=B ms=T ...`.
+- **Map transitions kept on the device (ARC-DEV-392).** The map's transitions and the map list's destinations are written to `map-cache/` in the device's
+  Steamwoven folder (`~/Library/Application Support/Arcanum Steamwoven Game/map-cache/` on a Mac; not `user://`, which every smoke replaces with a temporary
+  folder), so the next process, above all the next smoke run, skips the 1.8 s read ([design](../world/area-loader.md#map-transitions-kept-on-the-device-arc-dev-392)).
+  The viewer's start line `ARC-DEV-392 map-cache folder=...` names the folder, and the load's `ARC-WORLD-031 load stage=transitions` line says `source=memory|device|content|content+stored`.
+  `ARC_MAP_CACHE=0` (`--env ARC_MAP_CACHE=0` on a smoke) turns only this store off, `ARC_AREA_RESIDENT=0` turns it off with the resident stores, `ARC_MAP_CACHE_DIR=<folder>`
+  names another folder; a smoke drops the owner's `ARC_*` variables, so pass them with `--env`. Deleting the folder only costs one read; at most 96 files are kept.
 - **Reading the numbers.** The Mac is shared and a Debug source run is slower than the packaged build: the diagnosis took medians
   over several runs and looked at the load average. A packaged build needs the probe's switch in the environment (`ARC_PERF_PROBE=1`);
   HD runs need `ARC_HD_PACK` and settings files as the diagnosis's reproduction says.
