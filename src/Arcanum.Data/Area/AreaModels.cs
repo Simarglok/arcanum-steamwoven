@@ -342,6 +342,9 @@ public sealed class AreaLoaderOptions
     public int MaxResourceInputs { get; init; }
     /// <summary>ARC-DATA-032: most <see cref="AreaSourceRole.TerrainTemplate"/> inputs; 0, the default, admits none.</summary>
     public int MaxTerrainTemplates { get; init; }
+    /// <summary>ARC-DEV-375: the process-resident visual memo this plan's builds read and fill (see <see cref="AreaResidentVisuals"/>); null, the default,
+    /// keeps every build self-contained, as the pinned exterior does. The map plans set it.</summary>
+    public AreaResidentVisuals? ResidentVisuals { get; init; }
     internal void Validate()
     {
         if (MaxManagedBytes <= 0 || MaxRetainedBytes <= 0 || MaxBuildPhaseBytes <= 0 || MaxFrameOperationBytes <= 0 || MaxReadBytes <= 0 ||
