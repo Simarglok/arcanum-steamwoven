@@ -318,6 +318,12 @@ public sealed class ScrAdmissionSet
             ScrCatalogue.Condition.MasteredSpellCollege]),
         S30.Actions.Append(ScrCatalogue.Action.GiveSpellMastery), S30.ValueKinds, S30.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The ammunition set (ARC-MAGIC-041, ledger TI8): <see cref="S31"/> plus use ammunition units (135), which hands one <see cref="ScrAmmoUse"/> (the count of operand 0, the power-cell type 2, the
+    /// first object of operand 1) to the host; the script goes on whatever the host does with it. The Electric degree-3 shield's script (29016) needs it.
+    /// </summary>
+    public static ScrAdmissionSet S32 { get; } = new("S32", S31.Conditions, S31.Actions.Append(ScrCatalogue.Action.UseAmmoUnits), S31.ValueKinds, S31.FocusKinds, counterIndexWraps: true);
+
     /// <summary>The conditions of <see cref="S31"/> a host answers through <see cref="IScrSpellQueries"/>.</summary>
     public static IReadOnlySet<int> SpellQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.HasBodySpell, ScrCatalogue.Condition.InfluencedBySpell, ScrCatalogue.Condition.KnowsSpell,
         ScrCatalogue.Condition.MasteredSpellCollege };

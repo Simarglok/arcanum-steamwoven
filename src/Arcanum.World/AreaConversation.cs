@@ -369,7 +369,7 @@ public sealed class AreaConversationHost
         if (_content is null) { detail = _contentDetail; return false; }
         if (!_content.VerifySeen()) { detail = "a script or dialog file changed since it was first read"; return false; }
         var result = ScrDispatcher.RunCall(new(call.Script, call.Line, Scripts.Local(call.Triggerer), Scripts.Local(call.Attachee)), Scripts,
-            new() { Rules = _session.Rules.Scripts, Admission = Scripts.AdmissionFor(Scripts.Local(call.Attachee)) });
+            new() { Rules = _session.Rules.Scripts, Admission = Scripts.CallAdmissionFor(Scripts.Local(call.Attachee)) });
         LastCall = result;
         if (_content.Changed) { detail = $"script {call.Script}: a script file changed since it was first read"; return false; }
         if (result.Outcome == ScrOutcome.Refused)
