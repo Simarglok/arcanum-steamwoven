@@ -265,6 +265,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private readonly ISessionScriptWorld _events;
     private readonly ISessionCombatWorld _round;
     private readonly Dictionary<string, AreaAiNpc> _npcs;
+    // ARC-DEV-359 (E1-c): the critters the session created that this host runs (a created critter has no window to give its row back, so a window move never forgets it).
+    private readonly HashSet<string> _created = new(StringComparer.Ordinal);
+    // A created critter whose first tick the session refused (the event budget): asked again at the next sync, since nothing else starts a chain for it.
+    private readonly HashSet<string> _createdUnticked = new(StringComparer.Ordinal);
     // ARC-WORLD-115: the companions the host runs (their cells are their walk's, never the movers'); ARC-WORLD-119: free ones too.
     private readonly Dictionary<string, AreaAiNpc> _followers;
     // ARC-WORLD-119: the companions the hero led at the host's last look (ObserveLeaves).
@@ -817,7 +821,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         // The NPCs the earlier windows gave that stand on their map data's cell and run nothing are forgotten (a window that holds them again gives their rows back): the
         // host keeps the NPCs that act, so the set stays that of the windows near the hero and the ones walking.
         foreach (var entity in _npcs.Keys.ToArray())
-            if (!AnimationRunning(entity) && Movers.Of(entity) is null && scene.Npcs.All(n => n.Entity != entity)) _npcs.Remove(entity);
+            if (!_created.Contains(entity) && !AnimationRunning(entity) && Movers.Of(entity) is null && scene.Npcs.All(n => n.Entity != entity)) _npcs.Remove(entity);
         var added = new HashSet<string>(StringComparer.Ordinal);
         foreach (var npc in scene.Npcs) { if (!_npcs.ContainsKey(npc.Entity)) added.Add(npc.Entity); _npcs[npc.Entity] = npc; }
         foreach (var companion in followers.Keys) _npcs.Remove(companion);
@@ -829,6 +833,48 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         // A row the host did not hold stands where the session recorded the NPC, as in a host built for it (the first step would overwrite the place).
         if (added.Count > 0) RestorePlaces(added);
         _listCache = AiListCache.Empty; _shown.Clear(); _shownRevision = -1;
+    }
+
+    /// <summary>
+    /// ARC-DEV-359 (E1-c, TM4): the critters the session created on this host's map, as the host runs them: a critter new to the host joins its NPCs (stands where the session recorded it, else on its
+    /// creation cell, as a host built for it would put it) and gets its heartbeat chain, the delayed first tick a created NPC gets (<see cref="SessionAiTickStart.Delayed"/>, no sector gate: a chain starts at creation);
+    /// a critter this host ran that the list no longer holds (the session destroyed it) is dropped: its goal runs end at the highest level, its mover goes and it is no NPC of the host. A row of another
+    /// map is skipped. Called whenever the session's created critters change (the viewer's frame, a load); a list with nothing new and nothing gone changes nothing. Answers the critters added.
+    /// </summary>
+    public int SyncCreated(IReadOnlyList<AreaAiNpc> created)
+    {
+        ArgumentNullException.ThrowIfNull(created);
+        // A created critter that joined the party is run as a follower (Rebind takes followers out of the NPCs): it is no NPC of this list.
+        var wanted = created.Where(npc => npc.Row.Key.RuntimeMap == _scene.RuntimeMap && !_followers.ContainsKey(npc.Entity)).GroupBy(npc => npc.Entity, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        var changed = false;
+        foreach (var entity in _created.ToArray())
+        {
+            if (wanted.ContainsKey(entity)) continue;
+            DropRun(entity);
+            _npcs.Remove(entity); _created.Remove(entity); _createdUnticked.Remove(entity); Movers.Remove(entity); _traces.Remove(entity);
+            changed = true;
+        }
+        var added = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (entity, npc) in wanted)
+        {
+            if (!_npcs.ContainsKey(entity)) added.Add(entity);
+            _npcs[entity] = npc; _created.Add(entity);
+        }
+        _createdUnticked.UnionWith(added);
+        if (added.Count == 0 && !changed && _createdUnticked.Count == 0) return 0;
+        if (added.Count > 0 || changed)
+        {
+            _scene = _scene with { Npcs = [.. _npcs.Values] };
+            RestorePlaces(added);
+            _listCache = AiListCache.Empty; _shown.Clear(); _shownRevision = -1;
+        }
+        foreach (var entity in _createdUnticked.ToArray())
+        {
+            if (!_created.Contains(entity) || _session.QueryAiTick(entity) is not null || Life(entity) is null) { _createdUnticked.Remove(entity); continue; }
+            var result = _session.ScheduleAiTick(_session.Version, new SessionAiTickRequest { Entity = entity, Start = SessionAiTickStart.Delayed, DistanceToPc = DistanceToPc(entity) });
+            if (result.Disposition != GameSessionDisposition.Rejected) _createdUnticked.Remove(entity);
+        }
+        return added.Count;
     }
 
     /// <summary>Ends the casting runs as dropped ones (their end nodes free the magic run) and forgets the cast bookkeeping: what a window move takes from under them.</summary>

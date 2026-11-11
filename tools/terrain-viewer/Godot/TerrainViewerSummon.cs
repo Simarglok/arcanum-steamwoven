@@ -133,5 +133,5 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-DEV-352: the cell of a created object on the shown map (an eye candy's owner), or null.</summary>
     private CellCoord? CreatedCell(GameSessionOwner owner, string entity) =>
-        SessionCreatedObject.KindOf(entity) is not null && owner.QueryCreatedObject(entity) is { } made && made.Map == new SessionMapId(CurrentAreaMap) ? made.Cell : null;
+        SessionCreatedObject.KindOf(entity) is SessionCreatedKind.Scenery or SessionCreatedKind.EyeCandy && owner.QueryCreatedObject(entity) is { } made && made.Map == new SessionMapId(CurrentAreaMap) ? made.Cell : null;
 }

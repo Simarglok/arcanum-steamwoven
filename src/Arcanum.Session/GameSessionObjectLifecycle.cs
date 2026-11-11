@@ -47,6 +47,7 @@ public sealed partial class GameSessionOwner
             SessionObjectOrigin.Projectile => SessionProjectile.EntityPrefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             SessionObjectOrigin.Scenery => SessionCreatedObject.SceneryPrefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             SessionObjectOrigin.EyeCandy => SessionCreatedObject.EyeCandyPrefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            SessionObjectOrigin.Critter => SessionCreatedObject.CritterPrefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             _ => throw new ArgumentOutOfRangeException(nameof(origin)),
         };
     }
@@ -150,6 +151,7 @@ public sealed partial class GameSessionOwner
                 return;
             case SessionObjectOrigin.Scenery:
             case SessionObjectOrigin.EyeCandy:
+            case SessionObjectOrigin.Critter:
                 _inventory.Objects.RemoveCreated(entity);
                 return;
             case SessionObjectOrigin.Missile:
