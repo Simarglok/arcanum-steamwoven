@@ -89,6 +89,38 @@ public sealed class AreaScenePlanTests
     }
 
     [TestMethod]
+    public void A_placed_body_takes_the_blend_of_its_blit_flags_as_a_map_body_does_ARC_MAGIC_054()
+    {
+        var tile = TerrainKey(100, 0);
+        var body = Body(1);
+        var plan = AreaScenePlan.Create([new AreaTerrainRecord(tile, 0, 0, 92928, 82560, 0, 0, AreaScope.Core, tile)], [body], [Visual(tile), BodyVisual(body)]);
+        var plain = AreaScenePlan.Place(plan.Chart, body.Key with { SourceIndex = 9 }, BodyVisual(body), 92928, 82560, flat: false);
+        // The same rule as a map body's State: every valid blit state of a map body (mirrored art or not) gives the same blend and flips as a placed body.
+        foreach (var mirrored in new[] { false, true })
+            foreach (var (blit, alpha) in new[] { (0L, 255L), (0x10L, 255L), (0x40L, 255L), (0x100L, 95L), (0x150L, 255L), (0x140L, 255L), (0x1L, 255L), (0x2L, 255L), (0x3L, 255L), (0x111L, 255L), (0x100L, 0L) })
+            {
+                var visual = BodyVisual(body) with { Mirrored = mirrored };
+                var mapBody = AreaScenePlan.Create([], [With(body, (8, blit), (10, alpha))], [visual]).Commands.Single();
+                var placedBody = AreaScenePlan.WithBlend(AreaScenePlan.Place(plan.Chart, body.Key with { SourceIndex = 9 }, visual, 92928, 82560, flat: false), (uint)blit, (int)alpha);
+                Assert.AreEqual((mapBody.Additive, mapBody.Multiply, mapBody.Unlit, mapBody.Alpha, mapBody.FlipX, mapBody.FlipY),
+                    (placedBody.Additive, placedBody.Multiply, placedBody.Unlit, placedBody.Alpha, placedBody.FlipX, placedBody.FlipY), $"blit 0x{blit:X} alpha {alpha} mirrored {mirrored}");
+            }
+        Assert.AreEqual(plain, AreaScenePlan.WithBlend(plain, 0, 255), "no blit flag: the plain draw");
+        var additive = AreaScenePlan.WithBlend(plain, 0x10, 255);
+        Assert.IsTrue(additive.Additive && additive.Unlit && !additive.Multiply && additive.Alpha == 255 && additive.Blended, "additive 0x10, base palette, unlit");
+        var both = AreaScenePlan.WithBlend(plain, 0x150, 80);
+        Assert.IsTrue(both.Additive && !both.Multiply && both.Alpha == 255, "additive wins over multiply and constant alpha");
+        var multiply = AreaScenePlan.WithBlend(plain, 0x140, 80);
+        Assert.IsTrue(multiply.Multiply && !multiply.Additive && multiply.Unlit && multiply.Alpha == 255, "multiply wins over constant alpha");
+        var constant = AreaScenePlan.WithBlend(plain, 0x100, 80);
+        Assert.IsTrue(constant.Alpha == 80 && constant.Unlit && !constant.Additive && !constant.Multiply, "constant alpha 0x100 reads the blit alpha");
+        var flipped = AreaScenePlan.WithBlend(plain, 0x3, 255);
+        Assert.AreEqual((!plain.FlipX, true), (flipped.FlipX, flipped.FlipY), "the mirror bits flip across x and y");
+        Assert.AreEqual((plain.Destination, plain.Phase, plain.Visual), (additive.Destination, additive.Phase, additive.Visual), "the blend moves nothing");
+        Assert.ThrowsExactly<ArgumentNullException>(() => AreaScenePlan.WithBlend(null!, 0, 255));
+    }
+
+    [TestMethod]
     public void AdjacentSeamsRetainOccurrenceKeysAndGlobalChart()
     {
         var a = TerrainKey(100, 63); var b = TerrainKey(101, 0); var c = TerrainKey(102, 0);
