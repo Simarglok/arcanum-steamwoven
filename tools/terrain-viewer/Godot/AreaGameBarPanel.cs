@@ -286,6 +286,8 @@ public partial class AreaGameBarPanel : CanvasLayer
         _strips[AreaBarStrip.Top].Position = new Vector2(left, 0);
         _strips[AreaBarStrip.Bottom].Position = new Vector2(left, size.Y - AreaGameBarLayout.BottomHeight * Factor);
         foreach (var strip in _strips.Values) strip.Scale = new Vector2(Factor, Factor);
+        // ARC-UI-141: the generated chrome is painted at the exact device scale the strips and buttons are drawn at (factor times the viewport's own scale).
+        InterfaceHd.SetGeneratedScale(Factor * GetViewport().GetFinalTransform().Scale.X);
         // ARC-UI-089: the free width beside the centred strip, in UI units (filled with HD strip tiles while the HD profile is on).
         _sideLeft = left / Factor; _sideRight = (size.X - left - AreaGameBarLayout.ScreenWidth * Factor) / Factor;
         foreach (var strip in _strips)

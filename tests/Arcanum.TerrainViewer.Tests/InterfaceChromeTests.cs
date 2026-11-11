@@ -115,7 +115,11 @@ public sealed class InterfaceChromeTests
     [TestMethod]
     public void Keep_regions_copy_the_picture_and_parts_paint_their_rectangles()
     {
-        var legacy = Frame(48, 20, holes: false, colour: (10, 200, 10));
+        var legacy = Frame(48, 20, holes: false);
+        // The kept rectangle's Legacy pixels are green; the wood around it (the frame's own colour) is not.
+        for (var y = 2; y < 6; y++)
+        for (var x = 34; x < 38; x++)
+            (legacy[(y * 48 + x) * 4], legacy[(y * 48 + x) * 4 + 1], legacy[(y * 48 + x) * 4 + 2]) = (10, 200, 10);
         var picture = new byte[48 * S * 20 * S * 4];
         for (var i = 0; i < picture.Length; i += 4) (picture[i], picture[i + 1], picture[i + 2], picture[i + 3]) = (1, 2, 3, 255);
         var recipe = Panel(new ChromeSunk(20, 2, 10, 10, ChromeMaterial.Dark), new ChromeKeep(2, 2, 4, 4), new ChromeKeep(34, 2, 4, 4));
@@ -129,6 +133,7 @@ public sealed class InterfaceChromeTests
         Assert.IsTrue(inside.R < 30 && inside.G < 30, $"its dark fill: {inside}");
         var wood = Pixel(withLegacy, 48 * S, 10 * S, 10 * S);
         Assert.IsTrue(wood.R > wood.B && wood.G != 200, $"the rest is generated wood: {wood}");
+        Assert.IsTrue(Math.Abs(wood.R - 90) <= 4 && Math.Abs(wood.G - 60) <= 4 && Math.Abs(wood.B - 30) <= 4, $"in the tone of the frame's own wood: {wood}");
     }
 
     [TestMethod]
@@ -161,5 +166,119 @@ public sealed class InterfaceChromeTests
         Assert.ThrowsExactly<ArgumentException>(() => InterfaceChromeRenderer.Render(recipe, 4, 4, new byte[10], [], 0));
         Assert.ThrowsExactly<ArgumentException>(() => InterfaceChromeRenderer.Render(recipe, 4, 4, new byte[64], new byte[5], 0));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => InterfaceChromeRenderer.Render(recipe, 4, 4, new byte[64], [], -1));
+    }
+
+    // ARC-UI-141: the exact device scale.
+    [TestMethod]
+    public void Chrome_is_painted_at_every_whole_device_scale_with_one_unit_lines_of_scale_pixels()
+    {
+        var legacy = Frame(48, 20);
+        foreach (var scale in new[] { 1, 2, 3, 5, 8 })
+        {
+            var a = InterfaceChromeRenderer.Render(Panel(), 48, 20, legacy, [], 0, scale);
+            Assert.AreEqual(48 * scale * 20 * scale * 4, a.Length, $"size at {scale}");
+            CollectionAssert.AreEqual(a, InterfaceChromeRenderer.Render(Panel(), 48, 20, legacy, [], 0, scale), $"deterministic at {scale}");
+            var width = 48 * scale;
+            // The bottom rim: an ink line of exactly one unit (scale pixels), then the lit brass line of one unit, away from the holes.
+            for (var k = 0; k < scale; k++) Assert.AreEqual((20, 14, 8, 255), Pixel(a, width, 20 * scale, 20 * scale - 1 - k), $"ink line pixel {k} at {scale}");
+            Assert.AreNotEqual((20, 14, 8, 255), Pixel(a, width, 20 * scale, 20 * scale - 1 - scale), $"the line is {scale} pixels, no more");
+            // The silhouette and the holes are the Legacy frame's, whatever the scale (a square hole's pixels exactly).
+            for (var y = 0; y < 20 * scale; y++)
+            for (var x = 0; x < 48 * scale; x++)
+            {
+                if (x >= 20 * scale) break; // the round socket (anti-aliased) is to the right
+                Assert.AreEqual(legacy[((y / scale) * 48 + x / scale) * 4 + 3], a[(y * width + x) * 4 + 3], $"alpha ({x},{y}) at {scale}");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void The_wood_takes_the_tone_of_the_frames_own_wood_outside_its_parts()
+    {
+        // A light grey-green wood with a little grain; a sunk part over a different (dark red) area must not count.
+        var legacy = Frame(48, 20, holes: false);
+        for (var y = 0; y < 20; y++)
+        for (var x = 0; x < 48; x++)
+        {
+            var i = (y * 48 + x) * 4;
+            var grain = (byte)((x + y) % 2 == 0 ? 10 : 0);
+            var inSunk = x >= 20 && x < 30 && y >= 4 && y < 14;
+            (legacy[i], legacy[i + 1], legacy[i + 2]) = inSunk ? ((byte)200, (byte)10, (byte)10) : ((byte)(150 + grain), (byte)(160 + grain), (byte)(140 + grain));
+        }
+        var tuned = InterfaceChromeRenderer.Render(Panel(new ChromeSunk(20, 4, 10, 10, ChromeMaterial.Dark)), 48, 20, legacy, [], 0, 1);
+        double sr = 0, sg = 0; var n = 0;
+        for (var y = 2; y < 16; y++)
+        for (var x = 36; x < 46; x++) { var p = Pixel(tuned, 48, x, y); sr += p.R; sg += p.G; n++; }
+        Assert.IsTrue(Math.Abs(sr / n - 155) < 8 && Math.Abs(sg / n - 165) < 8, $"mean wood {sr / n:F0},{sg / n:F0} follows the frame's 155,165");
+        var tiny = Frame(4, 4, holes: false, colour: (200, 10, 10));
+        var own = InterfaceChromeRenderer.Render(Panel(), 4, 4, tiny, [], 0, 1);
+        Assert.IsTrue(Pixel(own, 4, 2, 0).R < 130, "too little wood to read keeps our own palette");
+    }
+
+    [TestMethod]
+    public void A_button_at_a_whole_scale_keeps_its_outline_and_glyph()
+    {
+        const int N = 20;
+        var legacy = Frame(N, N, holes: false, colour: (40, 40, 20));
+        for (var y = 8; y < 12; y++)
+        for (var x = 8; x < 12; x++)
+            (legacy[(y * N + x) * 4], legacy[(y * N + x) * 4 + 1], legacy[(y * N + x) * 4 + 2]) = (220, 30, 30);
+        var recipe = InterfaceChromeRecipes.All.Single(r => r.File == "char_but.art");
+        foreach (var scale in new[] { 1, 2, 3 })
+        {
+            var idle = InterfaceChromeRenderer.Render(recipe, N, N, legacy, [], 0, scale);
+            Assert.AreEqual((20, 14, 8, 255), Pixel(idle, N * scale, 0, 10 * scale), $"an ink outline at {scale}");
+            Assert.AreEqual((220, 30, 30, 255), Pixel(idle, N * scale, 10 * scale, 10 * scale), $"the glyph at {scale}");
+        }
+    }
+
+    [TestMethod]
+    public void A_picture_is_averaged_to_the_render_scale()
+    {
+        // 4 × 4 source pixels: a checkerboard of black and white 2 × 2 blocks (alpha 255).
+        var source = new byte[4 * 4 * 4];
+        for (var y = 0; y < 4; y++)
+        for (var x = 0; x < 4; x++)
+        {
+            var white = ((x / 2) + (y / 2)) % 2 == 0;
+            var i = (y * 4 + x) * 4;
+            (source[i], source[i + 1], source[i + 2], source[i + 3]) = white ? ((byte)200, (byte)100, (byte)50, (byte)255) : ((byte)0, (byte)0, (byte)0, (byte)255);
+        }
+        CollectionAssert.AreEqual(source, InterfaceChromeRenderer.ResamplePicture(source, 4, 4, 4, 4), "the same size is returned as it is (it was opaque already)");
+        var see = (byte[])source.Clone(); see[3] = 0;
+        Assert.AreEqual(255, InterfaceChromeRenderer.ResamplePicture(see, 4, 4, 4, 4)[3], "a transparent texel becomes opaque at the same size too");
+        var half = InterfaceChromeRenderer.ResamplePicture(source, 4, 4, 2, 2);
+        Assert.AreEqual((200, 100, 50, 255), Pixel(half, 2, 0, 0), "a whole 2:1 box keeps a flat block");
+        Assert.AreEqual((0, 0, 0, 255), Pixel(half, 2, 1, 0));
+        var one = InterfaceChromeRenderer.ResamplePicture(source, 4, 4, 1, 1);
+        Assert.AreEqual((100, 50, 25, 255), Pixel(one, 1, 0, 0), "4:1 is the mean of all sixteen");
+        var third = InterfaceChromeRenderer.ResamplePicture(source, 4, 4, 3, 3);
+        // Target pixel (1, 1) covers source 1.33..2.67 on both axes: area-weighted mix of all four blocks, so a mid grey.
+        var mid = Pixel(third, 3, 1, 1);
+        Assert.IsTrue(mid.R is > 60 and < 140 && mid.A == 255, $"4:3 mixes the blocks by area: {mid}");
+        var sum = 0;
+        for (var i = 0; i < third.Length; i += 4) sum += third[i];
+        Assert.IsTrue(Math.Abs(sum / 9.0 - 100) < 6, "the mean is kept at 4:3");
+    }
+
+    [TestMethod]
+    public void A_transparent_source_texel_adds_no_colour_to_a_picture()
+    {
+        var source = new byte[2 * 1 * 4];
+        (source[0], source[1], source[2], source[3]) = (255, 0, 0, 0);
+        (source[4], source[5], source[6], source[7]) = (0, 0, 255, 255);
+        var one = InterfaceChromeRenderer.ResamplePicture(source, 2, 1, 1, 1);
+        Assert.AreEqual((0, 0, 255, 255), Pixel(one, 1, 0, 0));
+    }
+
+    [TestMethod]
+    public void Scale_and_picture_bounds_are_refused()
+    {
+        var recipe = Panel();
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => InterfaceChromeRenderer.Render(recipe, 4, 4, new byte[64], [], 0, 0));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => InterfaceChromeRenderer.Render(recipe, 4, 4, new byte[64], [], 0, InterfaceChromeRenderer.MaxScale + 1));
+        Assert.ThrowsExactly<ArgumentException>(() => InterfaceChromeRenderer.Render(recipe, 4, 4, new byte[64], new byte[4 * 4 * 4 * 4 * 4 + 4], 0, 2));
+        Assert.ThrowsExactly<ArgumentException>(() => InterfaceChromeRenderer.ResamplePicture(new byte[10], 2, 2, 1, 1));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => InterfaceChromeRenderer.ResamplePicture(new byte[16], 2, 2, 0, 1));
     }
 }

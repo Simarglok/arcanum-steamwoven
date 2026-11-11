@@ -1421,7 +1421,8 @@ version 1 and 2 files read it as Off); it draws the interface art alone and does
 combined freely (sprites HD with a Legacy interface, or the reverse). The third value (ARC-UI-140, `generatedInterface`, file version 5;
 version 1–4 files read it as off) is the experimental [generated interface](hd-interface-density.md#viewer-slice-s1-arc-ui-140): it keeps the
 HD interface on and draws the chrome of the two HUD strips and the bar buttons by code, with the pictures from the HD redraw (else from the
-Legacy frame); only the drawing changes, every frame keeps its Legacy size, place, alpha test and hit area. **HD pack: Auto/Game/Custom** (ARC-DEV-350, default Auto) is the
+Legacy frame); only the drawing changes, every frame keeps its Legacy size, place, alpha test and hit area. ARC-UI-141 paints the chrome at
+the window's exact whole device scale on a worker (the first draw no longer stalls), see [S2](hd-interface-density.md#viewer-slice-s2-arc-ui-141). **HD pack: Auto/Game/Custom** (ARC-DEV-350, default Auto) is the
 third project line: where the active pack is read from, saved in the same file (`hdPack`, `hdPackPath`; file version 4, version 1–3 files
 read it as Auto). Auto prefers the player's iCloud pack folder (macOS, only when that folder exists on this device) when the pack in it
 is whole, and falls back to the installed copy in the game's own `user://hd-packs`; Game reads the installed copy alone; Custom opens the

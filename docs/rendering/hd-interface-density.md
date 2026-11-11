@@ -333,8 +333,8 @@ element where the original puts it: only the drawing changes, not the UI or UX. 
   4×, else the Legacy frame. A button recipe paints an ink outline, a brass bevel (inverted on its Down frame, lighter on its
   Hover frame) and a generated face, and copies the glyph from the picture. Recipes hold only rectangles and colours of our own; no game art is in git.
 - **Resolution.** S1 renders each frame once at 4× the Legacy size and lets the existing mipmapped, trilinear HD path
-  minify it (like the HD pack). Rendering at the window's exact device scale on the grid rule of
-  [section 2](#2-device-pixel-grid-rule) is the next slice; so are the windows (one per slice).
+  minify it (like the HD pack). Rendering at the window's exact device scale is [S2](#viewer-slice-s2-arc-ui-141); the
+  windows are one slice each.
 - **Checks.** `InterfaceChromeTests` (synthetic frames): recipes by name hash, hole finding, the Legacy silhouette kept,
   determinism, keep and sunk regions, a button's rim lit when raised and shaded when down, its glyph and outline, bad input.
   `AreaGameOptionsTests`: file version 5, a version 4 file, the third value and its wrap. The native bar smoke with
@@ -342,7 +342,7 @@ element where the original puts it: only the drawing changes, not the UI or UX. 
   generated chrome at their Legacy size and place, then runs the whole bar smoke (hover, press, Down feedback, windows,
   Combat, Spells, Fate Points, Sleep, the message log) in that mode; `ARC_AREA_BAR_CAPTURE=PREFIX` also saves the whole
   viewport as `PREFIX-hud-MODE.png` (local, not in git).
-- **Limits of S1.** A frame is painted on the main thread at its first draw (no worker, unlike the HD warm-up), so the first
+- **Limits of S1** (the first three are removed by [S2](#viewer-slice-s2-arc-ui-141)). A frame is painted on the main thread at its first draw (no worker, unlike the HD warm-up), so the first
   HUD after switching to Generated stalls about 1.2 s; each greyed copy of a frame paints again; the HD pack's frame is decoded
   again for the picture; the interface's HD counters count generated frames as HD. The size and place checks of the smoke
   hold by construction; the smoke's real check is that every bar texture draws generated chrome and the bar still behaves.
@@ -350,6 +350,50 @@ element where the original puts it: only the drawing changes, not the UI or UX. 
   for the bottom strip once per pack change, a few milliseconds per button. The composite image (Legacy, HD, Generated, and
   a 4× detail of the bottom strip) is in the task thread, not in git. Seen there: the generated wood is lighter and plainer
   than the painted one, and a kept picture shows its rectangle where its own background differs from the generated wood.
+
+## Viewer slice S2 (ARC-UI-141)
+
+S2 draws the generated HUD chrome at the window's exact device scale and removes three limits of S1. Positions, sizes,
+alpha tests and hit areas are still the Legacy ones; only the drawing changes.
+
+- **Exact scale.** The bars are laid out at a whole factor `F` (the largest whole number of 800 × 600 screens that fit the
+  window, [AreaGameBarPanel](../../tools/terrain-viewer/Godot/AreaGameBarPanel.cs)) in viewport pixels, and the viewport pixels are
+  device pixels (content scale mode Disabled, so a Retina window is already counted in physical pixels).
+  `AreaGameBarPanel.Place` sets `InterfaceHd.GeneratedScale` = `F` × the viewport's own scale (`GetFinalTransform().Scale.X`, 1 in the
+  viewer; rounded, clamped to 1..8). `InterfaceChromeRenderer.Render` takes that whole scale instead of S1's fixed 4: every
+  generated unit (a bevel, an ink line, a rim, a rivet) is `scale` device pixels, so lines are exactly one unit wide at every
+  `F` and the texture is as many pixels as the screen shows (no mip chain, drawn Nearest, one texel per device pixel). A
+  fractional product (a fractional content scale, not met in the viewer today) is painted at the nearest whole scale and
+  sampled Linear. A change of `F` (a resize across a whole step) paints the frames again for the new scale. Fractional scales and
+  the windows (panels at scales between whole steps) are the later slices.
+- **Pictures at the scale.** The vials, clock and cogs (the `Keep` rectangles) take the HD pack's redraw averaged to the render scale
+  (`InterfaceChromeRenderer.ResamplePicture`: the exact box filter for 4:2 and 4:1, the area-weighted one for 4:3, an alpha-weighted
+  colour), else the Legacy pixels repeated.
+- **No stall (S1 limit 1).** The frame is painted on a worker (`InterfaceHd.GeneratedFor`, at most four at once); until it is ready the
+  texture draws its Legacy pixels (no HD decode on the main thread either) and swaps by itself with the texture's `changed` signal.
+  The main thread only uploads the finished pixels. The gate is awaited (queued frames hold no pool thread), a frame whose entry was
+  replaced meanwhile (another pack, HD setting or scale) is not painted, and a failure of any kind (an out-of-memory at a big scale
+  too) falls back to HD or Legacy and is logged once. When the scale or the pack changes, the previous generated image keeps drawing
+  (stretched into the same Legacy rectangle) until the new one is ready, so the bar does not flash back to Legacy.
+- **Greyed copies share (S1 limit 2).** The painted pixels live once per Legacy frame (a `ConditionalWeakTable` keyed by the frame
+  object, with pack, HD setting and scale); a greyed copy turns them to luma bytes and uploads, it does not paint again.
+- **Wood matches (S1 limit 3).** A panel's wood takes the tone of the Legacy frame's own wood: the mean colour of its opaque
+  pixels outside every plate, sunk panel and kept rectangle sets the middle of our grain, and about six standard deviations
+  (at most 90 levels) its range; with fewer than 64 such pixels our own palette stays. A kept picture's painted wood background
+  therefore sits on generated wood of the same tone, and its box is hard to see.
+- **Counters.** `InterfaceHd.ActiveCount()` no longer counts generated frames; `GeneratedCount()` and `GeneratedPending` do.
+- **Checks.** `InterfaceChromeTests` (13): whole scales 1..8 (size, determinism, one-unit lines of `scale` pixels, the Legacy silhouette),
+  button outline and glyph per scale, `ResamplePicture` (identity, 2:1, 4:1, 4:3 area weights, transparent texels), tuned wood and its
+  small-sample fallback, bad scale and picture sizes. The native bar smoke with `ARC_AREA_BAR_GENERATED_VERIFY=1` and `ARC_HD_PACK`
+  waits for the workers, then checks the scale, that every strip is its Legacy size times the device scale in pixels and every bar
+  texture is generated, then resizes the window to 1600 × 1200 (factor 2) and checks the repaint at scale 2 (`ARC_AREA_BAR_CAPTURE`
+  saves `PREFIX-hud-generated-x2.png`; a screen too small for it logs the skip), then restores the size.
+- **Local observation** (owner's Mac, 2560 × 1440 monitor, scale factor 1, a 1280 × 800 window): factor 1; the whole bar smoke passes in
+  Generated, HD and Legacy modes. The slowest frame while every frame was painted was about 50 ms (S1: about 1.2 s on the main
+  thread); the bottom strip paints in about 0.6 s on a worker at scale 2. Retina (`k` = 2 with a 1:1 window) was not on this Mac; the
+  1600 × 1200 resize stands for factor 2. The composite (Legacy, HD, S1, S2 at factor 1, and S2 at factor 2) is in the task thread, not in git.
+  Seen there: S2 at factor 1 is sharper than S1's 4× minified frame (the brass rings and bevels are one-pixel lines), and the vial
+  column and the clock sit on wood of their own tone. The generated wood's grain is still plainer than the painted one.
 
 ## Synthetic comparison
 
@@ -367,7 +411,7 @@ into in-between pixels at every `s` (5, 6 and 7 distinct colours in that row aga
   observed (see [Demo](#demo)). Retina, the macOS mixed-screen sizes, Windows effective DPI under system awareness and
   SteamOS (code only, by the owner's decision) were not run.
 - `B = 1.5` is a judgement from typical monitor sizes, not a measurement; the owner's eye decides.
-- The look of generated chrome against the original's painted panels: S1 shows it on the HUD strips and bar buttons only; the owner's eye decides.
+- The look of generated chrome against the original's painted panels: S1 and S2 show it on the HUD strips and bar buttons only; the owner's eye decides.
 - The share of each panel that is illustration and not chrome, and the census of text baked into panel art, were not made.
 - Performance of one shader per component on the GL Compatibility renderer was not measured.
 
