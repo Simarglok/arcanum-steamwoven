@@ -2,6 +2,7 @@ using Arcanum.Data.Technology;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Items;
+using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Technology;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
@@ -44,6 +45,14 @@ public partial class TerrainViewerApp
             session.AwardHeroExperience(session.Version, Math.Max(2000, (now.ToNextLevel ?? 0) * 4 / 3 + 1));
         if (scheme != 0) session.SetAutoLevelScheme(session.Version, SessionSchemeTarget.Hero, scheme);
         TechSmokeRequire(session.QueryHeroExperience() is { } after && after.UnspentPoints >= need, $"an experience award buys {need} points ({session.QueryHeroExperience()?.UnspentPoints})");
+    }
+
+    /// <summary>One frame of a technology stage's clock (twenty ticks to the second): the spell caster's tick, the hero's runs and one world frame with the stick released.</summary>
+    internal void TechSmokeFrame()
+    {
+        _areaSmokeTime++;
+        SpellSmokeTick(); SmokeTickHeroRuns();
+        WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
     }
 
     /// <summary>The hero's degree in a discipline.</summary>

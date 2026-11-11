@@ -255,6 +255,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("tech-craft") == true) await RunAreaTechCraftSmokeAsync();
                                 // ARC-DEV-365 (technology audit T-g): only when named, the item cursor from the use icon, a press on a tile (goal 41) and on an NPC (goal 39) with a trap device (--hero, a map with a living NPC).
                                 if (only?.Contains("item-aim") == true) await RunAreaItemAimSmokeAsync();
+                                // ARC-MAGIC-051 (technology audit T-s): only when named, Therapeutics and Chemistry products assembled and used on the player's data (--hero, the Crash Site cave).
+                                if (only?.Contains("tech-products") == true) await RunAreaTechProductsSmokeAsync();
                                 // ARC-DEV-367 (O10): only when named, the timing probe's tables: the startup marks, six opens of each window, a map change out and back (--hero, a sector with a map exit).
                                 if (only?.Contains("perf") == true) await RunAreaPerfSmokeAsync();
                                 // ARC-DEV-367 (O10): only when named, the startup marks to the main menu's first frame and a new game from it (--main-menu).
