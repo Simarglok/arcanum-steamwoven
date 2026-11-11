@@ -358,7 +358,8 @@ check, action-point or time cost and no experience.
 - **Scripts**: no SCR action or condition reads or writes degrees or
   schematics. Technology is reached only indirectly: get stat (33) and adjust
   stat (137) on stat 23, get skill (47) for tech skills, add effect (77) with
-  expertise effects.
+  expertise effects (what the commands can do; the installed scripts use them less: none touches stat 22 or 23, and the only expertise effects
+  come from the eight tech books' insert script, [ledger XA5, XA9](ledger/technology.md#aptitude-and-expertise-consumers-arc-res-114)).
 - **Action 129 "start schematic UI"** (case at 0x44A7BD, F2): a PC calls
   0x460B50(PC, PC), an NPC calls it with its PC leader (0x45DDA0) and does
   nothing without one. 0x460B50 calls the pointer at 0x5E8768, copied
@@ -562,11 +563,16 @@ button state.
   [owner decisions](#owner-decisions-2026-10-20)), not by a game trace; ARC-WORLD-052 read the reason, the tech page's
   draw hides the button at the editor-open degree (ledger CP2).
 - **O3** The 5 found schematics without a written prototype: placed on maps or
-  given by scripts (map instances and scripts were not counted).
+  given by scripts (map instances and scripts were not counted). Answered by the
+  [placement census](technology-census-res-115.md) (ARC-RES-115): they have no written prototype, so nothing
+  can give them (records 4810, 4900, 5270, 5280, 5430).
 - **O4** Answered by a follow-up count: no record lists the same prototype in
   both component lists (TC4 is latent).
 - **O5** Degrees and inventories of the NPCs whose dialogs use `su`: set by
-  map instances and their auto-level schemes; needs a pass over map instances.
+  map instances and their auto-level schemes; needs a pass over map instances. Answered by the
+  [placement census](technology-census-res-115.md#4-npcs-with-su-dialogs-o5) (ARC-RES-115): six NPC
+  instances carry the five dialogs (auto-level scheme 0 on all six prototypes), with stored degrees and one to five items each, none holding
+  both components of any record their window lists.
 - **O6** Buy prices (0x462230, 0x4C1150) were not re-read (ledger R9 and O6
   stay with their tasks).
 - **O7** The button state codes: answered by ARC-TECHNOLOGY-004 (code 2 expertise lacking, code 1 an item missing; [ledger SA2](ledger/technology.md#schematic-assembly-arc-technology-004)).

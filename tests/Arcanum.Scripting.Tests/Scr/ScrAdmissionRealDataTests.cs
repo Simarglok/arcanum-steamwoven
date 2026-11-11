@@ -91,4 +91,28 @@ public sealed class ScrAdmissionRealDataTests
         Assert.AreEqual((17, 2, 1), (uses[47], uses[79], uses[115]));
         Assert.AreEqual((681, 683), (s10, s11), "the skill actions admit 2 more installed scripts whole");
     }
+
+    [TestMethod, TestCategory("RealData")]
+    public void The_spell_conditions_of_the_installed_scripts_are_counted()
+    {
+        // ARC-MAGIC-029 (MT21a): how many installed scripts use obj has body spell (14), obj is influenced by spell (35), knows spell (48), mastered spell college (49)
+        // and give spell mastery in college (112), and how many more scripts S31 admits whole than S30.
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Fail("DAT_ROOT is required for the opt-in SCR spell census; this is not a synthetic pass.");
+        using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+        var conditions = new Dictionary<int, int> { [ScrCatalogue.Condition.HasBodySpell] = 0, [ScrCatalogue.Condition.InfluencedBySpell] = 0, [ScrCatalogue.Condition.KnowsSpell] = 0, [ScrCatalogue.Condition.MasteredSpellCollege] = 0 };
+        var mastery = 0; int s30 = 0, s31 = 0;
+        foreach (var key in stack.Keys("scr/").Where(k => k.EndsWith(".scr", StringComparison.Ordinal) && k.Count(c => c == '/') == 1))
+        {
+            var program = ScrProgram.Read(stack.Read(stack.Resolve(key).Winner!).Bytes!).Program!;
+            foreach (var condition in conditions.Keys.ToArray())
+                if (program.Lines.Any(l => l.Condition.Type == condition)) conditions[condition]++;
+            if (program.Lines.Any(l => l.OnTrue.Type == ScrCatalogue.Action.GiveSpellMastery || l.OnFalse.Type == ScrCatalogue.Action.GiveSpellMastery)) mastery++;
+            if (ScrAdmission.Admit(program, ScrAdmissionSet.S30).IsAdmitted) s30++;
+            if (ScrAdmission.Admit(program, ScrAdmissionSet.S31).IsAdmitted) s31++;
+        }
+        Console.WriteLine($"scripts with 14 {conditions[14]}, 35 {conditions[35]}, 48 {conditions[48]}, 49 {conditions[49]}, action 112 {mastery}; S30 admits {s30}, S31 {s31}");
+        Assert.AreEqual((22, 6, 16, 16, 2), (conditions[14], conditions[35], conditions[48], conditions[49], mastery));
+        Assert.AreEqual((1640, 1660), (s30, s31), "the spell conditions and the mastery action admit 20 more installed scripts whole");
+    }
 }
