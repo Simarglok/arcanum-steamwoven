@@ -39,6 +39,8 @@ public partial class TerrainViewerApp
         if (_areaSession is not { } session) return;
         foreach (var made in session.QueryCreatedObjects(new SessionMapId(CurrentAreaMap)))
         {
+            // ARC-DEV-359: a created critter is no static art (it is hosted by the AI host; its drawing is E1-c2's).
+            if (made.Kind == SessionCreatedKind.Critter) continue;
             // ARC-DEV-352: an animated scenery (a wall of fire's piece) shows its loop's frame.
             if (CreatedPrototype(made.Prototype) is not { } facts || frameOf(CreatedArtNow(made.Entity, facts.Art), "created") is not { } frame)
             {

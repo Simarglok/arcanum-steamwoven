@@ -75,6 +75,9 @@ public sealed class RecordResolver
     private readonly List<AreaInventoryMap> _windows = [];
     private readonly Dictionary<string, AreaInventoryMap> _windowIndex = new(StringComparer.Ordinal);
     private readonly Dictionary<(int Map, string Entity), int> _windowMissed = [];
+    // ARC-DEV-359 (E1-c): the one-row maps of the critters the session created (a created object has no map file: its row is built from its prototype), derived data the host sets
+    // again whenever the session's created critters change. Never counted against the map limit, never evicted, bounded by the session's created-object bound.
+    private readonly Dictionary<string, AreaInventoryMap> _created = new(StringComparer.Ordinal);
     private AreaInventoryMap[]? _maps;
     private readonly IMapRecordSource? _source;
     private long _clock;
@@ -117,6 +120,21 @@ public sealed class RecordResolver
     /// <summary>Whether the map is one the resolver read on demand (not one it was given).</summary>
     public bool IsRead(int runtimeMap) => _loaded.ContainsKey(runtimeMap);
 
+    /// <summary>
+    /// ARC-DEV-359 (E1-c): sets the one-row maps of the critters the session created (each lists one NPC holder and its row, on the runtime map the critter stands on); a critter's row resolves by
+    /// its entity wherever the home map is, as a map NPC's does. Replaces the earlier set; the maps are not <see cref="Maps"/> (they hold no items and no seed of their own to attach).
+    /// </summary>
+    public void SetCreated(IEnumerable<AreaInventoryMap> maps)
+    {
+        ArgumentNullException.ThrowIfNull(maps);
+        _created.Clear();
+        foreach (var map in maps)
+            foreach (var holder in map.Seed.Holders) _created[holder.Entity] = map;
+    }
+
+    /// <summary>The map that lists the created critter <paramref name="entity"/>, or null.</summary>
+    public AreaInventoryMap? CreatedMap(string entity) => _created.GetValueOrDefault(entity);
+
     /// <summary>The held map, or null; it does not read a map (a map read on demand counts as used).</summary>
     public AreaInventoryMap? Held(int runtimeMap)
     {
@@ -141,6 +159,7 @@ public sealed class RecordResolver
     {
         ArgumentNullException.ThrowIfNull(entity);
         if (_index.TryGetValue(entity, out var held)) return Found(entity, Held(held)!);
+        if (_created.TryGetValue(entity, out var created)) return Found(entity, created);
         if (_windowIndex.TryGetValue(entity, out var window)) return Found(entity, window);
         if (home is not { } homeMap) return new(RecordStatus.UnknownEntity, null, "no held map lists the entity and no home map is named");
         if (_loaded.ContainsKey(homeMap) || _given.ContainsKey(homeMap)) return ReadWindow(entity, homeMap, token);

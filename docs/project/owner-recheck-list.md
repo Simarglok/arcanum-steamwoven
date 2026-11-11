@@ -68,3 +68,19 @@ Known differences (documented, not bugs):
 
 - No host answers or writes these yet, so the steps cannot be played until the follow-up that wires them (the spell book and flags for NPCs, the spell runs, the mastery write).
 - Giving mastery to an object the script does not name does nothing here; the original reads an uninitialised handle.
+
+## ARC-DEV-359 — Created critters, session and hosts (E1-c1, 2026-11-11)
+
+The session now creates, saves and hosts a critter made from a prototype ([created critters](../architecture/object-directory.md#e1-c1-created-critters-arc-dev-359)). Nothing in the game makes one yet (script action 52 for critters is E1-c3, the creature Summon is E1-e),
+and the viewer does not draw it (E1-c2), so there is nothing to play and compare. The steps below wait for those slices.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | After E1-c2 and E1-c3: let a script create a creature next to the hero (a script that creates a monster at a tile), and watch it. | It appears on the tile, stands there at first, and starts its ordinary behaviour after a short delay that grows with its distance from you (a created NPC gets the delayed first tick, RL16 and RL17). Hostile ones come at you; peaceful ones stand or wander as their prototype says. | open |
+| 2 | After E1-c2: save with a created creature alive, load. | It is still there, where it was last standing. | open |
+
+Known differences (documented, not bugs):
+
+- A created creature has an empty inventory (the original generates its inventory list at creation, OM16) and its tile scripts do not fire where it is made (the location notification, GR12): both are E1-c3.
+- Its teleport destination field (OM13) is not written; the field is not identified in the repository.
+- The state records of a destroyed created creature stay in the save (its entity is never given again).
