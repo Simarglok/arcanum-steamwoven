@@ -91,7 +91,7 @@ public partial class TerrainViewerApp
             string.Join(",", _areaCompanions?.Companions.Select(c => c.Entity) ?? []));
         if (_aiHost is { } kept && Equals(stamp, _aiHostStamp))
         {
-            if (ReferenceEquals(area, _aiHostArea)) return kept;
+            if (ReferenceEquals(area, _aiHostArea)) { SyncCreatedCritters(session, kept); return kept; }
             // ARC-DEV-119: the map's window moved; the host goes on over the scene the new window gives.
             var rebound = BuildAiScene(session, area, grid, map, combat, companions, () => _aiHost);
             kept.Rebind(rebound);
@@ -99,6 +99,7 @@ public partial class TerrainViewerApp
             if (windowed) StartSectorChart(session, CurrentAreaMap, area, grid);
             var late = kept.ScheduleTicks();
             GD.Print($"ARC-DEV-119 ai-host rebound map={CurrentAreaMap} npcs={kept.Scene.Npcs.Count} window-npcs={rebound.Npcs.Count} companions={kept.RunCompanions.Count} ticks-refused={late}");
+            SyncCreatedCritters(session, kept);
             return kept;
         }
         RetireAiHost();
@@ -121,6 +122,7 @@ public partial class TerrainViewerApp
         if (windowed) StartSectorChart(session, mapNumber, area, grid); else DropSectorChart();
         var refused = host.ScheduleTicks();
         GD.Print($"ARC-WORLD-092 ai-host map={mapNumber} npcs={scene.Npcs.Count} companions={host.RunCompanions.Count} ticks-refused={refused} table={scene.Parameters is not null}");
+        SyncCreatedCritters(session, host);
         return host;
     }
 

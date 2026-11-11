@@ -360,6 +360,13 @@ public sealed partial class GameSessionOwner
             case SessionObjectOrigin.EyeCandy:
                 return _inventory.Objects.CreatedObject(entity) is { } created && created.Map == map
                     ? new(entity, SessionResidentKind.Scenery, SessionResidentOrigin.Created, created.Cell, null, false, false) : null;
+            // ARC-DEV-359 (E1-c): a created critter is an NPC resident of the map it was made on, standing where the session last placed it (the companion cell, then the walked place, as a
+            // map NPC's row rule says) and on its creation cell before any; it moves its sector with its recorded place, and the object-state fields it carries are its own (oid: entity).
+            case SessionObjectOrigin.Critter:
+                if (_inventory.Objects.CreatedObject(entity) is not { } critter || critter.Map != map) return null;
+                if (Record(map, entity, AwayMapProperty) is { } gone && gone.Value != map.RuntimeMap && gone.Value is >= 1 and <= int.MaxValue) return null;
+                var stands = Placed(map, entity, CompanionCellProperty) ?? (lookups.Party.Contains(entity) ? null : Placed(map, entity, SessionNpcPlacement.Property)) ?? critter.Cell;
+                return new(entity, SessionResidentKind.Npc, SessionResidentOrigin.Created, stands, null, off, destroyed);
         }
         // A map object with no row here is another map's (carried, placed or given here); a counter's id is the session's own.
         var origin = row is not null ? SessionResidentOrigin.MapData

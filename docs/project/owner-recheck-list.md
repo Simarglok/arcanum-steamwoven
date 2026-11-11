@@ -69,6 +69,22 @@ Known differences (documented, not bugs):
 - No host answers or writes these yet, so the steps cannot be played until the follow-up that wires them (the spell book and flags for NPCs, the spell runs, the mastery write).
 - Giving mastery to an object the script does not name does nothing here; the original reads an uninitialised handle.
 
+## ARC-DEV-359 — Created critters, session and hosts (E1-c1, 2026-11-11)
+
+The session now creates, saves and hosts a critter made from a prototype ([created critters](../architecture/object-directory.md#e1-c1-created-critters-arc-dev-359)). Nothing in the game makes one yet (script action 52 for critters is E1-c3, the creature Summon is E1-e),
+and the viewer does not draw it (E1-c2), so there is nothing to play and compare. The steps below wait for those slices.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | After E1-c2 and E1-c3: let a script create a creature next to the hero (a script that creates a monster at a tile), and watch it. | It appears on the tile, stands there at first, and starts its ordinary behaviour after a short delay that grows with its distance from you (a created NPC gets the delayed first tick, RL16 and RL17). Hostile ones come at you; peaceful ones stand or wander as their prototype says. | open |
+| 2 | After E1-c2: save with a created creature alive, load. | It is still there, where it was last standing. | open |
+
+Known differences (documented, not bugs):
+
+- A created creature has an empty inventory (the original generates its inventory list at creation, OM16) and its tile scripts do not fire where it is made (the location notification, GR12): both are E1-c3.
+- Its teleport destination field (OM13) is not written; the field is not identified in the repository.
+- The state records of a destroyed created creature stay in the save (its entity is never given again).
+
 ## ARC-MAGIC-028 — Aptitude inputs: sector adjustment and mage backgrounds (2026-11-11)
 
 The rules and the readers are merged ([character stats](../world/character-stats-runtime.md#context-inputs-arc-magic-028-fr-char-020), [ledger AQ1–AQ8](../research/ledger/magic.md#aptitude-inputs-arc-magic-028)),
@@ -141,6 +157,24 @@ Known differences (reading only, no game step):
 - The follower near-death line has no activity or null-callback test in the original (latent bug, 0x414490, ledger FO16).
 - A paid skill service's forced-success request is dropped by the original (SK8, 0x419CB0).
 - The character-creation notes record a repeated place-choice branch in the player creation (0x40DB70) that was never settled.
+
+## ARC-MAGIC-030 — The script hosts answer the spell commands (MT21b, 2026-11-11)
+
+The use, tile, sector, heartbeat, dying and talk script hosts now answer "has a body spell", "under the influence of a spell", "knows a spell" and "mastered college" and write "give spell mastery" for the hero and for an NPC of the shown map ([ledger SC7–SC9](../research/ledger/scripts.md#spell-conditions-and-the-spell-mastery-action-arc-magic-029-mt21a)). It completes the steps of the ARC-MAGIC-029 list above. **Few installed scripts run yet**: 46 use these commands and only a handful are admitted whole, because they also use commands later slices bring (get stat 33 in 17 of them, action 91 in 16, others), so a step may stop where the script meets one of those.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | With a hero who has learned all five spells of a college and has no mastery, reach a script that gives mastery of that college (2 installed scripts), then look at the college on the spells page. | The college is now mastered (its spells cost half and last twice as long between maintenance ticks). Reaching the script again, or one for another college, changes nothing. | open |
+| 2 | The same with a hero who has fewer than five spells of the college. | Nothing changes and the script goes on. | open |
+| 3 | Ask "knows spell" (16 installed scripts) of a hero who knows rank 3 of a college, for the college's rank 3 spell and its rank 4 spell. | Rank 3 is known, rank 4 is not. | open |
+| 4 | Reach a script that gives mastery to an NPC who has all five ranks of a college (a mage NPC of the shown map). | The NPC's mastered college is set once and stays; an NPC the map data gives no sheet for is skipped with the run left unapplied (see below). | open |
+
+Known differences (documented, not bugs):
+
+- Standing under Body of Fire, Earth, Water or Air does **not** make "has a body spell" true yet: no spell component writes the body bits of the NPC's spell flags (the ObjFlag component takes only the hold bits). Step 4 of the ARC-MAGIC-029 list stays open until that is built. A body bit already in the NPC's map data does count.
+- "Under the influence of a spell" tests the run's target only; the original also looks in the run's two object lists (as ledger AC1).
+- Mastery for an NPC of another map, a PC-type row on the map, or an NPC whose map data gives no sheet is not applied; the run is left unapplied and the reason is logged.
+
 
 ## ARC-RES-119 — Function triage of the exe bands 0x50 to 0x54 (2026-11-11)
 
