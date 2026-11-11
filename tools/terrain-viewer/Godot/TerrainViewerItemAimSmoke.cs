@@ -13,7 +13,7 @@ public partial class TerrainViewerApp
     internal const string ItemAimCode = "ARC-DEV-365";
 
     // ARC-DEV-365 (technology audit slice T-g) native observation (stage "item-aim", only when named, with --hero, on a map with a living NPC): the item cursor and the item use goals on the player's data.
-    // The item is a script trap device (prototype 15100: OIF_NEEDS_TARGET and OIF_NO_RANGED_USE, a trap device, no charges, IA16), whose own use is NOT READY (E6-b), so the stage observes the cursor and the walks only.
+    // The item is a script trap device (prototype 15100: OIF_NEEDS_TARGET and OIF_NO_RANGED_USE, a trap device, no charges, IA16), whose own use is NOT READY (E6-b), so the stage observes the cursor and the walks only; ARC-WORLD-124 adds step 4, a timed bomb (item 15154) placed on a tile and its fuse.
     //  1. The use icon with no Shift opens the item cursor (interface mode 16, mask object or tile, IA3, IA6) and the window closes; a right press cancels it (IA5).
     //  2. A left press on a tile three to eight cells away is the pick of the cursor's mask: the cursor closes, goal 41 (or goal 39 when an object stands there) walks the hero next to the target and the use's refusal shows.
     //  3. A left press on the NPC (an object target with OIF_NO_RANGED_USE, IA8) starts goal 39: the hero walks next to it and the use runs (the refusal shows), the device staying in the pack.
@@ -127,6 +127,22 @@ public partial class TerrainViewerApp
             Require(inRange || HeroRunsHost()?.ItemUseRun is { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.UseItem }, $"the NPC's press started goal 39: {_itemAimLast}");
             RunUntil(() => _itemAimLast!.Contains("NOT READY", StringComparison.Ordinal), "goal 39 used the device at the NPC");
             Require(HeroRunsHost()?.ItemUseRun is null && TechSmokeHeld(session).Contains(trap), "goal 39 ended and the device stays");
+            // 4. ARC-WORLD-124 (E6-b, ledger IA13, TP2, TP3): a timed bomb (item 15154, record 176) used on the tile of step 2 is destroyed, leaves its marker (prototype 4047) and sets the 88 s fuse; when the
+            //    fuse ends (the session's game clock moved by it) the cast host's pass destroys the marker and casts the record at the tile with no source and no caster.
+            var bomb = TechSmokeGive(data, 15154);
+            Require(_inventoryHost.UseFacts(session, bomb, _areaKitUse) is { TrapDevice: true }, "prototype 15154 reads as a trap device");
+            var spot = tile!.Value;
+            var markers = session.QueryCreatedObjects(new SessionMapId(CurrentAreaMap)).Count;
+            var placedLine = PlaceTrapDeviceUse(bomb, null, new SpellLocation(checked((uint)spot.X), checked((uint)spot.Y)));
+            Require(LastTrapDeviceUse is { Outcome: SessionTrapDeviceOutcome.Placed, Marker.Prototype: 4047 } && !TechSmokeHeld(session).Contains(bomb), $"the bomb was placed and spent: {placedLine}");
+            Require(session.QueryCreatedObjects(new SessionMapId(CurrentAreaMap)).Count == markers + 1 && session.QueryTrapDevices().Count == 1, "the marker and the fuse are in the session");
+            var casts = new List<SessionTrapDeviceCast>();
+            Require(session.JumpClocks(session.QueryClockSnapshot().Token, Arcanum.Simulation.Traps.TrapDeviceRules.FuseMs).Disposition == Arcanum.Simulation.Clock.ClockMutationDisposition.Changed, "the game clock moved by the fuse");
+            caster!.ProcessEvents();
+            RunUntil(() => { casts.AddRange(caster!.TakeTrapDeviceCasts()); return casts.Count > 0; }, $"the fuse ran (clock {session.QueryClockSnapshot().GameTimestampMs}, pending {string.Join(";", session.QueryTrapDevices().Select(e => $"{e.DeadlineMs}:{string.Join(",", e.Payload.Values)}"))}, created {session.QueryCreatedObjects(new SessionMapId(CurrentAreaMap)).Count})");
+            Require(session.QueryTrapDevices().Count == 0 && session.QueryCreatedObjects(new SessionMapId(CurrentAreaMap)).Count == markers, "the fuse is spent and the marker destroyed");
+            GD.Print($"ARC-WORLD-124 trap-bomb fuse spell={casts[0].Firing.Spell} outcome={casts[0].Outcome} run={casts[0].Run?.ToString() ?? "-"} tile={spot.X},{spot.Y}");
+            Require(casts[0].Outcome == SpellCastAttemptOutcome.Started, $"the record's cast at the tile started: {casts[0].Outcome}");
             GD.Print("ARC-DEV-365 native-smoke item-aim PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Tile = tileGoal, Npc = npc.Id, Notice = _itemAimLast }));
         }
         finally

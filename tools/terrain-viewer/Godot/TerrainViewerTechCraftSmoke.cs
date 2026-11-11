@@ -69,6 +69,9 @@ public partial class TerrainViewerApp
             var expertise = session.QueryHeroTechnology()!.Value;
             GD.Print($"{TechCraftCode} tech-craft degrees herbology={expertise[TechDisciplineHerbology].Degree}/{expertise[TechDisciplineHerbology].Expertise}% gun-smithy={expertise[TechDisciplineGunSmithy].Degree}/{expertise[TechDisciplineGunSmithy].Expertise}% intelligence={intelligence}");
 
+            // ARC-UI-142: the schematic window's original look, clicked through its art buttons.
+            await TechSmokeSchematicLookAsync();
+
             // 2. Herbology: assemble and use the first two learned products.
             var heals = new List<object>();
             for (var degree = 1; degree <= 2; degree++)

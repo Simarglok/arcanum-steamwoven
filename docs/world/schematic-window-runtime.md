@@ -72,9 +72,22 @@ the hero's expertise in the discipline, and the button state.
 - The hover of Assemble is `schematic_text.mes` 3.
 - The viewer keeps no inventory locations: every held item counts as in the bag; the session knows the worn and broken ones.
 
-**Diagnostic layout (project policy):** a plain panel with project labels (Learned, Found, D0..D7, Previous, Next, Close,
-Assemble) instead of the original's window (interface art 365, the record art, the discipline glyphs, the slot pictures and
-overlays, the button faces); the record texts and messages are the data's. Layout parity is NOT_VERIFIED.
+**Original look (ARC-UI-142, ledger SW9–SW14):** when the window's interface art reads (art 365 and the arts of the buttons, slots, overlays and
+fonts, and the record arts of the 126 records), the window is the original's: the art 365 at the screen's (0, 41), the page buttons (hidden on the
+first and last page), the eight discipline tabs as one radio group, the learned and found tabs, the record's art, glyph, name and wrapped description,
+the two component slots (found or missing overlay, the item's picture fitted and shaded when the expertise lacks, the discipline glyph and the
+required number), the assemble button with its face by state, and the round view's lens over the game view. Positions and hit tests are the exe's
+tables ([layout](../../src/Arcanum.World/AreaSchematicWindowLayout.cs)): a button takes the pointer on its art's rectangle (PROJECT, not its opaque
+pixels); a press and a release on the same button act, with sounds 3000 and 3001 and the window's own 3010 and 3011; a release in the lens closes
+the window; the pointer over a part writes its text to the text bar (assemble `schematic_text.mes` 3, the list tabs 4 and 5, a discipline the
+`tech.mes` name and description, a slot the item's name, PROJECT); the refusal and completion texts (`schematic_text.mes` 0, 1, 2) are written to
+the text bar as messages. The key handling (`T`, `Escape`, `Tab`) is unchanged. PROJECT: the shade over an item whose expertise lacks is a multiply by
+(255, 204, 102); a type 5 or 7 item's art variant is not taken (the inventory art field 0x5D is, as the inventory window does); the viewer keeps
+no inventory locations, so a component counts as held when the bag holds it.
+
+**Diagnostic layout (project policy, fallback):** when an art does not read (no game folder, the synthetic self-tests) the window stays a plain panel
+with project labels (Learned, Found, D0..D7, Previous, Next, Close, Assemble); the record texts and messages are the data's. Layout parity is
+NOT_VERIFIED there.
 
 ## Script action 129 (SW8, TC2)
 

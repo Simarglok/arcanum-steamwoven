@@ -33,6 +33,9 @@ public sealed record SpellComponentOutcome(int SetSpellFlags = 0, int? JumpTo = 
     bool CallbackPending = false, bool CallbackNow = false, bool EndCallback = false)
 {
     public static SpellComponentOutcome None { get; } = new();
+
+    /// <summary>ARC-MAGIC-044: the jump that ends the target's component list (0x4529D0, and a branch of −1: the loop index becomes the list's count).</summary>
+    public const int EndOfList = int.MaxValue;
 }
 
 /// <summary>What the host must do or show after the run rules acted.</summary>

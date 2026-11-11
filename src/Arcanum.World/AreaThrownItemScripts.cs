@@ -45,8 +45,8 @@ public sealed record AreaThrownItemRun(AreaThrownItemOutcome Outcome, int Point,
 public sealed class AreaThrownItemScripts
 {
     /// <summary>The commands a thrown item's script may use: <see cref="ScrAdmissionSet.S1"/> (control flow, the returns, local flags and counters, arithmetic, global flags and story state) plus transform (40), force follow (21) and
-    /// attack (36) of <see cref="ScrAdmissionSet.S32"/>, the single-object focus kinds and everyone or anyone in the vicinity. A script that writes a global flag or the story state is refused when it runs (<see cref="Run"/>).</summary>
-    public static ScrAdmissionSet Admission { get; } = new("S32-thrown-item", ScrAdmissionSet.S1.Conditions,
+    /// attack (36) of <see cref="ScrAdmissionSet.S33"/>, the single-object focus kinds and everyone or anyone in the vicinity. A script that writes a global flag or the story state is refused when it runs (<see cref="Run"/>).</summary>
+    public static ScrAdmissionSet Admission { get; } = new("S33-thrown-item", ScrAdmissionSet.S1.Conditions,
         ScrAdmissionSet.S1.Actions.Concat([ScrCatalogue.Action.TransformObject, ScrCatalogue.Action.MakeFollow, ScrCatalogue.Action.Attack]), ScrAdmissionSet.S1.ValueKinds,
         [ScrFocusKind.Triggerer, ScrFocusKind.Attachee, ScrFocusKind.ExtraObject, ScrFocusKind.Player, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity], counterIndexWraps: true);
 

@@ -161,6 +161,14 @@ deadline is not its time plus its delay, naming the player or a made item, or a 
 event world is the restock host; a pass through the cast host reaches it (and the loot window) behind the cast host's wrapping pass world
 ([viewer](barter-runtime.md#restock-in-the-viewer-arc-world-096)).
 
+**Trap device fuse (ARC-WORLD-124).** The kind `trap.device` (also added to registry version 1 without a new version) is the original's Traps event (kind 28, ledger TP2,
+TP3): game time, saved, scoped to the map of its entity, any number, at most `SessionEventKinds.MaxTrapDevices` (256) on top of the others. Entity: the marker a placed device made on a
+tile, or the destroyed device item for a placement on an object (it only names the map: the kind checks its own entities). Values: the game time it was set at, its delay (88,000 ms, or
+the 60,000 ms retry), the spell record, the tile's cell x and y, and 1 when the entity is a marker. `PlaceTrapDevice` schedules it; when due the handler destroys the marker and
+`SessionEventPassResult.TrapDevices` reports it for the cast host, which casts the record at the tile with no source after the pass; a pass whose world is not the cast host's
+(`ISessionTrapDeviceWorld`) schedules it again a minute on and reports it postponed. A restore refuses one with an invalid entity, map or value, set after the saved clock, or whose
+deadline is not its time plus its delay. See [placed trap devices](trap-device-runtime.md).
+
 **Encumbrance timer (ARC-WORLD-087).** The kind `life.hero.encumbrance` (also added to registry version 1 without a new version)
 is mode 1 of the original's fatigue timer (ledger WE5, WE8): game time, saved, global, no entities, one at a time (`KeepExisting`:
 a level rise while one is pending keeps its older delay, WEA2). Value: the game time it was set at. A recalculation of the

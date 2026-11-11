@@ -7,7 +7,7 @@ using static Arcanum.Scripting.Tests.Scr.ScrTestPrograms;
 namespace Arcanum.Scripting.Tests.Scr;
 
 /// <summary>
-/// ARC-MAGIC-042 (T-m1, ledger TI4–TI6): the actions transform into a basic prototype (40), force follow (21) and attack (36) of set S32 hand one object request each to the host in action order, the attachee stays the object the event
+/// ARC-MAGIC-042 (T-m1, ledger TI4–TI6): the actions transform into a basic prototype (40), force follow (21) and attack (36) of set S33 hand one object request each to the host in action order, the attachee stays the object the event
 /// named (the host reads it as the new object after a transform), and the installed creature-item scripts are admitted and run to the requests the ledger records.
 /// </summary>
 [TestClass]
@@ -90,12 +90,12 @@ public sealed class ScrThrownItemTests
     }
 
     [TestMethod]
-    public void S32_adds_the_three_over_S31()
+    public void S33_adds_the_three_over_S32()
     {
         var program = Program(Do(C(ScrCatalogue.Action.TransformObject, N(28460))));
-        Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S32).IsAdmitted);
-        Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(program, ScrAdmissionSet.S31).Refusal!.Code);
-        Assert.IsTrue(ScrAdmissionSet.S31.IsSubsetOf(ScrAdmissionSet.S32));
+        Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S33).IsAdmitted);
+        Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(program, ScrAdmissionSet.S32).Refusal!.Code);
+        Assert.IsTrue(ScrAdmissionSet.S32.IsSubsetOf(ScrAdmissionSet.S33));
     }
 
     // The installed creature items' scripts (prototypes 15086, 15112, 15136, 15153 and 15192, 15232): four make a pet (transform, follow, return run default), 29017 an aggressor (transform, attack, return).
@@ -112,7 +112,7 @@ public sealed class ScrThrownItemTests
         {
             var key = stack.Keys("scr/").Single(k => k.StartsWith($"scr/{script:D5}", StringComparison.Ordinal));
             var program = ScrProgram.Read(stack.Read(stack.Resolve(key).Winner!).Bytes!).Program!;
-            Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S32).IsAdmitted, $"script {script} is admitted by S32");
+            Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S33).IsAdmitted, $"script {script} is admitted by S33");
             foreach (var point in new[] { ScrPoint.Hit, ScrPoint.Miss })
             {
                 var fake = new FakeHost();

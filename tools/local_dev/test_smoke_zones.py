@@ -255,6 +255,24 @@ class ZonePlanTests(unittest.TestCase):
             self.assertEqual(smoke.run(args), 0)
         self.assertIn("SMOKE PASS nothing to run", output.getvalue())
 
+    def test_the_retry_of_unfinished_stages_is_on_for_complete_and_off_for_a_pr_unless_asked(self) -> None:
+        def retrying(*argv: str) -> list[str]:
+            return [step.name for step in self.plan(*argv, "--no-build") if step.again is not None]
+
+        self.assertEqual(retrying("pr", "--stages", "cast,ai"), [])
+        self.assertEqual(retrying("pr", "--stages", "cast,ai", "--retry"), ["stages"])  # not for a process of one stage
+        self.assertEqual(retrying("pr", "--stages", "walk", "--retry"), [])
+        self.assertTrue(retrying("complete"))  # the stage groups of the nightly run, not the batteries
+        self.assertNotIn("main", retrying("complete"))
+        self.assertTrue(all(name.startswith("stages") for name in retrying("complete")))
+        self.assertEqual(retrying("complete", "--no-retry"), [])
+        step = next(step for step in self.plan("pr", "--stages", "cast,ai", "--retry", "--no-build"))
+        (self.prefs / (step.settings or "")).mkdir(parents=True)
+        alone = step.again("ai")
+        self.assertEqual((alone.name, alone.requires), ("stages-retry-ai", ("ai",)))
+        self.assertTrue((self.prefs / (alone.settings or "")).is_dir())
+        self.assertIn("ARC_AREA_MAP_SMOKE_ONLY=ai", alone.command)
+
     def test_the_launcher_help_lists_the_zone_options(self) -> None:
         args = parse("pr", "--zones", "core", "--auto", "--base", "origin/dev")
         self.assertEqual((args.zones, args.auto, args.base), ("core", True, "origin/dev"))

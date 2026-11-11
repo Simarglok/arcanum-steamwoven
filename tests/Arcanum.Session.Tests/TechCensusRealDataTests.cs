@@ -44,8 +44,7 @@ public sealed class TechCensusRealDataTests
         (187, "PART", "ChargeNBranch,Terminate", "ChargeNBranch,Terminate"),
         (188, "INERT", "NoOp", "NoOp"),
         (203, "INERT", "Cast", "Cast"),
-        // 214 adds effect 334 eighty times; the session refuses the NPC's write (EffectNotSaved) and takes the hero's (the row read PART before: ARC-MAGIC-038 found it stale on origin/main and corrected it).
-        (214, "HERO", "", "EffectNotSaved"),
+        // 214 adds effect 334 eighty times: RUNS on an NPC since ARC-RES-127 (the original's list has no bound, EF11; the NPC's list took 64 entries before and refused it).
         (222, "INERT", "ObjFlag,Trait", "ObjFlag,Trait"),
     ];
 
@@ -53,7 +52,7 @@ public sealed class TechCensusRealDataTests
     /// <summary>The records that hold a Destroy component, which the census leaves out of its lists: pinned so that a record gaining or losing one is seen.</summary>
     private const string DestroyRecords = "148,166,175,176,177,178,179,180,184,185,198,199,200,201,202,205,217,219,220";
 
-    private const string CarriedTally = "65 carried: RUNS 59 HERO 1 PART 3 INERT 2";
+    private const string CarriedTally = "65 carried: RUNS 60 HERO 0 PART 3 INERT 2";
 
     [TestMethod, TestCategory("RealData")]
     public void Every_technology_record_has_the_listed_state()

@@ -59,6 +59,7 @@ public sealed partial class GameSessionOwner : IDisposable
     private List<SessionDecayFiring>? _passDecays;
     private List<SessionAiTickFiring>? _passAiTicks;
     private List<SessionRestockFiring>? _passRestocks;
+    private List<SessionTrapDeviceFiring>? _passTrapDevices;
     // Replaced, not mutated, when a life step that drew on a trial copy commits.
     private SeededRandom _random;
     private readonly SessionCombatRolls _combatRolls;
@@ -194,6 +195,8 @@ public sealed partial class GameSessionOwner : IDisposable
         failure = ImportSpells(snapshot.Spells, out var spellTable, out var maintainBar);
         var objectFlags = ImmutableSortedDictionary.Create<string, SessionObjectFlags>(StringComparer.Ordinal);
         if (failure == GameSessionFailure.None) failure = ImportObjectFlags(snapshot.Spells.ObjectFlags, out objectFlags);
+        var traitArt = ImmutableSortedDictionary.Create<string, SessionTraitArt>(StringComparer.Ordinal);
+        if (failure == GameSessionFailure.None) failure = ImportTraitArt(snapshot.Spells.TraitArt, out traitArt);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportNewspaper(snapshot.Newspaper);
         if (failure != GameSessionFailure.None) return Rejected(failure);
@@ -283,7 +286,7 @@ public sealed partial class GameSessionOwner : IDisposable
             snapshot.Lighting, sink, events!, frame)
         { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _danger = danger, _durability = durability, _foundSchematics = found,
           _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty, _hotkeys = hotkeys, _recentActions = recentActions, _scripts = scripts, _pendingHistory = pendingHistory,
-          _spellRuns = spellTable, _maintainBar = maintainBar, _spellLastCost = snapshot.Spells.LastCost, _objectFlags = objectFlags, _newspaper = snapshot.Newspaper };
+          _spellRuns = spellTable, _maintainBar = maintainBar, _spellLastCost = snapshot.Spells.LastCost, _objectFlags = objectFlags, _traitArt = traitArt, _newspaper = snapshot.Newspaper };
         owner._danger.Here = () => owner._actor.Map;
         // ARC-DEV-208 (MIG14 S2): the saved runs and their steps (a run's step is re-created at its due time).
         owner.RestoreFlights(snapshot.Flights);
@@ -1396,6 +1399,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var decays = new List<SessionDecayFiring>();
         var aiTicks = new List<SessionAiTickFiring>();
         var restocks = new List<SessionRestockFiring>();
+        var trapDevices = new List<SessionTrapDeviceFiring>();
         var realSteps = new List<SessionRealStepFiring>();
         var goalSteps = new List<SessionGoalStepFiring>();
         _passRealSteps = realSteps;
@@ -1405,6 +1409,7 @@ public sealed partial class GameSessionOwner : IDisposable
         _passDecays = decays;
         _passAiTicks = aiTicks;
         _passRestocks = restocks;
+        _passTrapDevices = trapDevices;
         // ARC-WORLD-062: the items the pending decay events name are the session's to answer for (the hero's kit and made items are
         // no map object of the host's, and a seed item's map may not be attached yet: its handler postpones).
         var decaying = _events.Any(SessionEventKinds.ItemDecay)
@@ -1440,7 +1445,9 @@ public sealed partial class GameSessionOwner : IDisposable
                     // A host that knows objects answers for every kind; otherwise a Lock event's object exists while the
                     // session records its lock state (ARC-WORLD-050), and a waiting NPC while the session records it waiting
                     // (ARC-WORLD-045).
-                    : world is ISessionScriptWorld scripts ? scripts.ObjectExists(new(entity.Map), entity.Code)
+                    // ARC-MAGIC-041: an item the hero holds is an object a deferred call may name (the powered shield's attachee): the host's map
+                    // rows do not list the hero's kit and made items.
+                    : world is ISessionScriptWorld scripts ? scripts.ObjectExists(new(entity.Map), entity.Code) || HeroHeld().Any(item => item.Entity == entity.Code)
                     : LockObjectExists(entity) || RespawnObjectExists(entity) || _party.Get(entity.Code).Standing == CompanionStanding.Waiting)));
         }
         finally
@@ -1456,6 +1463,7 @@ public sealed partial class GameSessionOwner : IDisposable
             _passDecays = null;
             _passAiTicks = null;
             _passRestocks = null;
+            _passTrapDevices = null;
             _passRealSteps = null;
             _passGoalSteps = null;
         }
@@ -1464,7 +1472,7 @@ public sealed partial class GameSessionOwner : IDisposable
         return new(pass.Failure == GameEventFailure.None ? GameSessionFailure.None : GameSessionFailure.InvalidEventPass, pass,
             firings.AsReadOnly(), new(_identity, _revision)) { ScriptCalls = calls.AsReadOnly(), Effects = effects.AsReadOnly(),
             Locks = locks.AsReadOnly(), Waits = waits.AsReadOnly(), Respawns = respawns.AsReadOnly(), SpellRuns = spellRuns.AsReadOnly(),
-            Decays = decays.AsReadOnly(), AiTicks = aiTicks.AsReadOnly(), Restocks = restocks.AsReadOnly(), RealSteps = realSteps.AsReadOnly(), GoalSteps = goalSteps.AsReadOnly(), GoalsReconciled = goalsReconciled,
+            Decays = decays.AsReadOnly(), AiTicks = aiTicks.AsReadOnly(), Restocks = restocks.AsReadOnly(), TrapDevices = trapDevices.AsReadOnly(), RealSteps = realSteps.AsReadOnly(), GoalSteps = goalSteps.AsReadOnly(), GoalsReconciled = goalsReconciled,
             DeferredFoldTicks = foldTicks, DeferredFoldTicksRefused = foldTicksRefused };
     }
 
@@ -2669,6 +2677,16 @@ public sealed partial class GameSessionOwner : IDisposable
                 converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
                 continue;
             }
+            if (pending.Kind == SessionEventKinds.TrapDevice)
+            {
+                // A trap fuse (ARC-WORLD-124): one entity on a valid map, set no later than the saved clock, the fuse or the retry before its deadline, a spell record, a cell.
+                if (pending.Entities.Length != 1 || pending.Entities[0].Map < 1 || !SessionValidation.Entity(pending.Entities[0].Code) ||
+                    !SessionEventKinds.TrapDevicePayload(new(pending.Entities, pending.Values)) || pending.Values[0] > clockMs ||
+                    pending.DeadlineMs != pending.Values[0] + pending.Values[1])
+                    return GameSessionFailure.InvalidEvents;
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
+                continue;
+            }
             if (pending.Kind == SessionEventKinds.PartyWait)
             {
                 // A wait timer (ARC-WORLD-045): one NPC the saved party records waiting, set no later than the saved clock, its
@@ -2709,6 +2727,7 @@ public sealed partial class GameSessionOwner : IDisposable
             converted.Count(e => e.Kind == SessionEventKinds.ObjectRespawn) > SessionEventKinds.MaxObjectRespawns ||
             converted.Count(e => e.Kind == SessionEventKinds.ItemDecay) > SessionEventKinds.MaxItemDecays ||
             converted.Count(e => e.Kind == SessionEventKinds.Restock) > SessionEventKinds.MaxRestocks ||
+            converted.Count(e => e.Kind == SessionEventKinds.TrapDevice) > SessionEventKinds.MaxTrapDevices ||
             converted.Count(e => e.Kind == SessionEventKinds.SpellRun) > SessionEventKinds.MaxSpellRunEvents) return GameSessionFailure.EventBudgetExceeded;
         var result = GameEventQueue.Restore(registry, new(saved.Registry, saved.NextSequence, converted.ToImmutable()), profile,
             SessionEventKinds.Limits);
