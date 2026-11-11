@@ -42,6 +42,7 @@ public static class InterfaceHd
     {
         if (ReferenceEquals(pack, Pack) && enabled == Enabled) return false;
         Pack = pack; Enabled = enabled;
+        HdOptimizedStore.Attach(pack, enabled);
         lock (Textures)
         {
             for (var i = Textures.Count - 1; i >= 0; i--)
@@ -126,8 +127,9 @@ public static class InterfaceHd
             Image? image = null;
             try
             {
-                var result = pack.ResolveSprite(frame.Hd!, frame.Rgba);
-                if (result.Status == HdFrameStatus.Hd && result.Rgba is { } rgba)
+                // ARC-DEV-376: a plain frame the optimized cache holds is already decoded with its mip chain.
+                image = premultiplied ? null : HdOptimizedStore.TryBind(pack, frame.Hd!, frame.Rgba);
+                if (image is null && pack.ResolveSprite(frame.Hd!, frame.Rgba) is { Status: HdFrameStatus.Hd, Rgba: { } rgba } result)
                 {
                     image = Image.CreateFromData(result.Width, result.Height, false, Image.Format.Rgba8, rgba);
                     if (premultiplied) image.PremultiplyAlpha();
@@ -253,6 +255,14 @@ public partial class HdInterfaceTexture : Texture2D
                     _hdCanvas = new CanvasTexture { DiffuseTexture = _hd, TextureFilter = CanvasItem.TextureFilterEnum.LinearWithMipmaps };
                 }
                 else _failed = true;
+                return _hdCanvas;
+            }
+            // ARC-DEV-376: a plain frame comes ready-made (decoded, with its mip chain) from the optimized cache when the cache holds its PNG.
+            var cached = !_greyscale && !_premultipliedAlpha ? HdOptimizedStore.TryBind(pack, query, _frame.Rgba) : null;
+            if (cached is not null)
+            {
+                using (cached) _hd = ImageTexture.CreateFromImage(cached);
+                _hdCanvas = new CanvasTexture { DiffuseTexture = _hd, TextureFilter = CanvasItem.TextureFilterEnum.LinearWithMipmaps };
                 return _hdCanvas;
             }
             var result = pack.ResolveSprite(query, _frame.Rgba);

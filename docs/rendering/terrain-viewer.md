@@ -1432,7 +1432,9 @@ against the Legacy pixels) when HD interface is on and the pack has the frame; s
 trilinear with mipmaps (**ARC-UI-112**: the HD image is built with mipmaps and drawn through its own `CanvasTexture` whose
 `LinearWithMipmaps` filter overrides the parent node's Nearest, so a 4× redraw shown at 200 % (2×) or 150 % is filtered down instead of
 sampled nearest; the Legacy texture, the tile case, bitmap fonts and Legacy frames keep the parent's Nearest, since the filter is per
-texture, not per node). Off, without a pack, or without an entry, a frame draws exactly the Legacy pixels it drew before. On a screen
+texture, not per node). **ARC-DEV-376:** a plain frame (not premultiplied or grey) is taken from the device-local optimized cache when it holds the frame's PNG (`HdOptimizedStore.TryBind`,
+the pack's own checks run on the cached level 0; a missing or damaged entry takes the path above) and a background worker converts every interface PNG that has no
+entry ([HD pack](../workflow/hd-pack.md#optimized-textures-arc-dev-376)); self-test line `ARC-DEV-376 self-test optimized cache PASS`. Off, without a pack, or without an entry, a frame draws exactly the Legacy pixels it drew before. On a screen
 wider than 4:3 the strips stay centred at the factor of the 800 × 600 screen. **ARC-UI-096:** the side fill ARC-UI-089 drew there (a piece
 of the strip's own art tiled outwards, `AreaStripSides`, drawn by `AreaStripSidesView`; the top strip's wood x 186 width 32, the bottom
 strip's end rail, ARC-RES-094 U4) is **off** (`AreaStripSides.SideArtReady = false`), whatever the HD profile and the HD interface line say: the tiles looked like

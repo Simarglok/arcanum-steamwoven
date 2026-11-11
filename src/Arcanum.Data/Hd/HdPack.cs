@@ -190,18 +190,88 @@ public sealed class HdPack
         alphaMatches = false;
         ArgumentNullException.ThrowIfNull(query);
         CheckLegacy(query, legacyRgba);
+        var entry = Lookup(query, review, out var refused);
+        return entry is null ? refused! : Bind(entry, legacyRgba, review, out alphaMatches);
+    }
 
-        if (!review && Review == HdReviewStatus.Rejected) return HdFrameResult.Refused(HdFrameStatus.PackRejected, Scale);
+    // The key lookup shared by every sprite binding: the pack's review, the entry, its Legacy frame and its own review (none of it reads a file).
+    private HdPackEntry? Lookup(HdSpriteQuery query, bool review, out HdFrameResult? refused)
+    {
+        refused = null;
+        if (!review && Review == HdReviewStatus.Rejected) { refused = HdFrameResult.Refused(HdFrameStatus.PackRejected, Scale); return null; }
         if (!_sprites.TryGetValue(query.Key, out var entry))
         {
             // The pack knows this ART name but was built from other bytes (a mod or another
             // version): changed. Otherwise, including another frame of a known ART: missing.
             var changed = _spriteArts.TryGetValue(query.NameSha256, out var arts) && !arts.Contains(query.Key.ArtSha256);
-            return HdFrameResult.Refused(changed ? HdFrameStatus.SourceMismatch : HdFrameStatus.FrameMissing, Scale);
+            refused = HdFrameResult.Refused(changed ? HdFrameStatus.SourceMismatch : HdFrameStatus.FrameMissing, Scale);
+            return null;
         }
-        if (entry.Legacy != query.Legacy) return HdFrameResult.Refused(HdFrameStatus.SourceMismatch, Scale);
-        if (!review && entry.Review == HdReviewStatus.Rejected) return HdFrameResult.Refused(HdFrameStatus.FrameRejected, Scale);
-        return Bind(entry, legacyRgba, review, out alphaMatches);
+        if (entry.Legacy != query.Legacy) { refused = HdFrameResult.Refused(HdFrameStatus.SourceMismatch, Scale); return null; }
+        if (!review && entry.Review == HdReviewStatus.Rejected) { refused = HdFrameResult.Refused(HdFrameStatus.FrameRejected, Scale); return null; }
+        return entry;
+    }
+
+    /// <summary>ARC-DEV-376: the SHA-256 of the PNG file the pack binds to <paramref name="query"/> (the key the optimized texture cache is named by), or
+    /// null when the frame would not bind at all (pack or frame rejected, key absent, Legacy frame differs) or when its pack file is gone, is a link or
+    /// no longer has the manifest's byte size (one stat; the file is neither read nor hashed), so a damaged pack is noticed with a cache present too.</summary>
+    public string? SpriteFileSha256(HdSpriteQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        if (query.Chunk is not null || Lookup(query, review: false, out _) is not { } entry) return null;
+        try
+        {
+            if (HdPackPath.HasLink(Directory, entry.File)) return null;
+            var info = new FileInfo(HdPackPath.Full(Directory, entry.File));
+            return info.Exists && info.Length == entry.Bytes ? entry.Sha256 : null;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or NotSupportedException) { return null; }
+    }
+
+    /// <summary>ARC-DEV-376: the checks of <see cref="ResolveSprite"/> for a frame whose HD pixels are already decoded (the level 0 of an optimized
+    /// texture): the key, the Legacy frame, the review marks, the size and the alpha rule. It reads no file. The caller vouches that
+    /// <paramref name="hdRgba"/> are the pixels of the PNG whose SHA-256 <see cref="SpriteFileSha256"/> returned (the cache is named by it), so
+    /// <see cref="HdInvalidReason.FileMissing"/>, hash and PNG problems cannot arise here.</summary>
+    public HdPreparedResult CheckPrepared(HdSpriteQuery query, ReadOnlySpan<byte> legacyRgba, ReadOnlySpan<byte> hdRgba)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        if (query.Chunk is not null) throw new ArgumentException("A terrain chunk question is not prepared.", nameof(query));
+        CheckLegacy(query, legacyRgba);
+        var entry = Lookup(query, review: false, out var refused);
+        if (entry is null) return new(refused!.Status, refused.Invalid, 0, 0);
+        var (hdWidth, hdHeight) = ((long)Scale * entry.Legacy.Width, (long)Scale * entry.Legacy.Height);
+        if (hdWidth * hdHeight > _options.MaxHdFramePixels) return new(HdFrameStatus.Invalid, HdInvalidReason.TooLarge, 0, 0);
+        if (hdRgba.Length != hdWidth * hdHeight * 4) return new(HdFrameStatus.Invalid, HdInvalidReason.SizeMismatch, 0, 0);
+        if (!AlphaMatches(hdRgba.ToArray(), legacyRgba, entry.Legacy.Width, entry.Legacy.Height, AlphaOf(entry))) return new(HdFrameStatus.Invalid, HdInvalidReason.AlphaMismatch, 0, 0);
+        return new(HdFrameStatus.Hd, HdInvalidReason.None, (int)hdWidth, (int)hdHeight);
+    }
+
+    /// <summary>ARC-DEV-376: the sprite entries of the slices that hold interface art (the ones the viewer draws through the optimized cache).</summary>
+    public IEnumerable<HdPackEntry> InterfaceSprites
+    {
+        get
+        {
+            var slices = Recipe.Slices.Where(s => s.Kinds.Contains(HdSliceKind.Interface)).Select(s => s.Name).ToHashSet(StringComparer.Ordinal);
+            return Entries.Where(e => e.Kind == HdEntryKind.Sprite && slices.Contains(e.Slice));
+        }
+    }
+
+    /// <summary>ARC-DEV-376: the decoded RGBA of one entry's PNG after the file, size, SHA-256 and PNG checks of <see cref="ResolveSprite"/>, without the
+    /// Legacy checks (the converter has no Legacy frame). Null with <paramref name="problem"/> when the file does not pass.</summary>
+    public byte[]? DecodeFrame(HdPackEntry entry, out HdInvalidReason problem)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        var (hdWidth, hdHeight) = ((long)Scale * entry.Legacy.Width, (long)Scale * entry.Legacy.Height);
+        if (hdWidth * hdHeight > _options.MaxHdFramePixels) { problem = HdInvalidReason.TooLarge; return null; }
+        var bytes = ReadFrameFile(entry, out problem);
+        if (bytes is null) return null;
+        var header = HdPng.ReadHeader(bytes);
+        if (header.Status != HdPngStatus.Decoded) { problem = PngReason(header.Status); return null; }
+        if (header.Header!.Width != hdWidth || header.Header.Height != hdHeight) { problem = HdInvalidReason.SizeMismatch; return null; }
+        var image = HdPng.Decode(bytes, _options.MaxHdFramePixels);
+        if (image.Status != HdPngStatus.Decoded) { problem = PngReason(image.Status); return null; }
+        problem = HdInvalidReason.None;
+        return image.Image!.Rgba;
     }
 
     // The file, PNG, size and mask checks shared by sprites and terrain chunks.
