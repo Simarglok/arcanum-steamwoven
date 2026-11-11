@@ -484,6 +484,16 @@ child MSBuild witnesses; SOURCE/EXPORT authority, writer and registration retain
 the complete candidate-map guard. Missing, altered or cross-project pins reject.
 No tracked lock is excluded or restored after a build/export.
 
+## HD font tracing
+
+ARC-DEV-355, [`tools/hd_font`](../../tools/hd_font/hd_font.py), page [HD font tracing](hd-font.md). Python tool, standard library plus
+four locked packages (numpy, scipy, Pillow and the GPLv2+ potracer, wheel hashes in `tools/hd_font/requirements.lock`) installed into
+`local/hd-font/venv` on the first real run; `--dry-run` needs none. It runs no Godot and no `dotnet`, so it does not use the launch queue.
+
+```sh
+python3 -B tools/hd_font/hd_font.py self-test    # task check: synthetic fonts drawn by the test, no game file; a failed install is a failed check
+```
+
 ## Function oracle
 
 ARC-DEV-007, [`tools/original-oracle`](../../tools/original-oracle/README.md), method in the
