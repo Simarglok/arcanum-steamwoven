@@ -34,6 +34,22 @@ public sealed class AreaWorldMapArtTests
     }
 
     [TestMethod]
+    public void The_lens_is_the_square_hole_of_the_background_art_and_its_test_is_half_open()
+    {
+        // ARC-UI-133 (WM36): the registered rectangle (25, 65, 89, 89) of the screen is (25, 24) in the window; 0x551000 keeps the left and top edges
+        // in and the right and bottom out, and does not consult the round art.
+        Assert.AreEqual((25, 24, 89), AreaWorldMapArtLayout.Lens);
+        Assert.IsTrue(AreaWorldMapArtLayout.LensContains(25, 24));
+        Assert.IsTrue(AreaWorldMapArtLayout.LensContains(113.9, 112.9));
+        Assert.IsTrue(AreaWorldMapArtLayout.LensContains(26, 25), "a corner of the square, outside the round ring, still counts");
+        Assert.IsFalse(AreaWorldMapArtLayout.LensContains(24.9, 60));
+        Assert.IsFalse(AreaWorldMapArtLayout.LensContains(60, 23.9));
+        Assert.IsFalse(AreaWorldMapArtLayout.LensContains(114, 60));
+        Assert.IsFalse(AreaWorldMapArtLayout.LensContains(60, 113));
+        Assert.IsFalse(AreaWorldMapArtLayout.LensContains(AreaWorldMapArtLayout.View.X + 10, AreaWorldMapArtLayout.View.Y + 10), "the map view is not the lens");
+    }
+
+    [TestMethod]
     public void The_scroll_maximum_is_the_picture_minus_the_view()
     {
         Assert.AreEqual((1499, 1635), AreaWorldMapArtLayout.MaxOffset());

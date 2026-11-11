@@ -381,6 +381,7 @@ public sealed class SessionItemTriggers(SessionSpellCaster caster, ISessionComba
 
     // 0x4605E0's callback 0x57CE30: the slot-0 value (0x4CB7A0, −1 for none), a record without item triggers (0x45A030), the
     // activation for the item (0x57BC70), the cast at the use's target when it answered 0 (0x57C110), then the cancel (0x57BFF0).
+    [OriginalFunction(0x57CE30, OriginalFunctionScope.Partial)]
     private (SessionItemUseCast, SpellCastAttempt?, SpellCastGoalStart?) CastSlotZero(SessionItemSpells item, string? target)
     {
         // An empty slot 0 reads the record before the table in the original (no installed item on the spell path has one): nothing.

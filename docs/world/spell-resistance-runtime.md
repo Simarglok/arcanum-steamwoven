@@ -31,7 +31,7 @@ The rules take what the original reads as plain values, so they work for any tar
   140), a damage component, aggressive `Info:`, the maintenance period, the `Resist:` stat (−1 for none) and modifier — the
   [spell record](../formats/spell-records.md)'s values.
 - `SpellResistTarget`: whether it is the run's parent (the caster), PC, NPC or another object, the "no disintegrate" critter
-  flag, the **stored** magic resistance (the object's resistance 4: no armour, effects or 0..95 clamp, O9, both modes), the
+  flag, the magic resistance the save reads (the object's **stored** resistance 4 in the original: no armour, effects or 0..95 clamp, O9; Steamwoven reads it under the target's `resistmagic` effect changes in both modes, `SpellResistanceRules.ResistanceUnderEffects`, ARC-MAGIC-033, owner D6c), the
   effective magick/tech aptitude, the effective value of the `Resist:` stat and whether it is extraordinary (a PC or NPC, a
   primary stat, 20 or more).
 - `SpellResistRun`: BEGIN or not, unresistable (`No_Resist:` records and the script's "cast unresistable", MG19), and
@@ -88,8 +88,9 @@ Owner decisions 2026-10-20: every difference is documented.
 | The predictor reads the fate-maximised flag the last processed action left, whatever the run it is asked about. | The caller passes that flag. | — |
 | A network game and the "resisted" effect are the caller's. | The caller's (MT10). | — |
 
-O9 (the stored resistance), MG13 (fate margin 10, display 100, and the save still rolls) and MG14 (the predictor's own d20)
-follow the original in both modes, as decided.
+MG13 (fate margin 10, display 100, and the save still rolls) and MG14 (the predictor's own d20) follow the original in both modes, as decided.
+O9 (the stored resistance) is the original's, but its effects half is a bug of the game fixed in both modes with no switch (ARC-MAGIC-033, owner D6c): Resist Magick and the magic parts of the other
+resistance effects count in the save and the predictor ([rules](durable-effects-runtime.md#consumers-of-resistance-and-stat-changes-arc-magic-027), ledger RS11–RS13).
 
 ## Entangle re-resistance (ARC-DEV-303)
 

@@ -30,6 +30,8 @@ public sealed partial class AreaDataOwner
     private TerrainLoader.TileNames? _objectTiles;
     // ARC-DATA-024: frame facts of each distinct selection decoded by this build (every plan since ARC-DATA-036).
     private Dictionary<(AreaEntryIdentity Entry, int Group, int Frame, int Palette, bool SingleRotationClass, string? Policy), AreaVisualRecord>? _sharedFrames;
+    // ARC-DEV-375: the records this build derived for the resident memo, committed after the build's closing authentication (null without a memo).
+    private List<KeyValuePair<ResidentVisualKey, AreaVisualRecord>>? _residentStaged;
     private static readonly string[] CritterRoots = ["art/critter/", "art/monster/", "art/unique_npc/"];
 
     /// <summary>The file a critter (2), monster (12) or unique NPC (13) art id names in the
@@ -40,6 +42,26 @@ public sealed partial class AreaDataOwner
         var state = CritterState.From(cls, aid);
         var (animation, weapon) = RepairMissingArt(cls, state.Number, state.Animation, state.Weapon, maps, token);
         return CritterName(cls, state with { Animation = animation, Weapon = weapon }, maps);
+    }
+
+    /// <summary>
+    /// ARC-DEV-370 (E1-c2): the file a critter (2), monster (12) or unique NPC (13) art id names by the original's name rules (N1), for an art id no map row carries (a critter the session
+    /// created at run time). <paramref name="name"/> is the name table of a monster or unique NPC (null when it has no row for the number). The missing-art repair (N2, MA1) is not applied: it
+    /// needs the masks of the game's file list, so the caller draws the name as it stands and says so when the file is missing.
+    /// </summary>
+    public static string CritterArtPath(uint aid, Func<AreaMappingRole, int, string?> name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        var cls = aid >> 28;
+        if (cls is not (2 or 12 or 13)) throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
+        var state = CritterState.From(cls, aid);
+        var maps = new Dictionary<AreaMappingRole, SortedDictionary<int, string>>();
+        if (cls != 2)
+        {
+            var role = cls == 12 ? AreaMappingRole.MonsterNames : AreaMappingRole.UniqueNpcNames;
+            if (name(role, state.Number) is { } named) maps[role] = new SortedDictionary<int, string> { [state.Number] = named };
+        }
+        return CritterName(cls, state, maps);
     }
 
     /// <summary>The art fields that name a critter file, after the critter body rules.</summary>

@@ -2,6 +2,7 @@ using Arcanum.Data.Content;
 using Arcanum.Data.Maps;
 using Arcanum.Session;
 using Arcanum.Simulation.Travel;
+using Arcanum.Simulation;
 
 namespace Arcanum.World;
 
@@ -151,6 +152,7 @@ public sealed class AreaWorldMap
     /// <see cref="Cancel"/>). Whether the following segments keep the deleted waypoint's steps is the travel setting's
     /// <see cref="TravelRuleProfile.DeletedWaypointKeepsSteps"/> (WM97).
     /// </summary>
+    [OriginalFunction(0x5618B0, OriginalFunctionScope.Partial)]
     public AreaWorldMapRemoval RemoveWaypoint()
     {
         var count = _journey.Waypoints.Count;
@@ -208,6 +210,7 @@ public sealed class AreaWorldMap
     /// a newly discovered area becomes known and the last discovered record is cleared, and a finished journey sets
     /// <see cref="Landing"/>.
     /// </summary>
+    [OriginalFunction(0x564A70, OriginalFunctionScope.Partial)]
     public AreaWorldMapStep Step(Action<long> advance)
     {
         ArgumentNullException.ThrowIfNull(advance);
@@ -269,7 +272,7 @@ public sealed class AreaWorldMap
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready)
             return new(found.Status == AreaContentRootStatus.MountFailed ? AreaWorldMapDataStatus.MountFailed : AreaWorldMapDataStatus.ModuleOutsideGameRoot, null, found.Detail);
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return new(AreaWorldMapDataStatus.StackFailed, null, opened.Status.ToString());
         using var stack = opened.Stack!;
         var catalog = WorldCatalog.Open(stack);

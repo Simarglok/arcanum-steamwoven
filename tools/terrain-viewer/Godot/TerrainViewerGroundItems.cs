@@ -39,7 +39,7 @@ public partial class TerrainViewerApp
         _createdPrototypeRead = null; _createdPrototypeNumbers = []; _createdPrototypes.Clear();
         var found = AreaContentRoot.Discover(module);
         if (found.Status != AreaContentRootStatus.Ready) { _extraArtFailure = $"{found.Status}"; }
-        else if (ContentStack.Open(found.Plan!) is { Status: ContentStackStatus.Ready, Stack: { } stack })
+        else if (ContentStack.OpenShared(found.Plan!) is { Status: ContentStackStatus.Ready, Stack: { } stack })
         {
             var prototypes = ContentPrototypes.Open(stack);
             _junkPileArt = Arcanum.Data.Audio.ObjectSoundReader.ReadPrototype(prototypes.Read, Arcanum.Simulation.Items.JunkPileRules.Prototype).Fields?.CurrentArt;
@@ -69,7 +69,7 @@ public partial class TerrainViewerApp
         if (_prototypeItemsModule == module) return _prototypeItems;
         _prototypeItems?.Dispose(); _prototypeItems = null; _prototypeItemsModule = module;
         var found = AreaContentRoot.Discover(module);
-        if (found.Status == AreaContentRootStatus.Ready && ContentStack.Open(found.Plan!) is { Status: ContentStackStatus.Ready, Stack: { } stack }) _prototypeItems = new(stack);
+        if (found.Status == AreaContentRootStatus.Ready && ContentStack.OpenShared(found.Plan!) is { Status: ContentStackStatus.Ready, Stack: { } stack }) _prototypeItems = new(stack);
         GD.Print($"ARC-WORLD-081 prototype-items {(_prototypeItems is null ? "unavailable " + found.Status : "ready")}");
         return _prototypeItems;
     }
@@ -101,7 +101,7 @@ public partial class TerrainViewerApp
         // ARC-RENDER-041: a pool playing its frames changes its body without a revision, and a pool decays as game time passes
         // (which moves no revision either).
         var stamp = (area, session, session.Version.Revision, _inventoryHost, _areaKitArt, ObjectTargets(), _schematicData?.Data, BloodPoolFramesStamp(),
-            session.QueryBloodPools(new SessionMapId(CurrentAreaMap)).Count);
+            session.QueryBloodPools(new SessionMapId(CurrentAreaMap)).Count, _createdPrototypeRead is not null);
         if (Equals(stamp, _groundStamp)) return false;
         var frames = (AreaFrameOverlay)AreaFrames();
         var overlay = _areaOverlay!.Value;
@@ -182,6 +182,8 @@ public partial class TerrainViewerApp
         AddBloodPoolBodies(area, bodies, Frame);
         // ARC-DEV-347 (E1-a): the scenery and eye-candy objects the session created, drawn from their prototypes' art; a scenery is picked.
         AddCreatedObjectBodies(area, bodies, only, Frame);
+        // ARC-DEV-370 (E1-c2): the critters the session created, drawn from their prototypes' art and picked like map NPCs.
+        AddCreatedCritterBodies(area, frames, bodies, only);
         _groundBodies = bodies; _groundOnly = only;
         // A placed item without a row of this map is named and picked under its own key.
         if (_hoverIndex is { } index && ReferenceEquals(_hoverIndexArea, area)) foreach (var placed in only.Values) index.Admit(placed.Item3);

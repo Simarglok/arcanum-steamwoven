@@ -157,7 +157,7 @@ public static class AreaStartingHero
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready)
             return Refused(found.Status == AreaContentRootStatus.MountFailed ? AreaHeroStatus.MountFailed : AreaHeroStatus.ModuleOutsideGameRoot, hero, found.Detail);
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return Refused(AreaHeroStatus.StackFailed, hero, opened.Status.ToString());
         using var stack = opened.Stack!;
         // ARC-DATA-027: each table from the sources of the phase the original reads it in (exe-checked): the effect,

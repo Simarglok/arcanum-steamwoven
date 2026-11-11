@@ -51,6 +51,8 @@ public sealed partial class GameSessionOwner
     /// </summary>
     [OriginalFunction(0x45EE90, OriginalFunctionScope.Partial)]
     [OriginalFunction(0x45EE30, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x579FA0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x57A0A0, OriginalFunctionScope.Partial)]
     public GameSessionMutationResult ToggleHeroConcealment(GameSessionVersion expected)
     {
         ThrowIfDisposed();
@@ -93,6 +95,7 @@ public sealed partial class GameSessionOwner
     }
 
     // A dialog's start (0x567460, ST4): the hero and the NPC it talks to are no longer concealed; true when that changed anything.
+    [OriginalFunction(0x567460, OriginalFunctionScope.Partial)]
     private bool EndConcealmentForDialog(string entity)
     {
         var changed = _combat.HeroConcealed || _combat.Concealed.Contains(entity);

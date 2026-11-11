@@ -140,7 +140,7 @@ public partial class TerrainViewerApp
     /// and no other code does, so a difference is a cursor the stack and the viewer disagree on).</summary>
     internal bool TargetsMatchStack =>
         (_spellTargeting is not null) == TargetModeOpen(InterfaceMode.SpellTarget)
-        && (_lockpickArmed is not null) == TargetModeOpen(InterfaceMode.ItemTarget)
+        && ItemTargetOpen == TargetModeOpen(InterfaceMode.ItemTarget)
         && (_quantityMove is not null) == TargetModeOpen(InterfaceMode.QuantityPicker)
         && (_pendingOrder is not null) == TargetModeOpen(InterfaceMode.FollowerOrder);
 

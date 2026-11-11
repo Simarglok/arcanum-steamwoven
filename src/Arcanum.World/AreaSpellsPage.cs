@@ -3,6 +3,7 @@ using Arcanum.Data.Magic;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Magic;
+using Arcanum.Simulation;
 
 namespace Arcanum.World;
 
@@ -77,7 +78,7 @@ public static class AreaSpellsPage
                 AreaContentRootStatus.StackFailed => AreaSpellDataStatus.StackFailed,
                 _ => AreaSpellDataStatus.ModuleOutsideGameRoot,
             }, null, found.Detail);
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return new(AreaSpellDataStatus.StackFailed, null, opened.Status.ToString());
         using var stack = opened.Stack!;
         var loaded = SpellData.Open(stack, SpellRecordMode.LikeOriginal);
@@ -108,6 +109,7 @@ public static class AreaSpellsPage
     /// the willpower minima and the unspent points; <paramref name="floorRanks"/> are the editor's snapshot (null: no editor, the page is
     /// read-only and each college's floor is its rank).
     /// </summary>
+    [OriginalFunction(0x55CBC0, OriginalFunctionScope.Partial)]
     public static AreaSpellsPageView BuildFor(SpellData? data, int college, IReadOnlyList<int> ranks, int masteredCollege, CharacterRace race,
         System.Collections.Immutable.ImmutableArray<int> willpower, IReadOnlyList<int>? floorRanks, int unspent)
     {

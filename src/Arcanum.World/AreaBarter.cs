@@ -58,7 +58,7 @@ public sealed class AreaBarterData
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready)
             return (found.Status == AreaContentRootStatus.MountFailed ? AreaBarterDataStatus.MountFailed : AreaBarterDataStatus.ModuleOutsideGameRoot, null, found.Detail ?? "");
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return (AreaBarterDataStatus.StackFailed, null, opened.Status.ToString());
         using var stack = opened.Stack!;
         var sources = Mes(stack, "rules/InvenSource.mes");
@@ -218,6 +218,7 @@ public sealed class AreaBarter
     }
 
     /// <summary>The hero buys a merchant's item (all units of a stack) at its quote.</summary>
+    [OriginalFunction(0x575200, OriginalFunctionScope.Partial)]
     public AreaBarterTrade Buy(string entity)
     {
         var line = View().Wares.FirstOrDefault(item => item.Entity == entity);

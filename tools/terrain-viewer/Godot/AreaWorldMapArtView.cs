@@ -89,6 +89,8 @@ public partial class AreaWorldMapArtView : Control
     public event Action<AreaWorldMapKind, AreaTownNotes>? WorldNotesChanged;
     /// <summary>A hovered button's hint for the message window ("Action", a new line and the button's text, WM61), null when the pointer left it.</summary>
     public event Action<string?>? HintRequested;
+    /// <summary>ARC-UI-133 (WM36): a left release in the PC lens asks the app to close the window, as the key W does.</summary>
+    public event Action? CloseRequested;
     /// <summary>Asked before the arrow poll; false while another window owns the keys.</summary>
     public Func<bool>? PollGate { get; set; }
 
@@ -130,6 +132,8 @@ public partial class AreaWorldMapArtView : Control
     internal void LeftForSelfTest(Vector2 windowPoint, bool pressed) =>
         MouseLeft(new InputEventMouseButton { Position = windowPoint, GlobalPosition = windowPoint, Pressed = pressed, ButtonIndex = MouseButton.Left });
     internal void RightReleaseForSelfTest() => RightRelease();
+    /// <summary>The screen point of a point of the 800 × 400 window, as the pointer gives it (the window is scaled and placed between the bars).</summary>
+    internal Vector2 WindowPointForSelfTest(double x, double y) => GetGlobalTransform() * new Vector2((float)x, (float)y);
     /// <summary>A mouse move inside the view during a drag (the edge scroll of WM99).</summary>
     internal void DragForSelfTest(Vector2 windowPoint) { _pointer = windowPoint; if (_dragging) DragEdgeScroll(windowPoint); }
     internal void SetOffsetForSelfTest((int X, int Y) offset) { _offset = AreaWorldMapArtLayout.Clamp(offset, _max); Redraw(); }
@@ -314,6 +318,26 @@ public partial class AreaWorldMapArtView : Control
 
     private bool Travelling => _map?.Travelling == true;
 
+    // ARC-UI-134 (WM141): the lens state the chrome was last drawn with.
+    private bool _lensFrozenDrawn;
+
+    /// <summary>ARC-UI-134 (WM141): the lens shows no game view while a journey runs: the executable's travel state (0x5615D0(2)) turns the view-window mode to its
+    /// second kind (0x550DA0(2)), which fills the lens's rectangle black and draws art 198 over it; the end of the journey turns the live view on again.</summary>
+    internal bool LensFrozen => Travelling;
+
+    /// <summary>ARC-UI-134: art 198 read and is drawn over the lens's square.</summary>
+    internal bool HasLensArt => _look?.Art.TryGetValue(AreaWorldMapArtLayout.LensArt, out var lens) == true && lens.Length > 0;
+
+    /// <summary>ARC-UI-134: the lens's rectangle on the screen (the window's rectangle scaled and moved), the round view's square.</summary>
+    internal (Vector2 Origin, float Side) LensOnScreen
+    {
+        get
+        {
+            var (x, y, side) = AreaWorldMapArtLayout.Lens;
+            return (GlobalPosition + new Vector2(x, y) * Scale.X, side * Scale.X);
+        }
+    }
+
     private void Redraw()
     {
         _canvas?.QueueRedraw();
@@ -335,6 +359,8 @@ public partial class AreaWorldMapArtView : Control
 
     public override void _Process(double delta)
     {
+        // ARC-UI-134 (WM141): the lens goes black when the journey starts and comes back when it ends, whoever changed the state.
+        if (Visible && Travelling != _lensFrozenDrawn) { _lensFrozenDrawn = Travelling; _chrome?.QueueRedraw(); }
         if (!Visible || _map is null || Travelling || EditingNote || PollGate?.Invoke() == false) return;
         var now = (long)Time.GetTicksMsec();
         // WM18: the poll runs at most once for 10 ms; left beats right and up beats down.
@@ -554,6 +580,14 @@ public partial class AreaWorldMapArtView : Control
                 ClearDescription();
             }
             _pressedInView = false;
+            // ARC-UI-133 (WM36, 0x561DF5): every left release ends in the lens test (0x551000) after the kind's own work, in every kind and tool state; inside the
+            // lens the window closes (0x560F40, the close of the key W). The close frees this view's state, so nothing runs after it.
+            if (AreaWorldMapArtLayout.LensContains(button.Position.X, button.Position.Y))
+            {
+                Redraw();
+                CloseRequested?.Invoke();
+                return;
+            }
         }
         Redraw();
     }
@@ -934,6 +968,12 @@ public partial class AreaWorldMapArtView : Control
     private void DrawChrome(CanvasItem canvas)
     {
         if (_look is null) return;
+        // ARC-UI-134 (WM140, WM141): the lens. The game view's copy lies under the window (the round view); a running journey fills the square black (mode 2),
+        // and art 198 is drawn over the square in both states.
+        var (lensX, lensY, lensSide) = AreaWorldMapArtLayout.Lens;
+        _lensFrozenDrawn = LensFrozen;
+        if (_lensFrozenDrawn) canvas.DrawRect(new Rect2(lensX, lensY, lensSide, lensSide), Colors.Black);
+        if (_look.Art.TryGetValue(AreaWorldMapArtLayout.LensArt, out var lens) && lens.Length > 0) canvas.DrawTexture(lens[0], new Vector2(lensX, lensY));
         foreach (var button in Enum.GetValues<AreaWorldMapArtButton>())
         {
             if (!Shown(button)) continue;

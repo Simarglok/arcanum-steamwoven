@@ -16,7 +16,8 @@ public sealed record SpellObjectFlagComponent(int Field, uint Flag, bool On);
 /// ARC-DEV-358 (magic audit MA-1; the side effects are XR5 of the executable read, 0x454A10 re-read for this slice): the component takes **every bit of the spell flags** (field 20), of
 /// the object flags (field 19, <c>obj_f_flags</c>) and of the critter flags (field 218) on the hero and a mobile critter, with the reference count; the side effects the original has are
 /// done: invisible, shrunk, water walking and stoned write their object flag, don't-draw writes the paralysed bit of a critter. What stays not ready is named in
-/// <see cref="ObjectFlagNotReady"/> (the social and AI flags of MA-4, the portal and container locks of MA-6, items and the rest of the object types).
+/// the not-ready cases (a field this host does not model: the portal and container locks of MA-6, items and the rest of the object types). ARC-MAGIC-035 (MA-4): the social and AI flags (charmed, mind controlled, undead, fleeing, blinded)
+/// are written with the original's side effects (<c>SessionSpellCasterSocial.cs</c>).
 /// </summary>
 public sealed partial class SessionSpellCaster
 {
@@ -33,10 +34,10 @@ public sealed partial class SessionSpellCaster
     /// water walking the object flag water walking, stoned the object flag stoned; the four detection bits (0x3C0: magic, alignment, traps, invisible) call the screen refresh for the local player.</summary>
     public const int InvisibleSpellFlag = 0x1, ShrunkSpellFlag = 0x80000, WaterWalkingSpellFlag = 0x200000, DetectionSpellFlags = 0x3C0;
 
-    /// <summary>ARC-DEV-358: the spell flags whose side effects are social or AI ones (MA-4): charmed (+30 reaction toward a PC caster) and mind controlled (follow, no flee, −50, disband at the END). Not ready.</summary>
+    /// <summary>ARC-DEV-358: the spell flags whose side effects are social or AI ones: charmed (+30 reaction toward a PC caster) and mind controlled (follow, no flee, −50, disband at the END); ARC-MAGIC-035 (MA-4) writes them (<c>SessionSpellCasterSocial.cs</c>).</summary>
     public const int CharmedSpellFlag = 0x800000, MindControlledSpellFlag = 0x8000000;
 
-    /// <summary>ARC-DEV-358: the critter flags with a function of their own (MA-4): undead, fleeing, blinded. Paralysed is the hold above. Not ready.</summary>
+    /// <summary>ARC-DEV-358: the critter flags with a function of their own: undead, fleeing, blinded (ARC-MAGIC-035, MA-4). Paralysed is the hold above.</summary>
     public const int UndeadCritterFlag = 0x4, FleeingCritterFlag = 0x10, BlindedCritterFlag = 0x80;
 
     /// <summary>ARC-DEV-358 (XR5): the object flags the side effects write: invisible (0x200), translucent (0x40), shrunk (0x80), water walking (0x40000), stoned (0x80000) and don't-draw (0x100).</summary>
@@ -49,11 +50,14 @@ public sealed partial class SessionSpellCaster
     {
         if (component.ObjectFlag is not { } data || target.Object is not { } obj) return false;
         var mask = unchecked((int)data.Flag);
-        if (FieldOf(data.Field) is not { } which || ObjectFlagNotReady(which, mask)) return false;
+        if (FieldOf(data.Field) is not { } which) return false;
         var id = obj.Id;
+        if (SocialHostMissing(which, mask, id) && IsSocialFlag(which, mask)) return false;
         // A set needs the critter here; a clear needs it here or a change the session already holds for it (the change is kept by the critter's identity, and a run's END may come after
         // its critter left the map; an object the session wrote nothing on and the map does not know is no critter this host may clear a bit on).
-        if (id == Hero ? _owner.QueryHero() is null : (data.On ? _dataMap.Critter(id) is null : !CritterKnown(id))) return false;
+        // ARC-MAGIC-035: the blinded condition is the life record's, so an END after its critter left the map still clears it when the session holds the record.
+        var recordedBlind = !data.On && which == SessionObjectFlagField.Critter && (mask & BlindedCritterFlag) != 0 && id != Hero && _owner.QueryLifeRecord(id) is not null;
+        if (id == Hero ? _owner.QueryHero() is null : (data.On ? _dataMap.Critter(id) is null : !CritterKnown(id) && !recordedBlind)) return false;
         if (id != Hero && !id.StartsWith(ObjectStateVocabulary.EntityPrefix, StringComparison.Ordinal)) return false;
         var count = ProvidingRuns(id, which, mask, data.On);
         // 0x455100 first: setting a bit another active run already provides does nothing; clearing keeps a bit more than one run provides.
@@ -62,6 +66,8 @@ public sealed partial class SessionSpellCaster
             _log.Add(new(SpellCastEventKind.ObjectFlagKept, run.Id, mask, id, FlagDetail(which, data.On)));
             return true;
         }
+        // ARC-MAGIC-035 (MA-4): the social and AI flags run the original's own order (side effects first, the closing write only where the function does not return before it).
+        if (IsSocialFlag(which, mask)) return SocialFlag(run, id, which, mask, data.On);
         // The side effects come first in the original and the field's own write last (0x4550C6); the order is not observable here (one revision per write).
         if (!WriteFlag(run, id, which, mask, data.On)) return true;
         SideEffects(run, id, which, mask, data.On);
@@ -77,18 +83,6 @@ public sealed partial class SessionSpellCaster
         CritterFlagsField => SessionObjectFlagField.Critter,
         ObjectFlagsField => SessionObjectFlagField.Object,
         _ => null,
-    };
-
-    /// <summary>
-    /// ARC-DEV-358: whether a flag of the three fields still needs another slice before the component may write it (the caller logs <see cref="SpellCastEventKind.ComponentNotReady"/>): the social and
-    /// AI ones whose function the original calls (charmed and mind controlled, MA-4; undead, fleeing and blinded, MA-4). SU17: the original handles only the first special bit of a mask; a
-    /// record's component names one bit, so the case does not arise. The portal, container, item and other flag fields are not fields of this host (MA-6, MA-7).
-    /// </summary>
-    private static bool ObjectFlagNotReady(SessionObjectFlagField field, int mask) => field switch
-    {
-        SessionObjectFlagField.Spell => (mask & (CharmedSpellFlag | MindControlledSpellFlag)) != 0,
-        SessionObjectFlagField.Critter => (mask & (UndeadCritterFlag | FleeingCritterFlag | BlindedCritterFlag)) != 0,
-        _ => false,
     };
 
     // One write of the session's flag change with its log line; false when the session refused it.

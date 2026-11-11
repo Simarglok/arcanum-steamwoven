@@ -1,5 +1,6 @@
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
+using Arcanum.Simulation;
 
 namespace Arcanum.World;
 
@@ -18,6 +19,7 @@ public static class AreaSheetRefusals
         IntelligenceSpellPrerequisite = 29, IntelligenceDegreePrerequisite = 31, WillpowerSpellPrerequisite = 39;
 
     /// <summary>"You must raise your &lt;stat&gt; first" of a skill's key stat (SP7): one message per stat, 22 for any other.</summary>
+    [OriginalFunction(0x55F200, OriginalFunctionScope.Partial)]
     public static int KeyStatMessage(CharacterStat? stat) => stat switch
     {
         CharacterStat.Strength => 32,

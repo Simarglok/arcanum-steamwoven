@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using Arcanum.World;
 using Arcanum.Data.Hd;
 using Arcanum.TerrainViewer.Core;
@@ -15,6 +17,16 @@ public static class InterfaceHd
 {
     private static readonly List<WeakReference<HdInterfaceTexture>> Textures = [];
     private static int _pruneAt = 1024;
+    // ARC-DEV-369: HD frames a worker resolved ahead of their first draw, per Legacy frame, until the texture takes them or a warm-up drops them.
+    private static readonly ConditionalWeakTable<AreaInterfaceFrame, PreparedHd> Prepared = new();
+    private static readonly Queue<WeakReference<HdInterfaceTexture>> WarmQueue = new();
+
+    /// <summary>The result of resolving one frame ahead of time: <see cref="Image"/> is the finished HD image (premultiplied when asked, with mipmaps) or null
+    /// when the pack has no usable redraw for the frame (the texture then draws Legacy without asking the pack again).</summary>
+    internal sealed record PreparedHd(HdPack Pack, bool Premultiplied, Image? Image);
+
+    /// <summary>True while a warm-up builds textures: the textures it creates that have a prepared HD frame are queued for <see cref="WarmSlice"/>.</summary>
+    internal static bool CollectForWarm { get; set; }
 
     /// <summary>The active pack, or null (no pack found or none opened).</summary>
     public static HdPack? Pack { get; private set; }
@@ -30,6 +42,7 @@ public static class InterfaceHd
     {
         if (ReferenceEquals(pack, Pack) && enabled == Enabled) return false;
         Pack = pack; Enabled = enabled;
+        HdOptimizedStore.Attach(pack, enabled);
         lock (Textures)
         {
             for (var i = Textures.Count - 1; i >= 0; i--)
@@ -91,7 +104,82 @@ public static class InterfaceHd
             }
             Textures.Add(new(texture));
         }
+        if (CollectForWarm && Enabled && Pack is { } pack && Prepared.TryGetValue(frame, out var prepared) && ReferenceEquals(prepared.Pack, pack))
+            lock (WarmQueue) WarmQueue.Enqueue(new(texture));
         return texture;
+    }
+
+    /// <summary>ARC-DEV-369: resolves the HD redraws of <paramref name="frames"/> (pack file read, SHA-256 of the Legacy pixels, PNG decode, size and mask checks, then
+    /// the image with premultiplication and mipmaps as <see cref="HdInterfaceTexture"/> would build it) so the first draw only uploads. Runs on any thread;
+    /// a frame whose redraw is refused is remembered as refused. Does nothing without a pack, with the HD interface off, or for a frame that has no HD
+    /// question. Returns the number of frames prepared (refusals included).</summary>
+    internal static int Prepare(IEnumerable<(AreaInterfaceFrame Frame, bool Premultiplied)> frames, HdPack? pack, int parallelism)
+    {
+        if (pack is null) return 0;
+        // One question per frame object: records with equal pixels and query are still separate frames that each own a texture.
+        var seen = new HashSet<AreaInterfaceFrame>(ReferenceEqualityComparer.Instance);
+        var work = frames.Where(entry => entry.Frame.Hd is not null && seen.Add(entry.Frame)).ToArray();
+        var count = 0;
+        Parallel.ForEach(work, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, parallelism) }, entry =>
+        {
+            var (frame, premultiplied) = entry;
+            if (Prepared.TryGetValue(frame, out var known) && ReferenceEquals(known.Pack, pack) && known.Premultiplied == premultiplied) return;
+            Image? image = null;
+            try
+            {
+                // ARC-DEV-376: a plain frame the optimized cache holds is already decoded with its mip chain.
+                image = premultiplied ? null : HdOptimizedStore.TryBind(pack, frame.Hd!, frame.Rgba);
+                if (image is null && pack.ResolveSprite(frame.Hd!, frame.Rgba) is { Status: HdFrameStatus.Hd, Rgba: { } rgba } result)
+                {
+                    image = Image.CreateFromData(result.Width, result.Height, false, Image.Format.Rgba8, rgba);
+                    if (premultiplied) image.PremultiplyAlpha();
+                    image.GenerateMipmaps();
+                }
+            }
+            // A frame that cannot be prepared draws as it does without a warm-up: the first draw asks the pack itself.
+            catch (Exception error) when (error is not OutOfMemoryException) { return; }
+            Prepared.AddOrUpdate(frame, new PreparedHd(pack, premultiplied, image));
+            Interlocked.Increment(ref count);
+        });
+        return count;
+    }
+
+    /// <summary>The prepared HD frame of <paramref name="frame"/> for <paramref name="pack"/> with this premultiplication, taken out of the table (the caller owns its
+    /// image); null when none matches (a stale one is dropped).</summary>
+    internal static PreparedHd? TakePrepared(AreaInterfaceFrame frame, HdPack pack, bool premultiplied)
+    {
+        if (!Prepared.TryGetValue(frame, out var found)) return null;
+        Prepared.Remove(frame);
+        if (ReferenceEquals(found.Pack, pack) && found.Premultiplied == premultiplied) return found;
+        found.Image?.Dispose();
+        return null;
+    }
+
+    /// <summary>Drops whatever prepared HD frames of <paramref name="frames"/> no texture took (a window opened before its warm-up got to it, or the pack changed).</summary>
+    internal static void DropPrepared(IEnumerable<AreaInterfaceFrame> frames)
+    {
+        foreach (var frame in frames)
+            if (Prepared.TryGetValue(frame, out var found)) { Prepared.Remove(frame); found.Image?.Dispose(); }
+    }
+
+    /// <summary>Creates the HD textures of queued, prepared frames until <paramref name="budgetMilliseconds"/> is spent (at least one), so the upload is spread over
+    /// frames; returns how many are still queued.</summary>
+    internal static int WarmSlice(double budgetMilliseconds)
+    {
+        var clock = Stopwatch.StartNew();
+        while (true)
+        {
+            HdInterfaceTexture? texture = null;
+            lock (WarmQueue)
+            {
+                while (WarmQueue.Count > 0 && texture is null)
+                    if (!WarmQueue.Dequeue().TryGetTarget(out texture)) texture = null;
+                if (texture is null) return 0;
+            }
+            texture.Warm();
+            if (clock.Elapsed.TotalMilliseconds >= budgetMilliseconds) break;
+        }
+        lock (WarmQueue) return WarmQueue.Count;
     }
 
     /// <summary>Frames that currently draw their HD redraw (for the self-test and the status line).</summary>
@@ -133,6 +221,9 @@ public partial class HdInterfaceTexture : Texture2D
     /// <summary>True when the next draw uses the HD redraw.</summary>
     public bool IsHd => Active() is not null;
 
+    /// <summary>ARC-DEV-369: builds the HD texture now (the warm-up spreads these over frames) instead of at the first draw.</summary>
+    internal void Warm() => Active();
+
     internal int HdScale => InterfaceHd.Pack?.Scale ?? 1;
 
     /// <summary>True when the HD image is premultiplied for an art-font (PremultAlpha) canvas.</summary>
@@ -155,6 +246,25 @@ public partial class HdInterfaceTexture : Texture2D
         if (!ReferenceEquals(_hdFor, pack)) { _hdFor = pack; _hd = null; _hdCanvas = null; _failed = false; }
         if (_hdCanvas is null && !_failed)
         {
+            // ARC-DEV-369: a worker may have resolved this frame already; only the upload is left.
+            if (!_greyscale && InterfaceHd.TakePrepared(_frame, pack, _premultipliedAlpha) is { } prepared)
+            {
+                if (prepared.Image is { } ready)
+                {
+                    using (ready) _hd = ImageTexture.CreateFromImage(ready);
+                    _hdCanvas = new CanvasTexture { DiffuseTexture = _hd, TextureFilter = CanvasItem.TextureFilterEnum.LinearWithMipmaps };
+                }
+                else _failed = true;
+                return _hdCanvas;
+            }
+            // ARC-DEV-376: a plain frame comes ready-made (decoded, with its mip chain) from the optimized cache when the cache holds its PNG.
+            var cached = !_greyscale && !_premultipliedAlpha ? HdOptimizedStore.TryBind(pack, query, _frame.Rgba) : null;
+            if (cached is not null)
+            {
+                using (cached) _hd = ImageTexture.CreateFromImage(cached);
+                _hdCanvas = new CanvasTexture { DiffuseTexture = _hd, TextureFilter = CanvasItem.TextureFilterEnum.LinearWithMipmaps };
+                return _hdCanvas;
+            }
             var result = pack.ResolveSprite(query, _frame.Rgba);
             if (result.Status == HdFrameStatus.Hd && result.Rgba is { } rgba)
             {

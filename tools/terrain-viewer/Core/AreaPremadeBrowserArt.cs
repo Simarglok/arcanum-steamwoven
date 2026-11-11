@@ -242,7 +242,7 @@ public sealed record AreaPremadeBrowserArtContent(IReadOnlyDictionary<int, AreaI
         ArgumentNullException.ThrowIfNull(modulePath);
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready) return Empty($"not read ({found.Status} {found.Detail})");
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return Empty($"not read (content stack {opened.Status})");
         using var stack = opened.Stack!;
         var art = AreaInterfaceArt.Load(stack, AllArtNumbers, new AreaInterfaceArtLimits(MaxFrames: 256));
@@ -264,7 +264,7 @@ public sealed record AreaPremadeBrowserArtContent(IReadOnlyDictionary<int, AreaI
         ArgumentNullException.ThrowIfNull(modulePath);
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready) return new(id, AreaPortraitStatus.NotRead, null, null, $"{found.Status} {found.Detail}");
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return new(id, AreaPortraitStatus.NotRead, null, null, $"content stack {opened.Status}");
         using var stack = opened.Stack!;
         return AreaPortraits.Load(stack, Portraits, [id], AreaPremadeBrowserArtLayout.PortraitSize)[id];

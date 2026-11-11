@@ -485,10 +485,18 @@ Diagnosed on 2026-11-11 with the `worldmap` stage in Legacy and HD side by side 
   hole (window x 25..114, y 24..113) inside a round brass ring, so the scene shows through it in Legacy too; the HD redraw kept the same alpha. The
   ring (centre about (70.0, 67.1), outer radius about 49.4, inner about 46, in window pixels) is cut away under the square, and the square's corners
   poke through the wood outside the ring. A code mask cannot repair it because the pixels under the hole (wood in the corners, the covered ring arcs)
-  do not exist in the frame. The repair is a redraw of that region of the `mapmain` frame (art 138, 3200 × 1600): restore the wood grain in the four
-  corners and the full ring, and leave the alpha clear only inside the ring's inner circle (or fill it, the owner's choice of what the window shows there).
-  The registration, the other holes (the map view x 150..650, y 11..375, the buttons' shapes, the compass, the two readout boxes) and every other pixel must stay.
-  Land it as a one-frame repair ([hd-pack.md](../workflow/hd-pack.md#update-the-installed-pack-diff-only)), never as a whole-pack replace.
+  do not exist in the frame. **A repaint of that region cannot be installed under the current pack format**: the alpha check lets an HD frame be opaque
+  only within one Legacy texel of the Legacy silhouette (also for an entry with `"alpha": "masked"`), and the square corners are Legacy-clear. Tried on 2026-11-11: a
+  Codex repaint (full ring, wood in the corners, circle clear) was installed, failed with `AlphaMismatch`, the frame silently drew as Legacy in the HD run, and the
+  update was rolled back at once (pack back at its earlier manifest). Ways forward: a format extension (an entry-level opt-in that declares a rectangle where
+  the HD alpha may exceed the Legacy silhouette, with the check, the format page and tests), or drawing the porthole by code. The executable draws a "hero lens"
+  there (a scaled game view around the hero with art 198 over it, ledger WM140, WM141). **Built by ARC-UI-134 (2026-11-11), and it makes the question moot for the
+  installed pack:** the viewer now shows the half-size game view under the window and art 198 over the square (black under it during a journey). A native look
+  with the installed `interface-redraw-4x` pack (manifest as above, nothing changed in it) shows the HD frame's square corners as clean wood and one brass ring around the
+  lens, the same as in Legacy, because art 198 covers the square the frame leaves clear. Only a faint doubled brass edge at the ring's upper right remains, where the frame's
+  ring (cut away under the square) and the ring of art 198 do not coincide to the pixel; it is not a hole and needs no format extension. Whether the pack holds an HD frame of art 198 was not
+  checked; the double edge is the owner's to judge in game (recheck list, ARC-UI-134 step 8).
+  Check a native shot after any install: a rejected frame shows as Legacy art, not as an error.
 - **Native look:** `./arcanum smoke pr --stages worldmap --env ARC_HD_PACK=<pack> --env ARC_AREA_WORLDMAP_HD_VERIFY=1 --env ARC_WORLDMAP_SMOKE_SHOT=<png>`
   runs the stage with the HD interface switch on (`ARC_AREA_WORLDMAP_HD_VERIFY`, like the bar and sheet smokes) and saves the frame; the shot is
   original-derived and stays under `local/`.

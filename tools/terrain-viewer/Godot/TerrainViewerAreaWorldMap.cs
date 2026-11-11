@@ -159,6 +159,8 @@ public partial class TerrainViewerApp
             _worldMapPanel.TeleportRequested += TeleportWorldMap;
             _worldMapPanel.SoundRequested += id => PlayInterfaceSound(id, "world map button");
             _worldMapPanel.PollGate = () => !MainMenuOpen;
+            // ARC-UI-134 (WM140): the lens shows the game view around the hero (the round view of the inventory, the barter window and the logbook).
+            _worldMapPanel.HolderView = InventoryHolderView;
             // ARC-UI-083: a marker's description is written into the message window at once (WM60), a button's hint after the quiet time (WM61).
             _worldMapPanel.DescriptionRequested += text =>
             {
@@ -174,6 +176,8 @@ public partial class TerrainViewerApp
         _worldMapPanel.SetArtLook(art);
         StopWorldRoute("ROUTE_STOPPED_BY_WORLD_MAP");
         QuarantineWorld(); _quickKeys.Reset();
+        // ARC-UI-134 (WM140): the window build turns the view-window mode on, which centres the game view on the PC (0x551A10) for the lens; the diagnostic panel has no lens.
+        if (artLook is not null) CentreGameViewOnHolder();
         var names = _worldMapData.Data!.Areas.Areas;
         if (!OpenWindowMode(InterfaceMode.WorldMap, () => _worldMapPanel!.Open(worldMap, _areaSession!.IsAreaKnown, area => names[area].Name, DebugMode, townShow, MapNotesOf(_areaSession!, SessionStoryLimits.MapNoteView),
             MapNotesOf(_areaSession!, SessionStoryLimits.ContinentNoteView)), () => _worldMapPanel!.CloseView()))

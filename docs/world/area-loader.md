@@ -160,6 +160,26 @@ opt-in test). Neither is executed by Data.
   at once. A stream passed to the owner may be read from a worker thread and must not call
   back into the owner while it is read: the owner's public getters take its lock, which
   the pass holds (`CurrentPhase` is an unsynchronized internal phase for tests).
+- Verified-file memo (ARC-DEV-374, O5a of the [performance diagnosis](../research/performance-diagnosis-2026-11.md); owner decision
+  2026-11-11, option A). The authentication rule above is "every input is hashed in full at every pass". For a file of at least
+  1 MiB (`VerifiedFileMemo.MinBytes`: the archives and large loose inputs; prototypes, patches and small resources keep the
+  full pass every time) the rule is now: **the first check of that file in the process hashes it in full**; every later check
+  of the same path (the map plan's identity, `Open`, I0, I7, a frame batch's `Complete`, the viewer's `VerifyFiles`; in the same
+  load or a later one) reuses that hash while the file's stamp is unchanged. The stamp is the device, inode, size and the
+  modification and change times to the nanosecond on macOS and Linux (a file rewritten with its modification time put back still
+  moves the change time), and the size and last write time on Windows. A changed stamp is a first check again: the file is
+  hashed in full. A hash is remembered only when the stamp is the same before and after the pass that computed it. The memo
+  keeps a path, a stamp, a length and a hash, never bytes, and is not a trust root: a pinned plan still compares the memoized
+  hash with its pinned hash, so a file that is not the pinned file is refused by the first check and by every later one. A
+  path-bound input (`AreaInput.FromFile`) still has its handle/path binding and length checked on every pass; only the read of
+  its bytes is skipped, so the read counters of a later load are lower than the first's, and a stream-only input is always
+  hashed. The effect on I7: a load's build is still bracketed by its binding checks, but the bytes of a file already hashed in
+  this process are not read again at I7, so a rewrite of an archive in place during a load is seen only through its stamp: it is
+  caught unless it leaves the size, the modification time and the change time all as they were (a user-space program cannot
+  restore the change time), and on Windows unless it leaves the size and last write time as they were. A file rewritten in the same filesystem
+  timestamp tick as the pass that hashed it keeps its stamp (the "racy timestamp" case of any stamp cache); the tick is a
+  nanosecond on APFS and 100 ns on NTFS, so it is a known limit and not a guard. The legacy terrain/actor modes of the
+  viewer (`TerrainLoadCoordinator`, not the AREA load) keep their own full fingerprints and do not use the memo. Memo state is process-wide and lives until the process ends; it is not saved.
 - `AreaOriginalValidator.Validate(inputs, token)` is metadata-only convenience:
   its owner is disposed before returning. Use `Open` when frame access is needed.
 
@@ -237,7 +257,8 @@ Loading while leased, a second lease, foreign or superseded snapshots fail.
 escapes. An explicit copy survives independently. Disposal is idempotent, revokes
 leases and closes transferred streams. Previously returned metadata remains valid;
 it cannot be used to reacquire frames after replacement or disposal. There is no
-persistent encoded/decoded frame cache between operations.
+persistent encoded/decoded frame cache between operations of the pinned exterior and of any load that
+passes no resident stores; the map path passes them ([resident frames and visuals](#resident-frames-and-visuals-across-map-loads-arc-dev-375)).
 
 Inside one authenticated bracket, a strict build (between the I0 and I7 passes) or one
 frame batch (between a source's first authentication and `Complete`), an ART entry is
@@ -271,6 +292,80 @@ the first frame of an entry reads it). Any failed copy or
 revoked batches refuse further use. The batch therefore guarantees what per-frame
 reauthentication did for the batch as a whole, not for each frame separately; for the
 Crash Site profile it reads about 1.2 GB of authentication instead of about 596 GB.
+
+## Resident frames and visuals across map loads (ARC-DEV-375)
+
+Status: **implemented by ARC-DEV-375** (design written before the code; measurements at the end of this section). O5c of the [load time diagnosis](../research/performance-diagnosis-2026-11.md); the owner
+approved keeping the decoded repository between loads of the same map). The rule "no persistent encoded/decoded frame cache between
+operations" above stays for the pinned exterior (the Crash Site smoke, `ExecuteExterior`) and for every load that passes no resident
+store. The map path (`AreaMapLoadOperation`, whole interiors and the main map's windows) passes two.
+
+**Why.** A window move, a cave return and a cross-map quick load each build a new owner and read the same ART again: the strict build
+reads, inflates, hashes and decodes every distinct frame selection to record its pixel digest (`MakeVisual`), and the frame copy then reads and
+decodes each of them a second time (`DecodeDescriptor`), behind two whole-archive authentication passes of the batch. On the main map that is
+about 2,000 distinct frames (25 MiB) per window, most of them the same in the next window. The diagnosis measured the strict snapshot at 1.3 s
+and the frame copy at 1.2 s of a 6.4-14.9 s worker (packaged, Apple M4 Pro); this task measures them again beside the new numbers (below).
+
+**What is kept.** Two process-resident, content-keyed stores. Neither holds a file handle, an owner or a snapshot.
+
+| Store | Where | Key | Value | Replaces |
+| --- | --- | --- | --- | --- |
+| Visual memo (`AreaResidentVisuals`) | `Arcanum.Data` | the owner's build-local `_sharedFrames` key (entry identity, group, frame, palette, single-rotation class flag, fallback policy) plus the entry's source `Length` and `Sha256` from the plan's identities | the `AreaVisualRecord` template (geometry, payload and pixel digests, policy) | the entry read, inflate, payload hash, decode and pixel hash of a frame selection already built in this process |
+| Frame store (`AreaResidentFrames`) | `Arcanum.World` | `AreaFrameKey` (entry, palette, group, frame, policy, payload digest, view length, pixel digest) | `DecodedAreaFrame` (RGBA, shared, immutable by convention: no consumer writes it) | the frame copy's decode, and its batch when every frame hits |
+
+**Authentication rules are unchanged where they bind.** The strict build still authenticates every input at `Open` and again at I7;
+O5a (ARC-DEV-374, the verified-file memo above) is the separate, merged decision that lets a later pass of an unchanged file reuse its hash; this design does not depend on it and
+keeps working under either rule, since a key carries the identity whichever pass produced it. A hit is served inside that
+bracket and is keyed by the identity the bracket authenticates, so a changed file gets another key and misses (a file changed during the read is still
+refused at I7). What a hit skips is only re-deriving, in the same process, a value that was derived from the same authenticated bytes:
+
+- a **visual record** is inserted only after its build's I7 pass succeeded (it is staged in the owner and committed there; a failed or cancelled build
+  commits nothing), so every record in the memo was derived inside a fully authenticated bracket;
+- a **frame** is inserted only after its batch's `Complete` succeeded, so it passed the entry, payload, geometry, palette and pixel checks and the batch's
+  authentication; a faulted or cancelled batch inserts nothing;
+- a frame hit is accepted only when its width, height and RGBA length equal the descriptor's, and the pixel digest in the key is the descriptor's;
+- an all-hit copy opens no batch and so adds no second authentication pass beyond the build's own (the batch's passes authenticate the sources the
+  batch read from; this load read none); it still refuses a snapshot its owner has not published, as the batch's own check does;
+- the native smoke stage `resources` (a reload on a fresh owner with fresh counters, the retired generation collectable) empties both stores before its
+  reloads, so it keeps proving that contract; the real-data plan test that counts a cold build's frame requests empties the memo per map.
+
+The deviation from the contract above is therefore stated: a frame served from the store is not decoded again in this load. Its pixels are the decoder's output
+for bytes the same process already authenticated; the key carries the pixel digest the strict snapshot of this load published, and the decoder is deterministic.
+Nothing is written to disk, so a stale store cannot outlive the process.
+
+**Budget accounting.** A hit charges none of the owner's frame-domain counters (requests, stored, decoded, RGBA, encoded) and none of the
+copy charges, as nothing was read or decoded. The copy's pre-admission still tests the frames that must be read. The load result's `FinalUsage` on a warm load
+is therefore lower than on a cold one; no limit gets tighter. The per-load repository cap (16,384 frames, 160 MiB) still applies to the `Frames` of the result.
+
+**Memory.** Frame store: at most 256 MiB of RGBA and 32,768 frames, least recently used first, by bytes; every frame a load uses is touched, so the
+window just loaded is the newest. The frames also live in the load result (the result's own 160 MiB cap), so the store's cost is the frames of earlier windows
+that are not in the current one: bounded by 256 MiB. Visual memo: at most 65,536 records, least recently used first (about 0.5 KiB each, about 32 MiB).
+Together under 0.3 GiB resident on top of the load, against 24 GB of RAM on the development Mac. A Windows or smaller machine keeps the same caps; the caps are
+constants of the stores, not settings. The viewer's GPU caches (the 512-frame/32 MiB allowance and the terrain chunk cap) are separate and unchanged: a new
+load still releases every area frame texture, so equal keys never reuse another load's textures, only its CPU pixels.
+
+**Invalidation.** None is needed for correctness: keys carry content digests (and the source identity for the memo). The stores shrink by their caps only;
+`Clear()` empties them (tests, and a viewer that wants the memory back). A different game folder or an edited archive yields other keys and the old entries age out.
+A different data-rules profile (Original or Steamwoven) changes map data, not ART selections, and shares both stores.
+
+**Threads.** The load worker reads and inserts under one lock per store (a load runs one worker at a time; an overlapped reload's cancelled first generation
+inserts nothing that was not committed). The main thread only reads the immutable frames of its own result.
+
+**Not kept, and why.** The strict snapshot of a plan, its scene plan and its step evidence. A window move loads another window (other sector files), so the
+whole snapshot differs; the part that was expensive and is shared, the ART work, is what the two stores keep. A reload of the *same* window (a cave return to
+the same arrival, a quick load in place) could keep the snapshot too; with the verified-file memo (ARC-DEV-374) merged the authentication no longer stands in its way, so a follow-up
+(snapshot keyed by plan, data rules and input identities and stamps) is open. The map's transitions are O5b ([DEV-368](../research/performance-diagnosis-2026-11.md)).
+
+**Measured (ARC-DEV-375, before the verified-file memo and the transitions cache were merged).** One `perf` smoke (Debug source, `--sector 1409,1314`, Mac under load: load average 15-24, so only ratios inside one run mean anything),
+the same build with `ARC_AREA_RESIDENT=0` (before) and without it (after). Worker of the **return to the main map** after a trip to a temple interior (the cave-return case),
+milliseconds: `read.strict` 3,120 -> 3,950, `read.copy` **1,809 -> 469**, and the copy's allocation 103.5 MiB -> 1.9 MiB; frames served 1,617 of 1,623 (6 read), visual records served
+2,459 of 2,466. The unchanged stages of the same leg (plan, transitions, open, verify) were 1.6x slower in the second run (3.2 s -> 5.2 s together), so the second run was the busier one; scaled by
+that factor the worker's read stage fell from about 5.1 s to about 2.8 s (an estimate, not a measurement). The strict build still takes seconds with every visual served: its remaining cost is not the ART
+decode, so it is the next thing to profile (the closing whole-input authentication, the per-object appearance resolution; not measured here). A later `perf` run on the final tree (with the verified-file memo and the transitions cache merged; load average 30, so only the stage sizes mean anything): the same return leg's frame copy took 36 ms (6 frames read), `verify` 0.3 ms, the temple leg's whole worker 2.1 s, while the main map's `read.strict` still took 7.6 s with 2,459 of 2,466 visual records served and 482 MiB allocated, so the strict build's cost is mostly not ART work; that is the follow-up to profile. The first load of a process is unchanged (nothing is resident), the
+temple's first visit read 76 of 242 frames (the main map's frames were in the store).
+
+**Relation to residency (K1).** This is art residency in the loader, not the sector cache of mobile objects ([residency](../architecture/residency.md)):
+the two share no state, and the object residency's fold and heartbeat rules are untouched.
 
 ## Resource contract: bounds, reservations, observations
 

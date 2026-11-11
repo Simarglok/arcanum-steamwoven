@@ -114,6 +114,8 @@ public partial class TerrainViewerApp : Node
         _arguments = _launchArguments = arguments;
         // ARC-DEV-059: the mode this start resolved, the start line `./arcanum run` waits for.
         GD.Print($"ARC-DEV-059 viewer start mode={ModeName(arguments.Mode)} map={arguments.AreaMapName ?? "-"} main-menu={arguments.MainMenu} smoke={_nativeSmoke}");
+        // ARC-DEV-372: the viewer's readers share one index of the game folder per run (a self-test has no game folder and reads none).
+        Arcanum.Data.Content.ContentStack.EnableSharing(!SelfTestBootstrap);
         // ARC-DEV-350: the game settings come first, the HD pack source is one of them.
         ConfigureGameSettings();
         ConfigureVisualProfile();
@@ -231,6 +233,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("critter-light") == true) await RunAreaCritterLightSmokeAsync();
                                 // ARC-DEV-362 (technology audit T-a): only when named, degrees bought on the sheet, a Herbology heal and a Gun Smithy gun assembled, used and loaded again (--hero, best on the map "crash site cave").
                                 if (only?.Contains("tech-craft") == true) await RunAreaTechCraftSmokeAsync();
+                                // ARC-DEV-365 (technology audit T-g): only when named, the item cursor from the use icon, a press on a tile (goal 41) and on an NPC (goal 39) with a trap device (--hero, a map with a living NPC).
+                                if (only?.Contains("item-aim") == true) await RunAreaItemAimSmokeAsync();
                                 // ARC-DEV-367 (O10): only when named, the timing probe's tables: the startup marks, six opens of each window, a map change out and back (--hero, a sector with a map exit).
                                 if (only?.Contains("perf") == true) await RunAreaPerfSmokeAsync();
                                 // ARC-DEV-367 (O10): only when named, the startup marks to the main menu's first frame and a new game from it (--main-menu).
@@ -239,6 +243,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("spirit-talk") == true) await RunAreaSpiritTalkSmokeAsync(result);
                                 // ARC-DEV-347 (E1-a): only when named, a scenery and an eye-candy object the session creates by prototype are drawn, picked or not, resident, saved and destroyed (--hero, a map window).
                                 if (only?.Contains("created-scenery") == true) await RunAreaCreatedSceneryStageAsync();
+                                // ARC-DEV-370 (E1-c2): only when named, a critter the session creates by prototype is drawn, picked, moved by the AI's movers with a walk frame and gone once destroyed (--hero, a map window with the inventory).
+                                if (only?.Contains("created-critter") == true) await RunAreaCreatedCritterStageAsync();
                                 // ARC-DEV-352 (E1-b): only when named, Fireflash's flash on an empty tile and none on an occupied one; Wall of Fire's pieces, their burn and their END (--hero, a map window).
                                 if (only?.Contains("summon-flash") == true) await RunAreaSummonSmokeAsync(SummonFlashSpell);
                                 if (only?.Contains("summon-wall") == true) await RunAreaSummonSmokeAsync(SummonWallSpell);
@@ -1059,7 +1065,7 @@ public partial class TerrainViewerApp : Node
             // ARC-DEV-204 (B16): the change-of-place screen moves on the frame's real time, a map load's too; a hero change that waited
             // for the black screen runs now.
             TickTransitionScreen(delta * 1000);
-            try { TickAreaClock(); TickLightAnimation(); TickCarriedLight(); SyncHeroBody(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaWorldMap(); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncInterfaceHd(); SyncGameBar(); RefreshHeroGauges(); TickFloaters(); }
+            try { TickAreaClock(); TickLightAnimation(); TickCarriedLight(); SyncHeroBody(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaWorldMap(); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncInterfaceHd(); TickWindowArtWarm(); SyncGameBar(); RefreshHeroGauges(); TickFloaters(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");
@@ -1224,6 +1230,7 @@ public partial class TerrainViewerApp : Node
         if (_exiting) return;
         _exiting = true;
         _walkPlanCancellation?.Cancel(); // ARC-WORLD-042: the walk smoke's background route plan
+        HdOptimizedStore.Stop(); // ARC-DEV-376: the background texture conversion must not be inside an engine call at shutdown
         _installCancel?.Cancel(); // ARC-DEV-074: closing the window stops a running innoextract (it would write on after the app)
         DropSectorChart(); // ARC-DEV-118: its task may be reading a sector, and its fallback port holds the game folder's stack open
         ExitWorld();

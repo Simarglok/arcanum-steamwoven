@@ -4,6 +4,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Skills;
+using Arcanum.Simulation;
 
 namespace Arcanum.World;
 
@@ -55,7 +56,7 @@ public static class AreaSkillsPage
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready)
             return new(found.Status == AreaContentRootStatus.MountFailed ? AreaSkillTextsStatus.MountFailed : AreaSkillTextsStatus.ModuleOutsideGameRoot, null, found.Detail);
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return new(AreaSkillTextsStatus.StackFailed, null, opened.Status.ToString());
         using var stack = opened.Stack!;
         var loaded = SkillTexts.Load(stack);
@@ -84,6 +85,7 @@ public static class AreaSkillsPage
     /// ARC-UI-088: the page of any critter's skills (<paramref name="skills"/>: the hero's, or an NPC's from its sheet);
     /// <paramref name="floor"/> is the editor's snapshot (null: no editor, the page is read-only).
     /// </summary>
+    [OriginalFunction(0x55BD10, OriginalFunctionScope.Partial)]
     public static AreaSkillsPageView BuildFor(SessionSkills skills, SkillTexts? texts, MesTextProfile profile, int unspentPoints, AdvancementSheet? floor)
     {
         ArgumentNullException.ThrowIfNull(skills);

@@ -1,6 +1,7 @@
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation;
 
 namespace Arcanum.World;
 
@@ -71,6 +72,8 @@ public static class AreaCharacterSheet
     }
 
     /// <summary>The hero's sheet, or the refusal.</summary>
+    [OriginalFunction(0x55A240, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x55B1B0, OriginalFunctionScope.Partial)]
     public static AreaCharacterSheetBuild Build(GameSessionOwner session)
     {
         var refusal = Refusal(session);
@@ -102,6 +105,7 @@ public static class AreaCharacterSheet
     /// <summary>The original's colour rule (0x55B2A0): the base value adjusted by the effects that
     /// are not innate (0x4EA930, the aggregation of ledger EF6 without race, background, class
     /// and gender effects) compared with the base value.</summary>
+    [OriginalFunction(0x55B2A0, OriginalFunctionScope.Partial)]
     internal static AreaSheetMark Mark(CharacterStatsSnapshot stats, CharacterStat stat)
     {
         var value = stats.GetBase(stat);

@@ -8,7 +8,7 @@ using static Arcanum.Session.Tests.SessionSpellRecordsTests;
 namespace Arcanum.Session.Tests;
 
 // ARC-DEV-358 (MA-1, XR5: 0x454A10 and 0x455100 re-read): the ObjFlag component takes every bit of the spell flags, the object flags and the critter flags on a critter, with the side effects
-// the original has (invisible, shrunk, water walking, stoned, don't-draw), and leaves the social and AI flags (MA-4) not ready. Entities and values are invented.
+// the original has (invisible, shrunk, water walking, stoned, don't-draw), and (MA-4, ARC-MAGIC-035) the social and AI flags need the social host. Entities and values are invented.
 [TestClass]
 public sealed class SessionSpellCasterFlagTests
 {
@@ -217,10 +217,10 @@ public sealed class SessionSpellCasterFlagTests
     }
 
     [TestMethod]
-    public void The_social_and_AI_flags_the_original_gives_a_function_stay_not_ready_and_write_nothing()
+    public void The_flags_that_need_the_AI_host_or_a_field_this_host_lacks_stay_not_ready_and_write_nothing()
     {
-        // Charmed, mind controlled (MA-4); undead, fleeing, blinded (MA-4); the portal flags (MA-6) have no field of this host.
-        foreach (var (field, flag) in new (int, uint)[] { (20, 0x800000), (20, 0x8000000), (218, 0x4), (218, 0x10), (218, 0x80), (46, 0x1) })
+        // Charmed, mind controlled and fleeing need the social host on an NPC (MA-4, ARC-MAGIC-035: SessionSpellCasterSocialTests); the portal flags (MA-6) have no field of this host.
+        foreach (var (field, flag) in new (int, uint)[] { (20, 0x800000), (20, 0x8000000), (218, 0x10), (46, 0x1) })
         {
             var record = Flag(field, flag);
             var (owner, caster) = Session(record);

@@ -40,8 +40,24 @@ public static class AreaWorldMapArtLayout
     public static readonly (int X, int Y, int Width, int Height) View = (150, 11, 501, 365);
     public const int TileSize = 250, PictureSize = 2000, TileColumns = 8, TileRows = 8;
 
+    /// <summary>ARC-UI-133 (WM36, WM140): the PC lens in the window's top left, the rectangle the view-window mode registers (0x550DA0, the struct built at
+    /// 0x561376: the screen rectangle (25, 65, 89, 89) at 0x5C9AB8, y 24 in the window once the init (0x55F8D0) has taken the window's 41 rows off, the
+    /// hole of the background art that ARC-UI-126 measured, x 25 up to 114 and y 24 up to 113, the far ends out). A left release inside it closes the window.</summary>
+    public static readonly (int X, int Y, int Side) Lens = (25, 24, AreaInventoryHole.Side);
+
+    /// <summary>The lens's point test (0x551000 over the window's point): left and top edges in, right and bottom out; a square test, the round art is not
+    /// consulted.</summary>
+    public static bool LensContains(double x, double y) => x >= Lens.X && x < Lens.X + Lens.Side && y >= Lens.Y && y < Lens.Y + Lens.Side;
+
     /// <summary>Every interface art the look needs.</summary>
     public static IReadOnlyList<int> ArtNumbers { get; } = [BackgroundArt, ZoomArt, WholeArt, TravelArt, CompassArt, PartyArt, AreaArt, WaypointArt, NewAreaArt, CoverArt, FontArt, NoteArt];
+
+    /// <summary>ARC-UI-134 (WM140, WM141): the lens's art, 198 <c>PCWinCvr</c>, drawn over the lens's square. It is no condition for the window: the lens is drawn when
+    /// the art reads (the logbook's lens does the same, LB23).</summary>
+    public const int LensArt = 198;
+
+    /// <summary>Every art number the window reads: <see cref="ArtNumbers"/> and the lens's art.</summary>
+    public static IReadOnlyList<int> LoadedArtNumbers { get; } = [.. ArtNumbers, LensArt];
 
     /// <summary>A button's art and its top-left in the window (WM9).</summary>
     public static (int Art, int X, int Y) Button(AreaWorldMapArtButton button) => button switch
@@ -309,10 +325,10 @@ public sealed record AreaWorldMapArtContent(IReadOnlyDictionary<int, AreaInterfa
         ArgumentNullException.ThrowIfNull(modulePath);
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready) return Empty($"not read ({found.Status} {found.Detail})");
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return Empty($"not read (content stack {opened.Status})");
         using var stack = opened.Stack!;
-        var art = AreaInterfaceArt.Load(stack, AreaWorldMapArtLayout.ArtNumbers, new AreaInterfaceArtLimits(MaxFrames: 256));
+        var art = AreaInterfaceArt.Load(stack, AreaWorldMapArtLayout.LoadedArtNumbers, new AreaInterfaceArtLimits(MaxFrames: 256));
         var failed = art.Values.Where(load => load.Status != AreaInterfaceArtStatus.Ready).Select(load => $"{load.Number} {load.Status} {load.Detail}").ToList();
         var tiles = ReadTiles(stack, out var tileDetail, out var zoomed, out var offsets);
         var texts = ReadTexts(stack);

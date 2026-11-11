@@ -84,7 +84,7 @@ public sealed record AreaShopMap(string Name, int RuntimeMap, CellCoord Start, A
         {
             var found = AreaContentRoot.Discover(launch.ModulePath);
             if (found.Status != AreaContentRootStatus.Ready) return new(AreaShopMapStatus.Failed, null, "the module's content did not mount: " + found.Detail);
-            var opened = ContentStack.Open(found.Plan!);
+            var opened = ContentStack.OpenShared(found.Plan!);
             if (opened.Status != ContentStackStatus.Ready) return new(AreaShopMapStatus.Failed, null, "the module's content did not open: " + opened.Status);
             using var stack = opened.Stack!;
             var list = MapList.Read(stack);
