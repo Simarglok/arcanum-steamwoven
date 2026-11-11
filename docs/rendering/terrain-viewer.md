@@ -1445,6 +1445,16 @@ self-test interface HD switch PASS` (a synthetic 4× pack: Legacy size always, L
 draw of a white part of a half-black frame stays white within the edge bleed measured in that synthetic probe) and
 the options smoke's HD line.
 
+**Bitmap-font text (ARC-DEV-361).** `AreaArtFontFace` (the one source of every art-font glyph texture, drawn by `AreaArtTextDraw`) draws a glyph from
+its HD coverage frame when HD interface is on, the active pack holds an `interface` entry for that glyph's frame (a traced 4× coverage frame, `masked`
+entry, [format](../formats/hd-pack.md#interface-art-arc-dev-242)) and the blend is **Coverage**: the HD pixels go through the same layer maths as the
+Legacy ones (`AreaArtTextRules.LayerPixels`, cover as (w, w, w, w) on the premultiplied canvas), are built with mipmaps and drawn through their own
+`CanvasTexture` (trilinear, as ARC-UI-112) into the glyph's **Legacy-size** rectangle at the same integer position, so the layout, the integer
+advances, the colour and the blend are the original's and only the glyph edge differs. A glyph without an entry, a frame without a key, the Additive and
+Multiply blends and the switch off or no pack draw the Legacy frame exactly as before; the decoded HD glyphs are dropped when the pack or the switch
+changes. Check: `ARC-DEV-361 self-test HD font glyphs PASS` (synthetic 6 × 5 glyph: HD only with pack and switch on, never for another blend or a
+glyph without an entry, 254 against 199 on a black canvas at 1:1; the pixel checks need a window).
+
 - **Toggle.** `H` (no modifier; Cmd+H stays the system's) or the palette action **Visual Legacy/HD
   (H)** requests the other profile. `H` acts on a fresh press while the world owns input; under the
   palette or UI focus it is ignored and the HUD says so, and an open dialog or inventory window owns
@@ -1753,7 +1763,7 @@ at the floor, which is the new character's start.
 ### Character sheet original look (ARC-UI-075)
 
 With the player's game folder (`--game-root`, the arts of [CHW1–CHW9](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)
-read) the sheet's main page is the original's window: art 22 `char_maint` (800 × 400) at the screen's whole factor, standing on the bottom strip (`AreaGameBarPanel.DockedWindowTop`, ARC-UI-127; in the original's 800 × 600 that is also directly under the top strip, in a larger window the free height lies above the sheet, not as a gap above the HUD),
+read) the sheet's main page is the original's window: art 22 `char_maint` (800 × 400) between the strips (`AreaGameBarPanel.FittedWindow`, ARC-UI-132: with the HD pack the whole free height at the exact, fractional scale, aspect ratio kept, side margins at 16:9; without it the largest whole scale that fits), standing on the bottom strip (`AreaGameBarPanel.DockedWindowTop`, ARC-UI-127; in the original's 800 × 600 that is also directly under the top strip, in a larger window the free height lies above the sheet, not as a gap above the HUD),
 the hero's portrait in its slot (141, 21), every number in the original's fonts and colours (`Core/AreaCharacterSheetArt.cs`,
 `AreaCharacterSheetArtLayout.Texts`), the alignment gauge (art 254, frame by hot point) and the aptitude marker (art 255), the ten + / − art
 buttons (art 24 / 23: the knobs at either end of each number's oval, which is part of art 22) and the four tabs (arts 34, 35, 36, 568). Texts come

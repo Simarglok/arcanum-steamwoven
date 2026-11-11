@@ -53,7 +53,9 @@ internal static class Program
         HdInterfaceArt? Art(string name)
         {
             if (arts.TryGetValue(name, out var cached)) return cached;
-            var load = AreaInterfaceArt.LoadNamed(stack, name);
+            // ARC-DEV-361: a bitmap font has 225 frames, more than the default limit of 32 per file.
+            var load = AreaInterfaceArt.LoadNamed(stack, name, new AreaInterfaceArtLimits(MaxFrames: 256));
+            if (load.Status != AreaInterfaceArtStatus.Ready || load.Identity is null) stderr.WriteLine($"hd-interface-import: art {name} not read: {load.Status} {load.Detail}");
             return arts[name] = load.Status == AreaInterfaceArtStatus.Ready && load.Identity is { } identity
                 ? new HdInterfaceArt(load.Name ?? name, identity, [.. load.Frames.Select(f => new HdLegacyRaster(f.Width, f.Height, f.Rgba))])
                 : null;

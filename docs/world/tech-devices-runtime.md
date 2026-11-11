@@ -1,6 +1,6 @@
 # Tech devices runtime
 
-Status: **Bounded rules (Data, Simulation) and a session query; no host runs a device yet.** Work item ARC-TECHNOLOGY-008,
+Status: **Bounded rules (Data, Simulation) and a session query; a device's spells run through the item trigger executor (ARC-MAGIC-020 to ARC-MAGIC-025, `GameSessionItemTriggers`); trap devices and the `TechDeviceCatalogue` consumer are not done.** Work item ARC-TECHNOLOGY-008,
 2026-10-21, the device part of slice TECH-6 of the [technology research](../research/technology-evidence.md#proposed-implementation-slices-project-policy-not-accepted)
 (the cell part is [ARC-TECHNOLOGY-007](charge-cell-runtime.md)). Which technology items and records reach the magic engine and
 what each pays, that the engine's MAINTAIN charges a maintained technology record through the charge-cell source, and how a
@@ -86,6 +86,9 @@ IT1–IT10; record 168's three armours start their maintained run on the wear).
 
 The background refusals of DV6 are implemented by ARC-WORLD-069 ([backgrounds](equipment-runtime.md#backgrounds-arc-world-069)).
 
-- Running a device's spells: the item trigger executor (DV3), the use's spell path, item spell charges spent by the payment's
-  item branch in session state, and the lift of the equipment's refusal (the shared item trigger slice).
+- Delivered since this contract by the shared item trigger slice ([item spell triggers](item-spell-triggers.md), ARC-MAGIC-020 to
+  ARC-MAGIC-025): the item trigger executor (DV3), the use's spell path, the item's spell charges kept in session state and the lift
+  of the equipment's refusal; the runtime path is `SessionItemTriggers`, not the catalogue.
+- A consumer of `TechDeviceCatalogue` (no code in `src` reads it; the trigger path reads the item's own spell fields).
+- The trap-device path (TP1–TP8, see above).
 - The ChargeNBranch components (the end-to-end MAINTAIN over game time is done, ARC-MAGIC-010, #369).

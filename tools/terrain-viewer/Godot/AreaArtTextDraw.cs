@@ -1,3 +1,4 @@
+using Arcanum.Data.Hd;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
@@ -5,11 +6,18 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 /// <summary>ARC-UI-070: an art font ready to draw: its layout (<see cref="AreaArtFont"/>, MW4) and its glyph frames, whose textures for
-/// each blend (<see cref="AreaArtTextRules.LayerPixels"/>) are made on first use.</summary>
+/// each blend (<see cref="AreaArtTextRules.LayerPixels"/>) are made on first use.
+/// <para>ARC-DEV-361: with the HD interface on and an active pack that holds a traced coverage frame for a glyph (a 4× entry of the font's ART,
+/// see docs/formats/hd-pack.md), the <see cref="AreaArtTextBlend.Coverage"/> texture is that frame, drawn into the same Legacy-size
+/// rectangle through its own <see cref="CanvasTexture"/> with trilinear mip sampling (as ARC-UI-112 does for interface frames), so
+/// the layout, the advances and the blend are the original's and only the glyph's edge is finer. A glyph without an entry, every other blend and
+/// everything with the switch off or no pack draw the Legacy frame as before.</para></summary>
 public sealed class AreaArtFontFace
 {
     private readonly IReadOnlyList<AreaInterfaceFrame> _frames;
     private readonly Dictionary<(int Frame, AreaArtTextBlend Blend), Texture2D?> _textures = [];
+    private readonly Dictionary<int, Texture2D?> _hdTextures = [];
+    private HdPack? _hdFor;
 
     public AreaArtFontFace(IReadOnlyList<AreaInterfaceFrame> frames)
     {
@@ -23,12 +31,40 @@ public sealed class AreaArtFontFace
     /// <summary>A glyph frame's texture for <paramref name="blend"/>; null for an empty frame.</summary>
     public Texture2D? Texture(int frame, AreaArtTextBlend blend)
     {
+        if (blend == AreaArtTextBlend.Coverage && HdTexture(frame) is { } hd) return hd;
         if (_textures.TryGetValue((frame, blend), out var known)) return known;
         var art = _frames[frame];
         var texture = art.Width > 0 && art.Height > 0
             ? ImageTexture.CreateFromImage(Image.CreateFromData(art.Width, art.Height, false, Image.Format.Rgba8, AreaArtTextRules.LayerPixels(art.Rgba, blend)))
             : null;
         _textures[(frame, blend)] = texture;
+        return texture;
+    }
+
+    /// <summary>True when <paramref name="frame"/> draws its HD coverage frame now (the switch is on and the pack holds a valid entry).</summary>
+    public bool IsHd(int frame) => HdTexture(frame) is not null;
+
+    // The glyph's HD frame as a premultiplied coverage layer (the HD pixels are grey with alpha 255 on ink: LayerPixels gives (w, w, w, w)),
+    // decoded once per pack and frame; null while Legacy draws. Dropped when the pack or the switch changes.
+    private Texture2D? HdTexture(int frame)
+    {
+        if (!InterfaceHd.Enabled || InterfaceHd.Pack is not { } pack)
+        {
+            if (_hdFor is not null) { _hdFor = null; _hdTextures.Clear(); }
+            return null;
+        }
+        if (!ReferenceEquals(_hdFor, pack)) { _hdFor = pack; _hdTextures.Clear(); }
+        if (_hdTextures.TryGetValue(frame, out var known)) return known;
+        Texture2D? texture = null;
+        var art = _frames[frame];
+        if (art.Hd is { } query && art.Width > 0 && art.Height > 0
+            && pack.ResolveSprite(query, art.Rgba) is { Status: HdFrameStatus.Hd, Rgba: { } rgba } result)
+        {
+            using var image = Image.CreateFromData(result.Width, result.Height, false, Image.Format.Rgba8, AreaArtTextRules.LayerPixels(rgba, AreaArtTextBlend.Coverage));
+            image.GenerateMipmaps();
+            texture = new CanvasTexture { DiffuseTexture = ImageTexture.CreateFromImage(image), TextureFilter = CanvasItem.TextureFilterEnum.LinearWithMipmaps };
+        }
+        _hdTextures[frame] = texture;
         return texture;
     }
 }

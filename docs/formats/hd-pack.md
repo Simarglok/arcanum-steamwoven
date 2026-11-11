@@ -370,6 +370,16 @@ The plan (`HdInterfacePlan`, kind `arcanum-steamwoven-hd-interface-plan`) lists 
 | `sheet` | a redraw of a sheet of Legacy frames side by side (`columns` for a grid; `pad` texels of bled border, grey between; any scale, aspect kept or free space around) | fit the whole sheet then each frame (NCC of the blurred luma, coarse to fine, scale and offset per axis), translation refinement against the Legacy silhouette, bicubic resample to the scale, lock (unless `"lock": false`), smooth Legacy alpha |
 | `exact` | an image that already covers exactly one frame (a stitched strip) | resample, lock (unless `"lock": false`), smooth Legacy alpha |
 | `ready` | one image per tile, already registered at exactly `scale·w × scale·h` | lock (unless `"lock": false`), smooth Legacy alpha |
+| `ready` with `"coverage": true` | one coverage image per tile (ARC-DEV-361), grey, exactly `scale·w × scale·h` | none: the image is taken as it is (no lock, no Legacy alpha): red = green = blue = the image's grey, alpha 255 where the grey is above 0 and 0 elsewhere; refused when a texel is not grey or when ink lies farther than one Legacy texel from the Legacy glyph (the `masked` rule, checked at build); the frame is written with `"alpha": "masked"` |
+
+**Font glyph frames (ARC-DEV-361).** The glyphs of a bitmap font (an interface ART of 225 frames, frame *n* is character *n* + 31) are ordinary
+`interface` sprite entries keyed like any interface frame, with `"alpha": "masked"` and a coverage image as above: the HD frame of a glyph holds its
+coverage in red, green and blue and alpha 255 on every ink texel, 0 elsewhere (a partial alpha would be scaled twice on the premultiplied
+font canvas). No new entry field, slice kind or alpha mode exists; an older reader that knows `masked` binds them, one that does not refuses the pack, as
+for ARC-UI-113. The viewer takes such an entry for a glyph of the **Coverage** text blend only ([viewer](../rendering/terrain-viewer.md)); a pack
+with no font entry draws the Legacy text, and a glyph the pack leaves out (control-character placeholders, a frame whose trace vanished,
+the coloured frame 0) draws its Legacy frame. The frames come from `tools/hd_font` ([HD font tracing](../workflow/hd-font.md)); the plan
+for the importer is written by `hd_pack.py fonts-plan`, never by hand ([workflow](../workflow/hd-pack.md#traced-fonts-in-the-pack-arc-dev-361)).
 
 **Alpha mask (ARC-UI-113).** Some original overlay buttons (`char_minus`, `char_plus`, `oldchar_*`, `char_htft*`, slider buttons) carry
 pieces of the plate under them (a copper rim, black corners). The HD plate is redrawn separately, so the Legacy alpha of such a button

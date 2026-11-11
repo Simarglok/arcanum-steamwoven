@@ -494,6 +494,17 @@ four locked packages (numpy, scipy, Pillow and the GPLv2+ potracer, wheel hashes
 python3 -B tools/hd_font/hd_font.py self-test    # task check: synthetic fonts drawn by the test, no game file; a failed install is a failed check
 ```
 
+## Function census
+
+ARC-RES-106, [`tools/research/exe_census.py`](../../tools/research/exe_census.py): lists the function starts of the pinned
+`Arcanum.exe` into [`docs/verification/census.csv`](../verification/README.md#function-census) with `llvm-objdump` (Xcode's
+copy, or `LLVM_OBJDUMP`); no Ghidra, no extra install, about two seconds, the disassembly is not stored.
+
+```sh
+python3 -B tools/research/exe_census.py --self-test
+python3 -B tools/research/exe_census.py --exe "$DAT_ROOT/Arcanum.exe"
+```
+
 ## Function oracle
 
 ARC-DEV-007, [`tools/original-oracle`](../../tools/original-oracle/README.md), method in the

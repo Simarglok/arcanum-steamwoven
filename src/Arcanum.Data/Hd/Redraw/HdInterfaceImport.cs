@@ -22,9 +22,12 @@ public sealed record HdInterfaceFrameRef(string Art, int Frame);
 /// Legacy alpha are applied. <paramref name="Image"/> then names the first of them; <paramref name="ReadyImages"/> holds all.</param>
 /// <param name="Masks">ARC-UI-113: the frames (tiles and derived frames, as the plan names them) whose alpha is the owner's mask and not the
 /// Legacy alpha (<c>"alphaMask"</c> or <c>"ellipse"</c> on the tile). A derived frame without its own mask takes its base tile's.</param>
+/// <param name="Coverage">ARC-DEV-361: a <c>ready</c> item whose images are coverage masks (a traced bitmap font's glyphs, red = green = blue
+/// = coverage): they are taken exactly as they are (no lock, no Legacy alpha), ink is every texel with coverage, and the frame is written
+/// with the entry-level <c>"alpha":"masked"</c> after it passed that rule against the Legacy frame.</param>
 public sealed record HdInterfaceItem(string Image, bool Exact, int Pad, IReadOnlyList<HdInterfaceFrameRef> Tiles, double Coarse,
     IReadOnlyList<HdDerivedFrame> Derived, int Columns = 0, IReadOnlyList<string>? ReadyImages = null, bool Lock = true,
-    IReadOnlyDictionary<HdInterfaceFrameRef, HdAlphaMaskSpec>? Masks = null)
+    IReadOnlyDictionary<HdInterfaceFrameRef, HdAlphaMaskSpec>? Masks = null, bool Coverage = false)
 {
     public bool Ready => ReadyImages is not null;
 }
@@ -38,8 +41,9 @@ public sealed record HdInterfacePlan(string PackId, int Scale, IReadOnlyList<HdI
     public const string Kind = "arcanum-steamwoven-hd-interface-plan";
 
     /// <summary>Parses a plan. <c>{"schema":1,"kind":…,"packId":"…","scale":4,"items":[{"image":"…","mode":"sheet"|"exact","pad":8,
-    /// "coarse":0,"columns":0,"lock":true,"tiles":[{"art":"X.ART","frame":0,"alphaMask":"mask.png"|"ellipse":[cx,cy,rx,ry]}],"derived":[{"art":"X.ART","frame":1,"from":0}]}]}</c>.
-    /// <c>alphaMask</c> and <c>ellipse</c> (ARC-UI-113, on a tile or a derived frame) replace the frame's Legacy alpha; see <see cref="HdAlphaMaskSpec"/>. Throws
+    /// "coarse":0,"columns":0,"lock":true,"coverage":false,"tiles":[{"art":"X.ART","frame":0,"alphaMask":"mask.png"|"ellipse":[cx,cy,rx,ry]}],"derived":[{"art":"X.ART","frame":1,"from":0}]}]}</c>.
+    /// <c>alphaMask</c> and <c>ellipse</c> (ARC-UI-113, on a tile or a derived frame) replace the frame's Legacy alpha; see <see cref="HdAlphaMaskSpec"/>.
+    /// <c>"coverage": true</c> (ARC-DEV-361, <c>ready</c> items only) takes the images as coverage masks, see <see cref="HdInterfaceItem.Coverage"/>. Throws
     /// <see cref="FormatException"/> on a malformed plan (a tool input, not a runtime boundary).</summary>
     public static HdInterfacePlan Parse(ReadOnlySpan<byte> json)
     {
@@ -68,6 +72,9 @@ public sealed record HdInterfacePlan(string PackId, int Scale, IReadOnlyList<HdI
                 var masks = new Dictionary<HdInterfaceFrameRef, HdAlphaMaskSpec>();
                 foreach (var tileNode in item["tiles"]!.AsArray())
                     if (Mask(tileNode) is { } tileMask && !masks.TryAdd(Ref(tileNode), tileMask)) throw new FormatException("item.tiles names a frame twice");
+                var coverage = (bool?)item["coverage"] ?? false;
+                if (coverage && (mode != "ready" || masks.Count > 0 || (bool?)item["lock"] == true))
+                    throw new FormatException("item.coverage applies to ready items without alphaMask, ellipse or lock");
                 var derived = (item["derived"]?.AsArray() ?? []).Select(d =>
                 {
                     var o = d!.AsObject();
@@ -77,7 +84,7 @@ public sealed record HdInterfacePlan(string PackId, int Scale, IReadOnlyList<HdI
                     if (Mask(derivedNode) is { } derivedMask && !masks.TryAdd(Ref(derivedNode), derivedMask)) throw new FormatException("a derived frame is also a tile or named twice");
                 foreach (var d in derived)
                     if (!tiles.Contains(d.From)) throw new FormatException($"derived frame {d.Frame.Art}:{d.Frame.Frame} takes its base from a tile that is not in the item");
-                items.Add(new(image, mode == "exact", pad, tiles, (double?)item["coarse"] ?? 0, derived, columns, readyImages, (bool?)item["lock"] ?? true, masks.Count == 0 ? null : masks));
+                items.Add(new(image, mode == "exact", pad, tiles, (double?)item["coarse"] ?? 0, derived, columns, readyImages, !coverage && ((bool?)item["lock"] ?? true), masks.Count == 0 ? null : masks, coverage));
             }
             if (items.Count == 0) throw new FormatException("plan.items is empty");
             return new(packId, scale, items);
@@ -209,6 +216,13 @@ public static class HdInterfaceImport
                     masked = HdAlphaMasks.Resolve(spec, $"{found.FileName} frame {tile.Frame}", legacy, plan.Scale, image, out var problem);
                     if (masked is null) { problems.Add(problem!); continue; }
                 }
+                if (item.Coverage)
+                {
+                    if (CoverageFrame(picture, legacy, plan.Scale, $"{found.FileName} frame {tile.Frame} ({path})", out var coverageProblem) is not { } glyph)
+                    { problems.Add(coverageProblem!); continue; }
+                    frames.Add(new(found, tile.Frame, legacy.Width, legacy.Height, glyph, new(1, 1, 0, 0, 1), Masked: true));
+                    continue;
+                }
                 var rgb = picture.Rgb;
                 if (item.Lock)
                 {
@@ -221,6 +235,27 @@ public static class HdInterfaceImport
                     masked is null ? EdgeAlpha(rgb, legacy, plan.Scale) : HdAlphaMasks.Compose(rgb, masked, legacy, plan.Scale), new(1, 1, 0, 0, 1), masked is not null));
             }
         }
+    }
+
+    /// <summary>ARC-DEV-361: a coverage mask as an HD frame: the image's grey as red, green and blue, alpha 255 where there is coverage and 0
+    /// elsewhere (so a drawn glyph never has a partial alpha, which the premultiplied font canvas would scale twice). The image must be grey, and the
+    /// frame must pass the <see cref="HdAlphaMode.Masked"/> rule against <paramref name="legacy"/> (no ink farther than one Legacy texel from
+    /// the Legacy glyph), the rule the pack then applies to the entry.</summary>
+    internal static byte[]? CoverageFrame(HdRgbImage image, HdLegacyRaster legacy, int scale, string label, out string? problem)
+    {
+        problem = null;
+        var rgba = new byte[image.Width * image.Height * 4];
+        for (var i = 0; i < image.Width * image.Height; i++)
+        {
+            float r = image.Rgb[i * 3], g = image.Rgb[i * 3 + 1], b = image.Rgb[i * 3 + 2];
+            if (r != g || g != b) { problem = $"{label} is not a grey coverage mask"; return null; }
+            var level = (byte)Math.Clamp((int)Math.Round(r), 0, 255);
+            rgba[i * 4] = rgba[i * 4 + 1] = rgba[i * 4 + 2] = level;
+            rgba[i * 4 + 3] = level > 0 ? (byte)255 : (byte)0;
+        }
+        if (!HdAlphaCheck.Matches(rgba, legacy.Rgba, legacy.Width, legacy.Height, scale, new(HdAlphaMode.Masked, HdRecipeReader.MinSoftIoUPermille)))
+        { problem = $"{label} has ink farther than one Legacy texel from the Legacy glyph"; return null; }
+        return rgba;
     }
 
     // ARC-UI-113: the frame's own mask, else (a derived frame) its base tile's.
