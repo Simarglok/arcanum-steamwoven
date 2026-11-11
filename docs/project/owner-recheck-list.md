@@ -660,3 +660,21 @@ Known differences (documented, not bugs):
 
 - The hour of the menu's player is fixed (12) because the menu has no game clock; the installed pair plays at every hour, so no difference is expected.
 - A transition song in the menu's pair would play without the restore bookkeeping (the installed pair has none).
+
+## ARC-WORLD-124 — Timed bombs: placing trap devices with a spell (E6-b, 2026-11-11)
+
+The rules are in [placed trap devices](../world/trap-device-runtime.md). Give the hero the timed bomb (item 15154, record 176; or 15193, record 220) and compare in both games. The script
+trap devices (15100, 15120) are the next slice (ARC-WORLD-125) and still answer NOT READY.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Use the bomb from the inventory (Use icon) and click an empty tile a few cells away. | The hero walks next to the tile, the bomb leaves the pack and a marker object stands on the tile; nothing else happens at once. | open |
+| 2 | Wait 88 game seconds (about 11 s of play at the normal speed). | The marker disappears and the explosion goes off on the tile: fire and normal damage to everything within two tiles, a flash, no knockback. | open |
+| 3 | Place the record 176 bomb (15154) with a few people awake within ten tiles that can see the hero, then wait. | They turn on the hero as soon as the bomb is placed (not when it goes off); people who cannot see or hear it, and companions, do not. | open |
+| 4 | Use the bomb on a critter or on a scenery object instead of a tile. | The bomb is spent with no check of the target and there is no marker; the explosion goes off at that object's place after the same 88 s. | open |
+| 5 | Save while the fuse runs, load, and wait. | The marker is still there and the bomb goes off at the same moment. | open |
+
+Known differences (documented, not bugs):
+
+- The line the original shows when the marker is spotted (`mes\trap.mes` line 0) appears in the viewer's status text, not in a message window.
+- The marker is a plain scenery in Steamwoven: it cannot be spotted, disarmed or triggered by a step (the original's marker has no script either).
