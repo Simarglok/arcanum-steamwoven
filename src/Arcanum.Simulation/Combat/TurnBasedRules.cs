@@ -90,6 +90,7 @@ public static class TurnBasedRules
     public const int MaxFatigue = 1_000_000;
 
     /// <summary>Half-width of the square scanned around the PC: <c>max(10, PE / 2 + 5)</c> from its effective perception.</summary>
+    [OriginalFunction(0x4B7300, OriginalFunctionScope.Partial)]
     public static int ScanRadius(int perception)
     {
         CheckStat(perception, nameof(perception));
@@ -145,6 +146,7 @@ public static class TurnBasedRules
     }
 
     /// <summary>An attack's cost from the weapon speed: 1 above 24, 2 above 20, else <c>max(1, 8 − speed / 3)</c>.</summary>
+    [OriginalFunction(0x4B7C30, OriginalFunctionScope.Partial)]
     public static int AttackCost(int weaponSpeed)
     {
         CheckStat(weaponSpeed, nameof(weaponSpeed));
@@ -152,6 +154,7 @@ public static class TurnBasedRules
     }
 
     /// <summary>The estimate of a move: 2 per path step, 1 for a PC that always runs.</summary>
+    [OriginalFunction(0x4B7BA0, OriginalFunctionScope.Partial)]
     public static int MoveCost(int pathSteps, bool alwaysRunningPc)
     {
         if (pathSteps is < 0 or > MaxPathSteps) throw new ArgumentOutOfRangeException(nameof(pathSteps));
@@ -169,6 +172,7 @@ public static class TurnBasedRules
     /// The cost the attack preview checks: the attack cost, plus the move to an adjacent cell when the attacker reaches
     /// only one cell (unarmed or a weapon of range ≤ 1) and the target is farther than one cell.
     /// </summary>
+    [OriginalFunction(0x4B78D0, OriginalFunctionScope.Partial)]
     public static int AttackActionCost(int attackCost, bool reachOne, int distance, int adjacentPathSteps, bool alwaysRunningPc)
     {
         CheckCost(attackCost, nameof(attackCost));
@@ -177,10 +181,12 @@ public static class TurnBasedRules
     }
 
     /// <summary>Using an object: 2, plus the move to an adjacent cell when not on the object's cell.</summary>
+    [OriginalFunction(0x4B79A0, OriginalFunctionScope.Partial)]
     public static int UseObjectActionCost(bool sameCell, int adjacentPathSteps, bool alwaysRunningPc) =>
         UseObjectCost + (sameCell ? 0 : MoveCost(adjacentPathSteps, alwaysRunningPc));
 
     /// <summary>Picking up an item: 1, plus the move to its cell when not on it.</summary>
+    [OriginalFunction(0x4B7A20, OriginalFunctionScope.Partial)]
     public static int PickUpActionCost(bool sameCell, int pathSteps, bool alwaysRunningPc) =>
         PickUpCost + (sameCell ? 0 : MoveCost(pathSteps, alwaysRunningPc));
 
@@ -202,6 +208,7 @@ public static class TurnBasedRules
     /// The preview check of a cost: affordable when the action points cover it, or for the local PC with action points
     /// left and current fatigue above 1 (it would overexert).
     /// </summary>
+    [OriginalFunction(0x4B7790, OriginalFunctionScope.Partial)]
     public static bool CanAfford(int actionPoints, int cost, bool localPc, int currentFatigue)
     {
         CheckActionPoints(actionPoints);
@@ -215,6 +222,7 @@ public static class TurnBasedRules
     /// action points left and current fatigue above 1 overexerts (action points 0, fatigue damage); else the action is
     /// refused (action points 0, the subturn ends).
     /// </summary>
+    [OriginalFunction(0x4B7CD0, OriginalFunctionScope.Partial)]
     public static ActionPointCharge Charge(int actionPoints, int cost, bool localPc, int currentFatigue)
     {
         CheckActionPoints(actionPoints);
