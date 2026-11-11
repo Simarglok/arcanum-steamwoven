@@ -163,7 +163,7 @@ Gain is what the numbers above say it can remove (estimates unless stated); cost
 | O5a | Skip repeated whole-archive SHA-256 passes inside one process when the file identity (size, modification time, first verification) is unchanged. **Done: ARC-DEV-374** (owner option A, 2026-11-11): the first check of a file of 1 MiB or more hashes it in full, later checks reuse the hash while its stamp is unchanged, see [verified-file memo](../world/area-loader.md); measured with `perf`: map plan 1.0–1.3 s to 0.07–0.24 s on a repeat load, `open` 1.3–2.3 s to 0.4–0.5 s, `verify` 0.35–0.86 s to 0.0 s, a repeated map change worker 10 s to 1.3–6.2 s (shared Mac, so the baseline runs were noisier than the after runs; the removed work is the three passes above plus I7) | −1.6–2.2 s of the worker (about 25%) on every load | medium, touches the authentication rule of the load contract (owner decision) |
 | O8 | Saves list: list asynchronously, decode thumbnails lazily | −0.7 s first open (Debug source) | small |
 | O5c | Keep the decoded frame repository and strict snapshot across loads of the same map for window moves, cave return and a cross-map quick load. **Done in part: ARC-DEV-375**, the decoded frames and visual records (not the snapshot) stay resident, see [resident frames and visuals](../world/area-loader.md#resident-frames-and-visuals-across-map-loads-arc-dev-375): the frame copy 1.8 s to 0.5 s and 103 MiB to 2 MiB on a cave return; the strict build's other cost and the snapshot reuse (after O5a) remain | 6–9 s to about 2 s per map change (not reached by the frames alone) | large, touches the residency design |
-| O6 | Split the publication into per-frame slices (after O3 and O4 it is mostly the first-frame upload) | removes the 0.1–0.7 s stall and the 0.48 s frame at a window move | medium |
+| O6 | Split the publication into per-frame slices (after O3 and O4 it is mostly the first-frame upload). **Measured, not built: ARC-DEV-380**, see [O6 measured](#follow-up-o6-measured-arc-dev-380): after O3, O4, O5a and O5b the whole first publication is 0.86 s and the canvas's own share 0.15–0.2 s, so a split would remove at most that | removes the 0.1–0.7 s stall and the 0.48 s frame at a window move | medium |
 | O9 | HD: ship mipmapped or VRAM-compressed textures in the pack and skip the SHA-256 of the Legacy pixels on a warm pack | −0.2–0.6 s per window at first draw | large, pack format change |
 | O11 | Attribute the long frames around quick load and map change (probe in the game, not in a smoke stage) | unknown; decides whether save load has a real stall | small |
 
@@ -217,3 +217,30 @@ run, never into `artifacts/packages`), run it with `-- --native-smoke` and the v
 `./arcanum run --kind window`, with the owner's `visual_profile_v1.json` and `game_settings_v1.json` copied to isolated
 `*_TEST_PATH` files and `ARC_HD_PACK` set for HD (an automated run does not discover packs by itself), and read the
 timestamped lines from the log.
+
+## Follow-up: O6 measured (ARC-DEV-380)
+
+O6 asked to publish the scene to the canvas in per-frame slices. Before building it, the first publication was timed step by step, with laps that stay in the
+code (off unless `ARC_PERF_PROBE=1`, see [timing probe](../workflow/toolchain.md#timing-probe-and-the-perf-stages-arc-dev-367)): `canvas.publish.{chunks,upright,index,view}` and
+`canvas.view.{cull,chunks,upload,hd,items}` (the canvas's own work), `selection.{ambient,walls,roofs,combat,ground,portals,moving,canvas}` (what `PublishWorldSelection`
+does before it hands the scene to the canvas), `ground.{stamp,frames,busted,extra-art,items,blood,created,critters}`, `roofs.{bind,follow,publish}`, `walls.{bind,recalc}` and
+`hero-swap.{upload,profile,plan,select}`. The numbers are from `./arcanum smoke pr --stages perf --sector 1409,1314`, a Debug source run, the first load; the second and third
+columns are the same tree before DEV-372 (a Mac with a load average of 20 or more, several runs, the ranges) and after it was merged (load average about 10, one run).
+
+| Step | Before DEV-372 | After DEV-372, DEV-374, DEV-369 |
+| --- | ---: | ---: |
+| canvas share of the publication (`canvas.publish`, with the first view) | 0.16–0.21 s | 0.15–0.16 s |
+| `ground.extra-art` (the first open of the extra art, 90 MiB) | 1.9 s | 6 ms |
+| `roofs.bind` (tables of the whole map, 17 MiB) | 0.4–1.1 s | 48 ms |
+| `walls.bind` | 0.06 s | 3 ms |
+| `hero-swap.plan` | 0.23–0.35 s | 2 ms |
+| `publish.transitions` | 2.2–2.8 s | 0.33 s |
+| whole `PublishAreaReady` (`publish`) | 7.2–9.3 s | 0.86 s |
+
+Findings. (1) The canvas's own publication was never the stall: the visible set is bounded by the view (the camera is framed before the first publication), so its
+first view (chunk composing, texture upload, item setup) costs 50–75 ms and the canvas's whole share 0.15–0.2 s. The 3–4 s the report first charged to "the first publication to the canvas" sat in `PublishWorldSelection` before the canvas
+(the extra art's content stack open and the roof tables) and in the binders; all of it was the 87.5 MiB per `ContentStack.Open` that O4 removed. (2) Two worker-side
+prefetches of the pure parts that were left (the extra art open, the roof tables) were written, then dropped before any run of them: the steps they would move cost 6 ms and 48 ms on the new tree. (3) What is left on the main thread at start
+is 0.86 s of publication (transitions 0.33 s, the selection 0.27 s, 0.07 s `publish.selection`, the rest small) and about 0.2 s to the first frame, with the menu not yet shown; a window move's
+publication is 74–243 ms. The load worker (7.4 s on the main map, 3.2 s on the way back from a cave) is what is left to attack (O5c, O1). Slicing the remaining 0.86 s across frames would
+need every host in `PublishAreaReady` to tolerate frames running between its steps (input, the world tick, the smoke stages read the half-published scene), for at most that many milliseconds on the main thread at start; it is not built.

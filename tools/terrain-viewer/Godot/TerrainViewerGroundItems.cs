@@ -100,9 +100,13 @@ public partial class TerrainViewerApp
         // The inventory host (its attached seeds), the kit's art and the object targets change without a session revision.
         // ARC-RENDER-041: a pool playing its frames changes its body without a revision, and a pool decays as game time passes
         // (which moves no revision either).
+        // ARC-DEV-380: a computation of the ground bodies from nothing (a map's first, and after a reset) is timed (steps print as ground.NAME).
+        using var lap = PerfProbe.Enabled && _groundStamp is null ? PerfProbe.Lap("ground") : null;
+        lap?.Step("stamp");
         var stamp = (area, session, session.Version.Revision, _inventoryHost, _areaKitArt, ObjectTargets(), _schematicData?.Data, BloodPoolFramesStamp(),
             session.QueryBloodPools(new SessionMapId(CurrentAreaMap)).Count, _createdPrototypeRead is not null);
         if (Equals(stamp, _groundStamp)) return false;
+        lap?.Step("frames");
         var frames = (AreaFrameOverlay)AreaFrames();
         var overlay = _areaOverlay!.Value;
         var bodies = new Dictionary<AreaObjectKey, AreaDrawCommand>();
@@ -116,6 +120,7 @@ public partial class TerrainViewerApp
             if (_groundReported.Add($"{what}:{aid}")) GD.Print($"ARC-RENDER-033 extra-art {what} art=0x{aid:X8} status={load.Status} detail={load.Detail}");
             return null;
         }
+        lap?.Step("busted");
         // A busted scenery or trap: its destroyed ART where its T0 body stood.
         if (ObjectTargets() is { } targets)
             foreach (var key in targets.Busted(session))
@@ -126,6 +131,9 @@ public partial class TerrainViewerApp
                 if (Frame(destroyed, "destroyed") is not { } frame) continue;
                 bodies[key] = AreaScenePlan.Repose(command, row, visual, frame.Key, frame.Frame.Width, frame.Frame.Height, frame.Visual.HotX, frame.Visual.HotY);
             }
+        lap?.Step("extra-art");
+        if (lap is not null) _ = ExtraArt(); // measuring only: the first open is timed apart from the items
+        lap?.Step("items");
         // The items on the ground away from a T0 body.
         var map = _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == area.Snapshot.RuntimeMap);
         var current = session.QueryMapInventory(new SessionMapId(CurrentAreaMap));
@@ -179,10 +187,13 @@ public partial class TerrainViewerApp
                 only[key] = (pile.Entity, pile.Cell, new AreaObjectRecord(key, 0, ContainerType, Arcanum.Simulation.Items.JunkPileRules.Prototype, "", "", "", "",
                     AreaScope.Core, null, pile.Cell.X, pile.Cell.Y, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true));
             }
+        lap?.Step("blood");
         AddBloodPoolBodies(area, bodies, Frame);
+        lap?.Step("created");
         // ARC-DEV-347 (E1-a): the scenery and eye-candy objects the session created, drawn from their prototypes' art; a scenery is picked.
         AddCreatedObjectBodies(area, bodies, only, Frame);
         // ARC-DEV-370 (E1-c2): the critters the session created, drawn from their prototypes' art and picked like map NPCs.
+        lap?.Step("critters");
         AddCreatedCritterBodies(area, frames, bodies, only);
         _groundBodies = bodies; _groundOnly = only;
         // A placed item without a row of this map is named and picked under its own key.

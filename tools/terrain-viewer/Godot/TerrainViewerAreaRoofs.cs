@@ -32,7 +32,11 @@ public partial class TerrainViewerApp
     private void FollowAreaRoofs()
     {
         if (_readyArea is not { } area || _worldActor.Session is not AreaGridSession session || _canvas is null) return;
+        // ARC-DEV-380: the first call of a map is timed (steps print as roofs.NAME).
+        using var lap = !ReferenceEquals(_areaRoofArea, area) && PerfProbe.Enabled ? PerfProbe.Lap("roofs") : null;
+        lap?.Step("bind");
         if (!ReferenceEquals(_areaRoofArea, area)) BindAreaRoofs(area);
+        lap?.Step("follow");
         if (_areaRoofGrid is not { } grid) return;
         var cell = session.Chart.ToWorld(session.State.CommittedCell);
         // A same-map transfer unfills the roof of the tile it leaves, then the move recalculates the new tile (RF8), also
@@ -54,6 +58,7 @@ public partial class TerrainViewerApp
         // ARC-WORLD-037: a companion is covered where it stands now, not on its T0 tile.
         var companions = _areaCompanions?.Companions.Select(c => (c.Key, Cell: session.Chart.ToWorld(c.Grid.State.CommittedCell))).ToArray() ?? [];
         var signature = string.Join(";", companions.Select(c => $"{c.Key.SourceIndex}@{c.Cell.X},{c.Cell.Y}"));
+        lap?.Step("publish");
         if (grid.Revision != _areaRoofRevision || signature != _areaRoofCompanionCells) { _areaRoofCompanionCells = signature; PublishAreaRoofs(area, grid, companions); }
     }
 
