@@ -124,7 +124,7 @@ public sealed partial class SessionSpellCaster
         if (targetObject is not null && target is null) return new(SpellCastAttemptOutcome.Nothing);
         var round = _owner.QueryCombatRound();
         var invocation = new SpellInvocation(spell, facts, item is null ? facts : Facts(item)!, target, SpellLocation.None,
-            spells is null ? null : ItemPower(spells, facts), ParentIsLocalPlayer: caster == Hero,
+            spells is null ? null : ItemPower(spells, facts), TeleportAllowed: TeleportAllowedFor(spell, caster), ParentIsLocalPlayer: caster == Hero,
             TurnBased: round is not null, TurnBasedActor: round is null ? null : round.Actor.Entity ?? Hero);
         var world = InvocationWorld();
         if (!SpellInvocationRules.Check(invocation, record.Run.Invocation, world, _owner.SpellRolls).Allowed)

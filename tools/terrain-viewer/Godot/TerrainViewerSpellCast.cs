@@ -139,6 +139,8 @@ public partial class TerrainViewerApp
         _spellCaster.AiStruck = victim => _aiHost?.Struck(victim);
         // ARC-MAGIC-035 (MA-4): the social and AI flags (charm and mind control's reactions and peace, fear's flight) run through the AI host.
         _spellCaster.Social = new AreaSpellSocial(() => _aiHost);
+        // ARC-MAGIC-038 (MA-5 second half): the teleport types of the Movement component (the anti-teleport test, the area helper) ask the world-map data and the shown map.
+        _spellCaster.Teleport = NewSpellTeleportHost();
         // ARC-DEV-303 (EF9): the Effect component asks the hero's effect tables (effect.mes, the module's gameeffect.mes) for the rule of a number (Entangle's effect 62: speed -5); a rule the session refuses is none.
         _spellCaster.EffectDefinitions = number =>
         {
@@ -885,13 +887,15 @@ public partial class TerrainViewerApp
         var lines = new List<string>();
         if (lead is not null) lines.Add(lead);
         var texts = _spellData?.Data?.Texts;
-        foreach (var entry in entries)
+        // A snapshot: a tile script run by a relocation event may cast and flush the log in turn (ARC-MAGIC-038), and the nested flush owns the entries added meanwhile.
+        foreach (var entry in entries.ToArray())
         {
             GD.Print($"ARC-MAGIC-015 log kind={entry.Kind} run={entry.Run} value={entry.Value} object={entry.Object} detail={entry.Detail}");
             TakeEyeCandyEvent(entry);
             TakeSummonEvent(entry);
             TakeKnockbackEvent(entry);
             TakeMovementEvent(entry);
+            TakeTeleportEvent(entry);
             TakeHoldEvent(entry);
             if (AreaSpellCasting.Line(entry, texts, SpellObjectName) is { } line) lines.Add(line);
         }
