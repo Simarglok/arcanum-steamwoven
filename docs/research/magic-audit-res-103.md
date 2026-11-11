@@ -34,7 +34,7 @@ Requirements (reference only; no coverage row changes status): [FR-MAGIC-006](..
   After each wave the number of working spells is 24, 33, 53, 68 and 80 ([waves](#waves-what-is-parallel-and-what-is-not)).
 - **Whole colleges:** after wave 1 Necromantic (white) works completely; after wave 2 four more (Conveyance, Force, Meta, Temporal); after wave 3 two more (Mental, Morph); after wave 4 the other nine (Air, Earth, Fire,
   Water, Divination, Nature, Necromantic (black), Phantasm, Summoning), which wait on created critters, Identify or trap spotting.
-- **Decisions for the owner** are six (D6 added by MA-2) and sit in a table at the end ([decisions](#decisions-for-the-owner)); only D4 touches a wave 1 slice (the form of MA-0), and wave 1 can start on the others meanwhile.
+- **Decisions for the owner** are six (D6 added by MA-2) and sit in a table at the end ([decisions](#decisions-for-the-owner)); the owner decided all of them on 2026-11-11 (D1 a, D2 a, D3 b, D4 a, D5 a, D6 c).
 
 ## Method and limits
 
@@ -395,7 +395,7 @@ Done on 2026-11-11 ([contract](../world/durable-effects-runtime.md#consumers-of-
 - **The Effect component takes an NPC target** (`SessionSpellCasterEffects.cs`, the one `SessionSpellCaster*` file outside PR #941), so the census lost every NPC `Effect` row.
 - **The magic save does not read the effects (RE2).** The original's save reads the stored magic resistance, so Resist Magick (spell 40) and the magic parts of effects 51, 52, 55, 154 and 155 show on the sheet and roll in no save.
   Steamwoven follows (O9, both modes). **Owner question (new, D6): should Resist Magick work?** (a) as the original: no effect on saves; (b) a bug of the game fixed in Steamwoven only, with an "Original" setting; (c) fixed in both
-  modes. Recommendation (b): a spell that does nothing is a bug of the game a player meets, which the owner's bug rule (2026-10-28, ledger NW4) sends to an "Original" setting. Until decided the code is (a).
+  modes. Recommendation was (b): a spell that does nothing is a bug of the game a player meets, which the owner's bug rule (2026-10-28, ledger NW4) sends to an "Original" setting. **Decided 2026-11-11: (c), fixed in both modes with no "Original" setting.** Until the fix lands the code is (a).
 - **Speed.** The hero's speed already reached the attack pause and the turn-based action points; an NPC's does now. Walking is not speed-driven in the original (MA-R, XR), so nothing was added there.
 - **Left over, by name.** (1) `SessionSpellCaster.Combatant` and its stat getter (`SessionSpellCaster.cs` lines 550 and 1182) read an NPC without its list, so spell damage on an NPC ignores a Shield of Protection or Body spell it holds and a spell's save reads
   its unchanged stats: both are one-line changes (`_owner.WithNpcEffects(npc.Combat)`) for after PR #941 merges, together with the fire half (`FireDamageRules`, burning) the coordinator held back. (2) An NPC's life facts do not read its effect-changed strength, constitution or resistance (its maximum hit points
@@ -404,14 +404,14 @@ Done on 2026-11-11 ([contract](../world/durable-effects-runtime.md#consumers-of-
 
 ## Decisions for the owner
 
-| # | Question | Options | Recommendation |
+| # | Question | Options | Recommendation and decision |
 | --- | --- | --- | --- |
-| D1 | Work by component (flags, effects, summon...) as above and report by college, or finish one college at a time? | (a) component waves; (b) one college at a time, Necromantic (white), then Force, Meta, Conveyance, Temporal; (c) mixed: component waves, but wave 2 ordered so Force, Meta and Conveyance close first | (c): it is the same slices, ordered by what closes a college, so the report stays readable |
-| D2 | While a spell has missing components, does the spell pane keep offering it with the "not ready" line (today), hide it, or refuse the cast before payment? | (a) keep (today); (b) hide spells with an unbuilt component from the pane; (c) refuse before payment | (a): hiding hides progress and (c) changes the cast flow in a way no record describes; the line is already shown |
-| D3 | Teleportation scope: one slice, or split? | (a) one slice (MA-5) with tile movement, the world-map teleport, the no-teleport areas and followers; (b) split MA-5: tile movement first (spell 3), the rest second | (b): spell 3 needs no area data; the bans and the followers need the FR-TRAVEL-005 data |
-| D4 | Keep the census (MA-0) as a permanent opt-in real-data check in the toolchain table? | (a) yes; (b) one-off script, not kept | (a): it is the only way the matrix stays true; it adds one row to the opt-in table and runs only with `DAT_ROOT` |
-| D5 | Identify (spells 6, 7, 9) needs a window the original has and the viewer does not: inside the magic lane or inside E8? | (a) magic lane builds session state and a text answer, E8 the window; (b) the whole thing in E8; (c) both in the magic lane | (a) |
-| D6 | Resist Magick (40) does nothing for the saves in the original (RE2). Fix it? | (a) as the original; (b) fixed in Steamwoven only, "Original" setting; (c) fixed in both modes | (b) |
+| D1 | Work by component (flags, effects, summon...) as above and report by college, or finish one college at a time? | (a) component waves; (b) one college at a time, Necromantic (white), then Force, Meta, Conveyance, Temporal; (c) mixed: component waves, but wave 2 ordered so Force, Meta and Conveyance close first | (c): it is the same slices, ordered by what closes a college, so the report stays readable **Decided: owner chose (a), 2026-11-11 (waves by mechanic; the report stays by college).** |
+| D2 | While a spell has missing components, does the spell pane keep offering it with the "not ready" line (today), hide it, or refuse the cast before payment? | (a) keep (today); (b) hide spells with an unbuilt component from the pane; (c) refuse before payment | (a): hiding hides progress and (c) changes the cast flow in a way no record describes; the line is already shown **Decided: owner chose (a), 2026-11-11.** |
+| D3 | Teleportation scope: one slice, or split? | (a) one slice (MA-5) with tile movement, the world-map teleport, the no-teleport areas and followers; (b) split MA-5: tile movement first (spell 3), the rest second | (b): spell 3 needs no area data; the bans and the followers need the FR-TRAVEL-005 data **Decided: owner chose (b), 2026-11-11: MA-5 starts with tile movement (spell 3).** |
+| D4 | Keep the census (MA-0) as a permanent opt-in real-data check in the toolchain table? | (a) yes; (b) one-off script, not kept | (a): it is the only way the matrix stays true; it adds one row to the opt-in table and runs only with `DAT_ROOT` **Decided: owner chose (a), 2026-11-11: MA-0 stays a permanent opt-in check.** |
+| D5 | Identify (spells 6, 7, 9) needs a window the original has and the viewer does not: inside the magic lane or inside E8? | (a) magic lane builds session state and a text answer, E8 the window; (b) the whole thing in E8; (c) both in the magic lane | (a) **Decided: owner chose (a), 2026-11-11.** |
+| D6 | Resist Magick (40) does nothing for the saves in the original (RE2). Fix it? | (a) as the original; (b) fixed in Steamwoven only, "Original" setting; (c) fixed in both modes | (b) **Decided: owner chose (c), 2026-11-11: fixed in both modes, no "Original" setting.** |
 
 **Decided by the owner (2026-11-11): the two XR14 anomalies are bugs of the game, fixed in both modes with no switch** (the owner's bug rule of 2026-10-28: no "Original"/"Steamwoven" (D8) setting for either):
 
