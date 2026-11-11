@@ -463,7 +463,22 @@ public sealed partial class GameSessionOwner
         };
     }
 
-    // A follower the session levelled fights with its saved sheet's skills and level (ARC-SKILLS-002).
+    // A follower the session levelled fights with its saved sheet's skills and level (ARC-SKILLS-002), and any NPC under its effect list (ARC-MAGIC-027).
     private SessionCritterCombat Levelled(SessionCritterCombat npc) =>
-        _advancement.Npcs.TryGetValue(npc.Entity, out var levelled) ? npc.WithSheet(levelled.Sheet) : npc;
+        WithNpcEffects(_advancement.Npcs.TryGetValue(npc.Entity, out var levelled) ? npc.WithSheet(levelled.Sheet) : npc);
+
+    /// <summary>
+    /// ARC-MAGIC-027 (MA-2): the NPC's combat values under its effect list, the session's else the loaded one (<see cref="QueryNpcEffects"/>): the stat changes of the entries reach its stats
+    /// (speed, strength and the rest: <see cref="SessionCritterCombat.EffectiveStat"/>, the turn-based action points, the attack pause) and the resistance changes its effective
+    /// resistances (0x43D6D0). The NPC itself when its list is empty. Hosts that read an NPC's combat values for the round or a spell call it first.
+    /// </summary>
+    public SessionCritterCombat WithNpcEffects(SessionCritterCombat npc)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(npc);
+        // No session list and no host rules for the loaded one: its entries have no changes, nothing to apply (the common case, kept cheap).
+        if (!_effects.Critters.ContainsKey(npc.Entity) && NpcEffectRules is null) return npc;
+        if (QueryNpcEffects(npc.Target) is not { Entries.Count: > 0 } view) return npc;
+        return npc.WithEffects(view.Entries, view.Definitions.ToDictionary(definition => definition.Number));
+    }
 }

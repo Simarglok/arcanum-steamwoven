@@ -1,11 +1,11 @@
 # Character point pool (ARC-WORLD-052)
 
-Status: **Implemented bounded component**, wired for the skills by the AREA viewer's skills page (ARC-UI-009). Work item ARC-WORLD-052 (2026-10-21), task S5 of the
+Status: **Implemented bounded component**, wired by the AREA viewer's character sheet: the skills page (ARC-UI-009), the stats page (ARC-UI-034), the technology page (ARC-UI-076) and the spell page (ARC-MAGIC-008). Work item ARC-WORLD-052 (2026-10-21), task S5 of the
 [skills plan](../research/skills-plan.md) (rest of K1). The one spend-a-point / refund-a-point path over the hero's unspent
 character points that the character editor uses, for primary stats, hit and fatigue points, basic and tech skills, and,
 through a lane each, spell ranks (the magic lane's MT3) and tech degrees (the technology lane's TECH-2). Godot-free: pure
 rules in `Arcanum.Simulation.Character` and the editor's floor in `Arcanum.Session`. No snapshot schema change. The AREA viewer's
-skills page (ARC-UI-009) has the skills' + and − buttons.
+skills page (ARC-UI-009) has the skills' + and − buttons; the other pages have theirs (see Not ready, Callers).
 
 Requirements: [FR-CHAR-015](../requirements/characters-skills.md#fr-char-015) (stats bought and refunded),
 [FR-CHAR-016](../requirements/characters-skills.md#fr-char-016) (basic skill points),
@@ -87,6 +87,6 @@ strict in both modes.
 
 ## Not ready
 
-- Callers: the AREA viewer's skills page (ARC-UI-009, task S6) opens the editor with the sheet and spends and refunds skill points with the original's − click; stats, pools, spell ranks and tech degrees have no buttons yet.
+- Callers: the AREA viewer's skills page (ARC-UI-009, task S6) opens the editor with the sheet and spends and refunds skill points with the original's − click; its technology page (ARC-UI-076) does the same for tech degrees and its spell page (ARC-MAGIC-008) for spell ranks; its stats page (ARC-UI-034) does the same for the eight stats, hit points and fatigue.
 - Both lanes are plugged in: spell ranks since ARC-MAGIC-004, tech degrees since ARC-TECHNOLOGY-002.
 - The character editor's other modes (creation, the level-up of followers, multiplayer) are not modelled.

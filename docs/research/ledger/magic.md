@@ -266,6 +266,21 @@ UI callers of the learning path (0x57C540, 0x57C670) and the spell texts 0x4B160
 interface path and [FR-UI-004](../../requirements/ui-media-lifecycle.md#fr-ui-004)'s character sheet open (0x5597C0) for the spell
 page. Not raised (other slices): the spell bar's clear (0x57F340, MT20), the icons (0x4B1570, 0x4B1A90).
 
+## Effect consumers (ARC-MAGIC-027)
+
+Source: slice MA-2 of the [magic audit](../magic-audit-res-103.md#effect-consumers-ma-2-arc-magic-027), [durable effects](../../world/durable-effects-runtime.md#consumers-of-resistance-and-stat-changes-arc-magic-027).
+Read on 2026-11-11 in the retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52` checked; `llvm-objdump`, nothing run, patched or copied) by this task: the effective resistance function
+(0x43D6D0, whole), the effect-aggregation wrapper it calls (0x4EA9C0, a thin call of the aggregation 0x4EA6C0, EF6) and the stored-resistance read inside the spell resistance (0x4537B0, the
+call at 0x45399B). One reader; the rows are static readings of the first kind. EQ8 and O9 are the earlier readings of the same functions.
+
+| # | Function | Reading | Class |
+| --- | --- | --- | --- |
+| RE1 | `object_get_resistance` (0x43D6D0: object, type 0..4, display flag) | The base is the object's stored resistance array (field 0x1F, index = type; the object array getter 0x4072D0). For a PC (type 0xF) or an NPC (0x10): each worn armour item's adjustment and its scaled magic adjustment (slots 1000 to 1008, the gate of EQ8); for type 3 (poison) then `5 × (CN − 4)` when positive. **Then** the effect aggregation of that resistance (the wrapper 0x4EA9C0 over 0x4EA6C0 with the object, the type and the running value: percents summed, factors multiplied, adds summed, the highest minimum, the lowest maximum, EF6). **Then** the clamp to 0..95 for everyone but a monstrous NPC (0x45F730), whose sum is returned as it is; any other object type skips the armour, the poison bonus and the effects and returns its stored value clamped the same. So the effects come after armour and the poison bonus and before the clamp. The wrapper reads its collection from a global; its value was not resolved, the caller's argument (the resistance type 0..4 of the rules' `resistdamage`, `resistfire`, `resistelectrical`, `resistpoison`, `resistmagic`) says it is the resistance collection. | Original |
+| RE2 | spell resistance (0x4537B0) | The magic resistance R is read with the object array getter (0x4072D0, field 0x1F, index 4) directly, not through 0x43D6D0: no armour, no effects, no clamp (O9; the earlier readings said the same for the fail-chance predictor 0x453B20, which this reading did not repeat). So the `resistmagic` changes of effects (Resist Magick 56, and the magic parts of 51, 52, 55, 154, 155) change only what 0x43D6D0 returns, which the character sheet's Magick line shows, and no save of a spell. The effect add (0x4E9F70, EF1) writes no object field of the resistance. | Original (as O9). Owner question: Resist Magick (spell 40) does nothing for the saves in the original; whether that is a bug of the game to fix (an "Original" setting) is the owner's, see the [audit](../magic-audit-res-103.md#effect-consumers-ma-2-arc-magic-027) |
+| RE3 | the readers of an NPC's stats and speed | Not read in this slice: where the original's turn-based action points and the real-time attack pause take the speed stat (the executable reads of MA-R, [XR](spell-runs.md#magic-audit-executable-reads-arc-dev-357)) are the ones the session reuses; this slice only lets the stat changes of an NPC's effects reach those readers. | Not read |
+
+Steamwoven: RE1 and RE2 both modes, no switch. **Not read:** the resistance wrapper's global, the display form's use for NPCs' sheets, whether a monstrous NPC's unclamped sum is bounded by the resolver (the resolver bound ±1000 is Steamwoven's).
+
 ## Aptitude inputs (ARC-MAGIC-028)
 
 Source: the retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…3d52`), read statically on 2026-11-11 for [FR-CHAR-020](../../requirements/characters-skills.md#fr-char-020) and plan slice MT4
