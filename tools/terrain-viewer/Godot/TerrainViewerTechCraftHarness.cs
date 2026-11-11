@@ -91,13 +91,14 @@ public partial class TerrainViewerApp
     internal static int? TechSmokePrototype(GameSessionOwner session, string entity) =>
         TechSmokeHeldKinds(session).Where(item => item.Entity == entity).Select(item => (int?)item.Kind.Prototype).FirstOrDefault();
 
-    /// <summary>The prototype's item is created next to the hero (by the session, as a script's create object does) and picked up through the inventory host.</summary>
-    internal string TechSmokeGive(AreaSchematicData data, int prototype)
+    /// <summary>The prototype's item (of <paramref name="kind"/> when the schematic data has no kind for it, as a written document) is created next to the hero (by the session, as a script's create object does) and picked up through the inventory host.</summary>
+    internal string TechSmokeGive(AreaSchematicData data, int prototype, SessionItemKind? kind = null)
     {
         var session = _areaSession!;
-        TechSmokeRequire(data.Kind(prototype) is not null && _inventoryHost is not null && AreaDropMapNow() is not null, $"prototype {prototype} has a kind and the host a drop map");
+        kind ??= data.Kind(prototype);
+        TechSmokeRequire(kind is not null && _inventoryHost is not null && AreaDropMapNow() is not null, $"prototype {prototype} has a kind and the host a drop map");
         session.AttachItemWeights(data.WeightOf);
-        var created = session.CreateGroundItem(session.Version, data.Kind(prototype)!.Value, new SessionMapId(CurrentAreaMap), session.QueryActor().Cell, AreaDropMapNow()!, DropOwner.PcSide);
+        var created = session.CreateGroundItem(session.Version, kind!.Value, new SessionMapId(CurrentAreaMap), session.QueryActor().Cell, AreaDropMapNow()!, DropOwner.PcSide);
         TechSmokeRequire(created.Disposition == GameSessionDisposition.Changed && created.Item is not null, $"prototype {prototype} was created: {created.Disposition} {created.Failure}");
         var pick = _inventoryHost!.PickUp(session, created.Item!);
         TechSmokeRequire(AreaInventoryHost.Moved(pick) && TechSmokeHeld(session).Contains(created.Item!), $"prototype {prototype} was picked up: {pick.Disposition} {pick.Failure}");
@@ -118,9 +119,10 @@ public partial class TerrainViewerApp
     /// <summary>
     /// A learned record of a discipline is assembled as the player does it: the two components (the cheapest alternative of each list) are put in the pack, the
     /// schematic window opens (T), shows the discipline's page of the record and its assemble button works. Requires the window's button to allow it, the products to
-    /// be new made items of the product's prototype, and both components to be gone from the pack. The window is closed again.
+    /// be new made items of the product's prototype, and both components to be gone from the pack. The window is closed again. <paramref name="tab"/> is the window's tab (found records
+    /// are on the Found tab); with <paramref name="probe"/> a button that does not assemble closes the window and returns no products (the message names the button) instead of failing.
     /// </summary>
-    internal TechSmokeCraftResult TechSmokeCraft(AreaSchematicData data, int discipline, int record)
+    internal TechSmokeCraftResult TechSmokeCraft(AreaSchematicData data, int discipline, int record, AreaSchematicTab tab = AreaSchematicTab.Learned, bool probe = false)
     {
         var session = _areaSession!;
         var read = data.Catalog.Read(record).Record;
@@ -133,10 +135,12 @@ public partial class TerrainViewerApp
 
         OpenSchematics();
         TechSmokeRequire(SchematicsOpen, "the schematic window opens: " + _schematicsStatus);
+        SelectSchematicTab(tab);
         SelectSchematicDiscipline(discipline);
-        for (var turns = 0; turns < 8 && _schematicsPanel!.View is { } view && view.Record != record; turns++) TurnSchematicPage(1);
+        for (var turns = 0; turns < 24 && _schematicsPanel!.View is { } view && view.Record != record; turns++) TurnSchematicPage(1);
         var shown = _schematicsPanel!.View;
         TechSmokeRequire(shown is { Placeholder: false } && shown.Record == record, $"the window shows record {record} (shows {shown?.Record})");
+        if (probe && shown!.Button != AssemblyButton.CanAssemble) { EndSchematics(byPlayer: true); return new(record, components, [], [], "button " + shown.Button); }
         TechSmokeRequire(shown!.Button == AssemblyButton.CanAssemble, $"record {record} can be assembled (button {shown.Button})");
         AssembleSchematic();
         var message = _schematicMessage ?? "";
