@@ -100,7 +100,10 @@ The viewer's smokes on the original data run through one shared runner; do not w
 history held about 500 runs of such copies of one template).
 
     ./arcanum smoke pr [--stages S,...] [--map NAME] [--hero H] [--sector X,Y] [--main-menu] [--env NAME=VALUE] [--crash-site]
-    ./arcanum smoke full                       # the full map smoke chain
+    ./arcanum smoke pr --auto [--base REF]     # the zones the diff against origin/main selects (ARC-DEV-396)
+    ./arcanum smoke pr --zones core,walk,...   # named zones: core, walk, container-click, crash-site, census, complete
+    ./arcanum smoke full                       # the full map smoke chain (the batteries)
+    ./arcanum smoke complete                   # the nightly run: the chain, then every stage
     ./arcanum smoke map NAME [--stages S,...] [--hero H] [--sector X,Y] [--main-menu] [--env NAME=VALUE]
     ./arcanum smoke crash-site [--hero H] [--env NAME=VALUE]   # the Crash Site smoke alone
     ./arcanum smoke self-test [--headless] [--env NAME=VALUE]  # the viewer's synthetic --self-test
@@ -113,11 +116,11 @@ history held about 500 runs of such copies of one template).
   `MapSmokeStageNames` before anything waits for the queue) on `--map` and `--sector` when given, else on the
   configuration each stage needs (stage configurations below; most run on
   `Arcanum1-024-fixed` opened at the Crash Site), with the Crash Site smoke first only when the change is related to it
-  (`--crash-site`); with neither it refuses (nothing to run). `full` is the chain of the daily package build
-  (`./arcanum daily`, [daily package build](packaging.md#daily-package-build-arc-dev-062), when main changed since the last package): the Crash Site smoke, then the whole map battery (no stage list) on the main map with
+  (`--crash-site`); with neither it refuses (nothing to run). `full` is the chain of batteries: the Crash Site smoke, then the whole map battery (no stage list) on the main map with
   `--hero human-male` at the Crash Site, at the town sector (1409, 1314) and at the generated wilderness sector
   (1384, 239), and on `elven ruins` with `--hero elf-female` (the elf-male's boomerang cannot break a container for
-  the junk pile stage).
+  the junk pile stage). The daily package build (`./arcanum daily`, [daily package build](packaging.md#daily-package-build-arc-dev-062),
+  when main changed since the last package) runs `complete`: that chain, then every stage ([smoke zones](#smoke-runner-arc-dev-061)).
 - **Every requested stage runs (ARC-DEV-063).** `PASS` means each requested stage ran: a map smoke passes only when
   its log holds the `PASS` line of every stage in its list (`STAGE_PASS` in `tools/local_dev/smoke.py`, checked against
   the viewer's sources by the tests), the whole map battery (`full`, `map` without `--stages`) that of `map` and
@@ -151,8 +154,37 @@ history held about 500 runs of such copies of one template).
   `--no-config-check` runs the request as given (the grouping stays). The table holds only what is known: where a stage
   was only seen to pass in one place its default is that place and another one is not refused. `inv-carry` and
   `critter-light` have no configuration seen to pass yet (the diagnosis saw `NONE` at the Crash Site and in the town). A new stage needs a row
-  (the tests fail without one); the zones of [smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md#options)
-  option A are built on this table.
+  (the tests fail without one); the zones below are built on this table.
+- **Smoke zones (ARC-DEV-396).** Option A of the [smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md#zone-options),
+  in `tools/local_dev/smoke_zones.py`. A zone is a set of stages a change can break together: `core` is every cheap stage (every
+  stage no heavy zone holds, so a stage the viewer gains lands there until a heavy zone claims it; grouped by configuration into
+  about twenty processes at this base), and the heavy zones are `walk` (the stage `walk`, about 9 minutes), `container-click`
+  (the stage of that name, about 11 minutes), `crash-site` (the Crash Site smoke, not a stage) and `census` (the stage `census`).
+  `--zones core,walk` runs those; `complete` stands for all of them and runs what `./arcanum smoke complete` runs: the Crash Site
+  smoke and the batteries of `full`, then every stage but `map` and `resources` (the batteries vouch for those) grouped as
+  usual, the heavy stages last. That is what `./arcanum daily` runs, so the daily run now checks every stage the viewer accepts
+  (before, 15 of 76), and a stage that fails on main (see the known failures) blocks the day's packages as any failure does.
+  `--zones` and `--stages` combine (the union); `--map`, `--hero`, `--sector`, `--main-menu` and `--env` go with `--stages` only: with zones
+  chosen they apply to the `--stages` group (its own step `stages`) and the zones' stages keep their configurations (step `zones-...`);
+  without `--stages`, or with `complete`, they are refused. The batteries of `complete` vouch only for `map` and `resources`, so the
+  other stages they also run (`cast`, `ranged`, ...) run again in their groups.
+  **`--auto`** reads the diff: the merge base with `--base` (default `origin/main`; fetch first) to the working tree, untracked
+  files included, and picks the zones by the table `TRIGGERS` (all matching rows of a path, as a union; a "no smoke" row such as `tests/` or
+  `experiments/` beats the generic project-file rows `*.csproj`, `*.sln`, `*.props`, `*.tscn` and the lock files): ordinary game and
+  viewer code (`src/Arcanum.Simulation|Session|World|Scripting|Input`, `tools/terrain-viewer`) selects `core`, the files of a
+  heavy zone add that zone (route, movement, residency, window load and hero walk files: `walk`; picking, hover, roofs, locks and
+  container loot: `container-click`; the Crash Site profile, transitions, portals and area start: `crash-site`; the census stage
+  and the map row readers: `census`), a file of the shared data readers, the presentation, the save schema (`GameSaveLibrary`,
+  `GameSessionSnapshot*`), the render and shared UI files or a project, package or build file selects `complete`, and so does a
+  file no row names (a missing row is a safe miss, never a silent skip). A file no smoke can cover (documents, unit tests, research,
+  HD, oracle and inspect tools, the launcher tooling but the runner itself, the HD review viewer) selects nothing; a diff of
+  such files prints `no smoke zone covers this diff` and the run passes without building anything. The viewer's start and stage
+  dispatch file and its stage list file also hold shared logic, so for them a change to a line that is more than a stage's
+  registration adds `complete` or `walk`. `--auto` prints each zone with the files that chose it (the three first), the PR report
+  names the zones (the last line `SMOKE zones: ...`), `--crash-site` and `--stages` add to them, and `--dry-run` shows the
+  plan. A click or walk change still runs `--stages map` and `smoke self-test` as before (`core` holds `map`; the self-test is its
+  own target). A new heavy stage or a new path gets a row in `TRIGGERS` in the same PR (the tests check that every row matches a
+  tracked file and that every stage is in exactly one zone).
 - **Known failures on main (ARC-DEV-391).** `tools/local_dev/smoke_known_failures.json` lists failures seen on clean
   `origin/main`: the stage (or `crash-site`), a regex for the line its log holds, the owning task (`ARC-TYPE-NNN` or
   `unassigned`) and the day. A failed step whose requested stage did not pass and whose log holds that line is reported
@@ -202,7 +234,8 @@ Measured speed of the smoke runner, the queue and each stage, and the options fo
 
 Tests: `python3 -B -m unittest tools.local_dev.test_smoke` (the stage names from the viewer, the per-PR and full plans,
 the settings folders and dropped variables, the start lines, the chain going on after a failure and ending on a failed
-build or a stopped run, the stage table, the grouping and the early error, the known failures file, the launcher command).
+build or a stopped run, the stage table, the grouping and the early error, the known failures file, the launcher command) and
+`tools.local_dev.test_smoke_zones` (the zone table, the trigger rows, the selection from a diff, the zone and complete plans).
 
 ## Timing probe and the `perf` stages (ARC-DEV-367)
 

@@ -638,5 +638,25 @@ build); the first build for this comparison is any build from `main` that contai
 Known differences (documented, not bugs):
 
 - A new game still waits for the start map, which now begins to load when the New Game window opens (one press later than in ARC-DEV-381).
-- The menu's music is silent until the start map is loaded; the original plays it from the start (a follow-up: play the menu's pair without a scene).
+- The menu's music was silent until the start map was loaded; ARC-UI-139 (below) plays it from the start without a scene.
 - While a save's map loads the menu stays on screen with a note; the original shows its own loading screen.
+
+## ARC-UI-139 — The main menu's music plays without a scene (follow-up of ARC-DEV-387, 2026-11-11)
+
+The menu plays its music pair (the shop map's start sector, scheme 26 `arcanum.mp3`) through the scheme player of its own, without a game session or a scene, from the
+moment it opens until a game starts or a save loads ([scheme player](../audio/scheme-player.md#viewer-integration)). Compare on a start with the menu (`./arcanum area`, or a
+packaged build) with the music volume above 0, in both games.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Start the game and wait on the main menu without pressing anything for a minute or two. | The main theme plays from the first moment of the menu and loops without a gap or restart. | open |
+| 2 | Open Single Player, Options (change the music volume on the Sound page), New Game and the pre-made browser, then go back. | The theme goes on through every window, and the volume follows the slider. | open |
+| 3 | Press New Game, then New Character, so that the start map loads under the menu. | The theme does not stop and does not restart when the map has loaded (the original has no pause there either). | open |
+| 4 | Press Last Save, or choose a row in Load Game, while the theme plays. | The theme plays until the save is loaded, then the map's own music takes over. | open |
+| 5 | Start a new game with a pre-made hero. | The theme stops and the Crash Site's music (or its night ambience) starts; the theme does not come back. | open |
+| 6 | Press Esc in play and open the in-play menu. | The game's own music goes on (the theme is only the main menu's). | open |
+
+Known differences (documented, not bugs):
+
+- The hour of the menu's player is fixed (12) because the menu has no game clock; the installed pair plays at every hour, so no difference is expected.
+- A transition song in the menu's pair would play without the restore bookkeeping (the installed pair has none).

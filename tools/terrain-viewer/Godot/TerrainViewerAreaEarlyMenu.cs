@@ -145,7 +145,7 @@ public partial class TerrainViewerApp
         else if (held is not null) menu.Notice = null;
         // The smoke took the player's route to the New Game window to start the load; its stages begin at the main window.
         if (_smokeStartedLoadFromMenu) { _smokeStartedLoadFromMenu = false; while (menu.Window != AreaMenuWindow.Main && menu.Back()) { } }
-        EnterMainMenuSound();
+        // ARC-UI-139: the menu's song keeps playing across the attach (it belongs to the menu, not to the scene).
         if (_earlyMenuRecord is { } record) { record.Attached = true; record.AttachedMsec = Time.GetTicksMsec(); record.Refusal = refusal; }
         GD.Print($"ARC-DEV-381 early main menu attached to the scene newGame={refusal ?? "ready"} held={held?.Kind.ToString() ?? "none"}");
         // ARC-DEV-387: the load window may be open over the hidden menu (the start map loaded while a save was being chosen): the menu comes back with it.

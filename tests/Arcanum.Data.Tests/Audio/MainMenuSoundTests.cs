@@ -59,6 +59,29 @@ public sealed class MainMenuSoundTests
         Assert.IsNull(MainMenuSound.Choose(Read("")));
     }
 
+    private static readonly Func<int, bool> AllLoad = _ => true;
+
+    [TestMethod]
+    public void The_sector_pair_replaces_the_map_default_unless_both_its_ids_are_zero()
+    {
+        Assert.AreEqual(new MainMenuSound.Slots(26, 29), MainMenuSound.Choose(new(1, 40), new(26, 29), AllLoad));
+        Assert.AreEqual(new MainMenuSound.Slots(1, 40), MainMenuSound.Choose(new(1, 40), new(0, 0), AllLoad));
+        Assert.AreEqual(new MainMenuSound.Slots(1, 40), MainMenuSound.Choose(new(1, 40), null, AllLoad));
+        Assert.AreEqual(new MainMenuSound.Slots(29, 0), MainMenuSound.Choose(new(1, 40), new(0, 29), id => id == 29));
+        Assert.AreEqual(new MainMenuSound.Slots(26, 0), MainMenuSound.Choose(null, new(26, 0), AllLoad));
+        Assert.AreEqual(new MainMenuSound.Slots(0, 0), MainMenuSound.Choose(null, null, AllLoad));
+    }
+
+    [TestMethod]
+    public void An_ambient_equal_to_the_music_is_dropped_and_a_scheme_without_a_list_fills_no_slot()
+    {
+        Assert.AreEqual(new MainMenuSound.Slots(7, 0), MainMenuSound.Choose(null, new(7, 7), AllLoad));
+        // The installed pair 26/29: scheme 29 has no list base, so only slot 0 is filled.
+        Assert.AreEqual(new MainMenuSound.Slots(26, 0), MainMenuSound.Choose(null, new(26, 29), id => id != 29));
+        // A music id that loads nothing leaves the first slot free for the ambient id (the original's first-free slot load).
+        Assert.AreEqual(new MainMenuSound.Slots(29, 0), MainMenuSound.Choose(null, new(26, 29), id => id != 26));
+    }
+
     /// <summary>Opt-in (DAT_ROOT = the game folder): the installed module's opening map is the shop map, whose one sector holds the pair 26/29,
     /// and scheme 26 loops the main theme all day; the map itself has no default pair.</summary>
     [TestMethod, TestCategory("RealData")]
