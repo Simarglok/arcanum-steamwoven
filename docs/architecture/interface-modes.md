@@ -1,7 +1,7 @@
 # Interface mode stack (K16, MIG16)
 
 Status: **slices 1 to 4 implemented (ARC-DEV-108, ARC-DEV-109, ARC-DEV-110, ARC-DEV-111, 2026-11-05); the scroll and right-press tails: ARC-DEV-200 and ARC-DEV-201, 2026-11-07, and the screen-edge scroll ARC-UI-099 the scroll step and rate ARC-UI-100 and the distance limit ARC-UI-101, 2026-11-08 (see [below](#scroll-and-right-press-arc-dev-200-arc-dev-201)): the stack and its tables in `Arcanum.World`; the viewer owns one stack, its windows and its target modes (spell, skill, item use, quantity picker, follower order) open and close through it, the cursor and the window part of the modal test read it, and the game view, the follower-order keys, Esc, the window keys and the number row follow it as the original's do (owner decision D9, 2026-11-05: as the original, in both rule modes).**
-Concept document K16 of the [architecture audit](../research/architecture-audit-plan.md) and design of MIG16 ([target model](target-model.md#migration-order),
+Concept document K16 of the [architecture audit](gap-register.md) and design of MIG16 ([target model](target-model.md#migration-order),
 element TM13, gap GR35). Behaviour from the executable stays the original's rows (SA36–SA55 of the
 [scripts and authority reading](original-scripts-authority.md#5-the-interface-mode-machine)); this page fixes how the viewer will use them and what is built so far.
 

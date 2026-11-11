@@ -1,7 +1,7 @@
 # Hero skills runtime (ARC-SKILLS-002)
 
 Status: **Implemented bounded component**, ARC-SKILLS-002 (2026-10-20), task S2 of the
-[skills plan](../research/skills-plan.md). The session answers the hero's sixteen skill levels and training, and the levelled
+skills plan. The session answers the hero's sixteen skill levels and training, and the levelled
 followers' from their saved sheets, through the [skill rules](skill-rules-runtime.md) (ARC-SKILLS-001), and every reader of
 a hero's skill uses them: its attack, dodge and backstab, the weapon speed, the best-items choice and the follow check. The
 race and gender effects' skill changes of a pre-made hero (ledger SH-09) are kept as the hero's innate skill changes and

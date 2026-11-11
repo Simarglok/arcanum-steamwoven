@@ -8,7 +8,7 @@ original executable. It replaces the eight slices proposed at the end of that re
 ([proposed implementation slices](magic-core-evidence.md#proposed-implementation-slices-project-policy-not-accepted)).
 Codes are allocated when each task is created (owner decision D6 of
 the [NPC combat AI plan](npc-combat-ai-plan.md#owner-decisions-2026-10-16)), so slices carry plan labels **MT1..MT21**
-(MT9 and MT20 in two parts each) here, not codes. Of the other lanes named below, the [skills plan](skills-plan.md) (ARC-RES-061) is merged
+(MT9 and MT20 in two parts each) here, not codes. Of the other lanes named below, the skills plan (ARC-RES-061) is merged
 and the technology research (ARC-RES-062) is in flight. Docs only: no code, reader, schema or test changes.
 
 Per-spell state of the 80 college spells and the order of the remaining component slices by college: [magic audit](magic-audit-res-103.md) (ARC-RES-103, 2026-11-11).
@@ -180,7 +180,7 @@ parallel. "Read" lists the function groups each slice reads twice in the executa
 | --- | --- | --- | --- | --- | --- | --- |
 | **MT16 Movement, goals, nested casts** | MAGIC | Movement: to the target tile, a random tile in a radius, a world-map teleport or the nearest known area, through the universal map transfer, refused in anti-teleport areas; what a teleport does to followers afterwards (ledger "Not checked", W9). AGoal: knockback 4 cells, knockdown, follow, other goals through an animation-goal port. Cast: the parent casts another spell through the full check. Destroy. Split candidate: teleport with followers apart from AGoal, Cast and Destroy. | 007, 009 | MT7, MT9a, MT10 | movement (0x4524C0, 0x452650), goal (0x4514E0, 0x4516D0, 0x451700), cast (0x451740, 0x451850), destroy (0x451AF0) | — |
 | **P2 Objects created at run time** | WORLD | The session creates a critter from a prototype on a tile of the active map, saves it as map-local state and removes it again; also what monster generators (FR-AI-004) will need. | FR-AI-004 (part); 008 | — | object create and destroy paths the summon calls | — |
-| **MT17 Summon** | MAGIC | Summon a prototype or a list pick (lists 0..2 weighted, 3..5 by aptitude), the summoned flags, palette, faction from `Clear_Faction:` (MG8, a reconstruction slip), alignment of the parent, tracking in the run so its END or a dispel removes the summon, and the run's end when the summon dies or is destroyed (0x459740). | 008 | MT9a, P2 | summon (0x450C40), list (0x452830, 0x452900 oracle); what the objects are and how they end: [ARC-RES-101](summon-objects-res-101.md) | MG9, summon palette |
+| **MT17 Summon** | MAGIC | Summon a prototype or a list pick (lists 0..2 weighted, 3..5 by aptitude), the summoned flags, palette, faction from `Clear_Faction:` (MG8, a reconstruction slip), alignment of the parent, tracking in the run so its END or a dispel removes the summon, and the run's end when the summon dies or is destroyed (0x459740). | 008 | MT9a, P2 | summon (0x450C40), list (0x452830, 0x452900 oracle); what the objects are and how they end: [ARC-RES-101](ledger/spell-runs.md) | MG9, summon palette |
 | **MT18 Polymorph** | MAGIC | Trait: drop what the new art cannot wield, monster art and palette, elemental flags (MG10), restore with `-1`. | 007 | MT13 | trait (0x452AD0, 0x452B00, 0x452CD0, 0x452D80, 0x452E40, 0x452ED0) | MG10 |
 
 ### Phase F: host and UI
@@ -279,8 +279,8 @@ in both modes); none of them is a slice of this plan.
 
 Agreed through the coordinator on 2026-10-20:
 
-- **Skills ([ARC-RES-061](skills-plan.md))**: one character-point pool, the session's unspent points; learning or
-  unlearning a rank spends or refunds through the editor-budget transaction that slice S5 of the [skills plan](skills-plan.md) builds (a WORLD code; whichever lane
+- **Skills (ARC-RES-061)**: one character-point pool, the session's unspent points; learning or
+  unlearning a rank spends or refunds through the editor-budget transaction that slice S5 of the skills plan builds (a WORLD code; whichever lane
   gets there first builds it, the other reuses it). The aptitude formula stays in `CharacterStatRules`; skills owns the
   tech points from tech skills, magic owns magick points from spells, the sector adjustment and the mage backgrounds.
   The shared fate owner (point count, armed fate per kind, consumed on use, saved) is slice S7 of the skills plan, built as
@@ -314,7 +314,7 @@ Agreed through the coordinator on 2026-10-20:
 - **Cursor pick**: the targeting cursor picks its target in the original's order (0x4F28A0: the object under the point, the
   tile's objects, the tile; [ARC-MAGIC-021](../world/spell-cast-host.md#the-viewer-arc-magic-015), SU15–SU19, MG45).
 - **Line of fire**: the AI awareness lane (combat open question O4).
-- **Fate state**: slice S7 of the [skills plan](skills-plan.md).
+- **Fate state**: slice S7 of the skills plan.
 
 ## Open questions
 

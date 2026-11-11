@@ -19,4 +19,4 @@ shimmer when text moves (not checked).
 Change: `outline.py` constants (`ALPHA_MAX` 0.6, `LEVEL_CAP` 0.42), `hd_font.py` (`--alpha-max`, `--level-cap`, `--opt-tolerance` with range checks, restored after a run, recorded
 in the receipt; tool version 2), tests (defaults equal the tracer's constants, a custom run is recorded and undone, a cap of 0.5 keeps the old ink bounds, the shape tests take
 the cap's extra ink), `AreaArtFontFace` texture filter, docs ([hd-font](../workflow/hd-font.md), [HD pack workflow](../workflow/hd-pack.md#traced-fonts-in-the-pack-arc-dev-361),
-[terrain viewer](../rendering/terrain-viewer.md), [font research](../research/font-vectorization.md)). No pack format change. No original or derived data in git.
+[terrain viewer](../rendering/terrain-viewer.md)). No pack format change. No original or derived data in git.

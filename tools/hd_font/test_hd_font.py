@@ -262,7 +262,7 @@ class OutlineTests(unittest.TestCase):
                 self.assertGreater(result.nodes, 0)
                 self.assertLessEqual(result.level, outline.LEVEL_CAP)
                 ratio = result.traced_mass / result.mass
-                # A stroke under one pixel is quantized to whole 8x rows before the curve fit (docs/research/font-vectorization.md,
+                # A stroke under one pixel is quantized to whole 8x rows before the curve fit (see the research findings in docs/workflow/hd-font.md,
                 # section 5: one-pixel strokes recover poorly), so the bar gets a wider bound than the solid shapes.  The level cap
                 # 0.42 (ARC-UI-145, the owner's choice of a tighter edge) takes the binarization below the mass-preserving level
                 # wherever that is above 0.42, so the glyphs come out up to a third bolder in area (about 11 % over the player's

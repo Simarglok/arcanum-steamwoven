@@ -2,7 +2,7 @@
 
 Status: **Implemented bounded component**, ARC-UI-050 (2026-10-28), the barter window over the session's
 [NPC gold and transfers](inventory-runtime.md#npc-gold-and-transfers-arc-world-071) (ARC-WORLD-071), and with it the price and trade
-gates of task S13 (haggle) of the [skills plan](../research/skills-plan.md). A dialog reply `b:` ends the talk and opens the window
+gates of task S13 (haggle) of the skills plan. A dialog reply `b:` ends the talk and opens the window
 with the speaker as merchant; the hero sells its items and buys the merchant's for the original's prices, and a generous trade moves a
 loving merchant's reaction. Rules: `TradeRules` in [`Arcanum.Simulation.Items`](../../src/Arcanum.Simulation/Items/TradeRules.cs); buy
 lists: `InventorySourceBuyRules` in [`Arcanum.Data.Characters`](../../src/Arcanum.Data/Characters/InventorySourceBuyRules.cs) and the

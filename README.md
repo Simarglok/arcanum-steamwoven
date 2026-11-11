@@ -298,7 +298,7 @@ held during an attack click they aim as listed under *Combat*.
 ## Start here
 
 - [Documentation index](docs/README.md)
-- [Project vision](docs/project/vision.md) and [dependency roadmap](docs/project/roadmap.md)
+- [Project vision](docs/project/vision.md) and the [missing systems plan](docs/project/missing-systems-plan.md)
 - [Full-game functional requirements and bounded implementation coverage (draft)](docs/requirements/README.md)
 - [Toolchain and checks](docs/workflow/toolchain.md)
 - [Private local diagnostic launch and build retention](docs/workflow/local-development.md)
@@ -314,4 +314,4 @@ held during an attack click they aim as listed under *Combat*.
 
 **Tasks and acceptance contracts come from the owner's explicit requests ([task workflow](docs/workflow/tasks.md)):** a direct instruction, a Claude project thread or a named `ARC-TYPE-NNN` work item. Each task is one PR, reviewed independently and merged by the agent that did it unless the owner asked to review it. Obsidian stores research and discussions; it is not a task queue. Repository documents describe product and engineering policy, not runnable tickets.
 
-The local `toolkit/` archive is intentionally ignored. No task starts merely because a roadmap or research note exists.
+The local `toolkit/` archive is intentionally ignored. No task starts merely because a plan or research note exists.

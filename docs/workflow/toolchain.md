@@ -134,7 +134,7 @@ history held about 500 runs of such copies of one template).
 - **Click and walk changes** ([smoke scope](tasks.md#smoke-scope), ARC-DEV-239). A PR that changes click or walk handling
   always runs `./arcanum smoke pr --stages map` and `./arcanum smoke self-test` (both, every such PR).
 - **Sampled stages (ARC-DEV-395, owner decision 2026-11-11).** `container-click` and `walk` took 675 s and 525 s of the
-  one Godot slot in that report (600 s and 363 s on an idle Mac when re-measured here) ([smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md)), so by default they check a
+  one Godot slot in that report (600 s and 363 s on an idle Mac when re-measured here) (ARC-DEV-384, deleted; the result is in this section), so by default they check a
   sample; `--all` (on `pr` and `map`, with a run of one of them by `--stages` or its zone; it sets the viewer's `ARC_SMOKE_ALL=1`) runs the
   full stage; the nightly `complete` run and `--zones complete` always run both in full. `container-click` clicks at most 8 containers of the window, spread over the (prototype, admitted open
   outcome) groups, the group of admitted rubbish bins and a locked container first (so at least one bin, and every bin only with `--all`) (`ARC-DEV-395 container-click SAMPLE n of N` names them); `walk` plans and walks the
@@ -212,7 +212,7 @@ history held about 500 runs of such copies of one template).
   file keeps the newest 5,000 lines once it passes 2 MB. `stages` lists the requested stages (for a battery run the PASS names the step requires), `stageMs` the parts the viewer timed, so
   for a battery step the two differ; a stage's clock also holds the short work after it up to the next stage's start; a step stopped by a timeout or a signal prints no stage times (`stageMs` is empty). Only the map smokes print stage times: the Crash Site smoke, the self-test, the build and the import show their
   wait and run time only.
-- **Smoke zones (ARC-DEV-396).** Option A of the [smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md#zone-options),
+- **Smoke zones (ARC-DEV-396).** Option A of the smoke speed diagnosis (ARC-DEV-384, deleted),
   in `tools/local_dev/smoke_zones.py`. A zone is a set of stages a change can break together: `core` is every cheap stage (every
   stage no heavy zone holds, so a stage the viewer gains lands there until a heavy zone claims it; grouped by configuration into
   about twenty processes at this base), and the heavy zones are `walk` (the stage `walk`, about 1 minute as a sample, about 6 with `--all`), `container-click`
@@ -293,7 +293,7 @@ history held about 500 runs of such copies of one template).
 - **Godot** is `/Applications/Godot_mono.app/Contents/MacOS/Godot`, or `$GODOT`. The import writes the viewer's
   untracked `*.cs.uid` files into the checkout; never commit them (stage files by name).
 
-Measured speed of the smoke runner, the queue and each stage, and the options for faster runs and per-task zones: [smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md) (ARC-DEV-384).
+Measured speed of the smoke runner, the queue and each stage, and the options for faster runs and per-task zones: the smoke speed diagnosis (ARC-DEV-384, deleted); its results are the sections above.
 
 Tests: `python3 -B -m unittest tools.local_dev.test_smoke` (the stage names from the viewer, the per-PR and full plans,
 the settings folders and dropped variables, the start lines, the chain going on after a failure and ending on a failed
@@ -302,7 +302,7 @@ build or a stopped run, the stage table, the grouping and the early error, the k
 
 ## Timing probe and the `perf` stages (ARC-DEV-367)
 
-The standing probe of the performance diagnosis (O10 of [load time and window responsiveness](../research/performance-diagnosis-2026-11.md)):
+The standing probe of the performance diagnosis (O10 of [load time and window responsiveness](../project/status/tools.md)):
 `PerfProbe` in `src/Arcanum.World/PerfProbe.cs`, godot-free so the load worker and the viewer use the same one. It measures; it is not
 a budget or a regression gate. Other optimisations are shown with it: run before and after, compare the lines.
 
@@ -423,7 +423,7 @@ quiet, crashed and killed runs, limits, lockf, nesting, locales); they use their
 
 ### Queue order (ARC-DEV-390)
 
-[Smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md) measured 3/4 of a smoke call's time as waiting
+Smoke speed diagnosis measured 3/4 of a smoke call's time as waiting
 for the single Godot slot behind a few runs of 5 to 11 minutes (`walk`, `container-click`); a first-come first-served
 queue is the worst order for such a mix, and a project import waited for a window run to start 2.5 s of work.
 
@@ -923,7 +923,7 @@ Original inputs remain read-only and local. Set only the inputs needed for the s
 | Prototype builder | `ARCANUM_EXE` and `ARCANUM_GAME_ROOT` (the installed game folder; inconclusive without it); the comparison also `ARCANUM_ORIGINAL_PROTO` (a folder of the 1,423 files the original wrote); `ARCANUM_PROTO_OUT` writes the built files for a look (refused inside a git repository) | Executable project, `FullyQualifiedName~PrototypeBuilderRealData`, `TestCategory=OriginalExe`; about one minute in Release (`-c Release`: Debug is several times slower), the builds run in parallel; [contract](../Arcanum.Executable.md#the-prototype-builder) |
 | DAT R1 | `DAT_ROOT`, eight documented candidates | Data project, `FullyQualifiedName~DatArchiveTests&TestCategory=RealData`; [DAT API/evidence](../Arcanum.Data.md) |
 | Resource precedence | `DAT_ROOT` = the installed game folder (with `modules/` and `data/`) | Data project, `FullyQualifiedName~ContentStackRealData&TestCategory=RealData`; probe `tools/research/Arcanum.ContentProbe` (`--self-test`, `--game-root`); [research/API](../research/content-precedence.md) |
-| GOG installer unpack (ARC-DEV-074) | `ARC_GOG_INSTALLER` = the GOG offline installer; `innoextract` installed (`PATH` or a Homebrew folder); unpacks into a temporary folder, about 1.2 GB | Session project, `FullyQualifiedName~GogInstallerUnpackerTests&TestCategory=RealData`; [research](../research/gog-installer-unpack.md) |
+| GOG installer unpack (ARC-DEV-074) | `ARC_GOG_INSTALLER` = the GOG offline installer; `innoextract` installed (`PATH` or a Homebrew folder); unpacks into a temporary folder, about 1.2 GB | Session project, `FullyQualifiedName~GogInstallerUnpackerTests&TestCategory=RealData`; [research](packaging.md) |
 | Map aggregate builder (ARC-DEV-082) | `ARCANUM_EXE` and `ARCANUM_GAME_ROOT` (an installation with the module and the prototype files); the comparison also `ARCANUM_ORIGINAL_MAPS` (the aggregates the original wrote, such as `modules/Arcanum/maps`); `ARCANUM_AGGREGATE_OUT` writes the built files for a look | Executable project, `FullyQualifiedName~MapAggregateBuilderRealData`, `TestCategory=OriginalExe`, `-c Release` (about 10 s); [contract](../Arcanum.Executable.md#the-map-aggregate-builder) |
 | Prototype provision (ARC-DEV-069) | `ARCANUM_GAME_ROOT` = an installation the original ran (its `Arcanum.exe` is read; a copy made of links without `data/proto` and `modules/Arcanum/maps` is built from, in a temporary settings folder (prototypes and the map aggregates); `ARCANUM_ORIGINAL_PROTO` is not needed: the installation's own `data/proto` is compared by name and length) | Session project, `FullyQualifiedName~A_fresh_copy&TestCategory=OriginalExe`, `-c Release` (about 30 s); [research](../research/prototype-extraction.md#e4-results-arc-dev-069) |
 | Technology census (ARC-DEV-363) | `DAT_ROOT` = the installed game folder | Session project, `FullyQualifiedName~TechCensusRealDataTests&TestCategory=RealData` (a few seconds); one state per technology record 140..222 (RUNS, HERO, PART, INERT) and the not-ready components on the hero and an NPC; a failure prints the changed rows to paste into the test; [technology audit](../research/technology-audit-res-104.md#7-smoke-and-test-coverage) |

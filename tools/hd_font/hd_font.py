@@ -11,7 +11,7 @@ search order), traces each glyph's coverage mask into an outline and writes 4x c
 player's own game data: they stay local, never go into git or a distributed pack.  `--dry-run` reads the sources and the
 fonts and prints what would be written; it writes nothing and needs no dependencies.  A real run installs the locked
 dependencies (tools/hd_font/requirements.lock, with hashes) into a private venv on first use.
-Details: docs/workflow/hd-font.md and docs/research/font-vectorization.md.
+Details: docs/workflow/hd-font.md.
 """
 
 from __future__ import annotations

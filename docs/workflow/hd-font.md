@@ -1,6 +1,6 @@
 # HD font tracing: the player's interface fonts as 4× coverage frames (ARC-DEV-355)
 
-Slice 1 of the font vectorization research ([ARC-RES-100](../research/font-vectorization.md), section 7). The tool
+Slice 1 of the font vectorization research (ARC-RES-100 (deleted; its findings are at the end of "Method and limits"), section 7). The tool
 [`tools/hd_font`](../../tools/hd_font/hd_font.py) reads the interface bitmap fonts from the **player's own installation**, traces every
 glyph's coverage mask into an outline and renders it back as a 4× coverage frame. It writes **local files only**; it does not build
 or touch an HD pack. Slice 2 (ARC-DEV-361) puts the frames into the pack and the viewer draws text from them: [HD pack workflow](hd-pack.md#traced-fonts-in-the-pack-arc-dev-361). It needed no pack format change (the existing `masked` interface entries take the frames).
@@ -70,3 +70,13 @@ at cap 0.5) and a larger round-trip error (0.079 against 0.059 mean), a local ob
 - `interface.mes` is read in its simple `{number}{text}` form (first message of a number wins).
 - Pack and viewer support for the coverage frames is ARC-DEV-361 (`hd_pack.py fonts-plan`, importer `coverage` items, `AreaArtFontFace`); the owner's look at the result is slice 3.
 - Not done here (later slices): the remaining 23 fonts' review, runtime outlines.
+- **Research findings (ARC-RES-100, the research note is deleted).** The job is a deterministic trace, not a redraw: all 28 text fonts trace in about 70 s
+  of pure Python. On synthetic ground truth the traced outline matches the true one with IoU 0.87-0.94 for an unhinted source (0.79-0.86 if grid-fitted)
+  and 0.72-0.82 at 10-16 px; edge error at 4x is two to four times below nearest or bicubic upscaling. At exactly 4x a vector is not sharper than a
+  back-projected, thresholded 8x raster; its gain is size and scale freedom. A stroke under one pixel is quantized to whole 8x rows before the curve
+  fit. The original typefaces look like commercial designs and a licence review of derived outlines was not
+  done, so the outlines stay local like the rest of the pack. Not covered: other alphabets (the fonts hold Latin-1 only); runtime outlines (option B) are an optional later design.
+- **Owner check (slice 3):** compare the traced text with the 1x text at UI scales 1, 1.5, 2, 3 and 4 on the main menu (327), options (27, 229), the
+  character sheet (27, 229, 171), the dialog box and floaters (229), the world map (840), save/load (27) and the pre-made browser (27, 171). The 6 to
+  9 px fonts (Garamond 6/8/9, Courier 10, Pork 12) stay bitmap or get the stroke-aware step first; the reading windows use some of them (ledger WR6-WR8:
+  480 Courier 10 for the telegram, 482 Garamond 8 in the newspaper masthead, 497 Pepper 20 for the note), so that text stays at 1x until then.

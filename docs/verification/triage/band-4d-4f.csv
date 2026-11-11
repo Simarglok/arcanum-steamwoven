@@ -235,7 +235,7 @@ address,state,class,level,name,domain,basis
 0x4DE390,not implemented,,F2,light tint,lighting,read: LT15 world.md
 0x4DE4D0,not yet read,,F0,light helper,lighting,census only
 0x4DE4F0,not yet read,,F0,light helper,lighting,census only
-0x4DE5D0,not yet read,,F0,shadow map loader,lighting,census only; named in lights-on-all-maps.md
+0x4DE5D0,not yet read,,F0,shadow map loader,lighting,census only; named in the lights census (ledger LT1-LT15)
 0x4DE730,not yet read,,F0,light shadow helper,lighting,census only
 0x4DE770,not yet read,,F0,light shadow helper,lighting,census only
 0x4DE7A0,not yet read,,F0,light shadow helper,lighting,census only

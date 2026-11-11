@@ -1,6 +1,6 @@
 # Heal runtime (ARC-SKILLS-005)
 
-Status: **Implemented bounded component**, ARC-SKILLS-005 (2026-10-21), task S8 of the [skills plan](../research/skills-plan.md),
+Status: **Implemented bounded component**, ARC-SKILLS-005 (2026-10-21), task S8 of the skills plan,
 the first use of the [shared skill check](skill-check-runtime.md). The hero uses a healing item on a critter (itself included):
 the heal check, the healed amount, the master's and the critical success's cure, the item's uses and its destruction, and the
 4 action points in a turn-based round. Pure rules: `HealRules` in [`Arcanum.Simulation.Skills`](../../src/Arcanum.Simulation/Skills/HealRules.cs)

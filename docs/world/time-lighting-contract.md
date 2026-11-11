@@ -275,7 +275,7 @@ overlay update ORs the overlay flags without it. The executable reading of ARC-R
 ([LT1](../research/ledger/world.md#lights-on-all-maps-arc-res-069))
 corrects the earlier source reading, which had overlay creation take the primary flags.
 Object lights, nocturnal switching, carried and animated lights are read there
-([lights on all maps](../research/lights-on-all-maps.md)).
+([lights on all maps](../rendering/area-lighting.md)).
 
 ## Renderer boundary, layers and neighbours
 

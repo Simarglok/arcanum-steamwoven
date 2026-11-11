@@ -564,13 +564,14 @@ button state.
   draw hides the button at the editor-open degree (ledger CP2).
 - **O3** The 5 found schematics without a written prototype: placed on maps or
   given by scripts (map instances and scripts were not counted). Answered by the
-  [placement census](technology-census-res-115.md) (ARC-RES-115): they have no written prototype, so nothing
+  placement census (ARC-RES-115): they have no written prototype, so nothing
   can give them (records 4810, 4900, 5270, 5280, 5430).
+- Placement census (ARC-RES-115, the note is deleted): of the 62 found schematics 20 have a document on a map (24 instances on 8 maps), 30 appear only as chance lines of five generated source sets, 7 have a document that no followed path places (a floor, not proof) and 5 have no written prototype; of 146 non-craftable technological items 122 lie on maps and 16 nowhere, and of 124 craftable items 73 appear only as crafted products; six `su` NPCs cannot assemble from their own stock.
 - **O4** Answered by a follow-up count: no record lists the same prototype in
   both component lists (TC4 is latent).
 - **O5** Degrees and inventories of the NPCs whose dialogs use `su`: set by
   map instances and their auto-level schemes; needs a pass over map instances. Answered by the
-  [placement census](technology-census-res-115.md#4-npcs-with-su-dialogs-o5) (ARC-RES-115): six NPC
+  placement census (ARC-RES-115): six NPC
   instances carry the five dialogs (auto-level scheme 0 on all six prototypes), with stored degrees and one to five items each, none holding
   both components of any record their window lists.
 - **O6** Buy prices (0x462230, 0x4C1150) were not re-read (ledger R9 and O6

@@ -317,7 +317,7 @@ Known differences (reading only, no game step):
 ## ARC-DEV-366 — Tech books give expertise equal to intelligence (PR #980, 2026-11-11)
 
 The rules and what is built are in [tech books](../world/inventory-runtime.md#tech-books-arc-dev-366) and [ledger XA9, XA11](../research/ledger/technology.md#aptitude-and-expertise-consumers-arc-res-114).
-Where the eight books lie in the world is not read yet ([census](../research/technology-census-res-115.md)), so the first step is to find where one lies in the original; in ours it works wherever the viewer lets the hero pick up, loot or buy a book. Known differences, not to be re-reported: taking a book out of the pack by a drop, a sale or a gift is
+Where the eight books lie in the world is not read yet ([census](../research/technology-evidence.md)), so the first step is to find where one lies in the original; in ours it works wherever the viewer lets the hero pick up, loot or buy a book. Known differences, not to be re-reported: taking a book out of the pack by a drop, a sale or a gift is
 refused in ours (the removal script does not run there yet); a book picked up from the ground after the hero dropped it is refused likewise.
 
 | # | Step | Expected (from the original executable and data) | Status |
