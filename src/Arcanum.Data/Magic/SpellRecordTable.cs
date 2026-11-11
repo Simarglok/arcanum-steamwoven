@@ -124,6 +124,7 @@ public sealed partial class SpellRecordTable
     /// <summary>The first pass of the original's load: lines +0..+4 of each record in number order, then the forced values
     /// (willpower 0 from record 80, technology from 140). The file itself is loaded by <see cref="SpellData.Open"/>.</summary>
     [OriginalFunction(0x44FE30, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x44FE47, OriginalFunctionScope.Partial)]
     private static SpellDataRefusal? ReadRecords(MesFile list, SpellRecordMode mode, Draft[] drafts)
     {
         for (var spell = 0; spell < SpellRecord.Count; spell++)

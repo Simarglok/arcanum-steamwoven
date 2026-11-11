@@ -8,8 +8,8 @@ namespace Arcanum.World;
 
 /// <summary>
 /// ARC-DEV-359 (E1-c, TM4): the critters the session created on a map, as rows the world reads. A created critter has no map file, so its row is built from its prototype by
-/// <see cref="CreatedObjectRows.Critter"/> and each critter is given a one-row <see cref="AreaInventoryMap"/> (one NPC holder with an empty list: the inventory generation of a created critter is
-/// not modelled yet) that <see cref="RecordResolver.SetCreated"/> answers by identity, and an <see cref="AreaAiNpc"/> that <see cref="AreaAiHost.SyncCreated"/> runs. The session is the owner of what exists
+/// <see cref="CreatedObjectRows.Critter"/> and each critter is given a one-row <see cref="AreaInventoryMap"/> (one NPC holder with an empty list at T0; ARC-DEV-386: what the original's creation generates, the restock body 0x463C60, is the session's list added to it, and the map carries the
+/// prototype's inventory source as the holder's restock fact) that <see cref="RecordResolver.SetCreated"/> answers by identity, and an <see cref="AreaAiNpc"/> that <see cref="AreaAiHost.SyncCreated"/> runs. The session is the owner of what exists
 /// (<see cref="GameSessionOwner.QueryCreatedObjects"/>); this is derived data: a row is built once per entity (an entity is never given again) and a prototype that does not read as a critter is
 /// reported once (<see cref="Refused"/>) and left out, the critter staying in the session. Caller-serialized; no Godot.
 /// </summary>
@@ -23,11 +23,15 @@ public sealed class AreaCreatedCritters
         : this(session, made => CreatedObjectRows.Critter(prototypes ?? throw new ArgumentNullException(nameof(prototypes)), made.Prototype, made.Entity, made.Map.RuntimeMap, made.Cell.X, made.Cell.Y)) { }
 
     /// <param name="row">Builds the row of a created critter (a test gives synthetic rows).</param>
-    public AreaCreatedCritters(GameSessionOwner session, Func<SessionCreatedObject, CreatedObjectRowResult> row)
+    /// <param name="inventorySource">ARC-DEV-386: the inventory source (field 0xEF) of a created critter's row; null reads it from the row's critter fields (a test gives synthetic rows no fields).</param>
+    public AreaCreatedCritters(GameSessionOwner session, Func<SessionCreatedObject, CreatedObjectRowResult> row, Func<Arcanum.Data.Area.AreaObjectRecord, int>? inventorySource = null)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _row = row ?? throw new ArgumentNullException(nameof(row));
+        _source = inventorySource ?? (record => Arcanum.Data.Combat.CombatFieldReader.Read(record).Fields?.Critter?.InventorySource ?? 0);
     }
+
+    private readonly Func<Arcanum.Data.Area.AreaObjectRecord, int> _source;
 
     private readonly Dictionary<string, (AreaInventoryMap Map, AreaAiNpc Npc)> _built = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CreatedRowFailure> _refused = new(StringComparer.Ordinal);
@@ -70,7 +74,10 @@ public sealed class AreaCreatedCritters
                 var result = _row(made);
                 if (result.Row is not { } row) { _refused[made.Entity] = result.Failure; continue; }
                 var seed = new SessionMapInventorySeed([new SessionSeedHolder(made.Entity, SessionHolderKind.Npc, false, false, [], [])], []);
-                var one = new AreaInventoryMap(made.Map.RuntimeMap, seed, new Dictionary<string, Arcanum.Data.Area.AreaObjectRecord>(StringComparer.Ordinal) { [made.Entity] = row });
+                // ARC-DEV-386 (E1-c4, RK3): the restock facts of the holder are its prototype's inventory source (field 0xEF); a prototype that does not read as a critter's has none.
+                var source = _source(row);
+                var restock = source == 0 ? null : new Dictionary<string, AreaRestockSeed>(StringComparer.Ordinal) { [made.Entity] = new(source, 0) };
+                var one = new AreaInventoryMap(made.Map.RuntimeMap, seed, new Dictionary<string, Arcanum.Data.Area.AreaObjectRecord>(StringComparer.Ordinal) { [made.Entity] = row }, restock: restock);
                 built = (one, new AreaAiNpc(made.Entity, row, made.Cell));
                 _built[made.Entity] = built;
             }

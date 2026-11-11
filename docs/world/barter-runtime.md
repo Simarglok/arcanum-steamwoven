@@ -292,7 +292,7 @@ the revision. One revision. The viewer's caller is the [opening shop merchant](.
   sector list order (it matters only for two merchants of one container). The screen test's game window is the viewer's whole view at its
   zoom and the merchant search's area the viewport's size, not the original's fixed window. The generation of containers with flag 0x200 runs in the session
   ([above](#session-generation-arc-world-100)) and at the viewer's first loot open ([above](#container-loot-window-arc-world-101)); the
-  callers of RK13–RK14 (summons, a broken or destroyed holder, objects created in play) are not modelled. The NPC's best-items wield
+  callers of RK13–RK14 are modelled only for a critter a script created (ARC-DEV-386, RK16–RK17: the restock body at its creation); summons and a broken or destroyed holder are not. The NPC's best-items wield
   after a regeneration ([above](#npc-best-items-after-a-regeneration-arc-world-103)) takes no firearms level (a tech skill the map data's
   basic skills do not hold: 0, so a firearm scores −1 unless the NPC's sheet was levelled), reads no NPC effects, spells or art (never
   transformed, magick-allergic or unique), and the viewer builds an NPC's combat values (its attack's weapon, its armour class, its

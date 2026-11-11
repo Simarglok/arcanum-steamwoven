@@ -134,6 +134,7 @@ public sealed class WorldCatalog
         return Read(path, coordinate, relocate: false);
     }
 
+    [OriginalFunction(0x4F7464, OriginalFunctionScope.Partial)]
     private WorldSectorResult Read(string path, WorldSectorCoordinate coordinate, bool relocate)
     {
         var read = new Reader(_stack, _options).Bytes(path, _options.Sector.MaxSectorDecodedEntryBytes, out var issue);

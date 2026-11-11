@@ -102,6 +102,8 @@ with `llvm-objdump` and a direct-call, data-pointer and prologue scan (`tools/re
 the cited-but-unregistered rows are now 2,652 (any citation, not only call targets), 1,632 of them reached by a direct
 call chain from a registry function or a game-loop root.
 
+**V1 wave 3** (ARC-RES-121, groups G and I of the Ghidra export, 1,042 functions the census did not list) is read: see the [ledger section](ledger/census-triage-gi.md) and the [group definition](../verification/README.md#function-triage). Most of them are not code or dead; 31 carry a rule and have registry rows since ARC-DEV-389 (18 not implemented, 13 implemented).
+
 **Rules for every slice:** original behaviour is settled by the executable, not by a reconstruction; a row is added with
 its level at the time (F1 or higher for anything implemented); no original bytes, listings or oracle outputs in git; an
 anomaly is classified (reconstruction slip or original bug) under [D8](npc-combat-ai-plan.md#owner-decisions-2026-10-16);

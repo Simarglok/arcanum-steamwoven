@@ -428,6 +428,8 @@ public static class AreaMapPlans
             MaxPrototypes = Math.Max(1, prototypes), MaxResourceInputs = resources, MaxTerrainTemplates = templates, MaxObjects = (int)Math.Clamp(objects + 1, 1, int.MaxValue), MaxVisuals = (int)visuals,
             // ARC-DEV-375: every map plan (a whole interior or a window) shares the process's resident visual memo.
             ResidentVisuals = AreaResidentVisuals.Enabled ? AreaResidentVisuals.Shared : null,
+            // ARC-DEV-388: and the process's resident editor record facts.
+            ResidentEditorRecords = AreaResidentEditorRecords.Enabled ? AreaResidentEditorRecords.Shared : null,
         };
     }
 
