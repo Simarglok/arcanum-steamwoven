@@ -244,6 +244,25 @@ Known differences (documented, not bugs):
 - The Destroy of a grenade is left out of the census and covered by its own tests and the `grenade`, `summon-flash` and `summon-wall` stages.
 - Records with an unbuilt ObjFlag bit (blind, flee, fatigue limit, drunk, magnetic inversion, enshroud, shield, don't-draw, permanent polymorph), the cell branches, Use, Cast, Movement, Trait, AIRedirect and the creature list of record 183 are listed in the audit as open.
 
+## ARC-MAGIC-031 — The hero's sector aptitude and mage backgrounds are wired (2026-11-11)
+
+The hero's character sheet, inventory, carry weight and equipment now read the sector's aptitude adjustment, the tile under the hero, the hero's background and the game hour ([ledger AQ wiring note](../research/ledger/magic.md#aptitude-inputs-arc-magic-028)). This makes the steps of the ARC-MAGIC-028 list above playable; the expected values there stand. Magick points and aptitude are read on the character sheet.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | On the main map (`arcanum1-024-fixed`), read the aptitude on the sheet standing in sector (1749, 1512) and then in a neighbouring sector; then in (969, 1024) and (970, 1024), (969, 1025) and (969, 1030). | +40 in (1749, 1512), −20 in (969, 1024) and (970, 1024), +10 in (969, 1025), +8 in (969, 1030), 0 in an unnamed sector. The value changes at the sector border, not before. | open |
+| 2 | Same on the map "k'na tha", in one of its 19 sectors with adjustment and next to it. | +30 inside, 0 next to them. | open |
+| 3 | Day Mage hero: watch magick points across 5:59/6:00 and 17:59/18:00; then the Night Mage. | Day Mage 4 above the stored points from 6:00 to 17:59 and 4 below otherwise; Night Mage the reverse. | open |
+| 4 | Sky Mage hero: walk from open ground into a house and a cave. | 4 above on an outdoor tile, 4 below indoors (a swing of 8 at the doorway). | open |
+| 5 | Nature Mage hero: walk from a street or stone floor onto grass or forest. | 4 above on a tile with the `n` flag, 4 below elsewhere; note which grounds count. | open |
+| 6 | In a sector with adjustment, put on a magickal or technological item whose weight or effect depends on aptitude and compare with the same item next to the sector. | The item's effective weight follows the aptitude shown on the sheet (not checked in the original game; note what you see). | open |
+
+Known differences (documented, not bugs):
+
+- Only the hero reads the ground. An NPC's aptitude does not follow its sector here, the weapon aptitude in a hero's attack reads the stat owner without the ground, and backgrounds 66–68 are not built.
+- The ground comes from the shown window of the map: at the very edge of a window move, or on a cell the window holds no tile for, the hero has the neutral ground until the window moves.
+
+
 ## ARC-DEV-358 — ObjFlag writer: spell flags on the hero and creatures (MA-1, 2026-11-11)
 
 The component rules are in [the ObjFlag component](../world/spell-cast-host.md#the-objflag-component-and-the-component-table-arc-dev-358-ma-1), the executable reading in [OB1–OB5](../research/ledger/spell-runs.md#objflag-component-of-the-cast-host-arc-dev-358).
@@ -279,3 +298,22 @@ refused in ours (the removal script does not run there yet); a book picked up fr
 | 3 | Raise the intelligence while carrying a book (a potion, an item or a level-up), look at the expertise, then move the book to another place in the pack grid and look again. | Before the move the expertise still counts the old intelligence; after the move (the original removes the book's effects and adds them again) it counts the new intelligence. | open |
 | 4 | Take the book out of the pack (drop it or sell it). | In the original the expertise falls back by the intelligence the book last counted. In ours the drop and the sale are refused for now (see above), so only the original can be compared here. | open |
 | 5 | Open the barter window of a merchant that sells a tech book and buy it. | The book enters the pack and the expertise rises as in step 1 (the purchase fires the same insertion). | open |
+
+## ARC-MAGIC-032 — Identify: See Contents, Read Aura, Divine Magick (MA-7, 2026-11-11)
+
+The component rules are in [Identify](../world/spell-cast-host.md#identify-arc-magic-032) (executable reads XR1–XR5 in the [ledger](../research/ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)).
+By owner decision D5(a) the viewer shows the answer as a line in the message log; the three windows of the original are the identify-window slice E8's, so the **window itself is a known difference**, not a bug.
+Compare in both games with the same hero (Divination college: See Contents 6, Read Aura 7, Divine Magick 9).
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast Read Aura (spell 7) at a creature. | The original opens the character sheet of the creature, read only (no + or − buttons, all four tabs), the same window as the dialog's "show your abilities" reply. Steamwoven: a line "identify: ..." in the message log and no window. | open |
+| 2 | Cast See Contents (spell 6) at a **locked** container. | The original opens the container's inventory at once, with no lock, jam or magically-held test, so the items of a locked chest show. Steamwoven: the line only. | open |
+| 3 | In step 2, take or move an item in that window. | Not read in the executable (what a press may move in inventory mode 4): note what the original allows (take, put, nothing). | open |
+| 4 | Cast Divine Magick (spell 9) on an unidentified magickal item in the pack (a wand or a ring with a "?" description). | The item's name and description become the true ones, its spell slots and charge gauge show, and its worth in a trader's window is its real worth. Steamwoven builds this state (the item's identification mark), but cannot cast the spell yet: nothing picks an inventory item as a target. | open |
+| 5 | Cast Divine Magick on an item that was already identified. | The description shows again; nothing else changes. | open |
+
+Known differences (documented, not bugs):
+
+- The three windows (the NPC sheet, the container's inventory, the item description) are E8's; the viewer says so in its line.
+- Divine Magick cannot be cast from the viewer yet (no spell target in the inventory).
