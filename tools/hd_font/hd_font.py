@@ -165,7 +165,7 @@ def load_fonts(args: argparse.Namespace):
 
 def command_trace(args: argparse.Namespace) -> int:
     """Runs the trace with the tracer parameters of the command line, and puts the tracer's constants back afterwards."""
-    if not 0.0 <= args.alpha_max <= 1.3334 or not 0.05 <= args.level_cap <= 0.95 or args.opt_tolerance < 0.0:
+    if not (0.0 <= args.alpha_max <= 1.3334 and 0.05 <= args.level_cap <= 0.95 and 0.0 <= args.opt_tolerance < float("inf")):
         raise SystemExit("hd_font: --alpha-max must be 0 to 1.3334, --level-cap 0.05 to 0.95 and --opt-tolerance at least 0")
     if args.dry_run:
         return _trace(args)

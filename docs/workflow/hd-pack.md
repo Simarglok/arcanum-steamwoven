@@ -394,8 +394,8 @@ not a font change, stop and look. The real `apply` (then `verify --deep`, then `
 - `fonts-plan` overwrites only a plan it wrote (every item a `coverage` item), never the pipeline's `ready/plan.json`, and writes only under a checkout's `local/`.
 - Rolling back is `rollback` of the `apply` backup, as for any update.
 - **Replacing the installed fonts (ARC-UI-145).** A new trace of the same fonts (other `hd_font` parameters) changes the *bytes* of keys that are already installed, so
-  the update is not `--add-new`: run `plan --staged <staging> --base INSTALLED` without `--add-new`; it must say `1113 interface entries differ` (the five fonts,
-  nothing else) and no CONFLICT, then `apply` the same way. The viewer draws the glyphs bilinear without mipmaps since ARC-UI-145 (the interface frames stay trilinear).
+  the update is not `--add-new`: run `plan --staged <staging> --base INSTALLED` without `--add-new`; it must say about `1113 interface entries differ` (the five fonts, one per
+  frame whose bytes the new trace changed; check the figure, it is a prediction, not a run) and no CONFLICT, then `apply` the same way. The viewer draws the glyphs bilinear without mipmaps since ARC-UI-145 (the interface frames stay trilinear).
 
 ## Producing and repairing art (who does what)
 
