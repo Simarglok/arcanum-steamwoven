@@ -255,6 +255,8 @@ public partial class TerrainViewerApp
             var weapon = loaded.QueryEquipment().Worn.FirstOrDefault(w => w.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon)?.Entity;
             var item = loaded.QueryPcInventory().Select(i => i.Entity).Where(e => !worn.Contains(e)).Concat(worn.Where(e => e != weapon)).Concat(weapon is null ? [] : [weapon])
                 .Where(e => e != SessionHeroGrid.GoldEntity)
+                // A map item of the pack (oid:) may carry a get or insert-item script, which the session's ground pickup of a placed item does not run (ItemScriptUnsupported): the pickup steps below take a kit or made item first.
+                .OrderBy(e => e.StartsWith("oid:", StringComparison.Ordinal))
                 .FirstOrDefault(e => HoldItemOnGameCursor(e, "smoke") is not { } why || Refuse(e, why));
             bool Refuse(string e, string why) { refusals.Add($"{e}: {why}"); return false; }
             require(item is not null, $"an item of the pack goes on the cursor (pack {loaded.QueryPcInventory().Count}, worn {worn.Count}): {string.Join(" | ", refusals.Take(4))}");
@@ -285,7 +287,10 @@ public partial class TerrainViewerApp
             // ARC-DEV-319 (MIG14 S9d): the item goes back to the hero through the pickup goal 15 saved at its start: the click, F7, the live pickup, F8 with the use strings forgotten (as a load in a new
             // viewer has none), the loaded run finds the item again by its string, walks onto its cell and takes it once.
             SyncAreaInventory();
+            // An item with a row on this map (a pack item of the hero's own record) lies under its row's key, drawn in the ground bodies; one without a row is picked under a placed key.
             var lying = _groundOnly.FirstOrDefault(g => g.Value.Entity == item).Key;
+            if (lying == default && _inventoryHost!.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is { } itemMap && itemMap.TryGetRow(item!, out var itemRow)
+                && _groundBodies.ContainsKey(itemRow.Key)) lying = itemRow.Key;
             require(lying != default, "the thrown item lies on the ground as a placed item");
             CancelAreaAttack(null);
             var click = HeroRequests.Apply(new ObjectClickRequest(InventoryTargetOf(lying)));
