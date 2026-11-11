@@ -142,6 +142,8 @@ public partial class TerrainViewerApp
             }
             await Click(AreaBarButton.Inventory);
             Require(!SheetOpen && InventoryOpen, "Inventory switched from the sheet to the inventory: " + _gameBarNotice);
+            if (verifyGenerated) await VerifyGeneratedInventoryAsync(Frames, SetSmokeWindowSizeAsync);
+            else await CaptureHudAsync(verifyHd ? "inventory-hd" : "inventory-legacy", Frames);
             await Click(AreaBarButton.Inventory);
             Require(!InventoryOpen, "a second press closed it");
             foreach (var (button, open) in new (AreaBarButton, Func<bool>)[] { (AreaBarButton.Logbook, () => LogbookOpen), (AreaBarButton.Schematics, () => SchematicsOpen) })

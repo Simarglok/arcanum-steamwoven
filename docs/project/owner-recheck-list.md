@@ -693,3 +693,36 @@ The editor is the in-game character sheet's original look between the menu's str
 Known differences (documented, not bugs):
 
 - The hover hints of the buttons and values are not shown in the editor (the original shows them in the game's text bar).
+
+## ARC-UI-148 — Generated interface: the inventory window (S3, 2026-11-12)
+
+The rules are in [viewer slice S3](../rendering/hd-interface-density.md#viewer-slice-s3-arc-ui-148). Set the HD interface line on the launcher screen to **Generated (experimental)**, start a game
+and press `I`. Compare with the same window under **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open the inventory in a 1280 × 800 window, then press `I` again. | The pack grid, the doll grid, the count bars and the name box are drawn by code in the same places as in HD; the grid cells, the slots and every click land where they did. | open |
+| 2 | Drag the window's edge to make it bigger and smaller while the inventory is open. | The frame redraws at the new size (the previous picture stays until it is ready); the lines of the grid stay sharp and one unit wide at every size. | open |
+| 3 | Pick up an item and drop it into a cell and into a wear slot. | Same behaviour as in HD and Legacy. | open |
+| 4 | Look at the drop and use boxes. | Still the original's picture (the glow and the green or red corners show the state). | open |
+
+Known differences (documented, not bugs):
+
+- The curved flourishes at the corners of the original's boxes are not drawn in Generated: the boxes are plain rectangles with a brass rim.
+
+## ARC-MAGIC-058 — Spell runs at the hero's change of map (2026-11-12)
+
+The hero's change to another map (a jump point, the Crash Site cave, a map-mode exit) ends every spell run that names an object that does not travel with the hero (the hero, the followers that go along and what they hold); runs of the hero and of the followers that travel go on. Built from the executable (functions 0x45C720, 0x44F7A0, 0x44FA70, 0x44FC30; [rules](../world/spell-run-rules.md#runs-at-the-players-change-of-map-arc-magic-058-mt9b)). Compare in both games.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast a maintained spell on yourself (for example a protective spell with a slot in the top bar), walk through an exit to another map. | The spell and its slot are still there on the new map. | open |
+| 2 | With a follower in the party, cast a maintained spell on the follower and change map with the follower coming along. | The spell on the follower goes on; its slot stays. | open |
+| 3 | Cast a maintained spell on a creature that is not in the party (or on a follower you ordered to wait), then leave the map. | The spell ends as you leave: the slot is empty on the new map and the creature is without the effect when you come back. | open |
+| 4 | Cast Wall of Fire (or another spell that makes scenery) and leave the map. | The run ends as you leave and its fire pieces are gone when you return. (A summoned creature that follows you travels and its run goes on; creature summons are not built yet.) | open |
+| 5 | Cast a lock or hold spell on a door or chest of the map and leave. | The effect is over when you return (the run ended at the exit). | open |
+
+Known differences (documented, not bugs):
+
+- A run that travels keeps its next tick time; the original queues the tick again at the map entry (the time 0x459500 gives is not read).
+- The change of map by the world map is not covered (the endings on rest and world-map travel are MT11's).
