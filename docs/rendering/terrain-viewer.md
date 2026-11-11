@@ -106,15 +106,15 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   warning that only that release is checked; otherwise what is missing, for example "no arcanum2.dat here"); a button
   for each other ready fixed candidate; "Choose folder…" (the system's folder dialog; `GameFolderLocator.Choose` also
   looks inside a chosen Wine wrapper `.app`, bottle or `drive_c`); the rules Steamwoven or Original (custom mixes
-  after alpha); the options window's three HD lines (ARC-UI-143, below); "Show this screen at every start"; "Debug mode" (ARC-DEV-050, off by default:
+  after alpha); three HD lines (ARC-UI-143, below); "Show this screen at every start"; "Debug mode" (ARC-DEV-050, off by default:
   [debug mode](area-map-mode.md#debug-mode-arc-dev-050)); Play, Reset settings and Quit. The project's own look, not a
   window of the original's menu.
-- **HD lines (ARC-UI-143).** After the rules the screen has the Game page's three HD lines, one row of choices each: **HD graphics**
+- **HD lines (ARC-UI-143).** After the rules the screen has three HD lines (the Game page of the options window had them until ARC-UI-146), one row of choices each: **HD graphics**
   Off/On (the visual profile, `visual_profile_v1.json`), **HD interface** Off/On/Generated (experimental) and **HD pack** Auto/Game/Custom
   (`hdInterface`, `generatedInterface`, `hdPack`, `hdPackPath` of `game_settings_v1.json`, [HD pack source](../workflow/hd-pack.md#hd-pack-source-arc-dev-350)).
-  They are the options window's settings, not a copy: a choice is saved at once in the same files (not at Play), the game that Play
-  starts reads them like any start, and the options window keeps its lines. The pack source applies at the next start, as in the options
-  window; the note under the rows says what that start will read (an automated run: that pack folders are not searched). Custom opens the
+  They are the only place that sets them (the options window has no HD line since ARC-UI-146; the `H` key and the palette still switch the
+  visual profile in play): a choice is saved at once in the files (not at Play) and the game that Play
+  starts reads them like any start. The pack source applies at the next start; the note under the rows says what that start will read (an automated run: that pack folders are not searched). Custom opens the
   system folder dialog, with the same fallback note where there is none. The rows are off while the screen is busy; **Reset settings**
   resets `launcher_v1.json` only and leaves the HD lines as they are. A run with no settings file (an automated run) keeps the choices
   for the screen only: its start reads the files and finds the defaults. A choice that could not be written is named under the rows. Checked by the launcher self-test (defaults, each choice saved in the files, shown again by the next screen, read by
@@ -1425,7 +1425,7 @@ plans, picking, routes, the wall check, light, animation, the clock and the Sess
 it is not part of a snapshot or quick save.
 
 **Interface art (ARC-UI-089, ARC-UI-095).** The HD redraws of the interface (the pack's `interface` slice, ARC-DEV-242) have their own
-switch: the Game page of the options window has two project lines next to Rules. **HD graphics: Off/On** requests the Legacy or HD
+switch: the launcher screen has three project lines after Rules (ARC-UI-143; until ARC-UI-146 they were the options window's Game page lines, which no longer has them, the page ends with Rules). **HD graphics: Off/On** requests the Legacy or HD
 profile exactly as the key does (saved, the same toggle protocol) and switches the sprites and terrain of an HD pack only.
 **HD interface: Off/On/Generated (experimental)** (ARC-UI-095, default Off) is a separate saved setting (`hdInterface` of `game_settings_v1.json`, file version 3;
 version 1 and 2 files read it as Off); it draws the interface art alone and does not touch the visual profile, so the two can be
@@ -2247,7 +2247,7 @@ project's, except as below.
   arrows 667 and 668 at (+6, +21) and (+180, +21), a slider's bar 623 `SkilGauge` at (+47, +24) as wide as value × 120 / top, a
   list's value centred in red `Flare12Font` at (+47, +30). An arrow is a push button: the pointer over it shows its lit frame, a
   press its down frame with sound 3000, the release over it plays 3001 and changes the value. PROJECT: the shown controls take the
-  page's first slots in order (the Rules line the Game page's fifth, at (531, 122), ARC-UI-089's HD graphics line the sixth, at (531, 197) and ARC-UI-095's HD interface line the seventh, at (531, 272)); the control with the keyboard or controller
+  page's first slots in order (the Rules line the Game page's fifth and last, at (531, 122); ARC-UI-146 removed the HD graphics, HD interface and HD pack lines that stood after it, they are the [launcher screen](#launcher-screen-arc-ui-014)'s); the control with the keyboard or controller
   focus has its label lit in the page buttons' hover red; a text is one line. The line at the top names the hidden controls and the
   notice. Without the game's art (the synthetic self-tests) the whole window is the project's panel.
 

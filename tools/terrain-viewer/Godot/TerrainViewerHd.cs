@@ -201,9 +201,6 @@ public partial class TerrainViewerApp
         if (InterfaceHd.Configure(_canvas?.HdSource?.Pack, _gameSettings.HdInterface, _gameSettings.GeneratedInterface)) InterfaceHd.RedrawAll(GetTree().Root);
     }
 
-    /// <summary>ARC-UI-089: whether the options window's HD graphics line shows On (the requested profile, so a pending switch shows at once).</summary>
-    private bool HdGraphicsOption => (_canvas?.PendingVisualProfile ?? _canvas?.VisualProfile) == VisualProfile.Hd;
-
     private void BindVisualPalette()
     {
         if (_worldPanel is null || !GodotObject.IsInstanceValid(_worldPanel) || _canvas is null) return;
