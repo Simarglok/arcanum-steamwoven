@@ -2723,7 +2723,8 @@ buttons by mouse, spreads, an unbuilt tab, the diagnostic switch); the native sm
 
 The original Technical schematics key `T` (logical key down; the original's in-game key handler opens the window for the local
 PC as crafter and viewer, ledger [SW1](../research/ledger/technology.md#schematic-window-arc-technology-005)) toggles
-a diagnostic schematic window of the session's hero in area (exterior, cave and `--area-map`), with the learned and
+the schematic window of the session's hero (ARC-UI-142: in the original's look, art 365 with the page buttons, the discipline tabs, the record's art and
+text, the two component slots, the assemble button and the lens over the game view, when its art reads; else a diagnostic layout) in area (exterior, cave and `--area-map`), with the learned and
 found tabs, the eight discipline tabs, Previous and Next, the record's name and description, the two components (found or
 missing, the expertise they need), the product and quantity, and the Assemble button with its state. Contract:
 [schematic window runtime](../world/schematic-window-runtime.md).

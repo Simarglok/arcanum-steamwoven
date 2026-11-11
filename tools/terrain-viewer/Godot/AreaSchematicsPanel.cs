@@ -1,5 +1,6 @@
 using Arcanum.Simulation.Technology;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -9,6 +10,8 @@ namespace Arcanum.TerrainViewer;
 /// discipline tabs, the previous and next page, the record's name and description, the two components and the product, the
 /// assemble button and its message. A plain layout instead of the original's window art (interface art 365 and its buttons,
 /// not drawn here). The app rebuilds it whenever the session, the tab, the discipline or the page changes.
+/// ARC-UI-142: when the window's art reads, the original's window (<see cref="AreaSchematicWindowView"/>, with the round view's lens) replaces this
+/// layout; the diagnostic layout stays as the fallback and for the synthetic self-tests.
 /// </summary>
 public partial class AreaSchematicsPanel : CanvasLayer
 {
@@ -22,12 +25,26 @@ public partial class AreaSchematicsPanel : CanvasLayer
     private readonly ButtonGroup _disciplineGroup = new() { AllowUnpress = false };
     private AreaSchematicsView? _view;
     private Func<int, string>? _names;
+    private AreaSchematicWindowView _artView = null!;
+    private AreaRoundView _roundView = null!;
 
     public event Action? CloseRequested;
     public event Action<AreaSchematicTab>? TabRequested;
     public event Action<int>? DisciplineRequested;
     public event Action<int>? PageRequested;
     public event Action? AssembleRequested;
+    /// <summary>ARC-UI-142: an interface sound of the art look (3000 press, 3001 release) and the text bar entry of the part under the pointer.</summary>
+    public event Action<int>? SoundRequested;
+    public event Action<AreaMessageEntry?>? HoverEntryRequested;
+    /// <summary>ARC-UI-142: the round view's holder (the foot point and the zoom of the game view around the hero), or null for none.</summary>
+    public Func<(Vector2 Foot, float Zoom)?>? HolderView { get; set; }
+    /// <summary>ARC-UI-142: whether the window shows in the original's look (its art read).</summary>
+    public bool ArtMode => !DiagnosticLook && _artView.ArtSet;
+    /// <summary>PROJECT: shows the diagnostic layout although the art has read (the smoke's before-and-after capture); set before the next render.</summary>
+    public bool DiagnosticLook { get; set; }
+    internal AreaSchematicWindowView ArtViewForSelfTest => _artView;
+    internal bool RoundViewShown => _roundView.Visible;
+    public AreaSchematicWindowView ArtView => _artView;
     public bool IsOpen => Visible;
     public AreaSchematicsView? View => _view;
     internal AreaSchematicsView? ViewForSelfTest => _view;
@@ -37,6 +54,15 @@ public partial class AreaSchematicsPanel : CanvasLayer
     public override void _Ready()
     {
         Layer = 4;
+        _artView = new AreaSchematicWindowView(); AddChild(_artView);
+        _artView.TabRequested += tab => TabRequested?.Invoke(tab);
+        _artView.DisciplineRequested += discipline => DisciplineRequested?.Invoke(discipline);
+        _artView.PageRequested += by => PageRequested?.Invoke(by);
+        _artView.AssembleRequested += () => AssembleRequested?.Invoke();
+        _artView.CloseRequested += () => CloseRequested?.Invoke();
+        _artView.SoundRequested += id => SoundRequested?.Invoke(id);
+        _artView.HoverEntryRequested += entry => HoverEntryRequested?.Invoke(entry);
+        _roundView = new AreaRoundView(); AddChild(_roundView);
         _panel = new PanelContainer { Name = "AreaSchematics", MouseFilter = Control.MouseFilterEnum.Stop };
         _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
@@ -99,15 +125,28 @@ public partial class AreaSchematicsPanel : CanvasLayer
     {
         _names = names;
         Show(); Render(view, null);
-        _close.GrabFocus();
+        if (!ArtMode) _close.GrabFocus();
     }
 
-    public void CloseView() { Hide(); _view = null; _message.Text = ""; GetViewport().GuiReleaseFocus(); }
+    public void CloseView()
+    {
+        Hide(); _view = null; _message.Text = ""; _artView.CloseView(); _roundView.Visible = false;
+        GetViewport().GuiReleaseFocus();
+    }
 
     /// <summary>Renders a page; <paramref name="message"/> replaces the message line (null keeps it empty).</summary>
     public void Render(AreaSchematicsView view, string? message)
     {
         _view = view;
+        _body.Text = Body(view);
+        if (ArtMode)
+        {
+            _panel.Visible = false;
+            _artView.Render(view);
+            UpdateRoundView();
+            return;
+        }
+        _panel.Visible = true; _artView.Visible = false; UpdateRoundView();
         _learned.SetPressedNoSignal(view.Tab == AreaSchematicTab.Learned);
         _found.SetPressedNoSignal(view.Tab == AreaSchematicTab.Found);
         for (var d = 0; d < _disciplines.Length; d++) _disciplines[d].SetPressedNoSignal(d == view.Discipline);
@@ -123,7 +162,6 @@ public partial class AreaSchematicsPanel : CanvasLayer
             _ => "Assemble (expertise lacking)",
         };
         _assemble.TooltipText = view.HoverText;
-        _body.Text = Body(view);
         _message.Text = message ?? "";
     }
 
@@ -148,8 +186,20 @@ public partial class AreaSchematicsPanel : CanvasLayer
     // ARC-UI-018: the bar panel's inset event is static; a freed panel must leave it.
     public override void _ExitTree() => AreaGameBarPanel.InsetsChanged -= ResizePanel;
 
+    /// <summary>ARC-UI-142: the lens shows the game view around the hero while the original look is up (the view-window mode 1 of 0x550DA0).</summary>
+    private void UpdateRoundView()
+    {
+        var holder = IsOpen && ArtMode && _view is not null ? HolderView?.Invoke() : null;
+        var (origin, side) = _artView.LensOnScreen;
+        _roundView.Update(origin, side, holder);
+        _artView.LensCut = holder is not null;
+    }
+
+    public override void _Process(double delta) { if (IsOpen && ArtMode) { _artView.Place(); UpdateRoundView(); } }
+
     private void ResizePanel()
     {
+        if (_panel is null) return;
         // ARC-UI-018: inside the part the interface bars leave free.
         var (top, size) = AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size);
         _panel.Position = new Vector2(size.X * .1f, top + size.Y * .08f);
