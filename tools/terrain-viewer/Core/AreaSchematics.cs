@@ -24,11 +24,11 @@ public sealed record AreaSchematicSlot(int Prototype, int Description, bool Foun
 /// One page of the schematic window: the tab, the discipline (0..7), the page and the pages of that tab and discipline, the
 /// record shown (a placeholder for an empty tab), its name and description, the two components, the product and quantity, the
 /// button state (TECH-4) and the texts it shows, the crafter's expertise in the discipline, a note on what is missing, and
-/// (ARC-TECHNOLOGY-006) the NPC crafter's entity, null for the hero.
+/// (ARC-TECHNOLOGY-006) the NPC crafter's entity, null for the hero, and (ARC-UI-142) the record's interface art number.
 /// </summary>
 public sealed record AreaSchematicsView(AreaSchematicTab Tab, int Discipline, string DisciplineName, int Page, int Pages, int Record,
     bool Placeholder, string Name, string Description, AreaSchematicSlot? Component1, AreaSchematicSlot? Component2, AreaSchematicSlot? Product,
-    int Quantity, AssemblyButton Button, string? ButtonText, string HoverText, int Expertise, string? Note, string? Crafter = null);
+    int Quantity, AssemblyButton Button, string? ButtonText, string HoverText, int Expertise, string? Note, string? Crafter = null, int RecordArt = 0);
 
 public sealed record AreaSchematicsBuild(AreaSchematicRefusal Refusal, AreaSchematicsView? View);
 
@@ -135,7 +135,7 @@ public static class AreaSchematics
         var disciplineName = Text(data.Texts.DisciplineNames[discipline], profile) is { Length: > 0 } n ? n : $"Discipline {discipline}";
         if (record is null || pages == 0)
             return new(AreaSchematicRefusal.None, new(tab, discipline, disciplineName, shown, pages, number, true, name, description, null, null, null, 0,
-                AssemblyButton.ItemMissing, null, Hover(data), technology[discipline].Expertise, pages == 0 ? "no schematic in this tab" : "record unreadable", who));
+                AssemblyButton.ItemMissing, null, Hover(data), technology[discipline].Expertise, pages == 0 ? "no schematic in this tab" : "record unreadable", who, record?.Art ?? 0));
         // An NPC the session does not know (no attached seed, party record or added items) has no list to search.
         if ((crafter is null ? session.QueryHeroAssembly(record, items, data.Facts) : session.QueryNpcAssembly(crafter, record, items, data.Facts)) is not { } plan)
             return new(AreaSchematicRefusal.NoCrafter, null);
@@ -144,10 +144,15 @@ public static class AreaSchematics
         return new(AreaSchematicRefusal.None, new(tab, discipline, disciplineName, shown, pages, number, false, name, description,
             Slot(plan.First, data), Slot(plan.Second, data), Slot(new(true, product, 0, null, true), data), record.Quantity, plan.Button,
             SchematicAssemblyRules.RefusalMessage(plan.Button) is { } message ? Text(data.Catalog.Text(message), profile) : null, Hover(data),
-            technology[discipline].Expertise, null, who));
+            technology[discipline].Expertise, null, who, record.Art));
 
         string Hover(AreaSchematicData d) => Text(d.Catalog.Text(SchematicAssemblyRules.AssembleHoverMessage), profile);
     }
+
+    /// <summary>ARC-UI-142: a text of <c>schematic_text.mes</c> or a data string decoded as the window shows it (empty when absent).</summary>
+    public static string CatalogText(AreaSchematicData data, int message, MesTextProfile profile) => Text(data.Catalog.Text(message), profile);
+
+    public static string DecodeText(string? latin1, MesTextProfile profile) => Text(latin1, profile);
 
     /// <summary>The project's label of a tab.</summary>
     public static string TabName(AreaSchematicTab tab) => tab == AreaSchematicTab.Learned ? "Learned" : "Found";
