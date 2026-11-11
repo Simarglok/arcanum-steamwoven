@@ -139,6 +139,23 @@ public partial class TerrainViewerApp
             Require(_traitBodies.Count == 0, "no monster body is kept");
             await Shot("restored");
 
+            // ARC-MAGIC-052: the hero polymorphed into a monster is drawn with that body's profile (class 12, the record's species), and with its own body again at the END.
+            await Shot("hero-before");
+            var heroPoly = Cast(49, SessionSpellCaster.Hero);
+            await Until(() => session.QueryTraitArt(SessionSpellCaster.Hero) is not null, "the BEGIN of Polymorph put a monster body on the hero");
+            var heroArt = session.QueryTraitArt(SessionSpellCaster.Hero)!.Value;
+            await Until(() => WantedHeroBody().IsMonster && _worldActor.Profile.Idle.Selector >> 28 == 12, $"the hero is drawn with a monster profile ({_heroBodyStatus})");
+            var monsterProfile = _worldActor.Profile;
+            GD.Print($"ARC-MAGIC-052 trait-body hero-monster species={heroArt.Species} status={_heroBodyStatus} idle=0x{monsterProfile.Idle.Selector:X8} walk=0x{monsterProfile.Walk.Selector:X8} run=0x{monsterProfile.Run!.Selector:X8} "
+                + $"vault=0x{monsterProfile.Vault!.Selector:X8} attack=0x{monsterProfile.Attack!.Selector:X8} fall={(monsterProfile.FallDown is null ? "none" : "yes")} timing-walk={_worldActor.AreaGaitTiming?.ArtRate(MovementGait.Walk)}");
+            Require((monsterProfile.Idle.Selector >> 23 & 31) == heroArt.Species && ReferenceEquals(_readyActorPlan?.Profile, monsterProfile), "the plan draws the monster profile of the record's species");
+            Require(_readyActor is { } drawnHero && drawnHero.TextureKey.Selector >> 28 == 12 && _cache.TryGet(drawnHero.TextureKey, out _), "the drawn hero frame is a monster frame and uploaded: " + _readyActor?.TextureKey);
+            await Shot("hero-after");
+            SpellCasterNow()!.Act(new(SessionSpellRunActionKind.ForceEnd, heroPoly));
+            FlushSpellLog(null);
+            await Until(() => session.QueryTraitArt(SessionSpellCaster.Hero) is null && !WantedHeroBody().IsMonster && _worldActor.Profile.Idle.Selector >> 28 != 12, "the END of Polymorph gave the hero its own body back");
+            await Shot("hero-restored");
+
             // The hero: Body of Air takes every worn item off, its END chooses the best items again.
             var worn = session.QueryEquipment().Worn.Count;
             if (worn == 0) GD.Print("ARC-MAGIC-046 trait-body hero SKIP (the hero wears nothing)");
