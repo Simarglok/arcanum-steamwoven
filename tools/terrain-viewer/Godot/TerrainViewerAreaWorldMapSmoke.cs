@@ -330,8 +330,19 @@ public partial class TerrainViewerApp
             var realBefore = session.QueryFrameClocks().RealMs;
             var wasKnown = session.IsAreaKnown(target);
             var started = System.Environment.TickCount64;
+            // ARC-MAGIC-059 (0x565140 → 0x457450): entering the travel state ends the spells the hero maintains. A maintained spell of the hero (any data spell the stage can start; the stage tolerates a map with no spell data) is running when Enter is pressed.
+            var heroSpell = SpellCasterNow() is not null && _spellRecords is { Length: > 0 } ? StartMaintainedSpellForSmoke(session, SessionSpellCaster.Hero) : null;
+            if (heroSpell is null) GD.Print("ARC-MAGIC-059 native-smoke worldmap-demaintain NONE (no cast host, spell data or maintainable spell)");
+            else Require(session.QuerySpellRuns()[heroSpell.Value.Run] is not null, "the hero's maintained spell runs before Enter");
             InventoryKey(Key.Enter);
             Require(map.Travelling && session.QueryRealStep(SessionRealStep.WorldMapStep) is not null, "Enter started the journey and scheduled its first step");
+            if (heroSpell is { } spell)
+            {
+                // The ending is told when the cast host is next idle; the frame step's pass (the same TickAreaClock the journey's frames use) carries it.
+                for (var wait = 0; wait < 120 && session.QuerySpellRuns()[spell.Run] is not null; wait++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); TickAreaClock((long)Time.GetTicksMsec()); }
+                Require(session.QuerySpellRuns()[spell.Run] is null && session.QueryMaintainBar().SlotOf(spell.Run) is null, $"the travel start ended the hero's maintained spell {spell.Spell.Data.Number} (run {spell.Run}: {session.QuerySpellRuns()[spell.Run]?.Action.ToString() ?? "gone"})");
+                GD.Print($"ARC-MAGIC-059 native-smoke worldmap-demaintain PASS spell={spell.Spell.Data.Number}");
+            }
             // ARC-UI-134 (WM141): the journey turns the lens black (mode 2: a black square with art 198), the live view is off until it ends.
             if (_worldMapPanel.ArtMode)
             {

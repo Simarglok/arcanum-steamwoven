@@ -509,6 +509,15 @@ step (0x4A8570 → 0x457450) and `ObjectGone` the NPC destroy's (`AreaAiHost.Des
 leave the hero with its caster. Smoke stage `spell-end` (`docs/rendering/area-map-mode.md`). Differences: the ending comes after the outer action (the original ends the runs inside
 the kill, so a run killing its own parent is left alone by the guard 0x5B0BA4 there and is ended here), and the summon variants (0x4598D0, the summon list) are MT17's. The loss of consciousness is the transition test of the life step (conscious before, unconscious after); the setter's other conditions (a new fatigue damage of 0, the object test 0x405BC0, a critter flagged 0x4 that the original never counts as unconscious where this test uses the Undead trait) are not modelled. The sink belongs to the newest cast host: endings queued in a host that a map change retired are not told, so a run can outlive its dead parent for the moment between the map change and the new host's build.
 
+### The world-map travel start (ARC-MAGIC-059)
+
+The world map's start check (0x565140, [ledger UE6](../research/ledger/spell-runs.md#spell-run-endings-of-a-critter-arc-dev-301)) runs when a journey is started and again where a segment ends and another follows
+(`AreaWorldMap.TravelCheck`, set by the viewer to `WorldMapTravelCheck`). It interrupts the hero's running actions at level 3 through the hero runs host (`Interrupt`: a walk or a swing ends with its end nodes, an
+attempted cast of priority 4 or 5 refuses) and, when none refused, calls `EndMaintainedSpells` for the hero: every run the hero is the source of ends (technology runs and item-trigger runs without a maintenance
+period stay). A refusal at the start leaves the PC where it is and the map showing the route (`AreaWorldMapRefusal.ActionsRefused`); a refusal between segments drops every remaining waypoint and lands the PC
+(`WorldJourney.Step`'s `continueJourney`). Smoke stage `worldmap` (it takes the hero since this slice) starts a maintained spell of the hero and checks it is gone after Enter. The rest option click (0x57B710)
+calls the same ending without the interrupt; the rest window is E3-a's, so only travel is wired.
+
 ## Differences from the original
 
 Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is documented.

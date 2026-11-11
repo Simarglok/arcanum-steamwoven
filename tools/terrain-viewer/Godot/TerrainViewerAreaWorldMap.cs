@@ -146,7 +146,7 @@ public partial class TerrainViewerApp
         var onStart = _readyArea!.Snapshot.RuntimeMap == _worldMapData!.Data!.StartRuntime && townNumber == 0;
         // ARC-MAGIC-038: the teleport mode picks areas from any map (0x5618B0), so its view takes a position off the start map too, the location of the map's own area, and the picture's clicks reach the pick.
         TravelLocation? start = onStart ? new(cell.X, cell.Y) : teleport ? AreaSpellTeleport.MapAreaLocation(_worldMapData.Data, _readyArea.Snapshot.RuntimeMap) ?? default(TravelLocation) : null;
-        var worldMap = _worldMap = new AreaWorldMap(_worldMapData.Data, _areaSession!, start);
+        var worldMap = _worldMap = new AreaWorldMap(_worldMapData.Data, _areaSession!, start) { TravelCheck = WorldMapTravelCheck };
         if (_worldMapPanel is null)
         {
             _worldMapPanel = new AreaWorldMapPanel(); AddChild(_worldMapPanel);
@@ -427,8 +427,19 @@ public partial class TerrainViewerApp
         {
             AreaWorldMapRefusal.None => null,
             AreaWorldMapRefusal.NotOnStartMap => "not on the start map: no journey from here (teleport only)",
+            AreaWorldMapRefusal.ActionsRefused => "the hero's action cannot be interrupted: try again in a moment",
             _ => "nothing to travel to: add a waypoint",
         });
+    }
+
+    /// <summary>ARC-MAGIC-059 (0x565140, ledger WT9, UE6): the travel start check, before the journey and before each later segment. The hero's running
+    /// actions are interrupted at level 3 (0x424070: a walk or a swing ends with its end nodes; an attempted cast of priority 4 refuses), then the spells
+    /// the hero maintains end (0x457450, <see cref="SessionSpellCaster.EndMaintainedSpells"/>). False when a run refused: no journey is entered.</summary>
+    private bool WorldMapTravelCheck()
+    {
+        if (HeroRunsHost() is { } runs && !runs.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, "TRAVEL_START")) return false;
+        SpellCasterNow()?.EndMaintainedSpells(SessionSpellCaster.Hero);
+        return true;
     }
 
     private void RenderWorldMap(string? message)

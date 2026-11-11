@@ -60,8 +60,8 @@ public sealed record AreaWorldMapDataLoad(AreaWorldMapDataStatus Status, AreaWor
 
 /// <summary>Why a waypoint, a journey or a debug teleport was refused: none, the journey is running, no waypoints, too many, no route
 /// (the original's message 601), a pixel off the map, the PC not on the start map (ARC-DEV-050: a debug-mode view opened elsewhere),
-/// or an area without a location on the map.</summary>
-public enum AreaWorldMapRefusal { None, Travelling, NoWaypoints, TooMany, NoRoute, OffMap, NotOnStartMap, NoLocation }
+/// an area without a location on the map, or (ARC-MAGIC-059) the hero's running actions that the travel start check could not interrupt.</summary>
+public enum AreaWorldMapRefusal { None, Travelling, NoWaypoints, TooMany, NoRoute, OffMap, NotOnStartMap, NoLocation, ActionsRefused }
 
 /// <summary>What deleting a waypoint did (ARC-UI-085, ledger WM98): nothing to delete, one removed, one removed during travel (the travel is left and
 /// <see cref="AreaWorldMapRemoval.Landing"/> is where the PC lands), or the removal refused because the following segments have no route (Steamwoven).</summary>
@@ -117,6 +117,14 @@ public sealed class AreaWorldMap
     /// <summary>Steps taken and game hours applied by the running or last journey.</summary>
     public int Steps { get; private set; }
     public long GameMs { get; private set; }
+    /// <summary>
+    /// ARC-MAGIC-059 (ledger WT9, UE6): the host's travel start check (0x565140). It interrupts the hero's running actions at level 3
+    /// (0x424070) and, when none refuses, ends the spells the hero maintains (0x457450) and answers true; false when a run refused
+    /// (an attempted cast of priority 4 or 5). It runs when the journey starts (entering the travel state, 0x5615D0) and before each
+    /// later segment (0x564C20); a refusal at the start keeps the PC where it is, and a refusal between segments drops the remaining
+    /// waypoints and lands. Unset (no host): the journey is not checked.
+    /// </summary>
+    public Func<bool>? TravelCheck { get; set; }
     private TravelRuleProfile Rules => _session.Rules.Travel;
 
     /// <summary>The world-map pixel at the centre of a picture pixel.</summary>
@@ -209,6 +217,8 @@ public sealed class AreaWorldMap
         if (!OnStartMap) return AreaWorldMapRefusal.NotOnStartMap;
         if (Travelling) return AreaWorldMapRefusal.Travelling;
         if (_journey.Waypoints.Count == 0) return AreaWorldMapRefusal.NoWaypoints;
+        // Entering the travel state needs the start check (0x5615D0 → 0x565140); a refusal leaves the state as it was.
+        if (TravelCheck?.Invoke() == false) return AreaWorldMapRefusal.ActionsRefused;
         Travelling = true; Landing = null; Steps = 0; GameMs = 0; Selected = -1;
         return AreaWorldMapRefusal.None;
     }
@@ -223,7 +233,7 @@ public sealed class AreaWorldMap
     {
         ArgumentNullException.ThrowIfNull(advance);
         if (!Travelling) throw new InvalidOperationException("AREA_WORLD_MAP_NOT_TRAVELLING");
-        var step = _journey.Step(_session.IsAreaKnown, Rules);
+        var step = _journey.Step(_session.IsAreaKnown, Rules, TravelCheck);
         Steps++;
         if (step.GameMs > 0) { advance(step.GameMs); GameMs = checked(GameMs + step.GameMs); }
         var discovered = 0;

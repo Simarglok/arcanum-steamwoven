@@ -129,6 +129,19 @@ public sealed class SessionSpellRunEndTests
     }
 
     [TestMethod]
+    public void The_travel_start_demaintains_the_hero_and_only_the_runs_it_is_the_source_of()
+    {
+        // ARC-MAGIC-059 (0x565140 → 0x457450, UE6): the world map's start check ends the spells the hero maintains, as the gate does an NPC's.
+        var (owner, caster, record) = Setup();
+        using var _ = owner;
+        var heros = Start(owner, caster, record, Npc, source: SessionSpellCaster.Hero);
+        var cast = Start(owner, caster, record, SessionSpellCaster.Hero, source: Npc);
+        caster.EndMaintainedSpells(SessionSpellCaster.Hero);
+        Assert.IsNull(owner.QuerySpellRuns()[heros], "a run whose source is the hero ends");
+        Assert.IsNotNull(owner.QuerySpellRuns()[cast], "a run the hero is only the parent of goes on");
+    }
+
+    [TestMethod]
     public void Without_a_cast_host_a_death_tells_nobody_and_the_runs_stay()
     {
         var (owner, caster, record) = Setup();
