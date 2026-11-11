@@ -101,7 +101,7 @@ public partial class TerrainViewerApp
         // ARC-RENDER-041: a pool playing its frames changes its body without a revision, and a pool decays as game time passes
         // (which moves no revision either).
         var stamp = (area, session, session.Version.Revision, _inventoryHost, _areaKitArt, ObjectTargets(), _schematicData?.Data, BloodPoolFramesStamp(),
-            session.QueryBloodPools(new SessionMapId(CurrentAreaMap)).Count);
+            session.QueryBloodPools(new SessionMapId(CurrentAreaMap)).Count, _createdPrototypeRead is not null);
         if (Equals(stamp, _groundStamp)) return false;
         var frames = (AreaFrameOverlay)AreaFrames();
         var overlay = _areaOverlay!.Value;
@@ -182,6 +182,8 @@ public partial class TerrainViewerApp
         AddBloodPoolBodies(area, bodies, Frame);
         // ARC-DEV-347 (E1-a): the scenery and eye-candy objects the session created, drawn from their prototypes' art; a scenery is picked.
         AddCreatedObjectBodies(area, bodies, only, Frame);
+        // ARC-DEV-370 (E1-c2): the critters the session created, drawn from their prototypes' art and picked like map NPCs.
+        AddCreatedCritterBodies(area, frames, bodies, only);
         _groundBodies = bodies; _groundOnly = only;
         // A placed item without a row of this map is named and picked under its own key.
         if (_hoverIndex is { } index && ReferenceEquals(_hoverIndexArea, area)) foreach (var placed in only.Values) index.Admit(placed.Item3);

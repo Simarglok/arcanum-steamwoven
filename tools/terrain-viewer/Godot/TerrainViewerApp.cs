@@ -239,6 +239,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("spirit-talk") == true) await RunAreaSpiritTalkSmokeAsync(result);
                                 // ARC-DEV-347 (E1-a): only when named, a scenery and an eye-candy object the session creates by prototype are drawn, picked or not, resident, saved and destroyed (--hero, a map window).
                                 if (only?.Contains("created-scenery") == true) await RunAreaCreatedSceneryStageAsync();
+                                // ARC-DEV-370 (E1-c2): only when named, a critter the session creates by prototype is drawn, picked, moved by the AI's movers with a walk frame and gone once destroyed (--hero, a map window with the inventory).
+                                if (only?.Contains("created-critter") == true) await RunAreaCreatedCritterStageAsync();
                                 // ARC-DEV-352 (E1-b): only when named, Fireflash's flash on an empty tile and none on an occupied one; Wall of Fire's pieces, their burn and their END (--hero, a map window).
                                 if (only?.Contains("summon-flash") == true) await RunAreaSummonSmokeAsync(SummonFlashSpell);
                                 if (only?.Contains("summon-wall") == true) await RunAreaSummonSmokeAsync(SummonWallSpell);

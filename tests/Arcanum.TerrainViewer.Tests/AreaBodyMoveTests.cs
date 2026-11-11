@@ -291,7 +291,7 @@ public sealed class AreaBodyMoveTests
 
     // A minimal 8-bit ART: `groups` (8, or 1 with the one-rotation flag) groups of `frames` width×height frames with hotspot
     // (hotX, height − 1), palette 0 white.
-    private static byte[] Art(int frames, int fps, int width, int hotX, int groups = 8, int action = 0)
+    internal static byte[] Art(int frames, int fps, int width, int hotX, int groups = 8, int action = 0)
     {
         const int headerBytes = 132, paletteBytes = 1024, frameHeaderBytes = 28, height = 2;
         var total = groups * frames; var size = width * height;
