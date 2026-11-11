@@ -275,7 +275,7 @@ Crash Site profile it reads about 1.2 GB of authentication instead of about 596 
 
 ## Resident frames and visuals across map loads (ARC-DEV-375)
 
-Status: **design, written before the code** (O5c of the [load time diagnosis](../research/performance-diagnosis-2026-11.md); the owner
+Status: **implemented by ARC-DEV-375** (design written before the code; measurements at the end of this section). O5c of the [load time diagnosis](../research/performance-diagnosis-2026-11.md); the owner
 approved keeping the decoded repository between loads of the same map). The rule "no persistent encoded/decoded frame cache between
 operations" above stays for the pinned exterior (the Crash Site smoke, `ExecuteExterior`) and for every load that passes no resident
 store. The map path (`AreaMapLoadOperation`, whole interiors and the main map's windows) passes two.
@@ -334,6 +334,14 @@ inserts nothing that was not committed). The main thread only reads the immutabl
 whole snapshot differs; the part that was expensive and is shared, the ART work, is what the two stores keep. A reload of the *same* window (a cave return to
 the same arrival, a quick load in place) could keep the snapshot too, but doing so skips the build's authentication, which is the O5a decision; a follow-up
 (snapshot keyed by plan and input identities) belongs after O5a. The map's transitions are O5b ([DEV-368](../research/performance-diagnosis-2026-11.md)).
+
+**Measured (ARC-DEV-375).** One `perf` smoke (Debug source, `--sector 1409,1314`, Mac under load: load average 15-24, so only ratios inside one run mean anything),
+the same build with `ARC_AREA_RESIDENT=0` (before) and without it (after). Worker of the **return to the main map** after a trip to a temple interior (the cave-return case),
+milliseconds: `read.strict` 3,120 -> 3,950, `read.copy` **1,809 -> 469**, and the copy's allocation 103.5 MiB -> 1.9 MiB; frames served 1,617 of 1,623 (6 read), visual records served
+2,459 of 2,466. The unchanged stages of the same leg (plan, transitions, open, verify) were 1.6x slower in the second run (3.2 s -> 5.2 s together), so the second run was the busier one; scaled by
+that factor the worker's read stage fell from about 5.1 s to about 2.8 s (an estimate, not a measurement). The strict build still takes seconds with every visual served: its remaining cost is not the ART
+decode, so it is the next thing to profile (the closing whole-input authentication, the per-object appearance resolution; not measured here). The first load of a process is unchanged (nothing is resident), the
+temple's first visit read 76 of 242 frames (the main map's frames were in the store).
 
 **Relation to residency (K1).** This is art residency in the loader, not the sector cache of mobile objects ([residency](../architecture/residency.md)):
 the two share no state, and the object residency's fold and heartbeat rules are untouched.
