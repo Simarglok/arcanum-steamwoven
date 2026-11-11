@@ -77,6 +77,19 @@ public partial class TerrainViewerApp
                 Require(artView.Offset == max, "scrolling clamps at the south-east corner");
                 _worldMapPanel.CentreOnParty();
                 Require(artView.Offset == AreaWorldMapArtLayout.CentreOn(map.Position.X, map.Position.Y, max), "Home centres on the party");
+                // ARC-UI-134 (WM140): the lens shows the game view around the hero under the window, drawn over by art 198 when it read.
+                for (var f = 0; f < 3; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                var (holeCorner, holeEdge) = artView.LensOnScreen;
+                Require(_worldMapPanel.RoundViewShown && !artView.LensFrozen && holeEdge == AreaWorldMapArtLayout.Lens.Side * artView.Scale.X
+                    && holeCorner == artView.GlobalPosition + new Vector2(AreaWorldMapArtLayout.Lens.X, AreaWorldMapArtLayout.Lens.Y) * artView.Scale.X,
+                    $"the lens shows the round view: shown={_worldMapPanel.RoundViewShown} frozen={artView.LensFrozen} origin={holeCorner} side={holeEdge}");
+                Require(artView.HasLensArt == (artLook.Art.ContainsKey(AreaWorldMapArtLayout.LensArt)), "the lens art is drawn when it read");
+                // A native look (ARC_WORLDMAP_SMOKE_SHOT): the frame with the live lens; the shot is original-derived and stays under local/.
+                if (System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_SHOT") is { Length: > 0 } lensShot)
+                {
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.ChangeExtension(lensShot, ".lens.png"));
+                }
                 GD.Print($"ARC-UI-073 native-smoke worldmap-art PASS offset={artView.Offset} max={max}");
                 // ARC-UI-133 (WM36): through the real pointer route (so an input layer over the hole would be seen), a left release in the PC lens closes the
                 // window and a press, or a release just outside the square, does not; the key W opens it again.
@@ -319,6 +332,17 @@ public partial class TerrainViewerApp
             var started = System.Environment.TickCount64;
             InventoryKey(Key.Enter);
             Require(map.Travelling && session.QueryRealStep(SessionRealStep.WorldMapStep) is not null, "Enter started the journey and scheduled its first step");
+            // ARC-UI-134 (WM141): the journey turns the lens black (mode 2: a black square with art 198), the live view is off until it ends.
+            if (_worldMapPanel.ArtMode)
+            {
+                for (var f = 0; f < 3; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                Require(_worldMapPanel.ArtView.LensFrozen && !_worldMapPanel.RoundViewShown, $"the journey blackens the lens: frozen={_worldMapPanel.ArtView.LensFrozen} view={_worldMapPanel.RoundViewShown}");
+                if (System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_SHOT") is { Length: > 0 } travelShot)
+                {
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.ChangeExtension(travelShot, ".travel.png"));
+                }
+            }
             if (!DebugMode && _worldMapPanel.ArtMode) Require(!_worldMapPanel.QuillActive, "Enter left the quill on as it started the journey (ARC-UI-110)");
             var behindPause = 0;
             // ARC-DEV-126 (MIG12 S7): Escape on the open map opens the in-play menu over it (kind 3), it does not end the journey; the travel steps run
