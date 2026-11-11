@@ -20,6 +20,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import venv
@@ -71,8 +72,11 @@ def ensure_venv(argv: list[str]) -> None:
         if not replaceable_venv(environment):
             raise SystemExit(f"hd_font: {environment} exists and was not created by this tool (no {VENV_MARKER}); refusing to replace it")
         log(f"hd_font: installing the locked dependencies from {LOCK.relative_to(REPO)} into {environment}")
-        venv.EnvBuilder(clear=True, with_pip=True).create(environment)
-        (environment / VENV_MARKER).write_text("created by tools/hd_font/hd_font.py\n")
+        if environment.exists():
+            shutil.rmtree(environment)  # only a folder with this tool's marker gets here (replaceable_venv)
+        environment.mkdir(parents=True)
+        (environment / VENV_MARKER).write_text("created by tools/hd_font/hd_font.py\n")  # first, so an interrupted install stays replaceable
+        venv.EnvBuilder(clear=False, with_pip=True).create(environment)
         install = [str(python), "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "--no-input",
                    "--require-hashes", "--only-binary=:all:", "--no-deps", "-r", str(LOCK)]
         if subprocess.call(install) != 0:

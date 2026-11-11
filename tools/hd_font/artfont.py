@@ -178,7 +178,7 @@ def interface_art_name(content: Content, number: int) -> tuple[str, str]:
     name = messages.get(number)
     if not name:
         raise FontError(f"{INTERFACE_INDEX} has no message {number}")
-    if "/" in name or "\\" in name or ".." in name or name.startswith("."):
+    if "/" in name or "\\" in name or ".." in name or name.startswith(".") or not name.isprintable():
         raise FontError(f"{INTERFACE_INDEX} message {number} is not a plain file name")
     return name, found[1]
 
