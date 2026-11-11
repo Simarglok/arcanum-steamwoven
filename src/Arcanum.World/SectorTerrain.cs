@@ -86,7 +86,7 @@ public sealed class ContentSectorTerrain : ISectorTerrain, IDisposable
         ArgumentException.ThrowIfNullOrEmpty(mapName);
         var discovery = ContentMountPlan.Discover(gameRoot);
         if (discovery.Status != ContentMountStatus.Ready) { detail = "mount " + discovery.Status; return null; }
-        var opened = ContentStack.Open(discovery.Plan!);
+        var opened = ContentStack.OpenShared(discovery.Plan!);
         if (opened.Status != ContentStackStatus.Ready) { detail = "stack " + opened.Status; return null; }
         var port = new ContentSectorTerrain(opened.Stack!, mapName, data);
         if (port._catalog.Find(mapName) is null) { port.Dispose(); detail = "unknown map " + mapName; return null; }

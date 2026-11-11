@@ -38,7 +38,7 @@ public static class AreaMobileCells
         {
             var discovery = ContentMountPlan.Discover(gameRoot);
             if (discovery.Status != ContentMountStatus.Ready) return null;
-            var opened = ContentStack.Open(discovery.Plan!);
+            var opened = ContentStack.OpenShared(discovery.Plan!);
             if (opened.Status != ContentStackStatus.Ready) return null;
             using var stack = opened.Stack!;
             var list = MapList.Read(stack);

@@ -21,7 +21,7 @@ public static class AreaReputations
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready)
             return new(found.Status == AreaContentRootStatus.MountFailed ? AreaReputationsStatus.MountFailed : AreaReputationsStatus.ModuleOutsideGameRoot, null, found.Detail);
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return new(AreaReputationsStatus.StackFailed, null, opened.Status.ToString());
         using var stack = opened.Stack!;
         var loaded = ReputationTable.Load(stack);

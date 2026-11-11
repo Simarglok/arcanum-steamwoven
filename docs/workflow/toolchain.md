@@ -212,6 +212,20 @@ a budget or a regression gate. Other optimisations are shown with it: run before
 Tests: `PerfProbeTests` (the probe off and on, the lap names, the thread's allocation, the environment switches) in
 `tests/Arcanum.World.Tests`; `test_smoke` covers the stage kinds.
 
+## Shared content index (ARC-DEV-372)
+
+`ContentStack.Open` indexes every archive and walks the loose files of the game folder: about 87 MiB allocated and 0.3-0.4 s each (the allocation profile
+of the performance diagnosis, O4), and the viewer used to open one per reader (the load worker's two, five in `StartAreaTransitions`, the portraits, twelve
+background binders at once, the ground bodies, every window's art). The viewer's readers now call `ContentStack.OpenShared`:
+
+- **Sharing is opt-in.** Off by default, so tests and tools open private indexes as before; the viewer turns it on at its start (`ContentStack.EnableSharing`,
+  not in a self-test). With it on, `OpenShared(plan)` hands out a handle on the one index held for that mount plan (at most two plans are held), even when several threads
+  ask together; each handle is disposed by its reader as before and the archives close with the last handle. A call with its own `ContentStackOptions` opens a private index.
+- **Staleness.** The index is kept for the run (the original reads its static installation once). An archive whose size or modification time changed is read again;
+  `ContentStack.ResetShared()` drops the held indexes (`PrototypeCacheMount.Use` calls it, since the launcher may have built files into that folder).
+- **Measuring.** `./arcanum smoke pr --stages perf --sector 1409,1314 --env ARC_PERF_PROBE=1`; the publication's `transitions.NAME` steps print
+  next to `publish.NAME`. Reading the numbers: the allocation columns are exact, the milliseconds move with the Mac's load.
+
 ## Launch queue (ARC-DEV-033)
 
 Several threads work on the owner's Mac at once. Every Godot run, every export and every `dotnet` build or test goes
