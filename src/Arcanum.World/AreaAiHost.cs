@@ -2511,7 +2511,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (id == Pc)
         {
             // The hero is a healer only in the heal step (not run yet): its stats without the poison's effect, as the setter's facts read them.
-            var stats = _session.QueryHeroStats(new(0))?.Snapshot;
+            var stats = _session.QueryHeroStats(_session.HeroStatContext())?.Snapshot;
             return new AiSupportCritter
             {
                 FatiguePercent = fatigue, CurrentFatigue = status?.Fatigue ?? 0, PoisonLevel = _session.QueryHeroLife()?.Record.State.PoisonLevel ?? 0,

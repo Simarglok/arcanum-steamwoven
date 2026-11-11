@@ -397,7 +397,7 @@ public sealed class AreaInventoryHost
     {
         if (session.QueryHero() is null || session.QueryHeroLife() is not { } life) return null;
         var state = life.Record.State;
-        var query = session.QueryHeroStats(new(0, state.PoisonLevel, state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth)));
+        var query = session.QueryHeroStats(session.HeroStatContext(state.PoisonLevel, state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth)));
         return query?.Snapshot is { } stats ? stats.GetEffective(CharacterStat.Speed) : null;
     }
 
