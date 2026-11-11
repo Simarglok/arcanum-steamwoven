@@ -340,10 +340,10 @@ before it. It replaces the earlier
 
 | Kind | Use it for | Rule | Default limit |
 |---|---|---|---|
-| `window` | any Godot run with a window: native smokes, the viewer self-test, labs | the single Godot slot, in [queue order](#queue-order-arc-dev-390) | 30 min |
-| `headless` | `Godot --headless` that runs for a while (a lab, a long probe) | the same Godot slot | 30 min |
-| `quick` (ARC-DEV-390) | a Godot run with no window that ends in seconds: a project `--import`, the headless viewer self-test (`./arcanum smoke` uses it for both) | two quick places beside the Godot slot (it neither waits for nor holds the slot), one at a time per checkout; waits for an export that is running or next | 30 min |
-| `export` | an export endpoint (`tools/arcanum-local ... export`, the validation commands that export) | the Godot slot; when it is next, new `dotnet` runs wait and running ones finish, then it runs alone | 180 min |
+| `window` | any Godot run with a window: native smokes, the viewer self-test, labs | a [Godot lane](#godot-lanes-arc-dev-400): the heavy lane when it declares more than 90 s, else a short lane, in [queue order](#queue-order-arc-dev-390) | 30 min |
+| `headless` | `Godot --headless` that runs for a while (a lab, a long probe) | the same lanes | 30 min |
+| `quick` (ARC-DEV-390) | a Godot run with no window that ends in seconds: a project `--import`, the headless viewer self-test (`./arcanum smoke` uses it for both) | two quick places beside the Godot lanes (it neither waits for nor holds a lane), one at a time per checkout; waits for an export that is running or next | 30 min |
+| `export` | an export endpoint (`tools/arcanum-local ... export`, the validation commands that export) | alone: it waits for the running Godot runs of every lane; when it is next, new `dotnet` runs wait and running ones finish, then it runs alone | 180 min |
 | `dotnet` | `dotnet restore/build/test`; give the root checks as one command (`sh -c '... && ... && ...'`) | two dotnet places (waits for a free one, [limits](#dotnet-memory-limits-arc-dev-300)); runs alongside Godot runs; waits for an export that is running or next | 45 min |
 
 - **Order and gaps.** Places are numbered as runs arrive and ordered as [described below](#queue-order-arc-dev-390); a
@@ -373,14 +373,15 @@ before it. It replaces the earlier
   parent's place when that place covers it: an export covers every kind, a `window` or `headless` run covers Godot,
   `quick` and `dotnet` runs, a `quick` run covers `quick` runs, a `dotnet` run covers `dotnet` runs. Any other nesting (an export inside a Godot run, a Godot
   run inside a `dotnet` run) would wait for its own parent and is refused: queue it on its own.
-- **The owner's viewer.** `./arcanum area`, `world` and `map` take the Godot slot first in line (after the run holding
-  it), with no time limit, and keep it until the viewer window closes; the command stays in the terminal until then.
+- **The owner's viewer.** `./arcanum area`, `world` and `map` take a Godot lane (a short one, as a `window` run with the default
+  estimate) first in line (after the runs holding its lane), with no time limit, and keep it until the viewer window closes; the command stays in the terminal until then.
   Ctrl-C there, or closing the terminal, gives the place up while the viewer stays open. `--no-queue` starts at
   once, and `--dry-run` never queues.
-- **Lanes still on lockf.** While some threads still use the lockf rule, a run holding the Godot slot also takes
-  `/tmp/arcanum-godot-window.lock`, so the two never overlap (a queued run then prints that it waits for a lockf user).
+- **Lanes still on lockf.** While some threads still use the lockf rule, a Godot run also takes
+  `/tmp/arcanum-godot-window.lock` (shared, so the runs of the lanes hold it side by side), and a `lockf` user (exclusive)
+  and the queue's Godot runs never overlap (a queued run then prints that it waits for a lockf user).
 
-Tests: `python3 -B -m unittest tools.local_dev.test_run_queue` (arrival and length order, quick runs, gaps, export
+Tests: `python3 -B -m unittest tools.local_dev.test_run_queue` (arrival and length order, lanes and their accounting, quick runs, gaps, export
 quiet, crashed and killed runs, limits, lockf, nesting, locales); they use their own `ARCANUM_LOCAL_HOME` and lock file.
 
 ### Queue order (ARC-DEV-390)
@@ -415,6 +416,49 @@ queue is the worst order for such a mix, and a project import waited for a windo
   person-hours in all); this order with the declared lengths about 83 s (about 38 hours), open-loop, so a
   projection; the long runs wait longer (a 10 minute run about 100 s more on average). `history.jsonl` now records each
   run's `estimateSeconds`.
+
+### Godot lanes (ARC-DEV-400)
+
+The measurement of ARC-DEV-397 (2026-11-11, in its thread; not kept in git) showed the single Godot slot is not a
+resource limit: up to four smoke windows ran side by side on the owner's Mac (about 650 to 800 % CPU, 3 GB, 10 of 10
+four-window repeats green at load 12 to 40), while a replay of the 94 hours of history on one slot gave 76 hours of
+waiting against about 3 hours with a heavy lane and two short lanes. The owner approved the lanes (2026-11-11).
+
+- **Three lanes.** A `window` or `headless` run declaring more than `HEAVY_SECONDS` (90 s: `walk`, `container-click`, the
+  Crash Site smoke) takes the one **heavy** lane; any other takes one of the `DEFAULT_SHORT_LANES` (2) **short** lanes.
+  The lane is fixed when the run is queued (from `--estimate` or the kind's default) and written into its ticket; the
+  [queue order](#queue-order-arc-dev-390) still decides who is next within a lane. A run waits for the runs of its own lane, for
+  an exclusive run (below) that is running or ahead of it, and for runs of its own checkout, but no longer for the other
+  lane: a long run does not block a short one and the reverse. After about a day of the history the short lanes are
+  to be raised to 3 (`DEFAULT_SHORT_LANES`, or at once with the variable below); the history shows the red-run counts.
+- **A package build goes first.** `./arcanum package` (so `daily` too) queues its export with the owner's front priority, like
+  `./arcanum area|world|map`: it waits for the runs already holding a place and for nothing that arrives later. Before
+  this, an export was ordered by its arrival plus 3 of its 300 s estimates, so smokes arriving within 15 minutes kept
+  passing it (ticket 12945 waited with 4 to 9 runs ahead of it, 2026-11-11).
+- **An export runs alone.** It waits for every running Godot run of every lane (and those ahead of it in the order),
+  and Godot runs that are later in the order wait for it, as before; it still waits for running `dotnet` and `quick`
+  runs. Exports are one at a time.
+- **One checkout, one run.** Two Godot runs of one checkout (the folder holding `.git` above the folder the run was queued
+  from) never run at once, in any lane, and neither do a Godot run and a `quick` run of it: they share the checkout's
+  project folder. A run held back by its own checkout's run takes no place of another checkout's run in its lane.
+  So the lanes run the threads of different checkouts side by side; they do not speed up one thread's own chain.
+- **Rollback.** `ARCANUM_QUEUE_LANES=0` (or `off`) makes the wrapper queue its Godot runs as the old single slot: such a run
+  is recorded with lane `single` and runs alone, and every other wrapper waits for it and it waits for them. Any other
+  value that is not a whole number from 0 to 8 does the same and prints a note. `ARCANUM_QUEUE_LANES=3` makes 3 short
+  lanes. The variable is read by each wrapper, and every wrapper counts the short places from its own value, so keep it the same
+  in every lane's shell: set it in the shell profile to roll back for all of them
+  (a single wrapper that sets it only serialises its own runs); a ticket from a wrapper from before the lanes is also read as `single`.
+- **Same environment.** The lanes need no change to a command: every lane's smoke still has its own settings and saves
+  per process (the system pointer is gated, ARC-DEV-060). `lockf` users keep excluding the queue ([above](#launch-queue-arc-dev-033)); the queue's runs hold that lock shared, so with
+  overlapping lane runs a `lockf` user may wait for as long as the lanes stay busy (a retired rule).
+- **Red runs per lane.** The history of every Godot run (`history.jsonl`, and `./arcanum queue --history N`) records its
+  `lane`, the other Godot runs running at its start and end (`peersStart`, `peersEnd`) and the load average at its start
+  and end (`loadStart`, `loadEnd`). `./arcanum queue --lanes [--history N]` counts per lane the runs and the red ones
+  (a non-zero exit that is not the wrapper being stopped with SIGHUP, SIGINT or SIGTERM), split into runs that ran alone
+  and runs that ran beside others, and lists the latest red runs with those conditions, so a red run at a high load
+  (the measurement had one self-test red at load 37 that was never explained) is compared with the same lane's
+  red rate alone. Runs from before the lanes are put in the lane their length would take, without a peer count, as the baseline.
+  Stages and timings are not recorded here (ARC-DEV-399).
 
 ### dotnet memory limits (ARC-DEV-300)
 
