@@ -78,7 +78,7 @@ public static class AreaSpellsPage
                 AreaContentRootStatus.StackFailed => AreaSpellDataStatus.StackFailed,
                 _ => AreaSpellDataStatus.ModuleOutsideGameRoot,
             }, null, found.Detail);
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return new(AreaSpellDataStatus.StackFailed, null, opened.Status.ToString());
         using var stack = opened.Stack!;
         var loaded = SpellData.Open(stack, SpellRecordMode.LikeOriginal);

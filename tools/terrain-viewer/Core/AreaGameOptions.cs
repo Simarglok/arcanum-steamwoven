@@ -317,7 +317,7 @@ public sealed class AreaOptionsTexts
         ArgumentNullException.ThrowIfNull(modulePath);
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready) return Project($"{LabelsPath} not read ({found.Status} {found.Detail})");
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return Project($"{LabelsPath} not read (content stack {opened.Status})");
         using var stack = opened.Stack!;
         var kept = new Dictionary<(string, int), string>();

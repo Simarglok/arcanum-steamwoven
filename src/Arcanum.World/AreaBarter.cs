@@ -58,7 +58,7 @@ public sealed class AreaBarterData
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready)
             return (found.Status == AreaContentRootStatus.MountFailed ? AreaBarterDataStatus.MountFailed : AreaBarterDataStatus.ModuleOutsideGameRoot, null, found.Detail ?? "");
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return (AreaBarterDataStatus.StackFailed, null, opened.Status.ToString());
         using var stack = opened.Stack!;
         var sources = Mes(stack, "rules/InvenSource.mes");
