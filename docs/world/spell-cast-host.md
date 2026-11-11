@@ -703,6 +703,24 @@ today only the run that destroys its own objects does so, and it is the one bein
 Force in the path and passability queries (they are created; nothing blocks on them yet), a lost callback of a timed or maintained run (it is not called back; its CALLBACK line does not run). A creation or
 destroy is a session change inside the run pass: a pass the session then refuses (a full event budget) leaves the object made or gone with the run unchanged.
 
+## The ObjFlag component and the component table (ARC-DEV-358, MA-1)
+
+- **The dispatch is a table.** `SessionSpellCaster.Apply` looks a component's type up in `ComponentHandlers` (`SessionSpellCasterComponents.cs`, one line per type: Damage, Heal, Destroy, EyeCandy, Summon, AGoal,
+  AGoalTerminate, ObjFlag, Effect) and runs its handler, which answers its outcome or null for a component it leaves undone (logged as `ComponentNotReady`). A slice that adds a component adds its line and its own
+  partial file; the order of the old if-chain is gone (no type had two handlers).
+- **Every flag bit.** The ObjFlag component takes every bit of the spell flags (field 20), the object flags (field 19, new: `SessionObjectFlagField.Object`, saved as `objectSet` and `objectCleared`
+  in `spells.objectFlags`, schema 88) and the critter flags (field 218) on the hero and a mobile critter, with the reference count (0x455100: a set stops while another run provides the bit, a clear while
+  more than one does; spell flags only) and the original's side effects (ledger [OB1–OB5](../research/ledger/spell-runs.md#objflag-component-of-the-cast-host-arc-dev-358)): invisible writes the object flags invisible
+  (not for the local player) and translucent; shrunk, water walking and stoned write their object flag; don't-draw writes the object flag and the paralysed critter flag of a critter (Disintegrate's vanishing body);
+  entangled and paralysed ask for the hold interrupt as before; the other bits (shielded, anti-magic shell, bonds of magick, full reflection, the four detection bits, the body flags, hardened hands, enshrouded, Tempus Fugit,
+  illusion, familiar, spoken with the dead and the rest) are plain writes. The cast host's map (`FlagCastMap`) answers the object flags with the written ones, so the run rules, the target rules (a don't-draw object is no target)
+  and the invisible-awareness readers see them; the AI host's hidden test, action gate and hostility facts read them too.
+- **Body spells feed the unarmed damage.** `GameSessionOwner.UnarmedBodyOf` picks Body of Earth, Fire, Water, else Hardened Hands from the spell flags a critter holds in the original's order (OB5);
+  the hero's attack values and every NPC handed out by `WithNpcEffects` carry it, so a written flag reaches the resolver's unarmed bonus. The host's own `Combatant` and stat getter for an NPC now go through
+  `WithNpcEffects` as well (the MA-2 left-over: spell damage on an NPC reads its Shield of Protection or Body spell, and so does a burn).
+- **Not ready.** The flags with a function of their own (mind controlled, charmed, undead, fleeing, blinded: MA-4), the portal and container lock fields (MA-6), the item, NPC and trap flag fields (MA-7, E1-c), the water-walking clear's drowning
+  damage and the don't-draw clear's second function (OB2, OB3: F0, MA-8), the viewer's draw of a translucent, shrunk or hidden critter (the flags are written; the render reads them in a later slice), and non-critter targets.
+
 ## Identify (ARC-MAGIC-032)
 
 Slice MA-7 of the [magic audit](../research/magic-audit-res-103.md) (owner decision D5(a), 2026-11-11: magic builds the state and a text answer, the window is the identify-window slice E8's), on the
@@ -723,6 +741,7 @@ executable reads [XR1–XR5](../research/ledger/spell-runs.md#magic-audit-execut
 
 **Not ready.** Nothing picks an inventory item as a spell target yet (the pane's targeting, the inventory bit of `SessionItemUseCast.InventoryTarget`, and `Tgt_Obj_Inven` in the target rules), so spell 9 and the
 item-targeted half of spell 6 cannot be cast from the viewer; the three windows (E8); the multiplayer packets (kinds 7, 8, 10).
+
 
 ## Not ready
 

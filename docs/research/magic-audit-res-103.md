@@ -68,7 +68,7 @@ The components are the open part:
 | Damage | 18 (13) | Ready: typed, `Scaled`, flags (stun, scars, weapon drop, cripples) pass to the damage step | - |
 | Heal | 7 (6) | Ready: hit points, poison, fatigue, full, scars, raise; the raise script (point 0x12) runs no SCR and allows | MA-10 (small) |
 | AGoal | 4 (2) | Knockback (43) and hover (44) requests ready; the host pushes NPCs, not the hero or companions | MA-0 checks |
-| **ObjFlag** | **101 (49)** | **4 of 35 pairs** ([flags](#spell-and-object-flags-the-objflag-component)) | MA-1, MA-4, MA-6, MA-8 |
+| **ObjFlag** | **101 (49)** | **Every spell-flag, object-flag and critter-flag bit on a critter except the social and AI ones (MA-1, ARC-DEV-358)** ([flags](#spell-and-object-flags-the-objflag-component)) | MA-4, MA-6, MA-8 |
 | **Effect** | **48 (20)** | **Hero only**; changes to stats, maximums and reaction run, resistances and skills are inert ([effects](#effect-numbers-the-effect-component)) | E1-d, MA-2 |
 | **Summon** | **18 (18)** | **Not built** | E1-a/b/c/e |
 | Destroy | 17 (17) | Lying items only; the 17 spells use it on their summoned objects (CALLBACK, END_CALLBACK), so it follows Summon | E1-b |
@@ -87,15 +87,15 @@ The columns say whether anything **reads** the flag today and whether the cast h
 | --- | --- | --- | --- | --- |
 | Entangled, stoned (spell flags); paralysed (critter flags); spoken with dead | 51; 48; 59, 78; 56 | Hold rules, walk refusals, hit re-save (ARC-DEV-302, 304) | **Ready** (stoned: render side effect not) | - |
 | Mind controlled | 14, 19, 24, 29, 39, 52, 53, 57, 58, 68, 71, 72, 73, 74 | Reaction and companion rules | No (follow, no flee, -50 reaction, disband at END are the side effects) | MA-4 |
-| Object "don't draw" (object flags) | 11, 14, 17, 19, 21, 24, 26, 27, 29, 32, 34, 53, 57, 68, 71-74 | AI host hidden test, target rules (the draw path was not re-checked) | No (all but 34 follow Summon) | MA-1, E1 |
+| Object "don't draw" (object flags) | 11, 14, 17, 19, 21, 24, 26, 27, 29, 32, 34, 53, 57, 68, 71-74 | AI host hidden test, target rules (the draw path was not re-checked) | **Ready on a critter (MA-1: the flag and the paralysed bit, [OB3](ledger/spell-runs.md#objflag-component-of-the-cast-host-arc-dev-358)); the rest follow Summon** | E1 |
 | Charmed | 35, 50 | None found | No (+30 reaction toward a PC, kill-on-sight override) | MA-4 |
-| Water walking; Body of air, earth, fire, water | 13, 28; 13, 18, 23, 28 | The unarmed body bonus (+2 hardened hands, body of earth, fire, water) exists and **no producer feeds it from the flags**; the AI's body-of-air start refusal reads a fact whose producer was not checked | No | MA-1, MA-8 |
-| Anti-magic shell, full reflection, bonds of magick | 42; 44; 43 | Per-target stage; invocation check | No | MA-1 |
-| Invisible; enshrouded | 69; 63 | Awareness and hostility rules | No (invisible: translucent render flags) | MA-1 |
-| Detecting alignment; detecting invisible; detecting traps | 5; 8; 8 | Hover window; target stage; none (trap spotting is not built) | No | MA-1, E6 |
-| Shielded | 30 | Hit eye candy only | No | MA-1 |
-| Hardened hands | 45 | Unarmed damage rule exists, unfed (see above) | No | MA-1 |
-| Shrunk; polymorphed | 47; 49 | Render and equipment rules partly | No | MA-1, MA-8 |
+| Water walking; Body of air, earth, fire, water | 13, 28; 13, 18, 23, 28 | The unarmed body bonus (+2 hardened hands, body of earth, fire, water) exists and **no producer feeds it from the flags**; the AI's body-of-air start refusal reads a fact whose producer was not checked | Flags written (MA-1); Trait and the water-walking clear's damage (OB2) are MA-8 | MA-8 |
+| Anti-magic shell, full reflection, bonds of magick | 42; 44; 43 | Per-target stage; invocation check | **Ready (MA-1)** | - |
+| Invisible; enshrouded | 69; 63 | Awareness and hostility rules | **Ready (MA-1: the object flags invisible and translucent are written; the viewer's draw of them is not read)** | - |
+| Detecting alignment; detecting invisible; detecting traps | 5; 8; 8 | Hover window; target stage; none (trap spotting is not built) | **Ready (MA-1)** | E6 |
+| Shielded | 30 | Hit eye candy only | **Ready (MA-1)** | - |
+| Hardened hands | 45 | Unarmed damage rule, fed from the flags since MA-1 ([OB5](ledger/spell-runs.md#objflag-component-of-the-cast-host-arc-dev-358)) | **Ready (MA-1)** | - |
+| Shrunk; polymorphed | 47; 49 | Render and equipment rules partly | Flags written (MA-1: shrunk with its object flag); Trait is MA-8 | MA-8 |
 | Fleeing; blinded; undead (critter flags) | 38; 66; 58 | AI rules read them | No (AI notification and combat effects are the side effects) | MA-4 |
 | Locked (portal and container); magically held (portal) | 1; 75 | Door and container state in the session (pick locks) | No | MA-6 |
 | Identified (item) | 9 | Not modelled | No | MA-7 |
@@ -322,7 +322,7 @@ census (MA-0) in the same PR.
 | **MA-0** Spell census, ARC-DEV-356 ([result](#spell-census-ma-0)) | An opt-in `RealData` test (`DAT_ROOT`) that applies every record's BEGIN, MAINTAIN, END and callbacks (records 0..139) to a synthetic target in the cast host and asserts the exact set of `ComponentNotReady` components per record (the per-spell hero cast for the ✅ rows was left out, see the result). It is the living matrix: each slice below edits its expected set | verifies 0, 2, 12, 16, 31, 33, 36, 54, 59-62, 64, 65, 67, 78 | M | - | tests plus one test host; no production file | FR-MAGIC-007 |
 | **MA-5** Movement (E4-e) | `Movement` to a target tile and the teleport tile; no-teleport areas ([FR-TRAVEL-005](../requirements/world-travel-runtime.md#fr-travel-005)); followers after a teleport; Teleportation as a map change through the session path of MIG11 | 3, 4 | M-L | MA-1 (dispatch table) | new partial file; map transfer | FR-MAGIC-009, FR-TRAVEL-005 |
 | **MA-R** Executable reads (ARC-DEV-357, done: [ledger XR1-XR15](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)) | One Mac read (docs and ledger rows only): `Identify` on a critter, a container and an item (what each shows, what it writes); Tempus Fugit; the consumers of the illusion and familiar flags and of detecting traps; what magically-held does to a door; whether the speed stat reaches walking and action points; the weapon drop of the Disarm flag | 5-9, 75, 79, 0 | M | - | docs and ledger only | FR-MAGIC-007 |
-| **MA-1** Spell-flag writer (E4-a) | First splits the if-chain of `SessionSpellCaster.Apply` into a dispatch table with one partial file per component group; then generalises `ObjectFlag` from the four whitelisted bits to every `obj_f_spell_flags` and object-flag bit with the reference count it already has; per-flag side effects only where read (invisible render flags, shielded, shrunk, hardened hands and the body flags feed the unarmed rule); NPC targets once DEV-348 lands | 5, 43, 44, 45, 63, 69, 34, 47; part of 8, 30, 42 | M | - (NPC targets: DEV-348) | `SessionSpellCaster.Apply`, `SessionSpellCasterObjectFlags` | FR-MAGIC-007 |
+| **MA-1** Spell-flag writer (E4-a; **done**, ARC-DEV-358, 2026-11-11, [table](../world/spell-cast-host.md#the-objflag-component-and-the-component-table-arc-dev-358-ma-1)) | First splits the if-chain of `SessionSpellCaster.Apply` into a dispatch table with one partial file per component group; then generalises `ObjectFlag` from the four whitelisted bits to every `obj_f_spell_flags` and object-flag bit with the reference count it already has; per-flag side effects only where read (invisible render flags, shielded, shrunk, hardened hands and the body flags feed the unarmed rule); NPC targets once DEV-348 lands | 5, 43, 44, 45, 63, 69, 34, 47; part of 8, 30, 42 | M | - (NPC targets: DEV-348) | `SessionSpellCaster.Apply`, `SessionSpellCasterObjectFlags` | FR-MAGIC-007 |
 | **MA-6** Locks and holds on objects | `ObjFlag` on portal and container flags through the lock state pick locks already writes: Unlocking Cantrip, Magelock, and Flesh to Stone's reverse path on stone portals | 1, 75, 48 | S-M | MA-1 | door and container state | FR-MAGIC-007, FR-AI-003 |
 | **MA-3** Dispel (E4-c, narrowed) | Dispel: interrupt the runs sourced by, aimed at or listing the target, clear held, stoned and perma-polymorph, destroy a summoned target (exe read: MT15 lists the 0x451AF0 to 0x451C40 group for Dispel and Destroy together, so the Dispel function is confirmed first). The other control components are the technology lane's | 41, 42 | M | MA-1 | Dispel partial file, run host | FR-MAGIC-006, FR-MAGIC-007 |
 | **E1-b** Summon of scenery | The seven scenery summons: cloud, fog, ice cloud, walls, the flash and Wall of Fire (burning goal 77 exists); END and Dispel remove them; stage per group ([hand-off](summon-objects-res-101.md#e1-b-the-summon-component-for-objects-needs-e1-a)) | 11, 17, 21, 22, 26, 27, 32 | M | E1-a (done), MA-1 | Summon partial file | FR-MAGIC-008 |
@@ -385,6 +385,19 @@ What it checks and what it does not:
   the original (TA9: only a tile entry has a tile), so the census can no longer tell a scenery summon from a critter summon. A critter summon on a tile entry still logs `ComponentNotReady`
   (E1-e); its unit tests, not the census, hold that. The Destroy rows stay: the census targets are a critter and the hero, not a summoned object.
 
+## ObjFlag writer (MA-1, ARC-DEV-358)
+
+Done on 2026-11-11 ([host contract](../world/spell-cast-host.md#the-objflag-component-and-the-component-table-arc-dev-358-ma-1), ledger [OB1 to OB5](ledger/spell-runs.md#objflag-component-of-the-cast-host-arc-dev-358)).
+
+- **The dispatch is a table** (`SessionSpellCasterComponents.cs`): the next slices (MA-3 Dispel, MA-5 Movement, MA-6 locks, MA-8 Trait, E1-c and E1-e Summon) each add a line and their own partial file.
+- **Every bit of the spell, object and critter flags is written on the hero and a mobile critter**, with the reference count and the original's side effects (invisible and translucent, shrunk, water walking, stoned, don't-draw with the paralysed bit).
+  The session keeps the object flags as a third written field (schema 88). Eleven college spells (5, 8, 30, 34, 43, 44, 45, 47, 63, 69, 79) leave no component not ready on a PC and an NPC target any more (census, below), and the ObjFlag line left the not-ready set of 11, 13, 17, 18, 21, 23, 26, 27, 28, 32, 42 and 49.
+- **Left, by name.** The social and AI flags (mind controlled and charmed with their reactions and follow; undead, fleeing and blinded: MA-4); the portal and container locks (MA-6); the item identified bit (MA-7);
+  the drowning damage of the water-walking clear and the function the don't-draw clear calls when critter flags 2 have bit 0x2 (F0 rows OB2 and OB3, MA-8); the viewer's draw of a translucent, shrunk or hidden critter
+  (the object flags are written and read by the AI host and the target rules; the render does not read them yet); the Trait component (MA-8) for the Body spells and Polymorph.
+- **The unarmed body bonus is fed** from the flags a spell wrote: Body of Earth, Fire, Water and Hardened Hands reach the hero's and every NPC's unarmed damage (OB5).
+- **Census (D4a: stays a permanent opt-in test, each slice edits its table).** After MA-1 the census table lost the rows of 5, 8, 30, 34, 43, 44, 45, 47, 63, 69 and 79 (college) and 83, 84, 105 and 134 (others); 11, 13, 17, 18, 21, 23, 26, 27, 28, 32, 42 and 49 keep one component each (Destroy, Trait or Dispel). The census checks the dispatch only: a spell it lists as taken may still be partial (the flag's reader, the render).
+
 ## Effect consumers (MA-2, ARC-MAGIC-027)
 
 Done on 2026-11-11 ([contract](../world/durable-effects-runtime.md#consumers-of-resistance-and-stat-changes-arc-magic-027), ledger [RE1 to RE3](ledger/magic.md#effect-consumers-arc-magic-027)).
@@ -398,7 +411,7 @@ Done on 2026-11-11 ([contract](../world/durable-effects-runtime.md#consumers-of-
   modes. Recommendation was (b): a spell that does nothing is a bug of the game a player meets, which the owner's bug rule (2026-10-28, ledger NW4) sends to an "Original" setting. **Decided 2026-11-11: (c), fixed in both modes with no "Original" setting.** Until the fix lands the code is (a).
 - **Speed.** The hero's speed already reached the attack pause and the turn-based action points; an NPC's does now. Walking is not speed-driven in the original (MA-R, XR), so nothing was added there.
 - **Left over, by name.** (1) `SessionSpellCaster.Combatant` and its stat getter (`SessionSpellCaster.cs` lines 550 and 1182) read an NPC without its list, so spell damage on an NPC ignores a Shield of Protection or Body spell it holds and a spell's save reads
-  its unchanged stats: both are one-line changes (`_owner.WithNpcEffects(npc.Combat)`) for after PR #941 merges, together with the fire half (`FireDamageRules`, burning) the coordinator held back. (2) An NPC's life facts do not read its effect-changed strength, constitution or resistance (its maximum hit points
+  its unchanged stats: both were one-line changes (`_owner.WithNpcEffects(npc.Combat)`), **made by MA-1 (ARC-DEV-358)**, which covers the fire half (the burn's `Combatant` goes through the same call). (2) An NPC's life facts do not read its effect-changed strength, constitution or resistance (its maximum hit points
   and the poison tick); the list's own maxima apply. (3) The character sheet's resistance lines do not show effect changes. (4) The hero's innate (race, gender) effects have no resistance changes in the session.
   (5) Per-spell runs of 30, 46, 76 and 77 are not done: no smoke stage names them.
 

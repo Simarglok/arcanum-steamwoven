@@ -1,5 +1,6 @@
 using Arcanum.Data.Magic;
 using Arcanum.Session;
+using Arcanum.Simulation;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Goals;
@@ -121,6 +122,7 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     }
 
     /// <summary>The remove 0x4CD940 / 0x4243E0: the owner's runs whose bottom goal is exactly 45 and whose current frame has this entry's art and (unless <paramref name="anyTag"/>) this tag end at level 6. Returns how many. A looping entry played as 47, 58 or 75 (or queued under another run) cannot be removed this way (GT71, GT85).</summary>
+    [OriginalFunction(0x4243E0, OriginalFunctionScope.Partial)]
     public int Remove(string owner, int entryIndex, int tag, bool anyTag)
     {
         var removed = 0;

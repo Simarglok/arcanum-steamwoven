@@ -1,3 +1,4 @@
+using Arcanum.Simulation;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Goals;
@@ -64,6 +65,7 @@ public sealed partial class GameSessionOwner
     /// takes 3 off its countdown; at 0 or below the run is interrupted at level 6 (its end node clears the stunned bit and stands the critter), and that turn is still skipped. Out of a round the
     /// animation's own plays count (<see cref="AiExecutorRules"/>' stun node). A run being stepped keeps its count (the call is refused then, as any frame replacement is).
     /// </summary>
+    [OriginalFunction(0x427000, OriginalFunctionScope.Partial)]
     internal void CountStunnedTurn(string entity)
     {
         if (_goals.FirstRunOf(entity) is not { } run || run.Bottom.Goal != GoalType.AnimateStunned) return;

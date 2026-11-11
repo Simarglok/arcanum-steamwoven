@@ -29,6 +29,12 @@ public sealed class AreaSpellCastingTests
         // ARC-DEV-304: spell 56's flag is no hold.
         Assert.AreEqual("Rat r1 can be spoken with", AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x2000000, "r1", 1), null, Name));
         Assert.AreEqual("Rat r1 can no longer be spoken with", AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x2000000, "r1", 0), null, Name));
+        // ARC-DEV-358 (MA-1): every other flag, and the object flags a side effect wrote, tell no line (the original tells none); a hold's bit in the object flags is no hold.
+        Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x1, "r1", 1), null, Name), "invisible");
+        Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x200, "r1", 5), null, Name), "the invisible object flag");
+        Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x40, "r1", 5), null, Name), "the translucent object flag is no paralysis");
+        Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x10, "r1", 3), null, Name), "a critter flag that is no hold");
+        Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x40, "r1", 3 | SessionSpellCaster.SideEffectDetail), null, Name), "the paralysed bit don't-draw writes is no hold line");
     }
 
     [TestMethod]

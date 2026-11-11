@@ -200,6 +200,9 @@ public static partial class AiExecutorRules
     /// step against action − 1, an original slip), and nothing clears it.
     /// </summary>
     [OriginalFunction(0x431340, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x431C40, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4322A0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4324D0, OriginalFunctionScope.Partial)]
     private static (GoalFrame? Moved, bool More) EyeCandyFrameStep(GoalFrame goal, EyeCandyFacts facts, bool reverse)
     {
         var eye = goal.EyeCandy!;
