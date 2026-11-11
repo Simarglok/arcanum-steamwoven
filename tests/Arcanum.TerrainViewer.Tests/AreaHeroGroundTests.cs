@@ -56,6 +56,31 @@ public sealed class AreaHeroGroundTests
         Assert.AreEqual(default, new AreaHeroGround(() => snapshot, () => (new AreaChart(1L << 40, 0, new(0, 0), "FAR"), new CellCoord(1, 1)), () => null).Read());
     }
 
+    // ARC-DEV-398: the ground a session keeps across area reloads must not keep the window it last read: its indexes are the size of the whole terrain.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static (AreaHeroGround Ground, WeakReference Snapshot) ReadOnceAndForget()
+    {
+        using var fixture = new AreaOwnerFixture();
+        var snapshot = fixture.Owner.LoadStrict();
+        var sector = snapshot.Sectors.First(s => s.Present && s.Scope == AreaScope.Core);
+        var chart = new AreaChart(sector.Coordinate.OriginX, sector.Coordinate.OriginY, new(0, 0), "TEST_CHART");
+        (AreaChart, CellCoord)? hero = (chart, new(1, 1));
+        AreaSnapshot? shown = snapshot;
+        var ground = new AreaHeroGround(() => shown, () => hero, () => null);
+        ground.Read();
+        shown = null;
+        return (ground, new WeakReference(snapshot));
+    }
+
+    [TestMethod]
+    public void A_ground_that_read_a_window_does_not_keep_the_window_alive()
+    {
+        var (ground, snapshot) = ReadOnceAndForget();
+        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+        Assert.IsFalse(snapshot.IsAlive, "the retired window (and its terrain-sized indexes) must be collectable while the ground lives on");
+        GC.KeepAlive(ground);
+    }
+
     [TestMethod]
     public void A_chart_cell_becomes_a_world_cell_through_the_charts_origin_and_a_cell_beyond_the_cell_type_has_none()
     {

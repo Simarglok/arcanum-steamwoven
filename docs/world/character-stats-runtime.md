@@ -58,7 +58,7 @@ Derived formulas over effective inputs (C integer division, truncation toward ze
   `TileSoundTable.MageGround` over `WorldSector.TileArt` and are false where the sector cannot be locked (outside the map).
 
 The hero's callers read the context from the session (ARC-MAGIC-031): `GameSessionOwner.HeroStatContext(poison, crippledLegs)` adds the hero's background and the clock's hour to the ground the viewer supplies
-(`GameSessionOwner.HeroGround`, from `AreaHeroGround`: the sector adjustment of the hero's cell and its tile's outdoor and nature facts, neutral where the shown window holds none). NPC stat reads and the attack
+(`GameSessionOwner.HeroGround`, from `AreaHeroGround`: the sector adjustment of the hero's cell and its tile's outdoor and nature facts, neutral where the shown window holds none; ARC-DEV-398: its two terrain-sized indexes live exactly as long as their window snapshot, not in fields of the long-lived ground, so a reload's retired window is collectable). NPC stat reads and the attack
 paths that copy a stat owner still pass 0 ([ledger AQ wiring note](../research/ledger/magic.md#aptitude-inputs-arc-magic-028)).
 
 ## Accepted departures

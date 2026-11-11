@@ -16,9 +16,10 @@ public sealed class AreaHeroGround
     private readonly Func<AreaSnapshot?> _snapshot;
     private readonly Func<(AreaChart Chart, CellCoord Cell)?> _hero;
     private readonly Func<TileSoundTable?> _tiles;
-    private AreaSnapshot? _indexed;
-    private Dictionary<(long X, long Y), uint> _art = [];
-    private Dictionary<(long X, long Y), int> _aptitude = [];
+    // ARC-DEV-398: the two indexes live as long as their snapshot and no longer: they are the size of the window's terrain (tens of megabytes on a large map),
+    // and a field holding the last indexed snapshot and its indexes kept a retired generation's whole window alive after a reload until the next hero read.
+    private sealed record Index(Dictionary<(long X, long Y), uint> Art, Dictionary<(long X, long Y), int> Aptitude);
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<AreaSnapshot, Index> _indexes = new();
 
     /// <param name="snapshot">The shown area's snapshot now (null: none shown).</param>
     /// <param name="hero">The hero's committed chart cell with the chart that places it in the world now (null: none): a chart cell is relative to the map's chart origin, the snapshot's tiles and
@@ -35,15 +36,17 @@ public sealed class AreaHeroGround
     public SessionHeroGround Read()
     {
         if (_snapshot() is not { } snapshot || _hero() is not { } hero || WorldCell(hero.Chart, hero.Cell) is not { } cell) return default;
-        if (!ReferenceEquals(_indexed, snapshot))
-        {
-            _art = new Dictionary<(long, long), uint>(snapshot.Terrain.Count);
-            foreach (var tile in snapshot.Terrain) _art.TryAdd((tile.WorldX, tile.WorldY), tile.RawArt);
-            _aptitude = new Dictionary<(long, long), int>();
-            foreach (var sector in snapshot.Sectors) if (sector.Present) _aptitude.TryAdd((sector.Coordinate.X, sector.Coordinate.Y), sector.AptitudeAdjustment);
-            _indexed = snapshot;
-        }
-        return Resolve(cell, _aptitude, _art, _tiles());
+        var index = _indexes.GetValue(snapshot, Build);
+        return Resolve(cell, index.Aptitude, index.Art, _tiles());
+    }
+
+    private static Index Build(AreaSnapshot snapshot)
+    {
+        var art = new Dictionary<(long, long), uint>(snapshot.Terrain.Count);
+        foreach (var tile in snapshot.Terrain) art.TryAdd((tile.WorldX, tile.WorldY), tile.RawArt);
+        var aptitude = new Dictionary<(long, long), int>();
+        foreach (var sector in snapshot.Sectors) if (sector.Present) aptitude.TryAdd((sector.Coordinate.X, sector.Coordinate.Y), sector.AptitudeAdjustment);
+        return new(art, aptitude);
     }
 
     /// <summary>The world cell of a chart cell (<see cref="AreaChart.ToWorld"/>), or null where it does not fit the cell type (the sector and tile indexes are in 32-bit cells).</summary>
