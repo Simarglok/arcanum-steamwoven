@@ -17,6 +17,7 @@ public static partial class TerrainViewerSelfTest
         var payload = SoundPayloadReader.Inspect("synthetic/square.wav", SquareWave(22050, 22050));
         Require(payload.Status == SoundPayloadStatus.Admitted && payload.Wav!.FrameCount == 22050, "synthetic WAV admitted");
         var backend = ViewerAudioBackend.Create(host);
+        TerrainViewerApp.MuteMasterForTests();  // ARC-DEV-403: the test tones are not heard
         var audible = backend.Audible;
         try
         {

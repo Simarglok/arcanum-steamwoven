@@ -595,6 +595,7 @@ class RunTests(unittest.TestCase):
 
         with mock.patch.object(smoke.tempfile, "mkdtemp", mkdtemp), mock.patch.object(smoke, "plan", return_value=steps), \
                 mock.patch.object(smoke, "execute", execute), mock.patch.object(smoke.os, "access", return_value=godot), \
+                mock.patch.object(smoke, "focus_guard_library", return_value=None), \
                 mock.patch.dict(os.environ, {}, clear=False), redirect_stdout(io.StringIO()):
             os.environ.pop(run_queue.TICKET_ENV, None)
             result = smoke.run(parse(*argv))
