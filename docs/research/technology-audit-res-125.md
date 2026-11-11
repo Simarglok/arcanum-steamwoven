@@ -22,7 +22,7 @@ Requirements (reference only, no coverage row changes): [FR-ITEM-011](../require
 3. **RUNS is a host verdict, not a behaviour check.** The census says every component of a record is taken; it does not say the flag it writes has a reader. By a symbol search on `113d23e`, the drunk bit (records 172, 181)
    and the shielded spell bit (209) have **no reader in `src` or `tools`**, and the viewer draw does not read the hidden, shrunk or translucent flags (a limit MA-1 named). Section 4 lists which flags have readers.
 4. **What is genuinely missing is short and now has no blocker:** the powered shield cannot be worn (T-m2), creature items do nothing when thrown (T-m1, unblocked since E1-c landed), placed trap devices refuse (E6-b, unblocked since T-g),
-   the cell-branch and control components (E4-c), nested Cast (203), creature Summon with AIRedirect (183, E1-e) and Trait (222, MA-8), plus the reader gaps of section 4 and the smoke gaps of section 5.
+   the cell-branch and control components (E4-c; nested Cast 203 since ARC-MAGIC-049), creature Summon with AIRedirect (183, E1-e) and Trait (222, MA-8), plus the reader gaps of section 4 and the smoke gaps of section 5.
 5. **Nothing here is owned by a running thread** (no technology or magic thread is active on 2026-11-11). Four of the slices below are shared with the magic queue ([magic audit](magic-audit-res-103.md)): E4-c, E4-e/MA-8, E1-e and the flag readers; they are listed once, here, with the magic label.
 
 ## 2. Method and limits
@@ -68,7 +68,8 @@ A flag counts as read when a symbol outside the data tables uses it; behaviour a
 a charge cell spent and an NPC crafter through `su`. Per the smoke-scope rule these go into `tech-craft` (or one sibling stage) rather than a new runner.
 
 **T-s progress (ARC-MAGIC-051, sibling stage `tech-products`, slices in order):** slice 1 done: Therapeutics degree 1 and 2 potions (records 157 and 158) eaten with the effect list and the strength +2 measured, a Chemistry poison (record 171) used on a living NPC through the item cursor, effects and items kept across F7/F8.
-Open: found schematic document, charge cell, NPC crafter through `su`, an Explosives product.
+Slice 2 done: the seven found documents of Chemistry and Therapeutics (4200 to 4240, 5400 to 5420) read through the Read button, a second copy kept, and the Found tab assembles record 4220 (4200 and 4210 were refused for expertise in the run; the stage prints each button and asserts only that one record assembles).
+Open: charge cell, NPC crafter through `su`, an Explosives product.
 Unit-test coverage of the rules is as RES-104 lists it; no gap was found there.
 
 ## 6. Queue
@@ -83,7 +84,7 @@ Labels are planning labels, not task codes (the coordinator hands codes out). Si
 | 4 | **R-1** flag-reader read (**done, ARC-RES-126**) | Mac read: who reads the drunk bit and the shielded spell bit in the exe, and what they do; ledger rows only (SFR1 to SFR5) | 172, 181, 209 | S | none | none |
 | 5 | **E4-a2** shielded hit eye candy and don't-draw draw | R-1 found one reader: the hit effect 0x459A30 plays the run's hit eye candy for shielded (and magnetic inversion) at a hit on a PC or NPC (the entangled branch is built); drunk has none. Plus the viewer's draw of hidden, shrunk and translucent critters and of don't-draw objects | 172, 181, 209, 178, 183, 200, 217 | M | R-1 | spell-cast and viewer |
 | 6 | **E4-c** control components (first slice **done**, ARC-MAGIC-044, 2026-11-11: NoOp, Terminate, ChargeNBranch, TestNBranch on hit-point damage, [ledger CN1–CN5](ledger/spell-runs.md#control-components-arc-magic-044); Use (record 184) done by ARC-MAGIC-048, ledger CN6, CN7) | ChargeNBranch, TestNBranch, Terminate, Use, NoOp with the cell branch and the TC1 switch (cell weapon spends one cell; maintained armour pays a cell a tick) | 147, 168, 184, 187, 188 | L (two slices) | none | spell-cast |
-| 7 | **E4-e** nested Cast | Nested Cast component | 203 | S to M | E4-c | spell-cast |
+| 7 | **E4-e** nested Cast (**done**, ARC-MAGIC-049, 2026-11-11: the Cast component starts its spell as the parent's cast at the target without the casting goal, [ledger NC1–NC3](ledger/spell-runs.md#cast-component-arc-magic-049); record 203 RUNS) | Nested Cast component | 203 | S to M | E4-c | spell-cast |
 | 8 | **MA-8** Trait and polymorph (E4-f) | Trait: art and palette, drop what the new art cannot wield, restore | 222 (and the Body spells of the magic queue) | L | MA-1, MA-2 (done) | render and equipment |
 | 9 | **E1-e** creature Summon with AIRedirect | Prototype or list pick, summoned flags, faction; AIRedirect (E4-b remainder) | 183 and 11 summon spells | L | E1-c (done), MA-4 (done) | Summon file |
 | 10 | **T-s** smoke extension | Section 5 gaps in `tech-craft` or a sibling stage | n/a | M | none (best after 1 to 3, which add steps to it) | smoke |

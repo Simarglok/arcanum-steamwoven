@@ -14,7 +14,7 @@ public sealed partial class SessionSpellCaster
     private delegate SpellComponentOutcome? ComponentHandler(SessionSpellCaster caster, SpellRun run, SessionSpellComponent component, SpellRunTarget target);
 
     // One line per component type with a handler. The groups: damage and heal (SessionSpellCaster.cs), destroy, eye candy and the goal components (SessionSpellCaster.cs), Summon
-    // (SessionSpellCasterSummon.cs), ObjFlag (SessionSpellCasterObjectFlags.cs), Identify and the identified item flag (SessionSpellCasterIdentify.cs), Dispel (SessionSpellCasterDispel.cs), Movement (SessionSpellCasterMovement.cs), Effect (SessionSpellCasterEffects.cs), the lock flags of ObjFlag (SessionSpellCasterLocks.cs), Trait (SessionSpellCasterTrait.cs). Another slice's group adds its line and its own partial file.
+    // (SessionSpellCasterSummon.cs), ObjFlag (SessionSpellCasterObjectFlags.cs), Identify and the identified item flag (SessionSpellCasterIdentify.cs), Dispel (SessionSpellCasterDispel.cs), Movement (SessionSpellCasterMovement.cs), Effect (SessionSpellCasterEffects.cs), the lock flags of ObjFlag (SessionSpellCasterLocks.cs), Trait (SessionSpellCasterTrait.cs), the nested Cast (SessionSpellCasterNested.cs). Another slice's group adds its line and its own partial file.
     private static readonly IReadOnlyDictionary<SpellComponentType, ComponentHandler> ComponentHandlers = new Dictionary<SpellComponentType, ComponentHandler>
     {
         [SpellComponentType.Damage] = static (c, run, component, target) => c.DamageStep(run, component, target, heal: false),
@@ -39,6 +39,8 @@ public sealed partial class SessionSpellCaster
         [SpellComponentType.ChargeNBranch] = static (c, run, component, _) => c.ChargeBranchComponent(run, component),
         [SpellComponentType.TestNBranch] = static (c, _, component, target) => c.TestBranchComponent(component, target),
         [SpellComponentType.Use] = static (c, run, _, target) => c.UseComponent(run, target),
+        // ARC-MAGIC-049 (E4-e): the Cast component (0x451740) starts another spell as the run's parent's, at the current target, without the casting goal (SessionSpellCasterNested.cs).
+        [SpellComponentType.Cast] = static (c, run, component, target) => c.CastComponent(run, component, target),
         [SpellComponentType.Effect] = static (c, run, component, target) => c.EffectComponent(run, component, target) ? SpellComponentOutcome.None : null,
     };
 

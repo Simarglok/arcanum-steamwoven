@@ -23,7 +23,9 @@ public partial class TerrainViewerApp
     //     effect list grows and the stat of record 158 (strength) rises by its +2; the unit is gone and the others stay.
     //  3. Chemistry: the first learned record (a poison food, record 171, aggressive) is assembled and used on a living NPC with the item cursor (the use icon, the press on the NPC: goal 39);
     //     the NPC takes the record's damage, the unit is gone.
-    //  4. F7 and F8: the hero's effect list and held items are the same after the load.
+    //  4. Found schematic: the module's found documents of those two disciplines are read through the inventory's Read button (each registers its schematic and is destroyed; a second copy of a known
+    //     one is kept), and the Found tab of the schematic window assembles the first record the hero's expertise reaches.
+    //  5. F7 and F8: the hero's effect list and held items are the same after the load.
     // The NPC's life and the hero's hit points are put back; the rest (effects, points, degrees, items) is the stage's own state, not restored: the stage runs alone (smoke.py) and its F8 replaces the session.
     private async Task RunAreaTechProductsSmokeAsync()
     {
@@ -132,7 +134,47 @@ public partial class TerrainViewerApp
             // The NPC's hit points are measured from before the use to the end of the walk and the run; an NPC that is not in a fight with the hero has no other source of damage in the cave.
             TechProductsRequire(poisoned > 0 && recordDamage >= npcBefore && session.QueryLife(life).View!.Status.IsDead, $"the poison killed the NPC (record damage {recordDamage}, hit points {npcBefore} -> {NpcHitPoints()})");
 
-            // 4. F7 and F8: the same effects and items after the load.
+            // 4. A found schematic document: every document of the module for Therapeutics and Chemistry (the disciplines the stage bought degrees in) is read through the inventory's Read button (the schematic registers, the
+            //    document is gone, a second copy of a known one stays), then the Found tab of the window lists the records and the first one the hero's expertise reaches is assembled.
+            for (var i = 0; i < 1800 && _readingData is null; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); AdoptReadingData(); }
+            TechProductsRequire(_readingData is { Status: AreaReadingDataStatus.Ready, Data: not null }, $"the reading data of the module ({_readingData?.Status} {_readingData?.Detail})");
+            var documents = _readingData!.Data!.Prototypes.Where(p => p.Value.Subtype == (int)Arcanum.Data.Written.WrittenSubtype.Schematic && p.Value.TextStartLine >= SchematicCatalog.FirstFound)
+                .Select(p => (Prototype: p.Key, Number: p.Value.TextStartLine, Discipline: data.Catalog.Discipline(p.Value.TextStartLine, data.Discipline) ?? -1))
+                .Where(d => d.Discipline is TechDisciplineTherapeutics or TechDisciplineChemistry).OrderBy(d => d.Number).ToArray();
+            GD.Print($"{TechProductsCode} tech-products found documents " + string.Join(";", documents.Select(d => $"{d.Prototype}={d.Number}/d{d.Discipline}")));
+            TechProductsRequire(documents.Length > 0, "the module has found schematic documents for Therapeutics or Chemistry");
+            var foundBefore = session.QueryHeroFoundSchematics()!.Value.Length;
+            foreach (var document in documents)
+            {
+                var entity = TechSmokeGive(data, document.Prototype, new SessionItemKind(SessionItemType.Written, document.Prototype, 0, 0));
+                OpenInventory();
+                TechProductsRequire(InventoryOpen, "the inventory window opens for the document");
+                _readingStatus = null;
+                ReadItem(entity);
+                TechProductsRequire(_readingStatus is not null || _inventoryStatus is not null, $"document {document.Prototype} was read");
+                TechProductsRequire(session.QueryHeroFoundSchematics()!.Value.Contains(document.Number) && !TechSmokeHeld(session).Contains(entity),
+                    $"reading document {document.Prototype} registered schematic {document.Number} and destroyed the document: {_readingStatus}");
+                if (InventoryOpen) EndInventory();
+            }
+            TechProductsRequire(session.QueryHeroFoundSchematics()!.Value.Length == foundBefore + documents.Length, "each document registered one schematic");
+            var again = TechSmokeGive(data, documents[0].Prototype, new SessionItemKind(SessionItemType.Written, documents[0].Prototype, 0, 0));
+            OpenInventory();
+            TechProductsRequire(InventoryOpen, "the inventory window opens for the second copy");
+            _readingStatus = null;
+            ReadItem(again);
+            TechProductsRequire(_readingStatus is not null && TechSmokeHeld(session).Contains(again) && session.QueryHeroFoundSchematics()!.Value.Length == foundBefore + documents.Length, $"a second copy of a known schematic is kept and registers nothing: {_readingStatus}");
+            if (InventoryOpen) EndInventory();
+            TechSmokeCraftResult? foundCraft = null; var buttons = new List<string>();
+            foreach (var document in documents)
+            {
+                var attempt = TechSmokeCraft(data, document.Discipline, document.Number, AreaSchematicTab.Found, probe: true);
+                buttons.Add($"{document.Number}:{(attempt.Made.Length > 0 ? "assembled" : attempt.Message)}");
+                if (attempt.Made.Length > 0) { foundCraft = attempt; break; }
+            }
+            GD.Print($"{TechProductsCode} tech-products found buttons " + string.Join(";", buttons));
+            TechProductsRequire(foundCraft is not null, "the Found tab assembled a record the hero's expertise reaches: " + string.Join(";", buttons));
+
+            // 5. F7 and F8: the same effects and items after the load.
             string[] State(GameSessionOwner s) => [.. s.QueryHeroEffects()!.Effects.Select(e => "effect=" + e.Number).OrderBy(l => l, StringComparer.Ordinal), .. TechSmokeHeldLines(s),
                 .. Enumerable.Range(0, 8).Select(d => "degree" + d + "=" + TechSmokeDegree(s, d))];
             var saved = State(session);
@@ -149,7 +191,7 @@ public partial class TerrainViewerApp
             var loaded = State(_areaSession!);
             TechProductsRequire(loaded.SequenceEqual(saved), $"the load restored the effects, items and degrees: lost {string.Join(", ", saved.Except(loaded))}; new {string.Join(", ", loaded.Except(saved))}");
             GD.Print("ARC-MAGIC-051 native-smoke tech-products PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Map = _readyMapName, Intelligence = intelligence, Therapeutics = potions, Chemistry = new { Record = chemRecord, Product = poisonProduct, Damage = recordDamage }, StateLines = saved.Length }));
+                Map = _readyMapName, Intelligence = intelligence, Therapeutics = potions, Chemistry = new { Record = chemRecord, Product = poisonProduct, Damage = recordDamage }, Found = new { Documents = documents.Length, Assembled = foundCraft!.Record }, StateLines = saved.Length }));
         }
         finally
         {

@@ -430,6 +430,18 @@ and art-font material stay unchanged. Other interface canvases keep their
 existing straight-alpha path. This is independent of ARC-UI-111 edge smoothing
 and ARC-UI-112 filtering.
 
+### Dialog box, menus and pre-made browser (ARC-UI-144)
+
+The same hazard stood on more canvases: the dialog box (the quit and death-load questions), the main menu's art views (menus, options controls), the
+pre-made browser, new-character and opening-shop windows, and the schematic window's slot pictures. These canvases are prepared by `AreaArtTextDraw.Prepare` (premultiplied-alpha
+material), but their art was built with the straight-alpha texture, so with the HD interface on the colour of the transparent texels of the round Accept and
+Cancel buttons (and of every other frame with transparent HD texels) was added to the background: a square behind each round button (report
+`2026-11-11_22-22-57`, "such squares were already fixed"). Their art is now built with `InterfaceHd.Texture(frame, premultipliedAlpha: true)`
+(`PremultipliedTexture` beside `HotkeyTexture`; the schematic slot pictures too), and `AreaShopArtView`, which shares the pre-made art's textures, prepares its canvas too. The rule of
+ARC-UI-126 stands: **every texture on a prepared canvas is the premultiplied variant, and every canvas that takes them is prepared.** The native
+self-test checks that the five art canvases are premultiplied; `ARC_AREA_DEATH_HD_VERIFY=1` runs the `death` stage with the HD interface switch on for a
+native look: `./arcanum smoke pr --stages death --env ARC_HD_PACK=<pack> --env ARC_AREA_DEATH_HD_VERIFY=1 --env ARC_AREA_DEATH_CAPTURE=<local png>`.
+
 Unavailable spell icons retain the HD texture wrapper when greyed. Each active
 frame uses the existing .299/.587/.114 luminance formula; the wrapper retains the
 original source query and reloads on pack changes or an HD toggle. Legacy art

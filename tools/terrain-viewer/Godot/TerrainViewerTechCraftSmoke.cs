@@ -21,6 +21,7 @@ public partial class TerrainViewerApp
     //     window (the item-use path and the item-trigger host), and the hit points rise and the item is gone.
     //  3. Gun Smithy: the first learned schematic (a firearm) is assembled, worn in the weapon slot (the hero then attacks with the Firearms skill), given the
     //     bullets of the map, and shot at a living NPC from three to six cells away until a shot hits; the shots spend the bullets.
+    //  3b. ARC-MAGIC-049: record 203 (the Cast component of the explosive weapons) cast at the shot NPC with no caster starts spell 205 as a run of its own: the NPC is hurt and the flash is summoned.
     //  4. F7 and F8: the degrees, the products, the worn gun and the bullets are the same after the load.
     // The hero's hit points and fatigue and the shot NPC's life are put back; the rest (points, degrees, items, the worn gun, the bullets taken) is the stage's own state: the stage runs alone (smoke.py) and its F8 replaces the session.
     private async Task RunAreaTechCraftSmokeAsync()
@@ -209,6 +210,28 @@ public partial class TerrainViewerApp
             var ammoAfter = session.QueryHeroAmmo().Where(a => a.AmmoType == ammoType).Sum(a => a.Units);
             TechSmokeRequire(ammoAfter == ammoBefore - shots * weapon.AmmoConsumption, $"each shot spent {weapon.AmmoConsumption} bullet(s) ({ammoBefore} -> {ammoAfter} after {shots} shots)");
             if (HeroInCombatMode) ToggleCombatMode();
+            session.Heal(session.Version, life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+
+            // 3b. ARC-MAGIC-049 (E4-e): record 203, the Cast component of the explosive weapons, cast as the hero's own with the weapons' event mask (Parent_Dmgs_Opponent_W_Item|Target_Attacker, 0x22000: the record's components
+            // run only for a run that carries it) at the shot NPC; the run's goal is released at once. The component asks the host for spell 205 (an explosion: two Damage components and a Summon), which starts as a run of
+            // its own once the run rules are idle and plays its goal 73: the NPC is hurt and the flash is summoned. (The weapons' hit path needs the weapon and a hit; this step is the component on the real record.)
+            var spellHost = SpellCasterNow();
+            TechSmokeRequire(spellHost is not null && SpellRecordsNow() is { Length: > 205 }, "the cast host of the map");
+            var castFrom = spellHost!.Log.Count;
+            var me = spellHost.Facts(SessionSpellCaster.Hero); var victim = spellHost.Facts(target.Entity);
+            TechSmokeRequire(me is not null && victim is not null, "the hero and the NPC are objects of the cast host");
+            var invocation = new SpellInvocation(203, me, null, victim, SpellLocation.None, null, TeleportAllowed: true, ParentIsLocalPlayer: true) { SourceLocation = me!.Location };
+            var begun = session.StartSpellRun(session.Version, new(invocation, SkipCastGoal: true, Triggers: 0x22000), SpellRecordsNow()![203].Run, spellHost.InvocationWorld(), session.SpellRolls);
+            TechSmokeRequire(begun.Disposition == GameSessionDisposition.Changed && begun.Creation?.Run is not null, $"record 203 started as a run ({begun.Disposition} {begun.Failure} {begun.Creation?.Status})");
+            spellHost.Release(begun.Creation!.Run!.Id);
+            IEnumerable<SpellCastEvent> CastLog() => spellHost.Log.Skip(castFrom);
+            for (var frames = 0; frames < 200 && !CastLog().Any(e => e.Kind == SpellCastEventKind.Summoned); frames++) Frame();
+            GD.Print($"ARC-MAGIC-049 tech-craft nested-cast runs={string.Join(",", session.QuerySpellRuns().Runs.Select(r => $"{r.Id}:{r.Spell}:{r.Action}"))} log={string.Join(",", CastLog().Select(e => $"{e.Kind}:{e.Value}"))} cast={begun.Creation?.Run?.Id}");
+            var nested = CastLog().Where(e => e.Kind == SpellCastEventKind.NestedCast).ToArray();
+            TechSmokeRequire(nested.Length == 1 && nested[0].Value == 205 && nested[0].Detail >= 0 && nested[0].Object == target.Entity, $"the Cast component started spell 205 at the NPC ({string.Join(";", nested.Select(e => $"{e.Value}>{e.Object}:{e.Detail}"))})");
+            TechSmokeRequire(CastLog().Any(e => e.Kind == SpellCastEventKind.Damaged && e.Object == target.Entity), "the nested explosion damaged the NPC");
+            TechSmokeRequire(CastLog().Any(e => e.Kind == SpellCastEventKind.Summoned), "the nested explosion summoned its flash");
+            TechSmokeRequire(!CastLog().Any(e => e.Kind == SpellCastEventKind.ComponentNotReady && e.Value == (int)Arcanum.Data.Magic.SpellComponentType.Cast), "the Cast component is ready");
             session.Heal(session.Version, life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
 
             // 4. F7 and F8: the same degrees, items, worn gun and bullets after the load.
