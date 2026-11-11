@@ -107,8 +107,11 @@ resolver finds his record there, so the AI no longer keeps him out of its rules 
   nor the rows handed over at a window move (ARC-DEV-314) give; the viewer calls it when it adopts a session on a host: a new host (a fresh run, a load
   into another window or map, a map change) and a load the host keeps. Before, a fresh run that loaded a save with a note taken in another window of the
   main map had no row for it: "[unknown object]", no facts, no use (B51 follow-up). A row read is kept with the host and handed over at the next window
-  move like the others; an item whose row does not read is counted in the log (`ARC-DEV-354 carried-rows read=N missing=M`). The cost is one window read
-  per distinct window of the carried items, at a load only.
+  move like the others; an item whose row does not read is counted in the log (`ARC-DEV-354 carried-rows read=N missing=M`) and asked again by the next
+  host (NOT READY: one window read at each map change for such an item). The cost is one window read per distinct window of the carried items, at a
+  load only, and the first aggregate read of the process (`ARC-DEV-354 mobile-cells`, the main map's 7,400 records, on the calling thread; a failed
+  read is tried again, the cache is process-wide and `Clear` empties it for tests). The aggregate cell also answers an NPC of a window map that has no
+  recorded `npc.home` (before, a typed miss): it is the same T0 cell `npc.home` records.
 - The rows are what the resolver needs: a body or frame that does not read leaves the read with its rows and no bodies (named in the read's detail).
 - A home map that was not held is read on the calling thread, once (a window read takes the strict publication of 25 sectors: about 3 s for the main map's window in the `transfer` smoke); MIG9 owns moving reads
   off the frame. A map change is where it normally happens.

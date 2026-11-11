@@ -194,9 +194,10 @@ public sealed class AreaInventoryHost
     /// identity through the resolver from the map the session names as their origin: a window of the main map other than the shown one is read around
     /// the object's stored cell (<see cref="AreaMobileCells"/>), any other map whole. A fresh run (or a load into another window or map) has no rows
     /// handed over, so an item the hero took in another window of the main map had no row at all: no name ("[unknown object]"), no facts, no use.
-    /// An item whose row still does not read stays without one, and the log says how many. The viewer calls it once the session it adopts is bound to
-    /// this host (a new host after <see cref="Attach"/>, or a load this host keeps), not from <see cref="Attach"/>: a load to another map attaches its
-    /// session to the host it is about to drop first, which would read the same windows for nothing. Returns how many rows were read and how many not.
+    /// An item whose row still does not read stays without one, and the log says how many (NOT READY: it is asked again by the next host, one window read
+    /// each time). The viewer calls it once the session it adopts is the running one on this host (a new host after <see cref="Attach"/>, or a load
+    /// this host keeps), not from <see cref="Attach"/>: a load to another map attaches its session to the host it is about to drop first, which would
+    /// read the same windows for nothing, and the record source's callbacks read the running session. Returns how many rows were read and how many not.
     /// </summary>
     public (int Read, int Missing) ReadCarriedRows(GameSessionOwner session)
     {
@@ -379,7 +380,7 @@ public sealed class AreaInventoryHost
         var rows = new Dictionary<string, AreaHeldRow>(StringComparer.Ordinal);
         // ARC-DEV-354: every carried item (given and placed ones too), not only those the PC holds.
         foreach (var (entity, _) in Carried(session))
-            if (RowOf(entity) is { } row) rows[entity] = new(row, Weight(entity));
+            if (!session.IsItemDestroyed(entity) && RowOf(entity) is { } row) rows[entity] = new(row, Weight(entity));
         return rows;
     }
 
