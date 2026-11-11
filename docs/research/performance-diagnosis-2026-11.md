@@ -179,6 +179,14 @@ Recommended order: O10, then O3 and O5b together, then O2, then O4 and O1; O5a, 
 their contracts first; O11 can run beside any of them. Done in that order the main-thread freeze at start should fall
 from about 3.5 s to under 1 s (estimate) and the first window opens to warm opens, without touching original behaviour.
 
+## Follow-up: O2 done (ARC-DEV-369)
+
+O2 is implemented: the art of the inventory, the sheet and the logbook, with its HD redraws, is prepared on workers after the publication and the textures are
+created in small per-frame slices ([window art warm-up](../rendering/terrain-viewer.md#window-art-warm-up-arc-dev-369)). Measured with a local probe on the same
+Mac and settings as above (source viewer, HD interface on, one run each on a loaded machine): first opening to the next drawn frame 1069 / 2124 / 1764 ms
+(inventory / sheet / logbook) with the warm-up off, 85 / 119 / 70 ms with it on; Legacy, before the portrait was added to the warm-up, 531 / 1211 / 604 ms cold and
+124 / 322 / 72 ms warmed up. The remaining cold items of this table (world map, saves list, main menu art) are not covered by it.
+
 ## Reproducing
 
 The probe and the stage of this report's measurements were local patches. Since ARC-DEV-367 (O10) the repository keeps one, see
