@@ -23,7 +23,8 @@ public partial class TerrainViewerApp
         if (AutomatedVisualRun) return;
         if (input is InputEventMouse mouse) _worldPointer = mouse.Position;
     }
-    internal void WorldPointerForSelfTest(Vector2? position) => _worldPointer = position;
+    /// <summary>Places the test pointer on the window (a position) or removes it (null); a placed pointer is inside the window.</summary>
+    internal void WorldPointerForSelfTest(Vector2? position) { _worldPointer = position; if (position is not null) _pointerInWindow = true; }
 
     /// <summary>The scroll direction (x to the right, y downwards) of the pointer on a border pixel of the window, else (0, 0).</summary>
     internal Vec2 WorldEdgeScrollDirection()

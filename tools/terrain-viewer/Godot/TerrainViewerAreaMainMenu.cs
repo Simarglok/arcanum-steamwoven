@@ -266,7 +266,7 @@ public partial class TerrainViewerApp
         var created = _mainMenu is { Window: AreaMenuWindow.NewCharacter, Creation: { } creation } ? NewCharacterArt(creation, out portrait) : null;
         _mainMenuPanel.Render(_mainMenu, _mainMenu.Window == AreaMenuWindow.PickCharacter ? HeroDescription(_mainMenu.Hero)
             : _mainMenu.Window == AreaMenuWindow.Shop && _mainMenu.Creation?.Kit is { } kit ? ShopDescription(kit, _mainMenu.Creation.Shop) : "", browsed, portrait,
-            created, ShopArtShown);
+            created, ShopArtShown, _editorPanel?.IsOpen == true ? _editorPanel.ArtMode : CharacterEditorArtReady);
         RenderCharacterEditor();
     }
 
@@ -910,7 +910,9 @@ public partial class TerrainViewerApp
                 "Accept opened the character editor: " + _mainMenu?.Notice);
             var willpower = _editorPanel!.StatsForSelfTest!.Rows[7];
             Require(willpower.Stat == Arcanum.Simulation.Character.CharacterStat.Willpower && willpower.Value == 8, "row 7 is willpower 8: " + AreaStatsPage.Line(willpower));
-            _editorPanel!.StatPlusForSelfTest(7).EmitSignal(BaseButton.SignalName.Pressed);
+            // ARC-UI-147: with the game's art the editor is the sheet's original look and the willpower's + is pressed by the pointer on it.
+            if (_editorPanel.ArtMode) await CharacterEditorArtForSmoke(Require);
+            else _editorPanel!.StatPlusForSelfTest(7).EmitSignal(BaseButton.SignalName.Pressed);
             _editorPanel!.StatPlusForSelfTest(0).EmitSignal(BaseButton.SignalName.Pressed);
             _editorPanel!.SkillPlusForSelfTest(0).EmitSignal(BaseButton.SignalName.Pressed);
             _editorPanel!.CollegeTabForSelfTest(0).EmitSignal(BaseButton.SignalName.Pressed);

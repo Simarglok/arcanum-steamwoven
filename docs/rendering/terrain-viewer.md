@@ -2398,7 +2398,7 @@ snapshot every refund stops at, so the five starting points can be spent and tak
   (hit points, fatigue, the eight stats), the skills page and the spells page with their `−` and `+` (the in-game sheet's
   rules and texts, [skills page](#skills-page-arc-ui-009)) and, since ARC-MAGIC-043, a tech page with the eight disciplines'
   `−` and `+` (the original's degree page of the same editor, CM8; the pool's technology lane, refused below the snapshot the
-  editor opened on, TC10; project labels, the original look of the page is not drawn in the creation window), and Cancel and
+  editor opened on, TC10; project labels; the original look of the page since ARC-UI-147, below), and Cancel and
   Accept. Each press that changes the draft is recorded (the replay at Accept is by track, so degrees replay like the other
   points); a refused one is not.
 - **Accept** (or Return, CM5) opens the [opening shop](#opening-shop-arc-ui-036) (window 15, CM2), whose Accept starts the new
@@ -2410,6 +2410,20 @@ snapshot every refund stops at, so the five starting points can be spent and tak
   slice).
 - **Keys.** The menu owns the keys: Return accepts, Escape cancels, no letters (CM7). A controller moves over Accept and Cancel
   and confirms; the pages' buttons take the pointer.
+- **Original look (ARC-UI-147).** With the game's art the editor is the in-game character sheet's original look
+  ([sheet](../ui/original-windows.md#character-sheet), CHW1–CHW9, the pages ARC-UI-076/077) over the draft: art 22 with the draft hero's
+  portrait, name, level, the five points, the stats, the alignment gauge and the skills, tech or spells page, and the ten `−` and `+` and
+  the four tabs by the pointer, between the strips and the shop's two art buttons Accept (675, 496) and Back (69, 496) of the 800 × 600 screen
+  (window 14 has no background of its own and the same buttons as window 15, MW1, MW30, CM2; `AreaShopArtView`). The sheet's window stands at the
+  menu screen's (0, 41) at the bars' whole factor (`AreaCharacterSheetArtView.MenuScreen`, as the shop's barter window). Differences from
+  the in-game sheet, all original: a release in the portrait's close rectangle does not close the editor (the rectangle is the interface
+  modes 1 and 2's, CM3); the pages' presses are the same ones the diagnostic panel records on the draft (`AreaCreationEditor`). PROJECT: the
+  original's text bar belongs to the game, so the hover hints are not shown and a refused press writes the original's `charedit.mes` text
+  (ARC-UI-078) into the menu's note line at the top of the screen; the controller's focus row lights Accept or Back as in the shop. Without the
+  game's art (the synthetic self-tests, a game folder whose sheet or strips art does not read) the diagnostic panel above is shown as before.
+  Native smoke (`menu` stage): `ARC-UI-147 native-smoke character editor art PASS` (the draft's sheet and portrait, the window's place, a refused
+  `−` written as the note, the close rectangle that does not close, the spells tab, willpower's `+` by the pointer);
+  `ARC_AREA_EDITOR_CAPTURE=PATH.png` saves readbacks of the skills and spells pages (PATH-skills.png, PATH-spells.png, ignored local paths).
 
 Self-test inside `ARC-UI-011 self-test PASS synthetic main menu`: Accept opens the editor on the dwarf's draft, `+` on
 strength, Cancel back to a new human, then Accept again, strength, a hit point, constitution `+` and `−`, the first skill, a
