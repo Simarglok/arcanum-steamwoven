@@ -242,6 +242,8 @@ public partial class TerrainViewerApp
         // The viewer's part of a same-map change is the actor's new grid session once the run returns (MoveOnThisMap); the presentation
         // steps are ARC-DEV-204's (the sound on the hero at its departure point, the movies, the fade-in).
         public bool Run(ChangeOfPlaceStep step, ChangeOfPlaceRequest request) => app.RunTransitionStep(step, transfer.Fade);
+
+        public void CarrySpellRuns(SessionMoveList moveList) => app.EndSpellRunsLeavingMap(moveList);
     }
 
     // ARC-DEV-115: the landing from the shown map. Another map (a debug teleport) is readied by loading the start map's scene; the start
@@ -271,6 +273,8 @@ public partial class TerrainViewerApp
         }
 
         public bool Run(ChangeOfPlaceStep step, ChangeOfPlaceRequest request) => app.RunTransitionStep(step, null);
+
+        public void CarrySpellRuns(SessionMoveList moveList) => app.EndSpellRunsLeavingMap(moveList);
     }
 
     // The arrival of another map in map mode: the load flushed, closed and opened the scene, moved the view and bound the actor; the hero
@@ -324,5 +328,7 @@ public partial class TerrainViewerApp
             if (step == ChangeOfPlaceStep.OpenDestination) app._areaTransitions?.Complete();
             return true;
         }
+
+        public void CarrySpellRuns(SessionMoveList moveList) => app.EndSpellRunsLeavingMap(moveList);
     }
 }
