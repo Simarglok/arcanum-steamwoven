@@ -1036,6 +1036,8 @@ public sealed partial class GameSessionOwner : IDisposable
             foreach (var (entity, kept) in previous.Items)
                 if ((_inventory.Taken.Contains(entity) || piled.Contains(entity)) && !admitted.Items.ContainsKey(entity)) admitted.Items.Add(entity, kept);
         }
+        // ARC-DEV-386 (E1-c4): the critters the session created on this map are holders of its seed whatever the host's data lists (a created critter is in no map file).
+        foreach (var made in _inventory.Objects.Created.Where(made => made.Kind == SessionCreatedKind.Critter && made.Map == map)) admitted.AddCreatedHolder(made.Entity);
         _inventory.Seeds[map] = admitted;
         _inventory.SeedGeneration++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, new(_identity, _revision));

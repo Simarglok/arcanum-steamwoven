@@ -218,6 +218,8 @@ public sealed partial class GameSessionOwner
         var number = AllocateObjectNumber(CreatedOrigin(kind));
         var made = new SessionCreatedObject(SessionCreatedObject.PrefixOf(kind) + number.ToString(System.Globalization.CultureInfo.InvariantCulture), kind, prototype, map, cell, offsetX, offsetY, createdMs, spellFlags, summoner, run);
         _inventory.Objects.AddCreated(made);
+        // ARC-DEV-386 (E1-c4): a created critter is at once a holder of its map's seed (when one is attached; the next attach adds it otherwise).
+        if (kind == SessionCreatedKind.Critter && _inventory.Seeds.TryGetValue(map, out var seed) && seed.AddCreatedHolder(made.Entity)) _inventory.SeedGeneration++;
         return made;
     }
 

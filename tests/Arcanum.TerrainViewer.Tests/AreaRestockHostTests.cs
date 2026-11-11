@@ -2,6 +2,7 @@ using System.Text;
 using Arcanum.Data.Area;
 using Arcanum.Data.Characters;
 using Arcanum.Data.Combat;
+using Arcanum.Data.Objects;
 using Arcanum.Data.Messages;
 using Arcanum.Session;
 using Arcanum.Simulation.Clock;
@@ -186,6 +187,51 @@ public sealed class AreaRestockHostTests
         CollectionAssert.AreEqual(new[] { 2805, AreaBarterData.GoldPrototype, Axe, Bullets }, chest, "the ring stays, then coins, axe and bullets");
         Assert.IsTrue(session.IsItemDestroyed(Entity(2)), "the old coins are destroyed");
         Assert.AreEqual(0, session.QueryRestocks().Count);
+    }
+
+    // ARC-DEV-386 (E1-c4, OM16, RK3, RK14): a critter the session created is a holder of its one-row map the resolver was given; its inventory source is its row's, so the restock host answers its facts and
+    // the creation's regeneration generates its goods (the set 5 above) through the same event world a map NPC's restock uses.
+    [TestMethod]
+    public void A_created_critter_is_a_holder_for_the_restock_host_and_its_creation_generates_its_goods()
+    {
+        var (session, inventory, host, _) = Host();
+        using var owned = session;
+        var map = new SessionMapId(1);
+        var critter = session.CreateObject(session.Version, SessionCreatedKind.Critter, 28359, map, new(100, 102)).Object!;
+        var created = new AreaCreatedCritters(session, made => new(CreatedRowFailure.None,
+            new(new("created", 1, AreaSourceKind.Mobile, null, 0, 0, CreatedObjectRows.KeyId(made.Entity), 0), 0, 16, 0, "p", "p", "r", "s", AreaScope.Core, null, made.Cell.X, made.Cell.Y,
+                Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true)), row => 5);
+        Assert.IsNull(host.Facts(map, critter.Entity), "the resolver is not given the critters yet");
+        inventory.Resolver.SetCreated(created.Maps(map));
+        Assert.AreEqual(new RestockHolder(RestockHolderKind.Npc, 5, false, false, 0, false), host.Facts(map, critter.Entity), "the prototype's source, alive, no PC leader (RK3)");
+        Assert.IsNull(host.Facts(new(2), critter.Entity), "another map");
+        Assert.IsTrue(host.GeneratesAtCreation(map, critter.Entity), "a living NPC with a source and no leader: the creation's restock body generates (RK17)");
+        Assert.AreEqual(GameSessionDisposition.Changed, AreaRestockHost.Schedule(session, inventory, critter.Entity)?.Disposition, "a window open on it schedules its restock as a map NPC's");
+        var world = new AreaEventWorld(() => new AreaCombatHost(inventory), () => null, restock: () => host);
+        var result = session.RegenerateInventory(session.Version, critter.Entity, world);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (result.Disposition, result.Failure));
+        var done = result.Regeneration!;
+        Assert.AreEqual((critter.Entity, SessionRestockOutcome.Regenerated, 0, 25), (done.Holder, done.Outcome, done.Removed, done.Coins));
+        var goods = session.QueryMapInventory(map)!.Holders.Single(holder => holder.Entity == critter.Entity).Items.Select(item => item.Facts.Kind.Prototype).ToArray();
+        CollectionAssert.AreEqual(new[] { AreaBarterData.GoldPrototype, Axe, Bullets }, goods, "coins, axe and bullets of set 5");
+        // A living created critter is no loot target (its corpse's is found by the key of its row among the created maps; no test or smoke kills one yet: the owner's re-check list, ARC-DEV-386 step 2).
+        Assert.IsNull(inventory.Target(session, 1, created.Maps(map).Single().Row(critter.Entity).Key), "alive: no loot target");
+    }
+
+    [TestMethod]
+    public void The_creations_restock_body_does_nothing_for_a_critter_without_a_source_a_container_or_a_stranger()
+    {
+        var (session, inventory, host, _) = Host();
+        using var owned = session;
+        var map = new SessionMapId(1);
+        var critter = session.CreateObject(session.Version, SessionCreatedKind.Critter, 28359, map, new(100, 102)).Object!;
+        var created = new AreaCreatedCritters(session, made => new(CreatedRowFailure.None,
+            new(new("created", 1, AreaSourceKind.Mobile, null, 0, 0, CreatedObjectRows.KeyId(made.Entity), 0), 0, 16, 0, "p", "p", "r", "s", AreaScope.Core, null, made.Cell.X, made.Cell.Y,
+                Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true)), row => 0);
+        inventory.Resolver.SetCreated(created.Maps(map));
+        Assert.IsFalse(host.GeneratesAtCreation(map, critter.Entity), "source 0: 0x463C60 returns before the clear (RK17)");
+        Assert.IsFalse(host.GeneratesAtCreation(map, Entity(1)), "a container takes the other branch");
+        Assert.IsFalse(host.GeneratesAtCreation(map, "oid:critter:99"), "not a holder here");
     }
 
     [TestMethod]
