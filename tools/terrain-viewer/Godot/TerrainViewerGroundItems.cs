@@ -100,7 +100,7 @@ public partial class TerrainViewerApp
         // The inventory host (its attached seeds), the kit's art and the object targets change without a session revision.
         // ARC-RENDER-041: a pool playing its frames changes its body without a revision, and a pool decays as game time passes
         // (which moves no revision either).
-        // ARC-DEV-380: the first computation of a map's ground bodies is timed (steps print as ground.NAME).
+        // ARC-DEV-380: a computation of the ground bodies from nothing (a map's first, and after a reset) is timed (steps print as ground.NAME).
         using var lap = PerfProbe.Enabled && _groundStamp is null ? PerfProbe.Lap("ground") : null;
         lap?.Step("stamp");
         var stamp = (area, session, session.Version.Revision, _inventoryHost, _areaKitArt, ObjectTargets(), _schematicData?.Data, BloodPoolFramesStamp(),
@@ -195,7 +195,6 @@ public partial class TerrainViewerApp
         // ARC-DEV-370 (E1-c2): the critters the session created, drawn from their prototypes' art and picked like map NPCs.
         lap?.Step("critters");
         AddCreatedCritterBodies(area, frames, bodies, only);
-        lap?.Step("done");
         _groundBodies = bodies; _groundOnly = only;
         // A placed item without a row of this map is named and picked under its own key.
         if (_hoverIndex is { } index && ReferenceEquals(_hoverIndexArea, area)) foreach (var placed in only.Values) index.Admit(placed.Item3);

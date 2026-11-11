@@ -150,10 +150,10 @@ public partial class TerrainViewerApp
     {
         var (previousProfile, previousTiming) = (_worldActor.Profile, _worldActor.AreaGaitTiming ?? GaitTiming.HumanFixed);
         ActorDiagnosticScenePlan plan; ActorDiagnosticPlacementInput input;
-        // ARC-DEV-380: the swap of the publication is timed (steps print as hero-swap.NAME).
-        using var lap = _perfFirstSelection && PerfProbe.Enabled ? PerfProbe.Lap("hero-swap") : null;
         try
         {
+            // ARC-DEV-380: the swap of the publication is timed (steps print as hero-swap.NAME); the lap ends with this block, before the selection below.
+            using var lap = _perfFirstSelection && PerfProbe.Enabled ? PerfProbe.Lap("hero-swap") : null;
             lap?.Step("upload");
             if (textures is not null) _cache.UploadActor(textures);
             lap?.Step("profile");

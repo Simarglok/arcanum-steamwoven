@@ -191,9 +191,10 @@ a budget or a regression gate. Other optimisations are shown with it: run before
   conversations,companions,binders,ambient,hero-body,selection,menu}` inside `load.publish` (the main thread), `load.first-frame`
   (the first frame drawn after a publication), `window.open.MODE` (the interface stack's opener, the panel's own open included),
   `menu.open`, `menu.open.WINDOW`, `menu.first-frame`, `game.new`, `game.load`, `window.open.SaveList`.
-  ARC-DEV-380 adds the laps inside the publication's selection step, printed once per scene publication: `selection.{ambient,walls,roofs,combat,ground,portals,moving,canvas}`,
-  `canvas.publish.{chunks,upright,index,view}` and `canvas.view.{cull,chunks,upload,hd,items}` (the canvas's own work), `ground.*`, `roofs.{bind,follow,publish}`, `walls.{bind,recalc}`
-  and `hero-swap.{upload,profile,plan,select}`.
+  ARC-DEV-380 adds the laps inside the publication's selection step, printed for the first selection after a scene publication: `selection.{ambient,walls,roofs,combat,ground,portals,moving,canvas}`,
+  `canvas.publish.{chunks,upright,index,view}` (a new plan) and `canvas.view.{cull,chunks,upload,hd,items}` (its first view): the canvas's own work; `roofs.{bind,follow,publish}`, `walls.{bind,recalc}`,
+  `hero-swap.{upload,profile,plan,select}` (the body swap, not the selection it triggers) and `ground.{stamp,frames,busted,extra-art,items,blood,created,critters}` (each time the ground bodies are
+  computed from nothing, so also after a reset; a step names the region that follows it, so a first open of the extra art inside a busted-object loop counts under `busted`).
 - **`perf`** (a hero stage, own run; needs a window with a map exit: the Crash Site window has none, so
   `./arcanum smoke pr --stages perf --sector 1409,1314`): `startup` (process to load begin, worker, publication and first frame),
   one `window` line per open of each window key I C L T W M, six each through the production key route (`open-sync` is the key's
