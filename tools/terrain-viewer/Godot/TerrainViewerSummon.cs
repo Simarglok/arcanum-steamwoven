@@ -42,6 +42,28 @@ public partial class TerrainViewerApp
         caster.SummonPrototypes = SummonPrototypeOf;
         caster.SummonMap = new SessionMapId(CurrentAreaMap);
         caster.EyeCandyPlays = index => EyeCandyHostNow()?.Plays(index) ?? false;
+        caster.CritterSummoned = CritterSummonedHere;
+    }
+
+    // The creation notices and inventories queued for the summoned critters, for the smokes.
+    private readonly List<string> _summonedCrittersForSelfTest = [];
+
+    /// <summary>
+    /// ARC-MAGIC-053 (E1-e, SUM5, TG9): a critter the Summon component made on the shown map is handed to the resolver and the AI host at once (the record's next components, the ObjFlag and EyeCandy lines on
+    /// <c>Tgt_Summoned</c>, find it by identity), its inventory is queued (0x442260 runs the restock for every created object) and its tile notification is queued as every creation's is: the creation finish ends with the location
+    /// notification for a type 15 or 16 object (ARC-DEV-402, <see cref="QueueCreationNotice"/>), so the script of the tile it stands on runs with it as the triggerer. Without an AI host the resolver alone is told (the
+    /// AI host reads the session's critters when it is built).
+    /// </summary>
+    private void CritterSummonedHere(string entity)
+    {
+        if (_areaSession is not { } owner || owner.QueryCreatedObject(entity) is not { } made || made.Map != new SessionMapId(CurrentAreaMap)) return;
+        if (AreaAiHostNow() is { } ai) SyncCreatedCritters(owner, ai);
+        else if (_createdPrototypeRead is { } read && _inventoryHost is { } inventory) inventory.Resolver.SetCreated(CreatedCrittersOf(owner, read).Maps(new SessionMapId(CurrentAreaMap)));
+        QueueCreatedInventory(entity);
+        QueueCreationNotice(entity, made.Cell);
+        _summonedCrittersForSelfTest.Add(entity);
+        if (_summonedCrittersForSelfTest.Count > 64) _summonedCrittersForSelfTest.RemoveAt(0);
+        GD.Print($"ARC-MAGIC-053 summoned-critter entity={entity} prototype={made.Prototype} cell={made.Cell.X},{made.Cell.Y} summoner={made.Summoner ?? "-"} run={made.Run?.ToString() ?? "-"}");
     }
 
     /// <summary>ARC-DEV-352 (EC11): an add the cast host was told would play (so its run waits) that the overlay host refused after all calls back at once, as one that does not play.</summary>

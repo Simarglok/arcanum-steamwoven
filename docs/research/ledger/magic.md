@@ -18,7 +18,7 @@ Source: [magic core](../magic-core-evidence.md#anomalies-recorded-not-adopted),
 | MG6 | `sub_455250` (0x455250) | Absolute aptitude difference tested for `< 0`: the time scaling never applies. | Original bug (second reading ARC-MAGIC-009, RN9: the original in both modes) |
 | MG7 | `MTComponentInterrupt_ProcFunc` (0x452300), `sub_4573D0` | The interrupt invocation has no source, so the search returns at once: Interrupt does nothing. | Original bug |
 | MG8 | `MTComponentSummon_ProcFunc` (0x452830), `magictech_effect_summon` (0x450C40) | The faction switch is fed **`Clear_Faction:`**; `List:` only picks the prototype. | Reconstruction slip |
-| MG9 | `magictech_pick_proto_from_list` (0x452900) | Roll 0..100 over weights summing to 100/120 (the tables the magic study lists); 100 falls off the end to entry 0 with a log. | Original bug |
+| MG9 | `magictech_pick_proto_from_list` (0x452900) | Roll 0..100 over weights summing to 100/120 (the tables the magic study lists); 100 falls off the end to entry 0 with a log. | Original bug (technical; fixed in both modes by ARC-MAGIC-053, [SUM22](spell-runs.md#summon-component-and-the-objects-it-creates-arc-res-101)) |
 | MG10 | `magictech_component_trait` (0x452B00), `sub_452CD0` | Elemental polymorph assigns the two flag words; restore clears only those bits. | Original bug |
 | MG11 | `sub_450AC0`, `sub_450B40` | The maintained-run counter loops and returns 0. | Original bug (second reading ARC-MAGIC-009, RN13: Steamwoven fix, Original switch) |
 | MG12 | `spell_ui_maintain_add` (0x57C290) | Signed `≥ count` test lets slot −1 through; `INT / 4` uncapped. Latent. | Original bug |

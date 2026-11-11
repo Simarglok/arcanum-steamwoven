@@ -158,6 +158,8 @@ public partial class TerrainViewerApp
         foreach (var npc in CreatedCrittersOf(session, read).Npcs(map))
         {
             if (npc.Row.WorldX is not { } x || npc.Row.WorldY is not { } y || Number(npc.Row, CurrentArtSlot) is not { } aid) continue;
+            // ARC-MAGIC-053 (SUM5): a summoned creature is made with OF_DONTDRAW set and shows when the summoning animation's callback clears it (the ground bodies are computed again with every session revision).
+            if ((session.QueryObjectFlags(npc.Entity).Object(0) & Arcanum.Simulation.Magic.SpellTargetObject.DontDraw) != 0) continue;
             if (!_createdCritterArt.TryGetValue(aid, out var load))
             {
                 _createdCritterArt[aid] = load = AreaCreatedCritterArt.Load(aid, area.ArtSources, extra.MappedName);

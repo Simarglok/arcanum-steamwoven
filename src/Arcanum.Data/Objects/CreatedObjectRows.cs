@@ -21,6 +21,12 @@ public enum CreatedRowFailure
 public sealed record CreatedObjectRowResult(CreatedRowFailure Failure, AreaObjectRecord? Row);
 
 /// <summary>
+/// ARC-MAGIC-053 (E1-e, ledger SUM5): what the Summon effect (0x450C40) writes on the NPC it makes besides its flags: its experience worth and pool are cleared (fields 285 and 286: a summoned creature gives and takes no
+/// experience) and, when the run has a parent, the parent's alignment (stat 19) is copied (<see cref="Alignment"/>, null when the parent's is not known: the faction rule that copies an NPC summoner's faction is E1-f's).
+/// </summary>
+public sealed record CreatedCritterSummon(int? Alignment);
+
+/// <summary>
 /// ARC-DEV-359 (E1-c): the base record of an object the session created from a prototype, built by the rule a map object's record is built by
 /// (<c>AreaBuilder.AddObject</c>: the prototype's fields, each replaced by the object's own where it has one). A created object has no map file, so its own
 /// fields are the ones the original's create writes (OM13, OM16): its location (field 1, the cell packed as a map object stores it: x in the low half, y in the high half), OF_DYNAMIC, and for
@@ -48,7 +54,7 @@ public static class CreatedObjectRows
     /// (<paramref name="cellX"/>, <paramref name="cellY"/>) of map <paramref name="runtimeMap"/> under the entity <paramref name="entity"/> (an <c>oid:</c> entity). The effective fields are
     /// the prototype's with the object's own fields written over (the direct fields). A prototype that is not a critter's is refused, whatever else it holds.
     /// </summary>
-    public static CreatedObjectRowResult Critter(Func<int, PrototypeFile> lookup, int prototype, string entity, int runtimeMap, int cellX, int cellY)
+    public static CreatedObjectRowResult Critter(Func<int, PrototypeFile> lookup, int prototype, string entity, int runtimeMap, int cellX, int cellY, CreatedCritterSummon? summon = null)
     {
         ArgumentNullException.ThrowIfNull(lookup);
         ArgumentNullException.ThrowIfNull(entity);
@@ -74,6 +80,17 @@ public static class CreatedObjectRows
         Own(NpcFlagsSlot, Base(NpcFlagsSlot) | WaypointsDayFlag);
         Own(StandpointDaySlot, location);
         Own(StandpointNightSlot, location);
+        if (summon is not null)
+        {
+            // SUM5: the experience worth and pool cleared; the parent's alignment copied into the stat array's element 19.
+            Own(ExperienceWorthSlot, 0);
+            Own(ExperiencePoolSlot, 0);
+            if (summon.Alignment is { } alignment && effective.TryGetValue(StatSlot, out var stats) && stats.Presence == AreaPresence.Array)
+            {
+                var elements = stats.Elements.Where(element => element.Key != AlignmentStat).Append(new AreaSparseElement(AlignmentStat, [unchecked((long)(uint)alignment)])).OrderBy(element => element.Key).ToArray();
+                direct[StatSlot] = effective[StatSlot] = new AreaFieldValue(StatSlot, AreaPresence.Array, AreaValueOrigin.Instance, null, Array.AsReadOnly(elements), null);
+            }
+        }
 
         var key = new AreaObjectKey(Source, runtimeMap, AreaSourceKind.Mobile, null, 0, 0, KeyId(entity), 0);
         var row = new AreaObjectRecord(key, 119, record.Type, prototype, record.Own.Sha256, record.Own.Sha256, "", "", AreaScope.Core, location, cellX, cellY,
@@ -83,6 +100,9 @@ public static class CreatedObjectRows
 
     /// <summary>The slots of an object's location, its object flags, an NPC's flags and its day and night standpoints.</summary>
     public const int LocationSlot = 1, FlagsSlot = 18, NpcFlagsSlot = 69, StandpointDaySlot = 78, StandpointNightSlot = 79;
+
+    /// <summary>ARC-MAGIC-053: the slots of an NPC's experience worth and pool (fields 285 and 286 of the executable), of the critter's stat array and the alignment's element in it (stat 19).</summary>
+    public const int ExperienceWorthSlot = 74, ExperiencePoolSlot = 75, StatSlot = 38, AlignmentStat = 19;
 
     /// <summary>OF_DYNAMIC (object flag 0x2000), which the original's create finish sets on the new object (OM16); and ONF_WAYPOINTS_DAY (NPC flag 0x2), which its create sets on an NPC (OM13).</summary>
     public const long DynamicFlag = 0x2000, WaypointsDayFlag = 0x2;

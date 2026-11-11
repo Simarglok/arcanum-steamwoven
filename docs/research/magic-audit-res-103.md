@@ -70,7 +70,7 @@ The components are the open part:
 | AGoal | 4 (2) | Knockback (43) and hover (44) requests ready; the host pushes NPCs, not the hero or companions | MA-0 checks |
 | **ObjFlag** | **101 (49)** | **Every spell-flag, object-flag and critter-flag bit on a critter except the social and AI ones (MA-1, ARC-DEV-358)** ([flags](#spell-and-object-flags-the-objflag-component)) | MA-4, MA-6, MA-8 |
 | **Effect** | **48 (20)** | **Hero only**; changes to stats, maximums and reaction run, resistances and skills are inert ([effects](#effect-numbers-the-effect-component)) | E1-d, MA-2 |
-| **Summon** | **18 (18)** | **Not built** | E1-a/b/c/e |
+| **Summon** | **18 (18)** | **Built for scenery (E1-b) and critters (ARC-MAGIC-053, E1-e); not built: `Clear_Faction:`, `Palette:`, the concealed start SUM19** | E1-f, MA-1 |
 | Destroy | 17 (17) | Lying items only; the 17 spells use it on their summoned objects (CALLBACK, END_CALLBACK), so it follows Summon | E1-b |
 | Trait | 10 (5) | Not built (Body spells, Polymorph) | MA-8 |
 | Identify | 3 (3) | **Taken since MA-7 (ARC-MAGIC-032)**: the hero's answer is a typed event and a text line, the item's identification is the session's mark; the windows are E8's ([result](#identify-ma-7-arc-magic-032)) | E8 |

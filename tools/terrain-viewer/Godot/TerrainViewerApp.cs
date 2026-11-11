@@ -273,6 +273,8 @@ public partial class TerrainViewerApp : Node
                                 // ARC-DEV-352 (E1-b): only when named, Fireflash's flash on an empty tile and none on an occupied one; Wall of Fire's pieces, their burn and their END (--hero, a map window).
                                 if (only?.Contains("summon-flash") == true) await RunAreaSummonSmokeAsync(SummonFlashSpell);
                                 if (only?.Contains("summon-wall") == true) await RunAreaSummonSmokeAsync(SummonWallSpell);
+                                // ARC-MAGIC-053 (E1-e): only when named, Summon Undead makes a hidden, summoned, mind-controlled creature of list 5 that shows at the animation's callback, joins the party, has its creation notice queued and goes with its run (--hero, a map window).
+                                if (only?.Contains("summon-undead") == true) await RunAreaSummonUndeadSmokeAsync();
                                 // ARC-DEV-250 (B12, SM08): only when named, a damage spell with a radius cast at one of three animals that move before the hit (AI on, elven ruins, --hero elf-female).
                                 if (only?.Contains("cast-multi") == true) await RunAreaCastMultiSmokeAsync(result);
                                 // ARC-DEV-263 (B33, SM24): only when named, the buttons on a joined companion's portrait and body (start map, --hero).
