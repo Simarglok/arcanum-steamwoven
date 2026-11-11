@@ -236,7 +236,7 @@ public static class SpellRunRules
         var target = check.ReplacedTile.IsNone ? invocation.TargetObject : null;
         var tile = check.ReplacedTile.IsNone ? invocation.TargetTile : check.ReplacedTile;
         var run = new SpellRun(id, invocation.Spell, SpellRunAction.Begin, Capture(invocation.Source), Capture(invocation.Parent),
-            invocation.Source?.Location ?? SpellLocation.None, Capture(target), tile, Capture(invocation.Other), flags, request.Triggers, 0, record.TriggerCount);
+            invocation.Origin, Capture(target), tile, Capture(invocation.Other), flags, request.Triggers, 0, record.TriggerCount);
         var goal = run.Parent is null ? 0 : request.SkipCastGoal ? GoalCastWithoutGoal : record.CastAnimation == -1 ? GoalCast : GoalCastAnimation;
         return new(SpellRunCreationStatus.Created, table.With(run), run, check, goal, run.Parent is null);
     }

@@ -128,7 +128,8 @@ Not investigated here (the rule is to name them and go on); recorded because a z
 | `ranged` and so `map` battery | `ARC-COMBAT-015 ranged smoke FAIL: the dagger is picked up and wielded again` (COMBAT-026 is fixing it) |
 | Crash Site smoke | FAIL (exit 1, 98 s), the known one |
 | `barter` (main map, Crash Site) | `InvalidOperationException` after `barter-art PASS` (frontier=InvalidOperationException, stage=Upload). Fixed by ARC-DEV-393: run alone, the stage's first awaited frames started the map's scenery loops (four goal runs, one session revision) inside the look's "changed nothing" check; the smoke now waits for the loops to start before its baseline. The game was right |
-| `created-critter` | `AI host holds the created critter` FAIL |
+| `created-critter` | `AI host holds the created critter` FAIL (only after other stages; fixed in ARC-DEV-394, see [toolchain](../workflow/toolchain.md#smoke-runner-arc-dev-061)) |
+| `script-critters`, `summon-wall` (after the long list) | `the tile notifications of the creations ran`, `the summoner standing in its own wall is spared` (found by ARC-DEV-394, not investigated) |
 | `menu` then `options` (`--main-menu`) | `options smoke FAILED: the menu is open over the start map` (stage order or configuration; `menu` passed, `options` followed it in one process) |
 | `scene` (`--main-menu` on the main map) | `the launch map ... is not the start map, and a new game is offered there` (a configuration that needs another map) |
 | `inv-carry` (Crash Site), `critter-light` (town), `door-close` (Crash Site) | `NONE`, which the runner turns into FAIL exit 3: the map lacks what the stage needs (`door-close` passed on the town sector) |

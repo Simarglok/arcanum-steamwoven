@@ -134,6 +134,13 @@ history held about 500 runs of such copies of one template).
   (1384, 239), and on `elven ruins` with `--hero elf-female` (the elf-male's boomerang cannot break a container for
   the junk pile stage). The daily package build (`./arcanum daily`, [daily package build](packaging.md#daily-package-build-arc-dev-062),
   when main changed since the last package) runs `complete`: that chain, then every stage ([smoke zones](#smoke-runner-arc-dev-061)).
+- **Stage order matters (ARC-DEV-394).** The stages of one process run in the viewer's order, and a stage can leave the world's test
+  time set (`RestoreWorldTestTime` keeps it at the session's time when that is ahead of the wall clock); while it is set,
+  `ProcessWorld` returns early in a native smoke, so the frame never reaches `ProcessAreaAi`, and a later stage that waits for frames
+  to sync the AI host sees nothing. A stage that needs the frame's AI work asks for it itself (`AreaAiHostNow()` in its wait, as
+  `created-critter` does); a stage that passes alone and fails after others can be this. Seen after the long stage list of the smoke
+  speed diagnosis and not fixed: `script-critters` (`the tile notifications of the creations ran`; it passes alone and fails after
+  `spirit-talk,created-scenery`) and `summon-wall` (`the summoner standing in its own wall is spared`; the cause is not looked at).
 - **Every requested stage runs (ARC-DEV-063).** `PASS` means each requested stage ran: a map smoke passes only when
   its log holds the `PASS` line of every stage in its list (`STAGE_PASS` in `tools/local_dev/smoke.py`, checked against
   the viewer's sources by the tests), the whole map battery (`full`, `map` without `--stages`) that of `map` and
@@ -147,8 +154,8 @@ history held about 500 runs of such copies of one template).
   given, and says so (`SMOKE hero human-male (auto): ...`); with
   `--main-menu` (no hero) it is refused. A menu stage (`menu`, `scene`, `options`, `bar`, `death`, `perf-menu`) needs no
   `--main-menu`: it gets its own menu process. The stages the viewer runs only without `map` (`barter`, `menu`, `scene`, `options`, `plants`, `bar`,
-  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-tile`, `tile-ghost`, `container-click`, `fire-order`, `indoor-fade`, `npc-shot`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `placement-census`, `spell-end`, `hold-hero`, `movement`, `spirit-talk`, `created-scenery`, `worn-light`, `critter-light`, `summon-flash`, `summon-wall`, `tech-craft`, `item-aim`, `perf`, `perf-menu`) get a run of their
-  own (step `stages-alone`, or `map-alone`) when `map` is in the list too. `tech-craft` (ARC-DEV-362, technology audit slice T-a) needs the bullets the map's bodies hold, so it runs on the cave: `./arcanum smoke map "crash site cave" --stages tech-craft` (on a map with no bullets of the crafted gun's type it fails with that message; its steps are the helpers of `TerrainViewerTechCraftHarness.cs`). `item-aim` (ARC-DEV-365, technology audit slice T-g) opens the item cursor with a script trap device from the use icon and presses a tile (goal 41) and an NPC (goal 39); it needs a hero and a map with a living NPC. A run whose stages include `debug-travel`, `follower-far` or `inv-carry`
+  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-tile`, `tile-ghost`, `container-click`, `fire-order`, `indoor-fade`, `npc-shot`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `placement-census`, `spell-end`, `hold-hero`, `movement`, `spirit-talk`, `created-scenery`, `worn-light`, `critter-light`, `summon-flash`, `summon-wall`, `tech-craft`, `tech-products`, `item-aim`, `perf`, `perf-menu`) get a run of their
+  own (step `stages-alone`, or `map-alone`) when `map` is in the list too. `tech-craft` (ARC-DEV-362, technology audit slice T-a) needs the bullets the map's bodies hold, so it runs on the cave: `./arcanum smoke map "crash site cave" --stages tech-craft` (on a map with no bullets of the crafted gun's type it fails with that message; its steps are the helpers of `TerrainViewerTechCraftHarness.cs`). `tech-products` (ARC-MAGIC-051, technology audit slice T-s) is `tech-craft`'s sibling on the same cave (`./arcanum smoke map "crash site cave" --stages tech-products`): it buys Therapeutics degrees 1 and 2 and Chemistry degree 1, assembles their first records, eats the two stat potions (the hero's effect list grows, record 158 adds +2 strength), uses the poison on a living NPC through the item cursor, and F7/F8 keep effects and items (same harness helpers; it needs a living NPC in the cave). `item-aim` (ARC-DEV-365, technology audit slice T-g) opens the item cursor with a script trap device from the use icon and presses a tile (goal 41) and an NPC (goal 39); it needs a hero and a map with a living NPC. A run whose stages include `debug-travel`, `follower-far` or `inv-carry`
   starts the viewer with `--debug-mode` (the stage needs the debug mode, ARC-DEV-050; ARC-WORLD-120).
 - **Stage configurations and grouping (ARC-DEV-391).** A viewer process fixes its map, start sector, hero, main menu and
   debug mode at launch, so only stages with the same configuration share a process. `STAGE_NEEDS` in
@@ -160,7 +167,7 @@ history held about 500 runs of such copies of one template).
   are several, `stages` when there is one), a *portable* stage (`map`, `resources`, `report`, `knockdown`, `inv-arrange`,
   `created-*`, `summon-*`, `item-aim`) rides in a process that already exists on its map (else it gets one), and the stages that end a game, move
   the window, leave state behind or run long (the menu family, `walk`, `census`, `container-click`, `perf`,
-  `dead-window`, `critter-fall`, `tech-craft`, `debug-travel`, `follower-far`, `inv-carry`) each get a process of
+  `dead-window`, `critter-fall`, `tech-craft`, `tech-products`, `debug-travel`, `follower-far`, `inv-carry`) each get a process of
   their own (`stages-main-walk`). `--map`, `--sector` and `--main-menu` pin that dimension for every stage; a pinned
   value a stage cannot pass in is refused before anything waits for the queue (`stage plants does not run at --sector
   1452,1291: it needs map ... at sector 1384,239`), and so is `--main-menu` with a stage that needs a hero or a session.
