@@ -7,7 +7,7 @@ original's run table, a run's creation, its stage at BEGIN and MAINTAIN with the
 cap (MT9a-1); the processing of each action, the scheduler, the magic-tech events and the interrupts (MT9a-2), as the original has
 them. Godot-free rules in `Arcanum.Simulation.Magic` for any caster, item, target and map, over ports for the world and the
 components; the per-target stage, the no-stack test and the cancels are ARC-MAGIC-011's ([spell per-target
-stage](spell-target-stage.md)); the session holds the runs and queues their events. Saved runs are MT9b's. Rule-mode switches MG3,
+stage](spell-target-stage.md)); the session holds the runs and queues their events. Saved runs: MT9b (done, below). Rule-mode switches MG3,
 MG11, MG19, MG29 (and, with the per-target stage, MG15, MG30, MG32); runs and their events are saved since ARC-DEV-210 (the settled runs) and ARC-DEV-289 (the runs a missile or a cast in progress waits on), [saved runs](../architecture/saved-runs.md).
 
 Requirements: [FR-MAGIC-006](../requirements/combat-magic-tech.md#fr-magic-006) (a spell's life: begin, maintenance and its
@@ -132,7 +132,15 @@ script's stop of a cast (0x4573D0).
 **In the session.** `StartSpellRun` creates a run (and queues the BEGIN of a run without a parent); `ActOnSpellRun` carries out one of
 the actions above with the host's world; the event kind `magic.run` (values: the time it was set at, the run, the code) runs in the
 session's event pass through an `ISessionSpellWorld` host, and a pass with another host consumes it and reports it not run. Runs
-and `magic.run` events are not saved (the kind is `NotSaved`) until MT9b: a restored session has neither.
+and `magic.run` events are saved with the settled runs and the runs that wait to begin (ARC-DEV-210, ARC-DEV-289; schema 73 and 84, [saved runs](../architecture/saved-runs.md#35-projectiles-missiles-and-spell-runs)); a run that waits for an animation's callback stands in Begin (processed) or End and is saved like any other (MT9b's check with maintained, timed and counted records found the Callback and END_CALLBACK actions only inside the processing: the callback frees the run or returns it to Maintain or End).
+
+## Runs at the player's change of map (ARC-MAGIC-058, MT9b)
+
+The original keeps a spell run table per game and a `MT.dat` file per map ([PS26](../architecture/original-persistence.md), ledger [MX1–MX6](../research/ledger/spell-runs.md#spell-runs-at-the-players-change-of-map-arc-magic-058)). At a player character's change to another map (0x45C720 → 0x44F7A0) it walks the 512 slots: a run whose source, parent, target and summoned list are all none or on the travel list (the hero, its followers recursively and every item they hold) is carried; every other run in use is ended at once (0x457270). The other object of a run is not tested.
+
+`SpellRunTravelRules` (`Arcanum.Simulation.Magic`) is that test: `Goes(run, travels, summoned)` for one run and `RunsLeft` for a table, in slot order; an item (type 5..14) travels when its holder, the run's parent, does. `SessionSpellCaster.EndRunsLeavingMap(travelling)` forces the end of each run left behind through the cast host (the END actions, the ticks and the maintain-bar slot go with it), reading the table live, so a run an earlier end already ended is not ended twice. The session reaches it at the plan's `CarryEvents` step through `IChangeOfPlaceHost.CarrySpellRuns(moveList)` (a default no-op; the viewer's three map-change hosts call the cast host of the shown map): the step runs after the move list is built and before the destination is readied, on the old map, as the original's does. A same-map jump and a non-player mover's change run nothing.
+
+The session's table is one table with global `magic.run` events, so a run that travels simply stays in it, and the runs of a map that is not shown never exist: the original's parking at the map close (0x44FA70) and its re-read at the map entry (0x44FC30) have nothing to carry. A run kept by a pending END callback after its forced end (its overlay went with the map) is called back by the viewer's `AwaitedCallback` rule.
 
 ## Differences from the original
 
@@ -149,6 +157,7 @@ Owner decisions 2026-10-20: every difference is documented.
 | An aptitude difference that wraps to −100 divides by zero in the time scaling. | The time is left unscaled (unreachable with aptitudes of −100..100). | both (no-crash) |
 | The cap asks the range test and ignores its answer. | Not asked. | — |
 | A network client's processing returns at once; the host sends packets for frees, ticks and maintain-bar slots. | Single player only. | — |
+| A carried run's tick events are dropped at the teleport (0x45BD70) and queued again at the map entry (0x44FC30 → 0x459500); the first list at +0x130 is tested with the others. | A carried run keeps its tick with its old deadline; only the summoned list is tested (the other is never written by the build). | — |
 | The guard of nested event removals (0x5E7604). | Not modelled: every removal is made. | — |
 | A tick that cannot be queued (a full queue) takes the scheduler's failure branches. | The session refuses an action whose events do not fit; the branches stay in the decision (oracle-checked). | — |
 | A non-critter's aptitude and a missing target's type keep the slot's previous values. | No aptitude, no target. | — |
@@ -165,7 +174,7 @@ an action's or event's queued events do not fit; what the host's ports already d
 ## Not ready
 
 - No viewer caller: the casting UI (MT20a-2) starts runs and their BEGIN; Damage and Heal are ARC-MAGIC-012's ([spell damage and heal](spell-damage-heal.md), the host's `Apply` calls `SpellLifeComponents`), the other components MT13–MT18's; the maintain bar is MT20b's;
-  the endings' callers (fainting, rest, travel, death) are MT11's; saved runs and events are MT9b's.
+  the endings' callers (fainting, rest, world-map travel, death) are MT11's; saved runs and events are MT9b's, done (ARC-DEV-210, ARC-DEV-289, ARC-MAGIC-058).
 - The other object (the invocation's +0xA0, copied to the run's block at +0xE8; the run's +0xA0 block is the target, ledger [DP3](../research/ledger/spell-runs.md#dispel-component-arc-magic-034)): since ARC-MAGIC-025 `SpellInvocation.Other` carries it
   and the run captures it; only the item executor sets it (the attacker global of an attack start and of attacks a location, ledger
   IC10), every other cast leaves it null.

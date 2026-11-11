@@ -693,3 +693,20 @@ The editor is the in-game character sheet's original look between the menu's str
 Known differences (documented, not bugs):
 
 - The hover hints of the buttons and values are not shown in the editor (the original shows them in the game's text bar).
+
+## ARC-MAGIC-058 — Spell runs at the hero's change of map (2026-11-12)
+
+The hero's change to another map (a jump point, the Crash Site cave, a map-mode exit) ends every spell run that names an object that does not travel with the hero (the hero, the followers that go along and what they hold); runs of the hero and of the followers that travel go on. Built from the executable (functions 0x45C720, 0x44F7A0, 0x44FA70, 0x44FC30; [rules](../world/spell-run-rules.md#runs-at-the-players-change-of-map-arc-magic-058-mt9b)). Compare in both games.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast a maintained spell on yourself (for example a protective spell with a slot in the top bar), walk through an exit to another map. | The spell and its slot are still there on the new map. | open |
+| 2 | With a follower in the party, cast a maintained spell on the follower and change map with the follower coming along. | The spell on the follower goes on; its slot stays. | open |
+| 3 | Cast a maintained spell on a creature that is not in the party (or on a follower you ordered to wait), then leave the map. | The spell ends as you leave: the slot is empty on the new map and the creature is without the effect when you come back. | open |
+| 4 | Summon a creature with a summoning spell, then leave the map without it following. | The run of the summoning spell ends as you leave; the summoned creature is gone when you return. | open |
+| 5 | Cast a spell on a wall or a door of the map (a lock or hold spell, Wall of Fire) and leave. | The effect is over when you return (the run ended at the exit). | open |
+
+Known differences (documented, not bugs):
+
+- A run that travels keeps its next tick time; the original queues the tick again at the map entry (the time 0x459500 gives is not read).
+- The change of map by the world map is not covered (the endings on rest and world-map travel are MT11's).

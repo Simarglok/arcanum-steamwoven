@@ -461,7 +461,7 @@ Code: [`MaintainBarRules`](../../src/Arcanum.Simulation/Magic/MaintainBarRules.c
    frame while held); an open empty slot its art 188 + i; a closed slot art 188 + i with SP_Plugged 628 + i one pixel up and left, and
    takes no pointer. The arts load with the bars' art, the icons with the hotkey bar's.
 7. **Closing** (MB8). When the open count drops, each slot it closes while showing a run is clicked, so its spell ends.
-8. **Saving** (MB9). The bar is not saved, like the runs (MT9b): a loaded game starts with an empty bar.
+8. **Saving** (MB9). The bar is saved with the settled runs it shows (ARC-DEV-210, schema 73): a loaded game shows the saved slots again.
 9. **Smoke.** Inside the cast stage, before the hotkey bar: the hero casts the first maintained college spell (no damage at BEGIN) at
    itself or the NPC, released at once; slot 0 shows its icon, the closed slots their plugged art, the open ones their slot art;
    hovering slot 0 describes the spell; a click plays 3000 and 3001, ends the spell and empties the slot (marker
@@ -550,7 +550,7 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | An inventory art that does not read leaves the bar with what the art library gives for it (not read). | The type icon. | — |
 | A broken item's inventory art carries the destroyed bit 10 (DU4), whose effect on the drawing was not read. | Drawn as stored; the bit is ignored. | — (not ready) |
 | A full maintain bar, or one with no open slot, writes the run into slot −1 (a neighbouring variable) and answers that it took it; more than five open slots (intelligence 24 and above) index past the table (MB3, MG12). | A full bar refuses the run, so the scheduler ends it; at most five slots open. With intelligence 24 and above the cap allows a sixth maintained spell, which ends at its first tick. | — (out-of-bounds write, fixed in both modes by the owner rule of 2026-10-17) |
-| The maintain bar is saved with the game (MB9). | Not saved, like the runs (MT9b). | — (not ready) |
+| The maintain bar is saved with the game (MB9). | Saved with its settled runs (ARC-DEV-210). | — |
 | Hovering a maintain slot also marks the run's target (or first target, or parent) as the hovered object (0x43C270, MB6). | Only the spell's description. | — (not ready) |
 | A freed run whose bar note never came keeps its slot, and the next run given its id shows there (no such path read). | A slot whose run the table no longer holds is emptied. | — (technical guard) |
 
