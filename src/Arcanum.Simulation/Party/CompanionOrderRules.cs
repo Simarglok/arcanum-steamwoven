@@ -125,6 +125,8 @@ public static class CompanionOrderRules
 
     /// <summary>The message range of a line (OL12): acknowledgement 2100, "cannot" 2200, friendly farewell 1900, hostile farewell
     /// 2000, 100 lines each, in the generated NPC line files chosen by both genders.</summary>
+    [OriginalFunction(0x413C90, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x413BE0, OriginalFunctionScope.Partial)]
     public static LoyaltyLines Lines(CompanionOrderLine line) => line switch
     {
         CompanionOrderLine.Acknowledge => new(2100, 2199),
