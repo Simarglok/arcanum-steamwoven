@@ -1,7 +1,7 @@
 # Skill check runtime (ARC-SKILLS-003)
 
 Status: **Implemented bounded component**, ARC-SKILLS-003 (2026-10-21), task S3 of the
-[skills plan](../research/skills-plan.md) (ARC-RES-061, slice K2 of the [skills research](../research/skills-evidence.md#5-the-skill-check)).
+skills plan (ARC-RES-061, slice K2 of the [skills research](../research/skills-evidence.md#5-the-skill-check)).
 One public, pure, Godot-free owner of the check every skill uses: `SkillCheckRules` in
 [`Arcanum.Simulation.Skills`](../../src/Arcanum.Simulation/Skills). The [attack resolver](attack-resolver-runtime.md) runs its
 attack and dodge rolls through it, and `AttackRules`' effectiveness, critical chance and light helpers call it instead of

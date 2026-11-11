@@ -4,7 +4,7 @@ Status: **Research / test plan**, work item ARC-RES-089 (2026-11-04). Docs-only:
 It collects every open player bug, groups it by root cause, maps each bug to the gaps
 (GR) and migration slices (MIG1-MIG16) of the [gap register](../architecture/gap-register.md) and
 [target model](../architecture/target-model.md) that are likely to touch it, and plans the smoke re-checks that run
-after each migration step. It fixes nothing: the bug-fix hold of the [architecture audit](architecture-audit-plan.md)
+after each migration step. It fixes nothing: the bug-fix hold of the [architecture audit](../architecture/gap-register.md)
 stays on.
 The re-check of its 46 bugs on `main` after MIG1-MIG5 and MIG10 (ARC-RES-090) is in [open-bugs-resmoke-2026-11-04.md](open-bugs-resmoke-2026-11-04.md).
 The re-check of B06, B10 and B25 after MIG9 (ARC-DEV-107) is the last section of the same file.

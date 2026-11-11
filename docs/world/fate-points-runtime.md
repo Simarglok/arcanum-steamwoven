@@ -1,6 +1,6 @@
 # Fate points runtime (ARC-WORLD-054)
 
-Status: **Implemented bounded component**, ARC-WORLD-054 (2026-10-21), task S7 of the [skills plan](../research/skills-plan.md)
+Status: **Implemented bounded component**, ARC-WORLD-054 (2026-10-21), task S7 of the skills plan
 (the shared fate owner the skills, combat and magic lanes read). The hero's fate points and armed fates live in the game
 session; the pure rules are `FateRules` in [`Arcanum.Simulation.Character`](../../src/Arcanum.Simulation/Character/FateRules.cs),
 the session API is [`GameSessionFate.cs`](../../src/Arcanum.Session/GameSessionFate.cs). The hero's attack, the conversation start

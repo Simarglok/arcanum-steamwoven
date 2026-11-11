@@ -1,7 +1,7 @@
 # The original's frame and time: one loop, three clocks, one pause, one round flag
 
 Status: **Research**, work item ARC-RES-082 (2026-11-03), slice R4 of the
-[architecture audit](../research/architecture-audit-plan.md) (spine SP4, hypotheses H5
+[architecture audit](gap-register.md) (spine SP4, hypotheses H5
 and H7). Docs-only: no code changes and no checks run. It is a reference model of the
 original game, not a comparison: the "Steamwoven today" column notes only the obvious
 differences; the full comparison, its classes and the target model are slice G1's.

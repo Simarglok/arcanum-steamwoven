@@ -1,7 +1,7 @@
 # Open bugs: re-smoke on `main` after MIG1-MIG5 and MIG10
 
 Status: **Verification result**, work item ARC-RES-090 (2026-11-04). Docs-only: no source change. It fixes nothing; the bug-fix hold
-of the [architecture audit](architecture-audit-plan.md) stays on.
+of the [architecture audit](../architecture/gap-register.md) stays on.
 
 This is the re-check the [smoke plan](open-bugs-migration-smoke-plan.md) (ARC-RES-089, #601) asked for: each of its 46 bugs
 (B01-B46) against `main` 8c88e906, which holds the record resolver and its consumers (MIG1 #598, MIG3 #604), carried companions
@@ -236,7 +236,7 @@ Smokes of this slice on the owner's Mac, hero `human-male`, `Arcanum1-024-fixed`
 
 ## Re-check after MIG6 and MIG11 S5 (ARC-DEV-155, 2026-11-06)
 
-Verification only: no source change, no fix; the bug-fix hold of the [architecture audit](architecture-audit-plan.md) is the coordinator's to lift. The first table above was taken before MIG6 (#613-#621, 2026-11-04) and MIG11 S5 (#646), so the five rows it classed
+Verification only: no source change, no fix; the bug-fix hold of the [architecture audit](../architecture/gap-register.md) is the coordinator's to lift. The first table above was taken before MIG6 (#613-#621, 2026-11-04) and MIG11 S5 (#646), so the five rows it classed
 as waiting on them are read again on `main` c7a5e805 (#678). No stage was added (a stage belongs to the PR of the slice that fixes its bug); B01, B04 and B13 are therefore classed by the existing stages, the
 unit tests and the current source, and a reading is not a reproduction.
 

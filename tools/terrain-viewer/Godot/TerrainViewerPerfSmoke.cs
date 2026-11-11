@@ -4,7 +4,7 @@ using Godot;
 
 namespace Arcanum.TerrainViewer;
 
-// ARC-DEV-367 (O10 of docs/research/performance-diagnosis-2026-11.md): the timing probe's smoke stages. The probe (Arcanum.World.PerfProbe) prints
+// ARC-DEV-367 (O10 of the performance diagnosis ARC-RES-102, deleted; see docs/project/status/tools.md): the timing probe's smoke stages. The probe (Arcanum.World.PerfProbe) prints
 // one `ARC-DEV-367 perf ...` line per mark and span; these stages drive what the diagnosis measured and print the tables. They measure, they gate
 // nothing: PASS means every measurement was taken.
 //   perf (ARC_AREA_MAP_SMOKE_ONLY=perf, map mode with --hero, a sector with a map exit: the Crash Site window has none, use --sector 1409,1314 or

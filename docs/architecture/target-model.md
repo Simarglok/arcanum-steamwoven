@@ -1,7 +1,7 @@
 # Target model: one object, one world runtime, one clock, one goal table
 
 Status: **Accepted by the owner** (2026-11-04, every question by the recommendation; GQ3, GQ7 and GQ8 revised the same day in the [gap review](gap-review.md#owner-answers), ARC-RES-088), work item ARC-RES-086 (2026-11-04), slice G1 of the
-[architecture audit](../research/architecture-audit-plan.md). Docs-only: no code changes
+[architecture audit](gap-register.md). Docs-only: no code changes
 and no checks run. The elements below close the gaps of the [gap register](gap-register.md);
 six of them (TM2, TM5, TM6, TM8, TM10, TM11) depend on eight owner decisions (GQ1–GQ8,
 [below](#owner-decisions)), all answered on 2026-11-04

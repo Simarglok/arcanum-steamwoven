@@ -822,7 +822,7 @@ They confirm TA10/TA11 and SU17 and join them into one answer for the question.
 
 ## Summon component and the objects it creates (ARC-RES-101)
 
-Source: the [Summon research note](../summon-objects-res-101.md) (slice E1-r of the [missing-systems plan](../../project/missing-systems-plan.md): what the
+Source: the Summon research note (ARC-RES-101, deleted; rows SUM1-SUM15 below) (slice E1-r of the [missing-systems plan](../../project/missing-systems-plan.md): what the
 flash of Fireflash, the five pieces of Wall of Fire and the second line of Summon Undead are, B47 of the
 [2026-11-10 triage](../bug-reports-triage-2026-11-10.md)). Read on 2026-11-10 in the 1.0.7.4 executable (`Version.txt` `VERSION:1.0.7.4`;
 `llvm-objdump`; SHA-256 `9bd80511…8d52` checked) by this task alone (F1): the component's ProcFunc 0x452830 with the list pick 0x452900, the

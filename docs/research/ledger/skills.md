@@ -5,7 +5,7 @@ Part of the [original verification ledger](../original-verification-ledger.md) (
 ## Skill rules (ARC-SKILLS-001)
 
 Source: [skill rules runtime](../../world/skill-rules-runtime.md), [skills](../skills-evidence.md#2-ranks) sections 2 and 3, the
-[skills plan](../skills-plan.md) task S1. Read on 2026-10-20 by a first reader and, independently, a second reader that saw only
+skills plan task S1. Read on 2026-10-20 by a first reader and, independently, a second reader that saw only
 the questions (method step 6); they agree on every row. Rows FA7–FA9 (levels, caps, points, training) and AL5 (the points
 setters and the tech level) were already at F2 and are not repeated. SR10–SR14 re-read the remaining F0 facts of the
 skill state domain in the [skills research](../skills-evidence.md) (owner decision 2026-10-20: F0 facts are re-read domain by
@@ -34,7 +34,7 @@ oracle (F3, receipts `4C5EB0.json` and `4C6170.json`).
 ## Hero skills (ARC-SKILLS-002)
 
 Source: [hero skills runtime](../../world/hero-skills-runtime.md) and [skills](../skills-evidence.md#persuasion), task S2 of the
-[skills plan](../skills-plan.md). The levels, training, weapon speed (0x465CF0), weapon skill (0x465D80), best items (0x465170),
+skills plan. The levels, training, weapon speed (0x465CF0), weapon skill (0x465D80), best items (0x465170),
 follow check (AP3) and max followers (AP4) the task reads are already at F2. The remaining F0 facts of the persuasion reads
 (owner decision 2026-10-20) were read on 2026-10-20 by a first reader and, independently, a second reader that saw only the
 questions (method step 6); they agree on both rows. Every direct branch stays inside `.text`.
@@ -47,7 +47,7 @@ questions (method step 6); they agree on both rows. Every direct branch stays in
 ## Dialog skill gates (ARC-SKILLS-004)
 
 Source: [dialog conversation runtime](../../scripting/dialog-conversation-runtime.md#skill-gates-arc-skills-004) and
-[skills](../skills-evidence.md#dialog-and-scripts), task S4 of the [skills plan](../skills-plan.md). Read on 2026-10-21 by a first
+[skills](../skills-evidence.md#dialog-and-scripts), task S4 of the skills plan. Read on 2026-10-21 by a first
 reader and, independently, a second reader that saw only the questions (method step 6); they agree on every row. The training
 setters and the tier minimum the cases call are SR1 and SR3. Every direct branch stays inside `.text`.
 
@@ -62,7 +62,7 @@ setters and the tier minimum the cases call are SR1 and SR3. Every direct branch
 ## Skill check (ARC-SKILLS-003)
 
 Source: [skill check runtime](../../world/skill-check-runtime.md) and [skills](../skills-evidence.md#5-the-skill-check) section 5,
-task S3 of the [skills plan](../skills-plan.md). Read on 2026-10-21 by a first reader and, independently, a second reader that
+task S3 of the skills plan. Read on 2026-10-21 by a first reader and, independently, a second reader that
 saw only the questions (method step 6); they agree on every row. SC16 and SC17 re-read the attack's own F0 facts of the check
 (owner decision 2026-10-20: F0 facts are re-read domain by domain). The levels and training the check reads are SR1–SR4
 and FA7–FA9. Every direct branch of the functions below stays inside `.text`; none reaches `.IIDKing`; the four jump tables
@@ -91,7 +91,7 @@ point inside `.text`. The three effectiveness functions were also run in the fun
 
 ## Fate points (ARC-WORLD-054)
 
-Source: [fate points runtime](../../world/fate-points-runtime.md), FR-CHAR-024, task S7 of the [skills plan](../skills-plan.md). Read on
+Source: [fate points runtime](../../world/fate-points-runtime.md), FR-CHAR-024, task S7 of the skills plan. Read on
 2026-10-21 by a first reader and, independently, a second reader that saw only the questions (method step 6); they agree on
 every row. DR6 (fate 1 at the conversation start) and SC14 (the skill fates) are already at F2 and not repeated. Every direct
 branch of the functions below stays inside `.text`; none reaches `.IIDKing`. One indirect call goes through the fate window's
@@ -112,7 +112,7 @@ and the armed test were also run in the function oracle (F3, receipts `4F5090.js
 
 ## Stealth (ARC-SKILLS-008)
 
-Source: [stealth runtime](../../world/stealth-runtime.md), [skills](../skills-evidence.md), task S12 of the [skills plan](../skills-plan.md).
+Source: [stealth runtime](../../world/stealth-runtime.md), [skills](../skills-evidence.md), task S12 of the skills plan.
 Read on 2026-10-21 by two independent readers that saw only the questions (method step 6); they agree on every row below unless a
 row says otherwise. Sight, hearing and the prowling margin are AW1–AW12 (this section adds only what is new); the gait rows L5/L6 of
 the locomotion research agree with ST3.
@@ -129,7 +129,7 @@ the locomotion research agree with ST3.
 ## Script skill commands (ARC-SKILLS-009)
 
 Source: [SCR dispatcher](../../scripting/scr-dispatcher-runtime.md#skill-commands-arc-skills-009-set-s11), task S17 of the
-[skills plan](../skills-plan.md). Read on 2026-10-21 by two independent readers that saw only the questions (method step 6); they agree on
+skills plan. Read on 2026-10-21 by two independent readers that saw only the questions (method step 6); they agree on
 every row below unless a row says otherwise. The action executor `script_execute_action` (0x447220) dispatches through its table at
 0x44ADBC indexed by type − 1; the census's operand signatures (`non`, `ooonn`, `oo`) match the reads. The shared check is SC1–SC17, the
 goal gate EX3, the use-item-with-skill run HL2 and PL3.
@@ -146,7 +146,7 @@ goal gate EX3, the use-item-with-skill run HL2 and PL3.
 ## Repair (ARC-SKILLS-007)
 
 Source: [repair runtime](../../world/repair-runtime.md), [item durability](../../world/item-durability-runtime.md), task S11 of the
-[skills plan](../skills-plan.md). Read on 2026-10-21 by two independent readers that saw only the questions (method step 6); they
+skills plan. Read on 2026-10-21 by two independent readers that saw only the questions (method step 6); they
 agree on every row below. The check is SC1–SC17 (repair is tech skill 12, effectiveness 4L, SC3), the item rules DU1–DU8, the fate
 FT6. RP2 corrects DU8 in three points: the item part is the run's own case, which the service (0x4C8E60) reaches through a forced
 run; the 5 % loss for a broken item is a master's only (anyone else keeps the training table); and the skill's own run is not
@@ -164,7 +164,7 @@ the critical flag set).
 ## Pick locks (ARC-SKILLS-006)
 
 Source: [pick locks runtime](../../world/pick-locks-runtime.md), [skills](../skills-evidence.md#pick-locks), task S9 of the
-[skills plan](../skills-plan.md). Read on 2026-10-21 by two independent readers that saw only the questions (method step 6); they
+skills plan. Read on 2026-10-21 by two independent readers that saw only the questions (method step 6); they
 agree on every row below. The check, its difficulty (the lockpick's bonus, the lock's difficulty halved for a master, no
 darkness from expert) and the fate are SC1–SC17 and FT6; the lock setters and the Lock event are LK2–LK5.
 
@@ -180,7 +180,7 @@ darkness from expert) and the fate are SC1–SC17 and FT6; the lock setters and 
 
 ## Heal (ARC-SKILLS-005)
 
-Source: [heal runtime](../../world/heal-runtime.md), [skills](../skills-evidence.md#heal), task S8 of the [skills plan](../skills-plan.md).
+Source: [heal runtime](../../world/heal-runtime.md), [skills](../skills-evidence.md#heal), task S8 of the skills plan.
 Read on 2026-10-21 by a first reader and, independently, two more readers that saw only the questions (method step 6); they
 agree on every row. HL4 re-reads the record heal applier that `LifeRules.Heal` (ARC-COMBAT-002) modelled at F0 (owner decision
 2026-10-20: F0 facts are re-read domain by domain). The check, its difficulty and the heal fate are SC1–SC17 and FT6. Every
@@ -198,7 +198,7 @@ difficulty switch (0x4C8E38) and UI hooks (0x5FC1EC, 0x5E86F4).
 ## Skills page (ARC-UI-009)
 
 Source: the character sheet's [skills page](../../rendering/terrain-viewer.md#skills-page-arc-ui-009), task S6 of the
-[skills plan](../skills-plan.md). Read on 2026-10-21 by two independent readers that saw only the questions (method step 6) and a
+skills plan. Read on 2026-10-21 by two independent readers that saw only the questions (method step 6) and a
 first outline of 0x55BD10/0x55BF20; they agree on every row. The + and − rules themselves are CP2–CP7 (ARC-WORLD-052), the key
 stat and its cap SR7, the skill module's texts SR12.
 
@@ -216,7 +216,7 @@ stat and its cap SR7, the skill module's texts SR12.
 ## Pick pocket (ARC-SKILLS-010)
 
 Source: [pick pocket runtime](../../world/pick-pocket-runtime.md), [skills](../skills-evidence.md#pick-pocket), task S15 of the
-[skills plan](../skills-plan.md). Read on 2026-10-21 by two independent readers that saw only the questions (method step 6); they agree on
+skills plan. Read on 2026-10-21 by two independent readers that saw only the questions (method step 6); they agree on
 every row below unless a row says otherwise. The check is SC1–SC17 (pick pocket is basic skill 5, opposed by the victim's perception;
 its own difficulty terms SC11, its fate kind 8 SC14). Both readers corrected the questions: 0x575100 is the plant and 0x575180 the
 steal, and the use-skill goal of pick pocket (0x4350F0, goal 0x21, handing over to goal 0x56 whose check node 0x42A2A0 runs 0x4C7160

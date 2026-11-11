@@ -79,7 +79,7 @@ component type it does not build; the Summon type is not built. The plan has the
 other than the hold flags that ARC-DEV-302 built (the entangled, stoned and paralysed flags); the other flags are MT13/MT14 and still open.
 B25's closing note says the same about creatures: "no host path creates a critter on the shown map yet" (ARC-DEV-328).
 
-**Read (ARC-RES-101, [note](summon-objects-res-101.md)).** The Summon of spells 21 and 22 makes scenery objects: Wall of Fire is one component applied to five tiles, so the five
+**Read (ARC-RES-101, [note](ledger/spell-runs.md)).** The Summon of spells 21 and 22 makes scenery objects: Wall of Fire is one component applied to five tiles, so the five
 `ComponentNotReady` lines are five list entries, not five components; Fireflash's flash is made only when the strike tile is empty at the landing (a creature standing on it gives no flash),
 and it is destroyed at the animation's callback frame. Spell 57's second line turns `OSF_MIND_CONTROLLED` on the summoned creature. Slices E1-a and E1-b (objects) and E1-e (creatures) carry the build.
 
@@ -133,7 +133,7 @@ most likely the screen of the report (its screenshot is not re-read here).
 
 Main map at night (game time 20:47), the lantern in the hero's worn light slot, inventory window open. The log has no light line at all.
 
-**Cause.** The slice **V7d "Moving and carried lights"** of the [lights plan](lights-on-all-maps.md#steamwoven-slice-v7-proposed) was never built:
+**Cause.** The slice **V7d "Moving and carried lights"** of the [lights plan](../rendering/area-lighting.md) was never built:
 [area lighting](../rendering/area-lighting.md) says "Not drawn: moving and carried lights (V7d), shadows". V7a–V7c (object light
 descriptions, object lights in map mode, animated lights) are merged.
 

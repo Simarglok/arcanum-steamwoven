@@ -670,7 +670,7 @@ the part read.
 ## Summon for objects (ARC-DEV-352)
 
 Slice E1-b of the [missing-systems plan](../project/missing-systems-plan.md#e1-summon-and-objects-created-at-run-time-priority), on the created scenery of
-[E1-a](../architecture/object-directory.md#e1-a-created-scenery-and-eye-candy-objects-arc-dev-347) and the reads of [ARC-RES-101](../research/summon-objects-res-101.md)
+[E1-a](../architecture/object-directory.md#e1-a-created-scenery-and-eye-candy-objects-arc-dev-347) and the reads of [ARC-RES-101](../research/ledger/spell-runs.md)
 (ledger [SUM1–SUM16](../research/ledger/spell-runs.md#summon-component-and-the-objects-it-creates-arc-res-101)); code `SessionSpellCasterSummon.cs`, viewer
 `TerrainViewerSummon.cs`, [tests](../../tests/Arcanum.Session.Tests/SessionSpellSummonTests.cs), smoke stages `summon-flash` and `summon-wall`.
 

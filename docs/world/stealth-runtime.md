@@ -1,6 +1,6 @@
 # Stealth runtime (ARC-SKILLS-008)
 
-Status: **Implemented bounded component**, ARC-SKILLS-008 (2026-10-21), task S12 of the [skills plan](../research/skills-plan.md):
+Status: **Implemented bounded component**, ARC-SKILLS-008 (2026-10-21), task S12 of the skills plan:
 the concealment toggle of the hero and its followers (saved), the prowling margin an observer's sight or hearing check uses, and
 the stealth gait. The awareness functions take the margin as an input ([AI awareness](ai-awareness.md), ARC-WORLD-078, slice I2); their callers come with slice I4 and later. Rules: `StealthRules` in
 [`Arcanum.Simulation.Skills`](../../src/Arcanum.Simulation/Skills/StealthRules.cs); session:
