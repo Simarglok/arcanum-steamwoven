@@ -90,7 +90,7 @@ manifest's `slice`, and the layout does not depend on it. The map, the index and
   repairs) instead of its folder (`--folders` is only for a pack still in the old layout).
 - **The map file** is the owner's: `relayout` without `--map` and `apply` never rewrite it (`apply --map` only appends rows for ARTs the pack's map lacks, the pack's
   own rows win); `relayout --map FILE` writes its normalised four-column copy into the pack. A `refresh` cannot be rolled back (the edited PNGs are the only
-  copy); an interrupted `relayout` or `rollback` is finished by running `rollback <backup>` again. The three-way `--base` check is unchanged and still protects a local repair.
+  copy); an interrupted `relayout` or `rollback` is finished by running `rollback <backup>` again, before any other command on the pack. The three-way `--base` check is unchanged and still protects a local repair.
 
 ## Optimized textures (ARC-DEV-376)
 

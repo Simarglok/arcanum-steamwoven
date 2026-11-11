@@ -694,7 +694,7 @@ class LayoutTests(unittest.TestCase):
         self.assertIn("nothing to do", out)
         self.assertTrue(own.read_text().endswith("# owner note\n"))
         more = self.tmp / "more.tsv"
-        more.write_text("art\tscreen\tkind\nbtn\tother\tother\nnewart\twindow-c\ticons\n")  # btn is already in the pack's map: the pack's row wins
+        more.write_text("art\tscreen\tkind\nbtn\tother\tother\nnewart\twindow-c\ticons\nunusedart\twindow-d\ticons\n")  # btn is in the pack's map (its row wins); unusedart is no entry's
         stage = self.tmp / "local" / "pack-out" / "m"
         (stage / "interface").mkdir(parents=True)
         body = png(8, 8) + fake("newart")
@@ -709,6 +709,27 @@ class LayoutTests(unittest.TestCase):
         self.assertTrue(own.read_text().startswith(old_text))
         self.assertIn("newart\twindow-c\ticons\t0", own.read_text())
         self.assertNotIn("other", own.read_text())
+        self.assertNotIn("unusedart", own.read_text())
+
+    def test_a_pack_map_that_cannot_take_rows_stops_apply_before_any_write(self):
+        self.assertEqual(self.relayout()[0], 0)
+        (self.inst / "layout-map.tsv").write_text("art\tscreen\tkind\nbtn\ta\tb\n")  # no folder column
+        stage = self.tmp / "local" / "pack-out" / "h"
+        (stage / "interface").mkdir(parents=True)
+        body = png(8, 8) + fake("zzz")
+        rel = f"interface/zzz-f0-{hashlib.sha256(body).hexdigest()[:8]}.png"
+        (stage / rel).write_bytes(body)
+        e = entry("zzz", rel, body)
+        e["legacy"] = {"width": 2, "height": 2, "rgbaSha256": "0" * 64}
+        (stage / "manifest.json").write_text(json.dumps({"schema": 1, "kind": "arcanum-steamwoven-hd-pack", "id": "x", "scale": 4, "recipe": {"file": "recipe.json", "sha256": "0" * 64}, "entries": [e]}))
+        more = self.tmp / "m.tsv"
+        more.write_text("art\tscreen\tkind\nzzz\ta\tb\n")
+        before = tree(self.inst)
+        rc, _, err = run("apply", "--installed", self.inst, "--staged", stage, "--backup-root", self.backups, "--task", "ARC-TEST-383", "--no-base-check", "--add-new", "--map", more)
+        self.assertEqual(rc, 2)
+        self.assertIn("cannot add rows", err)
+        self.assertEqual(tree(self.inst), before)
+        self.assertFalse(self.backups.exists() and any("383" in p.name for p in self.backups.iterdir()))
 
     def test_map_on_an_old_layout_pack_and_a_refresh_rollback_are_refused(self):
         stage = self.tmp / "s"

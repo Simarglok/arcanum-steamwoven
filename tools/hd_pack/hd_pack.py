@@ -364,10 +364,9 @@ def compute_plan(installed: Path, staged: Path, add_new: bool, base: dict | None
     lm = pack_map(installed)
     if lm is None and extra_map is not None:
         raise PackError("--map only applies to a pack with a layout-map.tsv (run relayout first)")
-    new_rows: dict = {}
+    pack_rows = dict(lm.rows) if lm is not None else {}
     if lm is not None and extra_map is not None:  # the pack's own rows win; the file only adds ARTs the pack's map lacks
-        new_rows = {art: row for art, row in extra_map.rows.items() if art not in lm.rows}
-        lm = layout.LayoutMap({**lm.rows, **new_rows})
+        lm = layout.LayoutMap({**{a: r for a, r in extra_map.rows.items() if a not in lm.rows}, **lm.rows})
 
     def replaceable(e: dict, n: dict) -> bool:
         if lm is None:
@@ -378,6 +377,7 @@ def compute_plan(installed: Path, staged: Path, add_new: bool, base: dict | None
         return n["file"].startswith(folders) if lm is None else n["file"].startswith(REPLACEABLE)
 
     replace, entries, conflicted, copies = [], [], [], []
+    used_arts: set = set()
     for e in mi["entries"]:
         n = ks.get(entry_key(e))
         differs = n is not None and replaceable(e, n) and n["sha256"] != e["sha256"]
@@ -401,6 +401,8 @@ def compute_plan(installed: Path, staged: Path, add_new: bool, base: dict | None
             if not new_ok(n):
                 continue
             final = n if lm is None else dict(n, file=place_entry(n, lm))
+            if lm is not None:
+                used_arts.add(layout.art_of(n["file"]))
             entries.append(final)
             copies.append((n["file"], final))
     for old, n in replace:
@@ -409,6 +411,9 @@ def compute_plan(installed: Path, staged: Path, add_new: bool, base: dict | None
     for src, final in copies:
         safe_rel(src)
         safe_rel(final["file"])
+    new_rows = {a: lm.rows[a] for a in sorted(used_arts) if lm is not None and a not in pack_rows}  # only the ARTs of the entries this update adds
+    if new_rows:
+        append_map_rows(installed / layout.MAP_FILE, new_rows)  # a map that cannot take rows is refused here, before anything is written
     listed_now = {e["file"] for e in mi["entries"]}
     targets = [final["file"] for _, final in copies]
     if len(set(targets)) != len(targets) or len({e["file"] for e in entries}) != len(entries):

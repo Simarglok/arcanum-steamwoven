@@ -24,7 +24,7 @@ public static class HdOptimizedStore
     private static HdPack? _pack;
     private static HdOptimizedCache? _cache;
     private static CancellationTokenSource? _cancel;
-    private static Thread? _coordinator;
+    private static readonly List<Thread> Coordinators = [];
 
     /// <summary>Set by the app: conversion runs only in a persistent (non-automated) run.</summary>
     public static bool ConversionAllowed { get; set; }
@@ -52,17 +52,20 @@ public static class HdOptimizedStore
             if (!ConversionAllowed && !ConvertForced) return;
             var cancel = _cancel = new CancellationTokenSource();
             var cache = _cache;
-            var thread = _coordinator = new Thread(() => Convert(wanted, cache, cancel.Token, 3000)) { IsBackground = true, Name = "hd-cache-convert", Priority = System.Threading.ThreadPriority.BelowNormal };
+            var thread = new Thread(() => Convert(wanted, cache, cancel.Token, 3000)) { IsBackground = true, Name = "hd-cache-convert", Priority = System.Threading.ThreadPriority.BelowNormal };
+            Coordinators.RemoveAll(t => !t.IsAlive);
+            Coordinators.Add(thread);
             thread.Start();
         }
     }
 
-    /// <summary>Stops a running conversion and waits (at most two seconds) for it, so no worker is inside an engine call while the engine shuts down.</summary>
+    /// <summary>Stops every running conversion and waits (at most five seconds in all) for them, so no worker is inside an engine call while the engine shuts down.</summary>
     public static void Stop()
     {
-        Thread? thread;
-        lock (Gate) { _cancel?.Cancel(); thread = _coordinator; _coordinator = null; }
-        thread?.Join(2000);
+        Thread[] threads;
+        lock (Gate) { _cancel?.Cancel(); threads = [.. Coordinators]; Coordinators.Clear(); }
+        var until = System.Environment.TickCount64 + 5000;
+        foreach (var thread in threads) thread.Join((int)Math.Max(1, until - System.Environment.TickCount64));
     }
 
     /// <summary>The cached texture of one frame, or null (no cache entry, or the pack's checks do not pass: the caller then resolves the PNG as before).</summary>
