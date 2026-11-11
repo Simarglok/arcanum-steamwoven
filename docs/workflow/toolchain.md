@@ -167,7 +167,7 @@ history held about 500 runs of such copies of one template).
   hit-point damage the hero carries, which the wall's burn would raise (ARC-DEV-405).
 - **Stage boundary reset (ARC-DEV-408).** A stage that passes alone and fails after others had a second cause besides the test time:
   what the earlier stages left in the shared session. `TerrainViewerSmokeStageSet` calls `SmokeStageBoundary`
-  (`TerrainViewerSmokeStageReset.cs`) at every change of stage in the viewer: the first call takes the baseline (the hero's world cell
+  (`TerrainViewerSmokeStageReset.cs`) at every change of stage in the viewer: the first call with a hero and a session takes the baseline (the hero's world cell
   and the roll sequence's position, `GameSessionOwner.QueryRandom`), every later call puts back what a stage must not inherit and prints
   `ARC-DEV-408 stage-reset PREVIOUS -> NEXT: ...` for what it changed: the hero's combat mode (`worldmap` refused "leave combat mode
   first"), the roll sequence (`GameSessionOwner.RestoreRandom`; `floaters`' critical hit knocked its NPC out after `barter` and `life` had

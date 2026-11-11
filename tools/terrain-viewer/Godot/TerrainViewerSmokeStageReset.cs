@@ -28,6 +28,7 @@ public partial class TerrainViewerApp
     {
         var mode = System.Environment.GetEnvironmentVariable("ARC_SMOKE_STAGE_RESET");
         if (mode == "0") return;
+        // Before a hero and a session exist there is nothing to reset: the baseline is taken at the first boundary where they do.
         if (_areaSession is not { } session || session.QueryHero() is null || _worldActor.Session is not AreaGridSession grid || _readyArea is null) return;
         var hero = grid.Chart.ToWorld(grid.State.CommittedCell);
         // The first stage of the process starts from what is there now; it is the baseline for every later one, also when a stage
@@ -54,9 +55,10 @@ public partial class TerrainViewerApp
         {
             if (HeroInCombatMode)
             {
-                session.SetCombatMode(session.Version, SessionCombatant.Hero, false, SessionCombatModeContext.RealTime);
+                // The viewer's own context, as a map change leaves combat mode: a turn-based round ends with it.
+                var left = session.SetCombatMode(session.Version, SessionCombatant.Hero, false, CombatModeContext());
                 CancelAreaAttack("stage boundary");
-                reset.Add("combat-mode(off)");
+                reset.Add(HeroInCombatMode ? $"combat-mode(STILL ON: {left.Disposition} {left.Refusal})" : "combat-mode(off)");
             }
             // The hero goes back to where the process started when that cell is on the shown map (a window the stages moved may no longer hold it).
             if (hero != baseline.Hero && onShownMap)
