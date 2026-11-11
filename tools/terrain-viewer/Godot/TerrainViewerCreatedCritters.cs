@@ -215,9 +215,12 @@ public partial class TerrainViewerApp
 
         var aiBefore = _aiForSmoke;
         _aiForSmoke = true;
+        // ARC-DEV-394: a stage run earlier in the process can leave the world's test time set (RestoreWorldTestTime keeps it at the session's time), and then ProcessWorld does not run in a
+        // native smoke, so the frame never reaches ProcessAreaAi, which hands the session's created critters to the AI host (SyncCreatedCritters). The frames of this stage ask for the host
+        // themselves, which is that same sync, so the stage does not depend on what ran before it.
         async Task Settle(int frames = 3)
         {
-            for (var i = 0; i < frames; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); SyncAreaInventory(); }
+            for (var i = 0; i < frames; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); AreaAiHostNow(); SyncAreaInventory(); }
         }
         SessionCreatedObject? made = null;
         try
