@@ -41,6 +41,13 @@ public sealed class AreaCreatedCrittersTests
         Assert.AreEqual((Map, (long)Spot.X, (long)Spot.Y), (record.HomeMap, record.Row.WorldX!.Value, record.Row.WorldY!.Value));
         Assert.AreEqual(Map, f.Combat.HomeMap(critter.Entity));
         Assert.IsNotNull(f.Combat.Critter(critter.Entity), "the NPC's combat facts build from the row (a holder of the one-row map)");
+        // The hero can target it: by identity and by the key its row carries, through the session's holder view of its map (the one-row map has no session seed).
+        var target = f.Combat.Target(f.Session, critter.Entity);
+        Assert.IsNotNull(target, "a created critter is an NPC holder of its map for the combat host");
+        Assert.AreEqual((critter.Entity, false), (target.Entity, target.Dead));
+        Assert.AreEqual(critter.Entity, f.Combat.Target(f.Session, record.Row.Key)?.Entity);
+        Assert.AreEqual(critter.Entity, f.Combat.Target(f.Session, Map, record.Row.Key)?.Entity);
+        Assert.IsNotNull(f.Combat.Holder(f.Session, critter.Entity));
         // The map's own NPCs are unchanged, and the one-row maps are not held maps.
         Assert.IsNotNull(f.Combat.Record(f.A));
         Assert.IsFalse(f.Inventory.Resolver.Maps.Any(map => map.TryGetRow(critter.Entity, out _)));

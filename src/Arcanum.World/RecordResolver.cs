@@ -130,7 +130,14 @@ public sealed class RecordResolver
         _created.Clear();
         foreach (var map in maps)
             foreach (var holder in map.Seed.Holders) _created[holder.Entity] = map;
+        CreatedVersion++;
     }
+
+    /// <summary>Counts the sets of <see cref="SetCreated"/>: a reader that caches what it derived from the created critters asks again when it moves.</summary>
+    public int CreatedVersion { get; private set; }
+
+    /// <summary>The NPC holders of the created critters standing on <paramref name="runtimeMap"/> (each with an empty list: a created critter's inventory is not generated yet).</summary>
+    public IEnumerable<string> CreatedOn(int runtimeMap) => _created.Where(pair => pair.Value.RuntimeMap == runtimeMap).Select(pair => pair.Key);
 
     /// <summary>The map that lists the created critter <paramref name="entity"/>, or null.</summary>
     public AreaInventoryMap? CreatedMap(string entity) => _created.GetValueOrDefault(entity);
