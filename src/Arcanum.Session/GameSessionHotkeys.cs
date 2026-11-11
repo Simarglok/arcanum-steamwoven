@@ -46,10 +46,10 @@ public sealed partial class GameSessionOwner
     /// (<see cref="GameSessionFailure.ItemNotAvailable"/>; the original takes a worn item off the doll onto the bar: not ready); for an item entry, ammunition or gold (<see cref="GameSessionFailure.InvalidHotkey"/>)
     /// and an item of a prototype another item entry holds (<see cref="GameSessionFailure.ItemNotAvailable"/>; the original's message 4000).
     /// The same entry again is NoChange. An item that moves onto the bar or off it empties every other entry naming it (HK6). One revision.
+    /// </summary>
     [OriginalFunction(0x57ED60, OriginalFunctionScope.Partial)]
     [OriginalFunction(0x57EE30, OriginalFunctionScope.Partial)]
     [OriginalFunction(0x57EED0, OriginalFunctionScope.Partial)]
-    /// </summary>
     public GameSessionMutationResult AssignHotkey(GameSessionVersion expected, int slot, HotkeyEntry entry)
     {
         ThrowIfDisposed();
@@ -94,11 +94,11 @@ public sealed partial class GameSessionOwner
         EmptyEntriesOfMovedItems(before);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
-    [OriginalFunction(0x57F210, OriginalFunctionScope.Partial)]
     }
 
     /// <summary>ARC-UI-022: entry <paramref name="slot"/> dragged off the bar: it empties, and an item entry's item goes back to the grid. An
     /// empty entry is NoChange. Refused for a slot outside 0..9, a stale version, no hero. One revision.</summary>
+    [OriginalFunction(0x57F210, OriginalFunctionScope.Partial)]
     public GameSessionMutationResult ClearHotkey(GameSessionVersion expected, int slot)
     {
         ThrowIfDisposed();
@@ -199,10 +199,10 @@ public sealed partial class GameSessionOwner
         : (_equipment.SlotOf(item), _inventory.Grid.TryGetValue(item, out var placed) ? placed.Slot : null);
 
     // A saved bar: ten entries and two recent actions, each fitting its kind; an entry's item one the hero holds (an item entry's not worn, and
-    [OriginalFunction(0x57DBA0, OriginalFunctionScope.Partial)]
-    [OriginalFunction(0x57DEF0, OriginalFunctionScope.Partial)]
     // on one entry only); the recent actions only spells and skill-bar buttons. The original's load sets the recent actions through 0x57EFA0
     // in saved order, which turns the two around (HK7); here they come back as saved.
+    [OriginalFunction(0x57DBA0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x57DEF0, OriginalFunctionScope.Partial)]
     private static GameSessionFailure ImportHotkeys(SessionHotkeyState saved, bool hasHero, InventoryDomain inventory, EquipmentDomain equipment,
         out HotkeyEntry[] entries, out HotkeyEntry[] recent)
     {

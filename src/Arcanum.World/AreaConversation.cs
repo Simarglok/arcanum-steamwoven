@@ -473,10 +473,10 @@ public sealed class AreaConversationHost
         return Open(speaker, dialog, loaded.Document!);
     }
 
-    [OriginalFunction(0x5681C0, OriginalFunctionScope.Partial)]
-    [OriginalFunction(0x57CC70, OriginalFunctionScope.Partial)]
     // ARC-DEV-324 (B24, GT219): a talk request whose dialog point ran default shows the generic greeting: the greeting builder's line over the NPC as a floating line (0x57CC70
     // calls 0x5681C0, which builds the text with 0x4132A0), no window. A resumed dialog script (line != 0) is no talk request and says nothing.
+    [OriginalFunction(0x5681C0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x57CC70, OriginalFunctionScope.Partial)]
     private AreaConversationStart GenericGreeting(AreaSpeaker speaker, int line, ScrRunResult result)
     {
         var detail = $"script {result.Script?.ToString() ?? "none"} {result.Stop}: run default";

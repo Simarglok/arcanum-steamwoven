@@ -83,9 +83,9 @@ public static class AreaCharacterSheetPagesLayout
     /// <summary>A learned degree's icon slot (also the plus's slot for the next degree, and the minus's for the last one).</summary>
     public static (int X, int Y) DegreeSlot(int row) => (8, 96 + 33 * row);
 
-    [OriginalFunction(0x55C3A0, OriginalFunctionScope.Partial)]
     /// <summary>The degree's colour: white up to the stored degree, yellow for the next one, grey after it; all white at degree 7
     /// (0x55C620..0x55C749).</summary>
+    [OriginalFunction(0x55C3A0, OriginalFunctionScope.Partial)]
     public static AreaSheetColour DegreeColour(int row, int degree) => degree >= Degrees || row + 1 <= degree ? AreaSheetColour.White
         : row == degree ? AreaSheetColour.Yellow : AreaSheetColour.Grey;
 

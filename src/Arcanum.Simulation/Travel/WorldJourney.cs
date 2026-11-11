@@ -134,7 +134,6 @@ public sealed class WorldJourney
     [OriginalFunction(0x564C20, OriginalFunctionScope.Partial)]
     [OriginalFunction(0x565170, OriginalFunctionScope.Full)]
     [OriginalFunction(0x564EE0, OriginalFunctionScope.Full)]
-    [OriginalFunction(0x564E30, OriginalFunctionScope.Partial)]
     public TravelStepResult Step(Func<int, bool> known, TravelRuleProfile rules, Func<bool>? continueJourney = null)
     {
         ArgumentNullException.ThrowIfNull(known); ArgumentNullException.ThrowIfNull(rules);

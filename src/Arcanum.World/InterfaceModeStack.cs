@@ -111,6 +111,7 @@ public sealed class InterfaceModeStack
 
     /// <summary>The two reset functions (0x54A330, 0x54AA30): the stack is the game view alone, with no leave or enter case. Like the
     /// original's, it does not look at the change lock: an observer that calls it during a change clears the stack under that change.</summary>
+    [OriginalFunction(0x54AA30, OriginalFunctionScope.Partial)]
     public void Reset()
     {
         _modes.Clear();

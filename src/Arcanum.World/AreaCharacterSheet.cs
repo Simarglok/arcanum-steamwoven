@@ -102,10 +102,10 @@ public static class AreaCharacterSheet
             life.Status.HitPoints, life.Status.MaxHitPoints, life.Status.Fatigue, life.Status.MaxFatigue, primary, secondary, resistances));
     }
 
-    [OriginalFunction(0x55B2A0, OriginalFunctionScope.Partial)]
     /// <summary>The original's colour rule (0x55B2A0): the base value adjusted by the effects that
     /// are not innate (0x4EA930, the aggregation of ledger EF6 without race, background, class
     /// and gender effects) compared with the base value.</summary>
+    [OriginalFunction(0x55B2A0, OriginalFunctionScope.Partial)]
     internal static AreaSheetMark Mark(CharacterStatsSnapshot stats, CharacterStat stat)
     {
         var value = stats.GetBase(stat);

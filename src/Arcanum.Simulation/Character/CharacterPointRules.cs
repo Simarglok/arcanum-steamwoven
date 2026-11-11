@@ -169,7 +169,6 @@ public static class CharacterPointRules
     /// bought points, a skill its points, a college its rank, a discipline its degree.
     /// </summary>
     [OriginalFunction(0x55D3A0, OriginalFunctionScope.Partial)]
-    [OriginalFunction(0x55D6F0, OriginalFunctionScope.Partial)]
     internal static bool AtFloor(AdvancementSheet sheet, AdvancementSheet floor, AdvancementTrack track, int index)
     {
         ArgumentNullException.ThrowIfNull(sheet);

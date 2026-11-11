@@ -208,9 +208,9 @@ public sealed class AreaWorldMap
     /// <summary>
     /// One travel step: the journey moves, <paramref name="advance"/> applies the game time (the host's clock and event passes),
     /// a newly discovered area becomes known and the last discovered record is cleared, and a finished journey sets
-    [OriginalFunction(0x564A70, OriginalFunctionScope.Partial)]
     /// <see cref="Landing"/>.
     /// </summary>
+    [OriginalFunction(0x564A70, OriginalFunctionScope.Partial)]
     public AreaWorldMapStep Step(Action<long> advance)
     {
         ArgumentNullException.ThrowIfNull(advance);
