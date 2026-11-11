@@ -46,6 +46,7 @@ lines 2 and 3) are ARC-WORLD-125; their use still answers NOT READY and the devi
 
 ## Limits
 
+- The marker does **not** carry `OF_TRAP_PC` or any trap state (TP2 writes both on the original's marker): it is a plain created scenery. A fuse the session cannot run (the run budget refuses the cast, or the revision bound is reached when it falls due) is consumed with no effect and no retry; `TakeTrapDeviceCasts` reports the refused cast.
 - The spotted line (`mes\trap.mes` line 0, 0x4BC090) is shown in the status text, not in a message window, and the marker is a plain created scenery: a trap object's disarm and spot
   state (ARC-WORLD-076) does not know it (a spell-device marker has no script, so nothing could trigger it in the original either).
 - An NPC's use of a trap device stays NOT READY (no installed AI item entry is a trap device, IA15).

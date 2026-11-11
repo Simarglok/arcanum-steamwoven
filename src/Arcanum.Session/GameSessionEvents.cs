@@ -374,8 +374,8 @@ public static class SessionEventKinds
     // ARC-WORLD-124: [scheduled at, delay (the fuse or the retry), spell record, cell x, cell y, 1 for a marker entity]; the entity names the map.
     internal static bool TrapDevicePayload(GameEventPayload payload) =>
         payload.Values[0] >= 0 && payload.Values[1] is Arcanum.Simulation.Traps.TrapDeviceRules.FuseMs or TrapDeviceRetryDelayMs &&
-        payload.Values[2] is >= 0 and < Arcanum.Simulation.Magic.SpellPaymentRules.Spells && payload.Values[3] is >= 0 and <= int.MaxValue &&
-        payload.Values[4] is >= 0 and <= int.MaxValue && payload.Values[5] is 0 or 1 && payload.Entities[0].Code != AbsentRole;
+        payload.Values[2] is >= 0 and < Arcanum.Simulation.Magic.SpellPaymentRules.Spells && payload.Values[3] is >= 0 and < 1 << 24 &&
+        payload.Values[4] is >= 0 and < 1 << 24 && payload.Values[5] is 0 or 1 && payload.Entities[0].Code != AbsentRole;
 
     // Scheduled at a game time, after the decay delay or the retry's, naming an item.
     internal static bool DecayPayload(GameEventPayload payload) =>

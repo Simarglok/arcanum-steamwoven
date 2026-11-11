@@ -93,8 +93,9 @@ public sealed partial class GameSessionOwner
             var now = _clock.QueryClockSnapshot().GameTimestampMs;
             if (_events.Count >= _events.Limits.MaxPending || _events.NextSequence == long.MaxValue || now > long.MaxValue - SessionEventKinds.TrapDeviceRetryDelayMs)
                 return GameEventHandlerOutcome.Refused;
-            _events.ScheduleAfter(SessionEventKinds.TrapDevice, FusePayload(payload.Entities.ToArray(), now, SessionEventKinds.TrapDeviceRetryDelayMs, spell, cell, marker),
+            var again = _events.ScheduleAfter(SessionEventKinds.TrapDevice, FusePayload(payload.Entities.ToArray(), now, SessionEventKinds.TrapDeviceRetryDelayMs, spell, cell, marker),
                 SessionEventKinds.TrapDeviceRetryDelayMs, EventClocks(now));
+            if (again.Disposition != GameEventScheduleDisposition.Added) return GameEventHandlerOutcome.Refused;
             _passTrapDevices?.Add(new(firing.Event, map, entity.Code, spell, cell, false) { Postponed = true });
             return GameEventHandlerOutcome.Completed;
         }
