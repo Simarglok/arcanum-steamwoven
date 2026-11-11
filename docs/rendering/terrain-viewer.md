@@ -2839,6 +2839,32 @@ The logbook plays the original's book sounds (open, tab press, the player's clos
 item taken from a body plays its pickup sound; the palette has the three volume settings 0–10, applied and saved at once
 ([contract](../audio/interface-sounds.md)). Native smoke marker `ARC-UI-044 native-smoke interface PASS`.
 
+### Window art warm-up (ARC-DEV-369)
+
+The first opening of the inventory, the character sheet and the logbook cost 0.25–2.2 s because the window's art was read from the game folder and its HD
+redraws were resolved on the main thread ([diagnosis O2](../research/performance-diagnosis-2026-11.md)). Since ARC-DEV-369 the viewer prepares that art in
+the background after the map is published and the first 30 frames have drawn, one window at a time (inventory, sheet, logbook), so the first opening is a warm one:
+
+- **Worker.** The window's art content is read by its own loader through a `Lazy`, so a window the player opens meanwhile waits for the worker's read instead
+  of making a second one, and a window opened first reads on demand as before. With the HD interface on, the worker then resolves every HD frame the window will
+  draw (`InterfaceHd.Prepare`: pack file, SHA-256 of the Legacy pixels, PNG decode, size and mask checks through `HdPack.ResolveSprite`, then premultiplication for
+  art-font canvases and mipmaps, the same steps `HdInterfaceTexture` takes at its first draw) up to half the processors in parallel.
+- **Main thread.** It builds the window's textures as the opening would (the sheet's look is now kept per module, not per panel) and creates the prepared HD
+  textures in slices of at most about 3 ms a frame (`InterfaceHd.WarmSlice`). A frame that is not prepared, was prepared for another pack, or was dropped is
+  resolved at its first draw exactly as before, and a prepared image nobody took is dropped when the window's step ends.
+- **Hero portrait.** Once the session has a hero, its portrait (the sheet's slot) is read on a worker and adopted into the portrait content the way `LoadPortraits`
+  would, when that content did not change meanwhile; a different hero is warmed again.
+- **Nothing visual changes.** The textures, the pixels, the sizes and the order of drawing are the opening's own; only the time of the work moves. Without a game
+  folder (the synthetic self-tests) nothing runs. `ARC_WINDOW_ART_WARMUP=0` turns the warm-up off, to measure the cold opening. The log prints
+  `ARC-DEV-369 window art warm WINDOW: worker content … ms, hd N frames … ms; main build … ms, upload … slices … ms (worst … ms)` per window and
+  `ARC-DEV-369 portrait warm ID: STATUS`.
+
+Measured on the owner's Mac (packaged-like run of the source viewer, HD interface on with the installed 4× pack, one run each on a loaded machine, so a ranking and
+not a contract): first opening to the next drawn frame, cold against warmed-up, inventory 1069 → 85 ms, sheet 2124 → 119 ms, logbook 1764 → 70 ms; the worker takes
+0.4–0.6 s of reading and about 1 s of HD resolving per window, the main thread 2–9 ms of building and 15–35 ms of upload in 3–8 slices (worst slice 9 ms). The warm
+opening is the panel's own cost (inventory 39 ms, sheet 50 ms, logbook 27 ms inside the opening call). The self-test case `ARC-DEV-369 self-test prepared HD frames`
+checks that a prepared frame draws the pixels of a lazily resolved one, that refusals stay refusals, and that a stale or dropped frame resolves at the draw.
+
 ## Verification and evidence status
 
 ### WORLD camera zoom (ARC-GPAD-004)

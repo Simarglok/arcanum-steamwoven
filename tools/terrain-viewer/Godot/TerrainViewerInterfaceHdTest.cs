@@ -140,6 +140,49 @@ public static partial class TerrainViewerSelfTest
             Require(greyLegacy.GetPixel(0, 0).A8 == 0, "grey preserves transparent holes");
             GD.Print("ARC-UI-114 self-test grey HD source and pack switch PASS" + (native ? "" : " (pixel checks skipped: headless)"));
 
+            // ARC-DEV-369: a frame resolved ahead of its draw on a worker gives the texture the first draw would have built; a refused frame is remembered as
+            // refused; a stale pack's frame and a dropped one fall back to resolving at the draw. The warm-up queue takes only the textures that have one.
+            InterfaceHd.Configure(pack, true);
+            var ahead = new AreaInterfaceFrame(W, H, legacy, Hd: keyed.Hd);
+            var aheadMissing = new AreaInterfaceFrame(W, H, legacy, Hd: unlisted.Hd);
+            var aheadStale = new AreaInterfaceFrame(W, H, legacy, Hd: keyed.Hd);
+            var aheadDropped = new AreaInterfaceFrame(W, H, legacy, Hd: keyed.Hd);
+            Require(await Task.Run(() => InterfaceHd.Prepare([(ahead, true), (aheadMissing, false), (aheadStale, false), (aheadDropped, false), (keyless, false)], pack, 2)) == 4,
+                "four keyed frames are prepared on a worker (a frame without a key has nothing to ask)");
+            InterfaceHd.DropPrepared([aheadDropped]);
+            HdInterfaceTexture preparedTexture, preparedMissing, preparedDropped;
+            InterfaceHd.CollectForWarm = true;
+            try
+            {
+                preparedTexture = (HdInterfaceTexture)InterfaceHd.Texture(ahead, premultipliedAlpha: true);
+                preparedMissing = (HdInterfaceTexture)InterfaceHd.Texture(aheadMissing);
+                preparedDropped = (HdInterfaceTexture)InterfaceHd.Texture(aheadDropped);
+            }
+            finally { InterfaceHd.CollectForWarm = false; }
+            Require(InterfaceHd.WarmSlice(100) == 0, "the warm-up queue is emptied by one generous slice");
+            Require(preparedTexture.IsHd && !preparedMissing.IsHd, "a prepared frame is HD, a prepared refusal stays Legacy");
+            var lazyTexture = (HdInterfaceTexture)InterfaceHd.Texture(new AreaInterfaceFrame(W, H, legacy, Hd: keyed.Hd), premultipliedAlpha: true);
+            Require(lazyTexture.IsHd && preparedDropped.IsHd, "an unprepared frame and a dropped one resolve at their first draw");
+            rect.Material = new CanvasItemMaterial { BlendMode = CanvasItemMaterial.BlendModeEnum.PremultAlpha };
+            rect.Texture = preparedTexture;
+            var (aheadCorner, aheadEdge, aheadBody) = (await Probe(0, 0), await Probe(1, 0), await Probe(2, 2));
+            rect.Texture = lazyTexture;
+            var (lazyCorner, lazyEdge, lazyBody) = (await Probe(0, 0), await Probe(1, 0), await Probe(2, 2));
+            if (native)
+                Require(aheadCorner == lazyCorner && aheadEdge == lazyEdge && aheadBody == lazyBody,
+                    $"the prepared HD texture draws the pixels of the lazily resolved one ({aheadBody.R8},{aheadEdge.A8} against {lazyBody.R8},{lazyEdge.A8})");
+            rect.Material = null;
+            // A frame prepared for the pack that was active is not used once another pack is: the texture resolves against the new one.
+            var replacement = HdPack.Open(second).Pack!;
+            InterfaceHd.Configure(replacement, true);
+            var stale = (HdInterfaceTexture)InterfaceHd.Texture(aheadStale);
+            Require(stale.IsHd, "a frame prepared for another pack resolves against the active one");
+            rect.Texture = stale;
+            pixel = await Probe();
+            if (native) Require(Math.Abs(pixel.R8 - 10) <= 1, $"the stale prepared frame is not drawn ({pixel.R8})");
+            rect.Texture = texture;
+            GD.Print("ARC-DEV-369 self-test prepared HD frames PASS" + (native ? "" : " (pixel checks skipped: headless)"));
+
             InterfaceHd.Configure(null, true);
             Require(!texture.IsHd, "the profile on without a pack: Legacy");
 

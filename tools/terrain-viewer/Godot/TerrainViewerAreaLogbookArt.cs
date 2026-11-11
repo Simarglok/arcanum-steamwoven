@@ -22,12 +22,13 @@ public partial class TerrainViewerApp
         {
             _logbookArtModule = module;
             _logbookArtTextures = null;
-            _logbookArtContent = SelfTestBootstrap || module is null ? AreaLogbookArtContent.Empty("self-test: no game folder") : AreaLogbookArtContent.Load(module);
+            _logbookArtContent = SelfTestBootstrap || module is null ? AreaLogbookArtContent.Empty("self-test: no game folder")
+                : WarmedWindowArt(module, slots => slots.Logbook) ?? AreaLogbookArtContent.Load(module);
             if (_logbookArtContent.ArtReady)
             {
                 // ARC-UI-125: the view's canvas is premultiplied (art text, AreaArtTextDraw.Prepare); a straight-alpha HD frame would add the RGB of its
                 // transparent texels (Book_Quests is all rim and hole) to the page under it, as ARC-UI-114 fixed for the sheet.
-                _logbookArtTextures = _logbookArtContent.Art.Values.Where(load => load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0)
+                _logbookArtTextures = LogbookLookLoads(_logbookArtContent)
                     .ToDictionary(load => load.Number, load => load.Frames.Select(frame => (Texture2D)InterfaceHd.Texture(frame, premultipliedAlpha: true)).ToArray());
                 GD.Print($"ARC-UI-074 logbook art ready {_logbookArtContent.Detail}");
             }
@@ -36,4 +37,8 @@ public partial class TerrainViewerApp
         // A font with no line height cannot lay a spread out: the list stays.
         return _logbookArtTextures is { } art && TextFonts() is { TextLineHeight: > 0 } fonts ? (art, fonts) : null;
     }
+
+    /// <summary>The arts the logbook look turns into textures: those that read, every frame.</summary>
+    private static IEnumerable<AreaInterfaceArtLoad> LogbookLookLoads(AreaLogbookArtContent content) =>
+        content.Art.Values.Where(load => load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0);
 }

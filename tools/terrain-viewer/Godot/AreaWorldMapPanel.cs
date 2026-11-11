@@ -126,6 +126,7 @@ public partial class AreaWorldMapPanel : CanvasLayer
         _artView.TownNotesChanged += (town, notes) => TownNotesChanged?.Invoke(town, notes);
         _artView.WorldNotesChanged += (kind, notes) => WorldNotesChanged?.Invoke(kind, notes);
         _artView.HintRequested += text => HintRequested?.Invoke(text);
+        _artView.CloseRequested += () => CloseRequested?.Invoke();
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
     }
