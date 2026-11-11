@@ -8,16 +8,17 @@ in turn-based combat, and what each event kind is for. It maps the consumers
 that wait for a queue (the AI tick of [ARC-RES-039](npc-combat-ai-plan.md)
 slice I6, the deferred script calls of [ARC-RES-042](scr-event-dispatcher.md)
 slice S5, the durable effects of top-20 item 17 and the life-state timers of
-item 2) and proposes `WORLD` implementation slices. It changes no production
-API, viewer, session schema, launcher or other research document.
+item 2). The slices it proposed are implemented in the
+[event queue runtime](../world/game-event-queue-runtime.md); the proposal and
+"Steamwoven today" sections were trimmed, the source reading stays.
 
 Requirements: [FR-SCRIPT-003](../requirements/story-social-ai.md#fr-script-003)
 (deferred calls that survive a save) and
 [FR-RUNTIME-001](../requirements/world-travel-runtime.md#fr-runtime-001)
 (the frame runs only the game work that is due, the same input and time give
 the same state at any frame rate). The clock it builds on is the
-[game clock policy](../world/game-clock-policy.md) (ARC-RES-020) and its
-[runtime](../world/game-clock-runtime.md) (ARC-WORLD-004).
+[game clock runtime](../world/game-clock-runtime.md) (ARC-WORLD-004, with the
+evidence of the retired ARC-RES-020 policy).
 
 ## Vocabulary and evidence discipline
 
@@ -112,27 +113,19 @@ session, no installed game).
   restock, scenery respawn, traps, newspapers, random encounters, the
   companion wait timeout and the turn-based subturn step all live on this one
   mechanism ([section 3](#3-event-kinds-and-consumers-s)).
-- **Steamwoven today (C).** The session owns the normalized game clock with
-  pause reasons (`Arcanum.Simulation/Clock`, `GameSessionOwner.AdvanceGameTime`),
-  the viewer's ambient host admits host time 5..250 ms × 8
-  (`GameTimeFlow`, `AreaAmbient`) and the snapshot (schema 7) stores the clock
-  and the RNG state.
-  There is no event record, queue, pump or event section in the snapshot.
-- **Proposal.** One session-owned, Godot-free queue of typed events on the
-  game clock, ordered by (deadline, sequence), with a closed kind registry
-  that fixes domain, persistence, uniqueness and map scope per kind, a pass
-  that fires only due events of the active scope under a budget and reports
-  typed outcomes, and an event section in the snapshot. Five slices E1..E5
-  ([section 8](#8-proposed-implementation-slices-world)): the pure core E1
-  touches no schema and can start now; the session integration E2 raises the
-  snapshot schema and therefore waits for top-20 item 2 (life state) in the
-  one-at-a-time schema lane; item 1 (session RNG, ARC-WORLD-019) is merged.
+- **Steamwoven today and the proposal.** Delivered in the
+  [event queue runtime](../world/game-event-queue-runtime.md): one session-owned,
+  Godot-free queue of typed events ordered by (deadline, sequence) with a closed
+  kind registry (domain, persistence, uniqueness and map scope per kind), a pass
+  that fires only due events of the active scope under a budget, and an event
+  section in the snapshot; the clock is the
+  [game clock runtime](../world/game-clock-runtime.md).
 
 ## 1. Clocks, admission and freezing (S)
 
 The admission rules (ping intervals under 5 ms ignored, 250 ms clamp, the
 nested pause counter, the 8× rate) are already fixed in the
-[clock policy](../world/game-clock-policy.md#separate-time-domains-and-source-admission)
+[clock runtime](../world/game-clock-runtime.md#original-clock-evidence-carried-from-the-res-020-policy)
 and in `GameTimeFlow`; this section adds only what the queue needs.
 
 | ID | Claim | Source |
@@ -166,8 +159,8 @@ Domain: **G** game, **R** real, **A** animation. Saved: in the global save
 (the map-change parking of P3/P4 writes any kind still queued, saved or not).
 Map close: cleared when a map closes. Delays are game milliseconds unless the
 domain is R. The handler column names the owning module; the Steamwoven column
-names the slice that would own the kind (P, [section
-8](#8-proposed-implementation-slices-world)).
+names the slice that would own the kind (P, the
+[runtime](../world/game-event-queue-runtime.md)).
 
 | Kind | Dom. | Saved | Map close | Scheduled by, delay | Steamwoven owner |
 | --- | --- | --- | --- | --- | --- |
@@ -177,7 +170,7 @@ names the slice that would own the kind (P, [section
 | Poison | G | yes | — | damage every 15 s, recovery every 120 s, one of each per critter (schedule (0x4B1350), handler (0x4B1170)) | life state (item 2) kinds on E2 |
 | Resting | G | yes | — | 1 game hour after HP damage, one per critter; heals `heal rate × hours since scheduling` for an NPC without a PC leader (resting (0x45E910, 0x45EA00, 0x45EA80, 0x45EAB0)) | life state kinds |
 | Fatigue | G | yes | — | recovery 80 s after fatigue damage (10 real s), damage by encumbrance (600 s, 60 s, 5 s for the three heaviest levels, none below); recovers `elapsed s / 80 × heal rate`; one per critter and type (schedule (0x45E820), handler (0x45E610), set (0x45D5A0)) | life state kinds |
-| Aging, Combat, Ambient Lighting, Clock | G | yes | Combat cleared | no-op handlers or host callbacks (ambient light and the clock widget are host functions set at start; funcs (0x45AE20)) | ambient lighting: the source's hourly timer cadence is recorded in [clock policy P3](../world/game-clock-policy.md#p3--document-only-pure-hour-consumer), which proposes a pure hour query instead; the rest not needed |
+| Aging, Combat, Ambient Lighting, Clock | G | yes | Combat cleared | no-op handlers or host callbacks (ambient light and the clock widget are host functions set at start; funcs (0x45AE20)) | ambient lighting: the source's hourly timer cadence is recorded in [time loop](../architecture/original-time-loop.md) (TL22) and the ambient init/callback rows of the [clock runtime](../world/game-clock-runtime.md#original-clock-evidence-carried-from-the-res-020-policy) address table; the retired P3 hour-consumer proposal (a pure hour query) was never implemented; the rest not needed |
 | AI | G | **no** | cleared | NPC tick, replace pattern, delay `250 + 4750 × min(dist, 30) / 30` ms; an immediate first tick, then +0..5000 ms random on the tick it schedules (tick (0x4AD200), delay (0x4AD5D0, 0x4AD610), schedule (0x4AD730, 0x4AD790, 0x4AD7D0)) | ARC-RES-039 I6 on E2 |
 | TB Combat | R | yes | cleared | the subturn step, 2 ms, at most one (tb step (0x4B7080), handler (0x4B7150)) | turn-based round (item 8); in Steamwoven a direct call, not a timer (P) |
 | WorldMap, Sleeping, MainMenu, UI, MP Ctrl UI, Multiplayer, Debug, Bkg Anim, Fidget Anim | R | WorldMap only | WorldMap cleared | travel step 62 ms (travel (0x564C20)), sleep step 200 ms (sleep (0x57B710, 0x57B7F0)), UI messages, menu, background and fidget animations | host (Godot) timers, not session state (P) |
@@ -242,14 +235,8 @@ body decay fire at once and a resting NPC heal for the whole absence.
 
 ## 6. Steamwoven today (C)
 
-| Area | State | Code |
-| --- | --- | --- |
-| Game clock | delivered: normalized signed64 game milliseconds since day 0 midnight, pause disposition with reasons None/User/Menu/TurnBased, ordinary advance stops while paused, explicit wait advances while paused, revision/generation tokens | `src/Arcanum.Simulation/Clock` ([runtime](../world/game-clock-runtime.md)) |
-| Host admission | delivered: 5 ms minimum, 250 ms clamp, × 8 | `GameTimeFlow` |
-| Session | owns the clock; `AdvanceGameTime` clears the recorded lighting when the hour changes; snapshot schema 7 carries the clock state and the session RNG (ARC-WORLD-019) | `src/Arcanum.Session/GameSessionOwner.cs`, `GameSessionTypes.cs` |
-| Host pump | the area viewer's ambient host observes host time, advances the session clock and offers an explicit wait by hours | `src/Arcanum.World/AreaAmbient.cs` |
-| Event queue | **absent**: no event record, kind registry, pass, map scope or snapshot section | — |
-| Animation domain | absent (no second clock that runs in a round) | — |
+Delivered; see the [event queue runtime](../world/game-event-queue-runtime.md) and the [game clock runtime](../world/game-clock-runtime.md).
+The table of the research date (clock and admission delivered, queue absent) is dropped as outdated.
 
 ## 7. Anomalies recorded, not adopted
 
@@ -258,7 +245,7 @@ body decay fire at once and a resting NPC heal for the whole absence.
 | ID | Source behaviour | Note / proposed default (P) |
 | --- | --- | --- |
 | TE1 | Call-in and the magic maintenance and END periods build `seconds × 1000` ms and then multiply only the millisecond word by 8 (call-in (0x447220), maintain (0x454790)). `seconds × 1000` overflows a signed int above 2,147,483 s; the × 8 wraps the 32-bit word above 536,870 s (about 6.2 real days, 49.7 game days); the unsigned millisecond sum of the add wraps a little earlier, from about 526,070 s depending on the time of day (datetime helpers (0x45A950, 0x45A970, 0x45A9B0, 0x45A9E0, 0x45AA10, 0x45AA50, 0x45AAA0)); a negative operand becomes a huge unsigned delay. The recharge delay uses the same pattern with a constant 60 s and cannot overflow. | Likely unintended edges, harmless for normal operands. Default: one checked signed64 delay `seconds × 8000`, typed refusal for negative or overflowing operands. Decided in ARC-SCRIPT-010: the Original setting keeps the 32-bit count (`CallDelayWraps`), Steamwoven computes without wrapping and reads a negative count as 0 (8 ms, as 0 seconds); the later time-of-day sum wrap is not modelled. |
-| TE2 | Call-at subtracts the module start time (the start-hour key of the module's startup resource, 15:00 for the selected startup per the [clock policy](../world/game-clock-policy.md#source-clock-startup-and-calendar); 15 when the resource is absent, static default 10) from the current time before taking the time of day, so the operand counts seconds from the start hour, not from midnight, while the displayed clock counts from midnight (call-at (0x447220), start hour, startup (0x4B9C30)). A target equal to now gives delay 0 → 1 ms (fires now, not tomorrow). | Unknown whether slip or convention, but nearly moot: the [ARC-RES-045 census](scr-census.md#action-types-d) finds call-at in 1 line of the data and in no live line, against 304 call-in lines (209 live, 125 scripts). SCRIPT S5 may keep the source arithmetic behind its switch or refuse call-at; call-in carries TE1. |
+| TE2 | Call-at subtracts the module start time (the start-hour key of the module's startup resource, 15:00 for the selected startup per the [clock runtime](../world/game-clock-runtime.md#original-clock-evidence-carried-from-the-res-020-policy); 15 when the resource is absent, static default 10) from the current time before taking the time of day, so the operand counts seconds from the start hour, not from midnight, while the displayed clock counts from midnight (call-at (0x447220), start hour, startup (0x4B9C30)). A target equal to now gives delay 0 → 1 ms (fires now, not tomorrow). | Unknown whether slip or convention, but nearly moot: the [ARC-RES-045 census](scr-census.md#action-types-d) finds call-at in 1 line of the data and in no live line, against 304 call-in lines (209 live, 125 scripts). SCRIPT S5 may keep the source arithmetic behind its switch or refuse call-at; call-in carries TE1. |
 | TE3 | Ties fire newest first for events scheduled outside a ping; events merged after a ping go in front of older equals, and among themselves keep creation order (Q3, Q4). | An implementation artefact, not a rule. Decided: FIFO by a persisted sequence number (owner decision OQ1). |
 | TE4 | "Remove first" can remove two events, one from the main list and one from the side list (Q9). Remove-call during a ping can therefore cancel two calls. | Default: remove exactly the first match in queue order. |
 | TE5 | The loop guard is shared across the three lists and resets when it trips, so the per-list budget depends on earlier lists (Q8). | Default: a fixed per-pass budget, reported in the pass result. |
@@ -270,68 +257,21 @@ body decay fire at once and a resting NPC heal for the whole absence.
 
 ## 8. Proposed implementation slices (`WORLD`)
 
-All slices are proposals; codes are allocated when each task is created.
-Shared rules for every slice, in the project style (immutable records,
-explicit limits, typed results, Godot-free assemblies):
-
-- **Record.** `GameEvent {Sequence, Kind, Domain, DeadlineMs, Scope, Payload}`
-  with one typed payload record per kind instead of four untyped parameters;
-  entity references are session entity codes plus map, never live handles.
-- **Order.** `(DeadlineMs, Sequence)`; `Sequence` is a persisted, strictly
-  increasing signed64 counter (TE3). A delay of 0 is stored as 1 ms, as in the
-  source (Q2), so "immediate" stays "next pass"; the delay is a checked
-  signed64 in the clock's millisecond domain.
-- **Kind registry.** Closed and versioned: per kind the domain, whether it is
-  persisted, the uniqueness policy (replace, keep existing, merge, many) and
-  its key, and the scope rule (global, the map of its referenced entities,
-  active map only; an active-map kind is rebuilt on activation and, for the
-  AI tick, persisted while active, OQ2). An unknown kind, a missing handler or a
-  payload that fails validation is refused at scheduling, never dropped later.
-- **Pass.** `ProcessDue(expected version, budget)` reads the clock once,
-  takes due events of the active scope in order, but never one scheduled in
-  the same pass (Q4/Q5), validates its entity references, runs the kind's
-  handler port with `{event, deadline, now}` and commits the removal with the
-  handler's own session changes. Events of an inactive scope are skipped
-  and stay pending. The result lists processed, dropped (with reason: entity
-  missing, handler refused) and whether due events remain because the budget
-  ran out (TE5, TE6, TE7, TE9). The source budget
-  (500) is the proposed default; the pass consumes no randomness itself.
-- **Time jumps.** Explicit waits, travel, a timed teleport and the turn-based
-  round end advance the clock and then drain passes; long waits advance in
-  the caller's steps (sleep: 1 h) with a drain after each step, as the source
-  interleaves them. Handlers of periodic kinds compute from elapsed time and
-  reschedule from now; nothing replays per period.
-- **Pause.** Paused or turn-based game time does not advance by ordinary
-  admission, but a pass still fires events that are already due (the [clock
-  policy](../world/game-clock-policy.md#separate-time-domains-and-source-admission)
-  already records that the source does not suppress due processing).
-
-| Slice | Needs | Result |
-| --- | --- | --- |
-| E1 Queue core | clock runtime (delivered) | `Arcanum.Simulation` pure type: record, order, kind registry, schedule by delay and by absolute deadline, remove first / remove all / any by kind and key, uniqueness policies, scope eligibility, `ProcessDue` with budget and typed outcomes, explicit limits (proposed: 16,384 pending events, 500 per pass, payload bounds per kind). Synthetic tests: ties, same-pass exclusion, budget carry-over, uniqueness, refusal of unknown kinds, overflow, detached snapshots. **No session or schema change, so it can start now.** |
-| E2 Session owner and snapshot | E1, top-20 item 2 merged (schema lane; item 1 is merged) | `GameSessionOwner` owns one queue; clock advances and explicit waits drain passes; map activation and the PC's map change apply the scope rules (events that only reference travelling entities follow the PC, others stay with their map and become eligible when it is active again, AI-style kinds of the map left are removed and rebuilt when a map is activated, so no such kind is carried by accident as in P3); one queue for all maps with the scope field, no per-map files (OQ3); snapshot event section that keeps the active map's AI ticks, restored on load unless the "rebuild on load" switch asks for the source rebuild (OQ2), with strict validation (unknown kind, duplicate or non-increasing sequence, negative deadline, duplicate unique key, unresolvable entity refused) and the next schema version. |
-| E3 Host pump (done: ARC-WORLD-039, [host pump](../world/game-event-queue-runtime.md#host-pump-arc-world-039)) | E2 | The area viewer's ambient host calls the pass after each admitted advance and after each wait step; a diagnostic overlay line (pending count, next deadline, last pass outcomes). FR-RUNTIME-001 acceptance: one recorded sequence of admitted durations replayed at different frame rates gives equal snapshots. |
-| E4 First kinds | E2 and the owning slice | Each consumer slice adds its kinds with handlers: the AI tick (I6, with the RNG jitter label), script call-in / call-at / remove-call (SCRIPT S5, TE1/TE2 decided there), the life-state timers (fatigue 80 s, resting 1 h, poison 15 s/120 s, body decay), effect expiry and magic ticks (item 17 and MAGIC), the companion wait timeout after O3. The queue slice itself ships only a synthetic kind. |
-| E5 Animation domain | E2, animation scheduler (item 9) | A second clock that runs at the game rate while game time is frozen in a round, with its own list and pass, for animation goals and real-time combat cadence. |
-
-E1 is implemented as ARC-WORLD-022 ([runtime](../world/game-event-queue-runtime.md)), which records the
-decisions it took per row of section 7. E2 with the life-state timers is ARC-WORLD-024
-([session wiring](../world/game-event-queue-runtime.md#session-wiring-arc-world-024)); it keeps no per-kind
-ActiveMapOnly removal yet because no such kind exists before the AI tick.
-
-Order: E1 now (no schema), E2 after item 2 in the schema lane (and
-before item 6 if that is next in the lane), then E3; the E4 kinds arrive with
-their owners (I6 and S5 first); E5 with real-time combat.
+Implemented (E1 queue core ARC-WORLD-022, E2 session owner and snapshot ARC-WORLD-024, E3 host pump ARC-WORLD-039, the E4 kinds with their
+owners, E5 the animation domain with MIG12/MIG13); the slice tables and shared rules are in the
+[event queue runtime](../world/game-event-queue-runtime.md). Not repeated here.
 
 ## 9. Owner decisions (2026-10-16)
 
-The owner accepted the three recommendations; slices E1..E2 follow them.
+Kept because other documents cite the identifiers; all three are implemented.
 
-| ID | Question | Decision |
-| --- | --- | --- |
-| OQ1 | Ties between events with the same deadline: first scheduled first (FIFO), or the source's newest first? | **FIFO by a persisted sequence.** The source order is an artefact of the list insert (TE3) and depends on whether the event was created inside a ping; FIFO is deterministic and easy to explain in a trace. |
-| OQ2 | AI ticks are not saved in the source, so a quick load restarts every NPC's tick with fresh jitter. Persist the active map's AI ticks instead? | **Persist them.** A save then reloads into exactly the same timing, which the seeded replays of the AI plan (design rule 3) need; the source behaviour stays available as a named "rebuild on load" switch for comparison runs. (Note, E2 proposal unchanged: map change removes the ticks of the map left and rebuilds them on activation, without the source's P3 carry-over.) |
-| OQ3 | Keep one queue with a map scope per event, or per-map event files like the source? | **One queue in the session snapshot with a scope field.** It keeps the source semantics (events follow the map of their objects, parked events fire late on return) without separate files and keeps a save atomic. |
+- **OQ1** Ties between events with the same deadline: **FIFO by a persisted sequence** (the source order is an artefact of the list insert, TE3,
+  and depends on whether the event was created inside a ping).
+- **OQ2** AI ticks are not saved in the source: **persist them**, so a save reloads into exactly the same timing (seeded replays); the source
+  behaviour stays as the named "rebuild on load" switch. A map change removes the ticks of the map left and rebuilds them on activation, without
+  the source's P3 carry-over.
+- **OQ3** **One queue in the session snapshot with a scope field**: it keeps the source semantics (events follow the map of their objects, parked
+  events fire late on return) without separate files and keeps a save atomic.
 
 ## Unknowns
 
