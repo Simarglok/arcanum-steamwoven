@@ -138,9 +138,11 @@ history held about 500 runs of such copies of one template).
   time set (`RestoreWorldTestTime` keeps it at the session's time when that is ahead of the wall clock); while it is set,
   `ProcessWorld` returns early in a native smoke, so the frame never reaches `ProcessAreaAi`, and a later stage that waits for frames
   to sync the AI host sees nothing. A stage that needs the frame's AI work asks for it itself (`AreaAiHostNow()` in its wait, as
-  `created-critter` does); a stage that passes alone and fails after others can be this. Seen after the long stage list of the smoke
-  speed diagnosis and not fixed: `script-critters` (`the tile notifications of the creations ran`; it passes alone and fails after
-  `spirit-talk,created-scenery`) and `summon-wall` (`the summoner standing in its own wall is spared`; the cause is not looked at).
+  `created-critter` does, and `script-critters` runs `ProcessAreaAi` in its settle frames for the tile notifications, ARC-DEV-405); a stage
+  that passes alone and fails after others can be this. The test time is not reset between stages: its floor is what keeps the next
+  observation from being refused as late (`RestoreWorldTestTime`, ARC-WORLD-025). `summon-wall` read the hero's hit points before
+  and after the burn and failed once in the long list (`25 -> 30`, not reproduced alone or in shorter chains); it now checks the
+  hit-point damage the hero carries, which the wall's burn would raise (ARC-DEV-405).
 - **Every requested stage runs (ARC-DEV-063).** `PASS` means each requested stage ran: a map smoke passes only when
   its log holds the `PASS` line of every stage in its list (`STAGE_PASS` in `tools/local_dev/smoke.py`, checked against
   the viewer's sources by the tests), the whole map battery (`full`, `map` without `--stages`) that of `map` and
