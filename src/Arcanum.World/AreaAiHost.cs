@@ -1066,11 +1066,30 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public void RunStandpoints(string npc) => RunRouteStep(npc, NpcRouteRules.ForcedStandpoint, waypoints: false);
     public bool IsGenerator(string npc) => Fields(npc)?.Npc is { } fields && (fields.Flags & GeneratorNpc) != 0;
     public long? Spawn(string npc) => null;
-    public bool IsEncounterCreature(string npc) => false;
+    /// <summary>ARC-DEV-371 (PG1): the critter flag 0x20000 (field 0xDA) the script action create object writes on a critter it made, over the data's own flags. Only a critter the session created is asked (a map
+    /// NPC's data has none of them): the AI tick then destroys it when it is left without a next tick outside a round (the sector its tick found not loaded), which this host answers by queuing the
+    /// session's destroy of the created critter (<see cref="TakeDestroyedCreated"/>; the viewer applies it outside the tick, which holds the session).</summary>
+    public bool IsEncounterCreature(string npc) => _created.Contains(npc)
+        && (_session.QueryObjectFlags(npc).Critter(unchecked((int)(Fields(npc)?.Critter?.Flags ?? 0))) & SessionCreatedObject.EncounterCritterFlag) != 0;
+
+    private readonly List<string> _destroyedCreated = [];
+
+    /// <summary>ARC-DEV-371: the created critters an AI tick destroyed since the last call (an encounter creature left without a next tick), in order; the caller destroys them in the session
+    /// (<see cref="GameSessionOwner.DestroyCreatedObject"/>), after which <see cref="SyncCreated"/> drops them.</summary>
+    public IReadOnlyList<string> TakeDestroyedCreated()
+    {
+        var taken = _destroyedCreated.ToArray();
+        _destroyedCreated.Clear();
+        return taken;
+    }
     // The object destroy (0x43CCA0) kills every run of the object (0x423FF0, GS21): no rule, no level; the end nodes of the runs that ended run (they do nothing for a killed run
     // in the original; this host's also free a cast's unbegun magic run, ARC-WORLD-102).
     // ARC-DEV-301: the destroy also tells the spell runs (0x43CCA0 calls 0x459740 three times).
-    public void Destroy(string npc) { EndNodes(_session.KillGoals(npc).Steps); _scene.Spells?.Invoke()?.ObjectGone(npc); }
+    public void Destroy(string npc)
+    {
+        EndNodes(_session.KillGoals(npc).Steps); _scene.Spells?.Invoke()?.ObjectGone(npc);
+        if (_created.Contains(npc) && !_destroyedCreated.Contains(npc)) _destroyedCreated.Add(npc);
+    }
     // The AI tick's far path (0x424070 at level 4, TL42, GS20).
     public void InterruptAnimations(string npc) => InterruptRuns(npc, FarPathLevel);
     /// <summary>ARC-DEV-104 (MIG9 S4, RL16's loaded test): the session answers for the open map's sector cache (a whole map whose residency the
