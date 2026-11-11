@@ -11,22 +11,36 @@ namespace Arcanum.Session;
 /// to the target tile asked from the path request, at most eight tiles of it walked, the tile scripts of the tiles walked run, the object's runs interrupted and the object placed on the last tile
 /// (<see cref="Arcanum.Simulation.Navigation.ImmediatePathWalk"/>, the host's: it needs the map's paths and the tile scripts). This host logs the request (<see cref="SpellCastEventKind.Movement"/>), as the
 /// knockback and the hover do.
-/// <para>Left: the types 1 (a random tile in a radius of the object, 0x4F4E40), 2 (the teleport tile, with the anti-teleport zones, the change of place and the followers: MA-5's second half) and 3 (the area
-/// portal, record 218 of the technologies) stay not ready; so does a target that is no critter the host knows.</para>
+/// <para>ARC-MAGIC-038 (MA-5's second half) adds the type 1 here (a random tile in a radius of the object: the direction is drawn here, the host walks it, <see cref="SpellCastEventKind.MovementRandom"/>) and the
+/// types 2 and 3 (the teleports: SessionSpellCasterTeleport.cs). A target that is no critter the host knows stays not ready for the relocating types 0 and 1 (the host places critters only).</para>
 /// </summary>
 public sealed partial class SessionSpellCaster
 {
-    /// <summary>The Movement component on its target object (<c>0x4524C0</c> case 0): a critter the host knows (the hero, or a critter of the map) and the run's target tile.</summary>
+    /// <summary>The Movement component on its target object (<c>0x4524C0</c>): type 0 for a critter the host knows and the run's target tile; types 2 and 3 through the teleport host (<see cref="ISpellTeleportHost"/>).</summary>
     [OriginalFunction(0x4524C0, OriginalFunctionScope.Partial)]
     private SpellComponentOutcome? MovementComponent(SpellRun run, SessionSpellComponent component, SpellRunTarget target)
     {
-        if (component.Movement is not { Location: SpellComponentTables.TargetTile }) return null;
+        if (component.Movement is not { } movement) return null;
         // No current target object (0x5E6D48 and 0x5E6D4C both 0): the component does nothing, and it is not "not ready".
         if (target.Object is not { } obj) return SpellComponentOutcome.None;
-        // A resisted run (the margin, +0x144, written by the per-target stage) moves nothing, and a target tile of (0, 0) is no tile (the original tests the pair for zero).
-        if (run.Margin != 0 || run.TargetTile is { X: 0, Y: 0 }) return SpellComponentOutcome.None;
-        if (obj.Id != Hero && !CritterKnown(obj.Id)) return null;
-        _log.Add(new(SpellCastEventKind.Movement, run.Id, unchecked((int)run.TargetTile.X), obj.Id, unchecked((int)run.TargetTile.Y)));
-        return SpellComponentOutcome.None;
+        // A resisted run (the margin, +0x144, written by the per-target stage) moves nothing.
+        if (run.Margin != 0) return SpellComponentOutcome.None;
+        switch (movement.Location)
+        {
+            case SpellComponentTables.TargetTile:
+                // A target tile of (0, 0) is no tile (the original tests the pair for zero).
+                if (run.TargetTile is { X: 0, Y: 0 }) return SpellComponentOutcome.None;
+                if (obj.Id != Hero && !CritterKnown(obj.Id)) return null;
+                _log.Add(new(SpellCastEventKind.Movement, run.Id, unchecked((int)run.TargetTile.X), obj.Id, unchecked((int)run.TargetTile.Y)));
+                return SpellComponentOutcome.None;
+            case SpellComponentTables.RandomTileInRadius:
+                // 0x4F4E40 draws its direction first (0x4CEF00 over 0..8), then walks `Tile_Radius:` steps; the host asks the path and decides the rest.
+                if (obj.Id != Hero && !CritterKnown(obj.Id)) return null;
+                _log.Add(new(SpellCastEventKind.MovementRandom, run.Id, movement.TileRadius ?? 0, obj.Id, Rolls.Roll(SpellRollPurpose.MovementDirection, 0, 8)));
+                return SpellComponentOutcome.None;
+            case SpellComponentTables.TeleportTile: return TeleportTileComponent(run);
+            case SpellComponentTables.TeleportAreaPortal: return TeleportAreaPortalComponent(obj);
+            default: return null;
+        }
     }
 }

@@ -119,5 +119,26 @@ public sealed class DropPlacementRulesTests
         Assert.AreEqual(0, CreatedItemRules.Room(anchor, Enumerable.Repeat(anchor, CreatedItemRules.Limit + 1), unbounded: false));
         Assert.IsNull(CreatedItemRules.Room(anchor, Enumerable.Repeat(anchor, 100), unbounded: true));
     }
-}
 
+    // ARC-MAGIC-038 (ledger TP3): the one call of 0x4F4E40 the spell Movement component's type 1 makes, with the drawn direction given.
+    [TestMethod]
+    public void PlaceOnce_walks_the_radius_in_the_drawn_direction_and_stops_on_the_first_tile_without_a_critter()
+    {
+        var map = new Map(new() { [new(8, 5)] = new(3, 0, [5, 5, 5]) }, Owner);
+        Assert.AreEqual(new CellCoord(6, 5), DropPlacementRules.PlaceOnce(Owner, 3, DropOwner.Npc, map, 5));
+        Assert.AreEqual((Owner, new CellCoord(8, 5), DropOwner.Npc), map.Asked.Single(), "the path from the owner to the tile `radius` steps away");
+        // An object owner has no critter test: the walk goes to its end.
+        Assert.AreEqual(new CellCoord(8, 5), DropPlacementRules.PlaceOnce(Owner, 3, DropOwner.Object, new Map(new() { [new(8, 5)] = new(3, 0, [5, 5, 5]) }, Owner), 5));
+    }
+
+    [TestMethod]
+    public void PlaceOnce_keeps_the_owners_tile_without_a_path_or_with_a_route_of_radius_plus_two_and_answers_null_off_the_map()
+    {
+        Assert.AreEqual(Owner, DropPlacementRules.PlaceOnce(Owner, 3, DropOwner.Npc, new Map([], Owner), 5), "no path, no completed step");
+        Assert.AreEqual(Owner, DropPlacementRules.PlaceOnce(Owner, 3, DropOwner.Npc, new Map(new() { [new(8, 5)] = new(5, 0, [5, 5, 5, 5, 5]) }, Owner), 5), "a route of radius + 2");
+        Assert.AreEqual(Owner, DropPlacementRules.PlaceOnce(Owner, 3, DropOwner.Npc, new Map([], Owner), 8), "direction 8 steps in place: the path is empty");
+        Assert.IsNull(DropPlacementRules.PlaceOnce(new(8, 5), 3, DropOwner.Npc, new Map([], new CellCoord(8, 5)), 5), "a step leaves the 10 x 10 map: the component relocates nothing");
+        Assert.AreEqual(Owner, DropPlacementRules.PlaceOnce(Owner, 0, DropOwner.Npc, new Map([], Owner), 3), "radius 0 targets the owner's own tile");
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => DropPlacementRules.PlaceOnce(Owner, -1, DropOwner.Npc, new Map([], Owner), 3));
+    }
+}

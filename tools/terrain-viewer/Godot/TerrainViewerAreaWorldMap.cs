@@ -121,12 +121,14 @@ public partial class TerrainViewerApp
         // ARC-UI-084 (WM5, WM65): a PC in a sector with a town map is not on the walkable world and the original look opens on the town map, on any map.
         var art = AdoptWorldMapArt();
         var artLook = DebugMode ? null : art;
-        var townNumber = artLook is not null && !_worldMapTownGateOffForSmoke ? PcTownMapNumber() : 0;
+        // ARC-MAGIC-038: the teleport mode picks areas of the world map wherever the PC is, so the town map is not shown for it and the start-map refusal is off.
+        var teleport = _teleportMode is not null;
+        var townNumber = artLook is not null && !_worldMapTownGateOffForSmoke && !teleport ? PcTownMapNumber() : 0;
         var townLoading = townNumber > 0 && _townMapSource is null && _townMapTask is { IsCompleted: false };
         var townShow = townLoading ? null : TownMapShowFor(townNumber, PcCell().X, PcCell().Y);
         string? refused = _worldMapData is not { Data: { } data } ? $"world-map data {(_worldMapData is null ? "loading" : _worldMapData.Status.ToString())}"
             : townLoading ? "the town maps are still loading"
-            : _readyArea!.Snapshot.RuntimeMap != data.StartRuntime && !DebugMode && townShow is null ? $"only on the start map ({data.StartMap})"
+            : _readyArea!.Snapshot.RuntimeMap != data.StartRuntime && !DebugMode && !teleport && townShow is null ? $"only on the start map ({data.StartMap})"
             : HeroInCombatMode ? "leave combat mode first"
             : AreaTransferPending ? "a transfer is pending"
             : _worldActor.Session is not AreaGridSession { State.Phase: Arcanum.Simulation.Movement.MovementPhase.Settled } ? "the actor is moving"
@@ -142,12 +144,23 @@ public partial class TerrainViewerApp
         var cell = session.Chart.ToWorld(session.State.CommittedCell);
         // ARC-DEV-050: off the start map (debug mode only) the view has no position and only teleports.
         var onStart = _readyArea!.Snapshot.RuntimeMap == _worldMapData!.Data!.StartRuntime && townNumber == 0;
-        var worldMap = _worldMap = new AreaWorldMap(_worldMapData.Data, _areaSession!, onStart ? new(cell.X, cell.Y) : null);
+        // ARC-MAGIC-038: the teleport mode picks areas from any map (0x5618B0), so its view takes a position off the start map too, the location of the map's own area, and the picture's clicks reach the pick.
+        TravelLocation? start = onStart ? new(cell.X, cell.Y) : teleport ? AreaSpellTeleport.MapAreaLocation(_worldMapData.Data, _readyArea.Snapshot.RuntimeMap) ?? default(TravelLocation) : null;
+        var worldMap = _worldMap = new AreaWorldMap(_worldMapData.Data, _areaSession!, start);
         if (_worldMapPanel is null)
         {
             _worldMapPanel = new AreaWorldMapPanel(); AddChild(_worldMapPanel);
-            _worldMapPanel.WaypointRequested += pixel => WorldMapWaypoint(() => _worldMap!.AddWaypoint(pixel), $"pixel ({pixel.X},{pixel.Y})");
-            _worldMapPanel.AreaRequested += area => WorldMapWaypoint(() => _worldMap!.AddArea(area), $"area {area}");
+            // ARC-MAGIC-038: in the teleport mode a click picks the nearest known area (0x5618B0 case 0) in place of adding a waypoint.
+            _worldMapPanel.WaypointRequested += pixel =>
+            {
+                if (_teleportMode is not null && _worldMapData?.Data is { } d) TeleportPick(WorldTravelGeometry.Location(pixel, d.Width));
+                else WorldMapWaypoint(() => _worldMap!.AddWaypoint(pixel), $"pixel ({pixel.X},{pixel.Y})");
+            };
+            _worldMapPanel.AreaRequested += area =>
+            {
+                if (_teleportMode is not null) { if (_worldMapData?.Data is { } d && area > 0 && area < d.TravelAreas.Count) TeleportPick(d.TravelAreas[area].Location); }
+                else WorldMapWaypoint(() => _worldMap!.AddArea(area), $"area {area}");
+            };
             _worldMapPanel.TravelRequested += StartWorldMapTravel;
             _worldMapPanel.ClearRequested += () => { if (_worldMap?.Clear() == true) RenderWorldMap(null); };
             _worldMapPanel.RemoveRequested += WorldMapRemoveWaypoint;
@@ -483,10 +496,12 @@ public partial class TerrainViewerApp
     /// and an arrival is taken whenever its sector is loaded, walkable or not). ARC-DEV-115 (MIG11 S4, WT12, RL24, RL29): the landing is
     /// the session's change of place (caller <see cref="ChangeOfPlaceCaller.WorldMapLanding"/>, blank-screen flag alone), requested for
     /// the start map and pinged in the same frame (<see cref="TerrainViewerApp.RequestWorldMapLanding"/>).</summary>
-    private void LandWorldMap(TravelLocation landing, string why, bool teleport = false)
+    private void LandWorldMap(TravelLocation landing, string why, bool teleport = false, ChangeOfPlaceCaller caller = ChangeOfPlaceCaller.WorldMapLanding,
+        ChangeOfPlaceFlags flags = AreaChangeOfPlace.LandingFlags, bool? onStartMap = null)
     {
         var steps = _worldMap?.Steps ?? 0; var hours = (_worldMap?.GameMs ?? 0) / WorldJourney.MsPerSector;
-        var onStart = _worldMap?.OnStartMap != false;
+        // ARC-MAGIC-038: the area portal lands from outside the window (no world map object): the shown map says whether the PC is on the start map.
+        var onStart = onStartMap ?? _worldMap?.OnStartMap != false;
         var startMap = _worldMapData?.Data?.StartMap;
         var startRuntime = _worldMapData?.Data?.StartRuntime;
         EndWorldMap();
@@ -504,7 +519,7 @@ public partial class TerrainViewerApp
         GD.Print("ARC-UI-048 landing " + System.Text.Json.JsonSerializer.Serialize(new { Why = why, landing.X, landing.Y, Steps = steps, Hours = hours,
             Known = _areaSession?.QueryKnownAreas().ToArray() }));
         RefreshAreaStatus();
-        RequestWorldMapLanding(owner, session, origin, next, target, startRuntimeMap, new(checked((int)landing.X), checked((int)landing.Y)), sameMap: onStart);
+        RequestWorldMapLanding(owner, session, origin, next, target, startRuntimeMap, new(checked((int)landing.X), checked((int)landing.Y)), sameMap: onStart, caller, flags);
     }
 
     // W, a controller cancel or the button (Escape is the menu's key, not this window's): before the journey the panel closes; during it the PC lands where it stands (WT12).
@@ -521,7 +536,7 @@ public partial class TerrainViewerApp
         GD.Print("ARC-UI-048 world map closed");
         // MIG12 S8: a journey that ended any way (landing, cancel, the panel closed) leaves no travel step behind.
         _areaSession?.CancelRealStep(SessionRealStep.WorldMapStep);
-        CloseWindowMode(InterfaceMode.WorldMap); _worldMap = null;
+        CloseWindowMode(InterfaceMode.WorldMap); _worldMap = null; _teleportMode = null;
         QuarantineWorld(); RefreshReadyStatus();
     }
 
