@@ -766,10 +766,11 @@ public partial class TerrainViewerApp
             WorldObservation(() => WorldRouteClick(ctrlClick.Position, true));
         }
         // ARC-MAGIC-015: a right press closes the spell's targeting cursor (0x57BFF0).
-        else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } && _spellTargeting is not null)
+        else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } && (_spellTargeting is not null || _itemAiming is not null))
         {
             _rightPressTaken = true;
-            WorldObservation(() => { CancelSpellTargeting("right click"); RefreshAreaStatus(); });
+            // ARC-DEV-365: the same right press cancels the item cursor (IA5, IA6).
+            WorldObservation(() => { CancelSpellTargeting("right click"); CancelArmedLockpicks("right click"); RefreshAreaStatus(); });
         }
         else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true }) _rightPressTaken = false;
         // ARC-COMBAT-022: the right release leaves combat mode or concealment, unless its press was taken above.
@@ -830,6 +831,8 @@ public partial class TerrainViewerApp
         if (TryPendingOrder(screen)) return;
         // ARC-WORLD-051: any click replaces a walk to a door (a press on a door sets a new one).
         CancelPortalApproach("another click replaced it", keepArmed: true);
+        // ARC-DEV-365: the open item cursor takes the press (the original's interface mode 16, IA6).
+        if (_itemAiming is not null) { CancelAreaAttack("the item cursor took the press"); ItemAimClick(screen, ctrl, shift); return; }
         // ARC-SKILLS-006: armed lockpicks take this press: a door or window has its lock picked, anything else cancels the pick.
         if (_lockpickArmed is not null)
         {

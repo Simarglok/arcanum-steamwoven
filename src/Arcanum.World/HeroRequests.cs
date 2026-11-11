@@ -48,6 +48,15 @@ public sealed record PickPocketRequest(string Victim, string Item, bool Plant) :
 /// <summary>ARC-DEV-185: a press on a door or window with armed lockpicks: the skill goal 33 starts with skill 14 and the lockpicks (the target is the portal's session entity).</summary>
 public sealed record LockpickRequest(string Portal, string Item) : HeroRequest;
 
+/// <summary>
+/// ARC-DEV-365 (T-g, ledger IA8): the item cursor's apply on an object that needs a walk first (out of the spell's range, or an item with <c>OIF_NO_RANGED_USE</c>): the item use goal 39 starts with the item and the target.
+/// <paramref name="Ctrl"/> is the Ctrl key at the press (the always-run rule); <paramref name="Shift"/> sets the no-walk flag (the hero acts from where it stands).
+/// </summary>
+public sealed record UseItemRequest(string Item, string Target, bool Ctrl, bool Shift) : HeroRequest;
+
+/// <summary>ARC-DEV-365 (T-g, ledger IA9, IA11): the item cursor's apply of a trap device on a tile: the goal 41 starts with the item and the tile (walks next to the tile, then uses the device).</summary>
+public sealed record UseItemOnTileRequest(string Item, CellCoord Tile) : HeroRequest;
+
 /// <summary>What a request did.</summary>
 public enum HeroRequestOutcome
 {
@@ -117,6 +126,10 @@ public interface IHeroActions
     bool StartPickPocket(string victim, string item, bool plant) => false;
     /// <summary>ARC-DEV-185: starts the hero's skill goal 33 for a lock pick (skill 14); false when the gate or a run's refusal stopped it.</summary>
     bool StartLockpick(string portal, string item) => false;
+    /// <summary>ARC-DEV-365: starts the hero's item use goal 39 on <paramref name="target"/>, running when <paramref name="run"/>, with the no-walk flag when <paramref name="noWalk"/>; false when the gate or a run's refusal stopped it.</summary>
+    bool StartUseItem(string item, string target, bool run, bool noWalk) => false;
+    /// <summary>ARC-DEV-365: starts the hero's item use goal 41 of <paramref name="item"/> on <paramref name="tile"/>; false when the gate or a run's refusal stopped it.</summary>
+    bool StartUseItemOnTile(string item, CellCoord tile) => false;
 }
 
 /// <summary>Applies <see cref="HeroRequest"/>s to the hero through <see cref="IHeroActions"/>.</summary>
@@ -140,6 +153,8 @@ public sealed class HeroRequestHost
             CastRequest cast => Cast(cast),
             PickPocketRequest steal => PickPocket(steal),
             LockpickRequest pick => Lockpick(pick),
+            UseItemRequest use => UseItem(use),
+            UseItemOnTileRequest onTile => UseItemOnTile(onTile),
             _ => throw new ArgumentException("Unknown hero request.", nameof(request)),
         };
     }
@@ -170,6 +185,25 @@ public sealed class HeroRequestHost
         if (tail.StartsTurn) _hero.StartTurn(tail.Rotation!.Value);
         var outcome = interrupted || tail.StartsTurn ? HeroRequestOutcome.Done : tail.Turn == RotateStartVerdict.AlreadyFacing ? HeroRequestOutcome.Unchanged : HeroRequestOutcome.Ignored;
         return new(outcome, Rotation: tail.StartsTurn ? tail.Rotation : null, Verdict: tail.Turn);
+    }
+
+    private HeroRequestResult UseItem(UseItemRequest request)
+    {
+        // The item use starter 0x435450 passes the start gate with its cost for a hero that can act (a PC passes); the goal starts as a click's does (GS27): at once without a main run, otherwise after the level-3 interrupt.
+        var facts = _hero.Facts();
+        if (!facts.Active) return new(HeroRequestOutcome.Ignored);
+        if (HeroClickRules.StartOf(false, facts.InRound, facts.HighestRunPriority > 0, false, false) == HeroClickStart.Ignored) return new(HeroRequestOutcome.Ignored);
+        var options = _hero.Options();
+        var run = HeroInputRules.AlwaysRun(options.AlwaysRunOption, request.Ctrl, options.NumLockRun);
+        return new(_hero.StartUseItem(request.Item, request.Target, run, request.Shift) ? HeroRequestOutcome.Done : HeroRequestOutcome.Refused, run);
+    }
+
+    private HeroRequestResult UseItemOnTile(UseItemOnTileRequest request)
+    {
+        var facts = _hero.Facts();
+        if (!facts.Active) return new(HeroRequestOutcome.Ignored);
+        if (HeroClickRules.StartOf(false, facts.InRound, facts.HighestRunPriority > 0, false, false) == HeroClickStart.Ignored) return new(HeroRequestOutcome.Ignored);
+        return new(_hero.StartUseItemOnTile(request.Item, request.Tile) ? HeroRequestOutcome.Done : HeroRequestOutcome.Refused);
     }
 
     private HeroRequestResult Lockpick(LockpickRequest request)
