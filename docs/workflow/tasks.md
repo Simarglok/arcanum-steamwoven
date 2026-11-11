@@ -325,19 +325,20 @@ committed files. Do not copy the game or the full vault into each worktree.
   unless the owner explicitly asked to review it (in the task or later); then
   the agent leaves it open, reports the link and the owner merges. The agent
   merges only after the task's acceptance criteria, its checks and the root
-  checks pass (none for a docs-only change, below) and the review is
+  checks pass (only `docs_check.py` for a docs-only change, below) and the review is
   addressed, then reports which PR it merged. A PR body, a review PASS or a
   finished status alone never authorizes a merge.
-- Owner decision 2026-10-16: a **docs-only** change runs no checks. Docs-only
+- Owner decision 2026-10-16: a **docs-only** change runs no checks but the docs link check. Docs-only
   means the diff changes only Markdown documentation (`*.md`), not code,
   scripts, tests, project, build or configuration files. Markdown that a test
   reads is not docs-only (for example the size/SHA-256 tables in
   `docs/research/area-inventory.md` and `docs/research/dat-evidence.md`
   that `tools/local_dev/test_launcher_sync.py` checks). The root checks and the
-  task checks are not run; the PR says "docs-only, no checks run". The
+  task checks are not run, except `python3 -B tools/docs_check.py` (Python
+  only, the link and path check of ARC-DEV-406), which every docs-only PR runs;
+  the PR says "docs-only, no checks run except docs_check". The
   independent review still applies: it confirms that the diff is docs-only (no
-  changed file name appears in `tests/` or `tools/`) and that its relative
-  links resolve. Such a PR can run in a cloud checkout
+  changed file name appears in `tests/` or `tools/`). Such a PR can run in a cloud checkout
   without .NET or Godot.
 - An agent merge uses a merge commit for the exact reviewed head, for example
   `gh pr merge <url> --merge --match-head-commit <reviewed-sha>`, after checking

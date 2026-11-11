@@ -702,7 +702,13 @@ Run from repository root:
 "$DOTNET" test Arcanum.Steamwoven.sln --no-build --filter "TestCategory!=RealData"
 python3 -B tools/research/dat_probe.py --self-test
 python3 -B tools/original-oracle/oracle.py --self-test
+python3 -B tools/docs_check.py
 ```
+
+`tools/docs_check.py` (ARC-DEV-406) needs only Python and the tracked files: it fails on a relative Markdown link whose file
+or heading does not exist, on a `docs/...` path that code, tests, tables or a page name and that does not exist, and on a page
+under `docs/` that no page links to; `--self-test` runs it on a synthetic tree. A change that moves, renames or deletes a
+page runs it and fixes every finding in the same PR.
 
 The `OriginalExe` tests are part of the solution run and stay inconclusive without
 `ARCANUM_EXE` and the oracle's files ([function oracle](#function-oracle)).
