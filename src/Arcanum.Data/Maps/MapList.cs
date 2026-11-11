@@ -43,7 +43,7 @@ public sealed class MapList
     public IReadOnlyList<MapListEntry> Entries { get; }
 
     /// <summary>The first row naming the map folder, compared without case; null when none does.</summary>
-    [OriginalFunction(0x4127A0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4127A0, OriginalFunctionScope.Partial)]
     public MapListEntry? Find(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
