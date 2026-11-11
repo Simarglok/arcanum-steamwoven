@@ -2384,8 +2384,11 @@ snapshot every refund stops at, so the five starting points can be spent and tak
   a transfer or a load) cannot open the editor and names the reason.
 - **Pages.** The character sheet in its creation mode above the main menu's backdrop: the sheet's values, the stats page
   (hit points, fatigue, the eight stats), the skills page and the spells page with their `−` and `+` (the in-game sheet's
-  rules and texts, [skills page](#skills-page-arc-ui-009)), and Cancel and Accept. Each press that changes the draft is
-  recorded; a refused one is not.
+  rules and texts, [skills page](#skills-page-arc-ui-009)) and, since ARC-MAGIC-043, a tech page with the eight disciplines'
+  `−` and `+` (the original's degree page of the same editor, CM8; the pool's technology lane, refused below the snapshot the
+  editor opened on, TC10; project labels, the original look of the page is not drawn in the creation window), and Cancel and
+  Accept. Each press that changes the draft is recorded (the replay at Accept is by track, so degrees replay like the other
+  points); a refused one is not.
 - **Accept** (or Return, CM5) opens the [opening shop](#opening-shop-arc-ui-036) (window 15, CM2), whose Accept starts the new
   game as Start does for a pre-made hero, then replays the recorded presses on the new session inside an editor of its own
   opened on the same start (`AreaNewCharacter.Apply`), and closes that editor: the game starts with nothing refundable. A press
