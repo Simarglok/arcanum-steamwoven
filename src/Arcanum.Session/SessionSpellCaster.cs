@@ -140,6 +140,12 @@ public enum SpellCastEventKind
     EntangleHeld,
     /// <summary>ARC-DEV-303 (RS10): the entangled critter <see cref="SpellCastEvent.Object"/> was hit and resisted again: "resisted" plays (0x45A520) and the hold's run ends by event (0x4571E0).</summary>
     EntangleBroken,
+    /// <summary>ARC-DEV-352 (E1-b, SUM1–SUM4): a Summon component created the scenery <see cref="SpellCastEvent.Object"/> of prototype file <see cref="SpellCastEvent.Value"/> at its tile.</summary>
+    Summoned,
+    /// <summary>ARC-DEV-352: a Summon component's creation was refused (the session's failure is <see cref="SpellCastEvent.Detail"/>; the original exits on a failed creation, SUM2, an unreachable bug kept as a typed refusal).</summary>
+    SummonRefused,
+    /// <summary>ARC-DEV-352 (DS2, SUM8): a Destroy component destroyed the summoned object <see cref="SpellCastEvent.Object"/>.</summary>
+    SummonDestroyed,
 }
 
 /// <summary>
@@ -194,7 +200,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         ArgumentNullException.ThrowIfNull(map);
         _events = events ?? throw new ArgumentNullException(nameof(events));
         _items = items;
-        _dataMap = items is null ? map : new ItemCastMap(map, Item);
+        // ARC-DEV-352: the created objects of the summon map are map objects too (a Tgt_Summoned re-aim, the empty-tile tests, a Destroy).
+        _dataMap = new CreatedCastMap(items is null ? map : new ItemCastMap(map, Item), this);
         _map = new FlagCastMap(_dataMap, _owner);
         // ARC-DEV-301: the session tells the host of the shown map when a critter's life step ends its runs (death, loss of consciousness).
         _owner.CritterRunEnd = QueueRunEnd;
@@ -305,7 +312,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     }
 
     // ARC-DEV-303 (MG48): the run processing resets the cached target type at each action (0x451070) and sets it for each target object (0x45132D); the entangle's re-resistance reads it.
-    void ISpellRunHost.ActionStarted(SpellRun run) => _cachedTargetKind = null;
+    // ARC-DEV-352 (SUM1): and the context's summoned slot once per action.
+    void ISpellRunHost.ActionStarted(SpellRun run) { _cachedTargetKind = null; _lastSummoned = null; }
 
     void ISpellRunHost.TargetStarted(SpellRun run, SpellRunTarget target)
     {
@@ -351,7 +359,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         if (_records(run.Spell)?.Component(run.Action, component) is not { } c) return new(false, target);
         var context = Context(run, c.Area) with { Candidate = target.Object is { } o ? _map.Object(o.Id) : null, CandidateTile = target.Tile };
         if (!SpellTargetRules.Test(context, _map, Profile).Passes) return new(false, target, c.ItemTriggers);
-        var (aimed, tile) = SpellTargetRules.ReAim(c.ApplyTargets, context.Candidate, target.Tile, context.Self, context.Source, null, run.TargetTile,
+        var (aimed, tile) = SpellTargetRules.ReAim(c.ApplyTargets, context.Candidate, target.Tile, context.Self, context.Source, context.Summoned, run.TargetTile,
             context.Target);
         CacheReAimedKind(c.ApplyTargets, context.Self, context.Source);
         return new(true, new(aimed is null ? null : RunObject(aimed.Id) ?? new(aimed.Id, aimed.Type), tile), c.ItemTriggers);
@@ -389,7 +397,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
             return SpellComponentOutcome.None;
         }
         if (c.Type == SpellComponentType.Destroy && DestroyComponent(run, target)) return SpellComponentOutcome.None;
-        if (c.Type == SpellComponentType.EyeCandy) { EyeCandy(run, c, target); return SpellComponentOutcome.None; }
+        if (c.Type == SpellComponentType.EyeCandy) return EyeCandy(run, c, target);
+        if (c.Type == SpellComponentType.Summon && SummonComponent(run, c, target)) return SpellComponentOutcome.None;
         if (c.Type == SpellComponentType.AGoal && c.AnimationGoal == KnockbackGoal) { Knockback(run, target); return SpellComponentOutcome.None; }
         if (c.Type == SpellComponentType.AGoal && c.AnimationGoal == HoverGoal) { Hover(run, target, true); return SpellComponentOutcome.None; }
         if (c.Type == SpellComponentType.AGoalTerminate && c.TerminatedGoal == HoverGoal) { Hover(run, target, false); return SpellComponentOutcome.None; }
@@ -414,6 +423,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         // An object no longer found is left as it is when the session destroyed it; a carried or worn item is not a map object here: not ready.
         if (_map.Object(who.Id) is not { } victim) return _owner.IsItemDestroyed(who.Id) || Item(who.Id) is null;
         if (run.Margin != 0 && (victim.SpellFlags & SpellTargetObject.Summoned) == 0) return true;
+        if (SessionCreatedObject.KindOf(who.Id) is not null) return DestroyCreated(run, who.Id);
         if (!victim.IsItem || _owner.DestroyLyingItem(_owner.Version, who.Id).Disposition != GameSessionDisposition.Changed) return false;
         // The original tells the runs inside the destroy, while this run is processed (guard 0x5B0BA4): that run is left alone.
         _goneObjects.Add((SessionSpellRunActionKind.ObjectGone, who.Id, run.Id));
@@ -473,16 +483,16 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
 
     /// <summary>ARC-MAGIC-017: the EyeCandy component (0x451FE0, ledger EC rows) on its target object (none: nothing): an Add plays
     /// entry 6 · spell + number unless the run is forced to end, a Remove takes that entry off. Presentation only: the host draws it
-    /// from the log; the callbacks are not ready (a callback play flag makes the original's run wait for the animation).</summary>
-    private void EyeCandy(SpellRun run, SessionSpellComponent component, SpellRunTarget target)
+    /// from the log. ARC-DEV-352 (EC11): an Add with a callback play flag makes the run wait for the animation when the entry plays and calls back at once when it does not
+    /// (<see cref="EyeCandyPlays"/>; without it the callbacks are not ready).</summary>
+    private SpellComponentOutcome EyeCandy(SpellRun run, SessionSpellComponent component, SpellRunTarget target)
     {
-        if (target.Object is not { } obj || component.EyeCandy is not { } data) return;
+        if (target.Object is not { } obj || component.EyeCandy is not { } data) return SpellComponentOutcome.None;
         var index = SpellEyeCandyRules.EntryIndex(run.Spell, data.Number);
-        if (data.Add)
-        {
-            if ((run.Flags & SpellRunFlags.ForcedEnd) == 0) _log.Add(new(SpellCastEventKind.EyeCandyAdded, run.Id, index, obj.Id, (int)data.Play));
-        }
-        else _log.Add(new(SpellCastEventKind.EyeCandyRemoved, run.Id, index, obj.Id, (int)data.Play));
+        if (!data.Add) { _log.Add(new(SpellCastEventKind.EyeCandyRemoved, run.Id, index, obj.Id, (int)data.Play)); return SpellComponentOutcome.None; }
+        if ((run.Flags & SpellRunFlags.ForcedEnd) != 0) return SpellComponentOutcome.None;
+        _log.Add(new(SpellCastEventKind.EyeCandyAdded, run.Id, index, obj.Id, (int)data.Play));
+        return EyeCandyOutcome(index, data.Play);
     }
 
     /// <summary>The animation goal number of the knockback (<c>anim_goal_knockback</c>, GoalType 43).</summary>
@@ -1158,7 +1168,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         var source = run.Source is { } s ? _map.Object(s.Id) : null;
         var origin = source?.Location ?? run.StartLocation;
         return new(area, self, source, origin, Target: run.Target is { } t ? _map.Object(t.Id) : null, TargetTile: run.TargetTile,
-            Other: run.Other is { } o ? _map.Object(o.Id) : null);
+            Other: run.Other is { } o ? _map.Object(o.Id) : null, Summoned: LastSummoned, SummonedList: SummonedOf(run));
     }
 
     /// <summary>The session's life target of a critter (the hero, or an NPC of the map), or null.</summary>

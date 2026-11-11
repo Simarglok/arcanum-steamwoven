@@ -557,6 +557,8 @@ public partial class TerrainViewerApp
         // ARC-MAGIC-018: spell missiles fly after the casting goal's release frame.
         ProcessSpellMissiles();
         ProcessAreaEyeCandy();
+        // ARC-DEV-352: the eye candies' callbacks call their spell runs back.
+        ProcessEyeCandyCallbacks();
         // ARC-RENDER-040: the NPCs' dying and fall animations step their frames.
         ProcessLyingAnimations();
         // ARC-RENDER-035: animated scenery steps its frames.
