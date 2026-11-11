@@ -160,6 +160,26 @@ opt-in test). Neither is executed by Data.
   at once. A stream passed to the owner may be read from a worker thread and must not call
   back into the owner while it is read: the owner's public getters take its lock, which
   the pass holds (`CurrentPhase` is an unsynchronized internal phase for tests).
+- Verified-file memo (ARC-DEV-374, O5a of the [performance diagnosis](../research/performance-diagnosis-2026-11.md); owner decision
+  2026-11-11, option A). The authentication rule above is "every input is hashed in full at every pass". For a file of at least
+  1 MiB (`VerifiedFileMemo.MinBytes`: the archives and large loose inputs; prototypes, patches and small resources keep the
+  full pass every time) the rule is now: **the first check of that file in the process hashes it in full**; every later check
+  of the same path (the map plan's identity, `Open`, I0, I7, a frame batch's `Complete`, the viewer's `VerifyFiles`; in the same
+  load or a later one) reuses that hash while the file's stamp is unchanged. The stamp is the device, inode, size and the
+  modification and change times to the nanosecond on macOS and Linux (a file rewritten with its modification time put back still
+  moves the change time), and the size and last write time on Windows. A changed stamp is a first check again: the file is
+  hashed in full. A hash is remembered only when the stamp is the same before and after the pass that computed it. The memo
+  keeps a path, a stamp, a length and a hash, never bytes, and is not a trust root: a pinned plan still compares the memoized
+  hash with its pinned hash, so a file that is not the pinned file is refused by the first check and by every later one. A
+  path-bound input (`AreaInput.FromFile`) still has its handle/path binding and length checked on every pass; only the read of
+  its bytes is skipped, so the read counters of a later load are lower than the first's, and a stream-only input is always
+  hashed. The effect on I7: a load's build is still bracketed by its binding checks, but the bytes of a file already hashed in
+  this process are not read again at I7, so a rewrite of an archive in place during a load is seen only through its stamp: it is
+  caught unless it leaves the size, the modification time and the change time all as they were (a user-space program cannot
+  restore the change time), and on Windows unless it leaves the size and last write time as they were. A file rewritten in the same filesystem
+  timestamp tick as the pass that hashed it keeps its stamp (the "racy timestamp" case of any stamp cache); the tick is a
+  nanosecond on APFS and 100 ns on NTFS, so it is a known limit and not a guard. The legacy terrain/actor modes of the
+  viewer (`TerrainLoadCoordinator`, not the AREA load) keep their own full fingerprints and do not use the memo. Memo state is process-wide and lives until the process ends; it is not saved.
 - `AreaOriginalValidator.Validate(inputs, token)` is metadata-only convenience:
   its owner is disposed before returning. Use `Open` when frame access is needed.
 
