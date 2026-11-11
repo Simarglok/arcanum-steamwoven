@@ -95,8 +95,8 @@ public static class AreaSpellCasting
             SpellCastEventKind.EffectRemoved => $"{Who()} loses effect {entry.Value}",
             SpellCastEventKind.EffectNotSaved => $"effect {entry.Detail} not saved",
             SpellCastEventKind.EntangleBroken => $"{Who()} breaks free of the entangle",
-            // ARC-MAGIC-017: eye candy is drawn, not told; only its callbacks (play flags 0x8, 0x10) are not ready.
-            SpellCastEventKind.EyeCandyAdded when (entry.Detail & 0x18) != 0 => "eye-candy callback not ready",
+            // ARC-MAGIC-017: eye candy is drawn, not told. ARC-DEV-352: its callbacks (play flags 0x8, 0x10) call the run back; a summon is not told either (the original says nothing), its refusal is the viewer's line.
+            SpellCastEventKind.SummonRefused => $"the summoning of prototype {entry.Value} was refused",
             _ => null,
         };
     }

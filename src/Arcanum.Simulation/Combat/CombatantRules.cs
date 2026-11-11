@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Equipment;
 
 namespace Arcanum.Simulation.Combat;
@@ -30,23 +31,31 @@ public static class CombatantRules
     public const int MaxValue = 1_000_000;
 
     /// <summary>
-    /// A critter's effective resistances: its stored resistance plus its worn armour's adjustments (with their magic, already
+    /// A critter's effective resistances (0x43D6D0, ledger EQ8, ARC-MAGIC-027 reading RE1): its stored resistance plus its worn armour's adjustments (with their magic, already
     /// scaled for the wearer, <see cref="EquipmentRules.ResistanceAdjustments"/>), plus <c>5 × (CN − 4)</c> for poison when
-    /// positive, clamped to 0..95 unless the critter is a monstrous NPC (<paramref name="unclamped"/>). Resistance effects are not
-    /// applied (no owner models them yet).
+    /// positive, then the critter's resistance <paramref name="effects"/> (the aggregation 0x4EA6C0 over the sum), then clamped to 0..95 unless the critter is a monstrous NPC
+    /// (<paramref name="unclamped"/>). The effects come after the armour and the poison bonus and before the clamp, so an effect that lifts a resistance past 95 is cut for a
+    /// PC and an ordinary NPC and a negative one can take it below the stored value down to 0.
     /// </summary>
     [OriginalFunction(0x43D6D0, OriginalFunctionScope.Partial)]
-    public static DamageResistances Resistances(DamageResistances stored, EquipmentResistances worn, int constitution, bool unclamped)
+    public static DamageResistances Resistances(DamageResistances stored, EquipmentResistances worn, int constitution, bool unclamped, EffectResistances effects)
     {
+        ArgumentNullException.ThrowIfNull(effects);
         foreach (var value in new[] { stored.Normal, stored.Poison, stored.Electrical, stored.Fire, worn.Normal, worn.Poison, worn.Electrical,
                      worn.Fire, constitution })
             if (Math.Abs((long)value) > MaxValue) throw new ArgumentOutOfRangeException(nameof(stored));
         var poisonBonus = Math.Max(0, 5 * (constitution - 4));
         int Clamp(long value) => unclamped ? (int)Math.Clamp(value, -AttackResolver.MaxResistance, AttackResolver.MaxResistance)
             : (int)Math.Clamp(value, 0, MaxResistance);
-        return new(Clamp((long)stored.Normal + worn.Normal), Clamp((long)stored.Poison + worn.Poison + poisonBonus),
-            Clamp((long)stored.Electrical + worn.Electrical), Clamp((long)stored.Fire + worn.Fire));
+        return new(Clamp(EffectModifiers.Apply((long)stored.Normal + worn.Normal, effects.Normal)),
+            Clamp(EffectModifiers.Apply((long)stored.Poison + worn.Poison + poisonBonus, effects.Poison)),
+            Clamp(EffectModifiers.Apply((long)stored.Electrical + worn.Electrical, effects.Electrical)),
+            Clamp(EffectModifiers.Apply((long)stored.Fire + worn.Fire, effects.Fire)));
     }
+
+    /// <summary>The effective resistances with no resistance effects (<see cref="EffectResistances.None"/>).</summary>
+    public static DamageResistances Resistances(DamageResistances stored, EquipmentResistances worn, int constitution, bool unclamped) =>
+        Resistances(stored, worn, constitution, unclamped, EffectResistances.None);
 
     /// <summary>
     /// A critter's combat conditions: dead and unconscious from its current values (<paramref name="status"/>), stunned,

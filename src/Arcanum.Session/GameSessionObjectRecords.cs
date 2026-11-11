@@ -173,6 +173,24 @@ internal sealed class ObjectRecords
         return true;
     }
 
+    /// <summary>
+    /// ARC-DEV-352 (E1-b, ARC-RES-101 SUM7): a freed spell run's slot lets go of its summoned list: the created objects that name run <paramref name="run"/> keep everything but the run
+    /// (the original's slot free releases the list's nodes and destroys nothing), so a later run that takes the same slot does not find them. Returns how many were let go.
+    /// </summary>
+    internal int ReleaseRun(int run)
+    {
+        var released = 0;
+        for (var i = 0; i < _created.Count; i++)
+        {
+            if (_created[i].Run != run) continue;
+            var free = _created[i] with { Run = null };
+            _created[i] = free;
+            _createdByEntity[free.Entity] = free;
+            released++;
+        }
+        return released;
+    }
+
     /// <summary>The records as the snapshot saves them (the state and link fields are the owner's: <see cref="SessionObjectRecords.WithState"/>).</summary>
     internal SessionObjectRecords Capture() => new([.. _piles], [.. _pools], LastJunkNumber, LastPoolNumber, null, null, [.. _created], LastCreatedNumber);
 }

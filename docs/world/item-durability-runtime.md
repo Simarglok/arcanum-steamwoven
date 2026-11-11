@@ -137,4 +137,8 @@ attacker's weapon wear by the struck material, and `DestroyItem` for the "destro
 - The bust and destroy sounds and the BUST script are reported to the host, not played or run here.
 - Breaking walls (a branch of 0x43F1C0 no attack reaches) is not implemented; portals, containers, scenery and traps break in
   the [object damage](object-damage-runtime.md) domain (ARC-COMBAT-008).
-- No viewer shows item condition or broken art.
+- The viewer shows an item's condition in text and in its effects: the item window prints the session's current/maximum hit points of a
+  weapon, an armour or a hit-point generic item and nothing once the item is broken (`AreaItemWindowLines`), the inventory refuses to
+  wear a broken item and the Repair skill sees damaged or broken items (`AreaInventoryHost`). It does not pass the session's condition to the item's
+  icon (`AreaItemIcons`), so the session's `InventoryArtBroken` does not change the inventory art; whether the destroyed bit of a stored art
+  id picks a different frame there is not checked (check when the viewer's item condition slice runs).

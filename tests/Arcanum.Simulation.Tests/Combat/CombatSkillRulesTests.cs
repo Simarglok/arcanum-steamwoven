@@ -69,6 +69,30 @@ public sealed class CombatSkillRulesTests
         Assert.AreEqual(-10, CombatantRules.Resistances(new(-10, 0, 0, 0), EquipmentResistances.None, 4, true).Normal);
     }
 
+    // ARC-MAGIC-027 (0x43D6D0, EQ8, RE1): the resistance effects come after the armour and the poison bonus and before the clamp.
+    [TestMethod]
+    public void ResistanceEffectsAreAggregatedOverTheSumAndUnderTheClamp()
+    {
+        EffectModifier Add(int value) => new(StatModifierOperator.Add, value);
+        EffectModifier Percent(int value) => new(StatModifierOperator.Percent, value);
+        var stored = new DamageResistances(10, 0, 5, 40);
+        var worn = new EquipmentResistances(20, 10, 0, 5, 0);
+        var effects = new EffectResistances([Percent(50), Add(5)], [Add(30)], [], [Add(-100)], [Add(99)]);
+        // Normal (10 + 20) * 150 % + 5 = 50; fire 40 + 10 + 30 = 80; electrical 5 + 0 = 5; poison 0 + 5 + 5 × (8 − 4) − 100 cut at 0; magic is no part of the result.
+        Assert.AreEqual(new DamageResistances(50, 0, 5, 80), CombatantRules.Resistances(stored, worn, 8, false, effects));
+        // The effects see the poison bonus: +30 over (0 + 5 + 20) = 55.
+        Assert.AreEqual(55, CombatantRules.Resistances(stored, worn, 8, false, new([], [], [], [Add(30)], [])).Poison);
+        // The clamp is after the effects: +90 over 80 is cut at 95; a monstrous NPC keeps the sum (to the resolver's own bound).
+        var cut = new EffectResistances([], [Add(90)], [], [], []);
+        Assert.AreEqual(95, CombatantRules.Resistances(stored, worn, 8, false, cut).Fire);
+        Assert.AreEqual(140, CombatantRules.Resistances(stored, worn, 8, true, cut).Fire);
+        Assert.AreEqual(-60, CombatantRules.Resistances(new(0, 0, 0, 0), EquipmentResistances.None, 4, true, new([Add(-60)], [], [], [], [])).Normal);
+        // No effects: the four-argument form.
+        Assert.AreEqual(CombatantRules.Resistances(stored, worn, 8, false), CombatantRules.Resistances(stored, worn, 8, false, EffectResistances.None));
+        Assert.IsTrue(EffectResistances.None.IsEmpty);
+        Assert.IsFalse(effects.IsEmpty);
+    }
+
     [TestMethod]
     public void ConditionsComeFromLifeTraitsAndFlags()
     {
