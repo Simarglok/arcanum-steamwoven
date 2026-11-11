@@ -20,7 +20,7 @@ namespace Arcanum.Session.Tests;
 /// <list type="bullet">
 /// <item><b>RUNS</b>: the host takes every component on both targets.</item>
 /// <item><b>HERO</b>: every component is taken on the hero, but some are not on the NPC.</item>
-/// <item><b>PART</b>: some component is not taken on the hero, but another component that is not eye candy is.</item>
+/// <item><b>PART</b>: some component is not taken on the hero, but another component that is neither eye candy nor Destroy is.</item>
 /// <item><b>INERT</b>: nothing but the eye-candy line of the record is taken on the hero.</item>
 /// </list>
 /// Two components are not read off a creature target, which says nothing about them: a <b>Destroy</b> acts on a created object or a lying item (taken by <c>SessionSpellDestroyTests</c>,
@@ -50,8 +50,7 @@ public sealed class TechCensusRealDataTests
         (181, "PART", "ObjFlag", "ObjFlag"),
         (182, "INERT", "ObjFlag", "ObjFlag"),
         (183, "INERT", "AIRedirect,ObjFlag,Summon", "AIRedirect,ObjFlag,Summon"),
-        // 184: its Begin Destroy takes the item itself, a lying-item destroy the census leaves out; used from the pack the item is not lying, so the audit's INERT is the safer reading (the Use component is the gap either way).
-        (184, "PART", "Use", "Use"),
+        (184, "INERT", "Use", "Use"),
         (186, "INERT", "ObjFlag", "ObjFlag"),
         (187, "INERT", "ChargeNBranch,ObjFlag,Terminate", "ChargeNBranch,ObjFlag,Terminate"),
         (188, "INERT", "NoOp", "NoOp"),
@@ -69,7 +68,10 @@ public sealed class TechCensusRealDataTests
     ];
 
     /// <summary>Records carried by an item prototype, per state, over the audit's 65 (the rest are named by no item, or by items the data lists under no spell slot): filled with <see cref="Expected"/>.</summary>
-    private const string CarriedTally = "65 carried: RUNS 45 HERO 0 PART 11 INERT 9";
+    /// <summary>The records that hold a Destroy component, which the census leaves out of its lists: pinned so that a record gaining or losing one is seen.</summary>
+    private const string DestroyRecords = "148,166,175,176,177,178,179,180,184,185,198,199,200,201,202,205,217,219,220";
+
+    private const string CarriedTally = "65 carried: RUNS 45 HERO 0 PART 10 INERT 10";
 
     [TestMethod, TestCategory("RealData")]
     public void Every_technology_record_has_the_listed_state()
@@ -113,6 +115,8 @@ public sealed class TechCensusRealDataTests
             states[number] = actual.State;
             if (actual != expected.GetValueOrDefault(number, ("RUNS", "", ""))) differences.Add($"        ({number}, \"{actual.State}\", \"{actual.Hero}\", \"{actual.Npc}\"),");
         }
+        Assert.AreEqual(DestroyRecords, string.Join(",", Enumerable.Range(SpellRecord.FirstTechnology, SpellRecord.Count - SpellRecord.FirstTechnology)
+            .Where(n => spells.Data!.Records[n].Components.Any(c => c.Type == SpellComponentType.Destroy))), "the records with a Destroy component");
         var tally = Tally(states.Where(s => carried.Contains(s.Key)));
         Console.WriteLine($"technology records {states.Count}, carried by an item {carried.Count}; carried per state: {tally}; all per state: {Tally(states)}");
         Assert.AreEqual(0, differences.Count, "the census changed; the rows as they are now (a row of RUNS with two empty lists is removed):\n" + string.Join("\n", differences));
@@ -135,14 +139,14 @@ public sealed class TechCensusRealDataTests
         // A Destroy is left out; a Summon of a scenery prototype is ready, of a critter or an unread prototype is not, and a list pick (Proto 0) is not.
         var summon = (int proto) => SessionSpellRecords.Translate(Record(number: 153, components: [new(SpellAction.Begin, SpellComponentType.Summon, area, 0, 0, new SummonData(proto, 0, 0, 0)), new(SpellAction.End, SpellComponentType.Destroy, area, 0, 0, null)]));
         Assert.AreEqual(("RUNS", "", ""), Classify(summon(4050), Effect, file => file == 4070 ? SessionSpellCaster.SceneryObjectType : null), "a scenery summon and a destroy");
-        Assert.AreEqual(("PART", "Summon", "Summon"), Classify(summon(4050), Effect, file => file == 4070 ? 14 : null), "a summon of an item is not ready; the destroy is taken");
-        Assert.AreEqual(("PART", "Summon", "Summon"), Classify(summon(0), Effect, _ => SessionSpellCaster.SceneryObjectType), "a list pick is not ready; the destroy is taken");
+        Assert.AreEqual(("INERT", "Summon", "Summon"), Classify(summon(4050), Effect, file => file == 4070 ? 14 : null), "a summon of an item is not ready; the destroy does not count as taken");
+        Assert.AreEqual(("INERT", "Summon", "Summon"), Classify(summon(0), Effect, _ => SessionSpellCaster.SceneryObjectType), "a list pick is not ready; the destroy does not count as taken");
     }
 
     /// <summary>The census of the record on both targets and the state word from it.</summary>
     private static (string State, string Hero, string Npc) Classify(SessionSpellRecord record, Func<int, SessionEffectDefinition?> effects, Func<int, int?> prototypeType)
     {
-        var summon = record.Components.Any(c => c.Summon is { } data && !(data.Prototype > 0 && prototypeType(data.Prototype + SessionSpellCaster.PrototypeFileOffset) == SessionSpellCaster.SceneryObjectType));
+        var summon = record.Components.Any(c => c.Summon is { } data && !(data.Prototype is > 0 && data.Prototype <= SessionCreatedObject.MaxPrototype - SessionSpellCaster.PrototypeFileOffset && prototypeType(data.Prototype + SessionSpellCaster.PrototypeFileOffset) == SessionSpellCaster.SceneryObjectType));
         string Lists(string target) => string.Join(",", NotReady(record, target, effects).Split(',', StringSplitOptions.RemoveEmptyEntries)
             .Where(t => t != nameof(SpellComponentType.Destroy)).Concat(summon ? [nameof(SpellComponentType.Summon)] : []).Distinct().Order(StringComparer.Ordinal));
         var hero = Lists(Hero);
@@ -151,7 +155,8 @@ public sealed class TechCensusRealDataTests
         if (hero == "") return ("HERO", hero, npc);
         // A component the host logs as not ready names its type; the record is partly running when a component of another type, other than eye candy, is among its components.
         var notReady = hero.Split(',').ToHashSet();
-        var takes = record.Components.Any(c => c.Type != SpellComponentType.EyeCandy && !notReady.Contains(c.Type.ToString()));
+        // A Destroy is not read off the creature target (the class summary), so it does not count as a component the census saw run, like the eye candy.
+        var takes = record.Components.Any(c => c.Type is not (SpellComponentType.EyeCandy or SpellComponentType.Destroy) && !notReady.Contains(c.Type.ToString()));
         return (takes ? "PART" : "INERT", hero, npc);
     }
 
