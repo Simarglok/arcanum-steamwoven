@@ -300,7 +300,9 @@ def blocker(mine: dict[str, Any], live: Sequence[dict[str, Any]]) -> dict[str, A
     for ticket in others:
         if ticket["kind"] == "export" and not ticket.get("startedAt"):
             waits_for = blocker(ticket, live)
-            if waits_for is None or waits_for["kind"] in SIDE_KINDS:
+            # draining: the export waits for nothing, or only for a side run that is already running (a quick run of its
+            # own checkout that is still queued is not that: it would wait for the export in turn)
+            if waits_for is None or (waits_for["kind"] in SIDE_KINDS and waits_for.get("startedAt")):
                 return ticket
     if mine["kind"] == "quick" and mine_checkout is not None:
         # the same project folder is never imported or run twice at once: wait for a Godot or quick run of this checkout

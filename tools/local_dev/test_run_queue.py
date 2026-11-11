@@ -172,6 +172,17 @@ class QuickKindTests(unittest.TestCase):
         self.assertEqual(run_queue.blocker(ticket(7, "window", cwd="/a"), [first])["seq"], 1)  # the window waits for that import
         self.assertIsNone(run_queue.blocker(ticket(8, "window", cwd="/b"), [first]))
 
+    def test_an_export_and_a_queued_quick_run_of_one_checkout_do_not_wait_for_each_other(self) -> None:
+        quick, export = ticket(1, "quick", cwd="/a"), ticket(2, "export", cwd="/a")
+        self.assertEqual(run_queue.blocker(export, [quick, export])["seq"], 1)  # the quick run goes first (same project folder)
+        self.assertIsNone(run_queue.blocker(quick, [quick, export]))  # and it is not held by the export that waits for it
+        elsewhere = ticket(3, "quick", cwd="/b")
+        self.assertEqual(run_queue.blocker(elsewhere, [elsewhere, export])["seq"], 2)  # another checkout's: the export is draining
+        holder = ticket(6, "window", started=True, cwd="/z")
+        self.assertIsNone(run_queue.blocker(elsewhere, [holder, elsewhere, export]))  # the export still waits for the slot
+        running = ticket(4, "quick", started=True, cwd="/c")
+        self.assertEqual(run_queue.blocker(ticket(5, "quick", cwd="/d"), [running, export])["seq"], 2)  # draining: the export is next
+
     def test_a_quick_run_held_back_by_its_own_checkout_does_not_hold_up_another_checkouts(self) -> None:
         window = ticket(1, "window", started=True, cwd="/a")
         waiting_a1, waiting_a2 = ticket(2, "quick", cwd="/a"), ticket(3, "quick", cwd="/a")
