@@ -418,6 +418,21 @@ public partial class TerrainViewerApp
         return !vetoed;
     }
 
+    /// <summary>
+    /// ARC-MAGIC-048 (E4-c, CN6): the Use component's call (0x452ED0 → 0x441980, point 1): the target's own use script, with the target as the triggerer. True when a script ran. The PC has no script here (no attachment data), an
+    /// object that is not a row of the shown map has none; the target is also the extra object (the three object pairs of 0x452ED0); the run's awards, float lines and created objects are taken as for any other script run.
+    /// </summary>
+    private bool UseScriptOfCast(string target)
+    {
+        if (target == SessionSpellCaster.Hero || _areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return false;
+        var code = ScriptCodeOfCast(target);
+        var ran = Awarded(host, host.RunUseScript(code, new Arcanum.Scripting.Scr.ScrObjectRef(CurrentAreaMap, code), new Arcanum.Scripting.Scr.ScrObjectRef(CurrentAreaMap, code), owner.Rules.Scripts));
+        // True when a script ran and its effects applied (a refused or rejected run is not one).
+        var applied = ran.Run is not null && ran.Outcome == AreaScriptedUseOutcome.NoTeleport;
+        if (ran.Run is not null) GD.Print($"ARC-MAGIC-048 use-component target={target} outcome={ran.Outcome} run={ran.Run.Outcome} stop={ran.Run.Stop} detail={ran.Detail}");
+        return applied;
+    }
+
     /// <summary>ARC-MAGIC-031: hands the shown session the ground under the hero (<see cref="GameSessionOwner.HeroGround"/>: the sector's aptitude adjustment and the tile facts the mage backgrounds read) from the shown
     /// area's snapshot, the hero's committed cell and the module's tile-name table; called wherever the viewer takes a session, with <see cref="AttachAreaDyingScript"/>.</summary>
     private void AttachAreaHeroGround()

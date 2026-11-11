@@ -14,7 +14,7 @@ public sealed partial class SessionSpellCaster
     private delegate SpellComponentOutcome? ComponentHandler(SessionSpellCaster caster, SpellRun run, SessionSpellComponent component, SpellRunTarget target);
 
     // One line per component type with a handler. The groups: damage and heal (SessionSpellCaster.cs), destroy, eye candy and the goal components (SessionSpellCaster.cs), Summon
-    // (SessionSpellCasterSummon.cs), ObjFlag (SessionSpellCasterObjectFlags.cs), Identify and the identified item flag (SessionSpellCasterIdentify.cs), Dispel (SessionSpellCasterDispel.cs), Movement (SessionSpellCasterMovement.cs), Effect (SessionSpellCasterEffects.cs), the lock flags of ObjFlag (SessionSpellCasterLocks.cs). Another slice's group adds its line and its own partial file.
+    // (SessionSpellCasterSummon.cs), ObjFlag (SessionSpellCasterObjectFlags.cs), Identify and the identified item flag (SessionSpellCasterIdentify.cs), Dispel (SessionSpellCasterDispel.cs), Movement (SessionSpellCasterMovement.cs), Effect (SessionSpellCasterEffects.cs), the lock flags of ObjFlag (SessionSpellCasterLocks.cs), Trait (SessionSpellCasterTrait.cs). Another slice's group adds its line and its own partial file.
     private static readonly IReadOnlyDictionary<SpellComponentType, ComponentHandler> ComponentHandlers = new Dictionary<SpellComponentType, ComponentHandler>
     {
         [SpellComponentType.Damage] = static (c, run, component, target) => c.DamageStep(run, component, target, heal: false),
@@ -31,6 +31,14 @@ public sealed partial class SessionSpellCaster
         [SpellComponentType.Dispel] = static (c, run, _, target) => c.DispelComponent(run, target),
         // ARC-MAGIC-036 (MA-5): the Movement component's type 0 (the run's target tile); the types 1 to 3 are not ready (SessionSpellCasterMovement.cs).
         [SpellComponentType.Movement] = static (c, run, component, target) => c.MovementComponent(run, component, target),
+        // ARC-MAGIC-040 (MA-8): the Trait component of art type (Polymorph, the body spells); the other Trait fields are not ready (SessionSpellCasterTrait.cs).
+        [SpellComponentType.Trait] = static (c, run, component, target) => c.TraitComponent(run, component, target),
+        // ARC-MAGIC-044 (E4-c): the control components with no world effect of their own: NoOp (0x452F00), Terminate (0x4529D0), ChargeNBranch (0x451850) and TestNBranch (0x4529F0) (SessionSpellCasterControl.cs).
+        [SpellComponentType.NoOp] = static (_, _, _, _) => SpellComponentOutcome.None,
+        [SpellComponentType.Terminate] = static (_, _, _, _) => TerminateComponent(),
+        [SpellComponentType.ChargeNBranch] = static (c, run, component, _) => c.ChargeBranchComponent(run, component),
+        [SpellComponentType.TestNBranch] = static (c, _, component, target) => c.TestBranchComponent(component, target),
+        [SpellComponentType.Use] = static (c, run, _, target) => c.UseComponent(run, target),
         [SpellComponentType.Effect] = static (c, run, component, target) => c.EffectComponent(run, component, target) ? SpellComponentOutcome.None : null,
     };
 

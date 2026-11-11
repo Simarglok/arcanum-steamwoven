@@ -258,10 +258,38 @@ class PlanTests(unittest.TestCase):
         crash = self.plan("crash-site", "--hero", "elf-female", "--no-build")[0].command
         self.assertEqual(crash[crash.index("--hero") + 1], "elf-female")
         test = self.plan("self-test", "--headless", "--no-build")[0]
-        self.assertEqual((test.kind, test.expect), ("headless", None))
+        # ARC-DEV-390: the headless self-test is a quick run beside the Godot slot
+        self.assertEqual((test.kind, test.expect, test.estimate), ("quick", None, smoke.SELF_TEST_SECONDS["quick"]))
         self.assertIn("--headless", test.command)
         self.assertEqual(test.command[-1], "--self-test")
         self.assertEqual(self.plan("self-test", "--no-build")[0].kind, "window")
+
+    def test_the_import_is_a_quick_run_and_every_step_declares_its_seconds_to_the_queue(self) -> None:
+        # ARC-DEV-390: an import of a new checkout does not wait for the Godot slot; the queue orders runs by their estimates.
+        steps = self.plan("pr", "--stages", "cast,walk", "--crash-site", imported=False)
+        kinds = {step.name: (step.kind, step.estimate) for step in steps}
+        self.assertEqual(kinds["import"], ("quick", smoke.IMPORT_SECONDS))
+        self.assertEqual(kinds["build"], ("dotnet", smoke.BUILD_SECONDS))
+        self.assertEqual(kinds["crash-site"], ("window", smoke.CRASH_SITE_SECONDS))
+        self.assertTrue(all(step.estimate for step in steps))
+
+    def test_the_sampled_stages_are_declared_shorter_than_in_full_and_the_import_keeps_the_headless_limit(self) -> None:
+        for stage in smoke.SAMPLED_STAGES:
+            self.assertLess(smoke.estimate((stage,)), smoke.estimate((stage,), full=True))
+        self.assertEqual(smoke.estimate(("census",)), smoke.estimate(("census",), full=True))  # not sampled
+        steps = self.plan("pr", "--stages", "walk", "--all", "--no-build")
+        self.assertEqual(steps[-1].estimate, smoke.estimate(("walk",), full=True))
+        self.assertEqual(self.plan("pr", "--stages", "walk", "--no-build")[-1].estimate, smoke.estimate(("walk",)))
+        imported = self.plan("pr", "--stages", "cast", imported=False)
+        self.assertEqual(next(step for step in imported if step.name == "import").timeout, smoke.IMPORT_MINUTES)
+        self.assertEqual(smoke.IMPORT_MINUTES, run_queue.DEFAULT_TIMEOUT_MINUTES["headless"])
+
+    def test_the_estimate_of_a_stage_run_is_its_load_plus_its_stages_and_the_slow_ones_stand_out(self) -> None:
+        self.assertEqual(smoke.estimate(()), smoke.BATTERY_SECONDS)
+        self.assertEqual(smoke.estimate(("cast", "life")), smoke.RUN_SECONDS + 2 * smoke.STAGE_SECONDS)
+        for slow in smoke.SLOW_STAGES:
+            self.assertGreater(smoke.estimate((slow,)), 5 * smoke.estimate(("cast",)))
+        self.assertTrue(set(smoke.SLOW_STAGES) <= set(smoke.map_stages()))
 
     # ARC-DEV-391: the stage-to-configuration table, grouping and the early error
 
@@ -374,7 +402,7 @@ class ExecuteTests(unittest.TestCase):
         lines: list[str] = []
 
         def runner(kind: str, command: list[str], *, label: str, timeout: float | None, quiet: bool,
-                   start: start_check.StartCheck | None, log_sink) -> int:
+                   start: start_check.StartCheck | None, log_sink, estimate: float | None = None) -> int:
             calls.append((kind, label, quiet, start.start.pattern if start else None))
             name = label[len("smoke "):]
             if name in logs:
@@ -398,6 +426,32 @@ class ExecuteTests(unittest.TestCase):
         self.assertEqual(lines[-1], "SMOKE FAIL 3 of 4 steps passed")
         code, _, lines = self.run_steps(steps, {})
         self.assertEqual((code, lines[-1]), (0, "SMOKE PASS 4 of 4 steps passed"))
+
+    def test_the_unfinished_stages_of_a_failed_process_run_one_to_a_process(self) -> None:
+        pass_line = lambda stage: smoke.STAGE_PASS[stage] + " {}\n"
+        again = lambda stage: smoke.Step(f"stages-retry-{stage}", "window", ("g",), requires=(stage,))
+        group = smoke.Step("stages-main", "window", ("g",), requires=("cast", "ai", "life"), again=again)
+        steps = [group, smoke.Step("main", "window", ("g",))]
+        # cast passed, ai failed and stopped the process, life never ran; alone ai fails too and life passes
+        code, calls, lines = self.run_steps(steps, {"stages-main": 1, "stages-retry-ai": 1},
+                                            {"stages-main": pass_line("cast"), "stages-retry-ai": "",
+                                             "stages-retry-life": pass_line("life")})
+        self.assertEqual([call[1] for call in calls],
+                         ["smoke stages-main", "smoke stages-retry-ai", "smoke stages-retry-life", "smoke main"])
+        self.assertIn("  retrying 2 unfinished stage(s) one to a process: ai, life", lines)
+        self.assertIn("  ai: fails alone too (exit 1)", lines)
+        self.assertIn("  life: passes alone, so it fails only after the other stages of stages-main", lines)
+        self.assertIn("  stages-retry-life  PASS exit=0", lines)
+        self.assertEqual((code, lines[-1]), (1, "SMOKE FAIL 2 of 4 steps passed"))  # the failed group stays failed
+        # a stopped retry ends the chain; a step without `again` is not retried
+        code, calls, lines = self.run_steps(steps, {"stages-main": 1, "stages-retry-ai": 130}, {"stages-main": pass_line("cast")})
+        self.assertEqual((code, len(calls)), (130, 2))
+        code, calls, lines = self.run_steps(steps, {"stages-main": start_check.FAILED_START_EXIT})
+        self.assertEqual([call[1] for call in calls], ["smoke stages-main", "smoke main"])  # a start failure is not retried
+        self.assertTrue(any("not retried" in line for line in lines))
+        plain = [smoke.Step("stages-main", "window", ("g",), requires=("cast", "ai"))]
+        code, calls, _ = self.run_steps(plain, {"stages-main": 1}, {"stages-main": pass_line("cast")})
+        self.assertEqual((code, len(calls)), (1, 1))
 
     def test_a_failed_build_or_a_stopped_run_ends_the_chain(self) -> None:
         steps = [smoke.Step("build", "dotnet", ("sh",), gate=True), smoke.Step("crash-site", "window", ("g",)),
@@ -462,7 +516,7 @@ class ExecuteTests(unittest.TestCase):
                 "crash-site": "crash site smoke FAIL: x\n", "other": "something else failed\n"}
         lines: list[str] = []
 
-        def runner(kind, command, *, label, timeout, quiet, start, log_sink) -> int:
+        def runner(kind, command, *, label, timeout, quiet, start, log_sink, estimate=None) -> int:
             name = label[len("smoke "):]
             path = Path(self.temp.name) / f"{name}.log"
             path.write_text(logs[name], encoding="utf-8")
@@ -487,7 +541,7 @@ class ExecuteTests(unittest.TestCase):
         log = {"stages": f"{smoke.STAGE_PASS['cast']} x\nranged smoke FAIL: the dagger\n"}
         lines: list[str] = []
 
-        def runner(kind, command, *, label, timeout, quiet, start, log_sink) -> int:
+        def runner(kind, command, *, label, timeout, quiet, start, log_sink, estimate=None) -> int:
             path = Path(self.temp.name) / "stages.log"
             path.write_text(log["stages"], encoding="utf-8")
             log_sink(path)

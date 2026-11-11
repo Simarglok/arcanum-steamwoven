@@ -7,7 +7,7 @@ namespace Arcanum.TerrainViewer;
 
 // ARC-UI-034 (N10b slice 3): the character editor in creation mode, the original's window 14 that the new-character window's Accept
 // opens (ledger CM1–CM8). It is the character sheet in its creation mode (AreaCharacterSheetPanel with Accept and Cancel) above the
-// main menu's backdrop, over a draft session of the new character (AreaCreationEditor): the stats, skills and spells pages' + and −
+// main menu's backdrop, over a draft session of the new character (AreaCreationEditor): the stats, skills, spells and tech pages' + and −
 // spend the five starting points and take them back down to the sheet the editor opened on. Accept (or Return) opens the opening shop
 // (ARC-UI-036, window 15), whose Accept starts the game with the presses replayed on the real session and whose Back shows this
 // editor again on the same draft; Cancel (or Escape) goes back to
@@ -47,6 +47,8 @@ public partial class TerrainViewerApp
             _editorPanel.StatRefundRequested += row => PressEditor(e => e.PressStat(row, spend: false).Message, $"stat refund row={row}");
             _editorPanel.SkillSpendRequested += row => PressEditor(e => e.PressSkill(row, spend: true).Message, $"skill spend row={row}");
             _editorPanel.SkillRefundRequested += row => PressEditor(e => e.PressSkill(row, spend: false).Message, $"skill refund row={row}");
+            _editorPanel.TechSpendRequested += discipline => PressEditor(e => AreaTechPage.Press(e.PressTech(discipline, spend: true), true).Message, $"tech spend discipline={discipline}");
+            _editorPanel.TechRefundRequested += discipline => PressEditor(e => AreaTechPage.Press(e.PressTech(discipline, spend: false), false).Message, $"tech refund discipline={discipline}");
             _editorPanel.SpellLearnRequested += college => PressEditor(e => e.PressSpell(college, learn: true, _spellData?.Data).Message, $"spell learn college={college}");
             _editorPanel.SpellUnlearnRequested += college => PressEditor(e => e.PressSpell(college, learn: false, _spellData?.Data).Message, $"spell unlearn college={college}");
             _editorPanel.CollegeSelected += college =>
@@ -58,8 +60,8 @@ public partial class TerrainViewerApp
         AdoptSkillTexts(); AdoptSpellData();
         var skills = editor.Skills(_skillTexts?.Texts, AreaHoverIndex.TextProfile);
         var spells = editor.Spells(_spellData?.Data, _editorCollege);
-        if (!_editorPanel.IsOpen) _editorPanel.Open(view, skills, spells, editor.Stats());
-        else _editorPanel.Render(view, skills, spells, editor.Stats());
+        if (!_editorPanel.IsOpen) _editorPanel.Open(view, skills, spells, editor.Stats(), AreaTechPage.Build(editor.Draft));
+        else _editorPanel.Render(view, skills, spells, editor.Stats(), AreaTechPage.Build(editor.Draft));
         if (menu.Notice is { } notice) _editorPanel.ShowSkillMessage(notice);
         // The controller's rows (Accept, Cancel) as the menu's other windows highlight theirs.
         _editorPanel.ShowCreationFocus(menu.Focus);

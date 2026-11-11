@@ -238,9 +238,7 @@ or drop. Of the combat events (ARC-MAGIC-023 census) only the damage step's are 
 weapon 6130 (record 147, `Target_Hit|Target_Attacker`: a damage that pays cells through ChargeNBranch), weapons 6175 and 6179 (records
 203 and 204, `Parent_Dmgs_Opponent_W_Item|Target_Attacker`: a Cast component, not executed yet, and a damage) and armour 8215
 (record 87, `Parent_Hit|Target_Attacker|Target_Attacker_Weapon_Melee`: a damage at the attacker). The 14 `Parent_Atks_Location`
-records are thrown items' (food 10105, 13 generic items). Of the components, Heal runs; NoOp, TestNBranch, ChargeNBranch, ObjFlag are not executed yet (MT13–MT18: logged as not
-ready), so record 168 heals without paying cells (its maintenance cost is 0, so the stage pays nothing; its cells are the unexecuted
-ChargeNBranch's) and record 182 changes no flag. The unwear's recast of record 168 is maintained too;
+records are thrown items' (food 10105, 13 generic items). Of the components, Heal runs, and NoOp, TestNBranch and ChargeNBranch run since ARC-MAGIC-044 ([control components](spell-cast-host.md#control-components-arc-magic-044)): record 168 pays its cell through ChargeNBranch before it heals (its maintenance cost is 0, so the stage pays nothing). The unwear's recast of record 168 is maintained too;
 its MAINTAIN aims at the run's target (the holder) and its components are gated by `Wear`, so its first tick applies nothing and ends
 it, as in the original (a MAINTAIN with an empty target list would count as applied and keep the run).
 

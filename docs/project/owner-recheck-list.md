@@ -265,7 +265,7 @@ hero with the technology points for the degrees named, or the items from a map o
 | 2 | Throw a stun grenade (Explosives degree 4) and a smoke grenade (degree 3) at a group. | The stun grenade stuns creatures in its radius with a flash; the smoke grenade makes a smoke cloud for about 10 s, then it goes. The smoke grenade also sets the don't-draw flag on creatures, which is not built (the census lists it as partly running). | open |
 | 3 | Drink a Therapeutics potion (any of the seven stat potions) as the hero, and give the same potion to a companion by a script or by throwing it. | The stat bonus (+2 to the stat or stats named) appears on the sheet and goes away when the potion ends. On a companion the census says the effect list is written; compare the numbers shown or their effects in a fight. | open |
 | 4 | Use Chemistry degree 1 (poison draught) on a creature, and Chemistry degree 4 (acid) on a creature. | The poison does 290 damage over its duration; the acid does 10 to 100 damage and makes a flash. Compare the damage numbers with the original. | open |
-| 5 | Find a map item that carries the record 214 (a technology item on a map; see the placement census) and use it as the hero. | The original adds an effect 80 times; our effect list holds 64 entries, so nothing is added here (refused). Note what the original does to the sheet. | open |
+| 5 | Find a map item that carries the record 214 (a technology item on a map; see the placement census) and use it as the hero. | The original adds effect 334 80 times (its list has no bound). Since ARC-RES-127 our hero and NPC lists take the 80 entries (the list holds 1024). Note what the original does to the sheet and compare. | open |
 
 Known differences (documented, not bugs):
 
@@ -380,7 +380,7 @@ Compare in both games with the same hero and spells.
 
 Known differences (reading only, no game step):
 
-- Polymorph (49) and a script's permanent polymorph (critter flags 2 bit 0x400000) are undone by the original's Dispel with the art restored; ours has neither (MA-8).
+- Polymorph (49) and a script's permanent polymorph (critter flags 2 bit 0x400000) are undone by the original's Dispel with the art restored; ours has neither (MA-8). Since ARC-MAGIC-040 the Trait component keeps the monster body of Polymorph and the body spells in the session and tells the host, but nothing draws it, takes the worn items off or puts them back yet (the next slice of MA-8): a polymorphed hero still looks and fights as before.
 - A portal or container held by Magelock (75) loses the hold in the original; ours does the same since MA-6 ([steps below](#arc-magic-037--locks-and-holds-unlocking-cantrip-and-magelock-ma-6-2026-11-11)).
 - A summoned critter is destroyed by the original's Dispel; ours destroys one the session created, and no spell makes one before the creature summons (E1-e).
 
@@ -660,3 +660,21 @@ Known differences (documented, not bugs):
 
 - The hour of the menu's player is fixed (12) because the menu has no game clock; the installed pair plays at every hour, so no difference is expected.
 - A transition song in the menu's pair would play without the restore bookkeeping (the installed pair has none).
+
+## ARC-WORLD-124 — Timed bombs: placing trap devices with a spell (E6-b, 2026-11-11)
+
+The rules are in [placed trap devices](../world/trap-device-runtime.md). Give the hero the timed bomb (item 15154, record 176; or 15193, record 220) and compare in both games. The script
+trap devices (15100, 15120) are the next slice (ARC-WORLD-125) and still answer NOT READY.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Use the bomb from the inventory (Use icon) and click an empty tile a few cells away. | The hero walks next to the tile, the bomb leaves the pack and a marker object stands on the tile; nothing else happens at once. | open |
+| 2 | Wait 88 game seconds (about 11 s of play at the normal speed). | The marker disappears and the explosion goes off on the tile: fire and normal damage to everything within two tiles, a flash, no knockback. | open |
+| 3 | Place the record 176 bomb (15154) with a few people awake within ten tiles that can see the hero, then wait. | They turn on the hero as soon as the bomb is placed (not when it goes off); people who cannot see or hear it, and companions, do not. | open |
+| 4 | Use the bomb on a critter or on a scenery object instead of a tile. | The bomb is spent with no check of the target and there is no marker; the explosion goes off at that object's place after the same 88 s. | open |
+| 5 | Save while the fuse runs, load, and wait. | The marker is still there and the bomb goes off at the same moment. | open |
+
+Known differences (documented, not bugs):
+
+- The line the original shows when the marker is spotted (`mes\trap.mes` line 0) appears in the viewer's status text, not in a message window.
+- The marker is a plain scenery in Steamwoven: it cannot be spotted, disarmed or triggered by a step (the original's marker has no script either).

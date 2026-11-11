@@ -240,7 +240,7 @@ public sealed class SessionItemSpellTests
         Assert.AreEqual(hp, HitPoints(owner), "the BEGIN's damage component is the unwear's only");
         Tick(owner, caster);
         Assert.AreEqual(run.Id, Runs(owner).Single().Id, "the wear's MAINTAIN applies: the run is maintained");
-        Assert.AreEqual(2, caster.Log.Count(e => e.Kind == SpellCastEventKind.ComponentNotReady), "the BEGIN's and the tick's NoOp");
+        Assert.AreEqual(0, caster.Log.Count(e => e.Kind == SpellCastEventKind.ComponentNotReady), "the BEGIN's and the tick's NoOp run and do nothing (ARC-MAGIC-044)");
 
         // Without a host the coat cannot come off while its spell runs.
         Assert.AreEqual(GameSessionFailure.ItemEffectUnsupported, owner.Unequip(owner.Version, EquipmentSlot.Armor, Accept).Failure);

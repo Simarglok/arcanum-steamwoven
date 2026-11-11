@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":88,\"world\"";
+    private const string Current = "\"schemaVersion\":89,\"world\"";
+    private const string Current88 = "\"schemaVersion\":88,\"world\"";
     private const string Current87 = "\"schemaVersion\":87,\"world\"";
     private const string Current86 = "\"schemaVersion\":86,\"world\"";
     private const string Current85 = "\"schemaVersion\":85,\"world\"";
@@ -178,9 +179,19 @@ public sealed class SnapshotUpgradeTests
     // carry an object-flags change has no older literal: no build before wrote one.
     internal static string Schema87(string text)
     {
-        StringAssert.Contains(text, Current);
+        text = Schema88(text);
+        StringAssert.Contains(text, Current88);
         Assert.IsFalse(System.Text.RegularExpressions.Regex.IsMatch(text, "\"objectSet\":[1-9-]|\"objectCleared\":[1-9-]"), "a row with an object-flags change has no schema 87 text");
-        return text.Replace(",\"objectSet\":0,\"objectCleared\":0}", "}").Replace(Current, Current87);
+        return text.Replace(",\"objectSet\":0,\"objectCleared\":0}", "}").Replace(Current88, Current87);
+    }
+
+    // ARC-MAGIC-040: the schema 88 text of a schema 89 one with no monster body: the spells section loses its empty list of monster bodies at its end. A text with a body has no older literal: no
+    // build before wrote one.
+    internal static string Schema88(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.AreEqual(1, text.Split(NoTraitArt + "}").Length - 1, "the spells section ends with an empty list of monster bodies");
+        return text.Replace(NoTraitArt + "}", "}").Replace(Current, Current88);
     }
 
     // ARC-DEV-348: the schema 86 text of a schema 87 one with no NPC effect list: the effects section loses its empty list of NPC lists at its end. A text with a list has no older
@@ -590,6 +601,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":89,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":90,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

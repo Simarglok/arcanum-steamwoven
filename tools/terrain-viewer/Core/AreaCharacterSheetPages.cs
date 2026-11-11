@@ -13,8 +13,8 @@ public sealed record AreaTechPress(bool Changed, string Message, SessionPointRes
 public enum AreaPageHit { None, GroupTab, SkillRow, SkillPlus, SkillMinus, DisciplineTab, TechHeader, TechDegree, TechPlus, TechMinus }
 
 /// <summary>ARC-UI-076: the tech page's model and its + and − presses, Godot-free. The rules are the technology lane's (ledger TD3, TD4, TD7,
-/// TD8, CP2): the pool checks the points, the intelligence and, for the original's buy, nothing at all for a sell (the editor's snapshot
-/// only hides the − button).</summary>
+/// TD8, CP2): the pool checks the points and the intelligence for a buy, and refuses a sell at or below the editor's
+/// snapshot (TC10, shown as the floor refusal).</summary>
 public static class AreaTechPage
 {
     public static AreaTechPageView? Build(GameSessionOwner session)
@@ -39,7 +39,22 @@ public static class AreaTechPage
         return Press(session.RefundHeroPoint(session.Version, AdvancementTrack.TechDiscipline, discipline, AreaSkillsPage.RefundClick), false);
     }
 
-    private static AreaTechPress Press(SessionPointResult result, bool spend)
+    /// <summary>The project's names of the eight disciplines in the exe's order (the diagnostic window; the original look reads tech.mes).</summary>
+    public static readonly IReadOnlyList<string> Labels =
+        ["Herbology", "Chemistry", "Electric", "Explosives", "Gun Smithy", "Mechanical", "Smithy", "Therapeutics"];
+
+    /// <summary>ARC-MAGIC-043: the diagnostic window's text of one discipline: project words around the degrees.</summary>
+    public static string Line(AreaTechRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        var name = row.Discipline is >= 0 and < 8 ? Labels[row.Discipline] : $"Discipline {row.Discipline + 1}";
+        var counting = row.CountingDegree == row.Degree ? "" : $" (counts as {row.CountingDegree})";
+        return $"{name}: degree {row.Degree}{counting}, expertise {row.Expertise}";
+    }
+
+    /// <summary>The press's outcome and the window's message for a point-pool <paramref name="result"/> of a degree press (ARC-MAGIC-043:
+    /// the creation editor's press goes through the editor, which records it, and words the result here).</summary>
+    public static AreaTechPress Press(SessionPointResult result, bool spend)
     {
         if (result.Disposition == GameSessionDisposition.Changed)
             return new(true, spend ? $"spent {result.Change!.Points} point(s)" : $"refunded {result.Change!.Points} point(s)", result);
@@ -50,6 +65,7 @@ public static class AreaTechPage
             PointChangeStatus.AtMaximum => "the discipline is at its highest degree",
             PointChangeStatus.IntelligenceTooLow => "intelligence too low for the next degree",
             PointChangeStatus.AtMinimum => "no degree to give back",
+            PointChangeStatus.AtFloor => "nothing bought since the sheet opened to refund",
             var status => status.ToString(),
         } : result.Failure.ToString();
         return new(false, "refused: " + message, result);

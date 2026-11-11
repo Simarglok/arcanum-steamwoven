@@ -15,6 +15,7 @@ AUTO_HERO when no --hero is given; a stage the viewer runs only without `map` ge
 from __future__ import annotations
 
 import argparse
+import dataclasses
 from dataclasses import dataclass
 import json
 import os
@@ -63,6 +64,35 @@ STOPPED = 128  # an exit at or above it is a stopped run (128+N), which ends the
 NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 RESERVED = frozenset({"PATH", "DOTNET_ROOT", "HOME", "GODOT", "__GODOT_SHELL_ENV_SET"})  # the canonical start's own
 BATTERY_MINUTES = 60.0  # a whole map battery (no stage list) runs about 2 minutes; the queue's window default is 30
+# ARC-DEV-390: the seconds each step declares to the launch queue, which puts a short run ahead of a long one that arrived a
+# little before it (run_queue.ORDER_WEIGHT). Measured for docs/research/smoke-speed-diagnosis-2026-11.md: a run with no
+# stage worth naming is its map load (about 20 s with start and exit) plus 0-2 s per cheap stage; the whole map battery
+# 25 s (declared with room for a loaded Mac); the self-test 24 s with a window and 12 s headless; the Crash Site smoke 98 s;
+# a project import 3 s warm; a viewer build 12 s warm, 45 s cold. The stages that stand out add their own time: `walk`
+# 525 s (72 window moves) and `container-click` on the town 675 s in full, and about a fifth of that as a sample (ARC-DEV-395:
+# the default; the sampled figures are estimates, not measured); `census` is every map of the catalogue and was not
+# measured: an assumption.
+RUN_SECONDS = 20.0  # a viewer run with no stage on top of it
+STAGE_SECONDS = 3.0  # each cheap stage, with room for the dearer ones (opening 13 s, perf 16 s)
+BATTERY_SECONDS = 60.0  # the whole map battery with its load
+CRASH_SITE_SECONDS = 110.0
+SELF_TEST_SECONDS = {"window": 30.0, "quick": 15.0}
+BUILD_SECONDS, IMPORT_SECONDS = 30.0, 5.0
+IMPORT_MINUTES = 30.0  # a first import of a new checkout is not the warm 3 s (the limit the headless run had)
+SLOW_STAGES = {"walk": 540.0, "container-click": 700.0, "census": 900.0}  # in full (--all)
+SAMPLED_SLOW_SECONDS = {"walk": 100.0, "container-click": 120.0}  # as the sample they run by default
+
+
+def estimate(stages: Sequence[str], full: bool = False) -> float:
+    """ARC-DEV-390: the seconds a viewer run of these stages is expected to take (() is the whole map battery), the
+    estimate the queue orders it by; `full` is a run with --all, whose sampled stages run in full. Declared, not measured
+    per run: a wrong one only costs its run a different place in the queue."""
+    if not stages:
+        return BATTERY_SECONDS
+    slow = SLOW_STAGES if full else {**SLOW_STAGES, **SAMPLED_SLOW_SECONDS}
+    return RUN_SECONDS + sum(slow.get(stage, STAGE_SECONDS) for stage in stages)
+
+
 STAGE_NOT_RUN = 3  # a smoke that exited 0 without the PASS line of a requested stage (ARC-DEV-063)
 # ARC-DEV-063: the line each map smoke stage prints when it ran and passed (the viewer's own markers, checked against its
 # sources by the tests). A whole map battery (no stage list) must show the map and resources stages; its other stages
@@ -226,6 +256,8 @@ class Step:
     settings: str | None = None  # the step's own settings folder under the run's folder
     timeout: float | None = None  # minutes; None: the queue's default for the kind
     requires: tuple[str, ...] = ()  # the map smoke stages whose PASS line the log must hold (ARC-DEV-063)
+    again: Callable[[str], "Step"] | None = None  # ARC-DEV-396: one stage of this step as a step of its own (--retry)
+    estimate: float | None = None  # ARC-DEV-390: the seconds the step is expected to take (None: its kind's default)
 
 
 def map_stages() -> tuple[str, ...]:
@@ -282,12 +314,15 @@ def build_steps(environ: Mapping[str, str], godot: str, *, build: bool, imported
     steps = []
     if build:
         steps.append(Step("build", "dotnet", ("sh", "-c", f"dotnet restore {SOLUTION} --locked-mode -v q && "
-                                                          f"dotnet build {SOLUTION} --no-restore -v q --nologo"), gate=True))
+                                                          f"dotnet build {SOLUTION} --no-restore -v q --nologo"), gate=True,
+                          estimate=BUILD_SECONDS))
     if not imported:
         sdk = run_queue.pinned_sdk(dict(environ))
-        steps.append(Step("import", "headless", ("env", "__GODOT_SHELL_ENV_SET=1", f"DOTNET_ROOT={sdk}",
+        # ARC-DEV-390: a quick run (beside the Godot slot, not in it): importing this checkout's own project folder
+        steps.append(Step("import", "quick", ("env", "__GODOT_SHELL_ENV_SET=1", f"DOTNET_ROOT={sdk}",
                                                  f"PATH={sdk}:/usr/bin:/bin:/usr/sbin:/sbin", godot, "--headless",
-                                                 "--path", str(VIEWER), "--import"), gate=True))
+                                                 "--path", str(VIEWER), "--import"), gate=True, estimate=IMPORT_SECONDS,
+                          timeout=IMPORT_MINUTES))
     return steps
 
 
@@ -296,7 +331,7 @@ def crash_site_step(inputs: dict, conf: dict, prefs_root: Path, environ: Mapping
     viewer = ["--native-smoke", *launch.terrain_arguments(inputs, "area", task=CRASH_SITE_TASK, hero=hero,
                                                             verified=launch.verified_roles(conf))]
     return Step("crash-site", "window", godot_command(godot, prefs_root / "crash-site", viewer, environ, extra=extra),
-                start_line(None), settings="crash-site")
+                start_line(None), settings="crash-site", estimate=CRASH_SITE_SECONDS)
 
 
 def map_step(name: str, inputs: dict, prefs_root: Path, environ: Mapping[str, str], godot: str, map_name: str, *,
@@ -306,7 +341,8 @@ def map_step(name: str, inputs: dict, prefs_root: Path, environ: Mapping[str, st
                                                       debug_mode=any(stage in DEBUG_STAGES for stage in stages))]
     return Step(name, "window", godot_command(godot, prefs_root / name, viewer, environ, stages=stages, extra=extra),
                 start_line(map_name, main_menu), settings=name, timeout=None if stages else BATTERY_MINUTES,
-                requires=tuple(stages) or BATTERY_STAGES)
+                requires=tuple(stages) or BATTERY_STAGES,
+                estimate=estimate(stages, full=any(name == ALL_ENV for name, _ in extra)))
 
 
 @dataclass(frozen=True)
@@ -458,16 +494,34 @@ def plan(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mappin
     wants_all = getattr(args, "all", False)
     steps = build_steps(environ, godot, build=not args.no_build, imported=imported)
 
+    asked = getattr(args, "retry", None)
+
+    def retry() -> bool:  # the nightly run (and the complete zone) retries, a PR run does not unless asked
+        return (args.target == "complete" or smoke_zones.COMPLETE in getattr(args, "zones_chosen", ())) if asked is None else asked
+
     def stage_steps(base: str, stages: Sequence[str], pins: Pins, env: Sequence[tuple[str, str]] | None = None) -> None:
-        steps.extend(map_step(run.name, inputs, prefs_root, environ, godot, run.config.map, hero=run.hero,
-                              sector=run.config.sector, stages=run.stages, main_menu=run.config.menu,
-                              extra=extra if env is None else env)
-                     for run in map_runs(base, stages, pins, getattr(args, "hero", None), say, checked=checked))
+        def one(run: Run, name: str, members: Sequence[str]) -> Step:
+            return map_step(name, inputs, prefs_root, environ, godot, run.config.map, hero=run.hero,
+                            sector=run.config.sector, stages=members, main_menu=run.config.menu,
+                            extra=extra if env is None else env)
+
+        def alone(run: Run, stage: str) -> Step:
+            step = one(run, f"{run.name}-retry-{stage}", (stage,))
+            if step.settings:
+                (prefs_root / step.settings).mkdir(exist_ok=True)  # made now: the run's folders were made before it started
+            return step
+
+        for run in map_runs(base, stages, pins, getattr(args, "hero", None), say, checked=checked):
+            step = one(run, run.name, run.stages)
+            steps.append(dataclasses.replace(step, again=lambda stage, run=run: alone(run, stage))
+                         if retry() and len(run.stages) > 1 else step)
 
     if args.target == "self-test":
-        steps.append(Step("self-test", "headless" if args.headless else "window",
+        # ARC-DEV-390: the headless self-test has no window and ends in seconds: a quick run beside the Godot slot
+        kind = "quick" if args.headless else "window"
+        steps.append(Step("self-test", kind,
                           godot_command(godot, prefs_root / "self-test", ["--self-test"], environ, extra=extra,
-                                        headless=args.headless), settings="self-test"))
+                                        headless=args.headless), settings="self-test", estimate=SELF_TEST_SECONDS[kind]))
         return steps
     if args.target == "full":
         steps.append(crash_site_step(inputs, conf, prefs_root, environ, godot, CRASH_SITE_HERO))
@@ -621,12 +675,13 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
     known = load_known_failures() if known is None else known
     results: list[tuple[str, int]] = []
     only_known: list[str] = []
-    for step in steps:
+
+    def run_step(step: Step) -> tuple[int, Path | None]:
         say(f"SMOKE step {step.name} kind={step.kind}")
         check = start_check.for_run(step.kind, step.expect, None, step.command)
         logs: list[Path] = []
         code = runner(step.kind, list(step.command), label=f"smoke {step.name}", timeout=step.timeout, quiet=True,
-                      start=check, log_sink=logs.append)
+                      start=check, log_sink=logs.append, estimate=step.estimate)
         if code == 0 and step.requires:
             missing, reasons = stages_not_run(logs[-1] if logs else None, step.requires)
             if missing:
@@ -645,19 +700,42 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
                 else:
                     only_known.append(step.name)
         results.append((step.name, code))
+        return code, logs[-1] if logs else None
+
+    done = 0
+    for step in steps:
+        code, log = run_step(step)
+        done += 1
         if code >= STOPPED or (code != 0 and step.gate):
             break
+        # ARC-DEV-396: a smoke process ends at its first failing stage, so the stages after it never ran, and a stage that
+        # passes alone may fail only after the others (state it leaves behind). The unfinished stages run one to a process.
+        if code == start_check.FAILED_START_EXIT and step.again is not None:
+            say("  not retried one to a process: the viewer did not start, which says nothing about its stages")
+        elif code != 0 and step.again is not None:
+            unfinished = stages_not_run(log, step.requires)[0]
+            if unfinished:
+                say(f"  retrying {len(unfinished)} unfinished stage(s) one to a process: {', '.join(unfinished)}")
+            for stage in unfinished:
+                retry_code, _ = run_step(step.again(stage))
+                if retry_code >= STOPPED:
+                    code = retry_code
+                    break
+                say(f"  {stage}: " + (f"passes alone, so it fails only after the other stages of {step.name}"
+                                if retry_code == 0 else f"fails alone too (exit {retry_code})"))
+            if code >= STOPPED:
+                break
     width = max(len(name) for name, _ in results) if results else 0
     say("SMOKE summary")
     for name, code in results:
         say(f"  {name:<{width}}  {'PASS' if code == 0 else 'FAIL'} exit={code}")
-    skipped = [step.name for step in steps[len(results):]]
+    skipped = [step.name for step in steps[done:]]
     if skipped:
         say("  not run: " + ", ".join(skipped))
     failed = [name for name, code in results if code != 0]
     if only_known:
         say("  only known failures on main (not this PR): " + ", ".join(only_known))
-    say(f"SMOKE {'PASS' if not failed and not skipped else 'FAIL'} {len(results) - len(failed)} of {len(steps)} steps passed"
+    say(f"SMOKE {'PASS' if not failed and not skipped else 'FAIL'} {len(results) - len(failed)} of {len(results) + len(skipped)} steps passed"
         + (f" ({len(only_known)} of the {len(failed)} failed with only known failures on main)" if only_known else ""))
     stopped = [code for _, code in results if code >= STOPPED]
     return stopped[0] if stopped else (1 if failed or skipped else 0)
@@ -732,6 +810,10 @@ def configure(command: argparse.ArgumentParser) -> None:
     pr.add_argument("--auto", action="store_true", help="pick the zones from the diff against the merge base with --base: "
                     "prints each zone and the files that chose it; a diff no zone covers runs nothing")
     pr.add_argument("--base", help="the ref --auto diffs against (default origin/main; fetch it first)")
+    retry = argparse.BooleanOptionalAction
+    pr.add_argument("--retry", action=retry, default=None, help="after a failed stage process, run its unfinished stages one to "
+                    "a process, so no stage after the failing one goes unchecked and a stage that fails only after the "
+                    "others is named (default: off for pr, on for complete)")
     pr.add_argument("--map", help=f"the map the stages run on (default: the map each stage needs, {MAIN_MAP} for most)")
     map_options(pr)
     pr.add_argument("--crash-site", action="store_true", help="also the Crash Site smoke first, when the change is related "
@@ -742,6 +824,8 @@ def configure(command: argparse.ArgumentParser) -> None:
     common(full)
     complete = targets.add_parser("complete", help="the nightly run (./arcanum daily): the full chain, then every stage the "
                                   "viewer accepts, grouped by configuration; core plus all heavy zones")
+    complete.add_argument("--retry", action=retry, default=None, help="retry the unfinished stages of a failed process one to a "
+                          "process (default on)")
     common(complete)
     one = targets.add_parser("map", help="one map's smoke: every default stage, or --stages")
     one.add_argument("name", help='the map folder name, e.g. "crash site cave" or Arcanum1-024-fixed')

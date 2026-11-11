@@ -233,8 +233,8 @@ Slice E1-d of the [missing-systems plan](../project/missing-systems-plan.md) (ma
 - **Saved.** The `effects` section's `critters` (schema 87, upgrade step 84→85 adds the empty list): per NPC its entries, causes and the rule of each number in use.
 - **Spell flags.** The written flags (`WriteObjectFlag`, `spells.objectFlags`, schema 83) already hold any bit of the spell and critter flag fields for any mobile NPC; the hosts read
   the stored field from the map data (slot 19) and the session's change over it. Which bits a spell component writes is the caster's.
-- **Limits** (project policy, the source has none): 64 entries per NPC, 4096 lists (an add or a removal that adopts a loaded list counts). The entries are checked at each change (`Bounded`) against
-  the largest base maximum the NPC's own facts give, so no removal of them is refused for the maxima; a removal is still refused when the loaded list itself is not admitted (more than 64
+- **Limits** (project policy, the source has none, EF11): 1024 entries per NPC, the hero's capacity (it was 64 until ARC-RES-127, which refused the 80 entries record 214 adds), 4096 lists (an add or a removal that adopts a loaded list counts). The entries are checked at each change (`Bounded`) against
+  the largest base maximum the NPC's own facts give, so no removal of them is refused for the maxima; a removal is still refused when the loaded list itself is not admitted (more than 1024
   entries, an undefined cause, a rule the session refuses). A restore does not know the NPC's facts, so it does not check that bound: where the list laid over the facts is refused by the life
   rules (a level-up after the add), the host's maxima stand instead of the list's. An NPC's timers stay on one map: a change on another map takes its pending timers along, and is refused during an event pass.
 - **Not ready.** The maxima of a loaded list apply from the first session change of that list (before it the host's facts stand), and then without moving the damage, which the data stores relative to them; no timed NPC effect (an END event of its own) and no
