@@ -10,7 +10,7 @@ namespace Arcanum.Session;
 /// and no tile. The dispatcher 0x455AC0 (single player: 0x455C30) checks the invocation (0x4564E0) and starts the run.
 /// The session refuses a run start from inside the run rules, so the host keeps the request and starts it once the run rules are idle (<see cref="StartNestedCasts"/>, after the outer action or event pass, in order): the run's BEGIN
 /// comes from its casting goal's release as an item executor's run does (<see cref="SessionItemTriggers"/>), through the host's goal start and release (the action points in a turn-based round, then BEGIN), or, for a parentless
-/// run, as the event 2 ms later. The original starts the run inside the component; the order of the run slots, and so a run's id, can differ.
+/// run, as the event 2 ms later. The original starts the run inside the component; the order of the run slots, and so a run's id, can differ, and a later component of the same run that destroys the target or the parent ends the original's nested run (0x459740) where here the run does not exist yet (its goal's release re-checks the target).
 /// </summary>
 public sealed partial class SessionSpellCaster
 {
@@ -67,7 +67,12 @@ public sealed partial class SessionSpellCaster
                 }
                 var next = _nestedCasts[0];
                 _nestedCasts.RemoveAt(0);
-                StartNestedCast(next);
+                // A call from a host port that runs inside the run rules (a use script's damage, a trap) finds the session busy: the request waits for the outer action's own drain.
+                if (!StartNestedCast(next))
+                {
+                    _nestedCasts.Insert(0, next);
+                    break;
+                }
             }
         }
         catch
@@ -79,12 +84,13 @@ public sealed partial class SessionSpellCaster
         finally { _startingNested = false; }
     }
 
-    private void StartNestedCast(NestedCast cast)
+    // False when the session refused the start because its run rules are busy (the request is kept); true when the request is done with, started or not.
+    private bool StartNestedCast(NestedCast cast)
     {
         if (_records(cast.Spell) is not { } record)
         {
             _log.Add(new(SpellCastEventKind.NestedCast, cast.Run, cast.Spell, cast.Target?.Id, -1));
-            return;
+            return true;
         }
         var parentId = cast.Parent?.Id;
         var round = _owner.QueryCombatRound();
@@ -92,17 +98,19 @@ public sealed partial class SessionSpellCaster
             TurnBased: round is not null, TurnBasedActor: round is null ? null : round.Actor.Entity ?? Hero)
         { SourceLocation = cast.Parent?.Location ?? SpellLocation.None };
         var started = _owner.StartSpellRun(_owner.Version, new(invocation, SkipCastGoal: true), record.Run, InvocationWorld(), _owner.SpellRolls);
+        if (started.Failure == GameSessionFailure.InvalidSpellRun) return false;
         if (started.Disposition != GameSessionDisposition.Changed || started.Creation?.Run is not { } run)
         {
             // ARC-MAGIC-038 (0x4564E0): the anti-teleport refusal shows message 10000 whenever the parent is the local player.
             if (started.Creation?.Check is { ShowsTeleportMessage: true }) _log.Add(new(SpellCastEventKind.Message, -1, TeleportRefusedMessage));
             _log.Add(new(SpellCastEventKind.NestedCast, cast.Run, cast.Spell, cast.Target?.Id, -1));
-            return;
+            return true;
         }
         _itemChains.Remove(run.Id);
         _log.Add(new(SpellCastEventKind.NestedCast, cast.Run, cast.Spell, cast.Target?.Id, run.Id));
         // A run with a parent waits for its goal 73's release frame; one without is begun by its event.
         if (run.Parent is not null) PlayNestedGoal(run.Id);
+        return true;
     }
 
     // Goal 73 (CG1) has the casting goal's start without its end node, and the art plays no frames here: the start (action points, the target check), then the release, which begins the run. A start that refuses leaves the original's run in
@@ -111,6 +119,8 @@ public sealed partial class SessionSpellCaster
     {
         if (CastCombat is not { } combat)
         {
+            // StartGoal clears a release the slot's earlier run left; without it the host does here.
+            _released.Remove(run);
             Release(run);
             return;
         }

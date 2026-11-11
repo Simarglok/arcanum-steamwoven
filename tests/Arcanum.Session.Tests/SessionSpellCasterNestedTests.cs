@@ -15,7 +15,7 @@ public sealed class SessionSpellCasterNestedTests
     private const string Hero = SessionSpellCaster.Hero;
     private static readonly SpellLocation HeroTile = new(5, 5);
     private static readonly SpellArea Area = new(0x4, 0, 0, 0, -1);
-    private const int OuterNumber = 120, InnerNumber = 121, SelfNumber = 122, MissingNumber = 123, ChainNumber = 124, LongNumber = 125, OuterLongNumber = 126;
+    private const int OuterNumber = 120, InnerNumber = 121, SelfNumber = 122, MissingNumber = 123, ChainNumber = 124, LongNumber = 125, OuterLongNumber = 126, BusyNumber = 127;
 
     private sealed class Map(GameSessionOwner owner) : ISpellCastMap
     {
@@ -57,6 +57,7 @@ public sealed class SessionSpellCasterNestedTests
         Spell(ChainNumber, Cast(ChainNumber), Damage(SpellAction.Begin, 0, 1, 1, 0)),
         Spell(LongNumber, Damage(SpellAction.Begin, 0, 1, 1, 0)) with { Run = Spell(LongNumber, Damage(SpellAction.Begin, 0, 1, 1, 0)).Run with { Duration = new(30) } },
         Spell(OuterLongNumber, Cast(LongNumber)),
+        Spell(BusyNumber, Cast(InnerNumber), new SpellComponent(SpellAction.Begin, SpellComponentType.Use, Area, 0, 0, null)),
     }.ToDictionary(r => r.Data.Number);
 
     private static (GameSessionOwner Owner, SessionSpellCaster Caster) Session()
@@ -112,6 +113,7 @@ public sealed class SessionSpellCasterNestedTests
         Assert.IsNull(run.Source, "the invocation has no source (0x455A20 with a null source handle)");
         Assert.AreEqual(Hero, run.Parent?.Id);
         Assert.AreEqual(Hero, run.Target?.Id);
+        Assert.AreEqual(caster.Facts(Hero)!.Location, run.TargetTile, "an object target's tile is its location");
         Assert.AreEqual(caster.Facts(Hero)!.Location, run.StartLocation, "the run's start location (+0x50) is the invocation's +0x38, the parent's location");
         Assert.AreNotEqual(SpellRunAction.Begin, run.Action, "released at once, its BEGIN has run");
     }
@@ -159,5 +161,20 @@ public sealed class SessionSpellCasterNestedTests
         Assert.AreEqual(SessionSpellCaster.MaxNestedCastsPerStart, Nested(caster).Length, "one run a start, up to the bound");
         Assert.IsTrue(caster.Log.Any(e => e.Kind == SpellCastEventKind.NestedCastsDropped), "the rest is dropped and logged");
         Assert.IsTrue(owner.QuerySpellRuns().Count < SpellRunTable.Slots);
+    }
+
+    [TestMethod]
+    public void A_start_asked_for_while_the_run_rules_are_busy_waits_instead_of_being_lost()
+    {
+        var (owner, caster) = Session();
+        using var _ = owner;
+        var life = owner.QueryHeroLife()!.Status.HitPoints;
+        // The Use component's host port runs inside the run rules; a host call there that fires the pending items drains the requests while the session refuses a start.
+        caster.UseObject = _ => { caster.FireItemEvents([]); return true; };
+        var outer = Start(owner, caster, BusyNumber);
+        caster.Act(new(SessionSpellRunActionKind.Begin, outer.Id));
+        var started = Nested(caster).Single();
+        Assert.IsTrue(started.Detail >= 0, "the request was kept and started once the run rules were idle");
+        Assert.AreEqual(3, life - owner.QueryHeroLife()!.Status.HitPoints, "the nested run began");
     }
 }
