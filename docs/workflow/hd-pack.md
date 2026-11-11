@@ -112,6 +112,15 @@ The PNGs stay the pack's only content: you edit a PNG, `refresh` it into the man
   (key, Legacy frame, review marks, size, alpha rule) still run on the cached level 0 (`HdPack.CheckPrepared`), and the pack file must still exist with the
   manifest's byte size (one stat; it is not read, so a PNG edited without `refresh` is noticed by `verify`, not by this draw). A frame without an entry, a damaged entry
   and the premultiplied and grey variants (bitmap-font canvases, grey spell icons) take the earlier path, so the cache can never make a frame fail.
+- **Remembered alpha passes (ARC-DEV-382):** the pack's alpha rule (`HdAlphaCheck`) is a per-texel pass over the whole 4× frame, and on a warm bind it was the
+  main cost left (measured on the installed pack with the frames' own sizes: about 75 ms for one 800 × 600 backdrop, 140 ms for the inventory frames, 270 ms
+  for the character sheet's, 300 ms for the logbook's, 560 ms for the world map's, on a loaded Mac, so read them as ratios; the Legacy-pixel SHA-256 next to it is
+  1-2% of that and the 4× copy 3-4%, so neither is worth weakening). The result is a pure function of the PNG, the Legacy frame, the policy and the rule's
+  version (`HdAlphaCheck.Version`: bump it with any change of the rules), so the first successful bind of a frame appends a 24-byte record to
+  `alpha-ok.v1` in the cache folder and every later bind of that frame (this run, the next start) skips the pass. Only passes are kept; the key, Legacy
+  hash (still computed), size and file checks still run on every bind; `RemoveUnreferenced` drops the records of PNGs no longer in the pack, and deleting the
+  cache folder (or the file) only costs one pass per frame again. Not done: VRAM-compressed textures (a lossy encode would change what is drawn, so it needs
+  the owner's decision and a before/after image first; the lossless chain stays).
 - Format and code: `HdOptimizedCache` (Godot-free store, header `ARCM` version 1, format 1) and `HdOptimizedStore` (viewer).
 
 ## Daily tasks
