@@ -146,4 +146,23 @@ public sealed class AreaCreatedCrittersTests
         }
         public bool HasCritter(CellCoord cell) => false;
     }
+
+    [TestMethod]
+    public void A_critter_that_followed_the_pc_to_another_map_is_built_again_there()
+    {
+        // ARC-MAGIC-050: the session moves the object whole; its row, its holder map and its AI NPC are the destination's, and the map it left lists none.
+        using var f = AreaAiHostRebindTests.Open();
+        var critter = Make(f, Spot);
+        var created = new AreaCreatedCritters(f.Session, Row);
+        Assert.AreEqual(Map, created.Npcs(new(Map)).Single().Row.Key.RuntimeMap);
+        Assert.AreEqual(GameSessionDisposition.Changed, f.Session.ForceJoinParty(f.Session.Version, critter.Entity).Disposition);
+        var arrival = new CellCoord(70, 14);
+        Assert.AreEqual(GameSessionDisposition.Changed, f.Session.ApplyChanges(f.Session.Version, new ActorPlacement(new(Map + 1), arrival, NeighborDirection.XPlus), [], f.Session.QueryTransferMoveList(new())).Disposition);
+        Assert.AreEqual(0, created.Npcs(new(Map)).Count, "the map it left lists none");
+        var there = created.Npcs(new(Map + 1)).Single();
+        Assert.AreEqual((critter.Entity, Map + 1, (long)arrival.X, (long)arrival.Y), (there.Entity, there.Row.Key.RuntimeMap, there.Row.WorldX!.Value, there.Row.WorldY!.Value));
+        Assert.AreEqual(Map + 1, created.Maps(new(Map + 1)).Single().RuntimeMap);
+        Assert.IsNotNull(created.Row(new(Map + 1), critter.Entity));
+        Assert.IsNull(created.Row(new(Map), critter.Entity));
+    }
 }

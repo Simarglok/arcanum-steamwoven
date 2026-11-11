@@ -204,6 +204,11 @@ public enum SpellCastEventKind
     TraitRestored,
     /// <summary>ARC-MAGIC-048 (E4-c, CN6): a Use component (0x452ED0) had <see cref="SpellCastEvent.Object"/> run its own use script (<see cref="SessionSpellCaster.UseObject"/>): the value is 1 when a script ran and applied, 0 when the object has none or its run was refused.</summary>
     ObjectUsed,
+    /// <summary>ARC-MAGIC-049 (E4-e, NC1–NC3): a Cast component (0x451740) of run <see cref="SpellCastEvent.Run"/> started spell <see cref="SpellCastEvent.Value"/> as its parent's cast at <see cref="SpellCastEvent.Object"/> (none for a
+    /// tile) without the casting goal; <see cref="SpellCastEvent.Detail"/> is the new run's slot, or −1 when the invocation was refused (the check, a full table, an unknown record or a parent that is gone) and nothing started.</summary>
+    NestedCast,
+    /// <summary>ARC-MAGIC-049: this many nested casts were dropped unstarted (<see cref="SessionSpellCaster.MaxNestedCastsPerStart"/> in one start, a technical bound: the original spreads a chain over frames).</summary>
+    NestedCastsDropped,
 }
 
 /// <summary>
@@ -1014,6 +1019,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         var fired = FireItemLoop();
         // A firing's runs may have destroyed objects (a grenade's item event): their runs hear of it once the firing is over.
         TellGoneObjects();
+        // ARC-MAGIC-049: the casts the runs' Cast components asked for start once the run rules are idle (the session refuses a run start from inside them).
+        StartNestedCasts();
         return fired;
     }
 

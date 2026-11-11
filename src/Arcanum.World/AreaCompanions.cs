@@ -85,6 +85,8 @@ public static class AreaCompanionPlacement
     {
         ArgumentNullException.ThrowIfNull(template);
         var edit = Edit(template, map, world, facing);
+        // ARC-MAGIC-050: a created critter has no home map data to point at: the session holds it on the map it stands on.
+        if (template.Created) return [edit];
         return [edit, new(template.Home, HomeKey(template.Entity), edit.Value is null ? null : Encode(template.HomeWorld, NeighborDirection.XPlus))];
     }
 
@@ -483,7 +485,8 @@ public sealed class AreaCompanionGroup
     public GameSessionFailure Record(GameSessionOwner session)
     {
         ArgumentNullException.ThrowIfNull(session);
-        var result = session.ApplyChanges(session.Version, null, _companions.SelectMany(Stay).ToArray());
+        // ARC-MAGIC-050: a created critter the session destroyed since the group was built has no placement to record.
+        var result = session.ApplyChanges(session.Version, null, _companions.Where(c => !c.Template.Created || session.QueryCreatedObject(c.Entity) is not null).SelectMany(Stay).ToArray());
         return result.Disposition == GameSessionDisposition.Rejected ? result.Failure : GameSessionFailure.None;
     }
 
@@ -545,6 +548,14 @@ public sealed class AreaCompanionGroup
     {
         ArgumentNullException.ThrowIfNull(template);
         if (from == destination) return AreaCompanionPlacement.Edits(template, destination, arrival, facing);
+        // ARC-MAGIC-050: a created critter moves whole with the session's change of place (the session records it on the destination); no away change names its home.
+        if (template.Created)
+            return
+            [
+                new(from, AreaCompanionPlacement.Key(template.Entity), null),
+                new(destination, AreaCompanionPlacement.Key(template.Entity), AreaCompanionPlacement.Encode(arrival, facing)),
+                new(destination, SessionTeleportedMark.Key(template.Entity), SessionNpcPlacement.Fits(arrival, facing) ? SessionNpcPlacement.Encode(arrival, facing) : null),
+            ];
         return
         [
             new(from, AreaCompanionPlacement.Key(template.Entity), null),

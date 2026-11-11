@@ -44,7 +44,7 @@ public sealed class SpellInvocationAreas(ISpellTargetWorld targets, Func<int, ul
         ArgumentNullException.ThrowIfNull(invocation);
         var target = Resolve(invocation.TargetObject);
         return new(new SpellTargetArea(beginTargets(invocation.Spell), 0, 0, radius, 0), Resolve(invocation.Parent), Resolve(invocation.Source),
-            invocation.Source?.Location ?? SpellLocation.None, target, invocation.TargetTile, target, invocation.TargetTile);
+            invocation.Origin, target, invocation.TargetTile, target, invocation.TargetTile);
     }
 
     private SpellTargetObject? Resolve(SpellObjectFacts? facts) => facts is null ? null
