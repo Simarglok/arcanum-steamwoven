@@ -221,10 +221,27 @@ class PlanTests(unittest.TestCase):
         crash = self.plan("crash-site", "--hero", "elf-female", "--no-build")[0].command
         self.assertEqual(crash[crash.index("--hero") + 1], "elf-female")
         test = self.plan("self-test", "--headless", "--no-build")[0]
-        self.assertEqual((test.kind, test.expect), ("headless", None))
+        # ARC-DEV-390: the headless self-test is a quick run beside the Godot slot
+        self.assertEqual((test.kind, test.expect, test.estimate), ("quick", None, smoke.SELF_TEST_SECONDS["quick"]))
         self.assertIn("--headless", test.command)
         self.assertEqual(test.command[-1], "--self-test")
         self.assertEqual(self.plan("self-test", "--no-build")[0].kind, "window")
+
+    def test_the_import_is_a_quick_run_and_every_step_declares_its_seconds_to_the_queue(self) -> None:
+        # ARC-DEV-390: an import of a new checkout does not wait for the Godot slot; the queue orders runs by their estimates.
+        steps = self.plan("pr", "--stages", "cast,walk", "--crash-site", imported=False)
+        kinds = {step.name: (step.kind, step.estimate) for step in steps}
+        self.assertEqual(kinds["import"], ("quick", smoke.IMPORT_SECONDS))
+        self.assertEqual(kinds["build"], ("dotnet", smoke.BUILD_SECONDS))
+        self.assertEqual(kinds["crash-site"], ("window", smoke.CRASH_SITE_SECONDS))
+        self.assertTrue(all(step.estimate for step in steps))
+
+    def test_the_estimate_of_a_stage_run_is_its_load_plus_its_stages_and_the_slow_ones_stand_out(self) -> None:
+        self.assertEqual(smoke.estimate(()), smoke.BATTERY_SECONDS)
+        self.assertEqual(smoke.estimate(("cast", "life")), smoke.RUN_SECONDS + 2 * smoke.STAGE_SECONDS)
+        for slow in smoke.SLOW_STAGES:
+            self.assertGreater(smoke.estimate((slow,)), 5 * smoke.estimate(("cast",)))
+        self.assertTrue(set(smoke.SLOW_STAGES) <= set(smoke.map_stages()))
 
 
 class ExecuteTests(unittest.TestCase):
@@ -241,7 +258,7 @@ class ExecuteTests(unittest.TestCase):
         lines: list[str] = []
 
         def runner(kind: str, command: list[str], *, label: str, timeout: float | None, quiet: bool,
-                   start: start_check.StartCheck | None, log_sink) -> int:
+                   start: start_check.StartCheck | None, log_sink, estimate: float | None = None) -> int:
             calls.append((kind, label, quiet, start.start.pattern if start else None))
             name = label[len("smoke "):]
             if name in logs:

@@ -59,6 +59,30 @@ STOPPED = 128  # an exit at or above it is a stopped run (128+N), which ends the
 NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 RESERVED = frozenset({"PATH", "DOTNET_ROOT", "HOME", "GODOT", "__GODOT_SHELL_ENV_SET"})  # the canonical start's own
 BATTERY_MINUTES = 60.0  # a whole map battery (no stage list) runs about 2 minutes; the queue's window default is 30
+# ARC-DEV-390: the seconds each step declares to the launch queue, which puts a short run ahead of a long one that arrived a
+# little before it (run_queue.ORDER_WEIGHT). Measured for docs/research/smoke-speed-diagnosis-2026-11.md: a run with no
+# stage worth naming is its map load (about 20 s with start and exit) plus 0-2 s per cheap stage; the whole map battery
+# 25 s; the self-test 24 s with a window and 12 s headless; the Crash Site smoke 98 s; a project import 3 s; a viewer
+# build 12 s warm, 45 s cold. The stages that stand out (`walk`: 525 s, 72 window moves; `container-click` on the town:
+# 675 s; `census` is every map of the catalogue and was not measured: an assumption) add their own time.
+RUN_SECONDS = 20.0  # a viewer run with no stage on top of it
+STAGE_SECONDS = 3.0  # each cheap stage, with room for the dearer ones (opening 13 s, perf 16 s)
+BATTERY_SECONDS = 60.0  # the whole map battery with its load
+CRASH_SITE_SECONDS = 110.0
+SELF_TEST_SECONDS = {"window": 30.0, "quick": 15.0}
+BUILD_SECONDS, IMPORT_SECONDS = 30.0, 5.0
+SLOW_STAGES = {"walk": 540.0, "container-click": 700.0, "census": 900.0}
+
+
+def estimate(stages: Sequence[str]) -> float:
+    """ARC-DEV-390: the seconds a viewer run of these stages is expected to take (() is the whole map battery), the
+    estimate the queue orders it by. Declared, not measured per run: a wrong one only costs its run a different place
+    in the queue."""
+    if not stages:
+        return BATTERY_SECONDS
+    return RUN_SECONDS + sum(SLOW_STAGES.get(stage, STAGE_SECONDS) for stage in stages)
+
+
 STAGE_NOT_RUN = 3  # a smoke that exited 0 without the PASS line of a requested stage (ARC-DEV-063)
 # ARC-DEV-063: the line each map smoke stage prints when it ran and passed (the viewer's own markers, checked against its
 # sources by the tests). A whole map battery (no stage list) must show the map and resources stages; its other stages
@@ -116,6 +140,7 @@ class Step:
     settings: str | None = None  # the step's own settings folder under the run's folder
     timeout: float | None = None  # minutes; None: the queue's default for the kind
     requires: tuple[str, ...] = ()  # the map smoke stages whose PASS line the log must hold (ARC-DEV-063)
+    estimate: float | None = None  # ARC-DEV-390: the seconds the step is expected to take (None: its kind's default)
 
 
 def map_stages() -> tuple[str, ...]:
@@ -172,12 +197,14 @@ def build_steps(environ: Mapping[str, str], godot: str, *, build: bool, imported
     steps = []
     if build:
         steps.append(Step("build", "dotnet", ("sh", "-c", f"dotnet restore {SOLUTION} --locked-mode -v q && "
-                                                          f"dotnet build {SOLUTION} --no-restore -v q --nologo"), gate=True))
+                                                          f"dotnet build {SOLUTION} --no-restore -v q --nologo"), gate=True,
+                          estimate=BUILD_SECONDS))
     if not imported:
         sdk = run_queue.pinned_sdk(dict(environ))
-        steps.append(Step("import", "headless", ("env", "__GODOT_SHELL_ENV_SET=1", f"DOTNET_ROOT={sdk}",
+        # ARC-DEV-390: a quick run (beside the Godot slot, not in it): importing this checkout's own project folder
+        steps.append(Step("import", "quick", ("env", "__GODOT_SHELL_ENV_SET=1", f"DOTNET_ROOT={sdk}",
                                                  f"PATH={sdk}:/usr/bin:/bin:/usr/sbin:/sbin", godot, "--headless",
-                                                 "--path", str(VIEWER), "--import"), gate=True))
+                                                 "--path", str(VIEWER), "--import"), gate=True, estimate=IMPORT_SECONDS))
     return steps
 
 
@@ -186,7 +213,7 @@ def crash_site_step(inputs: dict, conf: dict, prefs_root: Path, environ: Mapping
     viewer = ["--native-smoke", *launch.terrain_arguments(inputs, "area", task=CRASH_SITE_TASK, hero=hero,
                                                             verified=launch.verified_roles(conf))]
     return Step("crash-site", "window", godot_command(godot, prefs_root / "crash-site", viewer, environ, extra=extra),
-                start_line(None), settings="crash-site")
+                start_line(None), settings="crash-site", estimate=CRASH_SITE_SECONDS)
 
 
 def map_step(name: str, inputs: dict, prefs_root: Path, environ: Mapping[str, str], godot: str, map_name: str, *,
@@ -196,7 +223,7 @@ def map_step(name: str, inputs: dict, prefs_root: Path, environ: Mapping[str, st
                                                       debug_mode=any(stage in DEBUG_STAGES for stage in stages))]
     return Step(name, "window", godot_command(godot, prefs_root / name, viewer, environ, stages=stages, extra=extra),
                 start_line(map_name, main_menu), settings=name, timeout=None if stages else BATTERY_MINUTES,
-                requires=tuple(stages) or BATTERY_STAGES)
+                requires=tuple(stages) or BATTERY_STAGES, estimate=estimate(stages))
 
 
 def map_runs(name: str, map_name: str, stages: Sequence[str], *, hero: str | None, main_menu: bool,
@@ -231,9 +258,11 @@ def plan(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mappin
     extra = parse_env(getattr(args, "env", None) or ())
     steps = build_steps(environ, godot, build=not args.no_build, imported=imported)
     if args.target == "self-test":
-        steps.append(Step("self-test", "headless" if args.headless else "window",
+        # ARC-DEV-390: the headless self-test has no window and ends in seconds: a quick run beside the Godot slot
+        kind = "quick" if args.headless else "window"
+        steps.append(Step("self-test", kind,
                           godot_command(godot, prefs_root / "self-test", ["--self-test"], environ, extra=extra,
-                                        headless=args.headless), settings="self-test"))
+                                        headless=args.headless), settings="self-test", estimate=SELF_TEST_SECONDS[kind]))
         return steps
     if args.target == "full":
         steps.append(crash_site_step(inputs, conf, prefs_root, environ, godot, CRASH_SITE_HERO))
@@ -291,7 +320,7 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
         check = start_check.for_run(step.kind, step.expect, None, step.command)
         logs: list[Path] = []
         code = runner(step.kind, list(step.command), label=f"smoke {step.name}", timeout=step.timeout, quiet=True,
-                      start=check, log_sink=logs.append)
+                      start=check, log_sink=logs.append, estimate=step.estimate)
         if code == 0 and step.requires:
             missing, reasons = stages_not_run(logs[-1] if logs else None, step.requires)
             if missing:

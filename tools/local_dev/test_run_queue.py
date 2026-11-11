@@ -18,8 +18,14 @@ REPO = Path(__file__).resolve().parents[2]
 ARCANUM = REPO / "arcanum"
 
 
-def ticket(seq: int, kind: str, started: bool = False, priority: int = run_queue.NORMAL) -> dict:
-    return {"seq": seq, "kind": kind, "startedAt": 1.0 if started else None, "priority": priority}
+def ticket(seq: int, kind: str, started: bool = False, priority: int = run_queue.NORMAL, at: float | None = None,
+           estimate: float | None = None) -> dict:
+    """A ticket; `at` is its arrival time (default: its number, so equal estimates keep the arrival order)."""
+    result = {"seq": seq, "kind": kind, "startedAt": 1.0 if started else None, "priority": priority,
+              "enqueuedAt": float(seq) if at is None else at}
+    if estimate is not None:
+        result["estimateSeconds"] = estimate
+    return result
 
 
 class AdmissionRuleTests(unittest.TestCase):
@@ -57,6 +63,78 @@ class AdmissionRuleTests(unittest.TestCase):
         live = [ticket(1, "window", started=True), ticket(2, "window"), ticket(3, "window", priority=run_queue.FRONT)]
         self.assertEqual(run_queue.blocker(live[2], live)["seq"], 1)
         self.assertEqual(run_queue.blocker(live[1], live[1:])["seq"], 3)
+
+
+class OrderTests(unittest.TestCase):
+    """ARC-DEV-390: a short run is not queued behind a long one that arrived a little before it, and no run waits for ever.
+    The lists hold waiting tickets only (a running Godot run blocks every waiter, whatever the order)."""
+
+    def test_a_short_run_passes_a_long_run_that_arrived_before_it(self) -> None:
+        long_run, short_run = ticket(2, "window", at=100.0, estimate=600.0), ticket(3, "window", at=110.0, estimate=20.0)
+        live = [long_run, short_run]
+        self.assertEqual(run_queue.blocker(long_run, live)["seq"], 3)  # the long run waits for the short one
+        self.assertIsNone(run_queue.blocker(short_run, live))
+        self.assertEqual([item["seq"] for item in sorted(live, key=run_queue._key)], [3, 2])
+        running = ticket(1, "window", started=True)
+        self.assertEqual(run_queue.blocker(short_run, [running, *live])["seq"], 1)
+
+    def test_a_long_run_is_passed_only_by_runs_that_arrive_within_its_delay(self) -> None:
+        delay = run_queue.ORDER_WEIGHT * 600.0
+        long_run = ticket(2, "window", at=100.0, estimate=600.0)
+        in_time = ticket(3, "window", at=100.0 + delay - run_queue.ORDER_WEIGHT * 20.0 - 1, estimate=20.0)
+        too_late = ticket(4, "window", at=100.0 + delay + 1, estimate=1.0)
+        self.assertEqual(run_queue.blocker(long_run, [long_run, in_time])["seq"], 3)  # arrived in time to pass it
+        self.assertEqual(run_queue.blocker(too_late, [long_run, too_late])["seq"], 2)  # too late: the long run is first
+        self.assertIsNone(run_queue.blocker(long_run, [long_run, too_late]))
+
+    def test_equal_estimates_keep_the_arrival_order_and_the_owners_launch_still_goes_first(self) -> None:
+        first, second = ticket(2, "window", at=5.0, estimate=30.0), ticket(3, "window", at=6.0, estimate=30.0)
+        owner = ticket(4, "window", at=900.0, estimate=9000.0, priority=run_queue.FRONT)
+        self.assertEqual(run_queue.blocker(second, [first, second])["seq"], 2)
+        self.assertIsNone(run_queue.blocker(first, [first, second]))
+        self.assertEqual(run_queue.blocker(first, [first, second, owner])["seq"], 4)  # FRONT first however long it is
+        self.assertIsNone(run_queue.blocker(owner, [first, second, owner]))
+
+    def test_a_ticket_without_an_estimate_counts_by_its_kinds_default(self) -> None:
+        old = {"seq": 9, "kind": "dotnet", "startedAt": None, "enqueuedAt": 10.0}
+        self.assertEqual(run_queue.estimate_of(old), run_queue.DEFAULT_ESTIMATE_SECONDS["dotnet"])
+        self.assertEqual(run_queue.estimate_of({**old, "estimateSeconds": -3}), run_queue.DEFAULT_ESTIMATE_SECONDS["dotnet"])
+        self.assertEqual(run_queue.estimate_of({**old, "estimateSeconds": True}), run_queue.DEFAULT_ESTIMATE_SECONDS["dotnet"])
+        self.assertEqual(run_queue.estimate_of({**old, "estimateSeconds": 0}), 0.0)
+        self.assertEqual(run_queue._key(old)[1], 10.0 + run_queue.ORDER_WEIGHT * run_queue.DEFAULT_ESTIMATE_SECONDS["dotnet"])
+
+
+class QuickKindTests(unittest.TestCase):
+    """ARC-DEV-390: a `quick` run (project import, headless self-test) takes a place beside the Godot slot."""
+
+    def test_a_quick_run_does_not_wait_for_the_godot_slot_nor_does_it_hold_it(self) -> None:
+        live = [ticket(1, "window", started=True), ticket(2, "window"), ticket(3, "quick")]
+        self.assertIsNone(run_queue.blocker(live[2], live))
+        running = [ticket(1, "quick", started=True), ticket(2, "window")]
+        self.assertIsNone(run_queue.blocker(running[1], running))
+
+    def test_quick_runs_fill_their_own_places_in_arrival_order(self) -> None:
+        self.assertEqual(run_queue.QUICK_SLOTS, 2)
+        live = [ticket(1, "quick", started=True), ticket(2, "dotnet", started=True), ticket(3, "quick", started=True),
+                ticket(4, "quick"), ticket(5, "quick")]
+        self.assertEqual(run_queue.blocker(live[3], live)["seq"], 1)  # a dotnet run takes no quick place
+        self.assertEqual(run_queue.blocker(live[4], live)["seq"], 3)
+        self.assertIsNone(run_queue.blocker(live[3], live[1:]))
+
+    def test_an_export_waits_for_a_running_quick_run_and_a_quick_run_waits_for_a_running_or_draining_export(self) -> None:
+        live = [ticket(1, "quick", started=True), ticket(2, "export")]
+        self.assertEqual(run_queue.blocker(live[1], live)["seq"], 1)
+        running = [ticket(1, "export", started=True), ticket(2, "quick")]
+        self.assertEqual(run_queue.blocker(running[1], running)["seq"], 1)
+        draining = [ticket(1, "quick", started=True), ticket(2, "export"), ticket(3, "quick")]
+        self.assertEqual(run_queue.blocker(draining[2], draining)["seq"], 2)  # the export is next for the slot: no new quick run
+        waiting = [ticket(1, "window", started=True), ticket(2, "export"), ticket(3, "quick")]
+        self.assertIsNone(run_queue.blocker(waiting[2], waiting))  # the export still waits for the Godot slot
+
+    def test_a_quick_run_can_nest_in_a_godot_run_but_not_in_a_dotnet_run(self) -> None:
+        for parent in ("window", "headless", "export", "quick"):
+            self.assertIn("quick", run_queue.COVERS[parent])
+        self.assertNotIn("quick", run_queue.COVERS["dotnet"])
 
 
 class BuildServerTests(unittest.TestCase):
@@ -137,20 +215,22 @@ class QueueRunTests(unittest.TestCase):
         self.env.stop()
         self.temp.cleanup()
 
-    def queued(self, kind: str, name: str, seconds: float, *, timeout: str | None = None) -> subprocess.Popen:
+    def queued(self, kind: str, name: str, seconds: float, *, timeout: str | None = None,
+               estimate: float | None = None) -> subprocess.Popen:
         code = (f"import time; open({str(self.log)!r}, 'a').write('start {name} %f\\n' % time.time()); time.sleep({seconds}); "
                 f"open({str(self.log)!r}, 'a').write('end {name} %f\\n' % time.time())")
-        return self.wrapper(kind, name, [sys.executable, "-c", code], timeout=timeout)
+        return self.wrapper(kind, name, [sys.executable, "-c", code], timeout=timeout, estimate=estimate)
 
     def live(self) -> list[dict]:
         with run_queue._QueueLock():
             return [item for _, item in run_queue.tickets(prune=False)]
 
     def wrapper(self, kind: str, name: str, command: list[str], *, timeout: str | None = None,
-                environment: dict | None = None) -> subprocess.Popen:
+                environment: dict | None = None, estimate: float | None = None) -> subprocess.Popen:
         before = len(self.live())
         argv = [sys.executable, "-B", str(ARCANUM), "run", "--kind", kind, "--label", name, "--start-within", "0",
-                *(["--timeout", timeout] if timeout else []), "--", *command]
+                *(["--timeout", timeout] if timeout else []), *(["--estimate", str(estimate)] if estimate is not None else []),
+                "--", *command]
         process = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                    env={**os.environ, **(environment or {})})
         self.processes.append(process)
@@ -188,6 +268,30 @@ class QueueRunTests(unittest.TestCase):
             gap = found[f"start {later}"] - found[f"end {earlier}"]
             self.assertGreaterEqual(gap, 0.0)
             self.assertLess(gap, 2.5)  # the poll interval plus interpreter start, not a lock-retry back-off
+
+    def test_a_short_run_that_arrived_later_starts_before_a_long_one_and_the_ticket_keeps_the_estimate(self) -> None:
+        self.queued("window", "running", 1.5)
+        self.until(lambda: self.log.exists())
+        self.queued("window", "long", 0.2, estimate=600.0)
+        self.queued("window", "short", 0.2, estimate=5.0)
+        self.until(lambda: len(self.live()) == 3)
+        self.assertEqual(sorted(item.get("estimateSeconds") for item in self.live() if item["label"] != "running"), [5.0, 600.0])
+        self.finish()
+        found = self.events()
+        self.assertLess(found["start short"], found["start long"])
+        self.assertGreaterEqual(found["start short"], found["end running"])
+
+    def test_a_quick_run_starts_while_a_godot_run_holds_the_slot(self) -> None:
+        self.queued("window", "w", 2.0)
+        self.until(lambda: self.log.exists())
+        self.queued("quick", "q", 0.2)
+        self.finish()
+        found = self.events()
+        self.assertLess(found["end q"], found["end w"])
+
+    def test_an_estimate_must_not_be_negative(self) -> None:
+        with self.assertRaisesRegex(ValueError, "--estimate"):
+            run_queue.run("dotnet", ["true"], estimate=-1.0)
 
     def test_dotnet_runs_alongside_a_godot_run(self) -> None:
         self.queued("window", "w", 2.0)
