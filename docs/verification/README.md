@@ -75,24 +75,24 @@ python3 -B tools/research/exe_census.py --exe "$DAT_ROOT/Arcanum.exe"   # rewrit
 | `address`, `size` | start in upper-case hex; bytes up to the next start |
 | `range` | the start's 64 KiB block (`0x4B` = 0x4B0000..0x4BFFFF) |
 | `source` | how the start was found, joined with `+`: `call` (a direct call lands on it), `ptr` (a dword in `.data`/`.rdata` or a code immediate holds its address and the previous instruction ends a block), `pro` (`push ebp; mov ebp, esp` after a block end), `reg` (the registry names it), `seed` (entry point, WinMain, loop roots) |
-| `callers` | direct calls and unconditional jumps to it from other functions |
+| `callers` | call and unconditional-jump sites in other functions that go straight to it (a count of sites, not of distinct callers; its own recursion is left out) |
 | `calls_out` | distinct other functions it calls or jumps to directly |
-| `address_taken` | `y` when a data dword or code immediate holds its address, so it may be reached through a table, callback or event |
+| `address_taken` | `y` when a data dword (4-aligned, in `.data` or `.rdata`) or an operand of the code holds a value equal to its address, so it may be reached through a table, callback or event; plain numeric constants in the code range count too, so this is an upper bound |
 | `registered` | `y` when [`functions.csv`](functions.csv) has a row |
-| `cited` | number of Markdown documents under `docs/` that cite the address as `0xNNNNNN` |
+| `cited` | number of Markdown documents under `docs/` that cite the address as `0xNNNNNN`; this README and the audit plan are left out, since they describe the census itself |
 | `reach` | by direct calls only: `registered` (reached from a registry function), `loop` (from a game-loop root: the in-game loop, module ping, engine ping, the six per-frame slots, [TL1/TL3/TL5/TL6](../architecture/original-time-loop.md)), `both`, `none` |
 
 Counts of the run on 2026-11-11 (retail 1.0.7.4, SHA-256 `9bd80511…3678d52`):
 
 | | Functions |
 | --- | --- |
-| In the census | 5,810 (the Ghidra trial of 2026-10-17 found 5,551) |
+| In the census | 5,815 (the Ghidra trial of 2026-10-17 found 5,551) |
 | Registered (rows of `functions.csv`) | 871 of the registry's 871; 867 of them are also found by the scan on its own |
-| Cited in a document, not registered | 2,652 (the plan's 2,078 counted call targets only) |
-| `reach` registered / loop / both / none | 723 / 79 / 2,837 / 2,171 |
-| `address_taken` | 1,184 |
-| `reach` none and `address_taken` y | 1,033 (reachable only through a table, callback or event: V1 treats them as roots) |
-| `reach` none, not `address_taken`, not registered | 1,138 (no direct route from a registry function or a loop root; V1 sorts the cited ones first, 1,023 of the `none` rows are cited) |
+| Cited in a document, not registered | 2,656 (the plan's 2,078 counted call targets only) |
+| `reach` registered / loop / both / none | 724 / 79 / 2,840 / 2,172 |
+| `address_taken` | 1,185 |
+| `reach` none and `address_taken` y | 1,034 (reachable only through a table, callback or event: V1 treats them as roots) |
+| `reach` none, not `address_taken`, not registered | 1,138 (no direct route from a registry function or a loop root; V1 sorts the cited ones first, 1,024 of the `none` rows are cited) |
 | Direct callers: 100 or more / size 16 bytes or less | 49 / 581 (helpers and thunks) |
 
 What the numbers do not say:
@@ -101,10 +101,12 @@ What the numbers do not say:
   called through pointers, so most of the game's per-frame work shows as `none` or `address_taken`. `reach` marks what is
   known to be live, not what is dead; a `none` row is never evidence that nothing runs it.
 - **The start list is a scan, not an analysis.** A leaf function that no direct call, data pointer or frame prologue points
-  at is missing (4 of the 871 registry rows were found only because the registry names them). Jump tables (214 found) are cut
-  out of the code before the scan. The largest unit, 0x468930 (206,528 bytes, 357 returns, no call or pointer into
-  it), is probably several functions behind one dispatcher; no start was invented inside it.
-- **1,848 cited addresses are not starts**: call sites, mid-function labels and loop heads (for example 0x41F048). They
+  at is missing (4 of the 871 registry rows were found only because the registry names them). Jump tables and the byte
+  index tables behind them (210 ranges) are cut out of the code before the scan, and a direct call target that is not on a
+  decoded instruction boundary would be dropped and reported (none in this run). A `size` runs to the next start, so it
+  includes any table inside the function. The largest unit, 0x468930, is the one giant switch function the
+  [prototype extraction study](../research/prototype-extraction.md) describes (357 returns, a table inside it); it is one row.
+- **1,844 cited addresses are not starts**: call sites, mid-function labels and loop heads (for example 0x41F048). They
   stay in the documents; the census lists functions only.
 - **The code section includes the C runtime and library code** (the part from about 0x580000 on); the census does not
   separate it, `range` and the callers' counts do. DirectX, Miles and Bink are imports and not in the list.
