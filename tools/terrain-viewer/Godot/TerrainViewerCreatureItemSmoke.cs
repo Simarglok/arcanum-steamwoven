@@ -117,10 +117,14 @@ public partial class TerrainViewerApp
             Require(!session.QueryPlacedItems().Any(p => p.Entity == thrownPet.Item) && !session.QueryPcInventory().Any(i => i.Entity == thrownPet.Item), "pet: the item is gone");
             Require(session.QueryCreatedObject(petRun.Critter!) is { Kind: SessionCreatedKind.Critter } petMade && petMade.Prototype == 28460 + AreaPrototypeItems.PrototypeOffset,
                 "pet: the critter is the script's prototype (28460 + 20)");
+            // ARC-DEV-402 (TG9): the creation ended with the location notification of the cell the item lay on (the critter's own); the AI frame runs it (the tile's script, if any, runs with the critter as the triggerer).
+            var petCell = session.QueryCreatedObject(petRun.Critter!)!.Cell;
+            Require(_creationNoticesForSelfTest.Any(n => n.Entity == petRun.Critter && n.Cell.X == petCell.X && n.Cell.Y == petCell.Y), "pet: the creation queued its location notification on its own cell");
             Require(AreaAiHostNow() is { } hosted && (hosted.Scene.Npcs.Any(n => n.Entity == petRun.Critter) || hosted.Scene.Followers?.Npcs.Any(n => n.Entity == petRun.Critter) == true), "pet: the AI host runs the critter");
             var petFirst = AreaAiHostNow()?.Tile(petRun.Critter!);
             for (var frames = 0; frames < 400; frames++) Frame();
             var petLater = AreaAiHostNow()?.Tile(petRun.Critter!);
+            Require(!_npcTilePending.Any(n => n.Npc == petRun.Critter), "pet: the creation notice was taken by the AI frame");
             var hero = LiveCell(grid) ?? standAt;
             GD.Print($"ARC-MAGIC-042 creature-item pet-after critter={petRun.Critter} first={petFirst?.X},{petFirst?.Y} later={petLater?.X},{petLater?.Y} hero={hero.X},{hero.Y}"
                 + $" led={session.QueryCompanion(petRun.Critter!).LedByPc} standing={session.QueryCompanion(petRun.Critter!).Standing}");
@@ -134,6 +138,7 @@ public partial class TerrainViewerApp
             Require(!attackRun.Followed && !session.QueryCompanion(attackRun.Critter!).LedByPc, "aggressor: the critter does not follow");
             Require(attackRun.Attacks.Any(a => a.Victim == npc.Entity) && attackRun.Attacks.All(a => a.Attacker == attackRun.Critter), "aggressor: the critter raised the attack event on the NPC next to it");
             Require(session.QueryCreatedObject(attackRun.Critter!)?.Prototype == 27391 + AreaPrototypeItems.PrototypeOffset, "aggressor: the critter is the script's prototype (27391 + 20)");
+            Require(_creationNoticesForSelfTest.Any(n => n.Entity == attackRun.Critter), "aggressor: the creation queued its location notification");
             for (var frames = 0; frames < 200; frames++) Frame();
             GD.Print($"ARC-MAGIC-042 native-smoke creature-item PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 RuntimeMap = runtime, Pet = petRun.Critter, PetPoint = petRun.Point, PetFollowed = petRun.Followed, Aggressor = attackRun.Critter, AggressorPoint = attackRun.Point,

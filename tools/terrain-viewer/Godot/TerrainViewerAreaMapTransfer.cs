@@ -222,9 +222,23 @@ public partial class TerrainViewerApp
             GD.Print("ARC-WORLD-081 created " + System.Text.Json.JsonSerializer.Serialize(new { made.Prototype, Near = made.Near.Code,
                 Disposition = made.Result.Disposition.ToString(), Failure = made.Result.Failure.ToString(), made.Result.Item, made.Critter }));
             if (made.Critter is not { } entity || made.Cell is not { } cell) continue;
-            if (_npcTilePending.Count >= 256) _npcTilePending.Dequeue();
-            _npcTilePending.Enqueue((entity, null, new(cell.X, cell.Y)));
+            QueueCreationNotice(entity, cell);
         }
+    }
+
+    // The creation notices queued, for the smokes (entity, cell).
+    private readonly List<(string Entity, AreaStepCell Cell)> _creationNoticesForSelfTest = [];
+
+    /// <summary>
+    /// ARC-DEV-402 (TG9): the location notification of one created critter (the creation finish 0x442260 ends with mode 2 of 0x444270 for any type 15 or 16 object), queued as an AI-host mover's step notice is: the script of the
+    /// tile it stands on runs with it as the triggerer. Used by every creation path that makes a critter on the shown map (the script action 52, an item that became a critter).
+    /// </summary>
+    private void QueueCreationNotice(string entity, CellCoord cell)
+    {
+        _creationNoticesForSelfTest.Add((entity, new(cell.X, cell.Y)));
+        if (_creationNoticesForSelfTest.Count > 64) _creationNoticesForSelfTest.RemoveAt(0);
+        if (_npcTilePending.Count >= 256) _npcTilePending.Dequeue();
+        _npcTilePending.Enqueue((entity, null, new(cell.X, cell.Y)));
     }
 
     private AreaUseScriptHost? UseScriptHost(AreaSnapshot snapshot)
