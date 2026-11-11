@@ -3,8 +3,8 @@
 Fetches origin main and stops at once (SKIP) when both player packages were already made by it from that commit (their
 BUILD.txt), unless --force. Otherwise it checks the commit out into a fresh detached worktree in a temporary folder (never
 the owner's checkout or working tree), and from there runs the commit's own commands: the root checks (CLAUDE.md §2: the
-solution's restore, build and tests through the launch queue, the dat probe and oracle self-tests), the full map smoke
-chain (`./arcanum smoke full`), then `./arcanum package mac` and `win` of that same commit, each told the chain's result
+solution's restore, build and tests through the launch queue, the dat probe and oracle self-tests), the complete map smoke
+run (`./arcanum smoke complete`), then `./arcanum package mac` and `win` of that same commit, each told the chain's result
 for its BUILD.txt. Owner decision 2026-10-29: any failure blocks the packages; a failed check or smoke stops the day
 before packaging and the report names each failed step with its run log and first error, so a fix thread can start; the
 package is built by the first day after the fix. The report and each step's whole output go to
@@ -179,7 +179,7 @@ def check_steps(python: str) -> list[Step]:
 
 
 def smoke_step() -> Step:
-    return Step("smoke", ("./arcanum", "smoke", "full"))
+    return Step("smoke", ("./arcanum", "smoke", "complete"))  # ARC-DEV-396: every stage, not the batteries only
 
 
 def package_step(platform: str, commit: str, map_smoke: str) -> Step:
