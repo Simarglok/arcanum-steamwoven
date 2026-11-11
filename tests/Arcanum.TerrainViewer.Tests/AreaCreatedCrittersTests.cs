@@ -105,4 +105,45 @@ public sealed class AreaCreatedCrittersTests
         Assert.AreEqual(0, picky.TakeNewRefusals().Count, "each refusal is taken once");
         Assert.IsNotNull(f.Session.QueryCreatedObject(bad.Entity), "the session still holds it");
     }
+
+    // ARC-DEV-371 (PG1): the critter flag 0x20000 the create action writes makes a created critter an encounter creature, which the tick destroys when it is left without a next tick; the host
+    // queues the session's destroy (the tick holds the session) and a map NPC or a created critter without the flag is none.
+    [TestMethod]
+    public void A_critter_a_script_made_is_an_encounter_creature_and_its_destroy_is_queued_for_the_session()
+    {
+        using var f = AreaAiHostRebindTests.Open();
+        var created = new AreaCreatedCritters(f.Session, Row);
+        var host = f.Build(f.Scene(0, AreaAiHostRebindTests.Sector(0, 0), [AreaAiHostRebindTests.NpcA(f)]));
+        var plain = Make(f, new(10, 12));
+        var encounter = f.Session.CreateCritterNear(f.Session.Version, Prototype, new(Map), new(12, 12), new OpenDropMap()).Object!;
+        f.Inventory.Resolver.SetCreated(created.Maps(new(Map)));
+        Assert.AreEqual(2, host.SyncCreated(created.Npcs(new(Map))));
+        Assert.IsTrue(host.IsEncounterCreature(encounter.Entity), "the flag 0x20000 the action wrote");
+        Assert.IsFalse(host.IsEncounterCreature(plain.Entity), "a created critter without the flag (the Summon's, the test's) is none");
+        Assert.IsFalse(host.IsEncounterCreature(f.A), "a map NPC is none");
+        Assert.AreEqual(0, host.TakeDestroyedCreated().Count);
+        host.Destroy(encounter.Entity);
+        host.Destroy(encounter.Entity);
+        host.Destroy(f.A);
+        CollectionAssert.AreEqual(new[] { encounter.Entity }, host.TakeDestroyedCreated().ToArray(), "queued once, a map NPC's destroy is not the session's to do");
+        Assert.AreEqual(0, host.TakeDestroyedCreated().Count);
+        // The viewer destroys it in the session; the next sync drops it.
+        Assert.AreEqual(GameSessionDisposition.Changed, f.Session.DestroyCreatedObject(f.Session.Version, encounter.Entity).Disposition);
+        host.SyncCreated(created.Npcs(new(Map)));
+        Assert.IsNull(host.Tile(encounter.Entity));
+        Assert.IsFalse(host.IsEncounterCreature(encounter.Entity));
+    }
+
+    private sealed class OpenDropMap : Arcanum.Simulation.Items.IDropMap
+    {
+        private static readonly (int X, int Y)[] Offsets = [(-1, -1), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1)];
+        public CellCoord? Step(CellCoord from, int rotation) => rotation == 8 ? from : new(from.X + Offsets[rotation].X, from.Y + Offsets[rotation].Y);
+        public Arcanum.Simulation.Items.DropPath Path(CellCoord from, CellCoord to, Arcanum.Simulation.Items.DropOwner who)
+        {
+            var steps = new List<int>();
+            for (var at = from; at != to; at = Step(at, steps[^1])!.Value) steps.Add(Array.IndexOf(Offsets, (Math.Sign(to.X - at.X), Math.Sign(to.Y - at.Y))));
+            return new(steps.Count, 0, steps);
+        }
+        public bool HasCritter(CellCoord cell) => false;
+    }
 }
