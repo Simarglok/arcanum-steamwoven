@@ -127,6 +127,22 @@ class PlanTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "--env takes NAME=VALUE"):
                 self.plan("pr", "--stages", "cast", "--env", bad)
 
+    def test_all_runs_the_sampled_stages_in_full_and_only_goes_with_them(self) -> None:
+        # ARC-DEV-395: container-click and walk check a sample unless --all, which sets the viewer's ARC_SMOKE_ALL.
+        sampled = self.plan("pr", "--stages", "walk", "--no-build")[-1].command
+        self.assertFalse(any(part.startswith(smoke.ALL_ENV + "=") for part in sampled))
+        for argv in (("pr", "--stages", "walk,cast", "--all", "--no-build"),
+                     ("map", "Arcanum1-024-fixed", "--stages", "container-click", "--all", "--no-build")):
+            self.assertIn(smoke.ALL_ENV + "=1", self.plan(*argv)[-1].command)
+        for argv in (("pr", "--all", "--crash-site"), ("pr", "--stages", "cast", "--all"), ("map", "Arcanum1-024-fixed", "--all")):
+            with self.assertRaisesRegex(ValueError, "--all goes with --stages naming"):
+                self.plan(*argv)
+        self.assertEqual(smoke.SAMPLED_STAGES, {"container-click", "walk"})
+        # the viewer reads the same variable the runner sets, in the stage the walk shares it with
+        viewer = REPO / "tools/terrain-viewer/Godot"
+        self.assertIn(f'"{smoke.ALL_ENV}"', (viewer / "TerrainViewerContainerClickSmoke.cs").read_text(encoding="utf-8"))
+        self.assertIn("SmokeAll", (viewer / "TerrainViewerAreaMapWalkSmoke.cs").read_text(encoding="utf-8"))
+
     def test_a_debug_stage_runs_in_the_viewers_debug_mode(self) -> None:
         debug = self.plan("pr", "--stages", "debug-travel", "--no-build")[-1]
         self.assertIn("--debug-mode", debug.command)

@@ -51,6 +51,9 @@ FULL_CHAIN: tuple[tuple[str, str, str, str | None], ...] = (
 SETTINGS = ("ALWAYS_RUN", "AUDIO_VOLUMES", "GAME_SETTINGS", "LAUNCHER_SETTINGS", "VISUAL_PROFILE",
             "WORLD_DIAGNOSTIC_SETTINGS", "WORLD_DIAGNOSTIC_ZOOM")
 STAGES_ENV = "ARC_AREA_MAP_SMOKE_ONLY"
+# ARC-DEV-395: the stages that check a sample unless --all (the viewer reads ALL_ENV: docs/workflow/toolchain.md#smoke-runner-arc-dev-061).
+SAMPLED_STAGES = frozenset({"container-click", "walk"})
+ALL_ENV = "ARC_SMOKE_ALL"
 # The owner's opt-in data, smoke and settings variables never reach a smoke (as in the player package); the queue's stay.
 DROPPED_PREFIXES = ("ARC_", "ARCANUM_", "DAT_ROOT", "LAUNCHER_SETTINGS_", "WORLD_DIAGNOSTIC_", "ALWAYS_RUN_",
                     "AUDIO_VOLUMES_", "GAME_SETTINGS_", "VISUAL_PROFILE_")
@@ -229,6 +232,11 @@ def plan(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mappin
     godot = environ.get("GODOT") or DEFAULT_GODOT
     inputs = conf.get("inputs", {})
     extra = parse_env(getattr(args, "env", None) or ())
+    if getattr(args, "all", False):
+        # ARC-DEV-395: the two long stages run in full (every container, the whole walk) instead of their sample.
+        if not set(parse_stages(args.stages, map_stages())) & SAMPLED_STAGES:
+            raise ValueError(f"--all goes with --stages naming {' or '.join(sorted(SAMPLED_STAGES))} (the sampled stages)")
+        extra = (*extra, (ALL_ENV, "1"))
     steps = build_steps(environ, godot, build=not args.no_build, imported=imported)
     if args.target == "self-test":
         steps.append(Step("self-test", "headless" if args.headless else "window",
@@ -365,6 +373,8 @@ def configure(command: argparse.ArgumentParser) -> None:
         parser.add_argument("--main-menu", action="store_true", help="open the main menu first (not with --hero)")
         parser.add_argument("--env", action="append", metavar="NAME=VALUE",
                             help="one more variable for the viewer (a capture or probe switch); repeatable")
+        parser.add_argument("--all", action="store_true", help="the sampled stages in full: container-click clicks every "
+                            "container, walk goes the whole route (default: a sample, about a tenth of the time)")
 
     stages = "comma list of map smoke stages (ARC_AREA_MAP_SMOKE_ONLY; the viewer's MapSmokeStageNames)"
     pr = targets.add_parser("pr", help="the per-PR scope: only the map smoke stages the change touches or is directly "

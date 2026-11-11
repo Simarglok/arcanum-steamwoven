@@ -161,6 +161,9 @@ narrowed the same day in ARC-DEV-061):
 - The full map smoke chain runs only as part of the daily package build
   (`./arcanum daily`, [daily package build](packaging.md#daily-package-build-arc-dev-062)),
   and only when main changed since the last package; not per PR.
+- `container-click` and `walk` check a sample unless `--all` (ARC-DEV-395, owner
+  decision 2026-11-11); run them with `--all` when the change touches what the
+  sample no longer proves ([sampled stages](toolchain.md#smoke-runner-arc-dev-061)).
 - A stage that also fails on clean main is not this PR's failure: name it in
   the PR and go on; do not investigate it in the task thread.
 - Run them with the shared runner ([smoke runner](toolchain.md#smoke-runner-arc-dev-061)):

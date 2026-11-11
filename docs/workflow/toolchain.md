@@ -99,15 +99,27 @@ Known pitfalls:
 The viewer's smokes on the original data run through one shared runner; do not write a scratch smoke script (the queue
 history held about 500 runs of such copies of one template).
 
-    ./arcanum smoke pr [--stages S,...] [--map NAME] [--hero H] [--sector X,Y] [--main-menu] [--env NAME=VALUE] [--crash-site]
+    ./arcanum smoke pr [--stages S,...] [--map NAME] [--hero H] [--sector X,Y] [--main-menu] [--env NAME=VALUE] [--all] [--crash-site]
     ./arcanum smoke full                       # the full map smoke chain
-    ./arcanum smoke map NAME [--stages S,...] [--hero H] [--sector X,Y] [--main-menu] [--env NAME=VALUE]
+    ./arcanum smoke map NAME [--stages S,...] [--hero H] [--sector X,Y] [--main-menu] [--env NAME=VALUE] [--all]
     ./arcanum smoke crash-site [--hero H] [--env NAME=VALUE]   # the Crash Site smoke alone
     ./arcanum smoke self-test [--headless] [--env NAME=VALUE]  # the viewer's synthetic --self-test
     # each also takes --no-build, --keep-settings and --dry-run
 
 - **Click and walk changes** ([smoke scope](tasks.md#smoke-scope), ARC-DEV-239). A PR that changes click or walk handling
   always runs `./arcanum smoke pr --stages map` and `./arcanum smoke self-test` (both, every such PR).
+- **Sampled stages (ARC-DEV-395, owner decision 2026-11-11).** `container-click` and `walk` took 675 s and 525 s of the
+  one Godot slot ([smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md)), so by default they check a
+  sample; `--all` (on `pr` and `map`, with `--stages` naming one of them; it sets the viewer's `ARC_SMOKE_ALL=1`) runs the
+  full stage. `container-click` clicks at most 8 containers of the window, spread over the (prototype, admitted open
+  outcome) groups, admitted rubbish bins and a locked container first (`ARC-DEV-395 container-click SAMPLE n of N` names them); `walk` plans and walks the
+  route to a goal 12 window moves from the start instead of to the town sector. What the sample no longer proves: for
+  `container-click`, the click path of the containers left out (a pick lost behind another object or a roof, a wrong
+  hover, a refused or locked answer of that container) and the "every rubbish bin opens" rule over the whole window (it
+  holds for the sampled bins); for `walk`, the walk's tail (the 60 or so window moves after the twelfth, the arrival at
+  the town, the planner on the full 88-sector route). Run `--all` when a change touches picking, containers or the click
+  path (`container-click`), or the route planner, the follower, the window loader or the far end of the route (`walk`),
+  and before reporting a stage that failed as sampled as fixed; the daily package chain names neither stage.
 - **Scope** ([smoke scope](tasks.md#smoke-scope)). `pr` is the per-PR run: only the stages the change touches or is
   directly related to (`--stages`, the viewer's `ARC_AREA_MAP_SMOKE_ONLY` names; checked against its
   `MapSmokeStageNames` before anything waits for the queue) on `--map` (default `Arcanum1-024-fixed`, opened at the

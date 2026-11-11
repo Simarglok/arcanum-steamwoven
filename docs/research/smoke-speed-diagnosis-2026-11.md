@@ -176,6 +176,8 @@ section 4 hole stays.
 | Q7 | A cross-process cache of the map's transitions (O5b of the load diagnosis is done per process only, so every smoke run still computes them: 1.8 s in the logs) | about 1.8 s of the 10 s load of every smoke run | small; needs a stamp so it cannot go stale |
 | Q8 | The daily run switches from `full` to `complete` of option A (or to `full` plus the stages the battery lacks) | closes the section 4 hole; costs about 25 minutes of slot a day at night | follows A |
 
+Q6 is done in ARC-DEV-395: the default is a sample (`container-click` 8 containers, `walk` a route cell 10 window moves out), `--all` keeps the full stage; [what the sample no longer proves](../workflow/toolchain.md#smoke-runner-arc-dev-061).
+
 A large item, not recommended now: a warm viewer process that runs several stage groups without restarting (saves the 10 s load per group, but each group
 then needs a reset of the session state, and the smokes are written to start from a fresh load).
 
