@@ -567,3 +567,12 @@ Known differences (documented, not bugs):
 
 - A choice that needs the game world waits for the start map's load, which the original does not do. It is the price of showing the menu first.
 - The main thread is busy while the start map is published, for about a second after the load ends, so the menu may answer late then (O6 of the diagnosis).
+
+## ARC-RES-121 — Function audit wave 3, groups G and I (2026-11-11)
+
+The audit changes no behaviour. Two places where it read original behaviour that our code does not reproduce and that the export shows no caller for ([ledger GI-5](../research/ledger/census-triage-gi.md#findings-of-wave-3)); the comparison tells whether those functions are live.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Press F10 in the original game on a normal map. | The interface bar hides or shows (the compact interface toggle, 0x54ACB0) and the two gauge strips are redrawn. Ours only reserves the key. If nothing happens, the function is dead code. | open |
+| 2 | Start a game with a hero of intelligence 3 or 4, join a companion and type a party order with long words (Enter, the companion's name, a command). | Words of intelligence plus two letters or more are replaced by filler text (0x4C3120); for a hero with the dim flag every word is. Ours does not read typed orders yet. If the order arrives whole, the function is dead code. | open |
