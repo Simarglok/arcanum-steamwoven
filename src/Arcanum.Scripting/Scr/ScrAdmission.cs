@@ -324,6 +324,14 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S32 { get; } = new("S32", S31.Conditions, S31.Actions.Append(ScrCatalogue.Action.UseAmmoUnits), S31.ValueKinds, S31.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The thrown creature item set (ARC-MAGIC-042, technology queue slice T-m1, ledger TI4–TI6): <see cref="S32"/> plus transform into a basic prototype (40), force follow (21) and attack (36), which hand one
+    /// <see cref="ScrObjectStateRequest"/> each (<see cref="ScrObjectStateChange.Transform"/>, <see cref="ScrObjectStateChange.MakeFollow"/>, <see cref="ScrObjectStateChange.Attack"/>) to the host in action order.
+    /// The interpreter keeps the run's attachee as the object the event named: the host applies the requests in order and reads the attachee in a later request as the object a transform made (the original makes the new object the run's attachee).
+    /// </summary>
+    public static ScrAdmissionSet S33 { get; } = new("S33", S32.Conditions,
+        S32.Actions.Concat([ScrCatalogue.Action.TransformObject, ScrCatalogue.Action.MakeFollow, ScrCatalogue.Action.Attack]), S32.ValueKinds, S32.FocusKinds, counterIndexWraps: true);
+
     /// <summary>The conditions of <see cref="S31"/> a host answers through <see cref="IScrSpellQueries"/>.</summary>
     public static IReadOnlySet<int> SpellQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.HasBodySpell, ScrCatalogue.Condition.InfluencedBySpell, ScrCatalogue.Condition.KnowsSpell,
         ScrCatalogue.Condition.MasteredSpellCollege };
