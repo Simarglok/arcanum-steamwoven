@@ -309,6 +309,8 @@ public sealed partial class AreaDataOwner : IDisposable
         try
         {
             var jobs = new (AreaInputIdentity Identity, AreaInput Input, BudgetStream Stream)[large.Length];
+            // ARC-DEV-374: a file the process already hashed in full and that has not changed since needs no read.
+            var known = new string?[large.Length];
             for (var index = 0; index < large.Length; index++)
             {
                 var identity = large[index];
@@ -319,6 +321,7 @@ public sealed partial class AreaDataOwner : IDisposable
                 if (input.Stream is AreaPathStream pathStream) pathStream.Check();
                 var stream = _streams[identity.Key];
                 if (stream.Length != identity.Length) throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Input);
+                known[index] = Memoized(input, identity);
                 jobs[index] = (identity, input, stream);
             }
             // Workers share one context: a read rejection during the parallel reads names the pass, not an input.
@@ -326,7 +329,7 @@ public sealed partial class AreaDataOwner : IDisposable
             var hashes = new string?[jobs.Length]; var failures = new Exception?[jobs.Length];
             Parallel.For(0, jobs.Length, new ParallelOptions { MaxDegreeOfParallelism = Math.Min(jobs.Length, Environment.ProcessorCount) }, index =>
             {
-                try { hashes[index] = HashInput(jobs[index].Stream, jobs[index].Identity.Length, token); }
+                try { hashes[index] = known[index] ?? HashInput(jobs[index].Stream, jobs[index].Identity.Length, token); }
                 catch (Exception error) { failures[index] = error; }
             });
             for (var index = 0; index < jobs.Length; index++)
@@ -336,7 +339,7 @@ public sealed partial class AreaDataOwner : IDisposable
                 if (stream.Length != identity.Length || hashes[index] != identity.Sha256)
                     throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Input);
                 stream.Position = 0;
-                if (input.Stream is AreaPathStream checkedPath) checkedPath.Check();
+                if (input.Stream is AreaPathStream checkedPath) { checkedPath.Check(); if (known[index] is null) Remember(checkedPath, identity, hashes[index]!); }
             }
         }
         finally { foreach (var scratch in scratches) scratch.Dispose(); }
@@ -376,6 +379,13 @@ public sealed partial class AreaDataOwner : IDisposable
         if (input.Stream is AreaPathStream pathStream) pathStream.Check();
         var stream = _streams[identity.Key];
         if (stream.Length != identity.Length) throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Input);
+        // ARC-DEV-374: the same file, unchanged since the process hashed it in full, is not read again; its path binding was checked above.
+        if (Memoized(input, identity) is not null)
+        {
+            stream.Position = 0;
+            ((AreaPathStream)input.Stream).Check();
+            return;
+        }
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         var buffer = new byte[65536]; stream.Position = 0; long read = 0;
         while (read < identity.Length)
@@ -385,11 +395,19 @@ public sealed partial class AreaDataOwner : IDisposable
             if (size == 0) throw Fail(AreaErrorCode.InputChangedDuringRead, AreaStage.Input);
             read = checked(read + size); hash.AppendData(buffer, 0, size);
         }
-        if (stream.Length != identity.Length || Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant() != identity.Sha256)
+        var actual = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+        if (stream.Length != identity.Length || actual != identity.Sha256)
             throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Input);
         stream.Position = 0;
-        if (input.Stream is AreaPathStream checkedPath) checkedPath.Check();
+        if (input.Stream is AreaPathStream checkedPath) { checkedPath.Check(); Remember(checkedPath, identity, actual); }
     }
+    // ARC-DEV-374 (O5a): the hash of a path-bound input that the process has already computed over the whole unchanged file, but only
+    // when it is the one the plan expects (a different hash is refused by a full pass, as before).
+    private static string? Memoized(AreaInput input, AreaInputIdentity identity) =>
+        input.Stream is AreaPathStream bound && VerifiedFileMemo.Lookup(bound.BoundPath, bound.Stamp, identity.Length) is { } known &&
+        string.Equals(known, identity.Sha256, StringComparison.Ordinal) ? known : null;
+    private static void Remember(AreaPathStream bound, AreaInputIdentity identity, string sha256) =>
+        VerifiedFileMemo.Record(bound.BoundPath, bound.Stamp, identity.Length, sha256);
     private void ReserveArchive(BudgetStream stream)
     {
         _budget.Context = new(AreaBudgetCallsite.ArchiveIndex, _budget.Context.Source);
