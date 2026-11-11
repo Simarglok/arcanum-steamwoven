@@ -1,4 +1,5 @@
 using Arcanum.Session;
+using Arcanum.Simulation;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
@@ -102,6 +103,7 @@ public sealed class AreaKnockbackHost : IAiKnockbackWorld, IGoalStepHost
     /// The starter 0x434E80 for the AGoal component 43 (0x4514E0): the object <paramref name="target"/> is pushed away from the <paramref name="source"/> tile. Nothing starts, and false answers, when the object cannot be
     /// pushed here, the push leaves the map, or the table refuses (dying, a knockback underway, the table full). The run's first step is 5 animation milliseconds later.
     /// </summary>
+    [OriginalFunction(0x434E80, OriginalFunctionScope.Partial)]
     public bool Start(string target, CellCoord source)
     {
         ArgumentNullException.ThrowIfNull(target);

@@ -135,6 +135,37 @@ The triage changes no behaviour. These are the places where it found original NP
 | 3 | At night, move a sleeping NPC off its bed (push, teleport or leave the map and come back) and wait. | The sleeper is put back onto a bed object found at its night standpoint, else at its day one (0x4AD0B0, 0x4AD140). Ours leaves it where it is. | open |
 | 4 | Frighten an NPC with a fear effect, or let one surrender in a dialog. | It starts to flee from the source (the start-flee request 0x4AF130). Ours has only the stop-fleeing side. | open |
 
+## ARC-RES-118 — Function triage of the exe band 0x42-0x43 (2026-11-11)
+
+The triage changes no behaviour. These are the places where the readers found original behaviour that our code differs from or lacks, each checked in the code ([ledger](../research/ledger/census-triage-b.md#findings-worth-a-task)); each step is to see the original do it, so that a follow-up task can be sized. The readings are F1 (one reader).
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Watch an NPC that wanders (a townsperson with the wander flag) once it has reached its standpoint, by day and in the dark. | It starts a wander goal (goal 65, in the dark goal 66) and walks to a destination near the standpoint (0x435E60, 0x436040). Ours starts none: the standpoint step of the route rules is marked not implemented, so the NPC stands still. | open |
+| 2 | Stack two critters on one tile (for example a refused attack start next to a follower, or a follower asked to step aside) and watch them. | The NPCs are asked to move away from each other (the step-apart request 0x4364D0, goal 68). Ours has an empty step-apart method, so they stay on one cell. | open |
+| 3 | Talk to an NPC (a dialog open) and, while the dialog is open or just after it, make a script or route walk start for that NPC in a round. | The start gate asks the activity test and whether the NPC has a conversation partner, not only whether it is the round's current participant (0x4339A0, 0x4C1110). Ours tests only the participant, so an NPC in a conversation may be sent walking. | open |
+| 4 | Swing and hit a creature with a weapon that has its own eye candy (a magic weapon), and with a blow that draws blood. | The weapon's own eye candy plays at the swing and at the hit, and the one at the hit may veto the damage effect (0x4377C0); the blood eye candy of the hit plays (0x433020). Ours plays neither (only the blood pool of a kill). | open |
+
+## ARC-DEV-364 — NPC grenades (T-h, 2026-11-11)
+
+An NPC in a fight can now pick a grenade from its pack and throw it at its target ([grenade step](../world/ai-host.md#grenade-step-arc-dev-364), [ledger TH1–TH4](../research/ledger/npc-ai.md#npc-grenade-host-arc-dev-364)).
+The settings differ on purpose in one place: the original's blast-radius reading is inverted (TH1), so **Original** keeps radius 0 for every installed grenade and **Steamwoven** uses the real radius of the
+grenade's spell. Compare in both games with an NPC that carries a grenade (the technology Explosives products, or the grenades in the crash site cave) and has throwing skill points.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Start a fight with a hostile NPC that carries a grenade and has points in throwing, standing a few tiles away with a clear line. | At the start of the fight it throws the grenade once (CHECK_GRENADE is set once per fight start); the grenade flies, explodes with its own spell and is gone from its pack. | open |
+| 2 | Repeat with the hostile NPC standing right next to you. | **Original:** it still throws, because the radius it tests is 0 (TH1). Steamwoven: it does not throw while the target is within the grenade's radius and attacks instead. | open |
+| 3 | Put a friend of that NPC (another NPC of its faction) next to you, then fight. | **Original:** it throws anyway, hurting its friend. Steamwoven: it holds the grenade while a friend it protects stands in the blast square. | open |
+| 4 | Give a companion a grenade (it needs throwing points), then stand next to a hostile NPC that the companion fights. | **Original:** the companion throws anyway and the blast can hit you, its leader (PCs are never checked, SP15; the radius is 0 here too, TH1). Steamwoven: it holds the throw while you stand in the blast square. | open |
+| 5 | Walk behind a wall or a closed door so a blocker stands between you, then fight. | It does not throw while anything blocks the line to your tile (the target tile's own objects do not count). | open |
+| 6 | An NPC with a grenade and no throwing points (a creature with none). | It never throws and attacks as before. | open |
+
+Known differences (documented, not bugs):
+
+- Only the first generic item with the grenade flag in the NPC's list is thrown, as in the original; an NPC does not pick the strongest grenade.
+- The NPC's throw animation and the grenade's flight use the viewer's stand-ins; the NPC's own art is not read yet.
+
 ## ARC-RES-117 — Executable triage of 0x40-0x41 (2026-11-11)
 
 [Ledger section](../research/ledger/census-triage-a.md). The triage changes no behaviour (it adds registry rows and `[OriginalFunction]` marks). These are the places where the reading found original behaviour that our code does not reproduce; each step is to see the original do it. They are read from the executable, not seen in game.

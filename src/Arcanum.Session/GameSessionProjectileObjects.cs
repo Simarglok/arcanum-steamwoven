@@ -1,3 +1,4 @@
+using Arcanum.Simulation;
 using Arcanum.Simulation.Movement;
 
 namespace Arcanum.Session;
@@ -37,6 +38,7 @@ public sealed partial class GameSessionOwner
     /// Null when the cell is out of range or the session holds <see cref="SessionProjectile.MaxProjectiles"/> already. A read-side object: no revision, no version change. Its flight is a goal run the host
     /// starts (<see cref="StartGoal"/>); a save keeps it once the host wrote its flight (<see cref="MoveProjectile"/>).
     /// </summary>
+    [OriginalFunction(0x43CBA0, OriginalFunctionScope.Partial)]
     public string? CreateProjectile(CellCoord cell)
     {
         ThrowIfDisposed();
@@ -48,6 +50,7 @@ public sealed partial class GameSessionOwner
 
     /// <summary>ARC-DEV-140: moves a projectile to <paramref name="cell"/> with the pixel offsets from that tile's centre (the ordinary object move 0x43E770 per tile, GT64). False for a projectile the session does not
     /// hold or a cell out of range. No revision. ARC-DEV-288: <paramref name="flight"/>, when given, replaces the flight the save keeps (null keeps the one written before).</summary>
+    [OriginalFunction(0x43E770, OriginalFunctionScope.Partial)]
     public bool MoveProjectile(string entity, CellCoord cell, int offsetX, int offsetY, SessionProjectileFlight? flight = null)
     {
         ThrowIfDisposed();

@@ -1,6 +1,7 @@
 using Arcanum.Data.Characters;
 using Arcanum.Data.Combat;
 using Arcanum.Session;
+using Arcanum.Simulation;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
 using GamepadLab.Core;
@@ -85,6 +86,7 @@ public sealed class AreaRestockHost
     }
 
     /// <summary>Whether the container's drawn body meets the game window (0x43DFD0 against 0x5E8808..0x5E8814): only on the shown map.</summary>
+    [OriginalFunction(0x43DFD0, OriginalFunctionScope.Partial)]
     public bool OnScreen(SessionMapId map, string entity) =>
         Holder(map.RuntimeMap, entity) is { } found && OnScreen(found.Map, entity);
 

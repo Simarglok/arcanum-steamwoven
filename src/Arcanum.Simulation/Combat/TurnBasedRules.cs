@@ -198,6 +198,7 @@ public static class TurnBasedRules
     /// <see cref="ThrowCost"/> too. An NPC's end-step charge of its pending cost (EX6) is the AI host's; the turn-based host charges it
     /// (the viewer's "default throws" attack still pays the attack cost until ARC-UI-063).
     /// </summary>
+    [OriginalFunction(0x433270, OriginalFunctionScope.Partial)]
     public static int ThrowActionCost(bool localPc, CombatAnomalyProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
