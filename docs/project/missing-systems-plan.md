@@ -321,6 +321,6 @@ survey found only the attacker's emission fed in; the wiring was not traced). It
 2. Movies, credits, endings (E7), gambling and newspapers (E8-h) may be taken, with low priority.
 3. E7-r may look at an ffmpeg-based Bink decoder (LGPL, external dependency).
 4. The network game, the second module, mods and original-save import stay deferred (E10).
-5. Mac concurrency: one Godot slot (`window`, `headless`, `export` share it, first in, first out) and two `dotnet` slots across all
+5. Mac concurrency: Godot lanes (one heavy and two short for `window` and `headless`, an export alone; [lanes](../workflow/toolchain.md#godot-lanes-arc-dev-400)) and two `dotnet` slots across all
    threads ([launch queue](../workflow/toolchain.md#launch-queue-arc-dev-033)); executable reads and docs-only slices are not queued.
 6. Windows validation and the in-game gamepad (E9-a, E9-c) come after the content epics.
