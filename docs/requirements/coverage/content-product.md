@@ -1,6 +1,6 @@
 # Data, compatibility and modern goals
 
-Part of the [functional coverage matrix](../coverage.md): the status scale and the summary by area are there. A task that changes the status of a row here also updates this section's counters in the [summary](../coverage.md#сводка) in the same PR.
+Part of the [functional coverage matrix](../coverage.md): the status scale and the summary by area are there. A task that changes the status of a row here also updates this section's counters in the [summary](../coverage.md#summary) in the same PR.
 
 Requirements: [content-product.md](../content-product.md).
 

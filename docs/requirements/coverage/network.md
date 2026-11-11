@@ -1,6 +1,6 @@
 # Network play
 
-Part of the [functional coverage matrix](../coverage.md): the status scale and the summary by area are there. A task that changes the status of a row here also updates this area's counters in the [summary](../coverage.md#сводка) in the same PR.
+Part of the [functional coverage matrix](../coverage.md): the status scale and the summary by area are there. A task that changes the status of a row here also updates this area's counters in the [summary](../coverage.md#summary) in the same PR.
 
 Requirements: [network.md](../network.md). The area was added on 2026-10-27 (ARC-DEV-044) by owner decision; not part of the alpha, a separate direction after single-player (recommendation of the ARC-RES-072 research).
 
