@@ -79,7 +79,7 @@ public static class AreaCharacterSheet
         var life = session.QueryHeroLife()!;
         var state = life.Record.State;
         // The effective read of the source: poison lowers strength and dexterity, both crippled legs lower speed.
-        var query = session.QueryHeroStats(new(0, state.PoisonLevel, state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth)))!.Value;
+        var query = session.QueryHeroStats(session.HeroStatContext(state.PoisonLevel, state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth)))!.Value;
         var stats = query.Snapshot ?? throw new InvalidOperationException("AREA_SHEET_STATS_" + query.Failure);
         var experience = session.QueryHeroExperience()!;
         var aptitude = stats.GetEffective(CharacterStat.MagickTechAptitude);

@@ -339,7 +339,7 @@ public partial class TerrainViewerApp
         // running one (the record source's callbacks read it) and before the item art sizes, which read those rows.
         _inventoryHost?.ReadCarriedRows(session);
         AttachAreaEncumbranceEffect();
-        AttachAreaDyingScript();
+        AttachAreaDyingScript(); AttachAreaHeroGround();
         AttachAreaItemArtSizes();
         // ARC-DEV-099: the attachment is not saved; the restored session gets the prototypes' script arrays again.
         AttachAreaPrototypeScripts(session);
