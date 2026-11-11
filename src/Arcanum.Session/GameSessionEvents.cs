@@ -78,6 +78,8 @@ public sealed record SessionEventPassResult(GameSessionFailure Failure, GameEven
     public IReadOnlyList<SessionAiTickFiring> AiTicks { get; init; } = Array.Empty<SessionAiTickFiring>();
     /// <summary>The restock events that came due (ARC-WORLD-094), in firing order.</summary>
     public IReadOnlyList<SessionRestockFiring> Restocks { get; init; } = Array.Empty<SessionRestockFiring>();
+    /// <summary>ARC-WORLD-124: the trap device fuses that came due (kind 28, ledger TP3), in firing order; the cast host runs their spells after the pass.</summary>
+    public IReadOnlyList<SessionTrapDeviceFiring> TrapDevices { get; init; } = Array.Empty<SessionTrapDeviceFiring>();
     /// <summary>ARC-DEV-104: the first ticks of sector folds that a touch inside the pass queued (<see cref="GameSessionOwner.TouchSectors"/>),
     /// scheduled when the pass ended, and those the queue could not take.</summary>
     public int DeferredFoldTicks { get; init; }
@@ -216,7 +218,7 @@ public static class SessionEventKinds
     /// can always set its timers, the deferred calls, the timed effects' ENDs, the Lock events, the wait timers, the respawns, the
     /// magic-tech events, the Item Decay events, the AI ticks, (ARC-WORLD-094) the restock events, the real-time steps and (ARC-DEV-132) one goal step per slot.</summary>
     public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 4 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects
-        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxAiTicks + MaxRestocks + MaxRealSteps + MaxGoalSteps;
+        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxAiTicks + MaxRestocks + MaxTrapDevices + MaxRealSteps + MaxGoalSteps;
 
     /// <summary>
     /// The original's AI event (kind 10, game time, never saved by the original; ARC-WORLD-084, ledger CL7, CL8): one NPC's AI tick
@@ -260,6 +262,19 @@ public static class SessionEventKinds
     /// or the session's <see cref="RestockRetryDelayMs"/>).
     /// </summary>
     public const string Restock = "inventory.restock";
+
+    /// <summary>
+    /// The original's Traps event (kind 28, saved, game time; ARC-WORLD-124, ledger TP2, TP3): a placed trap device's fuse. 88,000 ms after the device was used its spell runs at the tile
+    /// with no source and no caster and the marker made at the tile is destroyed. Scoped to the map of its entity, any number. Entity: the marker made on a tile, or the destroyed
+    /// device for a placement on an object (it only names the map; the handler checks its own entities). Values: the game time it was scheduled at, its delay
+    /// (<see cref="Arcanum.Simulation.Traps.TrapDeviceRules.FuseMs"/>, or the retry's <see cref="TrapDeviceRetryDelayMs"/>), the spell record, the tile's cell x and y, and 1 when the entity
+    /// is a marker to destroy (0 otherwise).
+    /// </summary>
+    public const string TrapDevice = "trap.device";
+    /// <summary>Pending trap fuses a session holds (project policy; the original has no bound).</summary>
+    public const int MaxTrapDevices = 256;
+    /// <summary>The delay a fuse that came due without a cast host waits before it is tried again: a minute.</summary>
+    public const long TrapDeviceRetryDelayMs = 60_000;
     /// <summary>Pending restock events a session holds (project policy; the original has no bound; the installed maps have 374 objects
     /// with an inventory source).</summary>
     public const int MaxRestocks = 2048;
@@ -340,6 +355,8 @@ public static class SessionEventKinds
                 new ItemDecayHandler(owner), Validate: DecayPayload),
             new(Restock, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Replace, GameEventScopeRule.EntityMap, 1, 2, 1, 0,
                 new RestockHandler(owner), Validate: RestockPayload),
+            new(TrapDevice, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.EntityMap, 1, 6, 0, 0,
+                new TrapDeviceHandler(owner), Validate: TrapDevicePayload, ChecksOwnEntities: true),
             new(AiTick, GameEventDomain.Game, GameEventPersistence.SavedUnlessRebuilt, GameEventUniqueness.Replace, GameEventScopeRule.ActiveMapOnly,
                 1, 3, 1, 0, new AiTickHandler(owner), Validate: AiTickPayload),
             new(SpellRun, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.Global, 0, 3, 0, 0,
@@ -353,6 +370,12 @@ public static class SessionEventKinds
                 ChecksOwnEntities: true),
         ]);
     }
+
+    // ARC-WORLD-124: [scheduled at, delay (the fuse or the retry), spell record, cell x, cell y, 1 for a marker entity]; the entity names the map.
+    internal static bool TrapDevicePayload(GameEventPayload payload) =>
+        payload.Values[0] >= 0 && payload.Values[1] is Arcanum.Simulation.Traps.TrapDeviceRules.FuseMs or TrapDeviceRetryDelayMs &&
+        payload.Values[2] is >= 0 and < Arcanum.Simulation.Magic.SpellPaymentRules.Spells && payload.Values[3] is >= 0 and < 1 << 24 &&
+        payload.Values[4] is >= 0 and < 1 << 24 && payload.Values[5] is 0 or 1 && payload.Entities[0].Code != AbsentRole;
 
     // Scheduled at a game time, after the decay delay or the retry's, naming an item.
     internal static bool DecayPayload(GameEventPayload payload) =>
@@ -488,6 +511,12 @@ internal sealed class RestockHandler(SessionEventSink sink) : IGameEventHandler
 {
     public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
         sink.Owner?.FireRestock(firing) ?? GameEventHandlerOutcome.Refused;
+}
+
+internal sealed class TrapDeviceHandler(SessionEventSink sink) : IGameEventHandler
+{
+    public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
+        sink.Owner?.FireTrapDevice(firing) ?? GameEventHandlerOutcome.Refused;
 }
 
 internal sealed class SpellRunHandler(SessionEventSink sink) : IGameEventHandler
