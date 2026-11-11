@@ -173,8 +173,11 @@ history held about 500 runs of such copies of one template).
   first"), the roll sequence (`GameSessionOwner.RestoreRandom`; `floaters`' critical hit knocked its NPC out after `barter` and `life` had
   rolled, so the NPC could not strike back) and the hero's cell when it is still on the shown map (`door-close` left the hero in the cell
   `npc-door` walks its NPC into). A new kind of leak is one more line there, not a change to one stage. Not reset: world objects a stage
-  changed (doors, items, bodies) and the viewer's windows; a stage that changes those restores them itself. A session a stage replaced by a
-  load starts a new baseline.
+  changed (a killed NPC, a used door, a looted container) and the viewer's windows. `ARC_SMOKE_STAGE_RESET=0` (as `--env`) switches the
+  reset off, to tell a leak from a stage's own failure; `=full` is an experiment that also loads a baseline save back at every boundary
+  (it fixes the killed-NPC leaks, but a loaded session is not a fresh one: `inv-arrange` counts revisions and sees one more). A process
+  stops at its first failing stage, so a leak fixed here can show the next one that was hidden behind it (`placement-census` after a
+  `pickpocket`/`loot-worn` kill: the AI host does not hold the dead NPC the census expects).
 - **Every requested stage runs (ARC-DEV-063).** `PASS` means each requested stage ran: a map smoke passes only when
   its log holds the `PASS` line of every stage in its list (`STAGE_PASS` in `tools/local_dev/smoke.py`, checked against
   the viewer's sources by the tests), the whole map battery (`full`, `map` without `--stages`) that of `map` and
