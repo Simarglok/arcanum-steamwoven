@@ -225,7 +225,10 @@ def package_build(args: argparse.Namespace) -> int:
     command = [sys.executable, "-B", str(ROOT / "tools" / "local_dev" / "package.py"), args.platform, "--ref", args.ref,
                *(["--no-fetch"] if args.no_fetch else []), *(["--no-smoke"] if args.no_smoke else []),
                *(["--keep-work"] if args.keep_work else []), *(["--map-smoke", args.map_smoke] if args.map_smoke else [])]
-    return run_queue.run("export", command, label=f"package {args.platform}", quiet=not args.verbose)
+    # ARC-DEV-400: a package build takes the queue's front like the owner's viewer launches (after the runs already holding
+    # a place): its turn by arrival time plus 3 of its estimates let the smokes of the lanes pass it for ever.
+    return run_queue.run("export", command, label=f"package {args.platform}", quiet=not args.verbose,
+                         priority=run_queue.FRONT)
 
 
 def positive(value: str) -> int:
@@ -236,7 +239,7 @@ def positive(value: str) -> int:
 
 
 def queue(args: argparse.Namespace) -> int:
-    for line in run_queue.status(args.history):
+    for line in (run_queue.lane_report(args.history) if args.lanes else run_queue.status(args.history)):
         print(line)
     return 0
 
@@ -391,6 +394,8 @@ def parser() -> argparse.ArgumentParser:
     command.set_defaults(func=daily.run)
     command = commands.add_parser("queue", help="show the launch queue: the runs holding a place and the waiters in order")
     command.add_argument("--history", type=positive, default=0, metavar="N", help="show the last N finished runs instead")
+    command.add_argument("--lanes", action="store_true", help="count the finished runs and the red ones per Godot lane, alone and "
+                         "beside other runs, with the load of the latest red ones (ARC-DEV-400; --history N limits the runs)")
     command.set_defaults(func=queue)
     return result
 
