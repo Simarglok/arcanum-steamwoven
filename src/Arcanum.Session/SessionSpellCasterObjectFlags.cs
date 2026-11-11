@@ -51,8 +51,9 @@ public sealed partial class SessionSpellCaster
         var mask = unchecked((int)data.Flag);
         if (FieldOf(data.Field) is not { } which || ObjectFlagNotReady(which, mask)) return false;
         var id = obj.Id;
-        // A set needs the critter here; a clear does not (the change is kept by the critter's identity, and a run's END may come after its critter left the map).
-        if (id == Hero ? _owner.QueryHero() is null : data.On && _dataMap.Critter(id) is null) return false;
+        // A set needs the critter here; a clear needs it here or a change the session already holds for it (the change is kept by the critter's identity, and a run's END may come after
+        // its critter left the map; an object the session wrote nothing on and the map does not know is no critter this host may clear a bit on).
+        if (id == Hero ? _owner.QueryHero() is null : (data.On ? _dataMap.Critter(id) is null : !CritterKnown(id))) return false;
         if (id != Hero && !id.StartsWith(ObjectStateVocabulary.EntityPrefix, StringComparison.Ordinal)) return false;
         var count = ProvidingRuns(id, which, mask, data.On);
         // 0x455100 first: setting a bit another active run already provides does nothing; clearing keeps a bit more than one run provides.
@@ -66,6 +67,9 @@ public sealed partial class SessionSpellCaster
         SideEffects(run, id, which, mask, data.On);
         return true;
     }
+
+    // A critter this host knows: on its map, or one the session holds written flags for (it left the map after a spell wrote them).
+    private bool CritterKnown(string id) => _dataMap.Critter(id) is not null || !_owner.QueryObjectFlags(id).IsEmpty;
 
     private static SessionObjectFlagField? FieldOf(int field) => field switch
     {
@@ -88,13 +92,14 @@ public sealed partial class SessionSpellCaster
     };
 
     // One write of the session's flag change with its log line; false when the session refused it.
-    private bool WriteFlag(SpellRun run, string id, SessionObjectFlagField field, int mask, bool on)
+    private bool WriteFlag(SpellRun run, string id, SessionObjectFlagField field, int mask, bool on, bool sideEffect = false)
     {
         var written = _owner.WriteObjectFlag(_owner.Version, id, field, mask, on, DataHas(id, field, mask));
         var rejected = written.Disposition == GameSessionDisposition.Rejected;
+        var detail = FlagDetail(field, on) | (sideEffect ? SideEffectDetail : 0);
         _log.Add(rejected
-            ? new(SpellCastEventKind.ObjectFlagNotSaved, run.Id, (int)written.Failure, id, FlagDetail(field, on))
-            : new(SpellCastEventKind.ObjectFlagWritten, run.Id, mask, id, FlagDetail(field, on)));
+            ? new(SpellCastEventKind.ObjectFlagNotSaved, run.Id, (int)written.Failure, id, detail)
+            : new(SpellCastEventKind.ObjectFlagWritten, run.Id, mask, id, detail));
         return !rejected;
     }
 
@@ -107,12 +112,12 @@ public sealed partial class SessionSpellCaster
             if ((mask & InvisibleSpellFlag) != 0)
             {
                 // The local player gets the translucent flag only; any other critter the invisible object flag too.
-                if (id != Hero) WriteFlag(run, id, SessionObjectFlagField.Object, ObjectInvisible, on);
-                WriteFlag(run, id, SessionObjectFlagField.Object, ObjectTranslucent, on);
+                if (id != Hero) WriteFlag(run, id, SessionObjectFlagField.Object, ObjectInvisible, on, sideEffect: true);
+                WriteFlag(run, id, SessionObjectFlagField.Object, ObjectTranslucent, on, sideEffect: true);
             }
-            else if ((mask & ShrunkSpellFlag) != 0) WriteFlag(run, id, SessionObjectFlagField.Object, ObjectShrunk, on);
-            else if ((mask & WaterWalkingSpellFlag) != 0) WriteFlag(run, id, SessionObjectFlagField.Object, ObjectWaterWalking, on);
-            else if ((mask & StonedSpellFlag) != 0) WriteFlag(run, id, SessionObjectFlagField.Object, ObjectStoned, on);
+            else if ((mask & ShrunkSpellFlag) != 0) WriteFlag(run, id, SessionObjectFlagField.Object, ObjectShrunk, on, sideEffect: true);
+            else if ((mask & WaterWalkingSpellFlag) != 0) WriteFlag(run, id, SessionObjectFlagField.Object, ObjectWaterWalking, on, sideEffect: true);
+            else if ((mask & StonedSpellFlag) != 0) WriteFlag(run, id, SessionObjectFlagField.Object, ObjectStoned, on, sideEffect: true);
             // GT146: setting entangled interrupts, at level 6, the critter's runs whose bottom or current goal is 3 or 61 (0x44E4D0); the host does it. Stone interrupts nothing.
             else if (on && (mask & EntangledSpellFlag) != 0) _log.Add(new(SpellCastEventKind.HoldStarted, run.Id, mask, id, FlagDetail(field, true)));
         }
@@ -120,13 +125,16 @@ public sealed partial class SessionSpellCaster
         {
             if (on && (mask & ParalysedCritterFlag) != 0) _log.Add(new(SpellCastEventKind.HoldStarted, run.Id, mask, id, FlagDetail(field, true)));
         }
-        else if ((mask & ObjectDontDraw) != 0 && (id == Hero || _dataMap.Critter(id) is not null))
+        else if ((mask & ObjectDontDraw) != 0 && (id == Hero || CritterKnown(id)))
         {
             // Don't-draw on a PC or NPC also sets (or clears) the paralysed critter flag by a plain write: the hidden body does not act (Disintegrate's vanishing body). The original's
             // clear goes on to a function (0x435D70) when the critter's second critter flags have bit 0x2; what it does is not read (F0, MA-1 left-over).
-            WriteFlag(run, id, SessionObjectFlagField.Critter, ParalysedCritterFlag, on);
+            WriteFlag(run, id, SessionObjectFlagField.Critter, ParalysedCritterFlag, on, sideEffect: true);
         }
     }
+
+    /// <summary>The detail bit of an <see cref="SpellCastEventKind.ObjectFlagWritten"/> line a side effect wrote (the object flags and the paralysed bit of don't-draw), not the component's own flag.</summary>
+    public const int SideEffectDetail = 8;
 
     private static int FlagDetail(SessionObjectFlagField field, bool on) =>
         (field switch { SessionObjectFlagField.Critter => 2, SessionObjectFlagField.Object => 4, _ => 0 }) | (on ? 1 : 0);

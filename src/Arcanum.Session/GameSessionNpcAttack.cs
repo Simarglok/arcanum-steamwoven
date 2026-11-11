@@ -477,7 +477,7 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(npc);
         // ARC-DEV-358: the body spell its spell flags hold (the session's written flags) feeds its unarmed attacks.
-        npc = npc.WithUnarmedBody(UnarmedBodyOf(npc.Entity, 0));
+        npc = npc.WithUnarmedBody(UnarmedBodyOf(npc.Entity, npc.DataSpellFlags));
         // No session list and no host rules for the loaded one: its entries have no changes, nothing to apply (the common case, kept cheap).
         if (!_effects.Critters.ContainsKey(npc.Entity) && NpcEffectRules is null) return npc;
         if (QueryNpcEffects(npc.Target) is not { Entries.Count: > 0 } view) return npc;

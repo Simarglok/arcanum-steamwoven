@@ -114,7 +114,7 @@ public sealed class SessionCritterCombat
     /// reads it) and that sheet's level; its other values stay the map data's.</summary>
     internal SessionCritterCombat WithSheet(AdvancementSheet sheet) => new(Entity, _stats, _worn, sheet.BasicSkills, sheet.TechSkills, _baseArmorClass,
         _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded, Experience, Monstrous, sheet.Level,
-        _natural, KillFacts, SessionSkills.Of(sheet, AdvancementModifiers.None), StoredEffects, _effectResistances) { UnarmedBody = UnarmedBody };
+        _natural, KillFacts, SessionSkills.Of(sheet, AdvancementModifiers.None), StoredEffects, _effectResistances) { UnarmedBody = UnarmedBody, DataSpellFlags = DataSpellFlags };
 
     /// <summary>
     /// ARC-DEV-358 (MA-1): the body spell its unarmed attacks add damage for, read from the spell flags it holds (<see cref="GameSessionOwner.UnarmedBodyOf"/>): Body of Earth, Fire or Water,
@@ -122,9 +122,12 @@ public sealed class SessionCritterCombat
     /// </summary>
     internal UnarmedBodySpell UnarmedBody { get; init; }
 
+    /// <summary>ARC-DEV-358: the spell flags (<c>obj_f_spell_flags</c>) the map data or prototype stores for this NPC; the body spell reads them with the session's written change.</summary>
+    internal int DataSpellFlags { get; init; }
+
     internal SessionCritterCombat WithUnarmedBody(UnarmedBodySpell body) => body == UnarmedBody ? this : new(Entity, _stats, _worn, _basicSkills, _techSkills, _baseArmorClass,
         _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded, Experience, Monstrous, Level,
-        _natural, KillFacts, _sheetSkills, StoredEffects, _effectResistances) { UnarmedBody = body };
+        _natural, KillFacts, _sheetSkills, StoredEffects, _effectResistances) { UnarmedBody = body, DataSpellFlags = DataSpellFlags };
 
     // A throwaway owner of the same race and gender over the same base values with the entries applied (the shared one is never touched; the cause is of no consequence there,
     // the race and gender causes of a loaded list belong to the owner's setters and are applied as spell entries); null when the owner refuses anything.
@@ -157,7 +160,7 @@ public sealed class SessionCritterCombat
         var stats = _stats;
         if (modifiers.Length > 0 && ClonedStats(modifiers) is { } cloned) stats = cloned;
         return new(Entity, stats, _worn, _basicSkills, _techSkills, _baseArmorClass, _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded,
-            Experience, Monstrous, Level, _natural, KillFacts, _sheetSkills, StoredEffects, resistances) { UnarmedBody = UnarmedBody };
+            Experience, Monstrous, Level, _natural, KillFacts, _sheetSkills, StoredEffects, resistances) { UnarmedBody = UnarmedBody, DataSpellFlags = DataSpellFlags };
     }
 
     /// <summary>
@@ -280,7 +283,7 @@ public sealed class SessionCritterCombat
             race, gender, facts, loaded, experience, monstrous, level, Natural(npc.Damage),
             new(fields.Object.Description, npc.UnknownDescription, Math.Clamp(stats[AlignmentStat], SessionHeroLimits.MinAlignment, SessionHeroLimits.MaxAlignment),
                 effectiveAptitude), sheetSkills: null,
-            storedEffects: Array.AsReadOnly((critter.Effects ?? []).Select(e => new SessionEffect(e.Number, (EffectCause)e.Cause)).ToArray())));
+            storedEffects: Array.AsReadOnly((critter.Effects ?? []).Select(e => new SessionEffect(e.Number, (EffectCause)e.Cause)).ToArray())) { DataSpellFlags = unchecked((int)spell) });
 
         static SessionCritterCombatBuild Fail(SessionCritterCombatFailure failure) => new(failure, null);
     }

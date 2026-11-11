@@ -120,7 +120,7 @@ public enum SpellCastEventKind
     /// <summary>ARC-DEV-295: the session refused the experience step of a damage step on <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the damage stands.</summary>
     ExperienceNotSaved,
     /// <summary>ARC-DEV-302: an ObjFlag component wrote the flag <see cref="SpellCastEvent.Value"/> on the critter <see cref="SpellCastEvent.Object"/>; <see cref="SpellCastEvent.Detail"/>
-    /// bit 0x1 is on (else off), bit 0x2 the critter flags (else the spell flags).</summary>
+    /// bit 0x1 is on (else off), bit 0x2 the critter flags, 0x4 the object flags (else the spell flags), 0x8 a side effect's write (ARC-DEV-358).</summary>
     ObjectFlagWritten,
     /// <summary>ARC-DEV-302: an ObjFlag component left the flag <see cref="SpellCastEvent.Value"/> as it is, because other runs provide it (the reference count 0x455100); the detail as
     /// <see cref="ObjectFlagWritten"/>.</summary>

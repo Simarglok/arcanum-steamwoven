@@ -16,12 +16,12 @@ public sealed class SessionSpellCasterFlagTests
     private const string Hero = SessionSpellCaster.Hero;
     private static readonly SpellLocation HeroTile = new(5, 5), TargetTile = new(8, 5);
 
-    private sealed class Map(GameSessionOwner owner, SpellCastCritter critter, int dataObjectFlags = 0, int dataSpellFlags = 0) : ISpellCastMap
+    private sealed class Map(GameSessionOwner owner, SpellCastCritter critter, int dataObjectFlags = 0, int dataSpellFlags = 0, bool onMap = true) : ISpellCastMap
     {
         public SpellTargetObject? Object(string id) => id switch
         {
             Hero => new(id, SpellTargetObject.Pc, HeroTile, HitPoints: owner.QueryHeroLife()!.Status.HitPoints),
-            Target => new(id, SpellTargetObject.Npc, TargetTile, ObjectFlags: dataObjectFlags, SpellFlags: dataSpellFlags, HitPoints: 5),
+            Target when onMap => new(id, SpellTargetObject.Npc, TargetTile, ObjectFlags: dataObjectFlags, SpellFlags: dataSpellFlags, HitPoints: 5),
             _ => null,
         };
         public IReadOnlyList<SpellTargetObject> ObjectsInSquare(SpellLocation centre, int radius, int typeMask) => [];
@@ -32,7 +32,7 @@ public sealed class SessionSpellCasterFlagTests
         public int Direction(SpellLocation from, SpellLocation to) => 0;
         public IReadOnlyList<SpellTargetObject> Party(SpellTargetObject source) => [];
         public SpellLineOfFire LineOfFire(SpellObjectFacts parent, SpellLocation tile) => new(0, null);
-        public SpellCastCritter? Critter(string entity) => entity == Target ? critter with { ObjectFlags = dataObjectFlags, SpellFlags = dataSpellFlags } : null;
+        public SpellCastCritter? Critter(string entity) => entity == Target && onMap ? critter with { ObjectFlags = dataObjectFlags, SpellFlags = dataSpellFlags } : null;
         public CombatWeapon WieldedWeapon(string entity) => CombatWeapon.Unarmed();
         public IReadOnlyList<SpellAcidItem> WornItems(string entity) => [];
         public (Combatant Combatant, AttackTargetKind Kind)? ObjectCombat(string id) => null;
@@ -187,6 +187,36 @@ public sealed class SessionSpellCasterFlagTests
     }
 
     [TestMethod]
+    public void A_clear_after_the_critter_left_the_map_takes_both_dont_draw_bits_and_a_clear_on_an_unknown_object_writes_nothing()
+    {
+        var record = Flag(SessionSpellCaster.ObjectFlagsField, SessionSpellCaster.ObjectDontDraw);
+        var (owner, caster) = Session(record);
+        using var _ = owner;
+        var run = Cast(owner, caster, record);
+        Assert.IsFalse(owner.QueryObjectFlags(Target).IsEmpty);
+        // A host over a map that no longer has the critter (the run's END comes after it left).
+        var away = new SessionSpellCaster(owner, n => n == record.Data.Number ? record : null, new Map(owner, TargetCritter(), onMap: false), new Events());
+        away.Apply(owner.QuerySpellRuns()[run]! with { Action = SpellRunAction.End }, 0, new(new SpellRunObject(Target, SpellObjectFacts.NpcType), TargetTile));
+        Assert.IsTrue(owner.QueryObjectFlags(Target).IsEmpty, $"object flag and paralysed bit both taken back: {Trail(away)}");
+        // An object the map does not know and the session wrote nothing on is no critter to clear a bit on.
+        away.Apply(owner.QuerySpellRuns()[run]! with { Action = SpellRunAction.End }, 0, new(new SpellRunObject("oid:other", SpellObjectFacts.NpcType), TargetTile));
+        Assert.IsTrue(owner.QueryObjectFlags("oid:other").IsEmpty);
+        Assert.IsTrue(away.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady && e.Object == "oid:other"), Trail(away));
+    }
+
+    [TestMethod]
+    public void The_side_effect_writes_carry_the_side_effect_bit_of_their_log_detail()
+    {
+        var record = Flag(SessionSpellCaster.ObjectFlagsField, SessionSpellCaster.ObjectDontDraw);
+        var (owner, caster) = Session(record);
+        using var _ = owner;
+        var run = Cast(owner, caster, record);
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.ObjectFlagWritten, run, SessionSpellCaster.ObjectDontDraw, Target, 0x4 | 0x1), caster.Log.First(e => e.Kind == SpellCastEventKind.ObjectFlagWritten), "the component's own flag");
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.ObjectFlagWritten, run, SessionSpellCaster.ParalysedCritterFlag, Target, 0x2 | 0x1 | SessionSpellCaster.SideEffectDetail),
+            caster.Log.Last(e => e.Kind == SpellCastEventKind.ObjectFlagWritten), "the paralysed bit, a side effect");
+    }
+
+    [TestMethod]
     public void The_social_and_AI_flags_the_original_gives_a_function_stay_not_ready_and_write_nothing()
     {
         // Charmed, mind controlled (MA-4); undead, fleeing, blinded (MA-4); the portal flags (MA-6) have no field of this host.
@@ -239,5 +269,11 @@ public sealed class SessionSpellCasterFlagTests
         Assert.AreEqual(UnarmedBodySpell.BodyOfFire, owner.WithNpcEffects(TargetCritter().Combat).UnarmedBody);
         // The spell host's combatant of the NPC reads it (it goes through the NPC's effects and flags since MA-1).
         Assert.AreEqual(UnarmedBodySpell.BodyOfFire, caster.Combatant(new(Target, SpellObjectFacts.NpcType)).UnarmedBodySpell);
+        // The flags the NPC's own data stores count too, and a spell that writes the same bit over them changes nothing.
+        var stored = SessionCritterCombat.From(Target, AttackStateTests.Npc(stats: AttackStateTests.Stats(willpower: 9), critterFlags: 0, spellFlags: 0x20)).Combat!;
+        Assert.AreEqual(0x20, stored.DataSpellFlags);
+        Assert.AreEqual(UnarmedBodySpell.BodyOfFire, owner.WithNpcEffects(stored).UnarmedBody, "the session's fire (written above) comes before the data's water");
+        owner.WriteObjectFlag(owner.Version, Target, SessionObjectFlagField.Spell, 0x10, false);
+        Assert.AreEqual(UnarmedBodySpell.BodyOfWater, owner.WithNpcEffects(stored).UnarmedBody, "the data's own water bit");
     }
 }

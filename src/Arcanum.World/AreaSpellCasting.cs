@@ -102,8 +102,8 @@ public static class AreaSpellCasting
         };
     }
 
-    // The hold an ObjFlag line names (detail bit 0x2: the critter flags, 0x4: the object flags): paralysis, stone or the entangle; null for any other flag.
-    private static string? HoldName(SpellCastEvent entry) => (entry.Detail & 0x4) != 0 ? null
+    // The hold an ObjFlag line names (detail bit 0x2: the critter flags, 0x4: the object flags, 0x8: written by a side effect): paralysis, stone or the entangle; null for any other flag.
+    private static string? HoldName(SpellCastEvent entry) => (entry.Detail & (0x4 | SessionSpellCaster.SideEffectDetail)) != 0 ? null
         : (entry.Detail & 0x2) != 0 ? entry.Value == SessionSpellCaster.ParalysedCritterFlag ? "paralysed" : null
         : entry.Value == SessionSpellCaster.StonedSpellFlag ? "stoned" : entry.Value == SessionSpellCaster.EntangledSpellFlag ? "entangled" : null;
 

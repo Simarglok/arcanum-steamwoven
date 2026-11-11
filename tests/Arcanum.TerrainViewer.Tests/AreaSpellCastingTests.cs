@@ -34,6 +34,7 @@ public sealed class AreaSpellCastingTests
         Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x200, "r1", 5), null, Name), "the invisible object flag");
         Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x40, "r1", 5), null, Name), "the translucent object flag is no paralysis");
         Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x10, "r1", 3), null, Name), "a critter flag that is no hold");
+        Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x40, "r1", 3 | SessionSpellCaster.SideEffectDetail), null, Name), "the paralysed bit don't-draw writes is no hold line");
     }
 
     [TestMethod]
