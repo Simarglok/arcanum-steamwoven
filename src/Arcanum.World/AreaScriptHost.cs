@@ -16,7 +16,7 @@ namespace Arcanum.World;
 /// point of the map's speakers is modelled; everything the viewer does not model answers "no" (no generator, no trap,
 /// alive and free, not jilted).
 /// </summary>
-public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrReactionQueries
+public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrReactionQueries, IScrSpellQueries
 {
     /// <summary>The PC as the scripts see it; the viewer has one.</summary>
     public const string PcCode = SessionEventKinds.PlayerEntity;
@@ -53,7 +53,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     /// (<see cref="QueryHost"/>): the guard conditions of <see cref="ScrAdmissionSet.S4"/> (PC quest state, holds an item named, is named,
     /// wields an item named, has a reputation), obj is dead (22) and obj is switched off (27) of <see cref="ScrAdmissionSet.S18"/>, random (37) of
     /// <see cref="ScrAdmissionSet.S15"/>, float line (23) and get area (84) of <see cref="ScrAdmissionSet.S19"/>, and (ARC-DEV-178, B19) get reaction
-    /// (29) of <see cref="ScrAdmissionSet.S23"/>.
+    /// (29) of <see cref="ScrAdmissionSet.S23"/>. ARC-MAGIC-030 (MT21b): plus the spell conditions body spell (14), influenced by spell (35), knows spell (48) and mastered spell college (49)
+    /// and give spell mastery in college (112) of <see cref="ScrAdmissionSet.S31"/>, which the use host answers and this host writes.
     /// </summary>
     public static ScrAdmissionSet TalkAdmission { get; } = WithQueries("S3-area-talk-queries", Admission);
 
@@ -61,8 +62,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public static ScrAdmissionSet SkillTalkAdmission { get; } = WithQueries("S3-area-talk-queries-skill", SkillAdmission);
 
     private static ScrAdmissionSet WithQueries(string id, ScrAdmissionSet set) => new(id,
-        set.Conditions.Concat(ScrAdmissionSet.ObjectQueryConditions).Concat(ScrAdmissionSet.ObjectStateQueryConditions),
-        set.Actions.Concat([ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea, ScrCatalogue.Action.GetReaction]), set.ValueKinds, set.FocusKinds);
+        set.Conditions.Concat(ScrAdmissionSet.ObjectQueryConditions).Concat(ScrAdmissionSet.ObjectStateQueryConditions).Concat(ScrAdmissionSet.SpellQueryConditions),
+        set.Actions.Concat([ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea, ScrCatalogue.Action.GetReaction, ScrCatalogue.Action.GiveSpellMastery]), set.ValueKinds, set.FocusKinds);
 
     /// <summary>The set a run of this host uses: <see cref="SkillAdmission"/> with a session hero, else <see cref="Admission"/>; ARC-SCRIPT-050:
     /// with the query commands of <see cref="TalkAdmission"/> while <see cref="QueryHost"/> gives a use host of this host's map.</summary>
@@ -112,6 +113,10 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public bool? IsSwitchedOff(ScrObjectRef obj) => Answering.IsSwitchedOff(obj);
     public int Random(int low, int high) => Answering.Random(low, high);
     public int? AreaOf(ScrObjectRef obj) => Answering.AreaOf(obj);
+    public int? SpellFlags(ScrObjectRef obj) => Answering.SpellFlags(obj);
+    public bool? IsInfluencedBy(ScrObjectRef obj, int spell) => Answering.IsInfluencedBy(obj, spell);
+    public bool? KnowsSpell(ScrObjectRef obj, int spell) => Answering.KnowsSpell(obj, spell);
+    public int? MasteredCollege(ScrObjectRef obj) => Answering.MasteredCollege(obj);
 
     /// <summary>ARC-DEV-178 (B19, GR1): the standard effective reaction (0x4C0CC0) of one of this host's speakers toward the PC, read as the dialog's
     /// reaction conditions read it (the session's reaction with the speaker's and the PC's facts, the enemy list included); null (the dispatch ends
@@ -365,6 +370,14 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
             var target = request.Object == Pc ? SessionSchemeTarget.Hero
                 : _npcAdvancement?.Invoke(request.Object.Code) is { } npc ? SessionSchemeTarget.ForNpc(npc) : null;
             if (target is not null && SchemeRefusalStops(_session.SetAutoLevelScheme(_session.Version, target, request.Scheme).Failure)) return false;
+        }
+        // ARC-MAGIC-030 (SC5): each give spell mastery request in action order, for the PC or an NPC of this map whose advancement the viewer reads; any other object is ignored (the
+        // original does nothing for an object that is not a PC or NPC). The spell-book rule decides; a session that cannot take the change stops the later steps.
+        foreach (var request in effects.ObjectStates)
+        {
+            if (request.Change != ScrObjectStateChange.GiveSpellMastery) continue;
+            if (request.Object == Pc) { if (!AreaScriptSpells.GiveMastery(_session, null, request.Value)) return false; }
+            else if (request.Object.Map == _map.RuntimeMap && _npcAdvancement?.Invoke(request.Object.Code) is { } npc && !AreaScriptSpells.GiveMastery(_session, npc, request.Value)) return false;
         }
         // ARC-TECHNOLOGY-005 (SW8, TC2 both fixed): each start schematic UI request in action order, resolved now (the PC, or an NPC
         // and its PC leader); it changes no session state, so it neither stops nor is stopped by a later step.
