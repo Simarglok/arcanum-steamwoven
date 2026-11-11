@@ -197,7 +197,7 @@ under their map on purpose; MIG7b keeps them in the same store as the fields of 
 ## MIG7c: what is built
 
 Where a map NPC stands was run-local state: the AI host's movers (`AreaAiMovers`) held the cell and facing of every NPC the host had walked or turned, and a quick load, a map change or a window move built the host again
-with no movers, so every NPC stood on its map data's cell (GR10, bugs B06 and B10 of the [smoke plan](../research/open-bugs-migration-smoke-plan.md)). MIG7c makes the place **object state**: one more field of the mobile
+with no movers, so every NPC stood on its map data's cell (GR10, bugs B06 and B10 of the [smoke plan](../research/open-bugs.md)). MIG7c makes the place **object state**: one more field of the mobile
 object's entry, in the store MIG7a built.
 
 - **The field.** `npc.pos` (`SessionNpcPlacement.Property`), a mobile object field of `ObjectStateVocabulary`: the world cell and the facing packed into one value (the packing of a companion's `npc.cell`, now one
@@ -412,7 +412,7 @@ Slice E1-c4 of the [missing systems plan](../project/missing-systems-plan.md): w
 
 - With the town seed `Ready` the combat and inventory stages of the map smoke run in the town window for the first time (before, the refused seed left no combat host and they
   skipped silently). Their fixtures were written for the Crash Site and failed there; ARC-DEV-089 adapted the smoke checks (no game change): the `town` step of the full chain
-  passes, see [the open-bugs re-smoke](../research/open-bugs-resmoke-2026-11-04.md#follow-ups-this-result-points-to-not-started).
+  passes, see [the open-bugs re-smoke](../research/open-bugs.md).
 - Except the lists of NPCs and containers (MIG6d-1), the hero's lists, placed items and given records (MIG6d-2) and the junk piles and pools (MIG6d-3), the stores are still per kind (the ammunition units, the weight facts and the taken mark) and the directory is derived from them on each query: a consumer that wants "where is X" can ask now, but nothing else is moved. A holder whose map has no seed attached (a map the run never read, or one the session refused) is still unknown; the loot of a dead NPC and a container
   of another map, and the barter with them, still look at the actor's map only (MIG6e moved the negative `IN` and the steal of an NPC list). Both paths are internal to the session; the public per-kind methods (`PlaceHeroItem`, `LeaveBloodPool`, `AddItemToNpc`, ...) keep their signatures and results.
 - The destroy script of point 2 (which may refuse), an NPC's leave of its leader, the drop of an invulnerable item of a destroyed holder and the spell runs that name the object
@@ -420,5 +420,5 @@ Slice E1-c4 of the [missing systems plan](../project/missing-systems-plan.md): w
 - An NPC's worn items (`NpcWorn`) and an item's slot inside a holder are not part of an entry; a given kit or taken item is `NpcList` with its
   entity unchanged.
 - A queried item of a map that is not attached, and not taken or placed by the session, answers null (it is not a destroyed object); so does an item marked taken that no list holds, which no move of the session leaves.
-- Whether B01 (items turning into other models after a window move) comes from per-kind keys is an inference of the [smoke plan](../research/open-bugs-migration-smoke-plan.md),
+- Whether B01 (items turning into other models after a window move) comes from per-kind keys is an inference of the [smoke plan](../research/open-bugs.md),
   not confirmed; MIG6a removes one possible cause (a reused junk or pool id) and nothing else of it. B02 is MIG6b's; B04 is MIG6c's: the one destroy closes the paths that left a pile with one item or none standing, whose reported case (an emptied pile staying after Take all, window still open) is the window's own rule (JP5) that `CloseJunkPile` ends, so the `junk` stage on the ruins decides whether the player's report is gone.

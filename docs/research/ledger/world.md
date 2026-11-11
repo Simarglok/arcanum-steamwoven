@@ -417,7 +417,7 @@ cell's centre is an integer there), which keeps the old tile for the whole step 
 placement is now the session's committed cell, which the grid contract commits half way along every step (P3), and the offsets are the anchor's distance from it. The grid session
 commits a window vault half way as well (562 ms), where HL2 puts the original's tile shift at the action frame (250 ms): the remaining gap, not changed here.
 PB1 and PB2 are the rules the cave's passability is built from (T7, F7); the reading found no difference, so B44's cells are not a slip of the rules (see the
-[B44 row of the bug re-check](../open-bugs-resmoke-2026-11-04.md#fix-and-re-check-by-arc-dev-203-2026-11-07)).
+[B44 row of the bug re-check](../open-bugs.md)).
 
 ## Load screen and transition presentation (ARC-DEV-204)
 
