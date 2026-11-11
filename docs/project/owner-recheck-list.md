@@ -760,3 +760,19 @@ Known differences (documented, not bugs):
 - The light at the trap is taken as full: an untrained hero in the dark is not penalised yet (the original adds up to 30 against an untrained hero).
 - The item that adds a modifier to the roll (inventory location 1005, name 2866) is not modelled.
 - Companions' own spot attempts are not made; disarming a trap and the skill-bar button are the next slice.
+
+## ARC-MAGIC-056 — Tempus Fugit speed (spell 79)
+
+Rules: [contract](../world/character-stats-runtime.md#tempus-fugit-speed-arc-magic-056), ledger [TF1–TF3](../research/ledger/spell-runs.md#tempus-fugit-speed-arc-magic-056). Compare in both games with the same hero (any Temporal hero with Tempus Fugit) and a hostile or neutral creature near.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast Tempus Fugit (spell 79) on the hero. Open the character sheet (speed line) and the inventory window. | The hero's speed is 10 higher while the spell is maintained, and back to the old value when it ends. | open |
+| 2 | Cast it, then fight a creature in turn-based mode, and compare the action points of the hero and of the creature with and without the spell. | The hero has 10 more action points; every other creature has 10 fewer (at least the game's minimum of 5). | open |
+| 3 | Cast it and fight in real time; compare the pause between attacks of the hero and of the creature with and without the spell. | The hero attacks faster, the creature slower. Walking speed does not change. | open |
+| 4 | Have a companion with the hero when casting. | The companion is in the spell's area and gains the same +10 as the hero; a companion that joins after the cast does not (not built, XR7). | open |
+
+Known differences (documented, not bugs):
+
+- An NPC that casts Tempus Fugit (record 79 carries a flee priority for the AI) changes speeds even when the player does not hold the spell: the owner decided on 2026-11-11 that the original's player-only test is a bug of the game, fixed in both modes. In the original such a cast does nothing to anyone's speed.
+- The follower join and leave flag writes (XR7) are not built: a companion that joins after the cast gains nothing, and one that leaves keeps the flag until the spell ends.
