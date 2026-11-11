@@ -44,8 +44,10 @@ internal static class AreaMapLoadOperation
             (centre is { } shown ? $" window={shown.X},{shown.Y}" : string.Empty));
         token.ThrowIfCancellationRequested();
         // ARC-WORLD-031: the map's transitions and the maps this mode can open, from the same stack.
+        var transitionsStarted = Environment.TickCount64; var transitionsReads = AreaMapTransitionsCache.Reads;
         var (transitions, destinations, transitionsFailure) = Transitions(stack, catalog, mapPlan.Map);
-        Console.WriteLine($"ARC-WORLD-031 load stage=transitions sites={transitions?.Sites.Count} unconditional={transitions?.Unconditional.Count()} issues={transitions?.Issues.Count} destinations={destinations?.Count} failure={transitionsFailure}");
+        Console.WriteLine($"ARC-WORLD-031 load stage=transitions sites={transitions?.Sites.Count} unconditional={transitions?.Unconditional.Count()} issues={transitions?.Issues.Count} destinations={destinations?.Count} failure={transitionsFailure}" +
+            $" cached={AreaMapTransitionsCache.Reads == transitionsReads && transitions is not null} ms={Environment.TickCount64 - transitionsStarted}");
         // ARC-WORLD-081: a window's template sectors run their templates' sector scripts on entry, as the own sectors do (PG9).
         var templateScripts = mapPlan.Plan.Window is { } window
             ? MapTransitions.TemplateSectorScripts(catalog, mapPlan.Map, window.Sectors.Where(s => s.Template is not null)
@@ -198,10 +200,12 @@ internal static class AreaMapLoadOperation
 
     /// <summary>ARC-WORLD-031: the map's transitions (ARC-DATA-025) and every listed map with a sector file, which map mode
     /// can open (whole, or as a window since ARC-RENDER-024), by runtime number. An unlisted map has no transitions (the
-    /// reason is returned instead).</summary>
+    /// reason is returned instead). ARC-DEV-368 (O5b): a map's transitions are read once per process for the same content (every window
+    /// move and map change loads the map again, and its transitions do not change): <see cref="AreaMapTransitionsCache"/>.</summary>
     internal static (MapTransitionSet? Transitions, IReadOnlyDictionary<int, AreaMapDestination>? Destinations, string? Failure) Transitions(
         ContentStack stack, WorldCatalog catalog, WorldMap map)
     {
+        if (AreaMapTransitionsCache.TryGet(stack, map, out var held)) return (held.Transitions, held.Destinations, null);
         var list = MapList.Read(stack);
         if (list.Status != MapListStatus.Read) return (null, null, "MAP_LIST_" + list.Status.ToString().ToUpperInvariant());
         if (list.Find(map.Name) is null) return (null, null, "MAP_NOT_LISTED");
@@ -211,6 +215,7 @@ internal static class AreaMapLoadOperation
         foreach (var entry in list.Entries)
             if (catalog.Find(entry.Name) is { SectorFiles.Count: > 0 } folder)
                 destinations.TryAdd(entry.Runtime, new(entry.Runtime, entry.Catalogue, folder.Name));
+        AreaMapTransitionsCache.Add(stack, map, transitions, destinations);
         return (transitions, destinations, null);
     }
 
@@ -266,6 +271,50 @@ internal static class AreaMapLoadOperation
         var sources = expected.Take(2).ToArray();
         if (sources.Length != 1 || !string.Equals(Path.GetFullPath(sources[0]), Path.GetFullPath(actual), StringComparison.Ordinal))
             throw new InvalidOperationException("AREA_MAP_SOURCES_MISMATCH");
+    }
+}
+
+/// <summary>
+/// ARC-DEV-368 (O5b, ARC-RES-102): a map's transitions and the map list's destinations, read once per process for the same content stack. The load of a map
+/// recomputed them every time (1.0–1.6 s of the worker on each load, every window move and cave return included) though they depend on the
+/// content only: the map list, the map's sector scripts and the module's script archive. The key is the map and the stack's identity: each
+/// mounted source's path, an archive's size and modification time, and the number of indexed names (a loose file added or removed changes it).
+/// A loose file edited in place under an unchanged name count is not seen until the process restarts (the content is the installation's own, which no run edits). Only a read that succeeded is kept (an unlisted map or an unreadable list is cheap and is answered again). The values are immutable
+/// records and read-only lists, shared by every load. Thread-safe. No game rule or data changes: the same records as a fresh read.
+/// </summary>
+internal static class AreaMapTransitionsCache
+{
+    internal sealed record Held(MapTransitionSet Transitions, IReadOnlyDictionary<int, AreaMapDestination> Destinations);
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string Map, string Identity), Held> Entries = new();
+    private static long _reads;
+
+    /// <summary>How many times a map's transitions were read from the content (not answered from the cache) in this process.</summary>
+    internal static long Reads => Interlocked.Read(ref _reads);
+
+    internal static bool TryGet(ContentStack stack, WorldMap map, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Held? held) => Entries.TryGetValue((map.Name, Identity(stack)), out held);
+
+    internal static void Add(ContentStack stack, WorldMap map, MapTransitionSet transitions, IReadOnlyDictionary<int, AreaMapDestination> destinations)
+    {
+        Interlocked.Increment(ref _reads);
+        // The destinations are kept as a read-only copy, so no caller can change what the next load is given.
+        Entries[(map.Name, Identity(stack))] = new(transitions, new System.Collections.ObjectModel.ReadOnlyDictionary<int, AreaMapDestination>(destinations.ToDictionary(pair => pair.Key, pair => pair.Value)));
+    }
+
+    /// <summary>Forgets what was read (tests).</summary>
+    internal static void Clear() => Entries.Clear();
+
+    internal static string Identity(ContentStack stack)
+    {
+        var text = new System.Text.StringBuilder();
+        foreach (var source in stack.Plan.SearchOrder)
+        {
+            text.Append((int)source.Role).Append('|').Append(source.Number).Append('|').Append(source.Path);
+            if (source.Kind == ContentSourceKind.Archive && new FileInfo(source.Path) is { Exists: true } file)
+                text.Append('|').Append(file.Length).Append('|').Append(file.LastWriteTimeUtc.Ticks);
+            text.Append(';');
+        }
+        return text.Append(stack.KeyCount).ToString();
     }
 }
 

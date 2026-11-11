@@ -107,6 +107,8 @@ public partial class TerrainViewerApp
         // ARC-DEV-099: a session built here, or carried from the map before, answers the prototypes' script arrays for the items it creates.
         AttachAreaPrototypeScripts(_areaSession!);
         BindAreaInventory(arguments, result, keepLeft: carried is not null && _mapHandoff is { Kind: not MapHandoffKind.QuickLoad });
+        // ARC-DEV-368 (O3): the hero's body reads on a worker while the rest of the publication binds its hosts.
+        PrefetchHeroBody();
         // ARC-UI-055: the inventory art sizes read the seeds' rows, so they are attached once the seeds are.
         AttachAreaItemArtSizes();
         // ARC-UI-041: the map opens: its default music and ambient pair plays. ARC-WORLD-038: a session a quick load (or its
@@ -149,7 +151,7 @@ public partial class TerrainViewerApp
             EndLevelMessages(_areaSession);
             _areaSession?.Dispose();
         }
-        _newGameRecipe = null;
+        _newGameRecipe = null; _heroBodyPrefetch = null;
         _areaTransitions = null; _areaSession = null; _useOpenPending = null; _useTargets.Clear(); _mapTransfers = null; _mapEntered.Clear(); _useScriptHost = null;
         _exteriorArea = null; _exteriorSteps = null; _caveLoad = null; _areaUseStatus = "cave: not loaded"; _companionTemplates = [];
         _audio?.StopAll(); _schemePlayer = null; _schemeVoices.Clear(); _combatStinger = _combatLoop = null; _soundSector = null;
