@@ -5,6 +5,7 @@ using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 using Arcanum.Simulation.Items;
+using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation;
 
@@ -83,7 +84,7 @@ public readonly record struct AreaPrintedLine(int Type, string Text);
 /// The PC's reputations are the session's (ARC-WORLD-044); no other object has one. Everything else the viewer does not model
 /// answers "no", as for the dialog and item hosts.
 /// </summary>
-public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries
+public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries
 {
     /// <summary>Map-change keys of an object's use slot.</summary>
     public const string LocalFlagsProperty = "use.lf", CountersProperty = "use.counters", ScriptProperty = "use.script";
@@ -125,15 +126,17 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// counter operand with any index. ARC-DEV-157 (bug B23): plus get stat (33) of <see cref="ScrAdmissionSet.S22"/>, answered for the PC only
     /// (<see cref="EffectiveStat"/>). ARC-DEV-205 (bug B22): plus unfog town map (113) of <see cref="ScrAdmissionSet.S24"/>, which reveals the town map
     /// in the session (<see cref="AreaScriptStory"/>); the wreck's sector script 3036 and one use script carry it (the census counts two scripts).
+    /// ARC-MAGIC-030 (MT21b, ledger SC1–SC6): plus the spell conditions body spell (14), influenced by spell (35), knows spell (48) and mastered spell college (49) of
+    /// <see cref="ScrAdmissionSet.S31"/>, which this host answers (<see cref="IScrSpellQueries"/>), and give spell mastery in college (112), which it writes through the session.
     /// </summary>
-    public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading-objects-story-world", ScrAdmissionSet.S4.Conditions,
+    public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading-objects-story-world", ScrAdmissionSet.S4.Conditions.Concat(ScrAdmissionSet.SpellQueryConditions),
         ScrAdmissionSet.S4.Actions.Where(a => a is not ScrCatalogue.Action.Dialog)
             .Concat([ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque,
                 ScrCatalogue.Action.CallScript, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType,
                 ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation,
                 ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.CreateObject, ScrCatalogue.Action.GetStat,
-                ScrCatalogue.Action.UnfogTownMap]),
+                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery]),
         ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]),
         counterIndexWraps: true);
@@ -172,15 +175,15 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// script outside it is refused and the tick goes on as without a script. ARC-SCRIPT-049 (audit slice 1): plus the world questions the
     /// installed heartbeats ask first: the conditions following (18), is named (20), is dead (22), is switched off (27) and has a reputation
     /// (33), and the actions call script in (54, through the session's queue), distance between (71) and set faction (134) of
-    /// <see cref="ScrAdmissionSet.S18"/>.
+    /// <see cref="ScrAdmissionSet.S18"/>. ARC-MAGIC-030 (MT21b): plus the spell conditions (14, 35, 48, 49) and give spell mastery in college (112) of <see cref="ScrAdmissionSet.S31"/>.
     /// </summary>
     public static ScrAdmissionSet HeartbeatAdmission { get; } = new("S2-area-heartbeat-state-kill-talk-world",
         ScrAdmissionSet.S2.Conditions.Concat([ScrCatalogue.Condition.FollowingPc, ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsDead,
-            ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasReputation]),
+            ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasReputation, .. ScrAdmissionSet.SpellQueryConditions]),
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
             ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
-            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, .. CastActions, .. DamageActions]),
+            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, .. CastActions, .. DamageActions]),
         ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]));
 
@@ -370,6 +373,50 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         if (Row(obj) is not { } row) return null;
         return ((Number(row, ObjectFlagsSlot) ?? 0) & OffObjectFlag) != 0 || row.Type == NpcType && obj.Map == _shownMap && SwitchedOff(_session, obj.Map, obj.Code);
     }
+
+    // ARC-MAGIC-030 (MT21b, SC1): the object's spell flags (field 20) as the original's field getter reads them for any object type: a row's effective value, and for a
+    // critter the flags the session's spell components wrote over it (QueryObjectFlags); the PC has no row, its flags are the written ones. The PC of a session without a hero and
+    // an object of no loaded row are unknown (null: the run stops). The body-of-element bits are written by no spell component yet (the ObjFlag component takes only the hold
+    // bits), so a running body spell does not show here until it does.
+    public int? SpellFlags(ScrObjectRef obj)
+    {
+        if (IsPc(obj)) return _session.QueryHero() is null ? null : _session.QueryObjectFlags(AreaScriptHost.PcCode).Spell(0);
+        if (Row(obj) is not { } row) return null;
+        var stored = unchecked((int)(Number(row, SpellFlagsSlot) ?? 0));
+        return row.Type == NpcType ? _session.QueryObjectFlags(obj.Code).Spell(stored) : stored;
+    }
+
+    // SC2: the influence test 0x459380 over the session's spell runs (the run's target only: its two object lists are not modelled). The PC without a hero is asked nothing
+    // (no runs); an object of no loaded row is unknown.
+    public bool? IsInfluencedBy(ScrObjectRef obj, int spell)
+    {
+        if (!IsPc(obj) && Row(obj) is null) return null;
+        return SpellRunRules.UnderInfluence(_session.QuerySpellRuns(), IsPc(obj) ? AreaScriptHost.PcCode : obj.Code, spell);
+    }
+
+    // SC3: known (0x4B1950) over the object's spell book (0x4B1AB0: a PC's or NPC's stored ranks, rank 0 for any other object).
+    public bool? KnowsSpell(ScrObjectRef obj, int spell) => BookOf(obj) is { } of ? of.Book is { } book && SpellBookRules.IsKnown(book, spell) : null;
+
+    // SC4: the mastered college (0x4B1CB0): the book's, -1 for none and for any object that is neither a PC nor an NPC.
+    public int? MasteredCollege(ScrObjectRef obj) => BookOf(obj) is { } of ? of.Book?.MasteredCollege ?? SpellBookRules.NoMastery : null;
+
+    // The spell book the original reads for the object: the hero's (null without a hero: unknown), an NPC's as the session records it, else as its map data stores it (the book
+    // outside its ranges or missing fields: unknown), none for another object type (a PC or NPC type is the only one with ranks); an object of no loaded row is unknown.
+    private ObjectBook? BookOf(ScrObjectRef obj)
+    {
+        if (IsPc(obj)) return _session.QueryHeroSpellBook() is { } hero ? new ObjectBook(hero) : null;
+        if (Row(obj) is not { } row) return null;
+        if (row.Type is not (NpcType or PcType)) return new ObjectBook(null);
+        var book = _session.QueryNpcSpellBook(obj.Code) ?? SpellBookRules.FromFields(Arcanum.Data.Combat.CombatFieldReader.Read(row).Fields?.Critter?.SpellTech);
+        return book is null ? null : new ObjectBook(book);
+    }
+
+    // The spell book of an object that has a place in the model; Book is null for an object type with no ranks.
+    private readonly record struct ObjectBook(SpellBook? Book);
+
+    // The loaded advancement of an NPC row as its map data gives it (the effects change no sheet value), null when its fields give no admissible sheet.
+    private SessionNpcAdvancement? AdvancementOf(ScrObjectRef npc) =>
+        Row(npc) is { } row && Arcanum.Data.Combat.CombatFieldReader.Read(row).Fields is { } fields ? AreaAdvancement.Npc(npc.Code, fields, _ => null)?.Loaded : null;
 
     // An object's tile: the PC's live cell (the session's placement without a world), an NPC's live cell (ARC-SCRIPT-047), a row's world cell.
     private CellCoord? Place(ScrObjectRef obj)
@@ -1056,6 +1103,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
                 else if (ShownNpc(request.Object) || ShownDamageable(request.Object)) _world!.ScriptDamageAsk?.Invoke(request.Object.Code);
                 continue;
             }
+            if (request.Change == ScrObjectStateChange.GiveSpellMastery)
+            {
+                // SC5: the PC, or an NPC of the shown map (ObjectStateRefusal checked its sheet); any other object does nothing in the original. The spell-book rule decides, the run goes on.
+                if (IsPc(request.Object) ? !AreaScriptSpells.GiveMastery(_session, null, request.Value)
+                    : ShownNpc(request.Object) && AdvancementOf(request.Object) is { } npc && !AreaScriptSpells.GiveMastery(_session, npc, request.Value)) return false;
+                continue;
+            }
             if (request.Change == ScrObjectStateChange.HealHitPoints)
             {
                 // GT196: a living PC or NPC of the shown map; any other object does nothing in the original.
@@ -1228,6 +1282,17 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             if (request.Change == ScrObjectStateChange.HealHitPoints)
             {
                 if (_world?.ScriptHeal is null) return "heal hit points needs the viewer's session";
+                continue;
+            }
+            // ARC-MAGIC-030 (SC5): give spell mastery acts on the PC and on an NPC of the shown map whose sheet its map data gives; a PC or NPC row of another map, or an object of no loaded
+            // row, is not modelled (the original would write it), and any other object type does nothing, as in the original.
+            if (request.Change == ScrObjectStateChange.GiveSpellMastery)
+            {
+                if (IsPc(request.Object)) continue;
+                if (Row(request.Object) is not { } masteryRow) return $"give spell mastery of {request.Object.Code} is not modelled (no loaded row)";
+                if (masteryRow.Type is not (NpcType or PcType)) continue;
+                if (masteryRow.Type == PcType || request.Object.Map != _shownMap) return $"give spell mastery of {request.Object.Code} is not modelled (only the PC or an NPC of the shown map)";
+                if (AdvancementOf(request.Object) is null) return $"give spell mastery of {request.Object.Code} needs its sheet, which its map data does not give";
                 continue;
             }
             if (request.Change == ScrObjectStateChange.CastSpell)
