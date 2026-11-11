@@ -57,7 +57,7 @@ it blocking in one step and read its result; this satisfies the one-minute rule.
 A failed start adds `start check: REASON` under the `FAIL` line on stdout, before the log lines. Fix the command and run
 it again; a failed start is never a result of the change under test.
 
-- **Start lines.** Each log line is checked in order (a line rewritten with `\r` counts as a line). For `window`, `headless` and `export` runs: the viewer's `ARC-DEV-059 viewer start mode=M map=NAME main-menu=B smoke=B`
+- **Start lines.** Each log line is checked in order (a line rewritten with `\r` counts as a line). For `window`, `headless`, `export` and `quick` runs: the viewer's `ARC-DEV-059 viewer start mode=M map=NAME main-menu=B smoke=B`
   (printed when its arguments resolved a mode; check that `M`, `NAME` and `smoke` are the intended ones, since a viewer
   that did not get its arguments starts from the launcher settings instead), `ARC-RENDER-004 load stage=begin` (a build
   from before ARC-DEV-059), the self-test's first `ARC-DEV-043 self-test stage`, the phase lines of the export
@@ -328,7 +328,7 @@ before it. It replaces the earlier
 |---|---|---|---|
 | `window` | any Godot run with a window: native smokes, the viewer self-test, labs | the single Godot slot, in [queue order](#queue-order-arc-dev-390) | 30 min |
 | `headless` | `Godot --headless` that runs for a while (a lab, a long probe) | the same Godot slot | 30 min |
-| `quick` (ARC-DEV-390) | a Godot run with no window that ends in seconds: a project `--import`, the headless viewer self-test (`./arcanum smoke` uses it for both) | two quick places beside the Godot slot (it neither waits for nor holds the slot); waits for an export that is running or next | 10 min |
+| `quick` (ARC-DEV-390) | a Godot run with no window that ends in seconds: a project `--import`, the headless viewer self-test (`./arcanum smoke` uses it for both) | two quick places beside the Godot slot (it neither waits for nor holds the slot), one at a time per checkout; waits for an export that is running or next | 30 min |
 | `export` | an export endpoint (`tools/arcanum-local ... export`, the validation commands that export) | the Godot slot; when it is next, new `dotnet` runs wait and running ones finish, then it runs alone | 180 min |
 | `dotnet` | `dotnet restore/build/test`; give the root checks as one command (`sh -c '... && ... && ...'`) | two dotnet places (waits for a free one, [limits](#dotnet-memory-limits-arc-dev-300)); runs alongside Godot runs; waits for an export that is running or next | 45 min |
 
@@ -387,7 +387,14 @@ queue is the worst order for such a mix, and a project import waited for a windo
   the run is queued, so every waiter computes the same order. `./arcanum queue` lists the waiters in this order.
 - **Quick runs.** The project import of a new checkout and `./arcanum smoke self-test --headless` are `quick`: Godot
   without a window that ends in seconds, on its own checkout's project folder, so it runs beside the Godot slot (up to
-  two at once) instead of waiting for it; a `window` or `headless` run does not wait for a quick one, and an export does.
+  two at once) instead of waiting for it; a `window` or `headless` run of another checkout does not wait for a quick one,
+  and an export does. Two sessions in one checkout still never open its project folder at once: a quick run waits for a
+  running or earlier queued Godot or quick run of the same checkout, and a Godot run waits for a running quick run of its
+  checkout.
+- **Old wrappers.** Another checkout that has not merged ARC-DEV-390 yet queues tickets without an estimate and waits by
+  number only; while any such ticket waits, every wrapper orders by number too (the old rule), so an old and a new waiter
+  can never wait for each other, and the order by length returns when none is queued. An old wrapper ignores `quick` runs
+  (an old export may start while a 3 to 12 s quick run of another checkout ends); merge main before queueing.
 - **Replay.** The 4,971 runs of 2026-11-07 to 11 replayed on one slot: first come first served 142 s mean wait (62
   person-hours in all); this order with the declared lengths about 83 s (about 38 hours), open-loop, so a
   projection; the long runs wait longer (a 10 minute run about 100 s more on average). `history.jsonl` now records each

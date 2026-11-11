@@ -273,6 +273,17 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(kinds["crash-site"], ("window", smoke.CRASH_SITE_SECONDS))
         self.assertTrue(all(step.estimate for step in steps))
 
+    def test_the_sampled_stages_are_declared_shorter_than_in_full_and_the_import_keeps_the_headless_limit(self) -> None:
+        for stage in smoke.SAMPLED_STAGES:
+            self.assertLess(smoke.estimate((stage,)), smoke.estimate((stage,), full=True))
+        self.assertEqual(smoke.estimate(("census",)), smoke.estimate(("census",), full=True))  # not sampled
+        steps = self.plan("pr", "--stages", "walk", "--all", "--no-build")
+        self.assertEqual(steps[-1].estimate, smoke.estimate(("walk",), full=True))
+        self.assertEqual(self.plan("pr", "--stages", "walk", "--no-build")[-1].estimate, smoke.estimate(("walk",)))
+        imported = self.plan("pr", "--stages", "cast", imported=False)
+        self.assertEqual(next(step for step in imported if step.name == "import").timeout, smoke.IMPORT_MINUTES)
+        self.assertEqual(smoke.IMPORT_MINUTES, run_queue.DEFAULT_TIMEOUT_MINUTES["headless"])
+
     def test_the_estimate_of_a_stage_run_is_its_load_plus_its_stages_and_the_slow_ones_stand_out(self) -> None:
         self.assertEqual(smoke.estimate(()), smoke.BATTERY_SECONDS)
         self.assertEqual(smoke.estimate(("cast", "life")), smoke.RUN_SECONDS + 2 * smoke.STAGE_SECONDS)

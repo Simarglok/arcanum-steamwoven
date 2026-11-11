@@ -19,12 +19,14 @@ ARCANUM = REPO / "arcanum"
 
 
 def ticket(seq: int, kind: str, started: bool = False, priority: int = run_queue.NORMAL, at: float | None = None,
-           estimate: float | None = None) -> dict:
+           estimate: float | None = None, cwd: str | None = None) -> dict:
     """A ticket; `at` is its arrival time (default: its number, so equal estimates keep the arrival order)."""
     result = {"seq": seq, "kind": kind, "startedAt": 1.0 if started else None, "priority": priority,
               "enqueuedAt": float(seq) if at is None else at}
     if estimate is not None:
         result["estimateSeconds"] = estimate
+    if cwd is not None:
+        result["cwd"] = cwd
     return result
 
 
@@ -104,6 +106,33 @@ class OrderTests(unittest.TestCase):
         self.assertEqual(run_queue._key(old)[1], 10.0 + run_queue.ORDER_WEIGHT * run_queue.DEFAULT_ESTIMATE_SECONDS["dotnet"])
 
 
+    def test_while_a_ticket_of_an_older_wrapper_waits_everyone_orders_by_number(self) -> None:
+        # a wrapper from before ARC-DEV-390 (no estimate) waits for every smaller number: ordering the others by length
+        # would let a new run wait for an older-numbered one that waits for it (A passed by B, B behind A for ever)
+        a = ticket(4, "window", at=100.0, estimate=600.0)
+        b = ticket(6, "window", at=110.0, estimate=20.0)
+        old = ticket(5, "window")
+        del old["enqueuedAt"]
+        self.assertEqual(run_queue.blocker(a, [a, b])["seq"], 6)  # by length alone: b first
+        live = [a, old, b]
+        self.assertIsNone(run_queue.blocker(a, live))  # with the old ticket waiting: by number, a is first
+        self.assertEqual(run_queue.blocker(old, live)["seq"], 4)
+        self.assertEqual(run_queue.blocker(b, live)["seq"], 4)  # behind both, the first of them
+        self.assertEqual([item["seq"] for _, item in self.sorted(live)], [4, 5, 6])
+        running_old = [a, b, {**old, "startedAt": 1.0}]
+        self.assertEqual(run_queue.blocker(a, running_old)["seq"], 5)  # a running old ticket blocks, but orders nothing
+        self.assertEqual(run_queue.order_of(running_old), run_queue._key)
+
+    def sorted(self, live):
+        order = run_queue.order_of(live)
+        return [(None, item) for item in sorted(live, key=order)]
+
+    def test_an_estimate_is_capped_and_a_non_finite_one_refused(self) -> None:
+        for bad in (float("inf"), float("nan"), -1.0):
+            with self.assertRaisesRegex(ValueError, "--estimate"):
+                run_queue.run("dotnet", ["true"], estimate=bad)
+
+
 class QuickKindTests(unittest.TestCase):
     """ARC-DEV-390: a `quick` run (project import, headless self-test) takes a place beside the Godot slot."""
 
@@ -130,6 +159,21 @@ class QuickKindTests(unittest.TestCase):
         self.assertEqual(run_queue.blocker(draining[2], draining)["seq"], 2)  # the export is next for the slot: no new quick run
         waiting = [ticket(1, "window", started=True), ticket(2, "export"), ticket(3, "quick")]
         self.assertIsNone(run_queue.blocker(waiting[2], waiting))  # the export still waits for the Godot slot
+
+    def test_a_checkouts_project_folder_is_never_imported_or_run_twice_at_once(self) -> None:
+        # two sessions in one checkout, an import and a window run (or two imports) of the same project folder: one at a time
+        first, second = ticket(1, "quick", started=True, cwd="/a"), ticket(2, "quick", cwd="/a")
+        other = ticket(3, "quick", cwd="/b")
+        self.assertEqual(run_queue.blocker(second, [first, second, other])["seq"], 1)
+        self.assertIsNone(run_queue.blocker(other, [first, other]))  # another checkout's folder: its own place
+        window_running = ticket(4, "window", started=True, cwd="/a")
+        self.assertEqual(run_queue.blocker(ticket(5, "quick", cwd="/a"), [window_running])["seq"], 4)
+        self.assertIsNone(run_queue.blocker(ticket(6, "quick", cwd="/b"), [window_running]))
+        self.assertEqual(run_queue.blocker(ticket(7, "window", cwd="/a"), [first])["seq"], 1)  # the window waits for that import
+        self.assertIsNone(run_queue.blocker(ticket(8, "window", cwd="/b"), [first]))
+
+    def test_the_default_limit_of_a_quick_run_is_the_headless_runs(self) -> None:
+        self.assertEqual(run_queue.DEFAULT_TIMEOUT_MINUTES["quick"], run_queue.DEFAULT_TIMEOUT_MINUTES["headless"])
 
     def test_a_quick_run_can_nest_in_a_godot_run_but_not_in_a_dotnet_run(self) -> None:
         for parent in ("window", "headless", "export", "quick"):
@@ -216,22 +260,22 @@ class QueueRunTests(unittest.TestCase):
         self.temp.cleanup()
 
     def queued(self, kind: str, name: str, seconds: float, *, timeout: str | None = None,
-               estimate: float | None = None) -> subprocess.Popen:
+               estimate: float | None = None, cwd: Path | None = None) -> subprocess.Popen:
         code = (f"import time; open({str(self.log)!r}, 'a').write('start {name} %f\\n' % time.time()); time.sleep({seconds}); "
                 f"open({str(self.log)!r}, 'a').write('end {name} %f\\n' % time.time())")
-        return self.wrapper(kind, name, [sys.executable, "-c", code], timeout=timeout, estimate=estimate)
+        return self.wrapper(kind, name, [sys.executable, "-c", code], timeout=timeout, estimate=estimate, cwd=cwd)
 
     def live(self) -> list[dict]:
         with run_queue._QueueLock():
             return [item for _, item in run_queue.tickets(prune=False)]
 
     def wrapper(self, kind: str, name: str, command: list[str], *, timeout: str | None = None,
-                environment: dict | None = None, estimate: float | None = None) -> subprocess.Popen:
+                environment: dict | None = None, estimate: float | None = None, cwd: Path | None = None) -> subprocess.Popen:
         before = len(self.live())
         argv = [sys.executable, "-B", str(ARCANUM), "run", "--kind", kind, "--label", name, "--start-within", "0",
                 *(["--timeout", timeout] if timeout else []), *(["--estimate", str(estimate)] if estimate is not None else []),
                 "--", *command]
-        process = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        process = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=cwd,
                                    env={**os.environ, **(environment or {})})
         self.processes.append(process)
         self.until(lambda: len(self.live()) > before or process.poll() is not None)
@@ -270,7 +314,7 @@ class QueueRunTests(unittest.TestCase):
             self.assertLess(gap, 2.5)  # the poll interval plus interpreter start, not a lock-retry back-off
 
     def test_a_short_run_that_arrived_later_starts_before_a_long_one_and_the_ticket_keeps_the_estimate(self) -> None:
-        self.queued("window", "running", 1.5)
+        self.queued("window", "running", 4.0)
         self.until(lambda: self.log.exists())
         self.queued("window", "long", 0.2, estimate=600.0)
         self.queued("window", "short", 0.2, estimate=5.0)
@@ -282,9 +326,11 @@ class QueueRunTests(unittest.TestCase):
         self.assertGreaterEqual(found["start short"], found["end running"])
 
     def test_a_quick_run_starts_while_a_godot_run_holds_the_slot(self) -> None:
+        other = self.root / "other-checkout"  # a quick run of the same checkout waits for its Godot run (same project folder)
+        other.mkdir()
         self.queued("window", "w", 2.0)
         self.until(lambda: self.log.exists())
-        self.queued("quick", "q", 0.2)
+        self.queued("quick", "q", 0.2, cwd=other)
         self.finish()
         found = self.events()
         self.assertLess(found["end q"], found["end w"])
