@@ -76,27 +76,6 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-041 map-sound map={catalogueMap} default={(mapDefault is { } d ? $"{d.Music}/{d.Ambient}" : "none")} result={result.Disposition} slots={state.Slot0}/{state.Slot1}");
     }
 
-    /// <summary>ARC-DEV-332: the main menu's soundtrack. The original's game init opens the shopping map (the start map without one) and
-    /// puts the PC on it, so the map's default pair plays and then its start sector's pair (the shop map: 26/29, "Main Menu", arcanum.mp3);
-    /// the menu itself starts no song (<see cref="MainMenuSound"/>). The menu here stands over the start scene, whose own pair is replaced.</summary>
-    private void EnterMainMenuSound()
-    {
-        if (_areaSession is not { } session || _audio is null || AreaSoundCatalog() is not { } catalog) return;
-        var (_, maps) = SoundWorld();
-        if (maps is null || MainMenuSound.Choose(maps) is not { } place) return;
-        session.AttachSoundSchemes(new CatalogSchemes(catalog));
-        var mapDefault = MapSoundDefault(place.Map.Catalogue);
-        session.EnterMapSound(session.Version, mapDefault);
-        StopSceneSound();
-        var sector = place.Sector is { } coordinate ? SectorSound((place.Map.Catalogue, coordinate.Id)) : null;
-        if (sector is not null) session.EnterSectorSound(session.Version, sector.MusicScheme, sector.AmbientScheme);
-        // The scene's own sector is not this menu's: following the PC must not play it over the menu's pair.
-        _soundSector = CurrentSoundSector();
-        var state = session.QuerySound().State;
-        GD.Print($"ARC-UI-041 menu-sound map={place.Map.Name} default={(mapDefault is { } d ? $"{d.Music}/{d.Ambient}" : "none")} "
-            + $"sector={(place.Sector is { } c ? $"{c.X},{c.Y}" : "none")} pair={(sector is not null ? $"{sector.MusicScheme}/{sector.AmbientScheme}" : "none")} slots={state.Slot0}/{state.Slot1}");
-    }
-
     /// <summary>A quick load replaced the session: it already holds the loaded sound state; the scene starts afresh.</summary>
     private void RebindAreaSound()
     {
@@ -108,7 +87,7 @@ public partial class TerrainViewerApp
 
     private void StopSceneSound()
     {
-        _audio?.StopAll();
+        StopAllSounds();
         _schemeVoices.Clear(); _combatStinger = _combatLoop = null;
         StopPositionalSound();
         _schemePlayer = new SchemePlayer(WrapReversedWindows, _areaSession?.QuerySound().CombatStarts ?? 0);
@@ -176,10 +155,16 @@ public partial class TerrainViewerApp
         var input = new SchemeInput(SchemeContent(state.Slot0), SchemeContent(state.Slot1), state.RestorePending, state.CombatMusic, view.CombatStarts);
         var commands = _schemePlayer.Update(input, (long)Time.GetTicksMsec(), session.QueryClockSnapshot().Hour,
             voice => _schemeVoices.TryGetValue(voice, out var handle) && _audio.IsPlaying(handle), _audioRandom);
-        foreach (var command in commands) Execute(command, catalog, session);
+        foreach (var command in commands) Execute(command, catalog, _schemeVoices, session.QueryClockSnapshot().Hour, session);
     }
 
-    private void Execute(SchemeCommand command, SoundCatalog catalog, GameSessionOwner session)
+    private void Execute(SchemeCommand command, SoundCatalog catalog, GameSessionOwner session) =>
+        Execute(command, catalog, _schemeVoices, session.QueryClockSnapshot().Hour, session);
+
+    /// <param name="voices">The song voices of the player whose command this is (the scene's, or the main menu's: ARC-UI-139).</param>
+    /// <param name="hour">The hour the player ticked at (for the log).</param>
+    /// <param name="session">The session that hears a finished transition song; null for the menu's player (no session, no restore).</param>
+    private void Execute(SchemeCommand command, SoundCatalog catalog, Dictionary<long, ViewerAudioHandle> voices, int hour, GameSessionOwner? session)
     {
         var music = AudioVolumeRules.ChannelVolume(_audioVolumes, AudioChannel.Music);
         switch (command.Kind)
@@ -187,15 +172,15 @@ public partial class TerrainViewerApp
             case SchemeCommandKind.StartSong:
                 ViewerAudioHandle? songHandle = command.Sound!.File is { } song ? Play(catalog.OpenPayload(catalog.ResolveFile(song)), AudioChannel.Music,
                     AudioVolumeRules.StartVolume(command.Volume, music), command.Loop) : null;
-                if (songHandle is { } started) _schemeVoices[command.Voice] = started;
+                if (songHandle is { } started) voices[command.Voice] = started;
                 // ARC-RES-075: every song start and fade is in the log, so a report of silence shows whether a song was due.
                 GD.Print($"ARC-UI-041 song start entry={command.Sound.ListNumber} file={command.Sound.File ?? "none"} "
-                    + $"window={command.Sound.HourStart}-{command.Sound.HourEnd} hour={session.QueryClockSnapshot().Hour} loop={command.Loop} started={songHandle is not null}");
+                    + $"window={command.Sound.HourStart}-{command.Sound.HourEnd} hour={hour} loop={command.Loop} started={songHandle is not null}");
                 break;
             case SchemeCommandKind.FadeOut:
-                var faded = _schemeVoices.Remove(command.Voice, out var fading);
+                var faded = voices.Remove(command.Voice, out var fading);
                 if (faded) _audio!.FadeOut(fading, command.FadeMs);
-                GD.Print($"ARC-UI-041 song fade entry={command.Sound?.ListNumber} hour={session.QueryClockSnapshot().Hour} faded={faded}");
+                GD.Print($"ARC-UI-041 song fade entry={command.Sound?.ListNumber} hour={hour} faded={faded}");
                 break;
             case SchemeCommandKind.PlayAmbient:
                 if (command.Sound!.File is { } ambient)
@@ -208,8 +193,8 @@ public partial class TerrainViewerApp
                 }
                 break;
             case SchemeCommandKind.TransitionFinished:
-                _schemeVoices.Remove(command.Voice);
-                session.FinishSoundTransition(session.Version);
+                voices.Remove(command.Voice);
+                session?.FinishSoundTransition(session.Version);
                 break;
             case SchemeCommandKind.StartCombat:
                 if (_combatStinger is { } oldStinger) _audio!.Stop(oldStinger);

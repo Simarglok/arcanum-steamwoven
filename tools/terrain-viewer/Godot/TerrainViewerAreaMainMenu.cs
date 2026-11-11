@@ -127,8 +127,9 @@ public partial class TerrainViewerApp
         _mainMenu = new AreaMainMenu(texts, root == AreaMenuWindow.Main && !early ? NewGameRefusal() : null, root, reopened);
         _mainMenuStatus = null;
         GD.Print($"ARC-UI-011 main menu open window={root} reopened={reopened} newGame={_mainMenu.NewGameRefusal ?? "ready"}");
-        // ARC-DEV-332: the main menu's soundtrack is the shop map's sector pair; the in-play menu keeps the game's music.
-        if (root == AreaMenuWindow.Main && !early) EnterMainMenuSound();
+        // ARC-UI-139: the main menu's soundtrack (the shop map's sector pair, ARC-DEV-332) plays through the scheme player without a session or a
+        // scene, from the moment the menu opens until it ends; the in-play menu keeps the game's music.
+        if (root == AreaMenuWindow.Main) StartMenuMusic();
         RenderMainMenu();
         RefreshReadyStatus();
     }
@@ -591,6 +592,7 @@ public partial class TerrainViewerApp
         DropMainMenuShop();
         _mainMenu.DropEditor(); CloseCharacterEditor();
         _mainMenuPanel?.CloseView(); _mainMenu = null; _mainMenuStatus = "closed: another map loads";
+        StopMenuMusic();
     }
 
     private void EndMainMenu(string reason)
@@ -600,6 +602,7 @@ public partial class TerrainViewerApp
         DropMainMenuShop();
         _mainMenu.DropEditor(); CloseCharacterEditor();
         _mainMenuPanel?.CloseView(); _mainMenu = null; _mainMenuStatus = reason;
+        StopMenuMusic();
         QuarantineWorld(); RefreshReadyStatus();
     }
 
@@ -744,13 +747,15 @@ public partial class TerrainViewerApp
             // ARC-DEV-381 (O1): the menu opened while the start map loaded; the choices that need the scene wait for it.
             EarlyMenuForSmoke(Require, Choose);
             var placeholder = _areaSession;
-            // ARC-DEV-332: the menu plays the opening map's sector pair (the shop map's 26/29, "Main Menu"), not the scene's own scheme.
+            // ARC-DEV-332, ARC-UI-139: the menu plays the opening map's sector pair (the shop map's 26/29, "Main Menu") through its own scheme player (no
+            // session): it began when the menu opened, before the scene, and went on across the scene's attach; the scene's own scheme is not played.
             if (_audio is not null && AreaSoundCatalog() is not null && SoundWorld().Maps is { } menuMaps && Arcanum.Data.Audio.MainMenuSound.Choose(menuMaps) is { } menuPlace)
             {
                 var menuSector = menuPlace.Sector is { } menuCoordinate ? SectorSound((menuPlace.Map.Catalogue, menuCoordinate.Id)) : null;
                 var menuMusic = menuSector is { } menuRecord && (menuRecord.MusicScheme != 0 || menuRecord.AmbientScheme != 0) ? menuRecord.MusicScheme : MapSoundDefault(menuPlace.Map.Catalogue)?.Music ?? 0;
-                Require(placeholder!.QuerySound().State.Slot0 == menuMusic, $"the menu plays the opening map's scheme {menuMusic}: slots {placeholder.QuerySound().State.Slot0}/{placeholder.QuerySound().State.Slot1}");
-                GD.Print($"ARC-DEV-332 native-smoke menu-sound PASS map={menuPlace.Map.Name} music={menuMusic}");
+                Require(_menuMusic is { } menuState && menuState.Slot0?.Id == menuMusic && menuState.Voices.Count > 0,
+                    $"the menu plays the opening map's scheme {menuMusic} through its own player: slot {_menuMusic?.Slot0?.Id} voices {_menuMusic?.Voices.Count}");
+                GD.Print($"ARC-DEV-332 native-smoke menu-sound PASS map={menuPlace.Map.Name} music={menuMusic} voices={_menuMusic!.Voices.Count} (ARC-UI-139, no session)");
             }
             Choose(10);
             Require(_mainMenu.Window == AreaMenuWindow.SinglePlayer, "single player by its letter");
@@ -774,6 +779,7 @@ public partial class TerrainViewerApp
             var flag = flags.Read(new Arcanum.Scripting.GlobalFlags.GlobalFlagReadRequest(new(Guid.NewGuid()), flags.Version, new(first.Flag!.Value)));
             Require(!MainMenuOpen && !ReferenceEquals(placeholder, session) && session.QueryHero()?.Prototype == first.Definition!.Prototype
                 && session.QueryGold() == first.Definition.Gold && flag.Value == true, $"the new game is the first hero's: {_quickSaveStatus} {session.QueryHero()?.Prototype} flag {flag.Status} {flag.Value}");
+            Require(_menuMusic is null, "the menu's song ended with the menu (ARC-UI-139)");
             // ARC-DEV-332: the start map opened: its arrival sector's pair (else the map's default) plays, no scheme of the menu is left.
             if (_audio is not null && AreaSoundCatalog() is not null && _readyArea is { } startedArea)
             {
