@@ -508,6 +508,9 @@ public static partial class GameSessionSnapshotCodec
             if (!objects.TryGetPropertyValue("state", out var state)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.objects.state");
             if (state is not JsonArray) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.objects.state");
         },
+        // ARC-DEV-348 (schema 87): the effects section gains the effect lists of NPCs. No older build kept any, so the step adds the empty list. The effects section the older
+        // schema carried must be there and an object.
+        [86] = root => AddField(Section(root, "effects"), "$.effects", "critters", new JsonArray()),
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from
