@@ -1984,6 +1984,18 @@ replaces it. The windows, buttons, texts, keys and back moves are the original's
 ([ledger MM1–MM7](../research/ledger/ui-audio.md#main-menu-arc-ui-011)); since ARC-UI-058 the button windows have the original's art
 and layout (below), the other windows the project's.
 
+- **Early menu (ARC-DEV-381, O1 of the [load-time diagnosis](../research/performance-diagnosis-2026-11.md)).** The first opening of the run
+  does not wait for the start map: the viewer starts the map's load on its worker and opens the menu as soon as the menu art is read
+  (`ARC-DEV-381 early main menu open`; the probe's `start-to-menu` in the packaged build went from the whole map's publication to about
+  1.6 s on a loaded Mac, see the diagnosis). The menu is the same one: its windows, texts, art, keys and back moves are unchanged. No scene
+  exists yet, so what opens a window the menu itself draws works at once (Single Player, New Game, the pre-made browser, Options, Exit
+  Game), and a choice that needs the scene is **held**: Start in the browser, New Character, Load Game and Last Save. A held choice shows
+  a note, the menu takes no other input, Escape or a Back press takes the choice back, and the scene's publication attaches the menu to
+  it (`ARC-DEV-381 early main menu attached to the scene`): the menu takes the scene's answer for a new game (`NewGameRefusal`), plays the
+  shop map's pair and runs the held choice as if it were pressed then. A start scene that fails to load closes the menu and shows the
+  failure's own screen. Later openings (after Quit, after a death, in play) open over a published scene, as before. Smoke: the `menu`
+  stage checks that the menu opened before the publication and attached to it, then plays the waiting again on the published scene
+  (a held choice, no other input, Escape taking it back, the attach running a held Last Save, a held Start starting nothing).
 - **Original look (ARC-UI-058,** [plan](../ui/original-windows.md#main-menu-done-arc-ui-058),
   [ledger MW1–MW6](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058); `AreaMenuArtLayout`, `AreaArtFont`, `AreaMenuArtView`):
   with the game's art the main, single-player, new-game and in-play windows draw their background (329 `MainMenuBack`, 331

@@ -125,6 +125,8 @@ public partial class TerrainViewerApp : Node
         _hud?.SetMode(_arguments.Mode);
         if (IsWorld) InitializeWorld();
         _lastLoad = StartLoadAsync(_arguments);
+        // ARC-DEV-381 (O1): the load runs on its worker; the main menu opens now, not after the whole start map is published.
+        OpenEarlyMainMenu();
     }
 
     private async Task StartLoadAsync(TerrainViewerArguments arguments, bool orchestrateSmoke = true)
@@ -465,6 +467,7 @@ public partial class TerrainViewerApp : Node
     private void PublishFailure(TerrainViewerMode mode, TerrainViewerError error)
     {
         _lastPublishedFailure = $"{error.Stage}/{error.Code}";
+        EarlyMenuSceneFailed();
         if (IsWorldMode(mode))
         {
             _worldGate.Close(); _worldReducer.Quarantine();
