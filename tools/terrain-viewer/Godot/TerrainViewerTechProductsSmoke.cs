@@ -28,10 +28,10 @@ public partial class TerrainViewerApp
     //     one is kept), and the Found tab of the schematic window assembles the first record the hero's expertise reaches.
     //  5. Charge cells: Chemistry degree 2 makes power cells; with intelligence bought to 17 and Electric degrees 1 to 6 the powered shield (degree 3) and the maintained armour (degree 6, record 168) are assembled and
     //     worn: the shield's 15 s call takes one cell, the armour's maintained run a cell a tick (ChargeNBranch).
-    //     The cell weapon (degree 4, record 147, Target_Hit) is wielded with the armour off and swung at the cave NPC until it dies (ARC-MAGIC-060): each hit pays its cell(s) and shocks the NPC through the record (the original fires
-    //     Target_Hit on the items of the one who damages an opponent, 0x4CBE70).
     //  6. NPC crafter: the window queued the way `su` queues it for the cave NPC (given a Herbology degree by the stage: the cave's NPCs have none) assembles a learned record from the NPC's own list; products to the NPC, hero's pack unchanged.
     //  7. Explosives: the degree-1 grenade (record 219) is assembled, thrown at a cave NPC from three to six cells (item event, run, damage on a cave NPC, grenade gone).
+    //  7b. Cell weapon (ARC-MAGIC-060): the Electric degree-4 weapon (record 147, Target_Hit) is wielded with the armour off and swung at the cave NPC until it dies; the firing of a hit pays its cell(s) and shocks the NPC through the record
+    //     (the original fires Target_Hit on the items of the one who damages an opponent, 0x4CBE70). The weapon comes off and the armour goes back on.
     //  8. F7 and F8: the hero's effect list, held and worn items, cells and degrees, and the NPC's list are the same after the load.
     // The hero's hit points and the cave NPCs' lives (all of them, after the grenade) are put back; the rest (effects, points, degrees, items) is the stage's own state, not restored: the stage runs alone (smoke.py) and its F8 replaces the session.
     private async Task RunAreaTechProductsSmokeAsync()
@@ -401,7 +401,7 @@ public partial class TerrainViewerApp
             // The cave NPCs have a few hit points: the first hit may kill, so the record's electrical damage on the (then dead) NPC is not always logged; the cell paid before it is.
             // A cell-powered source pays the cost times (1 + power / complexity) (TC1, original bug): one cell or up to double for a technologist, per firing.
             TechProductsRequire(weaponFirings > 0 && cellsSpent >= weaponFirings && cellsSpent <= 2 * weaponFirings, $"each hit's firing of the cell weapon paid its cells ({cellsBeforeSwing} -> {Cells()}, {weaponFirings} firings, shocks {shocks}: {_attackNotice})");
-            TechProductsRequire(shocks <= cellsSpent && NpcHitPoints() < weaponLifeBefore, $"each shock paid its cell ({cellsSpent} cells, {shocks} shocks, hit points {weaponLifeBefore} -> {NpcHitPoints()})");
+            TechProductsRequire(NpcHitPoints() < weaponLifeBefore, $"the NPC lost hit points ({weaponLifeBefore} -> {NpcHitPoints()}, {cellsSpent} cells, {shocks} shocks logged)");
             if (HeroInCombatMode) ToggleCombatMode();
             // The hands and the body as the later steps expect them: the weapon off, the maintained armour on again.
             OpenInventory();

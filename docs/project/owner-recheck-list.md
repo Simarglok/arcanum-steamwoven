@@ -783,9 +783,9 @@ The hero's melee swings and shots now fire the combat events of the worn items (
 
 | # | Step | Expected (from the original executable) | Status |
 | --- | --- | --- | --- |
-| 1 | With Electric degree 4 and power cells in the pack, assemble the degree-4 melee weapon, wield it and hit an NPC. | Each hit that lands takes cells from the pack (one or two, a technologist pays more) and adds an electrical shock to the weapon's own damage; a missed swing takes nothing. | open |
+| 1 | With Electric degree 4 and power cells in the pack, assemble the degree-4 melee weapon, wield it and hit an NPC. | Each hit that lands takes cells from the pack (a technologist pays up to double) and adds an electrical shock to the weapon's own damage; a missed swing takes nothing. In the original the shock's own damage fires the weapon again until the NPC dies or the cells run out (MG46), here once per hit: only the first shock and its cells are compared. | open |
 | 2 | Hit with no cells in the pack. | The weapon still hits for its own damage; no shock, no cells. | open |
-| 3 | Kill an NPC with the weapon. | The kill still pays the cells for that hit once; nothing fires after the NPC is dead. | open |
+| 3 | Kill an NPC with the weapon. | The killing hit pays the cells of its firing; nothing is expected to fire after the NPC is dead (the original's repeat per MG46 ends with the kill). | open |
 
 Known differences (documented, not bugs):
 
