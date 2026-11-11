@@ -344,7 +344,8 @@ check, action-point or time cost and no experience.
   for a cell-powered record; the installed 168 and 187 have maintenance 0, so their
   cells come from a ChargeNBranch component instead, ledger [DV7](ledger/technology.md#tech-devices-arc-technology-008)).
 - **Degrees do not change devices.** Effective expertise has no caller outside
-  the sheet and the schematic gate; degrees act on devices only through tech
+  the sheet and the schematic gate (re-checked over the whole image by ARC-RES-114,
+  [ledger XA6](ledger/technology.md#aptitude-and-expertise-consumers-arc-res-114)); degrees act on devices only through tech
   points → aptitude → item power. The four tech skills work in their own
   domains and do not modify device spells.
 - **Wear**: the weapon wear on a hit (0x4B5580, [combat core](combat-core-evidence.md) C21) **falls** with
@@ -357,7 +358,8 @@ check, action-point or time cost and no experience.
 - **Scripts**: no SCR action or condition reads or writes degrees or
   schematics. Technology is reached only indirectly: get stat (33) and adjust
   stat (137) on stat 23, get skill (47) for tech skills, add effect (77) with
-  expertise effects.
+  expertise effects (what the commands can do; the installed scripts use them less: none touches stat 22 or 23, and the only expertise effects
+  come from the eight tech books' insert script, [ledger XA5, XA9](ledger/technology.md#aptitude-and-expertise-consumers-arc-res-114)).
 - **Action 129 "start schematic UI"** (case at 0x44A7BD, F2): a PC calls
   0x460B50(PC, PC), an NPC calls it with its PC leader (0x45DDA0) and does
   nothing without one. 0x460B50 calls the pointer at 0x5E8768, copied

@@ -1,6 +1,6 @@
 # Technology audit: eight disciplines, seven degrees, schematics and devices
 
-Status: **Audit and plan**, work item ARC-RES-104 (2026-11-11). Docs-only: no source change and no checks run (the data census below ran
+Status: **Audit and plan**, work item ARC-RES-104 (2026-11-11); read T-r3 done by ARC-RES-114 (T-k dropped, T-m widened). Docs-only: no source change and no checks run (the data census below ran
 locally on the owner's Mac with a throwaway program outside the repository, not as a repository check). It is the technology counterpart
 of the [magic audit](magic-audit-res-103.md) (ARC-RES-103, merged: it leaves the technology records 140..222 to this document) and a companion of the [missing-systems plan](../project/missing-systems-plan.md) (ARC-RES-099):
 it does not repeat that plan's epics, it says which of their slices the technology content needs, what is left over, and in what order.
@@ -28,11 +28,11 @@ The original behaviour is in the [technology research](technology-evidence.md) (
    enshroud, shield, don't-draw, permanent polymorph; 12 records blocked by them alone) are E4-a and E4-b; the **control components** (ChargeNBranch, TestNBranch, Terminate,
    Use, Cast, Movement, Trait, AIRedirect; 5 records alone) are E4-c and E4-e; the **Effect component on any critter** (22 records) is E1-d.
 4. **Technology adds six things the plan does not hold:** (a) an item **aiming cursor** and use on a critter, object or tile (the viewer uses an item on the hero only;
-   item targeting is "NOT READY"); (b) NPCs choosing and throwing **grenades** and using devices (`AreaAiHost.Grenade` answers "none"); (c) the generic item flag 0x20 (2 learned and 3 found products; flag 0x10 is the grenade flag the AI ledger SP14 already uses, its numeric bit never written down) and the **item scripts on crafted gear** (6 learned products, attach points 24, 25, 7, 8), neither of which has been read; (d) **smoke coverage**: no
+   item targeting is "NOT READY"); (b) NPCs choosing and throwing **grenades** and using devices (`AreaAiHost.Grenade` answers "none"); (c) the generic item flag 0x20 (2 learned and 3 found products; flag 0x10 is the grenade flag the AI ledger SP14 already uses, its numeric bit never written down) and the **item scripts on crafted gear** (6 learned products, attach points 24, 25, 7, 8), neither of which has been read (ARC-RES-114 adds the eight tech books' insert and remove scripts, points 21 and 28, to that read, [ARC-RES-114](ledger/technology.md#aptitude-and-expertise-consumers-arc-res-114) XA9); (d) **smoke coverage**: no
    stage assembles anything, uses a technology item with a real record, or buys a degree (all three are covered by synthetic self-tests and unit tests only); (e) an opt-in
    **coverage test** that keeps the status table of section 5 true to the code; (f) a documentation refresh (five stale statements, section 9).
 5. **No missing piece is a hidden mechanic of the original.** Degrees give expertise only, expertise is read only by the sheet and the schematic gate, assembly has no roll, no
-   skill and no experience, and a degree has no other effect on a device (technology research, answer 2, 5, 7). The remaining unknowns are small reads, listed in section 8 (T-r1 to T-r4).
+   skill and no experience, and a degree has no other effect on a device (technology research, answer 2, 5, 7). The remaining unknowns are small reads, listed in section 8 (T-r1 to T-r4; T-r3 is done, [ARC-RES-114](ledger/technology.md#aptitude-and-expertise-consumers-arc-res-114)).
 6. **Order (section 10):** wave 0 is four short reads, the smoke stage, the coverage test and the doc refresh, all independent of E1; the content gaps are E1-b, E1-d, E4-a to E4-e and E6-b as
    already planned, with the acceptance lists of section 6; the two new product slices (aim cursor, NPC grenades) follow the item-aim read. Owner decisions are in section 11 (five rows).
 
@@ -59,7 +59,7 @@ The original behaviour is in the [technology research](technology-evidence.md) (
 | Link | Original (read) | Rules / session | Viewer | Smoke | Remaining |
 | --- | --- | --- | --- | --- | --- |
 | Degrees 0..7 per discipline, cost 1, intelligence minimum {0, 5, 8, 11, 13, 15, 17, 19}, TC10 floor | F2, [ledger](ledger/technology.md#technology-arc-res-062) | built ([degrees](../world/tech-degrees-runtime.md), `TechDegreeRules`, state tests) | sheet tech page with + and - buttons (`AreaTechPage`, ARC-UI-076) | self-test of the sheet; `tech-craft` buys degrees 1 and 2 and 1 on real data | creation editor: buttons for degrees not confirmed |
-| Expertise {0, 10, 20, 35, 50, 65, 80, 100} % through "expertise" effects | F2 | built (hero and NPC queries) | shown on the sheet and in the window | no | no effect in the installed data was counted that targets expertise (T-r3) |
+| Expertise {0, 10, 20, 35, 50, 65, 80, 100} % through "expertise" effects | F2 | built (hero and NPC queries) | shown on the sheet and in the window | no | nine effect rules name an expertise: 168 to 175 (+1 per discipline, the tech books' effects, delivered by an insert script the item-event admission refuses today) and 346 (the Arsonist background, explosives +20, live); [ARC-RES-114](ledger/technology.md#aptitude-and-expertise-consumers-arc-res-114) XA8, XA9 |
 | Learned schematics (7 per discipline) and found ones (62, documents) | F2 | built (catalogue, knowledge, registration) | window tabs, the Read button registers a document | self-test, synthetic | where found documents lie: see the [placement census](technology-census-res-115.md) (T-r4 done) |
 | Component gate and assembly (no roll, TC3 to TC5 fixed) | F2 | built, all 118 recipes real-data tested | window button, hero and NPC crafter (`su`, action 129) | self-test, synthetic; `tech-craft` assembles three learned records on real data | the other 115 records have no run |
 | Charge cells (ammunition type 2) and the TC1 switch | F2 | built (rules, hero stack, container switch) | none needed | none | no component pays them (ChargeNBranch absent) |
@@ -69,7 +69,7 @@ The original behaviour is in the [technology research](technology-evidence.md) (
 | Throwing: grenades, thrown weapons | F2 | built | held throw to the cursor | `grenade` (whatever grenade the cave map lays) | only the damage and destroy parts of a grenade run, Summon is absent |
 | Item spell triggers (wear, hit, attack start, throw end, pickup, drop) | F2 (IT1 to IT10) | built, wider than wear and unwear | partly | `cast` marker | a few moves are not wired (see [triggers](../world/item-spell-triggers.md)) |
 | Firearms, bullets, power cells, technology failure and magick cancel rolls | F2 (DV4, DV5) | built | built | `ranged`, `npc-shot` | none specific to crafted guns |
-| Aptitude and resistance (magic resistance scaled by negative aptitude, item power, penalty fields) | F2 | built | sheet | unit tests | AI and reaction readers of aptitude not read (T-r3) |
+| Aptitude and resistance (magic resistance scaled by negative aptitude, item power, penalty fields) | F2 | built | sheet | unit tests | the AI and the reactions have no unmodelled reader of aptitude ([ARC-RES-114](ledger/technology.md#aptitude-and-expertise-consumers-arc-res-114) XA3, XA4) |
 | Technical skills: Repair, Pick Locks, Firearms built; Disarm Traps session only | F2 | partly | partly | partly | E6-a, E8-b |
 | NPC use of items in the AI | F1 (AI I8 partly) | potions and food with spells built; **grenade pick absent**; heal-with-item, read, lockpick, trap device not ready | n/a | `ai-cast` | slice T-h |
 
@@ -259,7 +259,7 @@ Every list below is the acceptance of the plan slice named: when that slice land
 | --- | --- | --- |
 | T-r1 | What the generic item flag 0x20 means (two learned Mechanical items and three found products) and the numeric bit of the grenade flag (0x10, read by AI SP14); what the item scripts do that sit at attach points 24, 25, 7 and 8 on crafted armour and devices (28012 to 28015, 29016, 29017, 1022); whether the SCR host runs them | S to M |
 | T-r2 | Item use with a target: the targeting cursor masks per item kind, what the use does on a critter, an object and a tile, and the NPC use of devices and heal items (the AI's grenade rule is already read, ledger SP14, 0x4AC910); refusal messages (**done**, ARC-RES-113: [ledger IA1–IA16](ledger/items.md#item-aiming-and-use-with-a-target-arc-res-113)) | M |
-| T-r3 | Consumers of aptitude and expertise outside the combat and gate paths: callers of the aptitude stat (0x4B0740) in the AI and reaction code; effects in the installed data that target expertise in a discipline (race, background, items) | S |
+| T-r3 | **Done (ARC-RES-114, [ledger XA1 to XA10](ledger/technology.md#aptitude-and-expertise-consumers-arc-res-114)).** Consumers of aptitude and expertise outside the combat and gate paths: callers of the aptitude stat (the getter 0x4B0490 with the literal 16; 0x4B0740 is its base level) in the AI and reaction code; effects in the installed data that target expertise in a discipline (race, background, items). Result: no unmodelled reader in the AI or the reactions; expertise has two consumers (the sheet and the gate); nine effect rules name an expertise, delivered by the Arsonist background and by eight tech books whose insert script the item-event admission refuses today | S |
 | T-r4 | **Done (ARC-RES-115, [placement census](technology-census-res-115.md)).** Placement census (installed maps, scripts, shop lists): where found schematic documents lie (five found records have no written prototype, O3 of the research), which NPCs have `su` dialogs and what degrees and inventories they carry (O5), where the 146 non-craftable technology items lie | S to M |
 
 ## 9. Documents that are behind the code (to fix inside E0-a, the plan's documentation slice)
@@ -279,7 +279,7 @@ Labels are planning labels, not task codes (the coordinator hands out codes). Si
 | --- | --- | --- | --- | --- |
 | T-r1 | read: flag 0x20, the grenade flag's bit, item scripts on crafted gear | S to M | Mac read | none |
 | T-r2 | read: item aiming, AI grenade pick and device use (**done**, ARC-RES-113) | M | Mac read | none |
-| T-r3 | read: aptitude and expertise consumers | S | Mac read | none |
+| T-r3 | read: aptitude and expertise consumers (**done**, ARC-RES-114) | S | Mac read | none |
 | T-r4 | census: where found schematics, `su` crafters and the non-craftable items are (**done**, ARC-RES-115: [placement census](technology-census-res-115.md)) | S to M | Mac data run | none |
 | T-a | **done (ARC-DEV-362)**: smoke stage `tech-craft` on real data: buy degree 1 and 2 on the sheet, assemble a Herbology heal and a Gun Smithy firearm, use the heal, equip and fire the gun, save and load once; asserts item counts, the heal, a firearm hit | M | none (T-r4 only helps with found documents) | viewer smoke |
 | T-b | opt-in real-data test: runs each of the 83 records with the hero as target and fails when the classification of section 5 disagrees with the code (it flips with the epic slices) | S to M | none | tests |
@@ -292,11 +292,11 @@ Labels are planning labels, not task codes (the coordinator hands out codes). Si
 | T-g | **new**: item aiming cursor and use on a critter, object or tile in the viewer (185 installed prototypes open it, IA16) | M | T-r2 (done) | viewer |
 | E6-b | placed trap devices (plan), now also fed by the three trap-device products | M | E1-a, T-g | directory lane |
 | T-h | **new**: NPC picks and throws grenades (the rule is SP14; `AreaAiHost.Grenade` answers none today), uses heal items and the chooser's items (devices need nothing, IA15) | M | E1-b | AI lane |
-| T-k | **conditional**: expertise effects, aptitude readers in the AI and reaction code, per T-r3's result | S to M | T-r3 | by result |
-| T-m | **conditional**: a slice named by T-r1 for flag 0x20 and the item scripts | S to M | T-r1 | by result |
+| T-k | **dropped by T-r3's result** (ARC-RES-114): the AI and reaction code have no unmodelled reader of aptitude or expertise, and the hero's expertise query already carries any expertise effect (only the Arsonist's 346 reaches it today; the book effects belong to T-m); nothing is left for a slice of this name | none | none | none |
+| T-m | **needed, wider than first named**: a slice named by T-r1 for flag 0x20 and the item scripts, **plus the tech books** (ARC-RES-114 XA9: the insert script 30017 of the eight books at attach point 21 gives +intelligence expertise, with the remove script 30018 at point 28; the host needs get stat (33) admitted in the item-event set with a stat query behind it, the effect definitions 168 to 175, room for one effect entry per intelligence point in the hero's list, and the barter refusal of insert-script items lifted) | S to M | T-r1 | by result |
 
 Waves (a label starts when its needs are done): **wave 0** T-r1 to T-r4, T-a, T-b, T-j (no mutual dependency; T-a and T-b share the viewer and session test harness, so one at a time on the Mac's single Godot slot);
-**wave 1** E1-b, E1-d, T-g (after T-r2), T-m and T-k (after their reads); **wave 2** E4-a to E4-c, E6-b, T-h; **wave 3** E4-e, E4-f. The spell-cast lane is one writer at a time (the plan's conflict rule);
+**wave 1** E1-b, E1-d, T-g (after T-r2), T-m (after T-r1; T-k is dropped); **wave 2** E4-a to E4-c, E6-b, T-h; **wave 3** E4-e, E4-f. The spell-cast lane is one writer at a time (the plan's conflict rule);
 T-g and T-a touch the viewer only; T-h the AI host. The plan's own waves place E1-d in wave 0 and E4-a and E4-c in wave 1; here they sit one wave later only because of the "starts when needs are done" rule, and nothing stops them earlier. This document only adds T-a, T-b, T-g and T-h in front of or beside it.
 
 ## 11. Decisions for the owner
