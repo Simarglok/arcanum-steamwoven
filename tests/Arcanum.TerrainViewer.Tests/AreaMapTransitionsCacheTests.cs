@@ -97,7 +97,7 @@ public sealed class AreaMapTransitionsCacheTests
             for (var i = 0; i < first.Transitions.Sites.Count; i++)
             {
                 var (a, b) = (first.Transitions.Sites[i], kept.Transitions.Sites[i]);
-                Assert.AreEqual(a with { Chain = [] }, b with { Chain = [] }, $"site {i}");
+                Assert.AreEqual(a with { Chain = Array.Empty<int>() }, b with { Chain = Array.Empty<int>() }, $"site {i}");
                 CollectionAssert.AreEqual(a.Chain.ToArray(), b.Chain.ToArray(), $"chain {i}");
             }
             CollectionAssert.AreEqual(first.Transitions.Issues.ToArray(), kept.Transitions.Issues.ToArray());

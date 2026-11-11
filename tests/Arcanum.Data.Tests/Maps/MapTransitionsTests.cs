@@ -337,7 +337,7 @@ public sealed class MapTransitionsTests
         for (var i = 0; i < expected.Sites.Count; i++)
         {
             var (a, b) = (expected.Sites[i], actual.Sites[i]);
-            Assert.AreEqual(a with { Chain = [] }, b with { Chain = [] }, $"site {i}");
+            Assert.AreEqual(a with { Chain = Array.Empty<int>() }, b with { Chain = Array.Empty<int>() }, $"site {i}");
             CollectionAssert.AreEqual(a.Chain.ToArray(), b.Chain.ToArray(), $"chain {i}");
         }
         CollectionAssert.AreEqual(expected.Issues.ToArray(), actual.Issues.ToArray());

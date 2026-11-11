@@ -62,7 +62,7 @@ public sealed class AreaMapTransitionsStoreTests
         var kept = AreaMapTransitionsStore.TryRead(stack, Map, out _);
         Assert.IsNotNull(kept);
         Assert.AreSame(Map, kept.Transitions.Map);
-        Assert.AreEqual(Set().Sites.Single() with { Chain = [] }, kept.Transitions.Sites.Single() with { Chain = [] });
+        Assert.AreEqual(Set().Sites.Single() with { Chain = Array.Empty<int>() }, kept.Transitions.Sites.Single() with { Chain = Array.Empty<int>() });
         CollectionAssert.AreEqual(new[] { 12 }, kept.Transitions.Sites.Single().Chain.ToArray());
         Assert.AreEqual(Set().Entry, kept.Transitions.Entry); Assert.IsTrue(kept.Transitions.IsStartMap);
         CollectionAssert.AreEquivalent(Destinations.ToArray(), kept.Destinations.ToArray());
@@ -136,6 +136,22 @@ public sealed class AreaMapTransitionsStoreTests
         AreaMapTransitionsStore.Root = blocked;
         Assert.IsNull(AreaMapTransitionsStore.TryRead(stack, Map, out key));
         Assert.IsFalse(AreaMapTransitionsStore.Write(key, Set(), Destinations));
+    }
+
+    [TestMethod]
+    public void A_set_with_an_unreadable_file_is_not_kept_and_a_hostile_folder_name_is_a_miss()
+    {
+        using var stack = Open();
+        AreaMapTransitionsStore.TryRead(stack, Map, out var key);
+        var degraded = new MapTransitionSet(Map, null, [], [new(WorldIssueCode.Unreadable, "maps/alpha/1.sec")]);
+        Assert.IsFalse(AreaMapTransitionsStore.Write(key, degraded, Destinations), "a read that failed for the moment must not outlive the process");
+        Assert.AreEqual(0, Files().Length);
+        var deterministic = new MapTransitionSet(Map, null, [], [new(WorldIssueCode.Malformed, "maps/alpha/1.sec")]);
+        Assert.IsTrue(AreaMapTransitionsStore.Write(key, deterministic, Destinations), "the content's own refusals repeat, so they are kept");
+        // A folder name the file system rejects with an argument error (not an IO error) is a miss too.
+        AreaMapTransitionsStore.Root = Path.Combine(_store.FullName, "bad\0name");
+        Assert.IsNull(AreaMapTransitionsStore.TryRead(stack, Map, out key));
+        Assert.IsFalse(AreaMapTransitionsStore.Write(key, deterministic, Destinations));
     }
 
     [TestMethod]

@@ -416,7 +416,7 @@ each archive's size and last write time, the number of indexed names); a digest 
 the process cannot); and the identity of the code (the module version ids of `Arcanum.Data`, which holds the reader, and `Arcanum.World`, plus the codec and file layout versions), so any rebuilt reader
 meets no older file (a development checkout never serves records of another source state). The payload carries a SHA-256 of its bytes; a cut, flipped, foreign or trailing-byte file is a miss. Every
 disk failure (no folder, read-only, full, a path that is a file) is a miss, and no call throws: the store can only make a load faster, never fail or change it. A file is written under a temporary name and renamed, so
-two processes never see a half file; at most 24 files are kept, the least recently used going first (a used file is renewed after 6 hours).
+two processes never see a half file; at most 96 files are kept, the least recently used going first (a used file is renewed after 6 hours).
 
 **Beside the resident caches.** The resident frames and visuals (ARC-DEV-375, ARC-DEV-383) and the editor-record memo (ARC-DEV-388) live in process memory and key by the module's bytes; this store shares no state, folder
 or key with them and reads none of them. The master switch `ARC_AREA_RESIDENT=0` (a load keeps nothing between loads, for before/after timing) turns this store off too, so a run under it still reads

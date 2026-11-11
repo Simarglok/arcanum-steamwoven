@@ -32,10 +32,12 @@ public static class AreaMapTransitionsStore
     /// <summary>The layout of the file (not of the records: those carry <see cref="MapTransitionSetCodec.Version"/>).</summary>
     internal const byte Version = 1;
     /// <summary>Files kept in the folder; the next write removes the least recently used beyond this.</summary>
-    internal const int MaxFiles = 24;
+    internal const int MaxFiles = 96;
     internal const string Extension = ".mt";
     private static readonly byte[] Magic = "ARMT"u8.ToArray();
     private const int FixedHeader = 8;
+    // A file larger than any real set (the main map's is 118 KB) is not read.
+    private const long MaxFileBytes = 64L * 1024 * 1024;
     private static readonly TimeSpan TouchAfter = TimeSpan.FromHours(6), StaleTemporary = TimeSpan.FromHours(1);
 
     private static readonly bool Switch = Environment.GetEnvironmentVariable("ARC_MAP_CACHE") != "0" && AreaResidentVisuals.Enabled;
@@ -84,18 +86,20 @@ public static class AreaMapTransitionsStore
         {
             key = Key(stack, map);
             var path = PathFor(root, key);
-            if (!File.Exists(path)) return null;
+            if (!File.Exists(path) || new FileInfo(path).Length > MaxFileBytes) return null;
             var held = Decode(File.ReadAllBytes(path), key, map);
             if (held is not null) Touch(path);
             return held;
         }
-        catch (Exception error) when (IsDisk(error)) { return null; }
+        catch (Exception error) when (Refused(error)) { return null; }
     }
 
     /// <summary>Keeps a read under <paramref name="key"/>; false when the store is off or the disk refused (nothing is thrown).</summary>
     internal static bool Write(string? key, MapTransitionSet transitions, IReadOnlyDictionary<int, AreaMapDestination> destinations)
     {
         if (key is null || Root is not { } root) return false;
+        // A set with a file the content could not read at this moment is not kept: the next process may read it (the other issues are the content's own and repeat).
+        if (transitions.Issues.Any(issue => issue.Code == WorldIssueCode.Unreadable)) return false;
         string? temporary = null;
         try
         {
@@ -108,8 +112,8 @@ public static class AreaMapTransitionsStore
             Prune(root, path);
             return true;
         }
-        catch (Exception error) when (IsDisk(error)) { return false; }
-        finally { if (temporary is not null) try { File.Delete(temporary); } catch (Exception error) when (IsDisk(error)) { } }
+        catch (Exception error) when (Refused(error)) { return false; }
+        finally { if (temporary is not null) try { File.Delete(temporary); } catch (Exception error) when (Refused(error)) { } }
     }
 
     internal static byte[] Encode(string key, MapTransitionSet transitions, IReadOnlyDictionary<int, AreaMapDestination> destinations)
@@ -185,5 +189,7 @@ public static class AreaMapTransitionsStore
         catch (Exception error) when (IsDisk(error)) { }
     }
 
+    // Whatever the disk, the path or the bytes do, the store answers "nothing" and the load goes on; only memory exhaustion is not its business.
+    private static bool Refused(Exception error) => error is not OutOfMemoryException;
     private static bool IsDisk(Exception error) => error is IOException or UnauthorizedAccessException or System.Security.SecurityException or NotSupportedException;
 }
