@@ -56,6 +56,7 @@ public static class SpellMissileRules
     /// <summary>The steps of one tick (0x42F390 with the speed 0x458CA0 reads, the projectile entry's <c>Proj Speed:</c>): the speed,
     /// or <see cref="ProjectileRules.DefaultStepsPerTick"/> when it is 0; a negative speed takes no step, so the missile never
     /// moves (no installed line has one).</summary>
+    [OriginalFunction(0x458CA0, OriginalFunctionScope.Partial)]
     public static int StepsPerTick(int projectileSpeed) => projectileSpeed == 0 ? ProjectileRules.DefaultStepsPerTick : Math.Max(0, projectileSpeed);
 
     /// <summary>The pace the missile waits after a leg (the setup 0x42F2D0): 1000 / its art's frame rate, truncated, or

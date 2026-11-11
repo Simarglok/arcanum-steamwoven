@@ -6,6 +6,7 @@ using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation;
 
 namespace Arcanum.World;
 
@@ -310,6 +311,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// (<see cref="AreaScriptWorld.CritterCell"/>, else the row's), then the PC at its live cell (the original's list order is not read).
     /// Empty for a centre of another map or without a place.
     /// </summary>
+    [OriginalFunction(0x440FF0, OriginalFunctionScope.Partial)]
     public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre)
     {
         if (centre.Map != _shownMap || Place(centre) is not { } at) return [];
@@ -592,6 +594,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// Effects apply as the run goes: a step the session refuses leaves the earlier ones applied, as for a dialog script.
     /// Printed lines are read for the caller to show; effect sounds are not played here.
     /// </summary>
+    [OriginalFunction(0x441980, OriginalFunctionScope.Partial)]
     public AreaScriptedUse Run(AreaObjectRecord row, ScrRuleProfile rules, Func<ScrTeleport, string?>? teleportRefusal = null)
     {
         var used = RunUse(row, rules, teleportRefusal, out var trap);

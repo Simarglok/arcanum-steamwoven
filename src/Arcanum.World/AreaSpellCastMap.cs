@@ -5,6 +5,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation;
 
 namespace Arcanum.World;
 
@@ -190,6 +191,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     private (long X, long Y)? Cell(AreaObjectRecord row, IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?> placed) =>
         placed.TryGetValue(row.Key, out var live) ? live : _visitorKeys.ContainsKey(row.Key) ? null : (row.WorldX!.Value, row.WorldY!.Value);
 
+    [OriginalFunction(0x440B40, OriginalFunctionScope.Partial)]
     public IReadOnlyList<SpellTargetObject> ObjectsInSquare(SpellLocation centre, int radius, int typeMask)
     {
         var found = new List<SpellTargetObject>();
@@ -205,6 +207,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         return found;
     }
 
+    [OriginalFunction(0x4407C0, OriginalFunctionScope.Partial)]
     public IReadOnlyList<SpellTargetObject> ObjectsAt(SpellLocation tile, int typeMask)
     {
         var found = new List<SpellTargetObject>();

@@ -2,6 +2,7 @@ using Arcanum.Data;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Sound;
+using Arcanum.Simulation;
 
 namespace Arcanum.World;
 
@@ -32,6 +33,7 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
 
     /// <summary>The hero's body for a race, gender, armour part (<see cref="Armor"/>) and palette (<see cref="Palette"/>), or null for a
     /// race outside the creation table, an armour part without a code or a palette outside 0..3.</summary>
+    [OriginalFunction(0x441C70, OriginalFunctionScope.Partial)]
     public static HeroBody? For(CharacterRace race, CharacterGender gender, int armor = 0, int palette = 0)
     {
         if ((int)race is < 0 or >= CharacterCreationRules.RaceCount || !Enum.IsDefined(gender) || armor is < 0 || armor >= ArmorCodes.Length

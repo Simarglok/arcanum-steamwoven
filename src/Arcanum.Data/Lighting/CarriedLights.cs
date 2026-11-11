@@ -26,6 +26,7 @@ public static class CarriedLightRules
 
     /// <summary>The colour of a carried light of a size (LT12): extra large (244, 255, 255), large (255, 214, 172), medium
     /// (236, 138, 85), small (167, 88, 58); a critter without a worn light has none.</summary>
+    [OriginalFunction(0x45FA70, OriginalFunctionScope.Partial)]
     public static AmbientColor Color(CarriedLightSize size) => size switch
     {
         CarriedLightSize.ExtraLarge => new(244, 255, 255),

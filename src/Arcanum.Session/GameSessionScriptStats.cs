@@ -1,4 +1,5 @@
 using Arcanum.Simulation.Character;
+using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 
@@ -31,6 +32,7 @@ public sealed partial class GameSessionOwner
 
     /// <summary>Whether the hero's background makes the dumb test (0x45FC00, ledger BG5) pass without a low intelligence: background 55, 74 or 75;
     /// false without a hero.</summary>
+    [OriginalFunction(0x45FC00, OriginalFunctionScope.Partial)]
     public bool QueryHeroDumbBackground()
     {
         ThrowIfDisposed();

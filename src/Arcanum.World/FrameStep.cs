@@ -2,6 +2,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Goals;
+using Arcanum.Simulation;
 
 namespace Arcanum.World;
 
@@ -194,6 +195,7 @@ public sealed class FrameStep
     /// one set of passes and the participants. Behind the pause real time still moves, so a paused frame is one step with a pass either side. A
     /// refusal of the clocks throws (the host's invariant, as for the lighting); a frame is never left open.
     /// </summary>
+    [OriginalFunction(0x45B370, OriginalFunctionScope.Partial)]
     public FrameStepReport Run(long hostMs, bool frozen = false)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(hostMs);

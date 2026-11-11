@@ -239,6 +239,7 @@ public static class HostilityRules
     }
 
     // Avenge (0x4AE450): a dead NPC's focus, valid for the scanner, when the scanner protects the dead NPC.
+    [OriginalFunction(0x4AE450, OriginalFunctionScope.Partial)]
     private static string? Avenge(IHostilityWorld world, HostilityCritter npc, HostilityCritter dead, CombatAnomalyProfile profile)
     {
         if (!dead.Dead || dead.Kind != HostilityKind.Npc || world.Danger(dead.Id).Focus is not { } focus) return null;
@@ -314,6 +315,7 @@ public static class HostilityRules
     /// at 80 % hit points or more a 1..500 roll of 1 (<see cref="AiRollPurpose.SurrenderCalm"/>) asks for NONE.
     /// </summary>
     [OriginalFunction(0x4A92D0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4ABBC0, OriginalFunctionScope.Partial)]
     public static DangerUpdatePlan DangerUpdate(IHostilityWorld world, string npc, IAiRollSource rolls, CombatAnomalyProfile profile)
     {
         ArgumentNullException.ThrowIfNull(world);

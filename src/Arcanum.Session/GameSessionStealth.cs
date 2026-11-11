@@ -1,6 +1,7 @@
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Skills;
+using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 
@@ -48,6 +49,8 @@ public sealed partial class GameSessionOwner
     /// crouch animation and its art are the host's: the source sets no flags on a critter whose crouch art is missing, which the
     /// session does not see. One revision.
     /// </summary>
+    [OriginalFunction(0x45EE90, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x45EE30, OriginalFunctionScope.Partial)]
     public GameSessionMutationResult ToggleHeroConcealment(GameSessionVersion expected)
     {
         ThrowIfDisposed();

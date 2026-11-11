@@ -44,6 +44,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Spell cast host and viewer casting | [Magic](status/magic.md) | ARC-MAGIC-014, ARC-MAGIC-015 |
 | Spell eye candy | [Magic](status/magic.md) | ARC-MAGIC-017 |
 | Item spell triggers | [Magic](status/magic.md) | ARC-MAGIC-020 |
+| Aptitude inputs | [Magic](status/magic.md) | ARC-MAGIC-028 |
 | Weapon spell pane | [Magic](status/magic.md) | ARC-UI-016 |
 | Spell pane in the bottom strip | [Magic](status/magic.md) | ARC-UI-053 |
 | Spell missile and caster facing | [Magic](status/magic.md) | ARC-MAGIC-018 |

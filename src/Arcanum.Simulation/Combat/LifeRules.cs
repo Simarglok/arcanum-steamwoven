@@ -43,11 +43,14 @@ public static class LifeRules
         4L * facts.FatiguePoints + facts.FatigueAdjustment + 2 * (facts.Level + facts.Constitution) + facts.Willpower + 4,
         facts.MaxFatigueEffects.IsDefault ? [] : facts.MaxFatigueEffects);
 
+    [OriginalFunction(0x45D8D0, OriginalFunctionScope.Partial)]
     public static bool IsDead(LifeState state, LifeFacts facts) => MaxHitPoints(facts, state.PoisonLevel) - state.HitPointDamage <= 0;
 
+    [OriginalFunction(0x45D800, OriginalFunctionScope.Partial)]
     public static bool IsUnconscious(LifeState state, LifeFacts facts) =>
         !facts.Traits.HasFlag(LifeTraits.Undead) && MaxFatigue(facts) - state.FatigueDamage <= 0;
 
+    [OriginalFunction(0x45D700, OriginalFunctionScope.Full)]
     public static LifeStatus Evaluate(LifeState state, LifeFacts facts)
     {
         Check(state, facts);
@@ -233,6 +236,7 @@ public static class LifeRules
     /// Resting heal (sleep, and the hourly event of an NPC without a PC leader): a living critter loses
     /// <c>HealRate × hours</c> hit-point damage and three times that fatigue damage (never below 0).
     /// </summary>
+    [OriginalFunction(0x45E910, OriginalFunctionScope.Partial)]
     public static LifeOutcome RestHeal(LifeState state, LifeFacts facts, int hours)
     {
         Check(state, facts);

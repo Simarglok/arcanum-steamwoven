@@ -36,12 +36,16 @@ public static class EyeCandyArt
     public static bool IsEyeCandy(uint aid) => aid >> 28 == Class;
     public static int Number(uint aid) => (int)((aid >> 19) & 0x1FF);
     /// <summary>The frame (0x502B50, class 14: bits 12..18).</summary>
+    [OriginalFunction(0x502B50, OriginalFunctionScope.Partial)]
     public static int Frame(uint aid) => (int)((aid >> 12) & 0x7F);
     public static int Rotation(uint aid) => (int)((aid >> 9) & 7);
+    [OriginalFunction(0x504C00, OriginalFunctionScope.Partial)]
     public static bool Translucent(uint aid) => ((aid >> 8) & 1) != 0;
     /// <summary>The variant (0x504B90).</summary>
+    [OriginalFunction(0x504B90, OriginalFunctionScope.Partial)]
     public static EyeCandyVariant Variant(uint aid) => (EyeCandyVariant)((aid >> 6) & 3);
     public static int Palette(uint aid) => (int)((aid >> 4) & 3);
+    [OriginalFunction(0x504C60, OriginalFunctionScope.Partial)]
     public static int Scale(uint aid) => (int)((aid >> 1) & 7);
 
     /// <summary>The same art id with another variant (0x504BC0; the original logs and takes 0 for one of 3 or more).</summary>

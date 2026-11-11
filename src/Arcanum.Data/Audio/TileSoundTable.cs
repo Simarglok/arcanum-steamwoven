@@ -34,9 +34,14 @@ public sealed class TileSoundTable
     public const string Path = "art/tile/tilename.mes";
     public const int Categories = 4;
 
-    private readonly int[][] _classes;
+    /// <summary>The name flag the nature mage background reads (letter <c>n</c>, 0x10; 0x4EBBA0). The other letters read are
+    /// <c>b</c> 1, <c>s</c> 2, <c>f</c> 5, <c>i</c> 8 and <c>p</c> 0x20; no other consumer is modelled yet.</summary>
+    public const int NatureFlag = 0x10;
 
-    private TileSoundTable(int[][] classes) => _classes = classes;
+    private readonly int[][] _classes;
+    private readonly int[][] _flags;
+
+    private TileSoundTable(int[][] classes, int[][] flags) => (_classes, _flags) = (classes, flags);
 
     /// <summary>The sound numbers of a category (0 outdoor flippable, 1 outdoor, 2 indoor flippable, 3 indoor), by position.</summary>
     public IReadOnlyList<int> Category(int category) =>
@@ -62,12 +67,14 @@ public sealed class TileSoundTable
         if (!records.ContainsKey(0) || !records.ContainsKey(100) || !records.ContainsKey(200) || !records.ContainsKey(300))
             return new(TileSoundTableStatus.Invalid, null);
         var categories = Enumerable.Range(0, Categories).Select(_ => new List<int>()).ToArray();
+        var flags = Enumerable.Range(0, Categories).Select(_ => new List<int>()).ToArray();
         foreach (var (number, text) in records.Where(r => r.Key is >= 0 and < 400).OrderBy(r => r.Key))
         {
             if (Sound(text) is not { } sound) return new(TileSoundTableStatus.Invalid, null, Record: number);
             categories[number / 100].Add(sound);
+            flags[number / 100].Add(Flags(text));
         }
-        return new(TileSoundTableStatus.Ready, new TileSoundTable([.. categories.Select(c => c.ToArray())]));
+        return new(TileSoundTableStatus.Ready, new TileSoundTable([.. categories.Select(c => c.ToArray())], [.. flags.Select(c => c.ToArray())]));
     }
 
     /// <summary>
@@ -80,14 +87,62 @@ public sealed class TileSoundTable
     [OriginalFunction(0x4EBBE0, OriginalFunctionScope.Partial)]
     public int? SoundClass(uint tileArt)
     {
+        var (category, position) = Locate(tileArt);
+        return position < _classes[category].Length ? _classes[category][position] : null;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-028: the flag bits of the tile's name record (0x4EBAD0), the same category and position as
+    /// <see cref="SoundClass"/>; null where the position is beyond its category (the original reads past its table).
+    /// </summary>
+    [OriginalFunction(0x4EBAD0, OriginalFunctionScope.Partial)]
+    public int? NameFlags(uint tileArt)
+    {
+        var (category, position) = Locate(tileArt);
+        return position < _flags[category].Length ? _flags[category][position] : null;
+    }
+
+    /// <summary>
+    /// The two tile facts the Sky Mage and Nature Mage backgrounds read under a critter (stat getter 0x4B0490): whether the
+    /// tile art is outdoor (0x5038C0) and whether its name carries <see cref="NatureFlag"/> (0x4EBBA0). A null art id (the sector cannot be locked where the critter
+    /// stands: 0x4D70B0 answers -1) and the art id -1 itself give neither; a tile whose position
+    /// lies beyond its category has no flags (the original reads past its table) and is not nature.
+    /// </summary>
+    [OriginalFunction(0x4EBBA0, OriginalFunctionScope.Partial)]
+    public (bool Outdoor, bool Nature) MageGround(uint? tileArt) =>
+        tileArt is not { } art || art == uint.MaxValue ? (false, false) : (IsOutdoor(art), ((NameFlags(art) ?? 0) & NatureFlag) != 0);
+
+    /// <summary>Whether a tile slot's art id is outdoor: a tile (type 0) by bit 8, a facade (type 11) by bit 25, any other art
+    /// type not (0x5038C0).</summary>
+    [OriginalFunction(0x5038C0, OriginalFunctionScope.Full)]
+    public static bool IsOutdoor(uint tileArt) => (tileArt >> 28) switch
+    {
+        0 => (tileArt & 0x100) != 0,
+        11 => (tileArt >> 25 & 1) != 0,
+        _ => false,
+    };
+
+    private static (int Category, int Position) Locate(uint tileArt)
+    {
         var (outdoor, flippable, position) = (tileArt >> 28) switch
         {
-            0 => ((tileArt & 0x100) != 0, (tileArt & 0x80) != 0, (int)((tileArt >> 22) & 0x3F)),
-            11 => ((tileArt >> 25 & 1) != 0, (tileArt >> 26 & 1) != 0, (int)((tileArt >> 11) & 0x3F)),
+            0 => (IsOutdoor(tileArt), (tileArt & 0x80) != 0, (int)((tileArt >> 22) & 0x3F)),
+            11 => (IsOutdoor(tileArt), (tileArt >> 26 & 1) != 0, (int)((tileArt >> 11) & 0x3F)),
             _ => (false, false, 0),
         };
-        var category = _classes[outdoor ? (flippable ? 0 : 1) : (flippable ? 2 : 3)];
-        return position < category.Length ? category[position] : null;
+        return (outdoor ? (flippable ? 0 : 1) : (flippable ? 2 : 3), position);
+    }
+
+    // The flag letters after the '/' up to the first space (0x4EB2E0): b 1, s 2, f 5, i 8, n 0x10, p 0x20; any other letter
+    // adds nothing, and a record without '/' has no flags.
+    private static int Flags(string text)
+    {
+        var slash = text.IndexOf('/');
+        if (slash < 0) return 0;
+        var flags = 0;
+        for (var i = slash + 1; i < text.Length && text[i] != ' '; i++)
+            flags |= text[i] switch { 's' => 2, 'b' => 1, 'f' => 5, 'i' => 8, 'n' => 0x10, 'p' => 0x20, _ => 0 };
+        return flags;
     }
 
     // A text with a NUL would end the original's string early; one without '/' shorter than three characters fails its load.

@@ -104,6 +104,7 @@ public sealed class ScrProgram
     /// capacity not below it, and exactly <c>count</c> lines with nothing after them. Counts are
     /// checked before the line limit, so a malformed header never reads as a budget refusal.
     /// Invalid options throw <see cref="ArgumentOutOfRangeException"/>; a payload never throws.</summary>
+    [OriginalFunction(0x44C730, OriginalFunctionScope.Partial)]
     public static ScrReadResult Read(ReadOnlySpan<byte> payload, ScrReaderOptions? options = null)
     {
         options ??= new();

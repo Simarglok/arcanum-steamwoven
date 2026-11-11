@@ -1,4 +1,5 @@
 using Arcanum.Scripting.Dialog;
+using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 
@@ -35,6 +36,7 @@ public sealed class SessionDialogItemHoldPort(
         return false;
     }
 
+    [OriginalFunction(0x462480, OriginalFunctionScope.Partial)]
     public bool NpcHolds(DialogItemQuery query)
     {
         if (query.PlayerCharacter != playerCharacter || _entityOf(query.Npc) is not { } npc) return false;

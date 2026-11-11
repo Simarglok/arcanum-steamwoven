@@ -111,6 +111,15 @@ What the numbers do not say:
 - **The code section includes the C runtime and library code** (the part from about 0x580000 on); the census does not
   separate it, `range` and the callers' counts do. DirectX, Miles and Bink are imports and not in the list.
 
+## Function triage
+
+V1 of the [function audit plan](../research/function-audit-plan.md#5-recommendation) gives every census function that the registry lacked one state, slice by slice (address bands). The states: **not relevant** with a reason class (recorded in the slice's ledger section only), **read and implemented** (a registry row, `full` or `partial`, and an `[OriginalFunction]` mark in code), **read, not implemented** (a `not implemented` row) and **not yet read** (an F0 row). Read functions start at F1; F2 only where an existing document holds two independent readings.
+
+| Slice | Band | Functions triaged | Ledger section |
+| --- | --- | --- | --- |
+| C (ARC-RES-108) | 0x440000-0x45FFFF | 389 added (0x452830 and 0x45A060 got their rows from other PRs): 95 implemented, 68 not implemented, 226 not relevant | [census-triage-0x44-0x45](../research/ledger/census-triage-0x44-0x45.md) |
+| H1 (ARC-RES-119) | 0x500000-0x54FFFF | 933 added (50 of the band's 983 had rows): 17 implemented, 225 not implemented, 691 not relevant | [census-triage-h1](../research/ledger/census-triage-h1.md) |
+
 ## Rule-mode switches
 
 Every boolean switch of a profile composed in `GameRules` needs a row with a ledger ID (letters and a number) in the

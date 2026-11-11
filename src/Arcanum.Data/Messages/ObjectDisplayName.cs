@@ -68,6 +68,7 @@ public static class ObjectDisplayName
 
     /// <summary>Resolves the shown name for an object of <paramref name="type"/> whose fields
     /// <paramref name="read"/> supplies. Only the fields of the selected branch are read.</summary>
+    [OriginalFunction(0x441B60, OriginalFunctionScope.Partial)]
     public static ObjectNameResolution Resolve(int type, ObjectFieldReader read, ObjectDescriptionCatalog catalog, CritterRecognition recognition)
     {
         ArgumentNullException.ThrowIfNull(read);
