@@ -120,7 +120,7 @@ public enum SpellCastEventKind
     /// <summary>ARC-DEV-295: the session refused the experience step of a damage step on <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the damage stands.</summary>
     ExperienceNotSaved,
     /// <summary>ARC-DEV-302: an ObjFlag component wrote the flag <see cref="SpellCastEvent.Value"/> on the critter <see cref="SpellCastEvent.Object"/>; <see cref="SpellCastEvent.Detail"/>
-    /// bit 0x1 is on (else off), bit 0x2 the critter flags (else the spell flags).</summary>
+    /// bit 0x1 is on (else off), bit 0x2 the critter flags, 0x4 the object flags (else the spell flags), 0x8 a side effect's write (ARC-DEV-358).</summary>
     ObjectFlagWritten,
     /// <summary>ARC-DEV-302: an ObjFlag component left the flag <see cref="SpellCastEvent.Value"/> as it is, because other runs provide it (the reference count 0x455100); the detail as
     /// <see cref="ObjectFlagWritten"/>.</summary>
@@ -389,24 +389,13 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     [OriginalFunction(0x452300, OriginalFunctionScope.Partial)]
     [OriginalFunction(0x4516D0, OriginalFunctionScope.Partial)]
     [OriginalFunction(0x4514E0, OriginalFunctionScope.Partial)]
+    // ARC-DEV-358 (MA-1): the dispatch is a table by component type (ComponentHandlers, SessionSpellCasterComponents.cs); a type without a handler, or one whose handler leaves the
+    // target undone, is logged as ComponentNotReady.
     public SpellComponentOutcome Apply(SpellRun run, int component, SpellRunTarget target)
     {
         ArgumentNullException.ThrowIfNull(run);
         if (_records(run.Spell)?.Component(run.Action, component) is not { } c) return SpellComponentOutcome.None;
-        if (c.Damage is { } data && target.Object is { } obj)
-        {
-            if (c.Type == SpellComponentType.Damage) ApplyDamage(run, data, obj);
-            else ApplyHeal(run, data, obj);
-            return SpellComponentOutcome.None;
-        }
-        if (c.Type == SpellComponentType.Destroy && DestroyComponent(run, target)) return SpellComponentOutcome.None;
-        if (c.Type == SpellComponentType.EyeCandy) return EyeCandy(run, c, target);
-        if (c.Type == SpellComponentType.Summon && SummonComponent(run, c, target)) return SpellComponentOutcome.None;
-        if (c.Type == SpellComponentType.AGoal && c.AnimationGoal == KnockbackGoal) { Knockback(run, target); return SpellComponentOutcome.None; }
-        if (c.Type == SpellComponentType.AGoal && c.AnimationGoal == HoverGoal) { Hover(run, target, true); return SpellComponentOutcome.None; }
-        if (c.Type == SpellComponentType.AGoalTerminate && c.TerminatedGoal == HoverGoal) { Hover(run, target, false); return SpellComponentOutcome.None; }
-        if (c.Type == SpellComponentType.ObjFlag && ObjectFlag(run, c, target)) return SpellComponentOutcome.None;
-        if (c.Type == SpellComponentType.Effect && EffectComponent(run, c, target)) return SpellComponentOutcome.None;
+        if (ComponentHandlers.TryGetValue(c.Type, out var handler) && handler(this, run, c, target) is { } outcome) return outcome;
         if (c.Damage is null) _log.Add(new(SpellCastEventKind.ComponentNotReady, run.Id, (int)c.Type, target.Object?.Id));
         return SpellComponentOutcome.None;
     }
@@ -561,7 +550,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         ArgumentNullException.ThrowIfNull(who);
         if (who.Id == Hero) return _owner.QueryHeroAttack()?.Combatant ?? new Combatant { IsPc = true };
         if (_map.Critter(who.Id) is { } npc && _owner.QueryLife(npc.Combat.Target).View is { } life)
-            return npc.Combat.Combatant(life.Status, life.Record.State, _owner.Rules.Combat);
+            return _owner.WithNpcEffects(npc.Combat).Combatant(life.Status, life.Record.State, _owner.Rules.Combat);
         return _map.ObjectCombat(who.Id)?.Combatant ?? new Combatant();
     }
 
@@ -1194,7 +1183,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     private int? HeroStat(CharacterStat stat) => _owner.HeroEffectiveStat(stat);
 
     private int? NpcStat(SpellCastCritter npc, CharacterStat stat) =>
-        _owner.QueryLife(npc.Combat.Target).View is { } life ? npc.Combat.EffectiveStat(stat, life.Record.State) : null;
+        _owner.QueryLife(npc.Combat.Target).View is { } life ? _owner.WithNpcEffects(npc.Combat).EffectiveStat(stat, life.Record.State) : null;
 
     // The original's stat numbers the character owner models (0..7 primary, 8..16 derived).
     private static CharacterStat? CharacterStatOf(int stat) => stat switch

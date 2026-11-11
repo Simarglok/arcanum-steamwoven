@@ -243,3 +243,25 @@ Known differences (documented, not bugs):
 - The census checks the host's component dispatch, not a cast: area, save, run order and the item side are outside it (the Begin Destroy of a pack item, record 184).
 - The Destroy of a grenade is left out of the census and covered by its own tests and the `grenade`, `summon-flash` and `summon-wall` stages.
 - Records with an unbuilt ObjFlag bit (blind, flee, fatigue limit, drunk, magnetic inversion, enshroud, shield, don't-draw, permanent polymorph), the cell branches, Use, Cast, Movement, Trait, AIRedirect and the creature list of record 183 are listed in the audit as open.
+
+## ARC-DEV-358 — ObjFlag writer: spell flags on the hero and creatures (MA-1, 2026-11-11)
+
+The component rules are in [the ObjFlag component](../world/spell-cast-host.md#the-objflag-component-and-the-component-table-arc-dev-358-ma-1), the executable reading in [OB1–OB5](../research/ledger/spell-runs.md#objflag-component-of-the-cast-host-arc-dev-358).
+Compare in both games with the same hero and spells; a spell that also has a not-ready part (Trait, Dispel, Summon) is named in the step. The flags are written by the spell; some are drawn or read by other systems only later, which the steps say.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast Hardened Hands (45) on yourself, then hit a creature unarmed (no weapon in hand). | The unarmed damage gets +2 normal damage while the spell lasts, and loses it when it ends. Ours feeds the bonus from the flag; check the number in the combat log. | open |
+| 2 | Cast Body of Stone (18) on yourself and hit a creature unarmed. | +5 normal damage unarmed; the spell's art change (Trait) and its weight and speed side are not ready in ours, so the hero keeps its normal body. | open |
+| 3 | Cast Invisibility (69) on yourself and walk in front of an enemy that has already noticed you. | The original makes you translucent, and the enemy's awareness rules read the invisible flag. Ours writes the flags and the AI host reads them, but the viewer does not draw you translucent yet. | open |
+| 4 | Cast Dweomer Shield (42), then have a creature cast a harmful spell at you (or cast at yourself from a scroll). | The shell stops the spell at the per-target stage and the spell shows the shell message (602/603). Ours already read the flag before; now the spell writes it. Dispel (the other half of the spell) is not ready. | open |
+| 5 | Cast Bonds of Magick (43) on yourself and try to cast another spell. | The cast is refused at the invocation check while the flag holds. | open |
+| 6 | Cast Reflection Shield (44) on yourself and let a creature cast a hostile spell at you. | The spell is reflected to its caster. | open |
+| 7 | Cast Sanctuary (63) on yourself near a hostile creature that has not seen you yet. | The hostility rules read the enshrouded flag; compare which creatures still attack. | open |
+| 8 | Cast Disintegrate (34) on a creature. | The creature takes 30000 electrical damage and dies; the original sets don't-draw on it. Ours writes the flag (and the paralysed bit) but the viewer still draws the body; the AI and the spell target rules treat it as gone. | open |
+
+Known differences (reading only, no game step):
+
+- Water walking (spells 13, 28): the flag and its object flag are written; the original's clear then tests the tile under the critter and may run a damage step (F0, MA-8). Ours does neither.
+- Mind control, charm, undead, fleeing and blinded (MA-4) and the locks (MA-6) are still not ready and show "not ready" in the spell line.
+- The viewer draws no translucent, shrunk or hidden critter from these flags yet.
