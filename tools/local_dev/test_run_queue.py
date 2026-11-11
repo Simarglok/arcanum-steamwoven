@@ -156,6 +156,17 @@ class LaneTests(unittest.TestCase):
         two = [lane_ticket(2, started=True), lane_ticket(3, "export", started=True)]
         self.assertEqual(run_queue.blocker(two[1], two)["seq"], 2)  # (never admitted together; the rule is symmetric)
 
+    def test_a_front_export_waits_only_for_the_runs_that_hold_a_place(self) -> None:
+        # ARC-DEV-400: `./arcanum package` queues its export at the front, so no smoke that arrives before it passes it
+        export = lane_ticket(9, "export", at=500.0, estimate=300.0)
+        export["priority"] = run_queue.FRONT
+        live = [lane_ticket(1, started=True, at=1.0), lane_ticket(2, estimate=5.0, at=490.0, lane="short"),
+                lane_ticket(3, estimate=5.0, at=495.0, lane="short"), export]
+        self.assertEqual(run_queue.blocker(export, live)["seq"], 1)  # only the running run
+        self.assertEqual(run_queue.blocker(live[1], live)["seq"], 9)  # a smoke queued earlier now waits for it
+        self.assertIsNone(run_queue.blocker(export, [export]))
+        self.assertIsNone(run_queue.blocker(export, [lane_ticket(1, kind="dotnet", started=True), export][1:]))
+
     def test_an_export_waits_for_the_runs_ahead_of_it_and_for_running_side_runs(self) -> None:
         live = [lane_ticket(1, estimate=5.0), lane_ticket(2, "export", estimate=5.0), lane_ticket(3, "dotnet", started=True)]
         self.assertIsNone(self.waits_for(live[:1], 1))
@@ -200,6 +211,11 @@ class LaneTests(unittest.TestCase):
                 running = [item for item in live if item.get("startedAt")]
                 for item in rng.sample(running, rng.randint(0, len(running))):
                     live.remove(item)
+            running = [item for item in live if item.get("startedAt") and item["kind"] in run_queue.GODOT_KINDS]
+            for name, cap in (("heavy", 1), ("short", 2)):
+                self.assertLessEqual(sum(1 for item in running if run_queue.lane_of(item) == name and item.get("lane") != "single"), cap)
+            checkouts = [run_queue.checkout_of(item) for item in running]
+            self.assertEqual(len(checkouts), len(set(checkouts)), f"seed {seed}: two runs of one checkout")
             for first in live:  # the admitted set holds the rules: at most one heavy, the short places, exports and old runs alone
                 if first.get("startedAt") and run_queue.lane_of(first) in run_queue.EXCLUSIVE_LANES and first["kind"] in run_queue.GODOT_KINDS:
                     others = [item for item in live if item.get("startedAt") and item is not first and item["kind"] in run_queue.GODOT_KINDS]
@@ -246,7 +262,9 @@ class LaneAccountingTests(unittest.TestCase):
         entries = [self.entry(1, 0), self.entry(2, 1), self.entry(3, 0, peers=2), self.entry(4, 1, peers=1),
                    self.entry(5, 1, peers=1), self.entry(6, 0, lane="heavy", peers=None), self.entry(7, 130),
                    self.entry(8, 1, peers=0, startedAt=None)]
+        entries += [self.entry(20, 1, lane=None, kind="dotnet"), self.entry(21, 1, lane="quick", kind="quick")]
         lanes = run_queue.lane_accounting(entries)
+        self.assertEqual(sorted(lanes), ["heavy", "short"])  # dotnet and quick runs have no lane
         self.assertEqual((lanes["short"]["runs"], lanes["short"]["red"], lanes["short"]["stopped"]), (6, 3, 1))
         self.assertEqual((lanes["short"]["alone"], lanes["short"]["beside"]), ([3, 1], [3, 2]))
         self.assertEqual(lanes["heavy"]["unknown"], [1, 0])
@@ -258,7 +276,7 @@ class LaneAccountingTests(unittest.TestCase):
             self.entry(1, 0), self.entry(2, 1, peers=2)]) + "\nnot json\n" + json.dumps(self.entry(3, 0, lane="heavy", peers=0)) + "\n")
         lines = run_queue.lane_report()
         text = "\n".join(lines)
-        self.assertIn("lanes over the last 3 runs", lines[0])
+        self.assertIn("lanes over the last 3 Godot runs", lines[0])
         self.assertRegex(lines[2], r"^heavy +1 +0 +0.0%")
         self.assertRegex(lines[3], r"^short +2 +1 +50.0%")
         self.assertIn("red ", text)

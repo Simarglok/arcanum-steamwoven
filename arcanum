@@ -225,7 +225,10 @@ def package_build(args: argparse.Namespace) -> int:
     command = [sys.executable, "-B", str(ROOT / "tools" / "local_dev" / "package.py"), args.platform, "--ref", args.ref,
                *(["--no-fetch"] if args.no_fetch else []), *(["--no-smoke"] if args.no_smoke else []),
                *(["--keep-work"] if args.keep_work else []), *(["--map-smoke", args.map_smoke] if args.map_smoke else [])]
-    return run_queue.run("export", command, label=f"package {args.platform}", quiet=not args.verbose)
+    # ARC-DEV-400: a package build takes the queue's front like the owner's viewer launches (after the runs already holding
+    # a place): its turn by arrival time plus 3 of its estimates let the smokes of the lanes pass it for ever.
+    return run_queue.run("export", command, label=f"package {args.platform}", quiet=not args.verbose,
+                         priority=run_queue.FRONT)
 
 
 def positive(value: str) -> int:

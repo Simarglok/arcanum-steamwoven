@@ -68,7 +68,7 @@ EXCLUSIVE_LANES = frozenset({EXPORT, SINGLE})
 STOPPED_EXITS = frozenset({128 + signal.SIGHUP, 128 + signal.SIGINT, 128 + signal.SIGTERM})
 KILL_GRACE_SECONDS = 10.0
 TIMEOUT_EXIT = 124
-FRONT, NORMAL = 0, 1  # ticket priority: FRONT only for the owner's ./arcanum area|world|map launches
+FRONT, NORMAL = 0, 1  # ticket priority: FRONT for the owner's ./arcanum area|world|map launches and ./arcanum package (ARC-DEV-400)
 LEGACY_WINDOW_LOCK = Path("/tmp/arcanum-godot-window.lock")
 TICKET_ENV, KIND_ENV = "ARCANUM_QUEUE_TICKET", "ARCANUM_QUEUE_KIND"
 MAX_LABEL, MAX_COMMAND = 120, 400
@@ -904,7 +904,7 @@ def is_red(exit_code: Any) -> bool:
 
 
 def lane_of_entry(entry: dict[str, Any]) -> str:
-    """The lane a history entry ran in. An entry from before ARC-DEV-400 has none: it is put in the lane its kind and
+    """The lane a history entry of a Godot run (window, headless, export) ran in. An entry from before ARC-DEV-400 has none: it is put in the lane its kind and
     declared length would take now, so the red rate of the old single slot is the baseline of each lane."""
     lane = entry.get("lane")
     if isinstance(lane, str) and lane:
@@ -914,7 +914,7 @@ def lane_of_entry(entry: dict[str, Any]) -> str:
         estimate = entry.get("estimateSeconds")
         longer = isinstance(estimate, (int, float)) and not isinstance(estimate, bool) and estimate > HEAVY_SECONDS
         return HEAVY if longer else SHORT
-    return str(kind)
+    return EXPORT if kind == "export" else str(kind)
 
 
 def lane_accounting(entries: Sequence[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -923,7 +923,7 @@ def lane_accounting(entries: Sequence[dict[str, Any]]) -> dict[str, dict[str, An
     started (stopped while queued) is not counted."""
     lanes: dict[str, dict[str, Any]] = {}
     for entry in entries:
-        if not entry.get("startedAt"):
+        if not entry.get("startedAt") or entry.get("kind") not in GODOT_KINDS:  # dotnet and quick runs have no lane
             continue
         row = lanes.setdefault(lane_of_entry(entry), {"runs": 0, "red": 0, "stopped": 0, "alone": [0, 0],
                                                        "beside": [0, 0], "unknown": [0, 0], "reds": []})
@@ -963,12 +963,12 @@ def lane_report(history: int = 0, recent: int = 8) -> list[str]:
             entry = json.loads(line)
         except ValueError:
             continue
-        if isinstance(entry, dict):
+        if isinstance(entry, dict) and entry.get("kind") in GODOT_KINDS:  # a dotnet or quick run has no lane
             entries.append(entry)
     lanes = lane_accounting(entries)
     if not lanes:
         return ["no finished runs yet"]
-    result = [f"lanes over the last {len(entries)} runs (red = a non-zero exit that is not a stop; runs from before ARC-DEV-400 "
+    result = [f"lanes over the last {len(entries)} Godot runs (red = a non-zero exit that is not a stop; runs from before ARC-DEV-400 "
               f"are put in the lane they would take now, with no peer count)",
               f"{'lane':<10}{'runs':>6}{'red':>5}{'rate':>8}   alone (red/runs)   beside others   unknown"]
     for name in sorted(lanes):

@@ -420,9 +420,14 @@ waiting against about 3 hours with a heavy lane and two short lanes. The owner a
 - **Three lanes.** A `window` or `headless` run declaring more than `HEAVY_SECONDS` (90 s: `walk`, `container-click`, the
   Crash Site smoke) takes the one **heavy** lane; any other takes one of the `DEFAULT_SHORT_LANES` (2) **short** lanes.
   The lane is fixed when the run is queued (from `--estimate` or the kind's default) and written into its ticket; the
-  [queue order](#queue-order-arc-dev-390) still decides who is next within a lane. A run waits only for its own lane,
-  so a long run no longer blocks a short one and the reverse. After about a day of the history the short lanes are
+  [queue order](#queue-order-arc-dev-390) still decides who is next within a lane. A run waits for the runs of its own lane, for
+  an exclusive run (below) that is running or ahead of it, and for runs of its own checkout, but no longer for the other
+  lane: a long run does not block a short one and the reverse. After about a day of the history the short lanes are
   to be raised to 3 (`DEFAULT_SHORT_LANES`, or at once with the variable below); the history shows the red-run counts.
+- **A package build goes first.** `./arcanum package` (so `daily` too) queues its export with the owner's front priority, like
+  `./arcanum area|world|map`: it waits for the runs already holding a place and for nothing that arrives later. Before
+  this, an export was ordered by its arrival plus 3 of its 300 s estimates, so smokes arriving within 15 minutes kept
+  passing it (ticket 12945 waited with 4 to 9 runs ahead of it, 2026-11-11).
 - **An export runs alone.** It waits for every running Godot run of every lane (and those ahead of it in the order),
   and Godot runs that are later in the order wait for it, as before; it still waits for running `dotnet` and `quick`
   runs. Exports are one at a time.
@@ -433,10 +438,12 @@ waiting against about 3 hours with a heavy lane and two short lanes. The owner a
 - **Rollback.** `ARCANUM_QUEUE_LANES=0` (or `off`) makes the wrapper queue its Godot runs as the old single slot: such a run
   is recorded with lane `single` and runs alone, and every other wrapper waits for it and it waits for them. Any other
   value that is not a whole number from 0 to 8 does the same and prints a note. `ARCANUM_QUEUE_LANES=3` makes 3 short
-  lanes. The variable is read by each wrapper: set it in the shell profile of every lane to roll back for all of them
+  lanes. The variable is read by each wrapper, and every wrapper counts the short places from its own value, so keep it the same
+  in every lane's shell: set it in the shell profile to roll back for all of them
   (a single wrapper that sets it only serialises its own runs); a ticket from a wrapper from before the lanes is also read as `single`.
 - **Same environment.** The lanes need no change to a command: every lane's smoke still has its own settings and saves
-  per process (the system pointer is gated, ARC-DEV-060). `lockf` users keep excluding the queue ([above](#launch-queue-arc-dev-033)).
+  per process (the system pointer is gated, ARC-DEV-060). `lockf` users keep excluding the queue ([above](#launch-queue-arc-dev-033)); the queue's runs hold that lock shared, so with
+  overlapping lane runs a `lockf` user may wait for as long as the lanes stay busy (a retired rule).
 - **Red runs per lane.** The history of every Godot run (`history.jsonl`, and `./arcanum queue --history N`) records its
   `lane`, the other Godot runs running at its start and end (`peersStart`, `peersEnd`) and the load average at its start
   and end (`loadStart`, `loadEnd`). `./arcanum queue --lanes [--history N]` counts per lane the runs and the red ones
