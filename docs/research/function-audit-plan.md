@@ -96,6 +96,13 @@ that mattered, because those were in how objects are addressed, kept and moved, 
 Order: V0, then V1 and the matrix refresh in parallel, then V2 and V3. V0 and the matrix refresh can start now and need no
 other slice.
 
+**V0 is done** (ARC-RES-106): [`census.csv`](../verification/census.csv) lists 5,810 function starts with their call reach, and the
+[verification README](../verification/README.md#function-census) gives the counts and what they do not say. It was made
+with `llvm-objdump` and a direct-call, data-pointer and prologue scan (`tools/research/exe_census.py`), not Ghidra, which
+is not installed on the Mac; the scan finds 867 of the registry's 871 functions on its own. V1 starts from the census:
+the cited-but-unregistered rows are now 2,652 (any citation, not only call targets), 1,629 of them reached by a direct
+call chain from a registry function or a game-loop root.
+
 **Rules for every slice:** original behaviour is settled by the executable, not by a reconstruction; a row is added with
 its level at the time (F1 or higher for anything implemented); no original bytes, listings or oracle outputs in git; an
 anomaly is classified (reconstruction slip or original bug) under [D8](npc-combat-ai-plan.md#owner-decisions-2026-10-16);
