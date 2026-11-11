@@ -158,9 +158,23 @@ narrowed the same day in ARC-DEV-061):
   `./arcanum smoke pr --stages map` and `./arcanum smoke self-test`, whatever
   else it touches, and its report names both results. This overrides the
   "no smoke stage covers it" exception above.
-- The full map smoke chain runs only as part of the daily package build
+- The complete smoke run (the Crash Site smoke, the map batteries, then every
+  stage: `./arcanum smoke complete`) runs as part of the daily package build
   (`./arcanum daily`, [daily package build](packaging.md#daily-package-build-arc-dev-062)),
-  and only when main changed since the last package; not per PR.
+  and only when main changed since the last package; not per PR, unless the
+  change is wide: `./arcanum smoke pr --auto` picks `complete` itself for the
+  shared data, save schema, render and shared UI code and for a file no zone
+  table row names.
+- Zones (owner decision 2026-11-11, ARC-DEV-396): `./arcanum smoke pr --auto`
+  reads the diff against `origin/main` and runs the zones it selects (`core`,
+  the heavy `walk`, `container-click`, `crash-site`, `census`, or `complete`);
+  it prints each zone and why, and the PR report names them (`SMOKE zones: ...`).
+  A diff no zone covers (documents, tests, research tools) runs no smoke and the
+  run says so. `--zones` names zones by hand, `--stages` still adds stages
+  ([smoke zones](toolchain.md#smoke-runner-arc-dev-061)).
+- `container-click` and `walk` check a sample unless `--all` (ARC-DEV-395, owner
+  decision 2026-11-11); run them with `--all` when the change touches what the
+  sample no longer proves ([sampled stages](toolchain.md#smoke-runner-arc-dev-061)).
 - A stage that also fails on clean main is not this PR's failure: name it in
   the PR and go on; do not investigate it in the task thread.
   The runner prints `known on main, not this PR` for the failures listed in
@@ -168,8 +182,8 @@ narrowed the same day in ARC-DEV-061):
   ([known failures](toolchain.md#smoke-runner-arc-dev-061)); a failure that is
   not listed but also fails on clean main is named in the PR the same way.
 - Run them with the shared runner ([smoke runner](toolchain.md#smoke-runner-arc-dev-061)):
-  `./arcanum smoke pr --stages S,... [--crash-site]` per PR and
-  `./arcanum smoke full` for the chain; no scratch smoke scripts.
+  `./arcanum smoke pr --auto` (or `--stages S,... [--crash-site]`) per PR and
+  `./arcanum smoke complete` for the nightly run; no scratch smoke scripts.
 - `SMOKE PASS` means every requested stage ran and printed its `PASS` line
   (ARC-DEV-063): a skipped stage fails the smoke, a stage that needs a hero
   gets the chain's hero of the map (else `human-male`) unless `--hero` names
