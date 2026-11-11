@@ -391,3 +391,21 @@ The triage changes no behaviour. These are the places where it found original in
 | 11 | Open Options from the main menu and in play. | Three pages of eight slots (module, difficulty, violence filter, combat mode, auto attack, auto switch weapons, always run, follower skills; brightness, text duration, floats, float speed, combat taunts; three volumes) and a combat mode with three values including fast turn-based (0x589280, 0x589610, 0x5896A0). Ours shows fewer slots and two combat values (ledger OP2). | open |
 | 12 | Maintain three spells and lower the hero's intelligence below the number maintained times four (a curse); stand across an hour change; let the hero die. | Slots close and their spells end (0x553670); the ambient light re-applies the hour every 3,600,000 ms of game time (0x57D620); a dead hero resets the game to the main menu after 5 s (0x57D410). | open |
 | 13 | Read a long book and a newspaper; right-click a follower portrait of a mind-controlled follower and of one that cannot speak. | The text wraps by pixels into page and column rectangles (ours cuts at about 700 characters, 0x56C800, 0x56CAA0, 0x56CB60); the menu greys Wait for a mind-controlled follower and Inventory when the can-open test refuses (0x56B970, 0x575080). | open |
+
+## ARC-UI-133 — Click on the hero's lens closes the world map (PR pending, 2026-11-11)
+
+Read in the original executable (ledger [WM140](../research/ledger/ui-audio.md), WM36): in the window's top left the executable registers a square, 89 × 89 pixels at window (25, 24), the hole of
+the background art, as the hero's lens (the same view-window mode as the logbook's lens). A left release inside that square closes the map, as the key `W` does. The circle in the brass ring is only
+what is drawn around the square; the click test is the whole square, corners included. Known differences, not to be re-reported: in the original the lens shows the game around the hero at half size
+with the cover art 198 over it; in ours the square still shows the world behind the window, unscaled, and no cover art (its own task, because it also decides the ARC-UI-126 look of the hole).
+In both rule modes the click behaves the same.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Open the world map (`W` or the bar's Map button) and click the small window in the top left of the brass frame, in the middle of the circle. | The map closes and the game world is shown again, on press and release of the left button (the release does it). | open |
+| 2 | Open the map, press the left button on the lens, keep it down, move the pointer out onto the wood and release there. | Nothing happens (the test is on the release, at the release point); the map stays open. | open |
+| 3 | Open the map and click in a corner of the square, outside the round ring (the corner where the wood shows through), and just outside the square on each side. | The corner of the square closes the map; a click one pixel outside the square does not. | open |
+| 4 | Open the map, start a journey (Travel), and click the lens while it runs. | The map closes through the same close as `W`; the walking party stops where it stands (WT12). In ours this lands the party at its current place. | open |
+| 5 | In a town-map sector (kind 2) and in the continent view (button below the zoom), click the lens. | The map closes in every view. | open |
+| 6 | With the HD interface switch on, repeat step 1. | The same as in the original look: the click works in HD too. | open |
+
