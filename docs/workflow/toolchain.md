@@ -648,7 +648,7 @@ python3 -B tools/research/exe_export_extras.py --exe "$DAT_ROOT/Arcanum.exe" --e
 | The decoded initial data of `.rdata`/`.data` (the listing shows untyped `db[N]` rows) | every non-zero aligned dword with its target (text, function, data, float, small number), zero runs collapsed, text bytes skipped | `tables/data-dwords.txt` |
 | What the code stores into globals at start-up | `MOV [global], imm` into `.data`/`.rdata`: 1,156 stores of constants (the file's `.data` is 1.7 MB in memory but 221 KB on disk, the rest is zero-filled and set by code) | `tables/imm-stores.tsv` (function, site, width, global, value, target) |
 | Calls the decompiler shows only as a variable | `CALL`/`JMP` through a register or memory: 1,634 sites (563 through a global slot, 291 through a jump table, 71 through an import, 709 through a register) | `tables/indirect-calls.tsv` (slot and import name where known) |
-| The project's names next to Ghidra's | `docs/verification/functions.csv` joined by address: 3,583 rows | `names/functions-named.tsv`; `registry-not-function.tsv` lists the 21 registry addresses that are no function start in the export |
+| The project's names next to Ghidra's | `docs/verification/functions.csv` joined by address: 3,614 rows | `names/functions-named.tsv`; `registry-not-function.tsv` lists the 21 registry addresses that are no function start in the export |
 | The other binaries of the install | PE header, sections, imports and exports of the 11 DLL/ASI/EXE files beside the executable (hashes, sizes) | `other-binaries/index.tsv` and `<file>.txt` |
 
 Limits, each checked and settled:
