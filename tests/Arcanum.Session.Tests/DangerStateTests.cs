@@ -232,7 +232,7 @@ public sealed class DangerStateTests
         // Schema 65: the danger section holds the bits; the links are the rows of objects.links, on the map the hero stood on (ARC-DEV-095).
         StringAssert.Contains(text, ",\"danger\":{\"records\":[{\"entity\":\"oid:wolf\",\"flags\":[\"Fighting\",\"CheckWield\",\"CheckGrenade\"]}]},\"sound\"");
         StringAssert.Contains(text, ",\"links\":[{\"entity\":\"oid:wolf\",\"property\":\"link.enemies\",\"map\":79,\"targets\":[\"\",\"oid:virgil\"]}," +
-            "{\"entity\":\"oid:wolf\",\"property\":\"link.focus\",\"map\":79,\"targets\":[\"\"]}]}");
+            "{\"entity\":\"oid:wolf\",\"property\":\"link.focus\",\"map\":79,\"targets\":[\"\"]}],\"created\":[],\"lastCreatedNumber\":0}");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
         Assert.AreEqual(Hero, restored.QueryDanger(Wolf).Focus);

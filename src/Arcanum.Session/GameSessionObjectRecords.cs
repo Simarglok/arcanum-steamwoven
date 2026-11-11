@@ -12,8 +12,10 @@ public sealed class SessionObjectRecords
     internal static SessionObjectRecords Empty { get; } = new([], [], 0, 0);
 
     internal SessionObjectRecords(SessionJunkPile[] junkPiles, SessionBloodPool[] bloodPools, int lastJunkNumber, int lastPoolNumber,
-        SessionObjectField[]? state = null, SessionObjectLink[]? links = null)
+        SessionObjectField[]? state = null, SessionObjectLink[]? links = null, SessionCreatedObject[]? created = null, int lastCreatedNumber = 0)
     {
+        Created = Array.AsReadOnly(created ?? []);
+        LastCreatedNumber = lastCreatedNumber;
         State = Array.AsReadOnly(state ?? []);
         Links = Array.AsReadOnly(links ?? []);
         JunkPiles = Array.AsReadOnly(junkPiles);
@@ -45,9 +47,14 @@ public sealed class SessionObjectRecords
     /// these inside the danger records; the 64 to 65 upgrade step moves them.</summary>
     public IReadOnlyList<SessionObjectLink> Links { get; }
 
-    internal SessionObjectRecords WithState(SessionObjectField[] state) => new([.. JunkPiles], [.. BloodPools], LastJunkNumber, LastPoolNumber, state, [.. Links]);
+    /// <summary>ARC-DEV-347 (E1-a, schema 85): the scenery and eye-candy objects the session created from prototypes (<see cref="SessionCreatedObject"/>), in the order they were created.</summary>
+    public IReadOnlyList<SessionCreatedObject> Created { get; }
+    /// <summary>ARC-DEV-347 (E1-a): the highest number the one counter of <c>scenery:n</c> and <c>eyecandy:n</c> ever gave (0 when none), so an id is never given again.</summary>
+    public int LastCreatedNumber { get; }
 
-    internal SessionObjectRecords WithLinks(SessionObjectLink[] links) => new([.. JunkPiles], [.. BloodPools], LastJunkNumber, LastPoolNumber, [.. State], links);
+    internal SessionObjectRecords WithState(SessionObjectField[] state) => new([.. JunkPiles], [.. BloodPools], LastJunkNumber, LastPoolNumber, state, [.. Links], [.. Created], LastCreatedNumber);
+
+    internal SessionObjectRecords WithLinks(SessionObjectLink[] links) => new([.. JunkPiles], [.. BloodPools], LastJunkNumber, LastPoolNumber, [.. State], links, [.. Created], LastCreatedNumber);
 }
 
 /// <summary>
@@ -64,16 +71,22 @@ internal sealed class ObjectRecords
     private readonly Dictionary<string, string> _pileOfItem = new(StringComparer.Ordinal);
     private readonly List<SessionBloodPool> _pools = [];
     private readonly Dictionary<string, SessionBloodPool> _poolByEntity = new(StringComparer.Ordinal);
+    private readonly List<SessionCreatedObject> _created = [];
+    private readonly Dictionary<string, SessionCreatedObject> _createdByEntity = new(StringComparer.Ordinal);
 
     /// <summary>The highest junk pile number ever given (the saved mark): a number is never given again.</summary>
     internal int LastJunkNumber { get; set; }
     /// <summary>The highest blood pool number ever given.</summary>
     internal int LastPoolNumber { get; set; }
+    /// <summary>ARC-DEV-347: the highest number of the shared scenery and eye-candy counter ever given.</summary>
+    internal int LastCreatedNumber { get; set; }
 
     /// <summary>The junk piles in the order they were made.</summary>
     internal IReadOnlyList<SessionJunkPile> Piles => _piles;
     /// <summary>The pools of blood in the order they were left.</summary>
     internal IReadOnlyList<SessionBloodPool> Pools => _pools;
+    /// <summary>ARC-DEV-347: the created scenery and eye-candy objects in the order they were created.</summary>
+    internal IReadOnlyList<SessionCreatedObject> Created => _created;
     /// <summary>The items all junk piles hold (the bound of <see cref="SessionJunkPile.MaxItems"/>).</summary>
     internal int PileItems => _pileOfItem.Count;
 
@@ -85,6 +98,9 @@ internal sealed class ObjectRecords
 
     /// <summary>The pool of blood with this entity, or null (a decayed pool is still here until it is destroyed).</summary>
     internal SessionBloodPool? Pool(string entity) => _poolByEntity.GetValueOrDefault(entity);
+
+    /// <summary>ARC-DEV-347: the created scenery or eye-candy object with this entity, or null.</summary>
+    internal SessionCreatedObject? CreatedObject(string entity) => _createdByEntity.GetValueOrDefault(entity);
 
     /// <summary>Adds a pile at the end. A pile entity or an item that is recorded already is a broken invariant of the caller.</summary>
     internal void AddPile(SessionJunkPile pile)
@@ -142,6 +158,21 @@ internal sealed class ObjectRecords
         return true;
     }
 
-    /// <summary>The records as the snapshot saves them.</summary>
-    internal SessionObjectRecords Capture() => new([.. _piles], [.. _pools], LastJunkNumber, LastPoolNumber);
+    /// <summary>ARC-DEV-347: adds a created object at the end; an entity recorded already is a broken invariant of the caller.</summary>
+    internal void AddCreated(SessionCreatedObject made)
+    {
+        if (!_createdByEntity.TryAdd(made.Entity, made)) throw new InvalidOperationException("CREATED_OBJECT_TWICE");
+        _created.Add(made);
+    }
+
+    /// <summary>ARC-DEV-347: removes a created object's record; false when there is none.</summary>
+    internal bool RemoveCreated(string entity)
+    {
+        if (!_createdByEntity.Remove(entity)) return false;
+        _created.RemoveAll(held => held.Entity == entity);
+        return true;
+    }
+
+    /// <summary>The records as the snapshot saves them (the state and link fields are the owner's: <see cref="SessionObjectRecords.WithState"/>).</summary>
+    internal SessionObjectRecords Capture() => new([.. _piles], [.. _pools], LastJunkNumber, LastPoolNumber, null, null, [.. _created], LastCreatedNumber);
 }

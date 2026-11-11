@@ -305,6 +305,8 @@ public partial class TerrainViewerApp
         var runtime = maps[actor.Map.RuntimeMap];
         _readyArea = _caveLoad is { } cave && runtime.RuntimeMap == cave.Area.Snapshot.RuntimeMap ? cave.Area : _exteriorArea ?? _readyArea;
         ConfigureAreaActor(runtime, runtime.Chart.ToChart(new AreaStepCell(actor.Cell.X, actor.Cell.Y)), actor.Facing);
+        // ARC-DEV-351: a game loaded on this map opens it again (a quick load to another map goes through StartMapTransfers): marks the save holds here are taken.
+        if (_mapTransfers is not null) TakeTeleportedMarks(loaded, actor.Map);
         _camera!.SetAreaPlan(_readyArea!.Plan, WorldViewport, window: _mapWindowCentre is not null, _mapOverview);
         StopAreaWalls(); // a loaded game starts the wall check afresh (ARC-RENDER-011)
         ResetAreaRoofs(); // and the roofs from the map's stored state (ARC-RENDER-022)
@@ -332,6 +334,9 @@ public partial class TerrainViewerApp
         _aiHost = null; _aiHostStamp = null; _aiPcOccupancy = null;
         var previous = _areaSession;
         _areaSession = session;
+        // ARC-DEV-354: the carried items this host has no row for (taken in a window of the main map it never showed) are read once the session is the
+        // running one (the record source's callbacks read it) and before the item art sizes, which read those rows.
+        _inventoryHost?.ReadCarriedRows(session);
         AttachAreaEncumbranceEffect();
         AttachAreaDyingScript();
         AttachAreaItemArtSizes();

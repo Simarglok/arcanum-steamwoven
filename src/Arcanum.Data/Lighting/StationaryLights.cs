@@ -107,6 +107,26 @@ public sealed class AreaStationaryLightSource
         return new(catalogueMap, null, list, table);
     }
 
+    /// <summary>ARC-DEV-335: the source of critters' carried lights (ledger LT12) over their one light ART frame.</summary>
+    public static AreaStationaryLightSource ForCarried(int catalogueMap, StationaryLightFrame frame, IEnumerable<CarriedLight> lights)
+    {
+        ArgumentNullException.ThrowIfNull(frame); ArgumentNullException.ThrowIfNull(lights);
+        if (frame.Number != CarriedLightRules.ArtNumber) throw new ArgumentException("The frame is not the carried light's ART.", nameof(frame));
+        return new(catalogueMap, null, lights.Select(CarriedLightRules.ToLight).ToArray(),
+            new Dictionary<int, StationaryLightFrame> { [frame.Number] = frame });
+    }
+
+    /// <summary>ARC-DEV-353: the source of critters' lights over the frames of their light ARTs (a critter's own saved light and the carried
+    /// light of the hero); every light's ART number must have a frame.</summary>
+    public static AreaStationaryLightSource ForCarried(int catalogueMap, IReadOnlyDictionary<int, StationaryLightFrame> frames, IEnumerable<StationaryLight> lights)
+    {
+        ArgumentNullException.ThrowIfNull(frames); ArgumentNullException.ThrowIfNull(lights);
+        var list = lights.ToArray();
+        if (list.Any(light => light is null || !frames.ContainsKey(light.ArtNumber)))
+            throw new ArgumentException("Every carried light needs a frame.", nameof(lights));
+        return new(catalogueMap, null, list, new Dictionary<int, StationaryLightFrame>(frames));
+    }
+
     public int CatalogueMap { get; }
     /// <summary>SHA-256 of <c>art/light/light.mes</c>; null for synthetic sources.</summary>
     public string? NamesSha256 { get; }
@@ -126,7 +146,8 @@ public sealed class AreaStationaryLightSource
         var lights = Lights.ToList();
         foreach (var light in objects.Lights)
         {
-            if (!ObjectLightReader.BuiltAtLoad(light, hour)) continue;
+            // ARC-DEV-353: a critter's light moves with the critter, so it is not a fixed light of the sector.
+            if (light.Critter || !ObjectLightReader.BuiltAtLoad(light, hour)) continue;
             var sector = new AreaSectorCoordinate(light.X >> 6, light.Y >> 6).Packed;
             lights.Add(new StationaryLight(sector, -1, light.X, light.Y, light.OffsetX, light.OffsetY, ObjectLightReader.FlagsAtLoad(light, hour),
                 light.ArtId, light.Color, light.Object.ObjectIdSha256) { Owner = light.Object, Slot = light.Slot });

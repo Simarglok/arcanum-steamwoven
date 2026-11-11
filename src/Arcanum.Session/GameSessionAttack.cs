@@ -77,14 +77,19 @@ public sealed class SessionCritterCombat
     private SessionCritterCombat(string entity, CharacterStatsOwner stats, IReadOnlyDictionary<EquipmentSlot, EquipmentItem> worn,
         IReadOnlyList<int> basicSkills, IReadOnlyList<int> techSkills, int baseArmorClass, DamageResistances storedResistances, LightEmission ownLight,
         CombatantFlags flags, ObjectMaterial material, int criticalBody, CharacterRace race, CharacterGender gender, LifeFacts facts, LifeState loaded,
-        SessionNpcExperience experience, bool monstrous, int level, DamageRanges natural, SessionKillFacts killFacts, SessionSkills? sheetSkills = null)
+        SessionNpcExperience experience, bool monstrous, int level, DamageRanges natural, SessionKillFacts killFacts, SessionSkills? sheetSkills = null,
+        IReadOnlyList<SessionEffect>? storedEffects = null)
     {
+        StoredEffects = storedEffects ?? [];
         _natural = natural; KillFacts = killFacts;
         Entity = entity; _stats = stats; _worn = worn; _basicSkills = basicSkills; _techSkills = techSkills; _sheetSkills = sheetSkills; _baseArmorClass = baseArmorClass;
         _storedResistances = storedResistances; _ownLight = ownLight; _flags = flags; _material = material; _criticalBody = criticalBody;
         _race = race; _gender = gender; _constitutionMaximum = CharacterStatRules.Range(race, CharacterStat.Constitution).Maximum; Facts = facts; Loaded = loaded; Experience = experience; Monstrous = monstrous; Level = level;
-        Target = SessionLifeTarget.Critter(entity, facts, loaded);
+        Target = SessionLifeTarget.Critter(entity, facts, loaded, StoredEffects);
     }
+
+    /// <summary>ARC-DEV-348: the effect list the map or prototype data stores (number and cause of each entry); the session's NPC effect calls start from it (<see cref="SessionLifeTarget.LoadedEffects"/>).</summary>
+    public IReadOnlyList<SessionEffect> StoredEffects { get; }
 
     public string Entity { get; }
     public LifeFacts Facts { get; }
@@ -106,7 +111,7 @@ public sealed class SessionCritterCombat
     /// reads it) and that sheet's level; its other values stay the map data's.</summary>
     internal SessionCritterCombat WithSheet(AdvancementSheet sheet) => new(Entity, _stats, _worn, sheet.BasicSkills, sheet.TechSkills, _baseArmorClass,
         _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded, Experience, Monstrous, sheet.Level,
-        _natural, KillFacts, SessionSkills.Of(sheet, AdvancementModifiers.None));
+        _natural, KillFacts, SessionSkills.Of(sheet, AdvancementModifiers.None), StoredEffects);
 
     /// <summary>
     /// Builds the values of the NPC <paramref name="entity"/> from its fields and the fields of the items it carries
@@ -225,7 +230,8 @@ public sealed class SessionCritterCombat
             StoredResistances(fields.Object.Resistances), lightEmission, combatFlags, Material(fields.Object.Material), critter.CriticalHitChart,
             race, gender, facts, loaded, experience, monstrous, level, Natural(npc.Damage),
             new(fields.Object.Description, npc.UnknownDescription, Math.Clamp(stats[AlignmentStat], SessionHeroLimits.MinAlignment, SessionHeroLimits.MaxAlignment),
-                effectiveAptitude)));
+                effectiveAptitude), sheetSkills: null,
+            storedEffects: Array.AsReadOnly((critter.Effects ?? []).Select(e => new SessionEffect(e.Number, (EffectCause)e.Cause)).ToArray())));
 
         static SessionCritterCombatBuild Fail(SessionCritterCombatFailure failure) => new(failure, null);
     }

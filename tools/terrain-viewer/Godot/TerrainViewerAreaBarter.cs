@@ -3,6 +3,7 @@ using Arcanum.Data.Combat;
 using Arcanum.Data.Messages;
 using Arcanum.Input;
 using Arcanum.Session;
+using Arcanum.Simulation.Items;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using GamepadLab.Core;
@@ -143,11 +144,15 @@ public partial class TerrainViewerApp
             _barterPanel.BuyRequested += BuyFromMerchant;
             _barterPanel.DropRequested += BarterDrop;
             _barterPanel.PointerStill += BarterPointerStill;
+            _barterPanel.ArrangeRequested += BarterArrange;
+            _barterPanel.SoundRequested += id => PlayInterfaceSound(id, "barter arrange button");
             _barterPanel.HolderView = InventoryHolderView;
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
         _barterMessage = null; _barterStatus = null; _barterSession = session; _barterInShop = shop;
+        // ARC-DEV-339: the arrange button's layout flag is cleared at every open (ledger IW37).
+        _arrangeLayout = InventoryArrangeLayout.Horizontal;
         _barterPanel.Docked = shop;
         _mainMenuPanel?.SetDockedBelow(shop);
         // ARC-UI-064: the window in the world shows the original look when the game's art read; the open centres the game view on the PC
@@ -237,6 +242,15 @@ public partial class TerrainViewerApp
         var inventory = InventoryView(merchant.Container ?? merchant.Entity) with { HolderImage = _inventoryHost.HolderImage(CurrentAreaMap, merchant.Entity) };
         var frame = new AreaBarterFrame(AreaBarterArtLayout.Background(merchant.Follower, session.QueryParty().Followers.Count), merchant.Name, _barterMessage ?? string.Empty);
         return (inventory, frame);
+    }
+
+    /// <summary>ARC-DEV-339 (B54): the arrange button of the barter window (IW30) lays the hero's items out as the own window's does; the
+    /// merchant's grid is not arranged (PROJECT: the shown wares have no grid slots here; the original arranges a shop NPC's, 0x6810FC).</summary>
+    private void BarterArrange()
+    {
+        if (!BarterOpen || _barter is null || !BarterActive || _barterSession is null) return;
+        _barterMessage = ArrangeHero(_barterSession);
+        SyncAreaBarter(force: true);
     }
 
     /// <summary>ARC-UI-064: an item released in the original look: the merchant's on the hero's grid is bought, the hero's on the merchant's grid

@@ -84,12 +84,12 @@ public sealed class ObjectLinkStateTests
         using var owner = WolfHoldingVirgil(RuleMode.Steamwoven);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.SetDangerHitBy(owner.Version, Sogg, WolfHandle).Disposition);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, "\"schemaVersion\":84,");
+        StringAssert.Contains(text, "\"schemaVersion\":87,");
         StringAssert.Contains(text, ",\"danger\":{\"records\":[{\"entity\":\"oid:wolf\",\"flags\":[\"Fighting\",\"CheckWield\",\"CheckGrenade\"]}]},");
         StringAssert.Contains(text, ",\"links\":[{\"entity\":\"oid:sogg\",\"property\":\"link.hitby\",\"map\":79,\"targets\":[\"oid:wolf\"]}," +
             "{\"entity\":\"oid:wolf\",\"property\":\"link.enemies\",\"map\":79,\"targets\":[\"\",\"oid:virgil\"]}," +
             "{\"entity\":\"oid:wolf\",\"property\":\"link.focus\",\"map\":79,\"targets\":[\"oid:virgil\"]}," +
-            "{\"entity\":\"oid:wolf\",\"property\":\"link.hitby\",\"map\":79,\"targets\":[\"oid:virgil\"]}]}");
+            "{\"entity\":\"oid:wolf\",\"property\":\"link.hitby\",\"map\":79,\"targets\":[\"oid:virgil\"]}],\"created\":[],\"lastCreatedNumber\":0}");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
         var before = owner.QueryDanger(Wolf); var after = restored.QueryDanger(Wolf);

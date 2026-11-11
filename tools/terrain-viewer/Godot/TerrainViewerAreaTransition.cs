@@ -248,6 +248,8 @@ public partial class TerrainViewerApp
         // ARC-COMBAT-004: the source's teleport leaves combat mode.
         LeaveCombatModeForMapChange();
         LeaveFollowersCombatMode(host.MoveList);
+        // ARC-DEV-351: the Crash Site pair is no map mode (no tile script runs for anyone there), but the open of the arrival map still takes the carried followers' marks off.
+        owner.TakeTeleportedMarks(owner.Version, new(transition.ToMap));
         if (host.Carried is { } carried)
             GD.Print("ARC-WORLD-017 companions carried " + System.Text.Json.JsonSerializer.Serialize(new {
                 transition.FromMap, transition.ToMap, transition.Arrival, Carried = carried.Select(c => c.Speaker.ScriptId).ToArray(),

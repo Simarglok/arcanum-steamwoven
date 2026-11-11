@@ -143,7 +143,8 @@ public partial class AreaWorldMapArtView : Control
         var (x, y, width, height) = AreaWorldMapArtLayout.View;
         _canvas = new ViewCanvas { Host = this, Position = new Vector2(x, y), Size = new Vector2(width, height), ClipContents = true, MouseFilter = MouseFilterEnum.Ignore };
         _chrome = new ChromeCanvas { Host = this, Size = Size, MouseFilter = MouseFilterEnum.Ignore };
-        // The art text draw needs the premultiplied material; the art here has only opaque or clear pixels, which it draws the same.
+        // The art text draw needs the premultiplied material. The Legacy art has only opaque or clear pixels, which it draws the same; an HD redraw has soft edges
+        // and colour under clear pixels, so every texture drawn on these two canvases is the premultiplied variant (ARC-UI-126; only the background, drawn by this node, is not).
         AreaArtTextDraw.Prepare(_canvas);
         AreaArtTextDraw.Prepare(_chrome);
         // The diagnostic message is drawn with the engine's font, which the premultiplied material would spoil: it has a canvas of its own.

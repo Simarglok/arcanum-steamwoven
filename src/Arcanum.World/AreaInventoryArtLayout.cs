@@ -21,6 +21,18 @@ public static class AreaInventoryArtLayout
     public const int DropOffArt = 224, DropOnArt = 225, UseOffArt = 342, UseOnArt = 343;
     public static readonly (int X, int Y) DropBox = (703, 344), UseBox = (703, 290);
 
+    /// <summary>ARC-DEV-339 (B54): the arrange button (art 340 <c>tiny_butt</c>, 28 × 27) every mode of the window makes on open at (763, 197) of the
+    /// window (0x572815..0x57287C, ledger IW30, IW37): its release calls the arrange function 0x4670A0, which lays the hero's items out again
+    /// (<see cref="Arcanum.Simulation.Items.InventoryArrangeRules"/>); the first press after the window opens lays them out row by row, the next
+    /// column by column, and so on (the flag 0x6814F0, cleared at every open). The button plays the press sound 3000 and the release sound 3001
+    /// (the creator's fields, as the bar's buttons, GB6).</summary>
+    public const int ArrangeArt = 340;
+    public static readonly (int X, int Y) ArrangeButton = (763, 197);
+
+    /// <summary>Whether a window point is on the arrange button, sized by its art (the button system's rectangle is the art's frame).</summary>
+    public static bool ArrangeHit(float x, float y, (int Width, int Height) art) =>
+        art.Width > 0 && art.Height > 0 && x >= ArrangeButton.X && x < ArrangeButton.X + art.Width && y >= ArrangeButton.Y && y < ArrangeButton.Y + art.Height;
+
     /// <summary>The cover art an empty wear slot shows (0x5CAF58).</summary>
     public static IReadOnlyDictionary<EquipmentSlot, int> Covers { get; } = new Dictionary<EquipmentSlot, int>
     {

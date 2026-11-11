@@ -182,22 +182,29 @@ public sealed class AreaMapTransfers
     /// or when the run was refused before it started (outside the set, no content), an unconditional tile teleport there
     /// queues its transfer. Empty when the tile has none; a refused one returns its
     /// reason. A teleport asked while another transfer is pending is dropped and the run's other effects stay (TR4).
+    /// <paramref name="requestsRefused"/> (ARC-DEV-351, RL21, RL24): the hero's own arrival inside a change of place that is still being processed (a same-map
+    /// teleport: the relocation's notification runs inside the payload, while the local player's request is pending, and 0x4D3380 refuses every request then)
+    /// queues no transfer: the jump point and the tile's teleport are dropped like a teleport asked while another is pending, and the script's other effects stay.
     /// </summary>
-    public IReadOnlyList<AreaMapUseResult> Enter(AreaStepCell cell)
+    public IReadOnlyList<AreaMapUseResult> Enter(AreaStepCell cell, bool requestsRefused = false)
     {
         LastScripted = null;
         var results = new List<AreaMapUseResult>(2);
         var site = _cells.GetValueOrDefault(cell);
-        if (site is { Trigger: MapTransitionTrigger.JumpPoint }) results.Add(Pending is not null ? new(AreaUseOutcome.TransitionPending, site, 0, "TRANSITION_PENDING") : Queue(site, null, 0));
-        var ran = PlacedRunner is not null && _tiles.TryGetValue(cell, out var placed) ? RunPlaced(placed) : null;
+        var dropped = requestsRefused || Pending is not null;
+        if (site is { Trigger: MapTransitionTrigger.JumpPoint }) results.Add(dropped ? Dropped(site, requestsRefused) : Queue(site, null, 0));
+        var ran = PlacedRunner is not null && _tiles.TryGetValue(cell, out var placed) ? RunPlaced(placed, requestsRefused) : null;
         // A run that did not happen (outside the set, no content, no session) leaves the tile's unconditional teleport
         // (ARC-WORLD-031) to fire as before.
         if (ran is not null && LastScripted?.Outcome is not (AreaScriptedUseOutcome.Refused or AreaScriptedUseOutcome.ContentUnavailable)) results.Add(ran);
         else if (site is { Trigger: MapTransitionTrigger.TileEntry })
-            results.Add(Pending is not null ? new(AreaUseOutcome.TransitionPending, site, 0, "TRANSITION_PENDING") : Queue(site, null, 0));
+            results.Add(dropped ? Dropped(site, requestsRefused) : Queue(site, null, 0));
         else if (ran is not null) results.Add(ran);
         return results;
     }
+
+    private static AreaMapUseResult Dropped(MapTransitionSite site, bool requestsRefused) =>
+        new(AreaUseOutcome.TransitionPending, site, 0, requestsRefused ? "REQUEST_REFUSED_DURING_CHANGE_OF_PLACE" : "TRANSITION_PENDING");
 
     /// <summary>ARC-SCRIPT-017: the player stepped from <paramref name="from"/> into <paramref name="to"/>; when that enters
     /// another sector whose script exists, the script runs (with a <see cref="PlacedRunner"/>), as the original runs a
@@ -210,15 +217,17 @@ public sealed class AreaMapTransfers
         return RunPlaced(placed);
     }
 
-    private AreaMapUseResult RunPlaced(MapPlacedScript placed)
+    private AreaMapUseResult RunPlaced(MapPlacedScript placed, bool requestsRefused = false)
     {
         var site = new MapTransitionSite(placed.Trigger, placed.Location, null, placed.Script, [placed.Script], 0, false, false, Map.Snapshot.CatalogueMap,
             Map.RuntimeMap, placed.Location, MapTransitionGuard.None);
-        // A pending transfer refuses the teleport only: the run applies and its teleport is dropped (TR4).
-        var ran = LastScripted = PlacedRunner!(placed, teleport => Pending is not null ? null : Refusal(Teleported(site, teleport)));
+        // A pending transfer refuses the teleport only: the run applies and its teleport is dropped (TR4); so does a request refused during the change of place
+        // the hero's arrival belongs to (ARC-DEV-351).
+        var dropped = requestsRefused || Pending is not null;
+        var ran = LastScripted = PlacedRunner!(placed, teleport => dropped ? null : Refusal(Teleported(site, teleport)));
         return ran.Outcome switch
         {
-            AreaScriptedUseOutcome.Teleport when Pending is not null => new(AreaUseOutcome.TransitionPending, Teleported(site, ran.Teleport!), 0, "TRANSITION_PENDING"),
+            AreaScriptedUseOutcome.Teleport when dropped => new(AreaUseOutcome.TransitionPending, Teleported(site, ran.Teleport!), 0, requestsRefused ? "REQUEST_REFUSED_DURING_CHANGE_OF_PLACE" : "TRANSITION_PENDING"),
             AreaScriptedUseOutcome.Teleport => Queue(Teleported(site, ran.Teleport!), null, 0, ran.Teleport!.Fade),
             AreaScriptedUseOutcome.TeleportRefused => new(AreaUseOutcome.DestinationUnavailable, Teleported(site, ran.Teleport!), 0, ran.Detail),
             AreaScriptedUseOutcome.NoTeleport => new(AreaUseOutcome.ScriptEnded, site, 0, ran.Detail),

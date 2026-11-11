@@ -68,7 +68,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="prototype-phase-arc-data-026"></a>[Prototype phase (ARC-DATA-026)](ledger/data.md#prototype-phase-arc-data-026) | [Data and loading](ledger/data.md) | — |
 | <a id="audio-arc-res-052"></a>[Audio (ARC-RES-052)](ledger/ui-audio.md#audio-arc-res-052) | [Interface windows and audio](ledger/ui-audio.md) | SN3–SN31 |
 | <a id="load-phases-arc-data-027"></a>[Load phases (ARC-DATA-027)](ledger/data.md#load-phases-arc-data-027) | [Data and loading](ledger/data.md) | LP1–LP6 |
-| <a id="roofs-arc-render-021"></a>[Roofs (ARC-RENDER-021)](ledger/world.md#roofs-arc-render-021) | [World, maps and movement](ledger/world.md) | RF1–RF10 |
+| <a id="roofs-arc-render-021"></a>[Roofs (ARC-RENDER-021)](ledger/world.md#roofs-arc-render-021) | [World, maps and movement](ledger/world.md) | RF1–RF11 |
 | <a id="starting-kit-arc-world-034"></a>[Starting kit (ARC-WORLD-034)](ledger/character.md#starting-kit-arc-world-034) | [Character](ledger/character.md) | WB1–WB8 |
 | <a id="blessings-and-curses-arc-world-035"></a>[Blessings and curses (ARC-WORLD-035)](ledger/character.md#blessings-and-curses-arc-world-035) | [Character](ledger/character.md) | BC1–BC6 |
 | <a id="auto-level-schemes-arc-world-036"></a>[Auto-level schemes (ARC-WORLD-036)](ledger/character.md#auto-level-schemes-arc-world-036) | [Character](ledger/character.md) | AL1–AL14 |
@@ -133,6 +133,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="spell-run-endings-of-a-critter-arc-dev-301"></a>[Spell run endings of a critter (ARC-DEV-301)](ledger/spell-runs.md#spell-run-endings-of-a-critter-arc-dev-301) | [Magic: casting and spell runs](ledger/spell-runs.md) | UE1–UE5 |
 | <a id="centre-of-a-radius-cast-arc-dev-327"></a>[Centre of a radius cast (ARC-DEV-327)](ledger/spell-runs.md#centre-of-a-radius-cast-arc-dev-327) | [Magic: casting and spell runs](ledger/spell-runs.md) | RC1–RC5 |
 | <a id="summon-component-and-the-objects-it-creates-arc-res-101"></a>[Summon component and the objects it creates (ARC-RES-101)](ledger/spell-runs.md#summon-component-and-the-objects-it-creates-arc-res-101) | [Magic: casting and spell runs](ledger/spell-runs.md) | SUM1–SUM16 |
+| <a id="magic-audit-executable-reads-arc-dev-357"></a>[Magic audit executable reads (ARC-DEV-357)](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357) | [Magic: casting and spell runs](ledger/spell-runs.md) | XR1–XR15 |
 | <a id="doors-containers-and-locks-arc-res-065"></a>[Doors, containers and locks (ARC-RES-065)](ledger/world.md#doors-containers-and-locks-arc-res-065) | [World, maps and movement](ledger/world.md) | LK1–LK13 |
 | <a id="npc-ai-action-execution-arc-res-066"></a>[NPC AI action execution (ARC-RES-066)](ledger/npc-ai.md#npc-ai-action-execution-arc-res-066) | [NPC AI](ledger/npc-ai.md) | EX1–EX23 |
 | <a id="npc-ai-action-goals-arc-world-089"></a>[NPC AI action goals (ARC-WORLD-089)](ledger/npc-ai.md#npc-ai-action-goals-arc-world-089) | [NPC AI](ledger/npc-ai.md) | AG1–AG16 |

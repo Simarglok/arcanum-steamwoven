@@ -88,10 +88,30 @@ resolver finds his record there, so the AI no longer keeps him out of its rules 
   stored cell: a whole-map home still reads, a window home does not (typed failure, named on the HUD, no body and kept out of the AI rules). Nothing
   repairs it later: without a body it is not in the group that writes the cell, and it stays on the map it was left on. A new quick save with the
   companion carried by this build writes it; such an old save needs the companion fetched home again (a migration is not planned).
-- The resolver holds one window per map, read around `AreaVisitors.HomeWindow` (the lowest-entity NPC that is away from that map, else the lowest
-  with a recorded cell): a second companion away from another window of the same map is not resolved (kept out of the rules); its body is, since the
-  directory keeps a read per window. A failure the resolver meets (no stored cell yet) is kept by it for the scene. MIG9 (residency) reads such windows
-  through the sector model.
+- The resolver holds one window per map number, read around `AreaVisitors.HomeWindow` (the lowest-entity NPC that is away from that map, else the lowest
+  with a recorded cell). ARC-DEV-337 (B52) adds more windows beside it: when the map the resolver holds for the home map number does not list the
+  companion (another window of the main map is shown, as after a trip town -> temple -> town; or the window just read for the number is the one the run left
+  behind), `IMapRecordSource.LoadAround(map, entity)` reads the window around the companion's own stored cell (`npc.home`; `AreaMapRecords` only, a source
+  that reads whole maps answers none). The resolver keeps up to four such windows beside the held maps (not in `Maps`, not counted in the limits; the least
+  recently read leaves first), and a read that found nothing is asked again after 32 more asks of the same companion, since his stored cell may be written
+  meanwhile. The home map comes from the away change or, for a companion that stands on its home map's number, from his stored cell
+  (`EntityHomes.RecordedHomeOf`). The extra windows are not held maps: `AttachHolderMap` (the negative IN of a companion carried here, ARC-DEV-087) does not
+  attach them, so such a companion's item moves still find no holder (NOT READY). A failure the resolver meets (no stored cell yet) is kept by it for the
+  scene. MIG9 (residency) reads such windows through the sector model.
+- ARC-DEV-354 does the same for the items the hero carries. An item has no `npc.home`: when the record source has no cell recorded for the entity,
+  `AreaMapRecords.LoadAround` centres the window on the cell the map's mobile aggregate gives the object (`AreaMobileCells`: the aggregate read once per
+  process and map, without `map.patch`, which is the location a window plan keeps an aggregate object by). The original holds every mobile object of the
+  open map whatever sector it stands in (ledger SS7, PS7), and an inventory is a list of item objects that each keep their own record (PS17, PS20), so
+  an item taken in one window keeps its name and fields in every other. `AreaInventoryHost.ReadCarriedRows` reads, by identity from the origin map the
+  session names, the row of every carried item (the PC's items, items the hero gave an NPC, the hero's items placed on a shown map) that neither a held map
+  nor the rows handed over at a window move (ARC-DEV-314) give; the viewer calls it when it adopts a session on a host: a new host (a fresh run, a load
+  into another window or map, a map change) and a load the host keeps. Before, a fresh run that loaded a save with a note taken in another window of the
+  main map had no row for it: "[unknown object]", no facts, no use (B51 follow-up). A row read is kept with the host and handed over at the next window
+  move like the others; an item whose row does not read is counted in the log (`ARC-DEV-354 carried-rows read=N missing=M`) and asked again by the next
+  host (NOT READY: one window read at each map change for such an item). The cost is one window read per distinct window of the carried items, at a
+  load only, and the first aggregate read of the process (`ARC-DEV-354 mobile-cells`, the main map's 7,400 records, on the calling thread; a failed
+  read is tried again, the cache is process-wide and `Clear` empties it for tests). The aggregate cell also answers an NPC of a window map that has no
+  recorded `npc.home` (before, a typed miss): it is the same T0 cell `npc.home` records.
 - The rows are what the resolver needs: a body or frame that does not read leaves the read with its rows and no bodies (named in the read's detail).
 - A home map that was not held is read on the calling thread, once (a window read takes the strict publication of 25 sectors: about 3 s for the main map's window in the `transfer` smoke); MIG9 owns moving reads
   off the frame. A map change is where it normally happens.

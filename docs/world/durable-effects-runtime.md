@@ -198,9 +198,9 @@ the deferred blessings of FR-CHAR-024 are not part of this.
 - **No host.** Nothing in the viewer adds an effect yet: no spell casting, no item spells (wearing such an item is still
   refused), no SCR add-effect, remove-effect, blessing or curse action or has-blessing/has-curse condition (the dispatcher
   admits none of them), no effect shown on a character sheet, no logbook page of blessings and curses.
-- **NPCs.** Only the hero has an effect list; NPC lists come from their map data and are not loaded.
+- **NPCs (ARC-DEV-348).** The session keeps an effect list per NPC [below](#npc-effect-lists-arc-dev-348); the Effect component's wiring to it (`SessionSpellCasterEffects.cs`) and the stat changes of an NPC's effects are not done.
 - **Spell runs (ARC-DEV-303).** The cast host's Effect component ([spell cast host](spell-cast-host.md#effect-component-and-the-entangle-re-resistance-arc-dev-303)) adds and removes these entries on the hero
-  (`AddHeroEffect` with the spell cause, `RemoveHeroEffect`); Entangle's effect 62 (speed −5) is the first. An NPC's effect list is still not kept there.
+  (`AddHeroEffect` with the spell cause, `RemoveHeroEffect`); Entangle's effect 62 (speed −5) is the first. The component does not reach an NPC's list yet (the session side exists since ARC-DEV-348, the call is the caster's).
 - **Runs.** A timed effect stands for a run made only of Effect components. Active spells (magic slice 4) own maintenance,
   the `INT / 4` cap, the scaled count and its MG17, and every ending trigger: they will call `EndHeroTimedEffect` or replace
   the END kind. The session ends no timed effect by itself on death, unconsciousness, rest or travel.
@@ -212,3 +212,30 @@ the deferred blessings of FR-CHAR-024 are not part of this.
   gnome's bad-reaction adjustment, the halfling's critical-hit chance: ARC-WORLD-015 keeps only stats), background and class
   effects of a new character. A multiply or divide change on a maximum is refused (`InvalidEffect`): no installed rule has
   one, and the bounds that keep removals admissible assume none.
+
+## NPC effect lists (ARC-DEV-348)
+
+Slice E1-d of the [missing-systems plan](../project/missing-systems-plan.md) (magic plan P1); requirements
+[FR-CHAR-022](../requirements/characters-skills.md#fr-char-022) and [FR-MAGIC-007](../requirements/combat-magic-tech.md#fr-magic-007). The original keeps one list per PC or NPC
+(`effect_add` takes either, ledger EF1), so an NPC's list works as the hero's, over the NPC's own life record. Code: `GameSessionNpcEffects.cs`; tests `NpcEffectStateTests`.
+
+- **Loaded list.** The map or prototype data stores the list (the two effect arrays, `CombatCritterFields.Effects`); `SessionCritterCombat.StoredEffects` and
+  `SessionLifeTarget.LoadedEffects` carry it. The host that reads the effect tables sets `GameSessionOwner.NpcEffectRules` (number to `SessionEffectDefinition`); without it a
+  loaded entry has no changes (the source reads a number with no table entry as none).
+- **Session list.** `AddNpcEffect`, `RemoveNpcEffect` (the first entry of the number, whatever its cause, EF2), `RemoveAllNpcEffects` and `RemoveNpcEffectsCausedBy` (EF3) take the
+  NPC's `SessionLifeTarget`. The first call that changes a list adopts the loaded list whole; from then on the session's list wins, as an NPC's life record does. `QueryNpcEffects`
+  answers the session's list, else the loaded one. NPC causes are the source's ten; no cause is refused (the race and gender setters own no NPC entry). One revision per call.
+- **Maxima and damage.** The entries' maximum-hit-point and maximum-fatigue changes replace the host's (`LifeFacts.MaxHitPointEffects`, `MaxFatigueEffects`) wherever the session
+  reads an NPC's life (`WithWrittenHolds`); each entry added or removed moves the NPC's hit-point and fatigue damage by the change of the maximum, clamped at no damage (EF1, EF5),
+  and sets the timers a damage write sets (fatigue recovery, the NPC's resting). A maximum pushed to nothing leaves the NPC at no points with no faint and no death step (EF10, both modes).
+- **Saved.** The `effects` section's `critters` (schema 87, upgrade step 84→85 adds the empty list): per NPC its entries, causes and the rule of each number in use.
+- **Spell flags.** The written flags (`WriteObjectFlag`, `spells.objectFlags`, schema 83) already hold any bit of the spell and critter flag fields for any mobile NPC; the hosts read
+  the stored field from the map data (slot 19) and the session's change over it. Which bits a spell component writes is the caster's.
+- **Limits** (project policy, the source has none): 64 entries per NPC, 4096 lists (an add or a removal that adopts a loaded list counts). The entries are checked at each change (`Bounded`) against
+  the largest base maximum the NPC's own facts give, so no removal of them is refused for the maxima; a removal is still refused when the loaded list itself is not admitted (more than 64
+  entries, an undefined cause, a rule the session refuses). A restore does not know the NPC's facts, so it does not check that bound: where the list laid over the facts is refused by the life
+  rules (a level-up after the add), the host's maxima stand instead of the list's. An NPC's timers stay on one map: a change on another map takes its pending timers along, and is refused during an event pass.
+- **Not ready.** The stat changes of an NPC's effects (speed −5 of Entangle, strength and the rest) are kept in the list and saved but do not reach the NPC's combat values or its
+  speed; the maxima of a loaded list apply from the first session change of that list (before it the host's facts stand), and then without moving the damage, which the data stores relative to them; no timed NPC effect (an END event of its own) and no
+  cleanup of the list of a destroyed NPC; the Effect component and the ObjFlag component's other bits on an NPC (`SessionSpellCaster*`, ARC-DEV-347's files) and a host that sets
+  `NpcEffectRules` and fills the loaded list are the next slices (E4-a).

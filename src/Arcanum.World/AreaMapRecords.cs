@@ -17,9 +17,11 @@ namespace Arcanum.World;
 /// while the viewer holds the window). The resolver holds one window per map (NOT READY: companions of two windows of one map, until MIG9).
 /// Unlike a map load it does not compare the viewer's archive arguments with the stack's sources (`RequireSame`) or the expected
 /// digests: the stack comes from the same game folder as the viewer's, and the rows are derived data.
+/// ARC-DEV-337 (B52): <see cref="LoadAround"/> reads the window around one NPC's own stored cell, for an NPC that stands in another window of the map.
 /// A map the list does not name, one with no sector files, or one that does not read is a typed failure, never an exception.
 /// </summary>
-public sealed class AreaMapRecords(TerrainViewerArguments launch, AreaHomeDirectory? homes = null, Func<int, CellCoord?>? near = null) : IMapRecordSource
+public sealed class AreaMapRecords(TerrainViewerArguments launch, AreaHomeDirectory? homes = null, Func<int, CellCoord?>? near = null,
+    Func<int, string, CellCoord?>? nearEntity = null) : IMapRecordSource
 {
     private readonly IAreaHomeSource _own = new AreaMapHomes(launch, _ => null);
 
@@ -28,6 +30,17 @@ public sealed class AreaMapRecords(TerrainViewerArguments launch, AreaHomeDirect
         var at = near?.Invoke(runtimeMap);
         var load = homes is not null ? homes.Home(runtimeMap, at, token) : _own.Read(runtimeMap, at, token);
         return load.Read is { } read ? new(read.Rows, load.Detail) : new(null, load.Detail);
+    }
+
+    /// <summary>ARC-DEV-337 (B52): the window of a map that opens only as a window, read around <paramref name="entity"/>'s own stored cell
+    /// (<c>nearEntity</c>; ARC-DEV-354: else the cell the map's mobile aggregate gives the object, <see cref="AreaMobileCells"/>, so an item the hero
+    /// took in another window, which has no recorded cell, is read too; none known: a typed failure, nothing is guessed). A whole map has no other window: null.</summary>
+    public MapRecordsLoad LoadAround(int runtimeMap, string entity, CancellationToken token)
+    {
+        if ((nearEntity?.Invoke(runtimeMap, entity) ?? AreaMobileCells.Of(launch.GameRoot, runtimeMap, entity)) is not { } at)
+            return new(null, "no stored cell is recorded for the entity");
+        var load = homes is not null ? homes.Home(runtimeMap, at, token) : _own.Read(runtimeMap, at, token);
+        return load.Read is { } read && read.CoreSectors is not null ? new(read.Rows, load.Detail) : new(null, load.Read is null ? load.Detail : "the map is read whole");
     }
 }
 
@@ -45,4 +58,9 @@ public sealed class AreaRememberedRecords(IEnumerable<AreaInventoryMap> left, IM
 
     public MapRecordsLoad Load(int runtimeMap, CancellationToken token) =>
         _left.TryGetValue(runtimeMap, out var map) ? new(map, "left behind in this run") : inner?.Load(runtimeMap, token) ?? new(null, "no source reads the map");
+
+    /// <summary>ARC-DEV-337 (B52): the windows left behind do not answer here (the resolver asks because the map it holds, possibly this very
+    /// window, lacks the NPC): the game folder's reader reads the window around the NPC's own stored cell.</summary>
+    public MapRecordsLoad LoadAround(int runtimeMap, string entity, CancellationToken token) =>
+        inner?.LoadAround(runtimeMap, entity, token) ?? new(null, "no source reads the map");
 }

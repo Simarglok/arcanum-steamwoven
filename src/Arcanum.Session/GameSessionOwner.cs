@@ -222,7 +222,10 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportObjectMarks(snapshot.Objects, inventory);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportCreatedObjects(snapshot.Objects, snapshot.Clock.GameTimestampMs, inventory);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportEffects(snapshot.Effects, hero, life, snapshot.Clock.GameTimestampMs, out var effects);
+        if (failure == GameSessionFailure.None) failure = ImportCritterEffects(snapshot.Effects.Critters, effects);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportExperience(snapshot.Experience, options.Experience, limits, out var experience);
         if (failure != GameSessionFailure.None) return Rejected(failure);

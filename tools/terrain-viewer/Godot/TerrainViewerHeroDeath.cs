@@ -163,21 +163,34 @@ public partial class TerrainViewerApp
     /// game folder (the self-test) or when it did not read (the diagnostic box then asks).</summary>
     private void AttachDeathDialogArt(AreaDeathPanel panel)
     {
+        if (DialogBoxArt() is { } art) panel.SetDialogArt(art);
+    }
+
+    /// <summary>ARC-DEV-334: gives the main and in-play menu panel the same dialog box art for its quit question.</summary>
+    private void AttachMenuDialogArt(AreaMainMenuPanel panel)
+    {
+        if (DialogBoxArt() is { } art) panel.SetDialogArt(art);
+    }
+
+    /// <summary>ARC-WORLD-120: the original's dialog box art of the shown module, read once a module and shared by the death load
+    /// question and the menu's quit question (ARC-DEV-334); null without a game folder (the self-test) or when it did not read.</summary>
+    private AreaDialogBoxArt? DialogBoxArt()
+    {
         var module = _arguments?.ModulePath;
-        if (SelfTestBootstrap || module is null) return;
+        if (SelfTestBootstrap || module is null) return null;
         if (_dialogBoxContent is null || module != _dialogBoxModule)
         {
             _dialogBoxModule = module; _dialogBoxArt = null;
             _dialogBoxContent = AreaDialogBoxContent.Load(module);
             GD.Print("ARC-WORLD-120 dialog box art " + _dialogBoxContent.Detail);
         }
-        if (_dialogBoxArt is { } built) { panel.SetDialogArt(built); return; }
-        if (_dialogBoxContent.Font is null) return;
+        if (_dialogBoxArt is { } built) return built;
+        if (_dialogBoxContent.Font is null) return null;
         var art = _dialogBoxContent.Art;
         IReadOnlyList<Texture2D> Frames(int number) => [.. art[number].Frames.Select(frame => (Texture2D)HotkeyTexture(frame))];
-        panel.SetDialogArt(_dialogBoxArt = new AreaDialogBoxArt(Frames(AreaDialogBoxLayout.BackgroundArt)[0],
+        return _dialogBoxArt = new AreaDialogBoxArt(Frames(AreaDialogBoxLayout.BackgroundArt)[0],
             new Dictionary<int, IReadOnlyList<Texture2D>> { [AreaDialogBoxLayout.AcceptArt] = Frames(AreaDialogBoxLayout.AcceptArt), [AreaDialogBoxLayout.CancelArt] = Frames(AreaDialogBoxLayout.CancelArt) },
-            new AreaArtFontFace(art[AreaDialogBoxLayout.FontArt].Frames), _dialogBoxContent.LineHeight));
+            new AreaArtFontFace(art[AreaDialogBoxLayout.FontArt].Frames), _dialogBoxContent.LineHeight);
     }
 
     /// <summary>ARC-WORLD-120: the newest save of the session's hero (the details a save of it would record), null without a session or

@@ -33,6 +33,17 @@ public sealed class SessionLifeTarget
         return new(false, entity, facts, loaded);
     }
 
+    /// <summary>ARC-DEV-348: an NPC with the effect list its map or prototype data stores (<see cref="LoadedEffects"/>): the list the session's NPC effect calls start from until
+    /// the session holds its own.</summary>
+    public static SessionLifeTarget Critter(string entity, LifeFacts facts, LifeState loaded, IReadOnlyList<SessionEffect> loadedEffects)
+    {
+        ArgumentNullException.ThrowIfNull(loadedEffects);
+        return new(false, entity ?? throw new ArgumentNullException(nameof(entity)), facts ?? throw new ArgumentNullException(nameof(facts)), loaded) { LoadedEffects = loadedEffects };
+    }
+
+    /// <summary>The effect list the NPC's data stores, in order; empty for the hero or a target built without it.</summary>
+    public IReadOnlyList<SessionEffect> LoadedEffects { get; private init; } = [];
+
     /// <summary>The entity id, or null for the hero.</summary>
     public string? Entity { get; }
     public LifeFacts? Facts { get; }

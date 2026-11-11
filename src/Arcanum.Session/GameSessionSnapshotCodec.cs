@@ -83,7 +83,8 @@ public static partial class GameSessionSnapshotCodec
     // were inventory fields until schema 61 moved them to the objects section (ARC-DEV-091).
     private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights",
         "identified", "lastDiscardedMade", "grid", "generated", "npcWorn"];
-    private static readonly string[] ObjectsFields = ["junkPiles", "bloodPools", "lastJunkNumber", "lastPoolNumber", "state", "links"];
+    private static readonly string[] ObjectsFields = ["junkPiles", "bloodPools", "lastJunkNumber", "lastPoolNumber", "state", "links", "created", "lastCreatedNumber"];
+    private static readonly string[] CreatedObjectFields = ["entity", "kind", "prototype", "map", "x", "y", "offsetX", "offsetY", "createdMs", "spellFlags", "summoner", "run"];
     private static readonly string[] ObjectFieldFields = ["entity", "property", "map", "value"];
     private static readonly string[] ObjectLinkFields = ["entity", "property", "map", "targets"];
     private static readonly string[] BloodPoolFields = ["entity", "critter", "deathTimeMs", "map", "x", "y", "offsetX", "offsetY", "createdMs"];
@@ -117,7 +118,8 @@ public static partial class GameSessionSnapshotCodec
         "magicCritMissEffect"];
     private static readonly string[] EquipmentArmorFields = ["coverage", "sizes", "maleOnly", "femaleOnly", "ac", "magicAc", "resistances",
         "magicResistances", "unarmedBonus"];
-    private static readonly string[] EffectsFields = ["hero", "definitions", "blessings", "curses"];
+    private static readonly string[] EffectsFields = ["hero", "definitions", "blessings", "curses", "critters"];
+    private static readonly string[] CritterEffectFields = ["entity", "entries", "definitions"];
     private static readonly string[] BlessingFields = ["number", "effect", "timeMs"];
     private static readonly string[] HeroEffectFields = ["effect", "cause"];
     private static readonly string[] DefinitionFields = ["effect", "changes"];
@@ -682,6 +684,28 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteEndObject();
             }
             w.WriteEndArray();
+            // ARC-DEV-347 (E1-a, schema 85): the scenery and eye-candy objects the session created from prototypes, in the order they were created, and the one counter's mark.
+            w.WriteStartArray("created");
+            foreach (var made in snapshot.Objects.Created)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", made.Entity);
+                w.WriteNumber("kind", (int)made.Kind);
+                w.WriteNumber("prototype", made.Prototype);
+                w.WriteNumber("map", made.Map.RuntimeMap);
+                w.WriteNumber("x", made.Cell.X);
+                w.WriteNumber("y", made.Cell.Y);
+                w.WriteNumber("offsetX", made.OffsetX);
+                w.WriteNumber("offsetY", made.OffsetY);
+                w.WriteNumber("createdMs", made.CreatedMs);
+                // ARC-RES-101: the spell flags, the summoner ("" none: never a valid entity) and the owning spell run (-1 none).
+                w.WriteNumber("spellFlags", made.SpellFlags);
+                w.WriteString("summoner", made.Summoner ?? "");
+                w.WriteNumber("run", made.Run ?? -1);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteNumber("lastCreatedNumber", snapshot.Objects.LastCreatedNumber);
             w.WriteEndObject();
 
             w.WriteStartArray("equipment");
@@ -742,23 +766,7 @@ public static partial class GameSessionSnapshotCodec
             }
             w.WriteEndArray();
             w.WriteStartArray("definitions");
-            foreach (var definition in snapshot.Effects.Definitions)
-            {
-                w.WriteStartObject();
-                w.WriteNumber("effect", definition.Number);
-                w.WriteStartArray("changes");
-                foreach (var change in definition.Changes)
-                {
-                    w.WriteStartObject();
-                    w.WriteString("kind", change.Kind.ToString());
-                    w.WriteNumber("attribute", change.Attribute);
-                    w.WriteString("operator", change.Operator.ToString());
-                    w.WriteNumber("value", change.Value);
-                    w.WriteEndObject();
-                }
-                w.WriteEndArray();
-                w.WriteEndObject();
-            }
+            foreach (var definition in snapshot.Effects.Definitions) WriteEffectDefinition(w, definition);
             w.WriteEndArray();
             foreach (var (name, list) in new[] { ("blessings", snapshot.Effects.Blessings), ("curses", snapshot.Effects.Curses) })
             {
@@ -773,6 +781,26 @@ public static partial class GameSessionSnapshotCodec
                 }
                 w.WriteEndArray();
             }
+            w.WriteStartArray("critters");
+            foreach (var record in snapshot.Effects.Critters)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", record.Entity);
+                w.WriteStartArray("entries");
+                foreach (var entry in record.Entries)
+                {
+                    w.WriteStartObject();
+                    w.WriteNumber("effect", entry.Number);
+                    w.WriteString("cause", entry.Cause.ToString());
+                    w.WriteEndObject();
+                }
+                w.WriteEndArray();
+                w.WriteStartArray("definitions");
+                foreach (var definition in record.Definitions) WriteEffectDefinition(w, definition);
+                w.WriteEndArray();
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
             w.WriteEndObject();
 
             w.WriteStartObject("experience");
@@ -2190,7 +2218,24 @@ public static partial class GameSessionSnapshotCodec
                     byHolder == 0 && string.CompareOrdinal(links[i - 1].Property, links[i].Property) >= 0)))
                 throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
         }
-        return new(junkPiles, bloodPools, Int(f["lastJunkNumber"], p + ".lastJunkNumber", 0, int.MaxValue), Int(f["lastPoolNumber"], p + ".lastPoolNumber", 0, int.MaxValue), state, links);
+        // ARC-DEV-347 (schema 85): the created scenery and eye-candy objects in the order they were created (the owner's restore checks the entities, the bounds and the mark).
+        var createdRows = Array(f["created"], p + ".created", SessionCreatedObject.MaxObjects);
+        var created = new SessionCreatedObject[createdRows.Length];
+        for (var i = 0; i < createdRows.Length; i++)
+        {
+            var path = $"{p}.created[{i}]";
+            var row = Fields(createdRows[i], path, CreatedObjectFields);
+            created[i] = new(Entity(row["entity"], path + ".entity"), (SessionCreatedKind)Int(row["kind"], path + ".kind", 0, (int)SessionCreatedKind.EyeCandy),
+                Int(row["prototype"], path + ".prototype", 1, SessionCreatedObject.MaxPrototype), new SessionMapId(Int(row["map"], path + ".map", 1, int.MaxValue)),
+                new(Int(row["x"], path + ".x", 0, MaxPlacedCoordinate), Int(row["y"], path + ".y", 0, MaxPlacedCoordinate)),
+                Int(row["offsetX"], path + ".offsetX", -SessionCreatedObject.MaxOffset, SessionCreatedObject.MaxOffset),
+                Int(row["offsetY"], path + ".offsetY", -SessionCreatedObject.MaxOffset, SessionCreatedObject.MaxOffset),
+                Long(row["createdMs"], path + ".createdMs", 0, long.MaxValue), UInt(row["spellFlags"], path + ".spellFlags"),
+                row["summoner"].ValueKind == JsonValueKind.String && row["summoner"].GetString() == "" ? null : Entity(row["summoner"], path + ".summoner"),
+                Int(row["run"], path + ".run", -1, int.MaxValue) is var run && run < 0 ? null : run);
+        }
+        return new(junkPiles, bloodPools, Int(f["lastJunkNumber"], p + ".lastJunkNumber", 0, int.MaxValue), Int(f["lastPoolNumber"], p + ".lastPoolNumber", 0, int.MaxValue), state, links,
+            created, Int(f["lastCreatedNumber"], p + ".lastCreatedNumber", 0, int.MaxValue));
     }
 
     // A junk pile item's slot lies in the container grid (ARC-WORLD-063).
@@ -2429,11 +2474,69 @@ public static partial class GameSessionSnapshotCodec
             hero[i] = new(Int(e["effect"], path + ".effect", SessionEffectLimits.FirstNumber, SessionEffectLimits.LastNumber),
                 Named<Arcanum.Simulation.Character.EffectCause>(e["cause"], path + ".cause"));
         }
-        var items = Array(f["definitions"], p + ".definitions", SessionEffectLimits.MaxHeroEffects);
+        var definitions = EffectDefinitions(f["definitions"], p + ".definitions", SessionEffectLimits.MaxHeroEffects);
+        SessionBlessing[] Blessings(string name)
+        {
+            var list = Array(f[name], $"{p}.{name}", SessionEffectLimits.MaxBlessings);
+            var result = new SessionBlessing[list.Length];
+            for (var i = 0; i < list.Length; i++)
+            {
+                var at = $"{p}.{name}[{i}]";
+                var b = Fields(list[i], at, BlessingFields);
+                result[i] = new(Int(b["number"], at + ".number", int.MinValue, int.MaxValue),
+                    Int(b["effect"], at + ".effect", SessionEffectLimits.FirstNumber, SessionEffectLimits.LastNumber),
+                    Long(b["timeMs"], at + ".timeMs", 0, long.MaxValue));
+            }
+            return result;
+        }
+        var rows = Array(f["critters"], p + ".critters", SessionNpcEffectLimits.MaxCritters);
+        var critters = new SessionCritterEffectRecord[rows.Length];
+        for (var i = 0; i < rows.Length; i++)
+        {
+            var at = $"{p}.critters[{i}]";
+            var c = Fields(rows[i], at, CritterEffectFields);
+            var entity = Entity(c["entity"], at + ".entity");
+            if (i > 0 && string.CompareOrdinal(critters[i - 1].Entity, entity) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, at + ".entity");
+            var listed = Array(c["entries"], at + ".entries", SessionNpcEffectLimits.MaxEntries);
+            var kept = new SessionEffect[listed.Length];
+            for (var j = 0; j < listed.Length; j++)
+            {
+                var path = $"{at}.entries[{j}]";
+                var e = Fields(listed[j], path, HeroEffectFields);
+                kept[j] = new(Int(e["effect"], path + ".effect", SessionEffectLimits.FirstNumber, SessionEffectLimits.LastNumber),
+                    Named<Arcanum.Simulation.Character.EffectCause>(e["cause"], path + ".cause"));
+            }
+            critters[i] = new(entity, kept, EffectDefinitions(c["definitions"], at + ".definitions", SessionNpcEffectLimits.MaxEntries));
+        }
+        return new(hero, definitions, Blessings("blessings"), Blessings("curses"), critters);
+    }
+
+    private static void WriteEffectDefinition(Utf8JsonWriter w, SessionEffectDefinition definition)
+    {
+        w.WriteStartObject();
+        w.WriteNumber("effect", definition.Number);
+        w.WriteStartArray("changes");
+        foreach (var change in definition.Changes)
+        {
+            w.WriteStartObject();
+            w.WriteString("kind", change.Kind.ToString());
+            w.WriteNumber("attribute", change.Attribute);
+            w.WriteString("operator", change.Operator.ToString());
+            w.WriteNumber("value", change.Value);
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+        w.WriteEndObject();
+    }
+
+    // A list of effect rules by strictly ascending number (the hero's and each NPC's).
+    private static SessionEffectDefinition[] EffectDefinitions(JsonElement element, string p, int max)
+    {
+        var items = Array(element, p, max);
         var definitions = new SessionEffectDefinition[items.Length];
         for (var i = 0; i < items.Length; i++)
         {
-            var path = $"{p}.definitions[{i}]";
+            var path = $"{p}[{i}]";
             var d = Fields(items[i], path, DefinitionFields);
             var number = Int(d["effect"], path + ".effect", SessionEffectLimits.FirstNumber, SessionEffectLimits.LastNumber);
             if (i > 0 && number <= definitions[i - 1].Number) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".effect");
@@ -2450,21 +2553,7 @@ public static partial class GameSessionSnapshotCodec
             }
             definitions[i] = new(number, ImmutableArray.Create(changes));
         }
-        SessionBlessing[] Blessings(string name)
-        {
-            var list = Array(f[name], $"{p}.{name}", SessionEffectLimits.MaxBlessings);
-            var result = new SessionBlessing[list.Length];
-            for (var i = 0; i < list.Length; i++)
-            {
-                var at = $"{p}.{name}[{i}]";
-                var b = Fields(list[i], at, BlessingFields);
-                result[i] = new(Int(b["number"], at + ".number", int.MinValue, int.MaxValue),
-                    Int(b["effect"], at + ".effect", SessionEffectLimits.FirstNumber, SessionEffectLimits.LastNumber),
-                    Long(b["timeMs"], at + ".timeMs", 0, long.MaxValue));
-            }
-            return result;
-        }
-        return new(hero, definitions, Blessings("blessings"), Blessings("curses"));
+        return definitions;
     }
 
     private static EquipmentItem EquipmentItemValue(JsonElement element, string p)
