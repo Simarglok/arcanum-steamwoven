@@ -97,6 +97,28 @@ radius (1 tile, 4 for a wanderer) of the current standpoint **at** it; the AI ho
 **What the installed data holds** ([`BedCensusRealDataTests`](../../tests/Arcanum.World.Tests/BedCensusRealDataTests.cs), numbers only): of the **2236** NPC rows of the 80 read maps with a readable route, **41** have their
 night standpoint on a placed bed's tile, **21** their day standpoint and **51** either, so the step seats them.
 
+## Budget check of the AI heartbeat (ARC-WORLD-1162 slice 4, 2026-11-12)
+
+The NPC day adds work to the AI pass of every NPC (the bed lookup, the latch, the reconcile, the sleeping flag reads). It was measured on the owner's Mac (a shared machine, Debug build) with a temporary probe in the
+`npc-resident` smoke stage that was **not committed**: one frame of the viewer's world step (the AI host, the goal runs, the scenery loops, the draw preparation: everything one frame does) timed with a stopwatch,
+600 frames of 50 ms per game hour (12, 22, 3 and 7; the clock was jumped to each), the first 100 after the jump kept apart. Before = the commit before slice 1 (`e61200c5a`), after = `origin/main` with
+slices 1 to 3. Two runs each for the town; numbers are ms per frame, medians of the steady frames, p95 in brackets.
+
+| Map | NPCs | Before | After | Verdict |
+| --- | --- | --- | --- | --- |
+| Town (main map window at sector 1409,1314) | 69 | 12.5 to 18.3 (p95 16 to 23) | 10.9 to 14.9 (p95 14 to 21) | same, within the run-to-run noise of 2 to 3 ms |
+| Wheel clan (29 beds, 178 NPCs) | 178 | 13.3 to 18.2 (p95 15 to 21) | 14.0 to 19.0 (p95 16 to 21) | same within the noise; the shared machine moves a run by 3 ms |
+| Roseborough inn2 (15 beds, 15 NPCs) | 15 | 6.1 to 8.0 (p95 8 to 10) | 5.6 to 8.0 (p95 7 to 10) | same |
+
+The AI pass count is identical before and after (route outcomes per 600 frames: 683 then 644 in the town, 200 in Wheel clan, 2101 then 2086 in Roseborough): the day's new work adds no pass. The hour jumps (the first
+100 frames, where every NPC meets the new hour) cost at most 45 to 70 ms on one frame in the 178-NPC map, the same as before. The budget is the 60-frame second (16.7 ms): the town runs at about 11 to 18 ms and the
+178-NPC map at about 13 to 19 ms **before and after**, so the slices did not move it; that map's frame sits around the 16.7 ms second without them (a performance matter of the
+[diagnosis](../project/status/tools.md), not of the beds). The measurement is not a gate and nothing in the tree repeats it.
+
+**Observation from the same runs:** in Roseborough inn2 two NPCs lie in a bed at every hour tested (noon included). Their day and night standpoint is the same bed tile, so by the original's rule (SWB18: the hour
+switch wakes a sleeper only when it is farther than its radius from the *current* standpoint) nothing wakes them but an attack, a witness or a waypoint list; the town and Wheel clan seat nobody (their bed standpoints are not
+reached, or taken). This is what the ledger rows give; it is not classified under the bug rule and the picture of a bed with a permanent sleeper is on the [owner re-check list](../project/owner-recheck-list.md).
+
 ## Boundaries (NOT READY)
 
 - **Bed, what is left** (SWB15, SWB16): the hero gets neither the sleeping flag nor the don't-draw flag nor the nudge (his window fades the screen over him and the bed is emptied at the close; a flag written
