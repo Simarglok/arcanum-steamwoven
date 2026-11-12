@@ -43,7 +43,7 @@ TEMP_PREFIX = "arcanum-daily-"
 # The smoke steps that are not smokes: the chain's viewer build and project import. Their failure means the commit does
 # not build as a viewer, so no package is made from it.
 SMOKE_GATES = ("build", "import")
-SUMMARY_LINE = re.compile(r"^\s+(\S+)\s+(PASS|FAIL) exit=(\d+)$")
+SUMMARY_LINE = re.compile(r"^\s+(\S+)\s+(PASS|FAIL|ORDER) exit=(\d+)$")  # ORDER: ARC-DEV-396, a group that fails only after other stages
 LOCK = "arcanum-daily.lock"
 DAILY_RAN = re.compile(r"^map-smoke PASS\b", re.MULTILINE)  # BUILD.txt of a package that ./arcanum daily made
 CONTEXT_LINES = 8  # of a failed step's first error (or of its last lines) in the report; its headers are always kept
@@ -68,6 +68,7 @@ class SmokeResult:
     passed: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
     not_run: list[str] = field(default_factory=list)
+    order_steps: list[str] = field(default_factory=list)  # the steps the summary shows as ORDER
     order_dependent: list[str] = field(default_factory=list)  # ARC-DEV-396: steps that failed only after other stages (each passed alone)
     details: dict[str, list[str]] = field(default_factory=dict)  # each step's own lines (its run's PASS/FAIL, first error)
 
@@ -79,7 +80,7 @@ class SmokeResult:
         gates = [name for name in self.failed if name in SMOKE_GATES]
         if gates:
             return "the smoke chain's viewer " + " and ".join(gates) + " failed"
-        if not self.passed and not self.failed:
+        if not self.passed and not self.failed and not self.order_steps:
             return f"the smoke chain printed no summary (exit {self.code})"
         if self.failed or self.not_run or self.code:
             return ("smoke failed: " + (", ".join(self.failed) or f"exit {self.code}")
@@ -88,7 +89,8 @@ class SmokeResult:
 
     def line(self) -> str:
         """BUILD.txt's map-smoke line of a passing chain: the smokes that ran."""
-        return "PASS (" + ", ".join(name for name in self.passed if name not in SMOKE_GATES) + ")"
+        return ("PASS (" + ", ".join(name for name in self.passed if name not in SMOKE_GATES) + ")"
+                + (f" order-dependent ({', '.join(self.order_steps)})" if self.order_steps else ""))
 
 
 def say(message: str) -> None:
@@ -115,7 +117,10 @@ def parse_smoke(text: str, code: int) -> SmokeResult:
     for line in lines[start:]:
         found = SUMMARY_LINE.match(line)
         if found:
-            (result.passed if found.group(2) == "PASS" else result.failed).append(found.group(1))
+            if found.group(2) == "ORDER":
+                result.order_steps.append(found.group(1))
+            else:
+                (result.passed if found.group(2) == "PASS" else result.failed).append(found.group(1))
         elif line.strip().startswith("order-dependent:"):
             result.order_dependent.append(line.split(":", 1)[1].strip())
         elif line.strip().startswith("not run:"):

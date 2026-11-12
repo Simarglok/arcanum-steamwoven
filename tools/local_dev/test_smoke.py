@@ -475,6 +475,29 @@ class ExecuteTests(unittest.TestCase):
         self.assertFalse(any("order-dependent:" in line for line in lines))
         self.assertIn("  stages-main        FAIL exit=1", lines)
 
+    def test_a_timeout_a_known_failure_and_a_stopped_retry_are_not_order_dependence(self) -> None:
+        pass_line = lambda stage: smoke.STAGE_PASS[stage] + " {}\n"
+        again = lambda stage: smoke.Step(f"stages-retry-{stage}", "window", ("g",), requires=(stage,))
+        group = smoke.Step("stages-main", "window", ("g",), requires=("cast", "ai"), again=again)
+        ok = {"stages-main": pass_line("cast"), "stages-retry-ai": pass_line("ai")}
+        code, _, lines = self.run_steps([group], {"stages-main": run_queue.TIMEOUT_EXIT}, ok)
+        self.assertEqual((code, lines[-1]), (1, "SMOKE FAIL 1 of 2 steps passed"))  # a hung group is a failure, whatever passes alone
+        code, _, lines = self.run_steps([group], {"stages-main": 1}, {**ok, "stages-main": pass_line("cast")})
+        self.assertEqual(code, 0)
+        known = [smoke.KnownFailure("ai", re.compile("boom"), "unassigned", "2026-11-12")]
+        lines = []
+        calls = []
+
+        def runner(kind, command, *, label, timeout, quiet, start, log_sink, **rest) -> int:
+            name = label[len("smoke "):]
+            path = Path(self.temp.name) / f"{name}.log"
+            path.write_text(pass_line("cast") + "boom\n" if name == "stages-main" else pass_line("ai"), encoding="utf-8")
+            log_sink(path)
+            return 1 if name == "stages-main" else 0
+
+        self.assertEqual(smoke.execute([group], runner, lines.append, known), 0)
+        self.assertFalse(any("only known failures" in line for line in lines))  # listed as order-dependent, not as a known failure
+
     def test_a_failed_build_or_a_stopped_run_ends_the_chain(self) -> None:
         steps = [smoke.Step("build", "dotnet", ("sh",), gate=True), smoke.Step("crash-site", "window", ("g",)),
                  smoke.Step("main", "window", ("g",))]

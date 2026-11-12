@@ -744,7 +744,8 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
                                 if retry_code == 0 else f"fails alone too (exit {retry_code})"))
             if code >= STOPPED:
                 break
-            if unfinished and not alone_failed:
+            # a timeout is not a sign of order: the hung stage would pass alone only by luck (and the retry is not counted then)
+            if unfinished and not alone_failed and code != run_queue.TIMEOUT_EXIT:
                 order_dependent[step.name] = list(unfinished)
     width = max(len(name) for name, _ in results) if results else 0
     say("SMOKE summary")
@@ -761,6 +762,7 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
             for line in smoke_history.table(record):
                 say(line)
     failed = [name for name, code in results if code != 0 and name not in order_dependent]
+    only_known = [name for name in only_known if name not in order_dependent]
     if only_known:
         say("  only known failures on main (not this PR): " + ", ".join(only_known))
     say(f"SMOKE {'PASS' if not failed and not skipped else 'FAIL'} {len(results) - len(failed)} of {len(results) + len(skipped)} steps passed"

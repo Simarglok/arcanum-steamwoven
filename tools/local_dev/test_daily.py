@@ -188,6 +188,8 @@ class DailyTests(unittest.TestCase):
                 "SMOKE PASS 2 of 2 steps passed (1 order-dependent, each stage passes alone)\n")
         result = daily.parse_smoke(text, 0)
         self.assertEqual((result.passed, result.failed, result.failure), (["main"], [], None))
+        self.assertEqual(result.order_steps, ["stages-main"])
+        self.assertEqual(result.line(), "PASS (main) order-dependent (stages-main)")
         self.assertEqual(len(result.order_dependent), 1)
 
     def test_a_passing_day_checks_smokes_and_packages_the_same_commit_in_a_removed_worktree(self) -> None:

@@ -249,7 +249,8 @@ history held about 500 runs of such copies of one template).
   unless every unfinished stage passed alone: then it is **order-dependent** (owner decision 2026-11-12), the summary shows it as
   `ORDER` with an `order-dependent:` line naming the step and its stages, the run and `./arcanum daily` pass (the daily report adds
   `smoke order-dependent ...` for a fix thread, and no package is blocked), and the final line says `(N order-dependent, each stage
-  passes alone)`. A stage that fails alone too, or a failure with nothing unfinished, still fails the run as before. No stage goes
+  passes alone)`. A stage that fails alone too, a group that timed out (exit 124) and a failure with nothing unfinished still fail the run as before; the
+  `map-smoke` line of BUILD.txt then ends with `order-dependent (STEP)`. No stage goes
   unchecked behind a failure and an order-dependent stage is named.
   **`--auto`** reads the diff: the merge base with `--base` (default `origin/main`; fetch first) to the working tree, untracked
   files included, and picks the zones by the table `TRIGGERS` (all matching rows of a path, as a union; a "no smoke" row such as `tests/` or
