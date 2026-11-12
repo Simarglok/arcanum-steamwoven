@@ -92,6 +92,15 @@ public partial class TerrainViewerApp
             var failedBefore = _moviesFailed;
             Require(PlayMovies([1], 0, () => continued++, "smoke") && Pump(() => !MovieCovering, 5) && continued == 2 && _moviesFailed == failedBefore + 1 && !_moviePanel.IsOpen,
                 "a movie with no file ended at once and the continuation ran");
+            // ARC-SCRIPT-1241: the movies of two script fades (action 103; the clock jump belongs to the run's effects, tested apart) start one after the other through the viewer's poll, the
+            // second has no file and is passed over, and nothing is left waiting.
+            _moviePathForSelfTest = (number, _) => number == 7 ? second : null;
+            var (fadesBefore, failedFades) = (_scriptFadesPlayed, _moviesFailed);
+            _scriptFades.Enqueue(new AreaScriptFade(0, 7, 0, 0, 0)); _scriptFades.Enqueue(new AreaScriptFade(0, 9, 0, 0, 0));
+            SyncScriptFades();
+            Require(MovieCovering && _moviePanel!.IsOpen && _scriptFades.Count == 1, "the first script fade's movie started and the second waits");
+            Require(Pump(() => { SyncScriptFades(); return !MovieCovering && _scriptFades.Count == 0; }, 20) && _scriptFadesPlayed == fadesBefore + 2 && _moviesFailed == failedFades + 1 && !_moviePanel.IsOpen,
+                $"the script fades' movies ran one after the other (started {_scriptFadesPlayed - fadesBefore}, failed {_moviesFailed - failedFades}) and the screen closed");
             // No decoder: nothing starts and the caller goes on at once.
             _movieSourceForSelfTest = new FfmpegMovieSource(null);
             Require(MovieRefusal() is { } refusal && refusal.Contains("ffmpeg", StringComparison.Ordinal) && !PlayMovies([1], 0, () => continued++, "smoke") && !MovieCovering && continued == 2,
