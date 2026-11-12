@@ -120,6 +120,10 @@ public interface ISpellRunHost
     /// <summary>The action's target list (0x4F40B0 over the run's context, MT8).</summary>
     IReadOnlyList<SpellRunTarget> Collect(SpellRun run);
 
+    /// <summary>ARC-MAGIC-1234 (TA14): the action's target list and the run's object list it built (the area has the list bit and the stored list was empty: the gathered objects, newest first; null when the list
+    /// is not built). A host that keeps no run list answers <see cref="Collect"/> with no built list.</summary>
+    SpellRunCollected CollectRun(SpellRun run) => new(Collect(run), null);
+
     /// <summary>Uses the PC's armed fate "spell at maximum" (kind 5, 0x4F5270): true when it was armed.</summary>
     bool UseSpellAtMaximum(SpellRunObject pc);
 
@@ -154,9 +158,12 @@ public interface ISpellRunHost
     IReadOnlyList<SpellPayment> ChargeBegin(SpellRun run);
 
     /// <summary>ARC-MAGIC-034 (MA-3, SUM7, 0x451C40): whether the run's summoned list (the original's +0x134, the objects the run's Summon components made) holds the object. A host that
-    /// keeps no such list answers false. The run's other list (+0x130, the objects a run applied to) is not modelled by any host.</summary>
+    /// keeps no such list answers false. The run's object list (+0x130) is the run's own (<see cref="SpellRun.ObjectList"/>).</summary>
     bool SummonedListHolds(SpellRun run, string obj) => false;
 }
+
+/// <summary>An action's targets, and the run object list its collection built (null when it built none).</summary>
+public sealed record SpellRunCollected(IReadOnlyList<SpellRunTarget> Targets, IReadOnlyList<SpellRunObject>? BuiltList);
 
 /// <summary>
 /// ARC-MAGIC-010 (magic plan MT9a-2): the original's run processing, scheduler, events and interrupts over a run table, as the
@@ -329,7 +336,10 @@ public sealed class SpellRunSystem
     {
         var run = Table[id]!;
         _lastNoticed = null;
-        var targets = _host.Collect(run);
+        var collected = _host.CollectRun(run);
+        var targets = collected.Targets;
+        // ARC-MAGIC-1234 (TA14, 0x4F40B0): the list bit of an area with an empty run list stores the gathered objects in the run (the first such action builds the list, every later one reads it).
+        if (collected.BuiltList is { Count: > 0 } built && Table[id] is { } listed && listed.ObjectList.Count == 0) run = Set(listed with { ObjectList = new(built) });
         var maximized = false;
         if (run.Source is { Type: SpellObjectFacts.PcType } pc && _host.UseSpellAtMaximum(pc))
         {
@@ -673,9 +683,9 @@ public sealed class SpellRunSystem
     /// <summary>
     /// ARC-MAGIC-034 (MA-3, ledger DP1–DP2): the runs' half of the Dispel (0x451C40, called with the run being processed and the object the component handed it). First every run
     /// but the processed one whose source is the object, whatever its active bit, ends by event (0x4571E0); then every active run but the processed one whose target (+0xA0), summoned list
-    /// (+0x134) or other list (+0x130) holds it. The runs of a technological record (record flag 0x4) are never touched. A run is told once per test it matches (the original calls the
+    /// (+0x134) or object list (+0x130) holds it. The runs of a technological record (record flag 0x4) are never touched. A run is told once per test it matches (the original calls the
     /// ending in each test; the second call finds a run the first freed gone). The object's own flags are the host's (<c>SessionSpellCaster</c>): stoned, summoned (destroyed), perma-polymorph, magically held.
-    /// The other list (+0x130) is not modelled. No run being processed (a negative slot) does nothing, as the original's first test.
+    /// The object list (+0x130, ARC-MAGIC-1234) is tested last. No run being processed (a negative slot) does nothing, as the original's first test.
     /// </summary>
     [OriginalFunction(0x451C40, OriginalFunctionScope.Partial)]
     public void Dispel(string obj, int processing)
@@ -691,6 +701,8 @@ public sealed class SpellRunSystem
             if (run.Target?.Id == obj) EndByEvent(run.Id);
             // The first ending may have freed the run (a BEGIN never processed), which empties its lists.
             if (Table[run.Id] is { } still && _host.SummonedListHolds(still, obj)) EndByEvent(run.Id);
+            // ARC-MAGIC-1234: the run's object list (+0x130) is the last test of the loop (0x451C40).
+            if (Table[run.Id] is { } withList && withList.ObjectList.Holds(obj)) EndByEvent(run.Id);
         }
     }
 

@@ -79,7 +79,7 @@ public partial class TerrainViewerApp
             string[] NpcList() => [.. (session.QueryNpcEffects(npcCombat.Target)?.Entries ?? []).Select(e => "effect=" + e.Number).Order(StringComparer.Ordinal)];
 
             var report = new List<object>();
-            void Probe(int spell, string target, Func<CharacterStat, int> stat, Func<string[]> list, CharacterStat watched, int direction, string? caster = null, bool endRemoves = true)
+            void Probe(int spell, string target, Func<CharacterStat, int> stat, Func<string[]> list, CharacterStat watched, int direction, string? caster = null)
             {
                 var records = SpellRecordsNow()!;
                 Require(spell < records.Length && records[spell] is not null, $"spell {spell}'s record is read");
@@ -118,23 +118,10 @@ public partial class TerrainViewerApp
                 Require(_spellGoal is null && HeroRunsHost()?.CastRun is null && _areaSession?.QuerySpellRuns()[run] is not null, $"spell {spell}'s casting goal ended and its run is still there (goal {_spellGoal?.Run}, run {_areaSession?.QuerySpellRuns()[run]?.Action})");
                 Caster().Act(new(SessionSpellRunActionKind.ForceEnd, run));
                 for (var i = 0; i < 20; i++) { Frame(); FlushSpellLog(null); }
-                if (endRemoves)
-                {
-                    Require(list().SequenceEqual(listBefore), $"the END of spell {spell} removed its effects: {string.Join(",", listBefore)} -> {string.Join(",", list())} (log {string.Join(",", Caster().Log.TakeLast(10).Select(e => $"{e.Kind}:{e.Run}:{e.Value}"))})");
-                    Require(Enum.GetValues<CharacterStat>().All(s => stat(s) == valuesBefore[s]), $"the stats are back at their values after spell {spell}");
-                }
-                else
-                {
-                    // KNOWN GAP (ARC-DEV-1148 finding): the END of spell 76 removes its effect through the run's object list (its END area names the list, bit 0x80000000; the BEGIN area gathers by radius), which no
-                    // host models (spell-cast-host.md: the run lists are not filled), so the forced END leaves the effect on the NPC. The guard fails when that changes, so the stage is then made to expect the removal.
-                    Require(!list().SequenceEqual(listBefore) && added.All(e => list().Contains("effect=" + e.Effect)),
-                        $"the END of spell {spell} no longer leaves its effect on the target: the run's object list is modelled, so expect the removal here (list {string.Join(",", list())})");
-                    var left = added.Sum(e => e.Count);
-                    foreach (var e in added) Require(session.RemoveNpcEffect(session.Version, npcCombat.Target, e.Effect, e.Count).Disposition == GameSessionDisposition.Changed, $"the stage takes effect {e.Effect} off the NPC by hand");
-                    Require(list().SequenceEqual(listBefore), $"the NPC's list is back after the stage's own removal ({left} entries)");
-                    GD.Print($"{SpellEffectsCode} spell={spell} KNOWN GAP: the forced END left effect {string.Join(",", added.Select(e => e.Effect))} on the NPC (the run's object list is not modelled)");
-                }
-                report.Add(new { Spell = spell, EndRemoves = endRemoves, Target = target == SessionSpellCaster.Hero ? "hero" : "npc", Effects = added.Select(e => e.Effect).ToArray(), Watched = watched.ToString(), Before = valuesBefore[watched], During = during[watched], Gained = gained });
+                // ARC-MAGIC-1234: every spell's forced END takes its entries off and brings the stats back; spell 76's END area names the run's object list (stored by its BEGIN gather), which now finds the target.
+                Require(list().SequenceEqual(listBefore), $"the END of spell {spell} removed its effects: {string.Join(",", listBefore)} -> {string.Join(",", list())} (log {string.Join(",", Caster().Log.TakeLast(10).Select(e => $"{e.Kind}:{e.Run}:{e.Value}"))})");
+                Require(Enum.GetValues<CharacterStat>().All(s => stat(s) == valuesBefore[s]), $"the stats are back at their values after spell {spell}");
+                report.Add(new { Spell = spell, EndRemoves = true, Target = target == SessionSpellCaster.Hero ? "hero" : "npc", Effects = added.Select(e => e.Effect).ToArray(), Watched = watched.ToString(), Before = valuesBefore[watched], During = during[watched], Gained = gained });
             }
 
             // The hero casts the two NPC spells as a PC parent, whose willpower the run's stage checks against the record's minimum (the premade hero's is low: "You lose your concentration", spell.mes 602):
@@ -147,7 +134,7 @@ public partial class TerrainViewerApp
             Require(granted.Failure == GameSessionFailure.None, "the stage's willpower effect is added: " + granted.Failure);
             willpowerAdded = true;
             Probe(46, npcId, NpcStat, NpcList, CharacterStat.Strength, -1, SessionSpellCaster.Hero);
-            Probe(76, npcId, NpcStat, NpcList, CharacterStat.Speed, -1, SessionSpellCaster.Hero, endRemoves: false);
+            Probe(76, npcId, NpcStat, NpcList, CharacterStat.Speed, -1, SessionSpellCaster.Hero);
             GD.Print("ARC-DEV-1148 native-smoke spell-effects PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Npc = npcId, Spells = report }));
         }
         finally
@@ -157,7 +144,7 @@ public partial class TerrainViewerApp
             HeroRunsHost()?.LoseAll("SMOKE_SPELL_EFFECTS_END");
             if (_areaSession is { } now)
             {
-                // A failure before the stage's own removal (spell 76's END leaves its effect) must not leave the spells' entries on the NPC.
+                // A failure before a run's END must not leave the spells' entries on the NPC.
                 if (npcTarget is { } left && now.QueryNpcEffects(left) is { } npcList)
                     foreach (var number in new[] { 154, 326, 57 }) { var count = npcList.Count(number); if (count > 0) now.RemoveNpcEffect(now.Version, left, number, count); }
                 if (willpowerAdded) now.RemoveHeroEffect(now.Version, WillpowerEffectNumber, 1);

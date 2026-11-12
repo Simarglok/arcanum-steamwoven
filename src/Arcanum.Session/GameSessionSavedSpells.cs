@@ -61,6 +61,7 @@ public sealed partial class GameSessionOwner
             if (run.Id < 0 || run.Spell < 0 || !Enum.IsDefined(run.Action) || !SpellRunIsSaved(run) && !SpellRunAwaitsBegin(run)) return GameSessionFailure.InvalidSnapshot;
             foreach (var named in new[] { run.Source, run.Parent, run.Target, run.Other })
                 if (named is not null && !SessionValidation.Entity(named.Id)) return GameSessionFailure.InvalidSnapshot;
+            if (run.ObjectList.Items.Any(listed => !SessionValidation.Entity(listed.Id))) return GameSessionFailure.InvalidSnapshot;
         }
         var restored = SpellRunTable.Restore(saved.Runs);
         var restoredBar = MaintainBar.Restore(saved.Bar);
