@@ -14,8 +14,20 @@ namespace Arcanum.World;
 public enum AreaGreetingTextsStatus { Ready, StackFailed, FilesFailed, ReputationsFailed }
 
 /// <summary>The texts every greeting of a module reads, or why they could not be read (the greeting then stays a frontier).</summary>
-public sealed record AreaGreetingTexts(AreaGreetingTextsStatus Status, GeneratedDialogFiles? Files, IReadOnlyList<MesFile?> ReputationLines, string Detail)
+public sealed record AreaGreetingTexts(AreaGreetingTextsStatus Status, GeneratedDialogFiles? Files, IReadOnlyList<MesFile?> ReputationLines, string Detail,
+    SkillTexts? Skills = null)
 {
+    /// <summary>ARC-SCRIPT-1150: a skill's name for the trainer's menu (<c>skill.mes</c> message 0..11 basic, 12..15 tech), or null when the file is not loaded
+    /// or does not hold it.</summary>
+    public string? SkillName(int skill)
+    {
+        if (Skills is null || skill is < 0 or >= SkillTexts.BasicSkills + SkillTexts.TechSkills) return null;
+        var message = skill < SkillTexts.BasicSkills ? Skills.BasicName(skill) : Skills.TechName(skill - SkillTexts.BasicSkills);
+        if (message is null) return null;
+        var decoded = MesText.Decode(message, AreaHoverIndex.TextProfile);
+        return decoded.Status == MesDecodeStatus.Decoded ? decoded.Text : null;
+    }
+
     /// <summary>
     /// ARC-WORLD-058: the module's generated-dialog files (<see cref="GeneratedDialogFiles.Load"/>) and its four reputation
     /// greeting files (<see cref="ReputationTable.Load"/>, which reads them only after the reputation rules and names) through
@@ -32,8 +44,11 @@ public sealed record AreaGreetingTexts(AreaGreetingTextsStatus Status, Generated
         var reputations = ReputationTable.Load(stack);
         if (reputations.Table is null)
             return new(AreaGreetingTextsStatus.ReputationsFailed, null, [], $"{reputations.Status} {reputations.Path} {reputations.Read} {reputations.Parse?.Status}");
+        // ARC-SCRIPT-1150: the skill names of the trainer's menu; a file that does not load only leaves the t: reply blocked.
+        var skills = SkillTexts.Load(stack);
         return new(AreaGreetingTextsStatus.Ready, files.Files, reputations.Table.Greetings,
-            $"{GeneratedDialogFiles.Count - files.Files.Absent.Count} generated-dialog files, {reputations.Table.Greetings.Count(file => file is not null)} reputation greeting files");
+            $"{GeneratedDialogFiles.Count - files.Files.Absent.Count} generated-dialog files, {reputations.Table.Greetings.Count(file => file is not null)} reputation greeting files",
+            skills.Texts);
     }
 }
 

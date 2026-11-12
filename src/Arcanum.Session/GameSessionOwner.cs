@@ -975,6 +975,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (delay is { } d && !WaitTimerFits(d, entity)) return Reject(GameSessionFailure.EventBudgetExceeded);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         _party.Put(current with { Standing = CompanionStanding.Waiting, Forced = false }, false);
+        // ARC-MAGIC-1190 (TF3): the wait (0x4AA7A0) leaves the leader through 0x45DFC0 and takes it back after, so the waiter loses the Tempus Fugit flag.
+        ClearTempusFugitOnLeave(entity);
         if (delay is { } wait) ScheduleWaitTimer(entity, wait, charisma);
         return Changed();
     }
@@ -1003,6 +1005,7 @@ public sealed partial class GameSessionOwner : IDisposable
         // ARC-SKILLS-008 (ST2): a follower that leaves is no longer concealed.
         _combat.Concealed.Remove(entity);
         ClearNoAttackOnLeave(entity);
+        ClearTempusFugitOnLeave(entity);
         if (current.Standing == CompanionStanding.Waiting) CancelWaitTimers(entity);
         return Changed();
     }
@@ -1933,8 +1936,15 @@ public sealed partial class GameSessionOwner : IDisposable
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, consent, new(_identity, _revision));
         if (!_party.Records.ContainsKey(current.Entity) && _party.Records.Count >= _limits.MaxCompanions)
             return RejectParty(GameSessionFailure.BudgetExceeded, consent);
+        // ARC-MAGIC-1190 (XR7, TF3): the join (0x45DE90) first leaves an existing leader (0x45DFC0: the flag is cleared) and then copies the leader's Tempus Fugit flag; the copy needs room in the
+        // written-flags bound, so a full bound refuses before anything changes (a clear only edits an entry that exists).
+        var copyTempus = JoinCopiesTempusFugit(current.Entity);
+        if (copyTempus && !_objectFlags.ContainsKey(current.Entity) && _objectFlags.Count >= MaxObjectFlagCritters)
+            return RejectParty(GameSessionFailure.BudgetExceeded, consent);
         if (_revision == long.MaxValue) return RejectParty(GameSessionFailure.RevisionExhausted, consent);
         _party.Put(next, true);
+        if (current.Standing != CompanionStanding.Free) ClearTempusFugitOnLeave(current.Entity);
+        if (copyTempus) WriteTempusFugitOnJoin(current.Entity);
         if (current.Standing == CompanionStanding.Waiting) CancelWaitTimers(current.Entity);
         // ARC-SKILLS-008 (ST2): a new follower takes its leader's concealment.
         if (_combat.HeroConcealed) _combat.Concealed.Add(current.Entity); else _combat.Concealed.Remove(current.Entity);
@@ -2596,11 +2606,15 @@ public sealed partial class GameSessionOwner : IDisposable
         if (npcDied) CancelWaitTimers(target.Entity!);
         // ARC-AI-1134 (DY3, 0x45DA20 after the death time): the NPC's combat focus (0x11B) := the killer, whatever its danger state; the kill notification follows the commit below.
         var killedBy = killer ?? damageStep?.Parties.Killer;
+        // ARC-MAGIC-1146 (0x45ED70, before the focus write in the original): the Combat-Focus Wipe event, ten game minutes on.
+        if (npcDied) ScheduleFocusWipe(target.Entity!, map, now);
         if (npcDied) FocusOnKiller(target.Entity!, killedBy);
         // ARC-WORLD-1157 (PO7): a critter a generator made releases its slot's live count (0x4BAB30 from the death, after the party-leave helpers).
         if (npcDied) ReleaseGeneratorSlot(target.Entity!);
         // ARC-WORLD-1158 (PO10, 0x45EBE0): the death queues the body's Decay Dead Bodies event one game day on, on the NPC's map.
         if (npcDied) ScheduleBodyDecay(target.Entity!, map, now, facts!);
+        // ARC-MAGIC-1146 (0x45EC80, the callers of the cancel): a body healed back to life no longer decays, so its pending Decay Dead Bodies event goes.
+        if (outcome.Events.HasFlag(LifeEvents.Resurrected) && !target.IsHero) CancelBodyDecay(target.Entity!);
         Revise();
         if (npcDied && KillNotice is { } notice)
         {
@@ -2645,7 +2659,7 @@ public sealed partial class GameSessionOwner : IDisposable
     private int[] StrayMaps(string entity, int map)
     {
         var maps = new SortedSet<int>();
-        foreach (var kind in NpcKinds.Append(SessionEventKinds.PartyWait).Append(SessionEventKinds.BodyDecay))
+        foreach (var kind in NpcKinds.Append(SessionEventKinds.PartyWait).Append(SessionEventKinds.BodyDecay).Append(SessionEventKinds.FocusWipe))
             _events.Any(kind, e =>
             {
                 var at = e.Payload.Entities[0];
@@ -2820,6 +2834,16 @@ public sealed partial class GameSessionOwner : IDisposable
                 converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
                 continue;
             }
+            if (pending.Kind == SessionEventKinds.FocusWipe)
+            {
+                // A Combat-Focus Wipe event (ARC-MAGIC-1146): one NPC with a life record, set no later than the saved clock, the fixed delay before its deadline, on the one map of the NPC's timers (several per NPC are allowed).
+                if (pending.Entities.Length != 1 || pending.Entities[0].Map < 1 || !SessionEventKinds.FocusWipePayload(new(pending.Entities, pending.Values)) ||
+                    !life.Critters.ContainsKey(pending.Entities[0].Code) || pending.Values[0] > clockMs || pending.DeadlineMs != pending.Values[0] + pending.Values[1] ||
+                    (!maps.TryAdd(pending.Entities[0].Code, pending.Entities[0].Map) && maps[pending.Entities[0].Code] != pending.Entities[0].Map))
+                    return GameSessionFailure.InvalidEvents;
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
+                continue;
+            }
             if (pending.Kind == SessionEventKinds.TrapDevice)
             {
                 // A trap fuse (ARC-WORLD-124): one entity on a valid map, set no later than the saved clock, the fuse or the retry before its deadline, a spell record, a cell.
@@ -2870,6 +2894,7 @@ public sealed partial class GameSessionOwner : IDisposable
             converted.Count(e => e.Kind == SessionEventKinds.ObjectRespawn) > SessionEventKinds.MaxObjectRespawns ||
             converted.Count(e => e.Kind == SessionEventKinds.ItemDecay) > SessionEventKinds.MaxItemDecays ||
             converted.Count(e => e.Kind == SessionEventKinds.BodyDecay) > SessionEventKinds.MaxBodyDecays ||
+            converted.Count(e => e.Kind == SessionEventKinds.FocusWipe) > SessionEventKinds.MaxFocusWipes ||
             converted.Count(e => e.Kind == SessionEventKinds.Restock) > SessionEventKinds.MaxRestocks ||
             converted.Count(e => e.Kind == SessionEventKinds.TrapDevice) > SessionEventKinds.MaxTrapDevices ||
             converted.Count(e => e.Kind == SessionEventKinds.SpellRun) > SessionEventKinds.MaxSpellRunEvents) return GameSessionFailure.EventBudgetExceeded;

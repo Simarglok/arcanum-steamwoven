@@ -111,4 +111,25 @@ public sealed class DiagnosticGridActorTests
         queue.Observe(session,SimulationTime.At(2),ActorIntent.Neutral);session.Advance(SimulationTime.At(3),queue.CompleteThrough(SimulationTime.At(3)));
         Assert.AreEqual(MovementPhase.Returning,session.State.Phase);
     }
+
+    [TestMethod]
+    public void SelfTestFrameClockNeverFallsBehindTheNewestObservation()
+    {
+        // ARC-DEV-1251: the session's time is an older wall-clock stamp; a quarantine read the clock later, 0.25 s on.
+        using var fixture = new GridWireFixture();
+        var session = new DiagnosticGridSession(fixture.Snapshot, SimulationTime.At(0), StepDuration.Of(8));
+        var queue = new GridInputQueue();
+        Assert.IsNull(queue.Newest);
+        var late = new SimulationTime(ExactScalar.Create(1, 4));
+        queue.Observe(session, late, ActorIntent.Neutral);
+        Assert.AreEqual(late, queue.Newest);
+        var naive = new SimulationTime(session.State.Time.Value + SelfTestFrameClock.Step);
+        Assert.Throws<InvalidOperationException>(() => queue.Observe(session, naive, ActorIntent.Neutral));
+        var next = SelfTestFrameClock.Next(session.State.Time, queue.Newest);
+        Assert.AreEqual(new SimulationTime(late.Value + SelfTestFrameClock.Step), next);
+        queue.Observe(session, next, ActorIntent.Neutral);
+        // The clock keeps stepping by a tenth, and without a newer observation it steps from its own basis.
+        Assert.AreEqual(new SimulationTime(next.Value + SelfTestFrameClock.Step), SelfTestFrameClock.Next(next, queue.Newest));
+        Assert.AreEqual(new SimulationTime(ExactScalar.Create(1, 10)), SelfTestFrameClock.Next(SimulationTime.At(0), null));
+    }
 }

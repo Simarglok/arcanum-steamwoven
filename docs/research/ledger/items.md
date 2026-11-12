@@ -243,7 +243,7 @@ BT10 (medium confidence before) and agrees with it; NI6's "destroyed unless pers
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
 | RK1 | source getter 0x4641A0 | The inventory source of an object: field 0x3D of a container (type 2), field 0xEF of an NPC (type 16), 0 for anything else (a PC included). | Original |
-| RK2 | schedule 0x4640C0, predicate 0x464150, call site 0x5733A9 in 0x5727B0 | Only an object with a source (RK1) is scheduled: the pending type-0x16 events naming it are removed (0x45BF10 with the predicate comparing the event's object with the globals 0x5E8818/0x5E881C), then one event is added after a draw of 43,200,000..86,400,000 game milliseconds (0x4CEF00; 12–24 hours), shifted right twice in a multiplayer game. An object without a source keeps any pending event. The window open schedules the shown object (global 0x6813A8) whenever it is set, in every mode of the window (BT4). | Original |
+| RK2 | schedule 0x4640C0, predicate 0x464150, call site 0x5733A9 in 0x5727B0 | Only an object with a source (RK1) is scheduled: the pending type-0x16 events naming it are removed (0x45BF10 with the predicate comparing the event's object with the globals 0x5E8818/0x5E881C), then one event is added after a draw of 43,200,000..86,400,000 game milliseconds (0x4CEF00; 12–24 hours as asked, but the 15-bit draw makes it 12 hours plus at most 32,767 ms: [VP68](#partial-rows-by-risk-items-slice-2-arc-res-1104), VPG5), shifted right twice in a multiplayer game. An object without a source keeps any pending event. The window open schedules the shown object (global 0x6813A8) whenever it is set, in every mode of the window (BT4). | Original |
 | RK3 | handler 0x464180 → 0x463C60 | The handler runs the body on the event's object and always reports done (the event is not repeated by the queue). The body does nothing for a null object or one without a source (RK1). An NPC: nothing when dead (0x45D8D0) or with a PC at the top of its leader chain (0x45DDA0), else it regenerates. A container with flag 0x400 (field 0x38) regenerates. Another container whose screen rectangle (0x43DFD0) meets the game window (0x5E8808..0x5E8814) is scheduled again (RK2) and nothing else happens. Off screen, the NPCs of the game-window-sized area around it (0x440FC0, mask 0x10000) are searched in list order for the first whose substitute (0x45F650: no leader, field 0x126, within 20 tiles) is the container; without one nothing happens; when that NPC is dead or has a PC leader nothing happens; otherwise the body runs on the NPC (it regenerates when it has a source of its own) and then the container regenerates. A container that does nothing is not scheduled again. | Original (BT10 confirmed) |
 | RK4 | regeneration 0x463E20 | Only an NPC or PC (types 15, 16; source field 0xEF) or a container (field 0x3D). A container with flag 0x200 is skipped while the editor global 0x5E87E4 is set; otherwise its draws are reseeded (0x4CEED0) from the local PC (0x40DA50: stat 0x1B × its background 0x4C2690 + stat 0x1A), the container's location and the byte pairs of the PC's own player name (0x441B60; corrected and completed by RK10), and after the generation its source is set to 0 and the flag 0x200 cleared, so it is generated once. A multiplayer client only sends a request (0x4EFBA0). The inventory is cleared first (RK5), even when the source is 0, which then ends it. | Original |
 | RK5 | clear 0x4EFAE0 → 0x463B30 (keep 1) | Every entry of the list (NPC fields 0xED/0xEE, container 0x3B/0x3C; worn and gold items included) is removed (0x467860), moved to the holder's location (0x4415C0) and destroyed (0x43CCA0), unless its item flags (field 0x57) have 0x2000, which stays in place. | Original (NI6 confirmed) |
@@ -541,3 +541,184 @@ IW17's "another item's targeting cursor and a trap device are not built" stays t
 **Not read.** The network branches (0x4EF6F0, 0x4EF790). The meaning of the interface global 0x5C71B8 beyond its two writes and of hotkey keys pressed while mode 0x10 is on top.
 The range word of goals 39 and 41 beyond the earlier AG5 reading (IA11). Whether Num Lock's toggled state is read inverted by 0x52B350 (IA8 follows the listing; L4 reads the
 same tests as "always runs"). Escape's route out of mode 0x10 (the leave case, IA5, shows only that any exit cancels).
+
+## Partial rows by risk (ARC-RES-1104)
+
+Source: V2 of the [function audit plan](../function-audit-plan.md#5-recommendation), first domain slice (items). Question: of the 83 `partial`
+registry rows of the items domain, which carry the most risk, and for the top of that list, does the registry's reason name every way
+Steamwoven differs from the original, and is each difference deliberate? The ranking of all 83 rows is
+[`triage/v2-items.csv`](../../verification/triage/v2-items.csv): score = 2 × W + R + S, where W is the state the function writes (2 saved
+or shared state: holder lists, gold, keys, item flags, saved events; 1 transient state; 0 none), R how often the game reaches it (2 every
+inventory action or every redraw; 1 one action or event kind; 0 rare) and S whether a smoke stage exercises the implementing method
+(0 one does, 1 none; judged from the stage descriptions and the methods the smoke files call). The top is the seven rows scored 7 and ten rows
+scored 6 that are the transfer, insert, wield, key and move functions themselves (17 functions); the helpers they call that also score 6
+(the encumbrance recalculation 0x45F820, the drop placement 0x466E50, the hotkey callback 0x5570D0) and the other rows, 66 in all, are
+the [second items slice](#partial-rows-by-risk-items-slice-2-arc-res-1104).
+
+Read on 2026-11-12. First reading: the existing rows (V1 triage, ledger sections Equipment to Keys, IW of the
+[inventory grid](ui-audio.md#inventory-grid-arc-ui-019), [item events](scripts.md#item-events-arc-script-041)); second reading: a fresh
+agent that read only the decompiled exports of the retail 1.0.7.4 executable and saw no registry reason, ledger verdict or Steamwoven
+code for these functions (method step 6). The two readings agree on every branch both describe; where the second reading adds a
+branch, the row says so, and this task checked each such addition against the exports, so it rests on two readings too. Then each function was compared with its implementing method. Classes of a difference: **N** network or
+editor branch (not relevant to the single-player game), **S** a session bound or policy written in the method's summary, **H** done by
+a host or another session method, **A** an original detail with no effect on state, **G** a gap that writes different state (a
+follow-up issue).
+
+| ID | Function | Readings | Steamwoven against the original | Verdict |
+| --- | --- | --- | --- | --- |
+| VP1 | inventory removal 0x467860 | Agree. The second reading adds: the item's location becomes -1 while its parent field and the in-inventory flag stay; the holder's gold or ammunition stack field is nulled without checking that it named this item (AM5); hotkey refresh, the AI item cache clear and the Drop-trigger item spells run after the wield-off hook; an NPC holder gets flag 0x40; REMOVE_ITEM (28) fires last with the holder as triggerer. | The hero's paths run 25 then 28 and the spell steps after the move (A: order of spells against scripts, already in the reason), encumbrance and hotkeys through the revision (H). The NPC flag 0x40 is not set (G, VPG1). Network lock request (N). | F2; partial |
+| VP2 | item removal from holder 0x466E00 | Agree: the parent or a log line, then VP1. | As VP1. | F2; partial |
+| VP3 | item insert 0x466640 | Agree (AM, NT3). The second reading adds: a location of -1 is only logged; a key-ring item is merged into a held ring first (0x466AA0); the merge of a gold or ammunition stack fires INSERT_ITEM (21) with the merged item and returns before the pickup spells, the wield hook, encumbrance, the NPC flag and the key fold; a key folds only into a holder that carries a ring. | Ammunition merge, key fold and insert-item order match; the merged stack runs no pickup executor (matches). Key-ring items and gold as items (S, not modelled), NPC flag 0x40 (G, VPG1). | F2; partial |
+| VP4 | item transfer 0x4617F0 (core 0x461810) | Agree (IE1–IE4, NT2). A parented item goes to VP5; else GET (4), the insert check with the PC's message, the item leaves the map, the insert, then the decay cancel. A wield-slot target gets no wield check here. | Match for the hero as recipient; NPC recipients through the NPC transfers (H), which set no NPC flag 0x40 (G, VPG1). | F2; partial |
+| VP5 | item transfer from a holder 0x461CA0 | Agree (NT2). The second reading adds: after the insert the decay is cancelled and scheduled again for 2 days, which only holds when the recipient is a junk pile (ID4). | The no-drop remove check is not run on any parented transfer (G, VPG2); NPC flag 0x40 (G, VPG1); containers and junk piles as recipients (S). | F2; partial |
+| VP6 | item drop 0x461AB0 | Agree. The parent is not checked (a parentless item drops with no triggerer); DROP (5), the remove check with the PC's message, up to 10 random tiles at the distance, the removal, the placement with its decay; an NPC dropping a weapon or armour gets LOOK_FOR_WEAPON or LOOK_FOR_ARMOR. | The hero's drop at distance 0 matches (a refusal after the drop script drops its writes, where the original keeps them: session policy, PI1, S; the tile fit test is a session bound, S). NPC drops go through the critical drop (also a spell's damage), which sets no LOOK_FOR_WEAPON or LOOK_FOR_ARMOR bit; the bits are saved and read by the AI's ground search (G, VPG3). | F2; partial |
+| VP7 | item drop on the owner's tile 0x461A70 | Agree: VP6 with distance 0. | As VP6. | F2; partial |
+| VP8 | item wield 0x464AE0 | Agree (IW11, WE7). The second reading adds: slot 1003 sends the speed recalculation notice for the item's own handle, where the wearer's would be expected; an item has no animation run, so it does nothing. | The window's flow (wear check, removals, the occupant's insert check, roll-back) matches; animation speed (A); the empty-slot insert check is the window's move (0x5788C0, IW11), not this function's. | F2; partial |
+| VP9 | item unwield 0x464C80 | Agree. | Match; the insert check's host part (H). | F2; partial |
+| VP10 | wield-on hook 0x4677B0 | Agree. Slots 1004 and 1005 set the weapon art, 1006 the armour art; then the Wear-trigger spells, the light from worn items and WIELD_ON (24). | Art and light are the viewer's (H); spells run after the move and its scripts (A, in the reason). | F2; partial |
+| VP11 | wield-off hook 0x467CB0 | Agree; slot 1006 goes back to the base art; Unwear-trigger spells, light, WIELD_OFF (25). | As VP10. | F2; partial |
+| VP12 | same-holder item move 0x5788C0 | Agree (IW4, IW10–IW12). The second reading adds: the item's no-display flag (0x10) is cleared first; a wield-slot target gets neither a fit test nor a wield check here (the window checked, IW11). | Match for the hero's grid; the no-display flag is not modelled (A: Steamwoven never sets it, so clearing it changes nothing; Take all skips items that carry it, registry row 0x579770); other holders through the transfers (H). | F2; partial |
+| VP13 | gold units 0x464830 | Agree (NT1). | Match within the reason's limits (S). | F2; partial |
+| VP14 | key fold 0x466A00 | Agree (KY). With no ring the key stays an ordinary item; with a ring the key number is added and the ring's inventory art updated. | The hero always holds the ring (S); the ring art is not modelled (A). | F2; partial |
+| VP15 | key ring add 0x466A50 | Agree. The second reading adds: the number is added before the key is destroyed, so a destroy script that refuses leaves both the key and its number. | No key script is run at the fold (A, unverified: no installed key prototype was checked for a destroy script). | F2; partial |
+| VP16 | schedule item decay 0x468090 | Agree (ID2, ID4). | Steamwoven cancels first, so a no-decay item also loses an earlier event, where the original keeps it and the firing ignores it (A: same result); the project's bound on pending decays (S). | F2; partial |
+| VP17 | item decay cancel 0x468110 | Agree (ID4): it cancels only an item that no longer decays. | Steamwoven cancels unconditionally; every caller calls it after the item left the ground or was deleted, except the schedule, whose cancel is 0x468090's own removal (VP16) (A: same result). | F2; partial |
+
+Findings, each with its follow-up issue:
+
+- **VPG1.** The insert and the removal set NPC flag 0x40 (ONF_CHECK_WIELD) on an NPC holder, so the NPC re-wields its best items at its
+  next AI gate (NT3, VP1, VP3, VP5). Steamwoven's NPC transfers set no flag. The gate's re-wield is not built yet either (the AI host's
+  re-wield is empty, #1139), so the flag alone changes nothing until it is. Issue [#1284](https://github.com/Simarglok/arcanum-steamwoven/issues/1284).
+- **VPG2.** The transfer between holders runs the remove check after the transfer script: an item with the no-drop flag is refused with
+  a message to a PC source or recipient (NT2, VP5). Steamwoven's loot from a body, container or junk pile, the pick pocket, the give to an
+  NPC, the barter and the dialog's negative `IN -name` (0x415BA0 → 0x4617F0 → 0x461CA0) run no such check, so a no-drop item can leave its
+  holder. Issue
+  [#1283](https://github.com/Simarglok/arcanum-steamwoven/issues/1283).
+- **VPG3.** The drop sets LOOK_FOR_WEAPON (a weapon) or LOOK_FOR_ARMOR (an armour item) on an NPC that drops it (VP6), so its AI searches
+  the ground for a replacement. Steamwoven's NPC drops (the critical drop, also used by a spell's damage) set no bit, although the bits are
+  saved and the AI's ground search reads them. Issue [#1288](https://github.com/Simarglok/arcanum-steamwoven/issues/1288).
+
+No anomaly of the original needs a decision: the slot 1003 notice on the item's handle (VP8) does nothing, and the destroy-script order
+(VP15) was not checked against the installed data. No row became `full`: each keeps a difference of class S, H or G.
+
+**Not read.** The network callbacks of the removal and the insert (0x467D60, 0x467E00, 0x466C40, 0x466CF0), the NPC float line of a
+refused insert (0x4D5450), the hotkey slot assignment of a hero insert (0x460590 → 0x57EED0) beyond its outline, and the other-holder
+branch of 0x5788C0 (InvenItemTransfer 0x578B80 and the quantity window).
+
+## Partial rows by risk, items slice 2 (ARC-RES-1104)
+
+Source: V2 of the [function audit plan](../function-audit-plan.md#5-recommendation), the second items slice: the 66 rows of
+[`triage/v2-items.csv`](../../verification/triage/v2-items.csv) that the [first slice](#partial-rows-by-risk-arc-res-1104) left (column
+`slice` 2), from score 6 down to 1: the helpers of the transfers (encumbrance, drop placement, hotkey callback), the object break, item
+damage and use, the restock and the regeneration, the body drops, the traps, the barter window's drops and transfer, the repair and
+the inventory finders. Same question and classes as the first slice: does the registry's reason name every way Steamwoven differs
+from the original, and is each difference deliberate?
+
+Read on 2026-11-12. First reading: the existing rows (their reasons and the ledger sections they cite: Equipment, Item durability, Placed
+items, Ammunition, Barter, Merchant stock, Merchant restock, Generated-once containers, NPC best items, Weight and encumbrance, Junk piles,
+Item aiming, the [trap rows](technology.md#trap-state-arc-world-076), the [drop cell](combat.md#drop-cell-arc-combat-010), the
+[object damage](combat.md#object-damage-arc-combat-008), the [arrange button](ui-audio.md#arrange-button-arc-dev-339), the
+[best items](character.md#starting-kit-arc-world-034), the [body decay](npc-ai.md#body-decay-built-arc-world-1158) and the census triage
+for the 20 rows read once). Second reading: four fresh agents, each given only addresses and working names, that read only the
+decompiled exports of the retail 1.0.7.4 executable (with the field-name table and `docs/formats`) and saw no registry reason, ledger
+verdict or Steamwoven code (method step 6). Where they disagree with the first reading the row says so, and this task settled the
+point in the export (VP50, VP66, VP68) rather than by choice. No function calls or jumps into `.IIDKing` (method step 5). Then each
+function was compared with its implementing method. Classes as in the first slice: **N** network or editor branch, **S** a session
+bound or policy, **H** a host or another method, **A** no effect on state, **G** a gap that writes different state (an issue).
+
+| ID | Function | Readings | Steamwoven against the original | Verdict |
+| --- | --- | --- | --- | --- |
+| VP18 | item damage setter 0x43D530 | Agree (DU3). The second reading adds: no upper clamp, and the critter's rest timer is the Resting event (type 7) one hour ahead, added only when none is pending. | The write matches (a negative value as 0); the network branch (N); the rest timer and the change notice are the life domain's and the host's (H). | F2; partial |
+| VP19 | object break 0x43F1C0 | Agree (DU4, OD7–OD12, OD15). The second reading adds only that render bits 0x0B000000 are cleared after every branch except projectiles and critters (OD7 has it). | The item branch matches; the take-off or drop, the BUST script and the sound are the callers' and the viewer's, the animation stop and the render bits the host's (H). The container branch spills only the stored items: a container with flag 0x200 that was never generated spills them instead of its generated goods, where the original clears and generates it first (G, VPG6), and the items a barter window sold into a container are not spilled and are lost with it, where the original spills its whole list (G, VPG7). | F2; partial |
+| VP20 | encumbrance recalculation 0x45F820 | Agree (WE5). | The hero only, once per revision (S); effect 158 entries, the level message and the fatigue timer as the original; the session's effect list bound (S); the animation speed (H). The original's nested recalculation through each effect add changes nothing the final state shows (A). | F2; partial |
+| VP21 | item use 0x462CC0 | Agree (TP1, IA14). The second reading confirms the scroll's minimum intelligence is a constant 5 for every spell and that a use script's refusal still costs 4 action points. | Order, refusals and action points match (AiExecutorRules.UseItemNow); a healing kit with no target does nothing here where the original starts the heal skill with a null target, unreachable because both installed healing items carry OIF_NEEDS_TARGET (A, IA16); messages and cursor are the host's (H); the network branch (N). | F2; partial |
+| VP22 | item use on a tile 0x462FC0 | Agree (IA12). The second reading leaves open whether the tile reaches the cast (it is passed to the interface hook only); IA12 traced the hook (0x4CB7A0, 0x4605E0), so the cast at the tile rests on IA12. | Match within the reason (UseItemOnTileNow); the network branch is not in this function (IA12). | F2; partial |
+| VP23 | drop whole inventory 0x463730 | Agree (RK13, OD9). Mode 0 lays every item on the holder's tile (0x4415C0: no pile, no decay), but every caller passes 1 (0x43F1C0, 0x4598D0, 0x4A39F0), so it is never used; mode 1 drops each through the placement (0x466E50); a container with flag 0x200 is generated first while the editor global is clear; a failed removal skips the item. | The container spill's order, placement and decay match, but only for the stored items: a container with flag 0x200 is not generated before its spill (G, VPG6) and the items sold into a container are not spilled (G, VPG7). The other callers (the summoned objects' run end 0x4598D0, UE4, and the network save 0x4A39F0) are not modelled (S). | F1 → F2; partial |
+| VP24 | drop inventory then delete 0x463860 | Agree (RK13). A container with flag 0x200 is generated first, without the editor test of 0x463730 (reachable only through the summon cleanup 0x459740). Per item, last first: one with spell flag 0x4000 (summoned, field 0x14) or item flag 0x10 (no display) is laid on the holder's tile and destroyed; every other one goes through the placement (mode 1) with no drop script; a failed removal skips the item. | The walk order, the placement and the decay match, and no drop script runs (as in the original). Steamwoven destroys an item with item flag 0x20 (no drop) and drops a summoned or no-display item; the original drops the no-drop item and destroys the others (G, VPG4). It also destroys the added items the ground cannot hold (gold, ammunition, piles, given items, made items of other kinds; BD3's limit), where the original drops them (G, VPG4). The summoned container cleanup (S, not implemented). | F1 → F2; partial |
+| VP25 | inventory clear 0x463B30 | Agree (RK5). The second reading adds that the removal's failure is not checked, so a removal that fails still lays the item down and destroys it. | Match (the keep rule); the moves are the caller's (H). | F1 → F2; partial |
+| VP26 | inventory regeneration 0x463E20 | Agree (RK4–RK7, RK10, RK15). The second reading adds: the clear runs before the source is tested, so a container with flag 0x200 and source 0 is emptied at every regeneration and keeps its flag (RK10: none installed); the global generator keeps the seed afterwards; the coin draw cannot exceed the low bound by more than 32,767 (the 15-bit draw, RK11). | Match within the reason; the session keeps its own generator for every draw outside generate-once containers, so the seed does not leak into later draws (S); a coin range wider than 32,768 draws over the whole range in the session, where the original's 15-bit draw cannot reach its top: the cause of VPG5, unverified here because the installed sets' coin ranges were not checked (noted on #1300). | F1 → F2; partial |
+| VP27 | restock time event 0x464180 | Agree (RK3): the event's object goes to 0x463C60 and the event reports done. | Match; the NPC's wield after its regeneration is built (WieldNpcBest, RK15), so the registry reason's "not modelled" was stale and is corrected. | F1 → F2; partial |
+| VP28 | mark holder items identified 0x4643D0 | Agree (BT11): item flag 0x1 on every entry of the list (the count field, not the array length), through the synced setter; items inside bags are not reached. | Match for the NPC and its container (OpenBarter). | F1 → F2; partial |
+| VP29 | new gold pile 0x464970 | Agree (NT1): prototype 9056 at the place, then its coins; no check of the count. | The hero's coin drop makes a pile of the kind the host names (S). | F1 → F2; partial |
+| VP30 | best item for a slot 0x465170 | Agree (WB1–WB5). The second reading adds: an untrained or zero-effectiveness weapon scores negative and can still be chosen; with no fitting weapon the weapon slot is emptied. | Match within the reason (the tie by creation order for handles, S; move scripts and item spells, S). | F2; partial |
+| VP31 | best items for every slot 0x4654F0 | Agree (WB6): slots 1000..1008 in order, so the weapon is chosen before the shield. | As VP30. | F2; partial |
+| VP32 | new ammunition object 0x465A40 | Agree (AM3): the table 0x5B32B0 (7038..7041) by ammunition type, unchecked index; the units through the synced setter. | The kind is the host's (S). | F2; partial |
+| VP33 | drop placement 0x466E50 | Agree (JP1, JP2, PI3). | Match within the reason (S: no network message, the map's own piles, sweep scripts, stack merges, bounds). | F2; partial |
+| VP34 | trap spotted mark 0x4BC090 | Agree (TT4). The second reading adds: a node for the multiplayer list is allocated at every call before the gate, in single player too, and freed only at exit (a leak, no effect on play). | Match (flags and the line); the per-player list (N), the eye candy (H). | F2; partial |
+| VP35 | trap removal 0x4BC220 | Agree (TT5): a trap object is destroyed; any other object loses its use script's number and the spotted eye candy, flags 0x1000000 and 0x2000000 stay. | Match; the multiplayer list's unlink (0x4BD340) is N. | F2; partial |
+| VP36 | trap device on a tile 0x4BC480 | Agree (TP2, IA13). The second reading adds: a failed creation of the script trap's marker returns 0 with the device kept and no message; a mechanical device is armed without checking that it carries a script. | Match within the reason; a creation failure and a device without a script do not occur in the session (the installed script devices 15100 and 15120 carry scripts, IA16) (A). | F2; partial |
+| VP37 | trap spell timer 0x4BC690 | Agree (TP3): type 28, delay × 1000 ms (both callers pass 88). | Match. | F2; partial |
+| VP38 | trap time event handler 0x4BC780 | Agree (TP3). | Match. | F2; partial |
+| VP39 | trap trigger 0x4BCB00 | Agree (TT7, OD4). | Match. | F2; partial |
+| VP40 | native trap script run 0x4BCB70 | Agree (TT8). The second reading adds: the floating line also sets object flag 0x200000 on the triggerer, with no null check before it (a radius trap with no triggerer would pass a null handle). | Match within the reason; the line and the flag are the host's (H); a radius trap with no triggerer floats nothing here (A). | F2; partial |
+| VP41 | repair service 0x4C8E60 | Agree (DU8, RP2): a network client sends a request; otherwise the tail 0x4C8EEA. | Item side matches (S: hp_adj bound). | F2; partial |
+| VP42 | repair service tail forced run payment refresh 0x4C8EEA | Agree (DU8): the forced repair run (flag 0x1000, skill 12), then the payment 0x464830 (which pays nothing when the payer's pile is short, the caller checked first), then the window refresh; the run's result is not checked. | The item side (S); the forced run's other parts, the payment and the refresh wait for the barter window (S). | F1 → F2; partial |
+| VP43 | hotkey inventory callback 0x5570D0 | Agree. The second reading names the parts: entries naming the item cleared, every item entry's count refreshed (0x462B40); with the change flag, the two selected-action records naming the item cleared, mode 8 closed when its item is the item, the weapon button refreshed for location 1004; without it, the weapon spell button refreshed. | Entries and counts match (SettleHotkeys); the selected-action records, mode 8 and the buttons are left out (H, in the reason). | F1 → F2; partial |
+| VP44 | barter open stock 0x572640 | Agree (BT11, RK12). | Match within the reason (BT11's 0-coin pile, a fix in both modes; the steal mode and the critter's sound are not modelled, S). | F1 → F2; partial |
+| VP45 | buy drop 0x575200 | Agree (BT5): the unit quote against the PC's coins (not the quote × count), a quote of 0 cancels outside a follower's window. | Match (AreaBarter.Buy); the loot take and the grid place are the window's (H). | F1 → F2; partial |
+| VP46 | barter sale drop 0x575360 | Agree (BT5): the cap at the merchant's coins comes after the 0 test, so a merchant with no coins takes the item for nothing (kept as the original). | Match (the cap). | F2; partial |
+| VP47 | junk pile dissolve 0x463540 | Agree (JP4, JP5). | Match within the reason. | F2; partial |
+| VP48 | inventory arrange 0x4670A0 | Agree (IW39, IW40). | Match within the reason. | F1 → F2; partial |
+| VP49 | trap device on an object 0x4BC2E0 | Agree (TP2, IA13). The second reading adds that a mechanical device is armed without checking that it carries a script. | Match within the reason (A for a device without a script, as VP36). | F2; partial |
+| VP50 | trap disarm 0x4BC7B0 | Agree (TT5, TT6), except the item of a PC-placed trap with a spell byte: the second reading wrote 11005, a slip of its sum: the export adds 0x235E to 0x179F, 15101 (TT6). | Match (the outcome; the item's creation is the caller's, H). | F2; partial |
+| VP51 | inventory grid cells mark 0x466310 | Agree (JP3); no bounds check (an art of width or height 0 would mark 2^27 cells). | The session rebuilds occupancy and refuses a rectangle off the grid (S). | F2; partial |
+| VP52 | trap spot 0x4BBE40 | Agree (TT3, SP2). | Match within the reason: the item modifier and the NPCs' walk-check attempts are built (ARC-MAGIC-1189); an NPC's use of a trapped object and its step onto a trap object are not (S). | F2; partial |
+| VP53 | item drop distance 0x461A90 | Agree (PI1). | Match. | F2; partial |
+| VP54 | item wear check 0x464D20 | Agree (EQ1). | Match; the art lookups are the caller's (H). | F2; partial |
+| VP55 | weapon speed 0x465CF0 | Agree (EQ10). | Match. | F2; partial |
+| VP56 | drop tile try 0x4F4E40 | Agree (DC1). | Match (the map is the host's port, H). | F2; partial |
+| VP57 | item cursor begin 0x571AA0 | Agree (IA2, IA4). | Match within the reason. | F2; partial |
+| VP58 | item cursor apply 0x571CB0 | Agree (IA7–IA9). | Match within the reason. | F2; partial |
+| VP59 | encumbrance level 0x45F790 | Agree (WE6). | Match. | F2; partial |
+| VP60 | item effective power 0x4614A0 | Agree (EQ9). | Match. | F2; partial |
+| VP61 | item price 0x461F80 | Agree (BT1, DU5). | Match within the reason (F3 receipt). | F3; partial |
+| VP62 | thrown item damage 0x462330 | Agree (WB8). | Match. | F2; partial |
+| VP63 | holder item by name 0x462480 | Agree: the first item whose name field (0x16) equals the value, in a container's or critter's list; 0 otherwise. | Yes or no for the dialog conditions (S). | F1 → F2; partial |
+| VP64 | stack of the same prototype 0x462930 | Agree (AM1): basic number 15065 (prototype 15085) answers none; the first other entry of the same prototype. | Match within the reason. | F2; partial |
+| VP65 | hotkey item count 0x462B40 | Agree: 1 for the item plus 1 per other entry of its prototype (no quantities); 15065 answers 1. | Match within the reason (counted at every redraw, A). | F1 → F2; partial |
+| VP66 | inventory use check 0x462C30 | **Disagree on the extent.** The second reading: 0 for an item with OIF_CAN_USE_BOX (0x80), else 6 (a null item too); nothing more. The first reading's second part (the hotkey placement hook 0x460560 for an item with a held flag) belongs to the next function, 0x462C60, which the export lists on its own (39 bytes for 0x462C30); this task checked the boundary in the export. | Match (HotkeyRules.PlanItem's can-use test); no difference is left, so only the method's `[OriginalFunction]` scope keeps the row partial (a code change). | F1 → F2; partial |
+| VP67 | restock event handler 0x463C60 | Agree (RK3, RK17): no reschedule after a regeneration, nor when the merchant is missing, dead or led by a PC; only an on-screen container is scheduled again. | Match (RestockRules.Fire). | F1 → F2; partial |
+| VP68 | restock event schedule 0x4640C0 | **Disagree on the delay's range.** Both read the draw 43,200,000..86,400,000 ms (RK2); the second reading adds that the range draw takes one 15-bit value (0..32,767) modulo the width (RK11, checked in the export: the generator returns bits 8..22), so the delay is 12 hours plus at most 32.8 seconds, never up to 24 hours; a quarter in a network game. | Steamwoven draws the whole 12..24 hours from the session's generator (G, VPG5). | F1 → F2; partial |
+| VP69 | merchant buy list test 0x464200 | Agree (BT8). | The substitute container's retry is the host's (AreaBarter.Deals, H). | F2; partial |
+| VP70 | ammunition stack by type 0x465870 | Agree (AM5, AM6): a critter's field 0xE9 + type; a container's prototype search compares a handle with a bare number and never matches. | Match within the reason. | F2; partial |
+| VP71 | room for item in grid 0x4664C0 | Agree (JP3). | Match within the reason. | F2; partial |
+| VP72 | item insert check 0x466510 | Agree (WE4, WE10, BG4). | Match within the reason. | F2; partial |
+| VP73 | trap known 0x4BBFE0 | Agree (TT2). | Match (N: the per-player list). | F2; partial |
+| VP74 | trap object on a tile 0x4BCAB0 | Agree (DC8, IA13). | Match. | F2; partial |
+| VP75 | native trap effect 0x4BCDC0 | Agree (TT11–TT16); the second reading marks the fire and electrical slots as its own inference. | Match within the reason (TT15's shot not ready). | F2; partial |
+| VP76 | inventory source set loop 0x4BF640 | Agree (BT8, BT9). The second reading adds: a gap in the loot file's numbering stops the loop with the later sets unread (the reader treats them as unreachable). | Match within the reason. | F2; partial |
+| VP77 | loot line parse 0x4BF7B0 | Agree (BT9). | Match within the reason. | F2; partial |
+| VP78 | item art broken test 0x5045A0 | Agree: bit 0x400 of an item art (class 6), 0 for any other class. | Match (a bool, A); no difference is left, so only the method's `[OriginalFunction]` scope keeps the row partial (a code change). | F1 → F2; partial |
+| VP79 | item under inventory point 0x575FA0 | Agree. The second reading adds: an item skipped for object flag 0x2 or item flag 0x10 leaves the out holder unwritten. | Match within the reason (the own window's worn slots and grid). | F1 → F2; partial |
+| VP80 | repair quote 0x578760 | Agree (DU7). | TC7 switch (S). | F2; partial |
+| VP81 | barter transfer 0x578EA0 | Agree (BT5, BT6). The second reading adds: with flag 0x10 and a price of 0 or below the total is formatted unset into the line (a network path, UNSURE reachable). | Match within the reason. | F2; partial |
+| VP82 | holder item by prototype 0x462540 | Agree (SA1): flags 1 skip worn items, 2 skip an item whose art carries the broken bit, 4 compare the description; a match in 2000..2009 is kept as the last fallback. The first registry reason left out flag 2. | Match for flag set 7 (SchematicAssemblyRules.Find). | F1 → F2; partial |
+| VP83 | item cursor mask 0x5719F0 | Agree (IA3). | Match within the reason. | F2; partial |
+
+Findings, each with its issue:
+
+- **VPG4.** The body's inventory walk (0x463860, the decay of a dead body) destroys an item with spell flag 0x4000 (summoned) or item
+  flag 0x10 (no display) and drops every other one, a no-drop item included (RK13 and the second reading agree). The session's
+  `FireBodyDecay` destroys the no-drop items (item flag 0x20) and drops the others, so a dead NPC's no-drop item is lost where the
+  original leaves it on the ground (BD3 read the flag wrongly); it also destroys the added items the ground cannot hold (BD3's limit). Issue [#1299](https://github.com/Simarglok/arcanum-steamwoven/issues/1299).
+- **VPG5.** The restock delay (0x4640C0) is drawn by the original generator's range draw, one 15-bit value modulo the width (RK11), so
+  a restock comes 12 hours plus at most 32.8 seconds after it was scheduled, never later; the session draws 12 to 24 hours. Whether the
+  narrow range is followed in both modes or is a gameplay bug with a switch is the owner's choice (recommended: follow it). Issue
+  [#1300](https://github.com/Simarglok/arcanum-steamwoven/issues/1300).
+- **VPG6.** A container with flag 0x200 that is broken before it was ever generated spills its generated goods in the original (the
+  break's 0x463730 regenerates it first, OD9, RK13); the session spills only the stored items, so the goods never exist. Issue
+  [#1301](https://github.com/Simarglok/arcanum-steamwoven/issues/1301).
+- **VPG7.** The break's spill walks the container's whole list (0x463730); the session spills only the stored items, so the items a
+  barter window sold into a container (ARC-WORLD-090) are not spilled, and the spilled container then lists nothing, so they are lost
+  (found by the independent review). Issue [#1306](https://github.com/Simarglok/arcanum-steamwoven/issues/1306).
+
+Disagreements between the readings, settled in the export: the inventory use check 0x462C30 is 39 bytes and ends at the use-box test;
+the hotkey hook part of its first reading is the next function 0x462C60 (VP66); the restock delay's range (VP68, above); the disarm item
+of a PC-placed trap with a spell byte is 0x179F + 0x235E = 15101, as TT6 reads, not the second reading's 11005 (VP50). The first
+reading of 0x462540 left out its flag 2 (broken items skipped), which SA1 and the second reading have (VP82). Twenty rows read once
+(F1) move to F2 with this section as evidence, except 0x4C8EEA, whose evidence stays the wave 3 section its triage test requires. No
+row became `full` (0x462C30 and 0x5045A0 keep no difference; their marks' scope is code), and no anomaly of the original needs a decision beyond VPG5.
+
+**Not read.** The callers of 0x463730 other than the break (0x4598D0, 0x4A39F0), the summon cleanup's call of 0x463860 (0x459740), the
+hook function 0x462C60, the network handlers of the regeneration and the arrange, and the attack dispatcher with a non-critter attacker
+behind the shot of 0x4BCDC0 (TT15).

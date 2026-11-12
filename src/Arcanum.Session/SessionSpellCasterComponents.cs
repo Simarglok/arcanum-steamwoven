@@ -42,6 +42,11 @@ public sealed partial class SessionSpellCaster
         // ARC-MAGIC-049 (E4-e): the Cast component (0x451740) starts another spell as the run's parent's, at the current target, without the casting goal (SessionSpellCasterNested.cs).
         [SpellComponentType.Cast] = static (c, run, component, target) => c.CastComponent(run, component, target),
         [SpellComponentType.Effect] = static (c, run, component, target) => c.EffectComponent(run, component, target) ? SpellComponentOutcome.None : null,
+        // ARC-MAGIC-1146 (the leftovers of the 0x44-0x45 triage): EnvFlag is the original's no-op stub (0x452F10), Recharge adds charges to an item (0x454920), Trait64 stores a tile or a handle in a critter field (0x452E40)
+        // (SessionSpellCasterRemainders.cs); TraitIdx and Interrupt (a no-op in the original too, MG7) have no handler and stay "not ready".
+        [SpellComponentType.EnvFlag] = static (_, _, _, _) => EnvFlagComponent(),
+        [SpellComponentType.Recharge] = static (c, run, component, target) => c.RechargeComponent(run, component, target),
+        [SpellComponentType.Trait64] = static (c, run, component, target) => c.Trait64Component(run, component, target),
     };
 
     // Damage and Heal: the component's data on its target object; without the target object the component does nothing and is not "not ready" (its data is there).

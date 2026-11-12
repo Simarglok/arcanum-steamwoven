@@ -1,4 +1,5 @@
 using Arcanum.Data.Area;
+using Arcanum.Presentation.Hud;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
@@ -22,7 +23,8 @@ public partial class TerrainViewerApp
     // 3). Space turns the setting off (the round ends, combat mode stays), the game clock flows and the hero's fatigue recovers through
     // the event pump; R leaves combat mode. ARC-COMBAT-022: a right click first, in real time, keeps combat mode while the hero walks,
     // leaves it once the hero stands, never enters it and ends prowling; at the end, on the hero's subturn of a new round, it leaves
-    // combat mode and ends the round. The NPC, the hero's fatigue and the setting are restored for the later stages.
+    // combat mode and ends the round. ARC-UI-1114: the combat HUD is read along the way (the running lights and the marked NPC on its subturn, the hero's points as lamps, the walk
+    // preview and the charge's pending cost, the attack preview, the HUD gone with the round; ARC_AREA_HUD_CAPTURE saves readbacks). The NPC, the hero's fatigue and the setting are restored for the later stages.
     private async Task RunAreaTurnBasedSmokeAsync(TerrainLoadResult? mapMode = null)
     {
         if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _readyArea is not { } area)
@@ -46,6 +48,7 @@ public partial class TerrainViewerApp
 
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         var numLock = _numLockRun; var option = _alwaysRunOption; var setting = _turnBasedSetting; var concealed = HeroConcealed;
+        var hudForSelfTest = _combatHudForSelfTest;
         _worldFocusSimulationForSelfTest = true;
         // ARC-DEV-133: the search places the hero, and the safety gate opens only under focus. The smoke owns the focus from here on, as every
         // smoke does before its first placement, not the window's own, which a run behind another window does not have.
@@ -172,6 +175,19 @@ public partial class TerrainViewerApp
             // Space out of combat mode: the setting only.
             Tap(Key.Space);
             Require(_turnBasedSetting && session.QueryCombatRound() is null, "Space turned the setting on without a round: " + _turnBasedNotice);
+            // ARC-UI-1114: the combat HUD (action-point lamps, turn-order list) is drawn while a round runs; this stage reads it.
+            _combatHudForSelfTest = true;
+            // ARC_AREA_HUD_CAPTURE=<ignored path prefix> saves readbacks of the HUD for the graphics composite (never committed).
+            var hudCapture = System.Environment.GetEnvironmentVariable("ARC_AREA_HUD_CAPTURE");
+            async Task HudShot(string name)
+            {
+                if (string.IsNullOrWhiteSpace(hudCapture)) return;
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                using var image = GetViewport().GetTexture().GetImage();
+                Require(image.SavePng($"{hudCapture}-{name}.png") == Error.Ok, "capture saved");
+            }
+            ActionPointLamp[] HudLamps() { RefreshCombatHud(); return _combatHud?.LampsForSelfTest ?? throw new InvalidOperationException("ARC-UI-1114 smoke: the combat HUD is not drawn"); }
             // R: combat mode and round 1, the NPC first (the party goes last).
             Tap(Key.R);
             Require(HeroInCombatMode && session.QueryCombatRound() is { Turn: 1 } first && first.Participants.Contains(critter), "R began round 1 with the NPC: " + _combatModeNotice);
@@ -181,6 +197,13 @@ public partial class TerrainViewerApp
             var ignored = false;
             if (!Round().Actor.IsHero)
             {
+                // CH5: on another participant's subturn three lights run along the lamps, and the list marks that participant, not the hero.
+                var cue = HudLamps();
+                Require(cue.Count(l => l == ActionPointLamp.Left) == ActionPointRules.CueLights && cue.Count(l => l != ActionPointLamp.Off) == ActionPointRules.CueLights,
+                    "ARC-UI-1114: three running lights on the NPC's subturn: " + string.Join(",", cue));
+                Require(_combatHud!.ListShownForSelfTest && _combatHud.RowTextsForSelfTest.Count(t => t.StartsWith("> ", StringComparison.Ordinal)) == 1
+                    && !_combatHud.RowTextsForSelfTest.Contains("> Hero"), "ARC-UI-1114: the list marks the NPC: " + string.Join("|", _combatHud.RowTextsForSelfTest));
+                await HudShot("npc-turn");
                 _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = Screen(far!.Value), GlobalPosition = Screen(far.Value) });
                 ignored = !HeroWalking && _worldRouteClick.Contains("another participant", StringComparison.Ordinal);
                 Require(ignored, "a press on the NPC's subturn is ignored: " + _worldRouteClick);
@@ -189,6 +212,38 @@ public partial class TerrainViewerApp
             Require(HeroTurn(), "the NPC's subturn passed to the hero");
             var grant = Round().ActionPoints;
             Require(grant >= TurnBasedRules.MinActionPoints, $"the hero's grant {grant}");
+            // ARC-UI-1114 (CH2, CH4): on the hero's subturn the lamps show its points (no pending cost yet), the list marks the hero.
+            var lit = Math.Min(grant, ActionPointRules.LampCount);
+            var points = HudLamps();
+            Require(points.Count(l => l == ActionPointLamp.Left) == lit && points.Count(l => l != ActionPointLamp.Off) == lit, $"ARC-UI-1114: {lit} lamps for {grant} points: " + string.Join(",", points));
+            var rowTexts = _combatHud!.RowTextsForSelfTest;
+            Require(!session.Rules.Interface.TurnOrderListHidden && _combatHud.ListShownForSelfTest && rowTexts.Count(t => t.StartsWith("> ", StringComparison.Ordinal)) == 1 && rowTexts.Contains("> Hero")
+                && rowTexts[0] == $"Round {Round().Turn}", "ARC-UI-1114: the list marks the hero: " + string.Join("|", rowTexts));
+            // The hover preview of a walk one cell away: the check stores 2 as the pending cost, so the lamps show the points left and the cost.
+            HoverIndex();
+            var stepAhead = Enum.GetValues<NeighborDirection>().Select(d => (Direction: d, Cell: RoutePlanner.Neighbor(((AreaGridSession)_worldActor.Session!).State.CommittedCell, d)))
+                .First(n => new AreaRouteSource(map.Steps, map.Chart).Assess(((AreaGridSession)_worldActor.Session!).State.CommittedCell, n.Direction) == RouteStepVerdict.Open && n.Cell != targetCell).Cell;
+            // The pointer over the cell goes through the viewer's own hover (the hook of ShowAreaHover), not a direct call.
+            HoverAtForSelfTest(Screen(stepAhead));
+            Require(_hoverAction == AreaHoverAction.Walk, $"ARC-UI-1114: the hover over the next cell is a walk: {_hoverAction}");
+            Require(_apPending == TurnBasedRules.WalkStepCost, $"ARC-UI-1114: the walk preview stored {_apPending}");
+            var preview = HudLamps();
+            // Worked by hand: grant points, cost 2 → grant − 2 green lamps, then 2 orange, the rest off (the 20-lamp cap aside).
+            var greenLamps = Math.Min(grant - 2, ActionPointRules.LampCount); var orangeLamps = Math.Min(2, ActionPointRules.LampCount - greenLamps);
+            Require(preview.Take(greenLamps).All(l => l == ActionPointLamp.Left) && preview.Skip(greenLamps).Take(orangeLamps).All(l => l == ActionPointLamp.Cost)
+                && preview.Skip(greenLamps + orangeLamps).All(l => l == ActionPointLamp.Off), "ARC-UI-1114: lamps preview the walk's cost: " + string.Join(",", preview));
+            // The drawn lamps, not only the computed ones: green first, then orange, inside the window.
+            Require(_combatHud!.LampColorForSelfTest(0) == new Color(0f, 1f, 0f) && (orangeLamps == 0 || _combatHud.LampColorForSelfTest(greenLamps) == new Color(1f, .5f, 0f)),
+                "ARC-UI-1114: the drawn lamps' colours");
+            var panelRect = _combatHud.PlacementForSelfTest.Panel;
+            Require(new Rect2(Vector2.Zero, GetViewport().GetVisibleRect().Size).Encloses(panelRect) && _combatHud.LampRectForSelfTest(0).Size.X > 0, $"ARC-UI-1114: the lamp panel is inside the window: {panelRect}");
+            await HudShot("hero-preview");
+            HoverReleaseForSelfTest(); // the pointer leaves: the pending cost stays (an action that runs no check leaves it, CH4)
+            Require(_apPending == TurnBasedRules.WalkStepCost, $"ARC-UI-1114: the pending cost stays after the pointer leaves: {_apPending}");
+            // The "before" frame: the same scene without the HUD, as it was drawn before this change.
+            _combatHudForSelfTest = false; RefreshCombatHud();
+            await HudShot("before");
+            _combatHudForSelfTest = true; RefreshCombatHud();
 
             // One walk step.
             var grid = (AreaGridSession)_worldActor.Session!;
@@ -198,12 +253,21 @@ public partial class TerrainViewerApp
             FramesUntil(() => !HeroWalking && _worldActor.Session!.State.Phase == MovementPhase.Settled);
             Require(((AreaGridSession)_worldActor.Session!).State.CommittedCell == step, "the hero walked one cell");
             Require(HeroTurn() && Round().ActionPoints == grant - TurnBasedRules.WalkStepCost, $"the step cost 2: {grant} -> {Round().ActionPoints}");
+            // CH4: the charge stores its cost too and does not clear it: the lamps show the points left against the same cost.
+            var afterStep = HudLamps(); var leftLamps = Math.Min(grant - 2 * TurnBasedRules.WalkStepCost, ActionPointRules.LampCount);
+            Require(_apPending == TurnBasedRules.WalkStepCost && afterStep.Count(l => l == ActionPointLamp.Left) == leftLamps
+                && afterStep.Count(l => l == ActionPointLamp.Cost) == Math.Min(2, ActionPointRules.LampCount - leftLamps),
+                $"ARC-UI-1114: the lamps after the step: pending {_apPending}, " + string.Join(",", afterStep));
 
             // E ends the subturn; round 2 one game second later, the grant again.
             Tap(Key.E);
             FramesUntil(HeroTurn, 20);
             Require(Round().Turn == 2 && HeroTurn() && Round().ActionPoints == grant, $"E passed the turn: round {Round().Turn}, AP {Round().ActionPoints}");
             Require(session.QueryClockSnapshot().GameTimestampMs == clock + TurnBasedRules.RoundGameTimeMs, "one game second per round");
+            // CH4: a subturn start runs the check with cost 0, so the new subturn shows all its points and no cost.
+            var fresh = HudLamps();
+            Require(_apPending == 0 && fresh.Count(l => l == ActionPointLamp.Cost) == 0 && fresh.Count(l => l == ActionPointLamp.Left) == Math.Min(grant, ActionPointRules.LampCount),
+                $"ARC-UI-1114: the new subturn cleared the pending cost: {_apPending}, " + string.Join(",", fresh));
 
             // Next to the NPC a click attacks it; the start charges the attack's cost.
             var adjacent = Near(1);
@@ -214,6 +278,9 @@ public partial class TerrainViewerApp
             _areaSmokeTime *= 10; _worldTestTime = SimulationTime.At(_areaSmokeTime, 10);
             var point = await HoverPointAsync(this, commands[target.Row.Key]) ?? throw new InvalidOperationException("ARC-COMBAT-020 smoke: NPC not visible");
             var cost = TurnBasedRules.AttackCost(session.QueryHeroAttack()!.WeaponSpeed);
+            // ARC-UI-1114: the attack preview next to the NPC is the attack's cost alone (CH4, 0x4B78D0: no approach at one cell).
+            HoverAtForSelfTest(point);
+            Require(_hoverAction == AreaHoverAction.Attack && _apPending == cost, $"ARC-UI-1114: the attack preview stored {_apPending} for {_hoverAction}, expected {cost}");
             _worldTestTime = SimulationTime.At(_areaSmokeTime, 10);
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point });
             FramesUntil(() => _attack is null, 400);
@@ -244,6 +311,8 @@ public partial class TerrainViewerApp
             // Space off: the round ends, combat mode stays; the clock flows and the fatigue recovers.
             Tap(Key.Space);
             Require(!_turnBasedSetting && session.QueryCombatRound() is null && HeroInCombatMode, "Space ended the round: " + _turnBasedNotice);
+            RefreshCombatHud();
+            Require(_combatHud is { ShownForSelfTest: false } && _apPending == 0, "ARC-UI-1114: the HUD is hidden and the pending cost cleared once the round ends");
             var damage = session.QueryHeroLife()!.Record.State.FatigueDamage;
             Require(damage > 0 && _areaAmbient is not null, $"fatigue to recover ({damage}) and the clock driver ({_areaAmbient is not null})");
             Require(session.QueryEvents().Any(e => e.Kind == SessionEventKinds.HeroFatigue), "the fatigue recovery is on the queue");
@@ -266,7 +335,7 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             GD.Print("ARC-COMBAT-020 native-smoke turn-based PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Target = target.Row.PrototypeNumber, Grant = grant, AttackCost = cost, Attack = attack.Charge.ToString(),
-                HitPoints = $"{npcBefore}->{npcAfter}", Steps = _chargeLog.Count(c => c.What == "step"), Overexerted = overexerted, Ignored = ignored,
+                HitPoints = $"{npcBefore}->{npcAfter}", Steps = _chargeLog.Count(c => c.What == "step"), Hud = "lamps+list", Overexerted = overexerted, Ignored = ignored,
                 Rounds = _roundLog.Count(e => e.Kind == SessionCombatEventKind.RoundBegan), Fatigue = $"{fatigue}->{fatigueAfterWalk}", Recovered = recovered,
                 Parity = "NOT_VERIFIED (charges and keys read in the original executable; no original-runtime run)" }));
         }
@@ -274,6 +343,7 @@ public partial class TerrainViewerApp
         {
             if (session.QueryCombatRound() is not null) session.EndCombatRound(session.Version);
             _turnBasedSetting = setting;
+            _combatHudForSelfTest = hudForSelfTest; RefreshCombatHud();
             if (HeroConcealed != concealed) session.ToggleHeroConcealment(session.Version);
             if (HeroInCombatMode) session.SetCombatMode(session.Version, SessionCombatant.Hero, false, SessionCombatModeContext.RealTime);
             CancelAreaAttack(null);

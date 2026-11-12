@@ -122,6 +122,7 @@ public sealed class AreaSpellCastItemDamageTests
         Assert.AreEqual(4, f.Session.QueryItemCondition(Entity(3), new ItemCondition(10, 0, 0, false))!.Value.Damage);
         var hits = f.Map.TakeItemHits();
         Assert.AreEqual((vase, ItemBreakStep.None, SessionObjectHostSteps.None), (hits.Single().Id, hits.Single().Item.Break, hits.Single().Host));
+        Assert.AreEqual(4, hits.Single().Amount, "ARC-COMBAT-1138: the number the item's floater shows");
         Assert.AreEqual(0, f.Map.TakeItemHits().Count, "taken once");
         Assert.AreEqual(0, f.Map.TakeObjectHits().Count, "an item is no object hit");
 

@@ -334,6 +334,34 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
+    /// ARC-MAGIC-1146 (the Recharge component): the item's spell charges (field 0x69) grow by <paramref name="amount"/>, not above <paramref name="maximum"/> and only while they are below it: from the session's count
+    /// or else <paramref name="baseline"/> (the item's own field), as <see cref="SpendItemCharge"/> keeps it. A count that already reaches the maximum is <see cref="GameSessionDisposition.NoChange"/>, as is a sum equal to it.
+    /// Refused for an invalid entity, a baseline or a resulting count outside the saved bounds 0..1,000,000 (<see cref="GameSessionFailure.InvalidItem"/>; the original's negative count, unlimited charges, is not kept by the session),
+    /// a stale version, an item the session does not track or deleted (<see cref="GameSessionFailure.ItemNotAvailable"/>) and a full record budget. One revision. Like a spent charge, a recorded count also marks the item magical
+    /// when the host reads it (<see cref="QueryItemCharges"/>): the original's recharge writes the field only.
+    /// </summary>
+    public GameSessionMutationResult RechargeItemCharges(GameSessionVersion expected, string entity, int baseline, int amount, int maximum)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);
+        var recorded = _durability.Charges.TryGetValue(entity, out var left);
+        var current = recorded ? left : baseline;
+        if (current is < 0 or > SessionItemUseLimits.MaxUses) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);
+        if (!IsCurrent(expected)) return new(GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion, Version);
+        if (!TracksItem(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable, Version);
+        // 0x454920: charges that already reach the maximum are left alone; below it the sum is clipped at the maximum.
+        if (current >= maximum) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
+        var sum = (int)Math.Min((long)current + amount, maximum);
+        if (sum is < 0 or > SessionItemUseLimits.MaxUses) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);
+        if (sum == current) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
+        if (!recorded && _durability.Count >= _limits.MaxDurabilityRecords) return new(GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded, Version);
+        if (_revision == long.MaxValue) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
+        _durability.Charges[entity] = sum;
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
+    }
+
+    /// <summary>
     /// ARC-MAGIC-022: the destruction of a food or scroll the hero used (0x462CC0's tail, 0x43CCA0; the cast host clears the runs'
     /// sources, 0x4574D0): the item leaves the hero's lists and is deleted, as a destroying break deletes an item. Refused for an
     /// invalid entity (<see cref="GameSessionFailure.InvalidItem"/>), a stale version, an item the hero does not hold or wears

@@ -205,12 +205,15 @@ and writes the slot back as no light when the run ends ([IW2–IW5](../research/
   light, LT10) or a created critter's cell. The canvas draws it with the other carried lights and `AreaCellLightLevel` (FR-LIGHT-011) reads the same source, so the
   darkness term rises while the spell holds and returns when its run ends. The source is handed to the canvas again when the number of glows changes
   (`TickCarriedLight`).
-- **Not ready.** The glow after a load: the original writes the live light back into the object's fields at the save (LT11) and the sector load builds it
-  again (LT4), while Steamwoven does not save the overlay runs yet ([saved runs](../architecture/saved-runs.md)); the object's own offsets and scale (the eye candy parts
+- **After a load (ARC-MAGIC-1280).** The original writes the live light back into the object's fields at the save (LT11) and the sector load builds it again (LT4);
+  Steamwoven saves the overlay runs ([saved runs](../architecture/saved-runs.md#overlay-runs-arc-magic-1280): the goals section holds the maintained Illuminate's looping eye candy
+  with its tag, the spell run is saved as before), so a loaded game shows the glow again with no second cast: the overlay host of the loaded session is built by the first step of a
+  restored run, and `AreaEyeCandyHost.AdoptRestored` gives each lit run its first free overlay slot of its owner again, so the four-slot rule holds from the first frame.
+- **Not ready.** The object's own offsets and scale (the eye candy parts
   ignore them too); a light art number whose frame the map's lighting did not load (counted and logged once; number 1 is always there).
 - **Native smoke** (named stage `eye-light`, `--hero`, a lit map with a living NPC): Illuminate cast on the hero and on the nearest living NPC gives one
   light (art 1, 226 60 236, an overlay slot), the canvas holds one carried light more, the level at the target's cell rises at night, and the forced END takes
-  all of it away again.
+  all of it away again; then (ARC-MAGIC-1280) Illuminate held on the hero and the NPC is saved by F7 and loaded by F8, and the same lights, the canvas count and the darkness level are there with no second cast, and the forced END after the load takes them away.
 
 ### Animated lights (ARC-RENDER-031)
 
