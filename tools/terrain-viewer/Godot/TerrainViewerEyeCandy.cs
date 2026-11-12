@@ -17,7 +17,7 @@ namespace Arcanum.TerrainViewer;
 // entries on their targets, each as an overlay goal run of its own (goals 45-48, 58, 59, 75, 76, ARC-DEV-143, AreaEyeCandyHost). Each part (foreground, background, underlay) is drawn as an
 // extra-art body at its object's tile: the background and the underlay right before the object, the foreground right after it
 // (the object's own draw order), additive when translucent, at the art id's scale. A play needs a free slot of each list it places
-// in (7 foreground, 7 background, 4 underlay per object, 0x4CCF70). Not ready: lights, sounds, tinting, turning a multi-rotation eye
+// in (7 foreground, 7 background, 4 underlay per object, 0x4CCF70). A lit entry (Illuminate) also keeps a live light on its object while its run is shown (ARC-MAGIC-1229, TerrainViewerEyeCandyLight.cs). Not ready: sounds, tinting, turning a multi-rotation eye
 // candy to its object's facing, the object's scale and offsets, the eye-candy callbacks into the spell run (the host counts them), the AGoal hover's raised body (the host keeps its offset).
 public partial class TerrainViewerApp
 {
@@ -130,8 +130,12 @@ public partial class TerrainViewerApp
         if (_eyeCandyHost is { } host && ReferenceEquals(host.Session, session)) return host;
         _eyeCandyHost?.LoseAll();
         _eyeCandyFacts.Clear();
-        return _eyeCandyHost = new(session, index => EyeCandyTable?.At(index), EyeCandyFactsOf, null, owner => _eyeCandies.Where(e => e.Object == owner && e.Shown).Select(e => e.Parts), FireBurnerFor(session));
+        return _eyeCandyHost = new(session, index => EyeCandyTable?.At(index), EyeCandyFactsOf, null, owner => _eyeCandies.Where(e => e.Object == owner && e.Shown).Select(e => e.Parts), FireBurnerFor(session), SavedOverlayLightSlots);
     }
+
+    /// <summary>ARC-MAGIC-1229: the overlay light slots of an owner's own record that hold a light (bit i for slot i): a lit eye candy takes another, and with all four taken its add refuses (IW2).</summary>
+    private int SavedOverlayLightSlots(string owner) =>
+        _spellCastMap?.Row(owner) is { } row && _readyArea?.Lighting?.Local is { } local ? local.OverlaySlotMask(row.Key) : 0;
 
     /// <summary>The ART facts of an entry's parts for the goals' nodes (the header reads, cached): the timing part's frames and action frame, the background that animates beside a foreground, the pace; null when the art does not read or its rate is 0.</summary>
     private EyeCandyFacts? EyeCandyFactsOf(uint art, EyeCandyParts parts)

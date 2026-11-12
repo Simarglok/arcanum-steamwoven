@@ -1184,11 +1184,11 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   critter (not a container) show the toggle buttons 338 (doll) and 339 (bag) at (23, 108) and (74, 108), which act on a release over the same button;
   the doll view draws art 349 at (0, 134) and the body's worn items (`AreaInventoryView.BodyDoll`, by the worn item's inventory location) in the nine slot
   rectangles of table 0x5CAE08, a cover (0x5CAF58) on each empty slot, and hides the grid; a worn item pressed on its slot and released on the hero's grid
-  is taken through the loot path (PROJECT: its inventory art, and a cover, stretched into the rectangle; the wheel does not scroll the hidden grid). NOT READY: the doll's two values and the weapon overlay, the
+  is taken through the loot path (PROJECT: its inventory art, and a cover, stretched into the rectangle; the wheel does not scroll the hidden grid). **Doll values (ARC-UI-1121,** [ledger IW41–IW43](../research/ledger/ui-audio.md#doll-values-and-weapon-overlay-arc-ui-1121)**):** the doll view prints the body's displayed damage rating (right-aligned in the box at (105, 354)) and armour rating (from the left of the box at (227, 354)), read by `AreaCombatHost.DollRatings` into `AreaInventoryView.BodyRatings`, and fills the weapon's slot dark red when the weapon needs more strength than the body has (the numbers use the project's font). NOT READY: the hero's own window's values and fill (#1267), the
   barter window's doll, the hero's own doll toggle, the scroll bar's art, a hero's item moved into the body, a follower's portrait. The native smoke checks every Crash Site body's window
   (`ARC-UI-052 native-smoke loot-art PASS`: loot arts and the image read, every grid item's art, one item taken by a drag). The `loot-worn` stage
   (ARC-DEV-202, ARC-UI-072) drives the doll view: toggle, the worn item on its slot, the drag to the hero's grid, back to the bag view
-  (`ARC_AREA_LOOT_DOLL_CAPTURE=PATH.png` saves the doll view).
+  (`ARC_AREA_LOOT_DOLL_CAPTURE=PATH.png` saves the doll view; ARC-UI-1121 makes it require the body's ratings).
 - **Arrange button (ARC-DEV-339,** [ledger IW37–IW40](../research/ledger/ui-audio.md#arrange-button-arc-dev-339)**; bug B54):** every mode of the original look
   (own, loot, steal and barter windows) draws the button 340 `tiny_butt` at (763, 197) of the window (`AreaInventoryArtLayout.ArrangeButton`, drawn with its
   first frame); a press and a release on it (nothing held; sounds 3000 and 3001) lay the hero's items out again with
@@ -2844,12 +2844,12 @@ merchant's item pressed and released on the hero's grid is bought, a hero's item
 trades above (trade sound, messages on the quote line; PROJECT: a bought item goes to the hero's first free cells, a stack trades whole);
 a right release on an item moves it to the other side the same way (IW36); anything else goes back. A pointer resting on an item puts its quote on the quote line (PROJECT text `Buy NAME: N` / `Sell NAME: N` /
 `… no price (REASON)`; the original prints a generated phrase of the merchant's); the next quote replaces a trade message, as the
-original's hover rewrites its line. A left release in the round view closes the window. The `Diagnostic view` switch below the frame
+original's hover rewrites its line. A left release in the round view closes the window. ARC-UI-1120 (HK25, BW6): a pointer resting on an item first runs the item's examine script for the hero and draws its window while the bars show (the quote follows either way), and the cycle buttons 757 / 758 of the follower background switch the window to the previous or next follower ([barter runtime](../world/barter-runtime.md#follower-cycle-and-examine-arc-ui-1120)). The `Diagnostic view` switch below the frame
 shows the diagnostic window and back (the choice holds until it is switched again, as in the inventory window); a controller reaches
 only that switch in the original look (PROJECT: trades without a mouse go through the diagnostic window's buttons); since ARC-UI-069 the opening shop's docked window shows
 the original look too ([its section](#opening-shop-in-the-originals-look-arc-ui-069)). NOT READY: the gamble (box drawn in its off art; the check 0x579840 and the gamble 0x579B60, a held item released on it
 goes back), the hero's grid moves and its drop and use boxes inside the barter window (the item goes back), the count dialog, the
-generated quote phrases, the follower's weight lines and cycle buttons (757, 758), the merchant's doll view (337 `Barter_PD`) and both doll
+generated quote phrases, the follower's weight lines, the merchant's doll view (337 `Barter_PD`) and both doll
 toggles, the scroll bar's art, a follower's portrait as the image, the original fonts.
 
 **Not implemented in the diagnostic window:** grids, paperdoll and drag and drop, the count dialog, the quote lines, the gamble slot,

@@ -508,6 +508,8 @@ exhaustion is `RandomExhausted`. The hero, and an NPC following it, are the PC s
 item joins its placed items on that tile; an NPC's seed item is the `item.dropped` map change at that tile. Without a map the item
 lands on its holder's cell and nothing is drawn (a host without one).
 
+**Pushed items (ARC-MAGIC-1230).** An item lying on the hero's map can be moved on the ground (`QueryGroundItem`, `MoveGroundItem`, the original's object move 0x43E770, which writes only the location: no flag, no hit points, no junk pile, no decay). A placed item takes the cell in its own record; a map-data item (a seed's loose item, a broken container's spilled item, an NPC's dropped item) keeps the cell as the object field `item.moved` (`SessionItemMove`, a packed cell as `item.dropped`'s, `QueryMovedItems`), which the map inventory's ground, `LooseCell`, the pick-up and the residency overlay read before the item's own cell; the field stays harmless after a pick-up (the taken item is no ground item). No schema step: the object rows keep their form. Unseen Force's push reaches it through `AreaKnockbackItems` ([goal table, tail T7](../architecture/goal-table.md)).
+
 **Viewer port.** `AreaDropMap` (viewer Core) is the AREA viewer's map for the hero's attacks on NPCs and objects
 (`AreaDropMapNow`): the path's gate on the target's tile, the direct attempt and the 64 × 64 search exactly as read, with the
 step tests of the shown map's T0 step evidence (built on the same tile and traversal functions) and the doors' runtime passage;

@@ -31,9 +31,12 @@ public partial class TerrainViewerApp
     internal AreaClockDateOrder? ClockDateOrderForSelfTest { get; set; }
     internal string? ClockLineForSelfTest { get; private set; }
 
-    private bool GameBarActive => _areaSession is not null && _readyMode == TerrainViewerMode.Area
-        && !MainMenuOpen && !ConversationOpen && !BarterOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen && !WorldMapOpen
-        && (!ViewerAutomatedStorage.Automated || _gameBarForSelfTest);
+    /// <summary>ARC-UI-1120: the interface is on (the original's toggle 0x64C67C clear, 0x5578C0): the bars play with a session, whatever window is open over
+    /// them. The dialog start's description is made only then (0x567460); the viewer asks the same of the barter window's still pointer (PROJECT).</summary>
+    private bool InterfaceBarsOn => _areaSession is not null && _readyMode == TerrainViewerMode.Area && (!ViewerAutomatedStorage.Automated || _gameBarForSelfTest);
+
+    private bool GameBarActive => InterfaceBarsOn
+        && !MainMenuOpen && !ConversationOpen && !BarterOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen && !WorldMapOpen;
 
     /// <summary>Per frame: shows the bars while an area session plays (reading their art once a run) and follows the spell pane.</summary>
     private void SyncGameBar()

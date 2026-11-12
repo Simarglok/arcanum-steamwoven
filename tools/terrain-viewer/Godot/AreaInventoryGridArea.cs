@@ -49,6 +49,10 @@ public partial class AreaInventoryGridArea : Control
     /// <summary>ARC-DEV-339: the arrange button's press (3000) and release (3001) sounds, the button creator's fields (ledger IW37).</summary>
     public event Action<int>? SoundRequested;
     private bool _arrangeDown;
+    /// <summary>ARC-UI-1120 (BW6): a cycle button of the barter window's follower background was pressed and released over it: 0 the left (previous
+    /// follower), 1 the right (next).</summary>
+    public event Action<int>? CycleRequested;
+    private int? _cycleDown;
     // ARC-UI-072 (B30): the other party's doll view is on (the original's toggle 0x681514; clear at every open) and the toggle button a
     // press is waiting on (true the doll button, false the bag button).
     private bool _bodyDoll;
@@ -170,7 +174,7 @@ public partial class AreaInventoryGridArea : Control
     public void SetLook(AreaInventoryArtLook? look)
     {
         if (ReferenceEquals(look, Look)) return;
-        Look = look; _takeAllDown = false; _arrangeDown = false; QueueRedraw();
+        Look = look; _takeAllDown = false; _arrangeDown = false; _cycleDown = null; QueueRedraw();
     }
 
     // ARC-UI-148: the generated interface paints a window's frames at the window's own device scale: the frame scale times the canvas transform's and the
@@ -189,7 +193,7 @@ public partial class AreaInventoryGridArea : Control
     {
         _view = view ?? throw new ArgumentNullException(nameof(view));
         // ARC-UI-052: another holder (or none) starts the holder's grid at its top (the open sets the scroll to 0, 0x5731FA).
-        if (view.Holder != _lootHolder) { _lootHolder = view.Holder; _lootScroll = 0; _takeAllDown = false; _bodyDoll = false; _toggleDown = null; _arrangeDown = false; }
+        if (view.Holder != _lootHolder) { _lootHolder = view.Holder; _lootScroll = 0; _takeAllDown = false; _bodyDoll = false; _toggleDown = null; _arrangeDown = false; _cycleDown = null; }
         _lootScroll = Math.Clamp(_lootScroll, 0, ScrollMax(view));
         // A held item that is no longer where it was taken from (another move changed its place) cannot be dropped any more.
         if (Held is { } held && (held.Partner ? !view.LootGrid.Any(item => item.Entity == held.Entity) && view.BodyDoll.All(slot => slot.Entity != held.Entity)
@@ -259,7 +263,7 @@ public partial class AreaInventoryGridArea : Control
     internal void ResetStill() { _stillItem = null; _stillReported = true; }
 
     /// <summary>ARC-UI-052: the window opened: the holder's grid starts at its top (0x5731FA sets the scroll to 0 at every open).</summary>
-    internal void ResetLoot() { _lootHolder = null; _lootScroll = 0; _takeAllDown = false; _bodyDoll = false; _toggleDown = null; _arrangeDown = false; }
+    internal void ResetLoot() { _lootHolder = null; _lootScroll = 0; _takeAllDown = false; _bodyDoll = false; _toggleDown = null; _arrangeDown = false; _cycleDown = null; }
 
     /// <summary>ARC-UI-072: the doll or bag button was pressed and released over it (0x573986 sets the toggle, 0x57393B clears it).</summary>
     internal void SetBodyDoll(bool doll) { if (_bodyDoll == doll) return; _bodyDoll = doll; QueueRedraw(); }
@@ -279,11 +283,22 @@ public partial class AreaInventoryGridArea : Control
     internal bool ArrangeAt(Vector2 frame) => ArrangeShown && Look!.Art[AreaInventoryArtLayout.ArrangeArt] is { } art &&
         AreaInventoryArtLayout.ArrangeHit(frame.X, frame.Y, (art.GetWidth(), art.GetHeight()));
 
+    /// <summary>ARC-UI-1120 (BW6): whether the barter window's cycle buttons are drawn: the original barter look on the follower background with both
+    /// arts read.</summary>
+    internal bool CycleShown => BarterLook && _barter is { } frame && AreaBarterArtLayout.CycleShown(frame.Background)
+        && Look!.Art.ContainsKey(AreaBarterArtLayout.CycleLeftArt) && Look.Art.ContainsKey(AreaBarterArtLayout.CycleRightArt);
+
+    /// <summary>ARC-UI-1120: the cycle button a frame point is on (0 left, 1 right), sized by its art; null none or not shown.</summary>
+    internal int? CycleAt(Vector2 frame) => CycleShown && Look!.Art[AreaBarterArtLayout.CycleLeftArt] is { } left && Look.Art[AreaBarterArtLayout.CycleRightArt] is { } right
+        ? AreaBarterArtLayout.CycleHit(frame.X, frame.Y, (left.GetWidth(), left.GetHeight()), (right.GetWidth(), right.GetHeight())) : null;
+
     /// <summary>A left press at a point of the frame (the self-test drives it too).</summary>
     internal void PressAt(Vector2 frame)
     {
-        _arrangeDown = false;
+        _arrangeDown = false; _cycleDown = null;
         if (Held is not null || _view is null) return;
+        // ARC-UI-1120: a cycle button takes the press as the arrange button does (art buttons of the bars: press sound 3000).
+        if (CycleAt(frame) is { } cycle) { _cycleDown = cycle; SoundRequested?.Invoke(Arcanum.TerrainViewer.Core.AreaGameBarLayout.PressSound); QueueRedraw(); return; }
         // ARC-DEV-339: the arrange button takes the press first (the button system, not the window's handler, serves it), with its press sound.
         if (ArrangeAt(frame)) { _arrangeDown = true; SoundRequested?.Invoke(Arcanum.TerrainViewer.Core.AreaGameBarLayout.PressSound); QueueRedraw(); return; }
         if (BarterLook) Held = AreaBarterArtLayout.Press(_view, BarterHit(frame));
@@ -350,6 +365,17 @@ public partial class AreaInventoryGridArea : Control
     /// <summary>A left release at a point of the frame: the held item's drop, then the cursor is empty.</summary>
     internal void ReleaseAt(Vector2 frame)
     {
+        if (_cycleDown is { } pressed)
+        {
+            // ARC-UI-1120: the cycle button acts on its release over it, with its release sound; the window changes follower on the next frame.
+            _cycleDown = null;
+            if (CycleAt(frame) == pressed)
+            {
+                SoundRequested?.Invoke(Arcanum.TerrainViewer.Core.AreaGameBarLayout.ReleaseSound);
+                Callable.From(() => CycleRequested?.Invoke(pressed)).CallDeferred();
+            }
+            return;
+        }
         if (_arrangeDown)
         {
             // ARC-DEV-339: a button acts on its release over it, with its release sound (3001).
@@ -633,8 +659,8 @@ public partial class AreaInventoryGridArea : Control
             : (AreaLootArtLayout.GridY, AreaLootArtLayout.GridY + AreaLootArtLayout.ShownRows * AreaLootArtLayout.CellPixels);
         // ARC-UI-072 (B30, IW29): the body's doll view replaces the holder's grid: art 349 at (0, 134), each worn item in its slot rectangle (PROJECT:
         // its inventory art, as the hero's doll draws it; the original draws the paper-doll art at two thirds of its size), and a cover stretched to
-        // the rectangle of every empty slot or of the slot whose item is on the cursor. NOT READY: the two numbers (0x464630, 0x464700) and the
-        // weapon slot's strength overlay (0x465E90).
+        // the rectangle of every empty slot or of the slot whose item is on the cursor. ARC-UI-1121 (IW29, IW41, IW43): the weapon's slot is filled
+        // dark red first when the weapon is too heavy for the body (0x465E90), and the body's two ratings (0x464630, 0x464700) are printed under the doll.
         var doll = BodyDoll && barter is null;
         if (doll)
         {
@@ -642,8 +668,27 @@ public partial class AreaInventoryGridArea : Control
             foreach (var (slot, rect) in AreaLootArtLayout.BodySlotRects)
             {
                 var entry = view.BodyDoll.FirstOrDefault(entry => entry.Slot == slot);
+                if (slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon && entry?.Entity is not null && view.BodyRatings is { WeaponTooHeavy: true })
+                {
+                    var (red, green, blue) = AreaLootArtLayout.TooHeavyFill;
+                    DrawRect(Scaled(rect.X, rect.Y, rect.Width, rect.Height), new Color(red / 255f, green / 255f, blue / 255f));
+                }
                 if (entry?.Entity is { } worn && worn != Held?.Entity) Item(look.ItemArt(worn), rect, entry.Name ?? "?");
                 else if (look.Art.GetValueOrDefault(AreaInventoryArtLayout.Covers[slot]) is { } cover) DrawTextureRect(cover, Scaled(rect.X, rect.Y, rect.Width, rect.Height), false);
+            }
+            if (view.BodyRatings is { } ratings)
+            {
+                // The damage rating ends at the right edge of its box, the armour rating starts at the left edge of its box (0x576AF7..0x576C38).
+                void Rating(int value, (int X, int Y, int Width, int Height) rect, bool rightAligned)
+                {
+                    var box = Scaled(rect.X, rect.Y, rect.Width, rect.Height);
+                    var text = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var width = font.GetStringSize(text, HorizontalAlignment.Left, -1, size).X;
+                    DrawString(font, new((rightAligned ? box.End.X - width : box.Position.X), box.Position.Y + (box.Size.Y + size) / 2 - 2), text, HorizontalAlignment.Left, -1, size,
+                        AreaInventoryArtLook.TextColour);
+                }
+                Rating(ratings.Damage, AreaLootArtLayout.DamageRatingBox, true);
+                Rating(ratings.Armour, AreaLootArtLayout.ArmourRatingBox, false);
             }
         }
         foreach (var item in doll ? [] : view.LootGrid)
@@ -656,6 +701,12 @@ public partial class AreaInventoryGridArea : Control
         }
         // ARC-DEV-339: the arrange button every mode makes (IW30), the barter window's too.
         Art(AreaInventoryArtLayout.ArrangeArt, AreaInventoryArtLayout.ArrangeButton.X, AreaInventoryArtLayout.ArrangeButton.Y);
+        // ARC-UI-1120 (BW6): the follower's cycle buttons, drawn with their first frame as the other art buttons are.
+        if (barter is not null && CycleShown)
+        {
+            Art(AreaBarterArtLayout.CycleLeftArt, AreaBarterArtLayout.CycleLeft.X, AreaBarterArtLayout.CycleLeft.Y);
+            Art(AreaBarterArtLayout.CycleRightArt, AreaBarterArtLayout.CycleRight.X, AreaBarterArtLayout.CycleRight.Y);
+        }
         if (barter is null && AreaLootArtLayout.TakeAllShown(Mode)) Art(AreaLootArtLayout.TakeAllArt, AreaLootArtLayout.TakeAll.X, AreaLootArtLayout.TakeAll.Y);
         // ARC-UI-072: the doll and bag buttons (IW30), drawn with their first frame; the chosen view is the one on show.
         if (barter is null && TogglesShown)

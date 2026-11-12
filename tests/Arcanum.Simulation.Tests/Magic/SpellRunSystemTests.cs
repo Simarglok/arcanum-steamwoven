@@ -51,6 +51,9 @@ public sealed class SpellRunSystemTests
         public ISpellFateSave FateSave => SpellFateSave.None;
         public bool IsLocalPlayer(SpellRunObject? who) => who?.Id is { } id && id == LocalPlayer;
         public IReadOnlyList<SpellRunTarget> Collect(SpellRun run) => Targets;
+        /// <summary>ARC-MAGIC-1234: the run object list the next collection builds (the area has the list bit and the stored list was empty); null builds none.</summary>
+        public List<SpellRunObject>? Built { get; set; }
+        public SpellRunCollected CollectRun(SpellRun run) => new(Collect(run), Built);
         public bool UseSpellAtMaximum(SpellRunObject pc) => Fate;
         public SpellComponentGate Gate(SpellRun run, int component, SpellRunTarget target) => new(Passes, target);
         public SpellComponentOutcome Apply(SpellRun run, int component, SpellRunTarget target)
@@ -370,6 +373,56 @@ public sealed class SpellRunSystemTests
         CollectionAssert.AreEqual(new[] { 0, 0 }, system.Queued.Select(e => e.Run).ToArray());
         Assert.IsNull(system.Table[1], "a BEGIN never processed is freed by the ending");
         Assert.IsNotNull(system.Table[2]);
+    }
+
+    // ARC-MAGIC-034, ARC-MAGIC-1234 (0x451C40): the run's object list (+0x130) is the last test: an active run listing the object ends by event (the processed run and a technological record's run are left).
+    [TestMethod]
+    public void ADispelEndsTheActiveRunsWhoseObjectListHoldsTheObject()
+    {
+        var host = new Host();
+        host.Records[7] = Record();
+        host.Records[8] = new(Duration: new(0), Technology: true) { ActionComponents = [1, 0, 0, 0, 0] };
+        var live = SpellRunFlags.Active | SpellRunFlags.Processed;
+        var listing = Run(0, flags: live) with { ObjectList = new([Orc, Wand]) };
+        var other = Run(1, flags: live) with { ObjectList = new([Orc]) };
+        var idle = Run(2, flags: SpellRunFlags.Free, action: SpellRunAction.Maintain) with { ObjectList = new([Wand]) };
+        var tech = Run(3, spell: 8, flags: live) with { ObjectList = new([Wand]) };
+        var processed = Run(4, flags: live) with { ObjectList = new([Wand]) };
+        var system = System(host, listing, other, idle, tech, processed);
+        system.Dispel("wand", processing: 4);
+        CollectionAssert.AreEqual(new[] { 0 }, system.Queued.Select(e => e.Run).ToArray(), "only the active run that lists the object, not the processed, technological or inactive ones");
+    }
+
+    // ARC-MAGIC-1234 (TA14, 0x4F40B0): an action whose area has the list bit while the run's list is empty stores the gathered objects in the run; the next action that finds the list non-empty
+    // keeps it (the host builds nothing then), and a run whose collection builds nothing keeps its empty list.
+    [TestMethod]
+    public void ABuiltObjectListIsStoredInTheRunAndKeptForTheLaterActions()
+    {
+        var host = new Host { Built = [Orc, Wand] };
+        host.Records[7] = Record(maintain: 1, end: 1) with { Duration = new(10), TriggerCount = 1 };
+        var system = System(host, Run() with { TriggerCount = 1 });
+        system.Begin(0);
+        CollectionAssert.AreEqual(new[] { "orc", "wand" }, system.Table[0]!.ObjectList.Items.Select(o => o.Id).ToArray(), "BEGIN stored the list in the order the host built it");
+        host.Built = [Hero];
+        system.Fire(0, SpellRunEventCode.Tick);
+        CollectionAssert.AreEqual(new[] { "orc", "wand" }, system.Table[0]!.ObjectList.Items.Select(o => o.Id).ToArray(), "a list that holds objects is not replaced");
+        var nothing = new Host { Built = [] };
+        nothing.Records[7] = Record();
+        var empty = System(nothing, Run());
+        empty.Begin(0);
+        Assert.AreEqual(0, empty.Table[0]?.ObjectList.Count ?? 0, "an empty built list leaves the run's list empty");
+        var timed = new Host { Built = [] };
+        timed.Records[7] = Record() with { Duration = new(30) };
+        var waiting = System(timed, Run());
+        waiting.Begin(0);
+        Assert.IsNotNull(waiting.Table[0], "the run waits for its duration");
+        Assert.AreEqual(SpellRunObjectList.Empty, waiting.Table[0]!.ObjectList, "an empty built list leaves a live run's list empty");
+        // UnderInfluence reads the run's object list as well as its target (0x458CF0).
+        var listing = Run(0, flags: SpellRunFlags.Active) with { ObjectList = new([Wand]) };
+        Assert.IsTrue(SpellRunRules.UnderInfluence(SpellRunTable.Empty.With(listing), "wand", 7));
+        Assert.IsFalse(SpellRunRules.UnderInfluence(SpellRunTable.Empty.With(listing), "wand", 8));
+        Assert.IsFalse(SpellRunRules.UnderInfluence(SpellRunTable.Empty.With(listing with { Flags = SpellRunFlags.Free }), "wand", 7), "an inactive run influences nothing");
+        Assert.IsTrue(new SpellRunObjectList([Orc, Wand]).Equals(new SpellRunObjectList([Orc, Wand])), "lists are equal by contents");
     }
 
     // ARC-MAGIC-011: the stage's cancels, the per-target stage and the resistance in the run system.

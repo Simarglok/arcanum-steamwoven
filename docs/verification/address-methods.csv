@@ -45,6 +45,7 @@ src/Arcanum.Session/GameSessionAssembly.cs,QueryHeroAssembly,pending,
 src/Arcanum.Session/GameSessionAttack.cs,AttackCritter,pending,
 src/Arcanum.Session/GameSessionAttack.cs,AttackValues,pending,
 src/Arcanum.Session/GameSessionAttack.cs,CriticalAndWearSteps,pending,
+src/Arcanum.Session/GameSessionAttack.cs,DollValues,exempt,host
 src/Arcanum.Session/GameSessionAttack.cs,FirearmsLevel,pending,
 src/Arcanum.Session/GameSessionAttack.cs,LandShot,pending,
 src/Arcanum.Session/GameSessionAttack.cs,QueryHeroAttackChance,pending,
@@ -97,6 +98,7 @@ src/Arcanum.Session/GameSessionHotkeys.cs,RecordHotkeyAction,pending,
 src/Arcanum.Session/GameSessionIdentify.cs,MarkItemIdentified,pending,
 src/Arcanum.Session/GameSessionItemDamage.cs,QueryItemCombat,pending,
 src/Arcanum.Session/GameSessionItemExamine.cs,RunItemExamine,exempt,reference
+src/Arcanum.Session/GameSessionItemMove.cs,MoveGroundItem,exempt,reference
 src/Arcanum.Session/GameSessionItemScripts.cs,PowerRatio,pending,
 src/Arcanum.Session/GameSessionItemScripts.cs,Stat,pending,
 src/Arcanum.Session/GameSessionItemTriggers.cs,FireDamageStepItems,pending,
@@ -124,6 +126,7 @@ src/Arcanum.Session/GameSessionNpcEffects.cs,RemoveNpcEffect,pending,
 src/Arcanum.Session/GameSessionNpcEffects.cs,RemoveNpcEffectsCausedBy,pending,
 src/Arcanum.Session/GameSessionNpcInventory.cs,AddItemToNpc,pending,
 src/Arcanum.Session/GameSessionNpcInventory.cs,RemoveItemFromNpc,pending,
+src/Arcanum.Session/GameSessionNpcObjectStrike.cs,AttackObjectByNpc,exempt,reference
 src/Arcanum.Session/GameSessionNpcPickPocket.cs,PickPocketByNpc,pending,
 src/Arcanum.Session/GameSessionNpcTransfer.cs,GiveAmmoToNpc,pending,
 src/Arcanum.Session/GameSessionNpcTransfer.cs,GiveGoldToHero,pending,
@@ -169,6 +172,9 @@ src/Arcanum.Session/GameSessionScriptStores.cs,SetPcFlag,pending,
 src/Arcanum.Session/GameSessionScriptStores.cs,SetPcVariable,pending,
 src/Arcanum.Session/GameSessionScriptTrapDevices.cs,PlaceScriptTrapDevice,pending,
 src/Arcanum.Session/GameSessionScriptTrapDevices.cs,QueryScriptTrapMarkers,pending,
+src/Arcanum.Session/GameSessionSectorBlocked.cs,Pack,exempt,reference
+src/Arcanum.Session/GameSessionSectorBlocked.cs,QuerySectorBlocked,exempt,reference
+src/Arcanum.Session/GameSessionSectorBlocked.cs,SetSectorBlocked,exempt,reference
 src/Arcanum.Session/GameSessionSectors.cs,QuerySectorLoaded,pending,
 src/Arcanum.Session/GameSessionSkills.cs,SetHeroSkillTraining,pending,
 src/Arcanum.Session/GameSessionSpellBook.cs,MasterHeroCollege,pending,
@@ -543,6 +549,7 @@ src/Arcanum.World/AreaUseScripts.cs,RunTakingDamage,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunTrapScript,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunUseScript,pending,
 src/Arcanum.World/AreaUseScripts.cs,TakingDamageVetoes,pending,
+src/Arcanum.World/AreaWorldMap.cs,Passes,exempt,host
 src/Arcanum.World/DiagnosticGridSession.cs,Relocate,pending,
 src/Arcanum.World/GoalStepper.cs,Step,pending,
 src/Arcanum.World/GoalStepper.cs,StepOverlay,pending,
@@ -558,9 +565,11 @@ src/Arcanum.World/OriginalScroll.cs,EdgeCode,pending,
 tools/research/Arcanum.CrashSiteProbe/CombatCensusProbe.cs,CcEffectTokens,pending,
 tools/terrain-viewer/Core/AreaArtText.cs,Blend,pending,
 tools/terrain-viewer/Core/AreaBarterArt.cs,Background,pending,
+tools/terrain-viewer/Core/AreaBarterArt.cs,CycleHit,exempt,reference
 tools/terrain-viewer/Core/AreaBarterArt.cs,Quote,pending,
 tools/terrain-viewer/Core/AreaBarterArt.cs,Release,pending,
 tools/terrain-viewer/Core/AreaBarterArt.cs,RightRelease,pending,
+tools/terrain-viewer/Core/AreaBarterArt.cs,Step,exempt,reference
 tools/terrain-viewer/Core/AreaCharacterSheetArt.cs,RegionAt,pending,
 tools/terrain-viewer/Core/AreaCharacterSheetSpells.cs,HitAt,pending,
 tools/terrain-viewer/Core/AreaCursor.cs,Art,pending,
@@ -645,6 +654,8 @@ tools/terrain-viewer/Godot/AreaWorldMapArtView.cs,AcceptNoteEdit,pending,
 tools/terrain-viewer/Godot/TerrainCanvasArea.cs,AreaBodyRect,pending,
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,UseScriptOfCast,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterArt,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterCycle,exempt,reference
+tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterCycleSpeaker,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterPointerStill,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaContainerLoot.cs,CloseContainer,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaHoverWindow.cs,HoverCombatPanel,pending,

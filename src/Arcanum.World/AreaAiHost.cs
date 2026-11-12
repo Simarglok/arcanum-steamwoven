@@ -117,6 +117,16 @@ public sealed record AreaAiScene
     /// <summary>ARC-DEV-282 (PF1, PF2): launches the arrow or bullet of an NPC's bow or firearms attack: the shooter, its target (an NPC's entity or the hero), the shot, the shooter's tile and the target's; true
     /// when the flight began (the viewer then lands the strike through <see cref="AreaAiHost.LandShot"/> where it ends). Null: the attack lands at once, as ARC-DEV-273's; false: the host strikes the aimed target at once.</summary>
     public Func<string, string, SessionShot, CellCoord, CellCoord, bool>? LaunchShot { get; init; }
+    /// <summary>ARC-COMBAT-1140 (RA4): the door, window, container, scenery or trap a map row of the line of fire's blocker stands for, with its session target (<see cref="AreaObjectAttackTarget.Object"/>); null for a row that is
+    /// none (an item, a projectile, one the session destroyed, a wall: a wall is struck without a target). Null delegate: no object takes an NPC's shot, the line's check just fails (ARC-DEV-284).</summary>
+    public Func<AreaObjectRecord, AreaObjectAttackTarget?>? ObjectTarget { get; init; }
+    /// <summary>ARC-COMBAT-1140 (RA4, PF2): launches the arrow or bullet of an NPC's bow or firearms attack on the object or wall that stopped its line of fire: the shooter, the blocker's row (the shot's target: it strikes it
+    /// where it crosses the tile), the shot, the shooter's tile and the aimed target's (the original keeps the target location); true when the flight began (the viewer then lands the strike through
+    /// <see cref="AreaAiHost.LandShotOnObject"/> where it ends). Null or false: the host strikes the blocker at once.</summary>
+    public Func<string, AreaObjectRecord, SessionShot, CellCoord, CellCoord, bool>? LaunchShotAtObject { get; init; }
+    /// <summary>ARC-COMBAT-1140: an NPC's shot decided and landed at once on an object or wall (the shot did not fly): the shooter, the blocker's row, its target (null for a wall) as it was before the hit, and the session's result, for what the viewer does after an object hit
+    /// (the floaters, the trap and BUST script, the sounds, the redraw). A shot that flew is landed by the viewer itself.</summary>
+    public Action<string, AreaObjectRecord, AreaObjectAttackTarget?, SessionObjectAttackResult>? ObjectStruck { get; init; }
     /// <summary>ARC-DEV-261 (MIG13 S14m, GT198–GT199): a victim's taking-damage script (point 0x17) asked by an NPC's damage: the victim and the damage's attacker (null: none) in, whether the damage goes on out (false: the script skipped the default, which cancels the whole damage step). The hero has no script data and is not asked. Null: the damage goes on.</summary>
     public Func<string, string?, bool>? TakingDamage { get; init; }
     /// <summary>ARC-WORLD-115 (NPC AI slice I9, host part): the companions of the shown map the host runs too, and their moves; null:
@@ -1884,6 +1894,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public void Hit(string id, string target)
     {
         var aimed = target;
+        // ARC-COMBAT-1140 (RA4, RH5): a door, container, scenery, trap or wall that stops the line of fire takes the shot in place of the target.
+        if (HitBlockingObject(id, target)) return;
         target = LineOfFireStruck(id, target);
         if (NpcAttackOf(id, target, flight: _scene.LaunchShot is not null) is not { } attack) return;
         var result = _session.AttackByNpc(_session.Version, attack);
@@ -1945,6 +1957,64 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             HitEffect(struck, result);
             if (VictimReached(result)) Struck(struck);
         }
+        return result;
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1140 (RA4, RH5, PF8; tail T4e): on the ranged path the line of fire to the target may be stopped by a door, window, container, scenery, trap or wall, which replaces the target whatever its type (RA4); a target that is
+    /// no critter is hit without the skill roll (RH5). The NPC's attack is then <see cref="GameSessionOwner.AttackObjectByNpc"/> on that blocker, from the shooter's tile at the blocker's distance; the arrow flies toward the aimed
+    /// target's tile as the hero's does and strikes the blocker where it crosses its tile (<see cref="AreaAiScene.LaunchShotAtObject"/>, <see cref="LandShotOnObject"/>), or the attack lands at once
+    /// (<see cref="AreaAiScene.ObjectStruck"/>). True when a blocker took the attack; false leaves the shot to <see cref="LineOfFireStruck"/> (no scene hook, a critter or hero, an item or a row the host cannot place).
+    /// </summary>
+    private bool HitBlockingObject(string id, string target)
+    {
+        if (_scene.ObjectTarget is not { } objectOf || Distance(id, target) <= 1 || Tile(id) is not { } from || Tile(target) is not { } to || _scene.LineOfFire?.Invoke() is not { } map) return false;
+        var trace = LineOfFireRules.Trace(from, 0, 0, to, map, _session.Rules.Combat);
+        if (trace.Blocker is not { } blocker || blocker.Type is 15 or 16 || blocker.Key == Key(target) || blocker.WorldX is not { } bx || blocker.WorldY is not { } by) return false;
+        AreaObjectAttackTarget? info = null;
+        // A wall (type 0) is struck without a target; another blocker must be an object the session damages (an item or a projectile keeps the target, whose check the blocked line fails).
+        if (blocker.Type != 0 && ((info = objectOf(blocker)) is not { Refusal: null, Object: not null } || info.Kind == DamageableObjectKind.Item)) return false;
+        var struck = info?.Object;
+        if (Build(id) is not { } attacker) return false;
+        var cell = new CellCoord(checked((int)bx), checked((int)by));
+        var result = _session.AttackObjectByNpc(_session.Version, new SessionNpcObjectAttack(attacker)
+        {
+            Target = struck, Wall = struck is null, Distance = AiExecutorRules.Distance(from, cell), AttackerWorn = _scene.Combat.WornItems(_session, id), AttackerCell = from, DropMap = _scene.DropMap?.Invoke(),
+            Flight = _scene.LaunchShotAtObject is not null, TakingDamage = TakingDamageOfObject(id, struck),
+        });
+        Trace(id).Hit = $"shot on {(struck?.Entity ?? "a wall")} instead of {target}: {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
+        // A refused attack leaves the shot to the ordinary flow (the target keeps it).
+        if (result.Disposition == GameSessionDisposition.Rejected) return false;
+        if ((result.Shots.Count == 0 || result.Life is not null) && result.Resolution?.Refusal == AttackRefusal.None) _scene.ObjectStruck?.Invoke(id, blocker, info, result);
+        // The arrows leave the shooter's tile for the aimed target's; one the viewer cannot fly strikes the blocker at once.
+        foreach (var shot in result.Shots)
+            if (_scene.LaunchShotAtObject?.Invoke(id, blocker, shot, from, to) != true)
+            {
+                if (LandShotOnObject(id, shot, struck, struck is null) is { } landed && landed.Disposition != GameSessionDisposition.Rejected) _scene.ObjectStruck?.Invoke(id, blocker, info, landed);
+                _session.EndShot(shot);
+            }
+        return true;
+    }
+
+    private Func<bool>? TakingDamageOfObject(string attacker, SessionObjectTarget? target) =>
+        _scene.TakingDamage is { } asks && target is not null ? () => asks(target.Entity, attacker) : null;
+
+    /// <summary>
+    /// ARC-COMBAT-1140 (PF8, RH5, OD1–OD5; tail T4e): an arrow or bullet of <paramref name="shooter"/> reached an object it met: the one the shot was decided for (<see cref="HitBlockingObject"/>) takes the carried hit, another
+    /// object or wall past its destination a forced hit (<see cref="GameSessionOwner.LandNpcShotOnObject"/>); the object's taking-damage script is asked with the shooter as the attacker. A door, window, container,
+    /// scenery or trap is <paramref name="target"/>, a wall is none (<paramref name="wall"/>). What follows (the floaters, the trap and BUST script, the sounds, the redraw) is the viewer's, from the returned result.
+    /// Null when the shooter has no combat values (the shot is gone either way).
+    /// </summary>
+    public SessionObjectAttackResult? LandShotOnObject(string shooter, SessionShot shot, SessionObjectTarget? target, bool wall)
+    {
+        if (Build(shooter) is not { } attacker) { _session.EndShot(shot); return null; }
+        var result = _session.LandNpcShotOnObject(_session.Version, shot, new SessionNpcObjectAttack(attacker)
+        {
+            Target = target, Wall = wall, AttackerWorn = _scene.Combat.WornItems(_session, shooter), AttackerCell = Tile(shooter), DropMap = _scene.DropMap?.Invoke(),
+            TakingDamage = TakingDamageOfObject(shooter, target),
+        });
+        _session.EndShot(shot);
+        Trace(shooter).Hit = $"shot on {target?.Entity ?? "a wall"} {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
         return result;
     }
 

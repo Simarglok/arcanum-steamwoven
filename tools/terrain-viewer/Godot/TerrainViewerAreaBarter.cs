@@ -4,6 +4,7 @@ using Arcanum.Data.Messages;
 using Arcanum.Input;
 using Arcanum.Session;
 using Arcanum.Simulation.Items;
+using Arcanum.Simulation.Reaction;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using GamepadLab.Core;
@@ -145,6 +146,7 @@ public partial class TerrainViewerApp
             _barterPanel.DropRequested += BarterDrop;
             _barterPanel.PointerStill += BarterPointerStill;
             _barterPanel.ArrangeRequested += BarterArrange;
+            _barterPanel.CycleRequested += BarterCycle;
             _barterPanel.SoundRequested += id => PlayInterfaceSound(id, "barter arrange button");
             _barterPanel.HolderView = InventoryHolderView;
         }
@@ -244,6 +246,40 @@ public partial class TerrainViewerApp
         return (inventory, frame);
     }
 
+    /// <summary>
+    /// ARC-UI-1120 (BW6, 0x574FD0): a cycle button of a follower's window was released: the window switches to the previous (<paramref name="direction"/> 0)
+    /// or next (1) follower of the PC's follower list, wrapping, skipping the ones that cannot be talked to (<see cref="BarterCycleAccepts"/>); the
+    /// window closes and the other follower's opens through the pending open the dialog's <c>b:</c> reply uses, so the next frame shows it. No other
+    /// acceptable follower leaves the window as it is.
+    /// </summary>
+    private void BarterCycle(int direction)
+    {
+        if (!BarterOpen || _barter is not { Merchant.Follower: true } barter || !BarterActive || _barterInShop || _barterSession is not { } session || _conversationHost is not { } host) return;
+        AdmitCompanionSpeakers();
+        var followers = session.QueryParty().Followers.Select(follower => follower.Entity).ToList();
+        var chosen = AreaBarterCycle.Step(followers, barter.Merchant.Entity, direction == 1, entity => BarterCycleSpeaker(host, session, entity) is not null);
+        GD.Print($"ARC-UI-1120 barter cycle direction={direction} from={barter.Merchant.Entity} to={chosen ?? "-"} followers={followers.Count}");
+        if (chosen is null || BarterCycleSpeaker(host, session, chosen) is not { } speaker) return;
+        EndBarter();
+        _barterPending = (session, host, chosen, speaker.Index);
+    }
+
+    /// <summary>ARC-UI-1120 (0x575080): the speaker of a follower the cycle may switch to, or null. The original asks the can-speak test (0x4AD800; its
+    /// head is <see cref="CanSpeakRules.Head"/>, its tail is not modelled), then refuses the critter flags 0x20000008 and accepts a critter whose spell
+    /// flags do not carry bit 0x4000 (summoned); the viewer also asks that the follower is a speaker standing in the world (<see cref="SpeakerPresent"/>).</summary>
+    private AreaSpeaker? BarterCycleSpeaker(AreaConversationHost host, GameSessionOwner session, string entity)
+    {
+        var speaker = host.Speakers.FirstOrDefault(candidate => AreaConversationState.EntityId(candidate.Row) == entity);
+        if (speaker is null || !SpeakerPresent(speaker)) return null;
+        var fields = _combatHost?.Fields(entity);
+        var written = session.QueryObjectFlags(entity);
+        var critter = unchecked((uint)written.Critter(unchecked((int)(fields?.Critter?.Flags ?? 0))));
+        var spell = unchecked((uint)written.Spell(unchecked((int)(fields?.Object.SpellFlags ?? 0))));
+        var head = CanSpeakRules.Head(new CanSpeakFacts(StunnedParalysedOrMute: (critter & 0x2060) != 0, Asleep: (critter & 0x1000) != 0, Stoned: (spell & 0x10000) != 0,
+            Dead: SpeakerDead(speaker), SpokenWithDead: (spell & unchecked((uint)SessionSpellCaster.SpokenWithDeadSpellFlag)) != 0));
+        return head is { } answer && answer != CanSpeakRules.Free || (critter & 0x20000008) != 0 || (spell & 0x4000) != 0 ? null : speaker;
+    }
+
     /// <summary>ARC-DEV-339 (B54): the arrange button of the barter window (IW30) lays the hero's items out as the own window's does; the
     /// merchant's grid is not arranged (PROJECT: the shown wares have no grid slots here; the original arranges a shop NPC's, 0x6810FC).</summary>
     private void BarterArrange()
@@ -265,10 +301,23 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-UI-064: the pointer rested on an item of the original look: its quote goes on the quote line (PROJECT text, 0x578330 prints
-    /// a generated phrase); resting on no item keeps the line.</summary>
+    /// a generated phrase); resting on no item keeps the line. ARC-UI-1120 (HK25): the window's still-pointer handler is the inventory's (0x573C74,
+    /// mode 1 among its modes), which first describes the item for the window's holder, the PC (0x57CCF0: the item's examine script, then the item
+    /// window in the message mode, <see cref="DescribeItem"/>), and only then, in mode 1, makes the quote; an examine that answers skip default leaves
+    /// no description and the quote is made all the same.</summary>
     private void BarterPointerStill(string? item)
     {
         if (!BarterOpen || _barterPanel?.View is not { } view || item is null) return;
+        if (_areaSession is { } session && InterfaceBarsOn)
+        {
+            // The viewer hides the bars while the window is open (PROJECT: its message window is not there), so the examine script runs and the window
+            // is drawn only when the bars show (known gap: the bars are normally hidden under the barter window, so only the script runs); the script's effects
+            // and printed lines are the game's either way. PROJECT: the interface-on test is the viewer's (the original's still-pointer branch has no 0x5578C0 test),
+            // so that an automated run without bars stays quiet.
+            _hotkeyDescriptionsForSelfTest++;
+            if (_gameBarPanel is { Visible: true }) DescribeItem(session, item);
+            else if (InventoryItemKind(session, item) is not null) ItemExamineAllows(session, item, out _);
+        }
         var quote = AreaBarterArtLayout.Quote(view, item);
         if (quote.Length == 0 || quote == _barterMessage) return;
         // Only the quote line changes: no rebuild of the window's lists.
