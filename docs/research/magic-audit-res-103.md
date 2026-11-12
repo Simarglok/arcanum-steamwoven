@@ -48,7 +48,7 @@ Every other college spell has a code path for every component of its record (the
 | 6, 7, 9 See Contents, Read Aura, Divine Magick | The answer is a text line; the windows (container inventory in mode 4, the NPC sheet, the item description) and picking an inventory item as a target are E8's | E8 |
 | 8 Sense Hidden | Trap spotting for the detecting-traps flag works and the hero's spot roll exists (ARC-MAGIC-057); effect 157 (spot-trap skill): the hero's skill level reads the written effect's skill change since the skills lane, so the roll should see it, not run in the viewer | owner recheck |
 | 14, 19, 24, 29 Elemental summons; 53 Succour Beast; 57 Summon Undead; 68 Phantasmal Fiend; 71-74 Orcish Champion, Guardian Ogre, Hellgate, Familiar | Creature Summon (prototype or list pick, flags on the summoned, run ends when it dies) | E1-e |
-| 35, 50 Charm, Charm Beast | The NPC flag KOS_OVERRIDE a charm adds is not kept (the session has no NPC flag layer) | - |
+| 35, 50 Charm, Charm Beast | Built in ARC-MAGIC-1142: the session's NPC flag layer keeps the flag; the attack event clears it | - |
 | 47 Shrink, 34 Disintegrate, 69 Invisibility, 63 Sanctuary | The flags are written; the viewer's draw of shrunk, hidden, translucent critters is not built | render |
 | 48 Flesh to Stone | Stone render side effect; the stone-to-flesh pair on a portal holding the stoned spell flag | - |
 | 58 Create Undead, 64 Resurrect | The raise script hook; the combat and life rules read the data's undead bit, not the written one | MA-10 |
@@ -102,12 +102,13 @@ Left: an NPC's life facts (maximum hit points, poison tick) ignore effect-change
 
 Done by owner decision D5(a): magic builds the state and a text answer, the windows are E8's ([contract](../world/spell-cast-host.md#identify-arc-magic-032), ledger [XR1-XR5](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)). The original's Identify writes nothing and shows a window to the casting local player only, so an NPC caster's has no effect.
 The hero's answer is a typed event and a message line by the target's type (`IdentifyCritter`, `IdentifyContainer`, `IdentifyItem`); Divine Magick's identified flag is the session's `MarkItemIdentified` mark (no schema step), now read by the weapon spell pane too.
-Left: nothing picks an inventory item as a spell target (spell 9 cannot be cast from the viewer); the three windows; what inventory mode 4 lets the player move (XR3); a clear of the identified flag stays "not ready" (no installed record has one).
+Left: the three windows (an inventory item is a spell target since ARC-MAGIC-1128); what inventory mode 4 lets the player move (XR3); a clear of the identified flag stays "not ready" (no installed record has one).
 
 ## Social and AI flags (MA-4, ARC-MAGIC-035)
 
 Done ([contract](../world/spell-cast-host.md#social-and-ai-flags-arc-magic-035), ledger [SO1-SO8](ledger/spell-runs.md#social-and-ai-flags-arc-magic-035)): charm, mind control, fleeing, blinded and undead in the original's order (0x454A10 runs the side effects with the run's parent as the caster; fleeing, blinded and a non-NPC's mind control return before the closing write).
-Left: the NPC flag KOS_OVERRIDE (SO2); a follower of a caster that is no hero; the undead flag's readers (the combat and life rules read the data's bit); created critters (E1-e); the AI host's reaction facts carry `MindControlledByPc` false; no viewer smoke stage drives these spells ([owner recheck list](../project/owner-recheck-list.md)).
+Done since: the NPC flag KOS_OVERRIDE (SO2) in the session's NPC flag layer, read by the AI host and cleared by the attack event, and the AI host's read of the written undead bit (ARC-MAGIC-1142, [SO9–SO10](ledger/spell-runs.md#social-and-ai-flags-arc-magic-035)).
+Left: a follower of a caster that is no hero; the undead flag's readers in the combat and life rules (they read the data's bit when the life row is built); created critters (E1-e); the AI host's reaction facts carry `MindControlledByPc` false; no viewer smoke stage drives these spells ([owner recheck list](../project/owner-recheck-list.md)).
 
 ## Movement (MA-5, ARC-MAGIC-036)
 

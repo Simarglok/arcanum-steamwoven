@@ -601,9 +601,13 @@ public partial class TerrainViewerApp
         var record = records[spell];
         var begin = record.Areas.Length > 0 ? record.Areas[0].Targets : 0;
         var active = owner.QueryHeroLife() is { Status: { IsDead: false, IsUnconscious: false } };
-        if (active && SpellUiRules.TargetsInventory(begin)) { _spellNotice = "a spell on an inventory item is not ready"; RefreshAreaStatus(); return; }
+        // ARC-MAGIC-1128 (SU3): the inventory bit opens the caster's inventory before the cursor's tests; the cursor then stands over the window.
+        var inventory = active && record.Data.Enabled && SpellUiRules.TargetsInventory(begin);
+        if (inventory && !OpenInventoryForSpell()) { RefreshAreaStatus(); return; }
         var activation = SpellUiRules.Activate(active, record.Data.Enabled, begin, record.Resist.Aggressive, Godot.Input.IsKeyPressed(Key.Alt),
             Godot.Input.IsKeyPressed(Key.Shift), owner.QueryActionPointCheck(SessionCombatant.Hero, TurnBasedRules.CastSpellCost));
+        // ARC-MAGIC-1128: the quick cast at the hero (Shift) would skip the pick's area test, which refuses the hero for an inventory spell (it is no item in an inventory): the cursor opens instead.
+        if (inventory && activation.Kind == SpellActivationKind.CastAtPlayer) activation = new(SpellActivationKind.Target, activation.Mask);
         GD.Print($"ARC-MAGIC-015 activate spell={spell} kind={activation.Kind} mask=0x{activation.Mask:X}" + (item is null ? "" : " item=" + item));
         switch (activation.Kind)
         {
@@ -616,7 +620,7 @@ public partial class TerrainViewerApp
             case SpellActivationKind.CastAtPlayer:
                 // A window open keeps the cursor from opening, but a spell cast at the hero still casts (before ARC-DEV-110 the cursor
                 // opened and the per-frame guard closed it, and the cast ran).
-                if (OpenSpellTargeting(new(spell, record, activation.Mask, item)))
+                if (OpenSpellTargeting(new(spell, record, activation.Mask, item), inventory))
                 {
                     _spellNotice = $"{AreaSpellsPage.SpellName(_spellData?.Data, spell)}: left-click a target, right click cancels";
                     _hoverStamp = null;
@@ -628,12 +632,30 @@ public partial class TerrainViewerApp
         RefreshAreaStatus();
     }
 
-    /// <summary>ARC-DEV-110 (MIG16 S3): the targeting cursor opens as interface mode 1 on the viewer's stack (the original's 0x57BC70 pushes
-    /// it). The viewer's spells never carry the inventory bit (that case is NOT READY, above), so the mode replaces the top. A window open
-    /// takes the place the cursor would open in: the cursor does not open, as the per-frame window guard used to close it at once.</summary>
-    private bool OpenSpellTargeting(SpellTargeting targeting)
+    /// <summary>
+    /// ARC-MAGIC-1128 (0x57BC70, SU3): an activation whose BEGIN area has the inventory bit opens the caster's own inventory first: a loot or steal window leaves (the original leaves a loot window open and
+    /// closes the barter and steal ones, 0x573440; the viewer picks items of the own window only), and the window opens unless another one is open, which refuses it (the spell pane is a bar panel, the other windows replace it).
+    /// </summary>
+    private bool OpenInventoryForSpell()
     {
-        if (AnyWindowOpen)
+        if (!InventoryActive) { _spellNotice = "a spell on an inventory item needs the hero's inventory here"; return false; }
+        if (InventoryOpen && !WindowOpen(InterfaceMode.Inventory)) EndInventory();
+        if (!InventoryOpen)
+        {
+            if (AnyWindowOpen) { _spellNotice = "targeting cancelled: a window is open"; GD.Print("ARC-MAGIC-1128 inventory-target not opened: a window is open"); return false; }
+            OpenInventory();
+        }
+        if (WindowOpen(InterfaceMode.Inventory)) return true;
+        _spellNotice = "the inventory did not open";
+        return false;
+    }
+
+    /// <summary>ARC-DEV-110 (MIG16 S3): the targeting cursor opens as interface mode 1 on the viewer's stack (the original's 0x57BC70 pushes
+    /// it). ARC-MAGIC-1128: with <paramref name="overInventory"/> (the BEGIN area has the inventory bit) it is pushed over the inventory window, which stays and picks the target (<see cref="InventoryItemPicked"/>);
+    /// without it the mode replaces the top. A window open takes the place the cursor would open in: the cursor does not open, as the per-frame window guard used to close it at once.</summary>
+    private bool OpenSpellTargeting(SpellTargeting targeting, bool overInventory = false)
+    {
+        if (AnyWindowOpen && !overInventory)
         {
             _spellNotice = "targeting cancelled: a window opened or the map changed";
             GD.Print("ARC-MAGIC-015 targeting-cancel a window is open");
@@ -644,12 +666,13 @@ public partial class TerrainViewerApp
         if (PickPocketArmed) CancelPickPocket("a spell's cursor took the next press");
         CancelDisarm("a spell's cursor took the next press");
         CancelPendingOrder("a spell's cursor took the next press");
-        if (!OpenTargetMode(InterfaceMode.SpellTarget, _ => ClearSpellTargeting()))
+        if (!OpenTargetMode(InterfaceMode.SpellTarget, _ => ClearSpellTargeting(), overInventory))
         {
             _spellNotice = "targeting cancelled: the interface mode did not open";
             return false;
         }
         _spellTargeting = targeting;
+        if (overInventory && _inventoryPanel is not null) _inventoryPanel.TargetPicking = true;
         return true;
     }
 
@@ -657,6 +680,7 @@ public partial class TerrainViewerApp
     private void ClearSpellTargeting()
     {
         _spellTargeting = null; _hoverStamp = null;
+        if (_inventoryPanel is not null) _inventoryPanel.TargetPicking = false;
     }
 
     /// <summary>The cursor's cancel (0x57BFF0): the cursor closes (mode 1 leaves the stack, and the mode below it, if any, goes too, SA38);
@@ -731,20 +755,43 @@ public partial class TerrainViewerApp
     private void SpellTargetClick(Vector2 screen)
     {
         if (_spellTargeting is not { } targeting) return;
+        // SU9: the game view picks only with no inventory window open; with one open the window's own press picks (ARC-MAGIC-1128).
+        if (InventoryOpen) return;
         if (SpellTargetAt(screen) is not { } pick) { _spellNotice = "no target here"; RefreshAreaStatus(); return; }
-        if (!pick.Test.Passes)
+        SpellTargetApply(targeting, pick.Object, pick.Tile, pick.Test);
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-1128 (the mode-1 branch of the inventory window's mouse handler 0x573850, picker 0x575FA0, ledger IW44): a left press on an item of the window with the spell's cursor open takes the item as the object target and
+    /// casts at it (0x57C110). The pick runs the same area test as the game view's (<see cref="SessionSpellCaster.PickTarget"/> with the item as the point's object, no tile: an item the test refuses is no target).
+    /// </summary>
+    private void InventoryItemPicked(string item)
+    {
+        // The game view's guards of a press (WorldRouteClick): a hero lying down, another participant's turn in a round, a map transfer under way.
+        if (HeroLyingDown || AnotherHasTheTurn || AreaTransferPending) { _spellNotice = "the hero cannot act now"; RefreshAreaStatus(); return; }
+        if (_itemAiming is { } aim && TargetModeOpen(InterfaceMode.ItemTarget) && SpellUiRules.TargetsInventory(aim.Mask)) { ItemAimInventoryPick(aim, item); return; }
+        if (_spellTargeting is not { } targeting || !SpellUiRules.TargetsInventory(targeting.Mask) || SpellCasterNow() is not { } caster) return;
+        var pick = caster.PickTarget(SessionSpellCaster.Hero, targeting.Spell, targeting.Mask, item, null);
+        GD.Print($"ARC-MAGIC-1128 inventory-pick spell={targeting.Spell} item={item} passes={pick.Test.Passes} reason=0x{pick.Test.Reason:X}");
+        SpellTargetApply(targeting, pick.Object?.Id, pick.Tile, pick.Test);
+    }
+
+    /// <summary>The click's tail: a target that passes is cast at; otherwise the "not damaged" failure shows spell.mes 606 and the cursor stays.</summary>
+    private void SpellTargetApply(SpellTargeting targeting, string? target, SpellLocation tile, SpellTargetTest test)
+    {
+        if (!test.Passes)
         {
-            if (SpellUiRules.NoTargetMessage(pick.Test.Reason) is { } message)
+            if (SpellUiRules.NoTargetMessage(test.Reason) is { } message)
             {
                 _spellNotice = AreaSpellCasting.Message(_spellData?.Data?.Texts, message);
                 PostSpellMessage(_spellNotice);
             }
             else _spellNotice = "not a valid target";
-            GD.Print($"ARC-MAGIC-015 target-refused spell={targeting.Spell} reason=0x{pick.Test.Reason:X}");
+            GD.Print($"ARC-MAGIC-015 target-refused spell={targeting.Spell} reason=0x{test.Reason:X}");
             RefreshAreaStatus();
             return;
         }
-        CastSpell(targeting.Spell, pick.Object, pick.Tile, targeting.Item);
+        CastSpell(targeting.Spell, target, tile, targeting.Item);
     }
 
     // ---- the cast and its goal ----

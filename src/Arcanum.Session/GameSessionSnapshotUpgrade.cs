@@ -561,6 +561,19 @@ public static partial class GameSessionSnapshotCodec
                 AddField(row, $"$.spells.runs[{i}]", "objectList", new JsonArray());
             }
         },
+        // ARC-MAGIC-1142 (schema 93): each written-flags row of the spells section gains the NPC flags change (the charm's kill-on-sight override and the attack event's clear). No older build wrote
+        // one, so the step adds the two words as 0 to every row. The spells section and its rows the older schema carried must be there.
+        [92] = root =>
+        {
+            var spells = Section(root, "spells");
+            if (!spells.TryGetPropertyValue("objectFlags", out var rows)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.spells.objectFlags");
+            if (rows is not JsonArray array) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.spells.objectFlags");
+            for (var i = 0; i < array.Count; i++)
+            {
+                if (array[i] is not JsonObject row) throw new DecodeException(SnapshotDecodeFailure.WrongType, $"$.spells.objectFlags[{i}]");
+                foreach (var name in new[] { "npcSet", "npcCleared" }) AddField(row, $"$.spells.objectFlags[{i}]", name, 0);
+            }
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from
