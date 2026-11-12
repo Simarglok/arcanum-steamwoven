@@ -1116,7 +1116,8 @@ public partial class TerrainViewerApp
         if (!SelfTestBootstrap && !_nativeSmoke) throw new InvalidOperationException("Simulation requires an explicit test launch.");
         // The script clock is independent of camera delta, including zero,
         // invalid and huge zoom deltas. Exact motion tests supply literal times.
-        _worldTestTime = observationTime ?? new SimulationTime((_worldTestTime ?? _worldActor.Session?.State.Time ?? WorldTime).Value + ExactScalar.Create(1, 10));
+        // ARC-DEV-1251: never earlier than what the queue has observed (a quarantine at the wall clock before the first frame).
+        _worldTestTime = observationTime ?? SelfTestFrameClock.Next(_worldTestTime ?? _worldActor.Session?.State.Time ?? WorldTime, _worldGridInput.Newest);
         WorldObservation(() => ApplyWorldObservedFrame(delta, complete, keyboard, controllers, "SIMULATION complete-level frame (not physical evidence)"));
     }
     private RawInputFrame WorldKeyboardRouting(RawInputFrame raw)
