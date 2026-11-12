@@ -41,8 +41,21 @@ public static class AreaBarterArtLayout
     /// <summary>The scroll's largest value in rows (0x681510): 5 for the merchant, 89 for its substitute container (0x573038..0x573071).</summary>
     public const int MerchantScrollMax = 5, ContainerScrollMax = 89;
     /// <summary>The follower's cycle buttons 757 <c>MPCycleLeftButton</c> and 758 <c>MPCycleRightButton</c> at (155, 55) and (253, 55)
-    /// (0x573147..0x5731B5; not built: the viewer does not cycle the window through the followers).</summary>
+    /// (0x573147..0x5731B5). ARC-UI-1120 (BW6): built, drawn with their first frame as the other art buttons are; a release over one
+    /// switches the window to the previous (left) or next (right) follower (<see cref="AreaBarterCycle"/>).</summary>
     public static readonly (int X, int Y) CycleLeft = (155, 55), CycleRight = (253, 55);
+    public const int CycleLeftArt = 757, CycleRightArt = 758;
+
+    /// <summary>Whether the cycle buttons exist: they are made exactly when the window draws the follower background (BW1).</summary>
+    public static bool CycleShown(int background) => background == FollowerArt;
+
+    /// <summary>The cycle button a frame point is on, sized by its art: 0 the left one (the previous follower, 0x574FD0 with 0), 1 the right one
+    /// (the next follower), null none.</summary>
+    public static int? CycleHit(float x, float y, (int Width, int Height) left, (int Width, int Height) right) =>
+        Inside(x, y, CycleLeft, left) ? 0 : Inside(x, y, CycleRight, right) ? 1 : null;
+
+    private static bool Inside(float x, float y, (int X, int Y) corner, (int Width, int Height) art) =>
+        art.Width > 0 && art.Height > 0 && x >= corner.X && x < corner.X + art.Width && y >= corner.Y && y < corner.Y + art.Height;
 
     /// <summary>The arts the barter look needs besides the inventory window's (<see cref="AreaInventoryArtLayout.ArtNumbers"/>): the two
     /// backgrounds, the gamble box's three states and the refused box arts it shares with the loot window.</summary>
@@ -141,5 +154,31 @@ public static class AreaBarterArtLayout
         if (item is null) return string.Empty;
         if (view.Hero.FirstOrDefault(line => line.Entity == item) is { } sold) return Quote(sold, sale: true, view.Merchant.Follower);
         return view.Wares.FirstOrDefault(line => line.Entity == item) is { } bought ? Quote(bought, sale: false, view.Merchant.Follower) : string.Empty;
+    }
+}
+
+/// <summary>
+/// ARC-UI-1120 (BW6): which follower the barter window switches to when a cycle button is released, read in the executable's handler 0x574FD0 (the
+/// buttons 0x681100 and 0x681398 call it with 0 and 1) and the follower steppers 0x45E4F0 and 0x45E590. Godot-free.
+/// </summary>
+public static class AreaBarterCycle
+{
+    /// <summary>The follower the window shows next from <paramref name="current"/>, or null when it stays. The leader's follower list is stepped
+    /// backwards (<paramref name="next"/> false) or forwards, wrapping at either end, until a follower <paramref name="acceptable"/> is met
+    /// (0x575080); the walk ends at the current follower, which the original always accepts (its window is open), so a full turn with no other follower
+    /// acceptable changes nothing, as here. A current follower not in the list does not move the window.</summary>
+    public static string? Step(IReadOnlyList<string> followers, string current, bool next, Func<string, bool> acceptable)
+    {
+        ArgumentNullException.ThrowIfNull(followers);
+        ArgumentNullException.ThrowIfNull(acceptable);
+        var at = -1;
+        for (var i = 0; i < followers.Count; i++) if (followers[i] == current) { at = i; break; }
+        if (at < 0) return null;
+        for (var step = 1; step < followers.Count; step++)
+        {
+            var candidate = followers[((at + (next ? step : -step)) % followers.Count + followers.Count) % followers.Count];
+            if (acceptable(candidate)) return candidate;
+        }
+        return null;
     }
 }

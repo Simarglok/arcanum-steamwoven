@@ -272,21 +272,21 @@ public partial class TerrainViewerApp
 
     /// <summary>What follows an attack on a non-critter object (at once, or when a projectile struck it): the goal's break, the status
     /// line, a stun's end and the inventory.</summary>
-    private void FinishObjectHit(AttackGoal? goal, AreaObjectAttackTarget target, SessionObjectAttackResult result, bool ranged = false)
+    private void FinishObjectHit(AttackGoal? goal, AreaObjectAttackTarget target, SessionObjectAttackResult result, bool ranged = false, bool byHero = true, string? attacker = null)
     {
         var owner = _areaSession!;
         // A blocker the line of fire struck instead (ARC-COMBAT-012) does not end the goal on the clicked target when it breaks.
         if (goal is not null && target.Row.Key == goal.Row.Key)
             goal.Broke = result.Object?.Broken == true || result.Item?.Break is Arcanum.Simulation.Items.ItemBreakStep.Broken or Arcanum.Simulation.Items.ItemBreakStep.Deleted;
         _attackNotice = AreaObjectTargets.Describe(result);
-        FloatObjectAttack(result, target.Entity, target.Row);
+        FloatObjectAttack(result, target.Entity, target.Row, attacker);
         GD.Print($"ARC-COMBAT-008 object-attack-hit target={target.Entity} disposition={result.Disposition} failure={result.Failure}"
             + $" outcome={result.Resolution?.Outcome} damage={result.Object?.Damage}/{result.Item?.Condition?.Damage} break={result.Object?.Break}/{result.Item?.Break}"
             + $" host={result.Host} step={result.StepFailure} wear={string.Join(",", result.Wear?.Steps.Select(s => $"{s.Kind}:{s.Entity}:{s.Amount}:{s.Skip}") ?? [])}"
             + $" crit={AreaCombatHost.Criticals(result.Resolution, result.Criticals)}");
-        if (result.Life is { } self && self.Events.HasFlag(LifeEvents.Stunned)) HeroStunned(owner);
+        if (byHero && result.Life is { } self && self.Events.HasFlag(LifeEvents.Stunned)) HeroStunned(owner);
         // ARC-DEV-260: the object's trap and its BUST script (the hero is the breaker; a ranged attack sets the trap off with no triggerer), then the hits their effects dealt.
-        RunObjectBreakSteps(target.Row, result.Host, true, ranged);
+        RunObjectBreakSteps(target.Row, result.Host, byHero, ranged);
         LogObjectHits();
         LogItemHits();
         SyncAreaInventory();

@@ -130,9 +130,9 @@ pointer and the trade messages; the "Diagnostic view" switch shows the diagnosti
 look too, docked at the screen's (0, 41) over window 15's strips, without the round view and its release (the main menu is up, IW33,
 IW34; [menu windows plan](#menu-windows-plan-arc-ui-058) item 5).
 
-Left for the next barter slices (each its own task): the gamble (check 0x579840, gamble 0x579B60, the box's on and refused arts), the
+The follower's cycle buttons 757 / 758 at (155, 55), (253, 55) are built (ARC-UI-1120, BW6). Left for the next barter slices (each its own task): the gamble (check 0x579840, gamble 0x579B60, the box's on and refused arts), the
 generated quote phrases (0x413490 and its neighbours, `gd_*` lines), the count dialog for stacks, the hero's grid moves and drop and use
-boxes inside the barter window, the follower's weight lines and cycle buttons 757 / 758 at (155, 55), (253, 55), the merchant's doll view
+boxes inside the barter window, the follower's weight lines, the merchant's doll view
 (337 `Barter_PD` at (0, 157), toggles at (8, 123), (46, 123); IW29, IW30; the barter window's toggles are not built), the scroll bar's art.
 
 ## Character sheet
