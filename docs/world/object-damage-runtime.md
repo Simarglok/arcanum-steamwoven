@@ -227,7 +227,8 @@ step: the item's damage and its two-step break are the durability records (`Dama
 - Read in the executable: nothing new. The object branch (OD1–OD12), the acid's steps (DH9) and the burn's victim types 5..16 (GT94–GT97) were read twice or
   more; this slice applies them to the item type. The item's taking-damage script (point 0x17) is asked where ARC-DEV-254 and ARC-DEV-261's hook asks it (by the item's cast id); the witnesses are not modelled.
 - The viewer runs an item's trap and BUST script as it runs any broken object's (ARC-DEV-260, `RunObjectBreakSteps`) for an item lying on the map; a worn item has no map row, so its BUST script is not run.
-- NOT READY: the damage floaters; an item in a pack, a container or a junk pile is never reached (areas skip them); a
+- The viewer floats the damage line of a hit on an item lying on the map (`HT N`, the packet's amount, ARC-COMBAT-1138, `AreaItemHit.Amount`); a worn item has no cell to float over.
+- NOT READY: an item in a pack, a container or a junk pile is never reached (areas skip them); a
   non-kit item the hero wears; items on another map than the shown one; an NPC's item broken mid-pass is dropped by the host's build, not by the session.
 
 ## Not ready
@@ -260,5 +261,4 @@ that damage with no attacker dealt (`LogObjectHits`):
 - **Differences from the original.** The session applies the break in one revision, so the trap and the BUST script run after it, not as the original
   orders them (trap, then the break, whose BUST script follows the object's own change; a respawning scenery's BUST script runs before it is switched
   off). Only a script that reads the object's own state (switched off, busted, its art) sees the difference. The trap's own damage to objects queues
-  further hits: while a trap or script runs, `LogObjectHits` stands off and the outer loop takes the hits in at most 8 rounds (a window breaks again on every hit, ODA3, so its BUST script can chain). A ranged weapon with no missile art is still ranged (no trap triggerer). The hits' sounds, the witnesses and the
-  floaters stay unmodelled. A BUST script whose effects the viewer cannot apply is left unapplied, as for any script run here.
+  further hits: while a trap or script runs, `LogObjectHits` stands off and the outer loop takes the hits in at most 8 rounds (a window breaks again on every hit, ODA3, so its BUST script can chain). A ranged weapon with no missile art is still ranged (no trap triggerer). The hits' sounds and the witnesses stay unmodelled; each hit's damage line floats (ARC-COMBAT-1138, `LogObjectHits` -> `AreaCombatFloaters.Of(AreaObjectHit)`, the amount the hit added to the object's damage, "text floaters" 2 only). A BUST script whose effects the viewer cannot apply is left unapplied, as for any script run here.

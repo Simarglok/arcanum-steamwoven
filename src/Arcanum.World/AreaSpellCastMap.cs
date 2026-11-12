@@ -414,7 +414,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         if (ItemTarget(id) is not { } item) return false;
         var damaged = _session.DamageItemUnattacked(_session.Version, item.Wear, item.Facts, damage.HitPointDamage, item.OnGround);
         if (damaged.Item is not { } outcome) return false;
-        _itemHits.Add(new(id, outcome, damaged.Host));
+        _itemHits.Add(new(id, outcome, damaged.Host) { Amount = Math.Max(damage.HitPointDamage, 0) });
         return damaged.Disposition == GameSessionDisposition.Changed;
     }
 
@@ -516,4 +516,8 @@ public sealed class AreaSpellCastMap : ISpellCastMap
 public sealed record AreaObjectHit(string Id, ObjectHitOutcome Hit, SessionObjectHostSteps Host);
 
 /// <summary>ARC-COMBAT-025: one hit that reached an item (lying on the ground or worn): its cast id, the durability result and the host's steps.</summary>
-public sealed record AreaItemHit(string Id, ItemDurabilityResult Item, SessionObjectHostSteps Host);
+public sealed record AreaItemHit(string Id, ItemDurabilityResult Item, SessionObjectHostSteps Host)
+{
+    /// <summary>ARC-COMBAT-1138: the hit-point damage the item was struck with (the damage packet's, never below 0), the number its floater shows.</summary>
+    public int Amount { get; init; }
+}

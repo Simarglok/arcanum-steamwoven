@@ -1011,8 +1011,8 @@ critical hit (a granted fate) on the living NPC with the most hit points floats 
 from the game's file, the critical-hit message first, stacked from 4h one height apart, the damage line in white; the
 smoke's clock raises them 3 px a step and the drawn opacity is the fade's; the NPC then attacks the hero until a hit
 lands (red lines over the hero) or is dodged (a white dodge); at level 1 the numbers go, at level 0 nothing is drawn;
-it prints `ARC-UI-021 native-smoke floaters PASS`. Not done: spell, trap and script damage and the other damage steps
-without an attack (spell blinding included), the draw offsets of the boxes' objects (the hero's while walking), the
+it prints `ARC-UI-021 native-smoke floaters PASS`. Since ARC-COMBAT-1138 the stage also checks a script's damage on a map object (a door, container or scenery with hit points to spare): `HT N` in white over it, N what the
+object lost after its material (`ARC-COMBAT-1138 floaters object-damage`; its capture hides the diagnostic HUD). Not done: spell blinding, the draw offsets of the boxes' objects (the hero's while walking), the
 original's font art 229, text
 bubbles (Text Duration) and combat taunts. Original visual parity NOT VERIFIED.
 
