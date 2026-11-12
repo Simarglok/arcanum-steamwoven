@@ -38,7 +38,8 @@ public partial class TerrainViewerApp
         && (_inventoryPanel?.IsOpen ?? false) == InventoryOpen
         && (_sheetPanel?.IsOpen ?? false) == WindowOpen(InterfaceMode.Character)
         && (_schematicsPanel?.IsOpen ?? false) == WindowOpen(InterfaceMode.Schematic)
-        && (_readingPanel?.IsOpen ?? false) == WindowOpen(InterfaceMode.Book);
+        && (_readingPanel?.IsOpen ?? false) == WindowOpen(InterfaceMode.Book)
+        && (_sleepPanel?.IsOpen ?? false) == WindowOpen(InterfaceMode.Sleep);
 
     /// <summary>
     /// The first test of an opener: false when the window is on the stack (the opener's old guard, silent) or when another window mode is
@@ -205,6 +206,14 @@ public partial class TerrainViewerApp
         {
             if (_inventoryPanel?.Asking == true || DropHeldOnHotkey(key)) return false;
             return RouteHotkeyKey(decision, modifiers);
+        }
+        // ARC-WORLD-1160: S asks the sleep opener for its own decision (0x57B180): it leaves the open window as it is when it refuses and replaces it when it opens.
+        if (routed == Key.S && !SleepOpen)
+        {
+            if (!SleepActive || _inventoryPanel?.Asking == true) return false;
+            if (!_worldFocused || WorldUiFocus) return true;
+            OpenSleep();
+            return true;
         }
         var (own, active, open) = routed switch
         {

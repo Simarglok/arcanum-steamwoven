@@ -165,12 +165,16 @@ public partial class TerrainViewerApp
     // One production tick at the given host time; the frame loop passes the monotonic engine clock.
     private void TickAreaClock(long hostMilliseconds)
     {
+        // ARC-WORLD-1160: the sleep window's steps are real-time events, which a frame's pass spends before the game's (TL27); the cover follows the fade.
+        _clockHostMs = hostMilliseconds;
+        TickSleep(hostMilliseconds);
         if (_areaAmbient is not { } driver) { TickUnlitFrame(hostMilliseconds); return; }
         DropUnlitFrame();
         var paused = driver.MenuPaused;
         var hourChanged = driver.Tick(hostMilliseconds, WorldMenuPause, AmbientSector(), WorldFrozenFrame);
         LogAreaEvents(driver);
-        if (hourChanged) PushAreaAmbient();
+        // SWB11: the hourly light apply is off while the rest runs; the stop applies the current hour at once.
+        if (hourChanged && !_restDark) PushAreaAmbient();
         if (hourChanged || paused != driver.MenuPaused)
         {
             BindAreaAmbientPalette();

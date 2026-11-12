@@ -122,7 +122,7 @@ rules, clock and calendar, change-of-place clock steps, waypoint and standpoint 
 | Slice | Content | Size | Needs |
 | --- | --- | --- | --- |
 | E3-r | **Done** (ARC-RES-1102, issue #1102): the sleep and wait window, its conditions, bed use and the hourly NPC consumers are read in the [ledger rows SWB1–SWB22](../research/ledger/world.md#sleep-wait-and-beds-arc-res-1102). Answers: sleep and wait are refused in combat mode only when an NPC is engaged with the hero or his party (not for enemies merely near); a town refuses resting without the town-map wait marker, but beds work there; a bed is any scenery of art type 4, sub-type 0x16; there is no hourly NPC day timer, the day test runs at each AI step; a random encounter is the only interruption (SWB4, SWB3, SWB14, SWB20, SWB13) | M | Mac read |
-| E3-a | Sleep window and the PC rest action, time skip, interrupted rest; the game bar's Sleep button | M | E3-r |
+| E3-a | **Done** (ARC-WORLD-1160, issue #1160): sleep and wait window, the PC rest action, the hourly time skip, the game bar's Sleep button and the key S ([contract](../world/sleep-window-runtime.md)); open: the bed (SWB1, SWB5, SWB14–SWB16), the random-encounter interruption (E2-c) | M | E3-r |
 | E3-b | HUD clock and date button (the original's clock button) | S | — |
 | E3-c | Spell-run ending on rest (MT11 remainder; the travel ending is done, ARC-MAGIC-059: the rest option click calls 0x457450, [UE6](../research/ledger/spell-runs.md#spell-run-endings-of-a-critter-arc-dev-301)) | S | E3-a |
 | E3-d | NPC day: beds and sleep, hourly walking between the day and night standpoints, not only on the fold; heartbeat budget check | L | E3-r |

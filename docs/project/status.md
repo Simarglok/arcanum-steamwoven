@@ -113,6 +113,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Schematic window | [Technology](status/technology.md) | ARC-TECHNOLOGY-005, ARC-RES-062, ARC-TECHNOLOGY-006 |
 | Powered shield | [Technology](status/technology.md) | ARC-MAGIC-041, ARC-RES-112 |
 | Reading window | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-049, ARC-SCRIPT-020, ARC-TECHNOLOGY-009 |
+| Sleep and wait window | [Viewer, rendering, HD and input](status/viewer.md) | ARC-WORLD-1160 |
 | NPC inventory changes | [Items and inventory](status/items.md) | ARC-WORLD-055, ARC-TECHNOLOGY-006 |
 | Ammunition | [Items and inventory](status/items.md) | ARC-WORLD-066, ARC-TECHNOLOGY-009, ARC-TECHNOLOGY-007 |
 | NPC gold and transfers | [Items and inventory](status/items.md) | ARC-WORLD-071 |
