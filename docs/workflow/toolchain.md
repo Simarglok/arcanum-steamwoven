@@ -245,8 +245,12 @@ history held about 500 runs of such copies of one template).
   stages after it never ran, and a stage can fail only because of what the stages before it left behind (the 2026-11-11 daily run:
   `ai-cast` and `npc-door` failed in their groups and passed alone). With `--retry`, a failed stage process is followed by one
   process per unfinished stage (steps `STEP-retry-STAGE`; the failing stage included); the summary says `passes alone, so it fails
-  only after the other stages of STEP` or `fails alone too`. The failed step stays failed (the exit code and the daily gate do not
-  change); the retries only add what ran, so no stage goes unchecked behind a failure and an order-dependent stage is named.
+  only after the other stages of STEP` or `fails alone too`. The failed step stays failed
+  unless every unfinished stage passed alone: then it is **order-dependent** (owner decision 2026-11-12), the summary shows it as
+  `ORDER` with an `order-dependent:` line naming the step and its stages, the run and `./arcanum daily` pass (the daily report adds
+  `smoke order-dependent ...` for a fix thread, and no package is blocked), and the final line says `(N order-dependent, each stage
+  passes alone)`. A stage that fails alone too, or a failure with nothing unfinished, still fails the run as before. No stage goes
+  unchecked behind a failure and an order-dependent stage is named.
   **`--auto`** reads the diff: the merge base with `--base` (default `origin/main`; fetch first) to the working tree, untracked
   files included, and picks the zones by the table `TRIGGERS` (all matching rows of a path, as a union; a "no smoke" row such as `tests/` or
   `experiments/` beats the generic project-file rows `*.csproj`, `*.sln`, `*.props`, `*.tscn` and the lock files): ordinary game and

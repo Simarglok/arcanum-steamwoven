@@ -68,6 +68,7 @@ class SmokeResult:
     passed: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
     not_run: list[str] = field(default_factory=list)
+    order_dependent: list[str] = field(default_factory=list)  # ARC-DEV-396: steps that failed only after other stages (each passed alone)
     details: dict[str, list[str]] = field(default_factory=dict)  # each step's own lines (its run's PASS/FAIL, first error)
 
     @property
@@ -115,6 +116,8 @@ def parse_smoke(text: str, code: int) -> SmokeResult:
         found = SUMMARY_LINE.match(line)
         if found:
             (result.passed if found.group(2) == "PASS" else result.failed).append(found.group(1))
+        elif line.strip().startswith("order-dependent:"):
+            result.order_dependent.append(line.split(":", 1)[1].strip())
         elif line.strip().startswith("not run:"):
             result.not_run = [name.strip() for name in line.split(":", 1)[1].split(",") if name.strip()]
     return result
@@ -304,6 +307,8 @@ def daily(*, root: Path, output: Path, fetch: bool, force: bool, keep_work: bool
         result = parse_smoke(text, smoke_code)
         day.note("smoke summary: passed " + (", ".join(result.passed) or "none") + "; failed " + (", ".join(result.failed) or "none")
                  + (f"; not run {', '.join(result.not_run)}" if result.not_run else ""))
+        for entry in result.order_dependent:  # a warning for a fix thread, not a failure (owner decision 2026-11-12)
+            day.note(f"smoke order-dependent (no package is blocked by it): {entry}")
         failure = result.failure
         if failure:
             # Without a summary (the chain was cut off) the step that was running is the one to show.

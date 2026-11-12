@@ -456,6 +456,25 @@ class ExecuteTests(unittest.TestCase):
         code, calls, _ = self.run_steps(plain, {"stages-main": 1}, {"stages-main": pass_line("cast")})
         self.assertEqual((code, len(calls)), (1, 1))
 
+    def test_a_group_whose_unfinished_stages_all_pass_alone_is_order_dependent_and_does_not_fail_the_run(self) -> None:
+        pass_line = lambda stage: smoke.STAGE_PASS[stage] + " {}\n"
+        again = lambda stage: smoke.Step(f"stages-retry-{stage}", "window", ("g",), requires=(stage,))
+        group = smoke.Step("stages-main", "window", ("g",), requires=("cast", "ai", "life"), again=again)
+        steps = [group, smoke.Step("main", "window", ("g",))]
+        code, calls, lines = self.run_steps(steps, {"stages-main": 1},
+                                            {"stages-main": pass_line("cast"), "stages-retry-ai": pass_line("ai"),
+                                             "stages-retry-life": pass_line("life")})
+        self.assertEqual(code, 0)
+        self.assertIn("  stages-main        ORDER exit=1", lines)
+        self.assertIn("  order-dependent: stages-main (fails only after other stages of its process; each of ai, life passes alone)", lines)
+        self.assertEqual(lines[-1], "SMOKE PASS 4 of 4 steps passed (1 order-dependent, each stage passes alone)")
+        # one stage that fails alone too keeps the failure
+        code, _, lines = self.run_steps(steps, {"stages-main": 1, "stages-retry-life": 1},
+                                        {"stages-main": pass_line("cast"), "stages-retry-ai": pass_line("ai")})
+        self.assertEqual(code, 1)
+        self.assertFalse(any("order-dependent:" in line for line in lines))
+        self.assertIn("  stages-main        FAIL exit=1", lines)
+
     def test_a_failed_build_or_a_stopped_run_ends_the_chain(self) -> None:
         steps = [smoke.Step("build", "dotnet", ("sh",), gate=True), smoke.Step("crash-site", "window", ("g",)),
                  smoke.Step("main", "window", ("g",))]
