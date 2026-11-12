@@ -60,4 +60,29 @@ public sealed class AssemblyPendingItemsStateTests
         Assert.AreEqual(0, result.OnGround.Count);
         Assert.AreEqual("kit:3 made:1", string.Join(" ", owner.QueryHeroGrid().Items.Select(item => item.Entity)));
     }
+
+    [TestMethod]
+    public void A_waiting_gold_pile_never_takes_a_place_ahead_of_the_products()
+    {
+        // The gold pile is the last member of the list, so the products are placed before it: a hero with coins whose pile has no cell still gets a whole-grid product.
+        using var owner = CreateWith(HalfElf() with { Gold = 385, Kit = [new(Part), new(Part)] });
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, new([], [])).Disposition);
+        owner.AttachItemArtSizes((entity, kind) => entity == SessionHeroGrid.GoldEntity ? (64u, 32u) : kind.Prototype == 2320 ? (320u, 384u) : (320u, 192u));
+        CollectionAssert.AreEqual(new[] { SessionHeroGrid.GoldEntity }, owner.QueryHeroGrid().Unplaced.ToArray());
+        var result = owner.AssembleSchematic(owner.Version, Schematic(1), InBag, Facts, Kinds, Accept);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (result.Disposition, result.Failure));
+        CollectionAssert.AreEqual(new[] { "made:1" }, result.Made.ToArray(), "the product takes the freed grid");
+        Assert.AreEqual(0, result.OnGround.Count);
+    }
+
+    [TestMethod]
+    public void The_second_unit_sees_the_waiting_item_and_the_first_unit_s_place()
+    {
+        // 10 x 6 products: kit:3 (cells 0 and 1) leaves rows 1 to 6 for the first unit and rows 7 to 12 for none (10 x 6 needs rows 7..12 = 6 rows: 7,8,9,10,11 only 5 left).
+        using var owner = Hero(productHeight: 192);
+        var result = owner.AssembleSchematic(owner.Version, Schematic(2), InBag, Facts, Kinds, Accept);
+        CollectionAssert.AreEqual(new[] { "made:1" }, result.Made.ToArray());
+        CollectionAssert.AreEqual(new[] { "made:2" }, result.OnGround.ToArray(), "the second unit finds no place and lies on the tile");
+    }
 }
+

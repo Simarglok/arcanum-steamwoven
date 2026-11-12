@@ -324,7 +324,8 @@ public sealed partial class GameSessionOwner
         var cells = new List<InventoryGridItem>();
         foreach (var entity in GridMembers())
         {
-            if (_inventory.Grid.ContainsKey(entity) || freed.Contains(entity)) continue;
+            // The gold pile is the last member (GridMembers), after the made items the products join, so it never takes a place ahead of them.
+            if (entity == SessionHeroGrid.GoldEntity || _inventory.Grid.ContainsKey(entity) || freed.Contains(entity)) continue;
             var (width, height) = GridSize(entity);
             if (InventoryGridRules.FindSlot(occupied, width, height) is not (>= 0 and var slot)) continue;
             cells.Add(new(slot, width, height));
