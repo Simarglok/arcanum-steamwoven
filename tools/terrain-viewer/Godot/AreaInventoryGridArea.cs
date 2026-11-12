@@ -31,6 +31,12 @@ public partial class AreaInventoryGridArea : Control
     public event Action<AreaInventoryDrop>? DropRequested;
     /// <summary>ARC-UI-025: a right release with nothing held on an item of the doll or the grid (ARC-UI-032: the release, IW5).</summary>
     public event Action<AreaInventoryHeld>? UseRequested;
+    /// <summary>ARC-MAGIC-1128: while <see cref="TargetPicking"/>, a left press on an item names it as the target (the item under the pointer, 0x575FA0 in mode 1, ledger IW44); nothing is lifted.</summary>
+    public event Action<AreaInventoryHeld>? ItemPicked;
+    /// <summary>ARC-MAGIC-1128: a right release while <see cref="TargetPicking"/> cancels the cursor (the spell cursor's own cancel, SU9).</summary>
+    public event Action? PickCancelled;
+    /// <summary>ARC-MAGIC-1128: a spell's cursor (mode 1) stands over this window: a press picks an item as the spell's target instead of lifting it.</summary>
+    public bool TargetPicking { get; set; }
     /// <summary>ARC-UI-035: the pointer rested with nothing held over another item than the last report (its entity) or over none (null).</summary>
     public event Action<string?>? PointerStill;
     /// <summary>ARC-UI-052: the loot window's Take all button was pressed and released.</summary>
@@ -297,6 +303,13 @@ public partial class AreaInventoryGridArea : Control
     {
         _arrangeDown = false; _cycleDown = null;
         if (Held is not null || _view is null) return;
+        if (TargetPicking)
+        {
+            // The own window's grid and doll only: the loot, steal and barter looks name their items by their own layouts (not ready for a target).
+            if (!BarterLook && !LootLook && AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y)) is { } picked)
+                Callable.From(() => ItemPicked?.Invoke(picked)).CallDeferred();
+            return;
+        }
         // ARC-UI-1120: a cycle button takes the press as the arrange button does (art buttons of the bars: press sound 3000).
         if (CycleAt(frame) is { } cycle) { _cycleDown = cycle; SoundRequested?.Invoke(Arcanum.TerrainViewer.Core.AreaGameBarLayout.PressSound); QueueRedraw(); return; }
         // ARC-DEV-339: the arrange button takes the press first (the button system, not the window's handler, serves it), with its press sound.
@@ -344,6 +357,7 @@ public partial class AreaInventoryGridArea : Control
         // ARC-UI-065: in the loot and steal windows the right release moves the item under it to the other side (IW36): a take, or in the
         // steal window a theft or a plant attempt; ARC-UI-064: in the barter window a buy or a sale. ARC-UI-052: it uses an item only in the
         // player's own window (mode 0, IW5).
+        if (TargetPicking) { Callable.From(() => PickCancelled?.Invoke()).CallDeferred(); return; }
         if (BarterLook)
         {
             if (AreaBarterArtLayout.RightRelease(_view, BarterHit(frame)) is { } trade) Callable.From(() => DropRequested?.Invoke(trade)).CallDeferred();

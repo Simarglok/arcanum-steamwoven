@@ -339,13 +339,13 @@ Compare in both games with the same hero (Divination college: See Contents 6, Re
 | 1 | Cast Read Aura (spell 7) at a creature. | The original opens the character sheet of the creature, read only (no + or − buttons, all four tabs), the same window as the dialog's "show your abilities" reply. Steamwoven: a line "identify: ..." in the message log and no window. | open |
 | 2 | Cast See Contents (spell 6) at a **locked** container. | The original opens the container's inventory at once, with no lock, jam or magically-held test, so the items of a locked chest show. Steamwoven: the line only. | open |
 | 3 | In step 2, take or move an item in that window. | Not read in the executable (what a press may move in inventory mode 4): note what the original allows (take, put, nothing). | open |
-| 4 | Cast Divine Magick (spell 9) on an unidentified magickal item in the pack (a wand or a ring with a "?" description). | The item's name and description become the true ones, its spell slots and charge gauge show, and its worth in a trader's window is its real worth. Steamwoven builds this state (the item's identification mark), but cannot cast the spell yet: nothing picks an inventory item as a target. | open |
+| 4 | Cast Divine Magick (spell 9) on an unidentified magickal item in the pack (a wand or a ring with a "?" description). | The item's name and description become the true ones, its spell slots and charge gauge show, and its worth in a trader's window is its real worth. Steamwoven (ARC-MAGIC-1128): pressing the spell opens the inventory with the spell cursor over it; a left click on the item casts at it (the cursor stays, a right click cancels and closes the window). | open |
 | 5 | Cast Divine Magick on an item that was already identified. | The description shows again; nothing else changes. | open |
 
 Known differences (documented, not bugs):
 
 - The three windows (the NPC sheet, the container's inventory, the item description) are E8's; the viewer says so in its line.
-- Divine Magick cannot be cast from the viewer yet (no spell target in the inventory).
+- Divine Magick picks an item of the hero's own inventory window only; an item of a loot, steal or barter window is not a target (ARC-MAGIC-1128).
 
 ## ARC-MAGIC-033 — Resist Magick counts in the magic save (D6c, 2026-11-11)
 

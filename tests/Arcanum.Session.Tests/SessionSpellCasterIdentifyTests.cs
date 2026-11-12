@@ -166,4 +166,24 @@ public sealed class SessionSpellCasterIdentifyTests
         Assert.AreEqual(version, owner.Version);
         Assert.IsFalse(owner.QueryItemIdentified(Coat));
     }
+
+    // ARC-MAGIC-1128 (SU3, IA6, ledger IW44): the cursor's pick for a mask with the inventory bit (spell 9's Tgt_Obj_Inven, 0x2000004) at an item the inventory window names: a held item passes, the hero and an
+    // item the host does not hold do not (the inventory flag is the area test's, the holder's location the item's).
+    [TestMethod]
+    public void The_inventory_cursor_picks_a_held_item_and_nothing_else()
+    {
+        var record = SessionSpellRecords.Translate(Record(number: 9, beginTargets: 0x2000004, info: SpellInfo.Friendly,
+            components: [new(SpellAction.Begin, SpellComponentType.ObjFlag, new SpellArea(0x2000004, 0, 0, 0, -1), 0, 0, new ObjectFlagData(87, 0x1, true))]));
+        using var owner = CreateWith(HalfElf());
+        var caster = new SessionSpellCaster(owner, n => n == 9 ? record : null, new Map(owner), new Events(),
+            id => id == Coat ? new SessionItemSpells(Coat, Hero, 5, [10000, 10000, 10000, 10000, 10000], 0, 0) : null);
+        const ulong mask = 0x2000004;
+        var held = caster.PickTarget(Hero, 9, mask, Coat, null);
+        Assert.IsTrue(held.Test.Passes, "the held item is a target");
+        Assert.AreEqual(Coat, held.Object?.Id);
+        Assert.IsTrue(((held.Object?.ObjectFlags ?? 0) & SpellTargetObject.Inventory) != 0, "it is an object in an inventory");
+        Assert.IsFalse(caster.PickTarget(Hero, 9, mask, Hero, null).Test.Passes, "the hero is no item in an inventory");
+        Assert.IsFalse(caster.PickTarget(Hero, 9, mask, "kit:99", null).Test.Passes, "an item the host does not hold");
+        Assert.IsFalse(caster.PickTarget(Hero, 9, mask, null, null).Test.Passes, "no point, no tile");
+    }
 }

@@ -102,7 +102,7 @@ Left: an NPC's life facts (maximum hit points, poison tick) ignore effect-change
 
 Done by owner decision D5(a): magic builds the state and a text answer, the windows are E8's ([contract](../world/spell-cast-host.md#identify-arc-magic-032), ledger [XR1-XR5](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)). The original's Identify writes nothing and shows a window to the casting local player only, so an NPC caster's has no effect.
 The hero's answer is a typed event and a message line by the target's type (`IdentifyCritter`, `IdentifyContainer`, `IdentifyItem`); Divine Magick's identified flag is the session's `MarkItemIdentified` mark (no schema step), now read by the weapon spell pane too.
-Left: nothing picks an inventory item as a spell target (spell 9 cannot be cast from the viewer); the three windows; what inventory mode 4 lets the player move (XR3); a clear of the identified flag stays "not ready" (no installed record has one).
+Left: the three windows (an inventory item is a spell target since ARC-MAGIC-1128); what inventory mode 4 lets the player move (XR3); a clear of the identified flag stays "not ready" (no installed record has one).
 
 ## Social and AI flags (MA-4, ARC-MAGIC-035)
 

@@ -265,6 +265,8 @@ public partial class TerrainViewerApp
             _inventoryPanel.SoundRequested += id => PlayInterfaceSound(id, "inventory arrange button");
             _inventoryPanel.PlantRequested += item => PickPocketAttempt(Arcanum.Simulation.Skills.PickPocketDirection.Plant, item);
             _inventoryPanel.UseRequested += UseItemFromWindow;
+            _inventoryPanel.ItemPicked += InventoryItemPicked;
+            _inventoryPanel.PickCancelled += () => { if (_itemAiming is not null) CancelArmedLockpicks("right click"); else CancelSpellTargeting("right click"); };
             _inventoryPanel.PointerStill += InventoryPointerStill;
             _inventoryPanel.ReadRequested += ReadItem;
             _inventoryPanel.PickRequested += ArmLockpick;

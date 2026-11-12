@@ -564,6 +564,15 @@ value 0x465BA0, the critter's armour class 0x43D880 and resistance 0x43D6D0, the
 
 Limits: effects on the body's stats and its poison and crippled legs are read through the session's NPC effects (the AI host's reading); a throwing weapon's damage is read from its own arrays (the thrown item rule of WB8 is not applied); the armour class goes through the project's armour-class rule under the rule profile of the session (the original applies the armour-class effects and then adds the stat, which the Original profile counts twice, as in combat); a rating the rules cannot compute (an argument out of range) is not printed.
 
+## Inventory window as a target surface (ARC-MAGIC-1128)
+
+Source: issue #1128 (an inventory item as a spell target, spell 9), FR-MAGIC-003, FR-MAGIC-012, FR-UI-003. Read on 2026-11-12 by this task in the spell activation 0x57BC70, the cast at a target 0x57C110, the inventory window's mouse
+handler 0x573850 (the mouse-press branch with the cursor modes) and the item picker 0x575FA0, with [SU3](spell-runs.md) and [IA4–IA6](items.md) read earlier. The row is F1 (one reader).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| IW44 | activation inventory branch 0x57BC70, inventory window press 0x573850 (the branch for window modes 0 to 3 with the left press and the interface mode on top 1, 2, 0x10), picker 0x575FA0, cast 0x57C110 | A BEGIN area with the inventory bit (0x2000000) closes the inventory first when its window mode is barter or steal (interface mode 4 or 0xB, 0x573440), opens the source's inventory when it is not open (0x572240) or keeps it, then asks the action points (0x4B7AA0; a refusal leaves the inventory open and no cursor), stores the mask and pushes interface mode 1 over it. In the window's handler a left press (event subtype 0 as the decompiler reads it, with the repeat flag 0x68346C clear, for every window mode but 4, 5 and 6) reads the interface mode on top: 8, 10, 0xB or 4 lift the item (the window's drag lift), **1 (spell) takes the item under the pointer (0x575FA0: an item of the grid, the doll or the other party's list, the item's own object flag OF_OFF and item flag 0x10 refusing) as an object target and calls the cast at a target 0x57C110, 2 (skill) the skill's target function (0x57A1F0), 0x10 (item use) the apply 0x571CB0** (IA7). The press lifts nothing in these modes and a press on no item does nothing. The cast at a target (SU8) tests the caster (dead, unconscious), the cost for a PC or NPC source, and runs the invocation (0x455A20) with the item as the target object. Not read: the right-release branch of the window's handler in the cursor modes (reached through the test 0x57DE00); the cursor staying after the cast is SU9's. | Original (F1) |
+
 ## Barter window art (ARC-UI-064)
 
 Source: FR-UI-004 and the barter window (ARC-UI-050); plan [original windows](../../ui/original-windows.md#barter-window-done-arc-ui-064).
