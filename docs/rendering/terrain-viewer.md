@@ -1837,6 +1837,14 @@ experience stored in the map file against the session's level (a follower the se
 spell hover texts read the hero's spell book; without the player's game folder the plain fallback panel draws its + and − inert; a stored primary stat above the
 racial range shows clamped.
 
+**Identify sheet, heal another critter and lockpicks on containers (ARC-UI-1127, slice E8-g of [the plan](../project/missing-systems-plan.md)).** (1) The cast host's `IdentifyCritter` event for an NPC
+(Read Aura, spell 7, ledger XR2) opens the same read-only NPC sheet as the dialog's c-e reply (`TakeIdentifyEvent` and `TakeIdentifySheet` in `Godot/TerrainViewerAreaNpcSheet.cs`; the NPC's map row comes from the
+cast host's id; the sheet waits until no modal window owns input, and a hero as the target keeps its message line). (2) A healing kit with the target flag aimed with the item cursor at another critter walks
+next to it (goal 39, range 1) and the session's heal runs on it (`HealCritter`, [Heal](../world/heal-runtime.md#viewer)). (3) Armed lockpicks on a standing container start the skill goal 33 with the loot
+target string, and the pick is the session's on the container's lock (`TerrainViewerAreaContainerPick.cs`, [Pick locks](../world/pick-locks-runtime.md#containers-in-the-viewer-arc-ui-1127)). Smoke: stage `item-aim`
+(steps 6 to 8, run on the town sector). NOT READY: the container window of See Contents and the item description window (their interaction is not read), the question window for a junk pile's and a container's
+stacks, poison sources.
+
 **Not yet in the original's look:** the auto-level schemes tab (a NOT READY note); the age line (the session has no age); the race icons as portrait fallback; a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) keeps the diagnostic
 look. Without a game folder (the synthetic self-tests) or when an art does not read, the whole sheet is the diagnostic panel above.
 Native smoke: `./arcanum smoke pr --stages map --map "elven ruins" --hero elf-female` prints `ARC-UI-075 native-smoke sheet art PASS`

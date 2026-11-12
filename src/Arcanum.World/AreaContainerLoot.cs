@@ -136,6 +136,26 @@ public static class AreaContainerLoot
         return new(AreaContainerOpenOutcome.Opened, generation, opening, detail + (ran is null ? "" : " use-script=run-default")) { UseScript = ran };
     }
 
+    /// <summary>The container field slot of its lock level (field 57: the lock's difficulty, slot 37 as a portal's field 47).</summary>
+    private const int LockLevelSlot = 37;
+
+    /// <summary>
+    /// ARC-UI-1127 (E8-g): the hero picks the lock of <paramref name="container"/> of <paramref name="map"/> with <paramref name="lockpick"/> (null: no lockpicks), at the light <paramref name="light"/> of the container's cell: the
+    /// session's pick (<see cref="GameSessionOwner.PickLock"/>, ARC-SKILLS-006) on the container's lock identity, its T0 baseline and its lock level (field 57), as <see cref="AreaPortals.Pick"/> does for a door. Null when the
+    /// container is not a standing one of the map's seed (a broken container has no lock to pick); nothing opens (the window's admission does that).
+    /// </summary>
+    public static SessionPickLockResult? Pick(GameSessionOwner session, AreaInventoryMap map, string container, SessionLockpick? lockpick, int light = SessionPickLockTarget.FullLight,
+        ISessionCombatWorld? world = null)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(container);
+        if (Facts(session, map, container) is not { } facts) return null;
+        var level = facts.Row.EffectiveFields.SingleOrDefault(f => f.Slot == LockLevelSlot && f.Presence == Arcanum.Data.Area.AreaPresence.Value)?.Number ?? 0;
+        var difficulty = (int)Math.Clamp(level, -GameSessionOwner.MaxLockDifficulty, GameSessionOwner.MaxLockDifficulty);
+        return session.PickLock(session.Version, new(facts.Openable, facts.Baseline, difficulty, light), lockpick, world);
+    }
+
     /// <summary>
     /// The close of a container's loot window (0x573440 in mode 2): a container on frame 1 whose recorded flags lack
     /// <see cref="StaysOpenFlag"/> steps back to frame 0 (one revision); true when it did (its close sound plays). Anything else changes

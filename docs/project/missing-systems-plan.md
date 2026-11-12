@@ -212,7 +212,7 @@ FR-ITEM-008, FR-MEDIA-003, FR-COMBAT-002, FR-COMBAT-003.
 | E8-d | Combat action-point readout and the turn-order list (owner decision 2026-10-28) | M | — (UI-124 runs beside) |
 | E8-e | Options windows hidden today: violence filter, brightness, auto-switch weapons, follower skills, combat taunts (read, ARC-RES-1107: slices E8-e1…E8-e5 [below](#e8-c-and-e8-e-slices-read-by-arc-res-1107)); the autosave timer is **dropped** (the original has none, OH6) | M | — |
 | E8-f | **Done (ARC-RENDER-1126, #1126).** Sound callers: scenery loops, busting, AI barks, NPC footsteps, item drop | S–M | — |
-| E8-g | Identify window, heal another critter, lockpicks on chests (viewer wiring; the session takes containers), junk-pile partial take, poison sources | M | — |
+| E8-g | Identify window, heal another critter, lockpicks on chests (viewer wiring; the session takes containers), junk-pile partial take, poison sources. **Part done (ARC-UI-1127, issue #1127):** heal another critter, lockpicks on containers and the Identify sheet of an NPC (Read Aura). **Open:** the container window of See Contents and the item description window of Identify (what a press in the container's mode 4 may move is not read), the junk pile's and a container's partial take of a stack (the question window of a pile), poison sources | M | — |
 | E8-h | Gambling and newspapers queue (K10; proposed for after the alpha) | M | E5-c |
 
 #### E8-c and E8-e slices (read by ARC-RES-1107)

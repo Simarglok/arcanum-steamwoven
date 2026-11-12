@@ -216,7 +216,7 @@ history held about 500 runs of such copies of one template).
   configuration, the stages are grouped into the fewest processes (one per configuration, in order of first appearance;
   the step is named `stages-main`, `stages-wild`, `stages-town`, `stages-shrine`, `stages-crash-site-cave` ... when there
   are several, `stages` when there is one), a *portable* stage (`map`, `resources`, `report`, `knockdown`, `inv-arrange`,
-  `created-*`, `summon-*`, `item-aim`, `disarm`) rides in a process that already exists on its map (else it gets one), and the stages that end a game, move
+  `created-*`, `summon-*`, `disarm`) rides in a process that already exists on its map (else it gets one), and the stages that end a game, move
   the window, leave state behind or run long (the menu family, `walk`, `census`, `container-click`, `perf`,
   `dead-window`, `critter-fall`, `tech-craft`, `tech-products`, `debug-travel`, `follower-far`, `teleport-follow`, `inv-carry`) each get a process of
   their own (`stages-main-walk`). `--map`, `--sector` and `--main-menu` pin that dimension for every stage; a pinned

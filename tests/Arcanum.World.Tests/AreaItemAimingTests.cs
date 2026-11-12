@@ -64,6 +64,15 @@ public sealed class AreaItemAimingTests
     }
 
     [TestMethod]
+    public void AHealingKitAimedAtAnotherCritterWalksToItFirstWhateverTheRange()
+    {
+        // ARC-UI-1127 (E8-g, IA14): the heal skill's goal 33 (range 1) walks next to the target; Steamwoven walks with goal 39.
+        Assert.AreEqual(AreaItemAimObject.WalkThenUse, AreaItemAiming.ApplyOnObject(false, true, false, healsAnother: true));
+        Assert.AreEqual(AreaItemAimObject.WalkThenUse, AreaItemAiming.ApplyOnObject(false, false, false, healsAnother: true));
+        Assert.AreEqual(AreaItemAimObject.UseNow, AreaItemAiming.ApplyOnObject(false, false, false, healsAnother: false), "the kit on the hero itself is used at once");
+    }
+
+    [TestMethod]
     public void ATileIsUsedAtOnceForAChargedItemWalkedToForATrapDeviceAndThrownForAnythingElse()
     {
         Assert.AreEqual(AreaItemAimTile.UseNow, AreaItemAiming.ApplyOnTile(true, false));

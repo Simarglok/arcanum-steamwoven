@@ -73,10 +73,12 @@ prototype fields, a taken item's from its object row) and runs `HealWithItem` on
 action points on the hero's subturn and goes on whatever the charge answers. A made item (ARC-TECHNOLOGY-004, ARC-WORLD-055) gets no button: the viewer has no object row and so no healing
 fields for it, although `HealWithItem` accepts one the hero holds. The window reports the amount, the cure, the uses left or the item used up.
 
+**Another critter (ARC-UI-1127, slice E8-g).** A healing item with `OIF_NEEDS_TARGET` (prototype 15199, the heal kit; [IA16](../research/ledger/items.md#item-aiming-and-use-with-a-target-arc-res-113)) used from the Use icon without Shift opens the item cursor; a press on a critter (a follower, an NPC; the hero itself with Shift) starts the heal. The original's use goes to the heal skill goal 33 with range 1 (IA14); Steamwoven starts the item use goal 39 for a kit aimed at another critter (the same walk next to the target, range 1), and at its last node the viewer runs `HealWithItem` on the target's life target of the map's cast host (`SessionSpellCaster.LifeTarget`) with the 4 action points the item use already charged. The HUD answers with the amount or the failure and the uses left. Smoke: stage `item-aim`, step 6 (a living NPC of the town, a hurt one: the walk, the session's heal, the check's answer).
+
 ## Boundaries
 
 - Not modelled: the use and destroy scripts (refused), the best-follower substitution and its line, the dialog skill service
-  (SK8), the AI's heal decision, healing another critter from the viewer (no target choice), the animation goal's walk and its
+  (SK8), the AI's heal decision, the heal skill goal 33 for the hero (the heal of another critter walks with goal 39), the animation goal's walk and its
   range checks, the network messages.
 - The cure removes a scar from the session's scar count; other injury effects of cause 7 on an NPC are not session state.
 

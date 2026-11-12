@@ -57,10 +57,11 @@ public partial class TerrainViewerApp
         catch (KeyNotFoundException) { return null; }
     }
 
-    /// <summary>The cell of a skill goal's target: a pick pocket's victim ("pp:") or a lock pick's door or window (the portal's session entity).</summary>
+    /// <summary>The cell of a skill goal's target: a pick pocket's victim ("pp:") or a lock pick's door, window (the portal's session entity) or container (a loot target string, ARC-UI-1127).</summary>
     private CellCoord? SkillTargetCell(string target)
     {
         if (PickPocketRowOf(target) is { } row) { var (x, y) = LiveWorldCell(row); return new(checked((int)x), checked((int)y)); }
+        if (ContainerOfSkillTarget(target) is { } container) { var (cx, cy) = LiveWorldCell(container.Row); return new(checked((int)cx), checked((int)cy)); }
         return _areaDoors?.PortalOf(target) is { } portal ? new(checked((int)portal.Cell.X), checked((int)portal.Cell.Y)) : null;
     }
 
