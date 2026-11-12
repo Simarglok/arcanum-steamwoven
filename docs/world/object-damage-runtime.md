@@ -92,9 +92,9 @@ into it (ARC-WORLD-090, the end of the list) first: a made item becomes a script
 ammunition stack or an item the hero gave (kit or taken) a placed item of the hero's own, which its pickup or loot returns to its list; both
 only with a hero (a save restores a placed hero item only with one), else, and for gold, a key or a kind no ground source admits, the item is
 destroyed with the container (a recorded limit, as a body's). Before any change the break checks the created-item bound, the hero's item
-bound, the deleted-item records and the packing of the container's cell (`DropTileUnfit`); a break that cannot take every item is refused
+bound, the deleted-item records and, when an item is placed, that the container's cell fits the ground record (`DropTileUnfit`); a break that cannot take every item is refused
 whole (`DamageObject` and `AttackObject` report `BudgetExceeded` or `DropTileUnfit` as they report a full map-change budget) and the
-container stays whole with its sold items.
+container stays whole with its sold items (every blow on it is refused too, as the damage and the break are one write, until the hero makes room). A made item the hero sold counts against the created-item bound on the ground, so picking it up again needs room in the hero's list. Saves made before the fix keep the sold items of an already spilled container hidden in its list (lost, as before); only a break after the fix spills them. `CloseMapJunkPile` still leaves a pile that holds a sold item untouched.
 
 A respawning scenery schedules the saved game event `object.respawn`:
 

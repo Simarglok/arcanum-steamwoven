@@ -716,7 +716,7 @@ Findings, each with its issue:
   the walk is the whole list, last first, the sold items (the end of the list) through the drop placement with their decay events;
   a sold item lies on the ground as a placed item that a save restores. The budgets (created items, the hero's items, deleted-item
   records, the cell's packing) refuse the break whole before any change. Recorded limits: gold, a key, a kind no ground source admits and,
-  without a hero, an item the hero gave or an ammunition stack are destroyed with the container (as a body's, VPG5).
+  without a hero, an item the hero gave or an ammunition stack are destroyed with the container (as a body's, VPG5); a save made before the fix keeps the items of an already spilled container hidden in its list; a closed junk pile that holds a sold item is still left as it is (JP4).
 
 Disagreements between the readings, settled in the export: the inventory use check 0x462C30 is 39 bytes and ends at the use-box test;
 the hotkey hook part of its first reading is the next function 0x462C60 (VP66); the restock delay's range (VP68, above); the disarm item

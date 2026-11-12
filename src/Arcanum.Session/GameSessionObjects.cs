@@ -322,7 +322,7 @@ public sealed partial class GameSessionOwner
     /// An amount of 0 or less changes nothing while the object has hit points left (the original clamps a negative amount to 0 before it writes); at 0 hit points or less the break check still runs, as for the hero's attack.
     /// The state is the same map changes as an attack's (<c>object.damage</c>, <c>object.condition</c>), so the snapshot needs no schema step.
     /// Refused with <see cref="GameSessionFailure.InvalidObject"/> for an invalid target, <see cref="GameSessionFailure.ObjectUnavailable"/>
-    /// for a destroyed or switched-off object, and the version, revision and (for a respawning scenery) event budget failures.
+    /// for a destroyed or switched-off object, and the version, revision and (for a respawning scenery) event budget failures; a container's break also refuses whole with <see cref="GameSessionFailure.BudgetExceeded"/> or <see cref="GameSessionFailure.DropTileUnfit"/> when the items sold into it cannot all lie on the ground (ARC-WORLD-1306).
     /// <see cref="SessionObjectDamageResult.Host"/> names the trap, the bust script, the sounds and the spill eye candy the host owns; the
     /// trap fires before the break in the original (OD4), which is why <see cref="SessionObjectHostSteps.TrapFires"/> is set together with the
     /// break. Not modelled: the witnesses (the hit has no attacker) and the object's script at point 0x17.
