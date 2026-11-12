@@ -542,6 +542,24 @@ public sealed partial class GameSessionOwner
     private object? _tempusFlagsScanned;
     private bool _tempusAnyHolds;
 
+    // ARC-MAGIC-1190 (XR7, TF3): the join tail of 0x45DE90 copies the leader's Tempus Fugit flag by a plain write (no run, no count): a critter that joins a leader holding it holds it from then on.
+    // The leader is the hero (a follower of another leader is #1142's). A joiner that already holds it, or an entity the written flags do not cover (not a mobile object), needs no write.
+    private bool JoinCopiesTempusFugit(string follower) => ObjectFlagEntity(follower)
+        && (_objectFlags.GetValueOrDefault(SessionSpellCaster.Hero).Spell(0) & TempusFugitSpell) != 0
+        && (_objectFlags.GetValueOrDefault(follower).Spell(0) & TempusFugitSpell) == 0;
+
+    private void WriteTempusFugitOnJoin(string follower) =>
+        _objectFlags = _objectFlags.SetItem(follower, _objectFlags.GetValueOrDefault(follower).With(SessionObjectFlagField.Spell, TempusFugitSpell, true));
+
+    // ARC-MAGIC-1190 (XR7, TF3): every leave (0x45E040 through 0x459EA0, before the entry leaves the follower array) clears the leaver's Tempus Fugit flag, whatever the leader holds. A wait is no leave
+    // (the waiter keeps its leader). Only a flag the session wrote is cleared: a bit that only the NPC's map data stores is not seen here (TF3).
+    // The clear is a write over the data, so it leaves a cleared bit behind. The caller's revision covers it.
+    private void ClearTempusFugitOnLeave(string follower)
+    {
+        if (!_objectFlags.TryGetValue(follower, out var old) || (old.Spell(0) & TempusFugitSpell) == 0) return;
+        _objectFlags = _objectFlags.SetItem(follower, old.With(SessionObjectFlagField.Spell, TempusFugitSpell, false));
+    }
+
     /// <summary>
     /// ARC-DEV-358 (MA-1; the unarmed damage block 0x4B67F1 of the original, in this order): the body spell a critter's spell flags hold: Body of Earth (+5 normal damage), else Fire (+15 fire), else
     /// Water (+15 fatigue), else Hardened Hands (+2 normal), over <paramref name="dataSpellFlags"/> (the flags the critter's map data stores, 0 when the host does not know them) with the session's

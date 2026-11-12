@@ -1,6 +1,8 @@
 using Arcanum.Data.Characters;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Party;
+using Arcanum.Simulation.Reaction;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.HeroStateTests;
 using static Arcanum.Session.Tests.SessionFixtures;
@@ -134,5 +136,117 @@ public sealed class TempusFugitSpeedTests
         Hold(owner, Bear, false);
         Assert.AreEqual(wolf, Speed(Npc(owner)), "after the write is undone the cache answers 'nobody'");
         Assert.AreEqual(0, owner.HeroTempusFugitShift());
+    }
+
+    private static bool Holds(GameSessionOwner owner, string who) => (owner.QueryObjectFlags(who).Spell(0) & Flag) != 0;
+
+    // ARC-MAGIC-1190 (XR7, TF3): the join tail 0x45DE90 copies the leader's flag by a plain write, the removal 0x45E040 -> 0x459EA0 clears the leaver's.
+
+    [TestMethod]
+    public void A_companion_that_joins_after_the_cast_gains_the_flag_and_the_ten()
+    {
+        using var owner = Owner();
+        var wolf = Speed(Npc(owner));
+        Hold(owner, Hero);
+        Assert.AreEqual(wolf - 10, Speed(Npc(owner, Bear)), "outside the spell: slowed");
+        var before = owner.Version.Revision;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Bear).Disposition);
+        Assert.AreEqual(before + 1, owner.Version.Revision, "one revision for the join, the flag write inside it");
+        Assert.IsTrue(Holds(owner, Bear));
+        Assert.AreEqual(wolf + 10, Speed(Npc(owner, Bear)), "the joiner gains the 10 at once");
+        Assert.AreEqual(wolf - 10, Speed(Npc(owner)), "a critter that did not join still loses");
+        // A checked join (the follow check, as the dialog's JO) copies it too.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.JoinParty(owner.Version, Wolf, PartyStateTests.Facts(), false).Disposition);
+        Assert.IsTrue(Holds(owner, Wolf));
+    }
+
+    [TestMethod]
+    public void A_join_without_the_leader_holding_it_writes_nothing_and_a_holding_joiner_is_left_alone()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Bear).Disposition);
+        Assert.IsTrue(owner.QueryObjectFlags(Bear).IsEmpty, "the hero does not hold it: nothing is copied");
+        // An NPC holding it that joins keeps its written flag as it is (no second write), and the hero holding too changes nothing more.
+        Hold(owner, Wolf);
+        var flags = owner.QueryObjectFlags(Wolf);
+        Hold(owner, Hero);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Wolf).Disposition);
+        Assert.AreEqual(flags, owner.QueryObjectFlags(Wolf));
+    }
+
+    [TestMethod]
+    public void An_entity_the_written_flags_do_not_cover_joins_without_a_write_and_a_full_flag_bound_refuses_the_join()
+    {
+        using var owner = Owner();
+        Hold(owner, Hero);
+        // A static object's positional id is no mobile object: the join works, no flag is written (the written flags cover the hero and mobile objects).
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, "static:pal").Disposition);
+        Assert.IsTrue(owner.QueryObjectFlags("static:pal").IsEmpty);
+        // The written-flags bound full: the join that would need a new entry is refused with nothing changed; a critter that already has an entry still joins.
+        for (int i = 0, held = owner.QueryAllObjectFlags().Count; held < GameSessionOwner.MaxObjectFlagCritters; i++, held++) Hold(owner, $"oid:filler{i}");
+        var before = owner.Version;
+        var refused = owner.ForceJoinParty(before, Bear);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded), (refused.Disposition, refused.Failure));
+        Assert.AreEqual(before, owner.Version);
+        Assert.AreEqual(CompanionStanding.Free, owner.QueryCompanion(Bear).Standing);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, "oid:filler0").Disposition);
+        Assert.IsTrue(Holds(owner, "oid:filler0"));
+    }
+
+    [TestMethod]
+    public void A_companion_that_leaves_loses_the_flag_at_once_whatever_the_leader_holds()
+    {
+        using var owner = Owner();
+        var wolf = Speed(Npc(owner));
+        Hold(owner, Hero);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Bear).Disposition);
+        Assert.AreEqual(wolf + 10, Speed(Npc(owner, Bear)));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.LeaveParty(owner.Version, Bear, new PartyLeave(Force: true)).Disposition);
+        Assert.IsFalse(Holds(owner, Bear));
+        Assert.AreEqual(wolf - 10, Speed(Npc(owner, Bear)), "the leaver is outside the spell again while the hero holds it");
+        Assert.IsTrue(Holds(owner, Hero), "the leader keeps it");
+        // A follower that kept a flag after the spell ended loses it on leaving too.
+        Hold(owner, Hero, false);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Wolf).Disposition);
+        Hold(owner, Wolf);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.LeaveParty(owner.Version, Wolf, new PartyLeave(Force: true)).Disposition);
+        Assert.IsFalse(Holds(owner, Wolf));
+        Assert.AreEqual(0, owner.TempusFugitShiftOf(Wolf, 0), "nobody holds it any more: no shift");
+    }
+
+    [TestMethod]
+    public void A_wait_is_no_leave_the_waiter_keeps_the_flag_and_an_unwait_is_a_join()
+    {
+        using var owner = Owner();
+        Hold(owner, Hero);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Bear).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Bear).Disposition);
+        Assert.IsTrue(Holds(owner, Bear), "the waiter keeps its leader and its flag (the original's wait is no removal)");
+        // The spell ends while it waits: the waiter is outside the party array, so it keeps the stale flag (the original does the same); the unwait joins and copies nothing now.
+        Hold(owner, Hero, false);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.UnwaitParty(owner.Version, Bear, PartyStateTests.Facts(), force: true).Disposition);
+        Assert.IsTrue(Holds(owner, Bear));
+        // Waiting while the hero holds it again, a waiter that never had it gains it when it is brought back.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Wolf).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Wolf).Disposition);
+        Hold(owner, Hero);
+        Assert.IsFalse(Holds(owner, Wolf));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Wolf).Disposition);
+        Assert.IsTrue(Holds(owner, Wolf));
+    }
+
+    [TestMethod]
+    public void The_loyalty_step_that_makes_a_follower_leave_clears_the_flag_and_the_save_round_trips()
+    {
+        using var owner = Owner();
+        Hold(owner, Hero);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.JoinParty(owner.Version, Wolf, PartyStateTests.Facts(), false).Disposition);
+        Assert.IsTrue(Holds(owner, Wolf));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AdjustReaction(owner.Version, Wolf, new(50, CharacterRace.Human, false, false), new(CharacterRace.Human, 0, 0, [], [], [], false), -5).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ChangeHeroAlignment(owner.Version, 301).Disposition);
+        var facts = PartyStateTests.Facts(reaction: 50) with { PcAlignment = 301, PcCharisma = 8 };
+        Assert.AreEqual(LoyaltyStepKind.Left, owner.RunLoyaltyStep(owner.Version, Wolf, facts, false).Step!.Value.Kind);
+        Assert.IsFalse(Holds(owner, Wolf), "the follower that left through the loyalty step lost the flag");
+        Assert.IsTrue(Holds(owner, Hero));
     }
 }

@@ -54,6 +54,28 @@ public sealed class AreaNpcSheetTests
         Assert.IsNull(view.ToNextLevel, "no experience table in this session");
     }
 
+    private static int Speed(AreaNpcSheetPages pages) => pages.View.Secondary.Single(value => value.Label == AreaCharacterSheet.Label(CharacterStat.Speed)).Value;
+
+    [TestMethod]
+    public void The_speed_line_shows_the_tempus_fugit_change_the_combat_reads()
+    {
+        // ARC-MAGIC-1190 (TF2): the NPC's speed is dexterity 8 on the sheet; Tempus Fugit's +10 for a holder and -10 for everyone else (the stat range 1..100 clamps) show at once.
+        using var session = Session();
+        const string entity = "oid:virgil";
+        var fields = Npc();
+        var loaded = AreaAdvancement.Npc(entity, fields, Effect)!.Value;
+        int Shown() => Speed(AreaNpcSheet.Build(session, "Virgil", fields, loaded, null, null, AreaHoverIndex.TextProfile)!);
+        Assert.AreEqual(8, Shown(), "nobody holds the spell: no shift");
+        const int flag = 0x4000000;
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, session.WriteObjectFlag(session.Version, "pc", SessionObjectFlagField.Spell, flag, true).Disposition);
+        Assert.AreEqual(1, Shown(), "the hero holds it, the NPC does not: 8 - 10 is clamped to 1");
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, session.WriteObjectFlag(session.Version, entity, SessionObjectFlagField.Spell, flag, true).Disposition);
+        Assert.AreEqual(18, Shown(), "the NPC holds it (it joined the hero): +10");
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, session.WriteObjectFlag(session.Version, "pc", SessionObjectFlagField.Spell, flag, false).Disposition);
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, session.WriteObjectFlag(session.Version, entity, SessionObjectFlagField.Spell, flag, false).Disposition);
+        Assert.AreEqual(8, Shown(), "the spell is over");
+    }
+
     [TestMethod]
     public void The_resistances_are_the_stored_ones_with_the_constitution_bonus_and_no_worn_armour()
     {

@@ -1003,6 +1003,7 @@ public sealed partial class GameSessionOwner : IDisposable
         // ARC-SKILLS-008 (ST2): a follower that leaves is no longer concealed.
         _combat.Concealed.Remove(entity);
         ClearNoAttackOnLeave(entity);
+        ClearTempusFugitOnLeave(entity);
         if (current.Standing == CompanionStanding.Waiting) CancelWaitTimers(entity);
         return Changed();
     }
@@ -1933,8 +1934,13 @@ public sealed partial class GameSessionOwner : IDisposable
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, consent, new(_identity, _revision));
         if (!_party.Records.ContainsKey(current.Entity) && _party.Records.Count >= _limits.MaxCompanions)
             return RejectParty(GameSessionFailure.BudgetExceeded, consent);
+        // ARC-MAGIC-1190 (XR7, TF3): a joiner copies the leader's Tempus Fugit flag; the write needs room in the written-flags bound, so a full bound refuses before anything changes.
+        var copyTempus = JoinCopiesTempusFugit(current.Entity);
+        if (copyTempus && !_objectFlags.ContainsKey(current.Entity) && _objectFlags.Count >= MaxObjectFlagCritters)
+            return RejectParty(GameSessionFailure.BudgetExceeded, consent);
         if (_revision == long.MaxValue) return RejectParty(GameSessionFailure.RevisionExhausted, consent);
         _party.Put(next, true);
+        if (copyTempus) WriteTempusFugitOnJoin(current.Entity);
         if (current.Standing == CompanionStanding.Waiting) CancelWaitTimers(current.Entity);
         // ARC-SKILLS-008 (ST2): a new follower takes its leader's concealment.
         if (_combat.HeroConcealed) _combat.Concealed.Add(current.Entity); else _combat.Concealed.Remove(current.Entity);
