@@ -414,7 +414,7 @@ public partial class TerrainViewerApp
             TechProductsRequire(session.QueryEquipment().Worn.Any(w => w.Entity == armour) && session.QueryEquipment().Worn.All(w => w.Slot != EquipmentSlot.Weapon), $"the weapon is off and the armour is on again: {_inventoryStatus}");
 
             // ARC-COMBAT-1223 (ledger PS5, PF10; 0x4B2870): a throw that MISSES its NPC flies on to its scattered tile and its end there fires the item's attacks-a-location event, so the grenade explodes
-            // where it lands. The one exception is a scatter back onto the hero's own tile: the flight's line has no step (0x4201C0), the goal fails and ends without an item event (GT53), and the grenade
+            // where it lands. The one exception is a scatter back onto the hero's own tile: the projectile already stands on its destination, the flight goal pops at node 3 (0x424D90, GT53) and ends without an item event, and the grenade
             // just lies there. The darkness penalty (ARC-WORLD-1149) makes the throws miss. The leg runs after the cell weapon's swings, which read the session's random sequence.
             _cellLightForSelfTest = 0;
             int missedFlown = 0, missedLying = 0, missedThrows = 0;
@@ -452,11 +452,18 @@ public partial class TerrainViewerApp
                     missedLying++;
                     continue;
                 }
-                TechProductsRequire(missEvents.Any(e => e.Started > 0), $"the missed grenade's item event started a spell run at its landing tile (events {missEvents.Length})");
+                // The scatter's own end: the flight ended at its destination (not on a stray strike or an obstacle on the way) and the grenade landed on the scattered tile it was thrown to.
+                var scatteredTo = _lastHeldThrowForSelfTest!.Destination;
+                if (_projectileEndsForSelfTest.LastOrDefault().Strike != ProjectileStrikeKind.DestinationEnd || _thrownLandingsForSelfTest.Count == 0 || _thrownLandingsForSelfTest[0].Tile != scatteredTo) continue;
+                TechProductsRequire(missEvents.Any(e => e.Started > 0 && e.Tile == _thrownLandingsForSelfTest[0].Tile), $"the missed grenade's item event started a spell run at its landing tile (events {missEvents.Length})");
                 TechProductsRequire(!lyingStill && session.IsItemDestroyed(missGrenade), "the missed grenade exploded and is gone");
                 missedFlown++;
             }
             _cellLightForSelfTest = null;
+            ClearSpellMissiles("the smoke's missed grenades ended");
+            foreach (var id in caveNpcs) if (_combatHost.Target(session, runtime, area.Snapshot.Objects.First(r => r.Type == 16 && SpellPickId(r.Key) == id).Key) is { Build.Combat: not null } missedTarget)
+                session.Heal(session.Version, missedTarget.Build.Combat!.Target, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             TechProductsRequire(missedFlown > 0, $"a missed grenade exploded where it landed within {missedThrows} throws (lying {missedLying})");
             GD.Print($"{TechProductsCode} tech-products grenade-miss PASS exploded={missedFlown} lying={missedLying} throws={missedThrows}");
 

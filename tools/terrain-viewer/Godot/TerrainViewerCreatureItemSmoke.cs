@@ -111,6 +111,8 @@ public partial class TerrainViewerApp
             var thrownPet = Throw(pet, petTile, "pet");
             var petRun = thrownPet.Run;
             GD.Print($"ARC-MAGIC-042 creature-item pet point={petRun.Point} outcome={petRun.Outcome} critter={petRun.Critter} followed={petRun.Followed} detail={petRun.Detail}");
+            // ARC-COMBAT-1223 (ledger PS5, 0x4B2870): the end at the destination runs the item's hit script (point 7), only the range end the miss script (point 8).
+            Require(petRun.Point == ScrPointHit, $"pet: the destination's landing ran point {petRun.Point}, not the hit point {ScrPointHit}");
             Require(petRun.Outcome == AreaThrownItemOutcome.Applied && petRun.Critter is { } petCritter, $"pet: the script ran and made a critter ({petRun.Outcome}: {petRun.Detail})");
             made.Add(petRun.Critter!);
             Require(petRun.Followed && session.QueryCompanion(petRun.Critter!).LedByPc, "pet: the critter follows the hero");

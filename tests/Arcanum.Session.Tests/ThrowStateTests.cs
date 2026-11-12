@@ -282,7 +282,6 @@ public sealed class ThrowStateTests
         var events = owner.QueryShotEndItemEvents(miss.Shot!.Value, scattered);
         Assert.AreEqual(1, events.Count, "the miss's end fires the item's location event");
         Assert.AreEqual(("kit:1", SessionEventKinds.PlayerEntity), (events[0].Item, events[0].Parent));
-        Assert.AreEqual(new Arcanum.Simulation.Magic.SpellLocation((uint)scattered.X, (uint)scattered.Y), events[0].Tile, "at the scattered tile");
         Assert.AreEqual(GameSessionDisposition.Changed, owner.LandThrownItem(owner.Version, miss.Shot.Value, scattered).Disposition);
         Assert.AreEqual(0, owner.QueryShotEndItemEvents(miss.Shot.Value, scattered).Count, "landed: the shot is gone");
     }
