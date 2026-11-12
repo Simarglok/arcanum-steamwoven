@@ -358,8 +358,27 @@ public partial class TerrainViewerApp
         _conversationSpeaker = speaker;
         _voiceStart = start;
         var title = $"Dialog NPC (script {speaker.ScriptId}, prototype {speaker.Row.PrototypeNumber})";
-        ShowConversationPanel(title, start.Conversation, start.Status == AreaConversationStartStatus.Started ? null : $"[{start.Status}: {start.Detail}]");
+        var barsOn = InterfaceBarsOn;
+        var shown = ShowConversationPanel(title, start.Conversation, start.Status == AreaConversationStartStatus.Started ? null : $"[{start.Status}: {start.Detail}]");
+        // ARC-UI-1120 (HK25): the dialog start (0x567460, the single-player branch) describes the speaker for the hero (0x57CD60, 0x553BE0, 0x43C270) as the
+        // world's hover does: the speaker's examine script runs, and its window follows unless the script answered skip default.
+        // Only with the interface on (0x5578C0 answers 0).
+        if (shown && barsOn && start.Status == AreaConversationStartStatus.Started) DescribeDialogSpeaker(speaker);
     }
+
+    /// <summary>ARC-UI-1120 (HK25): the examine of the dialog's speaker at the dialog start, once; the speaker's window is described again even when
+    /// the pointer already held it (the original draws it afresh), and a speaker the shown map's hover index does not list (a companion carried
+    /// here) only runs its script.</summary>
+    private void DescribeDialogSpeaker(AreaSpeaker speaker)
+    {
+        _dialogExaminesForSelfTest++;
+        var key = speaker.Row.Key;
+        // The speaker's window is drawn when the bars show (the viewer hides them while the dialog is open: PROJECT); the script runs either way.
+        if (_gameBarPanel is { Visible: true } && _hoverIndex is { } index && index.Contains(key)) { _hoverWindowKey = null; SyncHoverWindow(key); }
+        else ExamineAllows(speaker.Row);
+    }
+
+    private int _dialogExaminesForSelfTest;
 
     /// <summary>ARC-DEV-109: shows the conversation panel through the stack (mode 3); the smoke that holds a conversation open uses it too.</summary>
     private bool ShowConversationPanel(string title, DialogConversation? conversation, string? note) =>

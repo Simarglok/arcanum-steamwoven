@@ -167,8 +167,43 @@ public partial class TerrainViewerApp
             var sword = view.LootGrid.Single(item => item.Entity == "kit:1");
             var axe = view.Grid.Single(item => item.Entity == "axe");
             Require(!view.LootGrid.Any(item => item.Entity == "vest"), "the worn vest is not in the grid");
+            // ARC-UI-1120 (HK25): the still pointer describes the ware first (0x57CCF0: the examine script, then the item window), then quotes it (0x578330).
+            var described = _hotkeyDescriptionsForSelfTest;
             area.StillAt(Ware(sword.Location));
+            Require(_hotkeyDescriptionsForSelfTest == described, "with the interface off (the synthetic run) the resting pointer describes nothing (0x5578C0)");
+            area.ResetStill();
+            var bars = _gameBarForSelfTest;
+            _gameBarForSelfTest = true;
+            try
+            {
+                area.StillAt(Ware(sword.Location));
+                Require(_hotkeyDescriptionsForSelfTest == described + 1, "the resting pointer described the ware for the hero");
+                area.StillAt(Ware(sword.Location));
+                Require(_hotkeyDescriptionsForSelfTest == described + 1, "resting on the same ware again describes nothing new");
+            }
+            finally { _gameBarForSelfTest = bars; _messageLog.ClearHover(); }
             Require(area.BarterFrame!.Quote.StartsWith("Buy kit:1: ", StringComparison.Ordinal), "the resting pointer quotes the ware: " + area.BarterFrame.Quote);
+
+            // ARC-UI-1120 (BW6): the cycle buttons are made on the follower background only, and a release over one asks for the previous or next follower.
+            Require(!area.CycleShown && area.CycleAt(new(AreaBarterArtLayout.CycleLeft.X + 5, AreaBarterArtLayout.CycleLeft.Y + 5)) is null, "a merchant's window has no cycle buttons");
+            var cycles = new List<int>();
+            area.CycleRequested += cycles.Add;
+            var plain = area.BarterFrame!;
+            area.SetBarter(plain with { Background = AreaBarterArtLayout.FollowerArt });
+            var (left, right) = (new Vector2(AreaBarterArtLayout.CycleLeft.X + 5, AreaBarterArtLayout.CycleLeft.Y + 5), new Vector2(AreaBarterArtLayout.CycleRight.X + 5, AreaBarterArtLayout.CycleRight.Y + 5));
+            Require(area.CycleShown && area.CycleAt(left) == 0 && area.CycleAt(right) == 1, "the follower background shows both cycle buttons");
+            var buttonSounds = new List<int>();
+            area.SoundRequested += buttonSounds.Add;
+            area.PressAt(right); area.ReleaseAt(right);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            area.PressAt(left); area.ReleaseAt(new(right.X, right.Y));
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            area.PressAt(left); area.ReleaseAt(left);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(cycles.SequenceEqual([1, 0]), "a release over the pressed button cycles (next, then previous); a release elsewhere does not: " + string.Join(",", cycles));
+            Require(buttonSounds.Count(id => id == AreaGameBarLayout.PressSound) == 3 && buttonSounds.Count(id => id == AreaGameBarLayout.ReleaseSound) == 2, "press and release sounds: " + string.Join(",", buttonSounds));
+            area.SetBarter(plain);
+            Require(!area.CycleShown, "the merchant background takes the buttons away");
 
             var revision = owner.Version.Revision;
             area.PressAt(Ware(sword.Location)); area.ReleaseAt(Ware(69));
