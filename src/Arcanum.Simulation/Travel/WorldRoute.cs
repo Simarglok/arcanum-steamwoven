@@ -128,7 +128,7 @@ public sealed class WorldRoute
 
     // The direction between two window cells (0x420110): the signs of the two deltas alone. Unlike the sector direction
     // (0x4CFCD0, WorldTravelGeometry.Direction) it has no minor-axis rule: the oracle (ARC-DEV-1105) found the function reads
-    // 8 octants of the plane, so a step of (10, 1) is a diagonal. The same cell gives 5.
+    // only the signs of the two deltas (8 directions and the same cell), so a step of (10, 1) is a diagonal. The same cell gives 5.
     [OriginalFunction(0x420110, OriginalFunctionScope.Full)]
     internal static int WindowDirection(int from, int to)
     {

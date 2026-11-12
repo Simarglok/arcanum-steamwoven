@@ -73,9 +73,9 @@ python3 -B tools/original-oracle/oracle.py list
 | 0x4CFCD0 | sector direction | pure: two sector ids (x in bits 0..25, y above them, as two 32-bit words each); the same shifts | `SectorDirectionMatchesTheOriginal` |
 | 0x4200C0 | window distance estimate | pure: two window cells and the width 16 | `EstimateMatchesTheOriginal` |
 | 0x420110 | window direction | pure: the same inputs; the answer is AL only | `WindowDirectionMatchesTheOriginal` (the oracle found it reads the signs of the deltas alone, with no minor-axis rule) |
-| 0x4B0F50 | stat cost | pure: any 32-bit value; the cost table at 0x5B52E4 | `StatCostMatchesTheOriginal` |
-| 0x4C5F70 | key stat skill cap | pure: a stat in or around 1..20; the cap table | `KeyStatCapMatchesTheOriginal` |
-| 0x4C64E0 | basic skill minimum key stat | pure: a level; may call the cap 0x4C5F70 | `MinimumKeyStatMatchesTheOriginal` |
+| 0x4B0F50 | stat cost | pure: a value in or around 1..20, sometimes any 32-bit value except int.MinValue; the cost table at 0x5B52E4 | `StatCostMatchesTheOriginal` |
+| 0x4C5F70 | key stat skill cap | pure: a stat in or around 1..20, sometimes up to ±1,000,000 (the bound of SkillRules); the cap table | `KeyStatCapMatchesTheOriginal` |
+| 0x4C64E0 | basic skill minimum key stat | pure: a level in or around 0..20, sometimes up to ±1,000,000; may call the cap 0x4C5F70 | `MinimumKeyStatMatchesTheOriginal` |
 | 0x4C64D0 | basic skill key stat | pure: a basic skill 0..11; the key-stat table | `BasicKeyStatMatchesTheOriginal` |
 | 0x4C6B10 | tech skill key stat | pure: a tech skill 0..3; the tech key-stat table | `TechKeyStatMatchesTheOriginal` |
 
