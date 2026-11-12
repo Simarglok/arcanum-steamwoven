@@ -201,7 +201,7 @@ All work items are GitHub issues under the epic [#1371](https://github.com/Simar
 | --- | --- |
 | This document and coverage rows | [#1372](https://github.com/Simarglok/arcanum-steamwoven/issues/1372) |
 | Foundation §0: core, viewer wiring, pause and accessibility, evidence log | [#1373](https://github.com/Simarglok/arcanum-steamwoven/issues/1373), [#1374](https://github.com/Simarglok/arcanum-steamwoven/issues/1374), [#1375](https://github.com/Simarglok/arcanum-steamwoven/issues/1375), [#1376](https://github.com/Simarglok/arcanum-steamwoven/issues/1376) |
-| UI scale on 1280×800 | [#1377](https://github.com/Simarglok/arcanum-steamwoven/issues/1377) |
+| UI scale on 1280×800 | [#1377](https://github.com/Simarglok/arcanum-steamwoven/issues/1377) ([result](handheld-ui-scale.md)) |
 | Focus layer; radials | [#1378](https://github.com/Simarglok/arcanum-steamwoven/issues/1378), [#1379](https://github.com/Simarglok/arcanum-steamwoven/issues/1379) |
 | Scheme B Pointer | [#1380](https://github.com/Simarglok/arcanum-steamwoven/issues/1380), [#1381](https://github.com/Simarglok/arcanum-steamwoven/issues/1381) |
 | Scheme A Direct | [#1382](https://github.com/Simarglok/arcanum-steamwoven/issues/1382), [#1383](https://github.com/Simarglok/arcanum-steamwoven/issues/1383), [#1384](https://github.com/Simarglok/arcanum-steamwoven/issues/1384), [#1385](https://github.com/Simarglok/arcanum-steamwoven/issues/1385) |

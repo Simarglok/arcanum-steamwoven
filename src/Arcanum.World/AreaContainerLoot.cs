@@ -136,6 +136,29 @@ public static class AreaContainerLoot
         return new(AreaContainerOpenOutcome.Opened, generation, opening, detail + (ran is null ? "" : " use-script=run-default")) { UseScript = ran };
     }
 
+    /// <summary>
+    /// ARC-RES-1327 (ledger XR3, LW1, LW2, XR16): the admission and setup of the window See Contents opens on <paramref name="container"/> in mode 4. Mode 4 is admitted with <b>no test</b>: no open
+    /// attempt (a locked, jammed or magically held container shows its items), no use script, no unlock script, no sight test and no turn to face it; the setup does not open a closed container (no
+    /// frame write, no open sound) and only generates a container with flag 0x200 the session has not generated, through <paramref name="world"/>. A refused generation (the restock host not ready,
+    /// a full budget) refuses the open, as the loot open does. <see cref="AreaContainerOpen.Opening"/> is always false.
+    /// </summary>
+    public static AreaContainerOpen Contents(GameSessionOwner session, AreaInventoryMap map, string container, ISessionRestockWorld world)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(container);
+        ArgumentNullException.ThrowIfNull(world);
+        if (Facts(session, map, container) is not { } facts) return new(AreaContainerOpenOutcome.Unavailable, null, false, "not a standing container of the map's seed");
+        var generate = (map.RestockSeed(container).ContainerFlags & Arcanum.Simulation.Items.RestockRules.GeneratedOnceFlag) != 0 &&
+            !session.QueryContainerGenerated(facts.Openable.Map, container);
+        if (!generate) return new(AreaContainerOpenOutcome.Opened, null, false, "generation=none no test");
+        if (!world.RestockReady) return new(AreaContainerOpenOutcome.GenerationRefused, null, false, "generation: the restock host is not ready");
+        var generation = session.GenerateContainerOnce(session.Version, container, world);
+        return generation.Disposition == GameSessionDisposition.Rejected
+            ? new(AreaContainerOpenOutcome.GenerationRefused, generation, false, $"generation={generation.Failure}")
+            : new(AreaContainerOpenOutcome.Opened, generation, false, $"generation={generation.Disposition}/{generation.Regeneration?.Outcome.ToString() ?? "none"} no test");
+    }
+
     /// <summary>The container field slot of its lock level (field 57: the lock's difficulty, slot 37 as a portal's field 47).</summary>
     private const int LockLevelSlot = 37;
 

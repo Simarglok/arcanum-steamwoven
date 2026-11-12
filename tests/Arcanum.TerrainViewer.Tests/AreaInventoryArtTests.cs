@@ -59,11 +59,11 @@ public sealed class AreaInventoryArtTests
     public void TheRoundViewIsAnHalfScaleSquareOfTheGameViewAroundTheHolder()
     {
         // ARC-UI-054 (IW33, IW34): (11, 9) with art 233 in the player's own window, (16, 17) with art 232 in a loot window, 89 × 89;
-        // ARC-UI-060: (16, 17) with art 231 in the barter window and the loot window's in the steal window.
+        // ARC-UI-060: (16, 17) with art 231 in the barter window and the loot window's in the steal window; ARC-RES-1327: and in the contents window (mode 4).
         Assert.AreEqual((11, 9), AreaInventoryHole.Corner(AreaInventoryMode.Own));
-        foreach (var mode in new[] { AreaInventoryMode.Barter, AreaInventoryMode.Loot, AreaInventoryMode.Steal })
+        foreach (var mode in new[] { AreaInventoryMode.Barter, AreaInventoryMode.Loot, AreaInventoryMode.Steal, AreaInventoryMode.Contents })
             Assert.AreEqual((16, 17), AreaInventoryHole.Corner(mode), mode.ToString());
-        CollectionAssert.AreEqual(new[] { 233, 231, 232, 232 }, Enum.GetValues<AreaInventoryMode>().Select(AreaInventoryHole.Art).ToArray());
+        CollectionAssert.AreEqual(new[] { 233, 231, 232, 232, 232 }, Enum.GetValues<AreaInventoryMode>().Select(AreaInventoryHole.Art).ToArray());
         CollectionAssert.IsSubsetOf(new[] { 232, 233 }, AreaInventoryArtContent.Numbers.ToArray());
         CollectionAssert.DoesNotContain(AreaInventoryArtLayout.ArtNumbers.ToArray(), 233, "the round view's art is no reason for the diagnostic window");
         Assert.IsTrue(AreaInventoryHole.Contains(AreaInventoryMode.Loot, 16, 17) && AreaInventoryHole.Contains(AreaInventoryMode.Loot, 104.9f, 105.9f),
@@ -72,7 +72,7 @@ public sealed class AreaInventoryArtTests
             || AreaInventoryHole.Contains(AreaInventoryMode.Loot, 15.9f, 50));
         Assert.IsTrue(AreaInventoryHole.Contains(AreaInventoryMode.Own, 11, 9) && !AreaInventoryHole.Contains(AreaInventoryMode.Own, 100, 9));
         Assert.IsTrue(AreaInventoryHole.Contains(AreaInventoryMode.Barter, 16, 17) && !AreaInventoryHole.Contains(AreaInventoryMode.Barter, 11, 9));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => AreaInventoryHole.Corner((AreaInventoryMode)4));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => AreaInventoryHole.Corner((AreaInventoryMode)5));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => AreaInventoryHole.Art((AreaInventoryMode)(-1)));
         // The game window's (311, 96, 178, 178) with the view centred on the holder at (400, 200): the square's centre is 15 pixels higher.
         Assert.AreEqual((311f, 96f, 178f), AreaInventoryHole.Source(400, 200, 1));

@@ -824,7 +824,97 @@ public partial class TerrainViewerApp
             panel.Render(InventoryView(null), null);
             GD.Print($"ARC-UI-094 native-smoke gold-throw PASS coins={coins} thrown=1 item={coinItem}");
         }
+        await JunkPileStackSmoke();
         GD.Print($"ARC-UI-029 native-smoke quantity PASS units={stack.Units} dropped=1 lent={lent} pile={pile is not null} cell={placed!.Cell}");
         return panel.ViewForSelfTest!;
+    }
+
+    /// <summary>
+    /// ARC-UI-1328 (QW1, QW5, NT1, AM4, JP5): part of a gold pile and of an ammunition stack taken out of a junk pile through the loot window: the hero drops
+    /// two gold piles and part of its ammunition stack on its tile (a junk pile), the window opens on the pile, a Take button of the pile of 3 coins asks
+    /// (mode 13), keypad 2 and Enter move 2 and leave 1 in the pile, a one-unit line moves at once, the ammunition stack's Take asks too and keeps the rest; what
+    /// is left is taken by the buttons, the hero holds what it held before, and closing the window dissolves the pile.
+    /// </summary>
+    private async Task JunkPileStackSmoke()
+    {
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print("ARC-UI-1328 native-smoke junk-stack FAIL " + why);
+            throw new InvalidOperationException("AREA_INVENTORY_SMOKE junk-stack " + why);
+        }
+        var session = _areaSession!;
+        var panel = _inventoryPanel!;
+        var coins = session.QueryGold();
+        if (coins < 6 || session.QueryHeroAmmo().Cast<SessionAmmoRecord?>().FirstOrDefault(entry => entry!.Value.Units >= 3) is not { } ammo
+            || session.QueryHeroAmmo().First(entry => entry.AmmoType == ammo.AmmoType).Entity != ammo.Entity || !HeroLocationKnown())
+        {
+            GD.Print($"ARC-UI-1328 native-smoke junk-stack SKIP coins={coins} ammo={session.QueryHeroAmmo().Count}");
+            return;
+        }
+        if (!InventoryOpen) { OpenInventory(); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
+        panel.Render(InventoryView(null), null);
+        var ammoKind = panel.ViewForSelfTest!.Pc.FirstOrDefault(entry => entry.Entity == ammo.Entity)?.StackKind;
+        Require(ammoKind is { Type: SessionItemType.Ammo }, "the hero's stack lists its kind");
+        var held = ammo.Units;
+        var goldKind = GoldPileKind();
+        var coinsA = session.DropHeroGold(session.Version, 3, goldKind);
+        var coinsB = session.DropHeroGold(session.Version, 2, goldKind);
+        var arrows = session.DropHeroAmmo(session.Version, ammo.Entity, 2, ammoKind!.Value);
+        Require(coinsA.Disposition == GameSessionDisposition.Changed && coinsB.Disposition == GameSessionDisposition.Changed && arrows.Disposition == GameSessionDisposition.Changed,
+            $"the drops: {coinsA.Failure} {coinsB.Failure} {arrows.Failure}");
+        var pile = session.QueryJunkPiles().FirstOrDefault(p => new[] { coinsA.Item, coinsB.Item, arrows.Item }.All(entity => p.Items.Any(item => item.Entity == entity)));
+        string[] mine = [coinsA.Item!, coinsB.Item!, arrows.Item!];
+        if (pile is null)
+        {
+            // The tile makes no junk pile of the three (a drop that did not fit): give the items back and leave the step.
+            foreach (var entity in mine) if (!session.IsItemDestroyed(entity)) _inventoryHost!.PickUp(session, entity);
+            GD.Print("ARC-UI-1328 native-smoke junk-stack SKIP the three drops make no junk pile");
+            return;
+        }
+        EndInventory();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        OpenInventory(pile.Entity);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Require(InventoryOpen && panel.Holder == pile.Entity, "the window opened on the junk pile");
+        Button Take(string entity) => panel.TakeButtonsForSelfTest[panel.ViewForSelfTest!.Loot.ToList().FindIndex(line => line.Entity == entity)];
+        int Units(string entity) => panel.ViewForSelfTest!.Loot.FirstOrDefault(line => line.Entity == entity)?.Units ?? 0;
+        Require(Units(coinsA.Item!) == 3 && Units(coinsB.Item!) == 2 && Units(arrows.Item!) == 2, "the pile lists the stacks with their units");
+        var afterDrops = session.QueryGold();
+        // Three coins: the question asks (mode 13), 2 move and 1 stays in the pile.
+        Take(coinsA.Item!).EmitSignal(BaseButton.SignalName.Pressed);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Require(panel.Asking && panel.QuantityForSelfTest == new QuantityBar(0, 3) && TargetModeOpen(InterfaceMode.QuantityPicker), "the pile's coins ask: " + _inventoryStatus);
+        InventoryKey(Key.Kp2); InventoryKey(Key.Enter);
+        Require(LastQuantityMoveForSelfTest is { Disposition: GameSessionDisposition.Changed } && session.QueryGold() == afterDrops + 2 && Units(coinsA.Item!) == 1
+            && session.QueryJunkPiles().Any(p => p.Entity == pile.Entity && p.Items.Any(item => item.Entity == coinsA.Item)) && !panel.Asking, "2 of 3 coins moved, 1 stays: " + _inventoryStatus);
+        // The one coin left moves at once (no question); the pile stands with the window.
+        Take(coinsA.Item!).EmitSignal(BaseButton.SignalName.Pressed);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Require(!panel.Asking && session.QueryGold() == afterDrops + 3 && session.IsItemDestroyed(coinsA.Item!) && Units(coinsA.Item!) == 0 && InventoryOpen, "the last coin moved at once: " + _inventoryStatus);
+        // The other pile of 2 coins: the question asks and the whole pile moves (the pile's item is destroyed), then the arrows.
+        Take(coinsB.Item!).EmitSignal(BaseButton.SignalName.Pressed);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Require(panel.Asking && panel.QuantityForSelfTest == new QuantityBar(0, 2), "the second pile asks: " + _inventoryStatus);
+        InventoryKey(Key.Kp2); InventoryKey(Key.Enter);
+        Require(session.QueryGold() == afterDrops + 5 && session.IsItemDestroyed(coinsB.Item!), "the whole second pile moved: " + _inventoryStatus);
+        Require(session.QueryGold() == coins, $"the hero holds the coins it had again: {session.QueryGold()} of {coins}");
+        // Two arrows: the question asks, 1 moves into the hero's stack and 1 stays in the pile.
+        var heroUnits = session.QueryAmmo(ammo.Entity)!.Value.Units;
+        Take(arrows.Item!).EmitSignal(BaseButton.SignalName.Pressed);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Require(panel.Asking && panel.QuantityForSelfTest == new QuantityBar(0, 2), "the pile's arrows ask: " + _inventoryStatus);
+        InventoryKey(Key.Kp1); InventoryKey(Key.Enter);
+        Require(session.QueryAmmo(ammo.Entity)?.Units == heroUnits + 1 && session.QueryAmmo(arrows.Item!)?.Units == 1 && Units(arrows.Item!) == 1, "1 of 2 arrows moved, 1 stays: " + _inventoryStatus);
+        Take(arrows.Item!).EmitSignal(BaseButton.SignalName.Pressed);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Require(session.QueryAmmo(ammo.Entity)?.Units == held && session.IsItemDestroyed(arrows.Item!), "the last arrow moved at once: " + _inventoryStatus);
+        EndInventory();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Require(session.QueryJunkPiles().All(p => p.Entity != pile.Entity || p.Items.Count > 0) && session.QueryGold() == coins, "the window closed on the pile");
+        OpenInventory();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        panel.Render(InventoryView(null), null);
+        GD.Print($"ARC-UI-1328 native-smoke junk-stack PASS pile={pile.Entity} coins={coins} arrows={held}");
     }
 }

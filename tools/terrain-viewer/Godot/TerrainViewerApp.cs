@@ -507,6 +507,7 @@ public partial class TerrainViewerApp : Node
         RetireAreaOverview();
         ClearReadyMetrics();
         _canvas!.ClearScene();
+        RetireHoverRing();
         _cache.Clear();
     }
 

@@ -214,9 +214,11 @@ public partial class TerrainViewerApp
 
     /// <summary>
     /// ARC-DEV-089: a standable cell next to <paramref name="targetCell"/> (orthogonally <paramref name="range"/> cells off, standable within
-    /// one more) that is at least <paramref name="minDistance"/> cells from it and is not its own cell; null when none is.
+    /// one more) that is at least <paramref name="minDistance"/> and at most <paramref name="maxDistance"/> cells from it and is not its own
+    /// cell; null when none is. The standable cell may lie one cell farther than <paramref name="range"/>, so a caller that needs a cell
+    /// really next to the target (ARC-UI-1333: the attack preview at one cell has no approach step) passes <c>maxDistance: 1</c>.
     /// </summary>
-    private CellCoord? AreaSmokeNearTarget(AreaMapRuntime map, CellCoord targetCell, int range, int minDistance = 1)
+    private CellCoord? AreaSmokeNearTarget(AreaMapRuntime map, CellCoord targetCell, int range, int minDistance = 1, int maxDistance = int.MaxValue)
     {
         foreach (var (dx, dy) in new[] { (range, 0), (-range, 0), (0, range), (0, -range), (range, range), (-range, -range) })
         {
@@ -224,7 +226,8 @@ public partial class TerrainViewerApp
             if (!map.Chart.Contains(near)) continue;
             CellCoord cell;
             try { cell = AreaSmokeStandable(map, near, 1); } catch (InvalidOperationException) { continue; }
-            if (Math.Max(Math.Abs(cell.X - targetCell.X), Math.Abs(cell.Y - targetCell.Y)) >= minDistance) return cell;
+            var distance = Math.Max(Math.Abs(cell.X - targetCell.X), Math.Abs(cell.Y - targetCell.Y));
+            if (distance >= minDistance && distance <= maxDistance) return cell;
         }
         return null;
     }
@@ -237,7 +240,7 @@ public partial class TerrainViewerApp
     /// </summary>
     private async Task<CellCoord?> AreaSmokeFightableStartAsync(AreaMapRuntime map, AreaDrawCommand body, CellCoord targetCell, int range, int minDistance, bool alsoAdjacent)
     {
-        if (alsoAdjacent && AreaSmokeNearTarget(map, targetCell, 1) is null) return null;
+        if (alsoAdjacent && AreaSmokeNearTarget(map, targetCell, 1, maxDistance: 1) is null) return null;
         var start = AreaSmokeNearTarget(map, targetCell, range, minDistance);
         if (start is null) return null;
         AreaSmokePlace(map, start.Value);

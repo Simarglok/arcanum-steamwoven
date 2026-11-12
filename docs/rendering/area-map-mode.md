@@ -124,6 +124,10 @@ before the reload, because a large map's heap (about 540 MB live for the 64-sect
 `tarant sewers-02`) varied between runs from −63 to +26 MB in a single post-GC
 sample. The baseline and the retained size are each the least of three post-GC samples
 a frame apart (exterior and maps); the retired generation must still be collected.
+ARC-BUG-1345 (issues #1345 and #1367): the stage's `RETIRED_GENERATION_ALIVE` after the `map` stage (the "native-smoke failure ... stage=Upload
+code=RenderFailure" line after it is only the viewer's generic wrapper of that failure) had one cause: the hover ring's overlay (`_ringOverlay`, which
+wraps the retired map's whole frame repository) stayed a field of the viewer after the scene was cleared, until a later hovered critter replaced it
+(its area, `_ringArea`, is replaced at the next frame). `ClearPublishedScene` now retires the ring (`RetireHoverRing`); a viewer field must not outlive its map.
 
 Since ARC-RENDER-025 the last collection of each sample compacts the large-object
 heap. On `tarant sewers-02` the earlier flake did not come from growth. In five
