@@ -116,6 +116,34 @@ public sealed class HeroTalkGoalsTests
         Assert.IsTrue(step.Run.Frames.Any(f => f.Goal == GoalType.MoveNear && f.Range == AiExecutorRules.HeroTalkApproachRange && f.Target == Npc));
     }
 
+    // ARC-AI-1137 (GT122, second read): a talk with Shift carries the no-walk flag 0x100; the walk step answers 0, so the approach never takes a step and the guard kills the run.
+
+    private static GoalRun NoWalkRun() => Run() with { Flags = GoalRunFlags.NoWalk };
+
+    [TestMethod]
+    public void AShiftTalkFromFiveCellsAwayWalksNowhereAndEndsSilently()
+    {
+        var w = new World { Npc = new(15, 10) };
+        var (last, steps) = Drive(NoWalkRun(), w);
+        Assert.AreEqual(0, w.Log.Count, "no step and no dialog");
+        Assert.AreEqual(new CellCoord(10, 10), w.At);
+        Assert.AreEqual(AiRunEnd.EndStep, last.End);
+        Assert.AreEqual(AiExecutorReason.NoWalkOutOfRange, last.Reason);
+        Assert.IsTrue(steps <= 2, "the run does not plan or wait");
+    }
+
+    [TestMethod]
+    public void AShiftTalkFromWithinFourCellsTalksAsAlways()
+    {
+        foreach (var distance in new[] { 1, 4 })
+        {
+            var w = new World { Npc = new(10 + distance, 10) };
+            var (last, _) = Drive(NoWalkRun(), w);
+            CollectionAssert.AreEqual(new[] { "dialog " + Npc }, w.Log, $"distance {distance}");
+            Assert.AreEqual(AiRunEnd.EndStep, last.End);
+        }
+    }
+
     [TestMethod]
     public void AnNpcThatIsGoneOrRefusedEndsTheRunWithoutADialog()
     {

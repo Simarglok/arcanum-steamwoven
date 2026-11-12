@@ -10,7 +10,7 @@ public static partial class GameSessionSnapshotCodec
     // ARC-MAGIC-1234 (schema 92): each run's object list (the original's +0x130).
     private static readonly string[] SpellsFields = ["runs", "bar", "lastCost", "objectFlags", "traitArt"];
     private static readonly string[] TraitArtFields = ["entity", "species", "palette"];
-    private static readonly string[] ObjectFlagFields = ["entity", "spellSet", "spellCleared", "critterSet", "critterCleared", "objectSet", "objectCleared", "critter2Set", "critter2Cleared", "blitSet", "blitCleared"];
+    private static readonly string[] ObjectFlagFields = ["entity", "spellSet", "spellCleared", "critterSet", "critterCleared", "objectSet", "objectCleared", "critter2Set", "critter2Cleared", "blitSet", "blitCleared", "npcSet", "npcCleared"];
     private static readonly string[] SpellRunFields =
         ["id", "spell", "action", "source", "parent", "start", "target", "targetTile", "other", "flags", "triggers", "margin", "triggerCount", "setSpellFlags", "objectList"];
     private static readonly string[] SpellObjectFields = ["id", "type", "aptitude"];
@@ -69,6 +69,8 @@ public static partial class GameSessionSnapshotCodec
             w.WriteNumber("critter2Cleared", record.Flags.Critter2Cleared);
             w.WriteNumber("blitSet", record.Flags.BlitSet);
             w.WriteNumber("blitCleared", record.Flags.BlitCleared);
+            w.WriteNumber("npcSet", record.Flags.NpcSet);
+            w.WriteNumber("npcCleared", record.Flags.NpcCleared);
             w.WriteEndObject();
         }
         w.WriteEndArray();
@@ -161,7 +163,8 @@ public static partial class GameSessionSnapshotCodec
                 Int(o["critterSet"], at + ".critterSet", int.MinValue, int.MaxValue), Int(o["critterCleared"], at + ".critterCleared", int.MinValue, int.MaxValue),
                 Int(o["objectSet"], at + ".objectSet", int.MinValue, int.MaxValue), Int(o["objectCleared"], at + ".objectCleared", int.MinValue, int.MaxValue),
                 Int(o["critter2Set"], at + ".critter2Set", int.MinValue, int.MaxValue), Int(o["critter2Cleared"], at + ".critter2Cleared", int.MinValue, int.MaxValue),
-                Int(o["blitSet"], at + ".blitSet", int.MinValue, int.MaxValue), Int(o["blitCleared"], at + ".blitCleared", int.MinValue, int.MaxValue)));
+                Int(o["blitSet"], at + ".blitSet", int.MinValue, int.MaxValue), Int(o["blitCleared"], at + ".blitCleared", int.MinValue, int.MaxValue),
+                Int(o["npcSet"], at + ".npcSet", int.MinValue, int.MaxValue), Int(o["npcCleared"], at + ".npcCleared", int.MinValue, int.MaxValue)));
         }
         // The monster bodies ascending by entity; which entities may carry one is Restore's.
         var artRows = Array(f["traitArt"], p + ".traitArt", GameSessionOwner.MaxTraitArtCritters);

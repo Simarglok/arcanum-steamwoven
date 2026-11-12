@@ -119,12 +119,16 @@ public sealed class SessionSpellCasterSocialTests
         var run = Cast(owner, caster, record);
         CollectionAssert.AreEqual(new[] { $"reaction {Target} 30" }, host.Calls, Trail(caster));
         Assert.AreEqual(Charmed, owner.QueryObjectFlags(Target).SpellSet);
-        // The NPC flag KOS_OVERRIDE the original adds is not kept by the session: named, not silent.
-        Assert.IsTrue(Social_(caster).Contains(new(SpellCastEventKind.SocialEffect, run, SessionSpellCaster.SocialNotModelled, Target, 2)), Trail(caster));
+        // ARC-MAGIC-1142 (SO2): the NPC flag KOS_OVERRIDE the original adds is in the session's NPC flag layer, logged as a side effect of the write.
+        Assert.AreEqual(SessionSpellCaster.KosOverrideNpcFlag, owner.QueryObjectFlags(Target).NpcSet);
+        Assert.IsTrue(caster.Log.Contains(new(SpellCastEventKind.ObjectFlagWritten, run, SessionSpellCaster.KosOverrideNpcFlag, Target,
+            64 | SessionSpellCaster.SideEffectDetail | 1)), Trail(caster));
+        Assert.IsFalse(Social_(caster).Any(e => e.Value == SessionSpellCaster.SocialNotModelled), Trail(caster));
         host.Calls.Clear();
         EndComponent(owner, caster, run);
         CollectionAssert.AreEqual(new[] { $"reaction {Target} -30" }, host.Calls, "the end takes the +30 back (0x454F39)");
-        Assert.IsTrue(owner.QueryObjectFlags(Target).IsEmpty);
+        // The clear branch takes the spell flag back and leaves the NPC flag for good (0x454F22 has no NPC flag write).
+        Assert.AreEqual(new SessionObjectFlags(0, 0, 0, 0, NpcSet: SessionSpellCaster.KosOverrideNpcFlag), owner.QueryObjectFlags(Target));
         Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady), Trail(caster));
     }
 

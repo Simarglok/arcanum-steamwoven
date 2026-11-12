@@ -142,14 +142,14 @@ public partial class TerrainViewerApp
                 present ? HeroClickTarget.Critter : HeroClickTarget.Other, TargetDead: talksDead, TargetTalksDead: talksDead, Alt: alt, Shift: shift);
         }
 
-        public bool StartTalk(string target, bool run)
+        public bool StartTalk(string target, bool run, bool noWalk)
         {
             if (app.HeroRunsHost() is not { } host) return false;
             // A movement gate that refuses leaves the walk under way alone; otherwise the route the hero followed (an approach of its own, a far goal) gives way as for any other action, and the table interrupts the runs.
             if (!host.MayTalk) return false;
             app.StopWorldRoute("ROUTE_REPLACED_BY_TALK");
             app._mapFarGoal = null;
-            return host.Talk(target, run);
+            return host.Talk(target, run, noWalk);
         }
 
         public bool StartPickup(string target, bool run)
