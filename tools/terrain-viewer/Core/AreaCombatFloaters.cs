@@ -75,6 +75,8 @@ public static class AreaCombatFloaters
             Blinded = events.HasFlag(LifeEvents.Blinded),
             CrippledArm = (events & (LifeEvents.CrippledArm | LifeEvents.CrippledBothArms)) != 0,
             CrippledLegs = events.HasFlag(LifeEvents.CrippledLegs),
+            // ARC-MAGIC-1232 (DW2): the weapon block's drop (Disarm) floats message 19 as an attack's critical drop does.
+            WeaponDropped = step.Criticals.Any(c => c.Kind == SessionCriticalStepKind.DropWeapon && Tried(c.Outcome)),
             HitPoints = damage.HitPointDamage,
             Fatigue = damage.FatigueDamage,
             Poison = damage.PoisonDamage,

@@ -155,7 +155,7 @@ The 60 records outside the colleges (80..139, used by monsters and items) share 
 
 ## Not read, not verified
 
-- Whether the maintained damage of the clouds (11, 27) hits the same targets as the BEGIN: not run per spell. Read by ARC-RES-1109 ([ledger](ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)): Disarm's weapon drop is not built for a spell (DW2; the original drops, XR15), Unseen Force (2) pushes ground items in the original and not in the viewer (UO5, UO6), Illuminate (65) lights the scene in the original and not in the viewer (IW5, IW6).
+- Whether the maintained damage of the clouds (11, 27) hits the same targets as the BEGIN: not run per spell. Read by ARC-RES-1109 ([ledger](ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)): Disarm's weapon drop was not built for a spell and is since ARC-MAGIC-1232 (DW2, built; the original drops, XR15), Unseen Force (2) pushes ground items in the original and not in the viewer (UO5, UO6), Illuminate (65) lights the scene in the original and not in the viewer (IW5, IW6).
 - Left open by the executable reads (ledger XR1-XR15): what inventory mode 4 lets the player move, what happens on arrival to a summoned follower the travel hide left shown, whether a familiar's death reaches the follower removal.
 - The AI's use of each spell was not audited beyond the priorities in the records (60 of the 80 have one); a component that is not ready is not ready for NPCs either.
 - Records 80..139 and the technology records (140..222) are outside the per-spell view.

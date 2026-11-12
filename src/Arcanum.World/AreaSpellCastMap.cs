@@ -35,6 +35,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     private readonly Func<IReadOnlyList<(string Entity, AreaObjectRecord Row)>>? _visitors;
     private readonly Func<AreaObjectRecord, AreaObjectAttackTarget?>? _objects;
     private readonly Func<IReadOnlyList<SessionWearItem?>?>? _heroKit;
+    private readonly Func<Arcanum.Simulation.Items.IDropMap?>? _dropMap;
     // ARC-COMBAT-025: the holder of each item a worn-items query listed (the acid's steps ask the item's combat values and damage by its id after it).
     private readonly Dictionary<string, string> _wornHolder = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AreaObjectRecord> _rows = new(StringComparer.Ordinal);
@@ -64,6 +65,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     /// through <see cref="GameSessionOwner.DamageObject"/> (none when null: such damage is not ready).</param>
     /// <param name="heroKit">ARC-COMBAT-025: the durability values of the hero's starting kit (<see cref="AreaStartingHero.KitDurability"/>), so the items the hero
     /// wears answer an acid and take its damage (none when null: the hero's items are not reached).</param>
+    /// <param name="dropMap">ARC-MAGIC-1232 (DW2): the shown map's drop map now (<see cref="AreaDropMap"/>), where a spell's weapon drop (Disarm) places the item as a critical drop does (none when null or when it answers null: the item lands on its holder's cell).</param>
     /// <param name="visitors">ARC-DEV-076 (MIG3): the NPCs standing on this map whose rows belong to another map (the companions carried
     /// from their home map), each with its entity and its row, asked at each query. They are targets, casters' party and critters like
     /// the map's own NPCs, found by identity through the combat host's resolver; they stand where <paramref name="placed"/> says (none:
@@ -72,8 +74,9 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         Func<CellCoord?> heroCell, Func<AreaLineOfFire?> lineOfFire, Func<AreaObjectKey, bool>? gone = null,
         Func<IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?>>? placed = null, Func<string, bool>? held = null,
         Func<IReadOnlyList<(string Entity, AreaObjectRecord Row)>>? visitors = null, Func<AreaObjectRecord, AreaObjectAttackTarget?>? objects = null,
-        Func<IReadOnlyList<SessionWearItem?>?>? heroKit = null)
+        Func<IReadOnlyList<SessionWearItem?>?>? heroKit = null, Func<Arcanum.Simulation.Items.IDropMap?>? dropMap = null)
     {
+        _dropMap = dropMap;
         _visitors = visitors;
         _objects = objects;
         _heroKit = heroKit;
@@ -315,6 +318,16 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         foreach (var item in worn) _wornHolder[item.Wear.Entity] = entity;
         return worn.Select(item => new SpellAcidItem(item.Wear.Entity, (int)item.Slot, false, Math.Clamp(item.Facts.Resistances.Normal, 0, 95))).ToArray();
     }
+
+    /// <summary>ARC-MAGIC-1232 (DW2): the critter's worn items by slot with their baselines, the same list the acid and an attack's wear read (<see cref="Worn"/>).</summary>
+    public IReadOnlyDictionary<Arcanum.Simulation.Equipment.EquipmentSlot, SessionWearItem>? WornBySlot(string entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        return Worn(entity).ToDictionary(item => item.Slot, item => item.Wear);
+    }
+
+    /// <summary>ARC-MAGIC-1232: the shown map's drop map now, or null.</summary>
+    public Arcanum.Simulation.Items.IDropMap? DropMap => _dropMap?.Invoke();
 
     // The items a critter wears now with their durability values and stored facts, in slot order. An NPC's are the session's (ARC-DEV-076, MIG3: by identity,
     // from the worn items' own fields, so a carried companion's items answer as on its home map). The hero's are its starting kit's (ARC-COMBAT-025:

@@ -230,6 +230,13 @@ public sealed class AreaSpellCastItemDamageTests
         Assert.AreEqual(0, new AreaSpellCastMap(session, 1, Steps(), rows, combat, () => null, () => null).WornItems(SessionSpellCaster.Hero).Count);
         var worn = withKit.WornItems(SessionSpellCaster.Hero).Single();
         Assert.AreEqual(("kit:1", (int)EquipmentSlot.Weapon, 50), (worn.Id, worn.Slot, worn.NormalResistance), "the prototype's stored resistance");
+        // ARC-MAGIC-1232 (DW2): the same items by wear slot are what a spell's weapon block (Disarm) takes the target's weapon from; the drop map is the host's.
+        var bySlot = withKit.WornBySlot(SessionSpellCaster.Hero)!;
+        Assert.AreEqual(("kit:1", 1), (bySlot[EquipmentSlot.Weapon].Entity, bySlot.Count));
+        Assert.AreEqual(0, new AreaSpellCastMap(session, 1, Steps(), rows, combat, () => null, () => null).WornBySlot(SessionSpellCaster.Hero)!.Count);
+        Assert.IsNull(withKit.DropMap, "no drop map given");
+        var dropMap = new NoDrops();
+        Assert.AreSame(dropMap, new AreaSpellCastMap(session, 1, Steps(), rows, combat, () => null, () => null, dropMap: () => dropMap).DropMap);
         Assert.IsTrue(withKit.DamageObject("kit:1", Hit(4)));
         Assert.AreEqual(6, session.QueryEquipment().Worn.Single().Item.HitPoints);
         Assert.IsTrue(withKit.DamageObject("kit:1", Hit(6)));
@@ -237,5 +244,12 @@ public sealed class AreaSpellCastItemDamageTests
         Assert.AreEqual(0, session.QueryEquipment().Worn.Count, "the first break takes the hero's item off");
         Assert.AreEqual(0, withKit.WornItems(SessionSpellCaster.Hero).Count);
 
+    }
+
+    private sealed class NoDrops : IDropMap
+    {
+        public CellCoord? Step(CellCoord from, int rotation) => rotation is >= 0 and <= 7 ? null : from;
+        public DropPath Path(CellCoord from, CellCoord to, DropOwner owner) => DropPath.None;
+        public bool HasCritter(CellCoord cell) => false;
     }
 }

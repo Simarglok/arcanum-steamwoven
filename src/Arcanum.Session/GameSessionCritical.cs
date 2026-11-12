@@ -169,6 +169,22 @@ public sealed partial class GameSessionOwner
         return Drop(kind, whose, side, slot, cell, dropMap, steps, ref failure);
     }
 
+    /// <summary>
+    /// ARC-MAGIC-1232 (DW2, XR15): the weapon block of a spell's damage step on <paramref name="who"/>: the critter's item in the weapon slot goes through <see cref="CriticalDrop"/> (the attack paths' step, not a copy), the host's
+    /// <paramref name="worn"/> items and <paramref name="cell"/> as for an attack's recipient (the hero's drop is at its own cell). Returns the one step, empty when no step ran; <paramref name="failure"/> is a refusal of the
+    /// session (the generator ran dry, a stale version), whose step is in the list as <see cref="SessionCriticalStepOutcome.Unknown"/>.
+    /// </summary>
+    internal IReadOnlyList<SessionCriticalStep> SpellWeaponDrop(SessionLifeTarget who, IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? worn, CellCoord? cell, IDropMap? dropMap,
+        out GameSessionFailure failure)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(who);
+        failure = GameSessionFailure.None;
+        var steps = new List<SessionCriticalStep>();
+        CriticalDrop(SessionCriticalStepKind.DropWeapon, DamageRecipient.Target, new SessionWearSide { Life = who, Worn = worn }, EquipmentSlot.Weapon, cell, dropMap, steps, ref failure);
+        return steps;
+    }
+
     // The wear check of the critter's item in the slot under its injuries now; null without the item or without its wear values.
     private EquipmentRefusal? WearRefusal(SessionWearSide side, SessionCritterCombat? npc, EquipmentSlot slot)
     {
