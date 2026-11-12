@@ -1,7 +1,7 @@
 # Sleep window runtime
 
-Status: **Implemented bounded component (World rules, viewer host), bed and random encounter not modelled.** Work item ARC-WORLD-1160
-(issue #1160, plan E3-a), 2026-11-12. The hero's rest: the key `S` and the game bar's Sleep button open the original's interface mode 6, a
+Status: **Implemented bounded component (World rules, viewer host); the hero's bed is built (ARC-WORLD-1162, slice 1 of E3-d: script, occupancy, kind-2 heal), the bed's drawing and the NPCs' beds and random encounter are not.** Work items ARC-WORLD-1160
+(issue #1160, plan E3-a) and ARC-WORLD-1162 (issue #1162, E3-d, the hero's bed), 2026-11-12. The hero's rest: the key `S` and the game bar's Sleep button open the original's interface mode 6, a
 window of lengths; a press runs a chain of one-hour steps that jump the game clock, heal the hero and his followers and end by the chosen
 length. Universal: any map of the viewer's area mode with a session hero. No saved state is added (the original does not save the chain
 either: a load closes the window).
@@ -38,11 +38,43 @@ Every rule was read in the retail 1.0.7.4 `Arcanum.exe` ([ledger SWB1–SWB13](.
   hour's light at once, fades the screen in and closes the window. Only the Esc menu pauses; the steps go on behind it. Nothing in the window
   reads damage or hostile arrivals (SWB13).
 
+## The bed (ARC-WORLD-1162, ledger SWB1, SWB3, SWB5, SWB14–SWB16)
+
+A **bed** is scenery (object type 3) whose art id is of art type 4 with sub-type 0x16 (bits 6 to 10): the executable has no bed flag, list or type
+([`AreaBeds`](../../src/Arcanum.World/AreaBeds.cs)). A left click on one is a use click (the hero's use goal 38, the same approach and range test as an
+exit object, [`AreaMapTransfers.Beds`](../../src/Arcanum.World/AreaMapTransfers.cs)); the act node hands it to the rest hook, which here is
+`TerrainViewerApp.OpenSleep(bed)` (the key S and the bar button call it with no bed). The same open decision runs with the bed, in the original's order:
+
+1. The gates of the ground rest: a dead hero does nothing, an open window is closed, an unconscious hero is refused (message 11), a hero in combat mode
+   is asked the exit gate (message 9) and otherwise leaves combat mode at once. **A call with a bed skips the town-map test** (SWB3): a bed is usable in a
+   town whatever its `townmap.mes` entry says, and it is never the wait window (eight buttons, until healed included).
+2. **The bed's use script** (attachment point 1, the hero as triggerer, [`AreaUseScriptHost.RunBed`](../../src/Arcanum.World/AreaUseScripts.cs), the trap
+   meeting and effects as for any use): the answer **1** refuses the hero with message 8 and nothing changes. The answer 1 is what the script entry point
+   gives for *run default* and **for an object with no script on the point** (SA10), so a bed with no use script refuses the hero (owner decision
+   2026-11-12 after the census below). Any other answer (*skip default*, a normal end, a trap that ended the call) goes on. The hero has already left combat
+   mode when a bed refuses him (SWB5). A run the host cannot apply (a script it refuses, a teleport or a conversation asked from a bed) answers nothing:
+   the status line says so and the bed is not used.
+3. **The seat** ([`AreaBedOccupancy.Seat`](../../src/Arcanum.World/AreaBeds.cs), 0x45F2D0): an occupied bed answers no and the hero is refused with message
+   10; otherwise he is the bed's occupant. A mode change that is refused takes him out again (SWB6).
+4. The sleep window opens as on the ground (eight lengths) and its steps heal with **kind 2** (`AreaRestRules.BedHealKind`: hit-point damage drops by twice the
+   healing rate, fatigue damage by three times that, SWB9, SWB10). The close (the end of the rest, the toggle, a replaced session) takes the hero out
+   (`Unseat`, 0x45F3A0) and empties the bed.
+
+**What the installed data holds** ([`BedCensusRealDataTests`](../../tests/Arcanum.World.Tests/BedCensusRealDataTests.cs), opt-in `DAT_ROOT`, numbers only;
+2026-11-12, the 80 maps of the catalogue and the main map read sector by sector): **191 placed beds**, all of one prototype (basic number 4045, eight art numbers for the styles). **19 carry a script on point 1 and 172 carry none**, so in
+the original 172 of them refuse the hero (message 8). The scripted ones are in four maps: Bates mansion level 1 (5 beds) and level 2 (6), script 3023 (a
+conditional script of three lines that ends *skip default* on one branch and *run default* on the other); Roseborough inn2 (4 of its 15) and Wheel clan (3 of
+its 29), script 1990 (32 lines with both ends, so the answer depends on state); the Crash Site cave (1 bed), script 1893 (a single line that ends *skip default*:
+the hero may lie down). The bed prototype itself holds no use script; the scripts are set on the placed beds. The main world map (621 sector files, more than a
+snapshot holds) is **not** read by the census; the 80 maps are every other map of the catalogue. The smoke stage `bed` pins the cave's bed.
+
 ## Boundaries (NOT READY)
 
-- **Bed** (SWB1, SWB5, SWB14–SWB16): no seating of the hero in a bed object, no bed use script point 1 test (message 8), no occupied-bed test
-  (message 10), no kind-2 heal. Open data question: which installed beds (scenery of art type 4, sub-type 0x16) carry a use script, since a bed
-  with no script on point 1 refuses the hero in the original (SWB5).
+- **Bed, what is left** (SWB15, SWB16): the sleeper's sleeping flag (critter flag 0x1000) and hidden drawing (object flag 0x100) are not written, the bed is
+  not drawn in its occupied frame (the art id's next frame: the builder reads no other frame of a bed, whose scenery flag 0x1 is set) and a sleeper on the bed's
+  own tile is not moved to its neighbour; the hero is drawn as he is while his window is open (the screen fades to black at the first press). These are graphics
+  changes and wait for their own slice with the NPCs' beds. An occupied bed can only meet an NPC sleeper, who is not seated yet (SWB17 to SWB21, the NPC day), so
+  message 10 is reached only by the rule and its tests today.
 - **Random encounter** (SWB13): the encounter roll, which closes the window with five times the chance, belongs to the world journey (E2-c).
 - **The sleeper's maintained spells** end at the press in the original (UE6, issue #1161); here they do not.
 - **Followers of followers**, and followers the AI host does not run, are not healed or told of event 29.

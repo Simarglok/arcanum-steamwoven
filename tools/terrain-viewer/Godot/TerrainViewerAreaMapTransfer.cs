@@ -57,7 +57,7 @@ public partial class TerrainViewerApp
     private bool AreaTransferPending => _areaTransitions?.Pending is not null || _mapTransfers?.Pending is not null || _mapHandoff is { Kind: not MapHandoffKind.Stream } || TransitionFadePending;
 
     private bool IsAreaTrigger(AreaObjectKey key) =>
-        _mapTransfers?.Site(key) is not null || _mapTransfers?.ScriptedSite(key) is not null || _areaTransitions?.Triggers().Any(t => t.Trigger.Key == key) == true;
+        _mapTransfers?.Site(key) is not null || _mapTransfers?.ScriptedSite(key) is not null || _mapTransfers?.IsBed(key) == true || _areaTransitions?.Triggers().Any(t => t.Trigger.Key == key) == true;
 
     /// <summary>The session the arriving map adopts: the carried one of a transfer to this map, else null.</summary>
     private GameSessionOwner? AdoptHandoffSession(TerrainViewerArguments arguments)
@@ -169,7 +169,7 @@ public partial class TerrainViewerApp
     private bool TryAreaMapUse(Vector2 screen)
     {
         if (_mapTransfers is null || _worldActor.Session is not AreaGridSession || AreaObjectAtScreen(screen) is not { } hit
-            || (_mapTransfers.Site(hit) is null && _mapTransfers.ScriptedSite(hit) is null)) return false;
+            || (_mapTransfers.Site(hit) is null && _mapTransfers.ScriptedSite(hit) is null && !_mapTransfers.IsBed(hit))) return false;
         CancelTalkApproach("a use click replaced it"); CancelInventoryApproach("a use click replaced it");
         // An exit map mode cannot take is refused at once, without walking there (a scripted use's script names its exit).
         if (_mapTransfers.Site(hit) is { } site && _mapTransfers.Refusal(site) is { } refusal)
