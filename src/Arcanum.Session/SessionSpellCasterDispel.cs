@@ -67,6 +67,8 @@ public sealed partial class SessionSpellCaster
         if (detail != 0) _log.Add(new(SpellCastEventKind.Dispelled, run.Id, 0, id, detail));
     }
 
-    // SUM7 (0x4554B0): the run's summoned list as the runs' Dispel reads it (+0x134), through the objects this host's summon map holds for the run.
-    bool ISpellRunHost.SummonedListHolds(SpellRun run, string obj) => SummonedOf(run).Any(summoned => summoned.Id == obj);
+    // SUM7 (0x4554B0, 0x459740): whether the run's summoned list (+0x134) holds the object. The list is the objects this host's summon map made for the run, dead or alive: the original's list keeps the handle of a
+    // creature that was killed (the kill is what tells the runs, ObjectGone), so the answer does not ask the cast map for the object, which has no body for a dead created critter (ARC-MAGIC-053).
+    bool ISpellRunHost.SummonedListHolds(SpellRun run, string obj) =>
+        SummonMap is { } map && _owner.QueryCreatedObjects(map).Any(made => made.Run == run.Id && made.Entity == obj);
 }

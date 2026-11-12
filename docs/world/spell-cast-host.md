@@ -685,7 +685,7 @@ Slice E1-b of the [missing-systems plan](../project/missing-systems-plan.md#e1-s
 
 - **The component (0x452830, SUM1–SUM4).** On each list entry that passes its area test and is a tile (an object entry has no tile, TA9): the object of prototype file `Proto:` + 20 (SC7) is
   created on the shown map at the tile, no offset, with spell flag `OSF_SUMMONED` (0x4000), the run's parent as its summoner and the run as its owner. Only a prototype of type 3 (scenery) is made; a
-  critter prototype and a list pick stay `ComponentNotReady` (E1-e). The cast host reads type, object flags and scenery flags of the prototype from the viewer (`SummonPrototypes`); a creation the
+  critter prototype and a list pick are E1-e's (below). The cast host reads type, object flags and scenery flags of the prototype from the viewer (`SummonPrototypes`); a creation the
   session refuses is logged (`SummonRefused`; the original exits, an unreachable bug, SUM2).
 - **Empty tiles (SUM9).** The area tests are the existing ones over a map that now lists the created objects too: `Tgt_Tile_Empty` (Fireflash) refuses a tile with blocking terrain (the step evidence's terrain verdict since ARC-MAGIC-055; before, only an unadmitted sector refused) or any object but an
   item without `OF_NO_BLOCK`, a standing critter included, so a flash cast at a creature that still stands on its tile makes no flash; `Tgt_Tile_Empty_Immobiles` (Wall of Fire) counts only walls,
@@ -711,6 +711,28 @@ Slice E1-b of the [missing-systems plan](../project/missing-systems-plan.md#e1-s
 today only the run that destroys its own objects does so, and it is the one being processed), the network paths, the burn's experience, blame and witnesses, the blocking pieces of Wall of Stone and Wall of
 Force in the path and passability queries (they are created; nothing blocks on them yet), a lost callback of a timed or maintained run (it is not called back; its CALLBACK line does not run). A creation or
 destroy is a session change inside the run pass: a pass the session then refuses (a full event budget) leaves the object made or gone with the run unchanged.
+
+
+## Summon for creatures (ARC-MAGIC-053)
+
+Slice E1-e of the [missing-systems plan](../project/missing-systems-plan.md#e1-summon-and-objects-created-at-run-time-priority), on the created critters of E1-c and the reads of
+[ARC-RES-101](../research/ledger/spell-runs.md) (ledger [SUM5–SUM8 and SUM17–SUM22](../research/ledger/spell-runs.md#summon-component-and-the-objects-it-creates-arc-res-101)); code
+`SessionSpellCasterSummon.cs`, `GameSessionOwner.CreateSummonedCritter`, `SummonLists`, `SpellRunSystem.ObjectGone`, viewer `TerrainViewerSummon.cs`, `TerrainViewerCreatedCritters.cs`,
+[tests](../../tests/Arcanum.Session.Tests/SessionSpellSummonCritterTests.cs), smoke stage `summon-undead`.
+
+- **Which prototype.** The component's own `Proto:` (the basic number, + 20 for the file), else the pick of its `List:` (0..5, `SummonLists`): a weighted list draws once over 0..total−1 (the original draws 0..100, so
+  an overrun of the table falls to entry 0: MG9, fixed in both modes), an aptitude list takes the first entry whose threshold is not below the run's captured parent aptitude (`SpellRunObject.Aptitude`, 100 under the
+  armed "spell at maximum" fate). Each list entry the area passed draws on its own (SUM1, SUM18). A prototype that is not type 3 or 16, a list outside the table, or a component with `Clear_Faction:` or `Palette:`
+  on a critter (no installed record has either) stays `ComponentNotReady`.
+- **What is made (SUM5, SUM20).** `CreateSummonedCritter` creates the critter at the entry's tile (an `oid:critter:n`, no tile search) in one revision with the spell flag 0x4000, `OF_DONTDRAW` and
+  `OCF2_NO_PICKPOCKET` written and the summoner and run on its record. The viewer's row builder clears its experience worth and pool and copies the hero's alignment into stat 19 when the hero summoned it (the alignment
+  is the hero's of the moment the world first reads the row; a loaded game reads it again). The host is told at once (`CritterSummoned`): the viewer hands the critter to the resolver and the AI host, queues its
+  inventory (the restock, 0x442260; it runs before the summon effect makes the creature the summoner's follower, so the viewer generates it with the PC-leader gate not read, `GeneratesAtCreation(..., beforeLeader: true)`) and its **creation notice** (`QueueCreationNotice`, TG9, ARC-DEV-402): the script of the tile it stands on runs with it as the triggerer.
+- **The records' lines do the rest.** `Tgt_Summoned` finds the creature through the run's summoned list: the ObjFlag line `OSF_MIND_CONTROLLED` (the forced join of the hero's party, no flee, MA-4), the EyeCandy entry with the
+  callback, the CALLBACK line that clears `OF_DONTDRAW` (the viewer draws the creature when the flag is gone; the AI gate treats a hidden critter as not acting), the END callback and its Destroy.
+- **The run and the creature.** The death of the summoned creature tells the runs it is gone (0x459740); the first loop (SUM21) ends the run whose summoned list holds it, and the END_CALLBACK Destroy takes the
+  corpse away. A destroyed critter that is a follower leaves the party. A Dispel on the creature is MA-3's (it destroys a summoned critter).
+- **Not built.** The concealed start of SUM19, `Clear_Faction:` and `Palette:`, the faction copy and the alignment of an NPC summoner (E1-f), the familiar's own flags and its hiding with the party on the world map.
 
 ## The ObjFlag component and the component table (ARC-DEV-358, MA-1)
 

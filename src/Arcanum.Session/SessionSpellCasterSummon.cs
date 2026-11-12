@@ -16,8 +16,8 @@ public sealed record SessionSummonPrototype(int Type, int ObjectFlags, int Scene
 /// ARC-DEV-352 (E1-b of the missing-systems plan; ARC-RES-101, ledger SUM1–SUM16): the Summon component (type 18, ProcFunc 0x452830, effect 0x450C40) for the objects it makes that are not
 /// critters, and the eye-candy callbacks the summoning records wait for (EC11, EC14). Fireflash (spell 22) makes the flash (basic prototype 4050) on an empty strike tile and its CALLBACK line destroys it
 /// after the eye candy's action frame; Wall of Fire (spell 21) makes five pieces (basic prototype 4031) along the wall line and its END_CALLBACK line destroys all of them. The run keeps its summoned list as
-/// the created objects that name it (<see cref="SessionCreatedObject.Run"/>, newest first, SUM7); a freed run's slot lets go of the list (<see cref="GameSessionOwner"/>'s commit). <b>Not ready:</b> the
-/// critter half (a prototype of another type and the list pick, E1-e), a dispel of a summoned object, the network paths.
+/// the created objects that name it (<see cref="SessionCreatedObject.Run"/>, newest first, SUM7); a freed run's slot lets go of the list (<see cref="GameSessionOwner"/>'s commit). <b>Not ready:</b> a dispel
+/// of a summoned scenery, the network paths. ARC-MAGIC-053 (E1-e) adds the critter half (an NPC prototype or the list pick, the flags the effect writes, the follower's join through the records' own ObjFlag line).
 /// </summary>
 public sealed partial class SessionSpellCaster
 {
@@ -26,6 +26,9 @@ public sealed partial class SessionSpellCaster
 
     /// <summary>The object type of a scenery.</summary>
     public const int SceneryObjectType = SpellTargetObject.Scenery;
+
+    /// <summary>ARC-MAGIC-053: the object type of a critter a summon makes (an NPC).</summary>
+    public const int CritterObjectType = SpellTargetObject.Npc;
 
     /// <summary>The play flags of an EyeCandy component that call the run back (EC11): <c>callback</c> (0x8) and <c>end_callback</c> (0x10).</summary>
     public const uint PlayCallback = 0x8, PlayEndCallback = 0x10;
@@ -47,10 +50,18 @@ public sealed partial class SessionSpellCaster
     private string? _lastSummoned;
 
     /// <summary>
-    /// ARC-DEV-352 (SUM1–SUM4, SUM9): the Summon component on one list entry. Only a tile entry is summoned on (an object entry has no tile, TA9); the component's own area test (the gate) has already
-    /// refused a tile that is not empty (<c>Tgt_Tile_Empty</c>: Fireflash) or holds a blocking immobile (<c>Tgt_Tile_Empty_Immobiles</c>: Wall of Fire). The object is made from the prototype file
-    /// <c>Proto:</c> + 20 at the entry's tile with no offset, marked summoned (0x4000) with the run's parent as its summoner and the run as its owner, and becomes the last summoned. A component whose
-    /// prototype is not a scenery (a critter) or that picks from a list is not ready (false). A creation the session refuses is logged (<see cref="SpellCastEventKind.SummonRefused"/>; the original
+    /// ARC-MAGIC-053 (E1-e): told the entity of each critter a Summon made, right after it exists and before the record's next component (the records' <c>Tgt_Summoned</c> lines act on it): the host hands the shown map's created
+    /// critters to the resolver and the AI host, queues its inventory and its tile notification (the creation finish 0x442260 ends with the location notification, mode 2, for a type 15 or 16 object, TG9). Null: none of it.
+    /// </summary>
+    public Action<string>? CritterSummoned { get; set; }
+
+    /// <summary>
+    /// ARC-DEV-352 (SUM1–SUM4, SUM9) and ARC-MAGIC-053 (SUM5, SUM6): the Summon component on one list entry. Only a tile entry is summoned on (an object entry has no tile, TA9); the component's own area test (the gate) has already
+    /// refused a tile that is not empty (<c>Tgt_Tile_Empty</c>: Fireflash) or holds a blocking immobile (<c>Tgt_Tile_Empty_Immobiles</c>: Wall of Fire). The prototype is the component's <c>Proto:</c>, else the pick of its
+    /// <c>List:</c> (<see cref="SummonLists.Pick"/>, drawn for each entry). The object is made from the prototype file prototype + 20 at the entry's tile with no offset, marked summoned (0x4000) with the run's parent as its
+    /// summoner and the run as its owner, and becomes the last summoned. A scenery is made by <see cref="GameSessionOwner.CreateObject"/>; a critter (an NPC prototype) by <see cref="GameSessionOwner.CreateSummonedCritter"/>
+    /// (written <c>OF_DONTDRAW</c> and <c>OCF2_NO_PICKPOCKET</c>) and told to <see cref="CritterSummoned"/>. A prototype of any other type, a component with a <c>Clear_Faction:</c> or a <c>Palette:</c> on a critter (no installed record has
+    /// either, SC12; the faction and palette changes are not built) or a list outside the table is not ready (false). A creation the session refuses is logged (<see cref="SpellCastEventKind.SummonRefused"/>; the original
     /// exits, an unreachable bug, SUM2).
     /// </summary>
     [OriginalFunction(0x452830, OriginalFunctionScope.Partial)]
@@ -58,15 +69,27 @@ public sealed partial class SessionSpellCaster
     {
         if (component.Summon is not { } data) return false;
         if (target.Object is not null || target.Tile.IsNone) return true;
-        if (data.Prototype <= 0 || data.Prototype > SessionCreatedObject.MaxPrototype - PrototypeFileOffset || SummonMap is not { } map) return false;
-        var file = data.Prototype + PrototypeFileOffset;
-        if (SummonPrototypes?.Invoke(file) is not { Type: SceneryObjectType }) return false;
+        if (SummonMap is not { } map) return false;
+        // SUM6: the component's own prototype, else the list pick (the original builds the request for each entry that passed the area test, so each entry draws).
+        var prototype = data.Prototype;
+        if (prototype <= 0)
+        {
+            if (!SummonLists.Exists(data.List)) return false;
+            prototype = SummonLists.Pick(data.List, run.Parent?.Aptitude ?? 0, (low, high) => Rolls.Roll(SpellRollPurpose.SummonPick, low, high)) ?? 0;
+        }
+        if (prototype <= 0 || prototype > SessionCreatedObject.MaxPrototype - PrototypeFileOffset) return false;
+        var file = prototype + PrototypeFileOffset;
+        if (SummonPrototypes?.Invoke(file) is not { Type: SceneryObjectType or CritterObjectType } facts) return false;
+        var critter = facts.Type == CritterObjectType;
+        if (critter && (data.ClearFaction != 0 || data.Palette != 0)) return false;
         if (target.Tile.X > int.MaxValue || target.Tile.Y > int.MaxValue) { _log.Add(new(SpellCastEventKind.SummonRefused, run.Id, file, null, (int)GameSessionFailure.InvalidCreatedObject)); return true; }
-        var made = _owner.CreateObject(_owner.Version, SessionCreatedKind.Scenery, file, map, new CellCoord((int)target.Tile.X, (int)target.Tile.Y), 0, 0, SessionCreatedObject.SummonedFlag,
-            run.Parent?.Id, run.Id);
+        var cell = new CellCoord((int)target.Tile.X, (int)target.Tile.Y);
+        var made = critter ? _owner.CreateSummonedCritter(_owner.Version, file, map, cell, run.Parent?.Id, run.Id)
+            : _owner.CreateObject(_owner.Version, SessionCreatedKind.Scenery, file, map, cell, 0, 0, SessionCreatedObject.SummonedFlag, run.Parent?.Id, run.Id);
         if (made.Object is not { } summoned) { _log.Add(new(SpellCastEventKind.SummonRefused, run.Id, file, null, (int)made.Failure)); return true; }
         _lastSummoned = summoned.Entity;
         _log.Add(new(SpellCastEventKind.Summoned, run.Id, file, summoned.Entity));
+        if (critter) CritterSummoned?.Invoke(summoned.Entity);
         return true;
     }
 
@@ -178,7 +201,8 @@ public sealed partial class SessionSpellCaster
 
         public SpellTargetObject? Object(string id)
         {
-            if (SessionCreatedObject.KindOf(id) is null) return map.Object(id);
+            // ARC-MAGIC-053: a created critter is a map NPC of the host (its row and live cell), not one of the created sceneries listed here.
+            if (SessionCreatedObject.KindOf(id) is null or SessionCreatedKind.Critter) return map.Object(id);
             return host.SummonMap is { } shown && host._owner.QueryCreatedObject(id) is { } made && made.Map == shown ? Of(made) : null;
         }
 

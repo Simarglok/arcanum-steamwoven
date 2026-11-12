@@ -188,6 +188,8 @@ public partial class TerrainViewerApp
         var placed = new Dictionary<AreaObjectKey, (long X, long Y)?>();
         if (_aiHost is { } ai && _readyArea is { } shown && ai.Scene.RuntimeMap == shown.Snapshot.RuntimeMap)
             foreach (var mover in ai.Movers.All) placed[mover.Key] = (mover.Cell.X, mover.Cell.Y);
+        // ARC-MAGIC-053: a critter the session created on this map (a summoned creature) stands on its creation cell until the AI host moves it.
+        foreach (var (made, row) in SpellCreatedCritters()) if (!placed.ContainsKey(row.Key)) placed[row.Key] = (made.Cell.X, made.Cell.Y);
         if (_areaCompanions is not { } group || _readyArea is not { } area || group.Map.RuntimeMap != area.Snapshot.RuntimeMap) return placed;
         foreach (var key in group.Absent) placed[key] = null;
         foreach (var companion in group.Companions) placed[companion.Key] = group.WorldCell(companion.Speaker);
@@ -196,10 +198,22 @@ public partial class TerrainViewerApp
 
     // ARC-DEV-076 (MIG3): the companions carried here from another map: spell targets and party members through their home map's record.
     private IReadOnlyList<(string Entity, AreaObjectRecord Row)> SpellVisitingCompanions() =>
-        _areaCompanions is { } group && _readyArea is { } area && group.Map.RuntimeMap == area.Snapshot.RuntimeMap
+        [.. (_areaCompanions is { } group && _readyArea is { } area && group.Map.RuntimeMap == area.Snapshot.RuntimeMap
             ? group.Companions.Where(companion => companion.Template.Home.RuntimeMap != area.Snapshot.RuntimeMap)
-                .Select(companion => (companion.Entity, companion.Speaker.Row)).ToArray()
-            : [];
+                .Select(companion => (companion.Entity, companion.Speaker.Row))
+            : []).Concat(SpellCreatedCritters().Select(created => (created.Made.Entity, created.Row)))];
+
+    // ARC-MAGIC-053: the critters the session created on the shown map with their rows (built from their prototypes, by identity): spell targets and party members like a map NPC, found by the cast map as
+    // visitors (a created critter is no row of the map's file). None without the module's prototypes or an area session.
+    private IReadOnlyList<(SessionCreatedObject Made, AreaObjectRecord Row)> SpellCreatedCritters()
+    {
+        if (_areaSession is not { } session || _createdPrototypeRead is null || _readyArea is null) return [];
+        var map = new SessionMapId(CurrentAreaMap);
+        var found = new List<(SessionCreatedObject, AreaObjectRecord)>();
+        foreach (var made in session.QueryCreatedObjects(map))
+            if (made.Kind == SessionCreatedKind.Critter && CreatedCrittersRow(made.Entity) is { } row) found.Add((made, row));
+        return found;
+    }
 
     /// <summary>The cast host for the event pump: the shown map's, built as soon as the session holds a run (its ticks and end need
     /// the map's magic world); without runs the host already built, or none (plain passes).</summary>

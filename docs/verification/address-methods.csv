@@ -748,7 +748,9 @@ tools/terrain-viewer/Godot/TerrainViewerSpellMissiles.cs,LaunchNpcSpellMissile,p
 tools/terrain-viewer/Godot/TerrainViewerSpellMissiles.cs,LaunchSpellMissile,pending,
 tools/terrain-viewer/Godot/TerrainViewerSpellMissiles.cs,SpellMissileArt,pending,
 tools/terrain-viewer/Godot/TerrainViewerSpellMissiles.cs,TurnHeroForCast,pending,
+tools/terrain-viewer/Godot/TerrainViewerSummon.cs,CritterSummonedHere,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSummon.cs,TakeSummonEvent,pending,
+tools/terrain-viewer/Godot/TerrainViewerSummonUndeadSmoke.cs,RunAreaSummonUndeadSmokeAsync,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerTeleport.cs,OpenTeleportWorldMap,pending,
 tools/terrain-viewer/Godot/TerrainViewerTeleport.cs,TeleportPick,pending,
 tools/terrain-viewer/Godot/TerrainViewerTraitBody.cs,TraitArtId,pending,
