@@ -133,7 +133,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-SCRIPT-052: the map-change key of an NPC a script's destroy (68) took out of the world (value 1). The original sets object
     /// flag 0x1 (TD2); a destroyed NPC is neither drawn nor in the object lists, and the view no longer reaches it (<see cref="Destroyed"/>).</summary>
     public const string DestroyedProperty = GameSessionOwner.ObjectDestroyedProperty;
-    private const int NpcType = 16, DestroyedObjectFlag = 0x1, OffObjectFlag = 0x2;
+    private const int NpcType = 16, DestroyedObjectFlag = 0x1, OffObjectFlag = 0x2, FirstItemType = 5, LastItemType = 14, WrittenItemType = 13;
     private const string ScriptPart = "script", LocalFlagsPart = "lf", CountersPart = "counters";
 
     /// <summary>The map-change property of a slot's part at a point the host writes back: <c>use.*</c> for the use point,
@@ -211,13 +211,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// installed heartbeats ask first: the conditions following (18), is named (20), is dead (22), is switched off (27) and has a reputation
     /// (33), and the actions call script in (54, through the session's queue), distance between (71) and set faction (134) of
     /// <see cref="ScrAdmissionSet.S18"/>. ARC-MAGIC-030 (MT21b): plus the spell conditions (14, 35, 48, 49) and give spell mastery in college (112) of <see cref="ScrAdmissionSet.S31"/>.
+    /// ARC-SCRIPT-1359: plus get location (95) of <see cref="ScrAdmissionSet.S38"/> (the Crash Site Molochean agent's heartbeat 1717 reads where it stands before it runs to its tile).
     /// </summary>
     public static ScrAdmissionSet HeartbeatAdmission { get; } = new("S2-area-heartbeat-state-kill-talk-world",
         ScrAdmissionSet.S2.Conditions.Concat([ScrCatalogue.Condition.FollowingPc, ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsDead,
             ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasReputation, ScrCatalogue.Condition.PcQuestState, .. ScrAdmissionSet.SpellQueryConditions, .. ScrAdmissionSet.StoryConditions, .. ScrAdmissionSet.WorldObjectConditions]),
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
-            ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
+            ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.GetLocation, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
             ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. DamageActions]),
         ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]));
@@ -1309,7 +1310,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         // ARC-WORLD-114: toggle state and kill in action order (ObjectStateRefusal checked them); ARC-SCRIPT-052: destroy and stop attacking.
         foreach (var request in effects.ObjectStates)
         {
-            if (request.Change is ScrObjectStateChange.SetLockState or ScrObjectStateChange.ToggleOpenClosed or ScrObjectStateChange.CreateItem)
+            if (request.Change is ScrObjectStateChange.SetLockState or ScrObjectStateChange.ToggleOpenClosed or ScrObjectStateChange.CreateItem
+                or ScrObjectStateChange.TransferItem or ScrObjectStateChange.DestroyItemNamed or ScrObjectStateChange.SetWrittenStart or ScrObjectStateChange.ToggleItemInventoryDisplay)
             {
                 if (!ApplyWorldObject(request)) return false;
                 continue;
@@ -1465,6 +1467,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     // ARC-SCRIPT-1164 (E5-b): set lock state (53, 0x441DD0), toggle open or closed (88, 0x4EEF80 and the container's 0x4EEF20, 0x4EEEC0) and create item (66) on what ObjectStateRefusal admitted. False when the session refuses.
     private bool ApplyWorldObject(ScrObjectStateRequest request)
     {
+        if (request.Change is ScrObjectStateChange.TransferItem or ScrObjectStateChange.DestroyItemNamed or ScrObjectStateChange.SetWrittenStart or ScrObjectStateChange.ToggleItemInventoryDisplay)
+            return ApplyItemAction(request);
         if (request.Change == ScrObjectStateChange.CreateItem)
         {
             var item = _world!.Item(request.Value)!;
@@ -1492,6 +1496,45 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         var frame = _session.QueryOpenable(facts.Openable, facts.Baseline).Frame;
         var target = facts.ToggledFrame(frame);
         return target == frame || _session.SetOpenableFrame(_session.Version, facts.Openable, facts.Baseline, target).Disposition != GameSessionDisposition.Rejected;
+    }
+
+    /// <summary>ARC-SCRIPT-1279 (WO2, WO7): what the session answered to the last transfer item or destroy item named a run applied (smoke and test seam; null before any).</summary>
+    public InventoryMutationResult? LastNamedItem { get; private set; }
+
+    // The holder the session's named-item finder takes for an object of a run: the hero for the PC, the object's own code for any other (the session answers nothing for one no attached map lists as a critter or container, as the finder 0x462480 does).
+    private string? HolderOf(ScrObjectRef holder) => IsPc(holder) ? null : holder.Code;
+
+    // ARC-SCRIPT-1279 (WO6, WO8): the item of the object operand a field action writes: a row of the loaded maps whose type is an item (5..14), a written one (13) for set written start; null when the action does nothing (the PC, another type, an item
+    // already deleted), as in the original.
+    private string? ItemFieldTarget(ScrObjectRef obj, bool writtenOnly)
+    {
+        if (IsPc(obj) || Row(obj) is not { } row || row.Type is < FirstItemType or > LastItemType || writtenOnly && row.Type != WrittenItemType || _session.IsItemDestroyed(obj.Code)) return null;
+        return obj.Code;
+    }
+
+    // ARC-SCRIPT-1279: transfer item (41), destroy item named (126), set written start (94) and toggle item inventory display (127) on what ObjectStateRefusal admitted. False when the session refuses.
+    private bool ApplyItemAction(ScrObjectStateRequest request)
+    {
+        switch (request.Change)
+        {
+            case ScrObjectStateChange.DestroyItemNamed:
+            {
+                var destroyed = _session.DestroyNamedItem(_session.Version, HolderOf(request.Object), request.Value);
+                LastNamedItem = destroyed;
+                return destroyed.Disposition != GameSessionDisposition.Rejected;
+            }
+            case ScrObjectStateChange.TransferItem:
+            {
+                var moved = _session.TransferNamedItem(_session.Version, HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value, InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck);
+                LastNamedItem = moved;
+                // A holder's insert check that says no, or a full list, leaves the item where it was and the run goes on (0x461810 returns without moving it). The session's own budgets (its NPC item total, ammunition and durability records, a 32-bit sum) answer the same way: the item stays and the run goes on (ledger WO17).
+                return moved.Disposition != GameSessionDisposition.Rejected || moved.Failure is GameSessionFailure.BudgetExceeded or GameSessionFailure.InsertRefused;
+            }
+            case ScrObjectStateChange.SetWrittenStart:
+                return ItemFieldTarget(request.Object, writtenOnly: true) is not { } written || _session.SetItemWrittenStart(_session.Version, written, request.Value).Disposition != GameSessionDisposition.Rejected;
+            default:
+                return ItemFieldTarget(request.Object, writtenOnly: false) is not { } shown || _session.ToggleItemDisplay(_session.Version, shown).Disposition != GameSessionDisposition.Rejected;
+        }
     }
 
     /// <summary>ARC-DEV-231: what the AI host answered to the last walk to or run to a run applied (smoke and test seam; null before any).</summary>
@@ -1573,6 +1616,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         foreach (var change in effects.WorldChanges)
             if (change.Change == ScrWorldChange.SectorBlocked && SessionSectorBlock.Pack(change.A, change.B) is null)
                 return $"toggle sector blocked of ({change.A},{change.B}) is not modelled (a negative sector or an x beyond 26 bits)";
+        // ARC-SCRIPT-1279: the (holder, name) pairs earlier item actions of the run touched: each plan below is read against the state before the run, so an action that meets a pair an earlier one changed would be planned on a stale list.
+        var touched = new HashSet<(string? Holder, int Name)>();
         foreach (var request in effects.ObjectStates)
         {
             if (request.Change == ScrObjectStateChange.StopAttacking)
@@ -1672,7 +1717,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 continue;
             }
             // ARC-SCRIPT-1164 (E5-b, WO1, WO3, WO4): lock state and the open toggle act on a portal or container of the shown map (any other object type does nothing, as in the original), create item on the PC or an NPC with an
-            // inventory list; the item, written-start and display actions have no host here.
+            // inventory list; the item actions (transfer, destroy named, written start, display) are checked below.
             if (request.Change is ScrObjectStateChange.SetLockState or ScrObjectStateChange.ToggleOpenClosed)
             {
                 var action = request.Change == ScrObjectStateChange.SetLockState ? "set lock state" : "toggle open or closed";
@@ -1686,14 +1731,31 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             {
                 if (_world?.Item(request.Value) is not { } made) return $"create item {request.Value}: no item prototype";
                 if (made.Kind.Type is SessionItemType.Gold or SessionItemType.Key or SessionItemType.KeyRing or SessionItemType.Ammo) return $"create item {request.Value}: a {made.Kind.Type} is not modelled";
+                touched.Add((HolderOf(request.Object), made.Kind.Name));
                 if (IsPc(request.Object)) continue;
                 if (Row(request.Object) is not { Type: NpcType }) return $"create item in {request.Object.Code} is not modelled (only the PC or an NPC)";
                 if (_session.QueryMapInventory(new SessionMapId(request.Object.Map))?.Holders.Any(h => h.Entity == request.Object.Code) != true)
                     return $"create item in {request.Object.Code}: the NPC has no inventory list";
                 continue;
             }
-            if (request.Change is ScrObjectStateChange.TransferItem or ScrObjectStateChange.SetWrittenStart or ScrObjectStateChange.DestroyItemNamed or ScrObjectStateChange.ToggleItemInventoryDisplay)
-                return $"{request.Change} is not modelled (no per-item field write or removal in the viewer)";
+            // ARC-SCRIPT-1279 (WO2, WO7): the session's named-item move and destroy say, before anything applies, whether they can (a holder that is no critter or container, or has no such item, does nothing, as in the original).
+            if (request.Change is ScrObjectStateChange.TransferItem or ScrObjectStateChange.DestroyItemNamed)
+            {
+                var holders = request.Change == ScrObjectStateChange.TransferItem ? new[] { HolderOf(request.Object), HolderOf(request.Other!.Value) } : new[] { HolderOf(request.Object) };
+                // A second action on an item name in a holder an earlier action of the run moved, destroyed or created in is not planned: the earlier step may have changed which item is first.
+                if (holders.Any(holder => touched.Contains((holder, request.Value)))) return $"{request.Change} of the item named {request.Value} meets an earlier item action of the run on the same holder and name, which is not modelled";
+                foreach (var holder in holders) touched.Add((holder, request.Value));
+                var plan = request.Change == ScrObjectStateChange.TransferItem
+                    ? _session.QueryNamedItemTransfer(HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value) : _session.QueryNamedItemDestroy(HolderOf(request.Object), request.Value);
+                if (plan.Refusal is { } why) return why;
+                continue;
+            }
+            // ARC-SCRIPT-1279 (WO6, WO8): the item's row decides: an item row of the loaded maps takes the write, the PC and any other type do nothing, an object with no loaded row cannot be told from an item.
+            if (request.Change is ScrObjectStateChange.SetWrittenStart or ScrObjectStateChange.ToggleItemInventoryDisplay)
+            {
+                if (!IsPc(request.Object) && Row(request.Object) is null) return $"{request.Change} of {request.Object.Code} is not modelled (no loaded row)";
+                continue;
+            }
             var name = request.Change == ScrObjectStateChange.Kill ? "kill" : "toggle state";
             if (request.Object.Map != _shownMap || IsPc(request.Object) || Row(request.Object) is not { Type: NpcType } row)
                 return $"{name} of {request.Object.Code} is not modelled (only an NPC of the shown map)";

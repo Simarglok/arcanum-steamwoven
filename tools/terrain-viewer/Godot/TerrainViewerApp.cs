@@ -239,6 +239,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("save-resume") == true) await RunAreaSaveResumeSmokeAsync(result);
                                 // ARC-DEV-264 (B08, SM06): only when named, an aggressive spell cast at a calm animal from afar makes it fight the hero (AI on, Crash Site, --hero).
                                 if (only?.Contains("ai-react") == true) await RunAreaAiReactSmokeAsync(result);
+                                // ARC-AI-1315 (VA4, VAG4): only when named, two NPCs put on one tile are separated by the attack starter's tile-sharer test and by the step apart (goal 68) (AI on, --hero).
+                                if (only?.Contains("please-move") == true) await RunAreaPleaseMoveSmokeAsync();
                                 // ARC-DEV-308 (B07, SM07): only when named, the map's NPC rows against the AI host's NPCs before a tick and after F7 and F8, read-only (AI on, start map, --hero).
                                 if (only?.Contains("placement-census") == true) await RunAreaPlacementCensusSmokeAsync(result);
                                 // ARC-DEV-301 (triage T1): only when named, an NPC's death and its loss of consciousness end the spell runs it casts and take their eye candy off the hero (AI on, Crash Site window, --hero).
@@ -303,6 +305,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("indoor-fade") == true) await RunIndoorFadeSmokeAsync(result);
                                 // ARC-DEV-206 (B25): only when named, an NPC walked onto the agent's exit tile runs the tile's script (AI on, --hero, --sector 1452,1291) (SM28).
                                 if (only?.Contains("npc-tile") == true) await RunAreaNpcTileSmokeAsync();
+                                // ARC-AI-1313 (VAG2): only when named, the standpoint step's wander goal 65/66 moves an NPC about its tether within four tiles (AI on, --hero, --sector 1452,1291).
+                                if (only?.Contains("npc-wander") == true) await RunAreaNpcWanderSmokeAsync();
                                 // ARC-DEV-298 (B20): only when named, the cave tiles of script 2768 (the ghost of Brego) run and cast (AI on, --hero, map crash site cave) (SM16).
                                 if (only?.Contains("tile-ghost") == true) await RunAreaGhostTileSmokeAsync();
                                 // ARC-DEV-299 (B23): only when named, every container of the window is clicked as the player does (--hero, best on --sector 1409,1314) (SM16).
@@ -505,6 +509,7 @@ public partial class TerrainViewerApp : Node
         RetireAreaOverview();
         ClearReadyMetrics();
         _canvas!.ClearScene();
+        RetireHoverRing();
         _cache.Clear();
     }
 
@@ -1114,7 +1119,7 @@ public partial class TerrainViewerApp : Node
             // for the black screen runs now.
             TickMovies(delta * 1000);
             TickTransitionScreen(delta * 1000);
-            try { TickAreaClock(); TickLightAnimation(); TickCarriedLight(); DrainTraitEquipment(); SyncHeroBody(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaSleep(); SyncScriptFades(); SyncAreaWorldMap(); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncInterfaceHd(); TickWindowArtWarm(); SyncGameBar(); RefreshHeroGauges(); RefreshCombatHud(); TickFloaters(); }
+            try { TickAreaClock(); TickLightAnimation(); TickCarriedLight(); DrainTraitEquipment(); SyncHeroBody(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaSleep(); SyncAreaFate(); SyncScriptFades(); SyncAreaWorldMap(); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncInterfaceHd(); TickWindowArtWarm(); SyncGameBar(); RefreshHeroGauges(); RefreshCombatHud(); TickFloaters(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");
@@ -1278,6 +1283,7 @@ public partial class TerrainViewerApp : Node
     {
         if (_exiting) return;
         _exiting = true;
+        CloseEvidence(); // ARC-GPAD-1376: an open evidence session ends with its last line
         _walkPlanCancellation?.Cancel(); // ARC-WORLD-042: the walk smoke's background route plan
         HdOptimizedStore.Stop(); // ARC-DEV-376: the background texture conversion must not be inside an engine call at shutdown
         _installCancel?.Cancel(); // ARC-DEV-074: closing the window stops a running innoextract (it would write on after the app)

@@ -1,6 +1,7 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Traversal;
 using Arcanum.Session;
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Movement;
 using Arcanum.World;
@@ -114,6 +115,31 @@ public sealed class AreaAiBedTests
         Assert.IsFalse(scene.Host.Hidden(scene.Npc));
         scene.Host.RunStandpoints(scene.Npc);
         Assert.AreEqual(DayStand, scene.Host.Tile(scene.Npc), "the next step relocates it: " + Route(scene));
+    }
+
+    [TestMethod]
+    public void A_latch_the_session_holds_keeps_a_rebuilt_host_from_looking_up_a_bed_again()
+    {
+        // ARC-AI-1314 (VA19, VAG3): the latch is NPC flag 0x200 of the object, saved with it. The bed is taken when the NPC arrives; after the occupant has left and the host is built again, the NPC at its standpoint is not seated.
+        var occupancy = new AreaBedOccupancy();
+        Assert.IsTrue(occupancy.Seat(BedKey, "someone else"));
+        var scene = Open(occupancy);
+        JumpToHour(scene, 3);
+        scene.Host.RunStandpoints(scene.Npc);
+        StringAssert.Contains(Route(scene), "bed taken by someone else");
+        Assert.AreEqual(true, scene.Session.QueryStandpointLatch(scene.Npc), "set at the standpoint before the bed look-up, kept when the seat fails");
+        Assert.IsTrue(occupancy.Unseat(BedKey, "someone else"));
+        var rebuilt = scene.Rebuild();
+        Assert.IsTrue(rebuilt.Arrived.Contains(scene.Npc));
+        rebuilt.RunStandpoints(scene.Npc);
+        Assert.IsNull(occupancy.Occupant(BedKey), "the latch is set: no look-up, no seat");
+        Assert.IsFalse(rebuilt.Sleeping(scene.Npc));
+        // Without the latch (an older save) the same step looks up the bed and seats the NPC.
+        var older = Open(new AreaBedOccupancy());
+        JumpToHour(older, 3);
+        Assert.IsNull(older.Session.QueryStandpointLatch(older.Npc));
+        older.Rebuild().RunStandpoints(older.Npc);
+        Assert.IsTrue(older.Session.QueryObjectFlags(older.Npc).CritterSet != 0, "seated");
     }
 
     [TestMethod]
@@ -285,5 +311,39 @@ public sealed class AreaAiBedTests
         Assert.AreEqual(scene.Npc, occupancy.Occupant(BedKey));
         Assert.AreEqual(new CellCoord(10, 20), scene.Host.Tile(scene.Npc), "the hero's tile is not taken: " + Route(scene));
         StringAssert.Contains(Route(scene), "no tile to move to");
+    }
+
+    // ARC-AI-1313 (WG5, ledger VA19, SWB21): the near branch starts the wander from the sleeping bit it read at entry, so a wanderer the step just put to bed still starts it in the original; Steamwoven starts none.
+    [TestMethod]
+    public void A_wanderer_just_seated_in_its_bed_starts_no_wander_in_Steamwoven_and_one_in_the_Original_setting()
+    {
+        var steamwoven = AreaAiRouteTests.Open(AreaAiRouteTests.Npc(NpcRouteFlags.Wanders, [], 0, (DayStand.X, DayStand.Y), (NightStand.X, NightStand.Y)),
+            beds: new AreaAiBeds(new AreaBedOccupancy(), () => [(BedKey, NightStand)]));
+        JumpToHour(steamwoven, 3);
+        steamwoven.Host.RunStandpoints(steamwoven.Npc);
+        StringAssert.Contains(Route(steamwoven), "bed: seated");
+        StringAssert.Contains(Route(steamwoven), "[wander: asleep in its bed]");
+        Assert.IsNull(steamwoven.Host.RunOf(steamwoven.Npc), "the sleeper does not walk off its bed");
+
+        var original = AreaAiRouteTests.Open(AreaAiRouteTests.Npc(NpcRouteFlags.Wanders, [], 0, (DayStand.X, DayStand.Y), (NightStand.X, NightStand.Y)), rules: RuleMode.Original,
+            beds: new AreaAiBeds(new AreaBedOccupancy(), () => [(BedKey, NightStand)]));
+        JumpToHour(original, 3);
+        original.Host.RunStandpoints(original.Npc);
+        StringAssert.Contains(Route(original), "bed: seated");
+        StringAssert.Contains(Route(original), "[wander: started goal 65]");
+        Assert.AreEqual(Arcanum.Simulation.Goals.GoalType.Wander, original.Host.RunOf(original.Npc)?.Bottom.Goal);
+    }
+
+    [TestMethod]
+    public void A_wanderer_at_a_standpoint_with_no_bed_wanders_in_both_settings()
+    {
+        foreach (var rules in new[] { RuleMode.Steamwoven, RuleMode.Original })
+        {
+            var scene = AreaAiRouteTests.Open(AreaAiRouteTests.Npc(NpcRouteFlags.Wanders, [], 0, (DayStand.X, DayStand.Y), (NightStand.X, NightStand.Y)), rules: rules,
+                beds: new AreaAiBeds(new AreaBedOccupancy(), () => []));
+            JumpToHour(scene, 3);
+            scene.Host.RunStandpoints(scene.Npc);
+            Assert.AreEqual(Arcanum.Simulation.Goals.GoalType.Wander, scene.Host.RunOf(scene.Npc)?.Bottom.Goal, $"{rules}: {Route(scene)}");
+        }
     }
 }

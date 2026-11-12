@@ -25,6 +25,42 @@ public partial class TerrainViewerApp
     /// <summary>The last container open's result, for the smoke.</summary>
     private AreaContainerOpen? _lastContainerOpen;
 
+    // ARC-RES-1327 (ledger XR3, XR16): the container whose See Contents window (inventory window mode 4) is open or about to open; null when the open window is no such one.
+    private string? _contentsHolder;
+    /// <summary>The open inventory window is the See Contents window of a container: it moves nothing (no take, put, drop, use or wear; the arrange button still lays the hero's grid out).</summary>
+    private bool ContentsWindow => _contentsHolder is not null && InventoryOpen;
+    /// <summary>The container of the open See Contents window (null none), for the smoke.</summary>
+    internal string? ContentsHolderForSelfTest => ContentsWindow ? _contentsHolder : null;
+
+    /// <summary>
+    /// ARC-RES-1327 (E8-g, ledger XR3, LW1–LW3, XR16): the Identify component on a container (<see cref="SpellCastEventKind.IdentifyContainer"/>) opens the inventory window on it in mode 4: no open attempt
+    /// (a locked container shows its items), no use script, no open frame or sound, a container with flag 0x200 generated first, the window is the loot window's frame (interface mode 10) with nothing to
+    /// move, and its close runs the junk-pile check without closing the lid (<see cref="CloseContainer"/>).
+    /// </summary>
+    private void OpenContainerContents(AreaInventoryTarget target)
+    {
+        _lastContainerOpen = null;
+        if (!InventoryActive || InventoryOpen || !WindowCanOpen(InterfaceMode.Loot) || _inventoryHost!.Map(CurrentAreaMap) is not { } map)
+        {
+            GD.Print($"ARC-RES-1327 contents entity={target.Entity} not opened (no inventory or another window up)");
+            return;
+        }
+        var open = AreaContainerLoot.Contents(_areaSession!, map, target.Entity, AreaEvents);
+        _lastContainerOpen = open;
+        GD.Print($"ARC-RES-1327 contents entity={target.Entity} outcome={open.Outcome} {open.Detail}");
+        if (open.Outcome != AreaContainerOpenOutcome.Opened)
+        {
+            _inventoryStatus = $"{_inventoryHost.Name(target.Entity, _hoverNames?.Catalog)}: {Refusal(open.Outcome)}";
+            RefreshAreaStatus();
+            return;
+        }
+        if (open.Generation?.Disposition == GameSessionDisposition.Changed) SyncAreaInventory();
+        _containerLootSession = _areaSession;
+        _containerLootMap = map.RuntimeMap;
+        _contentsHolder = target.Entity;
+        OpenInventory(target.Entity);
+    }
+
     private void OpenContainer(AreaInventoryTarget target)
     {
         _lastContainerOpen = null;
@@ -67,9 +103,12 @@ public partial class TerrainViewerApp
     {
         var session = _containerLootSession;
         _containerLootSession = null;
+        // ARC-RES-1327 (LW3): the See Contents window (mode 4) closes no lid: only the loot counter and the junk-pile check follow.
+        var contents = holder is not null && holder == _contentsHolder;
+        _contentsHolder = null;
         if (holder is null || session is null || !ReferenceEquals(session, _areaSession) || _inventoryHost?.Map(_containerLootMap) is not { } map) return;
-        var closed = AreaContainerLoot.Close(session, map, holder);
-        GD.Print($"ARC-WORLD-101 container close entity={holder} closed={closed}");
+        var closed = !contents && AreaContainerLoot.Close(session, map, holder);
+        GD.Print($"ARC-WORLD-101 container close entity={holder} closed={closed}{(contents ? " contents" : "")}");
         if (closed && map.TryGetRow(holder, out var row)) PlayContainerSound(row, OpenableSoundAction.Close);
         // ARC-DEV-310 (B04, JP4, JP5): after the lid, the close runs the dissolve check; a junk pile of the map's data (the Crash Site cave's)
         // left with no item goes, one left with one item goes and drops it again, as a pile the session made does (EndInventory).

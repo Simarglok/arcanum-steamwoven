@@ -132,11 +132,20 @@ public sealed class AreaHeartbeatScriptTests
             // ARC-DEV-244: 800 has the player cast spell 9 (48) at its attachee.
             Write("scr/00800pccast.scr", Program(Do(new(ScrCatalogue.Action.CastSpell, (Player, 0), N(9), (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00797caston.scr", Program(Do(new(ScrCatalogue.Action.CastUnresistableSpellOn, N(8), (Player, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
-            // ARC-SCRIPT-1360: 805 has the shape of 2787, the heartbeat of the NPC in the first building: PC quest 1158 unknown: run the default; else switch the attachee on (toggle state) and remove the script.
-            Write("scr/00805quest.scr", Program(
+            // ARC-SCRIPT-1360: 806 has the shape of 2787, the heartbeat of the NPC in the first building: PC quest 1158 unknown: run the default; else switch the attachee on (toggle state) and remove the script.
+            Write("scr/00806quest.scr", Program(
                 If(new(ScrCatalogue.Condition.PcQuestState, (Player, 0), N(1158), N(0)), new(ScrCatalogue.Action.Goto, N(3)), new(ScrCatalogue.Action.DoNothing)),
                 Do(new(ScrCatalogue.Action.ToggleState, (Attachee, -1))),
                 Do(new(ScrCatalogue.Action.RemoveThisScript)),
+                Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-SCRIPT-1359: 805 is script 1717's shape (the Crash Site's Molochean agent): with global flag 2323 set it sets its day and night standpoints to a literal tile, reads where it stands into two
+            // variables (get location) and runs to the tile of those variables; without the flag it runs the default at once.
+            Write("scr/00805agent.scr", Program(
+                If(new(ScrCatalogue.Condition.GlobalFlag, N(2323)), new(ScrCatalogue.Action.DoNothing), new(ScrCatalogue.Action.ReturnRunDefault)),
+                Do(new(ScrCatalogue.Action.SetDayStandpoint, (Attachee, -1), N(480), N(521))),
+                Do(new(ScrCatalogue.Action.SetNightStandpoint, (Attachee, -1), N(480), N(521))),
+                Do(new(ScrCatalogue.Action.GetLocation, (Attachee, -1), (Local, 0), (Local, 1))),
+                Do(new(ScrCatalogue.Action.RunTo, (Attachee, -1), (Local, 0), (Local, 1))),
                 Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00791offmap.scr", Program(Do(new(ScrCatalogue.Action.WalkTo, (Attachee, -1), N(-3), N(5))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
@@ -338,6 +347,33 @@ public sealed class AreaHeartbeatScriptTests
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
             var call = session.QueryScriptCalls().Single();
             Assert.AreEqual((785, 0, 16000L), (call.Call.Script, call.Call.Line, call.DeadlineMs - session.QueryClockSnapshot().GameTimestampMs));
+        });
+    }
+
+    [TestMethod]
+    public void A_heartbeat_that_reads_its_own_location_sets_its_standpoints_and_runs_whole_only_with_its_story_flag()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var walkers = new List<(string Npc, Arcanum.Simulation.Movement.CellCoord Cell, bool Run)>();
+            var agent = Row(1, 16, 805); // stands at (11, 20)
+            var host = new AreaUseScriptHost(session, 1, [agent], [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                ScriptWalk: (npc, cell, running) => { walkers.Add((npc, cell, running)); return "started"; }));
+            var entity = AreaUseScriptHost.EntityId(agent);
+
+            var before = host.RunHeartbeat(agent, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.AreEqual(ScrOutcome.RunDefault, before.Run!.Outcome, "no story flag: the script ends at line 0 without a refusal");
+            Assert.AreEqual(0, walkers.Count);
+            Assert.IsNull(AreaUseScriptHost.Standpoint(session, 1, entity, day: true));
+
+            SetFlag(session, 2323);
+            var after = host.RunHeartbeat(agent, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.AreNotEqual(AreaScriptedUseOutcome.Refused, after.Outcome, after.Detail);
+            Assert.AreEqual(ScrOutcome.RunDefault, after.Run!.Outcome);
+            Assert.AreEqual(new AreaRouteLocation(480, 521), AreaUseScriptHost.Standpoint(session, 1, entity, day: true));
+            Assert.AreEqual(new AreaRouteLocation(480, 521), AreaUseScriptHost.Standpoint(session, 1, entity, day: false));
+            CollectionAssert.AreEqual(new[] { (entity, new Arcanum.Simulation.Movement.CellCoord(11, 20), true) }, walkers, "get location gave the tile it stands on, run to started the goal 74 run");
         });
     }
 
@@ -649,7 +685,7 @@ public sealed class AreaHeartbeatScriptTests
         WithContent(content =>
         {
             using var session = ConversationSessionFixture.Create();
-            var npc = Row(1, 16, 805, StoredOff);
+            var npc = Row(1, 16, 806, StoredOff);
             var host = Host(session, content, null, npc);
             var targets = new AreaObjectTargets(1, [npc], new Dictionary<AreaObjectKey, (string, SessionOpenableBaseline)>(), null);
             Assert.IsTrue(AreaUseScriptHost.NpcOff(session, 1, Entity(1), StoredOff));
@@ -661,7 +697,7 @@ public sealed class AreaHeartbeatScriptTests
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, idle.Outcome, idle.Detail);
             Assert.AreEqual(ScrOutcome.RunDefault, idle.Run!.Outcome);
             Assert.IsTrue(AreaUseScriptHost.NpcOff(session, 1, Entity(1), StoredOff));
-            Assert.AreEqual(805, host.Slot(Ref(1), ScrPoint.Heartbeat)!.Value.Script);
+            Assert.AreEqual(806, host.Slot(Ref(1), ScrPoint.Heartbeat)!.Value.Script);
 
             // Quest 1158 accepted: the heartbeat flips the flag, removes itself and the NPC is on the scene.
             Assert.AreEqual(GameSessionDisposition.Changed, session.SetQuestState(session.Version, 1158, SessionQuestState.Accepted).Disposition);
@@ -805,5 +841,35 @@ public sealed class AreaHeartbeatScriptTests
         Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
         Assert.IsFalse(targets.Gone(session).Contains(npc.Key), "on the scene once the quest is accepted");
         Assert.IsFalse(AreaUseScriptHost.NpcOff(session, snapshot.RuntimeMap, entity, flags));
+    }
+
+    // ARC-SCRIPT-1359: the Crash Site's Molochean agent (heartbeat 1717): with global flag 2323 set its whole heartbeat is admitted (set day and night standpoint, get location, run to) and starts the goal 74 run.
+    [TestMethod, TestCategory("RealData")]
+    public void The_crash_site_molochean_agent_s_heartbeat_1717_runs_whole_with_its_story_flag_and_starts_the_run_to_its_tile()
+    {
+        if (Environment.GetEnvironmentVariable("DAT_ROOT") is not { Length: > 0 } root) { Assert.Inconclusive("DAT_ROOT is required for the opt-in heartbeat check; this is not a synthetic pass."); return; }
+        using var content = ConversationSessionFixture.Scripts(root);
+        var result = AreaLoadOperation.Execute(1, TerrainViewerArguments.Parse(["--mode", "crash-site-area", "--module", Path.Combine(root, "modules", "Arcanum.dat"),
+            "--resource", Path.Combine(root, "arcanum2.dat"), "--source-id", "map-test", "--actor-resource", Path.Combine(root, "arcanum1.dat"),
+            "--game-root", root, "--area-map", "Arcanum1-024-fixed"]), default);
+        var snapshot = result.Area!.Snapshot;
+        var agent = snapshot.Objects.Single(r => r.Type == 16 && AreaUseScriptHost.LoadedSlot(r, ScrPoint.Heartbeat) is { Script: 1717 });
+        using var session = ConversationSessionFixture.Create(snapshot.RuntimeMap);
+        var walkers = new List<(string Npc, Arcanum.Simulation.Movement.CellCoord Cell, bool Run)>();
+        var host = new AreaUseScriptHost(session, snapshot.RuntimeMap, snapshot.Objects, [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+            ScriptWalk: (npc, cell, running) => { walkers.Add((npc, cell, running)); return "started"; }));
+        var entity = AreaUseScriptHost.EntityId(agent);
+
+        Assert.AreEqual(ScrOutcome.RunDefault, host.RunHeartbeat(agent, ScrPoint.Heartbeat, session.Rules.Scripts).Run!.Outcome, "no flag");
+        Assert.AreEqual(0, walkers.Count);
+
+        SetFlag(session, 2323);
+        var run = host.RunHeartbeat(agent, ScrPoint.Heartbeat, session.Rules.Scripts);
+        Assert.AreNotEqual(AreaScriptedUseOutcome.Refused, run.Outcome, run.Detail);
+        Assert.IsNotNull(AreaUseScriptHost.Standpoint(session, snapshot.RuntimeMap, entity, day: true), "the day standpoint");
+        Assert.IsNotNull(AreaUseScriptHost.Standpoint(session, snapshot.RuntimeMap, entity, day: false), "the night standpoint");
+        Assert.AreEqual(1, walkers.Count, "goal 74 started once");
+        Assert.IsTrue(walkers[0].Run);
+        Assert.AreEqual(entity, walkers[0].Npc);
     }
 }

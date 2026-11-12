@@ -210,6 +210,8 @@ public partial class TerrainViewerApp
             Homecomings = HomecomingQueue(session, mapNumber),
             // ARC-WORLD-1162 (SWB17–SWB21): the shown map's beds and who lies in them, the hero's rest's occupancy too.
             Beds = new AreaAiBeds(_bedOccupancy, PlacedBeds),
+            // ARC-AI-1313: the dark wander compares the light of a candidate tile with the NPC's own (the light-aware checks' sampler).
+            CellLight = cell => AreaCellLightLevel(cell.X, cell.Y),
         };
 
         static CellCoord World(Arcanum.Data.Traversal.AreaStepCell cell) => new(checked((int)cell.X), checked((int)cell.Y));
@@ -470,6 +472,8 @@ public partial class TerrainViewerApp
         session.DyingScript = DyingGoesOn;
         // ARC-COMBAT-1141 (GT210): the script kill and the poison tick ask the NPC's taking-damage script too (no attacker); a victim that is not on the shown map has none here.
         session.TakingDamageScript = request => request.Map != CurrentAreaMap || TakingDamageGoesOn(request.Victim, request.Attacker);
+        // ARC-WORLD-1301 (VPG6): a container with flag 0x200 that breaks before it was opened generates its goods through the same restock host as the loot window's first open (not ready until the barter data has loaded: it then spills the stored items).
+        session.GenerateOnceWorld = () => AreaEvents;
     }
 
     /// <summary>

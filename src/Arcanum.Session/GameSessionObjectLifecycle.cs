@@ -70,6 +70,8 @@ public sealed partial class GameSessionOwner
             case SessionCreatePlace.NpcList:
                 _inventory.AddToNpc(creation.Holder ?? throw new ArgumentException("HOLDER_REQUIRED", nameof(creation)), item);
                 _inventory.Taken.Add(creation.Entity);
+                // ARC-WORLD-1284 (VPG1): the insert 0x466640 sets NPC flag 0x40 on the receiver (a new object never merges here).
+                MarkCheckWield(creation.Holder);
                 break;
             case SessionCreatePlace.ContainerList:
                 _inventory.AddToContainer(creation.Holder ?? throw new ArgumentException("HOLDER_REQUIRED", nameof(creation)), item);
@@ -155,8 +157,11 @@ public sealed partial class GameSessionOwner
                 return;
             case SessionObjectOrigin.Critter:
                 // ARC-DEV-386 (E1-c4): what the critter holds is destroyed with it (the original destroys an object's inventory with it, 0x43CCA0 on each entry), and its holder leaves the seed.
-                foreach (var held in _inventory.AddedTo(entity).Select(item => item.Entity).ToArray()) Discard(held);
+                _destroyingHolder = true;
+                try { foreach (var held in _inventory.AddedTo(entity).Select(item => item.Entity).ToArray()) Discard(held); }
+                finally { _destroyingHolder = false; }
                 _inventory.NpcWorn.Remove(entity);
+                _inventory.HolderSlots.Remove(entity);
                 foreach (var seed in _inventory.Seeds.Values) if (seed.RemoveCreatedHolder(entity)) _inventory.SeedGeneration++;
                 _inventory.Objects.RemoveCreated(entity);
                 // ARC-MAGIC-053 (E1-e): a summoned creature the mind control made a follower leaves the party with its destruction (the record would otherwise name an object that is gone).
@@ -186,9 +191,14 @@ public sealed partial class GameSessionOwner
         DestroyItem(entity, windowShowsContainer);
     }
 
+    // True while a created critter's list is destroyed with it: the NPC is going, so its items' removals mark nothing.
+    private bool _destroyingHolder;
+
     private void DestroyItem(string entity, bool windowShowsContainer)
     {
         var pile = _inventory.Objects.PileOf(entity);
+        // ARC-WORLD-1284 (AM5): the destroy 0x43CCA0 takes an item an NPC holds out of its list first (0x467860), which sets NPC flag 0x40 on the NPC; read before the records go.
+        if (!_destroyingHolder) MarkCheckWield(NpcHolderOfItem(entity));
         RemoveItemRecords(entity);
         // ARC-WORLD-063 (JP5, JP7): the pile the item left is checked unless a container window is open (the counter 0x5E8800).
         if (pile is not null && _lootedPile != pile.Entity && !windowShowsContainer && !LootWindowShowsContainer() && _inventory.Objects.Pile(pile.Entity) is { } left)
@@ -216,6 +226,8 @@ public sealed partial class GameSessionOwner
         _inventory.Hero.TakeGiven(entity);
         // ARC-WORLD-090: and its identified flag.
         _inventory.Identified.Remove(entity);
+        // ARC-SCRIPT-1279: and the fields a script wrote on it.
+        _inventory.ItemFields.Remove(entity);
         // ARC-SCRIPT-042: its kept script slots go with it.
         foreach (var key in _inventory.ScriptSlots.Keys.Where(key => key.Entity == entity).ToArray()) _inventory.ScriptSlots.Remove(key);
         // ARC-WORLD-085: its weight facts go with it.

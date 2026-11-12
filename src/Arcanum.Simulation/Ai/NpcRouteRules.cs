@@ -1,3 +1,5 @@
+using Arcanum.Simulation.Goals;
+
 namespace Arcanum.Simulation.Ai;
 
 /// <summary>A bare location the way the original's object fields hold it: the tile's x and y as unsigned 32-bit words (no map, no sector).</summary>
@@ -46,7 +48,7 @@ public enum NpcRouteOutcome
     /// <summary>A sleeping NPC: the step answers 1 and moves nothing. <see cref="NpcRouteStep.Reseat"/> says the original's bed re-seat (0x4AD0B0) ran (the host wakes the sleeper that lies in a bed at one of its standpoints, ARC-WORLD-1162).</summary>
     Sleeping,
     /// <summary>A standpoint step with the NPC already within its radius: the original sets NPC flag 0x200, looks for a bed at the standpoint (<see cref="NpcRouteStep.Standpoint"/>, the host's part, ARC-WORLD-1162) and
-    /// starts a wander (0x435E60 or 0x436040) for a wanderer (not implemented here); nothing moves.</summary>
+    /// starts a wander (0x435E60 or 0x436040) for a wanderer that is not sleeping (<see cref="NpcRouteStep.WanderGoal"/>, the host's part, ARC-AI-1313); nothing moves here.</summary>
     AtStandpoint,
     /// <summary>The NPC's teleport map is the open map: its animations are interrupted (priority 4) and it is relocated onto <see cref="NpcRouteStep.Target"/>.</summary>
     Relocate,
@@ -68,7 +70,10 @@ public enum NpcRouteOutcome
 /// <param name="Mode">A <see cref="NpcRouteOutcome.StartWalk"/>'s mode: 3 for a waypoint, 1 for a standpoint (0 for every other outcome).</param>
 /// <param name="Reseat">ARC-WORLD-1162 (SWB17, SWB18): the step took a sleeping NPC over through the bed re-seat (0x4AD0B0): a waypoint step of a sleeper, or a standpoint step of a sleeper farther than its radius from the current standpoint. The host wakes it when it lies in a bed at one of its standpoints.</param>
 /// <param name="Standpoint">ARC-WORLD-1162 (SWB21): the current standpoint of an <see cref="NpcRouteOutcome.AtStandpoint"/> step (null for every other outcome): the tile the bed is looked for on.</param>
-public sealed record NpcRouteStep(NpcRouteOutcome Outcome, bool Answer, RouteLocation? Target, int TeleportMap, int? NewWaypointIndex, int? TeleportMapSet, int Mode = 0, bool Reseat = false, RouteLocation? Standpoint = null);
+/// <param name="WanderGoal">ARC-AI-1313 (VAG2, 0x4ACDB0): the wander goal a not sleeping wanderer at its standpoint starts, after the bed look-up: <see cref="GoalType.Wander"/> (65, NPC flag WANDERS, starter 0x435E60) or
+/// <see cref="GoalType.WanderSeekDarkness"/> (66, WANDERS_IN_DARK, starter 0x436040), tethered to <see cref="Standpoint"/> with radius <see cref="NpcRouteRules.WanderRadius"/>; null for every other step.</param>
+public sealed record NpcRouteStep(NpcRouteOutcome Outcome, bool Answer, RouteLocation? Target, int TeleportMap, int? NewWaypointIndex, int? TeleportMapSet, int Mode = 0, bool Reseat = false, RouteLocation? Standpoint = null,
+    GoalType? WanderGoal = null);
 
 /// <summary>
 /// ARC-DEV-117 (MIG9 S4b, RL17, ledger WS1–WS12): the waypoint and standpoint steps of a sector fold's first tick, as the original runs them
@@ -93,6 +98,16 @@ public static class NpcRouteRules
 
     /// <summary>The standpoint radius of an NPC that wanders (flag WANDERS or WANDERS_IN_DARK).</summary>
     public const long WandererStandpointRadius = 4;
+
+    /// <summary>ARC-AI-1313 (0x4ACDB0 → 0x435E60 / 0x436040): the radius the standpoint step gives a wander goal (its fifth argument, a literal 4): the goal picks tiles within it and walks at most that many steps.</summary>
+    public const int WanderRadius = 4;
+
+    /// <summary>
+    /// The wander goal the standpoint step starts for an NPC at its standpoint (near branch): 65 for NPC flag WANDERS (0x1000, tested first), else 66 for WANDERS_IN_DARK (0x2000), else none (the step answers 0). The original
+    /// starts it only for a NPC that is not sleeping (the test uses the value read at entry), and even when a bed was just taken (ledger VA19).
+    /// </summary>
+    public static GoalType? WanderGoalOf(uint npcFlags) =>
+        (npcFlags & NpcRouteFlags.Wanders) != 0 ? GoalType.Wander : (npcFlags & NpcRouteFlags.WandersInDark) != 0 ? GoalType.WanderSeekDarkness : null;
 
     /// <summary>The NPC day test (0x4ACD90): the hour is 6 or more and below 21.</summary>
     [OriginalFunction(0x4ACD90, OriginalFunctionScope.Full)]
@@ -134,7 +149,7 @@ public static class NpcRouteRules
     /// The forced standpoint step (0x4ACDB0 with its third argument 1, after <see cref="ForcedWaypoints"/> did nothing). A hidden NPC that is not
     /// sleeping, or an NPC with a leader (0x4AD060), does nothing. The standpoint is the day or night one; the step sets the teleport map as the
     /// waypoint step does. An NPC within its radius (4 tiles for a wanderer, else 1) is at its standpoint: the original then flags it, looks for a
-    /// bed and starts a wander, none of which is modelled. A sleeping NPC farther away is taken over (bed re-seat, not modelled). Any other NPC is
+    /// bed and starts a wander (answer 1 for a wanderer, the wander goal in <see cref="NpcRouteStep.WanderGoal"/>: the host starts it, ARC-AI-1313). A sleeping NPC farther away is taken over (bed re-seat, not modelled). Any other NPC is
     /// relocated onto the standpoint when its teleport map is the open map, else a teleport request goes to that map. (The original also clears
     /// NPC flag 0x200 on this branch; the flag is not state here, see ledger WS8.)
     /// </summary>
@@ -151,7 +166,7 @@ public static class NpcRouteRules
         var radius = (facts.NpcFlags & (NpcRouteFlags.Wanders | NpcRouteFlags.WandersInDark)) != 0 ? WandererStandpointRadius : StandpointRadius;
         if (Distance(facts.Location, stand) <= radius)
             return new(facts.Sleeping ? NpcRouteOutcome.Sleeping : NpcRouteOutcome.AtStandpoint, facts.Sleeping || (facts.NpcFlags & (NpcRouteFlags.Wanders | NpcRouteFlags.WandersInDark)) != 0, null, teleportMap, null, set,
-                Standpoint: facts.Sleeping ? null : stand);
+                Standpoint: facts.Sleeping ? null : stand, WanderGoal: facts.Sleeping ? null : WanderGoalOf(facts.NpcFlags));
         if (facts.Sleeping) return Reseated(teleportMap, set);
         return Place(facts, stand, teleportMap, null, set);
     }
@@ -215,7 +230,8 @@ public static class NpcRouteRules
         var wanders = (facts.NpcFlags & (NpcRouteFlags.Wanders | NpcRouteFlags.WandersInDark)) != 0;
         var radius = wanders ? WandererStandpointRadius : StandpointRadius;
         if (Distance(facts.Location, stand) <= radius)
-            return new(facts.Sleeping ? NpcRouteOutcome.Sleeping : NpcRouteOutcome.AtStandpoint, facts.Sleeping || wanders, null, teleportMap, null, set, Standpoint: facts.Sleeping ? null : stand);
+            return new(facts.Sleeping ? NpcRouteOutcome.Sleeping : NpcRouteOutcome.AtStandpoint, facts.Sleeping || wanders, null, teleportMap, null, set, Standpoint: facts.Sleeping ? null : stand,
+                WanderGoal: facts.Sleeping ? null : WanderGoalOf(facts.NpcFlags));
         if (facts.Sleeping) return Reseated(teleportMap, set);
         return new(NpcRouteOutcome.StartWalk, true, stand, teleportMap, null, set, StandpointWalkMode);
     }

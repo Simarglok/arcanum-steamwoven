@@ -85,6 +85,25 @@ public sealed class SavedGoalRunTests
     }
 
     [TestMethod]
+    public void A_wander_run_with_its_tether_and_radius_survives_a_save_and_a_load()
+    {
+        // ARC-AI-1313: goals 65 and 66 are table runs of an NPC like any other (the tether tile in the frame's tile, the radius in its range slot).
+        using var owner = Create();
+        var wander = Started(owner, A, new GoalFrame(GoalType.Wander, tile: new CellCoord(50, 60), range: 4));
+        var dark = Started(owner, B, new GoalFrame(GoalType.WanderSeekDarkness, tile: new CellCoord(70, 80), range: 4), GoalStarters.Generic);
+        using var restored = Reload(owner);
+        foreach (var (handle, goal, tether) in new[] { (wander, GoalType.Wander, new CellCoord(50, 60)), (dark, GoalType.WanderSeekDarkness, new CellCoord(70, 80)) })
+        {
+            var run = restored.QueryGoals()[handle.Slot]!;
+            Assert.AreEqual(goal, run.Bottom.Goal);
+            Assert.AreEqual(tether, run.Bottom.Tile);
+            Assert.AreEqual(4, run.Bottom.Range);
+            Assert.AreEqual(1, run.Bottom.Node);
+        }
+        Assert.AreEqual(2, Steps(restored).Length, "each run's step is back");
+    }
+
+    [TestMethod]
     public void A_restored_step_fires_in_the_pass_at_its_due_time_and_not_before()
     {
         using var owner = Create();
@@ -198,7 +217,7 @@ public sealed class SavedGoalRunTests
         var upgraded = GameSessionSnapshotCodec.TryDecode(older);
         Assert.AreEqual(SnapshotDecodeFailure.None, upgraded.Failure, upgraded.Path);
         Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(upgraded.Snapshot!));
-        var twice = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.WithoutCritterEffects(current).Replace(SnapshotUpgradeTests.NoCreated, "}").Replace(NoHeroKeys, "").Replace(NoTownMapCells, "").Replace("\"schemaVersion\":93,\"world\"", "\"schemaVersion\":71,\"world\""));
+        var twice = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.WithoutCritterEffects(current).Replace(SnapshotUpgradeTests.NoCreated, "}").Replace(NoHeroKeys, "").Replace(NoTownMapCells, "").Replace("\"schemaVersion\":94,\"world\"", "\"schemaVersion\":71,\"world\""));
         Assert.AreEqual(SnapshotDecodeFailure.UnknownField, twice.Failure);
         Assert.AreEqual("$.goals", twice.Path);
     }

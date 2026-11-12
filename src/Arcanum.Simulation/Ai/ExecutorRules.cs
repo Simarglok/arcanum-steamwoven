@@ -29,7 +29,8 @@ public static partial class AiExecutorRules
         GoalType.ThrowItem, GoalType.UseItem, GoalType.MoveAway, GoalType.RunNear, GoalType.MeleeApproach, GoalType.AttemptPickLocks, GoalType.SpreadOut,
         GoalType.CombatApproach, GoalType.RangedApproach, GoalType.CastSpellWithAnimation, GoalType.AttemptSpellWithAnimation, GoalType.AttemptPickpocket,
         GoalType.AnimateStunned, GoalType.KnockDown, GoalType.GetUp, GoalType.Dying, GoalType.RunNearTile, GoalType.Animate, GoalType.AnimateKneelMagicHands, GoalType.AnimateReverse,
-        GoalType.OpenDoor, GoalType.AttemptOpenDoor, GoalType.CloseDoor, GoalType.AttemptCloseDoor,
+        GoalType.OpenDoor, GoalType.AttemptOpenDoor, GoalType.CloseDoor, GoalType.AttemptCloseDoor, GoalType.PleaseMove,
+        GoalType.Wander, GoalType.WanderSeekDarkness,
     ];
 
     /// <summary>Whether the executor interprets <paramref name="goal"/>'s nodes (<see cref="InterpretedGoals"/>).</summary>
@@ -270,11 +271,14 @@ public static partial class AiExecutorRules
             if (queued.Bottom.Target == target || queued.Bottom.Goal == GoalType.AttemptAttack) refusal = AiStartRefusal.AlreadyQueued;
             else return new(AiPerformKind.Attack, queued.WithFrames([new GoalFrame(GoalType.Attack, target, sound: sound)])) { Started = true };
         }
+        // ARC-AI-1315 (VA4, VAG4): before its interrupt the attacker asks the tile-sharer finder (0x436720): another living, not busy NPC on its tile is asked to move (goal 68,
+        // 0x4363E0) and no attack starts, with no step apart after it.
+        if (refusal == AiStartRefusal.None && AiTileSharerRules.AskBlocker(world, attacker)) return new(AiPerformKind.Attack, current, AiStartRefusal.TileSharer);
         if (refusal == AiStartRefusal.None && !world.InterruptLowerAnimations(attacker)) refusal = AiStartRefusal.Interrupt;
         if (refusal == AiStartRefusal.None && world.BoomerangInFlight(attacker)) refusal = AiStartRefusal.BoomerangInFlight;
         if (refusal != AiStartRefusal.None)
         {
-            world.StepApart(attacker);
+            AiTileSharerRules.StepApart(world, attacker);
             return new(AiPerformKind.Attack, current, refusal);
         }
         var mover = world.Mover(attacker);
@@ -431,6 +435,7 @@ public static partial class AiExecutorRules
         GoalType.Flee => FleeNode(owner, top, flags, world),
         GoalType.MoveAway => MoveAwayNode(owner, top, frames, flags, world, profile),
         GoalType.RunToTile or GoalType.MoveNearTile or GoalType.RunNearTile => RunToTileNode(owner, top, flags, world),
+        GoalType.PleaseMove => PleaseMoveNode(owner, top, flags, world, rolls),
         GoalType.Follow or GoalType.SpreadOut => FollowNode(owner, top, world),
         GoalType.MoveNear or GoalType.RunNear => MoveNearNode(owner, top, flags, world),
         GoalType.CastSpell or GoalType.CastSpellWithAnimation => CastNode(owner, top, world),
@@ -450,10 +455,42 @@ public static partial class AiExecutorRules
         GoalType.Animate => AnimateNode(owner, top, world),
         GoalType.AnimateKneelMagicHands => KneelNode(owner, top, world),
         GoalType.AnimateReverse => ReverseNode(owner, top, world),
+        GoalType.Wander or GoalType.WanderSeekDarkness => WanderNode(owner, top, world, rolls),
         // ARC-DEV-209 (GT49): the opener goals a walker pushes at a closed door (the same nodes as the hero's, over the door ports).
         GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor => OpenerNode(owner, top, world),
         _ => PauseNode(top),
     };
+
+    // ---- the wander goals (65, 66; ARC-AI-1313, nodes 0x425930 and 0x425D60) ----
+
+    /// <summary>ARC-AI-1313: the delay of both exits of the wander goal's one node (the descriptors' node records: false restarts the goal after 300 ms, true replaces it by the walk after 300 ms).</summary>
+    public const int WanderRetryMs = 300;
+
+    /// <summary>
+    /// ARC-AI-1313 (0x425930, 0x425D60, F1, one reader): the one node of the wander goals. The frame holds the tether tile (the standpoint) and the radius (4). The node draws a tile within the radius of the tether
+    /// (two draws of −radius..radius, x then y), for goal 66 refuses it unless it is **not lighter** than the tile the NPC stands on (the light read at both tiles; refused: no plan, restart after 300 ms), plans a path to it and
+    /// accepts it when a path exists and is **at most the radius** steps long: the goal then becomes the walk to that tile (goal 7, <see cref="Move.Replace"/>) after 300 ms. A tile with no path or a longer one is tried
+    /// again with request flag 1 in the original (the path may end on an occupied tile), which the world's <see cref="IAiGoalWorld.PlanPath"/> already folds in (one call); when both fail the goal restarts after 300 ms, and a
+    /// non-PC's subturn ends first in a round (0x4B7C90). The wander never ends by itself: a walk that reaches its tile ends the run, and the standpoint step starts the next wander at the NPC's next tick.
+    /// </summary>
+    [OriginalFunction(0x425930, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x425D60, OriginalFunctionScope.Partial)]
+    private static Transition WanderNode(string owner, GoalFrame goal, IAiGoalWorld world, IAiRollSource rolls)
+    {
+        if (goal.Tile is not { } tether || world.Tile(owner) is not { } at) return End(AiExecutorReason.ObjectGone);
+        var radius = goal.Range;
+        var x = tether.X + rolls.Roll(AiRollPurpose.WanderOffset, -radius, radius);
+        var y = tether.Y + rolls.Roll(AiRollPurpose.WanderOffset, -radius, radius);
+        var destination = new CellCoord(x, y);
+        // The dark wander keeps to tiles that are not lighter than the NPC's own (0x4D9240 at both, "not lighter" is at most).
+        if (goal.Goal == GoalType.WanderSeekDarkness && world.CellLight(destination) > world.CellLight(at))
+            return new(Move.Restart, Delay: WanderRetryMs, Reason: AiExecutorReason.WanderRetry);
+        var path = Plan(world, owner, new(AiPathKind.ToTile, null, destination, 0, false, false));
+        if (path is not null && path.Steps.Length <= radius)
+            return new(Move.Replace, Frame: new GoalFrame(GoalType.MoveNearTile, tile: destination, range: radius), Delay: WanderRetryMs, Reason: AiExecutorReason.WanderWalk);
+        if (world.InRound && world.RoundActor == owner && !world.Mover(owner).Pc) world.EndSubturn(owner);
+        return new(Move.Restart, Delay: WanderRetryMs, Reason: AiExecutorReason.WanderRetry);
+    }
 
     // ---- the opener goals a walker pushes (11, 12, 49, 50; ARC-DEV-209, GT39–GT41, GT49) ----
 
@@ -678,6 +715,22 @@ public static partial class AiExecutorRules
         var path = Plan(world, owner, new(AiPathKind.ToTile, null, tile, 0, false, Running(world, owner, flags)));
         if (path is null) return NoPath(owner, world, AiExecutorReason.NoPath);
         return new(Move.Push, Frame: Child(GoalType.AttemptMove, goal) with { Path = path.Steps }, Reason: AiExecutorReason.RunToTile);
+    }
+
+    /// <summary>
+    /// Goal 68, the order to step aside (ARC-AI-1315, descriptor 0x5ADDD0, ledger VAG4): node 1 (0x424E00) chooses the tile once (<see cref="AiTileSharerRules.StepTile"/>; none clear
+    /// pops the goal), then nodes 2 to 8 are the run to a tile's (goals 3 and 4: arrival test 0x424D90, get up, unconceal, plan 0x426040, push 5 walk, the pause when no path):
+    /// <see cref="RunToTileNode"/>. The delay code -3 after node 1 is a global whose value is whatever the last writer left (a projectile tick's 35 ms, else none); no wait is
+    /// modelled (A).
+    /// </summary>
+    private static Transition PleaseMoveNode(string owner, GoalFrame goal, GoalRunFlags flags, IAiGoalWorld world, IAiRollSource rolls)
+    {
+        if (goal.Tile is null)
+        {
+            if (AiTileSharerRules.StepTile(world, owner, rolls) is not { } tile) return new(Move.Pop, Reason: AiExecutorReason.PleaseMoveNoTile);
+            goal = goal with { Tile = tile };
+        }
+        return RunToTileNode(owner, goal, flags, world) with { Top = goal };
     }
 
     // ---- following (goals 24, 69, 8, 56) ----

@@ -225,6 +225,44 @@ public sealed class CompanionLoyaltyStateTests
             }
     }
 
+    // ARC-AI-1312 (VA15, VAG1): the kill notification (0x4AA1B0) unwaits the victim with force 1 (0x4AA8C0): a waiting companion joins its leader again as a forced follower.
+    [TestMethod]
+    public void The_death_of_a_waiting_companion_joins_it_to_its_leader_as_a_forced_follower()
+    {
+        using var owner = Waiting(Wait(), out _);
+        Assert.AreEqual(CompanionStanding.Waiting, owner.QueryCompanion(Npc).Standing);
+        var other = owner.ForceJoinParty(owner.Version, "oid:other");
+        Assert.AreEqual(GameSessionDisposition.Changed, other.Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, SessionLifeTarget.Critter(Npc, new LifeFacts(), LifeState.Unharmed)).Disposition);
+        var after = owner.QueryCompanion(Npc);
+        Assert.AreEqual((CompanionStanding.Following, true, false), (after.Standing, after.Forced, after.Jilted));
+        CollectionAssert.AreEqual(new[] { "oid:other", Npc }, owner.QueryParty().Followers.Select(f => f.Entity).ToArray(), "re-appended at the end of the array");
+        Assert.IsNull(owner.QueryWaitTimer(Npc));
+        Assert.AreEqual(0, owner.QueryParty().NonForcedFollowers, "a forced follower does not count against the max followers");
+        // The saved state is one the restore admits: the same record and order come back.
+        using var restored = GameSessionOwner.Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())), RestoreOptions()).Owner!;
+        Assert.AreEqual(after, restored.QueryCompanion(Npc));
+        CollectionAssert.AreEqual(new[] { "oid:other", Npc }, restored.QueryParty().Followers.Select(f => f.Entity).ToArray());
+    }
+
+    [TestMethod]
+    public void The_death_of_a_follower_or_a_free_npc_changes_no_party_record()
+    {
+        using var owner = Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.JoinParty(owner.Version, Npc, Facts(), false).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, "oid:other").Disposition);
+        var follower = owner.QueryCompanion(Npc);
+        var order = owner.QueryParty().Followers.Select(f => f.Entity).ToArray();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, SessionLifeTarget.Critter(Npc, new LifeFacts(), LifeState.Unharmed)).Disposition);
+        Assert.AreEqual(follower, owner.QueryCompanion(Npc), "an unforced follower stays an unforced follower");
+        CollectionAssert.AreEqual(order, owner.QueryParty().Followers.Select(f => f.Entity).ToArray(), "a follower's death does not re-append it");
+        var before = owner.QueryParty();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, SessionLifeTarget.Critter("oid:free", new LifeFacts(), LifeState.Unharmed)).Disposition);
+        Assert.AreEqual(CompanionStanding.Free, owner.QueryCompanion("oid:free").Standing);
+        CollectionAssert.AreEqual(before.Followers.ToArray(), owner.QueryParty().Followers.ToArray());
+        Assert.AreEqual(before.Others.Count, owner.QueryParty().Others.Count);
+    }
+
     [TestMethod]
     public void A_refused_unwait_or_leave_keeps_the_timer()
     {

@@ -52,6 +52,8 @@ public sealed record AreaAiScene
     /// <summary>ARC-DEV-137 (MIG13 S6): the ART of an NPC's animation (frames and rate) for the critter-state goals' timing; null (the provider, or its answer) when the header does not read or
     /// the viewer cannot read that animation (the stun's 23 is not read yet: the stun then ends at once, GT26).</summary>
     public Func<string, int, AiAnimationClip?>? AnimationClip { get; init; }
+    /// <summary>ARC-AI-1313 (0x4D9240 at the dark wander's node 0x425D60): the light level 0..255 at a world cell, as the viewer's lighting answers it for a light-aware check; null: full light everywhere, so the dark wander accepts every tile.</summary>
+    public Func<CellCoord, int>? CellLight { get; init; }
     /// <summary>ARC-WORLD-1162 (SWB17–SWB21): the beds of the shown map and who lies in them, shared with the hero's rest; null: the map has none, so an NPC at its standpoint finds no bed.</summary>
     public AreaAiBeds? Beds { get; init; }
     /// <summary>The hero's world cell now, or null without a hero on this map.</summary>
@@ -1269,6 +1271,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Trace(npc).Danger = $"{plan.Path} {plan.Request?.ToString() ?? "-"} {plan.Target ?? "-"}";
         if (plan.Path == DangerUpdatePath.Flee) { _session.RunFleeSpellStep(_session.Version, npc, () => false); return; }
         if (plan.Unlocks) _session.UnlockDangerTarget(_session.Version, npc);
+        // ARC-AI-1317 (VAG6): the pick's purge of the saved enemy list (the original runs it inside the pick, before the setter).
+        if (plan.PurgesEnemies) _session.PurgeDangerEnemies(_session.Version, npc, enemy => Exists(Id(enemy)));
         if (plan.Request is not { } state) return;
         AiPassChoice? choice = null;
         if (plan.ChoosesAction && plan.Target is { } found)
@@ -1333,23 +1337,27 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Started(npc, current, AiExecutorRules.StartAttack(this, npc, target, null, current));
     }
 
-    private void Started(string npc, GoalRun? current, AiPerformResult result)
+    // True when the run is in the table now (a started run the table took).
+    private bool Started(string npc, GoalRun? current, AiPerformResult result)
     {
         Trace(npc).Perform = $"{result.Kind}{(result.Refusal == AiStartRefusal.None ? "" : " " + result.Refusal)}{(result.Started ? " started" : "")}";
-        if (!result.Started || result.Run is not { } run || ReferenceEquals(current, run)) return;
+        if (!result.Started || result.Run is not { } run || ReferenceEquals(current, run)) return false;
         // ARC-DEV-135 (MIG13 S5): the proposed run starts in the session's table with its starter's own plan (GS12, GS13): the table interrupts the NPC's runs at the starter's
         // level by the rule (the executor's starters that interrupt in their own body, the attack, throw and follow, did so already, so what is left is the runs the rule kept, a
         // no-interrupt overlay among them, and the attack retarget's, which asks no port), refuses a duplicate and a refused interrupt, and the end nodes of every run the start
         // ended run here (the replaced run's among them). The first step comes 5 ms of animation time after the start (GS7), at the next pass (a start inside the AI tick's pass waits for it).
         var started = _session.StartGoal(new GoalStartRequest(npc, StarterPlan(run.Bottom.Goal), run.Bottom, run.Flags), _startPorts ??= new StartPorts(this));
         foreach (var end in started.Ended) EndNodes(end);
-        if (started.Started) { Trace(npc).Reason = AiExecutorReason.None; return; }
+        if (started.Started) { Trace(npc).Reason = AiExecutorReason.None; return true; }
         // A start the table refused (an interrupt a priority-4 or -5 goal refuses, a duplicate, no free slot, a full queue) leaves the NPC with the runs the rule kept: the proposed
         // run's end nodes free what its starter took (a cast's magic run).
         // Only the proposed run's end nodes run: the kept run's attack animation (a priority-4 goal's run can have one) is not the proposed run's.
         Trace(npc).Perform += $" not in the table: {started.Failure} {started.Outcome}";
         AiExecutorRules.EndRun(run, this);
         FreeUnbegunCasts(run, queuedOnly: false);
+        // ARC-AI-1315 (TS4): the attack starter's own run start failing (0x44D520) ends in the step apart as its other refusals do.
+        if (run.Bottom.Goal == GoalType.Attack) AiTileSharerRules.StepApart(this, npc);
+        return false;
     }
 
     // The interrupt plan of the starter that builds a run with this bottom goal (GS12, GS13): level 3 for the walks, runs, follow, attack, throw and spread out (with the
@@ -1582,6 +1590,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         : Values(id)?.AttackCost ?? TurnBasedRules.AttackCost(TurnBasedRules.UnarmedWeaponSpeed);
 
     public AiPath? PlanPath(string id, AiPathRequest request) => PlanPath(id, request, touch: true);
+
+    /// <summary>ARC-AI-1313: the light level at a world cell for the dark wander (<see cref="AreaAiScene.CellLight"/>; full light without one).</summary>
+    public int CellLight(CellCoord cell) => _scene.CellLight?.Invoke(cell) ?? AttackRules.MaxLightLevel;
 
     // A facts question (AttackFacts) plans without touching: a touch can load a sector and run its fold, which a question must not do.
     private AiPath? PlanPath(string id, AiPathRequest request, bool touch)
@@ -2857,7 +2868,55 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool BoomerangInFlight(string npc) => false;
     // The starters' interrupt (0x424070 at level 3, GS13): the end nodes of the runs it ended run now, and a refusal (a run whose current goal has priority 4 or 5) refuses the start.
     public bool InterruptLowerAnimations(string id) => InterruptOwner(id, GoalInterruptRules.OrdinaryActions).Succeeded;
-    public void StepApart(string id) { }
+
+    /// <summary>
+    /// ARC-AI-1315 (VA4, VAG4): the critters on the object's tile for the tile-sharer finder and the step apart (0x436720, 0x4364D0): the hero, the shown map's NPCs and the
+    /// companions on it, dead ones included (<see cref="CrittersOn"/>), each with its life, its busy-run test (<see cref="GoalRunTable.BusyRun"/>) and a stand-in for the handle
+    /// order: the original compares run-time pool handles (OM1), so the order of this list (the hero, the map's NPCs in the scene's order, then the companions) stands for it.
+    /// </summary>
+    public IReadOnlyList<AiTileCritter> TileCritters(string id)
+    {
+        if (Tile(id) is not { } cell) return [];
+        var goals = _session.QueryGoals();
+        var order = 0L;
+        return CrittersOn(cell).Select(c => new AiTileCritter(c, c == Pc, !DeadCritter(c), goals.BusyRun(c) is not null, order++)).ToList();
+    }
+
+    /// <summary>
+    /// ARC-AI-1315: the please-move starter's start (0x4363E0 after its choice, gate and busy test): goal 68 on <paramref name="mover"/> with <paramref name="awayFrom"/> stored,
+    /// through the table's generic start (the interrupt at the goal's own priority, the first step 5 ms later).
+    /// </summary>
+    public bool StartPleaseMove(string mover, string awayFrom)
+    {
+        var run = new GoalRun(mover, default, new GoalFrame(GoalType.PleaseMove, awayFrom));
+        return Started(mover, RunOf(mover), new AiPerformResult(AiPerformKind.PleaseMove, run) { Started = true });
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-1135 (CF4): the dialog <c>so</c> action's goal start (0x436960 right after the flag, ledger OL8/CF4): the spread-out goal (69) on the follower <paramref name="npc"/> toward the hero, through the
+    /// executor's starter (gate with cost 0) and the table's own start (level 3, a duplicate refused). The answer of the starter is never seen by the action. False: not a follower this host runs, one the hero
+    /// does not lead (no leader: the original's null-leader case is not followed), or a start the gate or the table refused (the text is in the NPC's trace).
+    /// </summary>
+    public bool StartSpreadOut(string npc)
+    {
+        ArgumentNullException.ThrowIfNull(npc);
+        if (!_followers.ContainsKey(npc) || !_session.QueryCompanion(npc).LedByPc) return false;
+        return Started(npc, RunOf(npc), AiExecutorRules.StartSpreadOut(this, npc, Pc));
+    }
+
+    /// <summary>
+    /// ARC-AI-1315: the blocked-step test of goal 68's tile choice (0x425760): the step from the object's tile to the neighbouring <paramref name="next"/> is clear when no living
+    /// critter stands on it and the terrain, walls and objects let the step through (the route source's verdict, with the moved records and the other movers' cells as the planner
+    /// sees them). No trap check and no random wait, which the walker's own step test (<see cref="StepBlocked"/>) adds.
+    /// </summary>
+    public bool StepClear(string id, CellCoord next)
+    {
+        if (Tile(id) is not { } from || AiExecutorRules.Distance(from, next) != 1) return false;
+        if (LivingCritterOn(next, id)) return false;
+        var chart = ToChart(from);
+        var direction = RoutePlanner.Toward(chart, ToChart(next));
+        return new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(id, null), _scene.Passages).Assess(chart, direction) == RouteStepVerdict.Open;
+    }
 
     public AiFleeing PerformFleeing(string npc)
     {
@@ -3024,6 +3083,14 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     // ---- the hostility and morale world (IMoraleWorld) ----
+
+    /// <summary>
+    /// ARC-AI-1317: whether the handle still names an object (<see cref="IHostilityWorld.Exists"/>): the hero always; an NPC of the shown map
+    /// until it is destroyed (<see cref="Gone"/>); a created critter until the session destroys it; any other object the host does not
+    /// hold (another map's) is kept, since only its own map can tell.
+    /// </summary>
+    public bool Exists(string id) =>
+        id == Pc || !Gone(id) && !(id.StartsWith(SessionCreatedObject.CritterPrefix, StringComparison.Ordinal) && _session.QueryCreatedObject(id) is null);
 
     public HostilityCritter? Find(string id)
     {

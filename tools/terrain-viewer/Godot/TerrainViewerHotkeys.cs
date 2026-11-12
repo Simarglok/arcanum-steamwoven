@@ -13,8 +13,8 @@ namespace Arcanum.TerrainViewer;
 // (a stand-in for the skill bar, which the viewer does not draw: the original drags from the bars, not from the recent-action buttons, HK13), Ctrl+Shift+1..0 empties the entry, and 1..0 while an item is held in the
 // inventory window drops it on the entry. A spell pressed in the spell pane and the palette's Prowl action (the skill bar's prowling
 // button) become the latest recent action (0x57EFA0). The activation carries out what the viewer has: a spell (the spell UI's activation),
-// an item's spell (its weapon wielded first), prowling, the repair button (the inventory window), and a weapon's or armour's hotkey wear;
-// the item use, the held cursor and the other skill-bar buttons are not ready and say so.
+// an item's spell (its weapon wielded first), the four skill-bar buttons (prowling, pick pocket, disarm traps, the repair button's inventory window), and a weapon's or armour's hotkey wear;
+// the item use and the held cursor are not ready and say so. ARC-UI-1113: the pick pocket button arms the pick pocket's cursor.
 public partial class TerrainViewerApp
 {
     private string? _hotkeyNotice;
@@ -112,13 +112,7 @@ public partial class TerrainViewerApp
                 outcome = ActivateItemSpellHotkey(session, entry.Item!, entry.Index);
                 break;
             case HotkeyKind.Skill:
-                outcome = (SkillBarButton)entry.Index switch
-                {
-                    SkillBarButton.Prowling => ToggleProwlFromBar(session),
-                    SkillBarButton.Repair => OpenRepair(),
-                    SkillBarButton.DisarmTraps => ArmDisarmTraps(),
-                    var other => $"{other}: the skill bar's targeting is not ready",
-                };
+                outcome = ActivateSkillButton(session, (SkillBarButton)entry.Index);
                 break;
             case HotkeyKind.Item:
                 outcome = ActivateItemHotkey(session, entry.Item!);
@@ -176,6 +170,18 @@ public partial class TerrainViewerApp
 
     private static EquipmentSlot? WornSlotOf(GameSessionOwner session, string item) =>
         session.QueryEquipment().Worn.FirstOrDefault(worn => worn.Entity == item)?.Slot;
+
+    /// <summary>The skill bar's button press (0x579FA0 → 0x57A0A0), the same for a hotkey entry of type 2 and for the skill pane's button
+    /// (ARC-UI-1113): prowling toggles concealment, pick pocket and disarm traps arm the skill cursor (interface mode 2, each replacing the
+    /// other), repair opens the inventory window. The caller has tested that the hero can act (0x45D8D0, 0x45D800).</summary>
+    private string ActivateSkillButton(GameSessionOwner session, SkillBarButton button) => button switch
+    {
+        SkillBarButton.Prowling => ToggleProwlFromBar(session),
+        SkillBarButton.PickPocket => ArmPickPocketFromBar(),
+        SkillBarButton.DisarmTraps => ArmDisarmTraps(),
+        SkillBarButton.Repair => OpenRepair(),
+        _ => $"{button}: no such skill button",
+    };
 
     private string ToggleProwlFromBar(GameSessionOwner session)
     {

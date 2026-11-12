@@ -34,6 +34,16 @@ def ticket(seq: int, kind: str, started: bool = False, priority: int = run_queue
 
 
 class AdmissionRuleTests(unittest.TestCase):
+    def setUp(self) -> None:  # ARC-DEV-1353: a settings file of the owner's real queue folder must not reach the test
+        self.temp = tempfile.TemporaryDirectory()
+        self.env = patch.dict(os.environ, {"ARCANUM_LOCAL_HOME": str(Path(self.temp.name) / "home")})
+        self.env.start()
+        os.environ.pop(run_queue.LANES_ENV, None)
+
+    def tearDown(self) -> None:
+        self.env.stop()
+        self.temp.cleanup()
+
     def test_godot_kinds_share_one_slot_in_arrival_order(self) -> None:
         live = [ticket(1, "headless", started=True), ticket(2, "window"), ticket(3, "export")]
         self.assertEqual(run_queue.blocker(live[1], live)["seq"], 1)
@@ -80,6 +90,16 @@ def lane_ticket(seq: int, kind: str = "window", lane: str | None = None, started
 class LaneTests(unittest.TestCase):
     """ARC-DEV-400: the Godot slot as one heavy lane and two short lanes; an export, a rollback run and a run of an old
     wrapper run alone; two runs of one checkout never run at once."""
+
+    def setUp(self) -> None:  # ARC-DEV-1353: a settings file of the owner's real queue folder must not reach the test
+        self.temp = tempfile.TemporaryDirectory()
+        self.env = patch.dict(os.environ, {"ARCANUM_LOCAL_HOME": str(Path(self.temp.name) / "home")})
+        self.env.start()
+        os.environ.pop(run_queue.LANES_ENV, None)
+
+    def tearDown(self) -> None:
+        self.env.stop()
+        self.temp.cleanup()
 
     def waits_for(self, live: list[dict], seq: int) -> int | None:
         mine = next(item for item in live if item["seq"] == seq)
@@ -297,6 +317,83 @@ class LaneAccountingTests(unittest.TestCase):
         self.assertNotIn("lane", entries[2])  # a dotnet run has none
 
 
+class OwnerCapTests(unittest.TestCase):
+    """ARC-DEV-1353: the owner's caps live in the queue folder, so one setting caps the runs of every thread."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.env = patch.dict(os.environ, {"ARCANUM_LOCAL_HOME": str(Path(self.temp.name) / "home")})
+        self.env.start()
+        os.environ.pop(run_queue.LANES_ENV, None)
+
+    def tearDown(self) -> None:
+        self.env.stop()
+        self.temp.cleanup()
+
+    def test_no_file_means_the_default_and_reading_creates_nothing(self) -> None:
+        self.assertEqual(run_queue.lanes_setting(), (run_queue.DEFAULT_SHORT_LANES, "default"))
+        self.assertIsNone(run_queue.max_load())
+        self.assertFalse(run_queue.folder().exists())
+
+    def test_the_file_sets_the_lanes_for_every_wrapper_and_default_removes_it(self) -> None:
+        run_queue.write_settings({"shortLanes": 1})
+        self.assertEqual(run_queue.lanes_setting(), (1, "settings file"))
+        self.assertEqual(run_queue.lane_for("window", 200.0), "heavy")
+        run_queue.write_settings({"shortLanes": 0})
+        self.assertEqual(run_queue.lane_for("window", 20.0), "single")  # one Godot run at a time
+        run_queue.write_settings({"shortLanes": None})
+        self.assertEqual(run_queue.lanes_setting(), (run_queue.DEFAULT_SHORT_LANES, "default"))
+
+    def test_the_variable_wins_over_the_file_and_a_given_mapping_never_reads_the_file(self) -> None:
+        run_queue.write_settings({"shortLanes": 1})
+        with patch.dict(os.environ, {run_queue.LANES_ENV: "3"}):
+            self.assertEqual(run_queue.lanes_setting(), (3, "environment"))
+        self.assertEqual(run_queue.short_lanes({}), run_queue.DEFAULT_SHORT_LANES)
+
+    def test_an_unreadable_or_out_of_range_file_value_is_ignored(self) -> None:
+        for text in ("not json", "[]", '{"shortLanes": 99}', '{"shortLanes": "2"}', '{"shortLanes": true}', '{"maxLoad": -1}',
+                     '{"maxLoad": "x"}'):
+            (run_queue._open_folder() / run_queue.SETTINGS_FILE).write_text(text)
+            self.assertEqual(run_queue.lanes_setting(), (run_queue.DEFAULT_SHORT_LANES, "default"), text)
+            self.assertIsNone(run_queue.max_load(), text)
+
+    def test_the_load_guard_holds_a_run_only_while_another_godot_run_runs_and_the_load_is_above_it(self) -> None:
+        self.assertIsNone(run_queue.too_loaded(2, 99.0))  # no guard set
+        run_queue.write_settings({"maxLoad": 12.0})
+        self.assertEqual(run_queue.too_loaded(1, 13.0), 12.0)
+        self.assertIsNone(run_queue.too_loaded(1, 12.0))
+        self.assertIsNone(run_queue.too_loaded(0, 99.0))  # a lone run always starts
+        with patch.object(run_queue, "_load", return_value=None):
+            self.assertIsNone(run_queue.too_loaded(1))  # the system gives no load figure: no guard
+        with patch.object(run_queue, "_load", return_value=40.0):
+            self.assertEqual(run_queue.too_loaded(1), 12.0)  # no figure given: it reads the system's
+        run_queue.write_settings({"maxLoad": None})
+        self.assertIsNone(run_queue.too_loaded(1, 99.0))
+        (run_queue._open_folder() / run_queue.SETTINGS_FILE).write_text('{"maxLoad": 1' + "0" * 400 + "}")
+        self.assertIsNone(run_queue.max_load())  # too large for a float: no guard, no crash
+
+    def test_the_status_line_names_the_caps_and_their_source(self) -> None:
+        run_queue.write_settings({"shortLanes": 1, "maxLoad": 10})
+        self.assertIn("short lanes 1 from settings file", run_queue.settings_line())
+        self.assertIn("load guard 10", run_queue.settings_line())
+
+    def test_the_command_sets_and_clears_the_caps(self) -> None:
+        environment = {**os.environ}
+        def run(*args: str) -> subprocess.CompletedProcess:
+            return subprocess.run([sys.executable, "-B", str(ARCANUM), "queue", *args], capture_output=True, text=True,
+                                  env=environment, cwd=REPO, timeout=60)
+        done = run("--set-lanes", "1", "--set-max-load", "12")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(json.loads((run_queue.folder() / run_queue.SETTINGS_FILE).read_text()), {"maxLoad": 12.0, "shortLanes": 1})
+        self.assertIn("short lanes 1 from settings file", done.stdout)
+        self.assertNotEqual(run("--set-lanes", "9").returncode, 0)
+        self.assertNotEqual(run("--set-max-load", "0").returncode, 0)
+        self.assertNotEqual(run("--set-max-load", "1_0").returncode, 0)
+        self.assertNotEqual(run("--set-lanes", "1", "--history", "3").returncode, 0)
+        self.assertEqual(run("--set-lanes", "default", "--set-max-load", "off").returncode, 0)
+        self.assertEqual(json.loads((run_queue.folder() / run_queue.SETTINGS_FILE).read_text()), {})
+
+
 class OrderTests(unittest.TestCase):
     """ARC-DEV-390: a short run is not queued behind a long one that arrived a little before it, and no run waits for ever.
     The lists hold waiting tickets only (a running Godot run blocks every waiter, whatever the order)."""
@@ -503,6 +600,106 @@ class BuildServerTests(unittest.TestCase):
         self.assertIn("not shut down", run_queue.shutdown_build_servers(self.environment, [], 7, broken))
 
 
+class ProcessStartTests(unittest.TestCase):
+    """ARC-DEV-1401: the process start time of a ticket is read without spawning `ps`."""
+
+    def ps_start(self, pid: int) -> str:
+        return subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True,
+                              env=run_queue._PS_ENVIRONMENT).stdout.strip()
+
+    @unittest.skipUnless(sys.platform == "darwin", "libproc is macOS only")
+    def test_libproc_text_equals_ps(self) -> None:
+        self.assertIsNotNone(run_queue._LIBPROC)
+        self.assertEqual(run_queue._process_start(os.getpid()), self.ps_start(os.getpid()))
+        child = subprocess.Popen(["sleep", "30"])
+        try:
+            self.assertEqual(run_queue._process_start(child.pid), self.ps_start(child.pid))
+        finally:
+            child.kill()
+            child.wait()
+
+    @unittest.skipUnless(sys.platform == "darwin", "libproc is macOS only")
+    def test_no_process_is_spawned(self) -> None:
+        with patch.object(subprocess, "run", side_effect=AssertionError("spawned")), \
+                patch.object(subprocess, "Popen", side_effect=AssertionError("spawned")):
+            start = run_queue._process_start(os.getpid())
+            self.assertRegex(start, r"^\w{3} \w{3} [ \d]\d \d\d:\d\d:\d\d \d{4}$")
+            self.assertTrue(run_queue._alive(os.getpid(), start))
+            self.assertFalse(run_queue._alive(os.getpid(), "Mon Jan  1 00:00:00 2001"))  # a reused pid
+            self.assertTrue(run_queue._alive(os.getpid(), run_queue.UNKNOWN))
+
+    @unittest.skipUnless(sys.platform == "darwin", "libproc is macOS only")
+    def test_gone_process_is_none(self) -> None:
+        child = subprocess.Popen(["true"])
+        child.wait()
+        self.assertIsNone(run_queue._process_start(child.pid))
+        self.assertFalse(run_queue._alive(child.pid, "Thu Nov 12 17:07:19 2026"))
+
+    @unittest.skipUnless(sys.platform == "darwin" and os.geteuid() != 0, "libproc is macOS only; root may read launchd")
+    def test_another_users_process_is_unknown_not_gone(self) -> None:
+        self.assertEqual(run_queue._process_start(1), run_queue.UNKNOWN)  # launchd: root's, the kernel refuses
+
+    def test_start_text_ignores_the_locale(self) -> None:
+        self.assertEqual(run_queue._start_text(1794503239), "Thu Nov 12 17:07:19 2026")
+        self.assertEqual(run_queue._start_text(1794503239 - 10 * 86400 + 3600 * 7), "Tue Nov  3 00:07:19 2026")
+
+    def test_fallback_asks_ps_and_caches(self) -> None:
+        run_queue._START_CACHE.clear()
+        answer = subprocess.CompletedProcess([], 0, stdout="Thu Nov 12 17:07:19 2026\n", stderr="")
+        with patch.object(run_queue, "_LIBPROC", None), patch.object(subprocess, "run", return_value=answer) as run:
+            self.assertEqual(run_queue._process_start(424242), "Thu Nov 12 17:07:19 2026")
+            self.assertEqual(run_queue._process_start(424242), "Thu Nov 12 17:07:19 2026")
+        self.assertEqual(run.call_count, 1)
+        run_queue._START_CACHE.clear()
+
+
+class TaskCodeTests(unittest.TestCase):
+    """ARC-DEV-1408: the task code of a run, from its label or the branch its checkout has now."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name).resolve()
+
+    def tearDown(self) -> None:
+        self.temp.cleanup()
+
+    def checkout(self, name: str, head: str, *, worktree: bool = False) -> str:
+        path = self.root / name
+        git = self.root / f"{name}-gitdir" if worktree else path / ".git"
+        git.mkdir(parents=True)
+        path.mkdir(exist_ok=True)
+        (git / "HEAD").write_text(head + "\n")
+        if worktree:  # a worktree's .git is a file naming its git folder
+            (path / ".git").write_text(f"gitdir: {git}\n")
+        return str(path)
+
+    def test_the_label_wins_over_the_branch(self) -> None:
+        checkout = self.checkout("a", "ref: refs/heads/ARC-DEV-1403-pause")
+        self.assertEqual(run_queue.task_code({"label": "ARC-AI-1315 registry test", "checkout": checkout}), "ARC-AI-1315")
+
+    def test_the_branch_of_a_plain_checkout_and_of_a_worktree(self) -> None:
+        plain = self.checkout("plain", "ref: refs/heads/ARC-DEV-1403-pause")
+        tree = self.checkout("tree", "ref: refs/heads/ARC-UI-1357-hud", worktree=True)
+        self.assertEqual(run_queue.task_code({"label": "smoke stages", "checkout": plain}), "ARC-DEV-1403")
+        self.assertEqual(run_queue.task_code({"label": "", "checkout": tree}), "ARC-UI-1357")
+        self.assertEqual(run_queue.task_code({"checkout": tree, "cwd": str(Path(tree) / "sub")}), "ARC-UI-1357")  # a ticket of an old wrapper
+
+    def test_no_code_when_there_is_none_or_it_cannot_be_read(self) -> None:
+        self.assertIsNone(run_queue.task_code({"label": "x", "checkout": self.checkout("c", "ref: refs/heads/claude/project-thread-74wi5u")}))
+        self.assertIsNone(run_queue.task_code({"label": "x", "checkout": self.checkout("d", "0123456789abcdef")}))  # detached HEAD
+        self.assertIsNone(run_queue.task_code({"label": "x", "checkout": str(self.root / "missing")}))
+        self.assertIsNone(run_queue.task_code({"checkout": None, "cwd": None}))
+        binary = Path(self.checkout("b", "x")) / ".git" / "HEAD"
+        binary.write_bytes(b"\xff\xfe\x00")  # not text: never an error in a wait loop or in ./arcanum queue
+        self.assertIsNone(run_queue.task_code({"label": "x", "checkout": str(binary.parent.parent)}))
+        self.assertIsNone(run_queue.task_code({"label": "x", "checkout": "/tmp/a\x00b"}))
+
+    def test_describe_shows_the_code(self) -> None:
+        checkout = self.checkout("e", "ref: refs/heads/ARC-DEV-1408-code")
+        text = run_queue._describe({"seq": 3, "kind": "quick", "label": "t", "cwd": checkout, "checkout": checkout})
+        self.assertEqual(text, '#3 quick e ARC-DEV-1408 "t"')
+
+
 class QueueRunTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -532,6 +729,10 @@ class QueueRunTests(unittest.TestCase):
     def live(self) -> list[dict]:
         with run_queue._QueueLock():
             return [item for _, item in run_queue.tickets(prune=False)]
+
+    def runs(self) -> list[dict]:
+        """The live tickets of runs: the pause (a ticket the queue counts as a running export) is not one."""
+        return [item for item in self.live() if not item.get("paused")]
 
     def wrapper(self, kind: str, name: str, command: list[str], *, timeout: str | None = None,
                 environment: dict | None = None, estimate: float | None = None, cwd: Path | None = None) -> subprocess.Popen:
@@ -791,6 +992,75 @@ class QueueRunTests(unittest.TestCase):
         history = run_queue.status(history=5)
         self.assertEqual(len(history), 2)
         self.assertIn("exit=0", history[0])
+
+    def test_a_paused_queue_starts_no_waiting_run_until_resume(self) -> None:
+        self.assertTrue(run_queue.set_paused(True, "test"))
+        self.assertFalse(run_queue.set_paused(True, "test"))  # already set
+        self.assertEqual(run_queue.pause_state()["by"], "test")
+        process = self.queued("dotnet", "a", 0.1)
+        self.until(lambda: len(self.runs()) == 1)
+        time.sleep(1.5)  # several polls: it neither starts nor leaves
+        self.assertIsNone(process.poll())
+        self.assertFalse(self.log.exists())
+        self.assertIsNone(self.runs()[0]["startedAt"])
+        lines = run_queue.status()
+        self.assertTrue(lines[0].startswith("PAUSED") and "--resume" in lines[0], lines)
+        self.assertTrue(lines[1].startswith("waiting #") and lines[1].endswith("(paused)"), lines)
+        self.assertTrue(run_queue.set_paused(False))
+        self.assertFalse(run_queue.set_paused(False))
+        self.finish()
+        self.assertIn("end a", self.events())
+        self.assertFalse(any(line.startswith("PAUSED") for line in run_queue.status()))
+
+    def test_pause_lets_the_running_run_finish_and_holds_the_next(self) -> None:
+        self.queued("window", "a", 1.5)
+        self.until(lambda: self.log.exists())
+        run_queue.set_paused(True, "test")
+        self.queued("window", "b", 0.1)
+        self.until(lambda: any(item.get("startedAt") is None for item in self.runs()))
+        self.until(lambda: "end a" in self.log.read_text())
+        time.sleep(1.5)  # a gap far over the poll: b still waits for the resume
+        self.assertNotIn("start b", self.log.read_text())
+        run_queue.set_paused(False)
+        self.finish()
+        found = self.events()
+        self.assertGreaterEqual(found["start b"], found["end a"])
+
+    def test_the_pause_is_a_held_ticket_no_wrapper_can_read(self) -> None:
+        # the contract that makes the pause bind wrappers of every version (ARC-DEV-033 counts a held unreadable ticket as a
+        # running export): the file is not a ticket of this schema, it is locked, and the queue lists it as a running export
+        run_queue.set_paused(True, "test")
+        try:
+            path = run_queue.pause_file()
+            self.assertIsNone(run_queue._read_json(path))
+            self.assertTrue(run_queue._locked(path))
+            with run_queue._QueueLock():
+                live = [item for _, item in run_queue.tickets(prune=True)]
+            self.assertEqual([(item["kind"], item.get("paused")) for item in live], [("export", True)])
+            self.assertIn("PAUSED", run_queue._describe(live[0]))
+            other = {"seq": 7, "kind": "quick", "enqueuedAt": time.time(), "estimateSeconds": 15}
+            self.assertEqual(run_queue.blocker(other, [*live, other])["paused"], True)
+        finally:
+            run_queue.set_paused(False)
+        self.assertFalse(run_queue.pause_file().exists())
+
+    def test_a_pause_nobody_holds_is_stale_and_does_not_pause(self) -> None:
+        run_queue._open_folder()
+        run_queue.pause_file().write_text('{"schema": "x"}')
+        self.assertIsNone(run_queue.pause_state())
+        with run_queue._QueueLock():
+            self.assertEqual(run_queue.tickets(prune=True), [])
+        self.assertFalse(run_queue.pause_file().exists())  # pruned like any dead ticket
+
+    def test_a_nested_run_is_not_held_by_the_pause(self) -> None:
+        inner = f"sleep 1.5; {sys.executable} -B {ARCANUM} run --kind window -- {sys.executable} -c pass"
+        process = self.wrapper("window", "outer", ["sh", "-c", inner])
+        self.until(lambda: len(self.runs()) == 1 and self.runs()[0].get("startedAt"))
+        run_queue.set_paused(True, "test")
+        try:
+            self.assertEqual(process.wait(30), 0)  # a run holding a place keeps working: its nested run is not queued
+        finally:
+            run_queue.set_paused(False)
 
 
 if __name__ == "__main__":

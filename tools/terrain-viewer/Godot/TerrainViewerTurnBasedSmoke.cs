@@ -76,7 +76,8 @@ public partial class TerrainViewerApp
             if (HeroInCombatMode) ToggleCombatMode();
             _turnBasedSetting = false; _chargeLog.Clear(); _roundLog.Clear();
             var targetCell = map.Chart.ToChart(new(target.Row.WorldX!.Value, target.Row.WorldY!.Value));
-            CellCoord? Near(int range) => AreaSmokeNearTarget(map, targetCell, range);
+            // ARC-UI-1333: "next to" is Chebyshev distance 1; the helper's standable cell can be one farther, where the preview is rightly WalkToAttack (+1 step).
+            CellCoord? Near(int range) => AreaSmokeNearTarget(map, targetCell, range, maxDistance: range);
             var start = AreaSmokeNearTarget(map, targetCell, 3, 2) ?? AreaSmokeStandable(map, targetCell, 2);
             AreaSmokePlace(map, start);
             _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);

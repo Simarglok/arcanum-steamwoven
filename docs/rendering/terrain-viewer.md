@@ -870,6 +870,12 @@ game's state, never the object under the pointer: what a click would do there st
   wrapping; the others have one frame. The same cursor serves the world, the bars and the windows, as in the original;
   controls with a cursor shape of their own (a text field's I-beam) keep it. The log prints `ARC-UI-056 cursor art ready=…`
   once and `ARC-UI-056 cursor art=N mode=M` at each change.
+- **Across a map window move** (ARC-UI-1357, FR-UI-002). While a window loads (`MapStreamInFlight`) the cursor art is not released
+  even if the scene's ready mode is momentarily not `area`, and the first frame after the window swap hands the art to Godot
+  again (`ARC-UI-056 window swap …` logs the swap's main-thread time and Godot's shape). The `stream` smoke stage checks (when the game's cursor art reads) that the art is shown, that no
+  move released it and that every swap re-applied it. `ClearPublishedScene` does set the ready mode to `TerrainOnly` for that span, so the hold is hardening, not a proven cure. The swap itself is one synchronous step of about 0.2-0.4 s, with no frame
+  between the clear and the publish, so the state never showed the system shape in the smoke; the owner's report of a system
+  cursor for a moment at a window move is kept on the owner recheck list.
 - **Without the art** (`AreaCursorContent.Ready` false: the self-test, another layout, a missing or unreadable file, a frame
   larger than 256 × 256 or with its hot point outside it) the ARC-UI-005 system shapes stay, as before.
 
@@ -1185,14 +1191,14 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   [ledger QW1–QW6](../research/ledger/ui-audio.md#quantity-window-arc-ui-029)). It starts at 0; the keypad digits append (capped
   at the stack), Backspace and Delete erase the last digit, Enter accepts, Escape and I cancel; the main-row digits do nothing.
   While it asks the rest of the window, the doll and the grid do nothing (QW6); closing the window cancels it. Accept with 0 moves
-  nothing. The moves are the session's `TakeGoldFromNpc`, `TakeAmmoFromNpc` and `DropHeroAmmo`
+  nothing. The moves are the session's `TakeGoldFromNpc`, `TakeAmmoFromNpc`, (a junk pile's, ARC-UI-1328) `TakeGoldFromJunkPile`, `TakeAmmoFromJunkPile` and `DropHeroAmmo`
   ([stack drop](../world/inventory-runtime.md#stack-drop-and-the-quantity-window-arc-ui-029)). *Take all* moves whole stacks
   without asking, a gold pile too (QW1; a session without a hero refuses the gold, as it has none to hold it); a stack of one unit moves at once by the same stack path. The new stack keeps the moved
   stack's kind (the original makes the type's base prototype, QW5; every installed stack is one). A dead NPC with two gold piles
   answers with its first pile (the session's `TakeGoldFromNpc`, NT1), so a take from the second asks with its coins but moves from
   the first (no installed NPC holds two). The loot list
   shows a gold pile's coins (×N) and the header the hero's gold and its four ammunition counts (arrows, bullets, charges, fuel; IW9).
-  NOT READY: the question in the barter window and for a junk pile's stacks, the art of the original's
+  A junk pile's stacks ask the same way (ARC-UI-1328): the session moves the count and leaves the rest in the pile, which keeps its items and its dissolve rules (a window that shows it keeps it standing; closing it dissolves one item or none); a container's stacks asked since ARC-WORLD-101. NOT READY: the question in the barter window, the art of the original's
   bar. The self-test takes 2 of 12 synthetic arrows by keypad and buttons, cancels with Escape, and drops 1 of the 2
   (`ARC-UI-029 self-test quantity`); the native smoke drops one unit of an ammunition stack of the hero's
   through its *Drop* button, keypad 1 and Enter, and takes it back (`ARC-UI-029 native-smoke quantity PASS`; the crash site holds no
@@ -1238,6 +1244,10 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   row by row (the first press after the window opens) or column by column (the next one), alternating. When one item finds no place nothing changes. The original
   runs no insert check, no item event and no action points. NOT READY: the shop NPC's grid (the viewer's wares have no grid slots), the pressed frame.
   The `inv-arrange` stage of the native smoke drives it.
+  **The open's own arrangement (ARC-RES-1410,** [ledger XR16 (g)](../research/ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)**):** the open of the loot (mode 2), steal (mode 3)
+  and See Contents (mode 4) windows lays the shown holder's grid out again before it draws (`GameSessionOwner.ArrangeHolderGrid`, row by row, the same sort; 96 rows
+  for a container, 12 for a critter, worn and quick-slot items stay out, no room writes nothing), so a taken item's old cell closes up at the next open. The slots are
+  not saved (issue #1441). The `container-click` stage's loot smoke checks the arranged layout at the open and after a take.
 - **Steal window art (ARC-UI-065,** [ledger IW35–IW36](../research/ledger/ui-audio.md#steal-window-arc-ui-065)): the window of a
   pick-pocket victim (mode 3) draws the loot window's look without the Take all button (IW30), with the victim's image by its critter
   flags or race and the round view. A victim's item pressed and released on the hero's grid is one theft attempt, a hero's grid item
@@ -1867,7 +1877,7 @@ the creation editor keeps its draft's snapshot until the game starts).
 **NPC sheet (ARC-UI-088, ledger [CHW24](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)):** the dialog reply action c-e ends the talk and
 opens the speaker's character sheet in the original's mode 2 (`Godot/TerrainViewerAreaNpcSheet.cs`, `src/Arcanum.World/AreaNpcSheet.cs`): the same window over the NPC's
 values (name, level, points, experience to the next level from its stored experience, the eight stats with the colour of its effects, derived stats from
-`AutoLevelRules.DerivedStat`, stored resistances with the constitution bonus, hit points and fatigue from its life, skills, spell book and tech degrees), no +
+`AutoLevelRules.DerivedStat`, stored resistances with the constitution bonus under the NPC's effect list (the session's, else the map data's; the Magick line shows the `resistmagic` changes too, ARC-UI-1145), hit points and fatigue from its life, skills, spell book and tech degrees), no +
 or − on any page (`ReadOnly` of the art view and pages), the next spell grey, no editor snapshot, no pause; a monstrous NPC shows no race or gender. The sheet is the
 talk's moment: the session's later changes do not rebuild it. A release in the close rectangle or `C` closes it, the dialog does not resume, and the next `C`
 opens the hero's sheet. Not built: the follower arrows, the scheme page (the NOT READY note), the portrait or race icon (the slot stays empty), the NPC's worn
@@ -2609,8 +2619,9 @@ under the bars. Buttons:
 | Map | top | The world map window (`W`, map mode on the start map), which does not fit between the strips, so the bars hide while it is open (`W` or Escape closes it); the town map is not built. |
 | Combat | bottom | Toggles the hero's combat mode (`R`). |
 | Spells | bottom | A toggle: on shows the spell pane (`M`), off hides it; `M` moves the button with the pane. |
-| Skills | bottom | A toggle (Spells goes up when it goes down); the original's skill pane is not built, so it only says so. |
-| Fate Points, Sleep | top | Say that their windows are not built. |
+| Skills | bottom | A toggle (Spells goes up when it goes down; `K` does the same without the sound): shows the [skill pane](../world/spell-cast-host.md#the-skill-pane-in-the-bottom-strip-arc-ui-1113) (bar mode 2: the pane's art and the four skill-bar buttons) in the message window. |
+| Fate Points | top | Opens the [Fate Point window](#fate-point-window-arc-ui-1112) as the key `F` does, or closes it when open. |
+| Sleep | top | The sleep window (`S`). |
 
 A button shows its idle, down and lit frames as the original's (GB4). It plays 3000 on the press and 3001 on the release
 over it, and acts on that release; a toggle plays 3000 turning on and 3001 turning off (GB3, GB6). The pointer over a
@@ -2635,10 +2646,10 @@ installed art and texts read). Native smoke on the original data, map mode on th
 name and lit frame, its down frame with 3000, the release with 3001 opening the sheet, Inventory switching from the sheet,
 Logbook and Schematics opening and closing their windows, the logbook lying between the strips and taking a press inside
 it, Map opening the world map with the bars hidden and back with no hover, Combat in and out of combat mode, Spells showing and hiding
-the pane, Fate Points refused, a press on the strip's clock not reaching the world, every sound started, and the
+the pane, Fate Points opening and closing its window (and, in the same smoke, the [Fate Point window](#fate-point-window-arc-ui-1112)'s own checks), a press on the strip's clock not reaching the world, every sound started, and the
 [clock](#clock-and-date-arc-ui-1111)). Not done: the
 hot-key bar (later slices; the vials since ARC-UI-020, the message log since ARC-UI-023, the vials' art, the follower frames
-and the hovered portrait since [ARC-UI-024](#panel-art-arc-ui-024)), the skill pane, fate and sleep windows, the town map, the
+and the hovered portrait since [ARC-UI-024](#panel-art-arc-ui-024); the skill pane since ARC-UI-1113), the town map, the
 buttons' lit art the original sets from game events (0x556A90), the toggle to the compact interface (the viewer shows the
 compact panel whenever its bars are not drawn).
 
@@ -2674,6 +2685,40 @@ it writes no name, a press writes nothing and the release writes the line with t
 no sound plays, leaving it clears the entry, and an hour of game time later the window refreshes once. `ARC_AREA_BAR_CAPTURE=PREFIX`
 also saves the strip with and without the window and at three later hours for a graphics report (local files, never committed).
 
+### Fate Point window (ARC-UI-1112)
+
+The window the Fate Points button and the key `F` open, as the 1.0.7.4 executable builds and answers it (ledger
+[FW1–FW6](../research/ledger/ui-audio.md#fate-point-window-arc-ui-1112)); `AreaFateWindow.cs` (Core, Godot-free: `AreaFateLayout`, `AreaFateTexts`,
+`AreaFateContent`, `AreaFateButtons`, `AreaFateWindowRules`), `AreaFateView` (the drawing and the pointer) and `TerrainViewerAreaFate.cs` (the opening,
+the session calls and the key). The rules and the session calls exist since ARC-WORLD-054 ([fate points](../world/fate-points-runtime.md)).
+
+- **The window.** The interface art 292 at (0, 41) of the original's screen (the bars' whole factor, standing under the top strip), of its art's size;
+  twelve lines of `mes\fate_ui.mes` (0..11, one for each fate kind; the project's English names stand in when the file does not read) in the
+  white font art 229 at x 11, y 3 + 18 × kind, wrapped at the window's width, and twelve toggle buttons of art 293 at x 223, y 4 + 18 × kind
+  (frames idle, down, lit as the bar's, GB4). The window is no interface mode: the world keeps running and clicks outside it reach the world; a press
+  over it never does.
+- **Opening.** The button and the key `F` call one function: an open window closes; otherwise it opens for a living hero (a dead hero, or none, gets
+  a notice in the bar's status line). Neither opens it while another interface window (sheet, inventory, logbook, schematics, sleep), the dialog,
+  barter, reading, the world map, the save list, the menu or the palette owns the screen (the key is also ignored while a UI control owns input, as `S`
+  is), and a window opened by its own button or key closes it (the original's interface close paths close it with the others, 0x541710, 0x541D40 and
+  0x542200, F0 for which events call them). Space closes it and goes no further. PROJECT: it also closes when any of those covers the screen, when
+  the hero dies and when the session is replaced.
+- **The buttons.** A press flips a button (sound 3000 turning on, 3001 turning off; the release does nothing) and asks the session: on arms the kind
+  (`ArmHeroFate`: one point is spent, a kind already armed or no point left is refused; the full heal is applied at once) and off undoes it
+  (`UndoHeroFate`: the point comes back, up to 100). After each answer and each frame the buttons are set from the hero's armed kinds, so a refused
+  press pops back (lit under the pointer, as the original's pop, FW4), the full heal pops up at once and a kind an event used (a critical hit, a
+  skill check, a conversation start, a spell) pops its button up while the window is open (FW6). A kind armed when the window opens shows down.
+- **Technical bug, fixed (FW3).** The original makes an already armed kind's button without the toggle flag, so it works as a push button that
+  cannot stay armed until the window is opened again. Every button toggles here, in both rule modes (the technical bug rule).
+- **Not modelled.** The multiplayer network messages of the buttons (FT3, FT4); a button takes the pointer on its art's rectangle, not its opaque
+  pixels; the controller has no focus row in the window; the fate points left are not shown (the original window shows no count either).
+
+Tests `AreaFateWindowTests` (layout, hit areas, the lines, the toggle sounds and looks, the buttons following the armed kinds and the rules' answers,
+the open decision). Native smoke, a step of `ARC_AREA_MAP_SMOKE_ONLY=bar` (prints `ARC-UI-1112 native-smoke fate PASS`): after a new game the button
+opens the window at (0, 41), every button starts idle, the pointer lights a button, a press arms critical hit and gambling (points spent, 3000), the full
+heal is used at once and pops up, a press with no point left is refused and pops back, a second press undoes (the point back, 3001), an event's use of
+an armed kind pops its button, Space closes the window and `F` opens and closes it.
+
 ### Message log (ARC-UI-023)
 
 The bottom strip's message window shows the original's message log, as the 1.0.7.4 executable keeps and draws it (ledger
@@ -2702,7 +2747,7 @@ session, the window only while the [interface bars](#interface-bars-arc-ui-018) 
   no entry was stored in the last 3 s (real time). Leaving the button takes the name away.
 - **Panes.** While Spells (the spell pane, `M`) or Skills is down the window belongs to that pane and draws nothing of the log
   (since ARC-UI-053 the spell pane is drawn there as the original's bar mode 1, with its art, college buttons and spell icons:
-  [spell pane](../world/spell-cast-host.md#the-spell-pane-in-the-bottom-strip-arc-ui-053); the skills pane's art is a later slice). A new stored entry puts the
+  [spell pane](../world/spell-cast-host.md#the-spell-pane-in-the-bottom-strip-arc-ui-053), and since ARC-UI-1113 the skill pane as bar mode 2: [skill pane](../world/spell-cast-host.md#the-skill-pane-in-the-bottom-strip-arc-ui-1113)). A new stored entry puts the
   window back in the message mode, and the next pointer move over the bottom strip (x 10–790, y 441–590) gives it back to the
   pane whose button is still down; a pointer move above the strip gives the spells or skills pane's window to the log (not the
   weapon's spells), as the original's panes own the window only while the pointer is over the strip; the button going up

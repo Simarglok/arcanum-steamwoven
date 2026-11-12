@@ -48,8 +48,7 @@ Resistance and stat changes of effects now reach combat values for the hero and 
 
 Known differences (documented, not bugs):
 
-- The character sheet's resistance lines (hero and NPC) do not show effect changes; damage does.
-- A poison tick meets an NPC's resistance without its effects (an NPC's maximum hit points and fatigue follow its effect-changed strength, willpower and constitution since ARC-WORLD-1144).
+- A poison tick meets the normal resistance of an NPC under the effect list the session holds for it, and the sheet's resistance lines (hero and NPC) show effect changes (ARC-UI-1145; an NPC's sheet reads its map-data list only when the host gave the effect rules); a list the map data stores and the session has not adopted is not laid over the NPC's life facts (its poison tick and maxima).
 - Spell damage dealt to an NPC ignores that NPC's resistance effects until PR #941 merges (the spell host reads the NPC without its list).
 - The hero's innate race and gender effects carry no resistance changes in the session.
 
@@ -812,7 +811,7 @@ Known differences (documented, not bugs):
 - When a follower is better at disarming, the original lets the best follower act instead of the hero ("let me handle it", Ctrl skips it); Steamwoven always uses the hero.
 - The original's skill-bar press builds the invocation at once, so Steamwoven does not walk the hero to the trap first; whether the original limits the distance by the difficulty is read from the shared check only.
 - A trap you placed yourself with a script trap device is a marker object in Steamwoven and cannot be targeted yet.
-- The skill pane's own Disarm Traps button is [#1113](https://github.com/Simarglok/arcanum-steamwoven/issues/1113).
+- The skill pane's own Disarm Traps button is built (ARC-UI-1113, [#1113](https://github.com/Simarglok/arcanum-steamwoven/issues/1113)).
 
 ## ARC-MAGIC-056 — Tempus Fugit speed (spell 79)
 
@@ -910,7 +909,7 @@ The rules are in the [ledger BD1–BD7](../research/ledger/npc-ai.md#body-decay-
 | # | Step | Expected (from the original executable and data) | Status |
 | --- | --- | --- | --- |
 | 1 | Kill a creature that carries an item or two (a map NPC, then a creature a generator made) and stay on the map. Pass 23 hours, look at the body; then pass another 2 hours. | The body lies there the first 23 hours and is gone a game day after the death (the Decay Dead Bodies event). | open |
-| 2 | Look at the spot after the body is gone. | The creature's items lie on its tile (in a junk pile when two or more) and disappear two game days later as any dropped item; an item the data marks "not droppable" is gone with the body. | open |
+| 2 | Look at the spot after the body is gone. | The creature's items lie on its tile (in a junk pile when two or more) and disappear two game days later as any dropped item; an item the data marks "no display" or that a spell summoned is gone with the body, any other item (a "not droppable" one too) lies on the ground. | open |
 | 3 | Kill a creature, leave the map for more than a day, come back. | The body is gone on return (the event runs late once its map is the shown one). | open |
 | 4 | Kill a creature of a generator and wait for its body to go. | The generator does not make a replacement because of the decay: only a generator whose live count the death released ticks again (PO7, PO11); the made-so-far count is never given back. | open |
 
@@ -973,7 +972,7 @@ quest step in both games.
 
 Known differences (documented, not bugs):
 
-- Transfer item, set written start, destroy item named and toggle item inventory display are not applied by any host yet: scripts that use them are still refused.
+- ARC-SCRIPT-1279: transfer item, set written start, destroy item named and toggle item inventory display are applied by the same hosts (limits in ledger WO17): a script that moves or destroys an item with scripts, or moves an item between two holders neither of which is the hero, is still refused. Recheck in the game: a quest item destroyed or handed over by a script leaves the hero's inventory list or arrives in it; a written start a script sets shows in the reading window; the toggled display bit is saved but not yet drawn (the inventory painters do not read it).
 - The world map's refusal when the hero's own sector is blocked, and the dimmed picture of a blocked sector, are not built.
 - A script in a dialog (a talk) that uses one of these commands is still refused.
 
@@ -1005,3 +1004,49 @@ The rules are in [Identify](../world/spell-cast-host.md#identify-arc-magic-032),
 | 3 | Cast Read Aura on a creature (see ARC-MAGIC-032, step 1). | The read-only sheet of the creature opens. | open |
 
 Known differences, so they are not reported as bugs: the hero's own Read Aura keeps the message line; See Contents and Divine Magick still show a line only (their windows are not built); the pick animation of the hero is not played (as for a door).
+
+## ARC-MAGIC-1361 — Harm damage and the difficulty share (2026-11-12)
+
+The numbers are in [DH11](../research/ledger/spell-runs.md). The owner's report (Harm "twice as strong") is answered by the data: no formula differs. Compare in both games with the same hero and the same difficulty setting.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | In the options set the difficulty to Normal (not Easy). Cast Harm (spell 55) once at a wolf, with a hero of 8 magick points (a night mage at night, or 8 points of magick). | 17 hit points per cast (3 + 37 × 40 / 100). On Easy 25, on Hard 13: the original adds half of a PC attacker's damage on Easy and takes a quarter on Hard, for spells and weapons alike. | open |
+| 2 | Press once on the wolf with the Harm cursor, with your own mouse, and watch the casts in the log (Ctrl+B). | One cast per press, as in the original (the cursor stays open for the next press). Two or three casts within a few milliseconds from one press mean the mouse sends duplicate presses. | open |
+
+## ARC-SCRIPT-1359 — the Crash Site Molochean agent after the altar talk (2026-11-12)
+
+The agent's heartbeat (script 1717) is admitted whole since this task ([GL1–GL2](../research/ledger/scripts.md)). Start a new game at the Crash Site; the checks need the story flag set by the altar talk.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Talk to Virgil at the altar (the tile script runs his dialog), then watch the Molochean agent near the altar and read the log (Ctrl+B). | No `heartbeat-refused ... script 1717` line any more. The agent sets its day and night standpoints to its tile and runs to it (goal 74), as the original's heartbeat does. | open |
+| 2 | Let the agent reach its tile. | The follow-up of the scene (talk or attack) starts as in the original. If it does not, report what the agent does (the scene may belong to another script; a new issue is then filed). | open |
+
+## ARC-INPUT-1400 — One mouse press arriving as several press events (issue #1400, 2026-11-12)
+
+The viewer now writes one `ARC-INPUT-1400 press` line per mouse button press the world sees (not in an automated run). The cause is not known yet: the viewer handles each event once, so the duplicates are several events from the system or one event handled twice; this log tells which. It changes no press (the original has no guard, and a guard is added only once this log shows that the duplicates are the platform's and that a guard cannot swallow a real double click).
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | In the viewer open the Harm cursor and press once on a creature, with the mouse that showed the duplicates. Press the report key (Ctrl+B) and send the report. | The log has one `press stage=Input` line per physical press (and one `stage=Unhandled` line when no window or menu takes the press, as on a creature in the open world), each with its own `id=`, `frame=` and `device=`. A `BURST=2` or `BURST=3` mark on a line means that press came less than 50 ms after the previous one of the same button and stage. | open |
+| 2 | Repeat with a second mouse (and, if it is the trackpad that duplicates, the trackpad too). | The lines tell the devices apart (`device=`; only mouse button presses are logged, so a touch tap shows as its emulated mouse press). If only one device bursts, the cause is that device or its macOS setting (tap to click, a bouncing switch). | open |
+| 3 | Press the left button twice quickly on purpose (a real double click). | Two lines about 100 ms or more apart, so a guard of a few milliseconds would not swallow it. | open |
+
+How to read it: two lines of `stage=Input` with different `id=` (hex) and the same position are two events from the system; the same `id=` twice is one event delivered twice (the viewer or the engine); `stage=Input` once and `stage=Unhandled` twice means the handler runs twice for one event.
+
+## ARC-MAGIC-1399 — queued casts when the target dies (2026-11-12)
+
+Answered by the executable ([QC7](../research/ledger/spell-runs.md)): no deviation, nothing changed in the rules. The original charges each queued cast's cost when the target dies; the report's four payments are consistent with a killing cast plus three queued casts, not verified against the report itself (see also the duplicate presses of [ARC-MAGIC-1361](#arc-magic-1361--harm-damage-and-the-difficulty-share-2026-11-12)).
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast Harm at a wolf several times in a row quickly so that casts queue, and let the first kill it. Read the fatigue bar and the log (Ctrl+B). | The hero (without the mastered college of Harm and without charged worn items) pays 5 fatigue for the killing cast and 5 for each cast still queued on the wolf; the queued casts are then gone. Steamwoven: the same. | open |
+
+## ARC-RENDER-1355 — window move with the pointer on an NPC (PR #1446, 2026-11-12)
+
+A repair of the game's own view, not original behaviour. Compare in the current build from `main`, new game on the main map.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Land at Misty Hills by the world map, rest the mouse pointer on the gypsy trader and walk west along the road (cells about 90172 to 90158 on y = 84179) across the window boundary. | The view goes on with the interface; no bare terrain-only screen, no `stream publication failed` line in `godot.log`. | open |

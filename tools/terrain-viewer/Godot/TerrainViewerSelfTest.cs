@@ -20,6 +20,16 @@ public static partial class TerrainViewerSelfTest
                 || DiagnosticInputSettingsStore.StoragePath.StartsWith("user://", StringComparison.Ordinal))
                 throw new InvalidOperationException("SELF_TEST_SETTINGS_NOT_ISOLATED");
             GD.Print("ARC-DEV-032 self-test PASS settings isolated (the zoom and input stores use no user:// file)");
+            // ARC-RENDER-1355: a failed window publication logs the exception's type, message and first stack frames, not only its type name.
+            try { new Dictionary<string, int>()["missing-key"] = new Dictionary<string, int>()["missing-key"]; }
+            catch (KeyNotFoundException lookup)
+            {
+                var detail = TerrainViewerApp.FailureDetail(lookup, 3);
+                if (!detail.StartsWith("KeyNotFoundException | KeyNotFoundException: ", StringComparison.Ordinal) || !detail.Contains("missing-key", StringComparison.Ordinal)
+                    || !detail.Contains(" | at ", StringComparison.Ordinal) || detail.Split(" <- ").Length > 3)
+                    throw new InvalidOperationException("STREAM_FAILURE_DETAIL " + detail);
+                GD.Print("ARC-RENDER-1355 self-test PASS failure detail names the exception and its stack");
+            }
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_GRID_PROBE") == "1")
             {
                 if (DisplayServer.GetName() == "headless") throw new InvalidOperationException("AREA_GRID_NATIVE_REQUIRED");
@@ -137,6 +147,8 @@ public static partial class TerrainViewerSelfTest
             await AssertAreaCompositionMatrixAsync(host);
             Stage("AreaLighting");
             await AssertAreaLightingAsync(host);
+            Stage("AreaRingSwap");
+            await AssertAreaRingSwapAsync(host);
             Stage("AreaLocalLighting");
             await AssertAreaLocalLightingAsync(host);
             Stage("HdPresentation");
