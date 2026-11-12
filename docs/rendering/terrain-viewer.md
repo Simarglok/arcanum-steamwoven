@@ -841,7 +841,7 @@ wilderness, prints `ARC-UI-057 native-smoke hover-window NONE` instead of failin
 (an animated scenery shows the frame its animation shows now, not its index command's; still bodies are tried first) drawn additive, none of its picked pixels
 gets darker and some get brighter, the window shows the expected kind, image and name without the tooltip, and since ARC-UI-107 the
 fourth line the session's facts give (a container's lock line and the `current/maximum` hit points, none for an invulnerable
-scenery; the line `ARC-UI-107 native-smoke hover-window fourth-line` prints each), leaving takes both away; since ARC-UI-1117 the same stage hovers an NPC (the AI on for that pass) and checks the rings: arts by combat mode, the colour of its reaction category, additive pixels in the ring's rectangle, a frame step, removal on leaving; `ARC-UI-1117 native-smoke hover-ring` prints it;
+scenery; the line `ARC-UI-107 native-smoke hover-window fourth-line` prints each), leaving takes both away; since ARC-UI-1281 it also joins a free companion of the map and observes his portrait's hover (`ARC-UI-1281 native-smoke hover-portrait`, [follower portraits' hover](../world/companion-orders-runtime.md#follower-portraits-hover-arc-ui-1281)); since ARC-UI-1117 the same stage hovers an NPC (the AI on for that pass) and checks the rings: arts by combat mode, the colour of its reaction category, additive pixels in the ring's rectangle, a frame step, removal on leaving; `ARC-UI-1117 native-smoke hover-ring` prints it;
 `ARC_AREA_HOVER_WINDOW_CAPTURE` saves readbacks) and the stage `life` (`ARC-UI-057 native-smoke hover-window critter PASS`: a
 follower's and another NPC's window with their name, image or portrait and bars; since ARC-UI-124 `ARC-UI-124 native-smoke hover combat-panel PASS`: in combat mode the other NPC's window shows the bullseye and the chance, out of it the image; `./arcanum smoke pr --stages life --map "bates mansion lev 2" --hero human-male`). Not verified: the exact pixel of the
 original's 16-bit additive blit (its pixel loop is not read), a portal's window on screen (the start map has none).
@@ -1876,6 +1876,14 @@ hero's excludes its innate race, background, class and gender causes, which the 
 experience stored in the map file against the session's level (a follower the session levelled after the file was written shows an inflated figure); the
 spell hover texts read the hero's spell book; without the player's game folder the plain fallback panel draws its + and − inert; a stored primary stat above the
 racial range shows clamped.
+
+**Identify sheet, heal another critter and lockpicks on containers (ARC-UI-1127, slice E8-g of [the plan](../project/missing-systems-plan.md)).** (1) The cast host's `IdentifyCritter` event for an NPC
+(Read Aura, spell 7, ledger XR2) opens the same read-only NPC sheet as the dialog's c-e reply (`TakeIdentifyEvent` and `TakeIdentifySheet` in `Godot/TerrainViewerAreaNpcSheet.cs`; the NPC's map row comes from the
+cast host's id; the sheet waits until no modal window owns input, and a hero as the target keeps its message line). (2) A healing kit with the target flag aimed with the item cursor at another critter walks
+next to it (goal 39, range 1) and the session's heal runs on it (`HealCritter`, [Heal](../world/heal-runtime.md#viewer)). (3) Armed lockpicks on a standing container start the skill goal 33 with the loot
+target string, and the pick is the session's on the container's lock (`TerrainViewerAreaContainerPick.cs`, [Pick locks](../world/pick-locks-runtime.md#containers-in-the-viewer-arc-ui-1127)). Smoke: stage `item-aim`
+(steps 6 to 8, run on the town sector). NOT READY: the container window of See Contents and the item description window (their interaction is not read), the question window for a junk pile's and a container's
+stacks, poison sources.
 
 **Not yet in the original's look:** the auto-level schemes tab (a NOT READY note); the age line (the session has no age); the race icons as portrait fallback; a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) keeps the diagnostic
 look. Without a game folder (the synthetic self-tests) or when an art does not read, the whole sheet is the diagnostic panel above.

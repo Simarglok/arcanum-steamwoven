@@ -184,7 +184,7 @@ Known differences (documented, not bugs):
 | # | Step | Expected (from the original executable) | Status |
 | --- | --- | --- | --- |
 | 1 | Make a creature back off or flee from a target (a scared or surrendering NPC, a follower ordered to back off) in open ground. | It walks away along a tile found by the away-path search (0x41F6C0). Ours finds no away tile, so the back-off ends at once. | open |
-| 2 | Talk to a teacher, then to a healer, a rumor monger and a newspaper vendor (a reply that opens a skill list, a cure, a rumor or a paper). | The replies marked for trainers, healers, rumors, town directions and newspapers show their generated lines and offers; training by an apprentice costs 100 gold (0x418CA0..0x41A8C0). Ours now builds the trainer's `t:` reply (ARC-SCRIPT-1150: the skill menu, the price on the reaction scale, the payment and the training); the healer, rumor and newspaper replies are still refused as unsupported. | open |
+| 2 | Talk to a teacher, then to a healer, a rumor monger and a newspaper vendor (a reply that opens a skill list, a cure, a rumor or a paper). | The replies marked for trainers, healers, rumors, town directions and newspapers show their generated lines and offers; training by an apprentice costs 100 gold (0x418CA0..0x41A8C0). Ours now builds the trainer's `t:` reply (ARC-SCRIPT-1150: the skill menu, the price on the reaction scale, the payment and the training); the rumor monger's `r:` reply too (ARC-SCRIPT-1304: one rumor of its list, for gold when it names a price, told in the NPC's words and written to the logbook); the healer and newspaper replies are still refused as unsupported. | open |
 | 3 | Start a talk with an NPC that is hostile on sight, then with one that cannot speak to you (too evil, too good, party full). | A hostile NPC answers with its race line and the talk ends; an NPC that cannot speak refuses with the line of its reason range (0x412FD0, 0x413A90). Ours opens the talk first. | open |
 | 4 | Ask a talkative NPC for money (a dialog money request), once with enough gold and once without. | The request, payment and no-money steps run from the reply (0x418A40, 0x418B30, 0x418C40). Ours has no such reply state. | open |
 | 5 | Save while combat music plays (any fight), reload that save and leave the fight. | In the Original setting the pre-combat music and ambient schemes are lost by the save (original bug SN18, 0x41B1D0); Steamwoven keeps them, so compare which music returns. | open |
@@ -330,12 +330,12 @@ refused in ours (the removal script does not run there yet); a book picked up fr
 ## ARC-MAGIC-032 — Identify: See Contents, Read Aura, Divine Magick (MA-7, 2026-11-11)
 
 The component rules are in [Identify](../world/spell-cast-host.md#identify-arc-magic-032) (executable reads XR1–XR5 in the [ledger](../research/ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)).
-By owner decision D5(a) the viewer shows the answer as a line in the message log; the three windows of the original are the identify-window slice E8's, so the **window itself is a known difference**, not a bug.
+By owner decision D5(a) the viewer shows the answer as a line in the message log; since ARC-UI-1127 (E8-g) the creature's sheet window of Read Aura is built too ([below](#arc-ui-1127--identify-sheet-heal-another-critter-and-lockpicks-on-containers-slice-e8-g-2026-11-12)); the container's inventory window of See Contents and the item description window are the rest of slice E8-g, so **those windows are a known difference**, not a bug.
 Compare in both games with the same hero (Divination college: See Contents 6, Read Aura 7, Divine Magick 9).
 
 | # | Step | Expected (from the original executable and data) | Status |
 | --- | --- | --- | --- |
-| 1 | Cast Read Aura (spell 7) at a creature. | The original opens the character sheet of the creature, read only (no + or − buttons, all four tabs), the same window as the dialog's "show your abilities" reply. Steamwoven: a line "identify: ..." in the message log and no window. | open |
+| 1 | Cast Read Aura (spell 7) at a creature. | The original opens the character sheet of the creature, read only (no + or − buttons, all four tabs), the same window as the dialog's "show your abilities" reply. Steamwoven since ARC-UI-1127: the same read-only sheet for an NPC (a line "identify: ... (its character sheet)" in the message log too); a creature that is the hero keeps the line only. | open |
 | 2 | Cast See Contents (spell 6) at a **locked** container. | The original opens the container's inventory at once, with no lock, jam or magically-held test, so the items of a locked chest show. Steamwoven: the line only. | open |
 | 3 | In step 2, take or move an item in that window. | Not read in the executable (what a press may move in inventory mode 4): note what the original allows (take, put, nothing). | open |
 | 4 | Cast Divine Magick (spell 9) on an unidentified magickal item in the pack (a wand or a ring with a "?" description). | The item's name and description become the true ones, its spell slots and charge gauge show, and its worth in a trader's window is its real worth. Steamwoven builds this state (the item's identification mark), but cannot cast the spell yet: nothing picks an inventory item as a target. | open |
@@ -991,3 +991,15 @@ is a bed tile (Roseborough inn2, Wheel clan, Bates mansion and others); a night 
 
 Known differences, so they are not reported as bugs: the hero gets no sleeping flag and is not hidden in the bed (the sleep window fades the screen over him); an attack aimed at the bed does not wake its occupant; a wanderer
 that lies down does not start its wander in the same step.
+
+## ARC-UI-1127 — Identify sheet, heal another critter and lockpicks on containers (slice E8-g, 2026-11-12)
+
+The rules are in [Identify](../world/spell-cast-host.md#identify-arc-magic-032), [Heal](../world/heal-runtime.md#viewer) and [Pick locks](../world/pick-locks-runtime.md#containers-in-the-viewer-arc-ui-1127). Open question the checker may settle: the original starts the heal skill goal 33 for a healing kit used on another critter (the hero walks within range 1, then heals); Steamwoven starts the item use goal 39 (the same walk, range 1), so the picture of the walk and the 4 action points should match, only the goal's number differs.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Hurt a creature (an NPC or a follower), hold the heal kit (prototype 15199) and release it on the Use icon, then press the creature. | The cursor opens; the hero walks next to the creature and the heal runs (the check of the heal skill: an amount, or a failure that may cost five uses). Steamwoven: the same, the HUD names the amount and the uses left. | open |
+| 2 | Arm lockpicks (use icon, no Shift) and press a locked chest. | The hero walks next to the chest and picks its lock (4 action points in a turn-based round); a success unlocks it, a critical failure jams it. Steamwoven: the same; the picked chest opens by the next press. | open |
+| 3 | Cast Read Aura on a creature (see ARC-MAGIC-032, step 1). | The read-only sheet of the creature opens. | open |
+
+Known differences, so they are not reported as bugs: the hero's own Read Aura keeps the message line; See Contents and Divine Magick still show a line only (their windows are not built); the pick animation of the hero is not played (as for a door).

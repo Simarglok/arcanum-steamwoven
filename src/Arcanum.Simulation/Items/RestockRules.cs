@@ -84,6 +84,9 @@ public static class RestockRules
     public const long MinDelayMs = 43_200_000;
     /// <summary>The longest restock delay: 24 game hours.</summary>
     public const long MaxDelayMs = 86_400_000;
+    /// <summary>The longest restock delay the original's 15-bit draw can give: 12 game hours plus 32,767 ms (<see cref="MinDelayMs"/> plus
+    /// <see cref="Randomness.OriginalRandom.MaxDraw"/>; ledger RK2, VP68, VPG5).</summary>
+    public const long NarrowMaxDelayMs = MinDelayMs + Randomness.OriginalRandom.MaxDraw;
     /// <summary>The item flag (field 0x57) that keeps an item through a regeneration.</summary>
     public const uint PersistentItemFlag = 0x2000;
     /// <summary>The container flag (field 0x38) of a container that regenerates without its merchant and whether it is on screen.</summary>
@@ -102,7 +105,9 @@ public static class RestockRules
 
     /// <summary>
     /// The delay of a new restock event (0x4640C0): the draw in <see cref="MinDelayMs"/>..<see cref="MaxDelayMs"/> game milliseconds, a
-    /// quarter of it (shifted right twice) in a multiplayer game. Only an object with an inventory source gets an event; the new one
+    /// quarter of it (shifted right twice) in a multiplayer game. The original's 15-bit range draw (RK11) only reaches
+    /// <see cref="MinDelayMs"/>..<see cref="NarrowMaxDelayMs"/> (<see cref="ItemRuleProfile.RestockDelayIsNarrow"/>, VPG5); the caller
+    /// chooses the range of its draw by the setting. Only an object with an inventory source gets an event; the new one
     /// replaces the object's pending one (0x45BF10 with the predicate 0x464150), and an object without a source keeps its pending event.
     /// </summary>
     [OriginalFunction(0x4640C0, OriginalFunctionScope.Partial)]
