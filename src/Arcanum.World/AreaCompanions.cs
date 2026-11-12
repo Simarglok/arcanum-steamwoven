@@ -273,6 +273,9 @@ public sealed class AreaCompanionGroup
             var source = new AreaRouteSource(steps, chart, Planning, crittersPass: Passes, dead: key => group!.Dead?.Invoke(key) == true);
             var companion = new AreaCompanion(template, grid, new CompanionFollower(source, segmentEndCritterCheck: () => group!._segmentEndCritter));
             grid.Gait = () => companion.LastUpdate.Action == FollowAction.Run ? MovementGait.Run : MovementGait.Walk;
+            // ARC-MAGIC-1189 (ledger TT10, SP2): the walk check before each of its steps (0x427110): a trap the companion spots on the next tile refuses the step.
+            var entityId = companion.Entity;
+            grid.StepCharge = (key, _) => group!.StepTrap?.Invoke(entityId, WorldCell(chart, key.To)) == true ? TrapSpottedReason : null;
             list.Add(companion);
         }
         group = new(steps, chart, map, list.ToArray(), absent, away.AsReadOnly()) { Skipped = skipped.AsReadOnly() };
@@ -283,6 +286,19 @@ public sealed class AreaCompanionGroup
     /// <summary>ARC-WORLD-065: the T0 records of the objects the session destroyed or switched off (read at every overlay; the same
     /// set while nothing changed); every overlay moves them. Null is none.</summary>
     public Func<IReadOnlySet<AreaObjectKey>>? Removed { get; set; }
+
+    /// <summary>ARC-MAGIC-1189: the reason a companion's step gives when it spots a trap on its next tile (<see cref="StepTrap"/>).</summary>
+    public const string TrapSpottedReason = "TRAP_SPOTTED";
+
+    /// <summary>ARC-MAGIC-1189 (ledger TT10, SP2): the walk check of a companion's step: the companion's session entity and the world cell of its next tile in, whether it spots an unknown
+    /// trap there out (the step is then refused; the companion marks it, so the player knows it). Null: no check, as before.</summary>
+    public Func<string, CellCoord, bool>? StepTrap { get; set; }
+
+    private static CellCoord WorldCell(AreaChart chart, CellCoord chartCell)
+    {
+        var cell = chart.ToWorld(chartCell);
+        return new(checked((int)cell.X), checked((int)cell.Y));
+    }
 
     /// <summary>ARC-WORLD-075: whether a T0 critter record is dead in the session, for the critter checks of a companion's walk that
     /// passes critters (a living critter on its goal, DC2, or before a segment's last step, LR5). Null is none dead.</summary>
