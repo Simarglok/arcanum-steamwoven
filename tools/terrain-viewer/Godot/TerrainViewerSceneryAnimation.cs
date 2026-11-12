@@ -10,7 +10,7 @@ namespace Arcanum.TerrainViewer;
 // ARC-DEV-142 (MIG13 S9a, docs/architecture/goal-table.md §3.5): the loop is the scenery's own goal run (goal 1, or 77 for a burning scenery, the S9 read GT75-GT78) that the frame step hands to the scenery host
 // through the router, on the animation clock (so the loops stop with the Esc pause); this file binds the host to the shown map and redraws a scenery whose frame the host moved.
 // ARC-DEV-144 (S9c): goal 77 burns the critters on the scenery's tile (TerrainViewerFire.cs).
-// Not ready: the loop's ambient sound, restarting a loop when an object's ART or OFF flag changes at runtime (AreaSceneryHost.Restart is the rule; no site calls it) and the items on a burning tile (busted scenery keeps its ground body,
+// ARC-RENDER-1126: the begin node's looping sound (TerrainViewerSoundCallers.cs). Not ready: the ambient sound of a one-frame ART and of a created scenery, restarting a loop when an object's ART or OFF flag changes at runtime (AreaSceneryHost.Restart is the rule; no site calls it) and the items on a burning tile (busted scenery keeps its ground body,
 // unanimated). A table-exhaustion sweep ends the loops for good, as in the original (GT98).
 public partial class TerrainViewerApp
 {
@@ -36,6 +36,7 @@ public partial class TerrainViewerApp
         {
             // The runs of the loops of the map or window shown before end (a map's close ended them already); the new window's start.
             _sceneryHost?.LoseAll();
+            StopSceneryVoices();
             _sceneryStamp = area.Plan;
             _sceneryAnimation = AreaSceneryAnimation.Create(area.Plan, area.Snapshot.Objects);
             _sceneryHost = new(session, _sceneryAnimation, HeroWorldCell, FireBurnerFor(session));
@@ -51,13 +52,15 @@ public partial class TerrainViewerApp
         // ARC-DEV-352: the created sceneries (a wall of fire's pieces) get or lose their loops.
         SyncCreatedSceneryLoops(session, _sceneryHost);
         changed |= _sceneryHost.TakeChanged();
+        // ARC-RENDER-1126: the loops whose begin node ran decide their looping sound (0x42DA50).
+        TickSceneryLoopSounds(_sceneryHost);
         if (changed && _sceneryAnimation is { } animation) SyncSceneryBodies(animation);
         // A created scenery is a ground body drawn at its loop's frame: the ground is drawn again only when a created loop came, went or moved a frame.
         if (_sceneryHost.TakeCreatedChanged()) { _groundStamp = null; SyncAreaInventory(); }
     }
 
     /// <summary>Drops the loops, their runs and their bodies (the shown map is cleared).</summary>
-    private void StopSceneryAnimation() { _sceneryHost?.LoseAll(); _sceneryHost = null; _sceneryAnimation = null; _sceneryStamp = null; _sceneryBodies = []; }
+    private void StopSceneryAnimation() { _sceneryHost?.LoseAll(); StopSceneryVoices(); _sceneryHost = null; _sceneryAnimation = null; _sceneryStamp = null; _sceneryBodies = []; }
 
     private void SyncSceneryBodies(AreaSceneryAnimation animation)
     {

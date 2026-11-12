@@ -42,6 +42,13 @@ public partial class TerrainViewerApp
     /// </summary>
     private void RunObjectBreakSteps(AreaObjectRecord row, SessionObjectHostSteps steps, bool byHero, bool ranged)
     {
+        RunObjectBreakScripts(row, steps, byHero, ranged);
+        // ARC-RENDER-1126 (OD15): the busting or destroying sound plays after the dispatch.
+        PlayObjectBreakSounds(row, steps);
+    }
+
+    private void RunObjectBreakScripts(AreaObjectRecord row, SessionObjectHostSteps steps, bool byHero, bool ranged)
+    {
         if ((steps & (SessionObjectHostSteps.TrapFires | SessionObjectHostSteps.BustScript)) == 0) return;
         if (_areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return;
         // While a trap or a script runs, the damage it deals only queues its hits (LogObjectHits stands off): the outer loop takes them, so the
