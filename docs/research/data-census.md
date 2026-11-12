@@ -92,7 +92,7 @@ is itself a mounted source, so files under it also appear under their
 | Townmap tiles `townmap/**.bmp`, `.tmi` | 57,522 / 114 | 180 MB | none | not needed for the world |
 | World map `worldmap/*.bmp` | 65 | 4.2 MB | none | world-map stage only |
 | Sound `.mp3` / `.wav` | 2,704 / 706 | 325 MB | audio lab (ARC-DATA-010) | out of scope here |
-| Movies `.bik`, slides, portraits | 18 / 42 / 126 | 351 MB | none | out of scope here |
+| Movies `.bik`, slides, portraits | 18 / 42 / 126 | 351 MB | none | out of scope here; the movies are read in [Bink movies](bink-movies.md) (the installation holds ten, 167 MB) |
 
 ## Maps and sectors
 
