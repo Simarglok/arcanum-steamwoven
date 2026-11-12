@@ -63,12 +63,19 @@ exit object, [`AreaMapTransfers.Beds`](../../src/Arcanum.World/AreaMapTransfers.
    (`Unseat`, 0x45F3A0) and empties the bed.
 
 **What the installed data holds** ([`BedCensusRealDataTests`](../../tests/Arcanum.World.Tests/BedCensusRealDataTests.cs), opt-in `DAT_ROOT`, numbers only;
-2026-11-12, the 80 maps of the catalogue that a snapshot holds; the main map is not read): **191 placed beds**, all of one prototype (basic number 4045, eight art numbers for the styles). **19 carry a script on point 1 and 172 carry none**, so in
+2026-11-12, the 80 maps of the catalogue that a snapshot holds, then the main map, below): **191 placed beds**, all of one prototype (basic number 4045, eight art numbers for the styles). **19 carry a script on point 1 and 172 carry none**, so in
 the original 172 of them refuse the hero (message 8). The scripted ones are in four maps: Bates mansion level 1 (5 beds) and level 2 (6), script 3023 (a
 conditional script of three lines that ends *skip default* on one branch and *run default* on the other); Roseborough inn2 (4 of its 15) and Wheel clan (3 of
 its 29), script 1990 (32 lines with both ends, so the answer depends on state); the Crash Site cave (1 bed), script 1893 (a single line that ends *skip default*:
 the hero may lie down). The bed prototype itself holds no use script; the scripts are set on the placed beds. The main world map (621 sector files, more than a
-snapshot holds) is **not** read by the census; the 80 maps are every other map of the catalogue. The smoke stage `bed` pins the cave's bed.
+snapshot holds) is counted apart, by a sector-by-sector reader (ARC-WORLD-1262, next paragraph); the 80 maps are every other map of the catalogue. The smoke stage `bed` pins the cave's bed.
+
+**The main world map** (`arcanum1-024-fixed`, 621 sector files; ARC-WORLD-1262, [#1262](https://github.com/Simarglok/arcanum-steamwoven/issues/1262), the second test of `BedCensusRealDataTests`, numbers only): the test reads each sector file once
+(`WorldCatalog.ReadSector`, no window, no plan, no queued per-sector load, so the 621 files cost about 6 s) and keeps only the bed rows (scenery with a bed art id, the instance's art over its prototype's) and, from the
+map's mobile aggregate, the NPC rows' standpoints. The same reader is run over the 80 maps first and must give the numbers above (191, 19, and the NPC rows below), so the two readers agree. The main map holds **275 placed beds**, all static (none in
+the mobile aggregate), of **two** prototypes (basic numbers 4038 and 4045; the 80 maps hold only 4045), in 72 sectors. **32 carry a script on point 1 and 243 carry none**, so in the original 243 of them refuse the hero (message 8), 88 % (90 % in the 80 maps: 172 of 191). The scripted ones use four scripts: 1893 (8 beds, the single line that ends *skip default*, as in the Crash Site cave), 1990 (21; 32 lines, both ends, shared with Roseborough inn2 and Wheel clan), 2429 (2; 30 lines) and 2452
+(1; 29 lines), the last two each with one *skip default* end and two *run default* ends. The 3,999,379 sectors of the map that have no file are generated from 208 terrain templates; none of the templates holds a bed, so the generated sectors add
+none. Over the 80 maps and the main map together: **466 placed beds, 51 scripted, 415 with none**.
 
 ## The bed's picture (ARC-WORLD-1162 slice 3, ledger SWB15)
 
@@ -97,7 +104,8 @@ radius (1 tile, 4 for a wanderer) of the current standpoint **at** it; the AI ho
   the original cannot reach that state, its occupant field being saved.
 
 **What the installed data holds** ([`BedCensusRealDataTests`](../../tests/Arcanum.World.Tests/BedCensusRealDataTests.cs), numbers only): of the **2236** NPC rows of the 80 read maps with a readable route, **41** have their
-night standpoint on a placed bed's tile, **21** their day standpoint and **51** either, so the step seats them.
+night standpoint on a placed bed's tile, **21** their day standpoint and **51** either, so the step seats them. On the main map (ARC-WORLD-1262; the NPC rows of its mobile aggregate, the beds above) **1556** NPC rows have a readable route; **145** have their night
+standpoint on a placed bed's tile, **23** their day standpoint and **150** either, so the step seats them.
 
 ## Budget check of the AI heartbeat (ARC-WORLD-1162 slice 4, 2026-11-12)
 
