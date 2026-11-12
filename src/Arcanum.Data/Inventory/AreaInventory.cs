@@ -68,7 +68,7 @@ public sealed record AreaInventoryItem(AreaObjectKey Key, AreaItemType Type, int
     /// <summary>ARC-WORLD-085: the magic weight adjustment (field 0x5A), which the holder's power scales into the item's weight.</summary>
     public int MagicWeight { get; init; }
 
-    /// <summary>ARC-WORLD-1299: the object's spell flags (field 0x13, slot 19): bit 0x4000 marks a summoned item, which a dead body's inventory walk destroys (0x463860). A field that does not read as a number reads as no flag.</summary>
+    /// <summary>ARC-WORLD-1299: the object's spell flags (field 0x14, slot 19): bit 0x4000 marks a summoned item, which a dead body's inventory walk destroys (0x463860). A field that does not read as a number reads as no flag.</summary>
     public uint SpellFlags { get; init; }
 
     public int SourceIndex => Key.SourceIndex;

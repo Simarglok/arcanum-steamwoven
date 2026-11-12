@@ -223,7 +223,7 @@ public sealed class BodyDecayStateTests
     {
         var plain = InventoryStateTests.Facts(SessionItemType.Generic, 5600);
         using var owner = HeroWithNpc(new SessionSeedItem("ghost", plain with { Summoned = true }, new CellCoord(101, 200)),
-            new SessionSeedItem("hidden", plain with { NoDisplay = true }, new CellCoord(101, 200)), new SessionSeedItem("kept", plain with { NoDrop = true }, new CellCoord(101, 200)));
+            new SessionSeedItem("hidden", plain with { NoDisplay = true }, new CellCoord(101, 200)), new SessionSeedItem("kept", plain, new CellCoord(101, 200)));
         foreach (var entity in new[] { "ghost", "hidden", "kept" })
         {
             Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, entity, _ => SessionInsertVerdict.Accepted).Disposition, entity);
@@ -268,6 +268,23 @@ public sealed class BodyDecayStateTests
         RestoresTheSame(owner);
         var back = owner.PickUpItem(owner.Version, "arrows", _ => SessionInsertVerdict.Accepted);
         Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (back.Disposition, back.Failure));
+    }
+
+    // The budgets come first: a body whose made items do not fit the created items' bound waits a minute and nothing is placed, destroyed or written.
+    [TestMethod]
+    public void ABodyWhoseItemsExceedTheCreatedItemsBoundWaitsAMinuteWithNothingChanged()
+    {
+        using var owner = Create(new GameSessionLimits(maxCreatedItems: 1));
+        var critter = Critter(owner);
+        MadeFor(owner, critter);
+        MadeFor(owner, critter);
+        owner.Kill(owner.Version, Target(critter));
+        Advance(owner, BloodPoolRules.CritterDecayDelayMs);
+        var fired = owner.ProcessEvents(new World(Body)).BodyDecays.Single();
+        Assert.AreEqual(SessionBodyDecayOutcome.Postponed, fired.Outcome);
+        Assert.AreEqual(0, owner.QueryPlacedItems().Count);
+        Assert.IsNotNull(owner.QueryCreatedObject(critter), "the body stays");
+        Assert.AreEqual(1, owner.QueryBodyDecays().Count, "the event is scheduled again");
     }
 
     // A session with no hero has no ground record for a given item or a coin pile: they go with the body (the documented limit); a made item still lies down.
