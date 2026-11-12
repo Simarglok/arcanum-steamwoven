@@ -226,7 +226,7 @@ public partial class TerrainViewerApp
             if (_mainMenu is not null) EndMainMenu("smoke end");
             if (_audioVolumes != before._audioVolumes) PaletteVolumeChanged(Arcanum.Presentation.Audio.AudioChannel.Music, before._audioVolumes.Music);
             (_gameSettings, _turnBasedSetting, _alwaysRunOption, _ruleMode) = (before._gameSettings, before._turnBasedSetting, before._alwaysRunOption, before._ruleMode);
-            ConfigureControllers(); _controllerClockForSelfTest = null; _padIdentityForSelfTest = null;
+            ResetControllersForSelfTest();
             if (_areaSession is { } current) ApplySessionSettings(current);
             _saveLibraryForSelfTest = null; _quickKeys.Reset();
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;

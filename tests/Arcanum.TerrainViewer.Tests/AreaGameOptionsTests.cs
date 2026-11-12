@@ -195,6 +195,15 @@ public sealed class AreaGameOptionsTests
     }
 
     [TestMethod]
+    public void No_page_shows_more_controls_than_the_art_has_slots()
+    {
+        // AreaMenuArtLayout.OptionsSlot throws for a ninth: the Game page is full with the three controller scheme lines (ARC-GPAD-1374).
+        var capacity = AreaMenuArtLayout.OptionsSlotColumns.Count * AreaMenuArtLayout.OptionsSlotRows.Count;
+        foreach (var page in Enum.GetValues<AreaOptionsPage>())
+            Assert.IsTrue(AreaOptionTable.Page(page).Count(control => control.Shown) <= capacity, page + " has more shown controls than slots");
+    }
+
+    [TestMethod]
     public void The_controller_scheme_lines_are_project_lists_after_the_rule_mode()
     {
         var menu = Options(AreaMenuWindow.InPlay);

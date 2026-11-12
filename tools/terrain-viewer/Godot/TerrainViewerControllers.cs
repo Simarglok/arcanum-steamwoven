@@ -44,6 +44,14 @@ public partial class TerrainViewerApp
     /// <summary>Applies the settings the host holds (a start, a read of the settings file, a run-time switch).</summary>
     private void ConfigureControllers() => Controllers.Apply(_gameSettings.Controls);
 
+    /// <summary>A test's end: the foundation (its tracker holds the test clock's times) is made again from the settings at its next use, and no stale strip stays.</summary>
+    private void ResetControllersForSelfTest()
+    {
+        _controllers = null; _controllerClockForSelfTest = null; _padIdentityForSelfTest = null;
+        _promptShown = string.Empty;
+        if (_promptPanel is not null) _promptPanel.Visible = false;
+    }
+
     private PadIdentity PadIdentityOf(int device)
         => _padIdentityForSelfTest?.Invoke(device) ?? new PadIdentity(global::Godot.Input.GetJoyName(device), global::Godot.Input.GetJoyGuid(device));
 

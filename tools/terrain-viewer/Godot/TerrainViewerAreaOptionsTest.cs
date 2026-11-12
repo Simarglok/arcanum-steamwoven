@@ -186,7 +186,7 @@ public partial class TerrainViewerApp
         {
             if (_mainMenu is not null) EndMainMenu("self-test end");
             (_gameSettings, _turnBasedSetting, _alwaysRunOption, _audioVolumes, _ruleMode) = before;
-            ConfigureControllers(); _controllerClockForSelfTest = null; _padIdentityForSelfTest = null;
+            ResetControllersForSelfTest();
             if (_areaSession is { } current) ApplySessionSettings(current);
             _saveLibraryForSelfTest = null; _quickKeys.Reset(); _heroLoaderForSelfTest = null; _mainMenuExitForSelfTest = null;
             _worldFocusSimulationForSelfTest = simulatedFocus;
