@@ -35,6 +35,16 @@ public sealed class AreaItemAimingTests
     }
 
     [TestMethod]
+    public void LockpicksOpenTheCursorWithTheObjectMaskAndTheFourActionPointsRefuseItAsAnyItemWithNoSpell()
+    {
+        // ARC-INPUT-1123: lockpicks are an item with no spell, so the mask is any object (IA3) and the begin asks the action points (IA4).
+        var mask = AreaItemAiming.Mask(false, false, null);
+        Assert.AreEqual(Object, mask);
+        Assert.AreEqual(AreaItemAimBegin.OpenCursor, AreaItemAiming.Begin(mask, true, false, true));
+        Assert.AreEqual(AreaItemAimBegin.NoActionPoints, AreaItemAiming.Begin(mask, true, false, false));
+    }
+
+    [TestMethod]
     public void ShiftWithTheObjectBitAppliesToThePlayerAtOnceWithNoSelfTestAndOnlyAfterTheActionPointCheck()
     {
         Assert.AreEqual(AreaItemAimBegin.UseOnPlayer, AreaItemAiming.Begin(Object, true, true, true));

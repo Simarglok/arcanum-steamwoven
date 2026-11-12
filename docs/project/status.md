@@ -249,7 +249,7 @@ What is integrated and working in the viewer (details in the [coverage matrix](.
 Not built or only stubbed (each has an epic in the plan):
 
 - Objects made at run time: items, scenery, eye-candy objects and critters by prototype can be created (E1, ARC-DEV-347, -359, -370, -371, -386; script action 52 makes critters; a created pet becomes a companion, ARC-MAGIC-050), and the Summon component makes scenery (Fireflash, Wall of Fire). Not built: the Summon of creatures (17 of the 42 installed Summon components, with AIRedirect, E1-e) and the AI's summoning (E1-f).
-- Monster generators, respawn, critter body decay and random encounters on the world map (E2).
+- Random encounters on the world map (E2-c); the generators and the critter body decay are built (E2-a, E2-b).
 - Sleep and rest windows, the NPC hourly day (beds, walking between day and night standpoints) and the HUD clock (E3).
 - 6 of the 25 spell component types have no handler (AIRedirect, EnvFlag, Interrupt, Recharge, TraitIdx, Trait64; 19 run), item recharge, the viewer draw of hidden, shrunk and translucent critters, the permanent polymorph's ObjFlag part (technology record 222), Tempus Fugit and the raise script hook (E4; [technology audit](../research/technology-audit-res-125.md)).
 - 104 of 142 script actions and 26 of 53 conditions are admitted by the widest admission set (`ScrAdmissionSet.S36`, S35 plus the nine NPC state actions of E5-a, ARC-SCRIPT-1163, eight of them applied by the area hosts; S35 is S34 plus fade 103, ARC-SCRIPT-1241; the survey of the missing systems plan found 81 and 20 under S33, E5-c added 13 and 6 in S34); dialogue markers `c r t z` and positive `IN` (E5).

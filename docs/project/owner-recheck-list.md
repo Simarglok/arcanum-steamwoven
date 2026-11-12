@@ -41,7 +41,7 @@ Resistance and stat changes of effects now reach combat values for the hero and 
 | 1 | Cast Resist Magick (spell 40) on yourself and open the character sheet. Then let a hostile caster cast a resistable spell (one with a save, for example Stun or Charm) at you many times, with and without Resist Magick, and compare how often it lands. | The Magick resistance line on the sheet rises while the spell runs. In the original the failure rate of the enemy's spells does not change (its save reads the stored magic resistance only, ledger RE2; a bug of the game, owner decision D6c). **Steamwoven now differs on purpose** in both modes: the rate does drop under Resist Magick (see ARC-MAGIC-033 below). Steamwoven's sheet does not show effect resistances yet (known difference below). **If the rate does change in the original too, tell the coordinator.** | open |
 | 2 | Cast Shield of Protection (spell 30) on yourself, then take a normal-damage hit from a weapon, a fire hit and an electrical hit, with and without the spell. | Armour class rises by 10 and the damage of each type falls by the resistances of effect 155 (rules data), never below zero damage and never past 95 % protection. | open |
 | 3 | Cast Body of Fire, Body of Air, Body of Stone and Body of Water (spells 23, 13, 18, 28) one after the other on yourself and take a fire or an electrical hit. | Only the resistance and speed numbers are compared here: Body of Fire protects against fire, the others by their effect rules; the body art and the flags are not built. | open |
-| 4 | Cast Weaken (spell 46) on a strong enemy in turn-based mode, and fight it. | Its strength falls by 5 and its resistances drop by effect 154 (compare the damage you deal to it and the damage it deals). Its hit points do not change in Steamwoven (known difference). | open |
+| 4 | Cast Weaken (spell 46) on a strong enemy in turn-based mode, and fight it. | Its strength falls by 5 and its resistances drop by effect 154 (compare the damage you deal to it and the damage it deals). Its maximum hit points fall by 10 (two per point of strength, ARC-WORLD-1144): a unhurt enemy's current hit points fall with the maximum, a wounded one's stay unless they would pass it. | open |
 | 5 | Cast Congeal Time (spell 76) on an enemy and enter turn-based mode. In real time watch its attack pause. | Its action points per round fall (speed −50 %); in real time its attacks come slower; its walking speed does **not** change (the original does not read the speed stat for walking). | open |
 | 6 | Cast Hasten (spell 77) on yourself and on a companion, and enter turn-based mode. | More action points per round (speed +100 %) and quicker attacks in real time; walking speed is unchanged. | open |
 | 7 | Stack protective spells until the sheet's resistance would pass 95 %. | The protection stops at 95 % for the hero and ordinary NPCs. A monster (animal, undead, mechanical) is not capped in the original. | open |
@@ -49,7 +49,7 @@ Resistance and stat changes of effects now reach combat values for the hero and 
 Known differences (documented, not bugs):
 
 - The character sheet's resistance lines (hero and NPC) do not show effect changes; damage does.
-- An NPC's maximum hit points do not follow its effect-changed strength or constitution, and a poison tick meets its resistance without effects.
+- A poison tick meets an NPC's resistance without its effects (an NPC's maximum hit points and fatigue follow its effect-changed strength, willpower and constitution since ARC-WORLD-1144).
 - Spell damage dealt to an NPC ignores that NPC's resistance effects until PR #941 merges (the spell host reads the NPC without its list).
 - The hero's innate race and gender effects carry no resistance changes in the session.
 
@@ -855,6 +855,42 @@ Known differences (documented, not bugs):
 - The original's weighted lists overrun their table on a draw of 100 (MG9); Steamwoven fixes it in both modes (technical bug rule).
 - Familiar (74): its own flags (`OSF_FAMILIAR`, `ONF_FAMILIAR`) and its hiding with the party on the world map are MA-1's and the world map's.
 
+## ARC-WORLD-1158 — Body decay of dead creatures (E2-b, 2026-11-12)
+
+The rules are in the [ledger BD1–BD7](../research/ledger/npc-ai.md#body-decay-built-arc-world-1158) (the executable's PO10). Compare in both games with a creature you kill and then leave lying: wait or sleep one game day (the game bar's wait, key S) near the body.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Kill a creature that carries an item or two (a map NPC, then a creature a generator made) and stay on the map. Pass 23 hours, look at the body; then pass another 2 hours. | The body lies there the first 23 hours and is gone a game day after the death (the Decay Dead Bodies event). | open |
+| 2 | Look at the spot after the body is gone. | The creature's items lie on its tile (in a junk pile when two or more) and disappear two game days later as any dropped item; an item the data marks "not droppable" is gone with the body. | open |
+| 3 | Kill a creature, leave the map for more than a day, come back. | The body is gone on return (the event runs late once its map is the shown one). | open |
+| 4 | Kill a creature of a generator and wait for its body to go. | The generator does not make a replacement because of the decay: only a generator whose live count the death released ticks again (PO7, PO11); the made-so-far count is never given back. | open |
+
+Known differences (documented, not bugs):
+
+- The hero's own death queues no decay event here (the game is over); the original queues one for a PC too.
+- The items of a dead follower that died away from its home map stay with the destroyed critter (a seed other than the body's map is not read).
+- Whether any installed creature carries the "no decay" critter flag (0x40 of critter flags 2) is read from the data when each creature is built: such a body is never removed, as in the original.
+
+## ARC-INPUT-1123 — Lockpicks need 4 action points to start (2026-11-12)
+
+The rule is in [interface modes](../architecture/interface-modes.md#action-points-at-the-start-of-a-target-mode-arc-input-1123). Compare it in both games in a turn-based fight (turn-based on, combat mode, a fight with a creature near) with a hero that carries lockpicks.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | On your own turn spend all action points (walk until they are gone, while it is still your turn), then pick the lockpicks from the inventory. With 1 to 3 points left the original lets a hero with normal fatigue through (only fatigue of 1 or less refuses). | The inventory closes and no lock cursor opens; nothing is said. (Steamwoven shows "pick a lock: not enough action points" on its status line, a known difference.) | open |
+| 2 | On your own turn with 4 or more points left, pick the lockpicks. | The inventory closes and the lock cursor opens. | open |
+| 3 | Outside a turn-based fight, pick the lockpicks. | The lock cursor opens whatever the points. | open |
+
+## ARC-WORLD-1132 — First gold pile (2026-11-12)
+
+The rule is in [First gold pile](../world/inventory-runtime.md). Compare in both games with a hero whose inventory grid is full and who holds no coin.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Fill the whole inventory grid, hold no gold, then receive coins (a dialog reward, selling an item, a successful steal). | The coins do not reach the hero: a pile of coins lies on the hero's tile and the call reports success. | open |
+| 2 | Pick the pile up with the grid still full. | The pickup is refused and the pile stays on the ground; with a free place the coins join the hero's gold. | open |
+
 ## ARC-SCRIPT-1163 — NPC state script actions (E5-a, 2026-11-12)
 
 Script actions that change an NPC's own state now run from use, tile, sector, heartbeat and dying scripts ([ledger NS1–NS8](../research/ledger/scripts.md#npc-state-commands-arc-script-1163-e5-a),
@@ -873,4 +909,3 @@ Known differences (documented, not bugs):
 - Change art number (a door, scenery or creature changing its picture from a script) is not built: scripts that use it are still refused, so those quest steps do nothing in Steamwoven.
 - A script in a dialog (a talk) that uses one of these actions is still refused; only use, tile, sector, heartbeat and dying scripts run them.
 - A reaction or standpoint change acts for NPCs of the map on screen only.
-

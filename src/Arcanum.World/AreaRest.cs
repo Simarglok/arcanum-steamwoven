@@ -15,9 +15,9 @@ public enum AreaRestTownMap { None = 0, WaitAllowed = 1, WaitRefused = 2 }
 /// <summary>
 /// ARC-WORLD-1160: the facts the open decision of the sleep window reads (SWB2–SWB4): whether the hero is dead, whether the window is already open (the key toggles it),
 /// whether the hero is unconscious, the sector's town map, and the combat-mode exit gate (<see cref="HeroInCombatMode"/>; <see cref="MayLeaveCombatMode"/> is the answer of
-/// 0x4B3D90, asked only when the hero is in combat mode). A bed (SWB1, SWB5, SWB15) is not modelled yet: every call is a call with no bed.
+/// 0x4B3D90, asked only when the hero is in combat mode). <see cref="Bed"/> (ARC-WORLD-1162, SWB3): the call carries a bed, which skips the town-map test (a bed is always usable, also in a town) and never waits.
 /// </summary>
-public readonly record struct AreaRestFacts(bool HeroDead, bool WindowOpen, bool HeroUnconscious, AreaRestTownMap TownMap, bool HeroInCombatMode, bool MayLeaveCombatMode);
+public readonly record struct AreaRestFacts(bool HeroDead, bool WindowOpen, bool HeroUnconscious, AreaRestTownMap TownMap, bool HeroInCombatMode, bool MayLeaveCombatMode, bool Bed = false);
 
 /// <summary>What the open decision answered (SWB2–SWB4).</summary>
 public enum AreaRestOpenOutcome
@@ -82,9 +82,9 @@ public static class AreaRestRules
     public static int LabelMessage(int button, bool wait) => wait ? AreaRestMessages.WaitLabels + button : button;
 
     /// <summary>
-    /// The open decision (0x57B180, SWB2–SWB4), for a call with no bed: a dead hero does nothing; an open window is closed; an unconscious hero is refused with its message; the town
-    /// map gives the kind (none: resting; a wait marker: waiting; neither: refused with its message); a hero in combat mode is asked the exit gate and, when it refuses, gets its message,
-    /// otherwise leaves combat mode at once. The open window of a call that is refused is left as it was.
+    /// The open decision (0x57B180, SWB2–SWB4): a dead hero does nothing; an open window is closed; an unconscious hero is refused with its message; the town
+    /// map gives the kind (none: resting; a wait marker: waiting; neither: refused with its message), a call with a bed (<see cref="AreaRestFacts.Bed"/>) skips that test; a hero in combat mode is asked the exit gate
+    /// and, when it refuses, gets its message, otherwise leaves combat mode at once. The open window of a call that is refused is left as it was. A bed's script and seat come after it (<see cref="BedScriptRefusal"/>).
     /// </summary>
     [OriginalFunction(0x57B180, OriginalFunctionScope.Partial)]
     public static AreaRestOpening Decide(AreaRestFacts facts)
@@ -92,10 +92,19 @@ public static class AreaRestRules
         if (facts.HeroDead) return AreaRestOpening.Nothing;
         if (facts.WindowOpen) return AreaRestOpening.Close;
         if (facts.HeroUnconscious) return AreaRestOpening.Refuse(AreaRestMessages.HeroUnconscious);
-        if (facts.TownMap == AreaRestTownMap.WaitRefused) return AreaRestOpening.Refuse(AreaRestMessages.WaitRefused);
+        // Only a call without a bed tests the town map (SWB3): a bed is always usable, also in a town, and heals as kind 2.
+        var town = facts.Bed ? AreaRestTownMap.None : facts.TownMap;
+        if (town == AreaRestTownMap.WaitRefused) return AreaRestOpening.Refuse(AreaRestMessages.WaitRefused);
         if (facts.HeroInCombatMode && !facts.MayLeaveCombatMode) return AreaRestOpening.Refuse(AreaRestMessages.CombatRefused);
-        return new(AreaRestOpenOutcome.Open, facts.TownMap == AreaRestTownMap.WaitAllowed, null, facts.HeroInCombatMode);
+        return new(AreaRestOpenOutcome.Open, town == AreaRestTownMap.WaitAllowed, null, facts.HeroInCombatMode);
     }
+
+    /// <summary>
+    /// The refusal of a bed's use script (0x57B180 after the combat mode, SWB5): the script on attachment point 1 runs with the hero as triggerer (0x441980) and the answer <b>1</b> (<paramref name="runDefault"/>:
+    /// the entry point's answer for <i>run default</i> and for an object with no script on the point) refuses the hero with message 8; any other answer (<i>skip default</i>, a normal end, a trap that ended the call)
+    /// goes on to the seat. The hero has already left combat mode when this refuses (<see cref="AreaRestOpening.LeavesCombatMode"/>).
+    /// </summary>
+    public static int? BedScriptRefusal(bool runDefault) => runDefault ? AreaRestMessages.ScriptRefused : null;
 
     /// <summary>
     /// The end tests of a step (0x57B7F0, SWB9, TL27), run after the hour jump and the heal: the sleeper's death ends the rest; otherwise a positive length goes on while more than
@@ -119,9 +128,14 @@ public static class AreaRestRules
     /// <summary>The next step's code: a positive length counts down, the three codes stay.</summary>
     public static int NextCode(int code) => code > 1 ? code - 1 : code;
 
-    /// <summary>The heal kind of a step on the ground (SWB9, SWB10): the hit-point damage drops by the healing rate times this and the fatigue damage by three times that; a bed would make it 2
-    /// (not modelled yet); the wait window heals nothing.</summary>
+    /// <summary>The heal kind of a step on the ground (SWB9, SWB10): the hit-point damage drops by the healing rate times this and the fatigue damage by three times that; the wait window heals nothing.</summary>
     public const int GroundHealKind = 1;
+
+    /// <summary>ARC-WORLD-1162 (SWB3, SWB9): the heal kind of a step in a bed, twice the ground's.</summary>
+    public const int BedHealKind = 2;
+
+    /// <summary>The heal kind of a rest: a bed's 2, else the ground's 1.</summary>
+    public static int HealKind(bool bed) => bed ? BedHealKind : GroundHealKind;
 }
 
 /// <summary>How a step of the rest ended (SWB9).</summary>
