@@ -3,6 +3,8 @@ using Arcanum.Simulation;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Reaction;
@@ -46,6 +48,12 @@ public interface ISpellCastMap : ISpellTargetWorld
     /// <summary>ARC-MAGIC-037 (MA-6): a portal's or container's lock facts for the ObjFlag component's lock fields and the Dispel component's held bit, or null when the object is none
     /// (or the host has no lock domain): the session's object, its T0 baseline and its lock level.</summary>
     SpellOpenable? Openable(string id) => null;
+
+    /// <summary>ARC-MAGIC-1232 (DW2, XR15): the items a critter wears now, by wear slot, with their baselines, as the damage step's weapon block reads them (the target's slot 1004 item): null when the host has none, so nothing is dropped.</summary>
+    IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? WornBySlot(string entity) => null;
+
+    /// <summary>ARC-MAGIC-1232: the shown map's drop map for placing a dropped item (0x461A90's placement); null lands the item on its holder's cell without a draw.</summary>
+    IDropMap? DropMap => null;
 }
 
 /// <summary>ARC-MAGIC-037 (MA-6): a portal or container a spell reaches: its session identity, its T0 lock baseline (the session's state is read over it) and its lock level (portal field 47, container field 57),
@@ -209,6 +217,11 @@ public enum SpellCastEventKind
     NestedCast,
     /// <summary>ARC-MAGIC-049: this many nested casts were dropped unstarted (<see cref="SessionSpellCaster.MaxNestedCastsPerStart"/> in one start, a technical bound: the original spreads a chain over frames).</summary>
     NestedCastsDropped,
+    /// <summary>ARC-MAGIC-1232 (DW2, XR15): a Damage component's step with the weapon-drop flag (0x2000, Disarm) ran the target's weapon block on <see cref="SpellCastEvent.Object"/>: the value is the
+    /// <see cref="SessionCriticalStepOutcome"/> (<see cref="SessionCriticalStepOutcome.Dropped"/> when the weapon now lies on the ground or among the hero's placed items). The step itself is in <see cref="SessionSpellDamageStep.Criticals"/>.</summary>
+    WeaponDropped,
+    /// <summary>ARC-MAGIC-1232: the session refused the weapon block's drop on <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the damage stands.</summary>
+    WeaponDropNotSaved,
 }
 
 /// <summary>
@@ -1219,7 +1232,9 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
                 if (applied.Outcome is { } outcome)
                 {
                     _log.Add(new(SpellCastEventKind.Damaged, run.Id, outcome.HitPointDamage, step.Object));
-                    QueueDamageStep(step.Object, damage, outcome, run.Parent?.Id);
+                    // ARC-MAGIC-1232 (DW2, XR15): the damage step's weapon block follows the life step (a dead critter takes no step).
+                    var criticals = damage.HitEffects.HasFlag(CriticalHitEffects.DropWeapon) && !outcome.Events.HasFlag(LifeEvents.AlreadyDead) ? DropWeapon(run, step.Object, who) : [];
+                    QueueDamageStep(step.Object, damage, outcome, run.Parent?.Id, criticals);
                     // ARC-DEV-295 (XP9, XP10): the same damage function pays the pool share and the kill award, with the source as the killer.
                     RecordDamageExperience(step.Object, outcome, maxHitPoints, source, run.Id, applied.DeathStopped);
                 }
