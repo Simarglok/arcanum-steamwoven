@@ -255,7 +255,7 @@ public sealed partial class GameSessionOwner
     /// or (worn) wield-off script (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), a full list, store or durability budget or a sum
     /// past 32 bits (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision, the host's verdict
     /// (<see cref="GameSessionFailure.InsertRefused"/>; a call back into the owner from it is <see cref="GameSessionFailure.StaleVersion"/>).
-    /// The original's no-drop item flag and the NPC flag 0x40 (re-wield) are not modelled. One revision.
+    /// The original's no-drop item flag is not modelled. ARC-WORLD-1284: a moved item that is not merged marks the NPC with its re-wield bit (NPC flag 0x40, <see cref="Arcanum.Simulation.Ai.DangerFlags.CheckWield"/>). One revision.
     /// ARC-MAGIC-022: an item that is the source of a spell run needs <paramref name="triggers"/> (else
     /// <see cref="GameSessionFailure.ItemEffectUnsupported"/>); with one, the removal's spell steps run after the move
     /// (<see cref="ISessionItemTriggers.Remove"/>, <see cref="InventoryMutationResult.ItemSpells"/>).
@@ -338,7 +338,12 @@ public sealed partial class GameSessionOwner
             _inventory.Hero.Remove(item);
             // The item stays taken (no seed shows it); a kit or taken item remembers where it came from.
             if (kind == SessionHolderKind.Container) _inventory.AddToContainer(npc, new SessionMadeItem(item, held.Kind, held.Complexity));
-            else _inventory.AddToNpc(npc, new SessionMadeItem(item, held.Kind, held.Complexity));
+            else
+            {
+                _inventory.AddToNpc(npc, new SessionMadeItem(item, held.Kind, held.Complexity));
+                // ARC-WORLD-1284 (VPG1): the insert sets NPC flag 0x40 on the receiver; a merge into a held stack (above) returns before the flag.
+                MarkCheckWield(npc);
+            }
             if (held.Source != SessionPlacedSource.Made) _inventory.Hero.SetGiven(new(item, held.Origin));
             if (identify) _inventory.Identified.Add(item);
         }

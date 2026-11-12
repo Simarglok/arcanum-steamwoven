@@ -61,6 +61,8 @@ src/Arcanum.Session/GameSessionChangeOfPlace.cs,CarrySpellRuns,pending,
 src/Arcanum.Session/GameSessionChangeOfPlace.cs,ProcessChangeOfPlace,pending,
 src/Arcanum.Session/GameSessionChangeOfPlace.cs,RequestHeroChangeOfPlace,pending,
 src/Arcanum.Session/GameSessionChangeOfPlaceMovers.cs,EmptySectorCache,pending,
+src/Arcanum.Session/GameSessionCheckWield.cs,MarkCheckWield,exempt,reference
+src/Arcanum.Session/GameSessionCheckWield.cs,NpcHolderOfItem,exempt,reference
 src/Arcanum.Session/GameSessionCombatMode.cs,QueryCanExitCombatMode,pending,
 src/Arcanum.Session/GameSessionCreatedObjects.cs,CreateCritterNear,pending,
 src/Arcanum.Session/GameSessionDanger.cs,AddDangerEnemy,pending,

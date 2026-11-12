@@ -300,7 +300,9 @@ public sealed class InventoryStateTests
             "\"weights\":[{\"entity\":\"apple\",\"weight\":5,\"magicWeight\":0,\"complexity\":0},{\"entity\":\"ring\",\"weight\":5,\"magicWeight\":0,\"complexity\":0}],\"identified\":[],\"lastDiscardedMade\":0," +
             // ARC-UI-019: each taken item takes the next free grid slot.
             "\"grid\":[{\"entity\":\"ring\",\"slot\":0,\"width\":1,\"height\":1},{\"entity\":\"apple\",\"slot\":1,\"width\":1,\"height\":1}],\"generated\":[],\"npcWorn\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}" +
-            NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoConcealment + NoDanger + NoSound + NoEvents + NoHotkeys + NoScripts + NoResidency + NoGoals + NoSpells + NoNewspaper + NoGenerators + NoFlights + ",\"lighting\":null}");
+            NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoConcealment +
+            // ARC-WORLD-1284: the ring left virgil's list (0x467860), so its re-wield bit (NPC flag 0x40) is saved with it.
+            ",\"danger\":{\"records\":[{\"entity\":\"virgil\",\"flags\":[\"CheckWield\"]}]}" + NoSound + NoEvents + NoHotkeys + NoScripts + NoResidency + NoGoals + NoSpells + NoNewspaper + NoGenerators + NoFlights + ",\"lighting\":null}");
 
         using var restored = Restore(Decode(text));
         CollectionAssert.AreEqual(owner.QueryPcInventory().ToArray(), restored.QueryPcInventory().ToArray());

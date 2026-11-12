@@ -2229,6 +2229,8 @@ public sealed partial class GameSessionOwner : IDisposable
             _inventory.SetWeight(item.Entity, facts.WeightFacts);
         }
         if (into is null && ammo is { } added) _inventory.Ammo[item.Entity] = added;
+        // ARC-WORLD-1284 (VPG1): the removal 0x467860 sets NPC flag 0x40 on the giver, a merge of the item into the hero's stack included (the removal comes first).
+        if (holder is not null && KnownNpc(holder)) MarkCheckWield(holder);
         runs?.Commit();
         if (refused) PlaceHeroItem(item.Entity, _actor.Cell);
         else Revise();
