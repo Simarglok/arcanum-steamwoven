@@ -8,6 +8,19 @@ namespace Arcanum.Session;
 public sealed partial class GameSessionOwner
 {
     /// <summary>
+    /// ARC-UI-1145 (the resistance function, ledger EQ8): the five resistance lines of the hero's character sheet: <paramref name="worn"/> (the worn armour's adjustments, the hero stores none) and the
+    /// poison bonus of <paramref name="constitution"/> under the durable effects' resistance changes, clamped 0..95; the Magick line is the worn magic resistance under the
+    /// <c>resistmagic</c> changes (the same values as the doll's armour rating, <see cref="QueryHeroDollRatings"/>). All zero without a hero.
+    /// </summary>
+    public (DamageResistances Damage, int Magic) QueryHeroSheetResistances(EquipmentResistances worn, int constitution)
+    {
+        ThrowIfDisposed();
+        if (_hero is null) return (DamageResistances.None, 0);
+        var effects = EffectDomain.Resistances(_effects.Entries, _effects.Definitions);
+        return (CombatantRules.Resistances(DamageResistances.None, worn, constitution, false, effects), CombatantRules.MagicResistance(0, worn.Magic, false, effects.Magic));
+    }
+
+    /// <summary>
     /// ARC-UI-1267 (ledger IW25, IW41, IW43): the numbers the hero's own inventory window prints under its doll and the overlay it draws, read from the hero's session
     /// values as <see cref="SessionCritterCombat.DollValues"/> reads an NPC's: the displayed damage rating (0x464630, <see cref="DollRatings.Damage"/>) over the weapon the hero strikes
     /// with (<see cref="QueryHeroAttack"/>) with the weapon skill's effectiveness under the game's difficulty (<see cref="AttackRules.AttackEffectiveness"/>, 0x4C62E0 reads

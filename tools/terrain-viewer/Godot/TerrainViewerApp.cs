@@ -239,6 +239,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("save-resume") == true) await RunAreaSaveResumeSmokeAsync(result);
                                 // ARC-DEV-264 (B08, SM06): only when named, an aggressive spell cast at a calm animal from afar makes it fight the hero (AI on, Crash Site, --hero).
                                 if (only?.Contains("ai-react") == true) await RunAreaAiReactSmokeAsync(result);
+                                // ARC-AI-1315 (VA4, VAG4): only when named, two NPCs put on one tile are separated by the attack starter's tile-sharer test and by the step apart (goal 68) (AI on, --hero).
+                                if (only?.Contains("please-move") == true) await RunAreaPleaseMoveSmokeAsync();
                                 // ARC-DEV-308 (B07, SM07): only when named, the map's NPC rows against the AI host's NPCs before a tick and after F7 and F8, read-only (AI on, start map, --hero).
                                 if (only?.Contains("placement-census") == true) await RunAreaPlacementCensusSmokeAsync(result);
                                 // ARC-DEV-301 (triage T1): only when named, an NPC's death and its loss of consciousness end the spell runs it casts and take their eye candy off the hero (AI on, Crash Site window, --hero).

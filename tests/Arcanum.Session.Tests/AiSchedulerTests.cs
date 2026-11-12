@@ -64,7 +64,9 @@ public sealed class AiSchedulerTests
         public int AnimationPriority(string npc) => 0;
         public bool StunAnimationRunning(string npc) => false;
         public bool AnimationRunning(string npc) => Animating;
-        public void ReWield(string npc, bool allSlots) => Calls.Add($"re-wield {npc} {(allSlots ? "all" : "weapon")}");
+        // ARC-WORLD-1284: a test that wants the gate's re-wield to reach the session sets it.
+        public Action<string, bool>? OnReWield;
+        public void ReWield(string npc, bool allSlots) { Calls.Add($"re-wield {npc} {(allSlots ? "all" : "weapon")}"); OnReWield?.Invoke(npc, allSlots); }
         public string? Leader(string npc) => null;
         public void EndMaintainedSpells(string npc) => Calls.Add("demaintain");
         public bool Heal(string npc) { Calls.Add($"heal {npc}"); return false; }

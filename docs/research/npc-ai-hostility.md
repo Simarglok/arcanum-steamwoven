@@ -300,7 +300,7 @@ persistent handle fields too.
 | Add a team | 0x4AF8C0 (owner, offender) | head := the offender's PC leader, else the offender; team (0x4413E0) := for a PC head the party's PCs and all their followers, otherwise the head alone; add each member |
 | Add | 0x4AF930 (owner, X) | skipped when X (a PC) or X's PC leader (otherwise) is not null and is the owner's PC leader, or X is already listed; else appended at the end and the owner's combat reaction recalculated (0x4B80E0) |
 | Remove | 0x4AF9D0 (owner, X) | every entry equal to X **and every null entry** is removed: the last entry fills the hole and the same index is checked again (order not kept) |
-| Pick | 0x4AFA90 (owner) | null entries removed; `start := random(0, n − 1)`; entries `start, start + 1, …` modulo n; the first valid one ([section 2](#2-target-validity)); none → null |
+| Pick | 0x4AFA90 (owner) | null entries (and entries whose object no longer exists, which the field reader 0x4076A0 reads as null) removed first; `start := random(0, n − 1)` over the purged count; entries `start, start + 1, …` modulo n; the first valid one ([section 2](#2-target-validity)); none → null |
 | Has | 0x4AFB30 (owner, X) | false for a null or non-NPC owner; else a linear search |
 
 The pick draws even for an empty list (bounds swapped to −1..0) and draws nothing

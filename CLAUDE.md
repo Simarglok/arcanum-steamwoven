@@ -47,6 +47,11 @@ and its link holds the detail.
   `.github/ISSUE_TEMPLATE/task.yml`. A document that lists pending work links
   its issue instead of repeating the plan. An unlaunched issue is not task
   authority.
+- **Found need = issue** (mandatory, owner rule 2026-11-12): any need for work
+  you find (leftover part, gap or bug, follow-up, review finding not fixed in
+  the PR) becomes a GitHub issue at once, with the usual labels, without asking
+  (standing permission); report the numbers
+  ([backlog](docs/workflow/tasks.md#backlog-in-github-issues)).
 - **Language.** Talk to the owner in Russian; repository text (docs, code,
   commits, PR titles and bodies) stays in English.
 - **Where work runs.** Work that builds, tests or runs code, Godot or original

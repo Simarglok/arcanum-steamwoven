@@ -408,6 +408,23 @@ public sealed class AreaAiRouteTests
         Assert.AreEqual(0, original.Host.PendingHomecomings.Count);
     }
 
+    // ARC-AI-1316 (VAG5, owner decision 2026-11-12, option B): a pending hero request is never replaced by an NPC's homecoming: Original refuses it, Steamwoven holds it back for a free slot.
+    // (The two-NPC rule, Original replaces and Steamwoven waits, is covered by A_former_follower_waits_for_the_slot... above.)
+    [TestMethod]
+    [DataRow(RuleMode.Original)]
+    [DataRow(RuleMode.Steamwoven)]
+    public void A_pending_hero_request_is_never_replaced_by_an_npcs_homecoming_in_either_setting(RuleMode rules)
+    {
+        var scene = Open(Npc(Day | Night, [(20, 20)], 0, (1, 1), (1, 1)), rules: rules, mapListed: map => map is Map or 9);
+        Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.EnsureTeleportMap(scene.Session.Version, scene.Npc, Home).Disposition);
+        Assert.IsTrue(scene.Session.RequestHeroChangeOfPlace(ChangeOfPlaceCaller.TeleportSpell, 9, new(1, 1), ChangeOfPlaceFlags.None, 0, _ => true).Accepted);
+        Assert.IsTrue(scene.Host.RunWaypoints(scene.Npc));
+        Assert.IsFalse(scene.Host.FlushHomecomings(), "the hero's pending request refuses the NPC's (or holds it back)");
+        Assert.IsTrue(scene.Session.QueryChangeOfPlace()!.IsPlayerCharacter, "the hero's request stays in the slot");
+        if (rules == RuleMode.Original) StringAssert.Contains(scene.Host.TraceOf(scene.Npc)!.Route, "RefusedLocalPlayerPending");
+        else Assert.AreEqual(1, scene.Host.PendingHomecomings.Count, "Steamwoven keeps the NPC's request for a free slot");
+    }
+
     [TestMethod]
     public void A_hidden_or_unreadable_npc_has_no_route_step()
     {
@@ -566,5 +583,16 @@ public sealed class AreaAiRouteTests
         }
         Assert.IsTrue(seen.Count > 1 || seen.Single() != NpcCell, "the wanderer moved off its first tile at least once");
         Assert.IsTrue(scene.Session.QueryNpcPlaces(new SessionMapId(Map)).Count > 0, "the session keeps the place the wanderer walked to");
+    }
+
+    [TestMethod]
+    public void A_wanderer_that_shares_its_tile_with_the_hero_alone_still_wanders_because_the_finder_looks_for_another_npc()
+    {
+        // 0x435E60 → 0x436720 (ARC-AI-1315's finder): a blocker must be another NPC (object type 16) that is living and not busy, so a hero on the tile does not stop the start.
+        // (The asked-to-move branch with two NPCs is the finder's and the please-move goal's own tests, ARC-AI-1315.)
+        var scene = Open(Npc(Wanders, [], 0, (10, 20), (10, 20)), hero: () => NpcCell);
+        scene.Host.RunStandpoints(scene.Npc);
+        StringAssert.Contains(scene.Host.TraceOf(scene.Npc)!.Route, "[wander: started goal 65]");
+        Assert.AreEqual(Arcanum.Simulation.Goals.GoalType.Wander, scene.Host.RunOf(scene.Npc)?.Bottom.Goal);
     }
 }

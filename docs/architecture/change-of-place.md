@@ -202,7 +202,7 @@ waypoint or standpoint on the teleport map (CP15).
   caller's tick rules do not run the waypoint step for it.
 - **The request** (`SendHome`): the step's `RequestTeleport` outcome becomes `RequestChangeOfPlace` with the caller `NpcWaypoint`, flags 0 (CP15), the NPC's
   teleport map and the step's target. Steamwoven makes the request in the next frame, one per frame (`FlushHomecomings`; the waiting list is the viewer's and survives a rebuilt AI host); the Original setting makes it at
-  once over any pending non-player request (`NonPlayerRequestsOverwriteEachOther`, RL21: the two NPCs that go home in one fold lose the first).
+  once over any pending non-player request (`NonPlayerRequestsOverwriteEachOther`, RL21: the two NPCs that go home in one fold lose the first; owner decision 2026-11-12, option B, ARC-AI-1316: that loss is an exe bug under the bug rule of 2026-10-28, so it is the Original setting only and Steamwoven keeps every request; a pending hero request is never replaced in either setting: Original refuses the NPC's request, Steamwoven holds it back until the slot is free).
 - **The ping** (`ProcessNpcChangeOfPlace`; since ARC-DEV-124 (MIG12 S5) the frame step's `placePing`, the first thing of each frame, TM12, so a request a tick or a goal step made in one frame is carried out at the start of the next, as the original's teleport ping does): a pending request that is not the hero's runs through
   `HomecomingHost`: the session's non-player plan (S3), the host's `Arrive` the companion group's own edits for the move (`AreaCompanionGroup.Arrive`: its
   placement on the map it leaves cleared, its cell on the destination, its home map's away change cleared when the destination is home); the destination
