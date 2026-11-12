@@ -373,6 +373,8 @@ public partial class TerrainViewerApp
     {
         _dialogExaminesForSelfTest++;
         var key = speaker.Row.Key;
+        // ARC-UI-1281: a dialog started from the follower's portrait describes him afresh (HK25): the portrait hover's kept answer is dropped.
+        _portraitHoverKey = null; _portraitAllows = null;
         // The speaker's window is drawn when the bars show (the viewer hides them while the dialog is open: PROJECT); the script runs either way.
         if (_gameBarPanel is { Visible: true } && _hoverIndex is { } index && index.Contains(key)) { _hoverWindowKey = null; SyncHoverWindow(key); }
         else ExamineAllows(speaker.Row);

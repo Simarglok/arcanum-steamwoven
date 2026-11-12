@@ -293,7 +293,7 @@ dialog start), [BW6](../research/ledger/ui-audio.md#barter-window-art-arc-ui-064
   the hero's follower list (`AreaBarterCycle.Step`, wrapping, skipping the followers `BarterCycleSpeaker` refuses), closes the window and opens it again
   on that follower through the pending open of the dialog's `b:` reply. Limits: the refusal test is the can-speak head, the critter flags 0x20000008, the
   summoned spell flag and the viewer's present-speaker test (the tail of 0x4AD800 is not modelled); the pressed frame of the buttons is not drawn; a held item blocks the press (the original puts it back first); the close-and-reopen path has no automated test of its own (the smoke `barter` stage opens no follower window); a
-  follower on another map is not a speaker here and is skipped. The follower portraits' hover (HK26) is not built.
+  follower on another map is not a speaker here and is skipped. The follower portraits' hover (HK26) is built apart ([ARC-UI-1281](companion-orders-runtime.md#follower-portraits-hover-arc-ui-1281)).
 
 ## Not modelled (NOT READY)
 
