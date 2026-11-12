@@ -26,6 +26,10 @@ public enum AiRunEnd
 public enum AiExecutorReason
 {
     None,
+    /// <summary>ARC-AI-1313 (0x425930, 0x425D60): the wander goal found a tile within its radius that a short enough path reaches and became the walk to it.</summary>
+    WanderWalk,
+    /// <summary>ARC-AI-1313: the wander goal found no tile this time (no path, a path longer than its radius, or for the dark wander a lighter tile) and restarts.</summary>
+    WanderRetry,
     /// <summary>The attack goal found its target in reach and attacks.</summary>
     AttackInReach,
     /// <summary>The attack goal approaches its target.</summary>
@@ -354,6 +358,9 @@ public interface IAiGoalWorld : IItemUseWorld
     int AttackCost(string id);
     /// <summary>Plans a path, or null when there is none.</summary>
     AiPath? PlanPath(string id, AiPathRequest request);
+    /// <summary>ARC-AI-1313 (the light sampler of the dark wander's node): the light level 0..255 at a cell, which the dark wander compares between its candidate tile and the NPC's own. The default answers full light everywhere, so a world with no light data
+    /// lets the dark wander accept every tile.</summary>
+    int CellLight(CellCoord cell) => 255;
     /// <summary>Whether the next step is blocked (0x4270B0 → 0x427110, then 0x42E9B0): by a living critter on it near the path's end,
     /// a newly spotted trap or, with <paramref name="flight"/>, any blocking tile (<see cref="AiStepBlock.Occupied"/>), or because the
     /// step cannot start (<see cref="AiStepBlock.CannotStart"/>).</summary>
