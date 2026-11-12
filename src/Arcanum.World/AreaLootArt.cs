@@ -71,6 +71,15 @@ public static class AreaLootArtLayout
             [Arcanum.Simulation.Equipment.EquipmentSlot.Boots] = (156, 330, 42, 42),
         };
 
+    /// <summary>ARC-UI-1121 (B30, IW29, IW41): the two numbers the doll view prints under the doll (rectangles 0x5CAF38 and 0x5CAF48, x, y, width, height): the displayed
+    /// damage rating (0x464630) right-aligned in the first, the displayed armour rating (0x464700) from the left edge of the second.</summary>
+    public static readonly (int X, int Y, int Width, int Height) DamageRatingBox = (105, 354, 22, 16), ArmourRatingBox = (227, 354, 22, 16);
+
+    /// <summary>ARC-UI-1121 (IW43): the colour (red, green, blue) the doll view fills the weapon slot with when the weapon is too heavy for its wearer: the red channel at
+    /// table index 0x40 of 0xFF, the other two at their first entry (0x576520, F0: which channel table the first of the three is, is read from the order the display setup
+    /// makes them in, 0x52CB20: red).</summary>
+    public static readonly (int Red, int Green, int Blue) TooHeavyFill = (0x40, 0, 0);
+
     /// <summary>ARC-UI-072: the window makes the doll and bag buttons in the loot and steal windows when the shown object is not a container
     /// (0x572B03..0x572CC9, IW30); the barter window has its own (8, 123) and (46, 123), not built.</summary>
     public static bool TogglesShown(AreaInventoryMode mode, AreaInventoryView view) =>

@@ -53,6 +53,21 @@ public static class CombatantRules
             Clamp(EffectModifiers.Apply((long)stored.Fire + worn.Fire, effects.Fire)));
     }
 
+    /// <summary>
+    /// ARC-UI-1121 (ledger IW42): a critter's displayed magic resistance, the armour rating's fifth term (the combat resistance getter with the magic type, which
+    /// <see cref="Resistances(DamageResistances, EquipmentResistances, int, bool, EffectResistances)"/> leaves out): its stored value plus its worn armour's magic resistance
+    /// adjustments (<see cref="EquipmentResistances.Magic"/>), then the critter's magic resistance <paramref name="effects"/> over the sum, then clamped as the other types are.
+    /// The save reads the stored value alone (<see cref="Arcanum.Simulation.Magic.SpellResistanceRules.ResistanceUnderEffects"/>).
+    /// </summary>
+    public static int MagicResistance(int stored, int worn, bool unclamped, IReadOnlyList<EffectModifier> effects)
+    {
+        ArgumentNullException.ThrowIfNull(effects);
+        if (Math.Abs((long)stored) > MaxValue) throw new ArgumentOutOfRangeException(nameof(stored));
+        if (Math.Abs((long)worn) > MaxValue) throw new ArgumentOutOfRangeException(nameof(worn));
+        var value = EffectModifiers.Apply((long)stored + worn, effects);
+        return unclamped ? Math.Clamp(value, -AttackResolver.MaxResistance, AttackResolver.MaxResistance) : Math.Clamp(value, 0, MaxResistance);
+    }
+
     /// <summary>The effective resistances with no resistance effects (<see cref="EffectResistances.None"/>).</summary>
     public static DamageResistances Resistances(DamageResistances stored, EquipmentResistances worn, int constitution, bool unclamped) =>
         Resistances(stored, worn, constitution, unclamped, EffectResistances.None);

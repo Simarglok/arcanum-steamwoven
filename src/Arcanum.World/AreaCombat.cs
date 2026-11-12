@@ -472,6 +472,28 @@ public sealed class AreaCombatHost : IAreaEventObjects
     public IReadOnlyDictionary<Arcanum.Simulation.Equipment.EquipmentSlot, SessionWearItem>? WornItems(GameSessionOwner session, string entity) =>
         Worn(session, entity)?.ToDictionary(item => item.Slot, item => item.Wear);
 
+    /// <summary>
+    /// ARC-UI-1121 (B30, ledger IW25, IW29, IW41–IW43): the numbers and the overlay the loot window's doll view shows for the NPC <paramref name="entity"/>
+    /// (<see cref="SessionCritterCombat.DollValues"/> with its life state and effects now, the items it wears now, the stored magic resistance of its fields and the
+    /// identification of each worn item: the item's own flag, or the session's mark); null when the NPC is no NPC of the covered maps or the session has no life
+    /// record for it.
+    /// </summary>
+    public SessionDollRatings? DollRatings(GameSessionOwner session, string entity)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (Build(session, entity).Combat is not { } built || Fields(entity) is not { } fields || Worn(session, entity) is not { } worn) return null;
+        if (session.QueryLife(built.Target).View is not { } life) return null;
+        const uint IdentifiedItemFlag = 0x1;
+        var identified = worn.ToDictionary(item => item.Slot, item => item.Fields.Item is { } stored && (stored.Flags & IdentifiedItemFlag) != 0 || session.QueryItemIdentified(item.Entity));
+        var resistances = fields.Object.Resistances;
+        try
+        {
+            return session.WithNpcEffects(built).DollValues(life.Status, life.Record.State, session.Rules.Combat, resistances.Count > 4 ? resistances[4] : 0,
+                slot => identified.GetValueOrDefault(slot), worn.Select(item => item.Slot).ToArray());
+        }
+        catch (ArgumentException) { return null; }
+    }
+
     /// <summary>ARC-DEV-075 (MIG2): <see cref="NpcItems(GameSessionOwner, int, string)"/> by identity: the items the NPC holds now, listed or
     /// worn, whichever map it stands on (its holder entry is the home map's).</summary>
     public IReadOnlyList<(string Entity, CombatFields Fields)> NpcItems(GameSessionOwner session, string entity)
