@@ -1022,3 +1022,15 @@ The agent's heartbeat (script 1717) is admitted whole since this task ([GL1–GL
 | --- | --- | --- | --- |
 | 1 | Talk to Virgil at the altar (the tile script runs his dialog), then watch the Molochean agent near the altar and read the log (Ctrl+B). | No `heartbeat-refused ... script 1717` line any more. The agent sets its day and night standpoints to its tile and runs to it (goal 74), as the original's heartbeat does. | open |
 | 2 | Let the agent reach its tile. | The follow-up of the scene (talk or attack) starts as in the original. If it does not, report what the agent does (the scene may belong to another script; a new issue is then filed). | open |
+
+## ARC-INPUT-1400 — One mouse press arriving as several press events (issue #1400, 2026-11-12)
+
+The viewer now writes one `ARC-INPUT-1400 press` line per mouse button press the world sees (not in an automated run). The cause is not known yet: the viewer handles each event once, so the duplicates are several events from the system or one event handled twice; this log tells which. It changes no press (the original has no guard, and a guard is added only once this log shows that the duplicates are the platform's and that a guard cannot swallow a real double click).
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | In the viewer open the Harm cursor and press once on a creature, with the mouse that showed the duplicates. Press the report key (Ctrl+B) and send the report. | The log has one `press stage=Input` and one `press stage=Unhandled` line per physical press, each with its own `id=`, `frame=` and `device=`. A `BURST=2` or `BURST=3` mark on a line means that press came less than 50 ms after the previous one of the same button. | open |
+| 2 | Repeat with a second mouse (and, if it is the trackpad that duplicates, the trackpad too). | The lines tell the devices apart (`device=`). If only one device bursts, the cause is that device or its macOS setting (tap to click, a bouncing switch). | open |
+| 3 | Press the left button twice quickly on purpose (a real double click). | Two lines about 100 ms or more apart, so a guard of a few milliseconds would not swallow it. | open |
+
+How to read it: two lines of `stage=Input` with different `id=` and the same position are two events from the system; the same `id=` twice is one event delivered twice (the viewer's fault); `stage=Input` once and `stage=Unhandled` twice means the handler runs twice for one event.
