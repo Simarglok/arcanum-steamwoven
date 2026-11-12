@@ -105,6 +105,23 @@ public sealed class AreaReadingTests
     }
 
     [TestMethod]
+    public void A_written_start_a_script_wrote_replaces_the_prototypes_when_the_item_is_read()
+    {
+        // ARC-SCRIPT-1279 (WO6): set written start (94) writes the item's own start line; the reading facts take it over the data's.
+        var hero = new SessionHeroDefinition(16089, CharacterRace.HalfElf, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0,
+            null, null, 385, [new SessionHeroKitItem(new(SessionItemType.Written, 9001, 6000, 6001))]);
+        var load = new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, hero, 2352, 0, null, "synthetic");
+        using var session = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
+            AreaGridSession.Cell(AreaGridSession.Spawn), 1, load).Owner!;
+        var host = new AreaInventoryHost([]);
+        var data = new AreaReadingData(Texts(), new Dictionary<int, SessionWrittenFacts> { [9001] = new(0, 100) { Prototype = 9001 } });
+        var book = session.QueryHeroKit()[0].Entity;
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetItemWrittenStart(session.Version, book, 250).Disposition);
+        Assert.AreEqual(new SessionWrittenFacts(0, 250) { Prototype = 9001 }, host.WrittenFacts(session, book, data), "the script's start, not the prototype's 100");
+        Assert.IsNull(host.WrittenFacts(session, "item:none", data), "an item the hero does not hold has no facts, whatever was written");
+    }
+
+    [TestMethod]
     public void A_schematic_document_names_messages_89_and_88_and_the_refusals_have_texts()
     {
         Assert.AreEqual("[tech 89] schematic 2000", AreaReading.SchematicMessage(SchematicReading.Registered, 2000, null, Profile));
