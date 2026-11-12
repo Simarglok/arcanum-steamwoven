@@ -103,7 +103,7 @@ public static class NpcRouteRules
     public const int WanderRadius = 4;
 
     /// <summary>
-    /// The wander goal the standpoint step starts for an NPC at its standpoint (0x4ACDB0, near branch): 65 for NPC flag WANDERS (0x1000, tested first), else 66 for WANDERS_IN_DARK (0x2000), else none (the step answers 0). The original
+    /// The wander goal the standpoint step starts for an NPC at its standpoint (near branch): 65 for NPC flag WANDERS (0x1000, tested first), else 66 for WANDERS_IN_DARK (0x2000), else none (the step answers 0). The original
     /// starts it only for a NPC that is not sleeping (the test uses the value read at entry), and even when a bed was just taken (ledger VA19).
     /// </summary>
     public static GoalType? WanderGoalOf(uint npcFlags) =>

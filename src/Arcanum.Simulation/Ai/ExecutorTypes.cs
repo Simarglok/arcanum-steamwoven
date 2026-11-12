@@ -356,7 +356,7 @@ public interface IAiGoalWorld : IItemUseWorld
     int AttackCost(string id);
     /// <summary>Plans a path, or null when there is none.</summary>
     AiPath? PlanPath(string id, AiPathRequest request);
-    /// <summary>ARC-AI-1313 (0x4D9240 at 0x425D60): the light level 0..255 at a cell, which the dark wander compares between its candidate tile and the NPC's own. The default answers full light everywhere, so a world with no light data
+    /// <summary>ARC-AI-1313 (the light sampler of the dark wander's node): the light level 0..255 at a cell, which the dark wander compares between its candidate tile and the NPC's own. The default answers full light everywhere, so a world with no light data
     /// lets the dark wander accept every tile.</summary>
     int CellLight(CellCoord cell) => 255;
     /// <summary>Whether the next step is blocked (0x4270B0 → 0x427110, then 0x42E9B0): by a living critter on it near the path's end,

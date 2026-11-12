@@ -50,13 +50,14 @@ public partial class TerrainViewerApp
             Frames(40);
             host = AreaAiHostNow()!;
             // The NPC: the first living free NPC with a tile and no run, nearest the hero is not needed; the order of the Npcs list is the window's.
-            var candidates = host.Scene.Npcs.Where(n => !host.RunCompanions.Contains(n.Entity) && !host.Gone(n.Entity) && host.Tile(n.Entity) is not null && host.RunOf(n.Entity) is null).ToArray();
+            var candidates = host.Scene.Npcs.Where(n => !host.RunCompanions.Contains(n.Entity) && !host.Gone(n.Entity) && host.Tile(n.Entity) is not null && host.RunOf(n.Entity) is null && host.Active(n.Entity)).ToArray();
             if (candidates.Length == 0)
             { GD.Print($"ARC-AI-1313 native-smoke npc-wander NONE map={_readyMapName} (no idle free NPC among {host.Scene.Npcs.Count} NPCs of the window)"); return; }
             var results = new List<object>();
             foreach (var dark in new[] { false, true })
             {
-                var entity = candidates[dark ? Math.Min(1, candidates.Length - 1) : 0].Entity;
+                if (dark && candidates.Length < 2) { GD.Print("ARC-AI-1313 npc-wander dark NONE (needs a second idle free NPC)"); break; }
+                var entity = candidates[dark ? 1 : 0].Entity;
                 for (var settle = 0; settle < 600 && host.RunOf(entity) is not null; settle++) Frames(1);
                 var tether = host.Tile(entity)!.Value;
                 var goal = dark ? GoalType.WanderSeekDarkness : GoalType.Wander;
@@ -66,19 +67,22 @@ public partial class TerrainViewerApp
                 Require(run!.Bottom.Goal == goal && run.Bottom.Tile == tether && run.Bottom.Range == 4, $"the run is a table run of goal {(int)goal} tethered to {tether.X},{tether.Y} with radius 4: {run.Bottom.Goal} {run.Bottom.Tile} {run.Bottom.Range}");
                 Require(session.QueryGoals().RunsOf(entity).Any(r => r.Handle == run.Handle), "the run is in the session's goal table");
                 var tiles = new HashSet<CellCoord> { tether };
-                var farthest = 0; var cycles = 0; var walked = 0;
+                var farthest = 0; var cycles = 0;
                 // Many frames: each time the run has ended, the standpoint step's next start (the order again) draws the next tile.
                 for (var frame = 0; frame < 6000 && cycles < 12; frame++)
                 {
                     Frames(1);
                     if (host.Tile(entity) is not { } at) continue;
-                    if (tiles.Add(at)) walked++;
+                    // Only the tiles where a run has ended count for the radius: a walk of up to four steps may bend around an obstacle on its way.
+                    if (host.RunOf(entity) is not null) continue;
+                    tiles.Add(at);
                     farthest = Math.Max(farthest, AiDistance(at, tether));
-                    if (host.RunOf(entity) is null) { cycles++; host.OrderWander(entity, tether, dark); }
+                    cycles++; host.OrderWander(entity, tether, dark);
                 }
                 GD.Print($"ARC-AI-1313 npc-wander {(dark ? "dark" : "plain")} npc={entity} tether={tether.X},{tether.Y} cycles={cycles} tiles={tiles.Count} farthest={farthest}");
-                Require(tiles.Count > 1, $"the {(dark ? "dark " : "")}wanderer left its tile (tiles {tiles.Count}, order {order})");
-                Require(farthest <= 4 + 1, $"the wanderer stayed within four tiles of the tether (one more for a step in flight): {farthest}");
+                // The dark wander keeps to tiles not lighter than its own, so on a lit tile with darker neighbours it may stay: only the plain wander must move.
+                Require(dark || tiles.Count > 1, $"the wanderer left its tile (tiles {tiles.Count}, order {order})");
+                Require(farthest <= 4, $"the wanderer ended every run within four tiles of the tether: {farthest}");
                 Require(cycles >= 2 || dark, $"the wander ran in cycles: {cycles}");
                 results.Add(new { Goal = (int)goal, Cycles = cycles, Tiles = tiles.Count, Farthest = farthest });
             }

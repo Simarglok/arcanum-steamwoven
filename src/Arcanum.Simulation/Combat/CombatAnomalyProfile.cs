@@ -150,6 +150,12 @@ public sealed record CombatAnomalyProfile
     public bool SpreadOutSetsNoFlee { get; init; }
 
     /// <summary>
+    /// WG5 (ARC-AI-1313; ledger VA19, SWB21; classed a gameplay bug of the original, proposed to the owner under the rule of 2026-10-28): the standpoint step's wander start tests the sleeping bit it read at entry, so a wanderer that the
+    /// step has just put to bed (NPC flag 0x200 clear, a bed on the standpoint tile) still starts its wander goal in the same step and walks off its bed while marked asleep. Steamwoven starts no wander for an NPC that is asleep after the bed look-up.
+    /// </summary>
+    public bool SeatedWandererWanders { get; init; }
+
+    /// <summary>
     /// SP11 (owner decision 2026-10-20; ARC-WORLD-088): the AI list cache keeps, per critter, only the list requested when its slot
     /// was taken, frozen until an inventory change, an exhausted listed item, a reset or round-robin reuse, and builds every other list
     /// afresh (see <see cref="Ai.AiListCache.Request"/>). Steamwoven builds each list fresh on every request.
@@ -221,6 +227,7 @@ public sealed record CombatAnomalyProfile
         GateRecoveryWritesStaleFlags = true,
         EndStepRechargesPendingCost = true,
         SpreadOutSetsNoFlee = true,
+        SeatedWandererWanders = true,
         AiListCacheKeepsFirstList = true,
         GrenadeIgnoresPcsInBlast = true,
         HealFatigueRungForOthers = true,

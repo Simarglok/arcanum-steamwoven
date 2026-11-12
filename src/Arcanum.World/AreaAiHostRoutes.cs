@@ -26,7 +26,7 @@ namespace Arcanum.World;
 /// ARC-WORLD-1162 (ledger SWB17–SWB21): the near branch's bed lookup and seat, the NPC flag 0x200 latch and a sleeper's re-seat are <see cref="AreaAiHostBeds"/>.
 /// ARC-AI-1314 (ledger VA18, VA19, VAG3): the waypoint index (the original's field 0x120) and the standpoint latch (NPC flag 0x200) are the NPC's object state in the session
 /// (<see cref="SessionNpcRouteState"/>), written with the step's teleport map in one revision, saved and loaded with the object; a rebuilt host and a loaded game go on from them.
-/// Left out (NOT READY, each named in the ledger): the wander of the standpoint step.
+/// ARC-AI-1313 (ledger WG1–WG5): the near branch's wander start is <see cref="StartWander"/> (the tile-sharer branch of the starters is issue #1315).
 /// </summary>
 public sealed partial class AreaAiHost
 {
@@ -57,7 +57,10 @@ public sealed partial class AreaAiHost
         var written = refused is null ? step.TeleportMapSet?.ToString(System.Globalization.CultureInfo.InvariantCulture) : null;
         var bed = BedStep(npc, step, route: RouteOf(npc));
         // ARC-AI-1313 (VAG2, 0x4ACDB0 near branch): after the bed look-up a wanderer starts its wander goal, even when a bed was just taken (VA19).
-        var wander = step.WanderGoal is { } wanderGoal && step.Standpoint is { } tether ? StartWander(npc, wanderGoal, tether) : null;
+        // A wanderer the step has just put to bed starts it only under the Original setting (WG5, CombatAnomalyProfile.SeatedWandererWanders).
+        var wander = step.WanderGoal is { } wanderGoal && step.Standpoint is { } tether
+            ? !_session.Rules.Combat.SeatedWandererWanders && Sleeping(npc) ? "asleep in its bed" : StartWander(npc, wanderGoal, tether)
+            : null;
         switch (step.Outcome)
         {
             case NpcRouteOutcome.Relocate:

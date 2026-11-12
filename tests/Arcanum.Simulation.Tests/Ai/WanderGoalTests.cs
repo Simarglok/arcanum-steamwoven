@@ -97,6 +97,13 @@ public sealed class WanderGoalTests
         other.Actor = "oid:someone";
         AiExecutorRules.Step(Run(), other, new OffsetRolls(1, 1), CombatAnomalyProfile.Steamwoven);
         CollectionAssert.DoesNotContain(other.Calls, "end subturn", "only the participant's subturn ends");
+        var pc = WorldAt(Tether);
+        pc.NoPaths = true;
+        pc.Round = true;
+        pc.Actor = Npc;
+        pc.Movers[Npc] = new AiMoverFacts(Pc: true, Fatigue: 20, MaxFatigue: 20);
+        AiExecutorRules.Step(Run(), pc, new OffsetRolls(1, 1), CombatAnomalyProfile.Steamwoven);
+        CollectionAssert.DoesNotContain(pc.Calls, "end subturn", "a PC's own subturn is never ended by its wander (0x40DA20)");
     }
 
     [TestMethod]
