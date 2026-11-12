@@ -774,9 +774,23 @@ The rules are in [trap state](../world/trap-state-runtime.md) (the Spot item) an
 
 Known differences (documented, not bugs):
 
-- The light at the trap is taken as full: an untrained hero in the dark is not penalised yet (the original adds up to 30 against an untrained hero).
-- The item that adds a modifier to the roll (inventory location 1005, name 2866) is not modelled.
-- Companions' own spot attempts are not made; disarming a trap is ARC-SKILLS-1156 (below).
+- The light at the trap enters the roll since ARC-WORLD-1149 (an untrained hero in the dark is penalised, up to 30); the item at location 1005 (name 2866, the powered shield) enters it since ARC-MAGIC-1189; companions and NPCs spot with their own roll on each step (see the ARC-MAGIC-1189 section below). A walker that fails to spot a trap still walks on without firing it; only the spot half of the NPCs' meeting is built. Disarming a trap is ARC-SKILLS-1156 (below).
+
+## ARC-MAGIC-1189 — Spot trap remainders: powered shield and companions (E6-a, 2026-11-12)
+
+The rules are in [trap state](../world/trap-state-runtime.md) (the Spot item and the NPC and companion spot item) and the [ledger SP2, TT2, TT10](../research/ledger/technology.md#spot-trap-roll-arc-magic-057). Use a hero with a technology build (tech points, so a negative aptitude), a powered shield (the technology product that uses charges) and some charges, on a map with hidden traps, in both games.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | With the powered shield worn and charges in the pack, walk over hidden traps many times (reload between tries). Repeat with the shield taken off. | With the shield worn and charges in the pack a technologist spots traps more often: its (negative) aptitude is a bonus on the roll. Without charges, or with the shield off, the odds are the ordinary ones. | open |
+| 2 | Do the same with a magickal hero (positive aptitude) wearing the shield. | No bonus: a positive aptitude clears the modifier. | open |
+| 3 | Walk with a companion across a hidden trap, in daylight and then in the dark. | The companion sometimes spots the trap with its own roll and stops before it; the trap then shows as known to you. A companion with a better Spot Trap skill spots more often; darkness makes an untrained companion worse. | open |
+| 4 | Let a companion walk onto a trap it did not spot. | It walks on. Known difference: Steamwoven does not set the trap off on a companion yet (the original does). | open |
+
+Known differences (documented, not bugs):
+
+- An NPC's or a companion's step onto a trap object, and its use of a trapped object, do not meet the trap yet; only the spot attempt on the walk check is built.
+- A companion's spot attempt is made by its walk check before each step, on the AI host's walk and on its own follow walk alike.
 
 ## ARC-SKILLS-1156 — Disarming a trap from the hotkey bar (E6-a, disarm half, 2026-11-12)
 

@@ -213,6 +213,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="keys-on-the-heros-ring-arc-world-123"></a>[Keys on the hero's ring (ARC-WORLD-123)](ledger/items.md#keys-on-the-heros-ring-arc-world-123) | [Items and inventory](ledger/items.md) | KY1–KY5 |
 | <a id="item-aiming-and-use-with-a-target-arc-res-113"></a>[Item aiming and use with a target (ARC-RES-113)](ledger/items.md#item-aiming-and-use-with-a-target-arc-res-113) | [Items and inventory](ledger/items.md) | IA1–IA16 |
 | <a id="partial-rows-by-risk-arc-res-1104"></a>[Partial rows by risk (ARC-RES-1104)](ledger/items.md#partial-rows-by-risk-arc-res-1104) | [Items and inventory](ledger/items.md) | VP1–VP17, VPG1–VPG3 |
+| <a id="partial-rows-by-risk-items-slice-2-arc-res-1104"></a>[Partial rows by risk, items slice 2 (ARC-RES-1104)](ledger/items.md#partial-rows-by-risk-items-slice-2-arc-res-1104) | [Items and inventory](ledger/items.md) | VP18–VP83, VPG4–VPG7 |
 | <a id="main-menu-arc-ui-011"></a>[Main menu (ARC-UI-011)](ledger/ui-audio.md#main-menu-arc-ui-011) | [Interface windows and audio](ledger/ui-audio.md) | MM1–MM7 |
 | <a id="hero-death-arc-ui-026"></a>[Hero death (ARC-UI-026)](ledger/ui-audio.md#hero-death-arc-ui-026) | [Interface windows and audio](ledger/ui-audio.md) | PD1–PD9 |
 | <a id="companion-walks-through-critters-arc-world-075"></a>[Companion walks through critters (ARC-WORLD-075)](ledger/world.md#companion-walks-through-critters-arc-world-075) | [World, maps and movement](ledger/world.md) | LR10–LR11 |

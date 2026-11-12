@@ -64,7 +64,8 @@ public sealed class AreaAiRouteTests
 
     // ARC-DEV-116: with companion the NPC is a companion of the shown map (a free one unless led), run as the host runs followers.
     internal static Scene Open(AreaObjectRecord row, Func<CellCoord?>? hero = null, RuleMode rules = RuleMode.Steamwoven, bool companion = false, bool led = false,
-        Func<int, bool>? mapListed = null, IAreaHeroPush? heroPush = null, AreaAiBeds? beds = null, Func<string, string?, bool>? takingDamage = null)
+        Func<int, bool>? mapListed = null, IAreaHeroPush? heroPush = null, AreaAiBeds? beds = null, Func<string, string?, bool>? takingDamage = null,
+        Func<AreaTraps?>? traps = null, Func<string, (SessionNpcAdvancement Loaded, Arcanum.Simulation.Character.AdvancementModifiers Modifiers)?>? sheet = null)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var heroDefinition = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -90,7 +91,7 @@ public sealed class AreaAiRouteTests
         var scene = new AreaAiScene
         {
             RuntimeMap = Map, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = companion ? [] : [new(Entity(0), row, NpcCell)], Combat = combat,
-            HeroCell = hero ?? (() => HeroCell), MapListed = mapListed, Homecomings = [], HeroPush = heroPush, Beds = beds, TakingDamage = takingDamage,
+            HeroCell = hero ?? (() => HeroCell), MapListed = mapListed, Homecomings = [], HeroPush = heroPush, Beds = beds, TakingDamage = takingDamage, Traps = traps, NpcSheet = sheet,
             Companions = companion ? () => [(Entity(0), Key(0), walks.Cells[Entity(0)])] : null,
             Followers = companion ? walks : null,
         };

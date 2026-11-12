@@ -140,6 +140,7 @@ other state than the original becomes an issue.
 | Slice | Rows | Ranking | Ledger section |
 | --- | --- | --- | --- |
 | Items 1 (ARC-RES-1104) | 83 ranked, 17 read: 6 from F1 to F2, reasons made exact, gaps #1283 (no-drop on transfers), #1284 (NPC re-wield flag) and #1288 (NPC look-for bits after a drop) | [`triage/v2-items.csv`](triage/v2-items.csv) | [partial-rows-by-risk](../research/ledger/items.md#partial-rows-by-risk-arc-res-1104) |
+| Items 2 (ARC-RES-1104) | the other 66 read: 20 from F1 to F2, reasons made exact, gaps #1299 (body decay's destroyed items), #1300 (restock delay, owner decision), #1301 (a broken generate-once container) and #1306 (items sold into a broken container) | [`triage/v2-items.csv`](triage/v2-items.csv) (slice 2) | [partial-rows-by-risk-items-slice-2](../research/ledger/items.md#partial-rows-by-risk-items-slice-2-arc-res-1104) |
 
 ## Address-named methods
 
