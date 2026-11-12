@@ -151,6 +151,23 @@ public partial class TerrainViewerApp
         AreaResidentFrames.Shared.Clear(); AreaResidentVisuals.Shared.Clear(); AreaResidentEditorRecords.Shared.Clear(); VerifiedFileMemo.Reset();
         var baselineSamples = await ManagedSamples();
         var baseline = (Managed: baselineSamples.Min(), Resident: Resident(), Handles: Handles());
+        // ARC-DEV-1426 (#1426): a full scene clear must retire the map's AI host, which holds the map's AreaLoadResult through its scene and its _aiHostArea (no world session
+        // means no area frame, so no later AreaAiHostNow to do it; every load begins with a clear). Today ClearReadyMetrics does it through StopAreaTransitions ->
+        // UnbindAreaInventory -> UnbindAreaCombat; this probe pins that: it turns the AI on, builds the host, clears the scene and reads the host's fields; it runs after the baseline and loads nothing, the
+        // reload below is the stage's own (its own first step is the same clear, so the baseline's loaded map is retired either way). A run without a hero (this stage alone, no --hero) builds no host and the probe says so.
+        {
+            var aiBefore = _aiForSmoke; _aiForSmoke = true;
+            for (var wait = 0; wait < 60 && AreaAiHostNow() is null; wait++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (_aiHost is not null)
+            {
+                ClearPublishedScene();
+                var held = _aiHost is not null || _aiHostArea is not null || _aiHostStamp is not null || _aiLineOfFire is not null || _aiPcOccupancy is not null;
+                GD.Print($"ARC-DEV-1426 resources ai-host-clear built=true heldAfterClear={held}");
+                Require(!held, "AI_HOST_HELD_AFTER_CLEAR");
+            }
+            else GD.Print($"ARC-DEV-1426 resources ai-host-clear built=false (the probe did not run: hero={_areaSession?.QueryHero() is not null} combat={_combatHost is not null})");
+            _aiForSmoke = aiBefore;
+        }
         // Overlapped production reloads: the second cancels the first, which
         // must never publish over its successor.
         var first = StartLoadAsync(arguments, false); var firstGeneration = _generation;
