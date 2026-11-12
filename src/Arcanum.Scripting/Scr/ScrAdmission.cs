@@ -394,6 +394,12 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S37 { get; } = new("S37", S36.Conditions.Concat(WorldObjectConditions), S36.Actions.Concat(WorldObjectActions), S36.ValueKinds, S36.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The get-location set (ARC-SCRIPT-1359, ledger GL1–GL2): <see cref="S37"/> plus get location (95), which writes the first object's tile x and y into its number operands 1 and 2 through <see cref="IScrWorldQueries.Location"/>
+    /// (the Crash Site Molochean agent's heartbeat 1717 reads where it stands).
+    /// </summary>
+    public static ScrAdmissionSet S38 { get; } = new("S38", S37.Conditions, S37.Actions.Append(ScrCatalogue.Action.GetLocation), S37.ValueKinds, S37.FocusKinds, counterIndexWraps: true);
+
     /// <summary>The conditions of <see cref="S37"/> a host answers through <see cref="IScrWorldObjectQueries"/>.</summary>
     public static IReadOnlySet<int> WorldObjectQueryConditions { get; } = new HashSet<int>(WorldObjectConditions);
 
@@ -414,7 +420,7 @@ public sealed class ScrAdmissionSet
 
     /// <summary>The actions of <see cref="S15"/>, <see cref="S18"/> and <see cref="S19"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int>
-        { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.FloatLine };
+        { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetLocation };
 
     /// <summary>The focus kinds of <see cref="S15"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<ScrFocusKind> WorldQueryFocusKinds { get; } = new HashSet<ScrFocusKind>
@@ -612,6 +618,8 @@ public static class ScrAdmission
             if (!condition && type == ScrCatalogue.Action.MagickTechAdjustment && slot == 3 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Distance between stores into its number operand 2 (ARC-SCRIPT-049, HW3).
             if (!condition && type == ScrCatalogue.Action.DistanceBetween && slot == 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
+            // Get location stores into its number operands 1 and 2 (ARC-SCRIPT-1359, GL1).
+            if (!condition && type == ScrCatalogue.Action.GetLocation && slot is 1 or 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Get area stores into its number operand 1 (ARC-SCRIPT-050, GA1).
             if (!condition && type == ScrCatalogue.Action.GetArea && slot == 1 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Slot 0 of these types is itself an index, a store or a jump target.

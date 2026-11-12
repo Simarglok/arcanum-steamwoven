@@ -211,13 +211,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// installed heartbeats ask first: the conditions following (18), is named (20), is dead (22), is switched off (27) and has a reputation
     /// (33), and the actions call script in (54, through the session's queue), distance between (71) and set faction (134) of
     /// <see cref="ScrAdmissionSet.S18"/>. ARC-MAGIC-030 (MT21b): plus the spell conditions (14, 35, 48, 49) and give spell mastery in college (112) of <see cref="ScrAdmissionSet.S31"/>.
+    /// ARC-SCRIPT-1359: plus get location (95) of <see cref="ScrAdmissionSet.S38"/> (the Crash Site Molochean agent's heartbeat 1717 reads where it stands before it runs to its tile).
     /// </summary>
     public static ScrAdmissionSet HeartbeatAdmission { get; } = new("S2-area-heartbeat-state-kill-talk-world",
         ScrAdmissionSet.S2.Conditions.Concat([ScrCatalogue.Condition.FollowingPc, ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsDead,
             ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasReputation, .. ScrAdmissionSet.SpellQueryConditions, .. ScrAdmissionSet.StoryConditions, .. ScrAdmissionSet.WorldObjectConditions]),
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
-            ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
+            ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.GetLocation, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
             ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. DamageActions]),
         ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]));
