@@ -83,7 +83,12 @@ public sealed class AreaCombatHost : IAreaEventObjects
     /// <summary>ARC-DEV-076 (MIG3): <see cref="Facts(int, string)"/> by identity: the NPC's life facts wherever it stands (a companion on a
     /// map other than its home map answers as on its home map), or null without a record.</summary>
     public LifeFacts? Facts(string entity) =>
-        Record(entity ?? throw new ArgumentNullException(nameof(entity))) is { } found ? Facts(found.HomeMap, entity) : null;
+        Record(entity ?? throw new ArgumentNullException(nameof(entity))) is { } found
+            // ARC-WORLD-1158: a created critter's row lives in its one-row map, not in the shown map the home number names, so that map answers (its life timers and its body's decay event found no object before); every other NPC is asked as before.
+            ? SessionCreatedObject.KindOf(entity) == SessionCreatedKind.Critter
+                ? (_session?.Invoke() is { } created ? Build(created, found.Map, entity).Combat?.Facts : null) ?? Build(found.Map, entity).Combat?.Facts
+                : Facts(found.HomeMap, entity)
+            : null;
 
     /// <summary>ARC-DEV-076 (MIG3): whether any reachable map's stored objects hold this entity (a deferred call's role), wherever the
     /// object stands now; <see cref="HasObject(int, string)"/> asks one map's rows.</summary>

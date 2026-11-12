@@ -119,7 +119,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     public const string FactionProperty = "npc.faction";
     /// <summary>ARC-SCRIPT-052: the map-change key of an NPC a script's destroy (68) took out of the world (value 1). The original sets object
     /// flag 0x1 (TD2); a destroyed NPC is neither drawn nor in the object lists, and the view no longer reaches it (<see cref="Destroyed"/>).</summary>
-    public const string DestroyedProperty = "obj.destroyed";
+    public const string DestroyedProperty = GameSessionOwner.ObjectDestroyedProperty;
     private const int NpcType = 16, DestroyedObjectFlag = 0x1, OffObjectFlag = 0x2;
     private const string ScriptPart = "script", LocalFlagsPart = "lf", CountersPart = "counters";
 

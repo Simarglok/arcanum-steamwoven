@@ -250,6 +250,8 @@ public sealed class SessionCritterCombat
         Trait((flags2 & NighInvulnerable2) != 0, LifeTraits.NighInvulnerable);
         Trait((flags & Unrevivifiable) != 0, LifeTraits.Unrevivifiable);
         Trait((flags & Unresurrectable) != 0, LifeTraits.Unresurrectable);
+        // ARC-WORLD-1158 (PO10): critter flags 2's "no decay" keeps the body.
+        Trait(!Arcanum.Simulation.Combat.BodyDecayRules.Schedules(flags2), LifeTraits.NoBodyDecay);
         var conditions = LifeConditions.None;
         void Condition(bool on, LifeConditions condition) { if (on) conditions |= condition; }
         Condition((flags & Stunned) != 0, LifeConditions.Stunned);
