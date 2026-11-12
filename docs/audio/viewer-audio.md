@@ -35,7 +35,7 @@ The original has no master or separate ambient bar; none is added here.
   `NotAdmitted`, `DecodeFailed`, `VoiceLimit` (nothing is stolen), `Disposed`.
 - `Play(..., pan)`: a pan −1…1 routes the voice through one of nine panning buses of its channel (`Effects pan −4` …
   `+4`, an `AudioEffectPanner` at each quarter, sending to the channel bus; a Steamwoven choice, the original pans
-  continuously). Pan buses are created on first use and removed with the others.
+  continuously). All 24 pan buses are built at start, with the three channel buses, under `AudioServer.Lock()`; none is added while sounds play, because the engine's `AddBus`/`SetBusName`/`SetBusSend` do not take the audio driver lock and a bus added during mixing crashed a packaged run on the CoreAudio thread (ARC-BUG-1396). They are removed with the others.
 - `FadeOut(handle, ms)`: fades a voice to silence and releases it (25 ms for scheme songs); a stale handle is a no-op.
 - `Reposition(handle, volume, pan)`: sets a live voice's volume and moves it to the pan bus of the new pan when the
   listener moves (ARC-UI-042); a stale handle is a no-op.
