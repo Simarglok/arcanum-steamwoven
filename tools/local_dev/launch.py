@@ -83,7 +83,8 @@ ORACLE_TEST_CLASSES = ("tests/Arcanum.Simulation.Tests/Character/ExperienceOrigi
                        "tests/Arcanum.Simulation.Tests/Magic/SpellTargetOriginalExeTests.cs",
                        "tests/Arcanum.Simulation.Tests/Magic/SpellRunOriginalExeTests.cs",
                        "tests/Arcanum.Simulation.Tests/Ai/AiListOriginalExeTests.cs",
-                       "tests/Arcanum.Simulation.Tests/Items/TradeOriginalExeTests.cs")
+                       "tests/Arcanum.Simulation.Tests/Items/TradeOriginalExeTests.cs",
+                       "tests/Arcanum.Simulation.Tests/Travel/PureRulesOriginalExeTests.cs")
 # ARC-DEV-008: where `./arcanum oracle` has the tests write their receipts (checked against docs/verification/functions.csv).
 ORACLE_RECEIPTS = "docs/verification/receipts"
 ORACLE_FUNCTIONS: dict[str, str] = {
@@ -125,6 +126,16 @@ ORACLE_FUNCTIONS: dict[str, str] = {
     "0x4B5810": "AcidMatchesTheOriginal",
     "0x461F80": "PriceMatchesTheOriginal",
     "0x4CC380": "GlobalListMatchesTheOriginal",
+    "0x4B96F0": "DistanceMatchesTheOriginal",
+    "0x4B8D50": "RotationMatchesTheOriginal",
+    "0x4CFCD0": "SectorDirectionMatchesTheOriginal",
+    "0x4200C0": "EstimateMatchesTheOriginal",
+    "0x420110": "WindowDirectionMatchesTheOriginal",
+    "0x4B0F50": "StatCostMatchesTheOriginal",
+    "0x4C5F70": "KeyStatCapMatchesTheOriginal",
+    "0x4C64E0": "MinimumKeyStatMatchesTheOriginal",
+    "0x4C64D0": "BasicKeyStatMatchesTheOriginal",
+    "0x4C6B10": "TechKeyStatMatchesTheOriginal",
 }
 
 FORBIDDEN = ("--self-test", "--native-smoke", "--smoke", "--matrix", "--capture", "--screenshot", "--headless", "--fullscreen", "--automated", "--resize", "--input")

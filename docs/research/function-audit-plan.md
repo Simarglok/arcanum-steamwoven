@@ -22,6 +22,8 @@ risk-ranked check is planned instead:
 | **V3 Oracle growth** | Take the pure numeric functions among the `full` F2 rows and the V1 results (rolls, tables, caps, cost and time formulas) and run them in the oracle in batches of 5-10 per PR; an F2 `full` of that kind moves to F3. Rows whose function needs the world stay at F2 and get a smoke stage instead. The oracle reaches only pure functions (a stack frame, globals and a table; service calls are stubs), so it cannot check lifecycle or ordering. | Mac | M per batch | V1 |
 | **V4 Gates and matrix** | The matrix refresh is done (V4a, ARC-RES-107, E0-a of the [missing systems plan](../project/missing-systems-plan.md#1-answer)). The root test that finds methods whose summary names an executable address but carry no mark (unmarked code is invisible to the mark/row tests), with the written three states marked, exempt and pending, is done (ARC-DEV-1106, [verification README](../verification/README.md#address-named-methods)). Open: one that a census address with state "implemented" has a row. | cloud/Mac | S-M | V0, V1 |
 
+V3 status: batch 1 is done (ARC-DEV-1105, ten pure functions at F3: the location distance, tile, sector and window directions, window estimate, stat cost, key stat cap and minimum, the basic and tech key stat; the oracle's pure models in `tools/original-oracle`); it found one slip, the window direction 0x420110 (signs only, fixed). Further batches (rolls, tables, caps, cost and time formulas among the `full` F2 rows) are each their own issue.
+
 Order: V1, then V2 and V3. A blanket check of the roughly 4,700 call targets would take months of work that adds no game feature and delay
 the missing systems; the shortest route to the same safety is V1 plus the behaviour walks.
 

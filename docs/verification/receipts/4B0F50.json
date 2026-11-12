@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x4B0F50",
+  "name": "stat-cost",
+  "method": "Arcanum.Simulation.Character.AutoLevelRules.StatCost",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 3,
+  "mutantsCaught": 3,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "ca85d8f50bac55d03db2aac411c24c2234421f4453e5e787520c8829589fdd2f",
+  "configuration": "Debug"
+}
