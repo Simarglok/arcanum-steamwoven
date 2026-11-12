@@ -57,7 +57,7 @@ public static class CombatFieldReader
     public const int MaxEffects = 256;
     // NPC block (69..93).
     private const int NpcFlagsSlot = 69, AiDataSlot = 71, ExperienceWorthSlot = 74, ExperiencePoolSlot = 75, FactionSlot = 81, RetailPriceMultiplierSlot = 82,
-        ReactionBaseSlot = 84, SocialClassSlot = 85, WaitSlot = 89, NpcDamageSlot = 92;
+        ReactionBaseSlot = 84, SocialClassSlot = 85, WaitSlot = 89, GeneratorDataSlot = 90, NpcDamageSlot = 92;
 
     /// <summary>Skill points of a stored basic or tech skill value (bits 0..5).</summary>
     public static int SkillPoints(int stored) => stored & 0x3F;
@@ -210,6 +210,8 @@ public static class CombatFieldReader
                     // ARC-UI-097: optional (a record without the field reads 0, which names nobody in the kill log).
                     UnknownDescription = field(UnknownDescriptionSlot) is { Presence: Presence.Value, Number: { } unknown } && unknown is >= int.MinValue and <= int.MaxValue
                         ? (int)unknown : 0,
+                    // ARC-WORLD-1157: the monster generator's packed settings (field 0x12D, slot 90): optional (a record without the field reads 0, so only a generator's own record needs it).
+                    GeneratorData = field(GeneratorDataSlot) is { Presence: Presence.Value, Number: { } generator } && generator is >= int.MinValue and <= uint.MaxValue ? unchecked((uint)generator) : 0,
                 };
             }
             return new(origin, common, null, null, null, null, null, critter, npc);

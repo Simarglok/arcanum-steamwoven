@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":90,\"world\"";
+    private const string Current = "\"schemaVersion\":91,\"world\"";
+    private const string Current90 = "\"schemaVersion\":90,\"world\"";
     private const string Current89 = "\"schemaVersion\":89,\"world\"";
     private const string Current88 = "\"schemaVersion\":88,\"world\"";
     private const string Current87 = "\"schemaVersion\":87,\"world\"";
@@ -200,9 +201,19 @@ public sealed class SnapshotUpgradeTests
     // such a change has no older literal: no build before wrote one.
     internal static string Schema89(string text)
     {
-        StringAssert.Contains(text, Current);
+        text = Schema90(text);
+        StringAssert.Contains(text, Current90);
         Assert.IsFalse(System.Text.RegularExpressions.Regex.IsMatch(text, "\"(critter2|blit)(Set|Cleared)\":[1-9-]"), "a row with a critter flags 2 or blit flags change has no schema 89 text");
-        return text.Replace(",\"critter2Set\":0,\"critter2Cleared\":0,\"blitSet\":0,\"blitCleared\":0}", "}").Replace(Current, Current89);
+        return text.Replace(",\"critter2Set\":0,\"critter2Cleared\":0,\"blitSet\":0,\"blitCleared\":0}", "}").Replace(Current90, Current89);
+    }
+
+    // ARC-WORLD-1157: the schema 90 text of a schema 91 one with no generator state: the text loses the empty generators section. A text with a used slot, a count made or a copy has no older literal: no build
+    // before ran a generator.
+    internal static string Schema90(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.AreEqual(1, text.Split(NoGenerators).Length - 1, "the generators section is a new game's (no slot, no made count, no copy)");
+        return text.Replace(NoGenerators, "").Replace(Current, Current90);
     }
 
     // ARC-DEV-348: the schema 86 text of a schema 87 one with no NPC effect list: the effects section loses its empty list of NPC lists at its end. A text with a list has no older
@@ -612,6 +623,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":91,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":92,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

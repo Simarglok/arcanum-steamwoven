@@ -657,8 +657,9 @@ public sealed class GameSessionSnapshot
     /// Schema 88 adds the object-flags change (<c>obj_f_flags</c>) to each critter's written flags in the spells section (<see cref="SessionObjectFlags.ObjectSet"/>, ARC-DEV-358).
     /// Schema 89 adds the monster bodies of the Trait component (Polymorph, the body spells) to the spells section (<see cref="SessionSpellState.TraitArt"/>, ARC-MAGIC-040).
     /// Schema 90 adds the second critter flags and the blit flags change to each critter's written flags (<see cref="SessionObjectFlags.Critter2Set"/>, <see cref="SessionObjectFlags.BlitSet"/>, ARC-MAGIC-047).
-    /// Schemas 1..55 are refused, not migrated; schemas 56 to 89 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 90;
+    /// Schema 91 adds the <see cref="Generators"/> section: the monster generators' counter table, the creatures they made so far and the slot mark of each critter they made (ARC-WORLD-1157).
+    /// Schemas 1..55 are refused, not migrated; schemas 56 to 90 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 91;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
@@ -666,7 +667,7 @@ public sealed class GameSessionSnapshot
         SessionEffectState effects, SessionExperienceState experience, SessionAdvancementState advancement, SessionRandomState random,
         SessionLifeState life, SessionReactionState reactions, SessionCombatRound? combat, SessionCombatModeState combatMode,
         SessionConcealmentState concealment, SessionDangerState danger, SessionEventState events, SessionLightingState? lighting, SessionSoundState sound,
-        SessionHotkeyState? hotkeys = null, SessionObjectRecords? objects = null, SessionScriptState? scripts = null, SessionResidencyState? residency = null, SessionGoalState? goals = null, SessionSpellState? spells = null, SessionNewspaperState? newspaper = null, SessionFlightState? flights = null)
+        SessionHotkeyState? hotkeys = null, SessionObjectRecords? objects = null, SessionScriptState? scripts = null, SessionResidencyState? residency = null, SessionGoalState? goals = null, SessionSpellState? spells = null, SessionNewspaperState? newspaper = null, SessionFlightState? flights = null, SessionGeneratorState? generators = null)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
@@ -679,6 +680,7 @@ public sealed class GameSessionSnapshot
         Spells = spells ?? SessionSpellState.Empty;
         Newspaper = newspaper ?? SessionNewspaperState.NewGame;
         Flights = flights ?? SessionFlightState.Empty;
+        Generators = generators ?? SessionGeneratorState.Empty;
     }
 
     public int SchemaVersion { get; }
@@ -742,6 +744,8 @@ public sealed class GameSessionSnapshot
     public SessionNewspaperState Newspaper { get; }
     /// <summary>The projectiles in flight on the active map with the shots they carry (ARC-DEV-288, schema 80).</summary>
     public SessionFlightState Flights { get; }
+    /// <summary>The monster generators' counter table, the creatures they made and the slot mark of each critter they made (ARC-WORLD-1157, schema 91).</summary>
+    public SessionGeneratorState Generators { get; }
 }
 
 internal static class SessionValidation
