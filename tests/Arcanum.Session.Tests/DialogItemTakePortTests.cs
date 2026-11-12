@@ -93,6 +93,25 @@ public sealed class DialogItemTakePortTests
     }
 
     [TestMethod]
+    public void A_no_drop_item_fails_the_hand_over_at_the_remove_check_and_follows_the_same_fallback()
+    {
+        // ARC-WORLD-1283: 0x461CA0 refuses the no-drop item before the insert check (the host's check is never asked); the item's holder is still not the NPC, so 0x416091
+        // destroys it for a leaderless NPC (TK2), as it does after a refused insert.
+        using var owner = Hero();
+        var kit = owner.QueryHeroKit().Single(item => item.Kind.Name == 2850);
+        owner.AttachItemNoDrop(prototype => prototype == kit.Kind.Prototype);
+        var asked = 0;
+        var port = Port(owner, check: _ => { asked++; return SessionInsertVerdict.Accepted; });
+        var revision = owner.Version.Revision;
+        Assert.AreEqual(DialogCommandResult.Applied, port.Execute(Take(2850)));
+        Assert.AreEqual(0, asked, "no insert check after the remove check's refusal");
+        Assert.AreEqual(GameSessionDisposition.Changed, port.LastResult!.Value.Disposition);
+        Assert.AreEqual(revision + 1, owner.Version.Revision);
+        CollectionAssert.AreEqual(new[] { "kit:1", "kit:3" }, owner.QueryHeroKit().Select(item => item.Entity).ToArray());
+        CollectionAssert.DoesNotContain(List(owner, "merchant"), "kit:2");
+    }
+
+    [TestMethod]
     public void A_refused_hand_over_to_an_npc_the_pc_leads_lays_the_item_on_its_cell()
     {
         using var owner = Hero();
