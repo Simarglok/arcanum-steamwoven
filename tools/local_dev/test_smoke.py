@@ -89,7 +89,7 @@ class PlanTests(unittest.TestCase):
             self.assertEqual(dropped, {"DAT_ROOT", "ARC_HD_PACK", "ARC_AREA_MAP_SMOKE_ONLY", "ARCANUM_EXE",
                                        "VISUAL_PROFILE_TEST_PATH", "LAUNCHER_SETTINGS_TEST_PATH"})
             for name in smoke.SETTINGS:
-                self.assertIn(f"{name}_TEST_PATH={self.prefs / step.settings / (name.lower() + '.json')}", command)
+                self.assertIn(f"{name}_TEST_PATH={self.prefs / step.settings / smoke.settings_file(name)}", command)
             self.assertIn("__GODOT_SHELL_ENV_SET=1", command)
             self.assertIn("PATH=/sdk:/usr/bin:/bin:/usr/sbin:/sbin", command)
             self.assertEqual(command[command.index("--path") + 1], "tools/terrain-viewer/Godot")

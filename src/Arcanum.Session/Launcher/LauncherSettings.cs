@@ -24,7 +24,7 @@ public sealed record LauncherDisplay(LauncherWindowMode WindowMode, int Monitor,
                          && UiScalePercent is >= MinUiScalePercent and <= MaxUiScalePercent;
 }
 
-/// <summary>ARC-DEV-046: the launcher's settings (research ARC-RES-074, "Configuration file"), stored in <c>launcher_v1.json</c>:
+/// <summary>ARC-DEV-046: the launcher's settings (research ARC-RES-074, "Configuration file"), stored as the <c>launcher</c> line of the one settings file (<c>arcanum.cfg</c>, ARC-UI-1130; <c>launcher_v1.json</c> before it):
 /// the game folder with its source and the identity it had when it was last checked (so a changed installation is noticed at
 /// start), whether the launcher shows at every start, the rule mode (alpha: the built-in Steamwoven and Original only; custom
 /// profiles are a later schema), the display at start and the debug mode (ARC-DEV-050). Player preferences outside saves
@@ -65,7 +65,7 @@ public sealed record LauncherSettingsRead(LauncherSettingsReadStatus Status, Lau
     internal JsonObject? Unknown { get; init; }
 }
 
-/// <summary>The text of <c>launcher_v1.json</c>: a JSON object with <c>schema</c> 1, <c>gameRoot</c> (a path or null),
+/// <summary>The text of the <c>launcher</c> line (once <c>launcher_v1.json</c>): a JSON object with <c>schema</c> 1, <c>gameRoot</c> (a path or null),
 /// <c>gameSource</c> (<c>gog</c>, <c>other</c>), <c>gameIdentity</c> (null or <c>version</c>, <c>exeBytes</c>, <c>exeSha256</c>,
 /// <c>gog</c>, <c>archives</c>: <c>[{"name","bytes"}]</c> in mount order), <c>showAtStart</c>, <c>rules</c>
 /// (<c>{"active":"steamwoven"|"original"}</c>), <c>display</c> (<c>window</c>: <c>windowed</c>/<c>fullscreen</c>, <c>monitor</c>,
@@ -155,8 +155,8 @@ public static class LauncherSettingsCodec
     }
 
     /// <summary>The file text of <paramref name="settings"/>, keeping <paramref name="previous"/>'s unknown keys (a <see cref="LauncherSettingsReadStatus.Read"/> read only).
-    /// Settings this codec cannot write back (an unsafe path, an invalid display or identity) throw.</summary>
-    public static string Serialize(LauncherSettings settings, LauncherSettingsRead? previous = null)
+    /// Settings this codec cannot write back (an unsafe path, an invalid display or identity) throw. The settings file holds the text on one line (<paramref name="indented"/> false).</summary>
+    public static string Serialize(LauncherSettings settings, LauncherSettingsRead? previous = null, bool indented = true)
     {
         ArgumentNullException.ThrowIfNull(settings);
         if (settings.GameRoot is { } path && !SafePath(path)) throw new ArgumentException("The game folder path cannot be stored.", nameof(settings));
@@ -194,7 +194,7 @@ public static class LauncherSettingsCodec
         if (kept is not null)
             foreach (var property in kept.Where(property => !KnownKeys.Contains(property.Key, StringComparer.Ordinal)))
                 root[property.Key] = property.Value?.DeepClone();
-        return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        return root.ToJsonString(new JsonSerializerOptions { WriteIndented = indented });
     }
 
     private static LauncherSettingsRead Defaults(LauncherSettingsReadStatus status) => new(status, LauncherSettings.Defaults, [], []);

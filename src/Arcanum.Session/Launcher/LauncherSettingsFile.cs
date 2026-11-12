@@ -1,33 +1,32 @@
-using System.Text;
 using Arcanum.Data.Content;
+using Arcanum.Session.Settings;
 
 namespace Arcanum.Session.Launcher;
 
 public enum LauncherSettingsSaveStatus { Saved, RefusedOtherSchema, RefusedUnreadable, Failed }
 
-/// <summary>ARC-DEV-046: <c>launcher_v1.json</c> on disk. The host picks the path (Godot's <c>user://</c> for a player, a test path or
-/// none for an automated run). Reading and writing never throw for the file's state: a missing, unreadable or invalid file reads as
-/// the defaults with its status; a write goes to a temporary file in the same folder and replaces the file by a rename, keeps the
-/// unknown keys of the file it replaces, and never replaces a file of another schema (a newer build's) or one it cannot read.</summary>
+/// <summary>ARC-DEV-046, ARC-UI-1130: the launcher's settings on disk, as the <see cref="Line"/> line of the one settings file
+/// (<see cref="ArcanumConfig"/>, <c>arcanum.cfg</c>; they were a file of their own, <c>launcher_v1.json</c>, before). The host picks the
+/// path (Godot's <c>user://</c> for a player, a test path or none for an automated run). Reading and writing never throw for the file's
+/// state: a missing, unreadable or invalid file reads as the defaults with its status; a write changes this line only (every other setting
+/// of the file stays), keeps the unknown keys of the object it replaces, and never replaces a launcher object of another schema (a newer
+/// build's) or a file it cannot read.</summary>
 public static class LauncherSettingsFile
 {
-    public const string FileName = "launcher_v1.json";
+    public const string FileName = ArcanumConfig.FileName;
+    /// <summary>The name of the settings line that holds the launcher object (compact JSON, see <see cref="LauncherSettingsCodec"/>).</summary>
+    public const string Line = "launcher";
 
     public static LauncherSettingsRead Load(string path)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
-        try
+        var config = ArcanumConfig.Read(path);
+        return config.Status switch
         {
-            var file = new FileInfo(path);
-            if (!file.Exists) return LauncherSettingsCodec.Deserialize(null);
-            if (file.Length > LauncherSettingsCodec.MaxBytes) return Invalid();
-            return LauncherSettingsCodec.Deserialize(File.ReadAllText(path, new UTF8Encoding(false, throwOnInvalidBytes: true)));
-        }
-        catch (DecoderFallbackException) { return Invalid(); }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException or NotSupportedException or ArgumentException)
-        {
-            return new(LauncherSettingsReadStatus.Unreadable, LauncherSettings.Defaults, [], []);
-        }
+            ArcanumConfigReadStatus.Invalid => Invalid(),
+            ArcanumConfigReadStatus.Unreadable => new(LauncherSettingsReadStatus.Unreadable, LauncherSettings.Defaults, [], []),
+            _ => LauncherSettingsCodec.Deserialize(config.Get(Line)),
+        };
     }
 
     private static LauncherSettingsRead Invalid() => new(LauncherSettingsReadStatus.Invalid, LauncherSettings.Defaults, [], []);
@@ -40,45 +39,24 @@ public static class LauncherSettingsFile
         var current = Load(path);
         if (current.Status == LauncherSettingsReadStatus.OtherSchema) return LauncherSettingsSaveStatus.RefusedOtherSchema;
         if (current.Status == LauncherSettingsReadStatus.Unreadable) return LauncherSettingsSaveStatus.RefusedUnreadable;
-        return Write(path, LauncherSettingsCodec.Serialize(settings, current));
+        return Write(path, LauncherSettingsCodec.Serialize(settings, current, indented: false), replaceUnreadable: false);
     }
 
-    /// <summary>ARC-UI-014: the player's "reset settings": the defaults replace whatever file is there, one of another schema or one
-    /// that cannot be read included (the only write that does), and keep none of its keys.</summary>
+    /// <summary>ARC-UI-014: the player's "reset settings" of the launcher: the defaults replace the launcher line, one of another schema or
+    /// a file that cannot be read included (the only write that does), and keep none of its keys. The other settings of the file stay.</summary>
     public static LauncherSettingsSaveStatus Reset(string path)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
-        return Write(path, LauncherSettingsCodec.Serialize(LauncherSettings.Defaults));
+        return Write(path, LauncherSettingsCodec.Serialize(LauncherSettings.Defaults, indented: false), replaceUnreadable: true);
     }
 
-    private static LauncherSettingsSaveStatus Write(string path, string text)
-    {
-        string? temporary = null;
-        try
+    private static LauncherSettingsSaveStatus Write(string path, string text, bool replaceUnreadable)
+        => ArcanumConfig.Save(path, [new(Line, text)], replaceUnreadable) switch
         {
-            var full = Path.GetFullPath(path);
-            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-            temporary = $"{full}.{Guid.NewGuid():N}.tmp";
-            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write))
-            {
-                stream.Write(new UTF8Encoding(false).GetBytes(text));
-                stream.Flush(flushToDisk: true);
-            }
-            File.Move(temporary, full, overwrite: true);
-            temporary = null;
-            return LauncherSettingsSaveStatus.Saved;
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException or NotSupportedException or ArgumentException)
-        {
-            return LauncherSettingsSaveStatus.Failed;
-        }
-        finally
-        {
-            if (temporary is not null)
-                try { File.Delete(temporary); }
-                catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
-        }
-    }
+            ArcanumConfigSaveStatus.Saved => LauncherSettingsSaveStatus.Saved,
+            ArcanumConfigSaveStatus.RefusedUnreadable => LauncherSettingsSaveStatus.RefusedUnreadable,
+            _ => LauncherSettingsSaveStatus.Failed,
+        };
 }
 
 public enum GameFolderStartupStatus { Ready, NotFound }

@@ -205,7 +205,7 @@ The list covers every ledger row whose verdict is a bug of the original or a D2 
   `PoisonRecoveryTwice` when it fires.
 - The AREA viewer's launcher screen and its options window's Rules line (ARC-UI-014) choose between the two built-in
   modes; the Rules line switches the session in play, and every session the viewer then makes or loads takes the
-  chosen mode. The choice is stored in the launcher's settings file (ARC-DEV-046, `launcher_v1.json`, `rules.active`)
+  chosen mode. The choice is stored in the launcher's settings (ARC-DEV-046, the `launcher` line of the one settings file `arcanum.cfg`, ARC-UI-1130, `rules.active`)
   and every ordinary run starts in it; an automated run without a test file starts in Steamwoven.
   `RuleModeSettingCodec` is not used (the launcher's codec holds the mode). Custom per-switch mixes are not offered
   (after alpha).
