@@ -407,8 +407,6 @@ public partial class TerrainViewerApp
                 Require(carried is null || ReferenceEquals(session, carried), "SESSION_NOT_CARRIED");
             }
             Require(_mapStreamLog.Count >= StreamSmokeMoves, "MOVES");
-            // ARC-RENDER-1355: no window move left a body of the window before among the drawn ones (its frame is not in the new repository).
-            Require(_staleMovingDropped == 0, $"STALE_MOVING_BODIES {_staleMovingDropped}");
             GD.Print($"ARC-UI-056 stream cursor releases={_cursorReleases - releasesAtStart} reapplies={CursorReappliesForSelfTest - reappliesAtStart} shown={_cursorShown is not null}");
             // ARC-UI-056 (#1357): the cursor art stays set across every window move (never released), and is handed over again after each swap.
             if (CursorContent() is { Ready: true })

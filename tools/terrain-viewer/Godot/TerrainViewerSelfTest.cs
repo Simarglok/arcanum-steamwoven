@@ -147,6 +147,8 @@ public static partial class TerrainViewerSelfTest
             await AssertAreaCompositionMatrixAsync(host);
             Stage("AreaLighting");
             await AssertAreaLightingAsync(host);
+            Stage("AreaRingSwap");
+            await AssertAreaRingSwapAsync(host);
             Stage("AreaLocalLighting");
             await AssertAreaLocalLightingAsync(host);
             Stage("HdPresentation");

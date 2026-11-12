@@ -1014,7 +1014,7 @@ public partial class TerrainViewerApp
             companions = [.. companions ?? [], .. walked.Where(c => companions?.Any(o => o.Identity == c.Identity) != true)];
         if ((_fallenBodies.Count == 0 && _portalBodies.Count == 0 && _groundBodies.Count == 0 && _projectileBodies.Count == 0 && _eyeCandyBodies.Count == 0
             && _spellMissileBodies.Count == 0 && _sceneryBodies.Count == 0 && _traitBodies.Count == 0)
-            || _readyArea is null || _areaOverlay?.Area != _readyArea) return Resolvable("companions and AI movers", companions);
+            || _readyArea is null || _areaOverlay?.Area != _readyArea) return companions;
         var moving = companions?.ToList() ?? [];
         var taken = moving.Select(c => c.Identity).ToHashSet();
         moving.AddRange(_fallenBodies.Values.Where(c => !taken.Contains(c.Identity)));
@@ -1035,30 +1035,7 @@ public partial class TerrainViewerApp
         moving.AddRange(_eyeCandyBodies.Values);
         // ARC-MAGIC-018: spell missiles in flight.
         moving.AddRange(_spellMissileBodies.Values);
-        return Resolvable("moving bodies", moving);
-    }
-
-    // ARC-RENDER-1355: a moving body whose frame is not in the shown map's repository (one a window move left from the window before) is left out and
-    // said once per kind of list and count: the canvas uploads every visible frame from the repository, and one missing key ended the whole view.
-    private string? _staleMovingNoted;
-    /// <summary>Moving bodies left out so far because their frame was not in the shown map's repository (the stream smoke requires none).</summary>
-    private int _staleMovingDropped;
-    private IReadOnlyList<AreaDrawCommand>? Resolvable(string what, IReadOnlyList<AreaDrawCommand>? commands)
-    {
-        if (commands is null || commands.Count == 0 || _readyArea is null) return commands;
-        var frames = AreaFrames();
-        if (commands.All(c => frames.ContainsKey(c.Frame))) return commands;
-        var kept = commands.Where(c => frames.ContainsKey(c.Frame)).ToList();
-        var dropped = commands.Where(c => !frames.ContainsKey(c.Frame)).ToList();
-        _staleMovingDropped += dropped.Count;
-        var note = $"{what}: {dropped.Count} of {commands.Count}";
-        if (_staleMovingNoted != note)
-        {
-            _staleMovingNoted = note;
-            GD.Print($"ARC-RENDER-1355 moving bodies left out, their frame is not in the shown map's repository ({note}): "
-                + string.Join(", ", dropped.Take(5).Select(c => $"{c.Identity?.SourceIndex.ToString() ?? "-"}@{c.MapX},{c.MapY} phase {c.Phase}")));
-        }
-        return kept.AsReadOnly();
+        return moving;
     }
 
     /// <summary>The NPCs of the shown map the session killed or knocked out are drawn fallen: the dying animation the kill chose (the
