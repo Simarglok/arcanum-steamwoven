@@ -154,16 +154,25 @@ FR-MAGIC-011, FR-TRAVEL-005, FR-SCRIPT-002.
 (`ScrAdmissionSet.S30`; with S33 it is 61 and 33, section 3.1). The biggest groups: NPC state (`attack`, follow and disband, reaction, standpoints, change script,
 change art), world objects (create item, transfer item, lock state, open and close toggle, blocked sector), story and time (global quest
 state, hours, newspapers, give XP, fate point), media (movie, slide, fade) and dialog markers (`c r t z`, `r:`). FR: FR-SCRIPT-001…004,
-FR-DIALOG-003, FR-DIALOG-004, FR-SOCIAL-009, FR-CHAR-018.
+FR-DIALOG-003, FR-DIALOG-004, FR-SOCIAL-009, FR-CHAR-018. **Census update (ARC-RES-1101):** follow and attack are in S33 now; the live refusals are 26 conditions and 53 actions ([census](../research/script-refusal-census.md)).
 
 | Slice | Content | Size | Needs |
 | --- | --- | --- | --- |
-| E5-r | **Census:** which refused actions and conditions occur in the installed scripts, on which maps, in which quests, ranked by use. Decides the order of the slices below (docs-only output, real-data run on the Mac) | S–M | Mac data run |
-| E5-a | NPC-state actions: attack, follow and disband, reaction adjust and set, standpoints, change script, change art | M–L | E5-r |
-| E5-b | World-object actions: create item, transfer item, lock state, open or close toggle, sector blocked, transform | M | E5-r |
-| E5-c | Story and time actions and conditions: global quest state, rumors quelled, hours, time, give XP, give fate point, blessing and curse | M | E5-r |
+| E5-r | **Done (ARC-RES-1101, 2026-11-12; [census](../research/script-refusal-census.md)):** which refused actions and conditions occur in the installed scripts, on which maps, in which quests, ranked by use; the order of the slices below. Under S33, 447 of 1,809 attached scripts (2,529 of 7,766 placed sites) are blocked by 79 types | S–M | Mac data run |
+| E5-a | NPC-state actions: disband, reaction adjust and set, standpoints (day, night, the two extended), change script, change art (follow and attack are in S33 already). Census: 166 blocked scripts, 550 sites freed alone | M–L | E5-r (done) |
+| E5-b | World-object actions: create item, lock state, open or close toggle and `obj_is_open`, sector blocked and `sector_is_blocked`, monster generator, destroy item named (transform is in S33; transfer item is one site). Census: 71 blocked scripts, 208 sites alone | M | E5-r (done) |
+| E5-c | Story and time actions and conditions: global quest state, rumors quelled, hours, time, give XP, give fate point, blessing and curse. Census: 80 blocked scripts, 98 sites alone (the smallest of E5-a to E5-c) | M | E5-r (done) |
 | E5-d | Dialog trainers and special replies (`t:`, `c`, `r`, `z`, `r:`, positive `IN`), skill training window, Educator | M–L | — |
-| E5-e | Loops and calls (`loop break`, `call script at`) | S–M | E5-r |
+| E5-e | Loops and calls: `loop break` (`call script at` occurs once on a line no run reaches). Census: 17 blocked scripts, 42 sites alone | S | E5-r (done) |
+
+**Census result (ARC-RES-1101, [details](../research/script-refusal-census.md)).** The order that frees the most placed sites under S33 is: vitals
+(`get_hit_points`, `get_fatigue_points`, `heal_poison`: one food use script on 729 objects; 836 sites alone), E5-a, critter-state conditions
+(met before, bad associates, invisible, in dialog, in combat, can see, prowling; 267 sites alone), E5-b, E5-c, spell effects and spell-state queries
+(eye candy, magictech adjustment, polymorphed, shrunk, mirror image; 62 sites alone), scene queries (get location, get scroll distance),
+E5-e, then the media actions (E7-b). Another 60 attached scripts are also refused for a reason that is not a type (45 for an object operand kind
+S33 does not admit, 13 for a computed goto, 2 for a goto beyond the end), a gap no planned slice covers. The vitals, critter-state and spell-effect groups have no slice in this plan; they are proposed to the
+coordinator as work items. The raise hook (E4-j, magic audit MA-10) is blocked only on two of its 15 placed sites (`change_script` and
+`set_pc_quest_unbotched`); the spell hooks of E4-g are not gated by E5-a or E5-b.
 
 ### E6 Traps and placed devices
 
@@ -236,7 +245,7 @@ FR-ITEM-008, FR-MEDIA-003, FR-COMBAT-002, FR-COMBAT-003.
 ## 5. Order and dependencies
 
 ```
-E1-r ─┐                         E5-r ──► E5-a, E5-b, E5-c ──► E7-b, E8-h
+E1-r ─┐                         E5-r (done) ──► E5-a, E5-b, E5-c ──► E7-b, E8-h
 E1-a ─┴► E1-b                   E3-r ──► E3-a ──► E3-c
 E1-a ──► E1-c ──► E1-e ──► E1-f   E3-r ──► E3-d
 E1-d ──┬──────────┘              E2-r ──► E2-a, E2-b;  E2-a ──► E2-c
@@ -245,7 +254,7 @@ E1-d ──┬──────────┘              E2-r ──► E2-a
 E5-c ──► E4-g                    E6-a ──► E6-c, E8-b
 ```
 
-**Wave 0, no dependency, can start in parallel** (limit by the Mac): E1-r, E1-a, E1-d, E0-a, E5-r, E3-r, E2-r, E3-b, E8-a, E8-d, E8-f, E6-a, E5-d.
+**Wave 0, no dependency, can start in parallel** (limit by the Mac): E1-r, E1-a, E1-d, E0-a, E5-r (done), E3-r, E2-r, E3-b, E8-a, E8-d, E8-f, E6-a, E5-d.
 **Wave 1:** E1-b (closes two B47 reports), E1-c, E3-a, E5-a…E5-c, E5-e, E4-a, E4-c, E8-b, E6-c.
 **Wave 2:** E1-e (closes the third B47 report), E1-f, E2-a, E2-b, E3-c, E3-d, E4-b, E4-d…E4-h, E6-b, E8-g.
 **Wave 3:** E2-c, E7 (after the decoder decision), E8-c, E8-e, E8-h, E9, E0-b (any time, cloud).
@@ -255,7 +264,7 @@ Threads of different lanes run beside each other.
 
 ## 6. Reads of the original that the plan needs
 
-Mac reads, each a docs-only research slice that ends in ledger rows: E1-r, E2-r, E3-r, E5-r (a data census), E7-r (a research on decoders),
+Mac reads, each a docs-only research slice that ends in ledger rows: E1-r, E2-r, E3-r, E5-r (a data census, done), E7-r (a research on decoders),
 E8-c and E8-e (UI rows). Everything else uses reads that already exist in the [ledger](../research/original-verification-ledger.md); each
 implementing slice still reads the F0 facts of the functions it changes, as the owner decided on 2026-10-20.
 
