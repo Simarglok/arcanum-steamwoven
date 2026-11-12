@@ -84,6 +84,7 @@ src/Arcanum.Session/GameSessionGoals.cs,RetargetGoal,pending,
 src/Arcanum.Session/GameSessionGoals.cs,SweepGoalsForRoundStart,pending,
 src/Arcanum.Session/GameSessionHandoverFallback.cs,SettleRefusedHandover,pending,
 src/Arcanum.Session/GameSessionHeal.cs,HealByNpc,pending,
+src/Arcanum.Session/GameSessionHeroDoll.cs,QueryHeroDollRatings,exempt,host
 src/Arcanum.Session/GameSessionHeroGrid.cs,ArrangeHeroGrid,pending,
 src/Arcanum.Session/GameSessionHeroGrid.cs,AttachItemArtSizes,pending,
 src/Arcanum.Session/GameSessionHeroGrid.cs,MoveHeroGold,pending,

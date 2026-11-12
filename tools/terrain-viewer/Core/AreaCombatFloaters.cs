@@ -36,12 +36,34 @@ public static class AreaCombatFloaters
         ArgumentNullException.ThrowIfNull(result);
         if (result.Disposition == GameSessionDisposition.Rejected) return null;
         // The original prints the damage after a portal's or container's material reduction, never below 0 (0x4B4390's object branch).
-        int? damage = result.Object is { } hit ? Math.Max(hit.Damage, 0)
+        int? damage = result.Object is { } hit ? Dealt(hit)
             : result.Item is not null && result.Resolution?.Damage is { Prevented: DamagePrevention.None } item && item.Recipient == DamageRecipient.Target
                 ? Math.Max(item.HitPointDamage, 0) : null;
         return Of(result.Resolution, result.Life is null ? null : DamageRecipient.Attacker, result.Life, result.Criticals, result.Wear, attacker,
             FloaterSide.Other, damage);
     }
+
+    /// <summary>
+    /// ARC-COMBAT-1138: the floater outcome of damage that reached a door, window, container, scenery or trap and is no hero attack (a spell's,
+    /// a trap's, a burn's, a script's; <see cref="AreaObjectHit"/>): the object's damage line, with no critter step. The damage function prints
+    /// it whoever called it (CH12, CH13): at "text floaters" 2 only, in white.
+    /// </summary>
+    public static CombatFloaterHit Of(AreaObjectHit hit)
+    {
+        ArgumentNullException.ThrowIfNull(hit);
+        return new CombatFloaterHit { ObjectStep = true, HitPoints = Dealt(hit.Hit) };
+    }
+
+    /// <summary>ARC-COMBAT-1138 (OD16): the same line for damage that reached an item (<see cref="AreaItemHit"/>), its durability being its hit points.</summary>
+    public static CombatFloaterHit Of(AreaItemHit hit)
+    {
+        ArgumentNullException.ThrowIfNull(hit);
+        return new CombatFloaterHit { ObjectStep = true, HitPoints = Math.Max(hit.Amount, 0) };
+    }
+
+    /// <summary>The damage a hit on an object dealt: what its damage grew by (the amount after the portal's or container's material
+    /// reduction, never below 0), not the object's total damage.</summary>
+    private static int Dealt(ObjectHitOutcome hit) => Math.Max(hit.Damage - hit.DamageBefore, 0);
 
     /// <summary>
     /// ARC-DEV-296 (B42): the floater outcome of a damage step that is no weapon swing or shot (a spell's, a trap's, a burn's, a script's;

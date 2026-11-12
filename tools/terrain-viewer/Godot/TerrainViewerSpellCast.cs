@@ -119,7 +119,8 @@ public partial class TerrainViewerApp
         var stamp = (owner, area, grid, (object?)_areaPortals);
         if (Equals(stamp, _spellCasterStamp) && _spellCaster is not null) return _spellCaster;
         CancelSpellCast("the map changed");
-        ClearEyeCandy("the map changed");
+        // ARC-MAGIC-1280: a session's first cast host keeps the overlay runs its load restored (their host was built by their first step); a rebuild for a map or its portals does not.
+        ClearEyeCandy("the map changed", keepRestoredOverlays: _spellCaster is null || !ReferenceEquals(_spellCaster.Owner, owner));
         var map = new AreaSpellCastMap(owner, area.Snapshot.RuntimeMap, grid.Snapshot, area.Snapshot.Objects, _combatHost!, HeroWorldCell, AreaLineOfFireNow,
             key => AreaRemovedObjects().Contains(key), SpellPlacedCompanions, HeroHolds, SpellVisitingCompanions,
             // ARC-DEV-255: damage to a door, window, container, scenery or trap goes through the object-attack host's baselines.
@@ -868,6 +869,8 @@ public partial class TerrainViewerApp
             foreach (var hit in hits)
             {
                 GD.Print($"ARC-DEV-255 object-damage target={hit.Id} damage={hit.Hit.Damage - hit.Hit.DamageBefore} total={hit.Hit.Damage} broken={hit.Hit.Broken} break={hit.Hit.Break} host={hit.Host}");
+                // ARC-COMBAT-1138: the damage function floats the object's damage line whoever dealt it (CH12, CH13).
+                FloatObjectDamage(hit.Id, _spellCastMap?.Row(hit.Id), AreaCombatFloaters.Of(hit));
                 if (_spellCastMap?.Row(hit.Id) is { } row) RunObjectBreakSteps(row, hit.Host, false, false);
             }
         }
@@ -894,7 +897,12 @@ public partial class TerrainViewerApp
             foreach (var hit in hits)
             {
                 GD.Print($"ARC-COMBAT-025 item-damage target={hit.Id} condition={hit.Item.Condition} break={hit.Item.Break} host={hit.Host}");
-                if (_spellCastMap?.Row(hit.Id) is { } row) RunObjectBreakSteps(row, hit.Host, false, false);
+                // ARC-COMBAT-1138: an item lying on the map floats its damage line over its cell; a worn item has no row and no cell to float over.
+                if (_spellCastMap?.Row(hit.Id) is { } row)
+                {
+                    FloatObjectDamage(hit.Id, row, AreaCombatFloaters.Of(hit));
+                    RunObjectBreakSteps(row, hit.Host, false, false);
+                }
             }
         }
         if (!any) return;
