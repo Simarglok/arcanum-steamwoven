@@ -37,8 +37,8 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// ARC-AI-1314 (0x4ACBB0, 0x4ACDB0, 0x45F6D0): what one route step writes on the NPC, in one revision: the waypoint index <paramref name="index"/> (over <paramref name="dataIndex"/>, the row's), the standpoint latch
-    /// <paramref name="latch"/> (over <paramref name="dataLatch"/>, the row's bit) and, with <paramref name="ensureTeleportMap"/>, the open map <paramref name="map"/> as the teleport map while the NPC has none. A value that gives the
+    /// ARC-AI-1314 (ledger WS3, WS4, WS9): what one route step (the waypoint or the standpoint step) writes on the NPC, in one revision: the waypoint index <paramref name="index"/> (over <paramref name="dataIndex"/>, the row's), the standpoint latch
+    /// <paramref name="latch"/> (over <paramref name="dataLatch"/>, the row's bit) and, with <paramref name="ensureTeleportMap"/>, the open map <paramref name="map"/> as the teleport map while the NPC has none (the getter's write). A value that gives the
     /// data's own back leaves no record. Nothing to write, or what is recorded already, is <see cref="GameSessionDisposition.NoChange"/>; an entity that is not a mobile object, a map below 1, a stale version and the change budget are refused as the map change does.
     /// </summary>
     public GameSessionMutationResult WriteRouteStep(GameSessionVersion expected, string entity, SessionMapId map, int? index = null, int dataIndex = 0, bool? latch = null, bool dataLatch = false, bool ensureTeleportMap = false)
