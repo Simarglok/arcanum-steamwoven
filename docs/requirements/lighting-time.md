@@ -152,7 +152,7 @@ executable/gameplay/visual parity are **not implemented / NOT_VERIFIED** by this
 
 **Dependencies:** a single light sampling API; the skill invocation context; emitted-light flags and dark-sight capabilities; object/coordinate luminance. **Proposed scenarios:** synthetic light changes only an explicitly light-aware result; identical object and coordinate parameters give a consistent sample; dark-sight/emission modifiers are checked independently; actions unrelated to light do not change.
 
-**Steamwoven:** there is no production runtime for this requirement at the audit baseline. See the [component catalogue](../project/status.md); the research contract does not close gameplay/save/Remastered integration.
+**Steamwoven:** partial, [ARC-WORLD-1149](../rendering/area-lighting.md#light-level-for-checks-arc-world-1149): the level of a cell is the grey (the original's weights 0.30, 0.59, 0.11 of 255, [ledger LL1–LL4](../research/ledger/world.md#light-level-for-checks-arc-world-1149)) of the colour an object standing there is lit with, and the viewer feeds it into the hero's attack and throw on an NPC, the combat panel's chance, the lockpicking of a portal and the spot roll of a trap object. NPC attacks on the hero or a companion, container picks, trap disarming, seeing checks and AI awareness do not read it yet. See the [component catalogue](../project/status.md); the research contract does not close gameplay/save/Remastered integration.
 
 <a id="fr-light-012"></a>
 

@@ -23,8 +23,8 @@ Since 2026-11-11 a slice merges without waiting for the owner's in-game comparis
   (E5, its first slice is a census), the leftover player windows (E8), media (E7, after a decoder decision).
 - **Deferred by earlier owner decisions** (listed, not planned): the network game, a second module, mods (E10).
 - **Documents re-baselined:** slice E0-a is done (ARC-RES-107 re-checked the coverage matrix and the status catalogue against the code,
-  2026-11-11) and ARC-DEV-1110 re-checked them again against `origin/main` `4dc5162` after the magic, technology and trap slices of the same day; the map in section 3 is the code-checked state of that commit. One gap is left: **FR-LIGHT-011**, the attack and skill
-  rolls' darkness penalty (the rules take a light value, the viewer feeds in only the full light 255; the cell light source is missing).
+  2026-11-11) and ARC-DEV-1110 re-checked them again against `origin/main` `4dc5162` after the magic, technology and trap slices of the same day; the map in section 3 is the code-checked state of that commit. One gap was left, **FR-LIGHT-011** (the darkness penalty of rolls); ARC-WORLD-1149 closed its host part: the cell light level feeds the hero's attacks and
+  throws, the combat panel, portal lockpicking and trap spotting (what still takes full light is listed in the [lighting area](../rendering/area-lighting.md#light-level-for-checks-arc-world-1149)).
 
 ## 3. Map of the systems
 

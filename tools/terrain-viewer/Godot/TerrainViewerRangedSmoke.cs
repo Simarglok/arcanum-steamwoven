@@ -30,6 +30,15 @@ public partial class TerrainViewerApp
     // side). The NPC is healed back afterwards. NONE on a map without such cells.
     private async Task RunAreaRangedSmokeAsync()
     {
+        // ARC-WORLD-1149: this stage judges the shots' flight, strikes and wear, and wants a hit within 12 shots; at night a shot would meet the darkness penalty
+        // (FR-LIGHT-011) and miss, so its checks read full light.
+        _cellLightForSelfTest = Arcanum.Simulation.Combat.AttackRules.MaxLightLevel;
+        try { await RunAreaRangedSmokeCoreAsync(); }
+        finally { _cellLightForSelfTest = null; }
+    }
+
+    private async Task RunAreaRangedSmokeCoreAsync()
+    {
         if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _readyArea is not { } area
             || _worldActor.Session is not AreaGridSession grid || AreaLineOfFireNow() is not { } lineMap)
         { GD.Print($"ARC-COMBAT-015 native-smoke ranged NONE map={_readyMapName} (no hero or no attack map)"); return; }

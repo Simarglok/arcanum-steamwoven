@@ -161,8 +161,8 @@ is `AreaUseScriptHost.EntityId`, as for the object damage domain.
   The walk check rolls for each unknown trap object on the next tile (the first one spotted ends the
   walk) and a use or a step rolls once more for the trap it meets, as the original's separate
   attempts do (SP2); a failed roll leaves the trap unknown and the use or step goes on, so the trap
-  fires. The light at the trap is full (as the lock pick's): the darkness term of an untrained hero
-  is not applied. A hero-less session rolls nothing (the trap stays unknown).
+  fires. The light at the trap is the light at its cell (ARC-WORLD-1149, as the lock pick's): the darkness term of an untrained hero
+  applies. A hero-less session rolls nothing (the trap stays unknown).
 - **Effects.** A fired native run goes to `SessionSpellCaster.ApplyTrapEffect` with the cast
   map's id of the trapped object and the hero as the triggerer. Without a cast host no trap
   is met at all (a use goes on as before and the dispatcher stops at a native trap script; a
@@ -174,7 +174,7 @@ is `AreaUseScriptHost.EntityId`, as for the object damage domain.
 ## Not modelled here
 
 - The disarm traps roll and action (E6-a, read as SP3), the spot modifier of the item at inventory
-  location 1005 (SP2), the light at the trap for the spot roll, and the NPCs' and companions' own
+  location 1005 (SP2), and the NPCs' and companions' own
   spot attempts.
 - The 30002 trap in the viewer (with its shot), an ordinary trap script on a step, and the
   route cost of a known trap (DC8) on the PC's route (the drop map's route has it), the

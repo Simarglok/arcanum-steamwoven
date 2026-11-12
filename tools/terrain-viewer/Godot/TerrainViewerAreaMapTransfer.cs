@@ -292,7 +292,7 @@ public partial class TerrainViewerApp
             OtherMapRow = inventory is null ? null : obj => inventory.RowOn(obj.Map, obj.Code),
         };
         // ARC-WORLD-110: a use meets the object's trap first; the walk and the steps meet the same host's traps.
-        _areaTraps = new AreaTraps(owner, host, snapshot.Objects, world.Gone, AreaTrapEffectsNow);
+        _areaTraps = new AreaTraps(owner, host, snapshot.Objects, world.Gone, AreaTrapEffectsNow, AreaRowLightLevel);
         host.Traps = _areaTraps.Use;
         // ARC-DEV-371: creations a replaced host had not handed over yet keep their tile notification when it is the same map's.
         if (_useScriptHost is { } replaced && replaced.Snapshot.RuntimeMap == snapshot.RuntimeMap && ReferenceEquals(replaced.Session, owner)) NoteScriptCreations(replaced.Host.TakeCreations());
