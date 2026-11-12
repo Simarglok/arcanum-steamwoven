@@ -177,20 +177,23 @@ public partial class TerrainViewerApp
                 if (FloaterCell(doomedId) is null && _spellCastMap?.Row(doomedId) is { WorldX: not null, WorldY: not null } doomedRow) _floaterCells[doomedId] = LiveWorldCell(doomedRow);
                 // The diagnostic HUD covers the top of the window: hidden for the two captures only.
                 if (!string.IsNullOrWhiteSpace(capture)) _hud!.Visible = false;
-                await Capture("object-before");
-                var objectAnswer = DamageByScript(doomed.Entity, 25, 0, true);
-                var objectAfter = session.QueryObject(doomed);
-                var lost = objectAfter.Damage - objectBefore.Damage;
-                Require(lost > 0, $"the script's damage reached the {doomed.Baseline.Kind} {doomed.Entity}: {objectBefore} -> {objectAfter} {objectAnswer}");
-                var objectLines = layer.Field.Lines(doomedId);
-                Require(objectLines.Count == 1 && objectLines[0].Color == FloaterColor.White
-                    && objectLines[0].Text == texts.Text(CombatFloaters.HitPointsLine) + " " + lost.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    $"the object's damage line 'HP {lost}' in white: " + string.Join("|", objectLines.Select(l => $"{l.Color}:{l.Text}")));
-                for (var step = 0; step < 8; step++) layer.Field.Advance(400_000 + step * FloaterRules.StepMs, FloaterRules.DefaultSpeed);
-                layer.Redraw();
-                await Capture("object-after");
-                _hud!.Visible = true;
-                GD.Print($"ARC-COMBAT-1138 floaters object-damage anchor={FloaterAnchor(doomedId)} kind={doomed.Baseline.Kind} id={doomedId} lost={lost} line={objectLines[0].Text}");
+                try
+                {
+                    await Capture("object-before");
+                    var objectAnswer = DamageByScript(doomed.Entity, 25, 0, true);
+                    var objectAfter = session.QueryObject(doomed);
+                    var lost = objectAfter.Damage - objectBefore.Damage;
+                    Require(lost > 0, $"the script's damage reached the {doomed.Baseline.Kind} {doomed.Entity}: {objectBefore} -> {objectAfter} {objectAnswer}");
+                    var objectLines = layer.Field.Lines(doomedId);
+                    Require(objectLines.Count == 1 && objectLines[0].Color == FloaterColor.White
+                        && objectLines[0].Text == texts.Text(CombatFloaters.HitPointsLine) + " " + lost.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        $"the object's damage line 'HP {lost}' in white: " + string.Join("|", objectLines.Select(l => $"{l.Color}:{l.Text}")));
+                    for (var step = 0; step < 8; step++) layer.Field.Advance(400_000 + step * FloaterRules.StepMs, FloaterRules.DefaultSpeed);
+                    layer.Redraw();
+                    await Capture("object-after");
+                    GD.Print($"ARC-COMBAT-1138 floaters object-damage anchor={FloaterAnchor(doomedId)} kind={doomed.Baseline.Kind} id={doomedId} lost={lost} line={objectLines[0].Text}");
+                }
+                finally { _hud!.Visible = true; }
             }
             else GD.Print("ARC-COMBAT-1138 floaters object-damage NONE (no unbroken object with hit points to spare on the map)");
 

@@ -227,7 +227,7 @@ step: the item's damage and its two-step break are the durability records (`Dama
 - Read in the executable: nothing new. The object branch (OD1–OD12), the acid's steps (DH9) and the burn's victim types 5..16 (GT94–GT97) were read twice or
   more; this slice applies them to the item type. The item's taking-damage script (point 0x17) is asked where ARC-DEV-254 and ARC-DEV-261's hook asks it (by the item's cast id); the witnesses are not modelled.
 - The viewer runs an item's trap and BUST script as it runs any broken object's (ARC-DEV-260, `RunObjectBreakSteps`) for an item lying on the map; a worn item has no map row, so its BUST script is not run.
-- The viewer floats the damage line of a hit on an item lying on the map (`HT N`, the packet's amount, ARC-COMBAT-1138, `AreaItemHit.Amount`); a worn item has no cell to float over.
+- The viewer floats the damage line of a hit on an item lying on the map (`HT N`, the packet's amount, ARC-COMBAT-1138, `AreaItemHit.Amount`); a worn item has no cell to float over. Not done: a hit whose amount the material takes all of (OD3 floats `HT 0` over the object) queues no object hit, so it floats nothing on a portal or container; an item's zero hit does float `HT 0`.
 - NOT READY: an item in a pack, a container or a junk pile is never reached (areas skip them); a
   non-kit item the hero wears; items on another map than the shown one; an NPC's item broken mid-pass is dropped by the host's build, not by the session.
 
