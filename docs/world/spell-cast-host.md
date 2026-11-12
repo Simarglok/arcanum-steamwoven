@@ -423,7 +423,7 @@ The pointer entering a slot or a recent-action button shows its entry's descript
    (the window's handler is the inventory's, 0x573C74; the description is drawn only while the bars show, which the viewer hides under the window, so in practice the script runs and the item window is a known gap; the viewer runs it only with its interface on),
    and the dialog start runs the speaker's examine script and redraws its window as the world hover does (0x567460), once, with the interface on. The
    floating tooltip of the viewer without the interface bars (the original has none) does not run it, and the follower portraits' hover (0x56A9D0,
-   HK26) is not built.
+   HK26) runs it too (ARC-UI-1281, [follower portraits' hover](companion-orders-runtime.md#follower-portraits-hover-arc-ui-1281)).
 5. **Inventory** (HK23). In the inventory window, the pointer resting 35 ms on another item of the doll or the grid (nothing held) draws
    that item's window the same way; resting on no item keeps the last description.
 6. **Smoke.** The hotkey-bar smoke enters slot 2 (a spell: its hint with the college's icon), a skill entry (its hint; in the spells mode
@@ -772,7 +772,7 @@ executable reads [XR1–XR5](../research/ledger/spell-runs.md#magic-audit-execut
   (the wrappers 0x4EE4C0, 0x4EE430, 0x4EE3A0 test the local player; a single-player game does no more), so an NPC caster's Identify has no effect and is no "not ready" line. For the hero the host logs one
   answer by the target's object type: `IdentifyCritter` (a PC or NPC: the original opens the read-only NPC sheet, XR2), `IdentifyContainer` (the container's inventory in window mode 4 with no lock, jam or
   magically-held test, XR3), `IdentifyItem` (any other type: the item description, the true one when the item is identified, XR4). The viewer shows each as a line in the message log
-  (`AreaSpellCasting.Line`); the windows, and what a press in mode 4 may move (not read), are E8's, which reads the same events.
+  (`AreaSpellCasting.Line`); since ARC-UI-1127 (E8-g) `IdentifyCritter` for an NPC also opens its read-only character sheet (`TakeIdentifyEvent`, queued until nothing else owns input, the same sheet as the dialog's "show your abilities", [ARC-UI-088](../rendering/terrain-viewer.md)); the hero as the target keeps the line (its sheet is the C key). The container's inventory window and the item description window, and what a press in mode 4 may move (not read), are E8's still.
 - **Divine Magick's identified flag (0x454A10, XR4, XR5).** Spell 9 (area `Tgt_Obj_Inven`) sets `OIF_IDENTIFIED` (`obj_f_item_flags` 0x57, bit 0x1) on its item before its Identify. In the original it is
   a plain write: no side effect for item flags, no reference count, and nothing in the run reads it back. The session keeps it as the **identification mark** that a barter window already sets
   (`GameSessionOwner.MarkItemIdentified`, `QueryItemIdentified`, saved in the inventory section: no schema step), so every reader of that mark (the name, the item window's lines, the worth in a barter, the
@@ -781,7 +781,7 @@ executable reads [XR1–XR5](../research/ledger/spell-runs.md#magic-audit-execut
 - **Census (MA-0).** Records 6 and 7 leave the not-ready list on both census targets; record 9 keeps its `ObjFlag` on the census's critter targets (its target is an item).
 
 **Not ready.** Nothing picks an inventory item as a spell target yet (the pane's targeting, the inventory bit of `SessionItemUseCast.InventoryTarget`, and `Tgt_Obj_Inven` in the target rules), so spell 9 cannot
-be cast from the viewer; the three windows (E8); the multiplayer packets (kinds 7, 8, 10).
+be cast from the viewer; the container's inventory window (mode 4) and the item description window (E8); the multiplayer packets (kinds 7, 8, 10).
 
 
 ## Dispel (ARC-MAGIC-034)

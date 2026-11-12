@@ -196,7 +196,7 @@ public partial class TerrainViewerApp
 
         public void StartSkillWithItem(string user, string item, string target, int skill)
         {
-            if (skill == AiPassChoice.HealSkill) After = () => app.HealSelf(item, charged: true);
+            if (skill == AiPassChoice.HealSkill) After = () => app.HealCritter(item, target, charged: true);
             else Message = $"not used: skill {skill} with an item is NOT READY here";
         }
 

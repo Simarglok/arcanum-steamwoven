@@ -1,5 +1,6 @@
 using Arcanum.Data.Area;
 using Arcanum.Session;
+using Arcanum.Simulation.Locks;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
@@ -19,6 +20,9 @@ public partial class TerrainViewerApp
     //  2. A left press on a tile three to eight cells away is the pick of the cursor's mask: the cursor closes, goal 41 (or goal 39 when an object stands there) walks the hero next to the target and the use's refusal shows.
     //  3. A left press on the NPC (an object target with OIF_NO_RANGED_USE, IA8) starts goal 39: the hero walks next to it and the use runs (the refusal of an NPC target shows), the device staying in the pack.
     //  5. (ARC-WORLD-125) Two script trap devices used on the same free tile: the first arms a marker of its script's prototype (26000..26007), the second is refused with line 3 and stays.
+    //  6. (ARC-UI-1127, E8-g) A healing kit with the target flag aimed at a hurt living NPC: goal 39 walks the hero next to it and the session's heal runs on it.
+    //  7. (ARC-UI-1127) Lockpicks on the nearest locked container without an unlock script (needs one in the window: the town sector): skill goal 33 walks, turns and the session's pick runs; the open attempt follows it.
+    //  8. (ARC-UI-1127) The cast host's Identify answer for an NPC opens the NPC's read-only sheet.
     private async Task RunAreaItemAimSmokeAsync()
     {
         static void Require(bool value, string why)
@@ -171,7 +175,91 @@ public partial class TerrainViewerApp
             PlaceTrapDeviceUse(second, null, free);
             Require(LastScriptTrapUse is { Outcome: SessionScriptTrapOutcome.TileRefused, Plan.RefusalLine: 3 } && TechSmokeHeld(session).Contains(second), $"the second device was refused with line 3 and stays: {LastScriptTrapUse?.Outcome}");
             GD.Print($"ARC-WORLD-125 script-trap first={armed.Outcome} second={LastScriptTrapUse!.Outcome} tile={cellTwo.X},{cellTwo.Y}");
-            GD.Print("ARC-DEV-365 native-smoke item-aim PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Tile = tileGoal, Npc = npc.Id, Notice = _itemAimLast }));
+            // 6. ARC-UI-1127 (E8-g, ledger IA14, HL1): a healing kit with OIF_NEEDS_TARGET aimed at the NPC of step 3 (the cursor is the kit's use: the heal skill on another critter): goal 39 walks the hero next to the NPC and the
+            //    session's heal runs on it (a hurt NPC heals by the check's amount; the kit loses a use or is destroyed). The kit is the first installed healing item with the flag and no use or destroy script.
+            for (var wait = 0; wait < 600 && _barterData is null; wait++) { AdoptBarterData(); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
+            var barter = _barterData?.Data;
+            Require(barter is not null, "the item prototypes loaded (" + _barterData?.Status + ")");
+            var kitNumber = Enumerable.Range(6049, 15213 - 6049 + 1).FirstOrDefault(n => barter!.Prototype(n) is { } p && AreaItemUseFacts.From("kit", p) is { HealingKit: true, NeedsTarget: true, UseScript: false }
+                && AreaHealingItems.From("kit", p) is { } healing && !healing.ScriptPoints.Contains(SessionHealingItem.UseScript) && !healing.ScriptPoints.Contains(SessionHealingItem.DestroyScript));
+            var healed = "NONE";
+            // The patient: the nearest living NPC the heal can change (a dead or invulnerable one keeps its hit points).
+            var patientNpc = area.Snapshot.Objects.Where(row => row.Type == 16 && row.Scope == AreaScope.Core && row.WorldX is not null && row.WorldY is not null && !IsAreaCompanion(row.Key))
+                .Select(row => (Row: row, Id: SpellPickId(row.Key)))
+                .Where(o => o.Id is not null && caster!.Facts(o.Id) is { } facts && facts.Location != SpellLocation.None && (facts.ObjectFlags & SpellTargetObject.Invulnerable) == 0
+                    && caster.LifeTarget(o.Id) is { } lt && session.QueryLife(lt).View is { Status: { IsDead: false, MaxHitPoints: > 10 } })
+                .OrderBy(o => Math.Max(Math.Abs(World(o.Row).X - here.X), Math.Abs(World(o.Row).Y - here.Y))).FirstOrDefault();
+            Require(patientNpc.Id is not null, "a living NPC that the heal can change");
+            if (kitNumber == 0) GD.Print($"{ItemAimCode} item-aim heal step NONE (no installed healing item with the target flag and no script)");
+            else
+            {
+                var kitFields = barter!.Prototype(kitNumber)!;
+                var kit = TechSmokeGive(data, kitNumber, new SessionItemKind(SessionItemType.Generic, kitNumber, kitFields.Object.Name, kitFields.Object.Description));
+                Require(_inventoryHost.UseFacts(session, kit, _areaKitUse) is { HealingKit: true, NeedsTarget: true }, $"prototype {kitNumber} reads as a healing kit that needs a target");
+                var patient = caster!.LifeTarget(patientNpc.Id!);
+                Require(patient is not null, "the NPC has a life target on the cast host");
+                var lifeBefore = session.QueryLife(patient!);
+                var hurt = session.ApplyDamage(session.Version, patient!, new Arcanum.Simulation.Combat.LifeDamage { HitPoints = 10 });
+                Require(hurt.Disposition == GameSessionDisposition.Changed, $"the NPC was hurt: {hurt.Disposition} {hurt.Failure} outcome={hurt.Outcome} life={lifeBefore.Failure}/{lifeBefore.View?.Status.HitPoints}/{lifeBefore.View?.Status.MaxHitPoints} flags={caster.Facts(patientNpc.Id!)?.ObjectFlags}");
+                var hpBefore = session.QueryLife(patient!).View!.Status.HitPoints;
+                OpenInventory();
+                UseHeroItem(kit, AreaItemUseSource.UseIcon, shift: false);
+                Require(!InventoryOpen && _itemAiming is { } kitAim && kitAim.Item == kit && ItemTargetOpen, $"the use icon opened the item cursor for the kit: {_itemAimLast} {_inventoryStatus}");
+                _itemAimLast = null;
+                ApplyItemAim(_itemAiming!, patientNpc.Id, SpellLocation.None, false, false);
+                Require(!ItemTargetOpen && TargetsMatchStack, "the apply closed the cursor");
+                Require(HeroRunsHost()?.ItemUseRun is { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.UseItem } || (_itemAimLast?.Contains("goal 39", StringComparison.Ordinal) ?? false), $"the kit aimed at another critter walks with goal 39: {_itemAimLast}");
+                RunUntil(() => LastHealForSelfTest is { } last && last.Target == patientNpc.Id, "goal 39 ended in the heal of the NPC");
+                var heal = LastHealForSelfTest!.Value.Result;
+                Require(heal.Disposition != GameSessionDisposition.Rejected && heal.Check is not null, $"the session ran the heal: {heal.Disposition} {heal.Failure}");
+                var hpAfter = session.QueryLife(patient!).View!.Status.HitPoints;
+                Require(!heal.Check!.Success || hpAfter >= hpBefore, $"a successful heal never lowers the NPC's hit points ({hpBefore} -> {hpAfter})");
+                Require(HeroRunsHost()?.ItemUseRun is null && _itemAimLast is { Length: > 0 }, $"the use run ended and the HUD answered: {_itemAimLast}");
+                healed = $"{(heal.Check.Success ? "healed" : "failed")} {hpBefore}->{hpAfter}";
+                GD.Print($"ARC-UI-1127 item-aim heal kit={kitNumber} npc={patientNpc.Id} success={heal.Check.Success} hp={hpBefore}->{hpAfter} uses-left={heal.UsesLeft?.ToString() ?? "-"} destroyed={heal.ItemDestroyed} notice={_itemAimLast}");
+            }
+            // 7. ARC-UI-1127 (E8-g): lockpicks on a container: the nearest standing locked container the viewer can pick (no unlock script) is the skill goal 33's target (the loot goals' target string); the hero walks next to it, turns and
+            //    the session's pick runs on its lock (a failure may retry); a picked container then opens through the window's admission.
+            var picked = "NONE";
+            if (_inventoryHost.Map(CurrentAreaMap) is { } lootMap)
+            {
+                var mapId = new SessionMapId(CurrentAreaMap);
+                var lockedBox = area.Snapshot.Objects.Where(row => row.Scope == AreaScope.Core && row.Type == 2 && row.WorldX is not null && row.WorldY is not null && lootMap.TryGetEntity(row.Key, out _))
+                    .Select(row => _inventoryHost.Target(session, CurrentAreaMap, row.Key)).OfType<AreaInventoryTarget>().Where(t => t.Kind == AreaInventoryTargetKind.Container)
+                    .Where(t => !Arcanum.Data.Traversal.AreaStepInspector.HasUnlockScript(t.Row) && Arcanum.Data.Combat.CombatFieldReader.ReadBreakable(t.Row).Fields is { } box
+                        && session.AttemptOpen(new(mapId, t.Entity), AreaObjectTargets.ContainerBaseline(t.Row, box), false) == OpenAttempt.Locked && LiveWorldCell(t.Row) is var (cx, cy) && ApproachCell(grid, cx, cy, 1) is not null)
+                    .OrderBy(t => Math.Max(Math.Abs(World(t.Row).X - HeroCell()!.Value.X), Math.Abs(World(t.Row).Y - HeroCell()!.Value.Y))).FirstOrDefault();
+                if (lockedBox is null) GD.Print($"{ItemAimCode} item-aim container-pick step NONE (no locked container with a standable cell next to it on map {_readyMapName})");
+                else
+                {
+                    var picks = TechSmokeGive(data, 15101);
+                    Require(_inventoryHost.Lockpick(session, picks, _areaKitLockpicks) is not null, "prototype 15101 reads as lockpicks");
+                    HeroRunsHost()!.LoseAll("SMOKE_ITEM_AIM_PICK");
+                    _lastContainerPick = null; _lockpickPending = null;
+                    var started = HeroRequests.Apply(new LockpickRequest(InventoryTargetOf(lockedBox.Row.Key), picks));
+                    Require(started.Outcome == HeroRequestOutcome.Done, $"the pick on the container started goal 33: {started.Outcome}");
+                    Require(HeroRunsHost()?.SkillRun is { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.UseSkill or Arcanum.Simulation.Goals.GoalType.AttemptPickLocks }, "the hero holds the skill run");
+                    RunUntil(() => { ProcessLockpickPending(); return _lastContainerPick is not null; }, "the hero walked to the container and picked its lock");
+                    var pick = _lastContainerPick!;
+                    Require(pick.Disposition != GameSessionDisposition.Rejected && pick.Outcome is not null, $"the session ran the pick: {pick.Disposition} {pick.Failure}");
+                    var opened = pick.Outcome!.Value.Result == Arcanum.Simulation.Skills.PickLockResult.Unlocked;
+                    Require(opened == (session.AttemptOpen(new(mapId, lockedBox.Entity), AreaObjectTargets.ContainerBaseline(lockedBox.Row, Arcanum.Data.Combat.CombatFieldReader.ReadBreakable(lockedBox.Row).Fields!), false) == OpenAttempt.Opens),
+                        $"the container's open attempt follows the pick ({pick.Outcome.Value.Result})");
+                    picked = pick.Outcome.Value.Result.ToString();
+                    GD.Print($"ARC-UI-1127 item-aim container-pick entity={lockedBox.Entity} result={picked} fate={pick.FateUsed}");
+                }
+            }
+            // 8. ARC-UI-1127 (E8-g, ledger XR2): the cast host's Identify answer for an NPC (the event Read Aura, spell 7, logs for the hero as caster: SessionSpellCasterIdentifyTests) opens the read-only sheet of the NPC, the window
+            //    the original opens. The hero's own Read Aura is refused by the spell's intelligence check on this smoke's hero (message 602), so the event is the cast host's entry as it would log it.
+            var sheet = "NONE";
+            PostSpellLog(null, [new SpellCastEvent(SpellCastEventKind.IdentifyCritter, 0, SpellTargetObject.Npc, patientNpc.Id!)]);
+            for (var i = 0; i < 1200 && !(SheetOpen && _sheetNpc is not null); i++) { Frame(); TakeDialogNpcSheet(); }
+            Require(SheetOpen && _sheetNpc is not null && LastIdentifySheetForSelfTest is { Opened: true } identified && identified.Entity == patientNpc.Id, $"the Identify answer opened the NPC's sheet: {_sheetNpcStatus}");
+            Require(_sheetPanel!.ReadOnly, "the NPC's sheet is read only (no + or - buttons)");
+            sheet = _sheetNpc!.View.Name;
+            GD.Print($"ARC-UI-1127 item-aim identify sheet entity={patientNpc.Id} name={sheet} level={_sheetNpc.View.Level}");
+            EndSheet();
+            GD.Print("ARC-DEV-365 native-smoke item-aim PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Tile = tileGoal, Npc = npc.Id, Notice = _itemAimLast, Heal = healed, Pick = picked, Sheet = sheet }));
         }
         finally
         {

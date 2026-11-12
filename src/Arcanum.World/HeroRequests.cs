@@ -108,8 +108,8 @@ public interface IHeroActions
     bool EndHeldWalk();
     /// <summary>ARC-DEV-169: the facts of an object click on <paramref name="target"/> (the class of the object, the hero's and the target's state) for the click decision.</summary>
     HeroClickFacts ClickFacts(string target, bool alt, bool shift) => new(false, false, false, false, false, HeroClickTarget.Other);
-    /// <summary>ARC-DEV-169: starts the hero's talk goal 21 at <paramref name="target"/>, running when <paramref name="run"/>; false when the movement gate or a run's refusal stopped it.</summary>
-    bool StartTalk(string target, bool run) => false;
+    /// <summary>ARC-DEV-169: starts the hero's talk goal 21 at <paramref name="target"/>, running when <paramref name="run"/> (ARC-AI-1137: with <paramref name="noWalk"/>, the click had Shift, the run flag 0x100 is set and no approach steps: GT122); false when the movement gate or a run's refusal stopped it.</summary>
+    bool StartTalk(string target, bool run, bool noWalk) => false;
     /// <summary>ARC-DEV-174: starts the hero's use goal 38 (<paramref name="container"/>: 81) at <paramref name="target"/>, running when <paramref name="run"/>; false when the movement gate or a run's refusal stopped it.</summary>
     bool StartUse(string target, bool container, bool run) => false;
     /// <summary>ARC-DEV-175: starts the hero's pickup goal 15 at <paramref name="target"/> (an item on the ground), running when <paramref name="run"/>; false when the movement gate or a run's refusal stopped it.</summary>
@@ -242,13 +242,14 @@ public sealed class HeroRequestHost
         if (decision.Goal is not (HeroClickGoal.Talk or HeroClickGoal.UseObject or HeroClickGoal.UseContainer or HeroClickGoal.Pickup or HeroClickGoal.Attack or HeroClickGoal.AttemptAttack)) return new(HeroRequestOutcome.Ignored, Click: decision.Goal);
         var facts = _hero.Facts();
         // GS27: after the decision, running is turned on (refused at encumbrance 4 by the walk itself); Shift sets the no-walk flag 0x100 instead (the attempt attack 19, ARC-DEV-270), and no run.
-        var run = decision.Goal != HeroClickGoal.AttemptAttack;
+        // ARC-AI-1137 (GT122): the talk goal follows the same rule (the Shift branch replaces the running call).
+        var run = decision.Goal != HeroClickGoal.AttemptAttack && !(decision.Goal == HeroClickGoal.Talk && request.Shift);
         // GS27 outside combat mode (a talk is never taken in a round: the click there is an attack): the goal starts at once without a main run, otherwise the hero's runs are interrupted at level 3 first, and the new goal starts.
         var start = HeroClickRules.StartOf(false, facts.InRound, facts.HighestRunPriority > 0, false, false);
         if (start == HeroClickStart.Ignored) return new(HeroRequestOutcome.Ignored, Click: decision.Goal);
         var started = decision.Goal switch
         {
-            HeroClickGoal.Talk => _hero.StartTalk(request.Target, run),
+            HeroClickGoal.Talk => _hero.StartTalk(request.Target, run, request.Shift),
             HeroClickGoal.Pickup => _hero.StartPickup(request.Target, run),
             HeroClickGoal.Attack => _hero.StartAttack(request.Target, run),
             HeroClickGoal.AttemptAttack => _hero.StartAttemptAttack(request.Target),
