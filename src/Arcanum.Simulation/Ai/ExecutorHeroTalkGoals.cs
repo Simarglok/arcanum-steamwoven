@@ -26,8 +26,10 @@ public static partial class AiExecutorRules
 
     // Goal 21 `ag_talk`, six nodes, no end node (ARC-DEV-169, the S11 read GT115 to GT118): 1 the checks (0x42ACD0: a target that is gone or refused ends the run, silently), 2 the get-up (the hero's own host gets it
     // up; a hero that is down ends the run), 3 the unconceal (never for the hero), 4 the range test (0x42AE10), 5 the act (0x42AF00: the dialog opens, the run ends by its end step), 6 the approach: goal 8 with range 1,
-    // after which the goal runs again from node 1.
-    private static Transition HeroTalkNode(GoalFrame goal, IAiHeroWalkWorld world)
+    // after which the goal runs again from node 1. ARC-AI-1137 (GT122, the second read in the GT122 row): a talk started with Shift carries the no-walk flag 0x100, the one reader of which is the walk step (node 9 of goals 5, 61 and 80:
+    // it answers 0 at once), so the approach of node 6 never takes a step: goals 8 and 61 hand the run to each other inside one step until the 101st node kills it. The hero stays where it is, with no message and no sound
+    // (a talk is never started in a round, so the turn the guard would end is not at stake); node 6 of a no-walk run therefore ends the run at once. A Shift talk from within 4 cells reaches node 5 and talks as always.
+    private static Transition HeroTalkNode(GoalFrame goal, HeroWalkState state, IAiHeroWalkWorld world)
     {
         var target = goal.Target;
         switch (goal.Node)
@@ -47,6 +49,7 @@ public static partial class AiExecutorRules
                 world.OpenDialog(target);
                 return new(Move.End);
             default:
+                if ((state.Flags & GoalRunFlags.NoWalk) != 0) return End(AiExecutorReason.NoWalkOutOfRange);
                 return new(Move.Push, Frame: new GoalFrame(GoalType.MoveNear, target) { Range = HeroTalkApproachRange });
         }
     }

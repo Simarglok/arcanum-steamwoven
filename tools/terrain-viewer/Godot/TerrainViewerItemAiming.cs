@@ -86,13 +86,24 @@ public partial class TerrainViewerApp
         {
             case AreaItemAimBegin.Nothing: ItemAimNotice($"{name}: nothing happens (the hero cannot act)"); return;
             case AreaItemAimBegin.NoActionPoints: ItemAimNotice($"{name}: not enough action points"); return;
-            case AreaItemAimBegin.InventoryTarget: ItemAimNotice($"not used: {name}'s target is an inventory item (NOT READY)"); return;
+            case AreaItemAimBegin.InventoryTarget:
+                // ARC-MAGIC-1128 (IA4): the inventory bit pushes mode 16 over the inventory window, which stays and picks the item (the window's press, IW44).
+                if (!OpenTargetMode(InterfaceMode.ItemTarget, _ => ClearItemTarget(), overInventory: true))
+                {
+                    ItemAimNotice($"not used: {name}: the item cursor could not open over this window");
+                    return;
+                }
+                _itemAiming = new ItemAiming(item, facts, mask, spell, charged);
+                _inventoryPanel!.TargetPicking = true;
+                _hoverStamp = null;
+                ItemAimNotice($"{name}: left-click an item of the pack, right click cancels");
+                return;
             case AreaItemAimBegin.UseAtOwnTile:
                 if (caster.Facts(SessionSpellCaster.Hero)?.Location is { } own && own != SpellLocation.None) ApplyItemAim(new(item, facts, mask, spell, charged), null, own, false, false);
                 else ItemAimNotice($"not used: {name}: the hero's tile is not known here");
                 return;
         }
-        if (!OpenTargetMode(InterfaceMode.ItemTarget, _ => { _lockpickArmed = null; _itemAiming = null; _hoverStamp = null; }))
+        if (!OpenTargetMode(InterfaceMode.ItemTarget, _ => ClearItemTarget()))
         {
             ItemAimNotice($"not used: {name}: the interface mode did not open");
             return;
@@ -106,6 +117,33 @@ public partial class TerrainViewerApp
             return;
         }
         ItemAimNotice($"{name}: left-click a target, right click cancels");
+    }
+
+    /// <summary>The leave step of mode 16: the item cursor's and the armed lockpicks' state goes, and the inventory window stops picking.</summary>
+    private void ClearItemTarget()
+    {
+        _lockpickArmed = null; _itemAiming = null; _hoverStamp = null;
+        if (_inventoryPanel is not null) _inventoryPanel.TargetPicking = false;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-1128 (IA6, the mode-16 branch of the inventory window's press, 0x575FA0 → 0x571CB0): an item of the window picked while the item cursor stands over it. The area test of the item's slot-0 spell runs as for a
+    /// click in the game view; a target that passes is applied (an item of the hero's pack is at the hero's tile, in range: the use at once).
+    /// </summary>
+    private void ItemAimInventoryPick(ItemAiming aim, string item)
+    {
+        if (HeroLyingDown || AnotherHasTheTurn || AreaTransferPending) { ItemAimNotice("the hero cannot act now"); return; }
+        if (SpellCasterNow() is not { } caster || aim.Spell is not { } spell) { ItemAimNotice("not a valid target"); return; }
+        var pick = caster.PickTarget(SessionSpellCaster.Hero, spell, aim.Mask, item, null);
+        GD.Print($"ARC-MAGIC-1128 inventory-pick item-cursor={aim.Item} item={item} passes={pick.Test.Passes} reason=0x{pick.Test.Reason:X}");
+        if (!pick.Test.Passes) { ItemAimRefused(pick); return; }
+        ApplyItemAim(aim, pick.Object?.Id, pick.Tile, false, false);
+    }
+
+    private void ItemAimRefused(SpellPick pick)
+    {
+        if (SpellUiRules.NoTargetMessage(pick.Test.Reason) is { } message) { var text = AreaSpellCasting.Message(_spellData?.Data?.Texts, message); PostSpellMessage(text); ItemAimNotice(text); }
+        else ItemAimNotice("not a valid target");
     }
 
     /// <summary>The cursor's pick (0x4F2830 → 0x4F28A0, IA6; SU15–SU19): the object under the pointer (seeing through what the mask spares), the objects on the tile under it, the tile; a spell's mask is tested by the spell's
@@ -135,12 +173,7 @@ public partial class TerrainViewerApp
     {
         if (_itemAiming is not { } aim) return;
         if (ItemAimPick(aim, screen) is not { } pick) { ItemAimNotice("no target here"); return; }
-        if (!pick.Test.Passes)
-        {
-            if (SpellUiRules.NoTargetMessage(pick.Test.Reason) is { } message) { var text = AreaSpellCasting.Message(_spellData?.Data?.Texts, message); PostSpellMessage(text); ItemAimNotice(text); }
-            else ItemAimNotice("not a valid target");
-            return;
-        }
+        if (!pick.Test.Passes) { ItemAimRefused(pick); return; }
         ApplyItemAim(aim, pick.Object?.Id, pick.Tile, ctrl, shift);
     }
 
