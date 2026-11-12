@@ -100,7 +100,7 @@ public sealed class ControllerFoundationTests
         Use(foundation, DeviceSignal.PadButton(1, 3));
         var afterDevice = changes;
         Assert.AreEqual(1, afterDevice, "the device change is announced once");
-        StringAssert.Contains(foundation.Strip(PromptContext.Modal), "pad scheme Off");
+        StringAssert.Contains(foundation.Strip(PromptContext.Modal), "original controls");
         foundation.Apply(new(Pad: PadScheme.Direct));
         Assert.AreEqual(afterDevice + 1, changes);
         StringAssert.Contains(foundation.Strip(PromptContext.Modal), "A Direct");
@@ -110,9 +110,13 @@ public sealed class ControllerFoundationTests
         Assert.AreEqual(afterDevice + 2, changes, "the same choice again is no change");
         Assert.AreEqual(ActiveDevice.Pad, foundation.Device, "a switch never moves the active device");
         Use(foundation, DeviceSignal.Touch(5, new(1, 1)));
-        StringAssert.Contains(foundation.Strip(PromptContext.Modal), "touch scheme Off");
+        StringAssert.Contains(foundation.Strip(PromptContext.Modal), "original controls");
         foundation.Apply(new(Pad: PadScheme.Pointer, Touch: TouchScheme.TouchPad));
         StringAssert.Contains(foundation.Strip(PromptContext.Modal), "C Touch+pad");
+        // Scheme C alone (the Controls line's value): a pad in hand is named with it, as the pad is part of C.
+        foundation.Apply(new ControlSchemeSettings().WithChoice(ControlChoice.TouchPad));
+        Use(foundation, DeviceSignal.PadButton(9, 3));
+        Assert.AreEqual("Xbox pad - C Touch+pad", foundation.Strip(PromptContext.Modal));
         // A damaged choice is validated, never kept.
         foundation.Apply(new(Pad: (PadScheme)9, Touch: (TouchScheme)9, Prompts: (PromptStyle)9));
         Assert.AreEqual(ControlSchemeSettings.Default, foundation.Settings);

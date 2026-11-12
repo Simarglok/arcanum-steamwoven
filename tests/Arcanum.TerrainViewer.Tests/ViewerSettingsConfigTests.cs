@@ -26,7 +26,7 @@ public sealed class ViewerSettingsConfigTests
     private static readonly AreaGameSettings Chosen = new(2, true, false)
     {
         Floats = 0, FloatSpeed = 9, HdInterface = true, GeneratedInterface = true, HdPackSource = HdPackSourceMode.Custom, HdPackPath = "/Volumes/Packs/HD pack",
-        Pad = PadScheme.Pointer, Touch = TouchScheme.TouchPad, Prompts = PromptStyle.SteamDeck,
+        Pad = PadScheme.Pointer, Touch = TouchScheme.Off, Prompts = PromptStyle.SteamDeck,
     };
 
     [TestMethod]
@@ -48,7 +48,7 @@ public sealed class ViewerSettingsConfigTests
     public void The_game_settings_round_trip_as_lines_and_a_missing_file_reads_the_defaults()
     {
         var text = ArcanumConfig.Format(ViewerSettingsConfig.GameChanges(Chosen).Select(change => new ArcanumConfigEntry(change.Name, change.Value!)));
-        Assert.AreEqual("difficulty=2\nturn-based=1\nauto attack=0\ntext floaters=0\nfloat speed=9\nhd interface=1\ngenerated interface=1\nhd pack=custom\nhd pack path=/Volumes/Packs/HD pack\npad scheme=pointer\ntouch scheme=touchpad\nprompt style=steamdeck\n", text);
+        Assert.AreEqual("difficulty=2\nturn-based=1\nauto attack=0\ntext floaters=0\nfloat speed=9\nhd interface=1\ngenerated interface=1\nhd pack=custom\nhd pack path=/Volumes/Packs/HD pack\npad scheme=pointer\ntouch scheme=off\nprompt style=steamdeck\n", text);
         var read = Lines(text);
         Assert.AreEqual(Chosen, ViewerSettingsConfig.ReadGame(read));
         Assert.IsTrue(ViewerSettingsConfig.HasGame(read));
@@ -88,6 +88,9 @@ public sealed class ViewerSettingsConfigTests
         var saved = ViewerSettingsConfig.ReadGame(ArcanumConfig.Read(path));
         Assert.AreEqual((PadScheme.Direct, TouchScheme.Off, PromptStyle.Nintendo), (saved.Pad, saved.Touch, saved.Prompts));
         Assert.AreEqual(ControlSchemeSettings.CurrentVersion, saved.Controls.Version);
+        // A file with both a pad scheme and the touch scheme on is C alone (the one Controls line shows C; the pad scheme beside it is dropped).
+        var both = ViewerSettingsConfig.ReadGame(Lines("pad scheme=direct\ntouch scheme=touchpad\n"));
+        Assert.AreEqual((PadScheme.Off, TouchScheme.TouchPad), (both.Controls.Pad, both.Controls.Touch));
         Assert.IsTrue(saved.Controls.OriginalActive, "the original mouse and keyboard stay live whatever the lines hold");
     }
 
