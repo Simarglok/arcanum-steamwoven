@@ -365,6 +365,17 @@ public partial class TerrainViewerApp
         EndInventory();
         CancelPendingOrder("lockpicks armed");
         CancelSpellTargeting("lockpicks armed");
+        // ARC-INPUT-1123 (IA4, SA52): the opener asks the action points (0x4B7790, cost 4: only in a turn-based round and only on the hero's own
+        // subturn) after the window closed and the mode below was popped, and pushes mode 16 only when they allow it; the lockpicks' mask is
+        // the item mask of an item with no spell (IA3, any object), so the begin is the item cursor's. A refusal leaves the interface on the base.
+        var mask = AreaItemAiming.Mask(false, false, null);
+        if (AreaItemAiming.Begin(mask, true, false, _areaSession!.QueryActionPointCheck(SessionCombatant.Hero, TurnBasedRules.UseItemCost)) == AreaItemAimBegin.NoActionPoints)
+        {
+            _portalNotice = "pick a lock: not enough action points";
+            GD.Print("ARC-INPUT-1123 lockpicks refused: not enough action points");
+            RefreshAreaStatus();
+            return;
+        }
         if (!OpenTargetMode(InterfaceMode.ItemTarget, _ => _lockpickArmed = null))
         {
             _portalNotice = "pick a lock: not ready (the interface mode did not open)";

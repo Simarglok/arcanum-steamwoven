@@ -401,7 +401,7 @@ one after the other, and an assembly counts its components' cells as free and th
 joins a held stack of its prototype and a key that folds onto the ring need no place (WE4). Take all is the loop of the single take: it moves the
 items that fit in list order and leaves the rest in the body, named in its message ("no free room in the grid"). The refusal's text in the original
 is a message of the item message file chosen by the code (WE10); the viewer keeps its own wording. Not covered: the hero's gold pile that takes
-a cell of its own when the first coin arrives (a pile that finds no cell still waits outside the grid). A script's create object makes ground
+a cell of its own when a restored save's coin has none (such a pile still waits outside the grid; the first coin of a live hero is ARC-WORLD-1132 below). A script's create object makes ground
 items only (ARC-WORLD-081), so it never enters the hero's list. The dialog's `IN` (`GiveItemToPc`, ARC-WORLD-1131) runs the same test, but its refusal is not a failure: the original's negative `IN` (0x415BA0, case 9)
 transfers the item to the PC, and when the PC is not its holder afterwards takes it out of the NPC's list (0x466E00) and places it at the PC's location
 (0x466E50: a junk pile on the tile or a new one, then the decay timer). The session does this for every refusal of the insert check (no room, too heavy,
@@ -409,8 +409,24 @@ Technophobia): the result is `Changed` with the refusing verdict (`InventoryMuta
 tile of the actor (`QueryPlacedItems`, source as the item came: pc, made), one revision, no insert-item script, no ring or stack merge, no pickup
 trigger; an NPC of another map (a carried companion) keeps its list's origin on the placed item. The dialog port answers Applied and the conversation goes on. A tile the ground cannot hold
 (`DropTileUnfit`) or a full list budget refuses the IN with no effect. Not covered: a transfer script's skip default (the original drops the item in that case too; the session still
-answers `Declined`). Recorded limits (NOT READY): an assembly that frees cells counts them free for its products even when an item already waiting outside the grid
-would take them first at the next placement; the first gold pile (a hero with no coins) needs no place.
+answers `Declined`). An assembly's room test (ARC-WORLD-1133) lets the hero's items that wait outside the grid (the session's own state: the original keeps every listed
+item in a cell) take the cells its components free first, in list order and by their size (`WaitingItemCells`, the same search as the next placement),
+before it places the products, so a product that would only have fitted in a cell such an item takes lies on the crafter's tile like a refused unit.
+An NPC crafter has no grid and is not affected.
+
+**First gold pile (ARC-WORLD-1132).** The hero's gold is an item of its list (ledger [HG1](../research/ledger/ui-audio.md#hero-gold-pile-in-the-grid-arc-ui-090)), so
+coins that reach a hero with no pile come as a new pile object that the transfer (0x464830) creates on the receiver's tile (0x464970) and moves in through the
+insert path (0x4617F0 → 0x461810 → check 0x466510, [NT1](../research/ledger/items.md)). The check asks the grid for a free place of the pile's size
+(code 2, WE4); with none the insert is refused, the new pile stays on the ground and the call still reports success, so the coins never reach the hero. The
+session does this for every way coins are *transferred* to a hero with no coin: the dialog's `$$ n` (`GiveGoldToHero`) and a take from an NPC's or a
+container's pile (`TakeGoldFromNpc`, and so a barter sale and a successful steal). The pile that did not fit is a made gold item with a coin record on the
+hero's tile (`QueryPlacedItems`, source made; `InventoryMutationResult.Item` names it), one revision, no junk pile and no decay timer (a created object, not
+a drop, as an assembly's refused product, ID9). A pickup or loot of a pile already lying on the ground is not a transfer: it runs the insert path on the pile
+itself (JP8), so a hero with no pile and no free place is refused (`InsertRefused`, verdict `NoRoom`, no revision) and the pile stays where it lies.
+The pile's kind is the NPC's seed pile's, else the neutral gold kind
+(`SessionHeroGrid.GoldKind`, names 0). A tile the ground cannot hold (`DropTileUnfit`), a full coin-record or hero item budget or no free made number refuses the call
+before any change. A hero that already holds a pile grows it by a plain add with no check, and the weight test is not modelled for gold (weight 0).
+Not covered: an insert-item script on the hero and the refusal message the original shows for the PC (0x4673F0).
 
 ## Junk piles (ARC-WORLD-063)
 

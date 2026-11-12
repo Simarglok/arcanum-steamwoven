@@ -138,6 +138,8 @@ public sealed partial class GameSessionOwner
         // places of the units accepted before count taken; an ammunition unit joining a stack needs none.
         var freedCells = deleted.ToHashSet(StringComparer.Ordinal);
         var unitCells = new Dictionary<string, Arcanum.Simulation.Items.InventoryGridItem>(StringComparer.Ordinal);
+        // ARC-WORLD-1133: items waiting outside the grid take the freed cells first (they precede the products in the list).
+        var waitingCells = WaitingItemCells(freedCells);
         // ARC-WORLD-070: the host answers one insert check a product unit, for the object it is (the stack it merges into); a refused
         // unit lies on the hero's tile.
         var units = PlanUnits(quantity, ammo is not null, into?.Entity, unitEntity =>
@@ -146,7 +148,7 @@ public sealed partial class GameSessionOwner
             var unit = new Arcanum.Simulation.Items.CarriedItem((int)kind.Type, weight.Weight, weight.MagicWeight, complexity, ammo?.Units ?? 0);
             var heavy = carry is { } c && !HeroFits(c, unit, pending);
             var merges = unitEntity == into?.Entity || unitCells.ContainsKey(unitEntity);
-            var place = merges ? null : NewItemPlace(unitEntity, kind, freedCells, unitCells.Values.ToArray());
+            var place = merges ? null : NewItemPlace(unitEntity, kind, freedCells, [.. waitingCells, .. unitCells.Values]);
             var verdict = HeroInsertVerdict(heavy ? SessionInsertVerdict.TooHeavy : insertCheck(new SessionInventoryItem(unitEntity, unitFacts)), complexity, room: merges || place is not null);
             if (verdict == SessionInsertVerdict.Accepted && carry is { } accepted) pending = unchecked(pending + HeroItemWeight(accepted, unit));
             if (verdict == SessionInsertVerdict.Accepted && place is { } taken) unitCells[unitEntity] = taken;
