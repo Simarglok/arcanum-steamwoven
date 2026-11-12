@@ -1283,6 +1283,7 @@ public partial class TerrainViewerApp : Node
     {
         if (_exiting) return;
         _exiting = true;
+        CloseEvidence(); // ARC-GPAD-1376: an open evidence session ends with its last line
         _walkPlanCancellation?.Cancel(); // ARC-WORLD-042: the walk smoke's background route plan
         HdOptimizedStore.Stop(); // ARC-DEV-376: the background texture conversion must not be inside an engine call at shutdown
         _installCancel?.Cancel(); // ARC-DEV-074: closing the window stops a running innoextract (it would write on after the app)
