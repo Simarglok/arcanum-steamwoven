@@ -286,7 +286,9 @@ public partial class TerrainViewerApp
             // ARC-DEV-386 (E1-c4): the creation's finish generates the new critter's inventory (queued for the frame, see TakeCreatedInventories).
             CritterMade: entity => QueueCreatedInventory(entity),
             // ARC-SCRIPT-1163 (E5-a): a script's set and adjust reaction go through the AI host's reaction change of an NPC toward the hero.
-            ScriptReaction: (npc, value, set) => AreaAiHostNow()?.ScriptReaction(npc, value, set) ?? "no AI host");
+            ScriptReaction: (npc, value, set) => AreaAiHostNow()?.ScriptReaction(npc, value, set) ?? "no AI host",
+            // ARC-SCRIPT-1164 (E5-b): a script's set lock state, toggle open or closed and obj is open read the shown map's portals and containers.
+            Openable: ScriptOpenable);
         var inventory = _inventoryHost;
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, inventory?.Maps ?? [], content, world)
         {
@@ -294,6 +296,8 @@ public partial class TerrainViewerApp
             OtherMapRow = inventory is null ? null : obj => inventory.RowOn(obj.Map, obj.Code),
             // ARC-SCRIPT-1165 (E5-c): a script's add blessing and add curse take their effect from the module's tables.
             BlessingEffects = BlessingEffectOf,
+            // ARC-SCRIPT-1164 (E5-b): a script's create item enters the holder's list under the inventory host's insert check.
+            InsertCheck = inventory?.InsertCheck,
         };
         // ARC-WORLD-110: a use meets the object's trap first; the walk and the steps meet the same host's traps.
         _areaTraps = new AreaTraps(owner, host, snapshot.Objects, world.Gone, AreaTrapEffectsNow, AreaRowLightLevel);
@@ -302,6 +306,21 @@ public partial class TerrainViewerApp
         if (_useScriptHost is { } replaced && replaced.Snapshot.RuntimeMap == snapshot.RuntimeMap && ReferenceEquals(replaced.Session, owner)) NoteScriptCreations(replaced.Host.TakeCreations());
         _useScriptHost = (snapshot, owner, content, _inventoryHost, host);
         return host;
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-1164 (E5-b, WO3, WO4): the lock identity, T0 baseline and ART facts of a portal or container of the shown map for a script's lock and open actions: a portal from the shown map's portals (its ART, the frames a toggle
+    /// steps through), a container from its breakable fields and the frame count of its body; null for any other object.
+    /// </summary>
+    private AreaScriptOpenable? ScriptOpenable(Arcanum.Scripting.Scr.ScrObjectRef obj)
+    {
+        if (_readyArea is not { } area || obj.Map != area.Snapshot.RuntimeMap) return null;
+        if (_areaPortals is { } portals && portals.All.FirstOrDefault(p => p.Entity == obj.Code) is { } portal)
+            return new(portals.Openable(portal), portal.Baseline, portal.Art, portal.Frames.Count);
+        var row = area.Snapshot.Objects.FirstOrDefault(o => o.Type == Arcanum.Data.Combat.CombatFieldReader.ContainerType && AreaUseScriptHost.EntityId(o) == obj.Code);
+        if (row is null || Arcanum.Data.Combat.CombatFieldReader.ReadBreakable(row).Fields is not { } fields) return null;
+        var frames = area.Snapshot.Visuals.FirstOrDefault(v => v.Key.Layer == AreaLayerKind.Body && v.Key.Object == row.Key)?.FrameCount ?? 0;
+        return new(new(new(obj.Map), obj.Code), AreaObjectTargets.ContainerBaseline(row, fields), null, frames);
     }
 
     private static CellCoord? LiveCell(AreaGridSession grid)
