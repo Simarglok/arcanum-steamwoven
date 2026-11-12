@@ -128,7 +128,7 @@ taking damage 1; dying, examine and taking damage have hosts since).
   and 1717 (the Molochean agent there, after a story flag), Wheel Clan 2700, the Void 1130 and 3081 (Arronax's interior), the Panarii
   temple 2602, Drog's cave 1490, Dernholm castle 1015 and Vollinger's basement 2106. The heartbeat set admits 1100, 2700, 1130, 3081
   and 2106 (ARC-SCRIPT-047, 049). The other four stopped on a command outside the set when read: 1717 on set day standpoint (45), then
-  set night standpoint (46), get location (95) and action run to (74); 2602 on obj can see obj (condition 28), then obj within range
+  set night standpoint (46), get location (95) and action run to (74) (45, 46 and 74 have been admitted since ARC-SCRIPT-1163 and ARC-DEV-231, 95 since ARC-SCRIPT-1359, so 1717 now runs whole); 2602 on obj can see obj (condition 28), then obj within range
   (34); 1490 on obj is in dialog (condition 26); 1015 on a global variable operand (admitted by the viewer's heartbeat set since
   ARC-DEV-100). Recount with the census before relying on this.
 - **Tile scripts** (not object slots): 3,012 in the installed data; 1,186 ran and 1,696 were refused at ARC-SCRIPT-052 (slice 8).

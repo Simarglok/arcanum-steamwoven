@@ -1952,6 +1952,23 @@ public sealed partial class GameSessionOwner : IDisposable
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, consent, new(_identity, _revision));
     }
 
+    // ARC-AI-1312 (VA15, VAG1, OL25, C11; 0x4AA1B0 calls 0x4AA8C0 with force 1 on the victim): an NPC with a leader and AI_WAIT_HERE loses the flag, its "NPC Wait Here" events go and
+    // it joins its leader again (0x45DE90): re-appended at the end of the follower array, FORCED_FOLLOWER set, JILTED cleared, the leader's Tempus Fugit flag copied and the leader's
+    // concealment taken, as every join does. The forced unwait runs no follow check that could refuse (the death cannot be refused), and the death's commit cannot fail, so a Tempus Fugit
+    // copy that would overflow the written-flags bound is left out (the join's own check refuses the whole join there). A free NPC and a follower are unchanged (no timer is pending for them).
+    // The caller's revision covers the writes.
+    private void ForceUnwaitOnDeath(string entity)
+    {
+        var current = _party.Get(entity);
+        CancelWaitTimers(entity);
+        if (current.Standing != CompanionStanding.Waiting) return;
+        _party.Put(current with { Standing = CompanionStanding.Following, Forced = true, Jilted = false }, true);
+        // A waiting NPC lost the flag at the wait (0x4AA7A0), so the leave half of the join has nothing to clear; the clear keeps the join's order all the same.
+        ClearTempusFugitOnLeave(entity);
+        if (JoinCopiesTempusFugit(entity) && (_objectFlags.ContainsKey(entity) || _objectFlags.Count < MaxObjectFlagCritters)) WriteTempusFugitOnJoin(entity);
+        if (_combat.HeroConcealed) _combat.Concealed.Add(entity); else _combat.Concealed.Remove(entity);
+    }
+
     private PartyMutationResult RejectParty(GameSessionFailure failure, FollowConsent? consent = null) =>
         new(GameSessionDisposition.Rejected, failure, consent, new(_identity, _revision));
 
@@ -2620,9 +2637,9 @@ public sealed partial class GameSessionOwner : IDisposable
             if (_life.Critters.TryGetValue(target.Entity!, out var current)) _life.Critters[target.Entity!] = current with { DeathTimeMs = now };
             TellCritterRunEnds(target, outcome, facts!, killRuns: true, demaintain: false);
         }
-        // OL25: the kill notification unwaits the NPC, which removes its wait timer.
+        // OL25, ARC-AI-1312 (VA15, VAG1; 0x4AA1B0 → 0x4AA8C0 with force 1): the kill notification unwaits the NPC: its wait timers go and a waiting companion joins its leader again.
         var npcDied = outcome.Events.HasFlag(LifeEvents.Died) && !target.IsHero && !deathStopped;
-        if (npcDied) CancelWaitTimers(target.Entity!);
+        if (npcDied) ForceUnwaitOnDeath(target.Entity!);
         // ARC-AI-1134 (DY3, 0x45DA20 after the death time): the NPC's combat focus (0x11B) := the killer, whatever its danger state; the kill notification follows the commit below.
         var killedBy = killer ?? damageStep?.Parties.Killer;
         // ARC-MAGIC-1146 (0x45ED70, before the focus write in the original): the Combat-Focus Wipe event, ten game minutes on.

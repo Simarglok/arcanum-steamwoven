@@ -118,7 +118,7 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// The kill notification's writes (0x4AA1B0) in one revision: the victim's stop fleeing (<see cref="StopFleeing"/>, decided on
     /// the session's record; the hero has none) and BACKING_OFF on each NPC of <see cref="KillNotificationPlan.BacksOff"/>. The
-    /// victim's flee-goal interrupt and stop waiting (0x4AA8C0) are the host's. An invalid id among the back-offs is
+    /// victim's flee-goal interrupt is the host's; its stop waiting (0x4AA8C0 with force 1: the wait timers go and a waiting companion joins its leader again as a forced follower) is the life step's, which has already run it (ARC-AI-1312, <c>ForceUnwaitOnDeath</c>). An invalid id among the back-offs is
     /// <see cref="GameSessionFailure.InvalidDangerTarget"/>.
     /// </summary>
     public SessionDangerResult ApplyKillNotification(GameSessionVersion expected, SessionKillNotificationRequest request)

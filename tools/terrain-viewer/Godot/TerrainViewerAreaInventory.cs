@@ -254,28 +254,28 @@ public partial class TerrainViewerApp
     private void OpenInventory(string? holder = null)
     {
         var mode = InventoryModeOf(holder);
-        if (!InventoryActive || InventoryOpen || !WindowCanOpen(mode)) { _containerLootSession = null; return; }
+        if (!InventoryActive || InventoryOpen || !WindowCanOpen(mode)) { _containerLootSession = null; _contentsHolder = null; return; }
         if (holder is null || SessionJunkPile.Number(holder) is not null) _containerLootSession = null;
         if (_inventoryPanel is null)
         {
             _inventoryPanel = new AreaInventoryPanel(); AddChild(_inventoryPanel);
             _inventoryPanel.CloseRequested += EndInventory;
-            _inventoryPanel.TakeRequested += TakeFromBody;
-            _inventoryPanel.TakeAllRequested += TakeAllFromBody;
+            _inventoryPanel.TakeRequested += item => { if (!ContentsWindow) TakeFromBody(item); };
+            _inventoryPanel.TakeAllRequested += () => { if (!ContentsWindow) TakeAllFromBody(); };
             _inventoryPanel.ArrangeRequested += ArrangeFromWindow;
             _inventoryPanel.SoundRequested += id => PlayInterfaceSound(id, "inventory arrange button");
-            _inventoryPanel.PlantRequested += item => PickPocketAttempt(Arcanum.Simulation.Skills.PickPocketDirection.Plant, item);
-            _inventoryPanel.UseRequested += UseItemFromWindow;
+            _inventoryPanel.PlantRequested += item => { if (!ContentsWindow) PickPocketAttempt(Arcanum.Simulation.Skills.PickPocketDirection.Plant, item); };
+            _inventoryPanel.UseRequested += item => { if (!ContentsWindow) UseItemFromWindow(item); };
             _inventoryPanel.ItemPicked += InventoryItemPicked;
             _inventoryPanel.PickCancelled += () => { if (_itemAiming is not null) CancelArmedLockpicks("right click"); else CancelSpellTargeting("right click"); };
             _inventoryPanel.PointerStill += InventoryPointerStill;
-            _inventoryPanel.ReadRequested += ReadItem;
-            _inventoryPanel.PickRequested += ArmLockpick;
-            _inventoryPanel.RepairRequested += RepairItem;
-            _inventoryPanel.WearRequested += WearItem;
-            _inventoryPanel.TakeOffRequested += TakeOffItem;
-            _inventoryPanel.DropRequested += DropItem;
-            _inventoryPanel.MapDropRequested += held => LiftToGameCursor(held.Entity, "round-view");
+            _inventoryPanel.ReadRequested += item => { if (!ContentsWindow) ReadItem(item); };
+            _inventoryPanel.PickRequested += item => { if (!ContentsWindow) ArmLockpick(item); };
+            _inventoryPanel.RepairRequested += item => { if (!ContentsWindow) RepairItem(item); };
+            _inventoryPanel.WearRequested += (item, slot) => { if (!ContentsWindow) WearItem(item, slot); };
+            _inventoryPanel.TakeOffRequested += slot => { if (!ContentsWindow) TakeOffItem(slot); };
+            _inventoryPanel.DropRequested += drop => { if (!ContentsWindow) DropItem(drop); };
+            _inventoryPanel.MapDropRequested += held => { if (!ContentsWindow) LiftToGameCursor(held.Entity, "round-view"); };
             _inventoryPanel.QuantityAccepted += AcceptQuantity;
             _inventoryPanel.QuantityCancelled += CancelQuantity;
             _inventoryPanel.HolderView = InventoryHolderView;
@@ -293,7 +293,7 @@ public partial class TerrainViewerApp
         var view = InventoryView(holder);
         if (!OpenWindowMode(mode, () => _inventoryPanel!.Open(view), () => _inventoryPanel!.CloseView()))
         {
-            _junkPileSession = null;
+            _junkPileSession = null; _contentsHolder = null;
             return;
         }
         // ARC-WORLD-096: a loot open schedules the looted holder's restock (RK2; a junk pile is no seed holder and has none).
@@ -324,6 +324,8 @@ public partial class TerrainViewerApp
         // ARC-SKILLS-010: the window on the NPC whose pocket the hero picks is in steal mode.
         // ARC-UI-1121 (B30, IW29): the body's doll view prints the damage and armour ratings the combat host reads for it and fills a too heavy weapon's slot.
         with { Steal = holder is not null && holder == _pickPocketVictim,
+               // ARC-RES-1327 (XR3, XR16): the container window See Contents opened (window mode 4) moves nothing.
+               Contents = holder is not null && holder == _contentsHolder,
                BodyRatings = holder is not null && _combatHost is { } combat && combat.Covers(CurrentAreaMap) ? combat.DollRatings(_areaSession!, holder) : null,
                // ARC-UI-1267 (IW25): the hero's own window prints its damage and armour ratings and fills a too heavy weapon's slot.
                HeroRatings = holder is null ? _combatHost?.HeroDollRatings(_areaSession!) : null };
@@ -642,9 +644,10 @@ public partial class TerrainViewerApp
         var taken = 0; var refused = new List<string>(); var printed = new System.Text.StringBuilder();
         foreach (var line in InventoryView(holder).Loot)
         {
-            // ARC-UI-029: Take all moves a dead NPC's (ARC-WORLD-101: or a container's) gold pile whole without asking (the original's flag 0x20, QW1).
-            var result = line.StackKind is { Type: SessionItemType.Gold } && SessionJunkPile.Number(holder) is null
-                ? _areaSession!.TakeGoldFromNpc(_areaSession.Version, holder, line.Units, line.Entity)
+            // ARC-UI-029: Take all moves a dead NPC's (ARC-WORLD-101: or a container's; ARC-UI-1328: or a junk pile's) gold pile whole without asking (the original's flag 0x20, QW1).
+            var result = line.StackKind is { Type: SessionItemType.Gold }
+                ? SessionJunkPile.Number(holder) is not null ? _areaSession!.TakeGoldFromJunkPile(_areaSession.Version, holder, line.Entity, line.Units)
+                : _areaSession!.TakeGoldFromNpc(_areaSession.Version, holder, line.Units, line.Entity)
                 : _inventoryHost!.Loot(_areaSession!, holder, line.Entity);
             GD.Print($"ARC-UI-004 loot-all-item disposition={result.Disposition} failure={result.Failure}{InsertScriptLog(result)}");
             // One pickup sound for the whole take (the first item's), not one voice per item in the same frame.

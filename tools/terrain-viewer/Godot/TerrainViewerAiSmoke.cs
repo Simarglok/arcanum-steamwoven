@@ -196,7 +196,7 @@ public partial class TerrainViewerApp
                 $"the NPC fights the hero: {danger.State} {host.TraceOf(entity)?.Reaction} {host.TraceOf(entity)?.Setter}");
 
             _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
-            var frames = 0; var drawnMoved = false; var swing = false;
+            var frames = 0; var drawnMoved = false; var swing = false; var probeSum = (Opaque: 0, Picked: 0, Other: 0, None: 0); var probeLogged = 0;
             // ARC-WORLD-111: its steps are drawn with its own walk or run cycle.
             var stepFrames = new HashSet<AreaFrameKey>(); var steppingFrames = 0;
             // ARC-RENDER-038: its attack is drawn with its body's attack ART, and in combat mode it stands with what it shows.
@@ -215,8 +215,17 @@ public partial class TerrainViewerApp
                     steppingFrames++;
                     if (stepping.Frame.Policy == AreaBodyMoveArt.Policy) stepFrames.Add(stepping.Frame);
                 }
+                if (_canvas!.AreaMovingDrawn?.Any(c => c.Identity == target.Row.Key) == true)
+                {
+                    var count = MovingPickCount(target.Row.Key);
+                    probeSum = (probeSum.Opaque + count.Opaque, probeSum.Picked + count.Picked, probeSum.Other + count.Other, probeSum.None + count.None);
+                    if (count.None > 0 && probeLogged++ < 10) GD.Print($"ARC-INPUT-1356 probe frame={frames} stepping={host.Movers.Of(entity)?.Stepping(host.NowMs)} opaque={count.Opaque} picked={count.Picked} other={count.Other} none={count.None} at={count.FirstNone}");
+                }
                 swing |= host.RunOf(entity)?.Top.Goal == GoalType.AttemptAttack;
             }
+            GD.Print($"ARC-INPUT-1356 probe total opaque={probeSum.Opaque} picked={probeSum.Picked} other={probeSum.Other} none={probeSum.None}");
+            // ARC-INPUT-1356: a creature that walks and attacks is picked wherever the canvas draws it, at every frame: no drawn pixel of its body picks nothing.
+            Require(probeSum.Opaque > 0 && probeSum.None * 100 <= probeSum.Opaque && probeSum.Picked * 10 >= (probeSum.Opaque - probeSum.Other) * 9, $"the pick finds the moving body where it is drawn: opaque {probeSum.Opaque} picked {probeSum.Picked} other {probeSum.Other} none {probeSum.None}");
             var trace = host.TraceOf(entity);
             GD.Print($"ARC-WORLD-092 ai smoke trace danger={trace?.Danger} perform={trace?.Perform} step={trace?.Step} hit={trace?.Hit}");
             Require(trace?.Hit is { } hit && !hit.StartsWith(nameof(GameSessionDisposition.Rejected), StringComparison.Ordinal), $"the NPC's bite was resolved after {frames} frames: {trace?.Hit}");
