@@ -381,10 +381,10 @@ public sealed class ScrAdmissionSet
     public static IReadOnlyList<int> WorldObjectActions { get; } = [ScrCatalogue.Action.TransferItem, ScrCatalogue.Action.SetLockState, ScrCatalogue.Action.CreateItem, ScrCatalogue.Action.ToggleOpenClosed, ScrCatalogue.Action.SetWrittenStart,
         ScrCatalogue.Action.ToggleSectorBlocked, ScrCatalogue.Action.ToggleMonsterGenerator, ScrCatalogue.Action.TouchArt, ScrCatalogue.Action.DestroyItemNamed, ScrCatalogue.Action.ToggleItemInventoryDisplay];
 
-    /// <summary>The actions of <see cref="WorldObjectActions"/> the area hosts apply (all but set written start (94), destroy item named (126), transfer item (41) and toggle item inventory display (127), which need per-item field writes and
-    /// removals the viewer's item model does not have).</summary>
-    public static IReadOnlyList<int> WorldObjectHostActions { get; } = [ScrCatalogue.Action.SetLockState, ScrCatalogue.Action.CreateItem, ScrCatalogue.Action.ToggleOpenClosed, ScrCatalogue.Action.ToggleSectorBlocked,
-        ScrCatalogue.Action.ToggleMonsterGenerator, ScrCatalogue.Action.TouchArt];
+    /// <summary>The actions of <see cref="WorldObjectActions"/> the area hosts apply: every one of them. ARC-SCRIPT-1164 left out transfer item (41), set written start (94), destroy item named (126) and toggle item inventory display (127) for lack of
+    /// a per-item field write and removal; ARC-SCRIPT-1279 added the session's named-item move and destroy and its item field writes, and the hosts apply them (ledger WO14, WO16).</summary>
+    public static IReadOnlyList<int> WorldObjectHostActions { get; } = [ScrCatalogue.Action.TransferItem, ScrCatalogue.Action.SetLockState, ScrCatalogue.Action.CreateItem, ScrCatalogue.Action.ToggleOpenClosed, ScrCatalogue.Action.SetWrittenStart,
+        ScrCatalogue.Action.ToggleSectorBlocked, ScrCatalogue.Action.ToggleMonsterGenerator, ScrCatalogue.Action.TouchArt, ScrCatalogue.Action.DestroyItemNamed, ScrCatalogue.Action.ToggleItemInventoryDisplay];
 
     /// <summary>
     /// The world-object set (ARC-SCRIPT-1164, plan slice E5-b, ledger WO1–WO10): <see cref="S36"/> plus the conditions obj is open (36), sector is blocked (45) and monster generator disabled (46), which a host answers through

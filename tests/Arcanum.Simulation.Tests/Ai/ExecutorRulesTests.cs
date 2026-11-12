@@ -24,7 +24,7 @@ public sealed class ExecutorRulesTests
         public int Draws;
         public int Roll(AiRollPurpose purpose, int min, int max)
         {
-            Assert.AreEqual(AiRollPurpose.BlockedStepWait, purpose);
+            Assert.IsTrue(purpose is AiRollPurpose.BlockedStepWait or AiRollPurpose.PleaseMoveStart);
             Draws++;
             return Math.Clamp(value, min, max);
         }
@@ -188,7 +188,10 @@ public sealed class ExecutorRulesTests
         public bool NpcPickupsOn => true;
         public bool BoomerangInFlight(string npc) => Boomerang;
         public bool InterruptLowerAnimations(string id) => !InterruptFails;
-        public void StepApart(string id) => Calls.Add("step apart");
+        // ARC-AI-1315: the critters on the tile (the finder and the step apart read them) and the please-move start.
+        public readonly List<AiTileCritter> Sharers = [];
+        public IReadOnlyList<AiTileCritter> TileCritters(string id) => Sharers;
+        public bool StartPleaseMove(string mover, string awayFrom) { Calls.Add($"please move {mover} from {awayFrom}"); return true; }
         public AiFleeing PerformFleeing(string npc) { Calls.Add("perform fleeing"); return Fleeing; }
         public void PerformSurrender(string npc) => Calls.Add("perform surrender");
     }
@@ -729,7 +732,7 @@ public sealed class ExecutorRulesTests
         world.Boomerang = false;
         world.Attack = new(BodyOfAir: true);
         Assert.AreEqual(AiStartRefusal.BodyOfAir, AiExecutorRules.StartAttack(world, Npc, Foe, null, null).Refusal);
-        CollectionAssert.AreEqual(new[] { "unwield oid:dagger", "step apart", "step apart", "step apart", "step apart" }, world.Calls);
+        CollectionAssert.AreEqual(new[] { "unwield oid:dagger" }, world.Calls, "no critter shares the tile, so the step apart after each refusal asks nobody");
         world.Attack = new();
         world.Round = true;
         world.Actor = Npc;
@@ -869,5 +872,150 @@ public sealed class ExecutorRulesTests
         var frames = Enumerable.Range(0, AiExecutorRules.MaxDepth).Select(_ => new GoalFrame(GoalType.Attack, Foe)).ToArray();
         var run = new GoalRun(Npc, default, frames[0]).WithFrames([.. frames]);
         Assert.AreEqual(AiRunEnd.Overflow, AiExecutorRules.Step(run, world, Rolls, Steamwoven).End);
+    }
+
+    // ---- critters sharing a tile (ARC-AI-1315, ledger VA4, VAG4: 0x436720, 0x4363E0, 0x4364D0, goal 68) ----
+
+    private static AiTileCritter Critter(string id, long order, bool pc = false, bool busy = false, bool living = true) => new(id, pc, living, busy, order);
+
+    [TestMethod]
+    public void TheFinderPairsTheBlockerWithTheSourceAndTheLargerHandleMoves()
+    {
+        var low = Critter("oid:low", 1);
+        var high = Critter("oid:high", 2);
+        // Two NPCs: the second of the pair is the one asked to move, the larger handle whoever is the source.
+        Assert.AreEqual(new AiTileSharerPair(low, high), AiTileSharerRules.Find("oid:low", [low, high]));
+        Assert.AreEqual(new AiTileSharerPair(low, high), AiTileSharerRules.Find("oid:high", [low, high]));
+        Assert.AreEqual(high, AiTileSharerRules.Choose(low, high)!.Value.Mover);
+        Assert.AreEqual(low, AiTileSharerRules.Choose(low, high)!.Value.AwayFrom);
+        // A player character as the source: the NPC is the blocker and moves (a PC is never the blocker).
+        var hero = Critter("pc", 0, pc: true);
+        var pair = AiTileSharerRules.Find("pc", [hero, high])!.Value;
+        Assert.AreEqual((high, hero), (pair.First, pair.Second));
+        Assert.AreEqual((high, hero), (AiTileSharerRules.Choose(pair.First, pair.Second)!.Value.Mover, AiTileSharerRules.Choose(pair.First, pair.Second)!.Value.AwayFrom));
+        // An NPC that shares a tile only with the hero finds no blocker: it attacks.
+        Assert.IsNull(AiTileSharerRules.Find("oid:high", [hero, high]));
+        // A busy source, a lone critter, and dead or busy company give nothing.
+        Assert.IsNull(AiTileSharerRules.Find("oid:low", [Critter("oid:low", 1, busy: true), high]));
+        Assert.IsNull(AiTileSharerRules.Find("oid:low", [low]));
+        Assert.IsNull(AiTileSharerRules.Find("oid:low", [low, Critter("oid:high", 2, busy: true)]));
+        Assert.IsNull(AiTileSharerRules.Find("oid:low", [low, Critter("oid:high", 2, living: false)]));
+        // The first living, not busy NPC in the tile's order is the blocker, not the smallest handle.
+        var third = Critter("oid:third", 3);
+        Assert.AreEqual(new AiTileSharerPair(low, high), AiTileSharerRules.Find("oid:low", [low, Critter("oid:dead", 9, living: false), high, third]));
+    }
+
+    [TestMethod]
+    public void ThePleaseMoveChoiceSendsTheNpcAwayFromAPlayerCharacterAndTheLargerOfTwoPlayers()
+    {
+        var hero = Critter("pc", 5, pc: true);
+        var npc = Critter("oid:npc", 1);
+        Assert.AreEqual(npc, AiTileSharerRules.Choose(hero, npc)!.Value.Mover, "second is the NPC");
+        Assert.AreEqual(npc, AiTileSharerRules.Choose(npc, hero)!.Value.Mover, "second is the player character: the first (an NPC) moves");
+        var other = Critter("pc2", 6, pc: true);
+        Assert.AreEqual(other, AiTileSharerRules.Choose(hero, other)!.Value.Mover);
+        Assert.AreEqual(other, AiTileSharerRules.Choose(other, hero)!.Value.Mover, "two players: the larger handle moves");
+        Assert.IsNull(AiTileSharerRules.Choose(npc, npc));
+    }
+
+    [TestMethod]
+    public void AnAttackerSharingATileAsksTheBlockerToMoveInsteadOfAttacking()
+    {
+        var world = Arena(1);
+        world.Sharers.AddRange([Critter(Npc, 1), Critter("oid:other", 2)]);
+        var result = AiExecutorRules.StartAttack(world, Npc, Foe, null, null);
+        Assert.AreEqual((AiStartRefusal.TileSharer, false, null), (result.Refusal, result.Started, result.Run));
+        CollectionAssert.AreEqual(new[] { $"please move oid:other from {Npc}" }, world.Calls, "no attack, no step apart, one please-move start");
+        // Round: only the current participant passes the start gate (0x4348E0), so a mover that is not the actor is not asked, and the attack still does not start.
+        world.Calls.Clear();
+        world.Round = true;
+        world.Actor = Npc;
+        world.Points[Npc] = 10;
+        Assert.AreEqual(AiStartRefusal.TileSharer, AiExecutorRules.StartAttack(world, Npc, Foe, null, null).Refusal);
+        CollectionAssert.AreEqual(Array.Empty<string>(), world.Calls);
+        // Alone on the tile, the attacker attacks as before.
+        world.Round = false;
+        world.Sharers.Clear();
+        Assert.IsTrue(AiExecutorRules.StartAttack(world, Npc, Foe, null, null).Started);
+    }
+
+    [TestMethod]
+    public void AFoundBlockerThatCannotMoveStillEndsTheAttackStartWithoutAStepApart()
+    {
+        var world = Arena(1);
+        // The finder found the blocker (idle NPC, larger handle); the round's gate refuses the mover, which is not the actor: nothing starts, no step apart, no attack.
+        world.Sharers.AddRange([Critter(Npc, 1), Critter("oid:other", 2), Critter("oid:third", 3)]);
+        world.Round = true;
+        world.Actor = Npc;
+        world.Points[Npc] = 10;
+        var result = AiExecutorRules.StartAttack(world, Npc, Foe, null, null);
+        Assert.AreEqual((AiStartRefusal.TileSharer, false), (result.Refusal, result.Started));
+        CollectionAssert.AreEqual(Array.Empty<string>(), world.Calls);
+        // A blocker that is busy is not one: the attacker meets the next idle NPC of the tile's list.
+        world.Round = false;
+        world.Sharers.Clear();
+        world.Sharers.AddRange([Critter(Npc, 1), Critter("oid:busy", 2, busy: true), Critter("oid:third", 3)]);
+        Assert.AreEqual(AiStartRefusal.TileSharer, AiExecutorRules.StartAttack(world, Npc, Foe, null, null).Refusal);
+        CollectionAssert.AreEqual(new[] { $"please move oid:third from {Npc}" }, world.Calls);
+    }
+
+    [TestMethod]
+    public void ARefusedAttackStartStepsApartTheOtherNpcsOnTheTile()
+    {
+        var world = Arena(1);
+        // The attacker is busy (it has its run), so the finder gives nothing; the boomerang refuses the start and the step apart asks the others.
+        world.Sharers.AddRange([Critter(Npc, 1, busy: true), Critter("oid:a", 2), Critter("oid:b", 3), Critter("oid:c", 4)]);
+        world.Boomerang = true;
+        Assert.AreEqual(AiStartRefusal.BoomerangInFlight, AiExecutorRules.StartAttack(world, Npc, Foe, null, null).Refusal);
+        // One stays (the smallest handle among the idle NPCs, a, which a busy attacker does not count against); the rest are asked, the last listed first.
+        CollectionAssert.AreEqual(new[] { "please move oid:c from oid:a", "please move oid:b from oid:a" }, world.Calls);
+        // A player character on the tile stays, and every idle NPC is asked to move away from it.
+        world.Calls.Clear();
+        world.Sharers.Clear();
+        world.Sharers.AddRange([Critter(Npc, 4, busy: true), Critter("oid:a", 2), Critter("pc", 9, pc: true)]);
+        AiExecutorRules.StartAttack(world, Npc, Foe, null, null);
+        CollectionAssert.AreEqual(new[] { "please move oid:a from pc" }, world.Calls);
+        // A gate refusal (not the actor in a round) returns without it.
+        world.Calls.Clear();
+        world.Round = true;
+        world.Actor = "oid:a";
+        Assert.AreEqual(AiStartRefusal.Gate, AiExecutorRules.StartAttack(world, Npc, Foe, null, null).Refusal);
+        CollectionAssert.AreEqual(Array.Empty<string>(), world.Calls);
+    }
+
+    [TestMethod]
+    public void TheStepApartNeedsTwoLivingIdleCrittersAndAsksNobodyOtherwise()
+    {
+        var world = Arena(1);
+        world.Sharers.AddRange([Critter("oid:a", 1), Critter("oid:b", 2, living: false), Critter("oid:c", 3, busy: true)]);
+        Assert.AreEqual(0, AiTileSharerRules.StepApart(world, "oid:a"));
+        world.Sharers.Add(Critter("oid:d", 4));
+        Assert.AreEqual(1, AiTileSharerRules.StepApart(world, "oid:a"));
+        CollectionAssert.AreEqual(new[] { "please move oid:d from oid:a" }, world.Calls);
+    }
+
+    [TestMethod]
+    public void GoalSixtyEightStepsToTheFirstClearNeighbourFromARandomRotationAndEnds()
+    {
+        var world = Arena(1);
+        world.At[Npc] = new(10, 10);
+        var run = new GoalRun(Npc, default, new GoalFrame(GoalType.PleaseMove, "oid:other"));
+        // A draw of 8 starts at rotation 0 (the tile at −1, −1): the neighbour comes first, the walk is the run to a tile's.
+        var steps = Drive(run, world, Steamwoven);
+        CollectionAssert.AreEqual(new[] { "plan ToTile", "step 9,9" }, world.Calls);
+        Assert.AreEqual((AiRunEnd.Finished, AiExecutorReason.RunToTile), (steps[^1].End, steps[^1].Reason));
+        // A draw of 3 starts at rotation 3 (0, +1); a blocked neighbour is passed over to the next one around the circle.
+        world = Arena(1);
+        world.At[Npc] = new(10, 10);
+        world.Blocked.Add(new(10, 11));
+        var first = AiExecutorRules.Step(run, world, new FixedRolls(3), Steamwoven);
+        Assert.AreEqual(new CellCoord(11, 11), first.Run!.Frames[0].Tile, "rotation 4");
+        // Every neighbour blocked: no tile, the goal pops and the run ends.
+        world = Arena(1);
+        world.At[Npc] = new(10, 10);
+        foreach (var rotation in Enumerable.Range(0, 8)) world.Blocked.Add(Arcanum.Simulation.Navigation.OriginalPathRequest.Neighbor(new(10, 10), rotation));
+        var none = AiExecutorRules.Step(run, world, Rolls, Steamwoven);
+        Assert.AreEqual((AiRunEnd.Finished, AiExecutorReason.PleaseMoveNoTile), (none.End, none.Reason));
+        CollectionAssert.AreEqual(Array.Empty<string>(), world.Calls);
     }
 }

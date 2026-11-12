@@ -11,7 +11,7 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 // ARC-SKILLS-010: the pick-pocket skill in map mode (contract docs/world/pick-pocket-runtime.md). The palette's "Pick pocket" arms the
-// skill (the skill bar's button stays a later task); the next left press on an NPC runs the start's rules at once, at sight distance
+// skill (since ARC-UI-1113 the skill bar's Pick Pocket button arms it too); the next left press on an NPC runs the start's rules at once, at sight distance
 // (PP1): a stoned target or the hero itself is refused, a "no pickpocket" or mechanical critter floats skill_ui.mes line 525, a dead one
 // is looted as any body, and a living one the hero sees opens the inventory window in steal mode. There each Steal button and each
 // Plant button is one attempt through the session (4 action points in the hero's subturn); a noticed failure runs the victim's
@@ -40,6 +40,14 @@ public partial class TerrainViewerApp
         _inventoryStatus = "pick pocket: press an NPC";
         GD.Print("ARC-SKILLS-010 pick-pocket armed");
         RefreshAreaStatus();
+    }
+
+    /// <summary>ARC-UI-1113: the skill bar's Pick pocket button (the hotkey bar's entry and the skill pane's button, 0x579FA0 → 0x57A0A0 with
+    /// button 1): the same arming as the palette's, whose outcome is the status text it left.</summary>
+    private string ArmPickPocketFromBar()
+    {
+        ArmPickPocket();
+        return PickPocketArmed ? "pick pocket: press an NPC" : _inventoryStatus ?? "pick pocket: not ready";
     }
 
     // ARC-DEV-184 (MIG13 S12d): a Steal or Plant is the skill goal 33 → 86 of the table; the attempt it asks for waits here for the frame's next safe point.

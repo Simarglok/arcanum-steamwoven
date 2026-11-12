@@ -213,8 +213,8 @@ public static class DangerRules
 
     /// <summary>
     /// The enemy-list remove (0x4AF9D0): every entry equal to <paramref name="entry"/> goes, the last entry filling its hole and
-    /// the same index checked again, so the order is not kept. The original also drops null entries, which a session list
-    /// never holds.
+    /// the same index checked again, so the order is not kept. The original also drops null entries (a session list holds none;
+    /// a stale one is <see cref="PurgeEnemies{T}"/>'s) and, with a null handle, only those.
     /// </summary>
     [OriginalFunction(0x4AF9D0, OriginalFunctionScope.Partial)]
     public static T[] RemoveEnemy<T>(IReadOnlyList<T> enemies, T entry) where T : notnull
@@ -227,6 +227,28 @@ public static class DangerRules
             list[i] = list[^1];
             list.RemoveAt(list.Count - 1);
             i--;
+        }
+        return list.ToArray();
+    }
+
+    /// <summary>
+    /// ARC-AI-1317 (ledger VA16, VAG6): the enemy-list remove with a null handle (0x4AF9D0, the first call of the enemy-list pick
+    /// 0x4AFA90). The original reads each entry through the object-field reader (0x4076A0), which gives a null for an entry whose
+    /// object no longer resolves (and clears it), and the remove drops every null entry: the entries are scanned from the front,
+    /// a stale one is replaced by the last entry (which is then checked at the same index) and the list is cut by one, so the
+    /// survivors keep the remove's order, not their own. <paramref name="exists"/> is the world's "the handle still names an
+    /// object" test. Returns a new array (equal to the list when nothing is stale).
+    /// </summary>
+    public static T[] PurgeEnemies<T>(IReadOnlyList<T> enemies, Func<T, bool> exists) where T : notnull
+    {
+        ArgumentNullException.ThrowIfNull(enemies);
+        ArgumentNullException.ThrowIfNull(exists);
+        var list = enemies.ToList();
+        for (var i = 0; i < list.Count;)
+        {
+            if (exists(list[i])) { i++; continue; }
+            list[i] = list[^1];
+            list.RemoveAt(list.Count - 1);
         }
         return list.ToArray();
     }
