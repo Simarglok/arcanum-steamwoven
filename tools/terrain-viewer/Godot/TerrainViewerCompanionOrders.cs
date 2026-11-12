@@ -213,6 +213,7 @@ public partial class TerrainViewerApp
             CancelSpellTargeting($"a {word} order took the next press");
             CancelArmedLockpicks($"a {word} order took the next press");
             CancelPickPocket($"a {word} order took the next press");
+            CancelDisarm($"a {word} order took the next press");
             if (!OpenOverlayMode(InterfaceMode.FollowerOrder, _ => _pendingOrder = null))
             {
                 _companionNotice = $"{word}: not ready (the interface mode did not open)";

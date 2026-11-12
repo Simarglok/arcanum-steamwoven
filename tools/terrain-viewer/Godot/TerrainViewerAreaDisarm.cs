@@ -82,6 +82,7 @@ public partial class TerrainViewerApp
         if (disarm is null) { _areaUseStatus = "disarm traps: no known trap there"; RefreshAreaStatus(); return; }
         // ARC-COMBAT-020: the charge's round events (a refused charge's next subturn) go to the round log.
         if (disarm.Roll.Charge is { } charge) LogRound(charge.Events);
+        if (disarm.Script is { } ordinary && UseScriptHost(_readyArea!.Snapshot) is { } scriptHost) Awarded(scriptHost, ordinary);
         var line = disarm.Describe();
         GD.Print($"ARC-SKILLS-1156 disarm entity={AreaUseScriptHost.EntityId(row)} {System.Text.Json.JsonSerializer.Serialize(new { disarm.Roll.Disposition, disarm.Roll.Failure, Outcome = disarm.Outcome.ToString(), SecondRoll = disarm.Roll.SecondRoll, Device = disarm.Device?.Item, Removed = disarm.Roll.Disarm?.State.Removed })}");
         _areaUseStatus = "disarm traps: " + line;

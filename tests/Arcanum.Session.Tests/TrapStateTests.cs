@@ -448,6 +448,20 @@ public sealed class TrapStateTests
     }
 
     [TestMethod]
+    public void A_refused_removal_leaves_an_armed_fate_point_armed()
+    {
+        using var owner = Disarmer(0, SkillTraining.None, 0, new GameSessionLimits(maxChangesPerMap: 1));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.GrantHeroFatePoint(owner.Version).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ArmHeroFate(owner.Version, FateKind.DisarmTraps).Disposition);
+        var (draws, revision) = (owner.QueryRandom().Draws, owner.Version.Revision);
+        // The fated press is a critical success; a trap object's two-change removal does not fit the budget of one.
+        var roll = owner.RollHeroDisarmTrap(owner.Version, Plate, KnownPlate);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded), (roll.Disposition, roll.Failure));
+        Assert.IsTrue(owner.HeroFateArmed(FateKind.DisarmTraps), "the fate point was not spent");
+        Assert.AreEqual((draws, revision), (owner.QueryRandom().Draws, owner.Version.Revision));
+    }
+
+    [TestMethod]
     public void In_a_round_the_press_pays_four_action_points_first_and_another_subturn_refuses_it()
     {
         using var owner = Disarmer(5, SkillTraining.Expert);
