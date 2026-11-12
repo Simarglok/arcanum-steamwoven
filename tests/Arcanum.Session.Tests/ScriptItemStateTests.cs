@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Movement;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.InventoryStateTests;
 using static Arcanum.Session.Tests.SessionFixtures;
@@ -124,6 +125,80 @@ public sealed class ScriptItemStateTests
         Assert.IsNull(owner.QueryNamedItemTransfer("virgil", null, 2807).Item, "2807 is the corpse's boots, not in virgil's list");
         Assert.AreEqual("boots", owner.QueryNamedItemTransfer("corpse", null, 2807).Item!.Entity);
         Assert.AreEqual(3, owner.QueryHeroKit().Count);
+    }
+
+    // The seed with two more ground items the hero can pick up (relic: a destroy script; idol: a remove-item script), a keeper whose list has a transfer script (point 32) and a smith holding a key without a number.
+    private static GameSessionOwner HeroWithScriptedItems()
+    {
+        var seed = Seed();
+        seed = seed with
+        {
+            Holders = [.. seed.Holders, new("warden", SessionHolderKind.Npc, false, false, [SessionScriptPoint.Transfer], []), new("smith", SessionHolderKind.Npc, false, false, [], ["signet"])],
+            Items = [.. seed.Items, new("relic", Facts(SessionItemType.Generic, 5700, scripts: 2), new CellCoord(110, 200)), new("idol", Facts(SessionItemType.Generic, 5701, scripts: SessionScriptPoint.RemoveItem), new CellCoord(111, 200)),
+                new("signet", Facts(SessionItemType.Key, 5710), null)],
+        };
+        var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, seed).Failure);
+        Assert.AreEqual("relic", owner.PickUpItem(owner.Version, "relic", Accept).Item);
+        Assert.AreEqual("idol", owner.PickUpItem(owner.Version, "idol", Accept).Item);
+        return owner;
+    }
+
+    [TestMethod]
+    public void A_hero_item_taken_from_a_map_keeps_the_script_points_of_its_seed_row_for_the_checks()
+    {
+        using var owner = HeroWithScriptedItems();
+        var revision = owner.Version.Revision;
+        CollectionAssert.Contains(owner.QueryNamedItem(null, 5700)!.ScriptPoints.ToArray(), 2);
+        CollectionAssert.Contains(owner.QueryNamedItem(null, 5701)!.ScriptPoints.ToArray(), SessionScriptPoint.RemoveItem);
+        // Destroyed it would run its destroy or remove-item script: refused before any effect, with the failure the plan names.
+        var destroy = owner.QueryNamedItemDestroy(null, 5700);
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, destroy.Failure);
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.DestroyNamedItem(owner.Version, null, 5700).Failure);
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.DestroyNamedItem(owner.Version, null, 5701).Failure);
+        // Given away it would run its remove-item script: the plan refuses it as the move itself would.
+        var plan = owner.QueryNamedItemTransfer(null, "virgil", 5701);
+        Assert.AreEqual((GameSessionFailure.ItemScriptUnsupported, true), (plan.Failure, plan.Refusal is not null));
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.TransferNamedItem(owner.Version, null, "virgil", 5701, Accept).Failure);
+        Assert.AreEqual(revision, owner.Version.Revision);
+        Assert.IsFalse(owner.IsItemDestroyed("relic"));
+        // An item with no such point goes: the destroy-script item of the hero can be handed over (nothing runs on that move).
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.TransferNamedItem(owner.Version, null, "virgil", 5700, Accept).Disposition);
+    }
+
+    [TestMethod]
+    public void Transfer_item_refuses_before_any_effect_what_the_move_would_refuse_for_its_holder_or_type()
+    {
+        using var owner = HeroWithScriptedItems();
+        var revision = owner.Version.Revision;
+        void Planned(string? from, string? to, int name, GameSessionFailure failure)
+        {
+            var plan = owner.QueryNamedItemTransfer(from, to, name);
+            Assert.AreEqual(failure, plan.Failure, $"{from} -> {to} {name}");
+            Assert.IsNotNull(plan.Refusal);
+            Assert.AreEqual((GameSessionDisposition.Rejected, failure), (owner.TransferNamedItem(owner.Version, from, to, name, Accept).Disposition, owner.TransferNamedItem(owner.Version, from, to, name, Accept).Failure));
+        }
+        // A new holder with a transfer script: the move starts with it (0x4617F0) and the session runs none.
+        Planned(null, "warden", owner.QueryHeroKit()[0].Kind.Name, GameSessionFailure.HolderScriptUnsupported);
+        // Gold is the coin total's, a key goes only onto the ring with a number.
+        Planned("merchant", null, 3200, GameSessionFailure.ItemTypeUnsupported);
+        Planned("smith", null, 5710, GameSessionFailure.InvalidItem);
+        Assert.AreEqual(revision, owner.Version.Revision);
+    }
+
+    [TestMethod]
+    public void Transfer_item_refuses_a_container_that_is_not_on_the_actors_map()
+    {
+        using var owner = Hero();
+        var elsewhere = new SessionMapId(80);
+        var vault = new SessionMapInventorySeed([new("vault", SessionHolderKind.Container, false, false, [], ["gem"])], [new("gem", Facts(SessionItemType.Generic, 5720), null)]);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(elsewhere, vault).Failure);
+        var revision = owner.Version.Revision;
+        var plan = owner.QueryNamedItemTransfer("vault", null, 5720);
+        Assert.AreEqual((GameSessionFailure.HolderNotLootable, "gem"), (plan.Failure, plan.Item!.Entity));
+        Assert.AreEqual(GameSessionFailure.HolderNotLootable, owner.TransferNamedItem(owner.Version, "vault", null, 5720, Accept).Failure);
+        Assert.AreEqual(GameSessionFailure.HolderNotLootable, owner.TransferNamedItem(owner.Version, null, "vault", owner.QueryHeroKit()[0].Kind.Name, Accept).Failure);
+        Assert.AreEqual(revision, owner.Version.Revision);
     }
 
     [TestMethod]

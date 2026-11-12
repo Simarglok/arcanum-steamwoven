@@ -4,13 +4,21 @@ namespace Arcanum.Session;
 /// ARC-SCRIPT-1279 (ledger WO2, WO7): the first item of a holder's own list whose name class (<c>OBJ_F_NAME</c>, field 0x16) is the number a script action names, as the original finds it (0x462480): the list of the
 /// critter or container, in order, worn items included. <see cref="Worn"/> and <see cref="ScriptPoints"/> are what the session knows of the item for the checks a move or a destroy makes.
 /// </summary>
-public sealed record SessionNamedItem(string Entity, SessionItemKind Kind, bool Worn, IReadOnlyList<int> ScriptPoints);
+public sealed record SessionNamedItem(string Entity, SessionItemKind Kind, bool Worn, IReadOnlyList<int> ScriptPoints)
+{
+    /// <summary>The item is worn through a trigger host and carries item spells, so it leaves a slot only through one (the session runs none here).</summary>
+    public bool ItemSpells { get; init; }
+
+    /// <summary>The key number a key item of an NPC or container carries (null for any other item).</summary>
+    public int? KeyId { get; init; }
+}
 
 /// <summary>
 /// ARC-SCRIPT-1279: what a script move or destroy of the first item named N would do, asked before anything applies so a run is refused whole rather than left half applied: <see cref="Item"/> is the item found (null:
-/// the holder has none, the action does nothing, as in the original), <see cref="Refusal"/> why the session cannot apply it (null: it can, though a later check, such as the insert check, can still decline it).
+/// the holder has none, the action does nothing, as in the original), <see cref="Refusal"/> why the session cannot apply it (null: it can, though a later check, such as the insert check, can still decline it) and
+/// <see cref="Failure"/> the failure the applying call answers for that refusal.
 /// </summary>
-public sealed record SessionNamedItemPlan(SessionNamedItem? Item, string? Refusal);
+public sealed record SessionNamedItemPlan(SessionNamedItem? Item, string? Refusal, GameSessionFailure Failure = GameSessionFailure.None);
 
 public sealed partial class GameSessionOwner
 {
@@ -32,13 +40,27 @@ public sealed partial class GameSessionOwner
         {
             if (_hero is null) return null;
             foreach (var (entity, kind) in _inventory.Hero.PackKinds)
-                if (kind.Name == name) return new(entity, kind, _equipment.SlotOf(entity) is not null, KnownScriptPoints(entity, null));
+                if (kind.Name == name) return HeroNamedItem(entity, kind);
             return null;
         }
         if (QueryHolderItems(holder) is not { } list) return null;
         foreach (var item in list)
-            if (item.Facts.Kind.Name == name) return new(item.Entity, item.Facts.Kind, item.Facts.Worn, KnownScriptPoints(item.Entity, item.Facts));
+            if (item.Facts.Kind.Name == name) return new(item.Entity, item.Facts.Kind, item.Facts.Worn, KnownScriptPoints(item.Entity, item.Facts)) { KeyId = item.Facts.KeyId };
         return null;
+    }
+
+    // One of the hero's items with what the session knows of it: the slots it kept or inherits, the points of the seed row an item taken from a map came from, and, worn, the points and the item spells mark its slot holds.
+    private SessionNamedItem HeroNamedItem(string entity, SessionItemKind kind)
+    {
+        var points = new SortedSet<int>(KnownScriptPoints(entity, null));
+        if (HeroListed(entity) is { Origin: { } origin } && _inventory.Seeds.TryGetValue(origin, out var seed) && seed.Items.TryGetValue(entity, out var row)) points.UnionWith(row.Facts.ScriptPoints);
+        var spells = false;
+        if (_equipment.SlotOf(entity) is { } slot)
+        {
+            points.UnionWith(_equipment.Worn[slot].ScriptPoints);
+            spells = _equipment.Worn[slot].ItemSpells;
+        }
+        return new(entity, kind, _equipment.SlotOf(entity) is not null, [.. points]) { ItemSpells = spells };
     }
 
     // The attachment points with a script an item has, as far as the session knows them: the points its seed row shows, and the slots the session kept or a made item inherits from its prototype.
@@ -60,10 +82,11 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         if (QueryNamedItem(holder, name) is not { } item) return new(null, null);
         if (item.ScriptPoints.Contains(SessionScriptPoint.RemoveItem) || item.ScriptPoints.Contains(Arcanum.Scripting.Scr.ScrPoint.Destroy) || item.Worn && item.ScriptPoints.Contains(SessionScriptPoint.WieldOff))
-            return new(item, $"destroy item named {name} would run a destroy, remove-item or wield-off script of {item.Entity}, which is not modelled");
-        if (HasItemRuns(item.Entity)) return new(item, $"destroy item named {name}: {item.Entity} is the source of a running spell");
+            return new(item, $"destroy item named {name} would run a destroy, remove-item or wield-off script of {item.Entity}, which is not modelled", GameSessionFailure.ItemScriptUnsupported);
+        if (HasItemRuns(item.Entity) || item.Worn && item.ItemSpells)
+            return new(item, $"destroy item named {name}: {item.Entity} is the source of a running spell or carries worn item spells", GameSessionFailure.ItemEffectUnsupported);
         if (_durability.Count >= _limits.MaxDurabilityRecords && !_durability.Records.ContainsKey(item.Entity))
-            return new(item, "destroy item named: the budget of deleted-item records is spent");
+            return new(item, "destroy item named: the budget of deleted-item records is spent", GameSessionFailure.BudgetExceeded);
         return new(item, null);
     }
 
@@ -79,12 +102,7 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         var plan = QueryNamedItemDestroy(holder, name);
         if (plan.Item is not { } item) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
-        if (plan.Refusal is not null)
-        {
-            var failure = HasItemRuns(item.Entity) ? GameSessionFailure.ItemEffectUnsupported
-                : _durability.Count >= _limits.MaxDurabilityRecords && !_durability.Records.ContainsKey(item.Entity) ? GameSessionFailure.BudgetExceeded : GameSessionFailure.ItemScriptUnsupported;
-            return RejectItem(failure);
-        }
+        if (plan.Refusal is not null) return RejectItem(plan.Failure);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         DestroyObject(item.Entity);
         Revise();
@@ -94,8 +112,9 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-SCRIPT-1279 (WO2): what transfer item would do with the first item of <paramref name="from"/>'s list named <paramref name="name"/> (the hero when null) into <paramref name="to"/>'s (0x4617F0 with no slot, the
     /// first free place). The session moves an item between the hero and an NPC or container (<see cref="GiveItemToNpc"/>, <see cref="TakeItemFromNpc"/>, <see cref="LootItem"/> and the container list), so a pair of
-    /// two holders neither of which is the hero is refused, as is an item the move would run a script for (the session runs no item script here), a worn item leaving an NPC or container, and a holder no attached
-    /// map lists. The item's insert check, the room and weight tests and a transfer script of the new holder (point 32) are answered when the move applies.
+    /// two holders neither of which is the hero is refused, as is an item the move would run a script for (the session runs no item script here; a hero's item counts the points of the seed row it came from and of its slot), a worn
+    /// item leaving an NPC or container or carrying item spells, an item that is the source of a running spell, a new holder with a transfer script (point 32), a container off the actor's map or spilled, a holder no attached
+    /// map lists, and for a move to the hero a gold pile or a key the key ring cannot take. The item's insert check and the room and weight tests are answered when the move applies.
     /// </summary>
     public SessionNamedItemPlan QueryNamedItemTransfer(string? from, string? to, int name)
     {
@@ -103,17 +122,45 @@ public sealed partial class GameSessionOwner
         if (from is not null && !SessionValidation.Entity(from) || to is not null && !SessionValidation.Entity(to)) throw new ArgumentException("Invalid entity id.");
         if (from == to) return new(null, null);
         if (QueryNamedItem(from, name) is not { } item) return new(null, null);
-        if (from is not null && to is not null) return new(item, $"transfer item between {from} and {to}, neither the hero, is not modelled");
+        if (from is not null && to is not null) return new(item, $"transfer item between {from} and {to}, neither the hero, is not modelled", GameSessionFailure.HolderPairUnsupported);
         var other = from ?? to!;
-        if (!HolderKnown(other)) return new(item, $"transfer item: no attached map lists the holder {other}");
-        if (item.Worn && from is not null) return new(item, $"transfer item of {item.Entity}, worn by {from}, is not modelled");
-        if (item.ScriptPoints.Any(point => point is SessionScriptPoint.Get or SessionScriptPoint.InsertItem or SessionScriptPoint.RemoveItem or SessionScriptPoint.WieldOff))
-            return new(item, $"transfer item of {item.Entity}, which has a get, insert-item, remove-item or wield-off script, is not modelled");
+        if (ListedHolderKind(other) is not { } kind) return new(item, $"transfer item: no attached map lists the holder {other}", GameSessionFailure.UnknownHolder);
+        // The container moves are the window's (0x572370): a container of the actor's map that did not spill; a body or an NPC of any attached map.
+        if (kind == SessionHolderKind.Container && !ShownContainer(other))
+            return new(item, $"transfer item: the container {other} is not on the actor's map or has spilled its items", GameSessionFailure.HolderNotLootable);
+        if (item.Worn && from is not null) return new(item, $"transfer item of {item.Entity}, worn by {from}, is not modelled", GameSessionFailure.WornItemUnsupported);
+        // The move runs none of the item's scripts: a hero's worn item with any, or any item with a get, insert-item, remove-item or wield-off point, is refused.
+        if (item.ScriptPoints.Any(point => point is SessionScriptPoint.Get or SessionScriptPoint.InsertItem or SessionScriptPoint.RemoveItem or SessionScriptPoint.WieldOff) || item.Worn && item.ScriptPoints.Count > 0)
+            return new(item, $"transfer item of {item.Entity}, which has a get, insert-item, remove-item or wield-off script, is not modelled", GameSessionFailure.ItemScriptUnsupported);
+        if (item.Worn && item.ItemSpells) return new(item, $"transfer item of {item.Entity}, worn with item spells, is not modelled", GameSessionFailure.ItemEffectUnsupported);
+        if (to is not null)
+        {
+            // 0x4617F0 starts with the new holder's transfer script (point 32), which the session does not run, and the removal ends the item's spell runs.
+            if (HolderHasScript(to, kind, SessionScriptPoint.Transfer)) return new(item, $"transfer item into {to}, which has a transfer script, is not modelled", GameSessionFailure.HolderScriptUnsupported);
+            if (HasItemRuns(item.Entity)) return new(item, $"transfer item: {item.Entity} is the source of a running spell", GameSessionFailure.ItemEffectUnsupported);
+        }
+        else
+        {
+            // The hero's list takes the types its lists admit; a key goes onto the key ring when the hero holds one and it has room.
+            var type = item.Kind.Type;
+            if (type == SessionItemType.Key)
+            {
+                if (!HeroHoldsKeyRing) return new(item, "transfer item: a key goes only onto the hero's key ring", GameSessionFailure.ItemTypeUnsupported);
+                if (item.KeyId is not { } key || !SessionStoryLimits.IsKey(key)) return new(item, $"transfer item: the key {item.Entity} has no valid key number", GameSessionFailure.InvalidItem);
+                if (_story.HeroKeys.Count >= SessionStoryLimits.MaxKeys) return new(item, "transfer item: the hero's key ring is full", GameSessionFailure.KeyRingFull);
+            }
+            else if (!InventoryDomain.Admitted(type)) return new(item, $"transfer item: a {type} is not modelled", GameSessionFailure.ItemTypeUnsupported);
+        }
         return new(item, null);
     }
 
-    // An NPC or a container one of the attached maps lists as a holder (the hero is no holder of a seed).
-    private bool HolderKnown(string holder) => _inventory.Seeds.Values.Any(seed => seed.Holders.ContainsKey(holder));
+    // The kind of the NPC or container the first attached seed that lists the holder gives it; null for a holder none lists (the hero is no holder of a seed).
+    private SessionHolderKind? ListedHolderKind(string holder)
+    {
+        foreach (var seed in _inventory.Seeds.Values)
+            if (seed.Holders.TryGetValue(holder, out var row)) return row.Kind;
+        return null;
+    }
 
     /// <summary>
     /// ARC-SCRIPT-1279 (WO2, the script action transfer item, case 0x29 → 0x4617F0): the first item of <paramref name="from"/>'s list whose name class is <paramref name="name"/> goes to the end of <paramref name="to"/>'s
@@ -130,16 +177,12 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         var plan = QueryNamedItemTransfer(from, to, name);
         if (plan.Item is not { } item) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
-        if (plan.Refusal is not null)
-            return RejectItem(from is not null && to is not null ? GameSessionFailure.HolderPairUnsupported : !HolderKnown(from ?? to!) ? GameSessionFailure.UnknownHolder
-                : item.Worn && from is not null ? GameSessionFailure.WornItemUnsupported : GameSessionFailure.ItemScriptUnsupported);
+        if (plan.Refusal is not null) return RejectItem(plan.Failure);
         if (from is null)
         {
-            var container = _inventory.Seeds.Values.Any(seed => seed.Holders.TryGetValue(to!, out var row) && row.Kind == SessionHolderKind.Container);
-            return container ? GiveToContainer(to!, item.Entity, insertCheck) : GiveItemToNpc(expected, to!, item.Entity, insertCheck);
+            return ListedHolderKind(to!) == SessionHolderKind.Container ? GiveToContainer(to!, item.Entity, insertCheck) : GiveItemToNpc(expected, to!, item.Entity, insertCheck);
         }
-        var fromContainer = _inventory.Seeds.Values.Any(seed => seed.Holders.TryGetValue(from, out var row) && row.Kind == SessionHolderKind.Container);
-        return fromContainer ? LootItem(expected, from, item.Entity, insertCheck) : TakeItemFromNpc(expected, from, item.Entity, insertCheck);
+        return ListedHolderKind(from) == SessionHolderKind.Container ? LootItem(expected, from, item.Entity, insertCheck) : TakeItemFromNpc(expected, from, item.Entity, insertCheck);
     }
 
     // The hero's item into a container's list (the move GiveItemToNpc makes into an NPC's), after the container checks the barter window's sale makes.

@@ -86,6 +86,7 @@ public sealed class AreaWorldObjectScriptTests
             Write("scr/00851transfer.scr", Program(Do(new(ScrCatalogue.Action.TransferItem, N(7001), (Attachee, -1), (Player, -1))), Do(RunDefault)));
             Write("scr/00852written.scr", Program(Do(new(ScrCatalogue.Action.SetWrittenStart, (Attachee, -1), N(9))), Do(RunDefault)));
             Write("scr/00853display.scr", Program(Do(new(ScrCatalogue.Action.ToggleItemInventoryDisplay, (Attachee, -1))), Do(RunDefault)));
+            Write("scr/00855destroytwice.scr", Program(Do(new(ScrCatalogue.Action.DestroyItemNamed, N(7001), (Attachee, -1))), Do(new(ScrCatalogue.Action.DestroyItemNamed, N(7001), (Attachee, -1))), Do(RunDefault)));
             Write("scr/00854twice.scr", Program(Do(new(ScrCatalogue.Action.ToggleItemInventoryDisplay, (Attachee, -1))), Do(new(ScrCatalogue.Action.ToggleItemInventoryDisplay, (Attachee, -1))), Do(RunDefault)));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
@@ -300,6 +301,22 @@ public sealed class AreaWorldObjectScriptTests
             var version = session.Version;
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
             Assert.AreEqual((GameSessionDisposition.NoChange, version), (host.LastNamedItem!.Value.Disposition, session.Version));
+        });
+    }
+
+    [TestMethod]
+    public void Two_item_actions_on_one_holder_and_name_leave_the_run_unapplied_as_the_second_is_not_planned_against_the_first()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var npc = Row(2, NpcType, ScrPoint.Heartbeat, 855);
+            SeedNpc(session, npc);
+            var version = session.Version;
+            var run = Host(session, content, null, npc).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, run.Outcome, run.Detail);
+            Assert.AreEqual(version, session.Version, "nothing applied");
+            Assert.IsFalse(session.IsItemDestroyed("ring"));
         });
     }
 

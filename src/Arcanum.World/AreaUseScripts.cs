@@ -1505,7 +1505,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             {
                 var moved = _session.TransferNamedItem(_session.Version, HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value, InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck);
                 LastNamedItem = moved;
-                // A holder's insert check that says no, or a full list, leaves the item where it was and the run goes on (0x461810 returns without moving it).
+                // A holder's insert check that says no, or a full list, leaves the item where it was and the run goes on (0x461810 returns without moving it). The session's own budgets (its NPC item total, ammunition and durability records, a 32-bit sum) answer the same way: the item stays and the run goes on (ledger WO17).
                 return moved.Disposition != GameSessionDisposition.Rejected || moved.Failure is GameSessionFailure.BudgetExceeded or GameSessionFailure.InsertRefused;
             }
             case ScrObjectStateChange.SetWrittenStart:
@@ -1595,6 +1595,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         foreach (var change in effects.WorldChanges)
             if (change.Change == ScrWorldChange.SectorBlocked && SessionSectorBlock.Pack(change.A, change.B) is null)
                 return $"toggle sector blocked of ({change.A},{change.B}) is not modelled (a negative sector or an x beyond 26 bits)";
+        // ARC-SCRIPT-1279: the (holder, name) pairs earlier item actions of the run touched: each plan below is read against the state before the run, so an action that meets a pair an earlier one changed would be planned on a stale list.
+        var touched = new HashSet<(string? Holder, int Name)>();
         foreach (var request in effects.ObjectStates)
         {
             if (request.Change == ScrObjectStateChange.StopAttacking)
@@ -1694,7 +1696,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 continue;
             }
             // ARC-SCRIPT-1164 (E5-b, WO1, WO3, WO4): lock state and the open toggle act on a portal or container of the shown map (any other object type does nothing, as in the original), create item on the PC or an NPC with an
-            // inventory list; the item, written-start and display actions have no host here.
+            // inventory list; the item actions (transfer, destroy named, written start, display) are checked below.
             if (request.Change is ScrObjectStateChange.SetLockState or ScrObjectStateChange.ToggleOpenClosed)
             {
                 var action = request.Change == ScrObjectStateChange.SetLockState ? "set lock state" : "toggle open or closed";
@@ -1708,6 +1710,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             {
                 if (_world?.Item(request.Value) is not { } made) return $"create item {request.Value}: no item prototype";
                 if (made.Kind.Type is SessionItemType.Gold or SessionItemType.Key or SessionItemType.KeyRing or SessionItemType.Ammo) return $"create item {request.Value}: a {made.Kind.Type} is not modelled";
+                touched.Add((HolderOf(request.Object), made.Kind.Name));
                 if (IsPc(request.Object)) continue;
                 if (Row(request.Object) is not { Type: NpcType }) return $"create item in {request.Object.Code} is not modelled (only the PC or an NPC)";
                 if (_session.QueryMapInventory(new SessionMapId(request.Object.Map))?.Holders.Any(h => h.Entity == request.Object.Code) != true)
@@ -1717,6 +1720,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             // ARC-SCRIPT-1279 (WO2, WO7): the session's named-item move and destroy say, before anything applies, whether they can (a holder that is no critter or container, or has no such item, does nothing, as in the original).
             if (request.Change is ScrObjectStateChange.TransferItem or ScrObjectStateChange.DestroyItemNamed)
             {
+                var holders = request.Change == ScrObjectStateChange.TransferItem ? new[] { HolderOf(request.Object), HolderOf(request.Other!.Value) } : new[] { HolderOf(request.Object) };
+                // A second action on an item name in a holder an earlier action of the run moved, destroyed or created in is not planned: the earlier step may have changed which item is first.
+                if (holders.Any(holder => touched.Contains((holder, request.Value)))) return $"{request.Change} of the item named {request.Value} meets an earlier item action of the run on the same holder and name, which is not modelled";
+                foreach (var holder in holders) touched.Add((holder, request.Value));
                 var plan = request.Change == ScrObjectStateChange.TransferItem
                     ? _session.QueryNamedItemTransfer(HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value) : _session.QueryNamedItemDestroy(HolderOf(request.Object), request.Value);
                 if (plan.Refusal is { } why) return why;
