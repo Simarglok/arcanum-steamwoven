@@ -16,7 +16,7 @@ public sealed record ShownOverlay(string Owner, GoalHandle Handle, GoalEyeCandy 
 /// candy is a run beside the owner's main run (priority 5, no interrupt, carried): the cast host's EyeCandy components start it through <see cref="Play"/> (the add 0x4CCF70: the goal is chosen by the play flags, the duplicate test, the places in the owner's
 /// overlay lists, the queue under the previous run) and take it off through <see cref="Remove"/> (0x4243E0: a level-6 interrupt of the goal-45 runs of the same entry and tag). The run steps on the animation clock inside the frame step (<see cref="IGoalStepHost"/>),
 /// so the parts stop with the Esc pause; the frame lives on the goal, and the viewer draws <see cref="Shown"/>. The host answers the overlay ports (<see cref="IAiOverlayWorld"/>) from the ART facts the viewer reads.
-/// <b>Not ready:</b> the sound, the light and the tinting of an eye candy, the destroy flag (goal 32 queued under the run), the source's bonus and hostility (S9c burns the critters and, since ARC-COMBAT-025, the loose items of the tile, <see cref="AreaFireBurner"/>), the sites that are not an EyeCandy component (struck critters, weapons, scripts, traps) and the draw of the hover's raised body.
+/// The live light of a lit entry (Illuminate, ARC-MAGIC-1229) is <see cref="Lights"/>. <b>Not ready:</b> the sound and the tinting of an eye candy, the light's follow of the object's own offsets and its light art number other than the frames the viewer has loaded, the destroy flag (goal 32 queued under the run), the source's bonus and hostility (S9c burns the critters and, since ARC-COMBAT-025, the loose items of the tile, <see cref="AreaFireBurner"/>), the sites that are not an EyeCandy component (struck critters, weapons, scripts, traps) and the draw of the hover's raised body.
 /// </summary>
 public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
 {
@@ -29,6 +29,9 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     private readonly Func<int, int, int> _random;
     private readonly Func<string, IEnumerable<EyeCandyParts>>? _otherParts;
     private readonly AreaFireBurner? _fire;
+    // ARC-MAGIC-1229: the overlay light slots of an owner that hold a saved light (bit i for slot i), and the slot each shown light run took.
+    private readonly Func<string, int> _savedLightSlots;
+    private readonly Dictionary<GoalHandle, int> _lightSlots = [];
     private readonly Dictionary<string, int> _hover = new(StringComparer.Ordinal);
     private readonly StartPorts _startPorts = new();
     // The handle of the last eye-candy run started, host-wide like the original's global 0x601700 (GT70): a stack flag queues under it whatever its owner.
@@ -42,10 +45,12 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     /// <param name="random">A number in the inclusive range (0x4CEF00).</param>
     /// <param name="otherParts">The parts of the owner's other shown eye candies that are not runs of this host (the casting goal's own cast animation), which fill the same overlay lists.</param>
     /// <param name="fire">The burn of the fire-damage eye candy 75/76 (GT94), or null when nothing burns (the damage is counted only).</param>
+    /// <param name="savedLightSlots">ARC-MAGIC-1229: the overlay light slots of an owner that already hold a light of its own record (bit i for slot i), or null for none.</param>
     public AreaEyeCandyHost(GameSessionOwner session, Func<int, SpellEyeCandyEntry?> entry, Func<uint, EyeCandyParts, EyeCandyFacts?> facts, Func<int, int, int>? random = null,
-        Func<string, IEnumerable<EyeCandyParts>>? otherParts = null, AreaFireBurner? fire = null)
+        Func<string, IEnumerable<EyeCandyParts>>? otherParts = null, AreaFireBurner? fire = null, Func<string, int>? savedLightSlots = null)
     {
         _fire = fire;
+        _savedLightSlots = savedLightSlots ?? (_ => 0);
         _otherParts = otherParts;
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _entry = entry ?? throw new ArgumentNullException(nameof(entry));
@@ -85,6 +90,37 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
         }
     }
 
+    /// <summary>
+    /// ARC-MAGIC-1229 (IW2–IW4): the live lights the shown eye candies keep on their owners: one per begun, not ended run whose entry has a light art, in the first free of the owner's four overlay
+    /// slots (the slots of its own record and of the lights shown before it are taken); a run that has ended or was interrupted at level 6 has none (the end node writes the slot back as no light). The
+    /// slot a run took stays while it runs. An owner out of free slots (a light a record lost its place to) shows none for that run.
+    /// </summary>
+    public IEnumerable<EyeCandyLight> Lights()
+    {
+        var shown = new List<EyeCandyLight>();
+        var live = new HashSet<GoalHandle>();
+        foreach (var overlay in Shown())
+        {
+            if (_entry(overlay.Eye.Entry) is not { Light: { } number } entry) continue;
+            live.Add(overlay.Handle);
+            if (!_lightSlots.TryGetValue(overlay.Handle, out var slot))
+            {
+                slot = AreaEyeCandyLights.FirstFree(UsedSlots(overlay.Owner, shown));
+                if (slot < 0) continue;
+                _lightSlots[overlay.Handle] = slot;
+            }
+            shown.Add(new(overlay.Owner, overlay.Handle, slot, number, entry.LightColor));
+        }
+        foreach (var gone in _lightSlots.Keys.Where(h => !live.Contains(h)).ToArray()) _lightSlots.Remove(gone);
+        return shown;
+    }
+
+    /// <summary>Whether the owner has a free overlay light slot for a lit entry: its record's lights and the live eye candy lights count (0x4CCF70 looks for the first slot whose art is −1).</summary>
+    public bool LightSlotFree(string owner) => AreaEyeCandyLights.FirstFree(UsedSlots(owner, Lights())) >= 0;
+
+    private int UsedSlots(string owner, IEnumerable<EyeCandyLight> lights) =>
+        _savedLightSlots(owner) | AreaEyeCandyLights.Mask(lights.Where(l => l.Owner == owner).Select(l => l.Slot));
+
     /// <summary>The overlay runs of an owner (eye candy and hover).</summary>
     public IEnumerable<GoalRun> RunsOf(string owner) => _session.QueryGoals().RunsOf(owner).Where(r => !r.Done && AiExecutorRules.IsOverlayRunGoal(r.Bottom.Goal));
 
@@ -109,6 +145,8 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
         if (_entry(entryIndex) is not { Art: { } art } entry || PartsOf(entryIndex) is not { } parts) return false;
         if (!SpellEyeCandyRules.Plays((entry.Flags & SpellEyeCandyFlags.Animates) != 0, parts)) return false;
         if (!PlacesFree(owner, parts)) { Skipped++; return false; }
+        // ARC-MAGIC-1229 (IW2): a lit entry needs a free overlay light slot on the owner; with all four in use the add refuses like a full part list, so no run is built and nothing plays.
+        if (entry.Light is not null && !LightSlotFree(owner)) { Skipped++; return false; }
         if ((play & AiExecutorRules.PlayCheckAlready) != 0
             && _session.QueryGoals().RunsOf(owner).Any(r => !r.Done && r.Bottom.Goal == GoalType.EyeCandy && r.Top.EyeCandy is { } e && e.Tag == tag && e.Art == art)) { Skipped++; return false; }
         var frame = AiExecutorRules.EyeCandyFrame(play, art, entryIndex, tag, (entry.Flags & SpellEyeCandyFlags.Forever) != 0, source);

@@ -224,7 +224,8 @@ public partial class TerrainViewerApp
     // ARC-DEV-335 (V7d, ledger EQ12, LT12): the hero's carried light. Each frame the session's worn light is read; what the canvas draws
     // changes only with it, with the shown map's lighting and with the lighting toggle. The light follows the hero because the canvas makes
     // the lighting from the hero's placement at every submission.
-    private (CarriedLightSize Size, AreaLightingPlan? Lighting, bool Lit)? _carriedKey;
+    // ARC-MAGIC-1229: the number of live eye candy lights is part of the key, so a glow that starts or ends hands the canvas a source that has it or not.
+    private (CarriedLightSize Size, AreaLightingPlan? Lighting, bool Lit, int EyeCandy)? _carriedKey;
 
     private void ResetCarriedLight() => _carriedKey = null;
 
@@ -282,8 +283,9 @@ public partial class TerrainViewerApp
         var lighting = _readyArea?.Lighting;
         var lit = _areaAmbient is { Enabled: true };
         var size = HeroCarriedSize();
-        if (_carriedKey is { } known && known.Size == size && known.Lit == lit && ReferenceEquals(known.Lighting, lighting)) return;
-        _carriedKey = (size, lighting, lit);
+        var glows = EyeCandyLightCount();
+        if (_carriedKey is { } known && known.Size == size && known.Lit == lit && known.EyeCandy == glows && ReferenceEquals(known.Lighting, lighting)) return;
+        _carriedKey = (size, lighting, lit, glows);
         _canvas.SetAreaCarried(CarriedLightSource(size, lighting, lit));
     }
 
@@ -295,7 +297,8 @@ public partial class TerrainViewerApp
     {
         if (!lit || lighting is not { Local: { } local }) return null;
         var hero = size != CarriedLightSize.None && lighting.CarriedFrame is not null;
-        if (!hero && local.CritterLights.Count == 0) return null;
+        // ARC-MAGIC-1229: a lit eye candy's glow is a carried light as well (it moves with its object).
+        if (!hero && local.CritterLights.Count == 0 && EyeCandyLightCount() == 0) return null;
         return (placement, reach) =>
         {
             // A source made for another map's lighting (a map change this frame) draws nothing until the tick gives the canvas the new one.
@@ -334,6 +337,7 @@ public partial class TerrainViewerApp
                 var stood = AreaCritterLights.Place(critter, pose);
                 if (Near(stood.X, stood.Y, stood.OffsetX, stood.OffsetY)) lights.Add(stood);
             }
+            AddEyeCandyLights(lighting, local, placement, poses, absent, frames, lights, Near);
             return LightsNow(local, driver)?.WithCarried(frames, lights);
         };
     }
