@@ -106,4 +106,35 @@ public sealed class AreaInventoryHostCarriedRowsTests
         Assert.AreEqual((0, 0), moved.ReadCarriedRows(session), "a row handed over is not read again");
         Assert.AreEqual(0, source.Asked.Count);
     }
+
+    /// <summary>ARC-DEV-1151: a row no source gives is asked once, the next host of a map change is told and does not ask again; a load the host keeps asks once more.</summary>
+    [TestMethod]
+    public void An_unreadable_carried_row_is_not_asked_again_by_the_next_host()
+    {
+        var (session, window) = Session();
+        using var owner = session;
+        var first = new WindowSource(null);
+        var host = new AreaInventoryHost([OtherWindow()], records: first);
+        Assert.AreEqual((0, 1), host.ReadCarriedRows(session));
+        CollectionAssert.AreEqual(new[] { AreaItemUseTests.Entity(1) }, first.Asked);
+        var unread = host.UnreadCarried(session);
+        Assert.AreEqual(1, unread.Count, "the host names the item it could not read");
+
+        var second = new WindowSource(null);
+        var next = new AreaInventoryHost([OtherWindow()], records: second);
+        next.RetainUnread(unread);
+        Assert.AreEqual((0, 0), next.ReadCarriedRows(session), "told at the map change: not asked again");
+        Assert.AreEqual(0, second.Asked.Count);
+        Assert.AreEqual(1, next.UnreadCarried(session).Count, "and still handed on to the host after it");
+
+        var fresh = new AreaInventoryHost([OtherWindow()], records: new WindowSource(null));
+        Assert.AreEqual((0, 1), fresh.ReadCarriedRows(session), "a host nobody told (a fresh run, a load) asks once");
+
+        var again = new WindowSource(window);
+        var kept = new AreaInventoryHost([OtherWindow()], records: again);
+        kept.RetainUnread(unread);
+        Assert.AreEqual((0, 0), kept.ReadCarriedRows(session));
+        Assert.AreEqual((1, 0), kept.ReadCarriedRows(session, retryUnread: true), "a load the host keeps asks again, and the row now reads");
+        Assert.AreEqual(0, kept.UnreadCarried(session).Count, "a row that read is no longer unread");
+    }
 }

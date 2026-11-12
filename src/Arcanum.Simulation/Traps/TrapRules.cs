@@ -149,6 +149,21 @@ public static class TrapRules
         return training < SkillTraining.Expert && trap == TrapClass.Magical ? (false, false) : (true, critical);
     }
 
+    /// <summary>
+    /// The disarm traps skill's own case after the shared check's two rolls (ledger SP3, the disarm case of the shared skill run, acting only with the skill bar's flag 4):
+    /// a failed check that is not a critical failure, for a master (training 3), is rolled once more (<paramref name="secondRoll"/>, 1..100) and passes
+    /// when <paramref name="effectiveness"/> is not below that roll plus the check's total difficulty (<paramref name="total"/>, the trap's difficulty
+    /// term included); a second roll that passes gives no critical. The first roll's critical flag is kept on every other path. Unlike the spot case,
+    /// no magical trap is refused here. The second roll is drawn only when needed.
+    /// </summary>
+    public static (bool Success, bool Critical) DisarmCase(bool success, bool critical, SkillTraining training, int effectiveness, int total, Func<int> secondRoll)
+    {
+        ArgumentNullException.ThrowIfNull(secondRoll);
+        if (success) return (true, critical);
+        if (critical || training != SkillTraining.Master) return (false, critical);
+        return effectiveness < (long)secondRoll() + total ? (false, false) : (true, false);
+    }
+
     /// <summary>The spot mark (ledger TT4): only the player or an NPC led by a PC sets the spotted flag; a trap object also
     /// loses don't-draw. The player alone gets the spotted line, unless the caller is quiet (the device paths).</summary>
     [OriginalFunction(0x4BC090, OriginalFunctionScope.Partial)]

@@ -887,6 +887,19 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     }
 
     /// <summary>
+    /// ARC-SKILLS-1156 (ledger TT5): a new item of the prototype <paramref name="prototype"/> (a script's create-object number, as a disarmed trap's device
+    /// is named) in the hero's pack (<see cref="GameSessionOwner.CreateItemForHero"/>), with its prototype's weight and scripts. Null when the world has
+    /// no item data for the number.
+    /// </summary>
+    public InventoryMutationResult? GiveHeroPrototypeItem(int prototype, SessionInsertCheck insertCheck)
+    {
+        if (_world?.Item(prototype) is not { } item) return null;
+        _session.AttachItemWeights(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.Weight);
+        _session.AttachItemScripts(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.Scripts);
+        return _session.CreateItemForHero(_session.Version, item.Kind, insertCheck);
+    }
+
+    /// <summary>
     /// ARC-DEV-260 (ledger OD4, OD6): the ordinary trap script (the use slot, point 1) of <paramref name="row"/> run by the trap trigger (0x4BCB00)
     /// with <paramref name="triggerer"/> (null: none, a ranged attack or a damage with no attacker) as the triggerer and the object as the
     /// attachee, under <see cref="Admission"/>. Unlike a use it makes no spot attempt and no trap check first. Its slot is kept as map changes
