@@ -291,14 +291,17 @@ public partial class TerrainViewerApp
         // ARC-UI-054: the open centres the game view on the window's holder, the PC (0x5732D5 → 0x4B8CE0, IW33).
         CentreGameViewOnHolder();
         // ARC-RES-1410 (ledger XR16 (g), IW39): the open of the loot, steal and See Contents windows lays the holder's grid out again (0x5727B0 calls
-        // 0x4670A0 near its end) before the window draws; a refusal (no room) writes nothing.
-        if (holder is not null && _areaSession is { } arranging)
+        // 0x4670A0 near its end, after its early returns) before the window draws; the stack's enter step is that point here. A refusal (no room) writes nothing.
+        void Show()
         {
-            var arranged = arranging.ArrangeHolderGrid(arranging.Version, holder);
-            GD.Print($"ARC-RES-1410 arrange at open holder={holder} disposition={arranged.Disposition} failure={arranged.Failure} no-room={arranged.NoRoom} moved={arranged.Moved}");
+            if (holder is not null && _areaSession is { } arranging)
+            {
+                var arranged = arranging.ArrangeHolderGrid(arranging.Version, holder);
+                GD.Print($"ARC-RES-1410 arrange at open holder={holder} disposition={arranged.Disposition} failure={arranged.Failure} no-room={arranged.NoRoom} moved={arranged.Moved}");
+            }
+            _inventoryPanel!.Open(InventoryView(holder));
         }
-        var view = InventoryView(holder);
-        if (!OpenWindowMode(mode, () => _inventoryPanel!.Open(view), () => _inventoryPanel!.CloseView()))
+        if (!OpenWindowMode(mode, Show, () => _inventoryPanel!.CloseView()))
         {
             _junkPileSession = null; _contentsHolder = null;
             return;

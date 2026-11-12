@@ -84,6 +84,7 @@ public partial class TerrainViewerApp
             arrangedAtOpen += placed.Count;
         }
         RequireArranged("first open");
+        Require(arrangedAtOpen > 0, "the first open had a list the original can lay out");
         var current = session.QueryMapInventory(mapId)!.Holders.Single(h => h.Entity == crate.Entity).Items;
         var takeable = listed.FirstOrDefault(entity => current.Any(item => item.Entity == entity && item.Facts.Kind.Type is not SessionItemType.Gold
             and not SessionItemType.Ammo and not SessionItemType.Key and not SessionItemType.KeyRing && !item.Facts.Worn && item.Facts.ScriptPoints.Count == 0));

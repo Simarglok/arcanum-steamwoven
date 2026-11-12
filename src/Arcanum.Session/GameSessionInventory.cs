@@ -517,8 +517,9 @@ internal sealed class InventoryDomain
     /// <summary>ARC-RES-1410 (ledger XR16 (g), IW39): the slots the arrangement at the open of a loot, steal or See Contents window gave the items of a
     /// map holder's list (a container or an NPC of the map's seed), by holder entity and item entity (the arranged items only: the worn and quick-slot
     /// items stay out of it). The original writes them into the items' inventory locations (0x4670A0); here the holder's list answers with them in place
-    /// of the map data's. Not saved (PROJECT): every open arranges the list again from scratch, so only a window that stays open across a save shows the
-    /// difference. A junk pile the session made keeps its slots in its record instead.</summary>
+    /// of the map data's. Not saved (PROJECT, issue #1441): every open arranges the list again from scratch, so a restored session differs where no open follows
+    /// (the barter window draws the same list, and an arrangement that no longer fits writes nothing). An entry is dropped when its item enters a list
+    /// again (<see cref="ForgetSlot"/>). A junk pile the session made keeps its slots in its record instead.</summary>
     internal SortedDictionary<string, SortedDictionary<string, int>> HolderSlots { get; } = new(StringComparer.Ordinal);
 
     /// <summary>ARC-WORLD-103: an item that leaves an NPC's list (to the hero, the ground, deletion) is worn no more; an item that comes
@@ -545,10 +546,13 @@ internal sealed class InventoryDomain
     /// <summary>The made items added to an NPC, in order (empty when none).</summary>
     internal IReadOnlyList<SessionMadeItem> AddedTo(string npc) => Lists.Of(npc);
 
-    internal void AddToNpc(string npc, SessionMadeItem item) => Lists.Add(npc, item, container: false);
+    internal void AddToNpc(string npc, SessionMadeItem item) { ForgetSlot(item.Entity); Lists.Add(npc, item, container: false); }
+
+    /// <summary>ARC-RES-1410: an item that enters a list takes no slot the arrangement of an earlier list gave it.</summary>
+    internal void ForgetSlot(string entity) { foreach (var slots in HolderSlots.Values) slots.Remove(entity); }
 
     /// <summary>ARC-WORLD-090: an item at the end of a container's added list.</summary>
-    internal void AddToContainer(string container, SessionMadeItem item) => Lists.Add(container, item, container: true);
+    internal void AddToContainer(string container, SessionMadeItem item) { ForgetSlot(item.Entity); Lists.Add(container, item, container: true); }
 
     /// <summary>Removes an added made item from whichever NPC holds it; an emptied list is dropped.</summary>
     internal bool RemoveFromNpc(string entity)

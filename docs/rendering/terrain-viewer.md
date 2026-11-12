@@ -1247,7 +1247,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   **The open's own arrangement (ARC-RES-1410,** [ledger XR16 (g)](../research/ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)**):** the open of the loot (mode 2), steal (mode 3)
   and See Contents (mode 4) windows lays the shown holder's grid out again before it draws (`GameSessionOwner.ArrangeHolderGrid`, row by row, the same sort; 96 rows
   for a container, 12 for a critter, worn and quick-slot items stay out, no room writes nothing), so a taken item's old cell closes up at the next open. The slots are
-  not saved. The `container-click` stage's loot smoke checks the arranged layout at the open and after a take.
+  not saved (issue #1441). The `container-click` stage's loot smoke checks the arranged layout at the open and after a take.
 - **Steal window art (ARC-UI-065,** [ledger IW35–IW36](../research/ledger/ui-audio.md#steal-window-arc-ui-065)): the window of a
   pick-pocket victim (mode 3) draws the loot window's look without the Take all button (IW30), with the victim's image by its critter
   flags or race and the round view. A victim's item pressed and released on the hero's grid is one theft attempt, a hero's grid item
