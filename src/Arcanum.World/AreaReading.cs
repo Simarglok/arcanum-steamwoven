@@ -33,8 +33,12 @@ public sealed record AreaReadingDataLoad(AreaReadingDataStatus Status, AreaReadi
 /// every other subtype shows one page), the spread index and count, a picture's art, and a note.
 /// </summary>
 public sealed record AreaReadingView(WrittenSubtype Subtype, int BackgroundArt, IReadOnlyList<string> Header, string Left, string Right,
-    int Spread, int Spreads, int? PictureArt, string? Note)
+    int Spread, int Spreads, int? PictureArt, string? Note, IReadOnlyList<int>? HeaderFonts = null)
 {
+    /// <summary>The interface art number of the font of header line <paramref name="index"/> (ARC-UI-1428, for the handheld text rule);
+    /// 0 when the document gave none.</summary>
+    public int HeaderFont(int index) => HeaderFonts is { } fonts && index >= 0 && index < fonts.Count ? fonts[index] : 0;
+
     public bool HasPrevious => Subtype == WrittenSubtype.Book && Spread > 0;
     public bool HasNext => Subtype == WrittenSubtype.Book && Spread < Spreads - 1;
 }
@@ -52,6 +56,8 @@ public static class AreaReading
     public const int BookPageCharacters = 700;
     /// <summary>How many newspaper filler messages the diagnostic panel shows after the body (the original fills the columns).</summary>
     public const int NewspaperFillerShown = 3;
+    /// <summary>The telegram's font art (WR7, Courier10): its form texts carry no font of their own, the original draws them in it.</summary>
+    public const int TelegramFont = 480;
 
     /// <summary>Loads the written texts and every written prototype's facts through the game folder's content stack.</summary>
     public static AreaReadingDataLoad LoadData(string modulePath)
@@ -80,19 +86,20 @@ public static class AreaReading
         ArgumentNullException.ThrowIfNull(texts);
         if (!document.Readable || document.Subtype is not { } subtype) return null;
         var header = document.Header.Select(h => Decode(h.Text, profile)).ToArray();
+        var headerFonts = document.Header.Select(h => document.Subtype == WrittenSubtype.Telegram ? TelegramFont : h.Font).ToArray();
         if (subtype == WrittenSubtype.Picture)
-            return new(subtype, document.BackgroundArt, header, "", "", 0, 1, document.PictureArt, "the picture is interface art " + document.PictureArt + " (not drawn here)");
+            return new(subtype, document.BackgroundArt, header, "", "", 0, 1, document.PictureArt, "the picture is interface art " + document.PictureArt + " (not drawn here)", headerFonts);
         var body = document.Body.Select(m => (m.Centered ? "[centred] " : "") + Decode(m.Text, profile)).ToList();
         if (subtype == WrittenSubtype.Newspaper)
             body.AddRange(texts.NewspaperFiller(document.StartLine, NewspaperFillerShown, rules).Select(m => "[filler] " + Decode(m.Text, profile)));
         var text = string.Join(subtype is WrittenSubtype.Note or WrittenSubtype.Telegram ? "" : "\n", body);
         if (subtype != WrittenSubtype.Book)
-            return new(subtype, document.BackgroundArt, header, text, "", 0, 1, null, body.Count == 0 ? "no text at the start line" : null);
+            return new(subtype, document.BackgroundArt, header, text, "", 0, 1, null, body.Count == 0 ? "no text at the start line" : null, headerFonts);
         var pages = Pages(text);
         var spreads = Math.Max(1, (pages.Count + 1) / 2);
         var shown = Math.Clamp(spread, 0, spreads - 1);
         return new(subtype, document.BackgroundArt, header, pages.ElementAtOrDefault(2 * shown) ?? "", pages.ElementAtOrDefault(2 * shown + 1) ?? "",
-            shown, spreads, null, body.Count == 0 ? "no text at the start line" : null);
+            shown, spreads, null, body.Count == 0 ? "no text at the start line" : null, headerFonts);
     }
 
     /// <summary>A script opener's document facts: a book (subtype 0), a picture (4) or a plaque (6) at the action's number.</summary>

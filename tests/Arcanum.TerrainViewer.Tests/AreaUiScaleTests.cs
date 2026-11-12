@@ -33,4 +33,21 @@ public sealed class AreaUiScaleTests
         var limits = new[] { AreaUiScale.MinimumTextPx, AreaUiScale.PreferredTextPx };
         CollectionAssert.AreEqual(new[] { 9, 12 }, limits);
     }
+
+    [TestMethod]
+    public void A_font_under_the_minimum_takes_the_smallest_whole_text_only_factor()
+    {
+        // ARC-UI-1428: Garmond8 (8) and Garmond6 (6) at the handhelds' screen factor 1 reach 9 px only with a text factor of 2.
+        Assert.AreEqual(2, AreaUiScale.TextOnlyFactor(8, 1));
+        Assert.AreEqual(2, AreaUiScale.TextOnlyFactor(6, 1));
+        Assert.AreEqual(3, AreaUiScale.TextOnlyFactor(3, 1));
+        // Garmond9 sits on the minimum, Garmond8 is enough at screen factor 2, and an unknown size is not multiplied.
+        Assert.AreEqual(1, AreaUiScale.TextOnlyFactor(9, 1));
+        Assert.AreEqual(1, AreaUiScale.TextOnlyFactor(8, 2));
+        Assert.AreEqual(1, AreaUiScale.TextOnlyFactor(0, 1));
+        Assert.AreEqual(1, AreaUiScale.TextOnlyFactor(-4, 1));
+        for (var size = 1; size <= 12; size++)
+            for (var screen = 1; screen <= 3; screen++)
+                Assert.IsTrue(size * screen * AreaUiScale.TextOnlyFactor(size, screen) >= AreaUiScale.MinimumTextPx, $"{size} x {screen}");
+    }
 }
