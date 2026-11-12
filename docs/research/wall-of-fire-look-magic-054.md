@@ -1,12 +1,12 @@
 # Wall of Fire: how the wall looks, and how many pieces (ARC-MAGIC-054)
 
-Status: **Closed.** The owner found on 2026-11-12 that the retail game makes 5 pieces, as the rules read; the 3 pieces of the first screenshot came from Arcanum Community Edition, no longer a comparison reference. Register entry B55 in [open bugs](open-bugs.md). Owner report 2026-11-11, with two screenshots (Arcanum CE in a cave, Steamwoven on the main map).
+Status: **Closed.** The owner found on 2026-11-12 that the retail game makes 5 pieces, as the rules read; the 3 pieces of the first screenshot came from a community build of the game, no longer a comparison reference. Register entry B55 in [open bugs](open-bugs.md). Owner report 2026-11-11, with two screenshots (a community build in a cave, Steamwoven on the main map).
 Requirements (reference only): [FR-MAGIC-008](../requirements/combat-magic-tech.md#fr-magic-008). Earlier reading:
 ledger [SUM11, SUM13](ledger/spell-runs.md#summon-component-and-the-objects-it-creates-arc-res-101).
 
 ## What the screenshots show (the first one was not the retail game)
 
-| | First screenshot (Arcanum CE, as it turned out) | Steamwoven (before this change) |
+| | First screenshot (a community build, as it turned out) | Steamwoven (before this change) |
 | --- | --- | --- |
 | Pieces | 3 | 5 |
 | Step between pieces | one tile (80 px at 800 x 600) | one tile |
@@ -36,4 +36,4 @@ The oracle (F3) had already run the collector and the area test on 10,000 inputs
 
 ## Question 3, closed
 
-The owner found that the retail game makes 5 pieces; the 3 pieces seen first were Arcanum Community Edition's. Our count of 5 on open ground stands, and Cause 2 stays as a faithful change (terrain drops pieces where the executable's `tile_is_blocking` would); it is unrelated to the CE count, and our own cave run's 3 pieces is a separate result.
+The owner found that the retail game makes 5 pieces; the 3 pieces seen first were a community build's. Our count of 5 on open ground stands, and Cause 2 stays as a faithful change (terrain drops pieces where the executable's `tile_is_blocking` would); it is unrelated to the community build's count, and our own cave run's 3 pieces is a separate result.

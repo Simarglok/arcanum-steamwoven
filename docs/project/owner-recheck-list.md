@@ -380,7 +380,7 @@ Compare in both games with the same hero and spells.
 
 Known differences (reading only, no game step):
 
-- Polymorph (49) and a script's permanent polymorph (critter flags 2 bit 0x400000) are undone by the original's Dispel with the art restored; ours has neither (MA-8). Since ARC-MAGIC-040 the Trait component keeps the monster body of Polymorph and the body spells in the session and tells the host, and since ARC-MAGIC-046 the viewer draws a polymorphed NPC as its monster body and takes the hero's worn items off and chooses them again at the END; the hero's own monster body is drawn since ARC-MAGIC-052 (a species without a stand or walk ART, such as the air elemental, keeps the hero's own body). Since ARC-MAGIC-047 the elemental bodies write the critter flags 2 and blit flags (MG10: assigned in Original mode, added in Steamwoven mode) and Dispel undoes a perma-polymorph in the session (the redraw of a map NPC whose data body is the polymorph is not built).
+- Polymorph (49) and a script's permanent polymorph (critter flags 2 bit 0x400000) are undone by the original's Dispel with the art restored; ours has neither (MA-8). Since ARC-MAGIC-040 the Trait component keeps the monster body of Polymorph and the body spells in the session and tells the host, and since ARC-MAGIC-046 the viewer draws a polymorphed NPC as its monster body and takes the hero's worn items off and chooses them again at the END; the hero's own monster body is drawn since ARC-MAGIC-052 (and since ARC-MAGIC-1219 with the weapon part of combat mode, the original's missing-art repair for the air elemental and palette 0 for the elemental bodies' palette 1). Since ARC-MAGIC-047 the elemental bodies write the critter flags 2 and blit flags (MG10: assigned in Original mode, added in Steamwoven mode) and Dispel undoes a perma-polymorph in the session (the redraw of a map NPC whose data body is the polymorph is not built).
 - A portal or container held by Magelock (75) loses the hold in the original; ours does the same since MA-6 ([steps below](#arc-magic-037--locks-and-holds-unlocking-cantrip-and-magelock-ma-6-2026-11-11)).
 - A summoned critter is destroyed by the original's Dispel; ours destroys one the session created, and no spell makes one before the creature summons (E1-e).
 
@@ -759,7 +759,28 @@ Known differences (documented, not bugs):
 
 - The light at the trap is taken as full: an untrained hero in the dark is not penalised yet (the original adds up to 30 against an untrained hero).
 - The item that adds a modifier to the roll (inventory location 1005, name 2866) is not modelled.
-- Companions' own spot attempts are not made; disarming a trap and the skill-bar button are the next slice.
+- Companions' own spot attempts are not made; disarming a trap is ARC-SKILLS-1156 (below).
+
+## ARC-SKILLS-1156 — Disarming a trap from the hotkey bar (E6-a, disarm half, 2026-11-12)
+
+The rules are in [trap state](../world/trap-state-runtime.md#disarm-arc-skills-1156) and the [ledger SP3, TT5, TT6](../research/ledger/technology.md#spot-trap-roll-arc-magic-057). Put the Disarm Traps skill button on the hotkey bar (the skill bar's entry), and use heroes with a low, an expert and a master Disarm Traps skill, on a map with a spotted trap (a trap plate you saw, or a trapped chest or door you spotted), in both games. Compare the odds over several reloads and the device.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Press the Disarm Traps entry on the hotkey bar, then click a trap you have not spotted. | Nothing is rolled: the trap is not a target (no known trap there) and the cursor is back to normal. | open |
+| 2 | Press the entry, then click a spotted trap (the plate, a chest or a door) with a low-skill hero. Reload and repeat a few times. | Sometimes the trap is gone, sometimes nothing happens, sometimes (a critical failure) the trap goes off on you. The odds rise with the skill. | open |
+| 3 | The same with a trap object that has a high difficulty (a strong trap plate) against one with a low difficulty. | The strong trap is disarmed less often at the same skill. A chest's or a door's trap has no such difficulty term. | open |
+| 4 | As an Expert, disarm a trap and look at the pack after a critical success. | The trap's device item (a trap kit the trap's script names) lands in the pack, or on the ground at your feet when the pack cannot take it. Compare which items you get and how often. | open |
+| 5 | As a Master, repeat step 2 many times and count successes against an Expert of the same stats. | A Master succeeds clearly more often (a failed roll gets a second chance). | open |
+| 6 | In turn-based mode, press the entry and click a spotted trap with fewer than 4 action points left, then with enough. | With too few the subturn ends and nothing is rolled; otherwise 4 action points are spent. | open |
+| 7 | Right-click while the cursor is armed. | The cursor is cancelled. | open |
+
+Known differences (documented, not bugs):
+
+- When a follower is better at disarming, the original lets the best follower act instead of the hero ("let me handle it", Ctrl skips it); Steamwoven always uses the hero.
+- The original's skill-bar press builds the invocation at once, so Steamwoven does not walk the hero to the trap first; whether the original limits the distance by the difficulty is read from the shared check only.
+- A trap you placed yourself with a script trap device is a marker object in Steamwoven and cannot be targeted yet.
+- The skill pane's own Disarm Traps button is [#1113](https://github.com/Simarglok/arcanum-steamwoven/issues/1113).
 
 ## ARC-MAGIC-056 — Tempus Fugit speed (spell 79)
 

@@ -1,3 +1,5 @@
+using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Randomness;
 using Arcanum.Simulation.Skills;
 using Arcanum.Simulation.Traps;
@@ -67,6 +69,12 @@ public sealed record SessionTrapDisarmResult(GameSessionMutationResult Mutation,
 /// the hero spotted the trap (the roll passed; the caller marks it), and whether the master's second roll was drawn.</summary>
 public sealed record SessionSpotRoll(GameSessionDisposition Disposition, GameSessionFailure Failure, SkillCheckResult? Check, bool Spotted,
     bool SecondRoll, GameSessionVersion Version);
+
+/// <summary>One disarm traps press of the hero (ledger SP3): the session's answer, the turn-based charge of the press (null outside a round), the
+/// shared check (null when refused or gated before the roll), whether the master's second roll was drawn, whether the PC's fate point was used,
+/// and the disarm itself (<see cref="SessionTrapDisarmResult"/>: its outcome is NotTrapped or NotKnown for a trap nothing was rolled for).</summary>
+public sealed record SessionDisarmRoll(GameSessionDisposition Disposition, GameSessionFailure Failure, SessionCombatResult? Charge, SkillCheckResult? Check,
+    bool SecondRoll, bool Fated, SessionTrapDisarmResult? Disarm, GameSessionVersion Version);
 
 /// <summary>
 /// ARC-WORLD-076: the trap state owner of trap objects and trapped objects on any map (ledger TT1–TT10), for the spot
@@ -225,6 +233,85 @@ public sealed partial class GameSessionOwner
                 return new(NoChange(), outcome, 0, null, state);
         }
     }
+
+    /// <summary>The bound of a trap's difficulty (object field 0x134) the session takes.</summary>
+    public const int MaxTrapDifficulty = 1_000;
+
+    /// <summary>
+    /// ARC-SKILLS-1156 (ledger SP3, E6-a second half): the hero's disarm traps press on an object whose trap it knows (the skill bar's flag-4
+    /// invocation of the shared skill run's disarm case, then the trap disarm, ledger SP3 and TT5). The press's own charge comes first (a PC in a turn-based round pays 4 action points,
+    /// <paramref name="world"/>: too few end its subturn and refuse the press as <see cref="GameSessionFailure.DisarmOutOfTurn"/>, as the
+    /// pick pocket's), then the skill's shared check (<see cref="SkillCheckRules.Run"/>: the hero's level and training, the light at the trap, its
+    /// injuries and the trap's difficulty <paramref name="trapDifficulty"/>, which the check reads only for a trap object, SP3: pass 0 for another
+    /// carrier), the skill's own case (<see cref="TrapRules.DisarmCase"/>: the master's second roll) and the disarm (<see cref="DisarmTrap"/>:
+    /// success removes the trap, an expert's critical success yields the device prototype the caller creates in the hero's pack, a critical failure
+    /// sets it off). The rolls, the PC's fate point and the disarm are one revision (the charge has its own). A trap that is gone, or that the hero does
+    /// not know, is NoChange with nothing charged or rolled (TT5: no trap there to disarm). NOT READY: the follower who acts instead (SP3). Refused:
+    /// no hero or a dead one (<see cref="GameSessionFailure.SkillsUnavailable"/>), an invalid object, difficulty or light
+    /// (<see cref="GameSessionFailure.InvalidTrap"/>), the version, the generator or the revision exhausted, a budget the removal cannot take.
+    /// </summary>
+    public SessionDisarmRoll RollHeroDisarmTrap(GameSessionVersion expected, SessionTrapped trapped, SessionTrapBaseline baseline, int trapDifficulty = 0,
+        int light = SessionPickLockTarget.FullLight, ISessionCombatWorld? world = null)
+    {
+        ThrowIfDisposed();
+        if (_hero is null || HeroDead()) return RejectDisarm(GameSessionFailure.SkillsUnavailable);
+        if (!ValidTrapped(trapped, baseline) || light is < 0 or > SessionPickLockTarget.FullLight || trapDifficulty is < -MaxTrapDifficulty or > MaxTrapDifficulty)
+            return RejectDisarm(GameSessionFailure.InvalidTrap);
+        if (!IsCurrent(expected)) return RejectDisarm(GameSessionFailure.StaleVersion);
+        var state = TrapState(trapped, baseline);
+        if (!state.Trapped || !TrapRules.Known(TrapObserver.Player, state.ObjectFlags))
+            return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, false, false,
+                new(NoChange(), state.Trapped ? TrapDisarm.NotKnown : TrapDisarm.NotTrapped, 0, null, state), Version);
+        if (_revision >= long.MaxValue - 1) return RejectDisarm(GameSessionFailure.RevisionExhausted);
+        SessionCombatResult? charge = null;
+        if (world is not null && _combat.Round is not null)
+        {
+            // The press needs the hero's turn (as the pick pocket's goal): another's subturn or an inactive hero is refused before any charge.
+            if (QueryCombatActionGate(SessionCombatant.Hero, TurnBasedRules.UseSkillCost) is SessionCombatGate.NotTheirTurn or SessionCombatGate.Inactive)
+                return RejectDisarm(GameSessionFailure.DisarmOutOfTurn);
+            charge = ConsumeActionPoints(Version, SessionCombatant.Hero, TurnBasedRules.UseSkillCost, world);
+            if (charge.Disposition == GameSessionDisposition.Rejected) return RejectDisarm(charge.Failure) with { Charge = charge };
+            if (charge.Charge == SessionActionPointUse.Refused) return RejectDisarm(GameSessionFailure.DisarmOutOfTurn) with { Charge = charge };
+            // The charge moved the version; the press goes on from there.
+            expected = Version;
+        }
+        var request = HeroSkillRequest(Skill.DisarmTraps, null);
+        request = request with
+        {
+            Difficulty = request.Difficulty with
+            {
+                Light = light,
+                TargetTrap = baseline.Carrier == TrapCarrier.TrapObject,
+                TrapDifficulty = baseline.Carrier == TrapCarrier.TrapObject ? trapDifficulty : 0,
+            },
+        };
+        var rolls = new SkillRolls(new SeededRandom(_random.Seed, _random.Draws));
+        SkillCheckResult check;
+        bool success, critical, second = false;
+        try
+        {
+            check = SkillCheckRules.Run(request, rolls, _rules.Combat.InvocationModifierCountedTwice);
+            (success, critical) = TrapRules.DisarmCase(check.Success, check.Critical, request.Training, check.Check.Effectiveness, check.Check.Difficulty,
+                () => { second = true; return rolls.D100(SkillCheckRoll.Check); });
+        }
+        catch (SkillRolls.ExhaustedException) { return RejectDisarm(GameSessionFailure.RandomExhausted) with { Charge = charge }; }
+        var (savedRandom, savedState) = (_random, _hero.State);
+        _random = rolls.Trial;
+        if (check.Fated && FateRules.Of(SkillCheckRules.Fate(Skill.DisarmTraps)) is { } fate) _hero.Apply(_hero.State.WithFate(FateRules.Use(_hero.State.Fate, fate).After));
+        var disarm = DisarmTrap(expected, trapped, baseline, TrapObserver.Player, success, critical, (int)request.Training);
+        if (disarm.Mutation.Disposition == GameSessionDisposition.Rejected)
+        {
+            // The removal could not be written: the rolls and the fate point go back, nothing happened.
+            _random = savedRandom;
+            _hero.Apply(savedState);
+            return RejectDisarm(disarm.Mutation.Failure) with { Charge = charge };
+        }
+        // A failed disarm writes nothing, but the rolls were drawn: the attempt is one revision.
+        if (disarm.Mutation.Disposition == GameSessionDisposition.NoChange) Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, charge, check, second, check.Fated, disarm, Version);
+    }
+
+    private SessionDisarmRoll RejectDisarm(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, null, false, false, null, Version);
 
     private SessionTrapResult Fire(GameSessionVersion expected, SessionTrapped trapped, SessionTrapBaseline baseline, SessionTrapState state,
         SessionTrapCause cause)

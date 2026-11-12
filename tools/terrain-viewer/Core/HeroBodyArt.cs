@@ -96,7 +96,7 @@ public static class HeroBodyArt
                 if (descriptor.Stride is { IsValid: false }) throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
                 read.Add(action, (descriptor, bytes, entries[0], metadata));
             }
-            return Finish(body, read, palette, options, token);
+            return Finish(body, read, MaxKeys, MaxRgbaBytes, options, token);
         }
         catch (TerrainViewerException) { throw; }
         catch (DatException) { throw Failure(TerrainViewerErrorCode.ActorDecode, TerrainViewerFailureStage.ActorDecode); }
@@ -107,8 +107,8 @@ public static class HeroBodyArt
     }
 
 
-    private static HeroBodyLoad Finish(HeroBody body, Dictionary<ActorDiagnosticAction, (ActorDiagnosticResource Resource, byte[] Bytes, DatEntry Entry, ArtMetadata Metadata)> read, int palette,
-        ArtDecoderOptions options, CancellationToken token)
+    private static HeroBodyLoad Finish(HeroBody body, Dictionary<ActorDiagnosticAction, (ActorDiagnosticResource Resource, byte[] Bytes, DatEntry Entry, ArtMetadata Metadata)> read, int maxKeys,
+        long maxRgbaBytes, ArtDecoderOptions options, CancellationToken token)
     {
         var human = ActorDiagnosticProfile.HumanFixedArea;
         // Every action shares the fixed facing table, so the human's used groups are every action's. The fall and get-up come only
@@ -116,12 +116,12 @@ public static class HeroBodyArt
         var groups = human.UsedGroups(ActorDiagnosticAction.Idle).Count();
         var keys = human.Actions.Sum(action => groups * read[action].Resource.FramesPerGroup);
         var falls = read.TryGetValue(ActorDiagnosticAction.FallDown, out var fall) && read.TryGetValue(ActorDiagnosticAction.GetUp, out var rise)
-            && keys + groups * (fall.Resource.FramesPerGroup + rise.Resource.FramesPerGroup) <= MaxKeys;
+            && keys + groups * (fall.Resource.FramesPerGroup + rise.Resource.FramesPerGroup) <= maxKeys;
         if (falls) keys += groups * (read[ActorDiagnosticAction.FallDown].Resource.FramesPerGroup + read[ActorDiagnosticAction.GetUp].Resource.FramesPerGroup);
-        if (keys > MaxKeys) throw Failure(TerrainViewerErrorCode.ResourceLimit, TerrainViewerFailureStage.ActorDecode);
+        if (keys > maxKeys) throw Failure(TerrainViewerErrorCode.ResourceLimit, TerrainViewerFailureStage.ActorDecode);
         ActorDiagnosticResource? Extra(ActorDiagnosticAction action)
         {
-            if (!read.TryGetValue(action, out var extra) || keys + groups * extra.Resource.FramesPerGroup > MaxKeys) return null;
+            if (!read.TryGetValue(action, out var extra) || keys + groups * extra.Resource.FramesPerGroup > maxKeys) return null;
             keys += groups * extra.Resource.FramesPerGroup;
             return extra.Resource;
         }
@@ -140,12 +140,14 @@ public static class HeroBodyArt
             for (var frame = 0; frame < descriptor.FramesPerGroup; frame++)
             {
                 token.ThrowIfCancellationRequested();
+                // ARC-MAGIC-1219 (PR5): the resource's palette is the one its ART is read in (a monster ART that lacks the requested palette is read in palette 0).
+                var palette = descriptor.Palette;
                 var key = new ActorDiagnosticTextureKey(descriptor.Ordinal, descriptor.Selector, group, frame, palette);
                 var decoded = ArtDecoder.Decode(bytes, new ArtFrameSelection(group, frame, palette), options);
                 if (decoded.EffectivePaletteSlot != palette || decoded.Width <= 0 || decoded.Height <= 0)
                     throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
                 rgbaBytes = checked(rgbaBytes + TerrainCachePolicy.CheckedRgbaBytes(decoded.Width, decoded.Height));
-                if (rgbaBytes > MaxRgbaBytes) throw Failure(TerrainViewerErrorCode.ResourceLimit, TerrainViewerFailureStage.ActorDecode);
+                if (rgbaBytes > maxRgbaBytes) throw Failure(TerrainViewerErrorCode.ResourceLimit, TerrainViewerFailureStage.ActorDecode);
                 var rgba = decoded.Rgba.ToArray();
                 textures.Add(key, new DecodedActorTexture(key, decoded.Width, decoded.Height, rgba)
                 { HdQuery = HdFrameQueries.FromArt(art.PayloadSha256, art.ViewLength, art.NameSha256, group, frame, decoded.EffectivePaletteSlot, decoded.Width, decoded.Height, rgba) });
@@ -159,40 +161,48 @@ public static class HeroBodyArt
         return new(body, profile, timing, frames.AsReadOnly(), textures.AsReadOnly(), rgbaBytes);
     }
 
+    /// <summary>ARC-MAGIC-1219: upper bounds of one monster body: distinct frames and their RGBA bytes. The elementals' frames are large (measured on the installed art: at most 505 frames and 20.3 MB, the fire elemental; the human limits were 512 and 16 MiB).</summary>
+    public const int MonsterMaxKeys = 512;
+    public const long MonsterMaxRgbaBytes = 32L * 1024 * 1024;
+
     /// <summary>
-    /// ARC-MAGIC-052 (ledger TR4): the hero's monster body (<see cref="HeroBody.Monster"/>): the five ARTs the actor needs, read from the monster ARTs of the species by the art id the original builds
-    /// (class 12, the species, the animation and the palette; the file name is the critter name rules' N1, <see cref="AreaDataOwner.CritterArtPath"/>) from the first archive that holds the file. A monster
-    /// has the animations of its own species: stand (0), walk (1) and run (6) usually, attack (20), fall (7) and get up (8) sometimes, a vault (13) never. An action the species has no ART for plays the nearest it has
-    /// (run the walk; vault and attack the stand; the fall and get-up are left out): its resource is that ART's frames under the action's own selector with the weapon part 15 (no file has it), so
-    /// the profile keeps one selector per action. A species without a stand ART, a header the actor cannot play (8 physical groups), or a walk with no stride is refused (typed failures as
-    /// <see cref="TerrainViewerException"/>; nothing is retained).
+    /// ARC-MAGIC-052 (ledger TR4), ARC-MAGIC-1219 (PR1 to PR5): the hero's monster body (<see cref="HeroBody.Monster"/>): the ARTs the actor needs, read from the monster ARTs of the species by the art id the original
+    /// builds (class 12, the species, the animation, the weapon part and the palette; the file name is the critter name rules' N1, <see cref="AreaDataOwner.CritterArtPath"/>) from the first archive that holds the
+    /// file. The weapon part is the body's (0 out of combat mode, 1 in it: <see cref="HeroBody.MonsterInCombat"/>) and the original's missing-art repair picks the file (<see cref="HeroBody.MonsterCandidates"/>: the stand
+    /// with part 1 for part 0, the walk with part 0 for part 1, the walk for a missing run). A species has the animations of its own: stand (0), walk (1) and run (6) usually, attack (20), fall (7) and get up (8)
+    /// sometimes, the low attack (21) for the fire elemental only, a vault (13) for five. The throw (14) is not loaded (owner decision D2: a monster body wields nothing). An action the species has no ART for plays the
+    /// nearest it has (the vault and attack the stand): its resource is that ART's frames under the action's own selector with the weapon part 15 (no file has it), so the profile keeps one selector per action. A palette the
+    /// ART does not hold is read as palette 0 (PR5: what the original draws; Body of Air, Fire and Water ask for palette 1, the elemental ARTs hold palette 0 only). A species without a stand ART, a header the actor cannot
+    /// play (8 physical groups), or a walk with no stride is refused (typed failures as <see cref="TerrainViewerException"/>; nothing is retained).
     /// </summary>
     /// <param name="archives">The archives to search, in order; the first that holds the file once is read (a name held twice there is refused).</param>
     /// <param name="name">The name tables of the monster art ids.</param>
     public static HeroBodyLoad LoadMonster(IReadOnlyList<DatArchive> archives, HeroBody body, Func<AreaMappingRole, int, string?> name, CancellationToken token = default)
     {
         ArgumentNullException.ThrowIfNull(archives); ArgumentNullException.ThrowIfNull(name);
-        if (!body.IsMonster || body.MonsterSpecies >= 32 || body.Palette is < 0 or > 3) throw Failure(TerrainViewerErrorCode.ActorInput, TerrainViewerFailureStage.ActorInput);
-        var palette = body.Palette;
+        if (!body.IsMonster || body.MonsterSpecies >= 32 || body.Palette is < 0 or > 3 || body.Weapon is not (0 or 1)) throw Failure(TerrainViewerErrorCode.ActorInput, TerrainViewerFailureStage.ActorInput);
         var options = new ArtDecoderOptions { MaxInputBytes = 1024 * 1024, MaxFrameCount = 8 * 64 };
         var read = new Dictionary<ActorDiagnosticAction, (ActorDiagnosticResource Resource, byte[] Bytes, DatEntry Entry, ArtMetadata Metadata)>();
         try
         {
-            // Each action: the animations to try in order (its own first), and whether the profile can do without it.
-            (ActorDiagnosticAction Action, int[] Animations, bool Optional)[] wanted =
+            // Each action: its animation and whether the profile can do without it; the throw has no consumer and is left out.
+            (ActorDiagnosticAction Action, int Animation, bool Optional)[] wanted =
             [
-                (ActorDiagnosticAction.Idle, [0], false), (ActorDiagnosticAction.Walk, [1], false), (ActorDiagnosticAction.Run, [6, 1], false),
-                (ActorDiagnosticAction.Vault, [13, 0], false), (ActorDiagnosticAction.Attack, [20, 0], false),
-                (ActorDiagnosticAction.FallDown, [7], true), (ActorDiagnosticAction.GetUp, [8], true),
+                (ActorDiagnosticAction.Idle, 0, false), (ActorDiagnosticAction.Walk, 1, false), (ActorDiagnosticAction.Run, 6, false),
+                (ActorDiagnosticAction.Vault, 13, false), (ActorDiagnosticAction.Attack, WeaponArtRules.AttackAnimation, false),
+                (ActorDiagnosticAction.FallDown, 7, true), (ActorDiagnosticAction.GetUp, 8, true), (ActorDiagnosticAction.LowAttack, WeaponArtRules.LowAttackAnimation, true),
             ];
-            foreach (var (action, animations, optional) in wanted)
+            foreach (var (action, animation, optional) in wanted)
             {
                 token.ThrowIfCancellationRequested();
-                var own = body.MonsterSelector(animations[0]);
+                var own = body.MonsterSelector(animation);
+                // The repair's candidates first; then, for the actions a species may lack, the stand stands in for them.
+                var tries = body.MonsterCandidates(animation).Concat(action is ActorDiagnosticAction.Vault or ActorDiagnosticAction.Attack ? body.MonsterCandidates(0) : []);
                 var found = false;
-                foreach (var animation in animations)
+                foreach (var selector in tries)
                 {
-                    var selector = body.MonsterSelector(animation);
+                    // An ART of the action's own animation keeps its art id as the action's selector; the run's walk and the stand-ins keep the action's own with the weapon part 15 (no file names it).
+                    var real = ((selector >> 6) & 31) == animation;
                     string path;
                     try { path = AreaDataOwner.CritterArtPath(selector, name); }
                     catch (AreaException) { continue; }
@@ -204,23 +214,24 @@ public static class HeroBodyArt
                     try { metadata = ArtDecoder.Inspect(bytes, options); }
                     catch (ArtException) { continue; }
                     var h = metadata.Header;
-                    if (h.PhysicalGroupCount != 8 || h.FramesPerGroup <= 0 || h.FramesPerSecond <= 0 || h.PalettePresenceWords.Count <= palette || h.PalettePresenceWords[palette] == 0
-                        || (Attacks(action) && animation == animations[0] && (h.ActionFrame < 0 || h.ActionFrame >= h.FramesPerGroup))) continue;
-                    // A stand-in ART keeps the action's own selector with the weapon part 15, which no file names.
-                    var key = animation == animations[0] ? own : own | 0xFu;
-                    var descriptor = new ActorDiagnosticResource(action, key, entries[0].Ordinal, palette, 8, h.FramesPerGroup, h.FramesPerSecond, h.FramesPerSecond)
+                    // PR5: the palette the art id asks for, else palette 0 (the original's lookup reads palette 0's table when the requested one is absent).
+                    var palette = Holds(h, body.Palette) ? body.Palette : Holds(h, 0) ? 0 : -1;
+                    if (h.PhysicalGroupCount != 8 || h.FramesPerGroup <= 0 || h.FramesPerSecond <= 0 || palette < 0
+                        || (Attacks(action) && real && (h.ActionFrame < 0 || h.ActionFrame >= h.FramesPerGroup))) continue;
+                    var descriptor = new ActorDiagnosticResource(action, real ? selector : own | 0xFu, entries[0].Ordinal, palette, 8, h.FramesPerGroup, h.FramesPerSecond, h.FramesPerSecond)
                     {
                         Stride = action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run ? Stride(metadata) : null,
-                        ActionFrame = Attacks(action) && animation == animations[0] ? h.ActionFrame : 0,
+                        ActionFrame = Attacks(action) && real ? h.ActionFrame : 0,
                     };
                     if (descriptor.Stride is { IsValid: false }) continue;
                     read.Add(action, (descriptor, bytes, entries[0], metadata));
                     found = true;
                     break;
                 }
+                // A low attack the repair turns into the attack (every species but the fire elemental) is not read again: the attack's ART plays it.
                 if (!found && !optional) throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
             }
-            return Finish(body, read, palette, options, token);
+            return Finish(body, read, MonsterMaxKeys, MonsterMaxRgbaBytes, options, token);
         }
         catch (TerrainViewerException) { throw; }
         catch (DatException) { throw Failure(TerrainViewerErrorCode.ActorDecode, TerrainViewerFailureStage.ActorDecode); }
@@ -229,6 +240,8 @@ public static class HeroBodyArt
         catch (ArgumentException) { throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata); }
         catch (OverflowException) { throw Failure(TerrainViewerErrorCode.ResourceLimit, TerrainViewerFailureStage.ActorDecode); }
     }
+
+    private static bool Holds(ArtHeader header, int palette) => header.PalettePresenceWords.Count > palette && header.PalettePresenceWords[palette] != 0;
 
     /// <summary>
     /// The stride of a walk or run ART (research L7): the offsets of one cycle on an axis rotation (group 1) and on a diagonal
