@@ -941,13 +941,13 @@ public sealed partial class GameSessionOwner
         var npcWorn = attack.TargetWorn?.OrderBy(pair => pair.Key).Select(pair => pair.Value.Entity).ToArray() ?? [];
         // The stun's and the knockdown's walks come before the step's drops and wear (IC3), the others after them.
         var itemSpells = FireDamageStepItems(attack.ItemTriggers, itemSteps.Where(step => BeforeItemSteps(step, outcome)), target.Entity, npcWorn,
-            heroWorn, contextWeapon).ToList();
+            SessionEventKinds.PlayerEntity, heroWorn, contextWeapon).ToList();
         if (stepFailure == GameSessionFailure.None)
             (wear, stepFailure) = CriticalAndWearSteps(resolution, outcome, heroSide, targetSide, recipient == DamageRecipient.Target ? target : null,
                 attack.TargetCell, attack.DropMap, criticals);
         if (stepFailure == GameSessionFailure.None)
             itemSpells.AddRange(FireDamageStepItems(attack.ItemTriggers, itemSteps.Where(step => !BeforeItemSteps(step, outcome)), target.Entity,
-                StillWorn(npcWorn, wear, criticals), heroWorn, contextWeapon));
+                StillWorn(npcWorn, wear, criticals), SessionEventKinds.PlayerEntity, heroWorn, contextWeapon));
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, outcome, hitAward, killAward, stepFailure, Version)
         {
             Wear = wear,
