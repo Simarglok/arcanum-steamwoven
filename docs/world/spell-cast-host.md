@@ -418,7 +418,7 @@ The pointer entering a slot or a recent-action button shows its entry's descript
    entry again (ML7's fix). ARC-DEV-326 (HK24): the item's examine script (point 0) runs first, with the hero as the triggerer
    (`AreaUseScriptHost.RunExamine`), and an answer of skip default leaves no description; the same step opens the world hover's description
    of every object, so a scenery or critter with an examine script is described only when it lets the default run. The script's printed
-   lines go to the message window. A made item (no map row) has no examine run yet; a run the viewer cannot apply (refused by the
+   lines go to the message window. ARC-SCRIPT-1119: an item the session made (`made:n`, no map row) runs its examine script too, from its prototype's point 0 (or the slot a run kept on the item) as a session item run (`GameSessionOwner.RunItemExamine`, `SessionItemScripts.Admission`, one revision when the run changed anything, a refused run applies nothing and the item is described as before); the world hover does not reach it (a made item on the ground has no row to point at). A run the viewer cannot apply (refused by the
    admission, a teleport it asks for) describes as before; a conversation it asks for is not started. The barter and dialog windows and the
    floating tooltip of the viewer without the interface bars (the original has none) do not run it.
 5. **Inventory** (HK23). In the inventory window, the pointer resting 35 ms on another item of the doll or the grid (nothing held) draws
