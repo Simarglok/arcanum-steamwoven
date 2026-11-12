@@ -210,9 +210,9 @@ public sealed class AreaUseScriptsOriginalTests
         // ARC_TILE_CENSUS, when set, names a file the first stops of the refused tile scripts are written to (reason, count, one sample script; no game data).
         if (Environment.GetEnvironmentVariable("ARC_TILE_CENSUS") is { Length: > 0 } reasonFile)
             File.WriteAllLines(reasonFile, tileReasons.OrderByDescending(p => p.Value).Select(p => $"{p.Value}\t{p.Key}\t{tileSamples[p.Key]}"));
-        // 21 guarded use sites on 6 maps: 9 run and their guards hold the teleport back; 12 need conditions or actions
+        // 21 guarded use sites on 6 maps: 10 run and their guards hold the teleport back (one more since ARC-SCRIPT-1165 admitted the story and time commands); 11 need conditions or actions
         // outside the set (immediate calls, loops, other conditions) and are refused.
-        CollectionAssert.AreEquivalent(new[] { (AreaScriptedUseOutcome.NoTeleport, 9), (AreaScriptedUseOutcome.Refused, 12) },
+        CollectionAssert.AreEquivalent(new[] { (AreaScriptedUseOutcome.NoTeleport, 10), (AreaScriptedUseOutcome.Refused, 11) },
             outcomes.Select(p => (p.Key, p.Value)).ToArray(), string.Join(", ", outcomes.Select(p => $"{p.Key}={p.Value}")));
         // 3,012 tile and 20 sector scripts on the 79 maps map mode opens (the start map holds 2,439 tile scripts): since
         // ARC-SCRIPT-018 (call script, assign object, get object type) 644 tile scripts run, since ARC-SCRIPT-019 (story state and
@@ -227,12 +227,15 @@ public sealed class AreaUseScriptsOriginalTests
         // move. Measured at d07ea71d and at 7758742b on 2026-11-07 (ARC-DEV-166). Since then the sets admitted the casts, damage, heal, walk, animation, steal and prone
         // actions (S29, S30 and the walk slices) and the sector scripts took 17 runs and 3 refusals (unfog town map, ARC-DEV-205): at af8eb52b plus ARC-DEV-298 (float line) 1,216
         // tile scripts run without a teleport, 1,612 are refused by their set and 178 run to effects this host (no AI host, no viewer session) cannot apply (create object of
-        // script 1629, damage, casts); the sector counts are 17 and 3. ARC_TILE_CENSUS lists the first stops (the biggest: script 30286 not modelled, 584 tiles; see the B23 note).
+        // script 1629, damage, casts); the sector counts are 17 and 3. Since ARC-SCRIPT-1165 (set S34, the story and time commands) 62 more tile scripts teleport (the Tulla battle interiors' exits, script 2698), 30 more run without one and 92 fewer are refused (68 teleports, 1,246 without, 1,520 refused, 178 rejected). ARC_TILE_CENSUS lists the first stops (the biggest: script 30286 not modelled, 584 tiles; see the B23 note).
         var tile = Arcanum.Data.Maps.MapTransitionTrigger.TileEntry; var sector = Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry;
-        CollectionAssert.AreEquivalent(Enumerable.Repeat("iron clan hq:2203", 5).Append("void-kerghans castle:3070").ToArray(), teleports, string.Join(", ", teleports));
+        // Since ARC-SCRIPT-1165 (set S34: the story and time commands) the 62 exit tiles of script 2698 on the Tulla battle interiors run to their teleport too.
+        static bool IsTullaExit(string t) => t.StartsWith("tulla interior - battle - ", StringComparison.Ordinal) && t.EndsWith(":2698", StringComparison.Ordinal);
+        Assert.AreEqual(62, teleports.Count(IsTullaExit));
+        CollectionAssert.AreEquivalent(Enumerable.Repeat("iron clan hq:2203", 5).Append("void-kerghans castle:3070").ToArray(), teleports.Where(t => !IsTullaExit(t)).ToArray(), string.Join(", ", teleports));
         CollectionAssert.AreEquivalent(new[]
         {
-            ((tile, AreaScriptedUseOutcome.Teleport), 6), ((tile, AreaScriptedUseOutcome.NoTeleport), 1216), ((tile, AreaScriptedUseOutcome.Refused), 1612),
+            ((tile, AreaScriptedUseOutcome.Teleport), 68), ((tile, AreaScriptedUseOutcome.NoTeleport), 1246), ((tile, AreaScriptedUseOutcome.Refused), 1520),
             ((tile, AreaScriptedUseOutcome.EffectsRejected), 178), ((sector, AreaScriptedUseOutcome.NoTeleport), 17), ((sector, AreaScriptedUseOutcome.Refused), 3),
         }, placedOutcomes.Select(p => (p.Key, p.Value)).ToArray(), string.Join(", ", placedOutcomes.Select(p => $"{p.Key}={p.Value}")));
     }

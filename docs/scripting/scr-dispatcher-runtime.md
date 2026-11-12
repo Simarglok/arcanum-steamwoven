@@ -742,6 +742,32 @@ every entry of its sector). Ledger [UF1–UF4](../research/ledger/scripts.md#tow
 - **Tests.** `ScrTownMapTests` (the interpreter), `TownMapStateTests` (the session, the snapshot and the upgrade step),
   `AreaUseScriptHostTests` (a sector script's reveal in the viewer).
 
+## Story and time commands (ARC-SCRIPT-1165, set S34)
+
+`ScrAdmissionSet.S34` is S33 plus six conditions and thirteen actions (`StoryConditions`, `StoryActions`); the interpreter runs at most S34
+(`ScrRunOptions.Validate`). Ledger [SQ1–SQ14](../research/ledger/scripts.md#story-and-time-commands-arc-script-1165-e5-c); plan slice E5-c.
+
+- **Conditions.** Daytime (1: the hour is 6 to 17), global quest state (7: the quest's game-wide state equals the value), obj has blessing (8) and obj has curse (9)
+  (the PC's lists, the list rule of SG6), rumor known (40: the first object is a PC that learned the rumor) and rumor quelled (41: game-wide).
+- **Clock actions** (96 day since startup, 97 current hour, 98 current minute, 105 hours since startup) store a number into operand 0 from
+  `IScrStoryQueries.Time` (`ScrGameTime`); a host with no clock ends the dispatch with `NotModelled` and applies nothing; a literal store is refused at admission.
+- **Story actions** hand one `ScrStateRequest` each to the caller, in action order with the older story requests: set quest global state (17: only 4 or 6 are stored and a
+  final state stays; the request is asked only when it changes the state as the run sees it), add and remove blessing and curse (25 to 28, per object of operand 1),
+  quell rumor (51, the first object of operand 1), give quest XP (63, the first object of operand 0 and a quest experience level), grant one fate point (117) and set PC quest
+  unbotched (119, per object of operand 0).
+- **The run's own changes** to the game-wide quest states, the quelled and learned rumors and the PC's blessings and curses are read back by its later conditions (the
+  original changes the game at once); a PC's quest state set with action 16 is not.
+- **The host.** `IScrStoryQueries` (the clock, `GlobalQuestState`, `RumorKnown`, `RumorQuelled`, `HasBlessing`): `AreaUseScriptHost` and `AreaScriptHost` implement it over
+  the session (`AreaScriptStoryQueries`) and hold the commands in all their sets (use, placed, heartbeat, dying, dialog and talk); `AreaScriptStory.Apply` gives the requests to the
+  session (`SetGlobalQuestState`, `QuellRumor`, `AwardQuestExperience`, `GrantHeroFatePoint`, `UnbotchQuest`, `AddHeroBlessing`, `RemoveHeroBlessing`), for the PC only
+  (a session without a hero or experience tables gives nothing for the PC-only ones and the run goes on); a blessing or curse needs the host's `BlessingEffects` rule, which the
+  viewer sets from the module's tables (`BlessingEffectOf`), and without it the action is refused.
+- **Limits.** The item-event host (wield on and off, hit) does not run these commands, so a blessing item's script stays refused there; the "received" message and the logbook
+  mark of a blessing or curse and the sound of an unbotched quest are not shown; a quest or rumor number outside the session's ranges is refused (the original stores it unchecked)
+  and stops the later requests, and reads as 0 or false in a condition.
+- **Tests.** `ScrStoryTimeTests` (the interpreter), `StoryStateTests` (the session's two new writes and the snapshot rule), `AreaUseScriptHostTests` (the viewer host over a real
+  session), `AreaStoryScriptAdmissionTests` (the sets and, with `DAT_ROOT`, the 96 installed scripts: S34 admits 52 whole).
+
 ## Checks
 
 - `tests/Arcanum.Scripting.Tests/Scr/ScrDispatcherTests.cs`: every step of the

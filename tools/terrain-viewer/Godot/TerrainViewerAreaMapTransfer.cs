@@ -290,6 +290,8 @@ public partial class TerrainViewerApp
         {
             // ARC-DEV-316: an item taken on another map runs its use script on the row of its home map, read on demand.
             OtherMapRow = inventory is null ? null : obj => inventory.RowOn(obj.Map, obj.Code),
+            // ARC-SCRIPT-1165 (E5-c): a script's add blessing and add curse take their effect from the module's tables.
+            BlessingEffects = BlessingEffectOf,
         };
         // ARC-WORLD-110: a use meets the object's trap first; the walk and the steps meet the same host's traps.
         _areaTraps = new AreaTraps(owner, host, snapshot.Objects, world.Gone, AreaTrapEffectsNow, AreaRowLightLevel);

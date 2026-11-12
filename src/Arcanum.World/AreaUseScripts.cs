@@ -97,7 +97,7 @@ public readonly record struct AreaPrintedLine(int Type, string Text);
 /// The PC's reputations are the session's (ARC-WORLD-044); no other object has one. Everything else the viewer does not model
 /// answers "no", as for the dialog and item hosts.
 /// </summary>
-public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries
+public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries, IScrStoryQueries
 {
     /// <summary>Map-change keys of an object's use slot.</summary>
     public const string LocalFlagsProperty = "use.lf", CountersProperty = "use.counters", ScriptProperty = "use.script";
@@ -142,14 +142,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// ARC-MAGIC-030 (MT21b, ledger SC1–SC6): plus the spell conditions body spell (14), influenced by spell (35), knows spell (48) and mastered spell college (49) of
     /// <see cref="ScrAdmissionSet.S31"/>, which this host answers (<see cref="IScrSpellQueries"/>), and give spell mastery in college (112), which it writes through the session.
     /// </summary>
-    public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading-objects-story-world", ScrAdmissionSet.S4.Conditions.Concat(ScrAdmissionSet.SpellQueryConditions),
+    public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading-objects-story-world", ScrAdmissionSet.S4.Conditions.Concat(ScrAdmissionSet.SpellQueryConditions).Concat(ScrAdmissionSet.StoryConditions),
         ScrAdmissionSet.S4.Actions.Where(a => a is not ScrCatalogue.Action.Dialog)
             .Concat([ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque,
                 ScrCatalogue.Action.CallScript, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType,
                 ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation,
                 ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.CreateObject, ScrCatalogue.Action.GetStat,
-                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery]),
+                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, .. ScrAdmissionSet.StoryActions]),
         ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]),
         counterIndexWraps: true);
@@ -192,11 +192,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// </summary>
     public static ScrAdmissionSet HeartbeatAdmission { get; } = new("S2-area-heartbeat-state-kill-talk-world",
         ScrAdmissionSet.S2.Conditions.Concat([ScrCatalogue.Condition.FollowingPc, ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsDead,
-            ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasReputation, .. ScrAdmissionSet.SpellQueryConditions]),
+            ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasReputation, .. ScrAdmissionSet.SpellQueryConditions, .. ScrAdmissionSet.StoryConditions]),
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
             ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
-            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, .. CastActions, .. DamageActions]),
+            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, .. ScrAdmissionSet.StoryActions, .. CastActions, .. DamageActions]),
         ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]));
 
@@ -306,6 +306,19 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             if (row.Type == NpcType && row.WorldX is not null && row.WorldY is not null && _shown[EntityId(row)] == row) _npcs.Add((EntityId(row), row));
         }
     }
+
+    /// <summary>
+    /// ARC-SCRIPT-1165 (E5-c): the effect rule of a blessing or curse number (the module's blessing and curse table's effect entry, then the effect table's rule), which a script's add blessing (25) or add curse (27)
+    /// needs; the viewer sets it once the tables are read. Without it such an action is refused (<see cref="AreaScriptStory.Apply"/>).
+    /// </summary>
+    public Func<SessionBlessingKind, int, SessionEffectDefinition?>? BlessingEffects { get; set; }
+
+    // SQ1–SQ12 (ARC-SCRIPT-1165): the story and time questions, from the session.
+    public ScrGameTime? Time() => AreaScriptStoryQueries.Time(_session);
+    public int GlobalQuestState(int quest) => AreaScriptStoryQueries.GlobalQuestState(_session, quest);
+    public bool? RumorKnown(ScrObjectRef obj, int rumor) => AreaScriptStoryQueries.RumorKnown(_session, IsPc(obj), rumor);
+    public bool RumorQuelled(int rumor) => AreaScriptStoryQueries.RumorQuelled(_session, rumor);
+    public bool? HasBlessing(ScrObjectRef obj, int number, bool curse) => AreaScriptStoryQueries.HasBlessing(_session, IsPc(obj), number, curse);
 
     private const int SceneryType = 3;
 
@@ -1139,6 +1152,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     private bool Apply(ScrEffects effects, Func<ScrWriteback, bool> writeSlot)
     {
         if (effects.DestroyTrapObject is not null) return false;
+        // The effect rule of every blessing or curse the run adds is known before anything applies (a missing rule refuses the run whole).
+        if (!AreaScriptStory.BlessingRulesResolve(_session, effects, IsPc, BlessingEffects)) return false;
         foreach (var write in effects.GlobalFlags)
         {
             var flags = _session.Flags;
@@ -1148,7 +1163,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         // ARC-DEV-100: the global variables and the hero's variables and flags.
         if (!_session.ApplyScriptStores(effects)) return false;
         // ARC-SCRIPT-019: the story-state number and the quest, area, rumor and reputation requests, for the PC.
-        if (!AreaScriptStory.Apply(_session, effects, IsPc, _awards.Add)) return false;
+        if (!AreaScriptStory.Apply(_session, effects, IsPc, _awards.Add, BlessingEffects)) return false;
         // As for a dialog script (AreaScriptHost.Apply): scheme pairs go to the session, applied steps stay applied when a later
         // one is refused (the original applies as it goes); effect sounds are not played by a use click.
         foreach (var sound in effects.Sounds)

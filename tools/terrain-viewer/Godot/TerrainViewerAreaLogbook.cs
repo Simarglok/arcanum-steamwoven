@@ -45,6 +45,20 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-008 logbook texts status={_logbookTexts.Status} detail={_logbookTexts.Detail}");
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-1165 (E5-c): the effect rule a script's add blessing or add curse gives (the host's <c>BlessingEffects</c>): the effect number the module's blessing or curse table names for the number
+    /// (<see cref="Arcanum.Data.Characters.BlessingRules.EffectOf"/>, BC2), then that effect's rule from the hero's effect tables; a number the effect tables do not hold has no changes, as in the source. Null while
+    /// the logbook texts have not loaded or the session has no hero tables (the script's action is refused then).
+    /// </summary>
+    private SessionEffectDefinition? BlessingEffectOf(SessionBlessingKind kind, int number)
+    {
+        if (_logbookTexts?.Texts is not { } texts || _areaEffectRules is not { } rules) return null;
+        var table = kind == SessionBlessingKind.Blessing ? texts.Blessings : texts.Curses;
+        if (table is null || Arcanum.Data.Characters.BlessingRules.EffectOf(table, number).Effect is not { } effect) return null;
+        try { return rules(effect) is { } rule ? SessionEffectDefinition.FromRule(rule) : new SessionEffectDefinition(effect, []); }
+        catch (ArgumentException) { return null; }
+    }
+
     private AreaLogbookBuild BuildLogbook() =>
         AreaLogbook.Build(_areaSession!, _logbookTexts?.Texts, _logbookTab, AreaHoverIndex.TextProfile);
 

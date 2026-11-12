@@ -86,8 +86,6 @@ public sealed class StoryStateTests
         Refused(Story("{\"quest\":1001,\"state\":\"Completed\",\"botched\":false,\"timestampMs\":1}"), GameSessionFailure.InvalidQuestState);
         Refused(Story("{\"quest\":1001,\"state\":\"Accepted\",\"botched\":true,\"timestampMs\":1}",
             "{\"quest\":1001,\"state\":\"Completed\"}"), GameSessionFailure.InvalidQuestState);
-        Refused(Story("{\"quest\":1001,\"state\":\"Accepted\",\"botched\":false,\"timestampMs\":1}",
-            "{\"quest\":1001,\"state\":\"Botched\"}"), GameSessionFailure.InvalidQuestState);
         Refused(Story("{\"quest\":1001,\"state\":\"Accepted\",\"botched\":false,\"timestampMs\":54000001}"), GameSessionFailure.InvalidSnapshot);
         Refused(Story("", rumors: "{\"rumor\":1001,\"timestampMs\":54000001}"), GameSessionFailure.InvalidSnapshot);
 
@@ -96,6 +94,12 @@ public sealed class StoryStateTests
             "{\"quest\":1001,\"state\":\"OtherCompleted\",\"botched\":false,\"timestampMs\":54000000}",
             "{\"quest\":1001,\"state\":\"Completed\"}", "{\"rumor\":1001,\"timestampMs\":54000000}"))));
         Assert.AreEqual(SessionQuestState.OtherCompleted, owner.QueryQuest(1001)!.Value.Effective);
+
+        // ARC-SCRIPT-1165: a quest the PC holds as Accepted may have a final shared state (set quest global state writes it without the PC's record).
+        using var scripted = Restore(Decode(GoldenJson.Replace(EmptyStory, Story(
+            "{\"quest\":1001,\"state\":\"Accepted\",\"botched\":false,\"timestampMs\":1}", "{\"quest\":1001,\"state\":\"Botched\"}"))));
+        Assert.AreEqual(SessionQuestState.Botched, scripted.QueryGlobalQuest(1001));
+        Assert.AreEqual(SessionQuestState.Accepted, scripted.QueryQuest(1001)!.Value.Effective);
     }
 
     [TestMethod]
@@ -111,6 +115,51 @@ public sealed class StoryStateTests
         Assert.AreEqual(StartMs + 1_000, owner.QueryRumor(2999));
         CollectionAssert.AreEqual(new[] { new SessionRumor(1000, StartMs), new SessionRumor(2999, StartMs + 1_000) },
             owner.QueryStory().Rumors.ToArray());
+    }
+
+    [TestMethod]
+    public void SetGlobalQuestStateStoresOnlyCompletedOrBotchedAndIsFinal()
+    {
+        // ARC-SCRIPT-1165, SQ7 (0x4C51C0): only 4 and 6 are stored, and a final state stays.
+        using var owner = Create();
+        foreach (var state in new[] { SessionQuestState.Unknown, SessionQuestState.Mentioned, SessionQuestState.Accepted, SessionQuestState.Achieved, SessionQuestState.OtherCompleted, (SessionQuestState)9 })
+            NoChange(owner.SetGlobalQuestState(owner.Version, 1005, state), owner, 0);
+        Assert.AreEqual(SessionQuestState.Accepted, owner.QueryGlobalQuest(1005));
+        Changed(owner.SetGlobalQuestState(owner.Version, 1005, SessionQuestState.Completed), owner, 1);
+        Assert.AreEqual(SessionQuestState.Completed, owner.QueryGlobalQuest(1005));
+        NoChange(owner.SetGlobalQuestState(owner.Version, 1005, SessionQuestState.Botched), owner, 1);
+        Changed(owner.SetGlobalQuestState(owner.Version, 1006, SessionQuestState.Botched), owner, 2);
+        NoChange(owner.SetGlobalQuestState(owner.Version, 1006, SessionQuestState.Completed), owner, 2);
+        Assert.AreEqual(SessionQuestState.Botched, owner.QueryGlobalQuest(1006));
+        foreach (var quest in new[] { 0, 999, 2000 }) Rejected(owner.SetGlobalQuestState(owner.Version, quest, SessionQuestState.Completed), owner, GameSessionFailure.InvalidQuest, 2);
+        // The PC's later request reads the new shared state: completing a quest that is already completed for everyone is OtherCompleted.
+        Changed(owner.SetQuestState(owner.Version, 1005, SessionQuestState.Accepted), owner, 3);
+        Assert.AreEqual(SessionQuestState.OtherCompleted, owner.QueryQuest(1005)!.Value.State);
+    }
+
+    [TestMethod]
+    public void UnbotchQuestRestoresAcceptedAndClearsTheBotchedMark()
+    {
+        // ARC-SCRIPT-1165, SQ12 (0x4C5070): only a quest whose shared state is Botched changes.
+        using var owner = Create();
+        NoChange(owner.UnbotchQuest(owner.Version, 1010), owner, 0);
+        Changed(owner.SetQuestState(owner.Version, 1010, SessionQuestState.Botched), owner, 1);
+        Assert.AreEqual(SessionQuestState.Botched, owner.QueryGlobalQuest(1010));
+        Changed(owner.UnbotchQuest(owner.Version, 1010), owner, 2);
+        Assert.AreEqual(SessionQuestState.Accepted, owner.QueryGlobalQuest(1010));
+        Assert.IsNull(owner.QueryQuest(1010), "a record that held only the botched mark is dropped");
+        NoChange(owner.UnbotchQuest(owner.Version, 1010), owner, 2);
+
+        Changed(owner.SetQuestState(owner.Version, 1011, SessionQuestState.Accepted), owner, 3);
+        Advance(owner, 5_000);
+        Changed(owner.SetQuestState(owner.Version, 1011, SessionQuestState.Botched), owner, 4);
+        Assert.AreEqual(SessionQuestState.Botched, owner.QueryQuest(1011)!.Value.Effective);
+        Advance(owner, 5_000);
+        Changed(owner.UnbotchQuest(owner.Version, 1011), owner, 5);
+        var record = owner.QueryQuest(1011)!.Value;
+        Assert.AreEqual((SessionQuestState.Accepted, false), (record.Effective, record.Botched));
+        Assert.AreEqual(StartMs + 10_000, record.TimestampMs, "the record is stamped with the game time of the change");
+        Rejected(owner.UnbotchQuest(owner.Version, 999), owner, GameSessionFailure.InvalidQuest, 5);
     }
 
     [TestMethod]
