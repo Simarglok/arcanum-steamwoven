@@ -18,7 +18,7 @@ summary table has the counts; requirements differ in size, so they are not a per
 - **Play**: click-to-move, walk and run, hover names and action cursor; inventory, pickup, loot and barter; NPC
   conversations; companions who follow and take orders; real-time and turn-based combat with the hero's and NPCs'
   attacks; spells and schematics; the character sheet, the logbook, experience and levels; skills such as picking locks;
-  quick save and the save list. Every key: [Hotkeys](docs/player/hotkeys.md).
+  resting and waiting (S, the sleep window); quick save and the save list. Every key: [Hotkeys](docs/player/hotkeys.md).
 - **Testing aids**: the [debug mode](docs/player/alpha-build.md#7-debug-mode) (teleport to any area), the in-game bug
   report (Ctrl+B) and the diagnostic palette.
 - **Headless rules** (Godot-free `Arcanum.Data`, `Arcanum.Simulation`, `Arcanum.Scripting`, `Arcanum.Session`, `Arcanum.World`): the
@@ -26,10 +26,12 @@ summary table has the counts; requirements differ in size, so they are not a per
   NPC reaction and AI, and the SCR script dispatcher. `Arcanum.Executable` interprets the player's own `Arcanum.exe`
   (an integer x86 subset), the base of building the prototypes a fresh installation lacks.
 
-Not there yet, among others: much of the NPC AI and the full SCR script runtime, traps that are spotted and fire, resting
-(S) and random encounters, the original look of several windows (character sheet, logbook, world map, save and load), and
-a run of the Windows build on a Windows 11 PC.
-The requirement rows name what each part still lacks.
+Not there yet, among others: much of the NPC AI and the full SCR script runtime (114 of 142 script actions are admitted),
+random encounters on the world map, the NPC day (beds, walking between day and night standpoints), the native trap script
+and the hero's step onto a placed trap marker, most movies, credits and endings (a movie plays only in the game build, through an external `ffmpeg`),
+the fate window, the skill pane, the rest of the companions window, the remaining windows of the "generated" interface, and a run of
+the Windows build on a Windows 11 PC. The requirement rows and the
+[missing systems plan](docs/project/missing-systems-plan.md#3-map-of-the-systems) name what each part still lacks.
 
 ## Direction
 
@@ -57,9 +59,10 @@ from the exported developer builds, builds the player's alpha and puts every God
 ./arcanum map Arcanum1-024-fixed  # the main world map, streamed by window from the new-game start
 ./arcanum world                   # the WORLD diagnostic
 ./arcanum package mac|win         # the player's alpha (packaged builds, below)
-./arcanum run --kind window|headless|export|dotnet -- COMMAND   # any Godot run, export or dotnet build/test through the queue
-./arcanum queue                   # the launch queue: running and waiting runs (--history N: the last finished ones)
-./arcanum smoke pr --stages S,... # the per-PR smoke: only the touched stages (--crash-site when related); `--auto`: the zones the diff selects (ARC-DEV-396); `smoke full`: the batteries chain, `smoke complete`: the nightly run, every stage
+./arcanum run --kind window|headless|export|dotnet|quick -- COMMAND   # any Godot run, export or dotnet build/test through the queue
+./arcanum queue                   # the launch queue: running and waiting runs (--history N: the last finished ones; --lanes: per Godot lane)
+./arcanum smoke pr --stages S,... # the per-PR smoke: only the touched stages (--crash-site when related); `--auto`: the zones the diff selects (ARC-DEV-396); also `smoke full` (the map smoke chain), `smoke complete` (every stage), `smoke map NAME`, `smoke crash-site`, `smoke self-test`
+./arcanum daily                   # the daily package build: when origin/main changed, its root checks, the full smoke chain and both packages
 ./arcanum oracle                  # run original functions of the installed Arcanum.exe in the emulator oracle, then the OriginalExe tests
 ./arcanum clean                   # which builds are protected and which may go (dry run; --apply removes only those)
 ```
@@ -83,6 +86,23 @@ does it for both platforms when `main` changed. Prerequisites, options, where th
 (Ctrl+B) are in [the player instruction](docs/player/alpha-build.md), which ships beside every build as its `README.md`.
 Every key of the game is in [Hotkeys](docs/player/hotkeys.md).
 
+## Building and testing from source
+
+The pinned toolchain is .NET SDK 8.0.425 (`global.json`, no roll-forward) and Godot 4.7.2 .NET ([toolchain](docs/workflow/toolchain.md)).
+The root solution leaves out the terrain viewer, `Arcanum.Input`, the research probes and the labs; their commands are in the
+toolchain document. The root checks:
+
+```sh
+dotnet restore Arcanum.Steamwoven.sln --locked-mode && dotnet build --no-restore && dotnet test --no-build --filter "TestCategory!=RealData"
+python3 -B tools/research/dat_probe.py --self-test
+python3 -B tools/original-oracle/oracle.py --self-test
+python3 -B tools/docs_check.py
+```
+
+Tests on the player's own data are opt-in through environment variables and test categories ([opt-in original data](docs/workflow/toolchain.md#opt-in-original-data)).
+A documentation-only change runs only `python3 -B tools/docs_check.py`. Every Godot run and every `dotnet` build or test of a
+task goes through the launch queue (`./arcanum run`, above).
+
 ## Start here
 
 - [Documentation index](docs/README.md), [component catalogue](docs/project/status.md) and [vision](docs/project/vision.md)
@@ -91,5 +111,7 @@ Every key of the game is in [Hotkeys](docs/player/hotkeys.md).
 - [Agent rules](AGENTS.md), [the Claude session guide](CLAUDE.md) and [contributor guidance](CONTRIBUTING.md)
 
 Tasks and acceptance contracts come from the owner's explicit requests ([task workflow](docs/workflow/tasks.md)): a direct
-instruction, a Claude project thread or a named `ARC-TYPE-NNN` work item. The local `toolkit/` archive is intentionally
-ignored. No task starts merely because a plan or research note exists.
+instruction, a Claude project thread or a named work item. The backlog lives in
+[GitHub Issues](https://github.com/Simarglok/arcanum-steamwoven/issues) ([backlog rule](docs/workflow/tasks.md#backlog-in-github-issues));
+a task code is `ARC-<TYPE>-<issue number>` ([task naming](docs/workflow/task-naming.md)). The local `toolkit/` archive is
+intentionally ignored. No task starts merely because a plan, a research note or an unlaunched issue exists.
