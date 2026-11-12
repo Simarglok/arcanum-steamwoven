@@ -80,6 +80,12 @@ public partial class TerrainViewerApp
     {
         // A replaced session (a load) has none of the queued critters: the queue and the results belong to one session.
         if (!ReferenceEquals(_createdInventorySession, session)) { _createdInventorySession = session; _createdInventoryPending.Clear(); _createdInventoryBeforeLeader.Clear(); _createdInventoryDone.Clear(); }
+        // ARC-WORLD-1157 (E2-a): a monster generator's copies are creations too (the copy's finish runs the restock body, RK16): their inventories are generated like a script-made critter's.
+        foreach (var generated in session.TakeGeneratedCritters())
+        {
+            _createdInventoryPending.Add(generated);
+            if (session.QueryCreatedObject(generated) is { } made) GD.Print($"ARC-WORLD-1157 generator-made entity={generated} map={made.Map.RuntimeMap} cell={made.Cell.X},{made.Cell.Y} slot={session.QueryGeneratorCopy(generated)?.ToString() ?? "-"}");
+        }
         if (_createdInventoryPending.Count == 0 || RestockHostNow() is not { } restock || _inventoryHost is not { } inventory || _createdPrototypeRead is not { } read) return;
         // The resolver answers the restock host for a critter created since the last sync.
         var map = new SessionMapId(CurrentAreaMap);

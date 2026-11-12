@@ -159,6 +159,8 @@ public partial class TerrainViewerApp
             Removed = AreaRemovedObjects,
             LineOfFire = () => AiLineOfFire(host()),
             DropMap = AreaDropMapNow,
+            // ARC-WORLD-1157 (SZ6): a generator's off-screen option reads the game window and the generator's drawn rectangle.
+            Screen = () => new RestockScreen(this),
             HeroWorn = () => AreaCombatHost.HeroWorn(session, _areaKitDurability),
             HeroCombatMode = CombatModeContext,
             // ARC-DEV-287 (MIG13 tail T6): the hero is pushed by the knockback through its grid actor.

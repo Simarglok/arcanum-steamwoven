@@ -180,7 +180,7 @@ public sealed class SavedGoalRunTests
     {
         using var owner = Create();
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, NoGoals + NoSpells + NoNewspaper + NoFlights);
+        StringAssert.Contains(text, NoGoals + NoSpells + NoNewspaper + NoGenerators + NoFlights);
         using var restored = Restore(Decode(text));
         Assert.AreEqual(0, restored.QueryGoals().InUseCount);
         Assert.AreEqual(1, restored.QueryGoals().NextRunId);
@@ -197,7 +197,7 @@ public sealed class SavedGoalRunTests
         var upgraded = GameSessionSnapshotCodec.TryDecode(older);
         Assert.AreEqual(SnapshotDecodeFailure.None, upgraded.Failure, upgraded.Path);
         Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(upgraded.Snapshot!));
-        var twice = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.WithoutCritterEffects(current).Replace(SnapshotUpgradeTests.NoCreated, "}").Replace(NoHeroKeys, "").Replace(NoTownMapCells, "").Replace("\"schemaVersion\":90,\"world\"", "\"schemaVersion\":71,\"world\""));
+        var twice = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.WithoutCritterEffects(current).Replace(SnapshotUpgradeTests.NoCreated, "}").Replace(NoHeroKeys, "").Replace(NoTownMapCells, "").Replace("\"schemaVersion\":91,\"world\"", "\"schemaVersion\":71,\"world\""));
         Assert.AreEqual(SnapshotDecodeFailure.UnknownField, twice.Failure);
         Assert.AreEqual("$.goals", twice.Path);
     }

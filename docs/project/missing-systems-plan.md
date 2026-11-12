@@ -107,7 +107,7 @@ decision of 2026-11-07); item decay and blood pools; scenery respawn.
 | Slice | Content | Size | Needs |
 | --- | --- | --- | --- |
 | E2-r | **Read** the spawner (0x4BA790), encounter creatures and the world-map encounter roll; body removal timers. Ledger rows | M | Mac read. **Done** (ARC-RES-1103, issue #1103: ledger rows [PO1–PO12](../research/ledger/npc-ai.md#generators-encounter-creatures-and-body-decay-arc-res-1103), registry rows of the generator band at F1) |
-| E2-a | Spawner for map generators on top of created critters; the host's `Spawn` stops answering null | M–L | E1-c, E2-r |
+| E2-a | **Built (ARC-WORLD-1157, issue #1157, schema 91; [ledger GS1–GS8](../research/ledger/npc-ai.md#generator-spawner-built-arc-world-1157)).** Spawner for map generators on top of created critters; the host's `Spawn` answers the rate's delay and makes the copies. Left: the generator's instance fields in the copy, script action 110 and condition 46 (E5-b) | M–L | E1-c, E2-r |
 | E2-b | Critter body decay and removal, repopulation of emptied areas | M | E1-c, E2-r |
 | E2-c | Random encounters on the world journey: roll, encounter map, creatures, the "encounter creature destroyed" scheduler branches | L | E2-a, E2-r |
 
