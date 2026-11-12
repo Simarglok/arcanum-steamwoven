@@ -256,7 +256,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         _area.Render(view);
         ApplyLook();
         _header.Text = $"Inventory | PC items {view.Pc.Count} | gold {view.Gold} | {AmmoText(view.Ammo)}" + (view.Carry is { } carry ? " | " + CarryText(carry) : string.Empty)
-            + (view.Holder is null ? string.Empty : view.Steal ? " | picking a pocket" : " | looting a dead NPC");
+            + (view.Holder is null ? string.Empty : view.Contents ? " | contents of a container (See Contents)" : view.Steal ? " | picking a pocket" : " | looting a dead NPC");
         _doll.Text = view.Doll.Count == 0 ? "(no hero: nothing can be worn)"
             : string.Join("\n", view.Doll.Select(slot => $"{AreaInventoryHost.SlotName(slot.Slot)}: {slot.Name ?? "-"}"));
         foreach (var slot in view.Doll.Where(slot => slot.Entity is not null))
@@ -340,17 +340,18 @@ public partial class AreaInventoryPanel : CanvasLayer
             _use.AddChild(repair); _repairButtons.Add(repair);
         }
         var looting = view.Holder is not null;
-        _lootHeader.Visible = looting; _loot.Visible = looting; _takeAll.Visible = looting && !view.Steal;
+        _lootHeader.Visible = looting; _loot.Visible = looting; _takeAll.Visible = looting && !view.Steal && !view.Contents;
         if (looting)
         {
-            _lootHeader.Text = view.Steal ? $"{view.HolderTitle} (picking its pocket): {view.Loot.Count} items"
+            _lootHeader.Text = view.Contents ? $"{view.HolderTitle} (contents): {(view.Loot.Count == 0 ? "empty" : $"{view.Loot.Count} items")}"
+                : view.Steal ? $"{view.HolderTitle} (picking its pocket): {view.Loot.Count} items"
                 : $"{view.HolderTitle} (dead): {(view.Loot.Count == 0 ? "nothing left" : $"{view.Loot.Count} items")}";
             foreach (var line in view.Loot)
             {
                 var entity = line.Entity;
                 var button = new Button
                 {
-                    Name = $"Take{_buttons.Count + 1}", Text = (view.Steal ? "Steal: " : "Take: ") + line.Text, Alignment = HorizontalAlignment.Left,
+                    Name = $"Take{_buttons.Count + 1}", Text = (view.Contents ? "Contents: " : view.Steal ? "Steal: " : "Take: ") + line.Text, Alignment = HorizontalAlignment.Left,
                     AutowrapMode = TextServer.AutowrapMode.WordSmart, FocusMode = Control.FocusModeEnum.All,
                 };
                 // Rebuild after the emitting button's signal returns: Render frees the buttons.
@@ -373,7 +374,8 @@ public partial class AreaInventoryPanel : CanvasLayer
             _takeAll.Disabled = view.Loot.Count == 0;
         }
         _message.Text = message ?? string.Empty;
-        _hint.Text = (view.Steal ? "Steal or Plant is one pick-pocket attempt (4 action points in a turn-based round); a caught thief's window closes | "
+        _hint.Text = (view.Contents ? "See Contents: the items are only shown, nothing in this window can be picked, moved or taken (ledger XR16) | "
+                : view.Steal ? "Steal or Plant is one pick-pocket attempt (4 action points in a turn-based round); a caught thief's window closes | "
                 : looting ? "Click an item to take it (controller: D-pad, confirm) | " : string.Empty)
             + (_useButtons.Count > 0 ? "Use (or a right click) uses an item on the hero; the Use icon uses a held item (Shift: on the hero) | " : string.Empty)
             + (view.Pc.Any(line => line.Written) ? "Read opens a written item (a schematic document registers) | " : string.Empty)
@@ -386,6 +388,9 @@ public partial class AreaInventoryPanel : CanvasLayer
             + " | I, Escape or cancel closes | PROJECT diagnostic window: no throw from the map; original UI parity NOT_VERIFIED";
         // ARC-UI-029: a re-render while the quantity window is up keeps the rest of the window inert.
         if (_bar is not null) SetOthersDisabled(true);
+        // ARC-RES-1327 (XR16): the See Contents window moves nothing: every action button is inert, only the close stays.
+        if (view.Contents)
+            foreach (var button in _useButtons.Concat(_pickButtons).Concat(_repairButtons).Concat(_buttons).Concat(_takeOffButtons).Concat(_wearButtons).Concat(_dropButtons)) button.Disabled = true;
         ShowMessageLine();
         // ARC-UI-051: in the original look only the switch takes focus, so a pad or the keyboard can reach the diagnostic buttons.
         var enabled = Focusable();

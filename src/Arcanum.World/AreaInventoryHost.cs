@@ -60,6 +60,10 @@ public sealed record AreaInventoryView(IReadOnlyList<AreaInventoryLine> Pc, stri
     /// items can be planted, and nothing is taken at once.</summary>
     public bool Steal { get; init; }
 
+    /// <summary>ARC-RES-1327 (ledger XR3, XR16): the window is the container window See Contents opens (mode 4): read-only, nothing in it is
+    /// picked, moved or taken, and it has no Take all button and no drop or use box.</summary>
+    public bool Contents { get; init; }
+
     /// <summary>ARC-WORLD-027: the PC's gold (the hero's coins; 0 without a hero).</summary>
     public int Gold { get; init; }
     /// <summary>ARC-UI-015: the hero's nine wear slots in slot order (empty without a hero).</summary>
