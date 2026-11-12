@@ -334,12 +334,12 @@ public sealed class DialogTrainerTests
         CollectionAssert.AreEqual(new[] { "TR:800:9:1" }, rig.Skills.Commands);
     }
 
-    private static GeneratedDialogFiles Files()
+    internal static GeneratedDialogFiles Files()
     {
         // Every file holds the first entry of every range and class block the talk reads; the text is the number and the file, and the
         // quote's NPC line holds the price's %d.
         var numbers = new SortedSet<int> { 1, 100, 500, 600, 800 };
-        for (var group = 1000; group <= 6000; group += 1000) numbers.Add(group);
+        for (var group = 1000; group <= 7000; group += 1000) numbers.Add(group);
         numbers.Add(1000);
         return GeneratedDialogFiles.Create(Enumerable.Range(0, GeneratedDialogFiles.Count).Select(index =>
         {

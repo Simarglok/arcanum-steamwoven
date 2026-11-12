@@ -201,9 +201,10 @@ public sealed partial class GameSessionOwner
             catch { PutBack(); throw; }
             var result = move.Value;
             moved = result.Disposition == GameSessionDisposition.Changed && result.Item is not null;
-            // A move the insertion refuses or a script declines is a failure that is never noticed (PP3); any other refusal is one the
+            // A move the insertion refuses or a script declines is a failure that is never noticed (PP3); so is one the item's remove check
+            // refuses (the no-drop flag, ARC-WORLD-1283: 0x461CA0 returns 0 with message 111 for the PC); any other refusal is one the
             // session cannot answer as the original does, so the attempt is refused with nothing rolled.
-            if (result.Disposition == GameSessionDisposition.Rejected && result.Failure != GameSessionFailure.InsertRefused)
+            if (result.Disposition == GameSessionDisposition.Rejected && result.Failure is not (GameSessionFailure.InsertRefused or GameSessionFailure.ItemNotDroppable))
             {
                 PutBack();
                 return RejectPickPocket(result.Failure) with { Move = result };
