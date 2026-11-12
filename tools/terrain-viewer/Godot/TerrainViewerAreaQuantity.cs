@@ -137,8 +137,11 @@ public partial class TerrainViewerApp
         else if (!HeroLocationKnown()) message = "not dropped: the hero's tile is not known here";
         else
         {
+            var dropSound = DropSoundFacts(move.Item);
             result = move.Item == SessionHeroGrid.GoldEntity ? session.DropHeroGold(session.Version, count, move.Kind) : session.DropHeroAmmo(session.Version, move.Item, count, move.Kind);
             _lastGroundDrop = result;
+            // ARC-RENDER-1126: the coins or the ammunition that left the hero play their drop sound.
+            if (result.Value.Disposition == GameSessionDisposition.Changed) PlayDroppedItemSound(dropSound);
             message = result.Value.Disposition switch
             {
                 GameSessionDisposition.Changed => $"dropped {count} of {move.Name} on the ground",

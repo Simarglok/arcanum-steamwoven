@@ -178,6 +178,13 @@ history held about 500 runs of such copies of one template).
   (it fixes the killed-NPC leaks, but a loaded session is not a fresh one: `inv-arrange` counts revisions and sees one more). A process
   stops at its first failing stage, so a leak fixed here can show the next one that was hidden behind it (`placement-census` after a
   `pickpocket`/`loot-worn` kill: the AI host does not hold the dead NPC the census expects).
+- **A stage waits for a state, not for a time (ARC-DEV-1193).** `bar` failed by chance (`feedback settles to Hover with combat
+  still on`) because it waited a fixed 0.15 s after a quick click and then read the button: the panel keeps Down for 80 ms
+  counted from the first frame actually drawn, and on a loaded machine that draw comes late (the failing run showed 24 ms since
+  the draw after the 150 ms wait; reproduced by keeping every CPU core busy). The stage now polls frames until the expected
+  frame shows, up to 2 s, and prints a line when that took 200 ms or more; a Down that never ends still fails. A new stage that
+  expects feedback after an input waits for that state the same way; to reproduce a load-dependent failure, run the stage in a loop
+  with every core busy.
 - **Every requested stage runs (ARC-DEV-063).** `PASS` means each requested stage ran: a map smoke passes only when
   its log holds the `PASS` line of every stage in its list (`STAGE_PASS` in `tools/local_dev/smoke.py`, checked against
   the viewer's sources by the tests), the whole map battery (`full`, `map` without `--stages`) that of `map` and
@@ -245,8 +252,13 @@ history held about 500 runs of such copies of one template).
   stages after it never ran, and a stage can fail only because of what the stages before it left behind (the 2026-11-11 daily run:
   `ai-cast` and `npc-door` failed in their groups and passed alone). With `--retry`, a failed stage process is followed by one
   process per unfinished stage (steps `STEP-retry-STAGE`; the failing stage included); the summary says `passes alone, so it fails
-  only after the other stages of STEP` or `fails alone too`. The failed step stays failed (the exit code and the daily gate do not
-  change); the retries only add what ran, so no stage goes unchecked behind a failure and an order-dependent stage is named.
+  only after the other stages of STEP` or `fails alone too`. The failed step stays failed
+  unless every unfinished stage passed alone: then it is **order-dependent** (owner decision 2026-11-12), the summary shows it as
+  `ORDER` with an `order-dependent:` line naming the step and its stages, the run and `./arcanum daily` pass (the daily report adds
+  `smoke order-dependent ...` for a fix thread, and no package is blocked), and the final line says `(N order-dependent, each stage
+  passes alone)`. A stage that fails alone too, a group that timed out (exit 124) and a failure with nothing unfinished still fail the run as before; the
+  `map-smoke` line of BUILD.txt then ends with `order-dependent (STEP)`. No stage goes
+  unchecked behind a failure and an order-dependent stage is named.
   **`--auto`** reads the diff: the merge base with `--base` (default `origin/main`; fetch first) to the working tree, untracked
   files included, and picks the zones by the table `TRIGGERS` (all matching rows of a path, as a union; a "no smoke" row such as `tests/` or
   `experiments/` beats the generic project-file rows `*.csproj`, `*.sln`, `*.props`, `*.tscn` and the lock files): ordinary game and

@@ -261,6 +261,12 @@ public static class SoundCueRules
     /// knock-back are silent.</summary>
     public static bool FootstepFrame(int frame) => frame is 3 or 8;
 
+    /// <summary>The critter flags (field 0xDA) that make a PC or NPC monstrous (0x45F730): undead, animal, monster, mechanical. A monstrous critter's footsteps are silent (SN26).</summary>
+    public const uint MonstrousCritterFlags = 0x2000800C;
+
+    /// <summary>Whether the critter flags make a critter monstrous (0x45F730, for a PC or NPC).</summary>
+    public static bool IsMonstrous(uint critterFlags) => (critterFlags & MonstrousCritterFlags) != 0;
+
     private static SoundCue? MaterialHit(SoundItem? weapon, SoundHitTarget target)
     {
         if (target.Material is < 0 or >= MaterialCount) return null;
