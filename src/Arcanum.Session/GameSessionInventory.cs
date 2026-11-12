@@ -55,8 +55,14 @@ public sealed record SessionItemFacts(SessionItemKind Kind, int Weight, int Comp
     /// <summary>ARC-WORLD-062: the item flag 0x20000 (field 0x57) that keeps a dropped item from decaying.</summary>
     public bool NoDecay { get; init; }
 
-    /// <summary>ARC-WORLD-1158: the item flag 0x20 (field 0x57) "not droppable": the remove check (0x466DA0) refuses the item's drop, so a dead body's inventory walk destroys it instead (0x463860).</summary>
+    /// <summary>ARC-WORLD-1158: the item flag 0x20 (field 0x57) "not droppable": the remove check (0x466DA0) refuses the item's drop (the grid, wear and throw paths). ARC-WORLD-1299: a dead body's inventory walk (0x463860) ignores it and lays the item down like any other.</summary>
     public bool NoDrop { get; init; }
+
+    /// <summary>ARC-WORLD-1299: the item flag 0x10 (field 0x57) "no display": a dead body's inventory walk destroys such an item (0x463860). A seed that does not say reads as clear.</summary>
+    public bool NoDisplay { get; init; }
+
+    /// <summary>ARC-WORLD-1299: the spell flag 0x4000 (field 0x14) "summoned": a dead body's inventory walk destroys such an item (0x463860). A seed that does not say reads as clear.</summary>
+    public bool Summoned { get; init; }
 
     /// <summary>ARC-WORLD-085: the magic weight adjustment (field 0x5A), which the holder's power scales into the item's weight.</summary>
     public int MagicWeight { get; init; }
