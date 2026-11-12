@@ -332,6 +332,13 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S33 { get; } = new("S33", S32.Conditions,
         S32.Actions.Concat([ScrCatalogue.Action.TransformObject, ScrCatalogue.Action.MakeFollow, ScrCatalogue.Action.Attack]), S32.ValueKinds, S32.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The fade set (ARC-SCRIPT-1241, <c>docs/research/bink-movies.md</c> MV5): <see cref="S33"/> plus fade (103), which hands one <see cref="ScrFade"/> (seconds, sound,
+    /// movie, flag) to the host in action order; the script goes on whatever the host does with it. The host jumps the game clock by the seconds, plays the movie or
+    /// the sound and brings the screen back. Six installed scripts carry a movie in it (1093, 1105, 1109, 2862, 2863, 3061).
+    /// </summary>
+    public static ScrAdmissionSet S34 { get; } = new("S34", S33.Conditions, S33.Actions.Append(ScrCatalogue.Action.Fade), S33.ValueKinds, S33.FocusKinds, counterIndexWraps: true);
+
     /// <summary>The conditions of <see cref="S31"/> a host answers through <see cref="IScrSpellQueries"/>.</summary>
     public static IReadOnlySet<int> SpellQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.HasBodySpell, ScrCatalogue.Condition.InfluencedBySpell, ScrCatalogue.Condition.KnowsSpell,
         ScrCatalogue.Condition.MasteredSpellCollege };

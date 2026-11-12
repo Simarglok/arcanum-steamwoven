@@ -32,14 +32,15 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     /// <see cref="ScrAdmissionSet.S12"/> (ARC-SCRIPT-018) are left out: a call from a dialog-point run would need the runner's dialog
     /// gates (E6) for its callee, assign object could change the dialog's NPC, which the conversation host takes from the click,
     /// and get object type needs object queries this host does not answer. Plus the quest, area, rumor and reputation actions of
-    /// <see cref="ScrAdmissionSet.S13"/> (ARC-SCRIPT-019).
+    /// <see cref="ScrAdmissionSet.S13"/> (ARC-SCRIPT-019). ARC-SCRIPT-1241: plus fade (103) of <see cref="ScrAdmissionSet.S34"/>, which jumps the game clock and hands its movie to the viewer
+    /// (<see cref="TakeFades"/>; Kerghan's dialog script 1105 plays movies 2, 3 and 6).
     /// </summary>
     public static ScrAdmissionSet Admission { get; } = new("S3-area-sound-calls-scheme-schematic-reading-story", ScrAdmissionSet.S3.Conditions,
         ScrAdmissionSet.S3.Actions
             .Concat([ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation, ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme,
                 ScrCatalogue.Action.CallScriptIn, ScrCatalogue.Action.RemoveScriptCall, ScrCatalogue.Action.SetAutoLevelScheme,
-                ScrCatalogue.Action.StartSchematicUi, ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque]),
+                ScrCatalogue.Action.StartSchematicUi, ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque, ScrCatalogue.Action.Fade]),
         ScrAdmissionSet.S3.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds), ScrAdmissionSet.S3.FocusKinds);
 
     /// <summary>ARC-SKILLS-009: <see cref="Admission"/> plus get skill (47) of <see cref="ScrAdmissionSet.S11"/>, the set a run uses while
@@ -145,6 +146,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     private readonly List<AreaSchematicScriptOpen> _schematics = [];
     private readonly List<ScrReadingRequest> _readings = [];
     private readonly List<AreaScriptFloat> _floats = [];
+    private readonly List<AreaScriptFade> _fades = [];
 
     /// <summary>ARC-DEV-324: queues a line for the viewer to float over <paramref name="speaker"/> as a script's float line does (the generic greeting, which is a
     /// floating line and no window).</summary>
@@ -184,6 +186,15 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         var readings = _readings.ToArray();
         _readings.Clear();
         return readings;
+    }
+
+    /// <summary>ARC-SCRIPT-1241: the fades (103) of the runs applied since the last call that ask for a movie, in order, for the viewer to play (their clock jumps are done; a fade with no
+    /// movie and a sound is in <see cref="TakeSounds"/>).</summary>
+    public IReadOnlyList<AreaScriptFade> TakeFades()
+    {
+        var fades = _fades.ToArray();
+        _fades.Clear();
+        return fades;
     }
 
     /// <summary>ARC-SCRIPT-040: the speaker the scripts name, or null for the PC and anything else (the viewer knows where it
@@ -415,6 +426,11 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         // ARC-UI-049: a reading action shows its document to the PC only (0x4EE290); it changes no session state either.
         foreach (var request in effects.Readings)
             if (IsPc(request.Viewer)) _readings.Add(request);
+        // ARC-SCRIPT-1241 (MV5): each fade's clock jump, then its movie for the viewer, or (no movie) its sound as an effect sound; the later steps stop when the clock refuses.
+        var asked = new List<AreaScriptFade>();
+        if (!AreaScriptFades.Apply(_session, effects, asked)) return false;
+        foreach (var fade in asked)
+            if (fade.Movie != 0) _fades.Add(fade); else _sounds.Add(new(ScrSoundKind.Effect, fade.Sound));
         if (effects.Writeback is not { } writeback) return true;
         if (writeback.Source != ScrSource.Object || writeback.Point != ScrPoint.Dialog || writeback.Attachee is not { } attachee
             || Speaker(attachee) is not { } speaker || LoadedSlot(speaker) is not { } loaded) return false;

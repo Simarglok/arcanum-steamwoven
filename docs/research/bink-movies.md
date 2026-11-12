@@ -105,8 +105,8 @@ object, sector or dialog was **not** resolved here, see section 7).
 - The credits and ending *slides* are not movies: the scripts 997 (end slides) and 999 (credits) contain no fade
   with a movie ([FR-MEDIA-002](../requirements/ui-media-lifecycle.md#fr-media-002), slice E7-b).
 - Steamwoven today: the change-of-place plan carries the movie steps and the viewer skips them with the line
-  "NOT READY: no Bink playback" ([ARC-DEV-204](../architecture/change-of-place.md)); the scripts' action 103 is not in
-  any admission set (the run stops there); the menu's intro button is hidden with a reason; no start-up movie plays.
+  "NOT READY: no Bink playback" ([ARC-DEV-204](../architecture/change-of-place.md)); the scripts' action 103 was not in
+  any admission set (section 7 now admits it); the menu's intro button is hidden with a reason; no start-up movie plays.
 
 ## 3. Registry rows of this reading
 
@@ -191,13 +191,34 @@ implementation plays movies 1 and 7 from View Intro and from a new game's start,
 `MoviePlayback`), the movie table in `Arcanum.World.AreaMovieTable` and the movie screen in the viewer; see [FR-MEDIA-001](../requirements/coverage/ui-media-lifecycle.md) and the
 [movie decoder](../workflow/toolchain.md#movie-decoder-arc-render-1170) section. The first thing the study asked for was done on the owner's Mac (ffmpeg 9.0.2): `ffprobe` and a full decode of all ten
 files give the header numbers of section 1 (the eight numbered files are opened by the opt-in real-data test; movie 50000.bik decodes to exactly its 171 frames; movie 4's two audio tracks decode
-to equal lengths and differ), so "FFmpeg plays these files" is now a run, not a header match. **Open:** script action 103 (section 2) in the script engine, a task of its own.
+to equal lengths and differ), so "FFmpeg plays these files" is now a run, not a header match. Script action 103 followed in ARC-SCRIPT-1241 (section 7).
 
-## 7. Open items and limits
+## 7. Script action 103 in the engine (ARC-SCRIPT-1241, 2026-11-12)
 
-- **Attachment of the six movie scripts** (to which NPC, item or sector they are attached, and so which map reaches
-  them) was not resolved; E7-a resolves it with the attachment walk of the
-  [script census](scr-census.md) before it admits action 103.
+Action 103 is admitted (`ScrAdmissionSet.S34`, S33 plus fade) and the interpreter hands one `ScrFade(seconds, sound, movie, flag)` per action to the host. The dialog host and the use host
+(use, tile, sector and dying scripts) apply it with `AreaScriptFades`: the game clock jumps by seconds × 1000 ms (32-bit, only above 0; TL26), then a non-zero movie number goes to the viewer with
+the sound operand as its audio track (above 0; else the default track), and with no movie a sound above 0 plays as an effect sound (dialog host). The viewer starts the movies one at a time
+through `PlayMovies` (`SyncScriptFades`). The screen's fade out and in is not drawn and the flag operand is carried, not used (the exe's fade-in event after the flag's seconds was not read further).
+The action is skipped in a network host game; the single-player host is never one.
+
+**The attachment walk (D, probe `--script-attachments` and a scan of every script for calls to the six).** Where the six scripts run and what blocks each (first refusal of S34 and of the host sets):
+
+| Script | Movies (movie, track, seconds, flag) | Attached to | Blocked by |
+| --- | --- | --- | --- |
+| 1093 | 4, track 1, 0 s, flag 0 | not attached: called by 1092 (Kanhua's dialog on the Caladon-Panarrii temple map, catalogue 5058) through call script (7), and 1093 calls 1092 back at line 11 | admitted whole by S34; the dialog host leaves call script (7) out, and 1092 itself needs attack (36) |
+| 1105 | 2, 3 (5 s each, flag 2) and 6 (10,800 s = 3 game hours, flag 2) | dialog point (9) of Kerghan, prototype 27387 and its map object on the Void, Kerghan's castle map (catalogue 5072); 107 lines | change script (99); the dialog host also refuses its loop for (18) |
+| 1109 | 4, default track, 0 s, flag 0 | not attached: called by 1108 (Nasrudin's dialog on the main map) through call script (7) | admitted whole by S34; the dialog host leaves call script (7) out |
+| 2862 | 3 and 5, 0 s, flag 0 | use point (1) of a type-14 object on the Vendigroth underground map (catalogue 5032) | end-game slides (132), play script eye candy (120) |
+| 2863 | 2 and 5 | dying point (12) of Kerghan, prototypes 27387 and 27389 | end-game slides (132), play script eye candy (120) |
+| 3061 | 2 and 5 | dying point (12) of Kerghan, prototype 27388 | end-game slides (132) |
+
+So no installed script plays its movie end to end in the viewer yet; the engine, the clock jump and the viewer's player are in place and tested on synthetic scripts and the smoke stage `movies`. The follow-ups
+that would make them play are end-game slides (132, with the ending of FR-MEDIA-002, E7-b), change script (99, E5-a), play script eye candy (120) in the use and dying hosts, and call script (7) in the dialog host
+(its callee's dialog gates, E6). An opt-in real-data test (`ScriptFadeRealDataTests`) pins the movie lines and the first refusals above.
+
+## 8. Open items and limits
+
+- **Attachment of the six movie scripts:** resolved in section 7 (ARC-SCRIPT-1241).
 - **The show condition of start-up movie 8** and the placement of the frame on the surface were not read.
 - **Decoding:** done by ARC-RENDER-1170 (section 6a); the study itself ran none.
 - The movie contents (what each shows, which script is which ending) were not looked at; the labels above come from

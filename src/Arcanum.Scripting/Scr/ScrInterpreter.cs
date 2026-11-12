@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S33"/>.
+/// <see cref="ScrAdmissionSet.S34"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -48,6 +48,8 @@ internal sealed class ScrInterpreter
         public readonly List<int> TownMaps = new();
         // ARC-MAGIC-041: the use ammunition units requests (TI8).
         public readonly List<ScrAmmoUse> AmmoUses = new();
+        // ARC-SCRIPT-1241: the fade actions (103), in action order.
+        public readonly List<ScrFade> Fades = new();
         // ARC-SCRIPT-042: the slots call-ex runs changed, in order, and the latest of each, which a later call-ex run of the same slot reads.
         public readonly List<ScrWriteback> SlotWrites = new();
         public readonly Dictionary<(ScrObjectRef, int), ScrSlot> Slots = new();
@@ -187,7 +189,8 @@ internal sealed class ScrInterpreter
             _shared.ObjectStates.Count == 0 ? null : Array.AsReadOnly(_shared.ObjectStates.ToArray()),
             _shared.Floats.Count == 0 ? null : Array.AsReadOnly(_shared.Floats.ToArray()), stores,
             _shared.TownMaps.Count == 0 ? null : Array.AsReadOnly(_shared.TownMaps.ToArray()),
-            _shared.AmmoUses.Count == 0 ? null : Array.AsReadOnly(_shared.AmmoUses.ToArray()));
+            _shared.AmmoUses.Count == 0 ? null : Array.AsReadOnly(_shared.AmmoUses.ToArray()),
+            _shared.Fades.Count == 0 ? null : Array.AsReadOnly(_shared.Fades.ToArray()));
     }
 
     private bool Condition(ScrClause c, int line) => c.Type switch
@@ -359,6 +362,14 @@ internal sealed class ScrInterpreter
                 // script has one).
                 var count = Get(a, 0);
                 if (OptionalObject(a, 1) is { } holder && count > 0) _shared.AmmoUses.Add(new(holder, count, PowerCellAmmoType));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.Fade:
+            {
+                // MV5 (ARC-SCRIPT-1241; 0x447220 case 0x67): four numbers, seconds, sound, movie and the flag that picks how the screen comes back.
+                // The original reads all four (an operand of any value kind) and then fades, advances the clock and plays; here the host does that
+                // from the operands as read. The run goes on, as the original's does after the movie.
+                _shared.Fades.Add(new(Get(a, 0), Get(a, 1), Get(a, 2), Get(a, 3)));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.UnfogTownMap:
