@@ -99,6 +99,20 @@ public sealed class TransferParityStateTests
     }
 
     [TestMethod]
+    public void A_wait_order_of_a_map_change_takes_the_tempus_fugit_flag_off_the_waiter_ARC_MAGIC_1190()
+    {
+        const int tempusFugit = 0x4000000;
+        using var owner = Party(Virgil, Sogg);
+        foreach (var who in new[] { SessionSpellCaster.Hero, Virgil, Sogg })
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteObjectFlag(owner.Version, who, SessionObjectFlagField.Spell, tempusFugit, true).Disposition);
+        var timer = new PartyWaitFacts(3, PersuasionTraining.None, 8, false);
+        var list = owner.QueryTransferMoveList(new() { NoFatigue = entity => entity == Sogg, WaitFacts = _ => timer });
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyChanges(owner.Version, Inside, [], list).Disposition);
+        Assert.AreEqual(0, owner.QueryObjectFlags(Sogg).Spell(0) & tempusFugit, "the waiter left its leader (0x4AA7A0 -> 0x45DFC0): its flag is cleared");
+        Assert.AreEqual(tempusFugit, owner.QueryObjectFlags(Virgil).Spell(0) & tempusFugit, "the traveller keeps it");
+    }
+
+    [TestMethod]
     public void An_unconscious_follower_is_ordered_to_wait_where_it_stands_and_does_not_travel()
     {
         using var owner = Party(Virgil, Sogg);
