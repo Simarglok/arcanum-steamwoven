@@ -1149,9 +1149,12 @@ public sealed partial class GameSessionOwner : IDisposable
     /// Negative dialog <c>IN -name</c> (the dialog <c>IN</c> action, ARC-RES-021): the first item in the NPC's current list
     /// whose name class is <paramref name="name"/> goes to the end of the PC's list, under the item rules of
     /// <see cref="LootItem"/>. No such item and no substitute inventory changes nothing, as in the source; an NPC with a
-    /// substitute inventory then is <see cref="GameSessionFailure.SubstituteInventoryUnsupported"/>. The source drops an item
-    /// the PC cannot take at the PC's location (into a junk pile when items lie there); that fallback is not modelled, so a
-    /// refusal of <paramref name="insertCheck"/> is <see cref="GameSessionFailure.InsertRefused"/> with no effect.
+    /// substitute inventory then is <see cref="GameSessionFailure.SubstituteInventoryUnsupported"/>. ARC-WORLD-1131: the source drops an item
+    /// the PC cannot take at the PC's location (0x415BA0: 0x466E00 then 0x466E50, into a junk pile when items lie there, then the decay timer), and so does
+    /// the session: a refusal of <paramref name="insertCheck"/>, or of the hero's room test (<see cref="SessionInsertVerdict.NoRoom"/>) or Technophobia, is
+    /// <see cref="GameSessionDisposition.Changed"/> with the refusing verdict in <see cref="InventoryMutationResult.Verdict"/>; the item leaves the NPC's list, joins the
+    /// placed items on the actor's tile (one revision, no insert-item script, no pickup trigger), and a tile the ground cannot hold is <see cref="GameSessionFailure.DropTileUnfit"/>
+    /// with no effect.
     /// ARC-DEV-087 (MIG6e): the NPC may stand on another attached map's seed (a companion carried here); the item then keeps that map as its origin
     /// (<see cref="NpcHolderSeed"/>), and an item or holder of that map with a script to run is refused (the script host answers for the shown map).
     /// ARC-MAGIC-022: with <paramref name="triggers"/> the pickup executor (0x4CBAA0) runs after the move.
@@ -1170,9 +1173,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (_inventory.Current(seed, row, entry => DroppedCell(map, seed, entry)).FirstOrDefault(entry => entry.Facts.Kind.Name == name) is not { } found)
             return row.HasSubstituteInventory ? RejectItem(GameSessionFailure.SubstituteInventoryUnsupported)
                 : new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, new(_identity, _revision));
-        // ARC-DEV-333 (B48): the dialog's IN skips the room test: the original drops an item the PC cannot take at the PC's feet (not modelled), so refusing here would
-        // fail the whole conversation; as before, an item with no place waits outside the grid (recorded limit).
-        return Take(seed, found, npc, insertCheck, scripts, map, needsRoom: false);
+        // ARC-WORLD-1131: the dialog's IN runs the room test like every take; an item the insert check refuses (room, weight, Technophobia) is laid on the PC's tile (0x415BA0).
+        return Take(seed, found, npc, insertCheck, scripts, map, toFeet: true);
     }
 
     /// <summary>
@@ -2006,7 +2008,7 @@ public sealed partial class GameSessionOwner : IDisposable
     [Arcanum.Simulation.OriginalFunction(0x466640, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     [Arcanum.Simulation.OriginalFunction(0x466A00, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     private InventoryMutationResult Take(InventoryDomain.Seed seed, SessionInventoryItem item, string? holder, SessionInsertCheck insertCheck,
-        ISessionItemScriptHost? scripts, SessionMapId? seedMap = null, bool unwield = false, bool needsRoom = true)
+        ISessionItemScriptHost? scripts, SessionMapId? seedMap = null, bool unwield = false, bool toFeet = false)
     {
         // ARC-DEV-087 (MIG6e): the map whose seed lists the item; it is the actor's unless the holder is another map's NPC (a carried companion).
         var origin = seedMap ?? _actor.Map;
@@ -2081,12 +2083,23 @@ public sealed partial class GameSessionOwner : IDisposable
         // ARC-WORLD-123: a key going onto the ring the hero holds skips the weight and the room (slot 0, 0x466510); the background still applies.
         // ARC-DEV-333 (B48): and the room: a take needs a free grid place for the item (code 2, WE4) unless the ammunition joins a held stack; a refused item stays where it was.
         var verdict = folds ? HeroInsertVerdict(SessionInsertVerdict.Accepted, facts.Complexity)
-            : HeroInsertVerdict(insertCheck(item), facts.Complexity, Incoming(item.Entity, facts), room: !needsRoom || HeroTakeRoom(item.Entity, into is not null));
+            : HeroInsertVerdict(insertCheck(item), facts.Complexity, Incoming(item.Entity, facts), room: HeroTakeRoom(item.Entity, into is not null));
         ThrowIfDisposed();
         if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { Scripts = runs?.Runs ?? [] };
         // Any answer but Accepted refuses, an undefined one included. Session policy: a refused transfer changes nothing, so a
         // gate script's writes are dropped with it (the original keeps them; census: no installed item or PC carries such a script).
-        if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict) with { Scripts = runs?.Runs ?? [] };
+        var refused = verdict != SessionInsertVerdict.Accepted;
+        if (refused && !toFeet) return RejectItem(GameSessionFailure.InsertRefused, verdict) with { Scripts = runs?.Runs ?? [] };
+        if (refused)
+        {
+            // ARC-WORLD-1131 (0x415BA0 case 9, n < 0): the transfer did not end with the PC, so the item is taken out of the NPC's list (0x466E00, its remove-item script)
+            // and laid on the PC's tile (0x466E50: a junk pile or a new one, then the decay timer). The insertion never happened: no ring, no stack merge, no insert-item script.
+            if (!DropCellFits(_actor.Cell)) return RejectItem(GameSessionFailure.DropTileUnfit, verdict) with { Scripts = runs?.Runs ?? [] };
+            (folds, into) = (false, null);
+            if (_inventory.Held >= _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded, verdict) with { Scripts = runs?.Runs ?? [] };
+            if (ammo is not null && !_inventory.Ammo.ContainsKey(item.Entity) && _inventory.Ammo.Count >= _limits.MaxAmmoRecords)
+                return RejectItem(GameSessionFailure.BudgetExceeded, verdict) with { Scripts = runs?.Runs ?? [] };
+        }
 
         ScrRunResult? insertRun = null;
         if (runs is not null)
@@ -2097,7 +2110,7 @@ public sealed partial class GameSessionOwner : IDisposable
             // ARC-DEV-202: a worn item's wield-off script (25) runs before its remove-item script (28), with the body as triggerer (PI2).
             if (wieldOff) runs.Run(SessionScriptPoint.WieldOff, item.Entity, holder!, null);
             if (runs.Failure == GameSessionFailure.None && parented && facts.HasScript(SessionScriptPoint.RemoveItem)) runs.Run(SessionScriptPoint.RemoveItem, item.Entity, holder!, null);
-            if (runs.Failure == GameSessionFailure.None && facts.HasScript(SessionScriptPoint.InsertItem))
+            if (runs.Failure == GameSessionFailure.None && !refused && facts.HasScript(SessionScriptPoint.InsertItem))
                 insertRun = runs.Run(SessionScriptPoint.InsertItem, item.Entity, SessionEventKinds.PlayerEntity, null);
             ThrowIfDisposed();
             if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { InsertScript = insertRun, Scripts = runs.Runs };
@@ -2131,7 +2144,8 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         if (into is null && ammo is { } added) _inventory.Ammo[item.Entity] = added;
         runs?.Commit();
-        Revise();
+        if (refused) PlaceHeroItem(item.Entity, _actor.Cell);
+        else Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, verdict, new(_identity, _revision))
             { InsertScript = insertRun, Scripts = runs?.Runs ?? [], Messages = runs?.Messages ?? [] };
     }
@@ -2140,7 +2154,9 @@ public sealed partial class GameSessionOwner : IDisposable
     /// list (not for an ammunition item merged into a stack: it is deleted, and the original returns before the pickup).</summary>
     private InventoryMutationResult PickedUp(InventoryMutationResult result, ISessionItemTriggers? triggers)
     {
-        if (triggers is null || result.Disposition != GameSessionDisposition.Changed || result.Item is not { } item || _durability.Destroyed.Contains(item))
+        // ARC-WORLD-1131: an item the insert check refused was laid on the ground, not inserted: no pickup.
+        if (triggers is null || result.Disposition != GameSessionDisposition.Changed || result.Item is not { } item || _durability.Destroyed.Contains(item) ||
+            result.Verdict is not null and not SessionInsertVerdict.Accepted)
             return result;
         return result with { ItemSpells = [triggers.Fire(Arcanum.Simulation.Magic.ItemSpellTriggerRules.Pickup, item, SessionSpellCaster.Hero)], Version = Version };
     }

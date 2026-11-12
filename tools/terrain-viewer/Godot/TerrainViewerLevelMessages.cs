@@ -46,6 +46,11 @@ public partial class TerrainViewerApp
         return texts;
     }
 
+    /// <summary>ARC-SCRIPT-1118: the entries of a script run's printed lines. The interface texts are waited for (up to five seconds) only when a line is
+    /// a type 1 poison notice, the one type that reads one (<c>intgame.mes</c> 13); the project's label stands in when they do not arrive.</summary>
+    private IReadOnlyList<AreaMessageEntry> ScriptLineEntries(IReadOnlyList<AreaPrintedLine> printed) =>
+        AreaScriptMessages.Entries(printed, printed.Any(line => line.Type == 1) ? LevelTexts(TimeSpan.FromSeconds(5)) ?? AreaLevelTexts.None : null);
+
     /// <summary>Queues one message-window entry per level the award wrote and posts them (waiting up to a second for the texts; while
     /// they still load the entries wait and the next frame posts them).</summary>
     private void ShowLevelUps(SessionExperienceAward? award)
