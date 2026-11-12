@@ -742,8 +742,23 @@ The world-map start check (0x565140) ends the hero's maintained spells ([ledger 
 
 Known differences (documented, not bugs):
 
-- Resting (the rest option click, 0x57B710) also ends the sleeper's maintained spells in the original, but the rest window (ARC-WORLD-1160) does not end them yet (issue #1161), so only travel is wired.
+- Resting (the rest option click, 0x57B710) also ends the sleeper's maintained spells in the original; that is wired since ARC-MAGIC-1161 (section below).
 
+
+## ARC-MAGIC-1161 — Spells end when the hero starts to rest (MT11, 2026-11-12)
+
+Choosing a length in the sleep or wait window ends the hero's maintained spells (the rest option click 0x57B710 → 0x457450, [ledger UE6](../research/ledger/spell-runs.md#spell-run-endings-of-a-critter-arc-dev-301), [sleep window](../world/sleep-window-runtime.md)). Compare in both games with a hero who can cast a maintained spell (a protection or light spell, one that shows on the top strip).
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast a maintained spell on the hero, open the sleep window (key `S`) and look at the top strip. | The spell is still there: opening the window ends nothing. | open |
+| 2 | Choose any length (for example one hour). | The spell's slot leaves the top strip as the length is chosen (not at the end of the rest). | open |
+| 3 | Open the window with the spell running and close it again with `S` without choosing a length. | The spell goes on. | open |
+| 4 | Cast a maintained spell on a follower (you are the caster), then rest. | The spell ends too: the run's caster is the hero. A spell a follower cast itself goes on. | open |
+
+Known differences (documented, not bugs):
+
+- The window is the diagnostic panel, not the original's art; the hero's own technology runs and item-trigger runs with no maintenance period stay, as in the original.
 
 ## ARC-MAGIC-057 — The hero's spot trap roll (E6-a, spot half, 2026-11-12)
 

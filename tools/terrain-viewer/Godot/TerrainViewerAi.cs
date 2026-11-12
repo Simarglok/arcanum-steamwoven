@@ -460,7 +460,10 @@ public partial class TerrainViewerApp
     /// <summary>ARC-DEV-312: hands the shown session the dying-script question (<see cref="GameSessionOwner.DyingScript"/>); called wherever the viewer takes a session (created, carried over a map change, loaded).</summary>
     private void AttachAreaDyingScript()
     {
-        if (_areaSession is { } session) session.DyingScript = DyingGoesOn;
+        if (_areaSession is not { } session) return;
+        session.DyingScript = DyingGoesOn;
+        // ARC-COMBAT-1141 (GT210): the script kill and the poison tick ask the NPC's taking-damage script too (no attacker); a victim that is not on the shown map has none here.
+        session.TakingDamageScript = request => request.Map != CurrentAreaMap || TakingDamageGoesOn(request.Victim, request.Attacker);
     }
 
     /// <summary>

@@ -125,7 +125,9 @@ public partial class TerrainViewerApp
             // ARC-DEV-255: damage to a door, window, container, scenery or trap goes through the object-attack host's baselines.
             row => ObjectTargets()?.Target(owner, row.Key, AreaTrapped),
             // ARC-COMBAT-025: the hero's starting kit, so the items it wears take an acid's damage.
-            () => _areaKitDurability);
+            () => _areaKitDurability,
+            // ARC-MAGIC-1232 (DW2): a spell's weapon drop (Disarm) places the item as a critical drop does.
+            AreaDropMapNow);
         var runtimeMap = area.Snapshot.RuntimeMap;
         _spellCaster = new SessionSpellCaster(owner, n => n >= 0 && n < records.Length ? records[n] : null, map, AreaEvents,
             id => HeroItemSpells(id, true) ?? _combatHost!.NpcItemSpells(owner, id));
