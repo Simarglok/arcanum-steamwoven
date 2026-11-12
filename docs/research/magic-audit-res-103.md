@@ -113,7 +113,7 @@ Left: the NPC flag KOS_OVERRIDE (SO2); a follower of a caster that is no hero; t
 
 Done in two halves (owner decision D3b): Spatial Distortion (3) by ARC-MAGIC-036 ([contract](../world/spell-cast-host.md#movement-component-arc-magic-036), ledger [MV1-MV3](ledger/spell-runs.md#movement-component-and-the-immediate-path-relocation-arc-magic-036): the immediate path relocation 0x455350, at most 8 tiles, tile scripts run before the placement) and
 Teleportation (4), the random tile and the area portal (record 218) by ARC-MAGIC-038 ([contract](../world/spell-cast-host.md#teleport-types-and-the-anti-teleport-test-arc-magic-038), ledger [TP1-TP5](ledger/spell-runs.md#teleport-types-and-the-anti-teleport-test-arc-magic-038): `Rules\AntiTeleport.mes` refuses a disabled map or a region's radius; in single player Teleportation opens the world map in a teleport mode and a pick within 320 lands the hero, paid then).
-Left: the multiplayer host branch of type 2; an NPC or other non-critter as the portal or relocation target; message 640 as the game's text; the interrupt of goals other than walks; the viewer's `Tgt_Tile_Pathable_To` test answers "not blocked", so a cast at an unreachable tile is paid and moves nothing (as the original's component does).
+Left: the fallback of an unreadable map module to the area portal (ledger TP8); the multiplayer host branch of type 2; an NPC or other non-critter as the portal or relocation target; message 640 as the game's text; the interrupt of goals other than walks; the viewer's `Tgt_Tile_Pathable_To` test answers "not blocked", so a cast at an unreachable tile is paid and moves nothing (as the original's component does).
 
 ## Locks and holds (MA-6, ARC-MAGIC-037)
 

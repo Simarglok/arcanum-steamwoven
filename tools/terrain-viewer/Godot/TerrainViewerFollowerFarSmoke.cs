@@ -30,7 +30,7 @@ public partial class TerrainViewerApp
         if (_areaSession is null) { GD.Print(tag.Replace(" ", " native-smoke ") + " NONE (no area session)"); return; }
         if (_smokeCompanion is null) await RunAreaMapCompanionSmokeAsync();
         if (_smokeCompanion is not { } entity || _areaCompanions?.Companions.Any(c => c.Entity == entity) != true)
-        { GD.Print("ARC-DEV-170 native-smoke follower-far NONE (no companion joined on this map)"); return; }
+        { GD.Print(tag.Replace(" ", " native-smoke ") + " NONE (no companion joined on this map)"); return; }
         for (var i = 0; i < 1200 && _worldMapData is null; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); AdoptWorldMapData(); }
         Require(_worldMapData is { Status: AreaWorldMapDataStatus.Ready, Data: not null }, "world map data " + _worldMapData?.Status + " " + _worldMapData?.Detail);
         var data = _worldMapData!.Data!;
@@ -101,6 +101,7 @@ public partial class TerrainViewerApp
                     FlushSpellLog(null);
                 }
                 Require(log == $"{SpellCastEventKind.TeleportMap}:4" && WorldMapOpen && _teleportMode is { Spell: 4 }, $"the cast opened the world map in its teleport mode: [{log}] {_worldMapStatus}");
+                Require(_worldMapPanel is { ArtMode: true }, "the original-look window is up for the Travel check");
                 Require(!(_worldMapPanel?.TravelShownForSelfTest ?? true), "the teleport mode's window has no Travel button (WM62, TP6)");
                 if (capture is { Length: > 0 }) await Shot("after");
                 var fatigue = caster.CurrentFatigue(hero);
