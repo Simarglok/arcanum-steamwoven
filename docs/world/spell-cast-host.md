@@ -516,7 +516,7 @@ The world map's start check (0x565140, [ledger UE6](../research/ledger/spell-run
 attempted cast of priority 4 or 5 refuses) and, when none refused, calls `EndMaintainedSpells` for the hero: every run the hero is the source of ends (technology runs and item-trigger runs without a maintenance
 period stay). A refusal at the start leaves the PC where it is and the map showing the route (`AreaWorldMapRefusal.ActionsRefused`); a refusal between segments drops every remaining waypoint and lands the PC
 (`WorldJourney.Step`'s `continueJourney`). Smoke stage `worldmap` (it takes the hero since this slice) starts a maintained spell of the hero and checks it is gone after Enter. The rest option click (0x57B710)
-calls the same ending without the interrupt; the rest window is E3-a's, so only travel is wired.
+calls the same ending without the interrupt: since ARC-MAGIC-1161 the sleep and wait window's press (`TerrainViewerApp.SleepPressed`, [sleep window](sleep-window-runtime.md)) calls `EndMaintainedSpells` for the hero after the leader-sleeping script event, so both callers of UE6 are wired. Smoke stage `sleep` starts a maintained spell of the hero, opens the window (the spell runs), presses a length and checks the run and its slot are gone.
 
 ## Differences from the original
 
