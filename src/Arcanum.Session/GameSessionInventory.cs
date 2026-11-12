@@ -184,6 +184,19 @@ public sealed record SessionPlacedItem(string Entity, SessionItemKind Kind, Sess
     CellCoord Cell, int Complexity = 0);
 
 /// <summary>
+/// ARC-SCRIPT-1279 (ledger WO14, WO16): what the session wrote on one item's own fields through the script actions set written start (94, field 0xCB of a written item) and toggle item inventory
+/// display (127, bit 0x10 of the item flags, field 0x57): the written start line the item now has (null: the data's), and whether the display bit is flipped against what the data stores (a toggle
+/// is an exclusive-or, so the session keeps the parity, not the bit).
+/// </summary>
+public readonly record struct SessionItemFieldWrites(int? WrittenStart, bool DisplayFlipped)
+{
+    public bool IsEmpty => WrittenStart is null && !DisplayFlipped;
+}
+
+/// <summary>One item's written fields in a save (the <c>inventory</c> section's <c>itemFields</c>, schema 94).</summary>
+public sealed record SessionItemFieldRecord(string Entity, SessionItemFieldWrites Writes);
+
+/// <summary>
 /// Saved inventory state: the PC's gold (ARC-WORLD-015: the hero's starting coins; 0 without a hero), the hero's starting
 /// kit in kit number order, the items the PC took from the world in the order they entered its list, (ARC-TECHNOLOGY-004) the
 /// items the hero made from schematics or took from an NPC that held made items, in the order they entered its list,
@@ -247,6 +260,12 @@ public sealed class SessionInventoryState
     /// <summary>ARC-WORLD-103: the worn items of the NPCs the session dressed (a regeneration's best-items wield, ledger RK15), by NPC entity
     /// in ordinal order; for such an NPC they replace the inventory locations of its map data.</summary>
     public IReadOnlyList<SessionNpcWear> NpcWorn { get; }
+
+    /// <summary>ARC-SCRIPT-1279 (schema 94): the item fields scripts wrote (written start, inventory display bit), by entity in ordinal order; no row is empty.</summary>
+    public IReadOnlyList<SessionItemFieldRecord> ItemFields { get; init; } = [];
+
+    /// <summary>ARC-SCRIPT-1279: how many items carry written fields at once (two full lists, many times over).</summary>
+    public const int MaxItemFields = 16384;
 
     /// <summary>ARC-WORLD-090: how many identified items a session keeps (two full lists, a merchant's and its container's, many times over).</summary>
     public const int MaxIdentified = 16384;
@@ -472,6 +491,9 @@ internal sealed class InventoryDomain
     /// <summary>ARC-WORLD-090: the items the session marked identified (item flag 0x1).</summary>
     internal SortedSet<string> Identified { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>ARC-SCRIPT-1279: the item fields scripts wrote (<see cref="SessionItemFieldWrites"/>), by entity; a row never holds an empty change.</summary>
+    internal SortedDictionary<string, SessionItemFieldWrites> ItemFields { get; } = new(StringComparer.Ordinal);
+
     /// <summary>ARC-WORLD-094: the highest made number a regeneration discarded (<see cref="SessionInventoryState.LastDiscardedMade"/>).</summary>
     internal int LastDiscardedMade { get; set; }
 
@@ -609,7 +631,8 @@ internal sealed class InventoryDomain
         CaptureScriptSlots(), Weights.Select(pair => new SessionItemWeightRecord(pair.Key, pair.Value)).ToArray(), Identified.ToArray(),
         LastDiscardedMade, Grid.Values.OrderBy(item => item.Slot).ToArray(),
         Generated.OrderBy(row => row.Map.RuntimeMap).ThenBy(row => row.Entity, StringComparer.Ordinal).ToArray(),
-        NpcWorn.Select(pair => new SessionNpcWear(pair.Key, Array.AsReadOnly(pair.Value.Select(worn => new SessionNpcWornItem(worn.Key, worn.Value)).ToArray()))).ToArray());
+        NpcWorn.Select(pair => new SessionNpcWear(pair.Key, Array.AsReadOnly(pair.Value.Select(worn => new SessionNpcWornItem(worn.Key, worn.Value)).ToArray()))).ToArray())
+        { ItemFields = ItemFields.Select(pair => new SessionItemFieldRecord(pair.Key, pair.Value)).ToArray() };
 
     /// <summary>ARC-UI-019: the hero's items in its inventory grid, by entity (a worn item and one without room have none).</summary>
     internal Dictionary<string, SessionHeroGridItem> Grid { get; } = new(StringComparer.Ordinal);
