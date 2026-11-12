@@ -98,6 +98,7 @@ instances (the objects of the maps) were not scanned; a GrandFix install replace
 - **A (recommended, owner D3).** Apply the repair in the monster loader (the stand with weapon 1, the run replaced by the walk with the gait stride of the walk), take palette 0 when the requested palette is absent (PR5: what the
   original draws, and what the decoder's present-slot policy already does for whole-map NPC art), and raise the monster read's caps after measuring the fire elemental. S–M.
 - **B.** Fall back to palette 0 only in the loader and leave the repair out. Leaves the air elemental refused. Not recommended.
+- **What palette 0 means (owner question).** Gameplay: nothing, the palette only picks sprite colours (the spell's effects, stats and equipment do not read it). Visual: the same as the original, which draws palette 0 for the fire, water and air bodies; the monsters of `rules/monster.txt` built on species 26 to 28 with palettes 1 to 3 (Spectral Wraith, Storm Fury and similar) fall back to it too. Body of Earth keeps palette 1, which its ARTs hold.
 - **C.** Keep refusing (hero keeps its own body, logged). The spells then look broken for three of five bodies. Not recommended.
 - **Owner's question (answered).** D3: the original's draw was read first (PR5) and is copied: palette 0.
 
@@ -169,7 +170,7 @@ original's executable and archives, and need nothing from GrandFix.
 | # | Decision | Recommended | Owner answer (2026-11-12) |
 | --- | --- | --- | --- |
 | D1 | Weapon part follows combat mode for the monster body (L2) | Yes, as the original (PR2) | **Yes, as the original** |
-| D2 | Load the throw for the five species that have it (L1) | No (nothing can draw it, see L1) | Asked what the throw is; explained in L1, decision open |
+| D2 | Load the throw for the five species that have it (L1) | No (nothing can draw it, see L1) | **Do not load it** (after the explanation in L1) |
 | D3 | Palette of the elemental bodies when the requested palette is absent (L3) | Read the original's draw first, then copy it | **Read first, then copy**: read (PR5), the original draws palette 0 |
 | D4 | Redraw of a map NPC with a perma-polymorph in data (L4) | Census first, build only if a consumer exists | **Census of the map instances first, build only if one exists** |
 | D5 | GrandFix file-level comparison | Not needed for these limits | **Allowed**: done (section 5), no change found |
