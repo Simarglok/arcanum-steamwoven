@@ -166,6 +166,25 @@ public sealed class NpcRouteRulesTests
     }
 
     [TestMethod]
+    public void The_steps_say_which_standpoint_a_near_npc_is_at_and_which_sleepers_go_through_the_re_seat()
+    {
+        // ARC-WORLD-1162 (SWB17, SWB21): the near branch names the current standpoint (the tile the bed is looked for on); a sleeper is re-seated by the waypoint step and by the far standpoint step, not by the near one.
+        var near = NpcRouteRules.ForcedStandpoint(Facts(Noon, 0, at: new(51, 61)));
+        Assert.AreEqual(new RouteLocation(50, 60), near.Standpoint);
+        Assert.AreEqual(new RouteLocation(70, 80), NpcRouteRules.ForcedStandpoint(Facts(Midnight, 0, at: new(70, 80))).Standpoint);
+        Assert.IsNull(NpcRouteRules.ForcedStandpoint(Facts(Noon, 0, at: new(20, 20))).Standpoint, "a far NPC is moved, not at it");
+        Assert.IsFalse(near.Reseat);
+        Assert.IsFalse(NpcRouteRules.ForcedStandpoint(Facts(sleeping: true, at: new(50, 60))).Reseat, "a sleeper near its standpoint is not woken");
+        Assert.IsNull(NpcRouteRules.ForcedStandpoint(Facts(sleeping: true, at: new(50, 60))).Standpoint);
+        Assert.IsTrue(NpcRouteRules.ForcedStandpoint(Facts(sleeping: true)).Reseat, "a sleeper far from the current standpoint goes through the re-seat (the hour switch)");
+        Assert.IsTrue(NpcRouteRules.ForcedWaypoints(Facts(sleeping: true)).Reseat);
+        Assert.IsTrue(NpcRouteRules.UnforcedWaypoints(Facts(sleeping: true)).Reseat);
+        Assert.IsTrue(NpcRouteRules.UnforcedStandpoint(Facts(sleeping: true), () => true).Reseat);
+        Assert.IsFalse(NpcRouteRules.UnforcedStandpoint(Facts(sleeping: true, at: new(50, 60)), () => true).Reseat);
+        Assert.AreEqual(new RouteLocation(50, 60), NpcRouteRules.UnforcedStandpoint(Facts(Noon, 0, at: new(51, 61)), () => true).Standpoint);
+    }
+
+    [TestMethod]
     public void The_standpoint_step_skips_a_leader_and_a_hidden_npc_and_takes_over_a_sleeper()
     {
         Assert.AreEqual(NpcRouteOutcome.NoStep, NpcRouteRules.ForcedStandpoint(Facts(leader: true)).Outcome);
