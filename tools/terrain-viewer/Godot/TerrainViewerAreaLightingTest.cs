@@ -78,3 +78,52 @@ public static partial class TerrainViewerSelfTest
         GD.Print($"ARC-RENDER-010 self-test PASS ambient channels/pair change/unlit samples={samples}" + (native ? "" : "; pixels NOT_VERIFIED headless"));
     }
 }
+
+public static partial class TerrainViewerSelfTest
+{
+    // ARC-RENDER-1355: the hover ring of a body is not carried over a scene swap. Its frames live in the repository of the window it was set
+    // in; a window move publishes the next scene (clear, then publish) while the pointer still rests on the body, and the canvas uploads every
+    // visible frame from the new repository, so a ring left set made that publication fail with KeyNotFoundException.
+    private static async Task AssertAreaRingSwapAsync(Node host)
+    {
+        using var cache = new TerrainTextureCache();
+        var synthetic = SyntheticActorFixture.Create(human: true, area: true);
+        cache.UploadActor(synthetic.Result.ActorTextures);
+        var viewport = new SubViewport { Size = new(480, 400), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        var canvas = new TerrainCanvas(); viewport.AddChild(canvas); host.AddChild(viewport);
+        async Task Settle()
+        {
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        var failures = new List<string>();
+        canvas.AreaFailure = error => failures.Add(error.GetType().Name);
+        try
+        {
+            var body = AreaCompositionFixture.Body(0);
+            var visual = AreaCompositionFixture.Visual(body, 160, 160, 40, 80);
+            var ringBody = AreaCompositionFixture.Body(1);
+            var ringVisual = AreaCompositionFixture.Visual(ringBody, 32, 32, 16, 16);
+            var ring = new AreaHoverRingFrame(ringVisual, AreaFrameKey.From(ringVisual), new(32, 32, AreaCompositionFixture.Pixels(32, 32, true)), 0, 0);
+            var plan = AreaScenePlan.Create([], [body], [visual]);
+            var placement = AreaCompositionFixture.Placement(AreaCompositionFixture.Cases[0]);
+            var actor = synthetic.Result.ActorPlan!.Select(placement);
+            viewport.CanvasTransform = new Transform2D(0, Vector2.One, 0, new Vector2(100, 130));
+            canvas.SetStaticVisibilityForReadback(true); canvas.SetActorVisibilityForReadback(true);
+            // The first window's repository holds the ring's frame (the viewer adds it there).
+            var first = new Dictionary<AreaFrameKey, DecodedAreaFrame> {
+                [AreaFrameKey.From(visual)] = new(160, 160, AreaCompositionFixture.Pixels(160, 160, true)), [ring.Key] = ring.Pixels };
+            canvas.PublishArea(plan, first, actor, placement, cache); await Settle();
+            canvas.AreaRing = new(body.Key, ring, ring, (255, 255, 255)); await Settle();
+            if (canvas.AreaRingDrawnForSelfTest is not { Under: not null, Over: not null }) throw new InvalidOperationException("AREA_RING_SWAP_NOT_DRAWN");
+            // The next window: the same body, its own repository without the ring's frame.
+            var next = new Dictionary<AreaFrameKey, DecodedAreaFrame> { [AreaFrameKey.From(visual)] = new(160, 160, AreaCompositionFixture.Pixels(160, 160, true)) };
+            canvas.ClearScene();
+            canvas.PublishArea(plan, next, actor, placement, cache); await Settle();
+            if (failures.Count > 0) throw new InvalidOperationException("AREA_RING_SWAP_FAILED " + string.Join(",", failures));
+            if (canvas.AreaRing is not null) throw new InvalidOperationException("AREA_RING_SWAP_KEPT_RING");
+        }
+        finally { canvas.ClearScene(); viewport.QueueFree(); }
+        GD.Print("ARC-RENDER-1355 self-test PASS hover ring does not outlive the scene swap");
+    }
+}

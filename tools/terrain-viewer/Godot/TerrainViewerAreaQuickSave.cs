@@ -116,7 +116,11 @@ public partial class TerrainViewerApp
     private int CurrentAreaMap => _areaTransitions?.CurrentMap ?? _readyArea!.Snapshot.RuntimeMap;
 
     /// <summary>F7: the auto slot, described "Auto-Save" as the original's F7 save, with a preview of the screen as it is.</summary>
-    private void QuickSave() => SaveGame(GameSaveLibrary.AutoName, GameSaveLibrary.AutoDescription, CaptureSaveThumbnail(), "F7 ", AreaSaveMessageRoute.QuickKey);
+    private void QuickSave()
+    {
+        RecordEvidence(EvidenceCommand.QuickSave); // ARC-GPAD-1376
+        SaveGame(GameSaveLibrary.AutoName, GameSaveLibrary.AutoDescription, CaptureSaveThumbnail(), "F7 ", AreaSaveMessageRoute.QuickKey);
+    }
 
     /// <summary>Saves the session into the save list: <paramref name="name"/> is the save to write, or null for a new numbered save.
     /// The HUD and the log say what happened; the written save's name, or null when nothing was saved.</summary>
@@ -189,8 +193,12 @@ public partial class TerrainViewerApp
 
     /// <summary>F8: the newest save of the list (the original's latest-save helper), the auto slot only when it is the newest.</summary>
     // ARC-DEV-168: with no save listed the original's quick load returns before the load function, so F8 posts its two notes and no result.
-    private void QuickLoad() => LoadGame(SaveLibrary.Latest() is { } latest ? SaveLibrary.Slot(latest.Name) : QuickSaveSlot, "F8 ",
-        messages: SaveLibrary.Latest() is null ? AreaLoadMessageRoute.NotesOnly : AreaLoadMessageRoute.QuickKey);
+    private void QuickLoad()
+    {
+        RecordEvidence(EvidenceCommand.QuickLoad); // ARC-GPAD-1376
+        LoadGame(SaveLibrary.Latest() is { } latest ? SaveLibrary.Slot(latest.Name) : QuickSaveSlot, "F8 ",
+            messages: SaveLibrary.Latest() is null ? AreaLoadMessageRoute.NotesOnly : AreaLoadMessageRoute.QuickKey);
+    }
 
     /// <summary>Loads one save of the list. True when the loaded session was adopted or its map load started; on false the running
     /// session and scene are unchanged and the HUD says why.</summary>

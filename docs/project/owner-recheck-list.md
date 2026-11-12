@@ -1042,3 +1042,11 @@ Answered by the executable ([QC7](../research/ledger/spell-runs.md)): no deviati
 | # | Step | Expected (from the original executable and data) | Status |
 | --- | --- | --- | --- |
 | 1 | Cast Harm at a wolf several times in a row quickly so that casts queue, and let the first kill it. Read the fatigue bar and the log (Ctrl+B). | The hero (without the mastered college of Harm and without charged worn items) pays 5 fatigue for the killing cast and 5 for each cast still queued on the wolf; the queued casts are then gone. Steamwoven: the same. | open |
+
+## ARC-RENDER-1355 — window move with the pointer on an NPC (PR #1446, 2026-11-12)
+
+A repair of the game's own view, not original behaviour. Compare in the current build from `main`, new game on the main map.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Land at Misty Hills by the world map, rest the mouse pointer on the gypsy trader and walk west along the road (cells about 90172 to 90158 on y = 84179) across the window boundary. | The view goes on with the interface; no bare terrain-only screen, no `stream publication failed` line in `godot.log`. | open |
