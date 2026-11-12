@@ -36,11 +36,12 @@ code, even a small fix found on the way, which goes back to the coordinator
 thread. Inside one task, do not clear or restart the context while it is still
 needed for correctness (part of the same decision).
 
-Sessions compact their context at 500k tokens: the committed
-`.claude/settings.json` sets `autoCompactWindow` to 500000 for every checkout
-and worktree (ARC-DEV-058, owner decision 2026-10-29). Keep the handoff record
-current in the thread's checklist, together with the branch, changed files and
-checks run, so a compaction keeps it.
+Sessions compact their context at 500k tokens: `autoCompactWindow` is 500000
+(ARC-DEV-058, owner decision 2026-10-29). `.claude/settings.json` holds it as a
+local, untracked and ignored file of each checkout (ARC-DEV-1342, owner
+decision 2026-11-12); a new checkout or worktree creates it by hand. Keep the
+handoff record current in the thread's checklist, together with the branch,
+changed files and checks run, so a compaction keeps it.
 
 Why: a session carried across codes re-reads every earlier task's history on
 each step. The token audit of 2026-10-21 found lane sessions living 3.5 to 5
