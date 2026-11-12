@@ -924,3 +924,20 @@ Known differences (documented, not bugs):
 - Change art number (a door, scenery or creature changing its picture from a script) is not built: scripts that use it are still refused, so those quest steps do nothing in Steamwoven.
 - A script in a dialog (a talk) that uses one of these actions is still refused; only use, tile, sector, heartbeat and dying scripts run them.
 - A reaction or standpoint change acts for NPCs of the map on screen only.
+
+## ARC-WORLD-1162 — beds: sleeper flags, occupied bed frame and nudge (slice 3, 2026-11-12)
+
+The rules are in [Sleep window runtime](../world/sleep-window-runtime.md#npc-beds-arc-world-1162-slice-2-ledger-swb16swb21). The occupied frame of a bed is the next frame of its art (ledger SWB15, 0x43F7F0); the build
+checks it by number only (the plan holds the frames, the draw command carries the next one), so what the frame looks like has not been seen. Maps with NPC beds: the installed data has 51 NPC rows whose standpoint
+is a bed tile (Roseborough inn2, Wheel clan, Bates mansion and others); a night hour (21:00 to 05:59) is needed.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | In a house with beds, wait in the original until about 22:00 and look at a bed an NPC went to. | The NPC is not drawn standing; the bed is drawn in its next frame (a sleeper in the bed). Empty beds keep the frame they have in the map data. | open |
+| 2 | Compare the bed's picture occupied in both games (position, size, mirror). | The occupied frame sits where the empty one did (the art's own offsets move it). A bed that looks shifted or cut means the frame offset handling (0x43F7F0) differs. | open |
+| 3 | Look at where the NPC lay down: it stood on the bed's own tile, or next to it. | An NPC on the bed's tile is moved one tile in direction 4 (x + 1, y + 1) when it lies down; it reappears there when it wakes. An NPC beside the bed is not moved. | open |
+| 4 | Wake it (attack it, or wait until about 06:00 and watch; the original has no other waker of a sleeping NPC in the executable, talking to it is not one). | It is drawn standing again on the tile it was seated on; the bed goes back to its first frame. The NPC walks off on its own later. | open |
+| 5 | Lie down yourself in a bed whose script lets you (Crash Site cave) and look at the bed while the window is open. | The bed shows its next frame; the screen fades. After the rest the bed is empty again. | open |
+
+Known differences, so they are not reported as bugs: the hero gets no sleeping flag and is not hidden in the bed (the sleep window fades the screen over him); an attack aimed at the bed does not wake its occupant; a wanderer
+that lies down does not start its wander in the same step.

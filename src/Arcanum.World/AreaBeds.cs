@@ -11,8 +11,8 @@ namespace Arcanum.World;
 public static class AreaBeds
 {
     /// <summary>The art type of scenery (the art id's bits 28 to 31) and the sub-type of a bed (bits 6 to 10).</summary>
-    public const uint SceneryArtType = 4;
-    public const int BedSubType = 0x16;
+    public const uint SceneryArtType = AreaBedArt.SceneryArtType;
+    public const int BedSubType = AreaBedArt.BedSubType;
 
     /// <summary>The object type of scenery.</summary>
     private const int SceneryType = 3;
@@ -21,7 +21,10 @@ public static class AreaBeds
     private const int CurrentArtSlot = 0;
 
     /// <summary>Whether an art id is a bed's (0x428A10 tests the sub-type through 0x504300 on the target's art id; the occupied frame of a bed is the same sub-type).</summary>
-    public static bool IsBedArt(uint art) => art >> 28 == SceneryArtType && ((art >> 6) & 0x1f) == BedSubType;
+    public static bool IsBedArt(uint art) => AreaBedArt.IsBed(art);
+
+    /// <summary>The frame a bed shows while it holds a sleeper (0x43F7F0 steps the art id to its next frame, the frame after the last wrapping to 0 as the scenery loop's does, ledger AS5).</summary>
+    public static int OccupiedFrame(int frame, int frameCount) => Arcanum.Simulation.Animation.SceneryAnimationRules.NextFrame(frame, frameCount);
 
     /// <summary>Whether a map object is a bed: scenery whose effective art id is a bed art.</summary>
     public static bool IsBed(AreaObjectRecord row)
@@ -47,6 +50,9 @@ public sealed class AreaBedOccupancy
 {
     private readonly Dictionary<AreaObjectKey, string> _occupants = [];
 
+    /// <summary>Counts every change of an occupant, so a drawer redraws the beds only when one changed.</summary>
+    public long Revision { get; private set; }
+
     /// <summary>The beds that hold an occupant now.</summary>
     public int Count => _occupants.Count;
 
@@ -67,6 +73,7 @@ public sealed class AreaBedOccupancy
         ArgumentException.ThrowIfNullOrEmpty(sleeper);
         if (_occupants.ContainsKey(bed)) return false;
         _occupants[bed] = sleeper;
+        Revision++;
         return true;
     }
 
@@ -77,9 +84,10 @@ public sealed class AreaBedOccupancy
         ArgumentException.ThrowIfNullOrEmpty(sleeper);
         if (!_occupants.TryGetValue(bed, out var occupant) || occupant != sleeper) return false;
         _occupants.Remove(bed);
+        Revision++;
         return true;
     }
 
     /// <summary>Empties every bed (for a host that replaces its map or session; the viewer empties the hero's bed when his window closes, which every such change does).</summary>
-    public void Clear() => _occupants.Clear();
+    public void Clear() { if (_occupants.Count == 0) return; _occupants.Clear(); Revision++; }
 }
