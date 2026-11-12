@@ -323,11 +323,30 @@ internal static class DialogGreeting
             'n' => PcLine(context, pcDumb, 100, 199),
             'p' => PcLine(context, pcDumb, 1900, 1999),
             's' => PcLine(context, pcDumb, 200, 299),
+            't' => PcLine(context, pcDumb, 500, 599),
             'w' => PcLine(context, pcDumb, 1800, 1899),
             'y' => PcLine(context, pcDumb, 1, 99),
             _ => null,
         };
     }
+
+    /// <summary>
+    /// ARC-SCRIPT-1150: a line of the NPC's own talk inside the trainer's skill menu (ledger DTR3 to DTR8): the class group
+    /// <paramref name="group"/> (1000, 2000, 3000, 4000, 5000, 6000), as the greeting reads it, with the override line 9999 + group / 1000.
+    /// </summary>
+    public static GreetingOutcome NpcClassGroup(int group, DialogGreetingFacts facts, DialogGreetingSources sources, IDialogGreetingPort port,
+        DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes) =>
+        ClassLine(new Context(facts, sources, port, names, encoding, maxTextBytes), group);
+
+    /// <summary>ARC-SCRIPT-1150: a PC line of the range <paramref name="first"/>..<paramref name="last"/> (the trainer talk's answers).</summary>
+    public static GreetingOutcome PcRange(int first, int last, bool pcDumb, DialogGreetingFacts facts, DialogGreetingSources sources,
+        IDialogGreetingPort port, DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes) =>
+        PcLine(new Context(facts, sources, port, names, encoding, maxTextBytes), pcDumb, first, last);
+
+    /// <summary>ARC-SCRIPT-1150: a PC line of the class group (the trained notice's answer).</summary>
+    public static GreetingOutcome PcClassGroup(int group, bool pcDumb, DialogGreetingFacts facts, DialogGreetingSources sources,
+        IDialogGreetingPort port, DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes) =>
+        PcClassLine(new Context(facts, sources, port, names, encoding, maxTextBytes), pcDumb, group);
 
     /// <summary>A PC line (0x4182D0): the PC file by the NPC's gender (the dumb one for a dumb PC), the range as given.</summary>
     [OriginalFunction(0x4182D0, OriginalFunctionScope.Partial)]

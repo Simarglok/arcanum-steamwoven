@@ -171,6 +171,32 @@ F1. Every direct branch and the jump table read (0x414DE0, 31 entries) stay insi
 Not read here: 0x4C2690 (GP4), the value 0x445090 returns (`c:`), and the conditions and actions of the questions node behind
 Virgil's `K:` (`ss`, `ar`, `ia`, `ce`; ARC-SCRIPT-045).
 
+## Trainer reply (ARC-SCRIPT-1150)
+
+Source: the [conversation runtime](../../scripting/dialog-conversation-runtime.md#trainer-reply-arc-script-1150) and the installed dialogs (315
+Player replies in 58 files start with `t:`; counts only). Question: what does the original do when the Player reply `t:` is picked? Read statically
+on 2026-11-12 by one reader (the implementing session, method step 6, with the exports in `research-private`: the decompiled C of 0x416C10, 0x414810,
+0x418480, 0x418A40, 0x418B30, 0x418C40, 0x418CA0, 0x418DE0, 0x418F30, 0x417F90, 0x4C1150, 0x4C60C0, 0x4C6170 and the assembly of 0x418F30, 0x418DE0);
+the rows are F1 until the independent review reads them. Every direct branch stays inside `.text`. The talk is a state machine of the dialog record:
+the screen is a generated NPC line plus options, each option a (state, value) pair that 0x414810 runs; a state-5 pick replaces the screen without
+leaving the NPC node.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| DTR1 | option builder (0x416C10) | A Player reply whose first two characters are `t:` (case-insensitive, a prefix: the text after it is the argument) becomes an option whose text is a PC line 500..599 (the GP2 pick); the argument is stored after the phrase's terminating NUL, not shown. The option keeps state 5 and the reply's raw response as its value; the response is decoded (0x417590) later, in 0x418CA0, into the way out's state and value. The reply's own condition and action run as for any reply (a pick runs the action, the hostile check 0x413130, then 0x414810). | Original |
+| DTR2 | list reader (0x417F90) | The argument is split at commas; a part with a dash is the range `a-b` (atoi both sides, the first dash found: `-1` reads 0 to 1; an empty part reads 0), else one atoi; at most 100 numbers; a descending range adds none. | Original |
+| DTR3 | state 5 (0x414810 → 0x418CA0) | The NPC's line becomes a class line of group 3000 (0x418480: the greeting's class generator with the override 10002) and the options one per listed number in list order, state 6 with the number as value, each text the skill's name (message number below 12 from 0x4C62B0, else 0x4C69A0 of the number less 12 in `skill.mes`), then the way out: PC line 800..899 with the reply's own response (state 0, 1 or 2 and its value: the next node, the end of the dialog, a script line); the node and the reply's action are not run again. The option arrays hold five entries and the way out takes the next one: five or more numbers write past them (the data has at most four). | Original |
+| DTR4 | state 6 (0x418DE0) | For the picked number the PC's training tier (0x4C60C0, 0x4C67F0 less 12; the setters' tier is bits 6..7): a tier other than none gives the notice of line 4000 (0x418C40). Tier none: the first-tier setter is probed (0x4C6170 with tier 1; it refuses below the tier's minimum level 1, ledger SR1, SR3) and a refusal gives the notice of line 5000; an accepted probe is put back to tier 0 at once through the real setter (so the Educator update, SR11, would run twice more; not built), then the price screen follows (0x418A40 with 100, state 7). For skill 2 under the monstrous-melee flag 0x4C60C0 derives the tier from the level and stat 0x11 instead of bits 6..7 (the port's Training answers it). | Original |
+| DTR5 | price screen (0x418A40) | The price is 100 on the reaction scale (0x4C1150, BT2) of the NPC toward the PC, a price of 1 counting 2. The NPC's line is class group 1000 with its `%d` filled by the price (0x589BD0); two options: PC line 1..99 (state 4, the price as value) and PC line 100..199 with the reply's own response. The reply's response and the next state (7 with the skill) are kept for the answers. | Original |
+| DTR6 | state 4 (0x418B30) | When the PC's own gold (0x464780 of the PC alone: its stack, not the followers') is below the price the notice is line 2000 (0x418C40); else the gold moves from the PC to the NPC (0x464830 of the whole price; in a network game a message is sent first, flags 0x62AC6C bits 0 and 1), then the training state runs. | Original |
+| DTR7 | state 7 (0x418F30) | The PC's training in the number is set to the first tier (basic 0x4C6170, tech 0x4C6850 of the number less 12, both tier 1, result unchecked), then the NPC's line is class group 6000 and the only option the PC class line from 1000 (0x418390: 1000 + 50 × the NPC's social class) with the reply's own response. A training that completes runs the Educator update (SR11, not implemented). | Original |
+| DTR8 | notice (0x418C40) | An NPC class line of the given group and the single option PC line 600..699 with the reply's own response; the line groups are 1000 (price), 2000 (no gold), 3000 (menu), 4000 (already trained), 5000 (cannot be taught), 6000 (trained). | Original |
+| DTR9 | line sources (0x418480, 0x418870) | Each NPC line is first looked up in the NPC's own override dialog (record 9999 + group / 1000: 10000 for 1000 up to 10005 for 6000); when it holds none, the class file by the NPC's and the PC's gender, the dumb files for a dumb NPC, the group + 50 × the NPC's social class (not for a dumb NPC), a random entry of 50 (GD5). | Original (the greeting's reading, GP, applies unchanged) |
+
+Not read here: the price helper's reaction input beyond BT2 (0x4C0CC0, R1), the Educator update (0x4C2950, SR11), the network message branch of
+0x418B30 and of 0x4C6170 (multiplayer), the debug-prefix branch of 0x416C10 (the debug flag 0x5D1A0C). The other prefix markers of GP1 (`c`, `r`, `z`,
+and the state-dependent `d`, `q`, `u`, `x`) are later slices of ARC-SCRIPT-1150.
+
 ## Followers across maps (ARC-RES-076)
 
 Source: [followers across maps](../follower-map-transfer.md) (rows FM1–FM14 with their full text and addresses). Read on
