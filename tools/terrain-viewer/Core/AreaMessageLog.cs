@@ -49,8 +49,13 @@ public sealed class AreaMessageLog
     public IReadOnlyList<AreaMessageEntry> History =>
         Enumerable.Range(0, _count).Select(i => _ring[(_head - _count + 1 + i + Capacity) % Capacity]!).ToArray();
 
-    /// <summary>The sound the drawing of an entry plays (ML5): 3005 a level-up entry, 3004 a message; none for the others.</summary>
-    public static int? Sound(AreaMessageKind kind) => kind switch { AreaMessageKind.LevelUp => 3005, AreaMessageKind.Message => 3004, _ => null };
+    /// <summary>The sound the drawing of an entry plays (ML5): 3005 a level-up entry, 3006 the poison notice, 3003 a curse, 3002 a blessing,
+    /// 3004 a message; none for the others (ARC-SCRIPT-1118: types 1 to 3 added).</summary>
+    public static int? Sound(AreaMessageKind kind) => kind switch
+    {
+        AreaMessageKind.LevelUp => 3005, AreaMessageKind.PoisonAbsorbed => 3006, AreaMessageKind.Curse => 3003, AreaMessageKind.Blessing => 3002,
+        AreaMessageKind.Message => 3004, _ => null,
+    };
 
     /// <summary>Posts an entry at <paramref name="nowMilliseconds"/> (a real-time clock).</summary>
     public AreaMessagePost Post(AreaMessageEntry entry, long nowMilliseconds)
@@ -268,10 +273,12 @@ public static class AreaMessageLayout
     public static (int X, int Y, int Width, int Height) PaneText(int mode) =>
         mode is >= 0 and <= LastPaneMode ? ModeText[mode] : throw new ArgumentOutOfRangeException(nameof(mode));
 
-    /// <summary>The icon arts by entry type (0x5C708C); a skill hint takes 444 too (0x5C70A4, HK20).</summary>
+    /// <summary>The icon arts by entry type (0x5C708C, ML5: 0 art 438, 1 439, 2 440, 3 441, 4 442, 5 443, 6 to 13 444); a skill hint takes 444 too
+    /// (0x5C70A4, HK20).</summary>
     public static int Icon(AreaMessageKind kind) => kind switch
     {
-        AreaMessageKind.LevelUp => 438, AreaMessageKind.Message => 442, AreaMessageKind.Plain => 443, _ => 444,
+        AreaMessageKind.LevelUp => 438, AreaMessageKind.PoisonAbsorbed => 439, AreaMessageKind.Curse => 440, AreaMessageKind.Blessing => 441,
+        AreaMessageKind.Message => 442, AreaMessageKind.Plain => 443, _ => 444,
     };
 
     /// <summary>Every interface art the message window draws: the background, the entry icons, the colleges' icons (spell hints,
@@ -287,6 +294,13 @@ public static class AreaMessageLayout
         if (entry.Kind == AreaMessageKind.LevelUp)
             return new(Icon(entry.Kind), [new(Title, AreaMessageFont.Title, entry.Title, false), new(Second, AreaMessageFont.Text, entry.Line, false),
                 new(entry.Scheme ? SchemeBlock : Third, AreaMessageFont.Text, entry.Detail, false)], false);
+        // ARC-SCRIPT-1118 (PY1–PY4, 0x5529C0 cases 1 to 3): the title (the line's text) in the title font; the poison notice then its number line in the text
+        // font, red (0x64C49C), at 0x5C70D8; a curse or a blessing the body of its number at 0x5C7138, empty for the print line's number 0 and then not drawn.
+        // Neither has a wide layout.
+        if (entry.Kind == AreaMessageKind.PoisonAbsorbed)
+            return new(Icon(entry.Kind), [new(Title, AreaMessageFont.Title, entry.Title, false), new(Second, AreaMessageFont.Text, entry.Line, false, false, AreaMessageColour.Red)], false);
+        if (entry.Kind is AreaMessageKind.Curse or AreaMessageKind.Blessing)
+            return new(Icon(entry.Kind), [new(Title, AreaMessageFont.Title, entry.Title, false), .. Line(entry.Detail, Body, false, AreaMessageColour.White)], false);
         // ARC-UI-035 (HK20): 0x5529C0 case 7, a skill: the name, its description, and the number line (red, right-aligned in the title's
         // rectangle) when the entry has one. Case 8, a spell: the college's icon, the name, the willpower line with the cost line
         // right-aligned on the same rectangle, the description. Neither has a wide layout.
@@ -323,10 +337,12 @@ public static class AreaMessageLayout
                 entry.CombatPanel is { } shown ? AreaCombatPanelLayout.Arts(shown) : null);
         var cut = entry.Title.IndexOf('\n');
         var (head, rest) = cut < 0 ? (entry.Title, (string?)null) : (entry.Title[..cut], entry.Title[(cut + 1)..]);
-        if (wide)
+        // ARC-SCRIPT-1118 (PY1–PY4, case 12): the layout of the transient text, but a text that does not fit is not drawn again wide.
+        var fallback = entry.Kind != AreaMessageKind.ScriptHover;
+        if (wide && fallback)
             return new(null, rest is null ? [new(WideWhole, AreaMessageFont.Text, head, true)]
                 : [new(WideTitle, AreaMessageFont.Title, head, true), new(WideBody, AreaMessageFont.Text, rest, true)], false);
         return new(Icon(entry.Kind), rest is null ? [new(Whole, AreaMessageFont.Text, head, false)]
-            : [new(Title, AreaMessageFont.Title, head, false), new(Body, AreaMessageFont.Text, rest, false)], true);
+            : [new(Title, AreaMessageFont.Title, head, false), new(Body, AreaMessageFont.Text, rest, false)], fallback);
     }
 }

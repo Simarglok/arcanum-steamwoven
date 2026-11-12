@@ -42,6 +42,13 @@ public partial class TerrainViewerApp
     /// </summary>
     private void RunObjectBreakSteps(AreaObjectRecord row, SessionObjectHostSteps steps, bool byHero, bool ranged)
     {
+        RunObjectBreakScripts(row, steps, byHero, ranged);
+        // ARC-RENDER-1126 (OD15): the busting or destroying sound plays after the dispatch.
+        PlayObjectBreakSounds(row, steps);
+    }
+
+    private void RunObjectBreakScripts(AreaObjectRecord row, SessionObjectHostSteps steps, bool byHero, bool ranged)
+    {
         if ((steps & (SessionObjectHostSteps.TrapFires | SessionObjectHostSteps.BustScript)) == 0) return;
         if (_areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return;
         // While a trap or a script runs, the damage it deals only queues its hits (LogObjectHits stands off): the outer loop takes them, so the
@@ -71,7 +78,7 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-WORLD-110 trap walk-check {key.To.X},{key.To.Y} mark refused failure={refused.Failure}: the step goes");
         if (walk.Spotted is not { } row)
         {
-            if (walk.RollsNotReady > 0) GD.Print($"ARC-WORLD-110 trap walk-check {key.To.X},{key.To.Y} rolls-not-ready={walk.RollsNotReady} (spot trap roll: S10)");
+            if (walk.Rolls > 0) GD.Print($"ARC-MAGIC-057 trap walk-check {key.To.X},{key.To.Y} spot trap rolls={walk.Rolls}: none spotted, the step goes");
             return null;
         }
         GD.Print("ARC-WORLD-110 trap walk-check " + System.Text.Json.JsonSerializer.Serialize(new { Trap = AreaUseScriptHost.EntityId(row), Cell = new { row.WorldX, row.WorldY },

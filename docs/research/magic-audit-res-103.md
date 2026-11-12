@@ -16,8 +16,8 @@ Requirements (reference only): [FR-MAGIC-006](../requirements/combat-magic-tech.
   (`SessionSpellCasterComponents.cs`, one partial file per component group); MA-2 (ARC-MAGIC-027, with ARC-MAGIC-033) lets resistance and stat changes of effect lists reach the combat resolver and the magic save for the hero and every NPC (E1-d, ARC-DEV-348, gave every critter its effect list).
   Summon of scenery is built (E1-a ARC-DEV-347, E1-b ARC-DEV-352) and created critters exist (E1-c, ARC-DEV-359, -370, -371); **Summon of critters (E1-e) is the one big hole left.**
 - **Done slices:** MA-0 the spell census (ARC-DEV-356), MA-R the executable reads (ARC-DEV-357, ledger XR1-XR15), MA-1, MA-2, MA-3 Dispel (ARC-MAGIC-034, -039), MA-4 social and AI flags (ARC-MAGIC-035), MA-5 Movement (ARC-MAGIC-036, -038), MA-6 locks and holds (ARC-MAGIC-037),
-  MA-7 Identify (ARC-MAGIC-032), MA-8 Trait and the body spells (ARC-MAGIC-040, -046, -047, -052). The control components that belong to the technology records and items (NoOp, Terminate, branches, Use, nested Cast) are ARC-MAGIC-044, -048 and -049.
-- **Open:** E1-e creature Summon (14, 19, 24, 29, 53, 57, 68, 71-74), E1-f AI summoning, E6 trap spotting (spell 8), MA-9 Tempus Fugit (79), MA-10 the raise script hook (58, 64), the hero and companion push of Unseen Force (2), and the windows of Identify (E8) ([slices](#slices), [open spells](#open-spells)).
+  MA-7 Identify (ARC-MAGIC-032), MA-8 Trait and the body spells (ARC-MAGIC-040, -046, -047, -052), MA-9 Tempus Fugit (ARC-MAGIC-056). The control components that belong to the technology records and items (NoOp, Terminate, branches, Use, nested Cast) are ARC-MAGIC-044, -048 and -049.
+- **Open:** E1-e creature Summon (14, 19, 24, 29, 53, 57, 68, 71-74), E1-f AI summoning, E6 trap spotting (spell 8), MA-10 the raise script hook (58, 64), the hero and companion push of Unseen Force (2), and the windows of Identify (E8) ([slices](#slices), [open spells](#open-spells)).
 - **Only three spells are named by a smoke stage** (51, 56 and, by its data filter, 55); the others are covered by unit tests of their components and by the census. "Runs" is a code-path claim, not parity (parity stays with the [ledger](original-verification-ledger.md)).
 - **Decisions for the owner** were six; the owner decided all of them on 2026-11-11 (D1 a, D2 a, D3 b, D4 a, D5 a, D6 c) ([decisions](#decisions-for-the-owner)).
 
@@ -46,7 +46,7 @@ Every other college spell has a code path for every component of its record (the
 | --- | --- | --- |
 | 2 Unseen Force | Hero and companions as targets are not pushed (knockback runs of the hero); loose objects unverified | knockback lane |
 | 6, 7, 9 See Contents, Read Aura, Divine Magick | The answer is a text line; the windows (container inventory in mode 4, the NPC sheet, the item description) and picking an inventory item as a target are E8's | E8 |
-| 8 Sense Hidden | Trap spotting for the detecting-traps flag; effect 157 (skill) inert | E6-a, skills lane |
+| 8 Sense Hidden | Trap spotting for the detecting-traps flag works and the hero's spot roll exists (ARC-MAGIC-057); effect 157 (spot-trap skill): the hero's skill level reads the written effect's skill change since the skills lane, so the roll should see it, not run in the viewer | owner recheck |
 | 14, 19, 24, 29 Elemental summons; 53 Succour Beast; 57 Summon Undead; 68 Phantasmal Fiend; 71-74 Orcish Champion, Guardian Ogre, Hellgate, Familiar | Creature Summon (prototype or list pick, flags on the summoned, run ends when it dies) | E1-e |
 | 35, 50 Charm, Charm Beast | The NPC flag KOS_OVERRIDE a charm adds is not kept (the session has no NPC flag layer) | - |
 | 47 Shrink, 34 Disintegrate, 69 Invisibility, 63 Sanctuary | The flags are written; the viewer's draw of shrunk, hidden, translucent critters is not built | render |
@@ -54,7 +54,7 @@ Every other college spell has a code path for every component of its record (the
 | 58 Create Undead, 64 Resurrect | The raise script hook; the combat and life rules read the data's undead bit, not the written one | MA-10 |
 | 65 Illuminate | Whether the glow lights the scene is unverified | - |
 | 76, 77 Congeal Time, Hasten | Speed reaches the turn-based action points and the real-time attack pause, not walking (the original does not either, XR); no per-spell smoke | - |
-| 79 Tempus Fugit | Nothing reads the flag; the original gives +10 speed to its holders and -10 to every other critter while the player holds it (XR6) | MA-9 |
+| 79 Tempus Fugit | Built (MA-9, ARC-MAGIC-056): +10 speed to its holders and -10 to every other critter while any critter holds it (the original: while the player holds it, XR6); the follower flag writes of XR7 are not built | - |
 
 ## Work order
 
@@ -67,15 +67,15 @@ Order: E1-e before E1-f (one writer in the Summon and AI files); E6, MA-9 and MA
 | Slice | Content | Unlocks (spells) | Size | Needs | Lane and files | FR |
 | --- | --- | --- | --- | --- | --- | --- |
 | **E1-e** Summon of critters | Prototype or list pick, summoned flags, palette, faction (MG8), run ends when the summon dies, summoned follower; the familiar hidden with the party on the world map (XR14 (b), decided by the owner: [Decisions](#decisions-for-the-owner)) | 14, 19, 24, 29, 53, 57, 68, 71, 72, 73, 74 | L | E1-c (done), MA-4 (done) | Summon partial file | FR-MAGIC-008 |
-| **E6** Trap spotting (spot roll; the E6-a row of the missing-systems plan) | The spot roll and the detecting-traps flag (spell 8's second flag) | 8 | M | MA-1 (done) | traps | FR-ITEM-016 |
-| **MA-9** Tempus Fugit | Implement what MA-R read (XR6); the XR14 (a) fix decided by the owner ([Decisions](#decisions-for-the-owner)) | 79 | S-M | MA-R, MA-1 (done) | to be read | FR-MAGIC-007 |
+| **E6** Trap spotting (spot roll; the E6-a row of the missing-systems plan) | The spot roll and the detecting-traps flag (spell 8's second flag); **spot half done, ARC-MAGIC-057** (the disarm action stays E6-a's) | 8 | M | MA-1 (done) | traps | FR-ITEM-016 |
+| **MA-9** Tempus Fugit | Implement what MA-R read (XR6); the XR14 (a) fix decided by the owner ([Decisions](#decisions-for-the-owner)) | 79 | S-M | MA-R, MA-1 (done) | done: ARC-MAGIC-056, session and stat files | FR-MAGIC-007 |
 | **MA-10** Raise script hook | The resurrect script (point 0x12) through the SCR dispatcher | edge of 58, 64 | S | the SCR dispatcher (E5) | scripts | FR-MAGIC-007 |
 | **E1-f** AI summoning and AI parity | The AI's summon list and one pass of `ai-cast` over every AI priority of the 80 (an NPC casting a spell must act like the hero's cast) | 60 spells carry an AI priority | M | E1-e | AI host | FR-AI-002 |
 
 ### By college
 
 After the open slices every college works: Summoning and the elemental colleges' summons (Air, Earth, Fire, Water), Nature (Succour Beast) and Necromantic (black) (Summon Undead) wait on E1-e; Divination on E6 and E8's windows;
-Temporal on MA-9; Conveyance on the hero's push (Unseen Force). The other colleges (Force, Mental, Meta, Morph, Necromantic (white), Phantasm apart from 68) have no open row in the table above; the owner re-check steps are in the [owner recheck list](../project/owner-recheck-list.md).
+Temporal done by MA-9; Conveyance on the hero's push (Unseen Force). The other colleges (Force, Mental, Meta, Morph, Necromantic (white), Phantasm apart from 68) have no open row in the table above; the owner re-check steps are in the [owner recheck list](../project/owner-recheck-list.md).
 
 ## Spell census (MA-0)
 
@@ -124,7 +124,12 @@ Left: the guard alert's witnesses (0x4AEE50); Flesh to Stone's pair for a portal
 
 Done in four slices ([host contract](../world/spell-cast-host.md#trait-component-arc-magic-040), ledger [TR1-TR6](ledger/spell-runs.md#trait-component-arc-magic-040)): the session keeps the species and palette a Trait chose per critter (schema 89, `-1` restores; no reference count, as the original) (ARC-MAGIC-040); the viewer draws a hosted NPC's monster body and moves the hero's worn items (ARC-MAGIC-046);
 critter flags 2 and blit flags are the session's with MG10's switch and the Dispel undo (ARC-MAGIC-047, schema 90); the hero's own monster body is drawn (ARC-MAGIC-052). The original takes **every** worn item off, not only what the new art cannot wield; an art builder range violation (species 32 or more, palette 4 or more) exits the original and is "not ready" here.
-Left: the dropped leftover of a refused take-off; an NPC's worn items (not tracked by the session); the redraw of a map NPC whose data body is a perma-polymorph; a polymorphed hero's low attack and throw; the drowning damage of the water-walking clear (OB2); the multiplayer packet.
+Left: the dropped leftover of a refused take-off; an NPC's worn items (not tracked by the session); the redraw of a map NPC whose data body is a perma-polymorph; a polymorphed hero's low attack and throw; the drowning damage of the water-walking clear (OB2); the multiplayer packet. Options, data findings and a recommendation for each limit: [ARC-RES-145](trait-polymorph-remainder-res-145.md).
+
+## Tempus Fugit (MA-9, ARC-MAGIC-056)
+
+Done ([contract](../world/character-stats-runtime.md#tempus-fugit-speed-arc-magic-056), ledger [TF1-TF3](ledger/spell-runs.md#tempus-fugit-speed-arc-magic-056)): speed (stat 11) of the hero and of every NPC handed out by `WithNpcEffects` takes +10 for a critter that holds `OSF_TEMPUS_FUGIT` and -10 for every other critter while some critter holds it, before the crippled-leg -5 and the effects, clamped by the stat range; it reaches the turn-based action points, the real-time attack pause, the inventory line and the sheet, not walking (XR8). The one rule that differs from the original is the owner's XR14 (a) fix: the original tests only the player's flag, Steamwoven any critter's, so an NPC's cast works without the player holding it (who gains: the holders; who is slowed: everyone else, the player included).
+Left: the follower join and leave flag writes (XR7, TF3); no smoke stage casts it ([owner recheck list](../project/owner-recheck-list.md#arc-magic-056--tempus-fugit-speed-spell-79)).
 
 ## Decisions for the owner
 
@@ -137,14 +142,14 @@ Left: the dropped leftover of a refused take-off; an NPC's worn items (not track
 | D5 | Identify (spells 6, 7, 9) needs a window the original has and the viewer does not: inside the magic lane or inside E8? | (a) magic lane builds session state and a text answer, E8 the window; (b) the whole thing in E8; (c) both in the magic lane | (a) **Decided: owner chose (a), 2026-11-11.** |
 | D6 | Resist Magick (40) does nothing for the saves in the original (RE2). Fix it? | (a) as the original; (b) fixed in Steamwoven only, "Original" setting; (c) fixed in both modes | (b) **Decided: owner chose (c), 2026-11-11: fixed in both modes, no "Original" setting.** |
 
-**Decided by the owner (2026-11-11): the two XR14 anomalies are bugs of the game, fixed in both modes with no switch** (the owner's bug rule of 2026-10-28: no "Original"/"Steamwoven" (D8) setting for either). They stay open until their slices merge:
+**Decided by the owner (2026-11-11): the two XR14 anomalies are bugs of the game, fixed in both modes with no switch** (the owner's bug rule of 2026-10-28: no "Original"/"Steamwoven" (D8) setting for either). (a) is done by MA-9 (ARC-MAGIC-056); (b) stays open until E1-e merges:
 
 | XR14 | The original | Steamwoven, both modes | Slice |
 | --- | --- | --- | --- |
-| (a) Tempus Fugit | Speed changes only while the **local player** holds the spell flag ([XR6](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)); an NPC's cast changes nobody's speed unless the player holds it too | An NPC's Tempus Fugit takes effect without the player holding it. MA-9 states the exact rule (who gains, who is slowed) in its PR and records it as a difference from the original | MA-9 |
+| (a) Tempus Fugit | Speed changes only while the **local player** holds the spell flag ([XR6](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)); an NPC's cast changes nobody's speed unless the player holds it too | An NPC's Tempus Fugit takes effect without the player holding it. The rule is stated in [MA-9](#tempus-fugit-ma-9-arc-magic-056) and recorded as a difference from the original (ledger TF1) | MA-9, done (ARC-MAGIC-056) |
 | (b) Familiar on the world map | The travel hide tests the caster-side `OSF_FAMILIAR` on the creature, which carries `ONF_FAMILIAR`, so the familiar stays shown ([XR10](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)) | The familiar is hidden and shown with the party like the PC and the non-summoned followers | E1-e |
 
-Ledger row XR14 still reads "owner question": the slice that merges updates it, adds the difference row next to XR6 or XR10 and updates the requirement's coverage row.
+Ledger row XR14 reads "decided" for (a) with its difference row TF1; E1-e does the same for (b) next to XR10.
 
 The 60 records outside the colleges (80..139, used by monsters and items) share every gap above; the census covers them.
 

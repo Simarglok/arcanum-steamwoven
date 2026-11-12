@@ -1044,7 +1044,9 @@ On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the wor
   2. The farthest area refuses its one-waypoint route.
   3. The nearest unknown area that travel can discover and whose route plans is chosen; from the Crash Site that is
      Shrouded Hills, 43 steps.
-  4. Enter travels. The run ticks the session clock with its own frame stamps (an automated run has no live flow) and
+  4. With a hero, a maintained spell of the hero is started first (ARC-MAGIC-059): Enter's start check interrupts the hero's actions and
+     ends it (`ARC-MAGIC-059 native-smoke worldmap-demaintain PASS`; `NONE` without a hero).
+  5. Enter travels. The run ticks the session clock with its own frame stamps (an automated run has no live flow) and
      checks that the real clock gained at least 50 ms + 42 × 62 ms (43 steps) while the open map holds the Menu pause,
      no step is left pending, the game clock gained exactly 43 h, Crash Site and Shrouded Hills
      known, the start map loaded around the landing with the session carried, and the actor on the area's location:

@@ -67,11 +67,22 @@ public sealed class CrossMapHolderStateTests
     }
 
     [TestMethod]
+    public void AnInsertRefusalLaysTheCompanionsItemOnTheHeroTileOfTheShownMap()
+    {
+        // ARC-WORLD-1131: the item comes from the home map's list, lies on the map the hero stands on, and keeps its origin.
+        using var owner = Both();
+        var heavy = owner.GiveItemToPc(owner.Version, "pal", 5700, _ => SessionInsertVerdict.TooHeavy);
+        Assert.AreEqual((GameSessionDisposition.Changed, "locket", (SessionInsertVerdict?)SessionInsertVerdict.TooHeavy), (heavy.Disposition, heavy.Item, heavy.Verdict));
+        Assert.AreEqual(0, Pc(owner).Length);
+        var lies = owner.QueryPlacedItems().Single();
+        Assert.AreEqual(("locket", Exterior, Cave), (lies.Entity, lies.Map, lies.Origin));
+        CollectionAssert.AreEqual(new[] { "bow", "locket-2" }, Listed(owner, Cave, "pal"));
+    }
+
+    [TestMethod]
     public void ARefusalOfTheMoveChangesNothingAndTheOtherRulesStayTheSame()
     {
         using var owner = Both();
-        var heavy = owner.GiveItemToPc(owner.Version, "pal", 5700, _ => SessionInsertVerdict.TooHeavy);
-        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InsertRefused), (heavy.Disposition, heavy.Failure));
         var worn = owner.GiveItemToPc(owner.Version, "pal", 2100, Accept);
         Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.WornItemUnsupported), (worn.Disposition, worn.Failure));
         Assert.AreEqual(0L, owner.Version.Revision);

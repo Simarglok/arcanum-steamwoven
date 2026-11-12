@@ -1,3 +1,4 @@
+using Arcanum.World;
 using Arcanum.TerrainViewer.Core;
 using Godot;
 
@@ -99,6 +100,57 @@ public partial class TerrainViewerApp
             Require(StripPixels(strip) == StripUnits(strip) * InterfaceHd.GeneratedScale, $"the {strip} strip is back at the first scale ({StripPixels(strip)})");
         GD.Print($"ARC-UI-141 slowest frame while the chrome was painted: {slowestFrame} ms");
         GD.Print($"ARC-UI-140 native generated interface PASS textures={checkedCount} factor={panel.Factor} device-scale={InterfaceHd.GeneratedScale}");
+    }
+
+    // ARC-UI-148: the open inventory window in the generated interface. Its two frames (the pack 221 and the paper doll 223) draw generated chrome
+    // painted at the window's own device scale (the frame scale times the canvas transform's, fractional in the inventory), at the Legacy size
+    // in layout; a bigger window paints them again at the new scale. The window is open when this runs.
+    private async Task VerifyGeneratedInventoryAsync(Func<int, Task> frames, Func<Vector2I, Task> resize)
+    {
+        static void Require(bool ok, string why)
+        {
+            if (ok) return;
+            GD.Print("ARC-UI-148 generated inventory smoke FAIL " + why);
+            throw new InvalidOperationException("ARC-UI-148 generated inventory smoke: " + why);
+        }
+        Require(InterfaceHd.Generated && _inventoryPanel is { ArtMode: true }, "the generated interface is on and the inventory shows the original's look");
+        var area = _inventoryPanel!.GridAreaForSelfTest;
+        Require(area.Look is not null, "the inventory has its look");
+        var textures = new[] { AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.DollArt }
+            .Select(number => area.Look!.Art.GetValueOrDefault(number) as HdInterfaceTexture ?? throw new InvalidOperationException($"ARC-UI-148 generated inventory smoke: art {number} is no interface texture"))
+            .ToArray();
+        double Device() => area.FrameScale * area.GetGlobalTransformWithCanvas().Scale.X;
+        async Task Painted(string at)
+        {
+            // Each draw asks for the frame at the window's current scale; wait for the worker and the swap (at most ~20 s).
+            for (var wait = 0; wait < 1200 && (textures.Any(texture => !texture.IsGenerated || texture.GeneratedPixelSize != Wanted(texture)) || InterfaceHd.GeneratedPending > 0); wait++) await frames(1);
+            await frames(2);
+            foreach (var texture in textures)
+                Require(texture.IsGenerated && texture.GeneratedPixelSize == Wanted(texture), $"{at}: a window frame is generated at {Wanted(texture)} (got {texture.GeneratedPixelSize}, device scale {Device():F3})");
+        }
+        Vector2I Wanted(HdInterfaceTexture texture)
+        {
+            var (w, h) = InterfaceChromeRenderer.PixelSize((int)texture.GetSize().X, (int)texture.GetSize().Y, InterfaceHd.PaintScale(Device()));
+            return new Vector2I(w, h);
+        }
+        await Painted("at the first size");
+        await CaptureHudAsync("inventory-generated", frames);
+        var firstScale = Device();
+        var size = DisplayServer.WindowGetSize();
+        try
+        {
+            var bigger = new Vector2I(Math.Max(size.X, 1920), Math.Max(size.Y, 1080));
+            await resize(bigger);
+            await frames(3);
+            await Painted("at the bigger size");
+            await CaptureHudAsync("inventory-generated-big", frames);
+            GD.Print($"ARC-UI-148 generated inventory scales {firstScale:F3} -> {Device():F3}");
+            Require(Math.Abs(Device() - firstScale) > 0.01 || bigger == size, "the window scale changed with the window");
+        }
+        finally { await resize(size); }
+        await frames(3);
+        await Painted("back at the first size");
+        GD.Print($"ARC-UI-148 native generated inventory PASS frames={textures.Length} device-scale={Device():F3}");
     }
 
     // ARC_AREA_BAR_CAPTURE=PREFIX also saves the whole viewport with the bars as PREFIX-hud-MODE.png (a local, ignored path).

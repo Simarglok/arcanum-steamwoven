@@ -1,3 +1,5 @@
+using Arcanum.Simulation.Randomness;
+using Arcanum.Simulation.Skills;
 using Arcanum.Simulation.Traps;
 
 namespace Arcanum.Session;
@@ -61,9 +63,14 @@ public sealed record SessionTrapResult(GameSessionMutationResult Mutation, Sessi
 public sealed record SessionTrapDisarmResult(GameSessionMutationResult Mutation, TrapDisarm Outcome, int DevicePrototype, NativeTrapRun? Run,
     SessionTrapState State);
 
+/// <summary>One spot trap roll of the hero (ledger SP1): the session's answer, the shared check (null when refused before the roll), whether
+/// the hero spotted the trap (the roll passed; the caller marks it), and whether the master's second roll was drawn.</summary>
+public sealed record SessionSpotRoll(GameSessionDisposition Disposition, GameSessionFailure Failure, SkillCheckResult? Check, bool Spotted,
+    bool SecondRoll, GameSessionVersion Version);
+
 /// <summary>
-/// ARC-WORLD-076: the trap state owner of trap objects and trapped objects on any map (ledger TT1–TT10), for the spot and
-/// disarm skills (S10), the trap devices (ARC-TECHNOLOGY-011/012) and the hosts' use and step paths. An object's trap is
+/// ARC-WORLD-076: the trap state owner of trap objects and trapped objects on any map (ledger TT1–TT10), for the spot
+/// trap roll (<see cref="RollHeroSpotTrap"/>, ARC-MAGIC-057), the disarm skill (S10), the trap devices (ARC-TECHNOLOGY-011/012) and the hosts' use and step paths. An object's trap is
 /// its T0 baseline until a spot mark or a removal; each write records the object's trap state as one map change of its
 /// entity (<see cref="TrapStateProperty"/>: bit 1 spotted, bit 2 removed, bit 4 placed by the PC (ARC-WORLD-125), and above bit 8 the script number the removal
 /// cleared), which the snapshot already carries, so the domain adds no schema. A removal holds only while the baseline still
@@ -99,6 +106,47 @@ public sealed partial class GameSessionOwner
         var state = QueryTrap(trapped, baseline);
         return TrapRules.SpotGate(observer, false, state.Class, state.ObjectFlags, playerSpellFlags);
     }
+
+    /// <summary>
+    /// The hero's spot trap roll on an object whose trap it does not know (0x4BBE40's roll branch, ledger TT3 and SP1): the skill's shared
+    /// check (<see cref="SkillCheckRules.Run"/>: the hero's spot trap level and training, the light at the trap, the hero's injuries) and the
+    /// skill's own case (<see cref="TrapRules.SpotCase"/>: the master's second roll, no spotting of a magical trap below expert). Nothing
+    /// is written but the generator's draws; the caller marks the trap (<see cref="MarkTrapSpotted"/>) when <see cref="SessionSpotRoll.Spotted"/>.
+    /// Rolled only when the gate asks for a roll (<see cref="TrapSpotGate"/> answers Roll for the player with <paramref name="playerSpellFlags"/>);
+    /// any other gate answers NoChange without a draw. NOT READY: the spot modifier of the item at inventory location 1005 (SP2) and the light
+    /// at the trap (the caller passes it; full light by default, as the lock pick does). Refused: no hero or a dead one
+    /// (<see cref="GameSessionFailure.SkillsUnavailable"/>), an invalid object or light (<see cref="GameSessionFailure.InvalidTrap"/>), the
+    /// version, the generator or the revision exhausted.
+    /// </summary>
+    public SessionSpotRoll RollHeroSpotTrap(GameSessionVersion expected, SessionTrapped trapped, SessionTrapBaseline baseline, int playerSpellFlags = 0,
+        int light = SessionPickLockTarget.FullLight)
+    {
+        ThrowIfDisposed();
+        if (_hero is null || HeroDead()) return RejectSpot(GameSessionFailure.SkillsUnavailable);
+        if (!ValidTrapped(trapped, baseline) || light is < 0 or > SessionPickLockTarget.FullLight) return RejectSpot(GameSessionFailure.InvalidTrap);
+        if (!IsCurrent(expected)) return RejectSpot(GameSessionFailure.StaleVersion);
+        var state = TrapState(trapped, baseline);
+        if (TrapRules.SpotGate(TrapObserver.Player, false, state.Class, state.ObjectFlags, playerSpellFlags) != Arcanum.Simulation.Traps.TrapSpotGate.Roll)
+            return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, false, false, Version);
+        if (_revision == long.MaxValue) return RejectSpot(GameSessionFailure.RevisionExhausted);
+        var request = HeroSkillRequest(Skill.SpotTrap, null);
+        request = request with { Difficulty = request.Difficulty with { Light = light } };
+        var rolls = new SkillRolls(new SeededRandom(_random.Seed, _random.Draws));
+        SkillCheckResult check;
+        bool spotted, second = false;
+        try
+        {
+            check = SkillCheckRules.Run(request, rolls, _rules.Combat.InvocationModifierCountedTwice);
+            (spotted, _) = TrapRules.SpotCase(check.Success, check.Critical, request.Training, state.Class, check.Check.Effectiveness, check.Check.Difficulty,
+                () => { second = true; return rolls.D100(SkillCheckRoll.Check); });
+        }
+        catch (SkillRolls.ExhaustedException) { return RejectSpot(GameSessionFailure.RandomExhausted); }
+        _random = rolls.Trial;
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, check, spotted, second, Version);
+    }
+
+    private SessionSpotRoll RejectSpot(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, false, false, Version);
 
     /// <summary>Marks the trap spotted by the observer (ledger TT4): only the player or an NPC led by a PC marks it. One
     /// revision; NoChange when the object carries no trap, is marked already or the observer marks nothing.</summary>

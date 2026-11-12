@@ -165,6 +165,26 @@ history held about 500 runs of such copies of one template).
   observation from being refused as late (`RestoreWorldTestTime`, ARC-WORLD-025). `summon-wall` read the hero's hit points before
   and after the burn and failed once in the long list (`25 -> 30`, not reproduced alone or in shorter chains); it now checks the
   hit-point damage the hero carries, which the wall's burn would raise (ARC-DEV-405).
+- **Stage boundary reset (ARC-DEV-408).** A stage that passes alone and fails after others had a second cause besides the test time:
+  what the earlier stages left in the shared session. `TerrainViewerSmokeStageSet` calls `SmokeStageBoundary`
+  (`TerrainViewerSmokeStageReset.cs`) at every change of stage in the viewer: the first call with a hero and a session takes the baseline (the hero's world cell
+  and the roll sequence's position, `GameSessionOwner.QueryRandom`), every later call puts back what a stage must not inherit and prints
+  `ARC-DEV-408 stage-reset PREVIOUS -> NEXT: ...` for what it changed: the hero's combat mode (`worldmap` refused "leave combat mode
+  first"), the roll sequence (`GameSessionOwner.RestoreRandom`; `floaters`' critical hit knocked its NPC out after `barter` and `life` had
+  rolled, so the NPC could not strike back) and the hero's cell when it is still on the shown map (`door-close` left the hero in the cell
+  `npc-door` walks its NPC into). A new kind of leak is one more line there, not a change to one stage. Not reset: world objects a stage
+  changed (a killed NPC, a used door, a looted container) and the viewer's windows. `ARC_SMOKE_STAGE_RESET=0` (as `--env`) switches the
+  reset off, to tell a leak from a stage's own failure; `=full` is an experiment that also loads a baseline save back at every boundary
+  (it fixes the killed-NPC leaks, but a loaded session is not a fresh one: `inv-arrange` counts revisions and sees one more). A process
+  stops at its first failing stage, so a leak fixed here can show the next one that was hidden behind it (`placement-census` after a
+  `pickpocket`/`loot-worn` kill: the AI host does not hold the dead NPC the census expects).
+- **A stage waits for a state, not for a time (ARC-DEV-1193).** `bar` failed by chance (`feedback settles to Hover with combat
+  still on`) because it waited a fixed 0.15 s after a quick click and then read the button: the panel keeps Down for 80 ms
+  counted from the first frame actually drawn, and on a loaded machine that draw comes late (the failing run showed 24 ms since
+  the draw after the 150 ms wait; reproduced by keeping every CPU core busy). The stage now polls frames until the expected
+  frame shows, up to 2 s, and prints a line when that took 200 ms or more; a Down that never ends still fails. A new stage that
+  expects feedback after an input waits for that state the same way; to reproduce a load-dependent failure, run the stage in a loop
+  with every core busy.
 - **Every requested stage runs (ARC-DEV-063).** `PASS` means each requested stage ran: a map smoke passes only when
   its log holds the `PASS` line of every stage in its list (`STAGE_PASS` in `tools/local_dev/smoke.py`, checked against
   the viewer's sources by the tests), the whole map battery (`full`, `map` without `--stages`) that of `map` and
@@ -179,7 +199,7 @@ history held about 500 runs of such copies of one template).
   `--main-menu` (no hero) it is refused. A menu stage (`menu`, `scene`, `options`, `bar`, `death`, `perf-menu`) needs no
   `--main-menu`: it gets its own menu process. The stages the viewer runs only without `map` (`barter`, `menu`, `scene`, `options`, `plants`, `bar`,
   `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-tile`, `tile-ghost`, `container-click`, `fire-order`, `indoor-fade`, `npc-shot`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `placement-census`, `spell-end`, `hold-hero`, `movement`, `spirit-talk`, `created-scenery`, `worn-light`, `critter-light`, `summon-flash`, `summon-wall`, `tech-craft`, `tech-products`, `item-aim`, `perf`, `perf-menu`) get a run of their
-  own (step `stages-alone`, or `map-alone`) when `map` is in the list too. `tech-craft` (ARC-DEV-362, technology audit slice T-a) needs the bullets the map's bodies hold, so it runs on the cave: `./arcanum smoke map "crash site cave" --stages tech-craft` (on a map with no bullets of the crafted gun's type it fails with that message; its steps are the helpers of `TerrainViewerTechCraftHarness.cs`). `tech-products` (ARC-MAGIC-051, technology audit slice T-s) is `tech-craft`'s sibling on the same cave (`./arcanum smoke map "crash site cave" --stages tech-products`): it buys Therapeutics degrees 1 and 2 and Chemistry degree 1, assembles their first records, eats the two stat potions (the hero's effect list grows, record 158 adds +2 strength), uses the poison on a living NPC through the item cursor, reads the module's found schematic documents of those two disciplines through the inventory's Read button (each registers and is destroyed, a second copy of a known one is kept) and assembles the first found record the hero's expertise reaches from the window's Found tab, buys intelligence and Electric degrees up to 6, assembles the power cells (Chemistry degree 2), the powered shield (Electric degree 3: worn, its 15 s deferred call takes one cell and schedules the next) and the maintained armour (degree 6, record 168: a cell a tick), has the cave NPC assemble a learned record from its own list into its own list through the window queued the way the dialog's `su` queues it (the stage gives that NPC a Herbology degree and intelligence 8: the cave's NPCs have no degree, so this shows the window and session path for a crafter, not a real crafter), and F7/F8 keep effects, items, worn items, cells and the NPC's list (same harness helpers; it needs a living NPC in the cave). `item-aim` (ARC-DEV-365, technology audit slice T-g) opens the item cursor with a script trap device from the use icon and presses a tile (goal 41) and an NPC (goal 39); it needs a hero and a map with a living NPC. A run whose stages include `debug-travel`, `follower-far` or `inv-carry`
+  own (step `stages-alone`, or `map-alone`) when `map` is in the list too. `tech-craft` (ARC-DEV-362, technology audit slice T-a) needs the bullets the map's bodies hold, so it runs on the cave: `./arcanum smoke map "crash site cave" --stages tech-craft` (on a map with no bullets of the crafted gun's type it fails with that message; its steps are the helpers of `TerrainViewerTechCraftHarness.cs`). `tech-products` (ARC-MAGIC-051, technology audit slice T-s) is `tech-craft`'s sibling on the same cave (`./arcanum smoke map "crash site cave" --stages tech-products`): it buys Therapeutics degrees 1 and 2 and Chemistry degree 1, assembles their first records, eats the two stat potions (the hero's effect list grows, record 158 adds +2 strength), uses the poison on a living NPC through the item cursor, reads the module's found schematic documents of those two disciplines through the inventory's Read button (each registers and is destroyed, a second copy of a known one is kept) and assembles the first found record the hero's expertise reaches from the window's Found tab, buys intelligence and Electric degrees up to 6, assembles the power cells (Chemistry degree 2), the powered shield (Electric degree 3: worn, its 15 s deferred call takes one cell and schedules the next) and the maintained armour (degree 6, record 168: a cell a tick), has the cave NPC assemble a learned record from its own list into its own list through the window queued the way the dialog's `su` queues it (the stage gives that NPC a Herbology degree and intelligence 8: the cave's NPCs have no degree, so this shows the window and session path for a crafter, not a real crafter), throws an assembled Explosives degree-1 grenade (record 219) at the cave NPC (a flight that lands off the tile is aimed again, up to three grenades; the item event starts the run and a cave NPC is damaged or resists), and F7/F8 keep effects, items, worn items, cells and the NPC's list (same harness helpers; it needs a living NPC in the cave). `item-aim` (ARC-DEV-365, technology audit slice T-g) opens the item cursor with a script trap device from the use icon and presses a tile (goal 41) and an NPC (goal 39); it needs a hero and a map with a living NPC. A run whose stages include `debug-travel`, `follower-far` or `inv-carry`
   starts the viewer with `--debug-mode` (the stage needs the debug mode, ARC-DEV-050; ARC-WORLD-120).
 - **Stage configurations and grouping (ARC-DEV-391).** A viewer process fixes its map, start sector, hero, main menu and
   debug mode at launch, so only stages with the same configuration share a process. `STAGE_NEEDS` in
@@ -196,8 +216,10 @@ history held about 500 runs of such copies of one template).
   value a stage cannot pass in is refused before anything waits for the queue (`stage plants does not run at --sector
   1452,1291: it needs map ... at sector 1384,239`), and so is `--main-menu` with a stage that needs a hero or a session.
   `--no-config-check` runs the request as given (the grouping stays). The table holds only what is known: where a stage
-  was only seen to pass in one place its default is that place and another one is not refused. `inv-carry` and
-  `critter-light` have no configuration seen to pass yet (the diagnosis saw `NONE` at the Crash Site and in the town). A new stage needs a row
+  was only seen to pass in one place its default is that place and another one is not refused. `junk` runs on the
+  ruins (the main map has no container with two items), `critter-light` on `tulla interior - battle - conveyance` (an NPC
+  there carries a light; `NONE` on the main map, the town, the ruins and the cave), and `ai-cast` and `npc-door` each get a
+  process of their own (they failed after the other stages of their group and passed alone, 2026-11-11). A new stage needs a row
   (the tests fail without one); the zones below are built on this table.
 - **Stage times (ARC-DEV-399, Q3 of the diagnosis).** The viewer's map smoke times each stage it runs
   (`TerrainViewerSmokeStageSet`: the chain's own question "does this stage run" is the stage's start, the next one its end) and prints
@@ -230,8 +252,13 @@ history held about 500 runs of such copies of one template).
   stages after it never ran, and a stage can fail only because of what the stages before it left behind (the 2026-11-11 daily run:
   `ai-cast` and `npc-door` failed in their groups and passed alone). With `--retry`, a failed stage process is followed by one
   process per unfinished stage (steps `STEP-retry-STAGE`; the failing stage included); the summary says `passes alone, so it fails
-  only after the other stages of STEP` or `fails alone too`. The failed step stays failed (the exit code and the daily gate do not
-  change); the retries only add what ran, so no stage goes unchecked behind a failure and an order-dependent stage is named.
+  only after the other stages of STEP` or `fails alone too`. The failed step stays failed
+  unless every unfinished stage passed alone: then it is **order-dependent** (owner decision 2026-11-12), the summary shows it as
+  `ORDER` with an `order-dependent:` line naming the step and its stages, the run and `./arcanum daily` pass (the daily report adds
+  `smoke order-dependent ...` for a fix thread, and no package is blocked), and the final line says `(N order-dependent, each stage
+  passes alone)`. A stage that fails alone too, a group that timed out (exit 124) and a failure with nothing unfinished still fail the run as before; the
+  `map-smoke` line of BUILD.txt then ends with `order-dependent (STEP)`. No stage goes
+  unchecked behind a failure and an order-dependent stage is named.
   **`--auto`** reads the diff: the merge base with `--base` (default `origin/main`; fetch first) to the working tree, untracked
   files included, and picks the zones by the table `TRIGGERS` (all matching rows of a path, as a union; a "no smoke" row such as `tests/` or
   `experiments/` beats the generic project-file rows `*.csproj`, `*.sln`, `*.props`, `*.tscn` and the lock files): ordinary game and

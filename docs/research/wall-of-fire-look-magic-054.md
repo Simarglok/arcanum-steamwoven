@@ -1,12 +1,12 @@
 # Wall of Fire: how the wall looks, and how many pieces (ARC-MAGIC-054)
 
-Status: **Bug fixed in part, one question open.** Register entry B55 in [open bugs](open-bugs.md). Owner report 2026-11-11, with two screenshots (the original game in a cave, Steamwoven on the main map).
+Status: **Closed.** The owner found on 2026-11-12 that the retail game makes 5 pieces, as the rules read; the 3 pieces of the first screenshot came from Arcanum Community Edition, no longer a comparison reference. Register entry B55 in [open bugs](open-bugs.md). Owner report 2026-11-11, with two screenshots (Arcanum CE in a cave, Steamwoven on the main map).
 Requirements (reference only): [FR-MAGIC-008](../requirements/combat-magic-tech.md#fr-magic-008). Earlier reading:
 ledger [SUM11, SUM13](ledger/spell-runs.md#summon-component-and-the-objects-it-creates-arc-res-101).
 
-## What the screenshots show
+## What the screenshots show (the first one was not the retail game)
 
-| | Original | Steamwoven (before this change) |
+| | First screenshot (Arcanum CE, as it turned out) | Steamwoven (before this change) |
 | --- | --- | --- |
 | Pieces | 3 | 5 |
 | Step between pieces | one tile (80 px at 800 x 600) | one tile |
@@ -15,7 +15,7 @@ ledger [SUM11, SUM13](ledger/spell-runs.md#summon-component-and-the-objects-it-c
 
 The step and the size of a piece are the same in both. The line's direction is decided by the cast: the original's wall gather turns the direction from the caster to the target tile
 into a step perpendicular to the cast (TA12, read again in `0x4F40B0`: the table agrees with the one in `SpellTargetRules`), so two casts from different places lie along different
-lines; this is no bug. The two real differences are the blend and the count.
+lines; this is no bug. The one real difference was the blend; the count turned out to be no difference (Question 3).
 
 ## Cause 1, fixed: the blend
 
@@ -26,15 +26,14 @@ placed body the same blend rule as `State` (additive, multiply, constant alpha, 
 objects whose prototypes carry blit flags get the same treatment (none of the installed Summon prototypes besides 4051 is known to; not censused).
 Observation: the smoke stage `summon-wall` saves the drawn wall when `ARC_AREA_SUMMON_WALL_CAPTURE=PREFIX` is set (`PREFIX-wall.png`; nothing is committed).
 
-## Question 2, open: 3 pieces or 5
+## Cause 2, fixed in ARC-MAGIC-055: the tile-blocked test of the cast map
 
-The rules read from the executable give **5** pieces on open ground: one Summon applied to the five tiles of `Tgt_Tile` plus `Tgt_Tile_Radius_Wall` with radius 2 (the collector `0x4F40B0` runs i = 0 to the radius, both sides,
-the area has no count limit: `Count` reads -1), each kept only if `Tgt_Tile_Empty_Immobiles` passes. The original's screenshot has 3, centred on the cursor. Not found in the read: any step that trims the list.
-What is known:
+The area test of `Tgt_Tile_Empty` and `Tgt_Tile_Empty_Immobiles` calls the original's `tile_is_blocking` (`0x4D7110`: the sector's block mask, else the tile name's flags, PB1). The cast map
+(`AreaSpellCastMap.TileBlocked`) asked only whether the tile's sector was **admitted**, so blocking terrain never refused a piece of Wall of Fire (or Wall of Stone, Fireflash). It now uses the step evidence's
+terrain verdict, as the drop map and the path request do (a tile the evidence cannot speak for counts as blocked). On the crash-site cave map the wall's five tiles now give 3 pieces: one tile of blocking terrain
+is dropped, and the hero's own start tile is dropped for another reason (an object the test counts: a wall, portal, scenery or trap without "no block"). Open ground still gives 5 (smoke stage `summon-wall`).
+The oracle (F3) had already run the collector and the area test on 10,000 inputs each; the input it could not check was the world's tile verdict, which is what this fixes.
 
-- In the viewer on the crash-site cave map the wall made **4** pieces and none on the hero's own tile (the tile test refuses a tile; open ground gives 5). So the tile test can drop pieces, and the owner's cave
-  may have dropped the two outer ones. Which tiles refused, and why, is not known (a blocking terrain tile, or an object type the test counts).
-- The oracle (F3) already ran the collector and the area test on synthetic inputs; it did not run them on the cave's tile data.
+## Question 3, closed
 
-To settle it, the owner casts the original's Wall of Fire once on **open ground outdoors** and counts the pieces. Five confirms the rules and points at the cave's blocked tiles (then the tile test is
-checked against the cave's data with the oracle); three means a limit the read missed and the next step is a run of the original's cast path in the oracle. No change to the count rule is made here.
+The owner found that the retail game makes 5 pieces; the 3 pieces seen first were Arcanum Community Edition's. Our count of 5 on open ground stands, and Cause 2 stays as a faithful change (terrain drops pieces where the executable's `tile_is_blocking` would); it is unrelated to the CE count, and our own cave run's 3 pieces is a separate result.

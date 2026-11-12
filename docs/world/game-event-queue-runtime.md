@@ -179,8 +179,7 @@ without a hero, with entities, set after the saved clock, or whose deadline is n
 [encumbrance consequences](inventory-runtime.md#encumbrance-consequences-arc-world-087).
 
 **Magic-tech events (ARC-MAGIC-010).** The kind `magic.run` (also added to registry version 1 without a new version) is the
-original's magic-tech event (kind 5, ledger RP11–RP14): game time, **not saved** (`NotSaved`: the session's spell runs are not
-saved either until MT9b, so a restored session has neither), global, any number, at most `SessionEventKinds.MaxSpellRunEvents`
+original's magic-tech event (kind 5, ledger RP11–RP14): game time, **saved** since ARC-DEV-210 (the settled runs' ticks, `Saved`, schema 73; the events of a run that is cut are cut with it), global, any number, at most `SessionEventKinds.MaxSpellRunEvents`
 (1,024, a budget of about a tick and an interrupt for each of the 512 runs; interrupt and process events are not deduplicated) on
 top of the others. No entity; values: the game time it was set at,
 the run (0..511) and the code (1 a tick, 2 an interrupt, 3 a process). The run rules queue it (a tick after the run's period or

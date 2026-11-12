@@ -19,7 +19,7 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-MAGIC-031: the stat context a query of the hero's stats reads, from what the session and the world hold: the life state's poison level and crippled legs (<paramref name="poisonLevel"/>,
     /// <paramref name="crippledLegs"/>, which the caller reads from the life record it holds), the sector aptitude adjustment and the two tile facts of <see cref="HeroGround"/> (the adjustment is
-    /// kept within the owner's bound ±100), the hero's background block, and the game hour from the session clock. The caller's stat query then moves aptitude by the sector and magick points by the
+    /// kept within the owner's bound ±100), the hero's background block, the game hour from the session clock, and the speed change of Tempus Fugit (<see cref="HeroTempusFugitShift"/>, ARC-MAGIC-056). The caller's stat query then moves aptitude by the sector and magick points by the
     /// Day, Night, Sky and Nature Mage backgrounds, as the original's getter does (ledger AQ1–AQ8).
     /// </summary>
     public CharacterStatContext HeroStatContext(int poisonLevel = 0, bool crippledLegs = false)
@@ -27,6 +27,6 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         var ground = HeroGround?.Invoke() ?? default;
         return new(Math.Clamp(ground.SectorAptitudeAdjustment, -100, 100), poisonLevel, crippledLegs, _hero?.State.Background ?? SessionBackgrounds.None, _clock.QueryClockSnapshot().Hour,
-            ground.OutdoorTile, ground.NatureTile);
+            ground.OutdoorTile, ground.NatureTile, HeroTempusFugitShift());
     }
 }

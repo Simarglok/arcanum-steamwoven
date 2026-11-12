@@ -1,7 +1,7 @@
 # Missing systems: map and work plan
 
 Status: **Plan, accepted by the owner as the work order** (2026-11-10, answers in section 9 and the [decisions](../architecture/decisions.md) row "Missing systems work order"), work item ARC-RES-099. Docs-only: no source
-change, no checks run. Each slice is still handed out as its own task: it starts when the coordinator gives it a thread and
+change, no checks run. Re-baselined again on 2026-11-11 against `origin/main` `4dc5162` (ARC-DEV-1110, issue #1110; sections 3.1, 1 and the slice rows it names). Each slice is still handed out as its own task: it starts when the coordinator gives it a thread and
 takes its task code from the coordinator (the labels `E1-a`, `E4-c` and so on are planning labels, not task codes).
 
 It continues the [architecture audit](../architecture/gap-register.md) (which settled the engine model) and the two bug triages
@@ -23,7 +23,7 @@ Since 2026-11-11 a slice merges without waiting for the owner's in-game comparis
   (E5, its first slice is a census), the leftover player windows (E8), media (E7, after a decoder decision).
 - **Deferred by earlier owner decisions** (listed, not planned): the network game, a second module, mods (E10).
 - **Documents re-baselined:** slice E0-a is done (ARC-RES-107 re-checked the coverage matrix and the status catalogue against the code,
-  2026-11-11); the map in section 3 is the code-checked state of that day. One gap is left: **FR-LIGHT-011**, the attack and skill
+  2026-11-11) and ARC-DEV-1110 re-checked them again against `origin/main` `4dc5162` after the magic, technology and trap slices of the same day; the map in section 3 is the code-checked state of that commit. One gap is left: **FR-LIGHT-011**, the attack and skill
   rolls' darkness penalty (the rules take a light value, the viewer feeds in only the full light 255; the cell light source is missing).
 
 ## 3. Map of the systems
@@ -32,23 +32,23 @@ Since 2026-11-11 a slice merges without waiting for the owner's in-game comparis
 
 | System | State in code | Evidence | Original read? | Epic |
 | --- | --- | --- | --- | --- |
-| Critter or scenery created at run time | **Partial (ARC-DEV-347, E1-a):** created kinds are items, junk piles, blood pools, missiles, projectiles and, new, scenery and eye-candy objects by prototype (`SessionCreatedObject`, schema 85); **E1-c1 (ARC-DEV-359):** critters by prototype (`oid:critter:n`, `SessionCreatedKind.Critter`), NPC residents hosted by the AI host; **E1-c2 (ARC-DEV-370):** drawn, animated, picked and laid fallen by the viewer; **E1-c3 (ARC-DEV-371):** script action 52 creates critters too (the installed "snapping twig" tile script 1629: eight critters next to the PC), each with the encounter flag 0x20000 and its tile notification, the AI tick destroys an encounter creature left without a next tick; the inventory of a created critter is generated at creation (ARC-DEV-386, E1-c4: a created holder in the map's seed, the restock body and the best-items wield, the loot of its body) | `SessionObjectOrigin` (`GameSessionObjectDirectory.cs`), `CreateRefusal` rejects other types, `ObjectLinkVocabulary`: summoner "not modelled yet" | Yes: object creation and destruction rows [OM](../architecture/original-object-model.md) | E1 |
-| Summon component | **Partial (ARC-DEV-352, E1-b):** scenery by prototype (Fireflash, Wall of Fire and the other scenery Summons), the summoned list, Destroy and the eye-candy callbacks; a critter Summon still falls to `ComponentNotReady` | `SessionSpellCaster.Apply`; B47: spells 21, 22, 57 | Critter summon read (0x450C40, 0x452830, 0x452900, [MG8–MG9](../research/ledger/magic.md)); what a flash or a wall creates is read ([ARC-RES-101](../research/ledger/spell-runs.md), SUM1–SUM16) | E1 |
-| NPC magic state (effects, generic spell flags) | **Partial:** the session keeps an effect list per NPC and any written flag bit (ARC-DEV-348, schema 87); the caster still reaches only the hold flags and the hero's list (`SessionSpellCaster*`) | `GameSessionObjectFlags.cs`, `GameSessionEffects.cs` | Effect functions read (EF1–EF10) | E1, E4 |
-| Monster generators, respawn, encounter creatures | **Stub:** the scheduler calls `world.Spawn` and handles its outcomes; the host's `Spawn` answers null | `AreaAiHost.cs:1021-1023`, `SchedulerRules.cs:115` | Generator branch read ([AI core loop](../research/npc-ai-core-loop.md)); spawner body 0x4BA790 not yet | E2 |
-| Critter body decay | **Absent** (items and blood pools decay; critter bodies do not) | `GameSessionDecay.cs` | Not read here | E2 |
-| Random encounters on the world map | **Absent** | `WorldJourney.cs` has no roll | Not read | E2 |
+| Critter or scenery created at run time | **Partial (ARC-DEV-347, E1-a):** created kinds are items, junk piles, blood pools, missiles, projectiles and, new, scenery and eye-candy objects by prototype (`SessionCreatedObject`, schema 85); **E1-c1 (ARC-DEV-359):** critters by prototype (`oid:critter:n`, `SessionCreatedKind.Critter`), NPC residents hosted by the AI host; **E1-c2 (ARC-DEV-370):** drawn, animated, picked and laid fallen by the viewer; **E1-c3 (ARC-DEV-371):** script action 52 creates critters too (the installed "snapping twig" tile script 1629: eight critters next to the PC), each with the encounter flag 0x20000 and its tile notification, the AI tick destroys an encounter creature left without a next tick; the inventory of a created critter is generated at creation (ARC-DEV-386, E1-c4: a created holder in the map's seed, the restock body and the best-items wield, the loot of its body); **ARC-MAGIC-050 (TI12):** a created pet joins the party as a companion and is carried over a map change (`RehomeCreatedCritters`). Left: critters made by a Summon spell (E1-e) and by generators (E2) | `SessionObjectOrigin` (`GameSessionObjectDirectory.cs`), `CreateRefusal` rejects other types, `ObjectLinkVocabulary`: summoner "not modelled yet" | Yes: object creation and destruction rows [OM](../architecture/original-object-model.md) | E1 |
+| Summon component | **Partial (ARC-DEV-352, E1-b):** scenery by prototype (Fireflash, Wall of Fire and the other scenery Summons), the summoned list, Destroy and the eye-candy callbacks; a critter Summon (17 of the 42 installed Summon components) still falls to `ComponentNotReady`; the Dispel component ends a summoned created critter (ARC-MAGIC-034) | `SessionSpellCaster.Apply`; B47: spells 21, 22, 57 | Critter summon read (0x450C40, 0x452830, 0x452900, [MG8–MG9](../research/ledger/magic.md)); what a flash or a wall creates is read ([ARC-RES-101](../research/ledger/spell-runs.md), SUM1–SUM16) | E1 |
+| NPC magic state (effects, generic spell flags) | **Built:** the session keeps an effect list per NPC and any written flag bit (ARC-DEV-348, schema 87); the Effect component works on the hero and every NPC, and effect lists reach the combat resolver and the magic save (MA-2, ARC-MAGIC-027, -033); the cast host writes every spell, object and critter flag with the original's reference count (MA-1, ARC-DEV-358, schema 88) and the social and AI flags (MA-4, ARC-MAGIC-035). Left: flags on created creatures (E1-e) | `GameSessionObjectFlags.cs`, `GameSessionEffects.cs`, `SessionSpellCasterEffects.cs`, `SessionSpellCasterObjectFlags.cs` | Effect functions read (EF1–EF10), flag writer read (OB1–OB5, SO1–SO8) | E1-e |
+| Monster generators, respawn, encounter creatures | **Stub:** the scheduler calls `world.Spawn` and handles its outcomes; the host's `Spawn` answers null | `AreaAiHost.cs:1021-1023`, `SchedulerRules.cs:115` | Generator branch read ([AI core loop](../research/npc-ai-core-loop.md)); spawner, placement, counters and release read (ARC-RES-1103, [PO1–PO8](../research/ledger/npc-ai.md#generators-encounter-creatures-and-body-decay-arc-res-1103)) | E2 |
+| Critter body decay | **Absent** (items and blood pools decay; critter bodies do not) | `GameSessionDecay.cs` | Read: schedule, delays, handler, inventory drop (ARC-RES-1103, PO10; [BP6, BP7](../research/ledger/combat.md#pool-of-blood-arc-render-041)) | E2 |
+| Random encounters on the world map | **Absent** | `WorldJourney.cs` has no roll | Read: event and roll ([TL29](../architecture/original-time-loop.md), registry rows 0x558DE0–0x559640); the roll does not set the encounter flag (ARC-RES-1103, PO9) | E2 |
 | Sleep and rest (PC) | **Absent in the viewer** (rules for the rest heal exist; the game bar says "sleep: the window is not built") | `LifeRules.RestHeal`, `TerrainViewerAreaGameBar.cs:130` | Partly (hour and heal rules; the window is not) | E3 |
 | NPC hourly day (beds, sleep, walking between day and night standpoints) | **Partial:** waypoints and standpoints are placed on the fold and wake-up tick only | `NpcRouteRules.cs`, `SchedulerRules.cs:92-101` | Waypoint rules read; schedule consumers not | E3 |
 | HUD clock or date | **Absent** (only the load screen has clock art) | survey | UI ledger | E3 |
-| Spell components Movement (teleport), Cast, Polymorph, Interrupt, Terminate, branches, Identify, Recharge, Use, EnvFlag, AIRedirect | **Stub** (17 of 25 component types parse but never run) | `SessionSpellCaster.Apply` | Most read ([magic plan](../research/magic-implementation-plan.md), MT15–MT18) | E4 |
-| Remaining ObjFlag flags (charm, mind control, invisible, blind, fleeing, summoned, shrunk, water walking…) | **Stub**; only entangled, stoned, paralysed, spoken-with-dead are written | `SessionSpellCasterObjectFlags.cs` | Read (MT13, MT14) | E4 |
+| Spell components AIRedirect, EnvFlag, Interrupt, Recharge, TraitIdx, Trait64 | **Stub: 19 of the 25 component types run** (Damage, Heal, Destroy, EyeCandy, Summon (scenery), AGoal, AGoalTerminate, ObjFlag, Identify, Dispel, Movement, Trait (art type), NoOp, Terminate, ChargeNBranch, TestNBranch, Use, Cast, Effect; since 2026-11-11 the table `ComponentHandlers`); the six listed have no handler and log `ComponentNotReady`. No installed record uses Interrupt; the records that still hit a missing handler are 103 (Recharge) and 183 (AIRedirect with a creature Summon) | `SessionSpellCasterComponents.cs` (`ComponentHandlers`), `SessionSpellCaster.Apply` | Most read ([magic plan](../research/magic-implementation-plan.md), MT15–MT18; [magic audit](../research/magic-audit-res-103.md)) | E4, E1-e |
+| ObjFlag remainder | **Mostly built:** every spell, object and critter flag bit is written (MA-1, ARC-DEV-358), charm, mind control, fleeing, blindness and the undead act through the AI host (MA-4), locks and holds on doors and containers (MA-6, ARC-MAGIC-037), the polymorph's art, palette and flags (MA-8, ARC-MAGIC-040, -046, -047, -052). Left: the viewer's draw of hidden, shrunk and translucent critters and of don't-draw objects and the shielded hit eye candy (E4-a2), the permanent polymorph's ObjFlag part (record 222, MA-8), the removal calls whose reads are F0 (drowning, 0x435D70), the KOS_OVERRIDE flag of charm | `SessionSpellCasterObjectFlags.cs`, `SessionSpellCasterTrait.cs`, [technology audit](../research/technology-audit-res-125.md) (81 of 83 technology records run; 183 and 222 are PART) | Read (MT13, MT14, OB1–OB5, SO1–SO8, TR1–TR6) | E4 |
 | Item recharge | **Absent** | survey | Charges read ([technology](../research/technology-evidence.md)) | E4 |
-| Spell-run endings on rest and world-map travel; runs of other maps; callback runs | **Absent / not saved** | survey: the snapshot saves the goal runs and spell runs of the active map only (`GameSessionTypes.cs`, `CaptureSpells`) | Read (MT11, MT9b) | E3, E4 |
-| Teleport bans by area | **Stub** (`TeleportAllowed` is never given false) | `SpellInvocationRules.cs:50,181` | Address read (0x4BDD30) | E4 |
-| Script actions | **Partial: 76 of 142 admitted** (survey, `ScrAdmissionSet.S30`); conditions 16 of 53 | `ScrAdmission.cs`, `ScrCatalogue.cs` | [SCR census](../research/scr-census.md) | E5 |
+| Spell-run endings on rest and world-map travel; runs of other maps; callback runs | **Rest ending absent; the world-map travel start ends the hero's spells (ARC-MAGIC-059); runs of other maps and callback runs done (ARC-MAGIC-058)** | the player's change of map ends the runs that do not travel (`SpellRunTravelRules`); a run waiting for a callback stands in Begin or End and is saved | Read (MT11; MT9b done) | E3, E4 |
+| Teleport bans by area | **Built (MA-5, ARC-MAGIC-036, -038):** the table `Rules\AntiTeleport.mes` and the check 0x4BDD30 (`AntiTeleportTable`, `AntiTeleportRules`) are asked by the invocation check and the Movement component; Teleportation opens the world map in teleport mode. Left: the multiplayer host branch, the town map and the path by waypoints in teleport mode | `SessionSpellCasterTeleport.cs`, `AreaSpellTeleport.cs`, `SpellInvocationRules.cs` | Read ([TP1–TP5](../research/ledger/spell-runs.md#teleport-types-and-the-anti-teleport-test-arc-magic-038)) | E4 |
+| Script actions | **Partial: 81 of 142 admitted** (the widest set, `ScrAdmissionSet.S33`; S30 held 76 on the survey, S31 to S33 added give spell mastery, use ammunition units, transform, force follow and attack); conditions 20 of 53 (S31 added the four spell conditions to the 16 of S30). Each host admits its own subset | `ScrAdmission.cs`, `ScrCatalogue.cs` | [SCR census](../research/scr-census.md) | E5 |
 | Dialog markers `c r t z` (trainers and special replies), `r:`, positive `IN` | **Stub** (`UnsupportedInteraction` blocks) | `DialogConversation.cs:1459-1466` | Trainers read (E5-d, formerly S16 of the skills plan) | E5 |
-| Spot-trap roll, disarm action, placed trap devices, trap script 30002 | **Partial:** traps on maps fire and hurt; the spot roll logs "not ready", disarm has no viewer action, placing a device is "NOT READY" | `TerrainViewerTraps.cs:74`, `TerrainViewerAreaItemUse.cs:170` | Read ([ARC-TECHNOLOGY-010](../research/technology-evidence.md), TP1–TP8) | E6 |
+| Spot-trap roll, disarm action, trap script 30002, the hero's step onto a placed marker | **Partial:** traps on maps fire and hurt; placed trap devices are built (E6-b ARC-WORLD-124: timer bombs 15154 and 15193; ARC-WORLD-125: script traps 15100 and 15120 on a portal, a container or a cell; stage `item-aim`); the spot roll logs "not ready", disarm has no viewer action, a device used on a target the rules refuse says "NOT READY" | `TerrainViewerTraps.cs`, `TerrainViewerAreaItemUse.cs` | Read ([ARC-TECHNOLOGY-010](../research/technology-evidence.md), TP1–TP8) | E6 |
 | Movies (Bink), credits, intro, script-queued slides, endings | **Stub / absent** (menu buttons are "Unavailable"; only the death slide exists) | `AreaMainMenu.cs`, `AreaHeroDeath.cs`; no Bink code | Slide table read | E7 |
 | Fate window and Fate Points button; Skill pane; combat action-point readout | **Stub / absent** ("not built" notices) | `TerrainViewerAreaGameBar.cs:127-129` | UI ledger partly | E8 |
 | Companions screen and follower menu | **Absent** | survey | Not read | E8 |
@@ -89,7 +89,7 @@ this in the code and, if true, fixes the record source before creating anything.
 | E1-a | **Created scenery and eye-candy objects (ARC-DEV-347, built):** new origin kinds in the directory, create and destroy by prototype on the open map, saved as map-local state (schema step), drawn and picked through the existing object paths, fold of created objects with their sector, a synthetic smoke stage | M–L | — (E1-r for the exact kind) | OM rows read |
 | E1-b | **Summon component for objects (ARC-DEV-352, built):** the flash and the wall; the records' CALLBACK and END_CALLBACK Destroy lines remove them (the eye-candy callbacks, EC11); the wall's pieces burn with the summoner as the source; stages `summon-flash` and `summon-wall`. Closes B47 for two of three reports. Not done: a Dispel on a summoned object, the blocking pieces of Wall of Stone and Force in the path queries | M | E1-a, E1-r | read in E1-r |
 | E1-c | **Created critters:** a critter from a prototype on a tile, built by identity through the record resolver, directory, AI host row wherever it stands, saved; script action 52 extended to critters; closes the B25 remainder. **Cut in three (owner rule on big tasks): E1-c1 (ARC-DEV-359, built):** the row built from the prototype by the original's create rule (`CreatedObjectRows`), the session kind `Critter` (`oid:critter:n`, directory, NPC resident, saved), the record resolver, the combat host and the AI host (`SyncCreated`, first tick, kept through a window move, dropped at destroy); the AI risk above is confirmed and fixed. **E1-c2 (ARC-DEV-370, built):** the viewer draws, animates, picks and hovers a created critter (the body from the prototype's art id and the window's art archives, `AreaCreatedCritterArt`), the smoke stage `created-critter`. **E1-c3 (ARC-DEV-371, built):** script action 52 creates critters (`CreateCritterNear`, the tile search of PG12, the encounter flag 0x20000 of PG1 written in the same revision), the location notification of OM16 (the tile script runs for the created critter), the AI tick's destroy of an encounter creature (`IsEncounterCreature`), the heartbeat of a created critter, stage `script-critters` on the installed tile script 1629; closes the B25 remainder (a created critter's tile script). **E1-c4 (ARC-DEV-386, done):** the inventory generation of OM16 (restock body 0x463C60 at creation, then the best-items wield), with a created holder in the session's map seed and in the inventory host's maps first | L (4 slices) | E1-a | OM rows read |
-| E1-d | **NPC magic state (P1):** effect list and generic spell flags for every critter from map and prototype fields, saved; Effect and the other flags reach NPCs | M | — | EF1–EF10 read |
+| E1-d | **Built (ARC-DEV-348, schema 87).** **NPC magic state (P1):** effect list and generic spell flags for every critter from map and prototype fields, saved; Effect and the other flags reach NPCs | M | — | EF1–EF10 read |
 | E1-e | **Summon component for creatures:** prototype or list pick (MG9 as a technical bug under the owner rule), summoned flags, palette, faction from `Clear_Faction:` (MG8), alignment, tracking in the run, END and dispel remove, run ends when the summon dies (0x459740), summoned follower join, Summon Undead's ObjFlag; the familiar (74) hidden and shown with the party on the world map (XR14 (b): the original leaves it shown, an owner-decided bug fixed in both modes, [magic audit](../research/magic-audit-res-103.md#decisions-for-the-owner)); stage for Summon Undead and one list spell | L | E1-c, E1-d | read (MG8, MG9) |
 | E1-f | **AI summoning:** the 16 spells of the AI's summon list used by NPC casters, summoned allies in combat | M | E1-e | AI I8 read |
 
@@ -106,7 +106,7 @@ decision of 2026-11-07); item decay and blood pools; scenery respawn.
 
 | Slice | Content | Size | Needs |
 | --- | --- | --- | --- |
-| E2-r | **Read** the spawner (0x4BA790), encounter creatures and the world-map encounter roll; body removal timers. Ledger rows | M | Mac read |
+| E2-r | **Read** the spawner (0x4BA790), encounter creatures and the world-map encounter roll; body removal timers. Ledger rows | M | Mac read. **Done** (ARC-RES-1103, issue #1103: ledger rows [PO1–PO12](../research/ledger/npc-ai.md#generators-encounter-creatures-and-body-decay-arc-res-1103), registry rows of the generator band at F1) |
 | E2-a | Spawner for map generators on top of created critters; the host's `Spawn` stops answering null | M–L | E1-c, E2-r |
 | E2-b | Critter body decay and removal, repopulation of emptied areas | M | E1-c, E2-r |
 | E2-c | Random encounters on the world journey: roll, encounter map, creatures, the "encounter creature destroyed" scheduler branches | L | E2-a, E2-r |
@@ -121,10 +121,10 @@ rules, clock and calendar, change-of-place clock steps, waypoint and standpoint 
 
 | Slice | Content | Size | Needs |
 | --- | --- | --- | --- |
-| E3-r | **Read** the sleep and wait window, its conditions (no sleep in combat, network rules aside; whether sleep is allowed when enemies are near is an open question for the read), bed use, the hourly NPC consumers | M | Mac read |
+| E3-r | **Done** (ARC-RES-1102, issue #1102): the sleep and wait window, its conditions, bed use and the hourly NPC consumers are read in the [ledger rows SWB1–SWB22](../research/ledger/world.md#sleep-wait-and-beds-arc-res-1102). Answers: sleep and wait are refused in combat mode only when an NPC is engaged with the hero or his party (not for enemies merely near); a town refuses resting without the town-map wait marker, but beds work there; a bed is any scenery of art type 4, sub-type 0x16; there is no hourly NPC day timer, the day test runs at each AI step; a random encounter is the only interruption (SWB4, SWB3, SWB14, SWB20, SWB13) | M | Mac read |
 | E3-a | Sleep window and the PC rest action, time skip, interrupted rest; the game bar's Sleep button | M | E3-r |
 | E3-b | HUD clock and date button (the original's clock button) | S | — |
-| E3-c | Spell-run endings on rest and on world-map travel (MT11 remainder); callback runs saved | S–M | E3-a |
+| E3-c | Spell-run ending on rest (MT11 remainder; the travel ending is done, ARC-MAGIC-059: the rest option click calls 0x457450, [UE6](../research/ledger/spell-runs.md#spell-run-endings-of-a-critter-arc-dev-301)) | S | E3-a |
 | E3-d | NPC day: beds and sleep, hourly walking between the day and night standpoints, not only on the fold; heartbeat budget check | L | E3-r |
 
 ### E4 The rest of the spell components
@@ -137,33 +137,42 @@ FR-MAGIC-011, FR-TRAVEL-005, FR-SCRIPT-002.
 
 | Slice | Content | Size | Needs |
 | --- | --- | --- | --- |
-| E4-a | Remaining ObjFlag flags with render and movement effects (invisible, shrunk, water walking, "don't draw", blind), Effect on NPCs | M | E1-d |
-| E4-b | Social and AI flags: charm (+30/−30), mind control, undead, fleeing, blinded as AI notifications; reaction adjustments; AIRedirect | M–L | E4-a |
-| E4-c | Control components: Dispel (built, ARC-MAGIC-034, MA-3), Interrupt, Terminate, TestNBranch, ChargeNBranch, Noop, EnvFlag, TraitIdx, Trait64, Use; Destroy for critters and containers | L (two slices) | E1-d |
-| E4-d | Item recharge and Identify components | S–M | E4-c |
-| E4-e | Movement: teleport to a tile, a random tile, the world map; no-teleport area data (FR-TRAVEL-005); what a teleport does to followers; nested Cast | M–L | E4-c |
-| E4-f | Polymorph (Trait): drop what the new art cannot wield, monster art and palette, restore (MG10 as a technical bug) | M | E4-a |
+| E4-a | **Built (MA-1, ARC-DEV-358); the viewer draw is E4-a2 in the [technology audit](../research/technology-audit-res-125.md#6-queue).** Remaining ObjFlag flags with render and movement effects (invisible, shrunk, water walking, "don't draw", blind), Effect on NPCs | M | E1-d |
+| E4-b | **Built except AIRedirect (MA-4, ARC-MAGIC-035; AIRedirect goes with E1-e).** Social and AI flags: charm (+30/−30), mind control, undead, fleeing, blinded as AI notifications; reaction adjustments; AIRedirect | M–L | E4-a |
+| E4-c | **Built except Interrupt, EnvFlag, TraitIdx and Trait64** (Dispel ARC-MAGIC-034, MA-3; Terminate, TestNBranch, ChargeNBranch, NoOp ARC-MAGIC-044; Use ARC-MAGIC-048). Control components: Dispel, Interrupt, Terminate, TestNBranch, ChargeNBranch, Noop, EnvFlag, TraitIdx, Trait64, Use; Destroy for critters and containers | L (two slices) | E1-d |
+| E4-d | **Identify built (MA-7, ARC-MAGIC-032); Recharge is not.** Item recharge and Identify components | S–M | E4-c |
+| E4-e | **Built (MA-5, ARC-MAGIC-036, -038; nested Cast ARC-MAGIC-049).** Movement: teleport to a tile, a random tile, the world map; no-teleport area data (FR-TRAVEL-005); what a teleport does to followers; nested Cast | M–L | E4-c |
+| E4-f | **Built except the permanent polymorph's ObjFlag part (MA-8, ARC-MAGIC-040, -046, -047, -052; record 222).** Polymorph (Trait): drop what the new art cannot wield, monster art and palette, restore (MG10 as a technical bug) | M | E4-a |
 | E4-g | Script hooks: conditions `knows_spell`, `mastered_spell_college`, `obj_is_influenced_by_spell`, `obj_has_body_spell`; the PC as a script caster; give spell mastery; paid spellcasting services. **Part done (ARC-MAGIC-029, MT21a):** set S31 holds the four conditions and give mastery in the interpreter; the host side is ARC-MAGIC-030 (MT21b): the use and talk hosts answer them and write the mastery (the PC and an NPC of the shown map); the body-of-element spell-flag bits and the rest stay | M | E5-c |
-| E4-h | Saved runs of maps that are not active | M | E4-c |
-| E4-i | **Tempus Fugit (spell 79, magic audit MA-9):** the flag's reader; the original changes speed only while the local player holds the spell (XR6), an owner-decided bug fixed in both modes: an NPC's cast takes effect without the player holding it, the PR states who gains and who is slowed ([XR14 (a)](../research/magic-audit-res-103.md#decisions-for-the-owner)) | S–M | — (the audit needs only MA-R and MA-1, both done) |
+| E4-h | Saved runs of maps that are not active (done: ARC-MAGIC-058, the runs that do not travel end at the player's change of map) | M | E4-c |
+| E4-i | **Tempus Fugit (spell 79, magic audit MA-9):** the flag's reader; the original changes speed only while the local player holds the spell (XR6), an owner-decided bug fixed in both modes: an NPC's cast takes effect without the player holding it; **done by ARC-MAGIC-056 (2026-11-12)**: holders gain 10, every other critter loses 10 while any critter holds the spell ([XR14 (a)](../research/magic-audit-res-103.md#decisions-for-the-owner)) | S–M | — (the audit needs only MA-R and MA-1, both done) |
 | E4-j | **Raise script hook (magic audit MA-10):** Heal's resurrect script (point 0x12) through the SCR dispatcher (spells 58, 64) | S | the SCR dispatcher (E5) |
 
 ### E5 Script and dialog coverage
 
-**Goal.** Installed content stops hitting "action not admitted": 66 action types and about 37 condition types are refused today
-(survey of `ScrAdmissionSet.S30`). The biggest groups: NPC state (`attack`, follow and disband, reaction, standpoints, change script,
+**Goal.** Installed content stops hitting "action not admitted": 66 action types and about 37 condition types were refused at the survey
+(`ScrAdmissionSet.S30`; with S33 it is 61 and 33, section 3.1). The biggest groups: NPC state (`attack`, follow and disband, reaction, standpoints, change script,
 change art), world objects (create item, transfer item, lock state, open and close toggle, blocked sector), story and time (global quest
 state, hours, newspapers, give XP, fate point), media (movie, slide, fade) and dialog markers (`c r t z`, `r:`). FR: FR-SCRIPT-001…004,
-FR-DIALOG-003, FR-DIALOG-004, FR-SOCIAL-009, FR-CHAR-018.
+FR-DIALOG-003, FR-DIALOG-004, FR-SOCIAL-009, FR-CHAR-018. **Census update (ARC-RES-1101):** follow and attack are in S33 now; the live refusals are 26 conditions and 53 actions ([census](../research/script-refusal-census.md)).
 
 | Slice | Content | Size | Needs |
 | --- | --- | --- | --- |
-| E5-r | **Census:** which refused actions and conditions occur in the installed scripts, on which maps, in which quests, ranked by use. Decides the order of the slices below (docs-only output, real-data run on the Mac) | S–M | Mac data run |
-| E5-a | NPC-state actions: attack, follow and disband, reaction adjust and set, standpoints, change script, change art | M–L | E5-r |
-| E5-b | World-object actions: create item, transfer item, lock state, open or close toggle, sector blocked, transform | M | E5-r |
-| E5-c | Story and time actions and conditions: global quest state, rumors quelled, hours, time, give XP, give fate point, blessing and curse | M | E5-r |
+| E5-r | **Done (ARC-RES-1101, 2026-11-12; [census](../research/script-refusal-census.md)):** which refused actions and conditions occur in the installed scripts, on which maps, in which quests, ranked by use; the order of the slices below. Under S33, 447 of 1,809 attached scripts (2,529 of 7,766 placed sites) are blocked by 79 types | S–M | Mac data run |
+| E5-a | NPC-state actions: disband, reaction adjust and set, standpoints (day, night, the two extended), change script, change art (follow and attack are in S33 already). Census: 166 blocked scripts, 550 sites freed alone | M–L | E5-r (done) |
+| E5-b | World-object actions: create item, lock state, open or close toggle and `obj_is_open`, sector blocked and `sector_is_blocked`, monster generator, destroy item named (transform is in S33; transfer item is one site). Census: 71 blocked scripts, 208 sites alone | M | E5-r (done) |
+| E5-c | Story and time actions and conditions: global quest state, rumors quelled, hours, time, give XP, give fate point, blessing and curse. Census: 80 blocked scripts, 98 sites alone (the smallest of E5-a to E5-c) | M | E5-r (done) |
 | E5-d | Dialog trainers and special replies (`t:`, `c`, `r`, `z`, `r:`, positive `IN`), skill training window, Educator | M–L | — |
-| E5-e | Loops and calls (`loop break`, `call script at`) | S–M | E5-r |
+| E5-e | Loops and calls: `loop break` (`call script at` occurs once on a line no run reaches). Census: 17 blocked scripts, 42 sites alone | S | E5-r (done) |
+
+**Census result (ARC-RES-1101, [details](../research/script-refusal-census.md)).** The order that frees the most placed sites under S33 is: vitals
+(`get_hit_points`, `get_fatigue_points`, `heal_poison`: one food use script on 729 objects; 836 sites alone), E5-a, critter-state conditions
+(met before, bad associates, invisible, in dialog, in combat, can see, prowling; 267 sites alone), E5-b, E5-c, spell effects and spell-state queries
+(eye candy, magictech adjustment, polymorphed, shrunk, mirror image; 62 sites alone), scene queries (get location, get scroll distance),
+E5-e, then the media actions (E7-b). Another 60 attached scripts are also refused for a reason that is not a type (45 for an object operand kind
+S33 does not admit, 13 for a computed goto, 2 for a goto beyond the end), a gap no planned slice covers. The vitals, critter-state and spell-effect groups have no slice in this plan; they are proposed to the
+coordinator as work items. The raise hook (E4-j, magic audit MA-10) is blocked only on two of its 15 placed sites (`change_script` and
+`set_pc_quest_unbotched`); the spell hooks of E4-g are not gated by E5-a or E5-b.
 
 ### E6 Traps and placed devices
 
@@ -174,8 +183,8 @@ FR-CHAR-017, FR-CHAR-019. Skills plan slice **S10**, audit slice K6.
 
 | Slice | Content | Size | Needs |
 | --- | --- | --- | --- |
-| E6-a | Spot-trap roll on every path step and use, the master second roll; disarm action and the skill-bar button; the expert's device | M | — |
-| E6-b | Placed devices: use an item with the trap-device flag on an object or tile, the device is spent, the marker object, the NPC alarm for record 176 | M | E1-a |
+| E6-a | Spot-trap roll on every path step and use, the master second roll (**done**, ARC-MAGIC-057); disarm action and the skill-bar button; the expert's device (open, read as [SP3](../research/ledger/technology.md#spot-trap-roll-arc-magic-057): the skill cursor, 4 action points, the follower substitution) | M | — |
+| E6-b | **Built (ARC-WORLD-124 timer bombs, ARC-WORLD-125 script traps).** Placed devices: use an item with the trap-device flag on an object or tile, the device is spent, the marker object, the NPC alarm for record 176 | M | E1-a |
 | E6-c | The native trap script 30002 (the shot) | S | E6-a |
 
 ### E7 Media, endings and credits
@@ -202,7 +211,7 @@ FR-ITEM-008, FR-MEDIA-003, FR-COMBAT-002, FR-COMBAT-003.
 | E8-c | Companions screen and follower menu; barter follower switch | M | Mac read |
 | E8-d | Combat action-point readout and the turn-order list (owner decision 2026-10-28) | M | — (UI-124 runs beside) |
 | E8-e | Options windows hidden today: violence filter, brightness, auto-switch weapons, follower skills, combat taunts, autosave timer | M | Mac read for each |
-| E8-f | Sound callers: scenery loops, busting, AI barks, NPC footsteps, item drop | S–M | — |
+| E8-f | **Done (ARC-RENDER-1126, #1126).** Sound callers: scenery loops, busting, AI barks, NPC footsteps, item drop | S–M | — |
 | E8-g | Identify window, heal another critter, lockpicks on chests (viewer wiring; the session takes containers), junk-pile partial take, poison sources | M | — |
 | E8-h | Gambling and newspapers queue (K10; proposed for after the alpha) | M | E5-c |
 
@@ -236,7 +245,7 @@ FR-ITEM-008, FR-MEDIA-003, FR-COMBAT-002, FR-COMBAT-003.
 ## 5. Order and dependencies
 
 ```
-E1-r ─┐                         E5-r ──► E5-a, E5-b, E5-c ──► E7-b, E8-h
+E1-r ─┐                         E5-r (done) ──► E5-a, E5-b, E5-c ──► E7-b, E8-h
 E1-a ─┴► E1-b                   E3-r ──► E3-a ──► E3-c
 E1-a ──► E1-c ──► E1-e ──► E1-f   E3-r ──► E3-d
 E1-d ──┬──────────┘              E2-r ──► E2-a, E2-b;  E2-a ──► E2-c
@@ -245,7 +254,7 @@ E1-d ──┬──────────┘              E2-r ──► E2-a
 E5-c ──► E4-g                    E6-a ──► E6-c, E8-b
 ```
 
-**Wave 0, no dependency, can start in parallel** (limit by the Mac): E1-r, E1-a, E1-d, E0-a, E5-r, E3-r, E2-r, E3-b, E8-a, E8-d, E8-f, E6-a, E5-d.
+**Wave 0, no dependency, can start in parallel** (limit by the Mac): E1-r, E1-a, E1-d, E0-a, E5-r (done), E3-r, E2-r, E3-b, E8-a, E8-d, E8-f, E6-a, E5-d.
 **Wave 1:** E1-b (closes two B47 reports), E1-c, E3-a, E5-a…E5-c, E5-e, E4-a, E4-c, E8-b, E6-c.
 **Wave 2:** E1-e (closes the third B47 report), E1-f, E2-a, E2-b, E3-c, E3-d, E4-b, E4-d…E4-h, E6-b, E8-g.
 **Wave 3:** E2-c, E7 (after the decoder decision), E8-c, E8-e, E8-h, E9, E0-b (any time, cloud).
@@ -255,7 +264,7 @@ Threads of different lanes run beside each other.
 
 ## 6. Reads of the original that the plan needs
 
-Mac reads, each a docs-only research slice that ends in ledger rows: E1-r, E2-r, E3-r, E5-r (a data census), E7-r (a research on decoders),
+Mac reads, each a docs-only research slice that ends in ledger rows: E1-r, E2-r, E3-r, E5-r (a data census, done), E7-r (a research on decoders),
 E8-c and E8-e (UI rows). Everything else uses reads that already exist in the [ledger](../research/original-verification-ledger.md); each
 implementing slice still reads the F0 facts of the functions it changes, as the owner decided on 2026-10-20.
 

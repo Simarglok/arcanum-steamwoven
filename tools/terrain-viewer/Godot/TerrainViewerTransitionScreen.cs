@@ -115,6 +115,10 @@ public partial class TerrainViewerApp
         DrawTransitionScreen();
     }
 
+    /// <summary>ARC-MAGIC-058 (MT9b): the hero's change to another map ends the spell runs that name an object that does not travel (0x44F7A0), through the cast host of the
+    /// shown map, which is where their objects are; without a cast host (a map mode with no spell data) there are no runs to end.</summary>
+    private void EndSpellRunsLeavingMap(SessionMoveList moveList) => SpellCasterNow()?.EndRunsLeavingMap(moveList.Travelling);
+
     /// <summary>The viewer's part of the plan's presentation steps for a hero change (<paramref name="fade"/>: the script's sound and movie
     /// numbers, when the request came from a script's fade-and-teleport).</summary>
     private bool RunTransitionStep(ChangeOfPlaceStep step, Arcanum.Scripting.Scr.ScrTeleportFade? fade)
