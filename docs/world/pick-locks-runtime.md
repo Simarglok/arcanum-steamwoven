@@ -50,13 +50,16 @@ a door or window in map mode picks its lock, walking within range 1 first (the u
 else, a key press, the window's focus loss, a follower walk order, a map change or a reload cancels it. The HUD reports "the lock opens", "locked it", "the lock jams" or "the pick failed". The viewer passes the light at the portal's cell (ARC-WORLD-1149, [FR-LIGHT-011](../rendering/area-lighting.md#light-level-for-checks-arc-world-1149));
 in a turn-based round (ARC-COMBAT-020) it passes the round's world, so the pick charges its 4 action points on the hero's subturn.
 
+## Containers in the viewer (ARC-UI-1127)
+
+Armed lockpicks (the item cursor of the lockpicks, interface mode 16) on a container of the map (E8-g): the press starts the same skill goal 33 (skill 14) with the container's loot target string, so the hero walks within range 1, turns and the pick runs at the frame's next safe point. The pick is the session's on the container's lock identity, its T0 baseline and its lock level (field 57, slot 37 as a portal's field 47), at the light of the container's cell (`AreaContainerLoot.Pick`; code `TerrainViewerAreaContainerPick.cs`). Nothing opens: the next press opens the picked container through the window's admission ([lock state](lock-state-runtime.md)). Smoke: stage `item-aim`, step 7 (the nearest locked container of the town sector without an unlock script: the pick result, and the container's open attempt follows it).
+
 ## Boundaries (NOT READY)
 
 - **Witnesses** (PL6): the session reports whether the original calls them; nobody acts on it (no NPC sight, hearing, reaction or
   attack is wired to it, the AI hostility slice does not exist yet).
 - **Not modelled:** the best-follower substitution and its line (PL5), the timed pick-lock goal of the AI, scripts and dialog
-  services with its apprentice speed-up (PL3), the floating text and its messages, containers in the viewer (the session takes
-  them; the viewer has no container use, so no light is passed for one), the multiplayer packets, keys (the session holds
+  services with its apprentice speed-up (PL3), the floating text and its messages, the multiplayer packets, keys (the session holds
   none, ARC-WORLD-050).
 
 ## Real-data census
