@@ -134,11 +134,27 @@ public sealed class ItemExamineScriptTests
     {
         var (owner, entity, host) = Setup(Program(C(ScrCatalogue.Action.ReturnSkipDefault)));
         using var _ = owner;
-        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.RunItemExamine(owner.Version, "kit:1", host).Failure, "a kit item's examine is the host's");
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.RunItemExamine(owner.Version, "kit:99", host).Failure, "a kit item the hero does not hold");
         Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.RunItemExamine(owner.Version, "made:99", host).Failure, "an item the session does not hold");
         Assert.AreEqual(GameSessionFailure.InvalidItem, owner.RunItemExamine(owner.Version, "", host).Failure);
         using var other = CreateWith(HalfElf());
         Assert.AreEqual(GameSessionFailure.StaleVersion, owner.RunItemExamine(other.Version, entity, host).Failure, "a version of another session");
         Assert.AreEqual(0, host.Asked.Count);
+    }
+
+    // ARC-UI-1458: a starting-kit item is built from its prototype as a made item is, so it owns no row and examines from the prototype's slot too.
+    [TestMethod]
+    public void A_kit_item_examines_from_its_prototype_and_has_a_prototype_kind_wherever_it_is()
+    {
+        using var owner = CreateWith(HalfElf() with { Kit = [new(Kind)] });
+        owner.AttachItemScripts(prototype => prototype == Prototype ? [new(SessionScriptPoint.Examine, ExamineScript, 3, 0)] : null);
+        var host = new Host(owner);
+        host.Programs[ExamineScript] = Program(C(ScrCatalogue.Action.PrintLine, (Number, 1), (Number, 6)), C(ScrCatalogue.Action.ReturnSkipDefault));
+        Assert.AreEqual(Kind, owner.QueryPrototypeItemKind("kit:1"));
+        Assert.IsNull(owner.QueryPrototypeItemKind("kit:2"), "no such kit item");
+        Assert.IsNull(owner.QueryPrototypeItemKind("not an entity"));
+        var ran = owner.RunItemExamine(owner.Version, "kit:1", host);
+        Assert.AreEqual((GameSessionDisposition.NoChange, GameSessionFailure.None, SessionScriptPoint.Examine), (ran.Disposition, ran.Failure, ran.DeclinedBy));
+        Assert.AreEqual(1, ran.Messages.Count);
     }
 }

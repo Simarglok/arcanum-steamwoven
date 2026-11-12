@@ -71,12 +71,30 @@ public sealed partial class GameSessionOwner
         return InheritedSlot(entity, point) is { } slot ? new(entity, point, slot.Script, slot.LocalFlags, slot.Counters) : null;
     }
 
-    // The kind of a made item wherever the session holds it: the hero's made items, the ground, or an NPC's or container's added items.
+    /// <summary>
+    /// ARC-UI-1458 (FR-ITEM-008, FR-MAGIC-007): the saved kind of an item the session holds that stands on a prototype and owns no object row in any
+    /// map: a made item (<c>made:n</c>) or one of the starting kit (<c>kit:n</c>), wherever it is now: the hero's lists, the ground, or an NPC's
+    /// or container's list. A viewer describes such an item (the item window of an Identify, of a hover) from it, since no map row names its
+    /// prototype. Null for any other entity (an item with a row, an unknown one, a deleted one nobody holds). A read of the current state, in no
+    /// revision. Null for an invalid entity id too.
+    /// </summary>
+    public SessionItemKind? QueryPrototypeItemKind(string entity)
+    {
+        ThrowIfDisposed();
+        return SessionValidation.Entity(entity) ? MadeKind(entity) : null;
+    }
+
+    // The kind of an item made from a prototype (a made item or one of the starting kit, ARC-UI-1458: the original builds the kit's objects as
+    // copies of their prototypes too, so they own no row and read the prototype's script array) wherever the session holds it: the hero's
+    // made items, the hero's kit, the ground, or an NPC's or container's list.
     private SessionItemKind? MadeKind(string entity)
     {
-        if (ObjectOriginOf(entity) != SessionObjectOrigin.Made) return null;
+        var origin = ObjectOriginOf(entity);
+        if (origin is not (SessionObjectOrigin.Made or SessionObjectOrigin.Kit)) return null;
         foreach (var made in _inventory.Made)
             if (made.Entity == entity) return made.Kind;
+        foreach (var kit in _inventory.Kit)
+            if (kit.Entity == entity) return kit.Kind;
         if (_inventory.PlacedItem(entity) is { } placed) return placed.Kind;
         if (_inventory.NpcOf(entity) is { } holder)
             foreach (var added in _inventory.Lists.Of(holder))

@@ -248,4 +248,15 @@ public sealed class NpcInventoryStateTests
         Assert.AreEqual(GameSessionFailure.BudgetExceeded, Restored(text, new GameSessionLimits(maxNpcItems: 1)));
         Assert.AreEqual(GameSessionFailure.None, Restored(text, new GameSessionLimits(maxNpcItems: 2)));
     }
+
+    // ARC-UI-1458: a made item an NPC holds has no map row; the session names its kind so a viewer can describe it (an Identify, a hover).
+    [TestMethod]
+    public void A_made_item_an_npc_holds_has_a_prototype_kind()
+    {
+        using var owner = Attached();
+        var item = Added(owner, "virgil");
+        Assert.AreEqual(Gear, owner.QueryPrototypeItemKind(item));
+        Assert.IsNull(owner.QueryPrototypeItemKind("made:99"));
+        Assert.IsNull(owner.QueryPrototypeItemKind("bad id"));
+    }
 }

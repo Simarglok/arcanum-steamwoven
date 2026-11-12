@@ -391,7 +391,24 @@ public partial class TerrainViewerApp
                 GD.Print($"ARC-UI-1451 item-aim dropped description item={dropping} texts={ItemWindowTextsForSelfTest}");
             }
             else GD.Print($"{ItemAimCode} item-aim dropped description step NONE (no made item to drop, or a pane mode)");
-            GD.Print("ARC-DEV-365 native-smoke item-aim PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Tile = tileGoal, Npc = npc.Id, Notice = _itemAimLast, Heal = healed, Pick = picked, Sheet = sheet, Contents = contents, Description = description, GroundDescription = groundDescription, DroppedDescription = droppedDescription, ObjectWindow = objectWindows.Count == 0 ? "NONE" : string.Join(" ", objectWindows) }));
+            // 14. ARC-UI-1458 (ledger XR4): the Identify answer for a made item an NPC holds (no map row, not on the ground, not the hero's) draws its item window too: the session names its kind.
+            var heldDescription = "NONE";
+            if (!_messageLog.PaneMode && _inventoryHost.Map(CurrentAreaMap) is { } holderMap && holderMap.TryGetEntity(npc.Row.Key, out var holderEntity) && data.Kind(15100) is { } heldKind)
+            {
+                var added = session.AddItemToNpc(session.Version, holderEntity, heldKind, AreaInventoryHost.DiagnosticInsertCheck);
+                Require(added.Disposition == GameSessionDisposition.Changed && added.Item is { } heldItem, $"the NPC was given a made item: {added.Disposition} {added.Failure}");
+                var held = added.Item!;
+                Require(InventoryItemKind(session, held) is null && PlacedItemKind(session, held) is null && ItemMapRow(held) is null && session.QueryPrototypeItemKind(held) is not null, "an NPC's made item has neither a hero kind nor a map row, only the session's kind");
+                _messageLog.ClearHover(); LastIdentifyDescriptionForSelfTest = null;
+                PostSpellLog(null, [new SpellCastEvent(SpellCastEventKind.IdentifyItem, 0, 5, held)]);
+                for (var i = 0; i < 20 && LastIdentifyDescriptionForSelfTest is null; i++) { Frame(); TakeDialogNpcSheet(); }
+                Require(LastIdentifyDescriptionForSelfTest is { Shown: true } heldWindow && heldWindow.Item == held, $"the item window is drawn for the made item an NPC holds ({LastIdentifyDescriptionForSelfTest})");
+                Require(ItemWindowTextsForSelfTest >= 1, "the item window of an NPC's made item has its name");
+                heldDescription = $"{held} texts={ItemWindowTextsForSelfTest}";
+                GD.Print($"ARC-UI-1458 item-aim npc-held description item={held} texts={ItemWindowTextsForSelfTest}");
+            }
+            else GD.Print($"{ItemAimCode} item-aim npc-held description step NONE (a pane mode, or no NPC entity)");
+            GD.Print("ARC-DEV-365 native-smoke item-aim PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Tile = tileGoal, Npc = npc.Id, Notice = _itemAimLast, Heal = healed, Pick = picked, Sheet = sheet, Contents = contents, Description = description, GroundDescription = groundDescription, DroppedDescription = droppedDescription, HeldDescription = heldDescription, ObjectWindow = objectWindows.Count == 0 ? "NONE" : string.Join(" ", objectWindows) }));
         }
         finally
         {
