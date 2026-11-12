@@ -140,6 +140,7 @@ public partial class LabApp : Control
     {
         Require(backend.Driver == "CoreAudio" && AudioServer.GetOutputDeviceList().Length > 0, "real native CoreAudio backend and device list");
         Require(AudioBackend.Create(this, AudioLimits.Lab, out _).Error == AudioError.BackendUnavailable, "exclusive bus topology ownership");
+        Require(AudioServer.BusCount == 5 && Enum.GetValues<AudioBus>().All(bus => AudioServer.GetBusName((int)bus) == bus.ToString() && (bus == AudioBus.Master || AudioServer.GetBusSend((int)bus) == "Master")), "all four buses built at start under the driver lock, sent to Master");
         Require(GetViewportRect().Size.X == 1000 && GetViewportRect().Size.Y == 650, "actual1000x650 viewport");
         using (var decoded = AudioStreamWav.LoadFromBuffer(wave.CopyForDecoder()))
         {
