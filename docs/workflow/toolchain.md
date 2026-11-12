@@ -165,19 +165,26 @@ history held about 500 runs of such copies of one template).
   observation from being refused as late (`RestoreWorldTestTime`, ARC-WORLD-025). `summon-wall` and `summon-undead` read the hero's hit points before
   and after the burn and failed once in the long list (`25 -> 30`, not reproduced alone or in shorter chains); it now checks the
   hit-point damage the hero carries, which the wall's burn would raise (ARC-DEV-405).
-- **Stage boundary reset (ARC-DEV-408).** A stage that passes alone and fails after others had a second cause besides the test time:
-  what the earlier stages left in the shared session. `TerrainViewerSmokeStageSet` calls `SmokeStageBoundary`
-  (`TerrainViewerSmokeStageReset.cs`) at every change of stage in the viewer: the first call with a hero and a session takes the baseline (the hero's world cell
-  and the roll sequence's position, `GameSessionOwner.QueryRandom`), every later call puts back what a stage must not inherit and prints
-  `ARC-DEV-408 stage-reset PREVIOUS -> NEXT: ...` for what it changed: the hero's combat mode (`worldmap` refused "leave combat mode
-  first"), the roll sequence (`GameSessionOwner.RestoreRandom`; `floaters`' critical hit knocked its NPC out after `barter` and `life` had
-  rolled, so the NPC could not strike back) and the hero's cell when it is still on the shown map (`door-close` left the hero in the cell
-  `npc-door` walks its NPC into). A new kind of leak is one more line there, not a change to one stage. Not reset: world objects a stage
-  changed (a killed NPC, a used door, a looted container) and the viewer's windows. `ARC_SMOKE_STAGE_RESET=0` (as `--env`) switches the
-  reset off, to tell a leak from a stage's own failure; `=full` is an experiment that also loads a baseline save back at every boundary
-  (it fixes the killed-NPC leaks, but a loaded session is not a fresh one: `inv-arrange` counts revisions and sees one more). A process
-  stops at its first failing stage, so a leak fixed here can show the next one that was hidden behind it (`placement-census` after a
-  `pickpocket`/`loot-worn` kill: the AI host does not hold the dead NPC the census expects).
+- **Stage boundary reset (ARC-DEV-408, ARC-DEV-1187).** A stage that passes alone and fails after others had a second cause besides the test
+  time: what the earlier stages left in the shared session. `TerrainViewerSmokeStageSet` calls `SmokeStageBoundary`
+  (`TerrainViewerSmokeStageReset.cs`) at every change of stage in the viewer. The first call with a hero and a session saves a baseline into a
+  private save folder (the production save path) and takes the roll sequence's position (`GameSessionOwner.QueryRandom`); every later call
+  loads that baseline back through the production quick-load path and prints `ARC-DEV-408 stage-reset PREVIOUS -> NEXT: session(loaded from
+  the baseline), random(...)`. The load puts back everything the session holds: the hero (cell, combat mode, life), every NPC and its life
+  (a killed or wounded NPC), the party (the barter merchant joins in `life` and `opening`; `companion-click` and `ai-follower` need a free
+  speaker, `pickpocket` a living one), doors, containers, clocks. The roll sequence is restored after the load (`RestoreRandom`), because a
+  load does not give the baseline's position back. Limits: (1) what the viewer holds outside the session (its windows, caches, the world
+  map's open state) is not reset; (2) the load runs only while the shown window still holds the baseline's hero cell (a map change or a
+  window move by `transfer`, `roundtrip`, `stream` publishes the scene on a later frame, which a stage boundary cannot wait for); then the
+  narrow reset runs instead (the hero's combat mode, the hero's cell when it is on the shown map, the party members a stage took in, the roll
+  position; the NPCs a stage killed, wounded or moved stay as they are), so a stage that needs the start window runs before the stages that move it (`creature-item` runs right after `resources` when that stage runs too: with
+  the AI on, the first window's hero is safe, a moved window left it among wolves that killed it); (3) a loaded session is not the fresh
+  one in what the viewer computes per frame: the town map's tile under the hero is revealed once per session instance, which cost every
+  loaded session one more revision on its first frame (`inv-arrange` counts the revisions of a press), so the baseline takes that reveal
+  before it is saved and every load repeats it at once (`RevealWalkedTownMapCell`; it needs the town files open, which is not certain at the very first boundary). A new kind of leak outside the session is one more line in `SmokeStageBoundary`, not a
+  change to one stage. `placement-census` also leaves out an NPC that follows the hero (a companion body is not an NPC the host places).
+  `ARC_SMOKE_STAGE_RESET=0` (as `--env`) switches the reset off, to tell a leak from a stage's own failure; `=narrow` selects the narrow
+  reset only. A process stops at its first failing stage, so a leak fixed here can show the next one that was hidden behind it.
 - **A stage waits for a state, not for a time (ARC-DEV-1193).** `bar` failed by chance (`feedback settles to Hover with combat
   still on`) because it waited a fixed 0.15 s after a quick click and then read the button: the panel keeps Down for 80 ms
   counted from the first frame actually drawn, and on a loaded machine that draw comes late (the failing run showed 24 ms since
