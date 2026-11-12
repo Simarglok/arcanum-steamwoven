@@ -34,6 +34,16 @@ def ticket(seq: int, kind: str, started: bool = False, priority: int = run_queue
 
 
 class AdmissionRuleTests(unittest.TestCase):
+    def setUp(self) -> None:  # ARC-DEV-1353: a settings file of the owner's real queue folder must not reach the test
+        self.temp = tempfile.TemporaryDirectory()
+        self.env = patch.dict(os.environ, {"ARCANUM_LOCAL_HOME": str(Path(self.temp.name) / "home")})
+        self.env.start()
+        os.environ.pop(run_queue.LANES_ENV, None)
+
+    def tearDown(self) -> None:
+        self.env.stop()
+        self.temp.cleanup()
+
     def test_godot_kinds_share_one_slot_in_arrival_order(self) -> None:
         live = [ticket(1, "headless", started=True), ticket(2, "window"), ticket(3, "export")]
         self.assertEqual(run_queue.blocker(live[1], live)["seq"], 1)
@@ -80,6 +90,16 @@ def lane_ticket(seq: int, kind: str = "window", lane: str | None = None, started
 class LaneTests(unittest.TestCase):
     """ARC-DEV-400: the Godot slot as one heavy lane and two short lanes; an export, a rollback run and a run of an old
     wrapper run alone; two runs of one checkout never run at once."""
+
+    def setUp(self) -> None:  # ARC-DEV-1353: a settings file of the owner's real queue folder must not reach the test
+        self.temp = tempfile.TemporaryDirectory()
+        self.env = patch.dict(os.environ, {"ARCANUM_LOCAL_HOME": str(Path(self.temp.name) / "home")})
+        self.env.start()
+        os.environ.pop(run_queue.LANES_ENV, None)
+
+    def tearDown(self) -> None:
+        self.env.stop()
+        self.temp.cleanup()
 
     def waits_for(self, live: list[dict], seq: int) -> int | None:
         mine = next(item for item in live if item["seq"] == seq)
@@ -295,6 +315,83 @@ class LaneAccountingTests(unittest.TestCase):
         self.assertEqual([item["peersEnd"] for item in entries[:2]], [0, 0])
         self.assertIn("loadStart", entries[0])
         self.assertNotIn("lane", entries[2])  # a dotnet run has none
+
+
+class OwnerCapTests(unittest.TestCase):
+    """ARC-DEV-1353: the owner's caps live in the queue folder, so one setting caps the runs of every thread."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.env = patch.dict(os.environ, {"ARCANUM_LOCAL_HOME": str(Path(self.temp.name) / "home")})
+        self.env.start()
+        os.environ.pop(run_queue.LANES_ENV, None)
+
+    def tearDown(self) -> None:
+        self.env.stop()
+        self.temp.cleanup()
+
+    def test_no_file_means_the_default_and_reading_creates_nothing(self) -> None:
+        self.assertEqual(run_queue.lanes_setting(), (run_queue.DEFAULT_SHORT_LANES, "default"))
+        self.assertIsNone(run_queue.max_load())
+        self.assertFalse(run_queue.folder().exists())
+
+    def test_the_file_sets_the_lanes_for_every_wrapper_and_default_removes_it(self) -> None:
+        run_queue.write_settings({"shortLanes": 1})
+        self.assertEqual(run_queue.lanes_setting(), (1, "settings file"))
+        self.assertEqual(run_queue.lane_for("window", 200.0), "heavy")
+        run_queue.write_settings({"shortLanes": 0})
+        self.assertEqual(run_queue.lane_for("window", 20.0), "single")  # one Godot run at a time
+        run_queue.write_settings({"shortLanes": None})
+        self.assertEqual(run_queue.lanes_setting(), (run_queue.DEFAULT_SHORT_LANES, "default"))
+
+    def test_the_variable_wins_over_the_file_and_a_given_mapping_never_reads_the_file(self) -> None:
+        run_queue.write_settings({"shortLanes": 1})
+        with patch.dict(os.environ, {run_queue.LANES_ENV: "3"}):
+            self.assertEqual(run_queue.lanes_setting(), (3, "environment"))
+        self.assertEqual(run_queue.short_lanes({}), run_queue.DEFAULT_SHORT_LANES)
+
+    def test_an_unreadable_or_out_of_range_file_value_is_ignored(self) -> None:
+        for text in ("not json", "[]", '{"shortLanes": 99}', '{"shortLanes": "2"}', '{"shortLanes": true}', '{"maxLoad": -1}',
+                     '{"maxLoad": "x"}'):
+            (run_queue._open_folder() / run_queue.SETTINGS_FILE).write_text(text)
+            self.assertEqual(run_queue.lanes_setting(), (run_queue.DEFAULT_SHORT_LANES, "default"), text)
+            self.assertIsNone(run_queue.max_load(), text)
+
+    def test_the_load_guard_holds_a_run_only_while_another_godot_run_runs_and_the_load_is_above_it(self) -> None:
+        self.assertIsNone(run_queue.too_loaded(2, 99.0))  # no guard set
+        run_queue.write_settings({"maxLoad": 12.0})
+        self.assertEqual(run_queue.too_loaded(1, 13.0), 12.0)
+        self.assertIsNone(run_queue.too_loaded(1, 12.0))
+        self.assertIsNone(run_queue.too_loaded(0, 99.0))  # a lone run always starts
+        with patch.object(run_queue, "_load", return_value=None):
+            self.assertIsNone(run_queue.too_loaded(1))  # the system gives no load figure: no guard
+        with patch.object(run_queue, "_load", return_value=40.0):
+            self.assertEqual(run_queue.too_loaded(1), 12.0)  # no figure given: it reads the system's
+        run_queue.write_settings({"maxLoad": None})
+        self.assertIsNone(run_queue.too_loaded(1, 99.0))
+        (run_queue._open_folder() / run_queue.SETTINGS_FILE).write_text('{"maxLoad": 1' + "0" * 400 + "}")
+        self.assertIsNone(run_queue.max_load())  # too large for a float: no guard, no crash
+
+    def test_the_status_line_names_the_caps_and_their_source(self) -> None:
+        run_queue.write_settings({"shortLanes": 1, "maxLoad": 10})
+        self.assertIn("short lanes 1 from settings file", run_queue.settings_line())
+        self.assertIn("load guard 10", run_queue.settings_line())
+
+    def test_the_command_sets_and_clears_the_caps(self) -> None:
+        environment = {**os.environ}
+        def run(*args: str) -> subprocess.CompletedProcess:
+            return subprocess.run([sys.executable, "-B", str(ARCANUM), "queue", *args], capture_output=True, text=True,
+                                  env=environment, cwd=REPO, timeout=60)
+        done = run("--set-lanes", "1", "--set-max-load", "12")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(json.loads((run_queue.folder() / run_queue.SETTINGS_FILE).read_text()), {"maxLoad": 12.0, "shortLanes": 1})
+        self.assertIn("short lanes 1 from settings file", done.stdout)
+        self.assertNotEqual(run("--set-lanes", "9").returncode, 0)
+        self.assertNotEqual(run("--set-max-load", "0").returncode, 0)
+        self.assertNotEqual(run("--set-max-load", "1_0").returncode, 0)
+        self.assertNotEqual(run("--set-lanes", "1", "--history", "3").returncode, 0)
+        self.assertEqual(run("--set-lanes", "default", "--set-max-load", "off").returncode, 0)
+        self.assertEqual(json.loads((run_queue.folder() / run_queue.SETTINGS_FILE).read_text()), {})
 
 
 class OrderTests(unittest.TestCase):
