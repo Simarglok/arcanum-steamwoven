@@ -44,8 +44,10 @@ public partial class TerrainViewerApp
                 var hero = map.Chart.ToWorld(((AreaGridSession)_worldActor.Session!).State.CommittedCell);
                 var heroSector = (X: (int)(hero.X >> 6), Y: (int)(hero.Y >> 6));
                 int Distance(CellCoord cell) => Math.Max(Math.Abs((cell.X >> 6) - heroSector.X), Math.Abs((cell.Y >> 6) - heroSector.Y));
+                // ARC-DEV-1187: an NPC that joined the party in an earlier stage of the process (the barter merchant, in life or opening) follows the hero as a companion body, which the host's NPC list does not hold; its row stays a
+                // row, but it is no NPC row of this census (the census is of the NPCs the AI host places), as an off or destroyed row is not.
                 var rows = now.QueryResidents(mapId).Residents
-                    .Where(r => r.Kind == SessionResidentKind.Npc && r.Origin == SessionResidentOrigin.MapData && !r.Excluded && r.Cell is { } c && Distance(c) <= 10)
+                    .Where(r => r.Kind == SessionResidentKind.Npc && r.Origin == SessionResidentOrigin.MapData && !r.Excluded && now.QueryCompanion(r.Entity).Standing != CompanionStanding.Following && r.Cell is { } c && Distance(c) <= 10)
                     .ToDictionary(r => r.Entity, r => r.Cell!.Value, StringComparer.Ordinal);
                 var held = ai.Scene.Npcs.GroupBy(n => n.Entity, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
                 var lines = new List<string>();

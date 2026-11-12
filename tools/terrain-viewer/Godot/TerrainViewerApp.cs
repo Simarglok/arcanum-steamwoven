@@ -336,6 +336,8 @@ public partial class TerrainViewerApp : Node
                         // collectable; this frame may not keep it reachable.
                         result = null;
                         if (_readyMapName is null || Stage("resources")) await RunAreaResourcesAsync();
+                        // ARC-MAGIC-042 (T-m1): only when named (with --hero), a creature item thrown from the pack becomes a critter that follows the hero, or one that attacks everyone around it. ARC-DEV-1187: it runs before the stages that move the window (transfer, roundtrip, stream): with the AI on, the hero it throws from stands where the first window's wolves are, and after the stream's move it stood among other ones that killed it.
+                        if (_readyMapName is not null && only?.Contains("creature-item") == true) await RunAreaCreatureItemSmokeAsync();
                         // ARC-WORLD-031: last, because a transfer to another map publishes a new scene.
                         // ARC-DEV-116: the follower-home stage (only when named) is that same carry, with the former follower's homecoming after its jump smoke.
                         if (_readyMapName is not null && (Stage("transfer") || only?.Contains("follower-home") == true)) { await RunAreaMapCompanionSmokeAsync(); await RunAreaMapTransferSmokeAsync(); }
@@ -351,8 +353,6 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && only?.Contains("route-barrel") == true) await RunAreaRouteBarrelSmokeAsync();
                         // ARC-DEV-249 (B14, SM12): only when named (with --hero), a real grenade thrown from the pack explodes where it lands, hurts the NPCs around and is gone.
                         if (_readyMapName is not null && only?.Contains("grenade") == true) await RunAreaGrenadeSmokeAsync();
-                        // ARC-MAGIC-042 (T-m1): only when named (with --hero), a creature item thrown from the pack becomes a critter that follows the hero, or one that attacks everyone around it.
-                        if (_readyMapName is not null && only?.Contains("creature-item") == true) await RunAreaCreatureItemSmokeAsync();
                         // ARC-RENDER-1170: only when named (with --hero, and ffmpeg installed), the movie player on two generated test movies: the screen, the frozen clocks, the key skip, the failures that must not hang.
                         if (_readyMapName is not null && only?.Contains("movies") == true) await RunAreaMoviesSmokeAsync();
                         // ARC-DEV-282: only when named (with --hero), an NPC archer of the map shoots the hero: the arrow flies as a projectile and strikes through the AI host.
