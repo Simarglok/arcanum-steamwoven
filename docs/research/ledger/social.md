@@ -197,6 +197,31 @@ Not read here: the price helper's reaction input beyond BT2 (0x4C0CC0, R1), the 
 0x418B30 and of 0x4C6170 (multiplayer), the debug-prefix branch of 0x416C10 (the debug flag 0x5D1A0C). The other prefix markers of GP1 (`c`, `r`, `z`,
 and the state-dependent `d`, `q`, `u`, `x`) are later slices of ARC-SCRIPT-1150.
 
+## Rumor reply (ARC-SCRIPT-1304)
+
+Source: the [conversation runtime](../../scripting/dialog-conversation-runtime.md#rumor-reply-arc-script-1304) and the installed dialogs (239
+Player replies in 32 files start with `r:`; 233 name the price 0 and 6 the price 10; the lists name 149 distinct rumors of 1000..1202, 121 of which
+have a class-less male-to-male text; counts only). Question: what does the original do when the Player reply `r:` is picked? Read statically on
+2026-11-12 by one reader (the implementing session, method step 6, with the exports in `research-private`: the decompiled C of 0x416C10, 0x414810,
+0x418FC0, 0x4190E0, 0x418A40, 0x418B30, 0x418C40, 0x418390, 0x4C5650, 0x4C58D0, 0x4C57E0 and 0x4C5700); a second reader (the independent review, 2026-11-12) checked every row against the decompiled C and found no
+discrepancy. It is the same state machine as the trainer's talk ([DTR1–DTR9](#trainer-reply-arc-script-1150)): a pick replaces the screen without leaving
+the NPC node, and the price screen, the payment and the notices are shared.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| RMR1 | option builder (0x416C10) | A Player reply whose first two characters are `r:` (case-insensitive, a prefix) becomes an option whose text is the PC's class line of group 2000 (0x418390: 2000 + 50 × the NPC's social class, the GP2 pick); the argument is stored after the phrase's terminating NUL, not shown. The option keeps state 8 and the reply's raw response as its value, decoded later (0x417590: a positive value is state 0 with it, zero state 1, a negative value state 2 with its absolute value). The reply's own condition and action run as for any reply. | Original |
+| RMR2 | state 8 (0x414810 → 0x418FC0) | The stored argument is read as `$price,list`: the price is the atoi of the text after the first `$`, the list is read by 0x417F90 ([DTR2](#trainer-reply-arc-script-1150)) from the text after the first comma at or after the `$` (at most 100 numbers). Other characters around the numbers do not matter (the installed replies wrap them in parentheses, or put spaces around the dash). Without a `$`, or a comma after it, the original searches from address 1 (a crash). A listed number outside 1000..2999 reads its bitmaps unchecked. | Original (the last two outside this subset) |
+| RMR3 | rumor draw (0x418FC0) | Each listed number is kept, in list order and with repeats, when the rumor is not quelled (0x4C5650: bit n − 1000 of the game-wide bitmap) and the PC does not know it (0x4C58D0: only when the PC is a player character, bit n − 1000 of the PC's rumor field 0x109); the quelled test comes first. One of the kept numbers is drawn uniformly (0x4CEF00 of 0 and count − 1; equal bounds, so a single candidate, draw nothing). | Original |
+| RMR4 | nothing left (0x418FC0) | With no number kept the NPC's line is the class line 7000 (0x418480) and the only option the PC line 600..699 with the reply's own response (the notice of [DTR8](#trainer-reply-arc-script-1150)); nothing is paid or written. | Original |
+| RMR5 | price (0x418FC0, 0x418A40) | A price below 1 tells the drawn rumor at once; otherwise the price screen of [DTR5](#trainer-reply-arc-script-1150) follows with the reply's price on the reaction scale (0x4C1150, a result of 1 counting 2), its next state 9 and the drawn rumor kept for the yes; the no answer (PC line 100..199) takes the reply's own response, as does the no-gold notice (class line 2000) of [DTR6](#trainer-reply-arc-script-1150). | Original |
+| RMR6 | payment (0x418B30, state 9 of 0x414810) | Yes pays as in DTR6 (the PC's own gold against the whole price, the gold to the NPC through 0x464830) and then runs state 9 with the kept rumor. | Original |
+| RMR7 | tale (0x4190E0, 0x4C5700) | The NPC's line is the rumor's text: the file by the NPC's gender then the PC's (m2m, m2f, f2f, f2m of `mes\game_rd_npc_*`, the module-load order of 0x4C5570, ledger LB10; the dumb file is not used here), message 20 × the number + the NPC's social class + 1, else 20 × the number + 1, else an empty text; then the name substitution of 0x416B00 (`@pcname@`, `@npcname@`). The line has no voice (field 0x458 is −1, as for every generated line). | Original |
+| RMR8 | learning (0x4C57E0, 0x4C58A0) | After the text, in single player, the rumor is written to the PC's rumor log with the game time when the PC is a player character and does not know it yet (a known one stays as it is); a multiplayer game sends a message first. | Original |
+| RMR9 | answer; NPC-side marker (0x4190E0, 0x416840) | The only option after the tale is the PC's class line 1000 (0x418390) with the reply's own response. The NPC's own node text `r:` (0x416840) calls the same 0x418FC0 with the NPC record's response and no reply around it: read, not built here (slice G1 of issue #1150). | Original |
+
+Not read here: the network message branches of 0x4C57E0 and 0x418B30 (multiplayer), the debug-prefix branch of 0x416C10 (the debug flag 0x5D1A0C), the
+unchecked 1000-byte buffer of the tale (a longer text overruns it; the installed texts are short), the behaviour for a rumor number outside 1000..2999.
+
 ## Followers across maps (ARC-RES-076)
 
 Source: [followers across maps](../follower-map-transfer.md) (rows FM1–FM14 with their full text and addresses). Read on

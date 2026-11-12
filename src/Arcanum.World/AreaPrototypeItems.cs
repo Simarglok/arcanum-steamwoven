@@ -10,6 +10,12 @@ public sealed record AreaPrototypeItem(SessionItemKind Kind, uint Art, SessionIt
 {
     /// <summary>ARC-DEV-097 (MIG8, SA4): the elements of the prototype's script array, which an object created from it reads until its first write.</summary>
     public IReadOnlyList<SessionPrototypeScript> Scripts { get; init; } = [];
+
+    /// <summary>ARC-WORLD-1283: the prototype's no-drop item flag (item flag 0x20, field 0x57), which the remove check (0x466DA0) of a transfer reads on an object made from it.</summary>
+    public bool NoDrop { get; init; }
+
+    /// <summary>The no-drop item flag (0x20) of the item flags.</summary>
+    public const uint NoDropFlag = 0x20;
 }
 
 /// <summary>
@@ -61,7 +67,10 @@ public sealed class AreaPrototypeItems : IDisposable
         if (Fields(prototype) is { Item: { } facts } fields && Enum.IsDefined((SessionItemType)fields.Object.Type))
             item = new(new((SessionItemType)fields.Object.Type, prototype, fields.Object.Name, fields.Object.Description), fields.Object.CurrentArt,
                 new(facts.Weight, facts.MagicWeight, facts.MagickTechComplexity))
-            { Scripts = Array.AsReadOnly(fields.Object.ScriptAttachments.Select(a => new SessionPrototypeScript(a.Point, a.Script, a.LocalFlags, a.Counters)).ToArray()) };
+            {
+                Scripts = Array.AsReadOnly(fields.Object.ScriptAttachments.Select(a => new SessionPrototypeScript(a.Point, a.Script, a.LocalFlags, a.Counters)).ToArray()),
+                NoDrop = (facts.Flags & AreaPrototypeItem.NoDropFlag) != 0,
+            };
         _items[prototype] = item;
         return item;
     }

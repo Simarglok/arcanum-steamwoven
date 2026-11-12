@@ -104,7 +104,7 @@ public sealed class AreaGreetingTests
         var start = new AreaConversationStart(AreaConversationStartStatus.Started, null, null, "", Document: document, DialogScript: 3) { Greeting = greeting };
         Assert.AreEqual((7 << 16) | 42, start.VoiceIdentity(new DialogNpcLine(new(10), "Hi", new(DialogLineOriginKind.Override, 10009))), "the override record's own voice");
         Assert.AreEqual(-1, start.VoiceIdentity(new DialogNpcLine(new(10), "Hi", new(DialogLineOriginKind.Override, 10010))), "no such override record");
-        foreach (var kind in new[] { DialogLineOriginKind.Generated, DialogLineOriginKind.Reputation, DialogLineOriginKind.MissingLine, DialogLineOriginKind.Empty })
+        foreach (var kind in new[] { DialogLineOriginKind.Generated, DialogLineOriginKind.Reputation, DialogLineOriginKind.MissingLine, DialogLineOriginKind.Empty, DialogLineOriginKind.Rumor })
             Assert.AreEqual(-1, start.VoiceIdentity(new DialogNpcLine(new(10), "x", new(kind, 10000))), kind.ToString());
         Assert.AreEqual((3 << 16) | 5, start.VoiceIdentity(new DialogNpcLine(new(10), "x")), "a record's own line keeps its voice");
         Assert.AreEqual(-1, (start with { Greeting = null }).VoiceIdentity(new DialogNpcLine(new(10), "Hi", new(DialogLineOriginKind.Override, 10009))));
@@ -121,10 +121,13 @@ public sealed class AreaGreetingTests
             Write(module, "rules/gamerep.mes", "{1000}{0 0 0, 5 0 0}");
             Write(module, "mes/gamereplog.mes", "{1000}{Name}");
             Write(module, "mes/game_rp_npc_m2m.mes", "{1000}{Hero}");
+            Write(module, "mes/game_rd_npc_m2f.mes", "{20001}{Tale}");
             var plan = new ContentMountPlan(root, "Mod", [new(ContentSourceRole.ModuleDirectory, 0, module)]);
             var texts = AreaGreetingTexts.Load(plan);
             Assert.AreEqual(AreaGreetingTextsStatus.Ready, texts.Status, texts.Detail);
-            Assert.AreEqual("1 generated-dialog files, 1 reputation greeting files", texts.Detail);
+            Assert.AreEqual("1 generated-dialog files, 1 reputation greeting files, 1 rumor files", texts.Detail);
+            Assert.IsNull(texts.RumorLines![0], "the male-to-male rumor file is not in this module");
+            Assert.IsNotNull(texts.RumorLines[1]?.Find(20001), "ARC-SCRIPT-1304: the module's rumor files are loaded in the original's handle order");
             Assert.IsNotNull(texts.Files!.File(GeneratedDialogFile.ClassMaleToMale));
             Assert.IsNotNull(texts.ReputationLines[0]);
             Write(module, "mes/gd_npc_f2f.mes", "{1}{broken");
