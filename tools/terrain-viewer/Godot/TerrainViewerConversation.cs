@@ -181,10 +181,10 @@ public partial class TerrainViewerApp
     /// A guarded left press (see <c>WorldRouteClick</c>): true when it hit a dialog NPC and the click rules (GS26) made it a talk. ARC-DEV-169 (MIG13 S11a): the click is an <see cref="ObjectClickRequest"/>; the hero's talk is goal 21 of the
     /// goal table (<see cref="AreaHeroRunsHost.Talk"/>): its steps test the range, walk the hero next to the NPC (goal 8) and ask for the dialog in the last node (<see cref="ViewerHeroRuns.OpenDialog"/>). There is no walk-to-talk intent any more.
     /// </summary>
-    private bool TryAreaTalk(Vector2 screen) => SpeakerAtScreen(screen) is { } speaker && TryAreaTalk(speaker);
+    private bool TryAreaTalk(Vector2 screen, bool shift = false) => SpeakerAtScreen(screen) is { } speaker && TryAreaTalk(speaker, shift);
 
     /// <summary>The talk click on one speaker (ARC-DEV-280: a press on the object, or the release on a follower's portrait, 0x54ED30 either way).</summary>
-    private bool TryAreaTalk(AreaSpeaker speaker)
+    private bool TryAreaTalk(AreaSpeaker speaker, bool shift = false)
     {
         if (ConversationOpen || ActorCell() is null) return false;
         if (HeroRunsHost() is null)
@@ -197,7 +197,7 @@ public partial class TerrainViewerApp
         }
         CancelAreaUseApproach("a talk click replaced it"); CancelInventoryApproach("a talk click replaced it");
         _talkOpenPending = null; // a dialog the last talk asked for and that has not opened yet is dropped by a new order
-        var request = HeroRequests.Apply(new ObjectClickRequest(TalkTargetOf(speaker)));
+        var request = HeroRequests.Apply(new ObjectClickRequest(TalkTargetOf(speaker), Shift: shift));
         if (request.Click != Arcanum.Simulation.Goals.HeroClickGoal.Talk) return false;
         _conversationNotice = request.Outcome == HeroRequestOutcome.Done ? $"talking: goal 21 started at script {speaker.ScriptId}" : "the talk was refused";
         GD.Print($"ARC-DEV-169 talk-click outcome={request.Outcome} goal={request.Click} script={speaker.ScriptId}");
