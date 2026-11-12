@@ -76,4 +76,28 @@ public sealed class AreaDollRatingsTests
         Assert.IsNull(host.DollRatings(session, Entity(1)));
         Assert.IsNull(host.DollRatings(session, "oid:unknown"));
     }
+
+    [TestMethod]
+    public void TheHeroHostReadsTheHeroValuesAndNothingWithoutAHero()
+    {
+        // ARC-UI-1267 (IW25): the combat host reads the hero's own rating numbers from the session's hero (the session's tests cover the values, the armour identification and the
+        // weapon overlay); a session without a hero has none.
+        using var plain = ConversationSessionFixture.Create();
+        Assert.IsNull(Host().Host.HeroDollRatings(plain));
+        using var session = ConversationSessionFixture.CreateWithHero();
+        var (host, _) = Host();
+        var rated = host.HeroDollRatings(session);
+        Assert.IsNotNull(rated);
+        var direct = session.QueryHeroDollRatings(_ => false)!;
+        Assert.AreEqual(direct.Damage, rated.Damage, "bare hands, nothing worn: the same damage rating whichever way identification is asked");
+        Assert.IsFalse(rated.WeaponTooHeavy);
+    }
+
+    [TestMethod]
+    public void TheOwnWindowsRatingBoxesAreTheOriginalsTables()
+    {
+        // IW25: 0x5CAEF8 and 0x5CAF08, 23 × 35 each; the damage rating's box lies left of the doll's boots, the armour rating's right of them (both under the slot rectangles).
+        Assert.AreEqual((80, 358, 23, 35), AreaInventoryArtLayout.DamageRatingBox);
+        Assert.AreEqual((261, 358, 23, 35), AreaInventoryArtLayout.ArmourRatingBox);
+    }
 }

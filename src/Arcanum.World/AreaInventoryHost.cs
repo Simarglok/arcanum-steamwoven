@@ -85,6 +85,9 @@ public sealed record AreaInventoryView(IReadOnlyList<AreaInventoryLine> Pc, stri
     /// <summary>ARC-UI-1121 (B30, IW29, IW41–IW43): the numbers the doll view prints for the looted body and whether its weapon is too heavy for it (the viewer reads them from
     /// the combat host, <see cref="AreaCombatHost.DollRatings"/>); null when the combat host does not know the body (the doll view then prints nothing).</summary>
     public SessionDollRatings? BodyRatings { get; init; }
+    /// <summary>ARC-UI-1267 (IW25, IW41, IW43): the numbers the hero's own window prints under its doll and whether its weapon is too heavy for it (the viewer reads them from
+    /// the combat host, <see cref="AreaCombatHost.HeroDollRatings"/>); null when the combat host does not know the hero (the own window then prints nothing).</summary>
+    public SessionDollRatings? HeroRatings { get; init; }
     /// <summary>ARC-UI-052: the interface art of the looted holder's image (<see cref="AreaLootArtLayout.HolderImage"/>); null when its facts
     /// do not decide it.</summary>
     public int? HolderImage { get; init; }
