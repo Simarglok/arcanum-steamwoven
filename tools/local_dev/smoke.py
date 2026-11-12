@@ -230,7 +230,7 @@ STAGE_NEEDS: dict[str, StageNeeds] = {
     "critter-fall": _needs(own=True),  # fails in a longer list ("ran over at least two cells"), passes alone
     "save-resume": _needs(), "cast-multi": _needs(map=RUINS, only_map=True), "grenade": _needs(map=CAVE),
     "companion-click": _needs(), "npc-shot": _needs(sector=TOWN), "ai-react": _needs(own=True),
-    "placement-census": _needs(),  # ai-react: its own process, it failed after the other AI stages and passed alone (2026-11-12)
+    "placement-census": _needs(),  # passes after the other AI stages (ARC-DEV-1187: baseline loads at the stage boundaries, a companion is no NPC row)
     "inv-carry": _needs(debug=True, own=True),  # a dead body with an item; NONE at the Crash Site was seen
     "spell-end": _needs(), "hold-hero": _needs(), "spell-effects": _needs(), "movement": _needs(), "spirit-talk": _needs(), "sleep": _needs(sector=WILD, own=True),  # moves the clock by days; the wilderness sector has no town map (the sleep window, not the wait window)
     "created-scenery": _needs(portable=True), "created-critter": _needs(portable=True),

@@ -10,24 +10,26 @@ namespace Arcanum.TerrainViewer;
 // stage that passes alone failed after others because of what its predecessors left: the hero in combat mode (worldmap: "leave combat
 // mode first"), the session's roll sequence further along (floaters: the NPC's critical hit knocked it out), the hero standing where the
 // last stage put it (npc-door: the cell its NPC must walk into), an NPC a stage killed (placement-census) ...
-// TerrainViewerSmokeStageSet calls SmokeStageBoundary at every change of stage, and the default reset puts back three things: the
-// hero's combat mode, the hero's cell (when it is on the shown map) and the session's roll position, each to what the first stage of the
-// process started with.
-// Not reset: world objects a stage changed (a killed NPC, a used door, a looted container) and what the viewer holds outside the session.
-// ARC_SMOKE_STAGE_RESET=0 switches it off, to tell a leak from a stage's own failure. =full is the wider experiment: the first call saves the
-// baseline into a private save folder and every later call loads it back through the production quick-load path (hero, combat, NPCs,
-// doors, containers, clocks); it fixes the killed-NPC leaks, but a loaded session is not a fresh one (inv-arrange counts revisions
-// and sees one more), so it is not the default. When a load is not possible the narrower reset runs.
+// TerrainViewerSmokeStageSet calls SmokeStageBoundary at every change of stage. ARC-DEV-1187: the default reset puts the whole session back:
+// the first call saves the baseline into a private save folder (the production save path) and every later call loads it back through the production
+// quick-load path (hero, combat mode, NPCs and their life, party, doors, containers, clocks), so no stage inherits a killed or wounded NPC, a companion
+// a stage took into the party, a used door or a looted container; then the session's roll position is put back too (a load does not restore it).
+// ARC_SMOKE_STAGE_RESET=narrow is the older narrow reset (the hero's combat mode, the hero's cell when it is on the shown map, the party's members a stage took
+// in, the roll position; ARC-DEV-408) and also the fallback when the load is not possible (a stage left the shown map, the quick-load is busy, the baseline
+// could not be saved). =0 switches the reset off, to tell a leak from a stage's own failure.
+// Limits: what the viewer holds outside the session is not reset (its windows, caches, the world map's open state); a loaded session is not the fresh one
+// in what the viewer computes per frame (the town map's tile under the hero is revealed once per session instance, so the baseline takes it before it is saved).
 public partial class TerrainViewerApp
 {
     private string? _smokeBaselineName;
-    private (int Map, AreaStepCell Hero, SessionRandomState Random)? _smokeBaseline;
+    private (int Map, AreaStepCell Hero, SessionRandomState Random, IReadOnlySet<string> Party)? _smokeBaseline;
     private GameSaveLibrary? _smokeBaselineLibrary;
 
     private void SmokeStageBoundary(string? previous, string next)
     {
         var mode = System.Environment.GetEnvironmentVariable("ARC_SMOKE_STAGE_RESET");
         if (mode == "0") return;
+        var full = mode != "narrow";
         // Before a hero and a session exist there is nothing to reset: the baseline is taken at the first boundary where they do.
         if (_areaSession is not { } session || session.QueryHero() is null || _worldActor.Session is not AreaGridSession grid || _readyArea is null) return;
         var hero = grid.Chart.ToWorld(grid.State.CommittedCell);
@@ -35,8 +37,11 @@ public partial class TerrainViewerApp
         // replaced the session by a load of its own (what that stage left is what the reset removes).
         if (_smokeBaseline is not { } baseline)
         {
-            var saved = mode == "full" && SmokeSaveBaseline();
-            _smokeBaseline = (CurrentAreaMap, hero, session.QueryRandom());
+            // The town map's tile under the hero is revealed by the viewer once per frame (WM78); a baseline taken before it was would give every loaded session
+            // one more revision on its first frame (inv-arrange counts the revisions of a press), so the baseline has it already.
+            RevealWalkedTownMapCell();
+            var saved = full && SmokeSaveBaseline();
+            _smokeBaseline = (CurrentAreaMap, hero, session.QueryRandom(), PartyLedByPc(session));
             GD.Print($"ARC-DEV-408 stage-baseline before {next}: map={CurrentAreaMap} hero={hero.X},{hero.Y} draws={session.QueryRandom().Draws} saved={saved}");
             return;
         }
@@ -44,7 +49,7 @@ public partial class TerrainViewerApp
         var baselineCell = new CellCoord(checked((int)baseline.Hero.X), checked((int)baseline.Hero.Y));
         var onShownMap = CurrentAreaMap == baseline.Map
             && AreaQuickSave.InShownSectors(_readyArea.Snapshot.Sectors.Where(s => s.Scope == Arcanum.Data.Area.AreaScope.Core && s.Present).Select(s => s.Coordinate), baselineCell);
-        if (mode == "full" && onShownMap && _smokeBaselineLibrary is not null && _smokeBaselineName is not null && SmokeLoadBaseline())
+        if (full && onShownMap && _smokeBaselineLibrary is not null && _smokeBaselineName is not null && SmokeLoadBaseline())
         {
             session = _areaSession!;
             reset.Add("session(loaded from the baseline)");
@@ -74,9 +79,27 @@ public partial class TerrainViewerApp
                 finally { _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused; }
             }
         }
+        // ARC-DEV-1187: an NPC a stage took into the party (the barter merchant joins in life and opening) is no longer free for the stages that need
+        // a free speaker (companion-click and ai-follower exit with NO-FOLLOWER, pickpocket with no candidate): it leaves the party as the stages
+        // that join one end theirs (PartyLeave Force), and the companion bodies and the selection are rebuilt.
+        var joined = PartyLedByPc(session).Where(entity => !baseline.Party.Contains(entity)).Order(StringComparer.Ordinal).ToArray();
+        if (joined.Length > 0)
+        {
+            foreach (var entity in joined) session.LeaveParty(session.Version, entity, new PartyLeave(Force: true));
+            BindAreaCompanions();
+            PublishWorldSelection();
+            reset.Add($"party-left({joined.Length})");
+        }
         var random = session.QueryRandom();
         if (random != baseline.Random && session.RestoreRandom(baseline.Random)) reset.Add($"random({random.Draws}->{baseline.Random.Draws})");
         if (reset.Count > 0) GD.Print($"ARC-DEV-408 stage-reset {previous ?? "-"} -> {next}: {string.Join(", ", reset)}");
+    }
+
+    // The NPCs the hero leads now: followers (also those the party's Forced flag marks) and waiting ones.
+    private static HashSet<string> PartyLedByPc(GameSessionOwner session)
+    {
+        var party = session.QueryParty();
+        return party.Followers.Concat(party.Others).Where(c => c.LedByPc).Select(c => c.Entity).ToHashSet(StringComparer.Ordinal);
     }
 
     private bool SmokeSaveBaseline()
