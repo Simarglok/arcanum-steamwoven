@@ -54,6 +54,38 @@ public sealed record AreaTrapMeeting(AreaObjectRecord Row, SessionTrapCause Caus
     }
 }
 
+/// <summary>
+/// ARC-SKILLS-1156: one disarm traps press of the hero on a trapped object (<see cref="AreaTraps.Disarm"/>): the object's row, the session's roll
+/// (<see cref="GameSessionOwner.RollHeroDisarmTrap"/>: the turn-based charge, the check, the disarm), the effect of a sprung native trap and the
+/// device item an expert's critical success created for the hero (null when none was owed or the world has no item data for it).
+/// </summary>
+public sealed record AreaTrapDisarm(AreaObjectRecord Row, SessionDisarmRoll Roll, SessionTrapEffectResult? Effect, InventoryMutationResult? Device)
+{
+    public bool Rejected => Roll.Disposition == GameSessionDisposition.Rejected;
+
+    /// <summary>The disarm outcome (<see cref="TrapDisarm.NotTrapped"/> for a rejected press).</summary>
+    public TrapDisarm Outcome => Roll.Disarm?.Outcome ?? TrapDisarm.NotTrapped;
+
+    /// <summary>Identifiers, outcomes and numbers only.</summary>
+    public string Describe()
+    {
+        if (Rejected) return $"refused by the session ({Roll.Failure})";
+        var check = Roll.Check is { } c ? $" (roll {c.Check.Roll} against {c.Check.Effectiveness - c.Check.Difficulty}, {(c.Success ? "pass" : "fail")}{(c.Critical ? " critical" : "")}{(Roll.SecondRoll ? ", second roll" : "")})" : "";
+        var what = Outcome switch
+        {
+            TrapDisarm.Removed => "disarmed",
+            TrapDisarm.RemovedWithDevice => "disarmed, its device " + (Device is { Item: not null } ? "is in the pack" : "could not be made"),
+            TrapDisarm.Failed => "the disarm failed",
+            TrapDisarm.Sprung => "the disarm failed critically: the trap goes off" + (Roll.Disarm?.Run is { } run ? $" (script {run.Script})" : ""),
+            TrapDisarm.NotKnown => "no known trap there",
+            _ => "no trap there",
+        };
+        if (Effect is { Victims.Count: > 0 } effect)
+            what += "; " + string.Join(", ", effect.Victims.Select(v => $"{v.Entity} {v.Hit}{(v.HitPointDamage > 0 ? $" -{v.HitPointDamage} HP" : "")}"));
+        return what + check;
+    }
+}
+
 /// <summary>What the walk check before one step found (TT10): the trap object it spotted (null: none, the step goes), the session's
 /// mark, and how many spot trap rolls it made on the tile's unknown traps (ARC-MAGIC-057, ledger SP1).</summary>
 public sealed record AreaTrapWalk(AreaObjectRecord? Spotted, GameSessionMutationResult? Mark, int Rolls);
@@ -181,6 +213,57 @@ public sealed class AreaTraps
         var result = _session.TriggerTrap(_session.Version, trapped, baseline, byHero ? TrapObserver.Player : TrapObserver.NotCritter, SessionTrapCause.Attack, false);
         if (result.Outcome != SessionTrapOutcome.Fired || result.Run is not { Effect: not NativeTrapEffect.None } run) return new(row, SessionTrapCause.Attack, result, null);
         return new(row, SessionTrapCause.Attack, result, apply!(row, run, baseline.Counters, result.State.ObjectFlags));
+    }
+
+    /// <summary>The trap difficulty of a trap object (type 17, object field 0x134 = 308, slot 37; 0 when the row holds none), which the disarm check
+    /// reads for a trap object only (ledger SP3); 0 for any other row.</summary>
+    public static int TrapDifficulty(AreaObjectRecord row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        return row.Type == TrapObjectType && row.EffectiveFields.FirstOrDefault(field => field.Slot == TrapDifficultySlot) is { Presence: AreaPresence.Value, Number: { } n }
+            && n is >= int.MinValue and <= int.MaxValue ? (int)n : 0;
+    }
+
+    private const int TrapDifficultySlot = 37;
+
+    /// <summary>The trap objects the player knows on <paramref name="cell"/> that the session has not destroyed, in snapshot order.</summary>
+    public IReadOnlyList<AreaObjectRecord> KnownTrapObjectsOn(CellCoord cell) =>
+        TrapObjectsOn(cell).Where(row => _host.TrapBaseline(row) is { } baseline && _session.TrapKnownTo(AreaUseScriptHost.Trapped(row), baseline, TrapObserver.Player)
+            && _session.QueryTrap(AreaUseScriptHost.Trapped(row), baseline).Trapped).ToArray();
+
+    /// <summary>Whether the player knows a trap on the row now (the disarm skill's only valid target, TT5).</summary>
+    public bool KnownTrap(AreaObjectRecord row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        if (_gone(row) || _host.TrapBaseline(row) is not { } baseline) return false;
+        var trapped = AreaUseScriptHost.Trapped(row);
+        return _session.QueryTrap(trapped, baseline).Trapped && _session.TrapKnownTo(trapped, baseline, TrapObserver.Player);
+    }
+
+    /// <summary>
+    /// ARC-SKILLS-1156 (ledger SP3, TT5, TT6): the hero's disarm traps press on <paramref name="row"/> (a trap object, a trapped container, door or
+    /// scenery): the session's roll with the trap object's difficulty (field 0x134) and the light at the row
+    /// (<see cref="GameSessionOwner.RollHeroDisarmTrap"/>, which charges the press in a round); a sprung native trap's effect through the cast host
+    /// (the hero as the triggerer, as a use's); an expert's device (<paramref name="insert"/>: the hero's insert check) created in the hero's pack.
+    /// Null for a row that carries no trap the player knows, or without a cast host (a sprung trap could not take effect). The follower who would act
+    /// instead (SP3) is not modelled.
+    /// </summary>
+    public AreaTrapDisarm? Disarm(AreaObjectRecord row, ISessionCombatWorld? combat, SessionInsertCheck insert)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        ArgumentNullException.ThrowIfNull(insert);
+        if (_effects() is not { } effects || !KnownTrap(row) || _host.TrapBaseline(row) is not { } baseline) return null;
+        var state = _session.QueryTrap(AreaUseScriptHost.Trapped(row), baseline);
+        // A native trap the host cannot make take effect (the 30002 shot, no cast host) is not met, so it is not set off by a failure either.
+        if (TrapRules.NativeRun(state.Script, baseline.HeaderFlags) is not null && TrapEffectRules.Of(state.Script, baseline.Counters) is { Kind: TrapEffectKind.Shot }) return null;
+        var roll = _session.RollHeroDisarmTrap(_session.Version, AreaUseScriptHost.Trapped(row), baseline, TrapDifficulty(row), LightAt(row), combat);
+        SessionTrapEffectResult? effect = null;
+        if (roll.Disarm is { Outcome: TrapDisarm.Sprung, Run: { Effect: not NativeTrapEffect.None } run } sprung)
+            effect = effects.Apply(row, run, baseline.Counters, sprung.State.ObjectFlags);
+        InventoryMutationResult? device = null;
+        if (roll.Disarm is { Outcome: TrapDisarm.RemovedWithDevice, DevicePrototype: > 0 and var prototype })
+            device = _host.GiveHeroPrototypeItem(prototype, insert);
+        return new(row, roll, effect, device);
     }
 
     private int LightAt(AreaObjectRecord row) => _light?.Invoke(row) ?? SessionPickLockTarget.FullLight;

@@ -157,7 +157,7 @@ public partial class TerrainViewerApp
     private void FollowerPortraitClick(string entity)
     {
         if (!WorldClickInputOpen || AreaTransferPending || HeroLyingDown || _gameCursorItem is not null || _spellTargeting is not null || _spellGoal is not null
-            || ItemTargetOpen || PickPocketArmed || _pendingOrder is not null
+            || ItemTargetOpen || PickPocketArmed || DisarmArmed || _pendingOrder is not null
             || _areaSession?.QueryCombatRound() is { } round && CombatModeActive && !round.Actor.IsHero)
         {
             _companionNotice = "follower click ignored: a window, a cursor or another's turn owns the input";
