@@ -172,7 +172,7 @@ is `AreaUseScriptHost.EntityId`, as for the object damage domain.
   the PC-placed ones, and the player's Detect Traps flag spots for any observer. `AreaTraps.WalkCheckNpc` is the walk check of the NPC's
   next tile (0x427110, TT10), asked by `AreaAiHost.StepBlocked` through the scene's `Traps` provider before the step starts: the first
   trap spotted blocks the step as a step that cannot start does (the walk ends, EX20). A companion on its own follow walk (not held by
-  the AI host) asks the same check through `AreaCompanionGroup.StepTrap`, which refuses the step with `TrapSpottedReason`. A companion marks what it spots (the player
+  the AI host) asks the same check through `AreaCompanionGroup.StepTrap`, which refuses the step with `TrapSpottedReason` (the gate stays on the companion's grid through its rebuilds; a companion the AI host holds asks nothing there, as the host's own check rolled). The AI host rolls only for a step that can start. A walker meeting a trapped door tile rolls again after its door push, as the walk node restarts; once a companion marks a trap the next frame's step goes (nothing ends its follow goal or plans around the tile yet). A companion marks what it spots (the player
   knows it from then on); a free NPC marks nothing (TT4), so it rolls again at its next step. An NPC with no sheet or life rolls nothing.
 - **Disarm.** See [Disarm](#disarm-arc-skills-1156).
 - **Effects.** A fired native run goes to `SessionSpellCaster.ApplyTrapEffect` with the cast

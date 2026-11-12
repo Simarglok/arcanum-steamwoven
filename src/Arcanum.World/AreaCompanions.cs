@@ -275,7 +275,8 @@ public sealed class AreaCompanionGroup
             grid.Gait = () => companion.LastUpdate.Action == FollowAction.Run ? MovementGait.Run : MovementGait.Walk;
             // ARC-MAGIC-1189 (ledger TT10, SP2): the walk check before each of its steps (0x427110): a trap the companion spots on the next tile refuses the step.
             var entityId = companion.Entity;
-            grid.StepCharge = (key, _) => group!.StepTrap?.Invoke(entityId, WorldCell(chart, key.To)) == true ? TrapSpottedReason : null;
+            // A companion the AI host holds takes the host's steps, whose own walk check (AreaAiHost.StepBlocked) already rolled for this step.
+            grid.StepCharge = (key, _) => group!.HeldByAi?.Invoke(entityId) != true && group.StepTrap?.Invoke(entityId, WorldCell(chart, key.To)) == true ? TrapSpottedReason : null;
             list.Add(companion);
         }
         group = new(steps, chart, map, list.ToArray(), absent, away.AsReadOnly()) { Skipped = skipped.AsReadOnly() };
@@ -338,7 +339,7 @@ public sealed class AreaCompanionGroup
         if (facing == state.Facing) return;
         companion.Grid = new AreaGridSession(_steps, state.Time, chart: _chart, start: state.CommittedCell, facing: facing,
             actorId: state.Binding.ActorId, capabilities: Capabilities)
-            { Occupancy = grid.Occupancy, CrittersPass = grid.CrittersPass, Timing = grid.Timing, Gait = grid.Gait };
+            { Occupancy = grid.Occupancy, CrittersPass = grid.CrittersPass, Timing = grid.Timing, Gait = grid.Gait, StepCharge = grid.StepCharge };
     }
 
     /// <summary>ARC-DEV-105 (MIG9 S5, the follower catch-up 0x4AD4D0, which ends in the move 0x43E770): the AI host's move of the companion
@@ -351,7 +352,7 @@ public sealed class AreaCompanionGroup
         companion.Follow.Interrupt(grid.State.Time);
         companion.Grid = new AreaGridSession(_steps, grid.State.Time, chart: _chart, start: cell, facing: grid.State.Facing,
             actorId: grid.State.Binding.ActorId, capabilities: Capabilities)
-            { Occupancy = grid.Occupancy, CrittersPass = grid.CrittersPass, Timing = grid.Timing, Gait = grid.Gait };
+            { Occupancy = grid.Occupancy, CrittersPass = grid.CrittersPass, Timing = grid.Timing, Gait = grid.Gait, StepCharge = grid.StepCharge };
         companion.Jumps++;
         return true;
     }
@@ -477,7 +478,7 @@ public sealed class AreaCompanionGroup
                 if (!Admitted(_steps, _chart, jump)) continue;
                 companion.Grid = new AreaGridSession(_steps, frontier, chart: _chart, start: jump, facing: grid.State.Facing,
                     actorId: grid.State.Binding.ActorId, capabilities: Capabilities)
-                    { Occupancy = grid.Occupancy, CrittersPass = grid.CrittersPass, Timing = grid.Timing, Gait = grid.Gait };
+                    { Occupancy = grid.Occupancy, CrittersPass = grid.CrittersPass, Timing = grid.Timing, Gait = grid.Gait, StepCharge = grid.StepCharge };
                 companion.Jumps++;
                 continue;
             }

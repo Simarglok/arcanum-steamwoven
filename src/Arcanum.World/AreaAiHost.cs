@@ -1616,10 +1616,11 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (LivingCritterOn(next, id)) return AiStepBlock.Occupied;
         var chart = ToChart(from);
         if (AiExecutorRules.Distance(from, next) != 1) return AiStepBlock.CannotStart;
-        // ARC-MAGIC-1189 (TT10): a trap the walker spots on the next tile blocks the step, which ends the walk as a step that cannot start does (EX20).
-        if (TrapSpottedOn(id, next)) return AiStepBlock.CannotStart;
         var direction = RoutePlanner.Toward(chart, ToChart(next));
         var open = new AreaRouteSource(Steps, _scene.Chart, MovedRecords, _scene.Passages).Assess(chart, direction) == RouteStepVerdict.Open;
+        // ARC-MAGIC-1189 (TT10): on a step that can start, a trap the walker spots on the next tile blocks it, which ends the walk as a step that cannot start does (EX20);
+        // a step that cannot start anyway rolls nothing, as the hero's step gate (asked for an open step only).
+        if (open && TrapSpottedOn(id, next)) return AiStepBlock.CannotStart;
         return open ? AiStepBlock.Clear : flight ? AiStepBlock.Occupied : AiStepBlock.CannotStart;
     }
 

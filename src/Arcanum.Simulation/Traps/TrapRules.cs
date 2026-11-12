@@ -109,7 +109,6 @@ public static class TrapRules
     /// <see cref="PoweredShieldName"/>, the source holds charges of ammunition type 2 (the count 0x465820 gives is above 0) and its aptitude (stat 16)
     /// is at or below 0, the modifier is the aptitude itself (negative: a bonus); a positive aptitude clears it to 0 and any other case leaves 0.
     /// </summary>
-    [OriginalFunction(0x4BBE40, OriginalFunctionScope.Partial)]
     public static int SpotItemModifier(int shieldName, int charges, int aptitude) =>
         shieldName == PoweredShieldName && charges > 0 && aptitude <= 0 ? aptitude : 0;
 

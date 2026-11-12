@@ -179,7 +179,7 @@ public sealed partial class GameSessionOwner
         if (_revision == long.MaxValue) return RejectSpot(GameSessionFailure.RevisionExhausted);
         var sheet = _advancement.Npcs.TryGetValue(spot.Loaded.Entity, out var levelled) ? levelled.Sheet : spot.Loaded.Sheet;
         var skill = QueryNpcSkills(spot.Loaded, spot.Modifiers)[Skill.SpotTrap];
-        var aptitude = AutoLevelRules.DerivedStat(sheet, spot.Modifiers, CharacterStat.MagickTechAptitude);
+        var aptitude = Math.Clamp(AutoLevelRules.DerivedStat(sheet, spot.Modifiers, CharacterStat.MagickTechAptitude), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);
         var request = new SkillCheckRequest
         {
             Skill = Skill.SpotTrap,
@@ -208,7 +208,7 @@ public sealed partial class GameSessionOwner
     {
         var worn = _equipment.Capture().Worn.FirstOrDefault(item => item.Slot == EquipmentSlot.Shield)?.Entity;
         var name = worn is null ? 0 : HeroHeld().Where(item => item.Entity == worn).Select(item => item.Kind.Name).FirstOrDefault();
-        return TrapRules.SpotItemModifier(name, HeroStackOfType(TrapRules.ChargeAmmoType)?.Units ?? 0, _hero!.Stats.Query(HeroStatContext()).Snapshot!.GetEffective(CharacterStat.MagickTechAptitude));
+        return TrapRules.SpotItemModifier(name, HeroStackOfType(TrapRules.ChargeAmmoType)?.Units ?? 0, HeroAptitude());
     }
 
     // The name of the item an NPC's list holds at an inventory location as the session's lists show it (a dressed NPC's record over its map data, ARC-WORLD-103); 0 for none.

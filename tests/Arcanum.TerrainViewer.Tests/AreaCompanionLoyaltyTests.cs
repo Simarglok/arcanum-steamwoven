@@ -123,6 +123,18 @@ public sealed class AreaCompanionLoyaltyTests
         var world = AreaChart.Exterior.ToWorld(new CellCoord(6, 1));
         Assert.AreEqual(2, asked.Count);
         Assert.IsTrue(asked.All(a => a.Entity == companion.Entity && a.Cell == new CellCoord((int)world.X, (int)world.Y)), "the companion's entity and the tile's world cell");
+        // A companion the AI host holds takes the host's steps, whose walk check rolled already: its own gate asks nothing.
+        group.HeldByAi = _ => true;
+        asked.Clear();
+        Assert.IsNull(companion.Grid.StepCharge(step, Arcanum.World.MovementGait.Walk));
+        Assert.AreEqual(0, asked.Count);
+        group.HeldByAi = null;
+        // A grid built again (a turn in place, a jump) keeps the check.
+        var before = companion.Grid;
+        var at = companion.Grid.State.CommittedCell;
+        group.FaceTo(companion.Entity, new CellCoord(at.X, at.Y + 1));
+        Assert.AreNotSame(before, companion.Grid, "the turn built the grid again");
+        Assert.AreEqual(AreaCompanionGroup.TrapSpottedReason, companion.Grid.StepCharge!(step, Arcanum.World.MovementGait.Walk), "the rebuilt grid keeps the trap gate");
     }
 
     [TestMethod]
