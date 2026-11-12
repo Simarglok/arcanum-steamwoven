@@ -689,6 +689,10 @@ class TaskCodeTests(unittest.TestCase):
         self.assertIsNone(run_queue.task_code({"label": "x", "checkout": self.checkout("d", "0123456789abcdef")}))  # detached HEAD
         self.assertIsNone(run_queue.task_code({"label": "x", "checkout": str(self.root / "missing")}))
         self.assertIsNone(run_queue.task_code({"checkout": None, "cwd": None}))
+        binary = Path(self.checkout("b", "x")) / ".git" / "HEAD"
+        binary.write_bytes(b"\xff\xfe\x00")  # not text: never an error in a wait loop or in ./arcanum queue
+        self.assertIsNone(run_queue.task_code({"label": "x", "checkout": str(binary.parent.parent)}))
+        self.assertIsNone(run_queue.task_code({"label": "x", "checkout": "/tmp/a\x00b"}))
 
     def test_describe_shows_the_code(self) -> None:
         checkout = self.checkout("e", "ref: refs/heads/ARC-DEV-1408-code")

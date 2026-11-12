@@ -605,7 +605,7 @@ def checkout_branch(checkout: str | None) -> str | None:
                 return None
             git_dir = Path(checkout) / text[len("gitdir:"):].strip()  # an absolute path replaces the checkout's
         head = (git_dir / "HEAD").read_text().strip()
-    except OSError:
+    except (OSError, ValueError):  # unreadable, binary (UnicodeDecodeError) or a NUL in the path
         return None
     return head[len("ref: refs/heads/"):] if head.startswith("ref: refs/heads/") else None
 
