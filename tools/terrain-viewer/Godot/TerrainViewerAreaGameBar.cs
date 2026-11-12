@@ -176,7 +176,12 @@ public partial class TerrainViewerApp
                 if (_gameBar.IsOn(AreaBarButton.Skills)) TakeWindowFromSpells();
                 if (_gameBar.IsOn(AreaBarButton.Skills) && !SkillPaneInStrip) _gameBarNotice = "skills: the pane's art did not read";
                 break;
-            case AreaBarButton.FatePoints: _gameBarNotice = "fate points: the window is not built"; break;
+            case AreaBarButton.FatePoints:
+                // ARC-UI-1112: the button and the key F call one function (0x56FBF0); only the dialog's modal hook and the panels outside the stack keep the press from acting.
+                if (!FateActive) _gameBarNotice = "fate points: not available here";
+                else if (!FateOpen && (PaletteOpen || ConversationOpen || SaveListOpen || MainMenuOpen)) _gameBarNotice = "fate points: ignored while another window owns input";
+                else ToggleFate("button");
+                break;
             case AreaBarButton.Clock: ClockButton(); break;
             case AreaBarButton.Sleep:
                 // ARC-WORLD-1160: the bar button runs the same opener as the key S (its own decision answers a dead or unconscious hero).

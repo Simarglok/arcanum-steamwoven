@@ -2616,7 +2616,8 @@ under the bars. Buttons:
 | Combat | bottom | Toggles the hero's combat mode (`R`). |
 | Spells | bottom | A toggle: on shows the spell pane (`M`), off hides it; `M` moves the button with the pane. |
 | Skills | bottom | A toggle (Spells goes up when it goes down; `K` does the same without the sound): shows the [skill pane](../world/spell-cast-host.md#the-skill-pane-in-the-bottom-strip-arc-ui-1113) (bar mode 2: the pane's art and the four skill-bar buttons) in the message window. |
-| Fate Points, Sleep | top | Say that their windows are not built. |
+| Fate Points | top | Opens the [Fate Point window](#fate-point-window-arc-ui-1112) as the key `F` does, or closes it when open. |
+| Sleep | top | The sleep window (`S`). |
 
 A button shows its idle, down and lit frames as the original's (GB4). It plays 3000 on the press and 3001 on the release
 over it, and acts on that release; a toggle plays 3000 turning on and 3001 turning off (GB3, GB6). The pointer over a
@@ -2641,10 +2642,10 @@ installed art and texts read). Native smoke on the original data, map mode on th
 name and lit frame, its down frame with 3000, the release with 3001 opening the sheet, Inventory switching from the sheet,
 Logbook and Schematics opening and closing their windows, the logbook lying between the strips and taking a press inside
 it, Map opening the world map with the bars hidden and back with no hover, Combat in and out of combat mode, Spells showing and hiding
-the pane, Fate Points refused, a press on the strip's clock not reaching the world, every sound started, and the
+the pane, Fate Points opening and closing its window (and, in the same smoke, the [Fate Point window](#fate-point-window-arc-ui-1112)'s own checks), a press on the strip's clock not reaching the world, every sound started, and the
 [clock](#clock-and-date-arc-ui-1111)). Not done: the
 hot-key bar (later slices; the vials since ARC-UI-020, the message log since ARC-UI-023, the vials' art, the follower frames
-and the hovered portrait since [ARC-UI-024](#panel-art-arc-ui-024); the skill pane since ARC-UI-1113), the fate window, the town map, the
+and the hovered portrait since [ARC-UI-024](#panel-art-arc-ui-024); the skill pane since ARC-UI-1113), the town map, the
 buttons' lit art the original sets from game events (0x556A90), the toggle to the compact interface (the viewer shows the
 compact panel whenever its bars are not drawn).
 
@@ -2679,6 +2680,39 @@ orders; with `DAT_ROOT` the arts' sizes in `AreaGameBarTests`). Native smoke, pa
 it writes no name, a press writes nothing and the release writes the line with the game's two labels and the day/month/year order,
 no sound plays, leaving it clears the entry, and an hour of game time later the window refreshes once. `ARC_AREA_BAR_CAPTURE=PREFIX`
 also saves the strip with and without the window and at three later hours for a graphics report (local files, never committed).
+
+### Fate Point window (ARC-UI-1112)
+
+The window the Fate Points button and the key `F` open, as the 1.0.7.4 executable builds and answers it (ledger
+[FW1–FW6](../research/ledger/ui-audio.md#fate-point-window-arc-ui-1112)); `AreaFateWindow.cs` (Core, Godot-free: `AreaFateLayout`, `AreaFateTexts`,
+`AreaFateContent`, `AreaFateButtons`, `AreaFateWindowRules`), `AreaFateView` (the drawing and the pointer) and `TerrainViewerAreaFate.cs` (the opening,
+the session calls and the key). The rules and the session calls exist since ARC-WORLD-054 ([fate points](../world/fate-points-runtime.md)).
+
+- **The window.** The interface art 292 at (0, 41) of the original's screen (the bars' whole factor, standing under the top strip), of its art's size;
+  twelve lines of `mes\fate_ui.mes` (0..11, one for each fate kind; the project's English names stand in when the file does not read) in the
+  white font art 229 at x 11, y 3 + 18 × kind, wrapped at the window's width, and twelve toggle buttons of art 293 at x 223, y 4 + 18 × kind
+  (frames idle, down, lit as the bar's, GB4). The window is no interface mode: the world keeps running and clicks outside it reach the world; a press
+  over it never does.
+- **Opening.** The button and the key `F` call one function: an open window closes; otherwise it opens for a living hero (a dead hero, or none, gets
+  a notice in the bar's status line). The key is ignored while another window, the palette or a UI control owns input, as `S` is; the button only while
+  the dialog, the save list, the menu or the palette owns input. Space closes the window and goes no further. PROJECT: the window also closes when the
+  dialog, barter, reading, save-list, menu, palette, world-map or movie covers the screen, when the hero dies and when the session is replaced
+  (the original's own close paths, 0x541710, 0x541D40 and 0x542200, are called from interface paths this task did not follow).
+- **The buttons.** A press flips a button (sound 3000 turning on, 3001 turning off; the release does nothing) and asks the session: on arms the kind
+  (`ArmHeroFate`: one point is spent, a kind already armed or no point left is refused; the full heal is applied at once) and off undoes it
+  (`UndoHeroFate`: the point comes back, up to 100). After each answer and each frame the buttons are set from the hero's armed kinds, so a refused
+  press pops back (lit under the pointer, as the original's pop, FW4), the full heal pops up at once and a kind an event used (a critical hit, a
+  skill check, a conversation start, a spell) pops its button up while the window is open (FW6). A kind armed when the window opens shows down.
+- **Technical bug, fixed (FW3).** The original makes an already armed kind's button without the toggle flag, so once undone it cannot be armed again
+  until the window is opened again. Every button toggles here, in both rule modes (the technical bug rule).
+- **Not modelled.** The multiplayer network messages of the buttons (FT3, FT4); a button takes the pointer on its art's rectangle, not its opaque
+  pixels; the controller has no focus row in the window; the fate points left are not shown (the original window shows no count either).
+
+Tests `AreaFateWindowTests` (layout, hit areas, the lines, the toggle sounds and looks, the buttons following the armed kinds and the rules' answers,
+the open decision). Native smoke, a step of `ARC_AREA_MAP_SMOKE_ONLY=bar` (prints `ARC-UI-1112 native-smoke fate PASS`): after a new game the button
+opens the window at (0, 41), every button starts idle, the pointer lights a button, a press arms critical hit and gambling (points spent, 3000), the full
+heal is used at once and pops up, a press with no point left is refused and pops back, a second press undoes (the point back, 3001), an event's use of
+an armed kind pops its button, Space closes the window and `F` opens and closes it.
 
 ### Message log (ARC-UI-023)
 

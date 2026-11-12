@@ -1033,6 +1033,12 @@ public partial class TerrainViewerApp
             if (HandleWorldMapKey(worldMapKey)) GetViewport().SetInputAsHandled();
             return;
         }
+        // ARC-UI-1112: an open Fate Point window takes a fresh Space press to close itself (0x56FE70); the key goes no further.
+        if (FateOpen && input is InputEventKey fateKey && HandleFateKey(fateKey))
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         var wasModal = WorldModal;
         _worldAdapter.PaletteOpen = PaletteOpen;
         if (input is InputEventKey chordKey)
@@ -1052,7 +1058,7 @@ public partial class TerrainViewerApp
             // ARC-INPUT-004: Ctrl, Alt or Command with a character letter (A C F I L R S T W) is no key in the original:
             // no window opens and nothing is reported as reserved.
             // ARC-WORLD-011: F7/F8 are quick save/load while an AREA game session exists.
-            if (!OriginalWorldKeyboard.CharacterKeySilenced(decision.Key, modifiers) && !RouteQuickKey(decision) && !RouteGameMenuKey(decision) && !RouteOrderKey(decision, modifiers) && !RouteHomeKey(decision) && !RouteInventoryKey(decision) && !RouteSheetKey(decision) && !RouteLogbookKey(decision) && !RouteSpellKey(decision) && !RouteSkillKey(decision) && !RouteHotkeyKey(decision, modifiers) && !RouteSchematicsKey(decision) && !RouteSleepKey(decision) && !RouteWorldMapKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && !RouteTurnBasedKey(decision) && !RouteCombatModeKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
+            if (!OriginalWorldKeyboard.CharacterKeySilenced(decision.Key, modifiers) && !RouteQuickKey(decision) && !RouteGameMenuKey(decision) && !RouteOrderKey(decision, modifiers) && !RouteHomeKey(decision) && !RouteInventoryKey(decision) && !RouteSheetKey(decision) && !RouteLogbookKey(decision) && !RouteSpellKey(decision) && !RouteSkillKey(decision) && !RouteHotkeyKey(decision, modifiers) && !RouteSchematicsKey(decision) && !RouteSleepKey(decision) && !RouteFateKey(decision) && !RouteWorldMapKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && !RouteTurnBasedKey(decision) && !RouteCombatModeKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
             {
                 _worldLastReserved = $"{routedKey} = {decision.OriginalAction} (original; NOT IMPLEMENTED)";
                 _hud?.SetNotice($"Reserved: {routedKey} = {decision.OriginalAction} (NOT IMPLEMENTED)");
