@@ -44,12 +44,20 @@ public sealed record ItemRuleProfile
     /// </summary>
     public bool WornMoveNeedsRoom { get; init; }
 
+    /// <summary>
+    /// Ledger RK2 (VP68, VPG5): the restock delay is 12 hours plus the original generator's one 15-bit draw (0..32,767 ms), because the
+    /// range draw 0x4CEF00 takes one 15-bit value modulo the width (RK11) where 0x4640C0 asks for 43,200,000..86,400,000 ms: a restock
+    /// always comes 12 hours plus at most 32.8 seconds after it was scheduled, as the retail executable does. Steamwoven keeps the
+    /// intended 12 to 24 hours (a gameplay bug fixed in Steamwoven, owner decision 2026-11-12, ARC-WORLD-1300, issue #1300).
+    /// </summary>
+    public bool RestockDelayIsNarrow { get; init; }
+
     /// <summary>The original with every recorded fix; the default setting.</summary>
     public static readonly ItemRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
     public static readonly ItemRuleProfile Original = new() { Name = "original", RepairQuoteCountsDamageTwice = true, ContainerStackLookupFails = true,
-        EncumbranceLagsOnStackMerge = true, WornMoveNeedsRoom = true };
+        EncumbranceLagsOnStackMerge = true, WornMoveNeedsRoom = true, RestockDelayIsNarrow = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<ItemRuleProfile> All { get; } = new[] { Steamwoven, Original };

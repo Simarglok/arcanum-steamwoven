@@ -117,7 +117,8 @@ public sealed partial class GameSessionOwner
     /// the shown object in every mode, RK2): with <paramref name="hasSource"/> (the host's: an NPC's or container's inventory source is
     /// not 0, <see cref="RestockRules.InventorySource"/>) the holder's pending restock event is replaced by one after a labelled
     /// <c>restock.delay</c> roll of <see cref="RestockRules.MinDelayMs"/>..<see cref="RestockRules.MaxDelayMs"/> game milliseconds
-    /// (single player); without one its pending event stays (<see cref="GameSessionDisposition.NoChange"/>), as for a container the
+    /// (Steamwoven; the Original setting rolls <see cref="RestockRules.MinDelayMs"/>..<see cref="RestockRules.NarrowMaxDelayMs"/>, the
+    /// reach of the original's 15-bit draw, VPG5) (single player); without one its pending event stays (<see cref="GameSessionDisposition.NoChange"/>), as for a container the
     /// session generated once (ARC-WORLD-100: its source is 0, RK12, whatever the host's data says). Refused before any effect:
     /// an entity that is not an object of a map (<see cref="GameSessionFailure.InvalidEvents"/>: the absent role, the player, a made
     /// item), the version, the revision, a full restock or event budget (<see cref="GameSessionFailure.EventBudgetExceeded"/>) and the
@@ -198,7 +199,9 @@ public sealed partial class GameSessionOwner
         if (delayMs is { } given) delay = given;
         else
         {
-            var roll = Roll(RestockDelayLabel, (int)RestockRules.MinDelayMs, (int)RestockRules.MaxDelayMs);
+            // VPG5: the original's 15-bit draw reaches only 12 hours plus 32,767 ms; Steamwoven draws the intended 12..24 hours.
+            var roll = Roll(RestockDelayLabel, (int)RestockRules.MinDelayMs,
+                (int)(_rules.Items.RestockDelayIsNarrow ? RestockRules.NarrowMaxDelayMs : RestockRules.MaxDelayMs));
             if (roll.Roll is null) return roll.Failure;
             // The quarter delay of a multiplayer game is not modelled.
             delay = RestockRules.Delay(roll.Roll.Value, multiplayer: false);
