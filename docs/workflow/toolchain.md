@@ -182,7 +182,7 @@ history held about 500 runs of such copies of one template).
   still on`) because it waited a fixed 0.15 s after a quick click and then read the button: the panel keeps Down for 80 ms
   counted from the first frame actually drawn, and on a loaded machine that draw comes late (the failing run showed 24 ms since
   the draw after the 150 ms wait; reproduced by keeping every CPU core busy). The stage now polls frames until the expected
-  frame shows, up to 5 s, and prints a line when that took 200 ms or more; a Down that never ends still fails. A new stage that
+  frame shows, up to 2 s, and prints a line when that took 200 ms or more; a Down that never ends still fails. A new stage that
   expects feedback after an input waits for that state the same way; to reproduce a load-dependent failure, run the stage in a loop
   with every core busy.
 - **Every requested stage runs (ARC-DEV-063).** `PASS` means each requested stage ran: a map smoke passes only when

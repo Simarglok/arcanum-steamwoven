@@ -272,11 +272,11 @@ public partial class TerrainViewerApp
             }
             // ARC-DEV-1193: the panel keeps Down for DownMinimumMs counted from the first frame actually drawn, and the draw can come
             // late on a loaded machine, so a fixed wait after a quick click is not enough. Wait for the settled frame itself (frames
-            // keep running); a Down that never ends still fails the check after the limit.
+            // keep running); a Down that never ends, or a minimum stretched past the limit, still fails the check.
             async Task WaitForSettled(AreaBarButton button, int frame)
             {
                 var started = Time.GetTicksMsec();
-                while (panel.FrameForSelfTest(button) != frame && Time.GetTicksMsec() - started < 5000) await Frames(1);
+                while (panel.FrameForSelfTest(button) != frame && Time.GetTicksMsec() - started < 2000) await Frames(1);
                 if (Time.GetTicksMsec() - started >= 200) GD.Print($"ARC-DEV-1193 bar smoke: {button} took {Time.GetTicksMsec() - started} ms to show frame {frame} (a slow draw, waited for)");
             }
 
