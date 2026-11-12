@@ -21,6 +21,7 @@ public static class SkillPaneRules
 
     /// <summary>A button's art (0x579F50, table 0x5CB220): the hotkey bar's skill icons, <see cref="HotkeyBarRules.SkillIcon"/>; null outside
     /// the four buttons (the original returns the first for an index outside, and the pane builds only 0..3).</summary>
+    [OriginalFunction(0x579F50, OriginalFunctionScope.Partial)]
     public static int? ButtonArt(int button) => button is >= 0 and < Buttons ? HotkeyBarRules.SkillArts[button] : null;
 
     /// <summary>Every interface art number the pane draws beyond the hotkey bar's own: its background (the button arts are the bar's).</summary>

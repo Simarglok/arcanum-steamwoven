@@ -760,6 +760,10 @@ tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,ProjectileGoalEnded,pendi
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,Strike,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,TurnBack,pending,
 tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,AddOccupiedBeds,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,RouteSkillKey,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,SkillBarDrag,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,SkillBarEntered,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,SkillBarReleased,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSoundCallers.cs,NoteGaitFrame,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSoundCallers.cs,PlayDroppedItemSound,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSoundCallers.cs,PlayNpcAttackBark,exempt,host
