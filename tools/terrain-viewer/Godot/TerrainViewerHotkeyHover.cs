@@ -78,7 +78,7 @@ public partial class TerrainViewerApp
     /// is described as well as the hero's own, an open window's and the barter panel's.</summary>
     private void DescribeItem(GameSessionOwner session, string item)
     {
-        var kind = InventoryItemKind(session, item) ?? PlacedItemKind(session, item);
+        var kind = InventoryItemKind(session, item) ?? PlacedItemKind(session, item) ?? RowlessItemKind(session, item);
         if (kind is null && ItemMapRow(item) is null) return;
         if (!ItemExamineAllows(session, item, out var row)) return;
         var catalog = _hoverNames?.Catalog;
@@ -94,6 +94,11 @@ public partial class TerrainViewerApp
     /// has no map row; a kit item has none either). Null for any other item.</summary>
     private static SessionItemKind? PlacedItemKind(GameSessionOwner session, string item) =>
         session.QueryPlacedItems().FirstOrDefault(placed => placed.Entity == item)?.Kind;
+
+    /// <summary>ARC-UI-1458: the kind of a made or kit item that has no map row and that none of the hero's lists or the ground holds: one an NPC's or
+    /// a container's list holds (a made item added to an NPC, a kit item the hero gave it), from the session. Null for any other item.</summary>
+    private static SessionItemKind? RowlessItemKind(GameSessionOwner session, string item) =>
+        session.QueryPrototypeItemKind(item);
 
     /// <summary>The map row of an item any held map lists (an item lying on the map, one an NPC or container holds, one the hero took); null for none.</summary>
     private AreaObjectRecord? ItemMapRow(string item)
@@ -129,7 +134,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
-    /// ARC-SCRIPT-1119 (HK24): the same first step for an item the session made (<c>made:n</c>), which has no object row: its examine script is the
+    /// ARC-SCRIPT-1119 (HK24), ARC-UI-1458: the same first step for an item the session made (<c>made:n</c>) or one of the hero's starting kit (<c>kit:n</c>), which has no object row: its examine script is the
     /// prototype's point 0 (or the slot a run kept on the item), run by the session as an item run with the hero as the triggerer
     /// (<see cref="GameSessionOwner.RunItemExamine"/>). The description follows only when the answer is not "skip default"; the printed lines go to the
     /// message window. An item with no script, a viewer without the script content or a run the session cannot apply (refused, nothing applied)
@@ -137,7 +142,7 @@ public partial class TerrainViewerApp
     /// </summary>
     private bool ExamineAllowsMade(GameSessionOwner session, string item)
     {
-        if (!item.StartsWith("made:", StringComparison.Ordinal) || _inventoryHost?.ItemScripts(session) is not { } host) return true;
+        if (RowlessItemKind(session, item) is null || _inventoryHost?.ItemScripts(session) is not { } host) return true;
         var ran = session.RunItemExamine(session.Version, item, host);
         if (ran.Scripts.Count == 0) return true;
         _examineRunsForSelfTest++;
