@@ -42,6 +42,7 @@ public static class SummonLists
     /// total of 120 can never reach the last entries fully: a technical bug the owner rule fixes in both modes, ledger MG9); an aptitude list takes the first entry whose threshold is not below
     /// <paramref name="aptitude"/>, the run's captured parent aptitude (+0x8C, 100 under a PC's armed "spell at maximum" fate), and draws nothing.
     /// </summary>
+    [OriginalFunction(0x452900, OriginalFunctionScope.Partial)]
     public static int? Pick(int list, int aptitude, Func<int, int, int> draw)
     {
         ArgumentNullException.ThrowIfNull(draw);

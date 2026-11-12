@@ -1,3 +1,4 @@
+using Arcanum.Simulation;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
 
@@ -143,6 +144,7 @@ public sealed partial class GameSessionOwner
     /// carry the encounter flag (the script action's, 0x20000, is not the summon's). The session reads no game data, so the prototype being a critter is the host's to have checked. Refused before any effect: an invalid
     /// input, the bounds of <see cref="SessionCreatedObject.MaxObjects"/> and of the critters with written flags, the version, a tile outside the ground store's range, the revision bound.
     /// </summary>
+    [OriginalFunction(0x450C40, OriginalFunctionScope.Partial)]
     public SessionCreatedObjectResult CreateSummonedCritter(GameSessionVersion expected, int prototype, SessionMapId map, CellCoord cell, string? summoner, int? run)
     {
         ThrowIfDisposed();
