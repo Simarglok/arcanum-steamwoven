@@ -2888,6 +2888,18 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     /// <summary>
+    /// ARC-SCRIPT-1135 (CF4): the dialog <c>so</c> action's goal start (0x436960 right after the flag, ledger OL8/CF4): the spread-out goal (69) on the follower <paramref name="npc"/> toward the hero, through the
+    /// executor's starter (gate with cost 0) and the table's own start (level 3, a duplicate refused). The answer of the starter is never seen by the action. False: not a follower this host runs, one the hero
+    /// does not lead (no leader: the original's null-leader case is not followed), or a start the gate or the table refused (the text is in the NPC's trace).
+    /// </summary>
+    public bool StartSpreadOut(string npc)
+    {
+        ArgumentNullException.ThrowIfNull(npc);
+        if (!_followers.ContainsKey(npc) || !_session.QueryCompanion(npc).LedByPc) return false;
+        return Started(npc, RunOf(npc), AiExecutorRules.StartSpreadOut(this, npc, Pc));
+    }
+
+    /// <summary>
     /// ARC-AI-1315: the blocked-step test of goal 68's tile choice (0x425760): the step from the object's tile to the neighbouring <paramref name="next"/> is clear when no living
     /// critter stands on it and the terrain, walls and objects let the step through (the route source's verdict, with the moved records and the other movers' cells as the planner
     /// sees them). No trap check and no random wait, which the walker's own step test (<see cref="StepBlocked"/>) adds.

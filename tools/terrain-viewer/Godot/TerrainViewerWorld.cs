@@ -778,6 +778,7 @@ public partial class TerrainViewerApp
     public override void _UnhandledInput(InputEvent @event)
     {
         if (!IsWorld || !_worldInitialized || _exiting || BugReportOpen) return;
+        TraceMousePress(@event, MousePressTrace.Stage.Unhandled);
         if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click)
             WorldObservation(() => WorldRouteClick(click.Position, click.CtrlPressed, click.AltPressed, click.ShiftPressed));
         // ARC-WORLD-020: macOS reports a physical Ctrl+left click as a right button press with Ctrl held; the world's right
@@ -916,6 +917,7 @@ public partial class TerrainViewerApp
     private void InputWorldObserved(InputEvent input)
     {
         NoteWorldPointer(input);
+        TraceMousePress(input, MousePressTrace.Stage.Input);
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:entry type={input.GetClass()}" + (input is InputEventKey tracedKey ? $" key={tracedKey.Keycode} pressed={tracedKey.Pressed} echo={tracedKey.Echo}" : ""));
         // ARC-DEV-051: the bug report comes first (Ctrl+B over any window, the death screen included; the open report owns every event).
         if (RouteBugReportInput(input)) return;
