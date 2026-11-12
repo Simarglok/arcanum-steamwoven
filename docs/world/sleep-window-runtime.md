@@ -28,7 +28,7 @@ Every rule was read in the retail 1.0.7.4 `Arcanum.exe` ([ledger SWB1–SWB13](.
   later; the buttons are hidden; once per rest the screen fades to black (2.0 s in 48 steps, `AreaRestFade`) and the hourly light apply is held
   until the stop; script event 29 (leader sleeping) runs on the hero's followers
   ([`AreaUseScriptHost.RunLeaderSleeping`](../../src/Arcanum.World/AreaUseScripts.cs), the heartbeat admission set, its answer decides nothing); then **the sleeper's maintained spells end**
-  (ARC-MAGIC-1161, ledger UE6: `SessionSpellCaster.EndMaintainedSpells` for the hero, 0x457450, so every run the hero is the source of ends but technology runs and item-trigger runs with no maintenance period; the
+  (ARC-MAGIC-1161, ledger UE6; the ending is queued by the press and told by the next frame pass of the cast host, before the first step is due: `SessionSpellCaster.EndMaintainedSpells` for the hero, 0x457450, so every run the hero is the source of ends but technology runs and item-trigger runs with no maintenance period; the
   followers' spells go on; no interrupt of the hero's actions is asked, unlike the world-map start; the same in the wait window; nothing ends when the window only opens, and a close without a press ends nothing).
 - **Step** (SWB9, TL27): the game clock jumps an hour (due events fire once and late, as in a world-map step), the hero and every follower the
   AI host runs are healed ([`AreaRestParty.Step`](../../src/Arcanum.World/AreaRest.cs), `LifeRules.RestHeal`: hit-point damage drops by the

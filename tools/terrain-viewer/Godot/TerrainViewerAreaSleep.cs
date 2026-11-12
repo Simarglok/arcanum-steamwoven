@@ -200,8 +200,9 @@ public partial class TerrainViewerApp
         _sleepPanel!.HideButtons();
         if (!_restDark) { _restDark = true; _restFade.Out(_clockHostMs); }
         RunLeaderSleeping(session);
-        SpellCasterNow()?.EndMaintainedSpells(SessionSpellCaster.Hero);
-        GD.Print($"ARC-WORLD-1160 sleep press button={button} code={rest.Code} wait={rest.Wait} due={rest.DueMs} (the sleeper's maintained spells end: ARC-MAGIC-1161)");
+        var caster = SpellCasterNow();
+        caster?.EndMaintainedSpells(SessionSpellCaster.Hero);
+        GD.Print($"ARC-WORLD-1160 sleep press button={button} code={rest.Code} wait={rest.Wait} due={rest.DueMs} maintained-spells-ended={caster is not null} (ARC-MAGIC-1161)");
         RefreshReadyStatus();
     }
 

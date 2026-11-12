@@ -161,7 +161,9 @@ public partial class TerrainViewerApp
             Tick(host + 10);
             Require(session.QuerySpellRuns()[heroSpell.Run] is not null && session.QueryMaintainBar().SlotOf(heroSpell.Run) is not null, "the maintained spell still runs while the window is open (only the press ends it)");
             SleepPressedForSelfTest(0);
-            for (var i = 0; i < 20 && session.QuerySpellRuns()[heroSpell.Run] is not null; i++) Tick(host + 10);
+            // The ending is queued by the press and told by the next frame pass of the cast host (as the world-map start's); the frame's pass here is the viewer's own, run before the first 50 ms step is due.
+            for (var i = 0; i < 20 && session.QuerySpellRuns()[heroSpell.Run] is not null; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); TickAreaClock((long)Time.GetTicksMsec()); }
+            Require(RestLogForSelfTest.Count == 0 && RestForSelfTest is { Pressed: true }, "no rest step ran yet: the ending is the press's, not the hour jump's");
             Require(session.QuerySpellRuns()[heroSpell.Run] is null && session.QueryMaintainBar().SlotOf(heroSpell.Run) is null,
                 $"the press ended the sleeper's maintained spell {heroSpell.Spell.Data.Number} (run {heroSpell.Run}: {session.QuerySpellRuns()[heroSpell.Run]?.Action.ToString() ?? "gone"})");
             RunUntilClosed(100);

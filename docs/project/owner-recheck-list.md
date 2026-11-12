@@ -750,7 +750,7 @@ Choosing a length in the sleep or wait window ends the hero's maintained spells 
 | # | Step | Expected (from the original executable) | Status |
 | --- | --- | --- | --- |
 | 1 | Cast a maintained spell on the hero, open the sleep window (key `S`) and look at the top strip. | The spell is still there: opening the window ends nothing. | open |
-| 2 | Choose any length (for example one hour). | The spell's slot leaves the top strip as the length is chosen (not at the end of the rest) and the effect is gone when the screen clears. | open |
+| 2 | Choose any length (for example one hour). | The spell's slot leaves the top strip as the length is chosen (not at the end of the rest). | open |
 | 3 | Open the window with the spell running and close it again with `S` without choosing a length. | The spell goes on. | open |
 | 4 | Cast a maintained spell on a follower (you are the caster), then rest. | The spell ends too: the run's caster is the hero. A spell a follower cast itself goes on. | open |
 
