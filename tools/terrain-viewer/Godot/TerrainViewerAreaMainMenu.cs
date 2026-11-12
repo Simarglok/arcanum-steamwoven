@@ -447,6 +447,7 @@ public partial class TerrainViewerApp
     {
         if (_mainMenu is not { } menu) return;
         var made = command.Kind == AreaMenuCommandKind.StartNewCharacter ? menu.Creation : null;
+        if (command.Kind == AreaMenuCommandKind.StartNewCharacter && made is null) { menu.Notice = "new game refused: no new character"; RenderMainMenu(); return; }
         var refused = made is not null ? StartNewGame(-1, creation: made) : StartNewGame(command.Hero);
         if (refused is not null) menu.Notice = refused;
         else if (_mainMenu is not null)

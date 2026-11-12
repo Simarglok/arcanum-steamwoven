@@ -48,7 +48,7 @@ public partial class TerrainViewerApp
         var table = AreaSoundCatalog() is not null && _soundContent?.Stack is { } stack ? AreaMovieTable.Load(stack)
             : AreaMovieTable.None("no content stack: " + (_soundContent?.Detail ?? "not opened"));
         GD.Print("ARC-RENDER-1170 movie table " + table.Detail);
-        _movieTable = table; _movieTableModule = module;
+        if (table.Loaded) { _movieTable = table; _movieTableModule = module; }
         return table;
     }
 
@@ -95,16 +95,25 @@ public partial class TerrainViewerApp
     private void TickMovies(double milliseconds)
     {
         if (!_movieActive) return;
-        // The movie's own time is real time; a frame that took long (a hiccup) drops frames, it does not stretch the movie.
-        var step = Math.Min(milliseconds, 1000);
-        if (_moviePlayback is null && !OpenNextMovie()) { EndMovies(); return; }
-        if (_moviePlayback is not { } playback) return;
-        playback.Advance(step);
-        if (playback.Running) return;
-        var end = playback.End;
-        if (end == MovieEnd.Skipped) _moviesSkipped++; else if (end == MovieEnd.Failed) _moviesFailed++; else _moviesPlayed++;
-        GD.Print($"ARC-RENDER-1170 movie ended {end} frames={playback.FramesShown}");
-        playback.Dispose(); _moviePlayback = null;
+        try
+        {
+            // The movie's own time is real time; a frame that took long (a hiccup) drops frames, it does not stretch the movie.
+            if (_moviePlayback is null && !OpenNextMovie()) { EndMovies(); return; }
+            if (_moviePlayback is not { } playback) return;
+            playback.Advance(milliseconds);
+            if (playback.Running) return;
+            var end = playback.End;
+            if (end == MovieEnd.Skipped) _moviesSkipped++; else if (end == MovieEnd.Failed) _moviesFailed++; else _moviesPlayed++;
+            GD.Print($"ARC-RENDER-1170 movie ended {end} frames={playback.FramesShown}");
+            playback.Dispose(); _moviePlayback = null;
+        }
+        catch (Exception error)
+        {
+            // A movie must never lock the game: whatever went wrong, the screen closes and the caller goes on.
+            GD.Print($"ARC-RENDER-1170 movie failed: {error.GetType().Name} {error.Message}");
+            _moviesFailed++;
+            EndMovies();
+        }
     }
 
     /// <summary>Opens the next movie of the queue that opens; a movie that does not (no number, no file, no decode) is passed over, as the
@@ -115,7 +124,7 @@ public partial class TerrainViewerApp
         {
             var number = _movieQueue.Dequeue();
             var path = _moviePathForSelfTest?.Invoke(number) ?? (MovieTable() is { } table && _soundContent?.Stack is { } stack
-                ? table.Path(stack, number, _movieCache ??= System.IO.Path.Combine(System.IO.Path.GetTempPath(), "arcanum-steamwoven-movies")) : null);
+                ? table.Path(stack, number, _movieCache ??= System.IO.Path.Combine(System.IO.Path.GetTempPath(), "arcanum-steamwoven-movies-" + System.Environment.UserName)) : null);
             if (path is null) { _moviesFailed++; GD.Print($"ARC-RENDER-1170 movie {number}: no file, nothing plays"); continue; }
             var opened = MovieSource().Open(path, _movieTrack);
             if (!opened.Opened) { _moviesFailed++; GD.Print($"ARC-RENDER-1170 movie {number}: not opened ({opened.Status}: {opened.Detail})"); continue; }
@@ -137,6 +146,8 @@ public partial class TerrainViewerApp
         var done = _movieDone; _movieDone = null;
         GD.Print($"ARC-RENDER-1170 movies done played={_moviesPlayed} skipped={_moviesSkipped} failed={_moviesFailed}");
         done?.Invoke();
+        // The menu's song stopped for the movies; it plays again when the main menu still stands (a started game ended the menu).
+        if (_mainMenu is { Root: AreaMenuWindow.Main }) StartMenuMusic();
     }
 
     /// <summary>The scene ended or the app closes: a movie in progress stops without its continuation.</summary>
@@ -151,10 +162,11 @@ public partial class TerrainViewerApp
     private bool HandleMovieInput(InputEvent input)
     {
         if (!MovieCovering) return false;
-        if (input is InputEventKey { Pressed: true, Echo: false } && _moviePlayback is { } playback)
+        if (input is InputEventKey { Pressed: true, Echo: false })
         {
             GD.Print("ARC-RENDER-1170 movie key skip");
-            playback.Skip();
+            // Between two movies (none open yet) a key drops the rest of the queue.
+            if (_moviePlayback is { } playback) playback.Skip(); else _movieQueue.Clear();
         }
         return true;
     }

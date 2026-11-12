@@ -62,6 +62,19 @@ public sealed class MoviePlaybackTests
     }
 
     [TestMethod]
+    public void The_clock_starts_with_the_first_frame_so_a_slow_decoder_start_drops_nothing()
+    {
+        var screen = new Screen(); var stream = new FakeStream(Info(), [1, 2, 3, 4], ready: false);
+        using var playback = new MoviePlayback(stream, screen);
+        for (var i = 0; i < 8; i++) playback.Advance(50);
+        Assert.AreEqual(0, screen.Shown.Count);
+        stream.Ready = true;
+        playback.Advance(50);
+        CollectionAssert.AreEqual(new[] { 0 }, screen.Shown, "400 ms of waiting did not eat frames: the first frame shown is frame 0, with the audio");
+        Assert.AreEqual(1, screen.AudioStarts);
+    }
+
+    [TestMethod]
     public void A_key_skips_at_once_and_stops_the_audio()
     {
         var screen = new Screen(); var stream = new FakeStream(Info(), [1, 2, 3, 4]);
@@ -92,7 +105,7 @@ public sealed class MoviePlaybackTests
     {
         var screen = new Screen();
         using var playback = new MoviePlayback(new FakeStream(Info(), [1, 2, 3, 4], failAfter: 4), screen);
-        playback.Advance(1000);
+        playback.Advance(0); playback.Advance(1000);
         Assert.AreEqual(MovieEnd.Failed, playback.End);
         Assert.AreEqual(3, screen.Shown[^1], "the last good frame was drawn");
         Assert.AreEqual(1, screen.AudioStops);
@@ -127,7 +140,7 @@ public sealed class MoviePlaybackTests
     {
         var screen = new Screen();
         using var playback = new MoviePlayback(new FakeStream(new(2, 2, 15, 10, 1), null, failAfter: int.MaxValue), screen);
-        playback.Advance(5000);
+        playback.Advance(0); playback.Advance(5000);
         Assert.AreEqual(MovieEnd.Finished, playback.End);
         Assert.AreEqual(9, screen.Shown[^1]);
     }

@@ -50,7 +50,8 @@ public sealed class MoviePlayback : IDisposable
     {
         if (_disposed || !Running) return;
         var step = Math.Max(0, milliseconds);
-        _elapsed += step;
+        // The clock starts with the first frame on the screen, so the audio (which starts with it) and the picture begin together whatever the decoder's start-up took.
+        if (FramesShown > 0) _elapsed += step;
         var info = _stream.Info;
         // Frame k is due when k / fps seconds have passed; the movie is over when the last frame has had its time.
         var due = (int)Math.Min(int.MaxValue - 1, Math.Floor(_elapsed * info.FramesPerSecond / 1000.0));

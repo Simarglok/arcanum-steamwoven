@@ -56,7 +56,7 @@ public sealed record FfmpegTools(string Ffmpeg, string Ffprobe);
 public sealed class FfmpegMovieSource : IMovieSource
 {
     /// <summary>The probe and the audio decode must finish within this time or the movie does not open.</summary>
-    public const int ProgramTimeoutMilliseconds = 20000;
+    public const int ProgramTimeoutMilliseconds = 8000;
     /// <summary>The audio of one movie is bounded (the longest shipped track is 162 s, 28.6 MB): a longer decode is cut off and the movie plays without sound.</summary>
     public const long MaxAudioBytes = 256L * 1024 * 1024;
     /// <summary>Decoded frames held ahead of the player: the decoder blocks on its pipe when this many wait.</summary>
@@ -75,6 +75,8 @@ public sealed class FfmpegMovieSource : IMovieSource
     {
         ArgumentNullException.ThrowIfNull(path);
         if (_tools is null) return MovieOpenResult.Failed(MovieOpenStatus.NoDecoder, $"no ffmpeg found (set {FfmpegLocator.EnvironmentVariable} or install ffmpeg)");
+        // An absolute path, so a name that starts with a dash is never read as an option by the programs.
+        path = Path.GetFullPath(path);
         if (!File.Exists(path)) return MovieOpenResult.Failed(MovieOpenStatus.FileMissing, $"{Path.GetFileName(path)} is not a file");
         MovieInfo? info;
         try { info = Probe(_tools, path); }
@@ -150,7 +152,7 @@ public sealed class FfmpegMovieSource : IMovieSource
 
     private static byte[]? DecodeAudio(FfmpegTools tools, string path, int track)
     {
-        var start = Start(tools.Ffmpeg, "-v", "error", "-nostdin", "-i", path, "-map", $"0:a:{track}", "-f", "s16le", "-ar", "44100", "-ac", "2", "-");
+        var start = Start(tools.Ffmpeg, "-v", "error", "-nostdin", "-i", path, "-map", $"0:a:{track}", "-fs", MaxAudioBytes.ToString(CultureInfo.InvariantCulture), "-f", "s16le", "-ar", "44100", "-ac", "2", "-");
         try
         {
             using var process = Process.Start(start) ?? throw new InvalidOperationException("ffmpeg did not start");
