@@ -332,6 +332,33 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S33 { get; } = new("S33", S32.Conditions,
         S32.Actions.Concat([ScrCatalogue.Action.TransformObject, ScrCatalogue.Action.MakeFollow, ScrCatalogue.Action.Attack]), S32.ValueKinds, S32.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>The conditions <see cref="S34"/> adds to <see cref="S33"/>: daytime (1), global quest state (7), obj has blessing (8), obj has curse (9), rumor known (40), rumor quelled (41); a host with its own set adds them with
+    /// <see cref="StoryActions"/> and implements <see cref="IScrStoryQueries"/>.</summary>
+    public static IReadOnlyList<int> StoryConditions { get; } = [ScrCatalogue.Condition.Daytime, ScrCatalogue.Condition.GlobalQuestState, ScrCatalogue.Condition.HasBlessing, ScrCatalogue.Condition.HasCurse,
+        ScrCatalogue.Condition.RumorKnown, ScrCatalogue.Condition.RumorQuelled];
+
+    /// <summary>The actions <see cref="S34"/> adds to <see cref="S33"/>: set quest global state (17), add and remove blessing (25, 26), add and remove curse (27, 28), quell rumor (51), give quest XP (63), the four clock actions
+    /// (96, 97, 98, 105), grant one fate point (117) and set PC quest unbotched (119).</summary>
+    public static IReadOnlyList<int> StoryActions { get; } = [ScrCatalogue.Action.SetGlobalQuestState, ScrCatalogue.Action.AddBlessing, ScrCatalogue.Action.RemoveBlessing, ScrCatalogue.Action.AddCurse,
+        ScrCatalogue.Action.RemoveCurse, ScrCatalogue.Action.QuellRumor, ScrCatalogue.Action.GiveQuestExperience, ScrCatalogue.Action.GetDaySinceStartup, ScrCatalogue.Action.GetCurrentHour,
+        ScrCatalogue.Action.GetCurrentMinute, ScrCatalogue.Action.GetHoursSinceStartup, ScrCatalogue.Action.GrantFatePoint, ScrCatalogue.Action.SetPcQuestUnbotched];
+
+    /// <summary>
+    /// The story and time set (ARC-SCRIPT-1165, plan slice E5-c, ledger SQ1–SQ12): <see cref="S33"/> plus the conditions daytime (1), global quest state (7), obj has blessing (8), obj has curse (9), rumor known (40) and
+    /// rumor quelled (41), which a host answers through <see cref="IScrStoryQueries"/>, the clock actions get day since startup (96), get current hour (97), get current minute (98) and get hours since startup (105), which store
+    /// into their number operand from <see cref="IScrStoryQueries.Time"/>, and the story actions set quest global state (17), add and remove blessing (25, 26), add and remove curse (27, 28), quell rumor (51), give quest XP (63), grant one
+    /// fate point (117) and set PC quest unbotched (119), which hand <see cref="ScrStateRequest"/> effects to the host. The run reads its own changes to the global quest states, the quelled rumors, blessings and curses back.
+    /// </summary>
+    public static ScrAdmissionSet S34 { get; } = new("S34", S33.Conditions.Concat(StoryConditions), S33.Actions.Concat(StoryActions), S33.ValueKinds, S33.FocusKinds, counterIndexWraps: true);
+
+    /// <summary>The conditions of <see cref="S34"/> a host answers through <see cref="IScrStoryQueries"/>.</summary>
+    public static IReadOnlySet<int> StoryQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.Daytime, ScrCatalogue.Condition.GlobalQuestState, ScrCatalogue.Condition.HasBlessing,
+        ScrCatalogue.Condition.HasCurse, ScrCatalogue.Condition.RumorKnown, ScrCatalogue.Condition.RumorQuelled };
+
+    /// <summary>The actions of <see cref="S34"/> a host answers through <see cref="IScrStoryQueries"/>: the four clock actions.</summary>
+    public static IReadOnlySet<int> StoryQueryActions { get; } = new HashSet<int> { ScrCatalogue.Action.GetDaySinceStartup, ScrCatalogue.Action.GetCurrentHour, ScrCatalogue.Action.GetCurrentMinute,
+        ScrCatalogue.Action.GetHoursSinceStartup };
+
     /// <summary>The conditions of <see cref="S31"/> a host answers through <see cref="IScrSpellQueries"/>.</summary>
     public static IReadOnlySet<int> SpellQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.HasBodySpell, ScrCatalogue.Condition.InfluencedBySpell, ScrCatalogue.Condition.KnowsSpell,
         ScrCatalogue.Condition.MasteredSpellCollege };
@@ -570,5 +597,6 @@ public static class ScrAdmission
 
     // Actions whose operand 0 is the store they write.
     private static bool Writes(int type) => type is ScrCatalogue.Action.Assign or ScrCatalogue.Action.Add or ScrCatalogue.Action.Subtract
-        or ScrCatalogue.Action.Multiply or ScrCatalogue.Action.Divide or ScrCatalogue.Action.GetStoryState;
+        or ScrCatalogue.Action.Multiply or ScrCatalogue.Action.Divide or ScrCatalogue.Action.GetStoryState
+        or ScrCatalogue.Action.GetDaySinceStartup or ScrCatalogue.Action.GetCurrentHour or ScrCatalogue.Action.GetCurrentMinute or ScrCatalogue.Action.GetHoursSinceStartup;
 }

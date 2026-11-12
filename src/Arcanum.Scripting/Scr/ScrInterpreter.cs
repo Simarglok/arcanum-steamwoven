@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S33"/>.
+/// <see cref="ScrAdmissionSet.S34"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -59,6 +59,11 @@ internal sealed class ScrInterpreter
         public readonly SortedDictionary<(ScrObjectRef Pc, int Index), int> PcVariables = new(ScrPcOrder.Instance);
         public readonly SortedDictionary<(ScrObjectRef Pc, int Index), bool> PcFlags = new(ScrPcOrder.Instance);
         public int? Story, StoryBefore;
+        // ARC-SCRIPT-1165 (E5-c): what the dispatch's own story actions changed, which its later conditions read back (the original changes the game at once): the global
+        // quest states it wrote, the rumors it quelled, and the blessings and curses of a PC it added (true) or removed (false), keyed by the object, the kind (true = curse) and the number.
+        public readonly Dictionary<int, int> GlobalQuests = new();
+        public readonly HashSet<int> Quelled = new(), Learned = new();
+        public readonly Dictionary<(ScrObjectRef Object, bool Curse, int Number), bool> Blessings = new();
         // Lines executed by every run of the dispatch (a project bound across nested calls).
         public int Executed;
     }
@@ -218,6 +223,14 @@ internal sealed class ScrInterpreter
         ScrCatalogue.Condition.InfluencedBySpell => SpellHolds(c, line, (obj, spell) => Spells.IsInfluencedBy(obj, spell)),
         ScrCatalogue.Condition.KnowsSpell => SpellHolds(c, line, (obj, spell) => Spells.KnowsSpell(obj, spell)),
         ScrCatalogue.Condition.MasteredSpellCollege => SpellHolds(c, line, (obj, college) => Spells.MasteredCollege(obj) is { } mastered ? mastered == college : null),
+        // SQ1–SQ6 (ARC-SCRIPT-1165): daytime is the hour 6 to 17 (0x45ACF0, case 1 at 0x4451FD); global quest state compares the quest's game-wide state (0x4C51A0) with the value (case 7);
+        // blessing and curse (cases 8 and 9: 0x4C4280, 0x4C3DD0) over the operand's objects by the list rule of SG6, value read once; rumor known (case 40: 0x4C58D0) of the first object;
+        // rumor quelled (case 41: 0x4C5650).
+        ScrCatalogue.Condition.Daytime => (Storyline.Time() ?? throw new CallRefusedStop(null, _number, ScrStop.NotModelled)).IsDay,
+        ScrCatalogue.Condition.GlobalQuestState => GlobalQuest(Get(c, 0)) == Get(c, 1),
+        ScrCatalogue.Condition.HasBlessing or ScrCatalogue.Condition.HasCurse => BlessingHolds(c, line),
+        ScrCatalogue.Condition.RumorKnown => KnownRumor(c, line),
+        ScrCatalogue.Condition.RumorQuelled => RumorQuelled(Get(c, 0)),
         _ => throw new InvalidOperationException("Condition outside the interpreter's set."),
     };
 
@@ -348,7 +361,11 @@ internal sealed class ScrInterpreter
                 // SS3, SS4: the number, then the first object operand 1 names; an absent one asks for nothing.
                 var number = Get(a, 0);
                 if (OptionalObject(a, 1) is { } obj)
+                {
                     _states.Add(new(a.Type == ScrCatalogue.Action.MarkMapLocation ? ScrStateKind.KnownArea : ScrStateKind.Rumor, obj, number));
+                    // SQ3 (ARC-SCRIPT-1165): a rumor the PC learned in this run is known to the run's later rumor-known tests.
+                    if (a.Type == ScrCatalogue.Action.SetRumor && _host.IsPc(obj)) _shared.Learned.Add(number);
+                }
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.UseAmmoUnits:
@@ -706,6 +723,93 @@ internal sealed class ScrInterpreter
             }
             case ScrCatalogue.Action.SetGlobalFlag: _flags[GlobalFlag(Get(a, 0), line)] = true; return (Step.Next, 0);
             case ScrCatalogue.Action.ClearGlobalFlag: _flags[GlobalFlag(Get(a, 0), line)] = false; return (Step.Next, 0);
+            case ScrCatalogue.Action.SetGlobalQuestState:
+            {
+                // SQ7 (0x4C51C0, case 17 at 0x4475F3): a quest's game-wide state is final once completed (4) or botched (6); otherwise only those two values are stored (any other request
+                // returns 2 and changes nothing). The request is asked of the host only when it changes the state as the run sees it.
+                var quest = Get(a, 0); var state = Get(a, 1);
+                if (GlobalQuest(quest) is not (4 or 6) && state is 4 or 6)
+                {
+                    _shared.GlobalQuests[quest] = state;
+                    _states.Add(new(ScrStateKind.GlobalQuestState, null, quest, state));
+                }
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.AddBlessing:
+            case ScrCatalogue.Action.RemoveBlessing:
+            case ScrCatalogue.Action.AddCurse:
+            case ScrCatalogue.Action.RemoveCurse:
+            {
+                // SQ8 (0x4C42F0, 0x4C4450, 0x4C3E40, 0x4C3FA0; cases 25 to 28): the number, then every object operand 1 names in list order; a PC only (BC3–BC5, the host decides what an object is).
+                var number = Get(a, 0);
+                var (kind, curse, add) = a.Type switch
+                {
+                    ScrCatalogue.Action.AddBlessing => (ScrStateKind.AddBlessing, false, true),
+                    ScrCatalogue.Action.RemoveBlessing => (ScrStateKind.RemoveBlessing, false, false),
+                    ScrCatalogue.Action.AddCurse => (ScrStateKind.AddCurse, true, true),
+                    _ => (ScrStateKind.RemoveCurse, true, false),
+                };
+                foreach (var obj in Objects(a, 1))
+                {
+                    _states.Add(new(kind, obj, number));
+                    if (_host.IsPc(obj)) _shared.Blessings[(obj, curse, number)] = add;
+                }
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.QuellRumor:
+            {
+                // SQ9 (0x4C5690, case 51 at 0x4484D8): the rumor, then the first object operand 1 names, which must be the local player; an absent object asks for nothing.
+                var rumor = Get(a, 0);
+                if (OptionalObject(a, 1) is { } obj)
+                {
+                    _states.Add(new(ScrStateKind.QuellRumor, obj, rumor));
+                    if (_host.IsPc(obj)) _shared.Quelled.Add(rumor);
+                }
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.GiveQuestExperience:
+            {
+                // SQ10 (case 63 at 0x448B57): the first object of operand 0, then the quest experience level of operand 1 (0x4C53C0 looks up the experience of a level, as the quest state's completion
+                // does with the quest's own level), given to a PC (0x45F110). An absent object asks for nothing.
+                var level = 0;
+                var who = OptionalObject(a, 0);
+                level = Get(a, 1);
+                if (who is { } pc) _states.Add(new(ScrStateKind.QuestExperience, pc, level));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.GrantFatePoint:
+            {
+                // SQ11 (case 117 at 0x44A2B3): one fate point (stat 20 plus one, FT7, FT8) for the first object of operand 0 when it is a PC.
+                if (OptionalObject(a, 0) is { } who) _states.Add(new(ScrStateKind.FatePoint, who, 0));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.SetPcQuestUnbotched:
+            {
+                // SQ12 (0x4C5070, case 119 at 0x44A39F): the objects of operand 0, then the quest of operand 1; a quest whose game-wide state is botched (6) goes back to 2 and a PC's record loses its botched mark.
+                var quest = Get(a, 1);
+                foreach (var obj in Objects(a, 0))
+                {
+                    _states.Add(new(ScrStateKind.QuestUnbotched, obj, quest));
+                    if (_host.IsPc(obj) && GlobalQuest(quest) == 6) _shared.GlobalQuests[quest] = 2;
+                }
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.GetDaySinceStartup:
+            case ScrCatalogue.Action.GetCurrentHour:
+            case ScrCatalogue.Action.GetCurrentMinute:
+            case ScrCatalogue.Action.GetHoursSinceStartup:
+            {
+                // SQ5 (cases 96, 97, 98, 105; 0x45A8D0, 0x45A870, 0x45A8B0, 0x45A890): the game clock into the number store of operand 0. A host with no clock ends the dispatch with nothing applied.
+                var time = Storyline.Time() ?? throw new CallRefusedStop(null, _number, ScrStop.NotModelled);
+                Set(a, unchecked((int)(a.Type switch
+                {
+                    ScrCatalogue.Action.GetDaySinceStartup => time.DaySinceStartup(),
+                    ScrCatalogue.Action.GetCurrentHour => time.Hour,
+                    ScrCatalogue.Action.GetCurrentMinute => time.Minute,
+                    _ => time.HoursSinceStartup(),
+                })), line);
+                return (Step.Next, 0);
+            }
             default: throw new InvalidOperationException("Action outside the interpreter's set.");
         }
     }
@@ -1037,6 +1141,28 @@ internal sealed class ScrInterpreter
     {
         var value = Get(c, 1);
         return ListHolds(c, obj => test(obj, value) ?? throw new MissingObjectStop(line));
+    }
+
+    // SQ1–SQ12: the game-wide state of a quest as the run sees it (its own writes first), the held blessing or curse of a PC, a PC's known rumor and a quelled rumor.
+    private IScrStoryQueries Storyline => _host as IScrStoryQueries
+        ?? throw new InvalidOperationException("SCR_STORY_QUERIES_REQUIRED: the admission set holds a story or time command the host cannot answer.");
+
+    private int GlobalQuest(int quest) => _shared.GlobalQuests.TryGetValue(quest, out var state) ? state : Storyline.GlobalQuestState(quest);
+
+    private bool RumorQuelled(int rumor) => _shared.Quelled.Contains(rumor) || Storyline.RumorQuelled(rumor);
+
+    private bool BlessingHolds(ScrClause c, int line)
+    {
+        var curse = c.Type == ScrCatalogue.Condition.HasCurse;
+        var number = Get(c, 1);
+        return ListHolds(c, obj => _shared.Blessings.TryGetValue((obj, curse, number), out var held) ? held : Storyline.HasBlessing(obj, number, curse) ?? throw new MissingObjectStop(line));
+    }
+
+    private bool KnownRumor(ScrClause c, int line)
+    {
+        var obj = Object(c, 0, line);
+        var rumor = Get(c, 1);
+        return (_shared.Learned.Contains(rumor) && _host.IsPc(obj)) || (Storyline.RumorKnown(obj, rumor) ?? throw new MissingObjectStop(line));
     }
 
     private IScrSpellQueries Spells => _host as IScrSpellQueries

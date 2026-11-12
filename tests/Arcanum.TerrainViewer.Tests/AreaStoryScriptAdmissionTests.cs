@@ -1,0 +1,55 @@
+using Arcanum.Data.Content;
+using Arcanum.Data.Scripts;
+using Arcanum.Scripting.Scr;
+using Arcanum.World;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace Arcanum.TerrainViewer.Tests;
+
+/// <summary>ARC-SCRIPT-1165 (E5-c, ledger SQ1–SQ12): the viewer's script hosts hold the story and time commands of set S34 and answer them. The opt-in check counts the installed scripts that use one and how many each host
+/// set admits whole.</summary>
+[TestClass]
+public sealed class AreaStoryScriptAdmissionTests
+{
+    [TestMethod]
+    public void The_use_heartbeat_dying_and_talk_sets_hold_the_story_and_time_commands_and_the_dialog_set_without_a_query_host_does_too()
+    {
+        foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission,
+                     AreaScriptHost.Admission, AreaScriptHost.SkillAdmission, AreaScriptHost.TalkAdmission, AreaScriptHost.SkillTalkAdmission })
+        {
+            foreach (var condition in ScrAdmissionSet.StoryConditions) Assert.IsTrue(set.Conditions.Contains(condition), $"{set.Id}: condition {condition}");
+            foreach (var action in ScrAdmissionSet.StoryActions) Assert.IsTrue(set.Actions.Contains(action), $"{set.Id}: action {action}");
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S34), set.Id);
+        }
+    }
+
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_scripts_with_the_story_and_time_commands_are_admitted_by_the_hosts_sets()
+    {
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Fail("DAT_ROOT is required for the opt-in story-command check; this is not a synthetic pass.");
+        var discovery = ContentMountPlan.Discover(root);
+        Assert.AreEqual(ContentMountStatus.Ready, discovery.Status, discovery.Detail);
+        var opened = ContentStack.Open(discovery.Plan!);
+        Assert.AreEqual(ContentStackStatus.Ready, opened.Status, opened.Detail);
+        using var content = ScriptContent.Over(opened.Stack!);
+        var sets = new (string Name, ScrAdmissionSet Set)[] { ("use", AreaUseScriptHost.Admission), ("placed", AreaUseScriptHost.PlacedAdmission), ("heartbeat", AreaUseScriptHost.HeartbeatAdmission),
+            ("dying", AreaUseScriptHost.DyingAdmission), ("talk", AreaScriptHost.SkillTalkAdmission) };
+        var without = new (string Name, ScrAdmissionSet Set)[] { ("S33", ScrAdmissionSet.S33), ("S34", ScrAdmissionSet.S34) };
+        var counts = sets.Concat(without).ToDictionary(s => s.Name, _ => 0);
+        var withStory = 0;
+        foreach (var number in Enumerable.Range(0, ScrCatalogue.MaxScriptNumber + 1))
+        {
+            if (content.Script(number) is not { Status: ScriptContentStatus.Read, Program: { } program }) continue;
+            bool Uses(ScrClause clause, bool condition) => (condition ? ScrAdmissionSet.StoryConditions : ScrAdmissionSet.StoryActions).Contains(clause.Type);
+            if (!program.Lines.Any(l => Uses(l.Condition, true) || Uses(l.OnTrue, false) || Uses(l.OnFalse, false))) continue;
+            withStory++;
+            foreach (var (name, set) in sets.Concat(without)) if (ScrAdmission.Admit(program, set).IsAdmitted) counts[name]++;
+        }
+        Console.WriteLine($"installed scripts with a story or time command {withStory}; admitted whole: " + string.Join(", ", counts.Select(c => $"{c.Key} {c.Value}")));
+        Assert.AreEqual(0, counts["S33"], "S33 refuses every one of them by construction");
+        // Ledger SQ13: 96 installed scripts use one of the 19 commands; S34 admits 52 of them whole (the others also hold a command of the other planned slices, which the census ranks), the hosts' sets
+        // 23 (use), 35 (placed), 24 (heartbeat), 47 (dying) and 26 (talk).
+        Assert.AreEqual((96, 52, 23, 35, 24, 47, 26), (withStory, counts["S34"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"]));
+    }
+}
