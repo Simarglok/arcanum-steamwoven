@@ -333,7 +333,7 @@ public sealed class SpellRunSystemTests
     {
         var host = new Host();
         host.Records[7] = Record();
-        var system = System(host, Run(0), Run(1), Run(2), Run(3, flags: SpellRunFlags.Active | SpellRunFlags.Processed));
+        var system = System(host, Run(0, flags: SpellRunFlags.Active), Run(1, flags: SpellRunFlags.Active), Run(2, flags: SpellRunFlags.Active), Run(3, flags: SpellRunFlags.Active | SpellRunFlags.Processed));
         system.ObjectGone("orc", processing: 3);
         var paid = system.Notes.Where(n => n.Kind == SpellRunNoteKind.Payments).Select(n => n.Run).ToArray();
         CollectionAssert.AreEquivalent(new[] { 0, 1, 2 }, paid, "one payment per queued run, none for the processed one");

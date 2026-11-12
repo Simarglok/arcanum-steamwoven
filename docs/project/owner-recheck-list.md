@@ -1025,8 +1025,8 @@ The agent's heartbeat (script 1717) is admitted whole since this task ([GL1–GL
 
 ## ARC-MAGIC-1399 — queued casts when the target dies (2026-11-12)
 
-Answered by the executable ([QC7](../research/ledger/spell-runs.md)): no deviation, nothing changed in the rules. The original charges each queued cast's cost when the target dies; the report's four payments were a killing cast plus three queued casts (see also the duplicate presses of [ARC-MAGIC-1361](#arc-magic-1361--harm-damage-and-the-difficulty-share-2026-11-12)).
+Answered by the executable ([QC7](../research/ledger/spell-runs.md)): no deviation, nothing changed in the rules. The original charges each queued cast's cost when the target dies; the report's four payments are consistent with a killing cast plus three queued casts, not verified against the report itself (see also the duplicate presses of [ARC-MAGIC-1361](#arc-magic-1361--harm-damage-and-the-difficulty-share-2026-11-12)).
 
 | # | Step | Expected (from the original executable and data) | Status |
 | --- | --- | --- | --- |
-| 1 | Cast Harm at a wolf several times in a row quickly so that casts queue, and let the first kill it. Read the fatigue bar and the log (Ctrl+B). | The hero pays 5 fatigue for the killing cast and 5 for each cast still queued on the wolf; the queued casts are then gone. Steamwoven: the same. | open |
+| 1 | Cast Harm at a wolf several times in a row quickly so that casts queue, and let the first kill it. Read the fatigue bar and the log (Ctrl+B). | The hero (without the mastered college of Harm and without charged worn items) pays 5 fatigue for the killing cast and 5 for each cast still queued on the wolf; the queued casts are then gone. Steamwoven: the same. | open |
