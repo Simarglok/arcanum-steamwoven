@@ -45,6 +45,15 @@ public partial class TerrainViewerApp
         return _ringContent;
     }
 
+    /// <summary>ARC-BUG-1345: the scene is cleared. The ring's overlay wraps the retired map's whole frame repository and the ring's area is its
+    /// load result, so neither may outlive the map: left in these fields they kept the retired generation alive (the resources smoke stage's
+    /// RETIRED_GENERATION_ALIVE after any earlier stage had hovered a critter), until the next hovered critter replaced them.</summary>
+    private void RetireHoverRing()
+    {
+        _ringOverlay = null; _ringArea = null; _ringTarget = null; _ringAdded.Clear();
+        if (_canvas is not null) _canvas.AreaRing = null;
+    }
+
     /// <summary>Per frame, after the hover decision: the rings of the hovered critter or trap, none otherwise.</summary>
     private void SyncHoverRing()
     {

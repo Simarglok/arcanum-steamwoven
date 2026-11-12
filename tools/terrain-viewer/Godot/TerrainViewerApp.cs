@@ -505,6 +505,7 @@ public partial class TerrainViewerApp : Node
         _worldRoute = null; _worldRouteSession = null;
         RetirePassabilityOverlay();
         RetireAreaOverview();
+        RetireHoverRing();
         ClearReadyMetrics();
         _canvas!.ClearScene();
         _cache.Clear();
