@@ -456,10 +456,11 @@ hero (a mage with these spells; a hero without the college can learn them from t
 | 6 | Cast Flash (spell 66) on a human who fights you, and watch their hits. | They are blinded (their melee is much worse); at the end, or by chance each AI pass, the blindness goes. | open |
 | 7 | Cast Create Undead (spell 58) on a corpse. | The creature rises under your control (it follows you), and at the spell's end it dies again. Note whether it is hurt by healing or poison as an undead would be. | open |
 | 8 | Dominate Will on a creature that is already your follower, and on one that is summoned. | A summoned creature does not lose reaction (no -50). | open |
+| 9 | Charm a kill-on-sight creature of another faction (a hostile wolf pack member is one), end the spell, then walk near it without attacking. | While charmed and after the end it does not attack you on sight for being of another faction (the reaction and alignment tests still apply); after you attack it, it is hostile as before (the attack takes the override off). | open |
 
 Known differences (documented, not bugs):
 
-- A charm adds the NPC flag "kill-on-sight override" in the original and never takes it off; ours does not keep that flag.
+- A charm adds the NPC flag "kill-on-sight override" in the original and never takes it off (only an attack on that NPC does); the session keeps it in its NPC flag layer (ARC-MAGIC-1142), so the step 9 can be seen.
 - Mind control makes a follower only under the hero (a spell cast by another creature on a creature does not make a follower); a mind-controlled creature of the world map is not covered.
 - The undead flag a spell writes is not read by the combat or life rules yet, so step 7's undead behaviour may differ.
 ## ARC-DEV-372 — Shared content index (O4 of the performance diagnosis, 2026-11-11)
