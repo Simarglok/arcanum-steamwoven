@@ -197,9 +197,9 @@ public sealed class NpcEffectStateTests
         var again = restored.QueryNpcEffects(wolf)!.Definitions;
         Assert.AreEqual(before.Count, again.Count);
         for (var i = 0; i < before.Count; i++) Assert.IsTrue(before[i].SameAs(again[i]));
-        // The facts the session reads carry the restored list's maxima.
+        // The facts the session reads carry the restored list's maxima and its strength (ARC-WORLD-1144: +2 strength is +4 hit points).
         var after = restored.QueryLife(wolf).View!.Status;
-        Assert.AreEqual((50, 30), (after.MaxHitPoints, after.HitPoints), "two entries of +10");
+        Assert.AreEqual((54, 30), (after.MaxHitPoints, after.HitPoints), "two entries of +10 and +2 strength");
 
         void Fails(string damaged, SnapshotDecodeFailure failure, string path)
         {
@@ -268,5 +268,73 @@ public sealed class NpcEffectStateTests
         Assert.AreEqual(31_887, Status(owner, target).MaxHitPoints);
         var stronger = SessionLifeTarget.Critter(Wolf, big with { Strength = 100, Level = 51, Willpower = 100 }, default, []);
         Assert.AreEqual(25_406, Status(owner, stronger).MaxHitPoints);
+    }
+
+    private static EffectChange Stat(int attribute, int value, EffectChangeOperator op = EffectChangeOperator.Add) => new(EffectAttributeKind.Stat, attribute, op, value);
+
+    /// <summary>ARC-WORLD-1144 (exe 0x43D5A0, 0x43D630, 0x45D670): an effect that changes an NPC's strength, willpower or constitution moves its maxima through the stat the formulas read, and the
+    /// add keeps the current values as it does for a maximum's own change (the damage moves by the difference).</summary>
+    [TestMethod]
+    public void A_stat_effect_moves_the_maxima_through_the_stats_the_formulas_read()
+    {
+        using var owner = Create();
+        var wolf = Target();
+        // Strength +2 (attribute 0): 2 x (ST + level) adds 4 hit points; willpower +3 (attribute 6) adds 3 hit points and 3 fatigue; constitution +4 (attribute 2) adds 8 fatigue.
+        var mighty = new SessionEffectDefinition(150, [Stat(0, 2), Stat(6, 3), Stat(2, 4)]);
+        Ok(owner.AddNpcEffect(owner.Version, wolf, mighty, EffectCause.Spell), 1);
+        var status = Status(owner, wolf);
+        Assert.AreEqual((37, 30, 41, 30), (status.MaxHitPoints, status.HitPoints, status.MaxFatigue, status.Fatigue), "a buff does not heal");
+        Ok(owner.RemoveNpcEffect(owner.Version, wolf, 150), 1);
+        status = Status(owner, wolf);
+        Assert.AreEqual((30, 30, 30, 30), (status.MaxHitPoints, status.HitPoints, status.MaxFatigue, status.Fatigue));
+    }
+
+    [TestMethod]
+    public void A_stat_effect_is_laid_over_the_hosts_stats_once_however_many_changes_follow()
+    {
+        using var owner = Create();
+        var wolf = Target();
+        var strong = new SessionEffectDefinition(150, [Stat(0, 2)]);
+        Ok(owner.AddNpcEffect(owner.Version, wolf, strong, EffectCause.Spell), 1);
+        Ok(owner.AddNpcEffect(owner.Version, wolf, Hardy, EffectCause.Spell), 1);
+        // Strength +2 once (34), then +10 from Hardy: 44 hit points; the +2 is not applied again by the second add.
+        Assert.AreEqual(44, Status(owner, wolf).MaxHitPoints);
+        Ok(owner.AddNpcEffect(owner.Version, wolf, strong, EffectCause.Spell), 1);
+        Assert.AreEqual(48, Status(owner, wolf).MaxHitPoints, "two entries of +2 strength: +8, and +10 of the maximum");
+        Ok(owner.RemoveAllNpcEffects(owner.Version, wolf, 150), 2);
+        Assert.AreEqual(40, Status(owner, wolf).MaxHitPoints);
+    }
+
+    [TestMethod]
+    public void A_stat_effect_is_cut_to_the_races_range_and_poison_takes_its_penalty_after_it()
+    {
+        using var owner = Create();
+        // A human's strength stops at 20, an ogre's at 26: +30 on a base of 8 reaches the limit.
+        var huge = new SessionEffectDefinition(151, [Stat(0, 30)]);
+        var human = SessionLifeTarget.Critter(Wolf, new LifeFacts(), default, []);
+        var ogre = SessionLifeTarget.Critter(Bear, new LifeFacts { Race = CharacterRace.Ogre }, default, []);
+        Ok(owner.AddNpcEffect(owner.Version, human, huge, EffectCause.Spell), 1);
+        Ok(owner.AddNpcEffect(owner.Version, ogre, huge, EffectCause.Spell), 1);
+        Assert.AreEqual(30 + 2 * (20 - 8), Status(owner, human).MaxHitPoints);
+        Assert.AreEqual(30 + 2 * (26 - 8), Status(owner, ogre).MaxHitPoints);
+        // Poison level 200 takes two points of strength before the effects (the situational adjustment of the getter) and the range cuts after them: 8 - 2 + 5 = 11, but 8 - 2 + 30 is cut to 20.
+        var poisoned = SessionLifeTarget.Critter("oid:rat", new LifeFacts(), new LifeState(0, 0, 200, LifeConditions.None, 0), []);
+        Ok(owner.AddNpcEffect(owner.Version, poisoned, new SessionEffectDefinition(153, [Stat(0, 5)]), EffectCause.Spell), 1);
+        Assert.AreEqual(30 + 2 * (11 - 8), Status(owner, poisoned).MaxHitPoints);
+        var poisonedHuge = SessionLifeTarget.Critter("oid:mouse", new LifeFacts(), new LifeState(0, 0, 200, LifeConditions.None, 0), []);
+        Ok(owner.AddNpcEffect(owner.Version, poisonedHuge, huge, EffectCause.Spell), 1);
+        Assert.AreEqual(30 + 2 * (20 - 8), Status(owner, poisonedHuge).MaxHitPoints);
+    }
+
+    [TestMethod]
+    public void A_stat_effect_on_constitution_moves_the_fatigue_maximum()
+    {
+        using var owner = Create();
+        var wolf = Target();
+        var hardy = new SessionEffectDefinition(152, [Stat(2, 4)]);
+        Ok(owner.AddNpcEffect(owner.Version, wolf, hardy, EffectCause.Spell), 1);
+        // Constitution 12: fatigue 4 x 0 + 2 x (1 + 12) + 8 + 4 = 38; the hit points do not read it.
+        var status = Status(owner, wolf);
+        Assert.AreEqual((30, 38), (status.MaxHitPoints, status.MaxFatigue));
     }
 }
