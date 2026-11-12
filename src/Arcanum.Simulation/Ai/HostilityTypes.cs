@@ -98,11 +98,12 @@ public interface IHostilityWorld
 {
     HostilityCritter? Find(string id);
     /// <summary>
-    /// Whether the handle still names an object (the original's handle test 0x4E5470 behind every field read): false for an object
+    /// Whether the handle still names an object (the original's handle test behind every field read): false for an object
     /// destroyed since the record was written, true for one the world holds even when it cannot describe it (another map's
     /// object). The enemy-list purge (<see cref="DangerRules.PurgeEnemies{T}"/>) drops the entries it is false for. Default: the
     /// world describes the object and it is not destroyed.
     /// </summary>
+    /// <remarks>The handle test is the executable's 0x4E5470, which the field reader 0x4076A0 calls.</remarks>
     bool Exists(string id) => Find(id) is { Destroyed: false };
     int Distance(string from, string to);
     bool FactionSame(string a, string b);
