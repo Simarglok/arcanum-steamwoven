@@ -957,7 +957,7 @@ quest step in both games.
 
 Known differences (documented, not bugs):
 
-- Transfer item, set written start, destroy item named and toggle item inventory display are not applied by any host yet: scripts that use them are still refused.
+- ARC-SCRIPT-1279: transfer item, set written start, destroy item named and toggle item inventory display are applied by the same hosts (limits in ledger WO17): a script that moves or destroys an item with scripts, or moves an item between two holders neither of which is the hero, is still refused. Recheck in the game: a quest item destroyed or handed over by a script leaves the hero's inventory list or arrives in it; a written start a script sets shows in the reading window; the toggled display bit is saved but not yet drawn (the inventory painters do not read it).
 - The world map's refusal when the hero's own sector is blocked, and the dimmed picture of a blocked sector, are not built.
 - A script in a dialog (a talk) that uses one of these commands is still refused.
 

@@ -2400,6 +2400,16 @@ public sealed partial class GameSessionOwner : IDisposable
             lastIdentified = entity;
             inventory.Identified.Add(entity);
         }
+        // ARC-SCRIPT-1279: the item fields by entity in ordinal order, within the bound, none empty, none of a deleted item.
+        if (saved.ItemFields.Count > SessionInventoryState.MaxItemFields) return GameSessionFailure.BudgetExceeded;
+        string? lastFielded = null;
+        foreach (var row in saved.ItemFields)
+        {
+            if (row is null || !SessionValidation.Entity(row.Entity) || row.Writes.IsEmpty || lastFielded is not null && string.CompareOrdinal(lastFielded, row.Entity) >= 0 || destroyed.Contains(row.Entity))
+                return GameSessionFailure.InvalidSnapshot;
+            lastFielded = row.Entity;
+            inventory.ItemFields.Add(row.Entity, row.Writes);
+        }
         // ARC-WORLD-094: the highest discarded made number.
         if (saved.LastDiscardedMade < 0) return GameSessionFailure.InvalidSnapshot;
         inventory.LastDiscardedMade = saved.LastDiscardedMade;
