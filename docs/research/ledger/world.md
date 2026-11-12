@@ -514,4 +514,4 @@ palette has an explicit "+1 hour" wait (`LifeRules.RestHeal`, `LifeRules.Resting
 `NpcRouteRules` stops at the bed, the sleep and the wander of the standpoint step (SWB21) and the re-seat (SWB17, SWB18); no kind 15 event, no overlay, no
 event 29 and no random-encounter event. The follow-ups carry these rows: the sleep window and rest action [#1160](https://github.com/Simarglok/arcanum-steamwoven/issues/1160)
 (SWB1 to SWB13), the NPC day [#1162](https://github.com/Simarglok/arcanum-steamwoven/issues/1162) (SWB14 to SWB21), the spell-run endings on rest
-[#1161](https://github.com/Simarglok/arcanum-steamwoven/issues/1161) (SWB8: the sleeper's own spells only).
+[#1161](https://github.com/Simarglok/arcanum-steamwoven/issues/1161) (SWB8: the sleeper's own spells only; built, ARC-MAGIC-1161).
