@@ -11,8 +11,9 @@ namespace Arcanum.TerrainViewer;
 // nothing of the movie is written to disk, and without a decoder or a table nothing plays and nothing waits (the failed open of the
 // original: the caller goes on). It covers the whole window, ends on any key press (every shipped movie is skippable, section 2), and the
 // world stands still under it as it does under the death slides (TL25: a movie does not ping). The callers: the start-up (the Sierra and
-// the Troika logo by path, 0x404810, then movie 8, 0x401000: before the first menu), the main menu's View Intro (movies 1 and 7) and a new
-// game's start (movies 1 and 7, the request's flags 0x45). Movies play only in the game build (a packaged build, ARC-RENDER-1242, owner
+// the Troika logo by path, 0x404810, then movie 8, 0x401000: before the first menu), the main menu's View Intro (movies 1 and 7), a new
+// game's start (movies 1 and 7, the request's flags 0x45) and (ARC-SCRIPT-1241) the script action 103 fade, whose movies 2 to 6 the dialog, use, tile, sector and dying scripts hand over after
+// jumping the game clock (SyncScriptFades). Movies play only in the game build (a packaged build, ARC-RENDER-1242, owner
 // 2026-11-12) and in the dedicated `movies` smoke stage; the viewer of a source run and every other automated run play none. Sound: the scene's and the menu's sounds stop for the movie and nothing starts under it
 // (the original locks its sound system around a movie, 0x41C610; the session's own lock state is not touched here, as no scheme
 // request can come while the world stands still).
@@ -46,6 +47,9 @@ public partial class TerrainViewerApp
     private bool _moviesForSelfTest;
     private string? _movieStatus;
     private int _moviesPlayed, _moviesSkipped, _moviesFailed;
+    // ARC-SCRIPT-1241: the movies the scripts' fades asked for and the viewer has not started yet, in order (a run with two movie fades plays them one after the other).
+    private readonly Queue<AreaScriptFade> _scriptFades = new();
+    private int _scriptFadesPlayed;
 
     /// <summary>A movie covers the game: it owns the input and the world stands still under it.</summary>
     private bool MovieCovering => _movieActive;
@@ -183,9 +187,27 @@ public partial class TerrainViewerApp
         if (_mainMenu is { Root: AreaMenuWindow.Main }) StartMenuMusic();
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-1241: the movies of the script fades (action 103) the dialog host and the use host collected, started one at a time: the clock jump was applied with the run's effects, the movie
+    /// plays now (the original plays it inside the action and the run goes on after it; here the run has finished and the movie covers the game until it ends or a key skips it). A movie
+    /// that cannot play (no decoder, no table, an automated run) is dropped at once, as the original's failed open returns to its caller.
+    /// </summary>
+    private void SyncScriptFades()
+    {
+        if (_readyMode != TerrainViewerMode.Area) { _scriptFades.Clear(); return; }
+        if (_conversationHost is { } talk) foreach (var fade in talk.Scripts.TakeFades()) _scriptFades.Enqueue(fade);
+        if (_useScriptHost is { } use) foreach (var fade in use.Host.TakeFades()) _scriptFades.Enqueue(fade);
+        while (!_movieActive && _scriptFades.Count > 0)
+        {
+            var fade = _scriptFades.Dequeue();
+            if (PlayMovies([fade.Movie], fade.Track, null, "script fade")) { _scriptFadesPlayed++; break; }
+        }
+    }
+
     /// <summary>The scene ended or the app closes: a movie in progress stops without its continuation.</summary>
     private void AbortMovies()
     {
+        _scriptFades.Clear();
         if (!_movieActive) return;
         _movieDone = null;
         EndMovies();

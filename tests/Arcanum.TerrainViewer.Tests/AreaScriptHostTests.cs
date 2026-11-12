@@ -85,7 +85,7 @@ public sealed class AreaScriptHostTests
         Assert.AreEqual(true, flags.Read(new GlobalFlagReadRequest(new GlobalFlagRequestId(Guid.NewGuid()), flags.Version, new FlagId(2593))).Value);
         // ARC-SCRIPT-019: story state is the session's number now; the S12 actions stay out of the dialog set (ARC-SCRIPT-018).
         Assert.IsTrue(AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.GetStoryState) && AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.SetStoryState));
-        Assert.IsTrue(AreaScriptHost.Admission.IsSubsetOfBesidesStores(ScrAdmissionSet.S34), "S13's commands plus the story and time commands (ARC-SCRIPT-1165), plus (ARC-DEV-100) the store value kinds");
+        Assert.IsTrue(AreaScriptHost.Admission.IsSubsetOfBesidesStores(ScrAdmissionSet.S35), "S13's commands plus the story and time commands (ARC-SCRIPT-1165) and the fade (ARC-SCRIPT-1241), plus (ARC-DEV-100) the store value kinds");
         CollectionAssert.IsSubsetOf(ScrAdmissionSet.StoreValueKinds.ToArray(), AreaScriptHost.Admission.ValueKinds.ToArray());
         Assert.IsFalse(new[] { ScrCatalogue.Action.CallScript, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType }.Any(AreaScriptHost.Admission.Actions.Contains));
         Assert.IsTrue(new[] { ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme }.All(AreaScriptHost.Admission.Actions.Contains),
@@ -113,6 +113,36 @@ public sealed class AreaScriptHostTests
         Assert.IsNull(f.Host.SpeakerOf(f.Host.Pc), "the PC's cell is the viewer's");
         Assert.IsTrue(f.Host.Apply(run.Effects), "the same request again changes nothing and stops nothing");
         Assert.AreEqual(3, f.Host.TakeSounds().Count);
+    }
+
+    // ARC-SCRIPT-1241 (docs/research/bink-movies.md MV5): a dialog script's fade jumps the game clock by its seconds, hands its movie with the audio track to the viewer and, with no
+    // movie, plays its sound as an effect sound; a fade with only seconds just passes the time.
+    [TestMethod]
+    public void A_fade_jumps_the_game_clock_and_hands_its_movie_or_its_sound_to_the_viewer()
+    {
+        using var f = Create();
+        Assert.IsTrue(AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.Fade) && AreaScriptHost.TalkAdmission.Actions.Contains(ScrCatalogue.Action.Fade));
+        var npc = f.Host.Object(f.Speaker);
+        var before = f.Session.QueryClockSnapshot().GameTimestampMs;
+        var run = new FakeEffectsRun(f.Host, npc).Run(Program.Fades(), new(777, 4, 0x0201), AreaScriptHost.Admission);
+        Assert.AreEqual(ScrOutcome.SkipDefault, run.Outcome, run.Refusal?.Code.ToString());
+        CollectionAssert.AreEqual(new[] { new ScrFade(30, 1, 4, 0), new ScrFade(0, 7, 0, 2), new ScrFade(5, 0, 0, 0) }, run.Effects.Fades.ToArray());
+        Assert.IsTrue(f.Host.Apply(run.Effects));
+        Assert.AreEqual(before + 35_000, f.Session.QueryClockSnapshot().GameTimestampMs, "30 s and 5 s, each by its own jump");
+        CollectionAssert.AreEqual(new[] { new AreaScriptFade(30_000, 4, 1, 0, 0) }, f.Host.TakeFades().ToArray(), "the movie with its audio track");
+        Assert.AreEqual(0, f.Host.TakeFades().Count, "taken once");
+        CollectionAssert.AreEqual(new[] { new ScrSound(ScrSoundKind.Effect, 7) }, f.Host.TakeSounds().ToArray(), "no movie: the sound plays as an effect sound");
+    }
+
+    [TestMethod]
+    public void A_fade_resolves_its_operands_as_the_original_reads_them()
+    {
+        // No time when the seconds are not above 0; the sound operand is the audio track only when a movie follows and only when above 0; with no movie it is the sound.
+        Assert.AreEqual(new AreaScriptFade(0, 4, 0, 0, 0), AreaScriptFades.Resolve(new(0, 0, 4, 0)));
+        Assert.AreEqual(new AreaScriptFade(0, 4, 1, 0, 0), AreaScriptFades.Resolve(new(-3, 1, 4, 0)));
+        Assert.AreEqual(new AreaScriptFade(2_000, 0, 0, 9, 3), AreaScriptFades.Resolve(new(2, 9, 0, 3)));
+        Assert.IsFalse(AreaScriptFades.Resolve(new(8, 0, 0, 1)).HasContent, "seconds and a flag only: nothing to show");
+        Assert.IsFalse(AreaScriptFades.Resolve(new(0, -1, 0, 0)).HasContent, "a negative sound plays nothing");
     }
 
     // ARC-SCRIPT-016: set auto-level scheme (139) on the triggerer (the PC), twice on the attachee (101, then 200, which the session
@@ -403,6 +433,9 @@ public sealed class AreaScriptHostTests
         internal static ScrProgram Sounds() => Lines(
             (82, [(3, 3008)]), (83, [(3, 4010), (1, 0)]), (83, [(3, 4011), (0, 0)]), (87, [(3, 15), (3, 39)]), (1, []));
 
+        // ARC-SCRIPT-1241: fade (103) with seconds 30, track 1, movie 4, flag 0 (1093's own line), then seconds 0 with a sound 7 and no movie, then seconds 5 with nothing else.
+        internal static ScrProgram Fades() => Lines((103, [(3, 30), (3, 1), (3, 4), (3, 0)]), (103, [(3, 0), (3, 7), (3, 0), (3, 2)]), (103, [(3, 5), (3, 0), (3, 0), (3, 0)]), (1, []));
+
         internal static ScrProgram Lines(params (int Action, (byte Kind, int Value)[] Operands)[] lines)
         {
             var bytes = new byte[64 + lines.Length * 132];
@@ -461,7 +494,7 @@ public sealed class AreaScriptHostTests
         var host = new AreaScriptHost(session, map, [], new AreaConversationState(session, map, [], 50), null,
             npcSheet: entity => entity == "oid:npc" ? (loaded, modifiers) : null);
         Assert.AreSame(AreaScriptHost.SkillAdmission, host.RunAdmission);
-        Assert.IsTrue(AreaScriptHost.SkillAdmission.IsSubsetOfBesidesStores(ScrAdmissionSet.S34) && AreaScriptHost.SkillAdmission.Actions.Contains(ScrCatalogue.Action.GetSkill));
+        Assert.IsTrue(AreaScriptHost.SkillAdmission.IsSubsetOfBesidesStores(ScrAdmissionSet.S35) && AreaScriptHost.SkillAdmission.Actions.Contains(ScrCatalogue.Action.GetSkill));
         Assert.IsFalse(AreaScriptHost.SkillAdmission.Actions.Contains(ScrCatalogue.Action.UseItemWithSkill), "no live script uses it (census)");
         var reads = Program.GetSkill();
         Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(reads, AreaScriptHost.Admission).Refusal!.Code, "refused without a hero");

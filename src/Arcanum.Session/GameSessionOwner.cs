@@ -1955,7 +1955,7 @@ public sealed partial class GameSessionOwner : IDisposable
     private InventoryMutationResult TakePlaced(SessionPlacedItem placed, SessionInsertCheck insertCheck)
     {
         // ARC-UI-091: a gold pile the hero dropped merges its coins into the hero's pile (0x466640, ledger JP8, NT1) and is deleted. Coins weigh
-        // nothing and need no room, so the insert check is not asked (a held stack needs none either).
+        // nothing, so the insert check is not asked; the first pile of a hero with no coin needs a grid place (ARC-WORLD-1132).
         if (placed.Kind.Type == SessionItemType.Gold) return TakePlacedGold(placed);
         var listed = placed.Origin is { } origin && _inventory.Seeds.TryGetValue(origin, out var seed) && seed.Items.TryGetValue(placed.Entity, out var item)
             ? item : null;
@@ -1999,6 +1999,10 @@ public sealed partial class GameSessionOwner : IDisposable
         if ((long)_inventory.Gold + coins > int.MaxValue ||
             !_durability.Records.ContainsKey(placed.Entity) && _durability.Count >= _limits.MaxDurabilityRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        // ARC-WORLD-1132: a ground pile is picked up through the insert path itself (0x4617F0 -> 0x461810 -> check 0x466510), not through the gold transfer: a
+        // hero that holds a pile takes the coins into it (JP8, no room needed), one that holds none needs a free grid place for the pile, and without it the
+        // insert is refused (code 2) and the pile stays on the ground untouched (junk pile and decay timer kept).
+        if (HeroGoldNeedsGround()) return RejectItem(GameSessionFailure.InsertRefused, SessionInsertVerdict.NoRoom);
         DestroyObject(placed.Entity);
         _inventory.Gold += coins;
         Revise();
