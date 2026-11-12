@@ -139,7 +139,7 @@ other state than the original becomes an issue.
 
 | Slice | Rows | Ranking | Ledger section |
 | --- | --- | --- | --- |
-| Items 1 (ARC-RES-1104) | 83 ranked, 17 read: 6 from F1 to F2, reasons made exact, gaps #1283 (no-drop on transfers) and #1284 (NPC re-wield flag) | [`triage/v2-items.csv`](triage/v2-items.csv) | [partial-rows-by-risk](../research/ledger/items.md#partial-rows-by-risk-arc-res-1104) |
+| Items 1 (ARC-RES-1104) | 83 ranked, 17 read: 6 from F1 to F2, reasons made exact, gaps #1283 (no-drop on transfers), #1284 (NPC re-wield flag) and #1288 (NPC look-for bits after a drop) | [`triage/v2-items.csv`](triage/v2-items.csv) | [partial-rows-by-risk](../research/ledger/items.md#partial-rows-by-risk-arc-res-1104) |
 
 ## Address-named methods
 

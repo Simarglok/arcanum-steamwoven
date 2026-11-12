@@ -2,8 +2,6 @@ address,name,score,writes,reach,smoke,slice,row
 0x461A70,item drop on the owner's tile,7,2,2,1,1,VP7
 0x461AB0,item drop,7,2,2,1,1,VP6
 0x464830,gold units,7,2,2,1,1,VP13
-0x466A00,key fold,7,2,2,1,1,VP14
-0x466A50,key ring add,7,2,2,1,1,VP15
 0x466E00,item removal from holder,7,2,2,1,1,VP2
 0x467860,inventory removal,7,2,2,1,1,VP1
 0x468090,schedule item decay,7,2,2,1,1,VP16
@@ -28,6 +26,8 @@ address,name,score,writes,reach,smoke,slice,row
 0x4654F0,best items for every slot,6,2,1,1,next,
 0x465A40,new ammunition object,6,2,1,1,next,
 0x466640,item insert,6,2,2,0,1,VP3
+0x466A00,key fold,6,2,1,1,1,VP14
+0x466A50,key ring add,6,2,1,1,1,VP15
 0x466E50,drop placement,6,2,2,0,next,
 0x4677B0,wield on hook,6,2,2,0,1,VP10
 0x467CB0,wield off hook,6,2,2,0,1,VP11

@@ -550,8 +550,8 @@ Steamwoven differs from the original, and is each difference deliberate? The ran
 [`triage/v2-items.csv`](../../verification/triage/v2-items.csv): score = 2 × W + R + S, where W is the state the function writes (2 saved
 or shared state: holder lists, gold, keys, item flags, saved events; 1 transient state; 0 none), R how often the game reaches it (2 every
 inventory action or every redraw; 1 one action or event kind; 0 rare) and S whether a smoke stage exercises the implementing method
-(0 one does, 1 none; judged from the stage descriptions and the methods the smoke files call). The top is the nine rows scored 7 and eight rows
-scored 6 that are the transfer, insert, wield and move functions themselves (17 functions); the helpers they call that also score 6
+(0 one does, 1 none; judged from the stage descriptions and the methods the smoke files call). The top is the seven rows scored 7 and ten rows
+scored 6 that are the transfer, insert, wield, key and move functions themselves (17 functions); the helpers they call that also score 6
 (the encumbrance recalculation 0x45F820, the drop placement 0x466E50, the hotkey callback 0x5570D0) and the other rows, 66 in all, are
 the next items slice.
 
@@ -559,7 +559,7 @@ Read on 2026-11-12. First reading: the existing rows (V1 triage, ledger sections
 [inventory grid](ui-audio.md#inventory-grid-arc-ui-019), [item events](scripts.md#item-events-arc-script-041)); second reading: a fresh
 agent that read only the decompiled exports of the retail 1.0.7.4 executable and saw no registry reason, ledger verdict or Steamwoven
 code for these functions (method step 6). The two readings agree on every branch both describe; where the second reading adds a
-branch, the row says so. Then each function was compared with its implementing method. Classes of a difference: **N** network or
+branch, the row says so, and this task checked each such addition against the exports, so it rests on two readings too. Then each function was compared with its implementing method. Classes of a difference: **N** network or
 editor branch (not relevant to the single-player game), **S** a session bound or policy written in the method's summary, **H** done by
 a host or another session method, **A** an original detail with no effect on state, **G** a gap that writes different state (a
 follow-up issue).
@@ -569,33 +569,37 @@ follow-up issue).
 | VP1 | inventory removal 0x467860 | Agree. The second reading adds: the item's location becomes -1 while its parent field and the in-inventory flag stay; the holder's gold or ammunition stack field is nulled without checking that it named this item (AM5); hotkey refresh, the AI item cache clear and the Drop-trigger item spells run after the wield-off hook; an NPC holder gets flag 0x40; REMOVE_ITEM (28) fires last with the holder as triggerer. | The hero's paths run 25 then 28 and the spell steps after the move (A: order of spells against scripts, already in the reason), encumbrance and hotkeys through the revision (H). The NPC flag 0x40 is not set (G, VPG1). Network lock request (N). | F2; partial |
 | VP2 | item removal from holder 0x466E00 | Agree: the parent or a log line, then VP1. | As VP1. | F2; partial |
 | VP3 | item insert 0x466640 | Agree (AM, NT3). The second reading adds: a location of -1 is only logged; a key-ring item is merged into a held ring first (0x466AA0); the merge of a gold or ammunition stack fires INSERT_ITEM (21) with the merged item and returns before the pickup spells, the wield hook, encumbrance, the NPC flag and the key fold; a key folds only into a holder that carries a ring. | Ammunition merge, key fold and insert-item order match; the merged stack runs no pickup executor (matches). Key-ring items and gold as items (S, not modelled), NPC flag 0x40 (G, VPG1). | F2; partial |
-| VP4 | item transfer 0x4617F0 (core 0x461810) | Agree (IE1–IE4, NT2). A parented item goes to VP5; else GET (4), the insert check with the PC's message, the item leaves the map, the insert, then the decay cancel. A wield-slot target gets no wield check here. | Match for the hero as recipient; NPC recipients through the NPC transfers (H). | F2; partial |
+| VP4 | item transfer 0x4617F0 (core 0x461810) | Agree (IE1–IE4, NT2). A parented item goes to VP5; else GET (4), the insert check with the PC's message, the item leaves the map, the insert, then the decay cancel. A wield-slot target gets no wield check here. | Match for the hero as recipient; NPC recipients through the NPC transfers (H), which set no NPC flag 0x40 (G, VPG1). | F2; partial |
 | VP5 | item transfer from a holder 0x461CA0 | Agree (NT2). The second reading adds: after the insert the decay is cancelled and scheduled again for 2 days, which only holds when the recipient is a junk pile (ID4). | The no-drop remove check is not run on any parented transfer (G, VPG2); NPC flag 0x40 (G, VPG1); containers and junk piles as recipients (S). | F2; partial |
-| VP6 | item drop 0x461AB0 | Agree. The parent is not checked (a parentless item drops with no triggerer); DROP (5), the remove check with the PC's message, up to 10 random tiles at the distance, the removal, the placement with its decay; an NPC dropping a weapon or armour gets LOOK_FOR_WEAPON or LOOK_FOR_ARMOR. | The hero's drop at distance 0 matches (the drop script's writes kept on a later refusal is session policy, PI1, S; the tile fit test is a session bound, S). NPC drops go through the AI host and the critical drop, which set no look-for bit (H, in the reason). | F2; partial |
+| VP6 | item drop 0x461AB0 | Agree. The parent is not checked (a parentless item drops with no triggerer); DROP (5), the remove check with the PC's message, up to 10 random tiles at the distance, the removal, the placement with its decay; an NPC dropping a weapon or armour gets LOOK_FOR_WEAPON or LOOK_FOR_ARMOR. | The hero's drop at distance 0 matches (a refusal after the drop script drops its writes, where the original keeps them: session policy, PI1, S; the tile fit test is a session bound, S). NPC drops go through the critical drop (also a spell's damage), which sets no LOOK_FOR_WEAPON or LOOK_FOR_ARMOR bit; the bits are saved and read by the AI's ground search (G, VPG3). | F2; partial |
 | VP7 | item drop on the owner's tile 0x461A70 | Agree: VP6 with distance 0. | As VP6. | F2; partial |
 | VP8 | item wield 0x464AE0 | Agree (IW11, WE7). The second reading adds: slot 1003 sends the speed recalculation notice for the item's own handle, where the wearer's would be expected; an item has no animation run, so it does nothing. | The window's flow (wear check, removals, the occupant's insert check, roll-back) matches; animation speed (A); the empty-slot insert check is the window's move (0x5788C0, IW11), not this function's. | F2; partial |
 | VP9 | item unwield 0x464C80 | Agree. | Match; the insert check's host part (H). | F2; partial |
 | VP10 | wield-on hook 0x4677B0 | Agree. Slots 1004 and 1005 set the weapon art, 1006 the armour art; then the Wear-trigger spells, the light from worn items and WIELD_ON (24). | Art and light are the viewer's (H); spells run after the move and its scripts (A, in the reason). | F2; partial |
 | VP11 | wield-off hook 0x467CB0 | Agree; slot 1006 goes back to the base art; Unwear-trigger spells, light, WIELD_OFF (25). | As VP10. | F2; partial |
-| VP12 | same-holder item move 0x5788C0 | Agree (IW4, IW10–IW12). The second reading adds: the item's no-display flag (0x10) is cleared first; a wield-slot target gets neither a fit test nor a wield check here (the window checked, IW11). | Match for the hero's grid; the no-display flag is not modelled (A: a flag of the window's drawing; its readers were not read); other holders through the transfers (H). | F2; partial |
+| VP12 | same-holder item move 0x5788C0 | Agree (IW4, IW10–IW12). The second reading adds: the item's no-display flag (0x10) is cleared first; a wield-slot target gets neither a fit test nor a wield check here (the window checked, IW11). | Match for the hero's grid; the no-display flag is not modelled (A: Steamwoven never sets it, so clearing it changes nothing; Take all skips items that carry it, registry row 0x579770); other holders through the transfers (H). | F2; partial |
 | VP13 | gold units 0x464830 | Agree (NT1). | Match within the reason's limits (S). | F2; partial |
 | VP14 | key fold 0x466A00 | Agree (KY). With no ring the key stays an ordinary item; with a ring the key number is added and the ring's inventory art updated. | The hero always holds the ring (S); the ring art is not modelled (A). | F2; partial |
-| VP15 | key ring add 0x466A50 | Agree. The second reading adds: the number is added before the key is destroyed, so a destroy script that refuses leaves both the key and its number. | No key script is run at the fold (A: no installed key prototype was checked for a destroy script; not reproduced). | F2; partial |
+| VP15 | key ring add 0x466A50 | Agree. The second reading adds: the number is added before the key is destroyed, so a destroy script that refuses leaves both the key and its number. | No key script is run at the fold (A, unverified: no installed key prototype was checked for a destroy script). | F2; partial |
 | VP16 | schedule item decay 0x468090 | Agree (ID2, ID4). | Steamwoven cancels first, so a no-decay item also loses an earlier event, where the original keeps it and the firing ignores it (A: same result); the project's bound on pending decays (S). | F2; partial |
-| VP17 | item decay cancel 0x468110 | Agree (ID4): it cancels only an item that no longer decays. | Steamwoven cancels unconditionally, and every caller calls it after the item left the ground or was deleted (A: same result). | F2; partial |
+| VP17 | item decay cancel 0x468110 | Agree (ID4): it cancels only an item that no longer decays. | Steamwoven cancels unconditionally; every caller calls it after the item left the ground or was deleted, except the schedule, whose cancel is 0x468090's own removal (VP16) (A: same result). | F2; partial |
 
 Findings, each with its follow-up issue:
 
 - **VPG1.** The insert and the removal set NPC flag 0x40 (ONF_CHECK_WIELD) on an NPC holder, so the NPC re-wields its best items at its
-  next AI gate (NT3, VP1, VP3, VP5). Steamwoven's NPC transfers set no flag, so an NPC given a better weapon, or one whose item was taken,
-  keeps its wielded items until another cause re-wields it. Issue [#1284](https://github.com/Simarglok/arcanum-steamwoven/issues/1284).
+  next AI gate (NT3, VP1, VP3, VP5). Steamwoven's NPC transfers set no flag. The gate's re-wield is not built yet either (the AI host's
+  re-wield is empty, #1139), so the flag alone changes nothing until it is. Issue [#1284](https://github.com/Simarglok/arcanum-steamwoven/issues/1284).
 - **VPG2.** The transfer between holders runs the remove check after the transfer script: an item with the no-drop flag is refused with
   a message to a PC source or recipient (NT2, VP5). Steamwoven's loot from a body, container or junk pile, the pick pocket, the give to an
-  NPC and the barter run no such check, so a no-drop item can leave its holder. Issue
+  NPC, the barter and the dialog's negative `IN -name` (0x415BA0 → 0x4617F0 → 0x461CA0) run no such check, so a no-drop item can leave its
+  holder. Issue
   [#1283](https://github.com/Simarglok/arcanum-steamwoven/issues/1283).
+- **VPG3.** The drop sets LOOK_FOR_WEAPON (a weapon) or LOOK_FOR_ARMOR (an armour item) on an NPC that drops it (VP6), so its AI searches
+  the ground for a replacement. Steamwoven's NPC drops (the critical drop, also used by a spell's damage) set no bit, although the bits are
+  saved and the AI's ground search reads them. Issue [#1288](https://github.com/Simarglok/arcanum-steamwoven/issues/1288).
 
 No anomaly of the original needs a decision: the slot 1003 notice on the item's handle (VP8) does nothing, and the destroy-script order
-(VP15) was not reproduced with the installed data. No row became `full`: each keeps a difference of class S, H or G.
+(VP15) was not checked against the installed data. No row became `full`: each keeps a difference of class S, H or G.
 
 **Not read.** The network callbacks of the removal and the insert (0x467D60, 0x467E00, 0x466C40, 0x466CF0), the NPC float line of a
 refused insert (0x4D5450), the hotkey slot assignment of a hero insert (0x460590 → 0x57EED0) beyond its outline, and the other-holder
