@@ -138,6 +138,12 @@ public sealed class AreaCombatTests
         Assert.AreEqual(frame, fallen.Frame);
         Assert.AreEqual(new TerrainRect(0, 0, 120, 40), fallen.Source);
         Assert.AreEqual(new TerrainRect(command.Destination.X + 30 - 50, command.Destination.Y + 80 - 30, 120, 40), fallen.Destination);
+        // ARC-MAGIC-045: the re-placed command carries the pose's hotspot, so a later shrink halves it about the same anchor.
+        Assert.AreEqual((50, 30), fallen.Hot);
+        Assert.AreEqual((command.Destination.X + 30, command.Destination.Y + 80), (fallen.Destination.X + fallen.Hot!.Value.X, fallen.Destination.Y + fallen.Hot.Value.Y));
+        var shrunkFallen = AreaBodyStyleRules.Shrink(fallen);
+        Assert.AreEqual(new TerrainRect(fallen.Destination.X + 25, fallen.Destination.Y + 15, 60, 20), shrunkFallen.Destination);
+        Assert.AreEqual((fallen.Destination.X + 50, fallen.Destination.Y + 30), (shrunkFallen.Destination.X + shrunkFallen.Hot!.Value.X, shrunkFallen.Destination.Y + shrunkFallen.Hot.Value.Y));
         // A scaled body keeps its scale.
         var half = Body(scale: 50); var halfVisual = Visual(half, visual.Entry, scale: 50);
         var halfCommand = AreaScenePlan.Create([], [half], [halfVisual]).Commands.Single();

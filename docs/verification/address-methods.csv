@@ -207,6 +207,7 @@ src/Arcanum.Session/SessionSpellCasterAi.cs,AiSpell,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,AiUnderInfluence,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,CastByAi,pending,
 src/Arcanum.Session/SessionSpellCasterEffects.cs,CacheReAimedKind,pending,
+src/Arcanum.Session/SessionSpellCasterEffects.cs,RunProvidingFlag,exempt,host
 src/Arcanum.Session/SessionSpellCasterFire.cs,ApplyBurn,pending,
 src/Arcanum.Session/SessionSpellCasterItems.cs,ItemTriggered,pending,
 src/Arcanum.Session/SessionSpellCasterItems.cs,RemoveItemSpells,pending,
@@ -661,6 +662,8 @@ tools/terrain-viewer/Godot/TerrainViewerAttack.cs,InAttackReach,pending,
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,TraceLineOfFire,pending,
 tools/terrain-viewer/Godot/TerrainViewerAudioCues.cs,PlayDyingBark,pending,
 tools/terrain-viewer/Godot/TerrainViewerBloodPools.cs,LeaveBloodPoolsForNewDeaths,pending,
+tools/terrain-viewer/Godot/TerrainViewerBodyStyles.cs,SyncAreaBodyStyles,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerBodyStylesSmoke.cs,RunAreaBodyStylesStageAsync,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCombatMode.cs,WorldRightRelease,pending,
 tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerPortraitClick,pending,
 tools/terrain-viewer/Godot/TerrainViewerCompanions.cs,LeaveFollowersCombatMode,pending,

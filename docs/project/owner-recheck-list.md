@@ -306,13 +306,13 @@ Compare in both games with the same hero and spells; a spell that also has a not
 | 5 | Cast Bonds of Magick (43) on yourself and try to cast another spell. | The cast is refused at the invocation check while the flag holds. | open |
 | 6 | Cast Reflection Shield (44) on yourself and let a creature cast a hostile spell at you. | The spell is reflected to its caster. | open |
 | 7 | Cast Sanctuary (63) on yourself near a hostile creature that has not seen you yet. | The hostility rules read the enshrouded flag; compare which creatures still attack. | open |
-| 8 | Cast Disintegrate (34) on a creature. | The creature takes 30000 electrical damage and dies; the original sets don't-draw on it. Ours writes the flag (and the paralysed bit) but the viewer still draws the body; the AI and the spell target rules treat it as gone. | open |
+| 8 | Cast Disintegrate (34) on a creature. | The creature takes 30000 electrical damage and dies; the original sets don't-draw on it. Ours writes the flag (and the paralysed bit); since ARC-MAGIC-045 the viewer draws no body for it either (the eye candy stays), and the AI and the spell target rules treat it as gone. | open |
 
 Known differences (reading only, no game step):
 
 - Water walking (spells 13, 28): the flag and its object flag are written; the original's clear then tests the tile under the critter and may run a damage step (F0, MA-8). Ours does neither.
 - Mind control, charm, undead, fleeing and blinded (MA-4) and the locks (MA-6) are still not ready and show "not ready" in the spell line.
-- The viewer draws no translucent, shrunk or hidden critter from these flags yet.
+- The viewer's draw of translucent, shrunk, hidden and seen-invisible critters is ARC-MAGIC-045 (the section at the end of this file).
 
 ## ARC-DEV-366 — Tech books give expertise equal to intelligence (PR #980, 2026-11-11)
 
@@ -812,6 +812,24 @@ Known differences (documented, not bugs):
 
 - An NPC's own worn items still fire nothing when it attacks (no trigger host on the NPC attack path yet).
 - A chain of item spells answers once per item (owner decision 2026-10-28, MG46), where the original repeats until the target dies.
+
+## ARC-MAGIC-045 — Shield hit eye candy and the draw of translucent, shrunk and hidden critters (2026-11-11)
+
+The rules and what is built are in [the cast host](../world/spell-cast-host.md#hit-eye-candy-and-object-draw-flags-arc-magic-045) and [ledger HE1–HE4, OD1–OD6](../research/ledger/spell-runs.md#object-draw-flags-and-the-hit-eye-candy-arc-magic-045). Steps need a mage hero (or scrolls) and a creature to fight.
+
+| # | Step | Expected (original) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast Shield of Protection (30) on yourself, then let a creature hit you with a weapon or a spell that damages you. | Each hit that reaches you plays the shield's hit effect on you (a short flash of the spell's own animation). Misses do not. | open |
+| 2 | Cast Invisibility (69) on yourself. | You are drawn half transparent (not gone). | open |
+| 3 | Cast Invisibility (69) on a friendly companion or NPC. | Without detection the creature is not drawn at all (a creature of high perception, 20 or more, or a Detect Invisible effect shows it half transparent). | open |
+| 4 | Cast the spell that shrinks a creature (the one with the shrunk flag; the player's spell list names it) on a creature. | It is drawn at half size, standing on its tile. | open |
+| 5 | Cast Disintegrate (34) on a creature that stands near an eye candy (a burning or magic overlay). | The body is gone at once; any overlay of the spell still plays there. | open |
+
+Known differences (documented, not bugs):
+
+- The hero's own shrink is not drawn (the hero's draw has no hotspot to scale about); a shrunk hero is drawn full size.
+- One prototype's hit plays a fixed extra eye candy in the original (HE3); ours does not.
+- Magnetic inversion plays the fixed entry 0x449 when no run provides the flag; which installed record sets the flag by a non-spell path is not read, so step 1's variant for it is not listed.
 
 ## ARC-MAGIC-053 — Summon for creatures: Summon Undead and the other creature summons (E1-e, 2026-11-11)
 
