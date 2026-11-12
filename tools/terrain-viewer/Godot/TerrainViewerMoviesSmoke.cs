@@ -46,7 +46,7 @@ public partial class TerrainViewerApp
             var second = Make("second.mkv", "64x48", 1, 880);
             _moviesForSelfTest = true; _movieSourceForSelfTest = null;
             _movieTableForSelfTest = AreaMovieTable.From(_ => "00000.bik", "synthetic table");
-            _moviePathForSelfTest = (number, path) => path is not null ? (path.Contains("Sierra", StringComparison.Ordinal) ? second : path.Contains("Troika", StringComparison.Ordinal) ? second : null) : number == 1 ? first : number is 7 or 8 ? second : null;
+            _moviePathForSelfTest = (number, path) => path is not null ? second : number == 1 ? first : number is 7 or 8 ? second : null;
             Require(MovieRefusal() is null, "movies can play: " + MovieRefusal());
             var stamp = 60_000_000L;
             bool Pump(Func<bool> until, int seconds)
