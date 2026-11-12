@@ -61,6 +61,13 @@ public sealed record AreaScriptCreation(int Prototype, ScrObjectRef Near, Invent
 /// nothing of the run is applied).</summary>
 public enum AreaScriptedUseOutcome { Teleport, NoTeleport, Refused, EffectsRejected, ContentUnavailable, TeleportRefused }
 
+/// <summary>ARC-WORLD-1162 (SWB5): the answer of a bed's use script to the rest hook: <see cref="RunDefault"/> is the answer 1 (the run-default end and an object with no script on the point), which refuses the hero;
+/// <see cref="SkipDefault"/> any other answer, which goes on to the seat; <see cref="NotModelled"/> a run the host could not apply (a script it refuses or cannot read, a teleport from a bed), which decides nothing.</summary>
+public enum AreaBedAnswer { RunDefault, SkipDefault, NotModelled }
+
+/// <summary>A bed's use run: the answer and the run it came from (its printed lines, dialog and detail).</summary>
+public sealed record AreaBedScriptRun(AreaBedAnswer Answer, AreaScriptedUse Use);
+
 /// <summary>A scripted use: the outcome, the first teleport of the player the run asked for, the printed lines the viewer
 /// shows, the dispatcher's result and a detail (identifiers and statuses only).</summary>
 public sealed record AreaScriptedUse(AreaScriptedUseOutcome Outcome, ScrTeleport? Teleport, IReadOnlyList<string> Lines, ScrRunResult? Run, string Detail)
@@ -112,7 +119,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     public const string FactionProperty = "npc.faction";
     /// <summary>ARC-SCRIPT-052: the map-change key of an NPC a script's destroy (68) took out of the world (value 1). The original sets object
     /// flag 0x1 (TD2); a destroyed NPC is neither drawn nor in the object lists, and the view no longer reaches it (<see cref="Destroyed"/>).</summary>
-    public const string DestroyedProperty = "obj.destroyed";
+    public const string DestroyedProperty = GameSessionOwner.ObjectDestroyedProperty;
     private const int NpcType = 16, DestroyedObjectFlag = 0x1, OffObjectFlag = 0x2;
     private const string ScriptPart = "script", LocalFlagsPart = "lf", CountersPart = "counters";
 
@@ -721,6 +728,20 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     {
         var used = RunUse(row, rules, teleportRefusal, out var trap);
         return trap is null ? used : used with { Trap = trap };
+    }
+
+    /// <summary>
+    /// ARC-WORLD-1162 (0x57B180, SWB5): the bed's use script on attachment point 1, run with the hero as triggerer exactly as a use is (<see cref="Run"/>: the trap meeting first, then the script with its effects applied), and
+    /// its answer in the hook's terms. A trap that ended the call answers 0 (the entry point's trap branch), so the hero goes on to the seat; a script that ended <i>run default</i>, and a bed with no script on the
+    /// point (the entry point's answer for it, SA10), answer 1, which refuses the hero. A run the host does not model (a refused script, a teleport from a bed, a conversation) is <see cref="AreaBedAnswer.NotModelled"/>.
+    /// </summary>
+    public AreaBedScriptRun RunBed(AreaObjectRecord row, ScrRuleProfile rules)
+    {
+        var used = Run(row, rules, _ => "a teleport from a bed's script is not modelled");
+        if (used.Trap is { Cancels: true }) return new(AreaBedAnswer.SkipDefault, used);
+        // A conversation the script asks for is the viewer's to start (the rest hook then pops the interface stack it stands on), which is not modelled: no answer is taken from such a run.
+        if (used.Outcome != AreaScriptedUseOutcome.NoTeleport || used.Run is not { } run || used.Dialog is not null) return new(AreaBedAnswer.NotModelled, used);
+        return new(run.Outcome == ScrOutcome.RunDefault ? AreaBedAnswer.RunDefault : AreaBedAnswer.SkipDefault, used);
     }
 
     /// <summary>

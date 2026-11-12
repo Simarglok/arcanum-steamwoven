@@ -337,11 +337,44 @@ public partial class TerrainViewerApp
             await Settle(6);
             Require(!_groundBodies.ContainsKey(key) && !_groundOnly.ContainsKey(key) && AreaMovingCommands()?.Any(c => c.Identity == key) != true, "it is neither drawn nor picked once destroyed");
             Require(host.Scene.Npcs.All(n => n.Entity != made.Entity), "the AI host dropped it");
+
+            // ARC-WORLD-1158 (E2-b, PO10): a second critter is killed; its Decay Dead Bodies event is queued one game day on; a day later the pass removes it: its body leaves the picture and the AI host.
+            var second = session.CreateObject(session.Version, SessionCreatedKind.Critter, found.Number, map, cell).Object;
+            Require(second is not null, "the session created a second critter");
+            await Settle(6);
+            var npc2 = host.Scene.Npcs.FirstOrDefault(n => n.Entity == second!.Entity);
+            Require(npc2 is not null, "the AI host holds the second critter");
+            var key2 = npc2!.Row.Key;
+            var target2 = AreaTargetOf(key2);
+            Require(target2?.Build.Combat is not null, "the combat host reads the second critter as a target");
+            var killed = session.Kill(session.Version, target2!.Build.Combat!.Target);
+            Require(killed.Outcome is { } died && died.Events.HasFlag(Arcanum.Simulation.Combat.LifeEvents.Died), $"the second critter died: {killed.Disposition} {killed.Failure}");
+            var deadline = session.QueryBodyDecays().Where(e => e.Entity == second!.Entity).Select(e => (long?)e.DeadlineMs).FirstOrDefault();
+            Require(deadline == session.QueryClockSnapshot().GameTimestampMs + 86_400_000L, "its body's decay event is queued one game day on");
+            Require(session.ProcessEvents(AreaEvents).BodyDecays.All(f => f.Entity != second!.Entity), "the event is not due before its day");
+            var advanced = session.JumpClocks(session.QueryClockSnapshot().Token, 86_400_000L);
+            Require(advanced.Disposition == Arcanum.Simulation.Clock.ClockMutationDisposition.Changed, "a game day passes");
+            // The day's pass also runs every other event that came due in the day (the map's AI ticks, which a pass answers a few hundred at a time): pass until the body's event has fired.
+            SessionBodyDecayFiring? removed = null;
+            string passes = "";
+            for (var pass = 0; pass < 40 && removed is null && session.QueryBodyDecays().Any(e => e.Entity == second!.Entity); pass++)
+            {
+                var result = session.ProcessEvents(AreaEvents);
+                removed = result.BodyDecays.FirstOrDefault(f => f.Entity == second!.Entity);
+                passes += $"[{result.Failure} fired={result.Pass?.Fired}/dropped={result.Pass?.Dropped}: {string.Join(",", result.Pass?.Outcomes.Where(o => o.Kind != Arcanum.Simulation.Events.GameEventOutcomeKind.Fired).Select(o => $"{o.Kind}:{o.Event.Kind}") ?? [])}]";
+            }
+            Require(removed is { Outcome: SessionBodyDecayOutcome.Removed }, $"the day's pass removes the body: {removed?.Outcome} {passes}");
+            await Settle(6);
+            Require(session.QueryCreatedObject(second!.Entity) is null && session.QueryBodyDecays().All(e => e.Entity != second.Entity), "the session no longer holds the critter or its event");
+            Require(!_groundBodies.ContainsKey(key2) && !_groundOnly.ContainsKey(key2) && AreaMovingCommands()?.Any(c => c.Identity == key2) != true, "its body is neither drawn nor picked");
+            Require(host.Scene.Npcs.All(n => n.Entity != second.Entity), "the AI host dropped the body");
+            GD.Print($"ARC-WORLD-1158 body-decay entity={second.Entity} dropped={removed!.Dropped} destroyed={removed.Destroyed}");
             GD.Print("ARC-DEV-370 native-smoke created-critter PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = area.Snapshot.RuntimeMap, Prototype = found.Number, Art = $"0x{found.Art:X8}" }));
         }
         finally
         {
             if (made is not null && session.QueryCreatedObject(made.Entity) is not null) session.DestroyCreatedObject(session.Version, made.Entity);
+            foreach (var left in session.QueryCreatedObjects(map).Where(o => o.Kind == SessionCreatedKind.Critter && o.Prototype == found.Number).ToArray()) session.DestroyCreatedObject(session.Version, left.Entity);
             if (AreaAiHostNow() is { } after) after.Movers.Remove(made?.Entity ?? "");
             SyncAreaInventory();
             _aiForSmoke = aiBefore;
