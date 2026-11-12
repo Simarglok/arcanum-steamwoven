@@ -348,6 +348,9 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         {
             // ARC-WORLD-102: the college ranks and mastery its fields store.
             Book = fields.Critter is { } critter ? SpellBookRules.FromFields(critter.SpellTech) : null,
+            // ARC-MAGIC-1295: the stored values the TraitIdx component adds to (the session lays what it wrote over them).
+            StoredStats = fields.Critter?.BaseStats, StoredResistances = resistances,
+            StoredBasicSkills = fields.Critter?.BasicSkills, StoredTechSkills = fields.Critter?.TechSkills,
         };
     }
 
