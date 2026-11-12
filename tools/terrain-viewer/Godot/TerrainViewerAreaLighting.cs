@@ -238,13 +238,16 @@ public partial class TerrainViewerApp
     /// <summary>
     /// ARC-WORLD-1149 (FR-LIGHT-011, ledger LL1–LL3): the light level 0..254 a light-aware check reads for something at the world cell
     /// (<see cref="AreaLocalLighting.LightLevel"/>): the shown map's ambient for the game hour, its sector lights as posed now and the lights
-    /// the creatures carry (the hero's worn light, the NPCs' and companions'), whatever the viewer's lighting toggle shows. Full light (255) on a
-    /// map without lighting or before one is shown, where the original's sampler finds no light and reads white.
+    /// the creatures carry (the hero's worn light, the NPCs' and companions'), whatever the viewer's lighting toggle shows. Full light (255, which
+    /// has the penalty of the original's white, 254) on a map without lighting, before one is shown, or for a cell the lighting has no tile for, where the original's
+    /// sampler answers 0 and the colour is white.
     /// </summary>
     private int AreaCellLightLevel(long worldX, long worldY)
     {
         const int Full = Arcanum.Simulation.Combat.AttackRules.MaxLightLevel, Reach = 1024;
         if (_areaAmbient is not { } driver || _readyArea?.Lighting is not { Local: { } basis } lighting || LightsNow(basis, driver) is not { } local) return Full;
+        // A cell the shown lighting has no tile for (a row of another map's snapshot, a body outside the loaded window) is lit by nothing here: full light.
+        if (!local.HasTile(worldX, worldY)) return Full;
         var view = local;
         if (_canvas?.AreaActorPlacementNow is { } placement && CarriedLightSource(HeroCarriedSize(), lighting, true, gameplay: true) is { } carried)
         {

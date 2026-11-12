@@ -277,7 +277,7 @@ so switching the lighting view off does not change a roll; on a map without ligh
 Fed into: the hero's melee, ranged and thrown attack on an NPC (`SessionAttack.TargetLight`, `SessionHeroThrow.StruckLight`, the light at the
 struck NPC's cell), the combat panel's hit chance (`QueryHeroAttackChance(…, targetLight)`), the lockpicking of a portal (the portal's cell) and the
 spot roll of a trap object (`AreaTraps`, the trap's cell). A target's carried light lights its own cell, so a torch-bearing NPC is easier to hit.
-Not modelled: NPC attacks on the hero and companions (full light on the target), container picks, trap disarming, seeing checks and the AI's
+Not modelled: NPC attacks on the hero and companions (full light on the target), container picks and trap disarming (the viewer has no host for either), seeing checks and the AI's
 awareness read; the object colour rules of 0x442520 (pinned and fixed-colour objects, a mover's pixel offsets) and the display-depth
 quantisation of the channels (NOT_VERIFIED). Tests: `LightLuminanceTests` (Data), `AttackChanceStateTests` (Session),
 `AreaLocalLightingTests` (viewer tests).

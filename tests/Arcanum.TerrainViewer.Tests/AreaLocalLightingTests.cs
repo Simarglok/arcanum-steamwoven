@@ -43,6 +43,8 @@ public sealed class AreaLocalLightingTests
     {
         // ARC-WORLD-1149 (FR-LIGHT-011): the origin cell is indoor (10..., pair.Indoor 50,60,70), the cell east of it outdoor (10,20,30).
         var local = Local([]);
+        Assert.IsTrue(local.HasTile(92928, 82560) && !local.HasTile(92930, 82560), "a cell outside the tiles has no level (the viewer answers full light for it)");
+        Assert.ThrowsExactly<InvalidOperationException>(() => local.LightLevel(92930, 82560, Pair));
         Assert.AreEqual(LightLuminance.Gray(Pair.Indoor), local.LightLevel(92928, 82560, Pair));
         Assert.AreEqual(LightLuminance.Gray(Pair.Outdoor), local.LightLevel(92929, 82560, Pair));
         Assert.AreEqual(local.LightLevel(92929, 82560, Pair), LightLuminance.Gray(local.Point(92929, 82560, 0, 0, Pair)));

@@ -559,7 +559,7 @@ public sealed record SessionAttack(SessionCritterCombat Target)
     public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? TargetWorn { get; init; }
     /// <summary>The target's cell now, where a critical drops its items (ARC-COMBAT-009); null: its drops are not applied.</summary>
     public Arcanum.Simulation.Movement.CellCoord? TargetCell { get; init; }
-    /// <summary>ARC-WORLD-1149 (FR-LIGHT-011): the light level 0..255 at the target's cell (the host's <c>LightLuminance</c> of the colour the target is lit with),
+    /// <summary>ARC-WORLD-1149 (FR-LIGHT-011): the light level 0..255 at the target's cell (the host's <c>LightLuminance</c> grey, at most 254, of the colour the target is lit with; 255 is full light),
     /// which the check's darkness penalty reads (<see cref="AttackRules.LightPenalty"/>); null: full light, no penalty (the hosts that have no lighting).</summary>
     public int? TargetLight { get; init; }
     /// <summary>The actor's map as the original's drop reads it (ARC-COMBAT-010): with it a drop draws its distance and directions and

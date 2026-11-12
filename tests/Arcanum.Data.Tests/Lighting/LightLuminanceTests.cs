@@ -19,7 +19,7 @@ public sealed class LightLuminanceTests
     }
 
     [TestMethod]
-    public void The_channels_weigh_in_the_order_green_red_blue()
+    public void The_channels_weigh_green_most_then_red_then_blue()
     {
         Assert.AreEqual(76, LightLuminance.Gray(new(255, 0, 0)));
         Assert.AreEqual(150, LightLuminance.Gray(new(0, 255, 0)));

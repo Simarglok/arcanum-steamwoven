@@ -190,6 +190,9 @@ public sealed class AreaLocalLighting
     public AreaAmbientChannel TileChannel(long worldX, long worldY) =>
         _tiles.TryGetValue((worldX, worldY), out var channel) ? channel : throw new InvalidOperationException("AREA_LIGHT_TILE_REQUIRED");
 
+    /// <summary>ARC-WORLD-1149: whether the world cell has a core tile in this lighting (<see cref="TileChannel"/> and so <see cref="LightLevel"/> refuse one without).</summary>
+    public bool HasTile(long worldX, long worldY) => _tiles.ContainsKey((worldX, worldY));
+
     public static AmbientColor Ambient(AreaAmbientChannel channel, AmbientPair pair) => channel switch
     {
         AreaAmbientChannel.Outdoor => pair.Outdoor,

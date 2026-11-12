@@ -113,8 +113,8 @@ public sealed partial class GameSessionOwner
     /// skill's own case (<see cref="TrapRules.SpotCase"/>: the master's second roll, no spotting of a magical trap below expert). Nothing
     /// is written but the generator's draws; the caller marks the trap (<see cref="MarkTrapSpotted"/>) when <see cref="SessionSpotRoll.Spotted"/>.
     /// Rolled only when the gate asks for a roll (<see cref="TrapSpotGate"/> answers Roll for the player with <paramref name="playerSpellFlags"/>);
-    /// any other gate answers NoChange without a draw. NOT READY: the spot modifier of the item at inventory location 1005 (SP2) and the light
-    /// at the trap (the caller passes it; full light by default, as the lock pick does). Refused: no hero or a dead one
+    /// any other gate answers NoChange without a draw. NOT READY: the spot modifier of the item at inventory location 1005 (SP2). The light
+    /// at the trap is the caller's (ARC-WORLD-1149: the viewer passes the light at the trap object's cell; full light by default). Refused: no hero or a dead one
     /// (<see cref="GameSessionFailure.SkillsUnavailable"/>), an invalid object or light (<see cref="GameSessionFailure.InvalidTrap"/>), the
     /// version, the generator or the revision exhausted.
     /// </summary>
