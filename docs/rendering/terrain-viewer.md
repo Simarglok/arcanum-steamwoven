@@ -1867,7 +1867,7 @@ the creation editor keeps its draft's snapshot until the game starts).
 **NPC sheet (ARC-UI-088, ledger [CHW24](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)):** the dialog reply action c-e ends the talk and
 opens the speaker's character sheet in the original's mode 2 (`Godot/TerrainViewerAreaNpcSheet.cs`, `src/Arcanum.World/AreaNpcSheet.cs`): the same window over the NPC's
 values (name, level, points, experience to the next level from its stored experience, the eight stats with the colour of its effects, derived stats from
-`AutoLevelRules.DerivedStat`, stored resistances with the constitution bonus, hit points and fatigue from its life, skills, spell book and tech degrees), no +
+`AutoLevelRules.DerivedStat`, stored resistances with the constitution bonus under the NPC's effect list (the session's, else the map data's; the Magick line shows the `resistmagic` changes too, ARC-UI-1145), hit points and fatigue from its life, skills, spell book and tech degrees), no +
 or − on any page (`ReadOnly` of the art view and pages), the next spell grey, no editor snapshot, no pause; a monstrous NPC shows no race or gender. The sheet is the
 talk's moment: the session's later changes do not rebuild it. A release in the close rectangle or `C` closes it, the dialog does not resume, and the next `C`
 opens the hero's sheet. Not built: the follower arrows, the scheme page (the NOT READY note), the portrait or race icon (the slot stays empty), the NPC's worn

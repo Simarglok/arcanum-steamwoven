@@ -337,6 +337,7 @@ public static class LifeRules
         Math.Abs((long)facts.FatigueAdjustment) <= LifeLimits.MaxPoolAdjustment &&
         facts.Level is >= 0 and <= LifeLimits.MaxLevel && Stat(facts.Strength) && Stat(facts.Constitution) && Stat(facts.Willpower) &&
         Stat(facts.HealRate) && Stat(facts.PoisonRecovery) && Math.Abs((long)facts.NormalResistance) <= LifeLimits.MaxResistance &&
+        (facts.NormalResistanceBase is not { } resistanceBase || Math.Abs((long)resistanceBase) <= CombatantRules.MaxValue) &&
         (facts.Traits & ~AllTraits) == 0 &&
         (facts.PoisonedStrength.IsDefaultOrEmpty || facts.PoisonedStrength.Length == 3 && facts.PoisonedStrength.All(Stat)) &&
         !facts.MaxHitPointEffects.IsDefault && !facts.MaxFatigueEffects.IsDefault &&

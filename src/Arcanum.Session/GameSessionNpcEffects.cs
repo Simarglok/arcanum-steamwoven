@@ -118,11 +118,16 @@ public sealed partial class GameSessionOwner
     private static LifeFacts WithCritterEffects(LifeFacts facts, IEnumerable<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
     {
         var list = entries as IReadOnlyList<SessionEffect> ?? [.. entries];
-        return WithStatEffects(facts, list, definitions) with
+        var laid = WithStatEffects(facts, list, definitions) with
         {
             MaxHitPointEffects = EffectDomain.Modifiers(list, definitions, EffectSpecial.MaxHitPoints),
             MaxFatigueEffects = EffectDomain.Modifiers(list, definitions, EffectSpecial.MaxFatigue),
         };
+        // ARC-UI-1145 (0x43D6D0): the normal resistance a poison tick meets, the sum before the effects under the list's resistnormal changes, clamped as the resistance is.
+        // Worked out from the base, never from the value the facts carry, so a list laid over facts twice gives the same (a host that gives no base keeps its value).
+        return facts.NormalResistanceBase is { } baseResistance
+            ? laid with { NormalResistance = CombatantRules.NormalResistance(baseResistance, facts.NormalResistanceUnclamped, EffectDomain.Resistances(list, definitions).Normal) }
+            : laid;
     }
 
     // ARC-WORLD-1144 (exe 0x43D5A0, 0x43D630, 0x45D670): the maxima read the effective stats, the strength (poisoned or not), the willpower and the constitution, through the stat getter (0x4B0490) that

@@ -162,7 +162,7 @@ public sealed class SessionCritterCombat
     /// ARC-MAGIC-027 (MA-2): the same NPC under an effect list (the session's, else the loaded one: <see cref="GameSessionOwner.QueryNpcEffects"/>): the stat changes of the entries are
     /// applied to its stats (so its speed, strength, armour class adjustment and the rest read through them: the turn-based action points, the attack pause, the combat values) and
     /// its resistance changes to the effective resistances (0x43D6D0) it defends with. The numbers of the loaded list the host gave no rule for have none. The skills of a levelled
-    /// sheet and the NPC's life facts (maximum hit points under its strength, the normal resistance a poison tick meets) are not re-read from the stats and resistances: ledger EF1 consequences stay with the life record.
+    /// sheet and the NPC's life facts (maximum hit points under its strength, the normal resistance a poison tick meets) are not re-read here: the session lays its own list over the life facts (ARC-WORLD-1144, ARC-UI-1145), ledger EF1 consequences stay with the life record.
     /// </summary>
     internal SessionCritterCombat WithEffects(IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
     {
@@ -183,6 +183,15 @@ public sealed class SessionCritterCombat
     /// it was handed out with (<see cref="WithEffects"/>), both modes (<see cref="SpellResistanceRules.ResistanceUnderEffects"/>). The stored value itself for an NPC with no such change.
     /// </summary>
     public int SaveMagicResistance(int stored) => SpellResistanceRules.ResistanceUnderEffects(stored, _effectResistances.Magic, Monstrous);
+
+    /// <summary>
+    /// ARC-UI-1145 (ledger CHW24): the five resistance lines of the NPC's character sheet (the resistance function as the sheet reads it): the stored resistances, the poison bonus of its effective constitution
+    /// and the changes of the effect list it was handed out with (<see cref="WithEffects"/>), clamped like the combat's resistances; the sheet reads no worn armour for an NPC. The Magick line is
+    /// <paramref name="storedMagic"/> (the fifth stored resistance) under the <c>resistmagic</c> changes (the sheet shows them; the save reads the stored value, <see cref="SaveMagicResistance"/>).
+    /// </summary>
+    public (DamageResistances Damage, int Magic) SheetResistances(LifeState state, int storedMagic) =>
+        (CombatantRules.Resistances(_storedResistances, EquipmentResistances.None, _stats.Query(StatContext(state)).Snapshot!.GetEffective(CharacterStat.Constitution), Monstrous, _effectResistances),
+            CombatantRules.MagicResistance(storedMagic, 0, Monstrous, _effectResistances.Magic));
 
     /// <summary>
     /// Builds the values of the NPC <paramref name="entity"/> from its fields and the fields of the items it carries
@@ -293,6 +302,9 @@ public sealed class SessionCritterCombat
             HealRate = Effective(plain, CharacterStat.HealRate),
             PoisonRecovery = Effective(plain, CharacterStat.PoisonRecovery),
             NormalResistance = resistances.Normal,
+            // ARC-UI-1145: the sum before the effects, so a list the session holds for the NPC reaches what its poison tick meets (WithCritterEffects).
+            NormalResistanceBase = StoredResistances(fields.Object.Resistances).Normal + equipment.Resistances.Normal,
+            NormalResistanceUnclamped = monstrous,
             Traits = traits,
             Race = race,
         };

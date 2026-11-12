@@ -48,8 +48,7 @@ Resistance and stat changes of effects now reach combat values for the hero and 
 
 Known differences (documented, not bugs):
 
-- The character sheet's resistance lines (hero and NPC) do not show effect changes; damage does.
-- A poison tick meets an NPC's resistance without its effects (an NPC's maximum hit points and fatigue follow its effect-changed strength, willpower and constitution since ARC-WORLD-1144).
+- A poison tick meets the normal resistance of an NPC under the effect list the session holds for it, and the sheet's resistance lines (hero and NPC) show effect changes (ARC-UI-1145); a list the map data stores and the session has not adopted is not laid over the NPC's life facts (its poison tick and maxima).
 - Spell damage dealt to an NPC ignores that NPC's resistance effects until PR #941 merges (the spell host reads the NPC without its list).
 - The hero's innate race and gender effects carry no resistance changes in the session.
 

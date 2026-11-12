@@ -337,4 +337,64 @@ public sealed class NpcEffectStateTests
         var status = Status(owner, wolf);
         Assert.AreEqual((30, 38), (status.MaxHitPoints, status.MaxFatigue));
     }
+
+    private static EffectChange Resist(int attribute, int value, EffectChangeOperator op = EffectChangeOperator.Add) => new(EffectAttributeKind.Resistance, attribute, op, value);
+
+    // A poisoned wolf whose facts carry the normal resistance as its host built it (stored 40, nothing worn), with the sum before the effects.
+    private static SessionLifeTarget PoisonedWolf(string entity = Wolf, int resistance = 40, bool unclamped = false) =>
+        SessionLifeTarget.Critter(entity, new LifeFacts { NormalResistance = resistance, NormalResistanceBase = resistance, NormalResistanceUnclamped = unclamped },
+            new LifeState(0, 0, 550, LifeConditions.None, 0), []);
+
+    private static int Tick(GameSessionOwner owner, SessionLifeTarget target)
+    {
+        var before = Status(owner, target).HitPoints;
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, owner.PoisonDamageTick(owner.Version, target).Disposition);
+        return before - Status(owner, target).HitPoints;
+    }
+
+    /// <summary>ARC-UI-1145 (0x43D6D0): the normal resistance a poison tick meets is the stored one under the NPC's <c>resistnormal</c> changes; poison level 550 hits for 3 less the resistance in percent (rounded
+    /// down), so 40 % takes 2 off, 90 % takes 2 off, and a negative change brings the damage back.</summary>
+    [TestMethod]
+    public void The_poison_tick_meets_the_normal_resistance_under_the_npcs_effects()
+    {
+        using var owner = Create();
+        var wolf = PoisonedWolf();
+        Assert.AreEqual(2, Tick(owner, wolf), "no list: 3 - 40 x 3 / 100");
+        var armoured = new SessionEffectDefinition(160, [Resist(0, 55)]);
+        Ok(owner.AddNpcEffect(owner.Version, wolf, armoured, EffectCause.Spell), 1);
+        Assert.AreEqual(1, Tick(owner, wolf), "95 % (cut at the clamp): 3 - 2");
+        Ok(owner.RemoveNpcEffect(owner.Version, wolf, 160), 1);
+        Assert.AreEqual(2, Tick(owner, wolf), "the list gone: the host's value again");
+        var thin = new SessionEffectDefinition(161, [Resist(0, -40)]);
+        Ok(owner.AddNpcEffect(owner.Version, wolf, thin, EffectCause.Spell), 1);
+        Assert.AreEqual(3, Tick(owner, wolf), "0 %: all 3");
+    }
+
+    [TestMethod]
+    public void The_normal_resistance_of_a_poison_tick_is_laid_over_its_base_once_and_cut_by_the_clamp()
+    {
+        using var owner = Create();
+        var wolf = PoisonedWolf();
+        var armoured = new SessionEffectDefinition(160, [Resist(0, 10)]);
+        Ok(owner.AddNpcEffect(owner.Version, wolf, armoured, EffectCause.Spell), 1);
+        // A second entry and a stat effect after it: 40 + 10 + 10 = 60 %, the damage is 3 - 60 x 3 / 100 = 2 (the stat effect does not lay the list over the base twice).
+        Ok(owner.AddNpcEffect(owner.Version, wolf, armoured, EffectCause.Spell), 1);
+        Ok(owner.AddNpcEffect(owner.Version, wolf, new SessionEffectDefinition(120, [Stat(0, 2)]), EffectCause.Spell), 1);
+        Assert.AreEqual(2, Tick(owner, wolf));
+        // 40 + 10 x 8 = 120 %: an ordinary NPC is cut to 95 (3 - 2 = 1), a monstrous one is not (3 - 3 = 0).
+        Ok(owner.AddNpcEffect(owner.Version, wolf, armoured, EffectCause.Spell, 6), 6);
+        Assert.AreEqual(1, Tick(owner, wolf));
+        var monster = PoisonedWolf(Bear, unclamped: true);
+        Ok(owner.AddNpcEffect(owner.Version, monster, armoured, EffectCause.Spell, 8), 8);
+        Assert.AreEqual(0, Tick(owner, monster));
+    }
+
+    [TestMethod]
+    public void Facts_without_a_base_keep_their_normal_resistance_under_a_list()
+    {
+        using var owner = Create();
+        var wolf = SessionLifeTarget.Critter(Wolf, new LifeFacts { NormalResistance = 40 }, new LifeState(0, 0, 550, LifeConditions.None, 0), []);
+        Ok(owner.AddNpcEffect(owner.Version, wolf, new SessionEffectDefinition(160, [Resist(0, 55)]), EffectCause.Spell), 1);
+        Assert.AreEqual(2, Tick(owner, wolf));
+    }
 }
