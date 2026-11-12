@@ -44,8 +44,8 @@ public sealed class AreaSpellCastingTests
         // ARC-MAGIC-032 (MA-7, D5(a)): the windows of the original are E8's; the line says what the window would show.
         Assert.AreEqual("identify: Rat r1 (its character sheet)", AreaSpellCasting.Line(new(SpellCastEventKind.IdentifyCritter, 1, SpellTargetObject.Npc, "r1"), null, Name));
         Assert.AreEqual("identify: Rat r1 (the hero's own sheet is the C key)", AreaSpellCasting.Line(new(SpellCastEventKind.IdentifyCritter, 1, SpellTargetObject.Pc, "r1"), null, Name));
-        Assert.AreEqual("identify: the contents of Rat r2 (the inventory window is not built yet)", AreaSpellCasting.Line(new(SpellCastEventKind.IdentifyContainer, 1, 2, "r2"), null, Name));
-        Assert.AreEqual("identify: Rat kit:2 (the item description window is not built yet)", AreaSpellCasting.Line(new(SpellCastEventKind.IdentifyItem, 1, 5, "kit:2"), null, Name));
+        Assert.AreEqual("identify: the contents of Rat r2 (its contents window)", AreaSpellCasting.Line(new(SpellCastEventKind.IdentifyContainer, 1, 2, "r2"), null, Name));
+        Assert.AreEqual("identify: Rat kit:2 (its item description)", AreaSpellCasting.Line(new(SpellCastEventKind.IdentifyItem, 1, 5, "kit:2"), null, Name));
         Assert.AreEqual("Rat kit:2 is identified", AreaSpellCasting.Line(new(SpellCastEventKind.ItemIdentified, 1, 1, "kit:2"), null, Name));
         Assert.AreEqual("the identification was not saved", AreaSpellCasting.Line(new(SpellCastEventKind.ItemIdentifyNotSaved, 1, 3, "kit:2"), null, Name));
     }

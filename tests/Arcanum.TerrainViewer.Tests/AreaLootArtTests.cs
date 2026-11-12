@@ -17,6 +17,17 @@ public sealed class AreaLootArtTests
         new([], "npc:1", "Body", []) { LootGrid = loot, Grid = [new AreaGridItem("own:1", 0, 1, 1, "Own")] };
 
     [TestMethod]
+    public void TheContentsWindowOfMode4HasNoTakeAllNoTogglesForAContainerAndNoRightReleaseMove()
+    {
+        // ARC-RES-1327 (ledger XR16): Take all is mode 2's alone, the doll toggles are made for a body (mode 4 shows containers), and the right release moves nothing in mode 4.
+        Assert.IsFalse(AreaLootArtLayout.TakeAllShown(AreaInventoryMode.Contents));
+        var container = new AreaInventoryView([], "box", "Box", []) { Contents = true, HolderContainer = true, LootGrid = [new("loot:1", 0, 1, 1, "Ring", Kind)] };
+        Assert.IsFalse(AreaLootArtLayout.TogglesShown(AreaInventoryMode.Contents, container));
+        Assert.IsNull(AreaLootArtLayout.RightRelease(container, new AreaLootHit(null, null, 0, false), AreaInventoryMode.Contents));
+        Assert.AreEqual(AreaRoundViewRelease.Close, AreaInventoryHole.Release(AreaInventoryMode.Contents, false), "a release in the round view closes it, as in every mode");
+    }
+
+    [TestMethod]
     public void TheLootArtsAreRead()
     {
         CollectionAssert.AreEqual(new[] { 234, 808, 348, 347 }, AreaLootArtLayout.ArtNumbers.ToArray());
