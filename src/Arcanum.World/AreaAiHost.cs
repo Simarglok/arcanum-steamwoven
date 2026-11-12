@@ -69,6 +69,8 @@ public sealed record AreaAiScene
     public Func<ILineOfFireMap<AreaObjectRecord>?>? LineOfFire { get; init; }
     /// <summary>The shown map as the drop's placement reads it, or null.</summary>
     public Func<Arcanum.Simulation.Items.IDropMap?>? DropMap { get; init; }
+    /// <summary>ARC-WORLD-1157 (SZ6): what the viewer shows (the game window and an object's drawn rectangle), for a generator's off-screen option; null (the provider or its answer): nothing is shown, so every rectangle is off the view.</summary>
+    public Func<IAreaRestockScreen?>? Screen { get; init; }
     /// <summary>The hero's worn items with their durability values, or null.</summary>
     public Func<IReadOnlyDictionary<EquipmentSlot, SessionWearItem>?>? HeroWorn { get; init; }
     /// <summary>The NPC the hero talks with, or null.</summary>
@@ -1085,8 +1087,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // ARC-DEV-117 (MIG9 S4b): the fold's waypoint and standpoint steps (0x4ACBB0, 0x4ACDB0), in AreaAiHostRoutes.cs.
     public bool RunWaypoints(string npc) => RunRouteStep(npc, NpcRouteRules.ForcedWaypoints, waypoints: true);
     public void RunStandpoints(string npc) => RunRouteStep(npc, NpcRouteRules.ForcedStandpoint, waypoints: false);
-    public bool IsGenerator(string npc) => Fields(npc)?.Npc is { } fields && (fields.Flags & GeneratorNpc) != 0;
-    public long? Spawn(string npc) => null;
+    // ARC-WORLD-1157 (0x4BA720): a critter a generator made is no generator, whatever its prototype's flags say.
+    public bool IsGenerator(string npc) => Fields(npc)?.Npc is { } fields && (fields.Flags & GeneratorNpc) != 0 && _session.QueryGeneratorCopy(npc) is null;
+    // ARC-WORLD-1157 (E2-a): the spawner of a generator is in AreaAiHostGenerators.cs.
     /// <summary>ARC-DEV-371 (PG1): the critter flag 0x20000 (field 0xDA) the script action create object writes on a critter it made, over the data's own flags. Only a critter the session created is asked (a map
     /// NPC's data has none of them): the AI tick then destroys it when it is left without a next tick outside a round (the sector its tick found not loaded), which this host answers by queuing the
     /// session's destroy of the created critter (<see cref="TakeDestroyedCreated"/>; the viewer applies it outside the tick, which holds the session).</summary>

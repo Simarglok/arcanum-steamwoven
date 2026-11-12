@@ -171,6 +171,8 @@ public sealed partial class GameSessionOwner
                 _objectFlags = _objectFlags.Remove(entity);
                 // ARC-MAGIC-040: the monster body a Trait component put on it goes too (the same bound).
                 _traitArt = _traitArt.Remove(entity);
+                // ARC-WORLD-1157 (PO7): the slot mark goes with the critter; a destroy releases nothing (the count of its slot stays).
+                _generators.DropCopy(entity);
                 return;
             case SessionObjectOrigin.Missile:
                 _missileObjects.Remove(entity);

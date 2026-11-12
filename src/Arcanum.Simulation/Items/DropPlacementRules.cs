@@ -125,6 +125,29 @@ public static class DropPlacementRules
         return near;
     }
 
+    /// <summary>The generator's distance per try: 1..5 steps (0x4BA910, ledger PO4).</summary>
+    public const int MinGeneratedDistance = 1, MaxGeneratedDistance = 5;
+
+    /// <summary>
+    /// ARC-WORLD-1157 (E2-a, ledger PO4): the spot of one creature a monster generator makes around <paramref name="near"/>, the generator's own tile: up to <see cref="Tries"/> tries,
+    /// each drawing a distance 1..5 and then the placement's direction (one call of the tile search for a critter owner without a PC leader, <see cref="DropOwner.Npc"/>), a try counting when the call
+    /// did not leave the map and <paramref name="accepted"/> (the host's test: the spot has the generator's tile class and, with the generator's off-screen option, its drawn rectangle moved
+    /// to the spot is off the view) says so; after the last failure the generator's own tile. A generator of cap 1 makes its creature on its own tile without a draw (the caller's rule).
+    /// </summary>
+    /// <remarks>Executable: the generator's placement 0x4BA910 over 0x4F4E40.</remarks>
+    public static CellCoord PlaceGenerated(CellCoord near, IDropMap map, IDropRolls rolls, Func<CellCoord, bool> accepted)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(rolls);
+        ArgumentNullException.ThrowIfNull(accepted);
+        for (var attempt = 0; attempt < Tries; attempt++)
+        {
+            var distance = Checked(rolls.Roll(DropRoll.Distance, MinGeneratedDistance, MaxGeneratedDistance), MinGeneratedDistance, MaxGeneratedDistance);
+            if (Try(near, distance, DropOwner.Npc, map, rolls) is { } spot && accepted(spot)) return spot;
+        }
+        return near;
+    }
+
     // One call of 0x4F4E40: null when a step leaves the map (the try failed).
     private static CellCoord? Try(CellCoord owner, int distance, DropOwner who, IDropMap map, IDropRolls rolls)
     {
