@@ -687,6 +687,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,NoteScriptCreations,p
 tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,QueueCreationNotice,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,RunMapEnteredSteps,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPanelArt.cs,HoverPortrait,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,ArmPickPocketFromBar,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,HeroFaceSkill,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,HeroDoorUse,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaQuickSave.cs,RouteQuickSaveOverWindow,pending,
@@ -740,6 +741,7 @@ tools/terrain-viewer/Godot/TerrainViewerHotkeyHover.cs,DescribeItem,pending,
 tools/terrain-viewer/Godot/TerrainViewerHotkeyHover.cs,ExamineAllows,pending,
 tools/terrain-viewer/Godot/TerrainViewerHotkeyHover.cs,HotkeyDescriptionLeft,pending,
 tools/terrain-viewer/Godot/TerrainViewerHotkeys.cs,ActivateHotkey,pending,
+tools/terrain-viewer/Godot/TerrainViewerHotkeys.cs,ActivateSkillButton,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerHotkeys.cs,RecordRecentAction,pending,
 tools/terrain-viewer/Godot/TerrainViewerInterfaceModes.cs,HandleGlobalKeyOverInterface,pending,
 tools/terrain-viewer/Godot/TerrainViewerInterfaceModes.cs,HandleRightPressOverWindow,pending,
@@ -765,6 +767,10 @@ tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,ProjectileGoalEnded,pendi
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,Strike,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,TurnBack,pending,
 tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,AddOccupiedBeds,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,RouteSkillKey,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,SkillBarDrag,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,SkillBarEntered,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,SkillBarReleased,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSoundCallers.cs,NoteGaitFrame,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSoundCallers.cs,PlayDroppedItemSound,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSoundCallers.cs,PlayNpcAttackBark,exempt,host
