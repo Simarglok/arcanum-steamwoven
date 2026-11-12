@@ -207,8 +207,12 @@ src/Arcanum.Session/SessionSpellCasterAi.cs,AiKnows,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,AiSpell,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,AiUnderInfluence,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,CastByAi,pending,
+src/Arcanum.Session/SessionSpellCasterDisarm.cs,DropWeapon,exempt,host
 src/Arcanum.Session/SessionSpellCasterEffects.cs,CacheReAimedKind,pending,
+src/Arcanum.Session/SessionSpellCasterEffects.cs,DamageEffect,exempt,host
 src/Arcanum.Session/SessionSpellCasterEffects.cs,RunProvidingFlag,exempt,host
+src/Arcanum.Session/SessionSpellCasterEffects.cs,SpellDamageHit,exempt,host
+src/Arcanum.Session/SessionSpellCasterEffects.cs,TrapDamageHit,exempt,host
 src/Arcanum.Session/SessionSpellCasterFire.cs,ApplyBurn,pending,
 src/Arcanum.Session/SessionSpellCasterItems.cs,ItemTriggered,pending,
 src/Arcanum.Session/SessionSpellCasterItems.cs,RemoveItemSpells,pending,
@@ -444,6 +448,7 @@ src/Arcanum.World/AreaBarter.cs,Deals,pending,
 src/Arcanum.World/AreaBarter.cs,HeroCanTrade,pending,
 src/Arcanum.World/AreaBarter.cs,Open,pending,
 src/Arcanum.World/AreaBeds.cs,IsBedArt,exempt,reference
+src/Arcanum.World/AreaBeds.cs,OccupiedFrame,exempt,host
 src/Arcanum.World/AreaCharacterSheetTexts.cs,DerivedName,pending,
 src/Arcanum.World/AreaCombat.cs,NpcHolder,pending,
 src/Arcanum.World/AreaCombatRound.cs,Step,pending,
@@ -663,6 +668,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaSchematicArt.cs,SchematicSlotEntry,p
 tools/terrain-viewer/Godot/TerrainViewerAreaSheetArt.cs,SheetHoverEntry,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaSleep.cs,ApplyBedUse,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaSleep.cs,BedScriptAnswer,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerAreaSleep.cs,SleepPressed,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,AppendTownRoute,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,MarkTownMapByScenery,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,WorldMapTravelCheck,pending,
@@ -728,6 +734,7 @@ tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,LaunchProjectile,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,ProjectileGoalEnded,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,Strike,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,TurnBack,pending,
+tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,AddOccupiedBeds,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSoundCallers.cs,NoteGaitFrame,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSoundCallers.cs,PlayDroppedItemSound,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSoundCallers.cs,PlayNpcAttackBark,exempt,host

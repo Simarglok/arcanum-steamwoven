@@ -1,6 +1,6 @@
 # Sleep window runtime
 
-Status: **Implemented bounded component (World rules, viewer host); the hero's bed (ARC-WORLD-1162, slice 1 of E3-d: script, occupancy, kind-2 heal) and the NPCs' beds (slice 2: seat at the standpoint, wake, the latch) are built; the sleeper's hidden drawing, the bed's occupied frame and the random encounter are not.** Work items ARC-WORLD-1160
+Status: **Implemented bounded component (World rules, viewer host); the hero's bed (ARC-WORLD-1162, slice 1 of E3-d: script, occupancy, kind-2 heal) and the NPCs' beds (slice 2: seat at the standpoint, wake, the latch) are built; the bed's occupied frame, the NPC sleeper's flags and the nudge (slice 3) are built but not yet compared with the original's picture ([owner re-check list](../project/owner-recheck-list.md)), the random encounter is not.** Work items ARC-WORLD-1160
 (issue #1160, plan E3-a) and ARC-WORLD-1162 (issue #1162, E3-d, the hero's bed), 2026-11-12. The hero's rest: the key `S` and the game bar's Sleep button open the original's interface mode 6, a
 window of lengths; a press runs a chain of one-hour steps that jump the game clock, heal the hero and his followers and end by the chosen
 length. Universal: any map of the viewer's area mode with a session hero. No saved state is added (the original does not save the chain
@@ -27,7 +27,9 @@ Every rule was read in the retail 1.0.7.4 `Arcanum.exe` ([ledger SWB1–SWB13](.
 - **Press** (SWB8, [`AreaRestRun.Press`](../../src/Arcanum.World/AreaRest.cs)): the pending step is removed and the first is due 50 ms of real time
   later; the buttons are hidden; once per rest the screen fades to black (2.0 s in 48 steps, `AreaRestFade`) and the hourly light apply is held
   until the stop; script event 29 (leader sleeping) runs on the hero's followers
-  ([`AreaUseScriptHost.RunLeaderSleeping`](../../src/Arcanum.World/AreaUseScripts.cs), the heartbeat admission set, its answer decides nothing).
+  ([`AreaUseScriptHost.RunLeaderSleeping`](../../src/Arcanum.World/AreaUseScripts.cs), the heartbeat admission set, its answer decides nothing); then **the sleeper's maintained spells end**
+  (ARC-MAGIC-1161, ledger UE6; the ending is queued by the press and told by the next frame pass of the cast host, before the first step is due: `SessionSpellCaster.EndMaintainedSpells` for the hero, 0x457450, so every run the hero is the source of ends but technology runs and item-trigger runs with no maintenance period; the
+  followers' spells go on; no interrupt of the hero's actions is asked, unlike the world-map start; the same in the wait window; nothing ends when the window only opens, and a close without a press ends nothing).
 - **Step** (SWB9, TL27): the game clock jumps an hour (due events fire once and late, as in a world-map step), the hero and every follower the
   AI host runs are healed ([`AreaRestParty.Step`](../../src/Arcanum.World/AreaRest.cs), `LifeRules.RestHeal`: hit-point damage drops by the
   healing rate, fatigue damage by three times that; nothing in the wait window), then the end tests
@@ -68,6 +70,13 @@ its 29), script 1990 (32 lines with both ends, so the answer depends on state); 
 the hero may lie down). The bed prototype itself holds no use script; the scripts are set on the placed beds. The main world map (621 sector files, more than a
 snapshot holds) is **not** read by the census; the 80 maps are every other map of the catalogue. The smoke stage `bed` pins the cave's bed.
 
+## The bed's picture (ARC-WORLD-1162 slice 3, ledger SWB15)
+
+A bed that holds a sleeper is drawn at **the next frame of its ART** (0x43F7F0 steps the art id's frame number, bits 14 to 18, to the next frame; the frame after the last wraps to 0 as the scenery loop's does). The area builder
+decodes the other frames of a bed's ART although a bed carries scenery flag 0x1 ([`AreaBedArt`](../../src/Arcanum.Data/Area/AreaBedArt.cs); no loop is made of them), and the viewer draws an occupied bed with the plan's
+next-frame command (`TerrainViewerApp.AddOccupiedBeds`, the same draw path as the scenery loops' frames), redrawing the beds when the occupancy's revision changes. The sleeper itself is not drawn (object flag 0x100,
+the body styles' don't-draw rule). The hero is not drawn differently: his window fades the screen and the bed is empty again at the close. Only the frame **numbers** are checked ([owner re-check list](../project/owner-recheck-list.md#arc-world-1162--beds-sleeper-flags-occupied-bed-frame-and-nudge-slice-3-2026-11-12)); what the frame looks like, and the offset of the occupied art against the empty one, have not been compared with the original.
+
 ## NPC beds (ARC-WORLD-1162 slice 2, ledger SWB16–SWB21)
 
 An NPC lies in a bed through the standpoint step, as the original's: the step ([`NpcRouteRules`](../../src/Arcanum.Simulation/Ai/NpcRouteRules.cs), forced at a wake-up and unforced in the routine) puts an NPC within its
@@ -76,8 +85,8 @@ radius (1 tile, 4 for a wanderer) of the current standpoint **at** it; the AI ho
 - **The latch (NPC flag 0x200)** is set once: while it is clear the step looks for a bed on the standpoint tile (0x4AD140: the finder tests neither the hour nor the NPC) and seats the NPC (0x45F2D0). The seat's answer is
   not read, so an NPC whose bed is taken (by the hero, by another NPC) keeps the latch, stands there and is not tried again until it leaves its radius (the far branch clears the latch). The latch is host state and is
   not saved; the first bed question of a host (below) settles the latch, the occupancy and the saved flags.
-- **A seated NPC** is the bed's occupant in the occupancy the hero's rest uses, so a bed an NPC sleeps in refuses the hero with message 10, and its critter flag 0x1000 is a session write (the saved `objectFlags`, no schema
-  change); the host's sleeping readers see it asleep (`AreaAiHost.Sleeping`: the danger update, the item search and the heal skip a sleeper; the AI gate only lets a sleeper past its hidden test, so a sleeping NPC still reaches the route steps, which is how it is woken). The NPC stays on its tile (the nudge belongs to the bed's drawing). A seated NPC answers 1 on every later step and
+- **A seated NPC** is the bed's occupant in the occupancy the hero's rest uses, so a bed an NPC sleeps in refuses the hero with message 10, and its critter flag 0x1000 and object flag 0x100 (not drawn) are session writes (the saved `objectFlags`, no schema
+  change); the host's sleeping readers see it asleep (`AreaAiHost.Sleeping`: the danger update, the item search and the heal skip a sleeper; the AI gate only lets a sleeper past its hidden test, so a sleeping NPC still reaches the route steps, which is how it is woken). An NPC that stands on the bed's own tile is moved to the neighbour tile in direction 4 (x + 1, y + 1) when the shown map holds that tile (the same placement test as every other relocation of the host: the tile is admitted and the hero is not on it; the original tests only that the tile exists), with no animation (0x45F2D0 ends with 0x43E770); any other NPC stays where it is. A seated NPC answers 1 on every later step and
   does not move.
 - **The wakers** (SWB18), each through the re-seat (0x4AD0B0: the bed at the night standpoint, then at the day standpoint; a sleeper that lies in neither is not woken, SWB17): the waypoint step of a sleeper with a list for the
   period, the standpoint step of a sleeper farther than its radius from the current standpoint (the hour switch at 06:00 or 21:00: the NPC day test is hours 6 to 20, SWB20, and the step's 1-in-1000 roll at hours 6 and 21 spreads the
@@ -90,17 +99,35 @@ radius (1 tile, 4 for a wanderer) of the current standpoint **at** it; the AI ho
 **What the installed data holds** ([`BedCensusRealDataTests`](../../tests/Arcanum.World.Tests/BedCensusRealDataTests.cs), numbers only): of the **2236** NPC rows of the 80 read maps with a readable route, **41** have their
 night standpoint on a placed bed's tile, **21** their day standpoint and **51** either, so the step seats them.
 
+## Budget check of the AI heartbeat (ARC-WORLD-1162 slice 4, 2026-11-12)
+
+The NPC day adds work to the AI pass of every NPC (the bed lookup, the latch, the reconcile, the sleeping flag reads). It was measured on the owner's Mac (a shared machine, Debug build) with a temporary probe in the
+`npc-resident` smoke stage that was **not committed**: one frame of the viewer's world step (the AI host, the goal runs, the scenery loops, the draw preparation: everything one frame does) timed with a stopwatch,
+600 frames of 50 ms per game hour (12, 22, 3 and 7; the clock was jumped to each), the first 100 after the jump kept apart. Before = the commit before slice 1 (`e61200c5a`), after = `origin/main` with
+slices 1 to 3. Two runs each for the town and for the after of the two other maps, one run for their before; numbers are ms per frame, the range over the four hours of the mean of the steady frames (the first 100 frames of each hour apart), p95 in brackets.
+
+| Map | NPCs | Before | After | Verdict |
+| --- | --- | --- | --- | --- |
+| Town (main map window at sector 1409,1314) | 69 | 12.5 to 18.3 (p95 16 to 23) | 10.9 to 14.9 (p95 14 to 21) | same, within the run-to-run noise of 2 to 3 ms |
+| Wheel clan (29 beds, 178 NPCs) | 178 | 13.4 to 18.2 (p95 15 to 21) | 14.0 to 19.0 (p95 16 to 21) | one before run only; one after run is 1.5 to 3.5 ms above it in three hours, the other within it; not told apart from the shared machine's noise |
+| Roseborough inn2 (15 beds, 15 NPCs) | 15 | 6.1 to 8.0 (p95 8 to 10) | 5.6 to 8.0 (p95 7 to 10) | same |
+
+The route outcomes counted in 600 frames are identical before and after (683, 644, 644, 644 in the town over the four hours, 200 in Wheel clan, 2101, 2086, 2086, 2080 in Roseborough), so the day's new work adds no step to the routine. The hour jumps (the first
+100 frames, where every NPC meets the new hour) cost on one frame 45 to 69 ms after against 42 to 50 ms before in the 178-NPC map (one before run): a little higher, not shown to matter; single stalls of 589 ms (after, Wheel clan, hour 7) and 120 ms (before, Roseborough, hour 12) are outliers of the shared machine. The budget is the 60-frame second (16.7 ms): the town runs at about 11 to 18 ms and the
+178-NPC map at about 13 to 19 ms **before and after**, so the slices did not move it; that map's frame sits around the 16.7 ms second without them (a performance matter of the
+[diagnosis](../project/status/tools.md#open-performance-candidates-arc-res-102), not of the beds). The measurement is not a gate and nothing in the tree repeats it.
+
+**Observation from the same runs:** in Roseborough inn2 two NPCs lie in a bed at every hour tested (noon included). Presumably their day and night standpoints coincide on the bed's tile (not read), so by the original's rule (SWB18: the hour
+switch wakes a sleeper only when it is farther than its radius from the *current* standpoint) nothing wakes them but an attack, a witness or a waypoint list; the town and Wheel clan seat nobody (`sleepers=0` there; why is not read, perhaps no NPC of the window has a bed standpoint). That they lie in bed at every hour comes from these runs, not from a ledger row; the waking rules follow from SWB18 and SWB21. It is not classified under the bug rule; the occupied bed's picture is on the [owner re-check list](../project/owner-recheck-list.md).
+
 ## Boundaries (NOT READY)
 
-- **Bed, what is left** (SWB15, SWB16): the sleeper's hidden drawing (object flag 0x100) is not written (a sleeping NPC is drawn standing on its tile), the hero gets no sleeping flag either, the bed is
-  not drawn in its occupied frame (the art id's next frame: the builder reads no other frame of a bed, whose scenery flag 0x1 is set) and a sleeper on the bed's
-  own tile is not moved to its neighbour; the hero is drawn as he is while his window is open (the screen fades to black at the first press). These are graphics
-  changes and wait for their own slice (slice 3 of #1162).
+- **Bed, what is left** (SWB15, SWB16): the hero gets neither the sleeping flag nor the don't-draw flag nor the nudge (his window fades the screen over him and the bed is emptied at the close; a flag written
+  into a saved session could outlive the window); the occupied frame's pixel offset adjustment of 0x43F7F0 is only the frame's own hotspot difference; the bed's picture is not compared with the original's yet.
 - **NPC beds, what is left** (SWB18d, SWB19–SWB21): an attack aimed at the bed (SC16: the occupant is taken out and becomes the target) does not wake its occupant; the near branch's wander start is not modelled (a seated
   wanderer would start one in the same step); the latch is not saved; the attack resolver's and the turn-based round's sleeping tests (+hit chance, round skip) read the stored critter flag only, so a sleeping NPC the
-  step seated is skipped by the danger update, the item search and the heal but not by those two; NPCs of the main map's windows are seated only for the beds the window holds; an NPC a script moves or destroys while seated is not taken out (only a kill and the first bed question of a host do); an NPC whose map row already has the sleeping flag is never seated (it already counts as asleep, so its step is the sleeper branch).
+  step seated is skipped by the danger update, the item search and the heal but not by those two; NPCs of the main map's windows are seated only for the beds the window holds; an NPC a script moves or destroys while seated is not taken out (only a kill and the first bed question of a host do); an NPC still walking to its standpoint when it comes within the radius is seated without an interrupt of its walk, so it may finish the walk onto the bed's tile (hidden, not nudged: the nudge is the seat's own test; not read in the original); an NPC whose map row already has the sleeping flag is never seated (it already counts as asleep, so its step is the sleeper branch).
 - **Random encounter** (SWB13): the encounter roll, which closes the window with five times the chance, belongs to the world journey (E2-c).
-- **The sleeper's maintained spells** end at the press in the original (UE6, issue #1161); here they do not.
 - **Followers of followers**, and followers the AI host does not run, are not healed or told of event 29.
 - The exit gate's NPC scan uses an approximated view rectangle (`AreaAiHost.CombatThreats`); the original's is the game view's size.
 - A town-map sector whose town-map files are not read yet (or cannot be) gets a notice, not message 20; the viewer cannot decide it (SWB3).

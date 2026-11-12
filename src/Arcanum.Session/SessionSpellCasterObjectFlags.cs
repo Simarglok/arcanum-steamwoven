@@ -1,6 +1,8 @@
 using Arcanum.Data.Magic;
 using Arcanum.Simulation;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Magic;
 
 namespace Arcanum.Session;
@@ -240,5 +242,7 @@ public sealed partial class SessionSpellCaster
         public (Combatant Combatant, AttackTargetKind Kind)? ObjectCombat(string id) => map.ObjectCombat(id);
         public bool DamageObject(string id, AttackDamage damage) => map.DamageObject(id, damage);
         public SpellOpenable? Openable(string id) => map.Openable(id);
+        public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? WornBySlot(string entity) => map.WornBySlot(entity);
+        public IDropMap? DropMap => map.DropMap;
     }
 }

@@ -740,8 +740,23 @@ The world-map start check (0x565140) ends the hero's maintained spells ([ledger 
 
 Known differences (documented, not bugs):
 
-- Resting (the rest option click, 0x57B710) also ends the sleeper's maintained spells in the original, but the rest window (ARC-WORLD-1160) does not end them yet (issue #1161), so only travel is wired.
+- Resting (the rest option click, 0x57B710) also ends the sleeper's maintained spells in the original; that is wired since ARC-MAGIC-1161 (section below).
 
+
+## ARC-MAGIC-1161 — Spells end when the hero starts to rest (MT11, 2026-11-12)
+
+Choosing a length in the sleep or wait window ends the hero's maintained spells (the rest option click 0x57B710 → 0x457450, [ledger UE6](../research/ledger/spell-runs.md#spell-run-endings-of-a-critter-arc-dev-301), [sleep window](../world/sleep-window-runtime.md)). Compare in both games with a hero who can cast a maintained spell (a protection or light spell, one that shows on the top strip).
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast a maintained spell on the hero, open the sleep window (key `S`) and look at the top strip. | The spell is still there: opening the window ends nothing. | open |
+| 2 | Choose any length (for example one hour). | The spell's slot leaves the top strip as the length is chosen (not at the end of the rest). | open |
+| 3 | Open the window with the spell running and close it again with `S` without choosing a length. | The spell goes on. | open |
+| 4 | Cast a maintained spell on a follower (you are the caster), then rest. | The spell ends too: the run's caster is the hero. A spell a follower cast itself goes on. | open |
+
+Known differences (documented, not bugs):
+
+- The window is the diagnostic panel, not the original's art; the hero's own technology runs and item-trigger runs with no maintenance period stay, as in the original.
 
 ## ARC-MAGIC-057 — The hero's spot trap roll (E6-a, spot half, 2026-11-12)
 
@@ -943,3 +958,20 @@ Known differences (documented, not bugs):
 - Transfer item, set written start, destroy item named and toggle item inventory display are not applied by any host yet: scripts that use them are still refused.
 - The world map's refusal when the hero's own sector is blocked, and the dimmed picture of a blocked sector, are not built.
 - A script in a dialog (a talk) that uses one of these commands is still refused.
+
+## ARC-WORLD-1162 — beds: sleeper flags, occupied bed frame and nudge (slice 3, 2026-11-12)
+
+The rules are in [Sleep window runtime](../world/sleep-window-runtime.md#npc-beds-arc-world-1162-slice-2-ledger-swb16swb21). The occupied frame of a bed is the next frame of its art (ledger SWB15, 0x43F7F0); the build
+checks it by number only (the plan holds the frames, the draw command carries the next one), so what the frame looks like has not been seen. Maps with NPC beds: the installed data has 51 NPC rows whose standpoint
+is a bed tile (Roseborough inn2, Wheel clan, Bates mansion and others); a night hour (21:00 to 05:59) is needed.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | In a house with beds, wait in the original until about 22:00 and look at a bed an NPC went to. | The NPC is not drawn standing; the bed is drawn in its next frame (a sleeper in the bed). Empty beds keep the frame they have in the map data. | open |
+| 2 | Compare the bed's picture occupied in both games (position, size, mirror). | The occupied frame sits where the empty one did (the art's own offsets move it). A bed that looks shifted or cut means the frame offset handling (0x43F7F0) differs. | open |
+| 3 | Look at where the NPC lay down: it stood on the bed's own tile, or next to it. | An NPC on the bed's tile is moved one tile in direction 4 (x + 1, y + 1) when it lies down; it reappears there when it wakes. An NPC beside the bed is not moved. | open |
+| 4 | Wake it (attack it, or wait until about 06:00 and watch; the original has no other waker of a sleeping NPC in the executable, talking to it is not one). | It is drawn standing again on the tile it was seated on; the bed goes back to its first frame. The NPC walks off on its own later. | open |
+| 5 | Lie down yourself in a bed whose script lets you (Crash Site cave) and look at the bed while the window is open. | The bed shows its next frame; the screen fades. After the rest the bed is empty again. | open |
+
+Known differences, so they are not reported as bugs: the hero gets no sleeping flag and is not hidden in the bed (the sleep window fades the screen over him); an attack aimed at the bed does not wake its occupant; a wanderer
+that lies down does not start its wander in the same step.

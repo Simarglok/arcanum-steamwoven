@@ -90,9 +90,17 @@ public partial class TerrainViewerApp
         Require(SleepOpenForSelfTest && RestForSelfTest is { Wait: false }, $"the scripted bed (script {good.Item3}) opens the sleep window: {SleepStatusForSelfTest}");
         Require(SleepPanelForSelfTest!.ButtonCountForSelfTest == 8, "the bed's window has eight buttons");
         Require(occupancy.Occupant(good.Item1) == Arcanum.World.AreaScriptHost.PcCode && _restBed == good.Item1, "the hero is the bed's occupant while the window is open");
+        // ARC-WORLD-1162 slice 3 (SWB15): the occupied bed is drawn at the next frame of its ART (the plan holds every frame of a bed, whatever its scenery flags), and the empty one at its own.
+        Require(area.Plan.SceneryFrames.TryGetValue(good.Item1, out var bedFrames) && bedFrames.Count > 1, $"the plan holds the other frames of a bed's ART: {(area.Plan.SceneryFrames.TryGetValue(good.Item1, out var f) ? f.Count : 0)}");
+        ProcessAreaSceneryAnimation();
+        var plain = _areaOverlay!.Value.Bodies[good.Item1];
+        Require(_sceneryBodies.TryGetValue(good.Item1, out var occupiedBed) && occupiedBed.Frame.Frame == AreaBeds.OccupiedFrame(plain.Frame.Frame, bedFrames!.Count) && occupiedBed.Frame.Frame != plain.Frame.Frame,
+            $"the occupied bed is drawn at its next frame: {(_sceneryBodies.TryGetValue(good.Item1, out var shown) ? shown.Frame.Frame : -1)} against {plain.Frame.Frame}");
         // A second open (the key) closes the window and empties the bed; a third lies down again.
         OpenSleepForSelfTest(good.Item1);
         Require(!SleepOpenForSelfTest && occupancy.Occupant(good.Item1) is null && _restBed is null, "the toggle closes the window and takes the hero out of the bed");
+        ProcessAreaSceneryAnimation();
+        Require(!_sceneryBodies.ContainsKey(good.Item1), "the emptied bed is drawn at its own frame again");
         OpenSleepForSelfTest(good.Item1);
         Require(SleepOpenForSelfTest && occupancy.Occupant(good.Item1) == Arcanum.World.AreaScriptHost.PcCode, "and lying down again seats him again");
         Tick(hostMs + 10);

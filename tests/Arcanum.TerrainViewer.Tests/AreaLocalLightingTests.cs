@@ -151,6 +151,27 @@ public sealed class AreaLocalLightingTests
     }
 
     [TestMethod]
+    public void An_eye_candy_light_changes_the_sampled_level_while_it_holds_and_the_overlay_slots_of_a_critter_are_known()
+    {
+        // ARC-MAGIC-1229 (FR-LIGHT-011, ledger IW2-IW5): Illuminate's glow (light ART 1, colour 226 60 236) is a carried light of its target: the darkness sampler reads it while the spell holds and the level returns after it.
+        var stationary = AreaStationaryLightSource.Create(5000, [], [Uniform(1, 400, 400, 200, 200, 100)]);
+        var key = new AreaObjectKey(Digest, 5000, AreaSourceKind.Static, 100, 0, 0, Digest, 1);
+        ObjectLight Overlay(int slot) => new(key, 16, slot, 92928, 82560, 0, 0, StationaryLightFlags.None, 1u << 19 | 9u << 28, new(10, 20, 30), false, false, false);
+        var objects = new AreaObjectLightSource(5000, null, [Overlay(-1), Overlay(1), Overlay(3)], new Dictionary<int, StationaryLightFrame>(stationary.Frames));
+        var local = AreaLocalLighting.Create(Tiles, [], AreaChart.Exterior, stationary, objects);
+        Assert.AreEqual(0b1010, local.OverlaySlotMask(key), "the primary light is no overlay slot; slots 1 and 3 hold a light");
+        Assert.AreEqual(0, local.OverlaySlotMask(key with { ObjectIdSha256 = "other" }));
+
+        var before = local.LightLevel(92929, 82560, Pair);
+        var glow = AreaEyeCandyLights.ToLight(new("npc:1", new Arcanum.Simulation.Goals.GoalHandle(0, 1), 0, 1, (226, 60, 236)), 92929, 82560, 0, 0, key);
+        var held = local.WithCarried(stationary.Frames, [glow]);
+        Assert.AreEqual(1, held.CarriedLightCount);
+        Assert.IsTrue(held.LightLevel(92929, 82560, Pair) > before, "the sampled value changes while the spell holds");
+        Assert.AreEqual(before, held.WithCarried(stationary.Frames, []).LightLevel(92929, 82560, Pair), "and returns when the run ended");
+        Assert.AreEqual(before, local.LightLevel(92929, 82560, Pair), "the map's own lighting is untouched, nothing is saved as a map light");
+    }
+
+    [TestMethod]
     public void Object_lights_join_by_hour_and_nocturnal_scenery_lights_only_at_night()
     {
         // ARC-RENDER-030 (ledger LT4, LT5): a nocturnal lamp on the outdoor tile is built only at night; another object light always.

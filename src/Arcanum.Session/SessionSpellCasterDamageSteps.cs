@@ -8,7 +8,12 @@ namespace Arcanum.Session;
 /// attacker (the run's parent; null for a burn, a script's damage or a trap nobody placed). The original's damage function (0x4B4390)
 /// prints its floaters inside the step whoever called it (ledger CH12), so the host that draws them reads the steps from here.
 /// </summary>
-public sealed record SessionSpellDamageStep(string Victim, AttackDamage Damage, LifeOutcome Life, string? Attacker);
+public sealed record SessionSpellDamageStep(string Victim, AttackDamage Damage, LifeOutcome Life, string? Attacker)
+{
+    /// <summary>ARC-MAGIC-1232 (DW2): the weapon block's drop of this step (a Damage component with the weapon-drop flag, Disarm): one <see cref="SessionCriticalStepKind.DropWeapon"/> step, none for a step without the flag. The host that draws
+    /// the floaters reads message 19 from it as for an attack's critical drop.</summary>
+    public IReadOnlyList<SessionCriticalStep> Criticals { get; init; } = [];
+}
 
 public sealed partial class SessionSpellCaster
 {
@@ -25,9 +30,9 @@ public sealed partial class SessionSpellCaster
         return taken;
     }
 
-    private void QueueDamageStep(string victim, AttackDamage damage, LifeOutcome life, string? attacker)
+    private void QueueDamageStep(string victim, AttackDamage damage, LifeOutcome life, string? attacker, IReadOnlyList<SessionCriticalStep>? criticals = null)
     {
         if (_damageSteps.Count >= MaxPendingEntries) _damageSteps.RemoveAt(0);
-        _damageSteps.Add(new(victim, damage, life, attacker));
+        _damageSteps.Add(new(victim, damage, life, attacker) { Criticals = criticals ?? [] });
     }
 }
