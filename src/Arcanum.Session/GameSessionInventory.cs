@@ -514,6 +514,13 @@ internal sealed class InventoryDomain
     /// nothing). For such an NPC an item is worn only in the slot its record names, whatever its map data's inventory location.</summary>
     internal SortedDictionary<string, SortedDictionary<EquipmentSlot, string>> NpcWorn { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>ARC-RES-1410 (ledger XR16 (g), IW39): the slots the arrangement at the open of a loot, steal or See Contents window gave the items of a
+    /// map holder's list (a container or an NPC of the map's seed), by holder entity and item entity (the arranged items only: the worn and quick-slot
+    /// items stay out of it). The original writes them into the items' inventory locations (0x4670A0); here the holder's list answers with them in place
+    /// of the map data's. Not saved (PROJECT): every open arranges the list again from scratch, so only a window that stays open across a save shows the
+    /// difference. A junk pile the session made keeps its slots in its record instead.</summary>
+    internal SortedDictionary<string, SortedDictionary<string, int>> HolderSlots { get; } = new(StringComparer.Ordinal);
+
     /// <summary>ARC-WORLD-103: an item that leaves an NPC's list (to the hero, the ground, deletion) is worn no more; an item that comes
     /// back to the list later is not worn either.</summary>
     internal void Unwear(string entity)
@@ -713,8 +720,13 @@ internal sealed class InventoryDomain
     internal IEnumerable<SessionInventoryItem> Current(Seed seed, SessionSeedHolder holder, Func<string, CellCoord?> dropped, bool added = true)
     {
         // ARC-WORLD-103: an NPC the session dressed wears what its record names.
-        SessionInventoryItem Item(string entity, SessionItemFacts facts) =>
-            new(entity, holder.Kind == SessionHolderKind.Npc ? Worn(holder.Entity, entity, facts) : facts);
+        // ARC-RES-1410: an item the arrangement of the holder's list placed lies in the slot it gave.
+        var slots = HolderSlots.GetValueOrDefault(holder.Entity);
+        SessionInventoryItem Item(string entity, SessionItemFacts facts)
+        {
+            var shown = holder.Kind == SessionHolderKind.Npc ? Worn(holder.Entity, entity, facts) : facts;
+            return new(entity, !shown.Worn && slots is not null && slots.TryGetValue(entity, out var slot) ? shown with { InventoryLocation = slot } : shown);
+        }
         return holder.Items
             .Where(entity => !Taken.Contains(entity) && dropped(entity) is null).Select(entity => Item(entity, WithAmmo(entity, seed.Items[entity].Facts)))
             .Concat(added && (holder.Kind == SessionHolderKind.Npc) != Lists.IsContainer(holder.Entity)
