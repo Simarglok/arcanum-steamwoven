@@ -2782,7 +2782,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     [OriginalFunction(0x45DE00, OriginalFunctionScope.Partial)]
     [OriginalFunction(0x45DDA0, OriginalFunctionScope.Partial)]
     public string? Leader(string npc) => npc != Pc && _session.QueryCompanion(npc).LedByPc ? Pc : null;
-    public bool Waiting(string npc) => _session.QueryCompanion(npc).Standing == CompanionStanding.Waiting;
+    public bool Waiting(string npc) => _session.QueryCompanion(npc).WaitBit;
     public void LoyaltyCheck(string npc) { }
     /// <summary>ARC-DEV-170 (B06): the routine of a leaderless NPC (the non-combat perform's branch, 0x4AC583): the unforced waypoint step, the unforced standpoint step when it answered 0
     /// (WS11), each starting the walk goal to the waypoint or the standpoint. Left out (NOT READY): the fidget start (0x435CE0), the step apart (0x4364D0) after both answered 0 and the

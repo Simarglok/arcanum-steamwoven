@@ -578,6 +578,22 @@ public static partial class GameSessionSnapshotCodec
         [93] = root => AddField(Section(root, "inventory"), "$.inventory", "itemFields", new JsonArray()),
         // ARC-RES-1441 (schema 95): the inventory section gains the arranged slots of seed holders. No older build saved any (an arrangement was transient), so the step adds the empty list. The inventory section the older schema carried must be there and an object.
         [94] = root => AddField(Section(root, "inventory"), "$.inventory", "holderSlots", new JsonArray()),
+        // ARC-SCRIPT-1136 (schema 96): each party record gains the wait flag (the WAIT bit of an NPC the PC does not hold as waiting). No older build could hold it (the dialog wait was refused for an NPC outside the party), so the
+        // step adds false to every follower and every other record. The party section and its two lists the older schema carried must be there.
+        [95] = root =>
+        {
+            var party = Section(root, "party");
+            foreach (var name in new[] { "followers", "others" })
+            {
+                if (!party.TryGetPropertyValue(name, out var rows)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.party." + name);
+                if (rows is not JsonArray array) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.party." + name);
+                for (var i = 0; i < array.Count; i++)
+                {
+                    if (array[i] is not JsonObject row) throw new DecodeException(SnapshotDecodeFailure.WrongType, $"$.party.{name}[{i}]");
+                    AddField(row, $"$.party.{name}[{i}]", "waitFlag", false);
+                }
+            }
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from
