@@ -106,7 +106,7 @@ public partial class AreaHotkeyBarView : Control
                 Name = "Name" + i, Position = slot.Position, Size = slot.Size, MouseFilter = MouseFilterEnum.Ignore, ClipText = true,
                 HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, AutowrapMode = TextServer.AutowrapMode.Arbitrary,
             };
-            _standIns[i].AddThemeFontSizeOverride("font_size", 8);
+            _standIns[i].AddThemeFontSizeOverride("font_size", AreaUiScale.MinimumTextPx); // ARC-GPAD-1377: no text under 9 px on the handheld
             AddChild(_standIns[i]);
             // The count is printed at the slot's left + 2 and the strip's top (HK12).
             _counts[i] = new Label { Name = "Count" + i, Position = new Vector2(HotkeyBarRules.SlotX[i] + 2, 0), MouseFilter = MouseFilterEnum.Ignore };

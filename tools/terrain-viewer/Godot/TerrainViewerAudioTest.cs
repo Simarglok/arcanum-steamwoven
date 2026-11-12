@@ -16,12 +16,19 @@ public static partial class TerrainViewerSelfTest
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-040 audio self-test: " + why); }
         var payload = SoundPayloadReader.Inspect("synthetic/square.wav", SquareWave(22050, 22050));
         Require(payload.Status == SoundPayloadStatus.Admitted && payload.Wav!.FrameCount == 22050, "synthetic WAV admitted");
+        var busesBefore = AudioServer.BusCount;
         var backend = ViewerAudioBackend.Create(host);
         TerrainViewerApp.MuteMasterForTests();  // ARC-DEV-403: the test tones are not heard
         var audible = backend.Audible;
         try
         {
             foreach (var channel in Enum.GetValues<AudioChannel>()) Require(AudioServer.GetBusIndex(ViewerAudioBackend.BusName(channel)) >= 0, $"{channel} bus");
+            // ARC-BUG-1396: every pan bus is built at start (3 channels x 8 steps + 3 channel buses), none while sounds play.
+            var busesBuilt = AudioServer.BusCount;
+            Require(busesBuilt == busesBefore + 3 * (1 + 2 * ViewerAudioBackend.PanSteps), $"all channel and pan buses built at start ({busesBuilt - busesBefore})");
+            foreach (var channel in Enum.GetValues<AudioChannel>())
+                for (var step = -ViewerAudioBackend.PanSteps; step <= ViewerAudioBackend.PanSteps; step++)
+                    if (step != 0) Require(AudioServer.GetBusIndex($"{ViewerAudioBackend.BusName(channel)} pan {step:+0;-0}") >= 0, $"{channel} pan {step} bus");
             var expected = backend.Audible ? ViewerAudioStatus.Playing : ViewerAudioStatus.Silent;
             var effect = backend.Play(payload, AudioChannel.Effects, 63);
             Require(effect.Status == expected && effect.Handle is not null, $"effect started {effect.Status}");
@@ -48,9 +55,11 @@ public static partial class TerrainViewerSelfTest
             var next = backend.Play(payload, AudioChannel.Voice, 10);
             var (old, fresh) = (reused.Handle!.Value, next.Handle!.Value);
             Require(fresh.Slot == 0 && fresh.Generation != old.Generation && !backend.Stop(old), "a reused slot ignores the old handle");
+            Require(AudioServer.BusCount == busesBuilt, "no bus was added while sounds played (ARC-BUG-1396)");
         }
         finally { backend.Dispose(); }
         foreach (var channel in Enum.GetValues<AudioChannel>()) Require(AudioServer.GetBusIndex(ViewerAudioBackend.BusName(channel)) < 0, $"{channel} bus removed");
+        Require(AudioServer.BusCount == busesBefore, "dispose removed every bus the backend built");
         Require(backend.Play(payload, AudioChannel.Effects, 63).Status == ViewerAudioStatus.Disposed, "a disposed backend plays nothing");
 
         var previous = OS.GetEnvironment(AudioVolumesStore.TestVariable);

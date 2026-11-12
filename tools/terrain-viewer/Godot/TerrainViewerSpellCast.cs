@@ -758,6 +758,8 @@ public partial class TerrainViewerApp
         // SU9: the game view picks only with no inventory window open; with one open the window's own press picks (ARC-MAGIC-1128).
         if (InventoryOpen) return;
         if (SpellTargetAt(screen) is not { } pick) { _spellNotice = "no target here"; RefreshAreaStatus(); return; }
+        // ARC-INPUT-1356: a refused press says what the pointer was over (a report of a missed creature then shows whether it missed the body or hit a corpse).
+        if (!pick.Test.Passes) GD.Print("ARC-INPUT-1356 target-refused " + PickRefusalDetail(screen));
         SpellTargetApply(targeting, pick.Object, pick.Tile, pick.Test);
     }
 
