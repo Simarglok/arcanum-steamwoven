@@ -77,6 +77,8 @@ public enum AiExecutorReason
     CastReleased,
     /// <summary>The release found its target invalid, or the missile did not start.</summary>
     CastNotReleased,
+    /// <summary>ARC-AI-1137 (GT122): the hero's talk was started with Shift (the no-walk flag) and the NPC is 5 or more cells away: the approach never steps, the run ends at once, silently.</summary>
+    NoWalkOutOfRange,
     /// <summary>A skill, item-use or pickup goal walks to its object.</summary>
     ActionApproach,
     /// <summary>A skill's attempt ran.</summary>

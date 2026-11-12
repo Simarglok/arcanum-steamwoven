@@ -87,7 +87,14 @@ A busted window also takes the lock domain's busted bit on frame 0 in the same c
 Its busted ART is the busted bit's for the host.
 
 A spilled container lists no items in `QueryMapInventory`: they lie on the ground at its cell, after the seed's ground items,
-and `PickUpItem` takes them.
+and `PickUpItem` takes them. Since ARC-WORLD-1306 (ledger VPG7) the spill walks the container's whole list, the items a barter window sold
+into it (ARC-WORLD-090, the end of the list) first: a made item becomes a script-created ground item (as a body's dropped made item), an
+ammunition stack or an item the hero gave (kit or taken) a placed item of the hero's own, which its pickup or loot returns to its list; both
+only with a hero (a save restores a placed hero item only with one), else, and for gold, a key or a kind no ground source admits, the item is
+destroyed with the container (a recorded limit, as a body's). Before any change the break checks the created-item bound, the hero's item
+bound, the deleted-item records and, when an item is placed, that the container's cell fits the ground record (`DropTileUnfit`); a break that cannot take every item is refused
+whole (`DamageObject` and `AttackObject` report `BudgetExceeded` or `DropTileUnfit` as they report a full map-change budget) and the
+container stays whole with its sold items (every blow on it is refused too, as the damage and the break are one write, until the hero makes room). A made item the hero sold counts against the created-item bound on the ground, so picking it up again needs room in the hero's list. Saves made before the fix keep the sold items of an already spilled container hidden in its list (lost, as before); only a break after the fix spills them. `CloseMapJunkPile` still leaves a pile that holds a sold item untouched.
 
 A respawning scenery schedules the saved game event `object.respawn`:
 
@@ -200,7 +207,8 @@ damage apply (0x4B4390) with no attacker (GT194/GT195, ledger OD3, OD4, OD7–OD
 | The respawn delay multiplies in 32 bits (it wraps beyond 268,435 seconds or 35,791 minutes). | Exact. |
 | Each spilled item goes through the drop function (0x466E50, ledger OD13): a second item landing where items lie gathers them all into a new junk pile (a container of description 3023, prototype 3043), and each dropped item gets an item-decay event two days later; the container drops its last item first. | Exact since ARC-WORLD-063 ([junk piles](inventory-runtime.md#junk-piles-arc-world-063)): the items drop last first through the session's placement and decay two game days later (ARC-WORLD-062); the session's limits of the placement (scripts not run, no stack merge) apply. |
 | A respawning scenery that is off can still be damaged (ODA1). | The hero's attack on it is refused (`ObjectUnavailable`): the player cannot click an object that is off. |
-| A container never opened first generates its inventory from its inventory source, then spills it. | The session holds no inventory sources: only the T0 items spill. |
+| The spill walks the container's whole list, last first (0x463730, mode 1), so the items a barter window sold into the container (the end of its list) drop first. | Exact since ARC-WORLD-1306: the sold items are placed on the ground and drop first, then the seed's items; the limits above (sold items destroyed when the hero or a ground source is missing) are recorded. |
+| A container never opened (flag 0x200) first generates its inventory from its inventory source (the clear keeps the persistent items, RK5), then spills the whole list last first (0x463730, RK13). | Exact since ARC-WORLD-1301 when the host gives the generation's facts (`GameSessionOwner.GenerateOnceWorld`, or the event pass's world): the break runs the same seeded generation as the first loot open (tile x, the hero's race, gender, background and player name), records the container as generated, and the spill's walk drops the kept items and the goods through the placement with their decay. The generation is one revision of its own: a break the walk's budgets refuse leaves the container generated and whole, as a first open would. Limits: without the host's facts (no world, not ready, no seed facts, a set the session does not admit, a transfer script, a full budget) the break spills the stored items and the container stays ungenerated; the generated gold piles are destroyed with the spill (the ground holds none, as for a sold pile). |
 
 ## Damage to items that is no hero attack (ARC-COMBAT-025)
 

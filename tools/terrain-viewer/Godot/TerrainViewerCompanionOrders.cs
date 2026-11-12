@@ -135,6 +135,8 @@ public partial class TerrainViewerApp
             _followerPortraits = new AreaFollowerPortraits(); AddChild(_followerPortraits);
             _followerPortraits.ItemChosen += FollowerMenuChosen;
             _followerPortraits.PortraitClicked += FollowerPortraitClick;
+            _followerPortraits.PortraitHovered += FollowerPortraitHovered;
+            _followerPortraits.PortraitHoverLeft += FollowerPortraitHoverLeft;
             // ARC-UI-024: the frames stand at the window's top left, where the diagnostic HUD starts.
             _followerPortraits.EdgeChanged += () => _hud?.SetLeftInset(_followerPortraits.RightEdge);
         }

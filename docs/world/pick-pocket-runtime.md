@@ -98,7 +98,7 @@ caught order), `tests/Arcanum.Session.Tests/PickPocketStateTests.cs` (a theft in
 victim, 100 coins and 20 units, plants, the perception die and the critical failure, a trained failure and a master's plant never
 noticed, the fate, a refused insertion, the turn-based charge, refusals before any roll), the viewer self-test (the palette's control
 count) and the native smoke `ARC_AREA_MAP_SMOKE_ONLY=pickpocket` with `--hero` (only when named; marker
-`ARC-SKILLS-010 native-smoke pickpocket PASS`): the AI host on, the hero next to a living free NPC with a plain item, the palette arms,
+`ARC-SKILLS-010 native-smoke pickpocket PASS`): the AI host on, the hero next to a living free NPC with a plain item (not gold, ammunition, a key, a script item, a worn one, nor a weapon, armour or generic item, which the running AI may wield before the attempt: ARC-DEV-1330), the palette arms,
 the start opens the steal window, a fated theft and a fated plant move the item, then up to ten plain thefts until one is noticed
 (a noticed one closes the window after its consequences); a critter the flags refuse floats the refusal. With the game's art the
 theft and the plant are drags in the original look and the first plain theft a right release (ARC-UI-065).
