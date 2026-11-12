@@ -194,8 +194,9 @@ public sealed class ResidencyStateTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteObjectFlag(owner.Version, Stone, SessionObjectFlagField.Object, 0x2, false, dataHas: true).Disposition);
         Assert.IsFalse(Of(owner, Stone).Off, "the session's change over the data's");
         Assert.IsFalse(Of(owner, Stone).Excluded);
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteObjectFlag(owner.Version, Stone, SessionObjectFlagField.Object, 0x2, true, dataHas: false).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteObjectFlag(owner.Version, Stone, SessionObjectFlagField.Object, 0x2, true, dataHas: true).Disposition);
         Assert.IsTrue(Of(owner, Stone).Off);
+        Assert.AreEqual(0, owner.QueryAllObjectFlags().Count, "the data's value is back: no change kept");
         Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteObjectFlag(owner.Version, Smith, SessionObjectFlagField.Object, 0x2, true, dataHas: false).Disposition);
         Assert.IsTrue(Of(owner, Smith).Off, "a resident the data stores on, switched off by the flag");
     }

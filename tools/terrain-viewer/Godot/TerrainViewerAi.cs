@@ -825,17 +825,23 @@ public partial class TerrainViewerApp
     private IReadOnlyList<(AreaObjectKey Key, string Entity, CellCoord World)> AreaSwitchedOnNpcs() =>
         _areaSession is { } session && ObjectTargets() is { } targets ? targets.SwitchedOn(session) : [];
 
-    private (AreaOccupancy? Base, object List, object? Host, long Moved, AreaOccupancy? Value)? _switchedOnOccupancy;
+    private readonly Dictionary<object, AreaOccupancy?> _switchedOnOccupancy = new(ReferenceEqualityComparer.Instance);
+    private (object List, object? Host, long Moved)? _switchedOnStamp;
+    private static readonly object NoBase = new();
 
-    /// <summary>ARC-WORLD-1436: the overlay with the cells of the NPCs switched on from the map data's off flag held (the T0 evidence lists no blocker for them); the ones the AI walked off their cell are its movers'.</summary>
+    /// <summary>ARC-WORLD-1436: the overlay with the cells of the NPCs switched on from the map data's off flag held (the T0 evidence lists no blocker for them); the ones the AI walked off their cell are its movers', and a companion (which the AI host
+    /// does not run) has left its data cell.</summary>
     private AreaOccupancy? WithSwitchedOn(AreaOccupancy? occupancy)
     {
         if (_worldActor.Session is not AreaGridSession grid || AreaSwitchedOnNpcs() is not { Count: > 0 } list) return occupancy;
-        var moved = _aiHost?.Movers.Version ?? -1;
-        if (_switchedOnOccupancy is { } known && ReferenceEquals(known.Base, occupancy) && ReferenceEquals(known.List, list) && ReferenceEquals(known.Host, _aiHost) && known.Moved == moved) return known.Value;
-        var cells = list.Where(n => _aiHost?.Movers.IsMoved(n.Entity) != true).Select(n => grid.Chart.ToChart(new(n.World.X, n.World.Y))).ToArray();
+        var stamp = (List: (object)list, Host: (object?)_aiHost, Moved: _aiHost?.Movers.Version ?? -1);
+        if (_switchedOnStamp != stamp) { _switchedOnStamp = stamp; _switchedOnOccupancy.Clear(); }
+        var key = (object?)occupancy ?? NoBase;
+        if (_switchedOnOccupancy.TryGetValue(key, out var known)) return known;
+        var cells = list.Where(n => _aiHost is { } host ? host.Scene.Npcs.Any(m => m.Entity == n.Entity) && !host.Movers.IsMoved(n.Entity) : _areaCompanions?.Companions.Any(c => c.Entity == n.Entity) != true)
+            .Select(n => grid.Chart.ToChart(new(n.World.X, n.World.Y))).ToArray();
         var value = cells.Length == 0 ? occupancy : (occupancy ?? AreaOccupancy.None).WithHeld(cells);
-        _switchedOnOccupancy = (occupancy, list, _aiHost, moved, value);
+        _switchedOnOccupancy[key] = value;
         return value;
     }
 

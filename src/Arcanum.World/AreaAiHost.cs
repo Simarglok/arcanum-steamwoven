@@ -70,7 +70,7 @@ public sealed record AreaAiScene
     /// <summary>The T0 records the session destroyed or switched off.</summary>
     public Func<IReadOnlySet<AreaObjectKey>>? Removed { get; init; }
     /// <summary>ARC-WORLD-1436: the NPCs the map data stores off that the session switched on, with the world cell of their map data (<see cref="AreaObjectTargets.SwitchedOn"/>): the T0
-    /// evidence lists no blocker for them, so the planners hold their cells while the host has not walked them off.</summary>
+    /// evidence lists no blocker for them, so the planners hold their cells while the host has not walked them off (a companion, which the host does not run, is not held).</summary>
     public Func<IReadOnlyList<(AreaObjectKey Key, string Entity, CellCoord World)>>? SwitchedOn { get; init; }
     /// <summary>The shown map's line of fire now (walls, doors, objects, the companions on their cells), or null.</summary>
     public Func<ILineOfFireMap<AreaObjectRecord>?>? LineOfFire { get; init; }
@@ -3455,7 +3455,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (target is not null && Key(target) is { } targetKey) moved.Add(targetKey);
         // ARC-WORLD-1436: an NPC switched on from the map data's off flag stands where the data has it and holds that cell (the T0 evidence lists none for it).
         foreach (var (_, entity, world) in _scene.SwitchedOn?.Invoke() ?? [])
-            if (entity != mover && entity != target && !Movers.IsMoved(entity) && !Gone(entity)) held.Add(ToChart(world));
+            if (entity != mover && entity != target && _npcs.ContainsKey(entity) && !Movers.IsMoved(entity) && !Gone(entity)) held.Add(ToChart(world));
         var occupancy = new AreaOccupancy(moved, held);
         return _scene.Removed?.Invoke() is { Count: > 0 } removed ? occupancy.WithRemoved(removed) : occupancy;
     }

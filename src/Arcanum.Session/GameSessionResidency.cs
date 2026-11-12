@@ -439,7 +439,7 @@ public sealed partial class GameSessionOwner
         bool? Field(string property) => Record(map, entity, property) is { } record ? record.Value == 1 : null;
         var condition = Record(map, entity, ObjectConditionProperty) is { } c && c.Value >= 0 ? (SessionObjectCondition)(c.Value & 0xFF) : (SessionObjectCondition?)null;
         // ARC-WORLD-1436: the session's object-flag change over the data's (a toggle state flips the flag of the original, so a data-off NPC a heartbeat switched on is on).
-        var off = QueryObjectFlags(entity).Object((Field(OffProperty) ?? row?.Off ?? false) ? ObjectOffFlag : 0) is var flags && (flags & ObjectOffFlag) != 0;
+        var off = QueryObjectFlags(entity).Object((Field(OffProperty) ?? row?.Off ?? false) ? ObjectOffFlag : 0) is var flags && (flags & ObjectOffFlag) != 0 || Field(OffProperty) == true;
         var destroyed = Field(DestroyedFieldProperty) ?? row?.Destroyed ?? false;
         return (off || condition == SessionObjectCondition.Off, destroyed || condition == SessionObjectCondition.Destroyed);
     }
