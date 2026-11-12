@@ -203,8 +203,8 @@ Source: the [conversation runtime](../../scripting/dialog-conversation-runtime.m
 Player replies in 32 files start with `r:`; 233 name the price 0 and 6 the price 10; the lists name 149 distinct rumors of 1000..1202, 121 of which
 have a class-less male-to-male text; counts only). Question: what does the original do when the Player reply `r:` is picked? Read statically on
 2026-11-12 by one reader (the implementing session, method step 6, with the exports in `research-private`: the decompiled C of 0x416C10, 0x414810,
-0x418FC0, 0x4190E0, 0x418A40, 0x418B30, 0x418C40, 0x418390, 0x4C5650, 0x4C58D0, 0x4C57E0 and 0x4C5700); the rows are F1 until the independent review
-reads them. It is the same state machine as the trainer's talk ([DTR1–DTR9](#trainer-reply-arc-script-1150)): a pick replaces the screen without leaving
+0x418FC0, 0x4190E0, 0x418A40, 0x418B30, 0x418C40, 0x418390, 0x4C5650, 0x4C58D0, 0x4C57E0 and 0x4C5700); a second reader (the independent review, 2026-11-12) checked every row against the decompiled C and found no
+discrepancy. It is the same state machine as the trainer's talk ([DTR1–DTR9](#trainer-reply-arc-script-1150)): a pick replaces the screen without leaving
 the NPC node, and the price screen, the payment and the notices are shared.
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |

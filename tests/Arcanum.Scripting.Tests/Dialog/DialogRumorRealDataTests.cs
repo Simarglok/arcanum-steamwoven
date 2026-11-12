@@ -46,6 +46,7 @@ public sealed class DialogRumorRealDataTests
         }
         Console.WriteLine($"RUMOR|replies {replies}|files {files}|paid {paid}|rumors listed {listed}|distinct {rumors.Count}|{rumors.Min}..{rumors.Max}");
         Assert.AreEqual((239, 32), (replies, files));
+        Assert.AreEqual((6, 149), (paid, rumors.Count), "233 replies name the price 0, six the price 10; 149 distinct rumors are listed");
 
         var texts = RumorSpeechTexts.Load(stack);
         Assert.AreEqual(0, texts.Failures.Count);
@@ -54,6 +55,7 @@ public sealed class DialogRumorRealDataTests
         var withText = rumors.Count(rumor => texts.Files[0]?.Find(rumor * RumorSpeechTexts.MessageStride + 1) is not null);
         Console.WriteLine($"RUMOR-TEXTS|files {present}|listed rumors with a class-less male-to-male text {withText} of {rumors.Count}");
         Assert.AreEqual(4, present);
+        Assert.AreEqual(121, withText, "the rumors the male-to-male file holds a class-less text for");
 
         var generated = GeneratedDialogFiles.Load(stack).Files!;
         foreach (var file in Enum.GetValues<GeneratedDialogFile>().Where(f => GeneratedDialogFiles.Names[(int)f].StartsWith("gd_cls_m", StringComparison.Ordinal)
@@ -104,7 +106,7 @@ public sealed class DialogRumorRealDataTests
         var greeter = new DialogGreetingTests.FakeGreeter(new DialogGreetingFacts(true, true, false, 0, 0, 0, DialogReactionCategory.Neutral, true),
             new DialogGreetingSources(files, new MesFile?[4], null, rumorTexts.Files), [], DialogRuleProfile.Original, []);
 
-        int talks = 0, told = 0, paidTalks = 0;
+        int talks = 0, told = 0, paidTalks = 0, offeredAll = 0;
         foreach (var key in stack.Keys().Where(k => k.EndsWith(".dlg", StringComparison.Ordinal)))
         {
             var document = DlgReader.Read(stack.Read(stack.Resolve(key).Winner!).Bytes!, new DlgReaderOptions { Mode = DlgReadMode.Original });
@@ -119,8 +121,12 @@ public sealed class DialogRumorRealDataTests
                     new DialogConversationPorts(ports, ports, DialogConversationTests.Owner(), new DialogConversationTests.World(), Rumors: new Rumors(), Gold: gold,
                         Greeting: greeter, Purse: new Purse()));
                 if (attempt.Phase != DialogConversationPhase.AwaitingSelection) continue;
+                // No installed r: reply is refused for its own shape (a transfer or window action in the same reply, a number outside the subset).
+                Assert.IsFalse(attempt.Options.Any(o => o.Marker is { Letter: 'r' } && o.Block is { Kind: DialogOptionBlockKind.UnsupportedInteraction }), $"{key} {npc.Id}");
                 var option = attempt.Options.FirstOrDefault(o => o.Transition == DialogOptionTransition.Rumor && o.Block is null);
                 if (option is null) continue;
+                offeredAll++;
+                if (talks >= 40) continue;
                 talks++;
                 Assert.AreEqual(DialogConversationSelectStatus.Continued, attempt.Select(option.Token).Status, $"{key} {npc.Id}");
                 if (attempt.Options.Any(o => o.Transition == DialogOptionTransition.RumorStep))
@@ -136,11 +142,9 @@ public sealed class DialogRumorRealDataTests
                     Assert.IsTrue(attempt.NpcLine.Text.Length > 0);
                     Assert.AreEqual(1, ports.Commands.Count(c => c.StartsWith("RU:", StringComparison.Ordinal)));
                 }
-                if (talks >= 40) break;
             }
-            if (talks >= 40) break;
         }
-        Console.WriteLine($"RUMOR-TALK|talks {talks}|told {told}|paid {paidTalks}");
+        Console.WriteLine($"RUMOR-TALK|offered {offeredAll}|talks {talks}|told {told}|paid {paidTalks}");
         Assert.IsTrue(talks > 0 && told > 0, "an installed NPC node offers a rumor reply and tells a rumor");
     }
 }

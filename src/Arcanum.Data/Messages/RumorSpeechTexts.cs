@@ -3,7 +3,7 @@ using Arcanum.Data.Content;
 namespace Arcanum.Data.Messages;
 
 /// <summary>
-/// ARC-SCRIPT-1304 (ledger RMR9): the four rumor files an NPC tells a rumor from (<c>mes\game_rd_npc_m2m.mes</c>, <c>m2f</c>, <c>f2f</c>, <c>f2m</c>: the
+/// ARC-SCRIPT-1304 (ledger RMR7): the four rumor files an NPC tells a rumor from (<c>mes\game_rd_npc_m2m.mes</c>, <c>m2f</c>, <c>f2f</c>, <c>f2m</c>: the
 /// speaker's gender, then the listener's), loaded with the module (0x4C5570); a rumor's text is message 20 × its number plus the speaker's social class plus 1,
 /// or the class-less message 20 × number + 1 (0x4C5700). A file that is not in the module, or that cannot be read or parsed, reads as absent (its rumors
 /// have no text); <see cref="Failures"/> names the ones that were present but unusable.

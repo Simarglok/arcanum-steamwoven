@@ -283,6 +283,14 @@ public sealed class DialogRumorTests
         refusing.Select(refusing.Options[0].Token);
         Assert.AreEqual(DialogConversationFailureKind.InvalidQueryResult, refusing.Failure!.Kind);
 
+        var late = new Rig();
+        var quoted = late.Start(RumorReply("R:$10,1000"));
+        Pick(quoted, 1);
+        late.Greeter.Refuse = true;
+        quoted.Select(quoted.Options[0].Token);
+        Assert.AreEqual(DialogConversationFailureKind.InvalidQueryResult, quoted.Failure!.Kind);
+        Assert.AreEqual(0, late.Pay.Moved.Count + late.Ports.Commands.Count, "the tale is built before the payment: a failure there never follows a spent price");
+
         var tight = new Rig();
         var limited = tight.Start(RumorReply("R:$10,1000"), options: new DialogConversationOptions { MaxEffects = 1 });
         Pick(limited, 1);

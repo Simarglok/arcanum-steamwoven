@@ -69,7 +69,7 @@ public sealed partial class DialogConversation
         var chosen = candidates[index];
         if (offer.Price < 1)
         {
-            Tell(chosen, reserve: 1);
+            Tell(chosen);
             return;
         }
         PresentRumorQuote(chosen, offer.Price);
@@ -109,11 +109,13 @@ public sealed partial class DialogConversation
         Present(line, [yes with { Choice = new TrainerChoice(TrainerChoiceKind.PayRumor, Price: price, Rumor: rumor) }, no with { Choice = new TrainerChoice(TrainerChoiceKind.Follow) }]);
     }
 
-    /// <summary>The payment, then the tale (ledger RMR6): too little own gold is the notice of line 2000, else the gold goes to the NPC and the rumor is told.</summary>
+    /// <summary>The payment, then the tale (ledger RMR6): too little own gold is the notice of line 2000, else the gold goes to the NPC and the rumor is told.
+    /// The tale is built before the payment, so a failure there never follows a spent price (nothing between the payment and the telling can fail in the original).</summary>
     private void PayAndTell(TrainerChoice choice)
     {
         var talk = _talk!;
         if (!EnoughGold(choice.Price)) return;
+        if (!PrepareTale(choice.Rumor, out var line, out var answer)) return;
         if ((long)_effects.Count + 2 > _options.MaxEffects)
         {
             Stop(new DialogConversationFrontier(DialogFrontierKind.EffectLimit, CurrentNode), null);
@@ -121,30 +123,42 @@ public sealed partial class DialogConversation
         }
         var pay = new GoldCommand(_request.Participants.PlayerCharacter, _request.Participants.Npc, -choice.Price);
         if (!RunTalkCommand(pay, () => _ports.Gold!.Execute(pay), talk.Source)) return;
-        Tell(choice.Rumor, reserve: 0);
+        WriteAndShow(choice.Rumor, line, answer);
     }
 
     /// <summary>
-    /// Telling the rumor (ledger RMR6, RMR7; 0x4190E0): the NPC's line is the rumor's text, the rumor is written to the PC's logbook (a known one stays as it
-    /// is), and the only answer is the PC's class line 1000 with the reply's own response. <paramref name="reserve"/> effects are checked before the write
-    /// (the paying path has checked them already).
+    /// Telling the rumor without a price (ledger RMR7, RMR8, RMR9): the NPC's line is the rumor's text, the rumor is written to the PC's logbook (a known one
+    /// stays as it is), and the only answer is the PC's class line 1000 with the reply's own response. The effect budget is checked before the write.
     /// </summary>
-    private void Tell(int rumor, int reserve)
+    private void Tell(int rumor)
     {
-        var talk = _talk!;
-        if (!GenerateTalkLine((facts, sources, port) => DialogGreeting.RumorTale(rumor, facts, sources, port, _request.Names, _request.Encoding, _options.MaxTextBytes),
-                out var text, out var origin))
-        {
-            return;
-        }
-        if (!PcTalkLine(1000, 0, classLine: true, out var answer)) return;
-        if ((long)_effects.Count + reserve > _options.MaxEffects)
+        if (!PrepareTale(rumor, out var line, out var answer)) return;
+        if ((long)_effects.Count + 1 > _options.MaxEffects)
         {
             Stop(new DialogConversationFrontier(DialogFrontierKind.EffectLimit, CurrentNode), null);
             return;
         }
+        WriteAndShow(rumor, line, answer);
+    }
+
+    // The tale's NPC line and the PC's answer, built without an effect.
+    private bool PrepareTale(int rumor, out DialogNpcLine line, out TrainerOption answer)
+    {
+        line = new DialogNpcLine(CurrentNode, string.Empty);
+        answer = new TrainerOption(string.Empty, null, default);
+        if (!GenerateTalkLine((facts, sources, port) => DialogGreeting.RumorTale(rumor, facts, sources, port, _request.Names, _request.Encoding, _options.MaxTextBytes),
+                out var text, out var origin))
+        {
+            return false;
+        }
+        line = new DialogNpcLine(CurrentNode, text, origin);
+        return PcTalkLine(1000, 0, classLine: true, out answer);
+    }
+
+    private void WriteAndShow(int rumor, DialogNpcLine line, TrainerOption answer)
+    {
         var learn = new RumorLogCommand(_request.Participants.PlayerCharacter, rumor);
-        if (!RunTalkCommand(learn, () => _ports.Commands.Execute(learn), talk.Source)) return;
-        Present(new DialogNpcLine(CurrentNode, text, origin), [answer with { Choice = new TrainerChoice(TrainerChoiceKind.Follow) }]);
+        if (!RunTalkCommand(learn, () => _ports.Commands.Execute(learn), _talk!.Source)) return;
+        Present(line, [answer with { Choice = new TrainerChoice(TrainerChoiceKind.Follow) }]);
     }
 }

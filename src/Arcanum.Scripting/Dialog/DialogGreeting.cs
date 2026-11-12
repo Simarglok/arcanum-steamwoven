@@ -345,9 +345,8 @@ internal static class DialogGreeting
         ClassLine(new Context(facts, sources, port, names, encoding, maxTextBytes), group);
 
     /// <summary>
-    /// ARC-SCRIPT-1304 (ledger RMR6): the text of the rumor the NPC tells (0x4C5700): the file by the NPC's gender then the PC's (the same order as the
-    /// reputation greetings), message 20 × rumor + the NPC's social class + 1, else 20 × rumor + 1, then the name substitution of the dialog text
-    /// (0x416B00). A rumor without a text, or without its file, is an empty line (origin <see cref="DialogLineOriginKind.Empty"/>).
+    /// ARC-SCRIPT-1304 (ledger RMR7): the text of the rumor the NPC tells: the file by the NPC's gender then the PC's (the same order as the
+    /// reputation greetings), message 20 × rumor + the NPC's social class + 1, else 20 × rumor + 1, then the name substitution of the dialog text. A rumor without a text, or without its file, is an empty line (origin <see cref="DialogLineOriginKind.Empty"/>).
     /// </summary>
     public static GreetingOutcome RumorTale(int rumor, DialogGreetingFacts facts, DialogGreetingSources sources, IDialogGreetingPort port,
         DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes)
