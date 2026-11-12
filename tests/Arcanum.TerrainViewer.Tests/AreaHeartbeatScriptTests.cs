@@ -135,7 +135,7 @@ public sealed class AreaHeartbeatScriptTests
             // ARC-SCRIPT-1359: 805 is script 1717's shape (the Crash Site's Molochean agent): with global flag 2323 set it sets its day and night standpoints to a literal tile, reads where it stands into two
             // variables (get location) and runs to the tile of those variables; without the flag it runs the default at once.
             Write("scr/00805agent.scr", Program(
-                If(new(ScrCatalogue.Condition.GlobalFlag, (GlobalFlag, 2323)), new(ScrCatalogue.Action.DoNothing), new(ScrCatalogue.Action.ReturnRunDefault)),
+                If(new(ScrCatalogue.Condition.GlobalFlag, N(2323)), new(ScrCatalogue.Action.DoNothing), new(ScrCatalogue.Action.ReturnRunDefault)),
                 Do(new(ScrCatalogue.Action.SetDayStandpoint, (Attachee, -1), N(480), N(521))),
                 Do(new(ScrCatalogue.Action.SetNightStandpoint, (Attachee, -1), N(480), N(521))),
                 Do(new(ScrCatalogue.Action.GetLocation, (Attachee, -1), (Local, 0), (Local, 1))),

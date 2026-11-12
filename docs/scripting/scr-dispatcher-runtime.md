@@ -804,10 +804,10 @@ toggle open or closed 88, set written start 94, toggle sector blocked 106, toggl
 ## Get location and the Molochean agent's heartbeat (ARC-SCRIPT-1359, set S38)
 
 `ScrAdmissionSet.S38` is S37 plus get location (95), which writes the first object's tile x and y into number operands 1 and 2 (32 bits each) through `IScrWorldQueries.Location`; an absent object or one without a place stops the run as distance
-between (71) does, and a literal in operand 1 or 2 is refused. The interpreter runs at most S38. Ledger [GL1–GL2](../research/ledger/scripts.md#get-location-and-the-crash-site-molochean-agent-arc-script-1359). Only
-the heartbeat set (`AreaUseScriptHost.HeartbeatAdmission`) holds it: with global flag 2323 set, the Crash Site agent's heartbeat 1717 sets the day and night standpoints, reads where it stands and runs to its tile (run to 74 is in the set since
+between (71) does, and a literal in operand 1 or 2 is refused. The interpreter runs at most S38. Ledger [GL1–GL2](../research/ledger/scripts.md#get-location-and-the-crash-site-molochean-agent-arc-script-1359). The
+heartbeat set (`AreaUseScriptHost.HeartbeatAdmission`, and the dying set built on it) holds it: with global flag 2323 set, the Crash Site agent's heartbeat 1717 sets the day and night standpoints, reads where it stands and runs to its tile (run to 74 is in the set since
 ARC-DEV-231) through the AI host's goal start, so it is admitted whole. Tests: `ScrHeartbeatWorldTests` (the action and the set), `AreaHeartbeatScriptTests` (a 1717-shaped script over the host and, with `DAT_ROOT`, the installed agent).
-Not built: the use, tile, sector, dying and talk sets (tile script 2080 also uses 95).
+Not built: the use, tile, sector and talk sets (tile script 2080 also uses 95).
 
 ## Checks
 
