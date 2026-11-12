@@ -72,28 +72,37 @@ public partial class TerrainViewerApp
     /// <summary>The bar mode a pane holds the window in: 8 the weapon's spells, 1 the spells, 2 the skills (ML8).</summary>
     private int MessagePaneMode => _itemPaneItem is not null ? 8 : _gameBar.IsOn(AreaBarButton.Spells) ? 1 : 2;
 
-    /// <summary>0x57CCF0 for an item the hero holds: the item's examine script first (<see cref="ExamineAllows"/>, ARC-DEV-326), then the item
-    /// window in the message mode (0x554F10's first part), its name in a pane's text area.</summary>
+    /// <summary>0x57CCF0 for an item: the item's examine script first (<see cref="ExamineAllows"/>, ARC-DEV-326), then the item
+    /// window in the message mode (0x554F10's first part), its name in a pane's text area. ARC-UI-1411 (ledger XR4): the original's wrapper
+    /// describes any object, so an item lying on the map or held by an NPC (its map row)
+    /// is described as well as the hero's own, an open window's and the barter panel's.</summary>
     private void DescribeItem(GameSessionOwner session, string item)
     {
-        if (InventoryItemKind(session, item) is not { } kind) return;
+        var kind = InventoryItemKind(session, item);
+        if (kind is null && ItemMapRow(item) is null) return;
         if (!ItemExamineAllows(session, item, out var row)) return;
         var catalog = _hoverNames?.Catalog;
-        var fallback = row is not null && _inventoryHost is { } host ? host.Name(item, catalog) : AreaInventoryHost.KindName(kind, catalog);
-        var described = _hotkeyItemIcons?.Describe(kind, row, session.QueryItemIdentified(item), catalog, fallback, ItemWindowContext(session, item))
+        var fallback = row is not null && _inventoryHost is { } host ? host.Name(item, catalog) : AreaInventoryHost.KindName(kind!.Value, catalog);
+        var described = _hotkeyItemIcons?.Describe(kind ?? default, row, session.QueryItemIdentified(item), catalog, fallback, ItemWindowContext(session, item))
             ?? new AreaItemDescription(null, fallback, AreaMessageColour.White);
         var shown = _messageLog.PaneMode ? _messageLog.ShowPaneName(MessagePaneMode, described.Name, item: true)
             : _messageLog.ShowItem(AreaHoverDescriptions.ItemWindow(described));
         if (shown) _gameBarPanel?.MessageLog.Render();
     }
 
+    /// <summary>The map row of an item any held map lists (an item lying on the map, one an NPC or container holds, one the hero took); null for none.</summary>
+    private AreaObjectRecord? ItemMapRow(string item)
+    {
+        foreach (var map in _inventoryHost?.Maps ?? [])
+            if (map.TryGetRow(item, out var found)) return found;
+        return null;
+    }
+
     /// <summary>The first step of an item's description (<see cref="ExamineAllows"/> for an item with a row, <see cref="ExamineAllowsMade"/> for one the
     /// session made): false when the item's examine script answered skip default. <paramref name="row"/> is the item's map row, null for a made item.</summary>
     private bool ItemExamineAllows(GameSessionOwner session, string item, out AreaObjectRecord? row)
     {
-        row = null;
-        foreach (var map in _inventoryHost?.Maps ?? [])
-            if (map.TryGetRow(item, out var found)) { row = found; break; }
+        row = ItemMapRow(item);
         return row is not null ? ExamineAllows(row) : ExamineAllowsMade(session, item);
     }
 

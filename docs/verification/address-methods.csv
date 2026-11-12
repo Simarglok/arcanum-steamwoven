@@ -689,6 +689,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterCycle,exempt,referen
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterCycleSpeaker,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterPointerStill,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaContainerLoot.cs,CloseContainer,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaHoverWindow.cs,DescribeObject,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaHoverWindow.cs,HoverCombatPanel,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaInventory.cs,ArmLockpick,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaInventory.cs,HealCritter,pending,
