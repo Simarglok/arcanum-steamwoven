@@ -25,7 +25,7 @@ public partial class TerrainViewerApp
     /// <summary>ARC-SKILLS-1156: the armed skill cursor is the disarm traps one.</summary>
     private bool DisarmArmed => _disarmArmed && TargetModeOpen(InterfaceMode.SkillTarget);
 
-    /// <summary>The hotkey bar's Disarm traps entry (0x57A320): arms the skill cursor; the next left press on a trap runs the skill.</summary>
+    /// <summary>The hotkey bar's Disarm traps entry (the skill bar's start): arms the skill cursor; the next left press on a trap runs the skill.</summary>
     private string ArmDisarmTraps()
     {
         if (_areaSession?.QueryHero() is null || !InventoryActive || AreaTrapsNow() is null) return "disarm traps: no hero, no area inventory or no trap host here";
