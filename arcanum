@@ -242,7 +242,7 @@ def queue(args: argparse.Namespace) -> int:
     if args.pause or args.resume:  # ARC-DEV-1344: the same flag the menu-bar app sets
         changed = run_queue.set_paused(args.pause)
         print(("paused" if args.pause else "resumed") if changed else ("already paused" if args.pause else "was not paused"))
-    if args.app:  # ARC-DEV-1344: start the menu-bar app now (builds it first when needed), in the foreground until it is up
+    if args.app:  # ARC-DEV-1344: start the menu-bar app now (builds it first when needed), (the build is foreground)
         target, why = menubar.build()
         if target is None:
             print(f"menu-bar app not available: {why}", file=sys.stderr)

@@ -479,13 +479,13 @@ display and reads the queue's own files, so it works from whichever checkout sta
 - **Shows.** The icon says what the queue holds (`tray`, `tray.full` with `running·waiting`, `pause.circle` while paused). The menu lists the
   running runs, then the waiting ones in queue order: number, kind and lane, label, how long it has run or waited, the checkout
   (the tooltip has the full command and pid). It reads the tickets the way the queue does (the flock the run holds plus a live
-  process), every second, and never writes a ticket.
+  process), every second, and never writes a ticket (it only probes their locks for an instant).
 - **Pause.** The menu's `Pause` item and `./arcanum queue --pause` / `--resume` set and clear one flag, the file `paused` in the queue
   folder. While it is set a waiter that would start waits instead (`ARCANUM_QUEUE queued ... waiting-for=resume paused`), and starts within the
   poll interval after the resume, in its place in the order; runs already running finish and a nested run still runs inside its
   parent's place; every kind waits, the owner's viewer launches and package builds too. `./arcanum queue` prints `PAUSED` and
   `waiting ... (paused)`. A checkout that has not merged ARC-DEV-1344 ignores the flag: merge main before relying on it. The pause
-  stays until resumed, also across a restart of the app; the app never clears it by itself.
+  stays until resumed, also across a restart of the app; the app never clears it by itself, so a forgotten pause holds every waiting run (they say so on stderr; the icon shows the pause).
 - **Start.** `run_queue.run` calls `menubar.ensure_running()` after it takes a ticket: when the app does not hold `menubar/app.lock` (an
   flock it holds for its whole life, so a crash frees it) a detached helper builds the app if needed and starts it; a second helper
   or a second app ends at once. Nothing here can fail or delay a run: a missing compiler or a failed build is written to

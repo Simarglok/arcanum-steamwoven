@@ -685,7 +685,7 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
             hold()
         return code
     fd, path, ticket = _enqueue(kind, label, command, priority, minutes, seconds)
-    menubar.ensure_running()  # ARC-DEV-1344: the menu-bar view of the queue starts with the first run it shows
+    menubar.ensure_running()  # (never raises) ARC-DEV-1344: the menu-bar view of the queue starts with the first run it shows
     log = None
     reason: list[str] = []
     if quiet:

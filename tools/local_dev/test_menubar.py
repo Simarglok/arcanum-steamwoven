@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -89,8 +90,13 @@ class AppTests(unittest.TestCase):
         self.source.write_text("// two\n")
         newer, _ = menubar.build(self.source, run=compiler, which=lambda name: "/usr/bin/swiftc")
         self.assertNotEqual(newer, target)
-        self.assertFalse(target.exists())
-        self.assertEqual(len(seen), 2)
+        self.assertTrue(target.exists())  # another checkout's build is kept, not rebuilt by every start
+        old = time.time() - menubar.KEEP_BUILDS_SECONDS - 10
+        os.utime(target, (old, old))
+        self.source.write_text("// three\n")
+        menubar.build(self.source, run=compiler, which=lambda name: "/usr/bin/swiftc")
+        self.assertFalse(target.exists())  # long unused: dropped
+        self.assertEqual(len(seen), 3)
 
     def test_build_reports_what_is_missing_or_broken(self) -> None:
         self.assertIn("no swiftc", menubar.build(self.source, which=lambda name: None)[1])
@@ -102,6 +108,12 @@ class AppTests(unittest.TestCase):
         self.assertIsNone(target)
         self.assertIn("boom", why)
         self.assertEqual(list(menubar.app_dir().glob(".build-*")), [])
+        self.assertTrue(menubar.recently_failed(self.source))  # no new try from the next queued run for a while
+        calls: list = []
+        with patch.object(menubar, "SOURCE", self.source):
+            self.assertFalse(menubar.ensure_running(spawn=lambda *a, **k: calls.append(1)))
+        self.assertEqual(calls, [])
+        self.assertFalse(menubar.recently_failed(self.source, now=time.time() + menubar.FAILURE_PAUSE_SECONDS + 1))
 
 
 if __name__ == "__main__":

@@ -53,7 +53,15 @@ struct QueueFolder {
             let path = url.appendingPathComponent(name).path
             guard let data = FileManager.default.contents(atPath: path),
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  json["schema"] as? String == "arcanum-run-queue-v1", let seq = json["seq"] as? Int else { continue }
+                  json["schema"] as? String == "arcanum-run-queue-v1", let seq = json["seq"] as? Int else {
+                // a held ticket this version cannot read (another version's format) blocks the queue like a running export
+                if lockedByOthers(path), let seq = Int(name.dropFirst(2).dropLast(5)) {
+                    found.append(Job(seq: seq, kind: "export", lane: nil, label: "unreadable ticket", command: "", checkout: "?",
+                                     enqueuedAt: Date().timeIntervalSince1970, startedAt: Date().timeIntervalSince1970,
+                                     childPid: nil, priority: 0, estimate: nil))
+                }
+                continue
+            }
             guard lockedByOthers(path), processAlive(json["pid"]) || processAlive(json["childPid"]) else { continue }
             let cwd = json["cwd"] as? String ?? "?"
             found.append(Job(seq: seq, kind: json["kind"] as? String ?? "?", lane: json["lane"] as? String,
@@ -66,8 +74,13 @@ struct QueueFolder {
                              estimate: (json["estimateSeconds"] as? NSNumber)?.doubleValue))
         }
         let byNumber = found.contains { $0.startedAt == nil && $0.estimate == nil }
+        let defaults = ["window": 60.0, "headless": 60.0, "export": 300.0, "dotnet": 60.0, "quick": 15.0]
+        func estimate(_ job: Job) -> Double {
+            if let value = job.estimate, value >= 0 { return min(value, 86400) }
+            return defaults[job.kind] ?? 60
+        }
         func key(_ job: Job) -> (Int, Double, Int) {
-            (job.priority, byNumber ? 0 : job.enqueuedAt + 3 * (job.estimate ?? 60), job.seq)
+            (job.priority, byNumber ? 0 : job.enqueuedAt + 3 * estimate(job), job.seq)
         }
         return found.sorted { key($0) < key($1) }
     }
@@ -128,7 +141,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    func menuNeedsUpdate(_ menu: NSMenu) { refresh() }
+    func menuNeedsUpdate(_ menu: NSMenu) { refresh(force: true) }
     func menuWillOpen(_ menu: NSMenu) { menuIsOpen = true }
     func menuDidClose(_ menu: NSMenu) { menuIsOpen = false }
 
@@ -172,7 +185,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return entry
     }
 
-    func refresh() {
+    func refresh(force: Bool = false) {
         let jobs = queue.jobs()
         let paused = queue.isPaused
         let now = Date().timeIntervalSince1970
@@ -185,8 +198,16 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             button.toolTip = "Arcanum launch queue: \(running.count) running, \(waiting.count) waiting" + (paused ? ", PAUSED" : "")
         }
 
+        if !menuIsOpen && !force {  // a closed menu is built when it is opened (menuNeedsUpdate), not every second
+            if jobs.isEmpty && !paused && idleMinutes > 0 {
+                if let since = emptySince, Date().timeIntervalSince(since) > idleMinutes * 60 { NSApp.terminate(nil) }
+            } else {
+                emptySince = Date()
+            }
+            return
+        }
         // an open menu is only given new times while the same runs are in it: rebuilding it under the pointer flickers
-        let positions = Dictionary(uniqueKeysWithValues: waiting.enumerated().map { ($1.seq, $0) })
+        let positions = Dictionary(waiting.enumerated().map { ($1.seq, $0) }, uniquingKeysWith: { first, _ in first })
         let before = signature
         signature = jobs.map { "\($0.seq):\($0.startedAt != nil)" }.joined(separator: ",") + (paused ? "|paused" : "")
         if menuIsOpen && signature == before {
@@ -259,7 +280,12 @@ let lockPath = (lockURL ?? queueURL.deletingLastPathComponent().appendingPathCom
 try? FileManager.default.createDirectory(atPath: (lockPath as NSString).deletingLastPathComponent,
                                          withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
 let lockFd = open(lockPath, O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0o600)
-if lockFd < 0 || flock(lockFd, LOCK_EX | LOCK_NB) != 0 {
+var locked = false
+for _ in 0..<20 where lockFd >= 0 && !locked {  // a probe of the starter holds the lock for microseconds: try for a second
+    locked = flock(lockFd, LOCK_EX | LOCK_NB) == 0
+    if !locked { usleep(50_000) }
+}
+if !locked {
     exit(0)  // already running
 }
 

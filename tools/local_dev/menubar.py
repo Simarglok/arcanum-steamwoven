@@ -16,6 +16,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import time
 from typing import Sequence
 
 from . import config
@@ -77,6 +78,21 @@ def binary_path(source: Path = SOURCE) -> Path:
     return app_dir() / f"ArcanumQueue-{hashlib.sha256(source.read_bytes()).hexdigest()[:12]}"
 
 
+FAILURE_PAUSE_SECONDS = 600.0  # after a failed build the next try waits this long, so a broken compiler is not run by every queued run
+KEEP_BUILDS_SECONDS = 14 * 86400.0  # a build other checkouts' sources may still want is kept this long after it was last made
+
+
+def failure_marker(source: Path | None = None) -> Path:
+    return app_dir() / f"build-failed-{hashlib.sha256((source or SOURCE).read_bytes()).hexdigest()[:12]}"
+
+
+def recently_failed(source: Path | None = None, now: float | None = None) -> bool:
+    try:
+        return (time.time() if now is None else now) - failure_marker(source).stat().st_mtime < FAILURE_PAUSE_SECONDS
+    except OSError:
+        return False
+
+
 def compile_command(swiftc: str, target: Path, source: Path = SOURCE) -> tuple[str, ...]:
     return (swiftc, "-O", "-warnings-as-errors", str(source), "-o", str(target))
 
@@ -92,33 +108,41 @@ def build(source: Path = SOURCE, *, run=subprocess.run, which=shutil.which) -> t
     if swiftc is None:
         return None, "no swiftc (install the Xcode command line tools)"
     app_dir().mkdir(mode=0o700, parents=True, exist_ok=True)
+    marker = failure_marker(source)
     hidden = target.with_name(f".build-{os.getpid()}")
     try:
         done = run(compile_command(swiftc, hidden, source), capture_output=True, text=True, timeout=600)
     except (OSError, subprocess.TimeoutExpired) as error:
         hidden.unlink(missing_ok=True)
+        marker.touch()
         return None, f"swiftc did not run: {error}"
     if done.returncode != 0:
         hidden.unlink(missing_ok=True)
+        marker.touch()
         return None, f"swiftc failed ({done.returncode}): {(done.stderr or done.stdout).strip()[:600]}"
     os.replace(hidden, target)
-    for old in app_dir().glob("ArcanumQueue-*"):  # the builds of earlier sources
-        if old != target:
-            old.unlink(missing_ok=True)
+    marker.unlink(missing_ok=True)
+    now = time.time()
+    for old in app_dir().glob("ArcanumQueue-*"):  # builds of other sources (another checkout's) go only when long unused
+        try:
+            if old != target and now - old.stat().st_mtime > KEEP_BUILDS_SECONDS:
+                old.unlink(missing_ok=True)
+        except OSError:
+            pass
     return target, ""
 
 
 def ensure_running(*, spawn=subprocess.Popen) -> bool:
     """Start the app (detached) when it is enabled and not running; True when a start was asked for. Never raises."""
     try:
-        if not enabled() or running():
+        if not enabled() or running() or recently_failed():
             return False
         app_dir().mkdir(mode=0o700, parents=True, exist_ok=True)
         with open(log_path(), "ab") as log:
             spawn([sys.executable, "-B", "-m", "tools.local_dev.menubar", "start"], cwd=ROOT, start_new_session=True,
                   stdin=subprocess.DEVNULL, stdout=log, stderr=log, close_fds=True)
         return True
-    except OSError:
+    except (OSError, ValueError, RuntimeError):
         return False
 
 
@@ -131,7 +155,7 @@ def start(extra: Sequence[str] = ()) -> int:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         return 0  # another helper is building or starting it
-    if running():
+    if running() or recently_failed():
         return 0
     target, why = build()
     if target is None:
