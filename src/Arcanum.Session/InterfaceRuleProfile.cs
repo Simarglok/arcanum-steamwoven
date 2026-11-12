@@ -18,11 +18,18 @@ public sealed record InterfaceRuleProfile
     /// </summary>
     public bool CalledShotCursorsSwapped { get; init; }
 
+    /// <summary>
+    /// Ledger CH6 (ARC-UI-1114): the original's combat interface shows no turn order, no list of participants and no name of whoever
+    /// acts (only the action-point lamps and, on another participant's subturn, three running lights). Steamwoven adds a list of the
+    /// round's participants with the current one marked (owner decision 2026-10-28, a Steamwoven addition); Original hides it.
+    /// </summary>
+    public bool TurnOrderListHidden { get; init; }
+
     /// <summary>The original with every recorded fix and addition; the default setting.</summary>
     public static readonly InterfaceRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
-    public static readonly InterfaceRuleProfile Original = new() { Name = "original", CalledShotCursorsSwapped = true };
+    public static readonly InterfaceRuleProfile Original = new() { Name = "original", CalledShotCursorsSwapped = true, TurnOrderListHidden = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<InterfaceRuleProfile> All { get; } = new[] { Steamwoven, Original };
