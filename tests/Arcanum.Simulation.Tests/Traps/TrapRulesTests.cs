@@ -142,4 +142,29 @@ public sealed class TrapRulesTests
         Assert.AreEqual((true, false), SpotCase(false, false, SkillTraining.Master, TrapClass.Magical, 95, 0, () => 1), "a master's second roll spots a magical trap");
         Assert.AreEqual((true, false), SpotCase(true, false, SkillTraining.Apprentice, TrapClass.Nonmagical, 95, 0, () => 1));
     }
+
+    // ARC-SKILLS-1156 (ledger SP3): the disarm traps skill's case of 0x4C7160.
+    [TestMethod]
+    public void A_passed_disarm_check_keeps_its_critical_flag_without_a_second_roll()
+    {
+        var calls = 0;
+        int Second() { calls++; return 1; }
+        Assert.AreEqual((true, false), DisarmCase(true, false, SkillTraining.None, 50, 0, Second));
+        Assert.AreEqual((true, true), DisarmCase(true, true, SkillTraining.Master, 50, 0, Second));
+        Assert.AreEqual(0, calls);
+    }
+
+    [TestMethod]
+    public void Only_a_master_that_failed_without_a_critical_failure_rolls_the_disarm_check_again()
+    {
+        var calls = 0;
+        int Roll(int value) { calls++; return value; }
+        Assert.AreEqual((false, false), DisarmCase(false, false, SkillTraining.Expert, 90, 0, () => Roll(1)));
+        Assert.AreEqual((false, true), DisarmCase(false, true, SkillTraining.Master, 90, 0, () => Roll(1)), "a critical failure keeps its flag and draws nothing");
+        Assert.AreEqual(0, calls);
+        Assert.AreEqual((true, false), DisarmCase(false, false, SkillTraining.Master, 60, 10, () => Roll(50)), "a pass carries no critical flag");
+        Assert.AreEqual((false, false), DisarmCase(false, false, SkillTraining.Master, 60, 10, () => Roll(51)));
+        Assert.AreEqual(2, calls);
+        Assert.AreEqual((true, false), DisarmCase(false, false, SkillTraining.Master, 60, -20, () => Roll(80)), "a negative total helps");
+    }
 }

@@ -306,4 +306,213 @@ public sealed class TrapStateTests
         Assert.AreEqual(GameSessionFailure.StaleVersion, owner.RollHeroSpotTrap(new(owner.Version.Owner, owner.Version.Revision + 1), Chest, TrappedChest).Failure);
         Assert.AreEqual(0, owner.QueryRandom().Draws, "a refusal draws nothing");
     }
+
+    // ARC-SKILLS-1156 (ledger SP3): the hero's disarm traps press. Dexterity 20 (the skill's key stats), the skill's points and training invented.
+    private static GameSessionOwner Disarmer(int points, SkillTraining training, ulong seed = 0, GameSessionLimits? limits = null)
+    {
+        var stats = Defaults();
+        for (var i = 0; i < stats.Length; i++) stats[i] = 20;
+        int[] tech = new int[4];
+        tech[SkillRules.FamilyIndex(Skill.DisarmTraps)] = points | (int)training << 6;
+        var hero = HalfElf(stats) with { Advancement = SessionHeroAdvancement.None with { TechSkills = [.. tech] } };
+        var created = GameSessionOwner.Create(Descriptor(limits: limits) with { Hero = hero, RandomSeed = seed });
+        Assert.AreEqual(GameSessionFailure.None, created.Failure);
+        return created.Owner!;
+    }
+
+    private static readonly SessionTrapBaseline KnownChest = TrappedChest with { ObjectFlags = TrapRules.SpottedFlag };
+    private static readonly SessionTrapBaseline KnownPlate = TrapPlate with { ObjectFlags = TrapRules.SpottedFlag };
+
+    [TestMethod]
+    public void A_disarm_press_on_a_trap_the_hero_does_not_know_or_that_is_gone_rolls_and_charges_nothing()
+    {
+        using var owner = Disarmer(5, SkillTraining.Master);
+        var (draws, revision) = (owner.QueryRandom().Draws, owner.Version.Revision);
+        var unknown = owner.RollHeroDisarmTrap(owner.Version, Chest, TrappedChest);
+        Assert.AreEqual((GameSessionDisposition.NoChange, TrapDisarm.NotKnown), (unknown.Disposition, unknown.Disarm!.Outcome));
+        var none = owner.RollHeroDisarmTrap(owner.Version, Chest, KnownChest with { Script = 0 });
+        Assert.AreEqual((GameSessionDisposition.NoChange, TrapDisarm.NotTrapped), (none.Disposition, none.Disarm!.Outcome));
+        Assert.IsNull(unknown.Check);
+        Assert.AreEqual((draws, revision), (owner.QueryRandom().Draws, owner.Version.Revision));
+    }
+
+    [TestMethod]
+    public void A_disarm_roll_is_one_revision_and_a_success_removes_the_trap_a_failure_leaves_it()
+    {
+        var removed = 0;
+        var failed = 0;
+        for (ulong seed = 0; seed < 200; seed++)
+        {
+            using var owner = Disarmer(5, SkillTraining.Expert, seed);
+            var (draws, revision) = (owner.QueryRandom().Draws, owner.Version.Revision);
+            var roll = owner.RollHeroDisarmTrap(owner.Version, Chest, KnownChest);
+            Assert.AreEqual(GameSessionDisposition.Changed, roll.Disposition);
+            Assert.IsNotNull(roll.Check);
+            Assert.IsTrue(owner.QueryRandom().Draws >= draws + 2, "the check's two draws");
+            Assert.IsFalse(roll.SecondRoll, "no second roll below master");
+            Assert.AreEqual(revision + 1, owner.Version.Revision, "the roll and the disarm are one revision");
+            var state = owner.QueryTrap(Chest, KnownChest);
+            if (roll.Disarm!.Outcome is TrapDisarm.Removed or TrapDisarm.RemovedWithDevice) { removed++; Assert.IsTrue(state.Removed); }
+            else if (roll.Disarm.Outcome == TrapDisarm.Failed) { failed++; Assert.IsFalse(state.Removed); }
+            else { Assert.AreEqual(TrapDisarm.Sprung, roll.Disarm.Outcome); Assert.IsNotNull(roll.Disarm.Run, "a critical failure sets the trap off"); }
+        }
+        Assert.IsTrue(removed > 0 && failed > 0, $"{removed} removed, {failed} failed");
+    }
+
+    [TestMethod]
+    public void A_master_rolls_a_second_time_and_disarms_more_often_than_an_expert()
+    {
+        int master = 0, expert = 0, seconds = 0;
+        for (ulong seed = 0; seed < 300; seed++)
+        {
+            using var m = Disarmer(2, SkillTraining.Master, seed);
+            using var e = Disarmer(2, SkillTraining.Expert, seed);
+            var a = m.RollHeroDisarmTrap(m.Version, Chest, KnownChest);
+            var b = e.RollHeroDisarmTrap(e.Version, Chest, KnownChest);
+            master += a.Disarm!.Outcome is TrapDisarm.Removed or TrapDisarm.RemovedWithDevice ? 1 : 0;
+            expert += b.Disarm!.Outcome is TrapDisarm.Removed or TrapDisarm.RemovedWithDevice ? 1 : 0;
+            seconds += a.SecondRoll ? 1 : 0;
+            Assert.IsFalse(b.SecondRoll);
+        }
+        Assert.IsTrue(seconds > 0, "a failed master rolls the third roll");
+        Assert.IsTrue(master > expert, $"{master} against {expert}");
+    }
+
+    [TestMethod]
+    public void The_trap_objects_difficulty_makes_the_check_harder_and_another_carrier_has_none()
+    {
+        int easy = 0, hard = 0, chest = 0;
+        for (ulong seed = 0; seed < 300; seed++)
+        {
+            using var a = Disarmer(4, SkillTraining.Expert, seed);
+            using var b = Disarmer(4, SkillTraining.Expert, seed);
+            using var c = Disarmer(4, SkillTraining.Expert, seed);
+            easy += a.RollHeroDisarmTrap(a.Version, Plate, KnownPlate, 0).Check!.Success ? 1 : 0;
+            hard += b.RollHeroDisarmTrap(b.Version, Plate, KnownPlate, 60).Check!.Success ? 1 : 0;
+            chest += c.RollHeroDisarmTrap(c.Version, Chest, KnownChest, 60).Check!.Success ? 1 : 0;
+        }
+        Assert.IsTrue(hard < easy, $"{hard} against {easy}");
+        // A trapped chest has no trap difficulty term: the field is read for a trap object only (SP3).
+        using var plain = Disarmer(4, SkillTraining.Expert, 7);
+        using var withTerm = Disarmer(4, SkillTraining.Expert, 7);
+        Assert.AreEqual(plain.RollHeroDisarmTrap(plain.Version, Chest, KnownChest, 0).Check!.Check.Difficulty,
+            withTerm.RollHeroDisarmTrap(withTerm.Version, Chest, KnownChest, 60).Check!.Check.Difficulty);
+        Assert.IsTrue(chest > hard);
+    }
+
+    [TestMethod]
+    public void An_experts_critical_success_yields_the_device_a_critical_failure_sets_the_trap_off()
+    {
+        var device = 0;
+        var sprung = 0;
+        for (ulong seed = 0; seed < 600; seed++)
+        {
+            using var owner = Disarmer(5, SkillTraining.Expert, seed);
+            var roll = owner.RollHeroDisarmTrap(owner.Version, Chest, KnownChest);
+            if (roll.Disarm!.Outcome == TrapDisarm.RemovedWithDevice) { device++; Assert.AreEqual(6047, roll.Disarm.DevicePrototype, "script 30001's device"); Assert.IsTrue(roll.Check!.Critical); }
+            if (roll.Disarm.Outcome == TrapDisarm.Sprung) { sprung++; Assert.IsTrue(roll.Check!.Critical && !roll.Check.Success); Assert.IsNotNull(roll.Disarm.Run); }
+        }
+        Assert.IsTrue(device > 0 && sprung > 0, $"{device} devices, {sprung} sprung");
+    }
+
+    [TestMethod]
+    public void A_disarm_press_refuses_without_a_hero_for_an_invalid_object_difficulty_or_light_and_a_stale_version()
+    {
+        using var heroless = Create();
+        Assert.AreEqual(GameSessionFailure.SkillsUnavailable, heroless.RollHeroDisarmTrap(heroless.Version, Chest, KnownChest).Failure);
+        using var owner = Disarmer(5, SkillTraining.Expert);
+        Assert.AreEqual(GameSessionFailure.InvalidTrap, owner.RollHeroDisarmTrap(owner.Version, Chest with { Entity = "" }, KnownChest).Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidTrap, owner.RollHeroDisarmTrap(owner.Version, Plate, KnownPlate, GameSessionOwner.MaxTrapDifficulty + 1).Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidTrap, owner.RollHeroDisarmTrap(owner.Version, Chest, KnownChest, 0, -1).Failure);
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.RollHeroDisarmTrap(new(owner.Version.Owner, owner.Version.Revision + 1), Chest, KnownChest).Failure);
+        Assert.AreEqual((0, 0L), (owner.QueryRandom().Draws, owner.Version.Revision), "a refusal draws nothing");
+    }
+
+    [TestMethod]
+    public void A_removal_the_session_cannot_write_takes_the_rolls_back()
+    {
+        var refused = 0;
+        for (ulong seed = 0; seed < 100; seed++)
+        {
+            using var owner = Disarmer(5, SkillTraining.Master, seed, new GameSessionLimits(maxChangesPerMap: 1));
+            var (draws, revision) = (owner.QueryRandom().Draws, owner.Version.Revision);
+            // A trap object's removal records two changes: over the budget of one, it is refused as a whole.
+            var roll = owner.RollHeroDisarmTrap(owner.Version, Plate, KnownPlate);
+            if (roll.Disposition != GameSessionDisposition.Rejected) continue;
+            refused++;
+            Assert.AreEqual(GameSessionFailure.BudgetExceeded, roll.Failure);
+            Assert.AreEqual((draws, revision), (owner.QueryRandom().Draws, owner.Version.Revision), "nothing happened");
+            Assert.IsTrue(owner.QueryTrap(Plate, KnownPlate).Trapped);
+        }
+        Assert.IsTrue(refused > 0);
+    }
+
+    [TestMethod]
+    public void A_refused_removal_leaves_an_armed_fate_point_armed()
+    {
+        using var owner = Disarmer(0, SkillTraining.None, 0, new GameSessionLimits(maxChangesPerMap: 1));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.GrantHeroFatePoint(owner.Version).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ArmHeroFate(owner.Version, FateKind.DisarmTraps).Disposition);
+        var (draws, revision) = (owner.QueryRandom().Draws, owner.Version.Revision);
+        // The fated press is a critical success; a trap object's two-change removal does not fit the budget of one.
+        var roll = owner.RollHeroDisarmTrap(owner.Version, Plate, KnownPlate);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded), (roll.Disposition, roll.Failure));
+        Assert.IsTrue(owner.HeroFateArmed(FateKind.DisarmTraps), "the fate point was not spent");
+        Assert.AreEqual((draws, revision), (owner.QueryRandom().Draws, owner.Version.Revision));
+    }
+
+    [TestMethod]
+    public void In_a_round_the_press_pays_four_action_points_first_and_another_subturn_refuses_it()
+    {
+        using var owner = Disarmer(5, SkillTraining.Expert);
+        var world = new RoundWorld();
+        Assert.AreEqual(GameSessionFailure.None, owner.StartCombatRound(owner.Version, world).Failure);
+        for (var i = 0; i < 4 && owner.QueryCombatRound()!.Actor != SessionCombatant.Hero; i++)
+            owner.EndCombatTurn(owner.Version, owner.QueryCombatRound()!.Actor, world);
+        var points = owner.QueryCombatRound()!.ActionPoints;
+        var roll = owner.RollHeroDisarmTrap(owner.Version, Chest, KnownChest, world: world);
+        Assert.AreEqual((SessionActionPointUse.Paid, points - TurnBasedRules.UseSkillCost, GameSessionDisposition.Changed),
+            (roll.Charge!.Charge, owner.QueryCombatRound()!.ActionPoints, roll.Disposition));
+        owner.EndCombatTurn(owner.Version, SessionCombatant.Hero, world);
+        var (revision, draws) = (owner.Version.Revision, owner.QueryRandom().Draws);
+        var outOfTurn = owner.RollHeroDisarmTrap(owner.Version, Plate, KnownPlate, world: world);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.DisarmOutOfTurn, revision, draws),
+            (outOfTurn.Disposition, outOfTurn.Failure, owner.Version.Revision, owner.QueryRandom().Draws));
+    }
+
+    private sealed class RoundWorld : ISessionCombatWorld
+    {
+        public IReadOnlyList<SessionCombatCandidate> ScanCombatants(SessionMapId map) =>
+            [new(SessionCombatant.Hero, new(0, 0)), new(SessionCombatant.Critter("oid:wolf"), new(105, 200))];
+
+        public SessionCombatantFacts? CombatantFacts(SessionMapId map, string entity) => new() { Speed = 7, Life = new LifeFacts() };
+    }
+
+    private static readonly SessionInsertCheck AcceptAll = _ => SessionInsertVerdict.Accepted;
+    private static readonly SessionItemKind DeviceKind = new(SessionItemType.Generic, 6047, 3000, 33000);
+
+    [TestMethod]
+    public void A_created_device_enters_the_heros_pack_or_lies_on_its_tile_when_the_hero_cannot_take_it()
+    {
+        using var owner = Disarmer(5, SkillTraining.Expert);
+        var revision = owner.Version.Revision;
+        var taken = owner.CreateItemForHero(owner.Version, DeviceKind, AcceptAll);
+        Assert.AreEqual((GameSessionDisposition.Changed, SessionInsertVerdict.Accepted, revision + 1), (taken.Disposition, taken.Verdict, owner.Version.Revision));
+        Assert.AreEqual(SessionObjectPlace.HeroPack, owner.QueryObject(taken.Item!)!.Place, "in the hero's list");
+        Assert.AreEqual(6047, owner.QueryMadeItems().Single(item => item.Entity == taken.Item).Kind.Prototype);
+        var refused = owner.CreateItemForHero(owner.Version, DeviceKind, _ => SessionInsertVerdict.TooHeavy);
+        Assert.AreEqual((GameSessionDisposition.Changed, SessionInsertVerdict.TooHeavy), (refused.Disposition, refused.Verdict));
+                Assert.AreEqual((SessionObjectPlace.Ground, owner.QueryActor().Cell), (owner.QueryObject(refused.Item!)!.Place, owner.QueryObject(refused.Item!)!.Cell), "left on the hero's tile");
+    }
+
+    [TestMethod]
+    public void A_created_device_refuses_ammunition_a_missing_hero_and_an_old_version()
+    {
+        using var owner = Disarmer(5, SkillTraining.Expert);
+        Assert.AreEqual(GameSessionFailure.ItemTypeUnsupported, owner.CreateItemForHero(owner.Version, new(SessionItemType.Ammo, 7059, 1, 2), AcceptAll).Failure);
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.CreateItemForHero(new(owner.Version.Owner, owner.Version.Revision + 1), DeviceKind, AcceptAll).Failure);
+        using var heroless = Create();
+        Assert.AreEqual(GameSessionFailure.InvalidItem, heroless.CreateItemForHero(heroless.Version, DeviceKind, AcceptAll).Failure);
+        Assert.AreEqual(0L, owner.Version.Revision);
+    }
 }

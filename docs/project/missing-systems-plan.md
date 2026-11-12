@@ -183,7 +183,7 @@ FR-CHAR-017, FR-CHAR-019. Skills plan slice **S10**, audit slice K6.
 
 | Slice | Content | Size | Needs |
 | --- | --- | --- | --- |
-| E6-a | Spot-trap roll on every path step and use, the master second roll (**done**, ARC-MAGIC-057); disarm action and the skill-bar button; the expert's device (open, read as [SP3](../research/ledger/technology.md#spot-trap-roll-arc-magic-057): the skill cursor, 4 action points, the follower substitution) | M | — |
+| E6-a | Spot-trap roll on every path step and use, the master second roll (**done**, ARC-MAGIC-057); disarm action and the skill-bar button; the expert's device (**done**, ARC-SKILLS-1156, [SP3](../research/ledger/technology.md#spot-trap-roll-arc-magic-057): the skill cursor, 4 action points; the follower substitution and the skill pane's button [#1113](https://github.com/Simarglok/arcanum-steamwoven/issues/1113) are open) | M | — |
 | E6-b | **Built (ARC-WORLD-124 timer bombs, ARC-WORLD-125 script traps).** Placed devices: use an item with the trap-device flag on an object or tile, the device is spent, the marker object, the NPC alarm for record 176 | M | E1-a |
 | E6-c | The native trap script 30002 (the shot) | S | E6-a |
 
@@ -195,7 +195,7 @@ project); the audit proposed no decoder.
 
 | Slice | Content | Size | Needs |
 | --- | --- | --- | --- |
-| E7-r | **Research:** decoder options and licences (ffmpeg's Bink support is LGPL; or ship no video and show stills), the movie list and where scripts and maps call it | S–M | owner decision on scope |
+| E7-r | **Done (ARC-RES-1108, [Bink movies](../research/bink-movies.md)):** decoder options and licences (ffmpeg's Bink support is LGPL; or ship no video and show stills), the movie list and where scripts and maps call it. Ten Bink 1 files (`BIKi`), 8 numbered; callers: start-up, logos, View Intro, new game, script action 103 (6 scripts); recommended decoder: ffmpeg as an external program; the owner chooses the scope (issue #1170) | S–M | owner decision on scope |
 | E7-a | Movie player and the change-of-place movie steps; menu "View Intro" | M–L | E7-r |
 | E7-b | Credits screen and slide types 0 and 2; script-queued slides (`queue_slide`), fades; ending selection | M | E5-c (media actions) |
 
