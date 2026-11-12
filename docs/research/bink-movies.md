@@ -184,13 +184,21 @@ Owner's choices (they are put to the owner through the coordinator, not decided 
 in scope at all or the fallback (O6) stays; **(b)** if in scope, O1 for the alpha (recommended) or also a bundled
 LGPL build; **(c)** whether the start-up logos and movie 8 play in the viewer.
 
+## 6a. Owner's decision and the implementation (ARC-RENDER-1170, 2026-11-12)
+
+The owner chose: **(a)** movies are in scope; **(b)** O1, ffmpeg as an external program the player installs; **(c)** the start-up movie 8 and the logos are not needed in the viewer (at most a separate smoke stage). The first
+implementation plays movies 1 and 7 from View Intro and from a new game's start, with the player in `Arcanum.Presentation.Movies` (`FfmpegMovieSource`,
+`MoviePlayback`), the movie table in `Arcanum.World.AreaMovieTable` and the movie screen in the viewer; see [FR-MEDIA-001](../requirements/coverage/ui-media-lifecycle.md) and the
+[movie decoder](../workflow/toolchain.md#movie-decoder-arc-render-1170) section. The first thing the study asked for was done on the owner's Mac (ffmpeg 9.0.2): `ffprobe` and a full decode of all ten
+files give the header numbers of section 1 (the eight numbered files are opened by the opt-in real-data test; movie 50000.bik decodes to exactly its 171 frames; movie 4's two audio tracks decode
+to equal lengths and differ), so "FFmpeg plays these files" is now a run, not a header match. **Open:** script action 103 (section 2) in the script engine, a task of its own.
+
 ## 7. Open items and limits
 
 - **Attachment of the six movie scripts** (to which NPC, item or sector they are attached, and so which map reaches
   them) was not resolved; E7-a resolves it with the attachment walk of the
   [script census](scr-census.md) before it admits action 103.
 - **The show condition of start-up movie 8** and the placement of the frame on the surface were not read.
-- **No decode was run.** The first thing E7-a does with an installed `ffmpeg` is probe all ten files
-  (`ffprobe` streams, frame counts against the headers above) and decode movie 4's second track.
+- **Decoding:** done by ARC-RENDER-1170 (section 6a); the study itself ran none.
 - The movie contents (what each shows, which script is which ending) were not looked at; the labels above come from
   file names, script names and the table comment.

@@ -152,6 +152,10 @@ public sealed record CombatNpcFields(uint Flags, int AiData, int ExperienceWorth
     /// recognition test 0x45F970 reads it in place of the object's description number); the kill and injury log names a victim or an attacker
     /// by it. 0 when a caller built the record without it or the stored record has none.</summary>
     public int UnknownDescription { get; init; }
+
+    /// <summary>ARC-WORLD-1157 (ledger PO1): the monster generator's packed settings (<c>OBJ_F_NPC_GENERATOR_DATA</c>, field 0x12D, slot 90): five option bits, the counter slot, the cap, the budget and the count made so
+    /// far; 0 when the record has none. Read only for an NPC whose flag word has the generator bit 0x80000.</summary>
+    public uint GeneratorData { get; init; }
 }
 
 /// <summary>

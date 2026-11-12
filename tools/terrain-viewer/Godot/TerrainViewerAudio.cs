@@ -125,13 +125,15 @@ public partial class TerrainViewerApp
     private void TickAudio()
     {
         _audio?.Tick();
-        TickMenuMusic();
+        // ARC-RENDER-1170: nothing starts under a movie.
+        if (!MovieCovering) TickMenuMusic();
         // ARC-UI-026: under the death screen the scene's sounds stand still (only the slides' music and voice play).
-        if (_readyMode == TerrainViewerMode.Area && !HeroDeathCovering) { if (_menuMusic is null) TickSceneSound(); TickPositionalSound(); TickDialogVoice(); TickScriptSounds(); TickInterfaceSounds(); }
+        if (_readyMode == TerrainViewerMode.Area && !HeroDeathCovering && !MovieCovering) { if (_menuMusic is null) TickSceneSound(); TickPositionalSound(); TickDialogVoice(); TickScriptSounds(); TickInterfaceSounds(); }
     }
 
     private void DisposeAudio()
     {
+        AbortMovies();
         _audio?.Dispose(); _audio = null;
         ReleaseSoundContent();
     }

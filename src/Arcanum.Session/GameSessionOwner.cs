@@ -200,6 +200,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportNewspaper(snapshot.Newspaper);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportGenerators(snapshot.Generators, snapshot.Objects, out var generators);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportResidency(snapshot.Residency, snapshot.Actor.Map, snapshot.Clock.GameTimestampMs, out var pendingHistory);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportDurability(snapshot.Durability, limits, out var durability);
@@ -286,7 +288,7 @@ public sealed partial class GameSessionOwner : IDisposable
             snapshot.Lighting, sink, events!, frame)
         { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _danger = danger, _durability = durability, _foundSchematics = found,
           _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty, _hotkeys = hotkeys, _recentActions = recentActions, _scripts = scripts, _pendingHistory = pendingHistory,
-          _spellRuns = spellTable, _maintainBar = maintainBar, _spellLastCost = snapshot.Spells.LastCost, _objectFlags = objectFlags, _traitArt = traitArt, _newspaper = snapshot.Newspaper };
+          _spellRuns = spellTable, _maintainBar = maintainBar, _spellLastCost = snapshot.Spells.LastCost, _objectFlags = objectFlags, _traitArt = traitArt, _newspaper = snapshot.Newspaper, _generators = generators };
         owner._danger.Here = () => owner._actor.Map;
         // ARC-DEV-208 (MIG14 S2): the saved runs and their steps (a run's step is re-created at its due time).
         owner.RestoreFlights(snapshot.Flights);
@@ -1736,7 +1738,7 @@ public sealed partial class GameSessionOwner : IDisposable
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision, _frame.RealMs, _frame.AnimationMs),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
             _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(_combat.SubturnStarts), CaptureCombatMode(), CaptureConcealment(), _danger.CaptureBits(), CaptureEvents(), _lighting, _sound.Capture(),
-            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()).WithLinks(_danger.CaptureLinks()), _scripts.Capture(_hero), CaptureResidency(), CaptureGoals(), CaptureSpells(), CaptureNewspaper(), CaptureFlights());
+            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()).WithLinks(_danger.CaptureLinks()), _scripts.Capture(_hero), CaptureResidency(), CaptureGoals(), CaptureSpells(), CaptureNewspaper(), CaptureFlights(), CaptureGenerators());
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
@@ -2564,6 +2566,8 @@ public sealed partial class GameSessionOwner : IDisposable
         // ARC-AI-1134 (DY3, 0x45DA20 after the death time): the NPC's combat focus (0x11B) := the killer, whatever its danger state; the kill notification follows the commit below.
         var killedBy = killer ?? damageStep?.Parties.Killer;
         if (npcDied) FocusOnKiller(target.Entity!, killedBy);
+        // ARC-WORLD-1157 (PO7): a critter a generator made releases its slot's live count (0x4BAB30 from the death, after the party-leave helpers).
+        if (npcDied) ReleaseGeneratorSlot(target.Entity!);
         Revise();
         if (npcDied && KillNotice is { } notice)
         {

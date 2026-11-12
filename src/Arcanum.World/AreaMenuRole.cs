@@ -26,6 +26,8 @@ public enum AreaMenuRole
     OptionsDone,
     /// <summary>ARC-UI-030: "New Character": the host makes the new character and opens its window (<see cref="AreaMainMenu.OpenNewCharacter"/>).</summary>
     NewCharacter,
+    /// <summary>ARC-RENDER-1170: "View Intro" (window 5): plays the intro movies (1 and 7, 0x5445F0), then the menu shows again.</summary>
+    ViewIntro,
     /// <summary>A button the original has whose function Steamwoven does not have yet; hidden (FR-UI-001).</summary>
     Unavailable,
 }

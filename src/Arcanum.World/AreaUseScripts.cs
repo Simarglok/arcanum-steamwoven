@@ -509,7 +509,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     }
 
     // The points whose slot a run writes back as map changes (SlotProperty). ARC-DEV-312: the dying point's slot is kept under scr12.* (no save schema step: the keys are strings).
-    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.Bust or ScrPoint.Dying;
+    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -812,6 +812,28 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             return Finish(run, _ => "a teleport from a taking-damage script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _inTakingDamage = false; _clicked = previous; }
+    }
+
+    /// <summary>
+    /// ARC-WORLD-1160 (E3-a; 0x57BAC0, 0x4411C0, ledger SWB8): the leader-sleeping script (attachment point 29) of <paramref name="follower"/>, an NPC of the shown map that leads the hero's rest: the rest's option click runs it for
+    /// every direct follower of the sleeper with the hero as the triggerer and the follower as the attachee, no extra object, line 0, under <see cref="HeartbeatAdmission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>).
+    /// The answer decides nothing (the click goes on whatever it says). A follower that is not a row of the shown map, or has no script at the point, runs nothing.
+    /// </summary>
+    [OriginalFunction(0x57BAC0, OriginalFunctionScope.Partial)]
+    public AreaScriptedUse RunLeaderSleeping(string follower, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(follower); ArgumentNullException.ThrowIfNull(rules);
+        var attachee = new ScrObjectRef(_shownMap, follower);
+        if (Row(attachee) is not { } row || Slot(attachee, ScrPoint.LeaderSleeping) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        var previous = _clicked;
+        _clicked = (follower, row);
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(ScrPoint.LeaderSleeping, attachee, Pc, null), this, new() { Rules = rules, Admission = HeartbeatAdmission });
+            return Finish(run, _ => "a teleport from a leader-sleeping script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+        }
+        finally { _clicked = previous; }
     }
 
     /// <summary>

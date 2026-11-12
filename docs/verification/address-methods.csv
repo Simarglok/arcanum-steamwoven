@@ -207,6 +207,7 @@ src/Arcanum.Session/SessionSpellCasterAi.cs,AiSpell,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,AiUnderInfluence,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,CastByAi,pending,
 src/Arcanum.Session/SessionSpellCasterEffects.cs,CacheReAimedKind,pending,
+src/Arcanum.Session/SessionSpellCasterEffects.cs,RunProvidingFlag,exempt,host
 src/Arcanum.Session/SessionSpellCasterFire.cs,ApplyBurn,pending,
 src/Arcanum.Session/SessionSpellCasterItems.cs,ItemTriggered,pending,
 src/Arcanum.Session/SessionSpellCasterItems.cs,RemoveItemSpells,pending,
@@ -432,6 +433,7 @@ src/Arcanum.World/AreaAiHost.cs,UpdateDanger,pending,
 src/Arcanum.World/AreaAiHost.cs,UseItemAtOnce,pending,
 src/Arcanum.World/AreaAiHost.cs,UseItemMagic,pending,
 src/Arcanum.World/AreaAiHost.cs,UsedItem,pending,
+src/Arcanum.World/AreaAiHostGenerators.cs,Spawn,exempt,host
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateAlongPath,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateToRandomTile,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,ScriptProne,pending,
@@ -662,6 +664,8 @@ tools/terrain-viewer/Godot/TerrainViewerAttack.cs,InAttackReach,pending,
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,TraceLineOfFire,pending,
 tools/terrain-viewer/Godot/TerrainViewerAudioCues.cs,PlayDyingBark,pending,
 tools/terrain-viewer/Godot/TerrainViewerBloodPools.cs,LeaveBloodPoolsForNewDeaths,pending,
+tools/terrain-viewer/Godot/TerrainViewerBodyStyles.cs,SyncAreaBodyStyles,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerBodyStylesSmoke.cs,RunAreaBodyStylesStageAsync,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCombatMode.cs,WorldRightRelease,pending,
 tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerPortraitClick,pending,
 tools/terrain-viewer/Godot/TerrainViewerCompanions.cs,LeaveFollowersCombatMode,pending,
@@ -745,7 +749,9 @@ tools/terrain-viewer/Godot/TerrainViewerSpellMissiles.cs,LaunchNpcSpellMissile,p
 tools/terrain-viewer/Godot/TerrainViewerSpellMissiles.cs,LaunchSpellMissile,pending,
 tools/terrain-viewer/Godot/TerrainViewerSpellMissiles.cs,SpellMissileArt,pending,
 tools/terrain-viewer/Godot/TerrainViewerSpellMissiles.cs,TurnHeroForCast,pending,
+tools/terrain-viewer/Godot/TerrainViewerSummon.cs,CritterSummonedHere,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSummon.cs,TakeSummonEvent,pending,
+tools/terrain-viewer/Godot/TerrainViewerSummonUndeadSmoke.cs,RunAreaSummonUndeadSmokeAsync,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerTeleport.cs,OpenTeleportWorldMap,pending,
 tools/terrain-viewer/Godot/TerrainViewerTeleport.cs,TeleportPick,pending,
 tools/terrain-viewer/Godot/TerrainViewerTraitBody.cs,TraitArtId,pending,

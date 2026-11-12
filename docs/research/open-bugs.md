@@ -7,9 +7,7 @@ mechanics behind each fix are in [docs/research/ledger](ledger/) under the task 
 
 ## Still open
 
-| ID | Bug | Cause / state | FR |
-| --- | --- | --- | --- |
-| B47 | Summon Undead has no summoning animation and no summoned creature (one of three reports; Fireflash and Wall of Fire are closed, below) | The Summon component for creatures falls through to `ComponentNotReady`; slice E1-e of [missing-systems-plan](../project/missing-systems-plan.md) (prototype or list pick, summoned flags, faction, run ends when the summon dies, Summon Undead's ObjFlag). Not built | FR-MAGIC-006, FR-MAGIC-007, FR-MAGIC-008 |
+None: B47, the last open report, is closed by ARC-MAGIC-053 (below); the owner's in-game comparison is listed in [owner-recheck-list](../project/owner-recheck-list.md).
 
 ## Closed with a residual (uncertain: the docs do not say whether the residual is wanted)
 
@@ -42,7 +40,7 @@ Every B-id not in the tables above is closed. A code in brackets was a part of t
   (stage `inv-ui`); B42 ARC-DEV-296.
 - **Pathing, render:** B43 ARC-WORLD-121 (ARC-DEV-247, stage `route-barrel`); B44 not a bug, the original's behaviour (owner,
   2026-11-07; ARC-DEV-203): a flood fill from the cave spawn (2087,2018) reaches 506 cells, including a ring one cell outside the walls through the corridor's east end (2095,2018) round the end of the north wall; PB1 and PB2 equal the executable, the ring's tiles are open in the original's data, and the owner confirmed that the original lets the hero walk out there too; B45 ARC-DEV-203 (stage `indoor-fade`); B46 gone, no reproduction (ARC-DEV-203, stage `fire-order`).
-- **Second triage (B47-B54):** B47 (Fireflash, Wall of Fire) ARC-DEV-352 (stages `summon-flash`, `summon-wall`); B48
+- **Second triage (B47-B54):** B47 (Fireflash, Wall of Fire) ARC-DEV-352 (stages `summon-flash`, `summon-wall`), (Summon Undead) ARC-MAGIC-053 (stage `summon-undead`); B48
   ARC-DEV-333 (stage `loot-room`); B49 ARC-DEV-334; B50 ARC-DEV-335 (hero), ARC-DEV-353 (companions and NPCs); B51
   ARC-DEV-336 (ARC-DEV-354, fresh load); B52 ARC-DEV-337; B53 ARC-DEV-338 (stage `tile-ghost`); B54 ARC-DEV-339 (stage
   `inv-arrange`).

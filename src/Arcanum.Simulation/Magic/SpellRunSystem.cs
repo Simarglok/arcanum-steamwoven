@@ -651,12 +651,15 @@ public sealed class SpellRunSystem
     /// then every active run whose target object (+0xA0, not the other object: 0x455C30 copies the invocation's target there, ARC-MAGIC-034 DP3) is the object ends by event. Every loop skips the slot the run rules are processing
     /// (<paramref name="processing"/>, the original's guard 0x5B0BA4: the Destroy component runs inside that run's BEGIN, so the run that
     /// destroyed the object is not touched and ends as it would have); the first and last loops test the run's active bit, the middle one
-    /// does not. The first loop of the original also ends the runs that list a summoned object (spell flag 0x4000, the summon list at
-    /// +0x134) and empties a summoned container (0x463860); both are the summon's (MT17) and are not modelled.</summary>
+    /// does not. ARC-MAGIC-053 (SUM7, SUM8): the first loop of the original runs first, for an object that carries the summoned spell flag (0x4000): every active run but the processed one whose summoned list (+0x134) holds the
+    /// object ends by event (0x4571E0), so a summoned creature's death ends the run that made it. The host's summoned list holds only objects its summon made, and each of them carries the flag, so the list test stands in for the flag test.
+    /// The original also empties a summoned container (0x463860), which no installed record makes (SUM10): not modelled.</summary>
     [OriginalFunction(0x459740, OriginalFunctionScope.Partial)]
     public void ObjectGone(string obj, int processing = -1)
     {
         ArgumentNullException.ThrowIfNull(obj);
+        foreach (var listed in Table.Runs.ToArray())
+            if (listed.Id != processing && Table[listed.Id] is { } held && (held.Flags & SpellRunFlags.Active) != 0 && _host.SummonedListHolds(held, obj)) EndByEvent(held.Id);
         foreach (var run in Table.Runs.ToArray())
         {
             if (run.Id == processing) continue;

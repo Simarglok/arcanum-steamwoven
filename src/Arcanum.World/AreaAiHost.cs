@@ -69,6 +69,8 @@ public sealed record AreaAiScene
     public Func<ILineOfFireMap<AreaObjectRecord>?>? LineOfFire { get; init; }
     /// <summary>The shown map as the drop's placement reads it, or null.</summary>
     public Func<Arcanum.Simulation.Items.IDropMap?>? DropMap { get; init; }
+    /// <summary>ARC-WORLD-1157 (SZ6): what the viewer shows (the game window and an object's drawn rectangle), for a generator's off-screen option; null (the provider or its answer): nothing is shown, so every rectangle is off the view.</summary>
+    public Func<IAreaRestockScreen?>? Screen { get; init; }
     /// <summary>The hero's worn items with their durability values, or null.</summary>
     public Func<IReadOnlyDictionary<EquipmentSlot, SessionWearItem>?>? HeroWorn { get; init; }
     /// <summary>The NPC the hero talks with, or null.</summary>
@@ -1085,8 +1087,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // ARC-DEV-117 (MIG9 S4b): the fold's waypoint and standpoint steps (0x4ACBB0, 0x4ACDB0), in AreaAiHostRoutes.cs.
     public bool RunWaypoints(string npc) => RunRouteStep(npc, NpcRouteRules.ForcedWaypoints, waypoints: true);
     public void RunStandpoints(string npc) => RunRouteStep(npc, NpcRouteRules.ForcedStandpoint, waypoints: false);
-    public bool IsGenerator(string npc) => Fields(npc)?.Npc is { } fields && (fields.Flags & GeneratorNpc) != 0;
-    public long? Spawn(string npc) => null;
+    // ARC-WORLD-1157 (0x4BA720): a critter a generator made is no generator, whatever its prototype's flags say.
+    public bool IsGenerator(string npc) => Fields(npc)?.Npc is { } fields && (fields.Flags & GeneratorNpc) != 0 && _session.QueryGeneratorCopy(npc) is null;
+    // ARC-WORLD-1157 (E2-a): the spawner of a generator is in AreaAiHostGenerators.cs.
     /// <summary>ARC-DEV-371 (PG1): the critter flag 0x20000 (field 0xDA) the script action create object writes on a critter it made, over the data's own flags. Only a critter the session created is asked (a map
     /// NPC's data has none of them): the AI tick then destroys it when it is left without a next tick outside a round (the sector its tick found not loaded), which this host answers by queuing the
     /// session's destroy of the created critter (<see cref="TakeDestroyedCreated"/>; the viewer applies it outside the tick, which holds the session).</summary>
@@ -2945,6 +2948,35 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     [OriginalFunction(0x441260, OriginalFunctionScope.Partial)]
     public IReadOnlyList<string> Followers(string id) =>
         id == Pc ? _session.QueryParty().Followers.Select(f => f.Entity).Where(f => Find(f) is not null).ToArray() : [];
+
+    /// <summary>
+    /// ARC-WORLD-1160 (E3-a; ledger RT2 and SWB4): the NPCs near the hero as the combat-mode exit gate reads them: each active NPC of the shown map that is in the combat-focus state
+    /// with the hero or another critter as its focus, in the view rectangle around the hero. PROJECT: the original's rectangle is the game view's size around the hero (the vicinity list); this one is
+    /// the isometric window of the original's 800 by 400 game view at its 80 by 40 tiles (|dx - dy| and |dx + dy| up to 10 cells), the viewer's own view size not being read. The gate (<see cref="Arcanum.Session.GameSessionOwner.QueryCanExitCombatMode"/>) tests the focus against the
+    /// hero and the party.
+    /// </summary>
+    public IReadOnlyList<SessionCombatThreat> CombatThreats()
+    {
+        var threats = new List<SessionCombatThreat>();
+        if (Tile(Pc) is not { } pc) return threats;
+        foreach (var id in _npcs.Keys.ToArray())
+        {
+            if (Tile(id) is not { } at || Math.Abs((at.X - pc.X) - (at.Y - pc.Y)) > ViewHalfTiles || Math.Abs((at.X - pc.X) + (at.Y - pc.Y)) > ViewHalfTiles) continue;
+            var danger = _session.QueryDanger(id);
+            if (danger.State != DangerState.CombatFocus || danger.Focus is not { } focus) continue;
+            threats.Add(new(focus, Status(id)?.IsActive ?? false, Fighting: true));
+        }
+        return threats;
+    }
+
+    private const int ViewHalfTiles = 10;
+
+    /// <summary>
+    /// ARC-WORLD-1160 (E3-a; ledger SWB9, the follower recursion): the life targets of the hero's followers the host runs, for the rest's heal (an NPC led by a follower is not a list this world
+    /// keeps: the original's recursion over the follower arrays reaches only the hero's own followers here).
+    /// </summary>
+    public IReadOnlyList<SessionLifeTarget> FollowerLifeTargets() =>
+        [.. Followers(Pc).Select(RawBuild).Where(build => build is not null).Select(build => build!.Target)];
 
     /// <summary>
     /// ARC-WORLD-124 (E6-b; 0x4AA0D0, ledger TP2, awareness research section 7): the alarm a trap device of record 176 gives when the hero uses it, after the device is consumed. For every NPC in the

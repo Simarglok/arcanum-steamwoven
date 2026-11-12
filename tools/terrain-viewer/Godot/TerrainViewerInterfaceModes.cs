@@ -38,7 +38,8 @@ public partial class TerrainViewerApp
         && (_inventoryPanel?.IsOpen ?? false) == InventoryOpen
         && (_sheetPanel?.IsOpen ?? false) == WindowOpen(InterfaceMode.Character)
         && (_schematicsPanel?.IsOpen ?? false) == WindowOpen(InterfaceMode.Schematic)
-        && (_readingPanel?.IsOpen ?? false) == WindowOpen(InterfaceMode.Book);
+        && (_readingPanel?.IsOpen ?? false) == WindowOpen(InterfaceMode.Book)
+        && (_sleepPanel?.IsOpen ?? false) == WindowOpen(InterfaceMode.Sleep);
 
     /// <summary>
     /// The first test of an opener: false when the window is on the stack (the opener's old guard, silent) or when another window mode is
@@ -151,7 +152,7 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-DEV-111: the panels outside the stack (the palette, the save list, the main menu, the hero-death cover, the bug report);
     /// each owns the input while it is open.</summary>
-    private bool PanelOutsideStackOpen => PaletteOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering || BugReportOpen;
+    private bool PanelOutsideStackOpen => PaletteOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering || MovieCovering || BugReportOpen;
 
     /// <summary>ARC-DEV-200 (SA44): the stack's mode scrolls the isometric game view (0, 1, 2, 3, 16 and 18; the world map's scroll moves
     /// the map) and no panel outside the stack owns the input. The main menu runs its own loop in the original, which never scrolls.</summary>
@@ -172,7 +173,7 @@ public partial class TerrainViewerApp
     /// <summary>ARC-DEV-111 (SA51, 0x541180): what drops an open target mode. A window that opens pops it (SA40) and so do the palette, the
     /// death cover and the bug report; the in-play menu does not (it is no mode: it changes nothing on the stack, and Continue returns to the
     /// same cursor).</summary>
-    private bool TargetsDroppedByModal => PaletteOpen || AnyWindowOpen || HeroDeathCovering || BugReportOpen;
+    private bool TargetsDroppedByModal => PaletteOpen || AnyWindowOpen || HeroDeathCovering || MovieCovering || BugReportOpen;
 
     /// <summary>
     /// ARC-DEV-111 (MIG16 S4; SA45, SA40, SA44; main loop 0x401560 and bar handler 0x54C8E0, read in the executable): with a window open,
@@ -206,6 +207,14 @@ public partial class TerrainViewerApp
         {
             if (_inventoryPanel?.Asking == true || DropHeldOnHotkey(key)) return false;
             return RouteHotkeyKey(decision, modifiers);
+        }
+        // ARC-WORLD-1160: S asks the sleep opener for its own decision (0x57B180): it leaves the open window as it is when it refuses and replaces it when it opens.
+        if (routed == Key.S && !SleepOpen)
+        {
+            if (!SleepActive || _inventoryPanel?.Asking == true) return false;
+            if (!_worldFocused || WorldUiFocus) return true;
+            OpenSleep();
+            return true;
         }
         var (own, active, open) = routed switch
         {

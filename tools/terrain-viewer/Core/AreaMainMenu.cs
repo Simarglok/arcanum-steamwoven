@@ -32,6 +32,9 @@ public enum AreaMenuCommandKind
     /// <summary>ARC-UI-036: the character editor's Accept (or Return): make the opening shop's kit from the editor's draft and open the
     /// shop (window 15) with it (<see cref="AreaMainMenu.OpenShop"/>).</summary>
     OpenShop,
+    /// <summary>ARC-RENDER-1170: play the intro movies (the original's View Intro, 0x5445F0: movies 1 and 7); the host hides the menu while they play
+    /// and shows it again after (<see cref="AreaMainMenu.IntroRefusal"/> is null only when it can).</summary>
+    ViewIntro,
     /// <summary>ARC-UI-013: set <see cref="AreaMenuCommand.Option"/> to <see cref="AreaMenuCommand.Value"/> (the original's setter runs at
     /// once, OP3); the host applies it and gives the window the values it then has (<see cref="AreaMainMenu.SetOptions"/>).</summary>
     ChangeOption,
@@ -73,7 +76,7 @@ public sealed class AreaMainMenu
 {
     public const string NoNetworkPlay = "network play is not built";
     public const string NoCredits = "the credits screen is not built (FR-MEDIA-002)";
-    public const string NoIntro = "movies do not play (FR-MEDIA-001)";
+    public const string NoIntro = "movies do not play (FR-MEDIA-001): no decoder or movie table";
     /// <summary>ARC-UI-038: the opening shop's note while its merchant's barter is not open yet (the shop map loads behind the menu).</summary>
     public const string ShopLoading = "the shop map's merchant is loading; Accept starts the game with the kit";
     /// <summary>ARC-UI-038: the opening shop's note when the project could not open its merchant's barter (the shop is the kit alone).</summary>
@@ -106,6 +109,10 @@ public sealed class AreaMainMenu
     /// (null then: the picking is allowed and the host holds the start until the scene is there); the host sets the real answer when the
     /// scene is published.</summary>
     public string? NewGameRefusal { get; set; }
+
+    /// <summary>ARC-RENDER-1170: why the intro cannot play (null: View Intro is shown and plays movies 1 and 7). The host sets it from what it
+    /// found (the decoder program and the installed movie table); the default is the "no decoder" reason, so a menu without a host hides the button.</summary>
+    public string? IntroRefusal { get; set; } = NoIntro;
     public AreaMenuWindow Root { get; }
     public bool Reopened { get; }
     /// <summary>True while the quit box asks (message 5100); only its answer, Escape and its letters act.</summary>
@@ -129,7 +136,7 @@ public sealed class AreaMainMenu
         AreaMenuWindow.SinglePlayer =>
         [
             new(50, AreaMenuRole.Open, AreaMenuWindow.NewGame), new(51, AreaMenuRole.LoadGame), new(52, AreaMenuRole.LastSave),
-            new(53, AreaMenuRole.Unavailable, Unavailable: NoIntro), new(54, AreaMenuRole.Back),
+            IntroRefusal is null ? new(53, AreaMenuRole.ViewIntro) : new(53, AreaMenuRole.Unavailable, Unavailable: IntroRefusal), new(54, AreaMenuRole.Back),
         ],
         AreaMenuWindow.NewGame =>
         [
@@ -220,6 +227,7 @@ public sealed class AreaMainMenu
             case AreaMenuRole.NewCharacter: return new(AreaMenuCommandKind.OpenNewCharacter);
             case AreaMenuRole.LoadGame: return new(AreaMenuCommandKind.LoadGame);
             case AreaMenuRole.LastSave: return new(AreaMenuCommandKind.LastSave);
+            case AreaMenuRole.ViewIntro: return new(AreaMenuCommandKind.ViewIntro);
             case AreaMenuRole.Exit: return new(AreaMenuCommandKind.Exit);
             default: return AreaMenuCommand.Nothing;
         }

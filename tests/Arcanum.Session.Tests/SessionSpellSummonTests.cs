@@ -204,7 +204,7 @@ public sealed class SessionSpellSummonTests
         using var ___ = other;
         Cast(other, otherCaster, critter, new(12, 5));
         Assert.AreEqual(0, Made(other).Count);
-        Assert.IsTrue(otherCaster.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady && e.Value == (int)SpellComponentType.Summon), "a critter summon is E1-e's");
+        Assert.IsTrue(otherCaster.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady && e.Value == (int)SpellComponentType.Summon), "a prototype the host does not read as a scenery or a critter is not ready");
     }
 
     [TestMethod]

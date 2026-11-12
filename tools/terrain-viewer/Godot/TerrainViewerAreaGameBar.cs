@@ -127,7 +127,13 @@ public partial class TerrainViewerApp
                 if (_gameBar.IsOn(AreaBarButton.Skills)) { _spellPane?.HidePane(); _gameBarNotice = "skills: the skill pane is not built"; }
                 break;
             case AreaBarButton.FatePoints: _gameBarNotice = "fate points: the window is not built"; break;
-            case AreaBarButton.Sleep: _gameBarNotice = "sleep: the window is not built"; break;
+            case AreaBarButton.Sleep:
+                // ARC-WORLD-1160: the bar button runs the same opener as the key S (its own decision answers a dead or unconscious hero).
+                if (!SleepActive) _gameBarNotice = "sleep: not available here";
+                else if (SleepOpen) OpenSleep(); // the same decision as the key: a dead hero gets nothing, even the close
+                else if (PaletteOpen || ConversationOpen || SaveListOpen || MainMenuOpen) _gameBarNotice = "sleep: ignored while another window owns input";
+                else OpenSleep();
+                break;
         }
         _gameBarPanel?.Render();
     }
@@ -156,6 +162,7 @@ public partial class TerrainViewerApp
         if (WorldMapOpen) CloseWorldMapByPlayer();
         if (BarterOpen) CloseBarterByPlayer();
         if (ReadingOpen) CloseReadingByPlayer();
+        if (SleepOpen) EndSleep();
     }
 
     /// <summary>The Spells toggle changed: on shows the spell pane, off hides it. False when an on press is refused.</summary>

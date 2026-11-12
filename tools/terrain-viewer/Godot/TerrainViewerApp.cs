@@ -245,6 +245,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("spell-end") == true) await RunAreaSpellEndSmokeAsync(result);
                                 // ARC-DEV-304 (B11, SM09): only when named, the spell holds (stone, paralysis, entangle) written on the hero stop its steps, drop its clicks and let a walk resume after the END (--hero, Crash Site).
                                 if (only?.Contains("hold-hero") == true) await RunAreaHoldHeroSmokeAsync(result);
+                                // ARC-DEV-1148 (magic audit leftover): only when named, spells 30 and 77 on the hero and 46 and 76 on an NPC add their effects, move the stats and take them off at the END (--hero, Crash Site).
+                                if (only?.Contains("spell-effects") == true) await RunAreaSpellEffectsSmokeAsync(result);
                                 // ARC-MAGIC-036 (MA-5): only when named, Spatial Distortion's Movement component relocates the hero along the path request, at most eight tiles (--hero, Crash Site).
                                 if (only?.Contains("movement") == true) await RunAreaMovementSmokeAsync(result);
                                 // ARC-DEV-335 (V7d, B50): only when named, a light worn by the hero lights the area around it (with --hero, a lit map).
@@ -265,16 +267,22 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("perf-menu") == true) await RunAreaPerfMenuSmokeAsync();
                                 // ARC-DEV-304 (B24, SM26): only when named, spell 56 sets the spoken-with-dead flag on a corpse: the click talks to it instead of looting it, and loots again when the flag is gone (--hero, Crash Site).
                                 if (only?.Contains("spirit-talk") == true) await RunAreaSpiritTalkSmokeAsync(result);
+                                // ARC-WORLD-1160 (E3-a): only when named, the sleep window on the hero (--hero): a rest of one hour, until healed and until morning jumps the clock and heals him, the window closes at the end, the screen fades and the key toggles it.
+                                if (only?.Contains("sleep") == true) await RunAreaSleepSmokeAsync();
                                 // ARC-DEV-347 (E1-a): only when named, a scenery and an eye-candy object the session creates by prototype are drawn, picked or not, resident, saved and destroyed (--hero, a map window).
                                 if (only?.Contains("created-scenery") == true) await RunAreaCreatedSceneryStageAsync();
                                 // ARC-DEV-370 (E1-c2): only when named, a critter the session creates by prototype is drawn, picked, moved by the AI's movers with a walk frame and gone once destroyed (--hero, a map window with the inventory).
                                 if (only?.Contains("created-critter") == true) await RunAreaCreatedCritterStageAsync();
                                 if (only?.Contains("trait-body") == true) await RunAreaTraitBodyStageAsync();
+                                // ARC-MAGIC-045 (E4-a2): only when named, the object flags a spell writes (translucent, shrunk, don't-draw, invisible) change how an NPC's body is drawn, and a hit on a shielded critter plays the run spell's hit eye candy (--hero, a map window with the inventory).
+                                if (only?.Contains("body-styles") == true) await RunAreaBodyStylesStageAsync();
                                 // ARC-DEV-371 (E1-c3): only when named, the installed tile script 1629 creates critters next to the hero (--hero, a map window with the inventory): flagged, hosted by the AI host, notified, destroyed.
                                 if (only?.Contains("script-critters") == true) await RunAreaScriptCrittersStageAsync();
                                 // ARC-DEV-352 (E1-b): only when named, Fireflash's flash on an empty tile and none on an occupied one; Wall of Fire's pieces, their burn and their END (--hero, a map window).
                                 if (only?.Contains("summon-flash") == true) await RunAreaSummonSmokeAsync(SummonFlashSpell);
                                 if (only?.Contains("summon-wall") == true) await RunAreaSummonSmokeAsync(SummonWallSpell);
+                                // ARC-MAGIC-053 (E1-e): only when named, Summon Undead makes a hidden, summoned, mind-controlled creature of list 5 that shows at the animation's callback, joins the party, has its creation notice queued and goes with its run (--hero, a map window).
+                                if (only?.Contains("summon-undead") == true) await RunAreaSummonUndeadSmokeAsync();
                                 // ARC-DEV-250 (B12, SM08): only when named, a damage spell with a radius cast at one of three animals that move before the hit (AI on, elven ruins, --hero elf-female).
                                 if (only?.Contains("cast-multi") == true) await RunAreaCastMultiSmokeAsync(result);
                                 // ARC-DEV-263 (B33, SM24): only when named, the buttons on a joined companion's portrait and body (start map, --hero).
@@ -343,6 +351,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && only?.Contains("grenade") == true) await RunAreaGrenadeSmokeAsync();
                         // ARC-MAGIC-042 (T-m1): only when named (with --hero), a creature item thrown from the pack becomes a critter that follows the hero, or one that attacks everyone around it.
                         if (_readyMapName is not null && only?.Contains("creature-item") == true) await RunAreaCreatureItemSmokeAsync();
+                        // ARC-RENDER-1170: only when named (with --hero, and ffmpeg installed), the movie player on two generated test movies: the screen, the frozen clocks, the key skip, the failures that must not hang.
+                        if (_readyMapName is not null && only?.Contains("movies") == true) await RunAreaMoviesSmokeAsync();
                         // ARC-DEV-282: only when named (with --hero), an NPC archer of the map shoots the hero: the arrow flies as a projectile and strikes through the AI host.
                         if (_readyMapName is not null && only?.Contains("npc-shot") == true) await RunAreaNpcShotSmokeAsync();
                         // ARC-UI-048: after the stream, as the landing loads the start map around another place.
@@ -1096,8 +1106,9 @@ public partial class TerrainViewerApp : Node
         {
             // ARC-DEV-204 (B16): the change-of-place screen moves on the frame's real time, a map load's too; a hero change that waited
             // for the black screen runs now.
+            TickMovies(delta * 1000);
             TickTransitionScreen(delta * 1000);
-            try { TickAreaClock(); TickLightAnimation(); TickCarriedLight(); DrainTraitEquipment(); SyncHeroBody(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaWorldMap(); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncInterfaceHd(); TickWindowArtWarm(); SyncGameBar(); RefreshHeroGauges(); TickFloaters(); }
+            try { TickAreaClock(); TickLightAnimation(); TickCarriedLight(); DrainTraitEquipment(); SyncHeroBody(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaSleep(); SyncAreaWorldMap(); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncInterfaceHd(); TickWindowArtWarm(); SyncGameBar(); RefreshHeroGauges(); TickFloaters(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");
