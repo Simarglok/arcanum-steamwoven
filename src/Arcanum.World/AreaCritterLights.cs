@@ -27,19 +27,24 @@ public static class AreaCritterLights
         ArgumentNullException.ThrowIfNull(light);
         if (!light.Critter) throw new ArgumentException("Not a critter's light.", nameof(light));
         var flags = ObjectLightReader.FlagsAtLoad(light, 12);
-        long cellX = light.X, cellY = light.Y; int offsetX = light.OffsetX, offsetY = light.OffsetY;
-        if (pose is { } moved)
-        {
-            cellX = moved.CellX; cellY = moved.CellY;
-            // The light stands at its tile's screen point plus its offsets; a different cell moves the tile by the projection of the
-            // cell difference, which the shift already includes, so the offsets take only what remains.
-            var tile = TerrainGeometry.Project(checked((int)(cellX - light.X)), checked((int)(cellY - light.Y)));
-            var origin = TerrainGeometry.Project(0, 0);
-            offsetX = checked(light.OffsetX + moved.ShiftX - (tile.X - origin.X));
-            offsetY = checked(light.OffsetY + moved.ShiftY - (tile.Y - origin.Y));
-        }
+        var (cellX, cellY, offsetX, offsetY) = Stand(light.X, light.Y, light.OffsetX, light.OffsetY, pose);
         var sector = new Arcanum.Data.Area.AreaSectorCoordinate(cellX >> 6, cellY >> 6).Packed;
         return new StationaryLight(sector, -1, cellX, cellY, offsetX, offsetY, flags, light.ArtId, light.Color, light.Object.ObjectIdSha256)
         { Owner = light.Object, Slot = light.Slot };
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-1229: where something that sits at <paramref name="baseX"/>, <paramref name="baseY"/> with the screen offsets of its T0 place stands once its critter has the
+    /// <paramref name="pose"/> (null: still at its T0 place): the pose's cell and the offsets that put it the pose's shift away from the T0 anchor. The light of an eye candy on a
+    /// critter (<see cref="AreaEyeCandyLights"/>) moves with the critter the same way as the critter's own light (LT10).
+    /// </summary>
+    public static (long CellX, long CellY, int OffsetX, int OffsetY) Stand(long baseX, long baseY, int baseOffsetX, int baseOffsetY, AreaCritterPose? pose)
+    {
+        if (pose is not { } moved) return (baseX, baseY, baseOffsetX, baseOffsetY);
+        // The light stands at its tile's screen point plus its offsets; a different cell moves the tile by the projection of the
+        // cell difference, which the shift already includes, so the offsets take only what remains.
+        var tile = TerrainGeometry.Project(checked((int)(moved.CellX - baseX)), checked((int)(moved.CellY - baseY)));
+        var origin = TerrainGeometry.Project(0, 0);
+        return (moved.CellX, moved.CellY, checked(baseOffsetX + moved.ShiftX - (tile.X - origin.X)), checked(baseOffsetY + moved.ShiftY - (tile.Y - origin.Y)));
     }
 }
