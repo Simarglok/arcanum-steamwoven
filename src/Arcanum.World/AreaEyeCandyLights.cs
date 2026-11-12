@@ -32,7 +32,7 @@ public static class AreaEyeCandyLights
         return mask;
     }
 
-    /// <summary>The first free overlay slot of a mask (the loop of 0x4CCF70 takes the first slot whose art is −1), or −1 when all four are in use.</summary>
+    /// <summary>The first free overlay slot of a mask (the add's loop takes the first slot whose art is −1, IW2), or −1 when all four are in use.</summary>
     public static int FirstFree(int mask)
     {
         for (var slot = 0; slot < Slots; slot++)

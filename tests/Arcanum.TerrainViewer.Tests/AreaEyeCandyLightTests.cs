@@ -130,6 +130,32 @@ public sealed class AreaEyeCandyLightTests
     }
 
     [TestMethod]
+    public void A_newer_run_in_a_lower_table_slot_never_shares_a_slot_and_pending_adds_hold_theirs()
+    {
+        using var f = new Fixture();
+        // An unlit run ends and frees a low table slot; the second lit run then lands below the first one.
+        Assert.IsTrue(f.Host.Play(Npc, 21, 0, 1));
+        Assert.IsTrue(f.Host.Play(Npc, 20, 0, 2));
+        Assert.IsTrue(f.Host.Play(Npc, 20, 0, 3));
+        f.Run(60);
+        var slots = f.Host.Lights().Select(l => l.Slot).ToArray();
+        Assert.AreEqual(slots.Length, slots.Distinct().Count(), "one slot a light: " + string.Join(",", slots));
+        f.Run(1_000);
+        Assert.AreEqual(2, f.Host.Lights().Count(), "the one that ended on its own freed its slot");
+        Assert.IsTrue(f.Host.Play(Npc, 23, 0, 4));
+        f.Run(60);
+        var again = f.Host.Lights().Select(l => l.Slot).ToArray();
+        Assert.AreEqual(again.Length, again.Distinct().Count(), "still one slot a light: " + string.Join(",", again));
+        // Adds before any begin hold their slots: with three of four taken by the record only one of two adds plays.
+        using var g = new Fixture();
+        g.Saved[Npc] = 0b0111;
+        Assert.IsTrue(g.Host.Play(Npc, 20, 0, 1));
+        Assert.IsFalse(g.Host.Play(Npc, 23, 0, 2), "the first add already holds the last slot (IW2)");
+        g.Run(60);
+        Assert.AreEqual(3, g.Host.Lights().Single().Slot);
+    }
+
+    [TestMethod]
     public void The_slot_helpers_follow_the_first_free_rule_of_the_add()
     {
         Assert.AreEqual(0, AreaEyeCandyLights.Mask([]));

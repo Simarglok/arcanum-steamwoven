@@ -31,7 +31,7 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     private readonly AreaFireBurner? _fire;
     // ARC-MAGIC-1229: the overlay light slots of an owner that hold a saved light (bit i for slot i), and the slot each shown light run took.
     private readonly Func<string, int> _savedLightSlots;
-    private readonly Dictionary<GoalHandle, int> _lightSlots = [];
+    private readonly Dictionary<GoalHandle, (string Owner, int Slot)> _lightSlots = [];
     private readonly Dictionary<string, int> _hover = new(StringComparer.Ordinal);
     private readonly StartPorts _startPorts = new();
     // The handle of the last eye-candy run started, host-wide like the original's global 0x601700 (GT70): a stack flag queues under it whatever its owner.
@@ -98,28 +98,35 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     public IEnumerable<EyeCandyLight> Lights()
     {
         var shown = new List<EyeCandyLight>();
-        var live = new HashSet<GoalHandle>();
         foreach (var overlay in Shown())
         {
             if (_entry(overlay.Eye.Entry) is not { Light: { } number } entry) continue;
-            live.Add(overlay.Handle);
-            if (!_lightSlots.TryGetValue(overlay.Handle, out var slot))
-            {
-                slot = AreaEyeCandyLights.FirstFree(UsedSlots(overlay.Owner, shown));
-                if (slot < 0) continue;
-                _lightSlots[overlay.Handle] = slot;
-            }
-            shown.Add(new(overlay.Owner, overlay.Handle, slot, number, entry.LightColor));
+            // The slot was taken by the add (ReserveLight); a run that has none (its entry changed under a queue) takes the first free one now.
+            if (!_lightSlots.ContainsKey(overlay.Handle) && !ReserveLight(overlay.Handle, overlay.Owner)) continue;
+            shown.Add(new(overlay.Owner, overlay.Handle, _lightSlots[overlay.Handle].Slot, number, entry.LightColor));
         }
-        foreach (var gone in _lightSlots.Keys.Where(h => !live.Contains(h)).ToArray()) _lightSlots.Remove(gone);
         return shown;
     }
 
-    /// <summary>Whether the owner has a free overlay light slot for a lit entry: its record's lights and the live eye candy lights count (0x4CCF70 looks for the first slot whose art is −1).</summary>
-    public bool LightSlotFree(string owner) => AreaEyeCandyLights.FirstFree(UsedSlots(owner, Lights())) >= 0;
+    /// <summary>Whether the owner has a free overlay light slot for a lit entry: its record's lights and the slots the live lit runs hold (begun or still waiting) count (the add looks for the first slot whose art is −1, IW2).</summary>
+    public bool LightSlotFree(string owner) => AreaEyeCandyLights.FirstFree(UsedSlots(owner)) >= 0;
 
-    private int UsedSlots(string owner, IEnumerable<EyeCandyLight> lights) =>
-        _savedLightSlots(owner) | AreaEyeCandyLights.Mask(lights.Where(l => l.Owner == owner).Select(l => l.Slot));
+    // The add's slot (0x4CCF70): the first free of the owner's, held for the run from its add until it is gone (the stack flag's queued frame shares the run it was put under).
+    private bool ReserveLight(GoalHandle handle, string owner)
+    {
+        if (_lightSlots.ContainsKey(handle)) return true;
+        var slot = AreaEyeCandyLights.FirstFree(UsedSlots(owner));
+        if (slot < 0) return false;
+        _lightSlots[handle] = (owner, slot);
+        return true;
+    }
+
+    // The slots an owner's record and the live lit runs (begun or not) hold; the slots of runs that are gone are given back here.
+    private int UsedSlots(string owner)
+    {
+        foreach (var gone in _lightSlots.Keys.Where(h => !_session.QueryGoals().TryGet(h, out var run) || run.Done).ToArray()) _lightSlots.Remove(gone);
+        return _savedLightSlots(owner) | AreaEyeCandyLights.Mask(_lightSlots.Values.Where(v => v.Owner == owner).Select(v => v.Slot));
+    }
 
     /// <summary>The overlay runs of an owner (eye candy and hover).</summary>
     public IEnumerable<GoalRun> RunsOf(string owner) => _session.QueryGoals().RunsOf(owner).Where(r => !r.Done && AiExecutorRules.IsOverlayRunGoal(r.Bottom.Goal));
@@ -152,10 +159,15 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
         var frame = AiExecutorRules.EyeCandyFrame(play, art, entryIndex, tag, (entry.Flags & SpellEyeCandyFlags.Forever) != 0, source);
         // Play flag 0x2: the frame goes under the previous eye-candy run (0x44DBE0, the bottom insert), which then plays it after its own.
         if ((play & AiExecutorRules.PlayStack) != 0 && _last is { } previous && _session.QueryGoals().TryGet(previous, out var held) && !held.Done && AiExecutorRules.IsEyeCandyGoal(held.Bottom.Goal)
-            && held.Frames.Length < GoalRun.MaxFrames && _session.ReplaceGoalFrames(previous, held.Frames.Insert(0, frame)) == SessionGoalFailure.None) return true;
+            && held.Frames.Length < GoalRun.MaxFrames && _session.ReplaceGoalFrames(previous, held.Frames.Insert(0, frame)) == SessionGoalFailure.None)
+        {
+            if (entry.Light is not null) ReserveLight(previous, owner);
+            return true;
+        }
         var result = _session.StartGoal(new GoalStartRequest(owner, GoalStarters.NoInterrupt, frame), _startPorts);
         if (!result.Started) { Refused++; return false; }
         _last = result.Handle;
+        if (entry.Light is not null && result.Handle is { } started) ReserveLight(started, owner);
         return true;
     }
 

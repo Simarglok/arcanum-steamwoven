@@ -17,6 +17,14 @@ public partial class TerrainViewerApp
     /// <summary>How many live eye candy lights the shown overlay runs keep now (0 without a host).</summary>
     private int EyeCandyLightCount() => ShownEyeCandyHost?.Lights().Count() ?? 0;
 
+    /// <summary>A signature of the live eye candy lights (owner, run, slot): it changes when a glow starts, ends or is replaced by another in the same frame (0 for none).</summary>
+    private int EyeCandyLightKey()
+    {
+        var hash = new HashCode(); var any = false;
+        foreach (var light in ShownEyeCandyHost?.Lights() ?? []) { hash.Add(light.Owner); hash.Add(light.Handle); hash.Add(light.Slot); any = true; }
+        return any ? hash.ToHashCode() | 1 : 0;
+    }
+
     /// <summary>The live eye candy lights where their objects stand now, with the frames of their light ARTs: the hero's at its placement (with its offsets, as the hero's carried light), a map
     /// critter's at its cell with the shift of its pose (LT10), a created critter's at its cell. A light whose object is not here (a companion on another map) or whose ART frame was not loaded is left out.</summary>
     private void AddEyeCandyLights(AreaLightingPlan lighting, AreaLocalLighting local, ActorDiagnosticPlacementInput placement, IReadOnlyDictionary<AreaObjectKey, AreaCritterPose> poses,
@@ -25,7 +33,7 @@ public partial class TerrainViewerApp
         if (ShownEyeCandyHost is not { } host || _areaSession is not { } session) return;
         foreach (var lit in host.Lights())
         {
-            var frame = lit.ArtNumber == Arcanum.Data.Lighting.CarriedLightRules.ArtNumber ? lighting.CarriedFrame : local.Field.Source.Frames.GetValueOrDefault(lit.ArtNumber) ?? local.CritterFrames.GetValueOrDefault(lit.ArtNumber);
+            var frame = (lit.ArtNumber == Arcanum.Data.Lighting.CarriedLightRules.ArtNumber ? lighting.CarriedFrame : null) ?? local.Field.Source.Frames.GetValueOrDefault(lit.ArtNumber) ?? local.CritterFrames.GetValueOrDefault(lit.ArtNumber);
             if (frame is null)
             {
                 if (_eyeCandyLightMissing.Add(lit.ArtNumber)) GD.Print($"ARC-MAGIC-1229 eye-candy-light-art-missing number={lit.ArtNumber}");

@@ -224,7 +224,7 @@ public partial class TerrainViewerApp
     // ARC-DEV-335 (V7d, ledger EQ12, LT12): the hero's carried light. Each frame the session's worn light is read; what the canvas draws
     // changes only with it, with the shown map's lighting and with the lighting toggle. The light follows the hero because the canvas makes
     // the lighting from the hero's placement at every submission.
-    // ARC-MAGIC-1229: the number of live eye candy lights is part of the key, so a glow that starts or ends hands the canvas a source that has it or not.
+    // ARC-MAGIC-1229: a signature of the live eye candy lights is part of the key, so a glow that starts or ends hands the canvas a source that has it or not.
     private (CarriedLightSize Size, AreaLightingPlan? Lighting, bool Lit, int EyeCandy)? _carriedKey;
 
     private void ResetCarriedLight() => _carriedKey = null;
@@ -283,7 +283,7 @@ public partial class TerrainViewerApp
         var lighting = _readyArea?.Lighting;
         var lit = _areaAmbient is { Enabled: true };
         var size = HeroCarriedSize();
-        var glows = EyeCandyLightCount();
+        var glows = EyeCandyLightKey();
         if (_carriedKey is { } known && known.Size == size && known.Lit == lit && known.EyeCandy == glows && ReferenceEquals(known.Lighting, lighting)) return;
         _carriedKey = (size, lighting, lit, glows);
         _canvas.SetAreaCarried(CarriedLightSource(size, lighting, lit));
