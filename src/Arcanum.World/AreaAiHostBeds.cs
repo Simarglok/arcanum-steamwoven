@@ -18,12 +18,25 @@ public sealed record AreaAiBeds(AreaBedOccupancy Occupancy, Func<IReadOnlyList<(
 
 public sealed partial class AreaAiHost
 {
-    // The original's NPC flag 0x200 (the "arrived at its standpoint" latch, SWB21): set once by the standpoint step's near branch, cleared by its far branch and by the unseat. It is host state here, not saved: a rebuilt
-    // host finds its NPC awake at the standpoint and seats it again, a sleeper the session's saved critter flag keeps is seated again by <see cref="RecoverSeat"/>.
-    private readonly HashSet<string> _arrived = new(StringComparer.Ordinal);
+    // The original's NPC flag 0x200 (the "arrived at its standpoint" latch, SWB21): set once by the standpoint step's near branch, cleared by its far branch and by the unseat. ARC-AI-1314: it is the NPC's session state
+    // (<see cref="SessionNpcRouteState"/>, saved with the object) over the map row's own bit, so a rebuilt host and a loaded game find an NPC at its standpoint with the latch set and do not look for a bed again.
+    // A sleeper the session's saved critter flag keeps is seated again by <see cref="RecoverSeat"/> (the original's saved occupant is not).
+    private const uint StandpointLatchFlag = 0x200;
 
-    /// <summary>The NPCs whose standpoint latch (the original's NPC flag 0x200) is set.</summary>
-    public IReadOnlySet<string> Arrived => _arrived;
+    private static bool LatchData(AreaNpcRoute route) => (route.NpcFlags & StandpointLatchFlag) != 0;
+
+    private bool LatchOf(string npc) => _session.QueryStandpointLatch(npc) ?? (RouteOf(npc) is { } route && LatchData(route));
+
+    // False when the write was refused (the latch is then as it was).
+    private bool WriteLatch(string npc, bool on)
+    {
+        if (RouteOf(npc) is not { } route) return false;
+        if (LatchOf(npc) == on) return true;
+        return _session.WriteRouteStep(_session.Version, npc, new SessionMapId(_scene.RuntimeMap), latch: on, dataLatch: LatchData(route)).Failure == GameSessionFailure.None;
+    }
+
+    /// <summary>The NPCs of this host whose standpoint latch (the original's NPC flag 0x200) is set.</summary>
+    public IReadOnlySet<string> Arrived => _npcs.Keys.Where(LatchOf).ToHashSet(StringComparer.Ordinal);
 
     /// <summary>The bed an NPC lies in, or null.</summary>
     public AreaObjectKey? BedOfSleeper(string npc) => _scene.Beds?.Occupancy.BedOf(npc);
@@ -51,7 +64,8 @@ public sealed partial class AreaAiHost
     // an NPC whose bed is taken keeps the flag, stands there and is not tried again until it leaves its radius.
     private string? SeatAtStandpoint(string npc, AreaAiBeds beds, RouteLocation stand)
     {
-        if (!_arrived.Add(npc)) return null;
+        if (LatchOf(npc)) return null;
+        if (!WriteLatch(npc, true)) return "latch write refused";
         if (BedAt(beds, stand) is not { } bed) return "no bed on the standpoint";
         if (!beds.Occupancy.Seat(bed, npc)) return $"bed taken by {beds.Occupancy.Occupant(bed)}";
         if (!WriteSleeping(npc, true))
@@ -143,7 +157,7 @@ public sealed partial class AreaAiHost
         // Not the original's (its occupant field is saved, so it cannot lie in no bed): a sleeper the session wrote asleep whose bed was lost (taken after a load, its bed gone) would sleep for ever; it is woken.
         if ((_session.QueryObjectFlags(npc).CritterSet & unchecked((int)SleepingFlag)) != 0 && beds.Occupancy.BedOf(npc) is null)
         {
-            _arrived.Remove(npc);
+            WriteLatch(npc, false);
             return WriteSleeping(npc, false) ? "stranded sleeper woken" : "stranded sleeper, flag write refused";
         }
         return "not in a bed at a standpoint";
@@ -153,7 +167,7 @@ public sealed partial class AreaAiHost
     private string Unseat(string npc, AreaAiBeds beds, AreaObjectKey bed)
     {
         if (!beds.Occupancy.Unseat(bed, npc)) return "unseat refused";
-        _arrived.Remove(npc);
+        WriteLatch(npc, false);
         return WriteSleeping(npc, false) ? "woken" : "woken, flag write refused";
     }
 
