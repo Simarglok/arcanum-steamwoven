@@ -74,6 +74,8 @@ internal static partial class Program
             if (args.SequenceEqual(["--companion-consent-self-test"])) { CompanionConsentSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--script-census") return ProbeScriptCensus(args[1..]);
             if (args.SequenceEqual(["--script-census-self-test"])) { ScriptCensusSelfTest(); return 0; }
+            if (args.FirstOrDefault() == "--script-refusal-census") return ProbeScriptRefusalCensus(args[1..]);
+            if (args.SequenceEqual(["--script-refusal-census-self-test"])) { ScriptRefusalCensusSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--script-attachments") return ProbeScriptAttachments(args[1..]);
             if (args.SequenceEqual(["--script-attachments-self-test"])) { ScriptAttachmentSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--virgil-auto-level") return ProbeVirgilAutoLevel(args[1..]);
@@ -125,6 +127,8 @@ internal static partial class Program
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception.Message.StartsWith("COMBAT_CENSUS_", StringComparison.Ordinal) || exception.Message.StartsWith("combat-census self-test failed: ", StringComparison.Ordinal) ? exception.Message : "COMBAT_CENSUS_INVOCATION_FAILED")}"
                 : args.Any(a => a.StartsWith("--script-census", StringComparison.Ordinal))
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception.Message.StartsWith("SCRIPT_CENSUS_", StringComparison.Ordinal) || exception.Message.StartsWith("script-census self-test failed: ", StringComparison.Ordinal) ? exception.Message : "SCRIPT_CENSUS_INVOCATION_FAILED")}"
+                : args.Any(a => a.StartsWith("--script-refusal-census", StringComparison.Ordinal))
+                ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception.Message.StartsWith("SCRIPT_REFUSAL_CENSUS_", StringComparison.Ordinal) || exception.Message.StartsWith("script-refusal-census self-test failed: ", StringComparison.Ordinal) ? exception.Message : "SCRIPT_REFUSAL_CENSUS_INVOCATION_FAILED")}"
                 : args.Any(a => a.StartsWith("--script-attachments", StringComparison.Ordinal))
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception.Message.StartsWith("ATTACH_", StringComparison.Ordinal) || exception.Message.StartsWith("attach self-test failed: ", StringComparison.Ordinal) ? exception.Message : "ATTACH_INVOCATION_FAILED")}"
                 : args.Any(a => a.StartsWith("--virgil-auto-level", StringComparison.Ordinal))

@@ -84,6 +84,9 @@ public sealed record AreaAiScene
     /// <summary>ARC-RENDER-038: the attack ART an NPC's body has for a request (its animation, weapon part and shield), or null when it
     /// has none the viewer can read: the attack then plays with the fixed human attack ART's timing and is not drawn. Null: always so.</summary>
     public Func<AreaAiNpc, AreaAiAttackArtRequest, AreaAiAttackArt?>? AttackArt { get; init; }
+    /// <summary>ARC-RENDER-1126 (0x4AABE0, 0x4A92D0): the sound id of an NPC's alerted bark (its sound base + 5, 0x4F0ED0), or null when it has none. The danger update's setter call
+    /// that makes the NPC hostile stores it in the pass record, and the combat approach goal plays it once (<see cref="PlaySound"/>, node 0x4296D0). Null: no NPC has one.</summary>
+    public Func<string, int?>? AlertedSound { get; init; }
     /// <summary>ARC-WORLD-099: whether the hero runs no animation (its walk or attack, which count in the original's animations-complete
     /// test); null: idle.</summary>
     public Func<bool>? HeroIdle { get; init; }
@@ -166,6 +169,8 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
     public SessionAttackResult? Result { get; init; }
     public int Sound { get; init; }
     public AiAttackSwing Swing { get; init; }
+    /// <summary>ARC-RENDER-1126 (0x432700): the attacker's roll of 1..4 for its attacking bark came up 1 (<see cref="AreaAiNoticeKind.Swing"/>); the roll is the original's, made at the swing's start whatever plays it.</summary>
+    public bool AttackBark { get; init; }
     /// <summary>ARC-RENDER-038: the attack animation the swing started (<see cref="AreaAiNoticeKind.Swing"/>).</summary>
     public AreaAiAttackPlay? Play { get; init; }
     /// <summary>ARC-WORLD-102: the cast's spell and magic run, its play's timing (<see cref="AreaAiNoticeKind.Cast"/>; none plays: the
@@ -301,6 +306,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // ARC-WORLD-102: the pass record's choice the danger update wrote for perform (0x4ABC20 → 0x4AC180), the list cache (SP11, not
     // saved), the facing a casting goal's start computed for its turn, and the magic runs whose play reaches no action frame.
     private readonly Dictionary<string, AiPassChoice> _passChoices = new(StringComparer.Ordinal);
+    // ARC-RENDER-1126: the alerted sound the pass's setter call stored in its pass record (0x4A92D0), for this pass's perform.
+    private readonly Dictionary<string, int> _passSounds = new(StringComparer.Ordinal);
     // ARC-DEV-292: the NPCs whose immediate pass after a hit is running (Struck): a hit inside it does not start another.
     private readonly HashSet<string> _striking = new(StringComparer.Ordinal);
     // ARC-DEV-292: the NPCs whose own goal step is running (StepGoal): a hit on one of them inside its step (a critical miss that turned on it, a spell its step cast) does not start a pass in the middle of that step (a project choice: the original's call stack has no such guard).
@@ -799,7 +806,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         _notices.Clear();
         _roundEvents.Clear();
         _roundSeen = false; _subturnsSeen = -1; _turnSetActor = null; _pendingCost = 0; _pendingAt = -1; HookedSubturn = -1; _fidgetAfterHook = null;
-        _passChoices.Clear(); _listCache = AiListCache.Empty; _castFacing.Clear(); _noRelease.Clear(); _queuedCasts.Clear(); _launched.Clear(); _playedCasts.Clear();
+        _passChoices.Clear(); _passSounds.Clear(); _listCache = AiListCache.Empty; _castFacing.Clear(); _noRelease.Clear(); _queuedCasts.Clear(); _launched.Clear(); _playedCasts.Clear();
         _attackPlays.Clear(); _shown.Clear(); _shownRevision = -1;
         Movers.Clear();
         RestoreMovers();
@@ -1190,6 +1197,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public void UpdateDanger(string npc)
     {
         _passChoices.Remove(npc);
+        _passSounds.Remove(npc);
         var plan = HostilityRules.DangerUpdate(this, npc, _session.AiRolls, _session.Rules.Combat);
         Trace(npc).Danger = $"{plan.Path} {plan.Request?.ToString() ?? "-"} {plan.Target ?? "-"}";
         if (plan.Path == DangerUpdatePath.Flee) { _session.RunFleeSpellStep(_session.Version, npc, () => false); return; }
@@ -1205,7 +1213,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             if (chosen.ItemUse is { } atOnce) UseItemAtOnce(npc, atOnce);
         }
         var target = state == DangerState.CombatFocus ? HostilityRules.FocusTarget(plan, choice?.Target ?? plan.Target, _session.Rules.Combat) : null;
-        var result = SetDanger(npc, state, target);
+        // ARC-RENDER-1126: the danger update's setter call asks for the alerted sound (0x4A92D0 passes the pass record's bark slot); the setter gives it when it made the NPC hostile (rule 7).
+        var result = SetDanger(npc, state, target, alertSound: true);
+        if (result.Transition is { AlertSound: true } && _scene.AlertedSound?.Invoke(npc) is { } bark) _passSounds[npc] = bark;
         if (choice is not null && (result.Transition is not { } transition || HostilityRules.KeepsChosenAction(transition, _session.Rules.Combat)))
             _passChoices[npc] = choice;
     }
@@ -1222,7 +1232,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var current = RunOf(npc);
         // ARC-WORLD-102: the pass record's choice from this pass's danger update (none: the action type 0).
         _passChoices.Remove(npc, out var choice);
-        var result = AiExecutorRules.Perform(this, npc, target, choice, null, current);
+        // ARC-RENDER-1126: the alerted sound of this pass's setter call goes into the attack goal (the approach node plays it once).
+        int? alerted = _passSounds.Remove(npc, out var bark) ? bark : null;
+        var result = AiExecutorRules.Perform(this, npc, target, choice, alerted, current);
         if (_followers.ContainsKey(npc) && result.Kind == AiPerformKind.Follow)
         {
             // A run left from the fight (a flight, a back-off) is interrupted as the follow starter's own interrupt would (level 3, the table's rule: a spell attempt, priority 4,
@@ -1382,11 +1394,11 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private bool OwnRun(string id, int run) => _session.QuerySpellRuns()[run]?.Parent?.Id == id;
 
     // The setter call with the facts its rules read; a fight on the hero carries the reaction facts (rule 8).
-    private SessionDangerResult SetDanger(string npc, DangerState state, string? target)
+    private SessionDangerResult SetDanger(string npc, DangerState state, string? target, bool alertSound = false)
     {
         var request = new SessionDangerRequest
         {
-            Entity = npc, State = state, Target = target is null ? null : Combatant(target), Facts = SetterFacts(npc),
+            Entity = npc, State = state, AlertSound = alertSound, Target = target is null ? null : Combatant(target), Facts = SetterFacts(npc),
             Reaction = target == Pc && state == DangerState.CombatFocus && ReactionFacts(npc) is { } facts
                 ? new SessionDangerReaction(facts.Npc, facts.Pc, Row(npc)?.HostileReaction ?? 0) : null,
             CombatMode = NpcCombatMode(npc),
@@ -1790,7 +1802,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var swing = new AiAttackSwing(action, (int)Math.Max(1, end.AtMs - action));
         var play = new AreaAiAttackPlay(id, _nowMs, wanted, art, moments);
         _attackPlays[id] = play;
-        _notices.Add(new(AreaAiNoticeKind.Swing, id, target) { Swing = swing, Play = play });
+        // ARC-RENDER-1126 (0x432700): every attacking PC or NPC rolls 1..4 at the attack's start and barks on 1; the roll comes from the session's generator here, so a headless host draws it as the viewer's does.
+        var bark = _session.Roll("combat.AttackSound", 1, RealTimeCombatRules.AttackSoundSides).Roll?.Value == 1;
+        _notices.Add(new(AreaAiNoticeKind.Swing, id, target) { Swing = swing, Play = play, AttackBark = bark });
         return swing;
     }
 

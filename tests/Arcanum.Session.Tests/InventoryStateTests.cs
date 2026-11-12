@@ -265,9 +265,15 @@ public sealed class InventoryStateTests
         Refused(owner.GiveItemToPc(owner.Version, "merchant", 2804, Accept), owner, GameSessionFailure.SubstituteInventoryUnsupported, 2);
         Refused(owner.GiveItemToPc(owner.Version, "chest", 2804, Accept), owner, GameSessionFailure.UnknownHolder, 2);
         Refused(owner.GiveItemToPc(owner.Version, "virgil", 0, Accept), owner, GameSessionFailure.InvalidItem, 2);
-        Refused(owner.GiveItemToPc(owner.Version, "virgil", 2000, _ => SessionInsertVerdict.TooHeavy), owner, GameSessionFailure.InsertRefused, 2,
-            SessionInsertVerdict.TooHeavy);
-        Took(owner.GiveItemToPc(owner.Version, "virgil", 2000, Accept), owner, "sword", 3);
+        // ARC-WORLD-1131: a refused insert does not refuse the IN: the item leaves the NPC and lies on the PC's tile (0x415BA0), not in the PC's list.
+        var heavy = owner.GiveItemToPc(owner.Version, "virgil", 2000, _ => SessionInsertVerdict.TooHeavy);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, "sword", (SessionInsertVerdict?)SessionInsertVerdict.TooHeavy),
+            (heavy.Disposition, heavy.Failure, heavy.Item, heavy.Verdict));
+        Assert.AreEqual(3L, owner.Version.Revision, "one revision for the move and the placement");
+        CollectionAssert.AreEqual(new[] { "ring", "ring-copy" }, Pc(owner));
+        var lies = owner.QueryPlacedItems().Single();
+        Assert.AreEqual(("sword", SessionPlacedSource.Pc), (lies.Entity, lies.Source));
+        CollectionAssert.AreEqual(new[] { "vest" }, owner.QueryMapInventory(Exterior)!.Holders[0].Items.Select(i => i.Entity).ToArray());
     }
 
     [TestMethod]
@@ -374,9 +380,10 @@ public sealed class InventoryStateTests
         CollectionAssert.AreEqual(new[] { "ring", "ring-copy" }, Pc(owner));
 
         var refusing = new SessionDialogInventoryPort(owner, pc, _ => "virgil", _ => SessionInsertVerdict.NoRoom);
-        Assert.AreEqual(DialogCommandResult.Rejected, refusing.Execute(new GiveItemCommand(npc, pc, 2000)));
-        Assert.AreEqual((GameSessionFailure.InsertRefused, (SessionInsertVerdict?)SessionInsertVerdict.NoRoom),
-            (refusing.LastResult!.Value.Failure, refusing.LastResult.Value.Verdict));
+        // ARC-WORLD-1131: a refused insert is not a failed command: the item lies on the PC's tile and the conversation goes on.
+        Assert.AreEqual(DialogCommandResult.Applied, refusing.Execute(new GiveItemCommand(npc, pc, 2000)));
+        Assert.AreEqual((GameSessionDisposition.Changed, SessionInsertVerdict.NoRoom), (refusing.LastResult!.Value.Disposition, refusing.LastResult.Value.Verdict!.Value));
+        Assert.AreEqual("sword", owner.QueryPlacedItems().Single().Entity);
         Assert.ThrowsExactly<ArgumentNullException>(() => new SessionDialogInventoryPort(owner, pc, _ => null, null!));
     }
 }
