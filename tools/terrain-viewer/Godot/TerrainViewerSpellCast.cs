@@ -625,6 +625,7 @@ public partial class TerrainViewerApp
         // One target mode at a time: the other cursors and a pending order leave first, each with its notice.
         CancelArmedLockpicks("a spell's cursor took the next press");
         if (PickPocketArmed) CancelPickPocket("a spell's cursor took the next press");
+        CancelDisarm("a spell's cursor took the next press");
         CancelPendingOrder("a spell's cursor took the next press");
         if (!OpenTargetMode(InterfaceMode.SpellTarget, _ => ClearSpellTargeting()))
         {

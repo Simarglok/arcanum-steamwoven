@@ -33,6 +33,7 @@ public partial class TerrainViewerApp
         if (_areaSession?.QueryHero() is null || !InventoryActive) { _inventoryStatus = "pick pocket: no hero or no area inventory"; RefreshAreaStatus(); return; }
         if (AreaAiHostNow() is null) { _inventoryStatus = "pick pocket: not ready (the map's AI host is off)"; RefreshAreaStatus(); return; }
         CancelArmedLockpicks("pick pocket armed");
+        CancelDisarm("pick pocket armed");
         CancelSpellTargeting("pick pocket armed");
         CancelPendingOrder("pick pocket armed");
         if (!OpenTargetMode(InterfaceMode.SkillTarget)) { _inventoryStatus = "pick pocket: not ready (a window is open)"; RefreshAreaStatus(); return; }
