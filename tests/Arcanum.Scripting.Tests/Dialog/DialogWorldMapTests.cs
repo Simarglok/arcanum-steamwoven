@@ -12,9 +12,11 @@ public sealed class DialogWorldMapTests
     {
         public List<(long Npc, long Pc)> Opened { get; } = [];
         public DialogCommandResult Result { get; set; } = DialogCommandResult.Applied;
+        public bool Throws { get; set; }
 
         public DialogCommandResult Execute(OpenWorldMapCommand command)
         {
+            if (Throws) throw new InvalidOperationException("synthetic");
             Opened.Add((command.Npc.Value, command.PlayerCharacter.Value));
             return Result;
         }
@@ -53,5 +55,18 @@ public sealed class DialogWorldMapTests
         var withFinal = Start(Read(Record("10", "?") + Record("11", "l:", iq: "1", response: "0", action: "fl 20") + Record("20", "Bye.")),
             new Ports(), Owner(), worldMap: new WorldMap());
         Assert.AreEqual(DialogOptionBlockKind.UnsupportedInteraction, withFinal.Options[0].Block!.Kind, "a dialog transfer in the same reply");
+    }
+
+    [TestMethod]
+    public void A_throwing_port_is_recorded_as_indeterminate_and_a_longer_marker_is_an_ordinary_reply()
+    {
+        var document = Read(Record("10", "?") + Record("11", "l:", iq: "1", response: "0"));
+        var conversation = Start(document, new Ports(), Owner(), worldMap: new WorldMap { Throws = true });
+        conversation.Select(conversation.Options[0].Token);
+        Assert.AreEqual(DialogConversationFailureKind.CommandIndeterminate, conversation.Failure!.Kind);
+        Assert.AreEqual(DialogCommandAttemptOutcome.Indeterminate, conversation.Effects.Single(e => e.Command is OpenWorldMapCommand).Outcome);
+
+        var longer = Start(Read(Record("10", "?") + Record("11", "l:x", iq: "1", response: "0")), new Ports(), Owner(), worldMap: new WorldMap());
+        Assert.AreEqual((DialogOptionTextKind.Record, DialogOptionTransition.Exit), (longer.Options[0].TextKind, longer.Options[0].Transition), "only the exact marker is the world map reply");
     }
 }

@@ -110,6 +110,7 @@ public partial class TerrainViewerApp
                 for (var wait = 0; wait < 10 && _dialogWorldMapPending is not null; wait++) { AreaSmokeFrame(); TakeDialogWorldMap(); }
                 Require(_dialogWorldMapPending is null, "the queued world map request was taken");
                 worldMapOpened = WorldMapOpen; worldMapStatus = _worldMapStatus;
+                Require(worldMapOpened, $"the world map opened after the reply (status {worldMapStatus})");
                 if (WorldMapOpen) CloseWorldMapByPlayer();
             }
             for (var close = 0; close < 8 && ConversationOpen; close++) _conversationPanel.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);

@@ -47,6 +47,7 @@ public partial class TerrainViewerApp
 
     // ARC-SCRIPT-1358: the session whose talk ended with an l: reply; the map opens once the dialog window has left the stack.
     private Arcanum.Session.GameSessionOwner? _dialogWorldMapPending;
+    private int _dialogWorldMapWaits;
 
     /// <summary>An <c>l:</c> reply ended the conversation (<see cref="Arcanum.Scripting.Dialog.DialogEndKind.WorldMapWindow"/>): the world map opens as
     /// for the bar's Map button (the same refusals, <see cref="OpenWorldMap"/>) once the dialog has closed.</summary>
@@ -60,7 +61,12 @@ public partial class TerrainViewerApp
     {
         if (_dialogWorldMapPending is not { } session) return;
         if (!ReferenceEquals(session, _areaSession) || !WorldMapActive) { _dialogWorldMapPending = null; return; }
-        if (AnyWindowOpen) return;
+        // The dialog window may still be on the stack for a frame; any other window opened since drops the request (the original opens the map inside the dialog's own state change).
+        if (WindowOpen(InterfaceMode.Dialog)) return;
+        if (AnyWindowOpen) { _dialogWorldMapPending = null; GD.Print("ARC-SCRIPT-1358 dialog world map dropped: another window is open"); return; }
+        AdoptWorldMapData();
+        if (_worldMapData is null && ++_dialogWorldMapWaits < 600) return; // the data still loads: wait for it, as the barter does
+        _dialogWorldMapWaits = 0;
         _dialogWorldMapPending = null;
         OpenWorldMap();
         GD.Print($"ARC-SCRIPT-1358 dialog world map open={WorldMapOpen} status={_worldMapStatus}");
