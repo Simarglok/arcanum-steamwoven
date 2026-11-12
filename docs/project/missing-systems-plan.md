@@ -195,7 +195,7 @@ project); the audit proposed no decoder.
 
 | Slice | Content | Size | Needs |
 | --- | --- | --- | --- |
-| E7-r | **Research:** decoder options and licences (ffmpeg's Bink support is LGPL; or ship no video and show stills), the movie list and where scripts and maps call it | S–M | owner decision on scope |
+| E7-r | **Done (ARC-RES-1108, [Bink movies](../research/bink-movies.md)):** decoder options and licences (ffmpeg's Bink support is LGPL; or ship no video and show stills), the movie list and where scripts and maps call it. Ten Bink 1 files (`BIKi`), 8 numbered; callers: start-up, logos, View Intro, new game, script action 103 (6 scripts); recommended decoder: ffmpeg as an external program; the owner chooses the scope (issue #1170) | S–M | owner decision on scope |
 | E7-a | Movie player and the change-of-place movie steps; menu "View Intro" | M–L | E7-r |
 | E7-b | Credits screen and slide types 0 and 2; script-queued slides (`queue_slide`), fades; ending selection | M | E5-c (media actions) |
 
