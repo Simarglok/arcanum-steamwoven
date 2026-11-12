@@ -132,6 +132,9 @@ public sealed record AreaAiScene
     /// <summary>ARC-WORLD-115 (NPC AI slice I9, host part): the companions of the shown map the host runs too, and their moves; null:
     /// the companions run no AI (their follow goal moves them). ARC-WORLD-119: the free ones too, as any leaderless NPC.</summary>
     public IAreaAiFollowers? Followers { get; init; }
+    /// <summary>ARC-MAGIC-1189 (ledger TT10, SP2): the shown map's trap host (<see cref="AreaTraps"/>), which checks the next tile of an NPC's or a companion's step for an unknown trap
+    /// before the step starts (0x427110) and rolls the NPC's own spot attempt; null (the provider or its answer): the NPCs meet no trap, as before.</summary>
+    public Func<AreaTraps?>? Traps { get; init; }
     /// <summary>ARC-DEV-287 (MIG13 tail T6): the hero's body for the knockback (its art rotation and its relocation onto a tile); null: the hero cannot be pushed here.</summary>
     public IAreaHeroPush? HeroPush { get; init; }
 }
@@ -1615,7 +1618,24 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (AiExecutorRules.Distance(from, next) != 1) return AiStepBlock.CannotStart;
         var direction = RoutePlanner.Toward(chart, ToChart(next));
         var open = new AreaRouteSource(Steps, _scene.Chart, MovedRecords, _scene.Passages).Assess(chart, direction) == RouteStepVerdict.Open;
+        // ARC-MAGIC-1189 (TT10): on a step that can start, a trap the walker spots on the next tile blocks it, which ends the walk as a step that cannot start does (EX20);
+        // a step that cannot start anyway rolls nothing, as the hero's step gate (asked for an open step only).
+        if (open && TrapSpottedOn(id, next)) return AiStepBlock.CannotStart;
         return open ? AiStepBlock.Clear : flight ? AiStepBlock.Occupied : AiStepBlock.CannotStart;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-1189 (ledger TT10, SP2): the walk check of the walker's next tile (0x427110): every unknown trap object there gets the NPC's own spot attempt
+    /// (<see cref="AreaTraps.WalkCheckNpc"/>, with the NPC's sheet for its spot trap skill and whether the PC leads it); true when it spots one, whose mark a companion writes
+    /// (the player knows it from then on). False for the hero, an NPC with no sheet or no life, and when the map has no trap host.
+    /// </summary>
+    public bool TrapSpottedOn(string id, CellCoord next)
+    {
+        if (id == Pc || _scene.Traps?.Invoke() is not { } traps || _scene.NpcSheet?.Invoke(id) is not { } sheet || RawBuild(id)?.Target is not { } life) return false;
+        var walk = traps.WalkCheckNpc(new(life, sheet.Loaded, sheet.Modifiers, Leader(id) == Pc), next);
+        if (walk.Spotted is null) return false;
+        Trace(id).Step = $"spotted a trap on {next.X},{next.Y}: the walk stops";
+        return true;
     }
 
     // ---- ARC-DEV-141 (MIG13 S8c): the pushed NPC's bodies for the knockback host (AreaAiKnockbackBodies) ----

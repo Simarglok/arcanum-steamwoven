@@ -167,4 +167,22 @@ public sealed class TrapRulesTests
         Assert.AreEqual(2, calls);
         Assert.AreEqual((true, false), DisarmCase(false, false, SkillTraining.Master, 60, -20, () => Roll(80)), "a negative total helps");
     }
+
+    // ARC-MAGIC-1189 (ledger SP2): the item modifier of the spot invocation (0x4BBE40).
+    [TestMethod]
+    public void The_powered_shield_with_charges_gives_an_aptitude_at_or_below_zero_as_the_modifier()
+    {
+        Assert.AreEqual(-7, SpotItemModifier(TrapRules.PoweredShieldName, 3, -7), "negative: a bonus");
+        Assert.AreEqual(0, SpotItemModifier(TrapRules.PoweredShieldName, 1, 0));
+        Assert.AreEqual(0, SpotItemModifier(TrapRules.PoweredShieldName, 3, 9), "a positive aptitude clears it");
+    }
+
+    [TestMethod]
+    public void Another_item_or_no_charges_give_no_modifier()
+    {
+        Assert.AreEqual(0, SpotItemModifier(0, 3, -7), "no item at location 1005");
+        Assert.AreEqual(0, SpotItemModifier(TrapRules.PoweredShieldName + 1, 3, -7));
+        Assert.AreEqual(0, SpotItemModifier(TrapRules.PoweredShieldName, 0, -7), "no charges");
+        Assert.AreEqual(0, SpotItemModifier(TrapRules.PoweredShieldName, -1, -7));
+    }
 }
