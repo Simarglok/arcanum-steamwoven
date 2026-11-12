@@ -125,6 +125,7 @@ src/Arcanum.Session/GameSessionNpcEffects.cs,RemoveNpcEffect,pending,
 src/Arcanum.Session/GameSessionNpcEffects.cs,RemoveNpcEffectsCausedBy,pending,
 src/Arcanum.Session/GameSessionNpcInventory.cs,AddItemToNpc,pending,
 src/Arcanum.Session/GameSessionNpcInventory.cs,RemoveItemFromNpc,pending,
+src/Arcanum.Session/GameSessionNpcObjectStrike.cs,AttackObjectByNpc,exempt,reference
 src/Arcanum.Session/GameSessionNpcPickPocket.cs,PickPocketByNpc,pending,
 src/Arcanum.Session/GameSessionNpcTransfer.cs,GiveAmmoToNpc,pending,
 src/Arcanum.Session/GameSessionNpcTransfer.cs,GiveGoldToHero,pending,
