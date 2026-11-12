@@ -213,6 +213,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="keys-on-the-heros-ring-arc-world-123"></a>[Keys on the hero's ring (ARC-WORLD-123)](ledger/items.md#keys-on-the-heros-ring-arc-world-123) | [Items and inventory](ledger/items.md) | KY1–KY5 |
 | <a id="item-aiming-and-use-with-a-target-arc-res-113"></a>[Item aiming and use with a target (ARC-RES-113)](ledger/items.md#item-aiming-and-use-with-a-target-arc-res-113) | [Items and inventory](ledger/items.md) | IA1–IA16 |
 | <a id="partial-rows-by-risk-arc-res-1104"></a>[Partial rows by risk (ARC-RES-1104)](ledger/items.md#partial-rows-by-risk-arc-res-1104) | [Items and inventory](ledger/items.md) | VP1–VP17, VPG1–VPG3 |
+| <a id="partial-rows-by-risk-items-slice-2-arc-res-1104"></a>[Partial rows by risk, items slice 2 (ARC-RES-1104)](ledger/items.md#partial-rows-by-risk-items-slice-2-arc-res-1104) | [Items and inventory](ledger/items.md) | VP18–VP83, VPG4–VPG7 |
 | <a id="main-menu-arc-ui-011"></a>[Main menu (ARC-UI-011)](ledger/ui-audio.md#main-menu-arc-ui-011) | [Interface windows and audio](ledger/ui-audio.md) | MM1–MM7 |
 | <a id="hero-death-arc-ui-026"></a>[Hero death (ARC-UI-026)](ledger/ui-audio.md#hero-death-arc-ui-026) | [Interface windows and audio](ledger/ui-audio.md) | PD1–PD9 |
 | <a id="companion-walks-through-critters-arc-world-075"></a>[Companion walks through critters (ARC-WORLD-075)](ledger/world.md#companion-walks-through-critters-arc-world-075) | [World, maps and movement](ledger/world.md) | LR10–LR11 |
@@ -257,6 +258,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="hovered-object-arc-ui-057"></a>[Hovered object (ARC-UI-057)](ledger/ui-audio.md#hovered-object-arc-ui-057) | [Interface windows and audio](ledger/ui-audio.md) | OH1–OH9 |
 | <a id="menu-window-art-arc-ui-058"></a>[Menu window art (ARC-UI-058)](ledger/ui-audio.md#menu-window-art-arc-ui-058) | [Interface windows and audio](ledger/ui-audio.md) | MW1–MW29 |
 | <a id="generated-player-phrases-arc-script-043"></a>[Generated Player phrases (ARC-SCRIPT-043)](ledger/social.md#generated-player-phrases-arc-script-043) | [Reaction, reputation and companions](ledger/social.md) | GP1–GP7 |
+| <a id="trainer-reply-arc-script-1150"></a>[Trainer reply (ARC-SCRIPT-1150)](ledger/social.md#trainer-reply-arc-script-1150) | [Reaction, reputation and companions](ledger/social.md) | DTR1–DTR9 |
 | <a id="unchosen-pre-made-heroes-arc-world-114"></a>[Unchosen pre-made heroes (ARC-WORLD-114)](ledger/scripts.md#unchosen-pre-made-heroes-arc-world-114) | [Scripts and events](ledger/scripts.md) | PM1–PM3 |
 | <a id="script-triggers-arc-script-047"></a>[Script triggers (ARC-SCRIPT-047)](ledger/scripts.md#script-triggers-arc-script-047) | [Scripts and events](ledger/scripts.md) | TG1–TG8 |
 | <a id="heartbeat-world-questions-arc-script-049"></a>[Heartbeat world questions (ARC-SCRIPT-049)](ledger/scripts.md#heartbeat-world-questions-arc-script-049) | [Scripts and events](ledger/scripts.md) | HW1–HW4 |

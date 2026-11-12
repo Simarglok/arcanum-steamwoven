@@ -184,6 +184,8 @@ public partial class TerrainViewerApp
             MissileArt = spell => SpellMissileArt(spell) is not null,
             // ARC-WORLD-109: an NPC's skills for its skill attempts.
             NpcSheet = AreaFollowerSheet,
+            // ARC-MAGIC-1189 (TT10, SP2): an NPC's or a companion's step checks the next tile for a trap it spots with its own roll.
+            Traps = AreaTrapsNow,
             // ARC-WORLD-114: the NPCs' first-heartbeat and heartbeat scripts (the Crash Site's unchosen pre-made heroes die by theirs).
             Heartbeat = AiHeartbeat,
             CatchingThief = AiCatchingThief,

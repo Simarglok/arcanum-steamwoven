@@ -160,7 +160,24 @@ public sealed class AreaTraps
     /// the walk (EX20). Known traps are skipped.
     /// Nothing without a cast host; a mark the session refuses lets the step go (<see cref="AreaTrapWalk.Mark"/> says so).
     /// </summary>
-    public AreaTrapWalk WalkCheck(CellCoord next)
+    public AreaTrapWalk WalkCheck(CellCoord next) =>
+        WalkCheckAs(TrapObserver.Player, next, (trapped, baseline, row, flags) => _session.RollHeroSpotTrap(_session.Version, trapped, baseline, flags, LightAt(row)));
+
+    /// <summary>
+    /// ARC-MAGIC-1189 (ledger TT10, SP2): the same walk check for an NPC or a companion that is about to step onto <paramref name="next"/> (0x427110 asks the
+    /// mover, whatever it is): every trap object there the NPC does not know (<see cref="GameSessionOwner.NpcSpotObserver"/>: a free NPC knows every trap the PC did
+    /// not place, a companion led by the PC the spotted and the placed ones) gets a spot attempt, the detect flag of the player's spells or the NPC's own roll
+    /// (<see cref="GameSessionOwner.RollNpcSpotTrap"/>: its spot trap skill, the light at the trap, its powered shield); the first one spotted blocks the step. A companion
+    /// marks the trap it spots, which the player knows from then on; a free NPC marks none, so it rolls again at its next meeting (TT4). Nothing without a cast host.
+    /// </summary>
+    public AreaTrapWalk WalkCheckNpc(SessionNpcSpot spot, CellCoord next)
+    {
+        ArgumentNullException.ThrowIfNull(spot);
+        return WalkCheckAs(GameSessionOwner.NpcSpotObserver(spot), next,
+            (trapped, baseline, row, flags) => _session.RollNpcSpotTrap(_session.Version, spot, trapped, baseline, flags, LightAt(row)));
+    }
+
+    private AreaTrapWalk WalkCheckAs(TrapObserver observer, CellCoord next, Func<SessionTrapped, SessionTrapBaseline, AreaObjectRecord, int, SessionSpotRoll> roll)
     {
         if (_effects() is not { } effects) return new(null, null, 0);
         var rolls = 0;
@@ -168,19 +185,19 @@ public sealed class AreaTraps
         {
             if (_host.TrapBaseline(row) is not { } baseline) continue;
             var trapped = AreaUseScriptHost.Trapped(row);
-            if (!_session.QueryTrap(trapped, baseline).Trapped || _session.TrapKnownTo(trapped, baseline, TrapObserver.Player)) continue;
-            switch (_session.TrapSpotGate(trapped, baseline, TrapObserver.Player, effects.PlayerSpellFlags))
+            if (!_session.QueryTrap(trapped, baseline).Trapped || _session.TrapKnownTo(trapped, baseline, observer)) continue;
+            switch (_session.TrapSpotGate(trapped, baseline, observer, effects.PlayerSpellFlags))
             {
                 case TrapSpotGate.Detected:
                     // A mark the session refuses (a full budget) blocks nothing: the trap would stay unknown and block the tile for good.
-                    var mark = _session.MarkTrapSpotted(_session.Version, trapped, baseline, TrapObserver.Player);
+                    var mark = _session.MarkTrapSpotted(_session.Version, trapped, baseline, observer);
                     return new(mark.Disposition == GameSessionDisposition.Rejected ? null : row, mark, rolls);
                 case TrapSpotGate.Roll:
-                    var spot = _session.RollHeroSpotTrap(_session.Version, trapped, baseline, effects.PlayerSpellFlags, LightAt(row));
-                    if (spot.Disposition == GameSessionDisposition.Rejected) break;
+                    var spotRoll = roll(trapped, baseline, row, effects.PlayerSpellFlags);
+                    if (spotRoll.Disposition == GameSessionDisposition.Rejected) break;
                     rolls++;
-                    if (!spot.Spotted) break;
-                    var marked = _session.MarkTrapSpotted(_session.Version, trapped, baseline, TrapObserver.Player);
+                    if (!spotRoll.Spotted) break;
+                    var marked = _session.MarkTrapSpotted(_session.Version, trapped, baseline, observer);
                     return new(marked.Disposition == GameSessionDisposition.Rejected ? null : row, marked, rolls);
             }
         }

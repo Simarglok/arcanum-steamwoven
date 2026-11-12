@@ -212,6 +212,8 @@ public partial class TerrainViewerApp
         var text = key is { } hit && _hoverIndex is { } index ? AreaHover.Tooltip(index.Name(hit), action) : null;
         var changed = key != _hoverKey || action != _hoverAction || text != _hoverText;
         _hoverKey = key; _hoverAction = action; _hoverText = text;
+        // ARC-UI-1114 (CH4, 0x557370): in a round the action under the pointer runs its action-point check, which the lamps preview.
+        PreviewHoverCost(action, key, screen);
         var cursor = action switch
         {
             AreaHoverAction.Walk => Godot.Input.CursorShape.Cross,

@@ -48,13 +48,15 @@ public static class AreaNpcSheet
         int Stored(int index) => index < stored.Count ? stored[index] : 0;
         var experience = Stored(ExperienceStat);
         var table = session.Experience?.Levels;
+        // ARC-MAGIC-1190 (TF2): the speed line shows Tempus Fugit's change as the combat reads it (the session's written spell flags over the NPC's stored ones).
+        var speedShift = session.TempusFugitShiftOf(entity, unchecked((int)fields.Object.SpellFlags));
         var primary = AreaStatsPage.StatOrder.Select(stat => new AreaSheetValue(AreaCharacterSheet.Label(stat), AutoLevelRules.EffectiveStat(sheet, modifiers, stat),
             Mark(sheet, modifiers, stat))).ToArray();
         var secondary = new[]
         {
             CharacterStat.CarryWeight, CharacterStat.DamageBonus, CharacterStat.AcAdjustment, CharacterStat.Speed, CharacterStat.HealRate,
             CharacterStat.PoisonRecovery, CharacterStat.ReactionModifier, CharacterStat.MaxFollowers,
-        }.Select(stat => new AreaSheetValue(AreaCharacterSheet.Label(stat), AutoLevelRules.DerivedStat(sheet, modifiers, stat))).ToArray();
+        }.Select(stat => new AreaSheetValue(AreaCharacterSheet.Label(stat), AutoLevelRules.DerivedStat(sheet, modifiers, stat, speedShift))).ToArray();
         var aptitude = AutoLevelRules.DerivedStat(sheet, modifiers, CharacterStat.MagickTechAptitude);
         // The stored resistances (normal, fire, electrical, poison, magic) and the constitution bonus, as 0x43D6D0 shows them; the worn armour of an NPC is not read (CHW24).
         var resist = fields.Object.Resistances;
