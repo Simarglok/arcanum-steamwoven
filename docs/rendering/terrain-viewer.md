@@ -1867,7 +1867,7 @@ the creation editor keeps its draft's snapshot until the game starts).
 **NPC sheet (ARC-UI-088, ledger [CHW24](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)):** the dialog reply action c-e ends the talk and
 opens the speaker's character sheet in the original's mode 2 (`Godot/TerrainViewerAreaNpcSheet.cs`, `src/Arcanum.World/AreaNpcSheet.cs`): the same window over the NPC's
 values (name, level, points, experience to the next level from its stored experience, the eight stats with the colour of its effects, derived stats from
-`AutoLevelRules.DerivedStat`, stored resistances with the constitution bonus, hit points and fatigue from its life, skills, spell book and tech degrees), no +
+`AutoLevelRules.DerivedStat`, stored resistances with the constitution bonus under the NPC's effect list (the session's, else the map data's; the Magick line shows the `resistmagic` changes too, ARC-UI-1145), hit points and fatigue from its life, skills, spell book and tech degrees), no +
 or − on any page (`ReadOnly` of the art view and pages), the next spell grey, no editor snapshot, no pause; a monstrous NPC shows no race or gender. The sheet is the
 talk's moment: the session's later changes do not rebuild it. A release in the close rectangle or `C` closes it, the dialog does not resume, and the next `C`
 opens the hero's sheet. Not built: the follower arrows, the scheme page (the NOT READY note), the portrait or race icon (the slot stays empty), the NPC's worn
@@ -2609,7 +2609,7 @@ under the bars. Buttons:
 | Map | top | The world map window (`W`, map mode on the start map), which does not fit between the strips, so the bars hide while it is open (`W` or Escape closes it); the town map is not built. |
 | Combat | bottom | Toggles the hero's combat mode (`R`). |
 | Spells | bottom | A toggle: on shows the spell pane (`M`), off hides it; `M` moves the button with the pane. |
-| Skills | bottom | A toggle (Spells goes up when it goes down); the original's skill pane is not built, so it only says so. |
+| Skills | bottom | A toggle (Spells goes up when it goes down; `K` does the same without the sound): shows the [skill pane](../world/spell-cast-host.md#the-skill-pane-in-the-bottom-strip-arc-ui-1113) (bar mode 2: the pane's art and the four skill-bar buttons) in the message window. |
 | Fate Points, Sleep | top | Say that their windows are not built. |
 
 A button shows its idle, down and lit frames as the original's (GB4). It plays 3000 on the press and 3001 on the release
@@ -2638,7 +2638,7 @@ it, Map opening the world map with the bars hidden and back with no hover, Comba
 the pane, Fate Points refused, a press on the strip's clock not reaching the world, every sound started, and the
 [clock](#clock-and-date-arc-ui-1111)). Not done: the
 hot-key bar (later slices; the vials since ARC-UI-020, the message log since ARC-UI-023, the vials' art, the follower frames
-and the hovered portrait since [ARC-UI-024](#panel-art-arc-ui-024)), the skill pane, fate and sleep windows, the town map, the
+and the hovered portrait since [ARC-UI-024](#panel-art-arc-ui-024); the skill pane since ARC-UI-1113), the fate window, the town map, the
 buttons' lit art the original sets from game events (0x556A90), the toggle to the compact interface (the viewer shows the
 compact panel whenever its bars are not drawn).
 
@@ -2702,7 +2702,7 @@ session, the window only while the [interface bars](#interface-bars-arc-ui-018) 
   no entry was stored in the last 3 s (real time). Leaving the button takes the name away.
 - **Panes.** While Spells (the spell pane, `M`) or Skills is down the window belongs to that pane and draws nothing of the log
   (since ARC-UI-053 the spell pane is drawn there as the original's bar mode 1, with its art, college buttons and spell icons:
-  [spell pane](../world/spell-cast-host.md#the-spell-pane-in-the-bottom-strip-arc-ui-053); the skills pane's art is a later slice). A new stored entry puts the
+  [spell pane](../world/spell-cast-host.md#the-spell-pane-in-the-bottom-strip-arc-ui-053), and since ARC-UI-1113 the skill pane as bar mode 2: [skill pane](../world/spell-cast-host.md#the-skill-pane-in-the-bottom-strip-arc-ui-1113)). A new stored entry puts the
   window back in the message mode, and the next pointer move over the bottom strip (x 10–790, y 441–590) gives it back to the
   pane whose button is still down; a pointer move above the strip gives the spells or skills pane's window to the log (not the
   weapon's spells), as the original's panes own the window only while the pointer is over the strip; the button going up
