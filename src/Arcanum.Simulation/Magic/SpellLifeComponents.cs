@@ -19,8 +19,14 @@ public interface ISpellDamageWorld
 }
 
 /// <summary>One damage step for the host to apply: the object, the step's result and, for a critter, its life damage (null when
-/// prevented). An acid's worn items are objects too; the host applies an object's damage through its object rules.</summary>
-public sealed record SpellDamageStep(string Object, AttackDamage Damage, LifeDamage? Life);
+/// prevented). An acid's worn items are objects too; the host applies an object's damage through its object rules. ARC-COMBAT-1141 (GT211): a step whose
+/// victim's taking-damage script skipped the default is <paramref name="Vetoed"/>, with no damage and no life damage: the host applies nothing and logs the veto.</summary>
+public sealed record SpellDamageStep(string Object, AttackDamage Damage, LifeDamage? Life, bool Vetoed = false)
+{
+    /// <summary>The damage of a vetoed step: nothing was rolled, taken or prevented.</summary>
+    public static readonly AttackDamage NoDamage = new(DamageRecipient.Target, DamageByType.Zero, DamageByType.Zero, 0, 0, 0, DamageMultiplier.None, false,
+        CriticalHitEffects.None, CriticalMissEffects.None, false, DamagePrevention.None);
+}
 
 /// <summary>
 /// A Damage component's result: the packet, the steps in order (none when cancelled), and the object that counts as the damage's
@@ -38,9 +44,13 @@ public static class SpellLifeComponents
 {
     /// <summary>A Damage component on <paramref name="target"/>: the packet (<see cref="SpellDamageRules.Damage"/>) and its steps
     /// through <see cref="AttackResolver.DamageStep"/> with the run's parent as the attacker and, in the original, its wielded
-    /// weapon (MG36); the full and death flags take the current hit points (MG35 in the Steamwoven setting: no difficulty share).</summary>
+    /// weapon (MG36); the full and death flags take the current hit points (MG35 in the Steamwoven setting: no difficulty share).
+    /// ARC-COMBAT-1141 (GT198, GT210, GT211): <paramref name="takingDamage"/> is the victims' taking-damage script (point 0x17, asked with the object's id; true: the step
+    /// goes on). It is asked at the start of each step's damage apply, before the resistance step, so a vetoed step is <see cref="SpellDamageStep.Vetoed"/> and does
+    /// not lower the amounts the acid chain hands to the next object (the original lowers them inside the step it skipped). Every ask of a component is made while its
+    /// steps are built, before the host applies the first one.</summary>
     public static SpellDamageResult Damage(SpellDamageComponent component, SpellRun run, SpellRunObject target, ISpellDamageWorld world,
-        ISpellRollSource rolls, MagicAnomalyProfile profile)
+        ISpellRollSource rolls, MagicAnomalyProfile profile, Func<string, bool>? takingDamage = null)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(world);
@@ -48,6 +58,7 @@ public static class SpellLifeComponents
         var packet = SpellDamageRules.Damage(component, run, world.CurrentFatigue(target), rolls, profile);
         var source = SpellDamageRules.Source(run);
         if (packet.Route == SpellDamageRoute.Cancelled) return new(packet, [], source);
+        static SpellDamageStep VetoedStep(string id) => new(id, SpellDamageStep.NoDamage, null, Vetoed: true);
         var attacker = run.Parent is { } parent ? world.Combatant(parent) : new Combatant();
         var weapon = run.Parent is { } holder && profile.SpellDamageUsesCastersWeapon ? world.WieldedWeapon(holder) : CombatWeapon.Unarmed();
         SpellDamageStep Step(SpellRunObject on, DamageByType damage)
@@ -61,7 +72,7 @@ public static class SpellLifeComponents
             });
             return new(on.Id, step, kind == AttackTargetKind.Critter ? LifeDamage.FromStep(step, HitLocation.Torso, packet.PlainDeath) : null);
         }
-        if (packet.Route == SpellDamageRoute.Step) return new(packet, [Step(target, packet.Damage)], source);
+        if (packet.Route == SpellDamageRoute.Step) return new(packet, [takingDamage?.Invoke(target.Id) == false ? VetoedStep(target.Id) : Step(target, packet.Damage)], source);
         // The acid (0x4B5810): its plan gives the items and whether the wearer takes a share; the amounts chain through the steps
         // themselves, as the original's step lowers the context's amounts in place (none for a prevented step, and none when the
         // context's weapon ignores resistance, MG36).
@@ -70,11 +81,12 @@ public static class SpellLifeComponents
         var amount = packet.Damage;
         foreach (var (item, _) in acid.Items)
         {
+            if (takingDamage?.Invoke(item.Id) == false) { steps.Add(VetoedStep(item.Id)); continue; }
             var step = Step(new SpellRunObject(item.Id, 0), amount);
             if (step.Damage.Prevented == DamagePrevention.None) amount = step.Damage.Final;
             steps.Add(step);
         }
-        if (acid.Wearer is not null) steps.Add(Step(target, amount with { Normal = amount.Normal / 3 }));
+        if (acid.Wearer is not null) steps.Add(takingDamage?.Invoke(target.Id) == false ? VetoedStep(target.Id) : Step(target, amount with { Normal = amount.Normal / 3 }));
         return new(packet, steps, source);
     }
 

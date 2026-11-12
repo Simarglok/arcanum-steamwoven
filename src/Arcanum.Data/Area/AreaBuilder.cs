@@ -353,7 +353,8 @@ public sealed partial class AreaDataOwner
                         // runtime (ledger LK10). A portal ART has one group; its frame is ART bits 14..18.
                         // ARC-RENDER-035: on a whole map, every other frame of a scenery ART its animation loop plays (ledger
                         // AS1): scenery without scenery flag 0x1 (no auto-animation). Its frame is ART bits 14..18 too.
-                        if ((record.Type == 1 || record.Type == 3 && AnimatedSceneryAdmitted && (Optional(effective, SceneryFlagsSlot) & 0x1) == 0)
+                        // ARC-WORLD-1162 (SWB15): a bed's occupied look is the next frame of its ART, so its other frames are decoded whatever its scenery flags say (a bed has flag 0x1 and never loops).
+                        if ((record.Type == 1 || record.Type == 3 && AnimatedSceneryAdmitted && ((Optional(effective, SceneryFlagsSlot) & 0x1) == 0 || AreaBedArt.IsBed(aid)))
                             && body.FrameCount is > 1 and <= 32)
                             for (var other = 0; other < body.FrameCount; other++)
                             {
