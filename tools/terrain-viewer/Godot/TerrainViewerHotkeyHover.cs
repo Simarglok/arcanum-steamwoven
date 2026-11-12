@@ -104,7 +104,7 @@ public partial class TerrainViewerApp
         if (ran.Run is null && ran.Outcome == AreaScriptedUseOutcome.NoTeleport) return true;
         _examineRunsForSelfTest++;
         GD.Print($"ARC-DEV-326 examine entity={AreaUseScriptHost.EntityId(row)} outcome={ran.Outcome} run={ran.Run?.Outcome.ToString() ?? "-"} detail={ran.Detail}");
-        foreach (var entry in AreaScriptMessages.Entries(ran.Printed)) PostMessage(entry, "script line");
+        foreach (var entry in ScriptLineEntries(ran.Printed)) PostMessage(entry, "script line");
         return !AreaUseScriptHost.ExamineSkips(ran);
     }
 
