@@ -116,8 +116,11 @@ public partial class TerrainViewerApp
         else
         {
             var triggers = ItemTriggersNow();
+            var dropSound = DropSoundFacts(item);
             var result = session.DropHeroItem(session.Version, item, facts, _inventoryHost.ItemScripts(session), triggers);
             _lastGroundDrop = result;
+            // ARC-RENDER-1126: the item that left the hero plays its drop sound (not when the drop was refused or its script kept the item).
+            if (result.Disposition == GameSessionDisposition.Changed && result.DeclinedBy is null) PlayDroppedItemSound(dropSound);
             message = result.Disposition == GameSessionDisposition.Rejected ? $"not dropped: {DropRefusal(result.Failure)}"
                 : result.DeclinedBy is not null ? $"{name} stays: its drop script kept it" : $"dropped {name} on the ground";
             var placed = session.QueryPlacedItems().FirstOrDefault(entry => entry.Entity == item);

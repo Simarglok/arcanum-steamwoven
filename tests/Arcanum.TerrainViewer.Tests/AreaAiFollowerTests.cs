@@ -112,7 +112,7 @@ public sealed class AreaAiFollowerTests
     }
 
     private static Scene Open(bool companionWaits = false, bool followers = true, CellCoord? companionAt = null, CellCoord? corner = null,
-        CellCoord? companionHome = null, bool healer = false, uint enemyFlags = 0, bool free = false, bool visitor = false, bool onDemand = false, bool homeless = false, string? dialogPartner = null, Action<string>? dialogEnded = null)
+        CellCoord? companionHome = null, bool healer = false, uint enemyFlags = 0, bool free = false, bool visitor = false, bool onDemand = false, bool homeless = false, string? dialogPartner = null, Action<string>? dialogEnded = null, Func<string, int?>? alertedSound = null)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -169,6 +169,7 @@ public sealed class AreaAiFollowerTests
             Followers = followers ? walks : null,
             ConversationPartner = dialogPartner is null ? null : () => dialogPartner, ConversationEnded = dialogEnded,
             NpcSheet = entity => combat.Fields(entity) is { } fields ? AreaAdvancement.Npc(entity, fields, _ => null) : null,
+            AlertedSound = alertedSound,
         };
         var host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null), new AreaCombatWorld(1, () => [], _ => null));
         return new(session, host, walks, Entity(0), Entity(1)) { Combat = combat };
@@ -859,5 +860,20 @@ public sealed class AreaAiFollowerTests
         Assert.IsFalse(AreaAiHost.CanHealAndFight(0x400000, 0, 0), "an invulnerable NPC never fights");
         Assert.IsFalse(AreaAiHost.CanHealAndFight(0, 0, 0x200), "a nigh-invulnerable NPC never fights");
         Assert.IsTrue(AreaAiHost.CanHealAndFight(0x100, 0x8, 0x2), "flags the rules do not read leave it fit");
+    }
+
+    [TestMethod]
+    public void The_reactions_setter_asks_for_no_alerted_sound_so_the_attack_goal_carries_none()
+    {
+        // ARC-RENDER-1126 (0x4A92D0, 0x4AABE0, 0x4296D0): only the danger update's setter call asks for the alerted sound (its pass record's bark slot, the host's UpdateDanger);
+        // the attack reaction's setter call passes none (its caller gives the setter no bark slot), so even with a scene that has a sound for the NPC the attack goal carries none and the approach plays nothing.
+        var (session, host, _, enemy, companion) = Open(alertedSound: entity => entity == Entity(1) ? 4242 : null);
+        host.HeroAttacked(enemy);
+        Assert.AreEqual(DangerState.CombatFocus, session.QueryDanger(companion).State, "the companion fights the hero's victim");
+        // The reaction's setter asked for no sound: the pass's perform starts the attack with none.
+        host.Perform(companion);
+        Assert.IsNull(host.RunOf(companion)?.Bottom.Sound, "no alerted sound without the danger update's call");
+        var plain = Run(host, companion);
+        Assert.IsFalse(plain.Any(n => n.Kind == AreaAiNoticeKind.Sound), "nothing played");
     }
 }

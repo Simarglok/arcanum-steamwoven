@@ -211,7 +211,7 @@ FR-ITEM-008, FR-MEDIA-003, FR-COMBAT-002, FR-COMBAT-003.
 | E8-c | Companions screen and follower menu; barter follower switch | M | Mac read |
 | E8-d | Combat action-point readout and the turn-order list (owner decision 2026-10-28) | M | — (UI-124 runs beside) |
 | E8-e | Options windows hidden today: violence filter, brightness, auto-switch weapons, follower skills, combat taunts, autosave timer | M | Mac read for each |
-| E8-f | Sound callers: scenery loops, busting, AI barks, NPC footsteps, item drop | S–M | — |
+| E8-f | **Done (ARC-RENDER-1126, #1126).** Sound callers: scenery loops, busting, AI barks, NPC footsteps, item drop | S–M | — |
 | E8-g | Identify window, heal another critter, lockpicks on chests (viewer wiring; the session takes containers), junk-pile partial take, poison sources | M | — |
 | E8-h | Gambling and newspapers queue (K10; proposed for after the alpha) | M | E5-c |
 
