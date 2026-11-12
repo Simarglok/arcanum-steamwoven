@@ -1112,6 +1112,7 @@ public partial class TerrainViewerApp : Node
     public override void _Process(double delta)
     {
         PaceFrames();
+        SyncControllerPrompts();
         TickAudio();
         if (IsWorld)
         {
@@ -1145,6 +1146,7 @@ public partial class TerrainViewerApp : Node
     public override void _Input(InputEvent @event)
     {
         NotePacingActivity();
+        ObserveControllerInput(@event);
         if (IsWorld) { InputWorld(@event); return; }
         var before = _camera?.State;
         if (@event is InputEventMouseButton button)
