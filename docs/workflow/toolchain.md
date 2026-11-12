@@ -213,7 +213,7 @@ history held about 500 runs of such copies of one template).
   given, and says so (`SMOKE hero human-male (auto): ...`); with
   `--main-menu` (no hero) it is refused. A menu stage (`menu`, `scene`, `options`, `bar`, `death`, `perf-menu`) needs no
   `--main-menu`: it gets its own menu process. The stages the viewer runs only without `map` (`barter`, `menu`, `scene`, `options`, `plants`, `bar`,
-  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-tile`, `tile-ghost`, `container-click`, `fire-order`, `indoor-fade`, `npc-shot`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `please-move`, `placement-census`, `spell-end`, `hold-hero`, `spell-effects`, `movement`, `spirit-talk`, `sleep`, `bed`, `created-scenery`, `worn-light`, `critter-light`, `eye-light`, `summon-flash`, `summon-wall`, `summon-undead`, `tech-craft`, `tech-products`, `item-aim`, `disarm`, `perf`, `perf-menu`) get a run of their
+  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-tile`, `npc-wander`, `tile-ghost`, `container-click`, `fire-order`, `indoor-fade`, `npc-shot`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `please-move`, `placement-census`, `spell-end`, `hold-hero`, `spell-effects`, `movement`, `spirit-talk`, `sleep`, `bed`, `created-scenery`, `worn-light`, `critter-light`, `eye-light`, `summon-flash`, `summon-wall`, `summon-undead`, `tech-craft`, `tech-products`, `item-aim`, `disarm`, `perf`, `perf-menu`) get a run of their
   own (step `stages-alone`, or `map-alone`) when `map` is in the list too. `tech-craft` (ARC-DEV-362, technology audit slice T-a) needs the bullets the map's bodies hold, so it runs on the cave: `./arcanum smoke map "crash site cave" --stages tech-craft` (on a map with no bullets of the crafted gun's type it fails with that message; its steps are the helpers of `TerrainViewerTechCraftHarness.cs`). `bed` (ARC-WORLD-1162) runs on the cave (`./arcanum smoke map "crash site cave" --stages bed --hero human-male`): the cave's beds counted by script, a bed with no script refuses (message 8), an occupied one (10), the scripted bed seats the hero and a one-hour rest in it heals twice the ground's, the close empties the bed. `tech-products` (ARC-MAGIC-051, technology audit slice T-s) is `tech-craft`'s sibling on the same cave (`./arcanum smoke map "crash site cave" --stages tech-products`): it buys Therapeutics degrees 1 and 2 and Chemistry degree 1, assembles their first records, eats the two stat potions (the hero's effect list grows, record 158 adds +2 strength), uses the poison on a living NPC through the item cursor, reads the module's found schematic documents of those two disciplines through the inventory's Read button (each registers and is destroyed, a second copy of a known one is kept) and assembles the first found record the hero's expertise reaches from the window's Found tab, buys intelligence and Electric degrees up to 6, assembles the power cells (Chemistry degree 2), the powered shield (Electric degree 3: worn, its 15 s deferred call takes one cell and schedules the next) and the maintained armour (degree 6, record 168: a cell a tick), has the cave NPC assemble a learned record from its own list into its own list through the window queued the way the dialog's `su` queues it (the stage gives that NPC a Herbology degree and intelligence 8: the cave's NPCs have no degree, so this shows the window and session path for a crafter, not a real crafter), throws an assembled Explosives degree-1 grenade (record 219) at the cave NPC (a flight that lands off the tile is aimed again, up to three grenades; the item event starts the run and a cave NPC is damaged or resists), and F7/F8 keep effects, items, worn items, cells and the NPC's list (same harness helpers; it needs a living NPC in the cave). `item-aim` (ARC-DEV-365, technology audit slice T-g) opens the item cursor with a script trap device from the use icon and presses a tile (goal 41) and an NPC (goal 39); it needs a hero and a map with a living NPC. `disarm` (ARC-SKILLS-1156, E6-a second half) arms the hotkey bar's Disarm traps entry (skill cursor, interface mode 2), presses a container the stage makes trapped (the native script 30001 written as a map change) with the trap unknown (nothing rolled) and known (a fated press removes it); it needs a hero and a map with a container drawn in its window (NONE without one, or when the content's script 30001 is no trap script). A run whose stages include `debug-travel`, `follower-far` or `inv-carry`
   starts the viewer with `--debug-mode` (the stage needs the debug mode, ARC-DEV-050; ARC-WORLD-120).
 - **Stage configurations and grouping (ARC-DEV-391).** A viewer process fixes its map, start sector, hero, main menu and
@@ -417,7 +417,7 @@ before it. It replaces the earlier
     ./arcanum run --kind window|headless|export|dotnet|quick [--estimate SEC] [--timeout MIN] [--label TEXT] [--expect REGEX] [--start-within SEC] [--verbose] -- COMMAND [ARGS...]
     ./arcanum queue                 # the runs holding a place, then the waiters in order
     ./arcanum queue --history N     # the last N finished runs: waited, ran, exit
-    ./arcanum queue --pause         # no waiting run starts (running ones finish) until --resume (ARC-DEV-1344)
+    ./arcanum queue --pause         # no waiting run starts (running ones finish), for every checkout, until --resume (ARC-DEV-1344)
     ./arcanum queue --resume
     ./arcanum queue --app           # start the menu-bar view of the queue now (a queued run starts it by itself)
 
@@ -477,6 +477,12 @@ changed source is built again by the next start (about 30 s the first time, in t
 Python helper because it needs nothing installed (system Python has no `rumps`/PyObjC), has no interpreter running for the
 display and reads the queue's own files, so it works from whichever checkout started it and when that checkout is gone.
 
+- **Task code.** Every run row (the menu's and `./arcanum queue`'s) shows the task code `ARC-<TYPE>-<issue>` it belongs to: the one in its
+  label, else the one in the branch its checkout has now, read from the checkout's `HEAD` file (a worktree's `.git` file names its git
+  folder), so a run of any wrapper version shows it and nothing is added to the ticket; a branch with no code (`claude/project-thread-...`)
+  shows none.
+- **Layout.** What stays the same is on top (Pause, `Godot runs at once`, `Load guard`, Quit); below it what changes: the counts, the
+  Mac's load and RAM, then the running and the waiting runs.
 - **Shows.** The icon says what the queue holds (`tray`, `tray.full` with `running·waiting`, `pause.circle` while paused). The menu lists the
   running runs, then the waiting ones in queue order: number, kind and lane, label, how long it has run or waited, the checkout
   (the tooltip has the full command and pid). It reads the tickets the way the queue does (the flock the run holds plus a live
@@ -485,12 +491,17 @@ display and reads the queue's own files, so it works from whichever checkout sta
   one core, from the change of the tree's accumulated CPU time, so it shows from the second sample on) and RAM (resident set)
   of its command's process tree: the process group the queue started it in plus descendants that left it. The header line shows
   the Mac's load average, cores and RAM in use (active, wired and compressed pages). Nothing is sampled while the menu is closed.
-- **Pause.** The menu's `Pause` item and `./arcanum queue --pause` / `--resume` set and clear one flag, the file `paused` in the queue
-  folder. While it is set a waiter that would start waits instead (`ARCANUM_QUEUE queued ... waiting-for=resume paused`), and starts within the
-  poll interval after the resume, in its place in the order; runs already running finish and a nested run still runs inside its
-  parent's place; every kind waits, the owner's viewer launches and package builds too. `./arcanum queue` prints `PAUSED` and
-  `waiting ... (paused)`. A checkout that has not merged ARC-DEV-1344 ignores the flag: merge main before relying on it. The pause
-  stays until resumed, also across a restart of the app; the app never clears it by itself, so a forgotten pause holds every waiting run (they say so on stderr; the icon shows the pause).
+- **Pause.** The menu's `Pause` item and `./arcanum queue --pause` / `--resume` set and clear one thing: the file `t-pause.json` in the
+  queue folder, an *unreadable ticket* held by a small `/usr/bin/lockf` process. The queue has always counted a locked ticket it
+  cannot read (another version's format) as a running export, which blocks everything, so **every wrapper of every checkout, old
+  ones too, waits behind the pause** (checked with the code from before this change); no merge of main is needed for it to hold. Runs
+  already running finish and a nested run still runs inside its parent's place; every kind waits, the owner's viewer launches and
+  package builds too. A waiter says `waiting-for=queue PAUSED (./arcanum queue --resume)` (old wrappers: `waiting-for=#0 export ...
+  "unreadable ticket"`), `./arcanum queue` prints `PAUSED` and `waiting ... (paused)`, and the first run waiting starts within the poll
+  interval after the resume, in its place in the order. Resume removes the file and the holder ends within a second; the holder is
+  independent of the app and the shell that started it, but it dies with the machine's processes (a reboot, a kill of the holder),
+  which ends the pause, so a pause never outlives them. It has no limit: a forgotten pause holds every waiting run (they say so on
+  stderr; the icon shows the pause).
 - **Limits.** The menu's `Godot runs at once` and `Load guard` submenus set the owner's caps of
   [ARC-DEV-1353](#godot-lanes-arc-dev-400) (`./arcanum queue --set-lanes N|default`, `--set-max-load X|off`): they write the same
   `settings.json` of the queue folder (`shortLanes`, `maxLoad`), under the queue lock and atomically, so the CLI, the app and every
@@ -861,6 +872,17 @@ four locked packages (numpy, scipy, Pillow and the GPLv2+ potracer, wheel hashes
 
 ```sh
 python3 -B tools/hd_font/hd_font.py self-test    # task check: synthetic fonts drawn by the test, no game file; a failed install is a failed check
+```
+
+## Controller test evidence summariser (ARC-GPAD-1376)
+
+[`tools/input/evidence_summary.py`](../../tools/input/evidence_summary.py): standard-library Python that reads the opt-in evidence files the
+viewer writes (format and recording: [controller schemes, evidence log](../input/controller-schemes.md#evidence-log-arc-gpad-1376-merged)).
+It runs no Godot and no `dotnet`, so it does not use the launch queue; it reads only the files named on the command line.
+
+```sh
+python3 -B tools/input/evidence_summary.py --self-test    # task check: a synthetic session, no game file
+python3 -B tools/input/evidence_summary.py evidence-*.jsonl [--json]
 ```
 
 ## Function census

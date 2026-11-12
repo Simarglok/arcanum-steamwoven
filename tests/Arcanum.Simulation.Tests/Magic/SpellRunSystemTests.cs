@@ -325,6 +325,23 @@ public sealed class SpellRunSystemTests
         Assert.IsFalse(none.Changed(none.Table));
     }
 
+    // ARC-MAGIC-1399 (#1399, ledger QC7): the casts queued on a creature are runs active from the click with a BEGIN never processed. When the
+    // creature dies (0x45DA20 -> 0x459740 -> 0x4571E0 -> 0x456FA0 with the charge flag -> 0x4507D0) each of them is charged its BEGIN cost
+    // once and freed, as the original does; the run being processed (the killing cast, paid at its own BEGIN) is neither charged nor ended.
+    [TestMethod]
+    public void QueuedCastsOnADyingTargetAreEachChargedOnceAndFreedAsInTheOriginal()
+    {
+        var host = new Host();
+        host.Records[7] = Record();
+        var system = System(host, Run(0, flags: SpellRunFlags.Active), Run(1, flags: SpellRunFlags.Active), Run(2, flags: SpellRunFlags.Active), Run(3, flags: SpellRunFlags.Active | SpellRunFlags.Processed));
+        system.ObjectGone("orc", processing: 3);
+        var paid = system.Notes.Where(n => n.Kind == SpellRunNoteKind.Payments).Select(n => n.Run).ToArray();
+        CollectionAssert.AreEquivalent(new[] { 0, 1, 2 }, paid, "one payment per queued run, none for the processed one");
+        Assert.IsTrue(system.Table[0] is null && system.Table[1] is null && system.Table[2] is null, "the queued runs are freed");
+        Assert.IsNotNull(system.Table[3], "the processed run stays");
+        Assert.AreEqual(0, system.Queued.Count, "a never-processed BEGIN is freed at once, no interrupt follows");
+    }
+
     // ARC-MAGIC-034 (MA-3, 0x451C40; ledger DP1–DP2): the Dispel's runs: every run but the processed one whose source is the object ends by event (whatever its active bit), then every active
     // run whose target or summoned list holds it; a technological record's run is never touched; a run that only has the object as its parent or other object is left.
     [TestMethod]
