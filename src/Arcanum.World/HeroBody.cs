@@ -29,11 +29,47 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
     /// <summary>ARC-MAGIC-052: whether this is a monster body (the hero polymorphed by a Trait component).</summary>
     public bool IsMonster => MonsterSpecies >= 0;
 
-    /// <summary>ARC-MAGIC-052 (ledger TR4): the monster body of a species (0..31) and palette (0..3): no armour, shield or weapon part.</summary>
-    public static HeroBody Monster(int species, int palette) => new(0, 0, 0, palette, 0, 0, species);
+    /// <summary>ARC-MAGIC-052 (ledger TR4): the monster body of a species (0..31) and palette (0..3): no armour or shield part. ARC-MAGIC-1219 (PR1, PR2): <paramref name="weapon"/> is the weapon part,
+    /// 0 out of combat mode and 1 in it (the hero wields nothing in a monster body, so the part is only ever 0 or 1); <see cref="Palette"/> is the one the spell asked for, which the ART may not hold
+    /// (the draw then reads palette 0, PR5).</summary>
+    public static HeroBody Monster(int species, int palette, int weapon = 0) => new(0, 0, 0, palette, weapon, 0, species);
 
-    /// <summary>ARC-MAGIC-052: the art id of this monster body for an animation: class 12, the species, the animation and the palette (no armour, shield, weapon, rotation or frame).</summary>
-    public uint MonsterSelector(int animation) => (12u << 28) | ((uint)MonsterSpecies << 23) | ((uint)animation << 6) | ((uint)Palette << 4);
+    /// <summary>ARC-MAGIC-1219: this monster body in or out of combat mode (the weapon part 1 or 0, PR2).</summary>
+    public HeroBody MonsterInCombat(bool combatMode) => this with { Weapon = combatMode ? 1 : 0 };
+
+    /// <summary>ARC-MAGIC-052: the art id of this monster body for an animation: class 12, the species, the animation, the weapon part (see <see cref="MonsterWeaponPart"/>) and the palette (no armour, shield,
+    /// rotation or frame).</summary>
+    public uint MonsterSelector(int animation) => MonsterSelector(animation, MonsterWeaponPart(animation));
+
+    private uint MonsterSelector(int animation, int weapon) =>
+        (12u << 28) | ((uint)MonsterSpecies << 23) | ((uint)animation << 6) | ((uint)Palette << 4) | (uint)weapon;
+
+    /// <summary>The weapon part the art id of an animation carries (MA2): the animations 6 to 19 (run, fall, get up, vault, throw) clear it, the attack (20) and the low attack (21) take 1 even out of combat
+    /// mode (every installed attack file is a weapon part 1 one, and nothing attacks out of combat mode; the human body does the same), the rest keep the body's.</summary>
+    public int MonsterWeaponPart(int animation) => animation switch
+    {
+        >= 6 and <= 19 => 0,
+        WeaponArtRules.AttackAnimation or WeaponArtRules.LowAttackAnimation => Weapon == 0 ? 1 : Weapon,
+        _ => Weapon,
+    };
+
+    /// <summary>
+    /// ARC-MAGIC-1219 (PR4 of ARC-RES-145, the original's missing-art repair on a monster): the art ids the loader tries for an animation, in order. The stand with weapon part 0 missing becomes the stand with part 1; the walk
+    /// with part 1 missing (30 of 32 species, not the lizard man and the phantom knight) becomes the walk with part 0; the run missing becomes the walk; a low attack missing becomes the attack (the caller does not
+    /// read it twice). The throw (14) has no entry and is not loaded at all (owner D2: nothing in a monster body can play it).
+    /// </summary>
+    public IReadOnlyList<uint> MonsterCandidates(int animation)
+    {
+        var own = MonsterSelector(animation);
+        var weapon = (int)(own & 15);
+        return animation switch
+        {
+            0 when weapon == 0 => [own, MonsterSelector(0, 1)],
+            1 when weapon != 0 => [own, MonsterSelector(1, 0)],
+            6 => [own, MonsterSelector(1, 0)],
+            _ => [own],
+        };
+    }
 
     private static readonly string[] BodyCodes = ["HM", "DF", "GH", "HG", "EF"];
     private static readonly string[] ArmorCodes = ["UW", "V1", "LA", "CM", "PM", "RB", "PC", "BN", "CD"];

@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+using System.Text;
 using Arcanum.Data;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Movement;
@@ -152,6 +154,177 @@ public sealed class HeroBodyArtTests
         Assert.AreEqual(0xCF8000B0u, HeroBody.Monster(31, 3).MonsterSelector(2), "species 31 (bits 23 to 27), palette 3 and animation 2 fill their fields");
         Assert.AreNotEqual(sheep, HeroBody.Monster(20, 2), "the palette is part of the body");
     }
+
+    // ARC-MAGIC-1219 (PR1, PR2, PR4): the weapon part follows combat mode, and the original's missing-art repair picks the file.
+    [TestMethod]
+    public void TheMonsterBodysWeaponPartFollowsCombatModeAndTheRepairPicksTheFile()
+    {
+        var calm = HeroBody.Monster(26, 1); var fighting = calm.MonsterInCombat(true);
+        Assert.AreEqual(0, calm.Weapon); Assert.AreEqual(1, fighting.Weapon);
+        Assert.AreNotEqual(calm, fighting, "the weapon part is part of the body (a combat-mode change swaps it)");
+        Assert.AreEqual(calm, fighting.MonsterInCombat(false));
+        // The stand and the walk keep the part, the run, fall, get up, vault and throw clear it, the attacks always carry 1.
+        Assert.AreEqual((0, 1), ((int)(calm.MonsterSelector(0) & 15), (int)(fighting.MonsterSelector(0) & 15)));
+        Assert.AreEqual((0, 1), ((int)(calm.MonsterSelector(1) & 15), (int)(fighting.MonsterSelector(1) & 15)));
+        foreach (var animation in new[] { 6, 7, 8, 13, 14 }) Assert.AreEqual(0, (int)(fighting.MonsterSelector(animation) & 15), $"animation {animation} clears the weapon");
+        foreach (var animation in new[] { 20, 21 }) Assert.AreEqual((1, 1), ((int)(calm.MonsterSelector(animation) & 15), (int)(fighting.MonsterSelector(animation) & 15)), $"animation {animation}");
+        Assert.AreEqual(26, (int)(fighting.MonsterSelector(20) >> 23 & 31)); Assert.AreEqual(1, (int)(fighting.MonsterSelector(20) >> 4 & 3));
+        // PR4: stand 0 -> stand 1; walk 1 -> walk 0; run -> walk 0; the others have no repair of their own here.
+        CollectionAssert.AreEqual(new[] { calm.MonsterSelector(0), fighting.MonsterSelector(0) }, calm.MonsterCandidates(0).ToArray());
+        CollectionAssert.AreEqual(new[] { fighting.MonsterSelector(0) }, fighting.MonsterCandidates(0).ToArray());
+        CollectionAssert.AreEqual(new[] { fighting.MonsterSelector(1), calm.MonsterSelector(1) }, fighting.MonsterCandidates(1).ToArray());
+        CollectionAssert.AreEqual(new[] { calm.MonsterSelector(1) }, calm.MonsterCandidates(1).ToArray());
+        CollectionAssert.AreEqual(new[] { fighting.MonsterSelector(6), calm.MonsterSelector(1) }, fighting.MonsterCandidates(6).ToArray());
+        CollectionAssert.AreEqual(new[] { fighting.MonsterSelector(20) }, fighting.MonsterCandidates(20).ToArray());
+        Assert.AreEqual(0xCA000010u, HeroBody.Monster(20, 1).MonsterSelector(0), "weapon part 0 changes nothing for the sheep body");
+    }
+
+    // ARC-MAGIC-1219 (L6): the profile's provenance names a monster body, not human fields.
+    [TestMethod]
+    public void AMonsterProfilesProvenanceNamesTheSpeciesWeaponAndPalette()
+    {
+        using var archive = MonsterArchive(new() { ["ba"] = [0, 1], ["ab"] = [0, 1], ["bu"] = [0, 1], ["ag"] = [0, 1], ["an"] = [0, 1] });
+        var load = HeroBodyArt.LoadMonster([archive], HeroBody.Monster(28, 1, 1), Name);
+        Assert.AreEqual("hero monster body species28 weapon1 palette1 single-layer", load.Profile.Provenance);
+    }
+
+    // The synthetic species "air": stands and runs the air elemental's way (no weapon-0 stand, no run), palette 0 only.
+    // ARC-MAGIC-1219: every species and palette of the monster ARTs, out of and in combat mode, reads from the installed archives (opt-in: DAT_ROOT = the installed game folder with arcanum1.dat to Arcanum4.dat).
+    [TestMethod, TestCategory("RealData")]
+    public void EveryMonsterSpeciesLoadsInBothModesFromTheInstalledArt()
+    {
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrEmpty(root)) { Assert.Inconclusive("DAT_ROOT runs the installed monster body check."); return; }
+        var options = new DatReaderOptions { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 };
+        var archives = Directory.EnumerateFiles(root, "*.dat").Where(f => Path.GetFileName(f).StartsWith("arcanum", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase).Select(f => DatArchive.Open(f, options)).ToList();
+        try
+        {
+            var (holder, entry) = archives.SelectMany(a => a.Entries.Select(e => (Archive: a, Entry: e)))
+                .First(x => Encoding.ASCII.GetString(x.Entry.RawNameBytes.ToArray()).TrimEnd('\0').Replace('\\', '/').Equals("art/monster/monster.mes", StringComparison.OrdinalIgnoreCase));
+            var names = Arcanum.Data.Area.AreaObjectArt.ReadNameTable(holder.ReadEntry(entry)) ?? throw new AssertFailedException("monster.mes did not read");
+            string? Name(Arcanum.Data.Area.AreaMappingRole role, int number) => names.TryGetValue(number, out var name) ? name : null;
+            var report = new List<string>(); var failures = new List<string>();
+            for (var species = 0; species < 32; species++)
+            foreach (var combat in new[] { false, true })
+            foreach (var palette in new[] { 0, 1 })
+            {
+                var body = HeroBody.Monster(species, palette, combat ? 1 : 0);
+                try
+                {
+                    var load = HeroBodyArt.LoadMonster(archives, body, Name);
+                    var p = load.Profile;
+                    Assert.IsNull(p.Throw, $"species {species}: the throw is not loaded");
+                    Assert.IsTrue(p.Actions.All(a => p.Resource(a).Palette is 0 or 1), $"species {species}");
+                    report.Add($"species={species} {Name(Arcanum.Data.Area.AreaMappingRole.MonsterNames, species)} combat={combat} palette={palette} keys={load.Textures.Count} bytes={load.RgbaBytes} "
+                        + $"actions={string.Join(",", p.Actions.Select(a => a + ":" + p.Resource(a).Palette))} low={(p.LowAttack is null ? "none" : "own")}");
+                }
+                catch (TerrainViewerException error) { failures.Add($"species={species} combat={combat} palette={palette} {error.Error.Code}"); }
+            }
+            Console.WriteLine(string.Join("\n", report)); Console.WriteLine("FAILURES\n" + string.Join("\n", failures));
+            // The spider queen (30) does not decode in any palette (no installed spell makes it); everything else reads.
+            Assert.AreEqual(0, failures.Count(f => !f.StartsWith("species=30 ")), string.Join("; ", failures));
+        }
+        finally { foreach (var archive in archives) archive.Dispose(); }
+    }
+
+    private static string? Name(Arcanum.Data.Area.AreaMappingRole role, int number) => "air";
+
+    [TestMethod]
+    public void TheAirElementalsMissingStandAndRunAreRepairedAndItsMissingPaletteReadsAsPaletteZero()
+    {
+        // Files: the stand with weapon 1 (ba), the walk (ab), the attack with weapon 1 (bu); no stand with weapon 0 (aa), no run (ag).
+        using var archive = MonsterArchive(new() { ["ba"] = [0], ["ab"] = [0], ["bu"] = [0] });
+        foreach (var combat in new[] { false, true })
+        {
+            var body = HeroBody.Monster(28, 1, combat ? 1 : 0);
+            var load = HeroBodyArt.LoadMonster([archive], body, Name);
+            var profile = load.Profile;
+            // The stand is the repaired one (weapon part 1) in both modes; the walk is the part the mode names or, with 1 missing, 0.
+            Assert.AreEqual(body.MonsterSelector(0) | 1u, profile.Idle.Selector, $"stand combat={combat}");
+            Assert.AreEqual(body.MonsterSelector(1) & ~15u, profile.Walk.Selector, $"walk combat={combat}");
+            // The run is the walk's frames under the run's own selector with the weapon part 15; the vault is the stand's.
+            Assert.AreEqual(body.MonsterSelector(6) | 0xFu, profile.Run!.Selector);
+            Assert.AreEqual(body.MonsterSelector(13) | 0xFu, profile.Vault!.Selector);
+            Assert.AreEqual(body.MonsterSelector(20), profile.Attack!.Selector, "the attack file with weapon part 1 (the human body's rule: nothing attacks unarmed out of combat mode, the ART is the same)");
+            Assert.IsNull(profile.LowAttack, "no species file: the attack plays it"); Assert.IsNull(profile.Throw, "the throw is not loaded (owner D2)");
+            // PR5: palette 1 asked, the ARTs hold palette 0 only: the frames are palette 0's, the art id keeps palette 1.
+            Assert.IsTrue(profile.Actions.All(a => profile.Resource(a).Palette == 0), "read as palette 0");
+            Assert.IsTrue(load.Textures.Keys.All(k => k.Palette == 0));
+            Assert.AreEqual(1, (int)(profile.Idle.Selector >> 4 & 3));
+        }
+    }
+
+    [TestMethod]
+    public void AnArtWithNoPaletteAtAllIsRefusedAndAWeaponOneWalkIsKeptWhenTheSpeciesHasIt()
+    {
+        string? Lizard(Arcanum.Data.Area.AreaMappingRole role, int number) => "air";
+        // The species has its own walk with weapon 1 (the lizard man's bb): in combat mode it is the walk, out of it the weapon-0 walk.
+        using var own = MonsterArchive(new() { ["ba"] = [0], ["ab"] = [0], ["bb"] = [0], ["bu"] = [0] });
+        Assert.AreEqual(HeroBody.Monster(28, 0, 1).MonsterSelector(1), HeroBodyArt.LoadMonster([own], HeroBody.Monster(28, 0, 1), Lizard).Profile.Walk.Selector);
+        Assert.AreEqual(HeroBody.Monster(28, 0, 0).MonsterSelector(1), HeroBodyArt.LoadMonster([own], HeroBody.Monster(28, 0, 0), Lizard).Profile.Walk.Selector);
+        // A palette 0 that is absent too has nothing to fall back to.
+        using var none = MonsterArchive(new() { ["ba"] = [], ["ab"] = [], ["bu"] = [] });
+        Assert.AreEqual(TerrainViewerErrorCode.ActorMetadata, Assert.Throws<TerrainViewerException>(() => HeroBodyArt.LoadMonster([none], HeroBody.Monster(28, 1, 1), Lizard)).Error.Code);
+    }
+
+    [TestMethod]
+    public void TheLowAttackOfAWeaponOneFileIsReadWhenTheSpeciesHasItAndTheThrowNever()
+    {
+        using var archive = MonsterArchive(new() { ["ba"] = [0], ["ab"] = [0], ["bu"] = [0], ["bv"] = [0], ["ao"] = [0], ["bo"] = [0] });
+        var load = HeroBodyArt.LoadMonster([archive], HeroBody.Monster(26, 1, 1), Name);
+        Assert.IsNotNull(load.Profile.LowAttack, "the fire elemental's own low attack");
+        Assert.AreEqual(HeroBody.Monster(26, 1, 1).MonsterSelector(21), load.Profile.LowAttack.Selector);
+        Assert.IsNull(load.Profile.Throw, "the throw files are there, and not read");
+    }
+
+    // A DAT holding the synthetic species "air": each key is the letters after "airuwX" (weapon letter, animation letter), each value the palettes (0..3) the ART holds.
+    private static DatArchive MonsterArchive(Dictionary<string, int[]> files)
+    {
+        var entries = files.Select(f => (Name: $"art/monster/air/airuwX{f.Key}.art", Bytes: SyntheticArt(f.Value))).ToList();
+        entries.Add(("art/monster/monster.mes", []));
+        using var output = new MemoryStream();
+        var offsets = new List<uint>();
+        foreach (var (_, bytes) in entries) { offsets.Add((uint)output.Position); output.Write(bytes); }
+        using var table = new MemoryStream();
+        WriteU32(table, (uint)entries.Count);
+        for (var i = 0; i < entries.Count; i++)
+        {
+            var name = Encoding.ASCII.GetBytes(entries[i].Name + "\0");
+            WriteU32(table, (uint)name.Length); table.Write(name); table.Write(new byte[4]);
+            WriteU32(table, 1); WriteU32(table, (uint)entries[i].Bytes.Length); WriteU32(table, (uint)entries[i].Bytes.Length); WriteU32(table, offsets[i]);
+        }
+        table.Position = 0; table.CopyTo(output);
+        output.Write(new byte[16]); output.Write("1TAD"u8);
+        WriteU32(output, (uint)entries.Count); WriteU32(output, (uint)(table.Length + 28));
+        return DatArchive.Open(new MemoryStream(output.ToArray(), writable: false), new DatReaderOptions { MaxArchiveBytes = 1 << 20, MaxStoredEntryBytes = 1 << 20, MaxDecodedEntryBytes = 1 << 20 });
+    }
+
+    // An ART of eight rotations of two one-pixel frames holding the given palettes.
+    private static byte[] SyntheticArt(int[] palettes)
+    {
+        const int headerBytes = 132, paletteBytes = 1024, frameHeaderBytes = 28, groups = 8, frames = 2;
+        var total = groups * frames;
+        var table = headerBytes + palettes.Length * paletteBytes;
+        var payload = table + total * frameHeaderBytes;
+        var bytes = new byte[payload + total];
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(4), 8);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(8), 8);
+        foreach (var palette in palettes) BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(12 + 4 * palette), 1u);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(32), frames);
+        var at = headerBytes;
+        foreach (var _ in palettes) { bytes[at + 4] = bytes[at + 5] = bytes[at + 6] = bytes[at + 7] = 255; at += paletteBytes; }
+        for (var index = 0; index < total; index++)
+        {
+            var frame = table + index * frameHeaderBytes;
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame), 1); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame + 4), 1); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame + 8), 1);
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame + 20), 4); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame + 24), 2);
+            bytes[payload + index] = 1;
+        }
+        return bytes;
+    }
+
+    private static void WriteU32(Stream stream, uint value) { Span<byte> bytes = stackalloc byte[4]; BinaryPrimitives.WriteUInt32LittleEndian(bytes, value); stream.Write(bytes); }
 
     [TestMethod]
     public void AMonsterBodyThatCannotBeReadIsRefusedWithATypedFailure()

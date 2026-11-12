@@ -37,8 +37,8 @@ public partial class TerrainViewerApp
         if (_areaSession is not { } session || session.QueryHero() is not { } hero || HeroBody.For(hero.Race, hero.Gender) is not { } bare)
             return HeroBody.HumanFemale;
         // ARC-MAGIC-052 (TR4): a monster body the Trait component put on the hero (Polymorph, the body spells) is drawn instead of the race's body, worn armour and weapon (the original's new art id has none of them);
-        // a species whose ARTs do not read is drawn as the hero's own body.
-        if (session.QueryTraitArt(SessionSpellCaster.Hero) is { IsValid: true } trait && HeroBody.Monster(trait.Species, trait.Palette) is var monster && !_heroBodyFailures.ContainsKey(monster)) return monster;
+        // a species whose ARTs do not read is drawn as the hero's own body. ARC-MAGIC-1219 (PR2): its weapon part is 1 in combat mode and 0 out of it, so a combat-mode change swaps the body as the human's does.
+        if (session.QueryTraitArt(SessionSpellCaster.Hero) is { IsValid: true } trait && HeroBody.Monster(trait.Species, trait.Palette).MonsterInCombat(HeroInCombatMode) is var monster && !_heroBodyFailures.ContainsKey(monster)) return monster;
         var worn = session.QueryEquipment().Worn;
         var dressed = bare.Wearing(WornUseArt(session, worn, EquipmentSlot.Armor)) is { } armour && !_heroBodyFailures.ContainsKey(armour) ? armour : bare;
         if (ArmedBody(session, worn, dressed) is not { } armed) return dressed;

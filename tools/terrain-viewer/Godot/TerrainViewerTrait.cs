@@ -19,6 +19,9 @@ public partial class TerrainViewerApp
     private void TakeTraitEvent(SpellCastEvent entry)
     {
         if (entry.Kind is not (SpellCastEventKind.TraitApplied or SpellCastEventKind.TraitRestored) || entry.Object != SessionSpellCaster.Hero) return;
+        // ARC-MAGIC-1219 (L5): a monster body that did not read is tried again at the next Trait apply (a read failure of the data is deterministic and the same failure twice stops there; an I/O error need not be).
+        if (entry.Kind == SpellCastEventKind.TraitApplied)
+            foreach (var failed in _heroBodyFailures.Keys.Where(body => body.IsMonster).ToArray()) _heroBodyFailures.Remove(failed);
         if (_traitEquipment.Count >= 64) _traitEquipment.Clear();
         _traitEquipment.Enqueue(entry.Kind == SpellCastEventKind.TraitApplied);
     }
