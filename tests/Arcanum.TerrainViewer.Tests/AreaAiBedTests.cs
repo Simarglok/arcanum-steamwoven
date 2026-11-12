@@ -46,7 +46,10 @@ public sealed class AreaAiBedTests
         Assert.IsTrue(scene.Host.Arrived.Contains(scene.Npc), "NPC flag 0x200");
         Assert.IsTrue(scene.Host.Sleeping(scene.Npc), "critter flag 0x1000 over the data's");
         Assert.AreEqual(0x1000, scene.Session.QueryObjectFlags(scene.Npc).CritterSet);
-        Assert.AreEqual(new CellCoord(10, 20), scene.Host.Tile(scene.Npc), "the NPC stays where it stood");
+        Assert.AreEqual(0x100, scene.Session.QueryObjectFlags(scene.Npc).ObjectSet, "object flag 0x100: the bed's occupied frame shows the sleeper");
+        Assert.IsTrue(scene.Host.Hidden(scene.Npc));
+        Assert.AreEqual(new CellCoord(11, 21), scene.Host.Tile(scene.Npc), "a sleeper on the bed's tile is moved to the neighbour in direction 4 (x + 1, y + 1)");
+        StringAssert.Contains(Route(scene), "moved 10,20 -> 11,21");
     }
 
     [TestMethod]
@@ -107,7 +110,8 @@ public sealed class AreaAiBedTests
         Assert.IsFalse(scene.Host.Sleeping(scene.Npc));
         Assert.IsFalse(scene.Host.Arrived.Contains(scene.Npc), "the unseat clears NPC flag 0x200");
         Assert.IsTrue(scene.Session.QueryObjectFlags(scene.Npc).IsEmpty, "the flag write that gives back the data's value leaves no change behind");
-        Assert.AreEqual(new CellCoord(10, 20), scene.Host.Tile(scene.Npc), "the waking step moves nothing");
+        Assert.AreEqual(new CellCoord(11, 21), scene.Host.Tile(scene.Npc), "the waking step moves nothing: the NPC stays where it was seated");
+        Assert.IsFalse(scene.Host.Hidden(scene.Npc));
         scene.Host.RunStandpoints(scene.Npc);
         Assert.AreEqual(DayStand, scene.Host.Tile(scene.Npc), "the next step relocates it: " + Route(scene));
     }
@@ -173,6 +177,34 @@ public sealed class AreaAiBedTests
         Assert.IsFalse(again.Host.Sleeping(again.Npc));
     }
 
+    [TestMethod]
+    public void A_sleeper_that_does_not_stand_on_the_beds_tile_is_not_moved()
+    {
+        var occupancy = new AreaBedOccupancy();
+        var bed = new CellCoord(11, 20);
+        var scene = AreaAiRouteTests.Open(AreaAiRouteTests.Npc(0, [], 0, (DayStand.X, DayStand.Y), (bed.X, bed.Y)), beds: new AreaAiBeds(occupancy, () => [(BedKey, bed)]));
+        JumpToHour(scene, 3);
+        scene.Host.RunStandpoints(scene.Npc);
+        Assert.AreEqual(scene.Npc, occupancy.Occupant(BedKey), Route(scene));
+        Assert.AreEqual(new CellCoord(10, 20), scene.Host.Tile(scene.Npc));
+        Assert.IsTrue(scene.Host.Hidden(scene.Npc));
+    }
+
+    [TestMethod]
+    public void Waking_gives_the_flags_back_and_the_bed_revision_counts_each_change()
+    {
+        var occupancy = new AreaBedOccupancy();
+        var scene = Open(occupancy);
+        JumpToHour(scene, 3);
+        var before = occupancy.Revision;
+        scene.Host.RunStandpoints(scene.Npc);
+        Assert.AreEqual(before + 1, occupancy.Revision);
+        JumpToHour(scene, 12);
+        scene.Host.RunStandpoints(scene.Npc);
+        Assert.AreEqual(before + 2, occupancy.Revision);
+        Assert.IsTrue(scene.Session.QueryObjectFlags(scene.Npc).IsEmpty, "both session writes give back the data's values");
+    }
+
     private static void WriteSavedSleeper(AreaAiRouteTests.Scene scene) =>
         Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.WriteObjectFlag(scene.Session.Version, scene.Npc, SessionObjectFlagField.Critter, 0x1000, true, false).Disposition);
 
@@ -226,5 +258,32 @@ public sealed class AreaAiBedTests
         scene.Host.NoticeKill(scene.Npc, null);
         Assert.IsNull(occupancy.Occupant(BedKey));
         Assert.IsFalse(scene.Host.Sleeping(scene.Npc));
+    }
+
+    [TestMethod]
+    public void An_attack_on_a_seated_sleeper_goes_on_after_the_wake_the_victim_turns_and_reacts()
+    {
+        // The seated sleeper is not drawn (flag 0x100): the attack event must not stop at "victim gone" once the wake has given the flag back.
+        var occupancy = new AreaBedOccupancy();
+        var scene = Open(occupancy);
+        JumpToHour(scene, 3);
+        scene.Host.RunStandpoints(scene.Npc);
+        Assert.IsTrue(scene.Host.Hidden(scene.Npc));
+        scene.Host.HeroAttacked(scene.Npc);
+        Assert.IsFalse(scene.Host.Hidden(scene.Npc));
+        Assert.AreNotEqual("VictimGone", scene.Host.TraceOf(scene.Npc)?.Event, "the event went on after the wake");
+    }
+
+    [TestMethod]
+    public void The_nudge_is_refused_when_the_hero_stands_on_the_neighbour_tile()
+    {
+        var occupancy = new AreaBedOccupancy();
+        var scene = AreaAiRouteTests.Open(AreaAiRouteTests.Npc(0, [], 0, (DayStand.X, DayStand.Y), (NightStand.X, NightStand.Y)), hero: () => new CellCoord(11, 21),
+            beds: new AreaAiBeds(occupancy, () => [(BedKey, NightStand)]));
+        JumpToHour(scene, 3);
+        scene.Host.RunStandpoints(scene.Npc);
+        Assert.AreEqual(scene.Npc, occupancy.Occupant(BedKey));
+        Assert.AreEqual(new CellCoord(10, 20), scene.Host.Tile(scene.Npc), "the hero's tile is not taken: " + Route(scene));
+        StringAssert.Contains(Route(scene), "no tile to move to");
     }
 }
