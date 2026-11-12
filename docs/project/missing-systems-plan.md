@@ -227,8 +227,8 @@ The two Mac reads of section 6 are done (2026-11-12, [ARC-RES-1107](https://gith
 | E8-e1 | Violence filter: the hit effect and the dying animation read it, the blood pool wiring, the options row (OH2) | S | — |
 | E8-e2 | Brightness: the Video page's slider 0–9, the final colour multiply 1.0 + 0.1 × value, fades returning to it (OH1) | S–M | — |
 | E8-e3 | Combat taunts: the host call at the end of an attack, the options row, default on, never in a network game (OH5, `FollowerRules.Taunt`) | S | the floating text layer (built, ARC-UI-021) |
-| E8-e4 | Auto Switch Weapons: the PC's re-wield after no ammunition, a destroyed weapon and the item-loss branches of the damage step, the options row, default off (OH3, PI5) | M | the best-item-for-slot function 0x465170 (partly built, starting kit) |
-| E8-e5 | Follower Skills and the hand-over: the better follower does a skill-bar skill or a lockpick use, Ctrl skips it, the hand-over line floats, the options row (OH4, PL5; owner recheck 8) | M–L | E8-b (the skill pane) for the skill-bar path |
+| E8-e4 | Auto Switch Weapons: the PC's re-wield after no ammunition, a destroyed weapon and (for a struck PC) the item-loss branches of the damage step, the options row, default off (OH3, PI5) | M | the best-item-for-slot function 0x465170 (partly built, starting kit) |
+| E8-e5 | Follower Skills and the hand-over: the better follower does a lockpick use or the skill bar's Disarm Traps (only these two, OH4), Ctrl skips it, the hand-over line floats, the options row (PL5; owner recheck 8 expects repair to hand over too, which the original does not do) | M | E8-b and E6-a for the Disarm Traps bar path |
 
 
 ### E9 Platform, controller and presentation
