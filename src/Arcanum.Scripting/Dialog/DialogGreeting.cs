@@ -331,19 +331,19 @@ internal static class DialogGreeting
     }
 
     /// <summary>
-    /// ARC-SCRIPT-1150: a line of the NPC's own talk inside the trainer's skill menu (0x418C40, 0x418A40, 0x418CA0, 0x418F30): the class group
+    /// ARC-SCRIPT-1150: a line of the NPC's own talk inside the trainer's skill menu (ledger DTR3 to DTR8): the class group
     /// <paramref name="group"/> (1000, 2000, 3000, 4000, 5000, 6000), as the greeting reads it, with the override line 9999 + group / 1000.
     /// </summary>
     public static GreetingOutcome NpcClassGroup(int group, DialogGreetingFacts facts, DialogGreetingSources sources, IDialogGreetingPort port,
         DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes) =>
         ClassLine(new Context(facts, sources, port, names, encoding, maxTextBytes), group);
 
-    /// <summary>ARC-SCRIPT-1150: a PC line of the range <paramref name="first"/>..<paramref name="last"/> (the trainer talk's answers, 0x4182D0).</summary>
+    /// <summary>ARC-SCRIPT-1150: a PC line of the range <paramref name="first"/>..<paramref name="last"/> (the trainer talk's answers).</summary>
     public static GreetingOutcome PcRange(int first, int last, bool pcDumb, DialogGreetingFacts facts, DialogGreetingSources sources,
         IDialogGreetingPort port, DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes) =>
         PcLine(new Context(facts, sources, port, names, encoding, maxTextBytes), pcDumb, first, last);
 
-    /// <summary>ARC-SCRIPT-1150: a PC line of the class group (the trained notice's answer, 0x418390).</summary>
+    /// <summary>ARC-SCRIPT-1150: a PC line of the class group (the trained notice's answer).</summary>
     public static GreetingOutcome PcClassGroup(int group, bool pcDumb, DialogGreetingFacts facts, DialogGreetingSources sources,
         IDialogGreetingPort port, DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes) =>
         PcClassLine(new Context(facts, sources, port, names, encoding, maxTextBytes), pcDumb, group);

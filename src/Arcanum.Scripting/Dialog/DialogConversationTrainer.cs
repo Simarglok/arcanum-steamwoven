@@ -31,7 +31,7 @@ public sealed partial class DialogConversation
     private bool TrainerAvailable => _ports.Trainer is not null && _ports.Skills is not null && _ports.Gold is not null && _ports.World is not null;
 
     /// <summary>
-    /// The numbers after the marker of a <c>t:</c> reply (the text the original's list reader 0x417F90 gets): comma-separated numbers or
+    /// The numbers after the marker of a <c>t:</c> reply (the text the original's list reader gets): comma-separated numbers or
     /// <c>a-b</c> ranges, at most 100, read like <c>atoi</c>; the whole reply is outside the subset when a number is no skill (0..15) or the menu
     /// (the listed skills and the way out) would not fit the five options the original keeps (it writes past its arrays then).
     /// </summary>
@@ -42,7 +42,7 @@ public sealed partial class DialogConversation
         return [.. numbers];
     }
 
-    /// <summary>0x417F90: the list reader of the trainer's skills and the rumor range of <c>r:</c>.</summary>
+    /// <summary>The original's list reader (ledger DTR2): the trainer's skills and, later, the rumor range of <c>r:</c>.</summary>
     internal static List<int> ParseNumberList(string text)
     {
         var result = new List<int>();
@@ -88,8 +88,8 @@ public sealed partial class DialogConversation
     }
 
     /// <summary>
-    /// The reaction scale of the price (0x4C1150, ledger BT2): the standard reaction counts at most 100; the factor is 200 below 0, 200 − 2r below
-    /// 50, else 120 − trunc(2r / 5); the price is the factor's share of <paramref name="price"/> (truncated). A price of 1 is shown as 2 (0x418A40).
+    /// The reaction scale of the price (ledger BT2): the standard reaction counts at most 100; the factor is 200 below 0, 200 − 2r below
+    /// 50, else 120 − trunc(2r / 5); the price is the factor's share of <paramref name="price"/> (truncated). A price of 1 is shown as 2 (ledger DTR5).
     /// </summary>
     internal static int ReactionPrice(int reaction, int price)
     {
@@ -99,7 +99,7 @@ public sealed partial class DialogConversation
         return scaled == 1 ? 2 : scaled;
     }
 
-    /// <summary>Replaces the first <c>%d</c> of a generated line with the price as the original's printf does (0x589BD0); <c>%%</c> is one percent sign.</summary>
+    /// <summary>Replaces the first <c>%d</c> of a generated line with the price as the original's printf does; <c>%%</c> is one percent sign.</summary>
     internal static string FormatPrice(string line, int price)
     {
         var builder = new System.Text.StringBuilder();
@@ -118,7 +118,7 @@ public sealed partial class DialogConversation
         return builder.ToString();
     }
 
-    /// <summary>The <c>t:</c> reply was picked and its action has run: the skill menu opens (0x414810 case 5 → 0x418CA0).</summary>
+    /// <summary>The <c>t:</c> reply was picked and its action has run: the skill menu opens (ledger DTR3).</summary>
     private void OpenTalk(OfferPlan plan)
     {
         var record = plan.Reply.Record;
@@ -127,7 +127,7 @@ public sealed partial class DialogConversation
         PresentMenu();
     }
 
-    /// <summary>0x418CA0: the NPC's menu line (class group 3000), one reply per listed skill and the way out (PC lines 800..899).</summary>
+    /// <summary>The menu (ledger DTR3): the NPC's class line 3000, one reply per listed skill and the way out (PC lines 800..899).</summary>
     private void PresentMenu()
     {
         if (!NpcTalkLine(MenuGroup, null, out var line)) return;
@@ -151,7 +151,7 @@ public sealed partial class DialogConversation
         Present(line, options);
     }
 
-    /// <summary>0x418DE0: a skill of the menu was picked.</summary>
+    /// <summary>A skill of the menu was picked (ledger DTR4).</summary>
     private DialogConversationStepResult PresentSkill(int skill)
     {
         var source = _talk!.Source;
@@ -174,7 +174,7 @@ public sealed partial class DialogConversation
         return Result();
     }
 
-    /// <summary>0x418A40: the price (the base price on the reaction scale) in the NPC's class line 1000, and the yes and no replies.</summary>
+    /// <summary>The price screen (ledger DTR5; the base price on the reaction scale) in the NPC's class line 1000, and the yes and no replies.</summary>
     private void PresentQuote(int skill)
     {
         if (ReadReactionValue(_talk!.Source) is not { } reaction) return;
@@ -184,7 +184,7 @@ public sealed partial class DialogConversation
         Present(line, [yes with { Choice = new TrainerChoice(TrainerChoiceKind.Pay, skill, price) }, no with { Choice = new TrainerChoice(TrainerChoiceKind.Follow) }]);
     }
 
-    /// <summary>0x418C40 and 0x418F30: one NPC line and the single way on, the PC line 600..699 (or the class line 1000 after a training).</summary>
+    /// <summary>A notice (ledger DTR7, DTR8): one NPC line and the single way on, the PC line 600..699 (or the class line 1000 after a training).</summary>
     private void PresentNotice(int group, bool classAnswer)
     {
         if (!NpcTalkLine(group, null, out var line)) return;
@@ -251,7 +251,7 @@ public sealed partial class DialogConversation
         }
     }
 
-    /// <summary>0x418B30 then 0x418F30: the PC's own gold must cover the price (else line 2000); then the gold goes to the NPC and the PC is trained.</summary>
+    /// <summary>The payment and the training (ledger DTR6, DTR7): the PC's own gold must cover the price (else line 2000); then the gold goes to the NPC and the PC is trained.</summary>
     private void PayAndTrain(TrainerChoice choice)
     {
         var talk = _talk!;
