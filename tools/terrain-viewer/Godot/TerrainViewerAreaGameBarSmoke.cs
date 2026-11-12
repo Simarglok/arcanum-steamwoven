@@ -192,7 +192,7 @@ public partial class TerrainViewerApp
                     var quickFrame = panel.FrameForSelfTest(button);
                     Require(panel.Visible && quickFrame == heldFrame && control.Texture == heldTexture,
                         $"{button} first draw after quick {(opens ? "open" : "close")} shows held Down, got frame {quickFrame}");
-                    await WaitForDownFeedback();
+                    await WaitForSettled(button, hoverFrame);
                     Require(panel.FrameForSelfTest(button) == hoverFrame, $"{button} feedback settles to Hover");
                 }
 
@@ -270,6 +270,15 @@ public partial class TerrainViewerApp
                 await ToSignal(GetTree().CreateTimer(0.15, ignoreTimeScale: true), SceneTreeTimer.SignalName.Timeout);
                 await Frames(1);
             }
+            // ARC-DEV-1193: the panel keeps Down for DownMinimumMs counted from the first frame actually drawn, and the draw can come
+            // late on a loaded machine, so a fixed wait after a quick click is not enough. Wait for the settled frame itself (frames
+            // keep running); a Down that never ends still fails the check after the limit.
+            async Task WaitForSettled(AreaBarButton button, int frame)
+            {
+                var started = Time.GetTicksMsec();
+                while (panel.FrameForSelfTest(button) != frame && Time.GetTicksMsec() - started < 5000) await Frames(1);
+                if (Time.GetTicksMsec() - started >= 200) GD.Print($"ARC-DEV-1193 bar smoke: {button} took {Time.GetTicksMsec() - started} ms to show frame {frame} (a slow draw, waited for)");
+            }
 
             Require(InterfaceHd.Enabled == verifyHd, "the bar smoke is running in the requested interface mode");
             await Move(combat);
@@ -286,7 +295,7 @@ public partial class TerrainViewerApp
             Require((combatControl.Texture is HdInterfaceTexture { IsHd: true }) == verifyHd, "Combat Down uses the requested art");
             var quickDownPixels = ButtonPixels(combatRect);
             Require(!quickDownPixels.AsSpan().SequenceEqual(combatHoverPixels), "quick Down differs from Hover in the viewport");
-            await WaitForDownFeedback();
+            await WaitForSettled(AreaBarButton.Combat, 2);
             Require(HeroInCombatMode && panel.FrameForSelfTest(AreaBarButton.Combat) == 2, "feedback settles to Hover with combat still on");
 
             await Button(combat, true);
@@ -352,7 +361,7 @@ public partial class TerrainViewerApp
                 var downSource = TextureSource();
                 var downPixels = ButtonPixels(rect);
                 Require(!downPixels.AsSpan().SequenceEqual(hoverPixels), $"{button} Down differs from Hover in the viewport");
-                await WaitForDownFeedback();
+                await WaitForSettled(button, hoverFrame);
                 Require(panel.FrameForSelfTest(button) == hoverFrame, $"{button} settles to Hover");
 
                 await Button(at, true);
