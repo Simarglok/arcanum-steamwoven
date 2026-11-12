@@ -10,6 +10,8 @@ production API, viewer, session, launcher or other component; the probe's
 attachment walk of [ARC-RES-037](virgil-script-attachments.md) moved into a
 shared function without changing that report (byte-identical before and after).
 
+A later census ([script refusal census](script-refusal-census.md), ARC-RES-1101) ranks what the widest admitted set still refuses.
+
 Requirements: [FR-SCRIPT-001](../requirements/story-social-ai.md#fr-script-001)
 (which events occur) and [FR-SCRIPT-002](../requirements/story-social-ai.md#fr-script-002)
 (which opcodes occur, the unknown-opcode policy). Answers unknown **U2** of

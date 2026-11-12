@@ -46,7 +46,9 @@ public partial class TerrainViewerApp
             if (group.Companions.FirstOrDefault(c => c.Key == command.Identity) is not { } companion
                 || !companion.Template.Visuals.TryGetValue(command.Visual, out var visual)) { drawn.Add(command); continue; }
             var state = DiagnosticGridActor.RenderState(companion.Grid.State);
-            drawn.Add(AnimateBody(command, companion.Speaker.Row, visual, state.Action, state.Facing, now, companion.Cycle, keepT0Until: true));
+            var companionGrid = companion.Grid;
+            drawn.Add(AnimateBody(command, companion.Speaker.Row, visual, state.Action, state.Facing, now, companion.Cycle, keepT0Until: true,
+                gait: (k, r, a, f) => NoteGaitFrame(k, r, a, f, WorldCellCoord(companionGrid))));
         }
         return drawn.AsReadOnly();
     }
@@ -65,7 +67,8 @@ public partial class TerrainViewerApp
             if (!_bodyCycles.TryGetValue(key, out var cycle)) _bodyCycles[key] = cycle = new AreaBodyCycle();
             var octant = DiagnosticGridActor.Octant(mover.Facing);
             if (action == ActorDiagnosticAction.Idle && ArmedBody(host, npc, command, visual, octant, now) is { } armed) { cycle.Observe(action, now); drawn.Add(armed); continue; }
-            drawn.Add(AnimateBody(command, npc.Row, visual, action, octant, now, cycle, keepT0Until: false));
+            var cell = mover.Cell;
+            drawn.Add(AnimateBody(command, npc.Row, visual, action, octant, now, cycle, keepT0Until: false, gait: (k, r, a, f) => NoteGaitFrame(k, r, a, f, cell)));
         }
         return drawn.AsReadOnly();
     }
@@ -150,7 +153,7 @@ public partial class TerrainViewerApp
 
     // One body: its gait clock, then its pose (a companion that has not moved yet keeps its T0 frame and facing, as before it joined).
     private AreaDrawCommand AnimateBody(AreaDrawCommand command, AreaObjectRecord row, AreaVisualRecord visual, ActorDiagnosticAction action,
-        int octant, long now, AreaBodyCycle cycle, bool keepT0Until)
+        int octant, long now, AreaBodyCycle cycle, bool keepT0Until, Action<AreaObjectKey, AreaObjectRecord, ActorDiagnosticAction, int>? gait = null)
     {
         if (command.Identity is not { } key || _readyArea is not { } area) return command;
         var elapsed = cycle.Observe(action, now);
@@ -161,6 +164,9 @@ public partial class TerrainViewerApp
             _bodyMoves[(visual.Entry, visual.RequestedPalette)] = moves;
             GD.Print($"ARC-WORLD-111 body-moves object={key.SourceIndex} status={moves.Status} detail={moves.Detail}");
         }
+        // ARC-RENDER-1126 (0x4305D0): the walk or run frame the cycle is on, for the footsteps (frames 3 and 8).
+        if (gait is not null && moves.Status == AreaBodyMoveStatus.Ready && moves.For(action) is { } gaitArt)
+            gait(key, row, action, AreaBodyMoveArt.CycleFrame(action == ActorDiagnosticAction.Idle ? 0 : elapsed, gaitArt.FramesPerSecond, gaitArt.FramesPerGroup));
         try
         {
             var (moved, pose) = AreaBodyMoveArt.Animate(command, row, visual, moves, action, octant, elapsed, cycle.Moved);

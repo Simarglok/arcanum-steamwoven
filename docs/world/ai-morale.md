@@ -58,8 +58,7 @@ retry changes nothing, so the back-off simply ends without a clear line.
 
 ## Not ready
 
-- **Callers.** The AI pass (I6) runs the danger update and perform (0x4AC180) only as host stages, so nothing runs their FLEE and SURRENDER paths or combat perform yet; no
-  combat path reports a kill; no host implements `IMoraleWorld`. The fear effect and the dialog start (flee 0x4AF130 = the
+- **Callers.** `KillNotification` has its caller since ARC-AI-1134: the life step of every kill path (hero and NPC attack, spell, burn, trap, script damage and kill) tells the host (`GameSessionOwner.KillNotice`) once the dying script allowed the death and the death time is stamped; the session has written the victim's combat focus (field 0x11B) := the killer first (none for a damage with no source), and `AreaAiHost.NoticeKill` runs the rule over its world (`AreaAiHost` is the `IMoraleWorld`), applies it with `ApplyKillNotification` and ends the victim's flee goals; a death on a map other than the shown one, or of an NPC the host does not run, gets the focus write only. The AI pass (I6) runs the danger update and perform (0x4AC180) only as host stages, so nothing runs their FLEE and SURRENDER paths or combat perform yet. The fear effect and the dialog start (flee 0x4AF130 = the
   setter's FLEE), the fear effect's end and resurrection (stop fleeing) are their domains' callers.
 - **Execution.** The flee goal (type 25) and the run to the back-off's tile are the executor's ([AI executor](ai-executor.md),
   ARC-WORLD-086), which calls perform fleeing, the back-off step and the back-off start through its world; the "away" path's

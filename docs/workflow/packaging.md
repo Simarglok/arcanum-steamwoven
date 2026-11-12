@@ -125,7 +125,8 @@ thread to find and fix it starts from the report; the first day after the fix pa
    Unicorn, rather than installing it into the fresh worktree each day; one that cannot load Unicorn is a failed check.
 4. `./arcanum smoke complete` ([smoke runner](toolchain.md#smoke-runner-arc-dev-061), ARC-DEV-396): its viewer build and
    import, the Crash Site smoke, the map batteries and then every stage the viewer accepts (about twenty processes; about 35
-   minutes of slot with the two long stages). A failed, not run or stopped step ends the day with no package.
+   minutes of slot with the two long stages). A failed, not run or stopped step ends the day with no package; a group of stages that fails only after other stages of its process
+   and whose every stage passes alone in the retry (order-dependent, ARC-DEV-396) is reported but does not end the day.
 5. `./arcanum package mac`, then `win`, of that same commit (`--ref COMMIT --no-fetch`), each told the chain's result as
    `--map-smoke`, which `BUILD.txt` keeps as its `map-smoke` line (`PASS (crash-site, main, town, wild, ruins, stages-main, ...)`: the steps that ran); a
    plain `./arcanum package` writes `map-smoke NOT RUN (...)`. Each platform is tried even when the other failed.

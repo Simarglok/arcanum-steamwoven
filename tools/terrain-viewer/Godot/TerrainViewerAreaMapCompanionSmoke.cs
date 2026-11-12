@@ -300,7 +300,8 @@ public partial class TerrainViewerApp
             var before = session.QueryPcInventory().Count;
             var applied = port.Execute(new GiveItemCommand(npc, pc, name));
             var result = port.LastResult;
-            if (result is not { Disposition: GameSessionDisposition.Changed, Item: { } item }) continue;
+            // ARC-WORLD-1131: an item the insert check refused lies on the ground (Changed, a refusing verdict): not one that entered the list.
+            if (result is not { Disposition: GameSessionDisposition.Changed, Item: { } item, Verdict: SessionInsertVerdict.Accepted }) continue;
             Require(applied == DialogCommandResult.Applied && session.QueryPcInventory().Count == before + 1, "the item entered the hero's list");
             var taken = session.QueryPcInventory().Single(entry => entry.Entity == item);
             Require(taken.Origin == new SessionMapId(home.RuntimeMap), $"the item keeps its home map as origin: {taken.Origin.RuntimeMap}");
