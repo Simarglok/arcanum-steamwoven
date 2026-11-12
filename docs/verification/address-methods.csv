@@ -166,6 +166,13 @@ src/Arcanum.Session/GameSessionReading.cs,UseWrittenItem,pending,
 src/Arcanum.Session/GameSessionRestock.cs,RegenerateInventory,pending,
 src/Arcanum.Session/GameSessionRestock.cs,ScheduleRestock,pending,
 src/Arcanum.Session/GameSessionSchematics.cs,ReadWrittenItem,pending,
+src/Arcanum.Session/GameSessionScriptItems.cs,DestroyNamedItem,exempt,reference
+src/Arcanum.Session/GameSessionScriptItems.cs,QueryNamedItem,exempt,reference
+src/Arcanum.Session/GameSessionScriptItems.cs,QueryNamedItemDestroy,exempt,reference
+src/Arcanum.Session/GameSessionScriptItems.cs,QueryNamedItemTransfer,exempt,reference
+src/Arcanum.Session/GameSessionScriptItems.cs,SetItemWrittenStart,exempt,reference
+src/Arcanum.Session/GameSessionScriptItems.cs,ToggleItemDisplay,exempt,reference
+src/Arcanum.Session/GameSessionScriptItems.cs,TransferNamedItem,exempt,reference
 src/Arcanum.Session/GameSessionScriptStats.cs,QueryHeroScriptStat,pending,
 src/Arcanum.Session/GameSessionScriptStores.cs,QueryGlobalVariable,pending,
 src/Arcanum.Session/GameSessionScriptStores.cs,QueryPcFlag,pending,

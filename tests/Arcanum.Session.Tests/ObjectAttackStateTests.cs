@@ -125,17 +125,17 @@ public sealed class ObjectAttackStateTests
     }
 
     [TestMethod]
-    public void ItemsSoldIntoABrokenContainerAreNotSpilledAndTheSaveStaysValid()
+    public void ItemsSoldIntoABrokenContainerSpillWithItsOwnAndTheSaveStaysValid()
     {
-        // ARC-WORLD-090: a merchant's stock chest with a sale in it; the attack spills only the chest's own items.
+        // ARC-WORLD-090: a merchant's stock chest with a sale in it; ARC-WORLD-1306: the attack spills the sold item with the chest's own, the list's end first.
         using var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
         var seed = Seed() with { Holders = [.. Seed().Holders, new("smith", SessionHolderKind.Npc, false, true, [], [])] };
         Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, seed).Failure);
         var pile = new SessionItemKind(SessionItemType.Gold, 9056, 3200, 33200);
         Assert.AreEqual(GameSessionFailure.None, owner.BarterSell(owner.Version, "smith", "kit:1", 1, 0, default, Accept, container: "chest", identify: true).Failure);
         Assert.AreEqual(ObjectBreak.ContainerSpilled, BreakIt(owner, new() { Target = Target("chest", DamageableObjectKind.Container) }).Object!.Break);
-        CollectionAssert.AreEqual(new[] { "knife", "cup" }, owner.QueryJunkPiles().Single().Items.Select(item => item.Entity).ToArray());
-        CollectionAssert.AreEqual(new[] { "knife", "cup" }, owner.QueryItemDecays().Select(d => d.Entity).ToArray(), "the sold item does not decay");
+        CollectionAssert.AreEqual(new[] { "kit:1", "knife", "cup" }, owner.QueryJunkPiles().Single().Items.Select(item => item.Entity).ToArray());
+        CollectionAssert.AreEqual(new[] { "kit:1", "knife", "cup" }, owner.QueryItemDecays().Select(d => d.Entity).ToArray(), "the sold item decays as the others");
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         using var restored = Restore(Decode(text));
         Assert.AreEqual(GameSessionDisposition.Changed, restored.AttachMapInventory(Exterior, seed).Disposition);
