@@ -169,6 +169,9 @@ src/Arcanum.Session/GameSessionScriptStores.cs,SetPcFlag,pending,
 src/Arcanum.Session/GameSessionScriptStores.cs,SetPcVariable,pending,
 src/Arcanum.Session/GameSessionScriptTrapDevices.cs,PlaceScriptTrapDevice,pending,
 src/Arcanum.Session/GameSessionScriptTrapDevices.cs,QueryScriptTrapMarkers,pending,
+src/Arcanum.Session/GameSessionSectorBlocked.cs,Pack,exempt,reference
+src/Arcanum.Session/GameSessionSectorBlocked.cs,QuerySectorBlocked,exempt,reference
+src/Arcanum.Session/GameSessionSectorBlocked.cs,SetSectorBlocked,exempt,reference
 src/Arcanum.Session/GameSessionSectors.cs,QuerySectorLoaded,pending,
 src/Arcanum.Session/GameSessionSkills.cs,SetHeroSkillTraining,pending,
 src/Arcanum.Session/GameSessionSpellBook.cs,MasterHeroCollege,pending,
