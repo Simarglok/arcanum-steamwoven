@@ -235,6 +235,33 @@ public partial class TerrainViewerApp
     /// <summary>The size of the hero's carried light now (None without a session or a hero).</summary>
     private CarriedLightSize HeroCarriedSize() => _areaSession is { } session ? CarriedSize(session.QueryHeroLight()) : CarriedLightSize.None;
 
+    /// <summary>
+    /// ARC-WORLD-1149 (FR-LIGHT-011, ledger LL1–LL3): the light level 0..254 a light-aware check reads for something at the world cell
+    /// (<see cref="AreaLocalLighting.LightLevel"/>): the shown map's ambient for the game hour, its sector lights as posed now and the lights
+    /// the creatures carry (the hero's worn light, the NPCs' and companions'), whatever the viewer's lighting toggle shows. Full light (255) on a
+    /// map without lighting or before one is shown, where the original's sampler finds no light and reads white.
+    /// </summary>
+    private int AreaCellLightLevel(long worldX, long worldY)
+    {
+        const int Full = Arcanum.Simulation.Combat.AttackRules.MaxLightLevel, Reach = 1024;
+        if (_areaAmbient is not { } driver || _readyArea?.Lighting is not { Local: { } basis } lighting || LightsNow(basis, driver) is not { } local) return Full;
+        var view = local;
+        if (_canvas?.AreaActorPlacementNow is { } placement && CarriedLightSource(HeroCarriedSize(), lighting, true, gameplay: true) is { } carried)
+        {
+            var tile = Arcanum.Data.Terrain.TerrainGeometry.Project(checked((int)(worldX - local.Chart.OriginX)), checked((int)(worldY - local.Chart.OriginY)));
+            view = carried(placement, new TerrainRect(tile.X + 40 - Reach, tile.Y + 20 - Reach, 2 * Reach, 2 * Reach)) ?? local;
+        }
+        return view.LightLevel(worldX, worldY, driver.Selection.Pair);
+    }
+
+    /// <summary>ARC-WORLD-1149: the light level at the cell a critter row stands on now (<see cref="AreaCellLightLevel"/>); full light for a row without a cell.</summary>
+    private int AreaRowLightLevel(AreaObjectRecord row)
+    {
+        if (row.WorldX is null || row.WorldY is null) return Arcanum.Simulation.Combat.AttackRules.MaxLightLevel;
+        var (x, y) = LiveWorldCell(row);
+        return AreaCellLightLevel(x, y);
+    }
+
     /// <summary>Per frame: gives the canvas the hero's carried light when the worn light, the shown lighting or the toggle changed.</summary>
     private void TickCarriedLight()
     {
@@ -250,7 +277,8 @@ public partial class TerrainViewerApp
     // ARC-DEV-335 (the hero) and ARC-DEV-353 (V7d second part, the critters): the lights that move with a creature. The hero's is the size of its worn
     // light; a critter's (an NPC's or a companion's) is its saved primary light, which the original writes from its worn items (EQ12, LT12) and
     // moves with it (LT10): it stands where the critter stands now, its T0 cell until the AI or the follower moved it.
-    private Func<ActorDiagnosticPlacementInput, TerrainRect, AreaLocalLighting?>? CarriedLightSource(CarriedLightSize size, AreaLightingPlan? lighting, bool lit)
+    // ARC-WORLD-1149: with gameplay the source answers a light-aware check, not a drawing: it stands whatever the viewer's lighting toggle says.
+    private Func<ActorDiagnosticPlacementInput, TerrainRect, AreaLocalLighting?>? CarriedLightSource(CarriedLightSize size, AreaLightingPlan? lighting, bool lit, bool gameplay = false)
     {
         if (!lit || lighting is not { Local: { } local }) return null;
         var hero = size != CarriedLightSize.None && lighting.CarriedFrame is not null;
@@ -258,7 +286,7 @@ public partial class TerrainViewerApp
         return (placement, reach) =>
         {
             // A source made for another map's lighting (a map change this frame) draws nothing until the tick gives the canvas the new one.
-            if (_areaAmbient is not { Enabled: true } driver || !ReferenceEquals(_readyArea?.Lighting, lighting)) return null;
+            if (_areaAmbient is not { } driver || !gameplay && !driver.Enabled || !ReferenceEquals(_readyArea?.Lighting, lighting)) return null;
             var frames = new Dictionary<int, StationaryLightFrame>(local.CritterFrames);
             var lights = new List<StationaryLight>();
             // Only a light whose anchor is within reach of the view is built (the view is widened by the largest frame), so one far from the view

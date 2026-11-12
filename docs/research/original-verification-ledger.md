@@ -157,6 +157,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="world-map-travel-arc-res-068"></a>[World-map travel (ARC-RES-068)](ledger/world.md#world-map-travel-arc-res-068) | [World, maps and movement](ledger/world.md) | WT1–WT13 |
 | <a id="npc-ai-followers-in-combat-arc-res-067"></a>[NPC AI followers in combat (ARC-RES-067)](ledger/npc-ai.md#npc-ai-followers-in-combat-arc-res-067) | [NPC AI](ledger/npc-ai.md) | FO1–FO20 |
 | <a id="lights-on-all-maps-arc-res-069"></a>[Lights on all maps (ARC-RES-069)](ledger/world.md#lights-on-all-maps-arc-res-069) | [World, maps and movement](ledger/world.md) | LT1–LT15 |
+| <a id="light-level-for-checks-arc-world-1149"></a>[Light level for checks (ARC-WORLD-1149)](ledger/world.md#light-level-for-checks-arc-world-1149) | [World, maps and movement](ledger/world.md) | LL1–LL4 |
 | <a id="combat-wear-arc-combat-007"></a>[Combat wear (ARC-COMBAT-007)](ledger/combat.md#combat-wear-arc-combat-007) | [Combat](ledger/combat.md) | CW1–CW10 |
 | <a id="object-damage-arc-combat-008"></a>[Object damage (ARC-COMBAT-008)](ledger/combat.md#object-damage-arc-combat-008) | [Combat](ledger/combat.md) | OD1–OD14 |
 | <a id="critical-effects-arc-combat-009"></a>[Critical effects (ARC-COMBAT-009)](ledger/combat.md#critical-effects-arc-combat-009) | [Combat](ledger/combat.md) | CR1–CR15 |

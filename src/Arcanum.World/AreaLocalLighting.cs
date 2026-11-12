@@ -257,6 +257,14 @@ public sealed class AreaLocalLighting
         return Sample(checked(tile.X + offsetX + 40L), checked(tile.Y + offsetY + 20L), Ambient(TileChannel(worldX, worldY), pair), pair);
     }
 
+    /// <summary>
+    /// ARC-WORLD-1149 (FR-LIGHT-011): the light level 0..254 a light-aware check reads for something standing at the cell: the grey of
+    /// <see cref="Point"/>, the colour an object there is lit with (the indoor or outdoor ambient of the tile under it, the sector's lights and,
+    /// on a view made with them, the carried lights), through <see cref="LightLuminance.Gray"/>. Not the colour of an object the original
+    /// pins (flag 0x147 bit 0x2000000 and the object colour rules of 0x442520 are not modelled), nor a mover's pixel offsets.
+    /// </summary>
+    public int LightLevel(long worldX, long worldY, AmbientPair pair) => LightLuminance.Gray(Point(worldX, worldY, 0, 0, pair));
+
     // The sector's lights from the basis colour, then the carried lights (ARC-DEV-335); carriedOnly starts from a colour that already
     // holds the sector's lights.
     private AmbientColor Sample(long x, long y, AmbientColor basis, AmbientPair pair, Func<StationaryLight, bool>? admit = null, bool carriedOnly = false)

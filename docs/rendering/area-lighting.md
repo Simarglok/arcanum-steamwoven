@@ -261,8 +261,26 @@ both actions report "unavailable". No launch argument or key binding was added.
 Original night appearance, TIG multiply rounding, palette/BPP behaviour and
 gameplay effects of darkness remain NOT_VERIFIED. Stationary sector lights are
 covered below (ARC-RENDER-012); object/carried lights (FR-LIGHT-009), luminance
-checks (FR-LIGHT-011) and a save list (FR-LIFECYCLE) are separate work; the
+checks (FR-LIGHT-011, [below](#light-level-for-checks-arc-world-1149)) and a save list (FR-LIFECYCLE) are separate work; the
 session snapshot carries the clock and the applied scheme, saved by the ARC-WORLD-011 quick-save slot.
+
+## Light level for checks (ARC-WORLD-1149)
+
+Status: **implemented bounded component** (FR-LIGHT-011, partial in the viewer). The light-aware checks of the original read the grey level
+of the light at an object or a location ([ledger LL1–LL4](../research/ledger/world.md#light-level-for-checks-arc-world-1149)). Steamwoven's
+level of a world cell is `LightLuminance.Gray` (Data: the sum of three channel table entries, weights 0.30 red, 0.59 green, 0.11 blue of 255,
+truncated per channel, so white reads 254) over `AreaLocalLighting.LightLevel` (World: the colour of `Point` for the cell, i.e. the tile's indoor
+or outdoor ambient of the game hour plus the sector lights as posed and, on a view made with them, the lights the creatures carry). The viewer
+(`AreaCellLightLevel`) asks it with the hour pair of the ambient driver and the hero's carried light, never the lighting toggle's neutral pair,
+so switching the lighting view off does not change a roll; on a map without lighting it answers full light (255), as before.
+
+Fed into: the hero's melee, ranged and thrown attack on an NPC (`SessionAttack.TargetLight`, `SessionHeroThrow.StruckLight`, the light at the
+struck NPC's cell), the combat panel's hit chance (`QueryHeroAttackChance(…, targetLight)`), the lockpicking of a portal (the portal's cell) and the
+spot roll of a trap object (`AreaTraps`, the trap's cell). A target's carried light lights its own cell, so a torch-bearing NPC is easier to hit.
+Not modelled: NPC attacks on the hero and companions (full light on the target), container picks, trap disarming, seeing checks and the AI's
+awareness read; the object colour rules of 0x442520 (pinned and fixed-colour objects, a mover's pixel offsets) and the display-depth
+quantisation of the channels (NOT_VERIFIED). Tests: `LightLuminanceTests` (Data), `AttackChanceStateTests` (Session),
+`AreaLocalLightingTests` (viewer tests).
 
 ## Cave ambient and stationary sector lights (ARC-RENDER-012)
 

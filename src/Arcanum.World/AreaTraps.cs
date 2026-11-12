@@ -80,14 +80,17 @@ public sealed class AreaTraps
     private readonly AreaUseScriptHost _host;
     private readonly Func<AreaObjectRecord, bool> _gone;
     private readonly Func<AreaTrapEffects?> _effects;
+    private readonly Func<AreaObjectRecord, int>? _light;
     private readonly Dictionary<(long X, long Y), List<AreaObjectRecord>> _trapObjects = [];
 
     /// <param name="shown">The shown map's rows (its snapshot's): its trap objects (type 17) in snapshot order are the ones a step meets.</param>
     /// <param name="gone">Whether the session destroyed or switched off a row (a removed trap object is destroyed).</param>
     /// <param name="effects">The cast host's side now, or null while there is none.</param>
+    /// <param name="light">ARC-WORLD-1149 (FR-LIGHT-011): the light level 0..255 at a trap object's cell for the spot roll's darkness term; null: full light.</param>
     public AreaTraps(GameSessionOwner session, AreaUseScriptHost host, IEnumerable<AreaObjectRecord> shown, Func<AreaObjectRecord, bool> gone,
-        Func<AreaTrapEffects?> effects)
+        Func<AreaTrapEffects?> effects, Func<AreaObjectRecord, int>? light = null)
     {
+        _light = light;
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _host = host ?? throw new ArgumentNullException(nameof(host));
         ArgumentNullException.ThrowIfNull(shown);
@@ -138,7 +141,7 @@ public sealed class AreaTraps
                     var mark = _session.MarkTrapSpotted(_session.Version, trapped, baseline, TrapObserver.Player);
                     return new(mark.Disposition == GameSessionDisposition.Rejected ? null : row, mark, rolls);
                 case TrapSpotGate.Roll:
-                    var spot = _session.RollHeroSpotTrap(_session.Version, trapped, baseline, effects.PlayerSpellFlags);
+                    var spot = _session.RollHeroSpotTrap(_session.Version, trapped, baseline, effects.PlayerSpellFlags, LightAt(row));
                     if (spot.Disposition == GameSessionDisposition.Rejected) break;
                     rolls++;
                     if (!spot.Spotted) break;
@@ -180,6 +183,8 @@ public sealed class AreaTraps
         return new(row, SessionTrapCause.Attack, result, apply!(row, run, baseline.Counters, result.State.ObjectFlags));
     }
 
+    private int LightAt(AreaObjectRecord row) => _light?.Invoke(row) ?? SessionPickLockTarget.FullLight;
+
     private AreaTrapMeeting? Meet(AreaObjectRecord row, SessionTrapCause cause)
     {
         if (_effects() is not { } effects || _host.TrapBaseline(row) is not { } baseline) return null;
@@ -193,7 +198,7 @@ public sealed class AreaTraps
         // A step with the step-over spell flags never reaches the entry point, so it never rolls (0x4305D0 before 0x441980).
         var rolls = gate == TrapSpotGate.Roll && (cause != SessionTrapCause.Step || TrapRules.StepTriggers(effects.PlayerSpellFlags));
         var spotted = gate == TrapSpotGate.Detected || rolls &&
-            _session.RollHeroSpotTrap(_session.Version, trapped, baseline, effects.PlayerSpellFlags).Spotted;
+            _session.RollHeroSpotTrap(_session.Version, trapped, baseline, effects.PlayerSpellFlags, LightAt(row)).Spotted;
         var result = _session.TriggerTrap(_session.Version, trapped, baseline, TrapObserver.Player, cause, spotted,
             cause == SessionTrapCause.Step ? effects.PlayerSpellFlags : 0);
         if (result.Outcome != SessionTrapOutcome.Fired || result.Run is not { Effect: not NativeTrapEffect.None } run) return new(row, cause, result, null);

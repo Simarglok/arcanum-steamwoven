@@ -227,6 +227,20 @@ offsets, flags (+0x18), ART (+0x1C), r, b, g, tinted colour, tint palette.
 | LT14 | drawing and sampling (0x4D89E0, 0x4DC210, 0x4DE900), shadow builder (0x4D9B20) | Drawing and sampling gate a light on OFF (0x1) and DARK (0x2) only; INDOOR and OUTDOOR are read there only to re-tint after an ambient change. The shadow builder skips lights that are off, dark or carry 0x40, and lights owned by the object itself, and builds up to four shadows; it is the only reader of 0x40 in the executable. 0x4 and 0x20 only gate animation. | Original |
 | LT15 | tint (0x4DE390) | A light with INDOOR takes the indoor ambient colour, with OUTDOOR the outdoor colour, otherwise its own colour. | Original |
 
+## Light level for checks (ARC-WORLD-1149)
+
+Source: [FR-LIGHT-011](../../requirements/lighting-time.md#fr-light-011), [skills ledger SC9](skills.md), [lights on all maps](#lights-on-all-maps-arc-res-069).
+Question: what is "the light at an object or a location" that the darkness term of a skill check reads, and how does Steamwoven's sampler
+stand to it? Read on 2026-11-12 by this task from the exports of the executable; one reader (F1). Field numbers are the executable's:
+325 the object's cached light colour, 327 its render flags.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| LL1 | object light level (0x4DCE10) | Reads the object's cached light colour (field 325); when the render flag 0x2000000 (field 327: colour valid) is not set it first has the object-colour function (0x442520) compute and cache it, which lights the object through 0x4DC210 (the indoor or outdoor ambient of the tile under it plus the lights at its anchor) and then applies the object's own colour rules (a critter on the move, fixed-colour flags). The result is the grey sum of LL3 over that colour. | Original |
+| LL2 | location light level (0x4D9240) | Calls the sampler 0x4D89E0 for the location with no offsets and the ambient as the starting colour; the sampler starts from the indoor or the outdoor ambient by the tile class under the location and adds the lights over it; when it answers 0 (the location fails its bounds test, or no sector list is found for its window) the colour is full white. The result is the grey sum of LL3 over the sampled colour. | Original |
+| LL3 | grey sum (0x4DCE10, 0x4D9240), channel tables (0x52C9B0, 0x52C070, 0x524830) | Each of the three colour channels is looked up in its own table; the sum is the level. The tables are built once at video start: entry `i` is `trunc(i / max × weight)` with the channel's largest value as `max` and the weights 76.5 (red, the first channel the surface is asked for with colour 0xFF), 150.45 (green, 0xFF00) and 28.05 (blue, 0xFF0000), 0.30, 0.59 and 0.11 of 255. A white colour therefore reads 254; the darkness term (`30 × (255 − level) / 255`, SC9) is 0 for 254 and for 255. The channel values are those of the display surface (a 16-bit display has 5, 6 and 5 bits), so the level is display-dependent. | Original |
+| LL4 | callers (0x4C8430, 0x425D60, the awareness read) | The skill difficulty (SC9) reads the object light of the source in a seeing check, else of the target, else (no target) the location light at the check's location; the dark-wander node and the awareness read take the same level. Steamwoven's cell level is the grey of the colour an object standing on that cell is lit with (tile ambient, sector lights, carried lights; no pixel offsets, no 0x442520 colour rules); the quantisation by the display depth is not modelled (NOT_VERIFIED). | Original |
+
 ## Long and far routes (ARC-WORLD-060)
 
 Source: the [click-to-move route](../../world/click-route-runtime.md#original-check-arc-world-060) and its WORLD-042 corridor,

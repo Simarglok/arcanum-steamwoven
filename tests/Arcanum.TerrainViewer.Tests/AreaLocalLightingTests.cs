@@ -39,6 +39,25 @@ public sealed class AreaLocalLightingTests
             AreaStationaryLightSource.Create(5000, lights, [Uniform(7, 10, 10, 0, 0, 100), Uniform(8, 400, 400, 200, 200, 100)]));
 
     [TestMethod]
+    public void The_light_level_of_a_cell_is_the_grey_of_the_colour_an_object_there_is_lit_with()
+    {
+        // ARC-WORLD-1149 (FR-LIGHT-011): the origin cell is indoor (10..., pair.Indoor 50,60,70), the cell east of it outdoor (10,20,30).
+        var local = Local([]);
+        Assert.AreEqual(LightLuminance.Gray(Pair.Indoor), local.LightLevel(92928, 82560, Pair));
+        Assert.AreEqual(LightLuminance.Gray(Pair.Outdoor), local.LightLevel(92929, 82560, Pair));
+        Assert.AreEqual(local.LightLevel(92929, 82560, Pair), LightLuminance.Gray(local.Point(92929, 82560, 0, 0, Pair)));
+        Assert.AreEqual(LightLuminance.White, local.LightLevel(92929, 82560, AmbientPair.Neutral), "neutral light reads the table's white");
+        // A light on the cell raises it: ART 7 is a 10 x 10 mask adding 100 red at its anchor (the cell's tile point + (40, 20)).
+        var lit = Local([], Light(92929, 82560, 0, 0));
+        Assert.IsTrue(lit.LightLevel(92929, 82560, Pair) > local.LightLevel(92929, 82560, Pair), "a light adds to the grey");
+        // A carried light is part of the level when the view carries it.
+        var frame = AreaStationaryLightSource.Create(5000, [], [Uniform(1, 400, 400, 200, 200, 100)]).Frames[1];
+        var carried = local.WithCarried(frame, [new CarriedLight(92929, 82560, 0, 0, CarriedLightSize.Large)]);
+        Assert.IsTrue(carried.LightLevel(92929, 82560, Pair) > local.LightLevel(92929, 82560, Pair));
+        Assert.AreEqual(local.LightLevel(92929, 82560, Pair), Local([]).LightLevel(92929, 82560, Pair), "the map's own lighting is untouched");
+    }
+
+    [TestMethod]
     public void Carried_light_is_added_after_the_sector_lights_to_bodies_terrain_and_the_actor()
     {
         // ARC-DEV-335 (V7d, ledger LT10, LT12): the critter's light stands where the critter stands, never dark, ART 1 in the size's colour.

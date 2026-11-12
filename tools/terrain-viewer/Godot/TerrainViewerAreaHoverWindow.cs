@@ -173,7 +173,7 @@ public partial class TerrainViewerApp
         var cell = grid.Chart.ToWorld(grid.State.CommittedCell);
         var distance = Chebyshev(row, (cell.X, cell.Y));
         var line = RangedPath(session.QueryHeroAttack()) ? ShotLine(TraceLineOfFire(new(checked((int)cell.X), checked((int)cell.Y)), row), row) : null;
-        if (session.QueryHeroAttackChance(combat, (int)Math.Min(distance, AttackResolver.MaxMagnitude), line) is not { } chance) return null;
+        if (session.QueryHeroAttackChance(combat, (int)Math.Min(distance, AttackResolver.MaxMagnitude), line, AreaRowLightLevel(row)) is not { } chance) return null;
         var label = (_gameBarContent?.Texts ?? AreaGameBarTexts.Project("hover")).Text(AreaCombatPanelLayout.ToHitMessage);
         return AreaCombatPanelLayout.Panel(chance, label);
     }
