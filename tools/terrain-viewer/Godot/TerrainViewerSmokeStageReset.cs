@@ -52,6 +52,9 @@ public partial class TerrainViewerApp
         if (full && onShownMap && _smokeBaselineLibrary is not null && _smokeBaselineName is not null && SmokeLoadBaseline())
         {
             session = _areaSession!;
+            // The loaded session is a new instance: the viewer's once-per-session town map reveal (WM78) runs now, not in the first frame of the next stage (a revision there
+            // would count in a stage that counts them); the town files are open by the second boundary.
+            RevealWalkedTownMapCell();
             reset.Add("session(loaded from the baseline)");
             grid = (AreaGridSession)_worldActor.Session!;
             hero = grid.Chart.ToWorld(grid.State.CommittedCell);
@@ -85,10 +88,12 @@ public partial class TerrainViewerApp
         var joined = PartyLedByPc(session).Where(entity => !baseline.Party.Contains(entity)).Order(StringComparer.Ordinal).ToArray();
         if (joined.Length > 0)
         {
-            foreach (var entity in joined) session.LeaveParty(session.Version, entity, new PartyLeave(Force: true));
+            var refused = new List<string>();
+            foreach (var entity in joined)
+                if (session.LeaveParty(session.Version, entity, new PartyLeave(Force: true)) is { Disposition: GameSessionDisposition.Rejected } left) refused.Add($"{entity[..Math.Min(12, entity.Length)]}:{left.Failure}");
             BindAreaCompanions();
             PublishWorldSelection();
-            reset.Add($"party-left({joined.Length})");
+            reset.Add(refused.Count == 0 ? $"party-left({joined.Length})" : $"party-left({joined.Length - refused.Count}, REFUSED {string.Join(" ", refused)})");
         }
         var random = session.QueryRandom();
         if (random != baseline.Random && session.RestoreRandom(baseline.Random)) reset.Add($"random({random.Draws}->{baseline.Random.Draws})");
@@ -104,7 +109,10 @@ public partial class TerrainViewerApp
 
     private bool SmokeSaveBaseline()
     {
-        _smokeBaselineLibrary = new(System.IO.Directory.CreateTempSubdirectory("arc-dev-408-").FullName);
+        var folder = System.IO.Directory.CreateTempSubdirectory("arc-dev-408-").FullName;
+        // Best effort: the baseline folder goes with the process (the smoke runner removes only its settings folder).
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => { try { System.IO.Directory.Delete(folder, recursive: true); } catch (System.Exception e) when (e is System.IO.IOException or UnauthorizedAccessException) { } };
+        _smokeBaselineLibrary = new(folder);
         var previous = _saveLibraryForSelfTest;
         _saveLibraryForSelfTest = _smokeBaselineLibrary;
         try

@@ -177,11 +177,11 @@ history held about 500 runs of such copies of one template).
   map's open state) is not reset; (2) the load runs only while the shown window still holds the baseline's hero cell (a map change or a
   window move by `transfer`, `roundtrip`, `stream` publishes the scene on a later frame, which a stage boundary cannot wait for); then the
   narrow reset runs instead (the hero's combat mode, the hero's cell when it is on the shown map, the party members a stage took in, the roll
-  position), so a stage that needs the start window runs before the stages that move it (`creature-item` runs right after `resources`: with
+  position; the NPCs a stage killed, wounded or moved stay as they are), so a stage that needs the start window runs before the stages that move it (`creature-item` runs right after `resources` when that stage runs too: with
   the AI on, the first window's hero is safe, a moved window left it among wolves that killed it); (3) a loaded session is not the fresh
   one in what the viewer computes per frame: the town map's tile under the hero is revealed once per session instance, which cost every
   loaded session one more revision on its first frame (`inv-arrange` counts the revisions of a press), so the baseline takes that reveal
-  before it is saved (`RevealWalkedTownMapCell`). A new kind of leak outside the session is one more line in `SmokeStageBoundary`, not a
+  before it is saved and every load repeats it at once (`RevealWalkedTownMapCell`; it needs the town files open, which is not certain at the very first boundary). A new kind of leak outside the session is one more line in `SmokeStageBoundary`, not a
   change to one stage. `placement-census` also leaves out an NPC that follows the hero (a companion body is not an NPC the host places).
   `ARC_SMOKE_STAGE_RESET=0` (as `--env`) switches the reset off, to tell a leak from a stage's own failure; `=narrow` selects the narrow
   reset only. A process stops at its first failing stage, so a leak fixed here can show the next one that was hidden behind it.
