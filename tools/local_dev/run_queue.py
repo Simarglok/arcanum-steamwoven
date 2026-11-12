@@ -16,6 +16,7 @@ While lanes still use the retired `lockf /tmp/arcanum-godot-window.lock` rule, a
 """
 from __future__ import annotations
 
+import ctypes
 import errno
 import fcntl
 import json
@@ -183,16 +184,71 @@ def _read_json(path: Path) -> dict[str, Any] | None:
 
 
 _START_CACHE: dict[int, tuple[float, str | None]] = {}
-UNKNOWN = "?"  # ps could not answer: never read as "gone"
+UNKNOWN = "?"  # the start time could not be read: never read as "gone"
 # The same start-time text in every lane, whatever the caller's locale or time zone.
 _PS_ENVIRONMENT = {"LC_ALL": "C", "TZ": "UTC", "PATH": "/bin:/usr/bin"}
+PS_CACHE_SECONDS = 30.0  # the spawning fallback is cached longer: a start time never changes while the pid lives
+PROC_PIDTBSDINFO = 3  # proc_pidinfo flavor of struct proc_bsdinfo (sys/proc_info.h)
+
+
+class _ProcBsdInfo(ctypes.Structure):
+    """struct proc_bsdinfo of macOS (sys/proc_info.h, 136 bytes); only the start time is read."""
+    _fields_ = [("pbi_flags", ctypes.c_uint32), ("pbi_status", ctypes.c_uint32), ("pbi_xstatus", ctypes.c_uint32),
+                ("pbi_pid", ctypes.c_uint32), ("pbi_ppid", ctypes.c_uint32), ("pbi_uid", ctypes.c_uint32),
+                ("pbi_gid", ctypes.c_uint32), ("pbi_ruid", ctypes.c_uint32), ("pbi_rgid", ctypes.c_uint32),
+                ("pbi_svuid", ctypes.c_uint32), ("pbi_svgid", ctypes.c_uint32), ("rfu_1", ctypes.c_uint32),
+                ("pbi_comm", ctypes.c_char * 16), ("pbi_name", ctypes.c_char * 32), ("pbi_nfiles", ctypes.c_uint32),
+                ("pbi_pgid", ctypes.c_uint32), ("pbi_pjobc", ctypes.c_uint32), ("e_tdev", ctypes.c_uint32),
+                ("e_tpgid", ctypes.c_uint32), ("pbi_nice", ctypes.c_int32), ("pbi_start_tvsec", ctypes.c_uint64),
+                ("pbi_start_tvusec", ctypes.c_uint64)]
+
+
+def _load_libproc() -> Any:
+    """The macOS libproc with proc_pidinfo typed, or None where it is not there (the ps fallback then answers)."""
+    if sys.platform != "darwin" or ctypes.sizeof(_ProcBsdInfo) != 136:
+        return None
+    try:
+        lib = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+        lib.proc_pidinfo.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_int]
+        lib.proc_pidinfo.restype = ctypes.c_int
+    except (OSError, AttributeError):
+        return None
+    return lib
+
+
+_LIBPROC = _load_libproc()
+
+
+_DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def _start_text(seconds: int) -> str:
+    """The text `ps -o lstart=` prints in the C locale and UTC (`Thu Nov 12 17:07:19 2026`, day padded by a space)."""
+    moment = time.gmtime(seconds)  # fixed English names: strftime would follow a locale the importing process set
+    return (f"{_DAYS[moment.tm_wday]} {_MONTHS[moment.tm_mon - 1]} {moment.tm_mday:2d} "
+            f"{moment.tm_hour:02d}:{moment.tm_min:02d}:{moment.tm_sec:02d} {moment.tm_year}")
+
+
+def _process_start_libproc(pid: int) -> str | None:
+    """The start time through proc_pidinfo, no process spawned: None when the pid is gone, UNKNOWN when the kernel
+    would not tell (another user's process)."""
+    info = _ProcBsdInfo()
+    ctypes.set_errno(0)
+    size = _LIBPROC.proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, ctypes.byref(info), ctypes.sizeof(info))
+    if size == ctypes.sizeof(info) and info.pbi_pid == pid and info.pbi_start_tvsec:
+        return _start_text(int(info.pbi_start_tvsec))
+    return None if ctypes.get_errno() == errno.ESRCH else UNKNOWN
 
 
 def _process_start(pid: int) -> str | None:
-    """The process's start time (`ps -o lstart` in the C locale and UTC), cached for 5 s; None when ps says it is
-    gone, UNKNOWN when ps failed."""
+    """The process's start time as `ps -o lstart` prints it in the C locale and UTC; None when the process is gone,
+    UNKNOWN when it could not be read. ARC-DEV-1401: read through libproc, so the queue spawns no process; only where
+    libproc is missing does `ps` answer, cached for PS_CACHE_SECONDS."""
+    if _LIBPROC is not None:
+        return _process_start_libproc(pid)
     cached = _START_CACHE.get(pid)
-    if cached and time.monotonic() - cached[0] < 5:
+    if cached and time.monotonic() - cached[0] < PS_CACHE_SECONDS:
         return cached[1]
     try:
         completed = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True, timeout=5,
@@ -201,6 +257,8 @@ def _process_start(pid: int) -> str | None:
         return UNKNOWN
     value = completed.stdout.strip() or (None if completed.returncode == 1 else UNKNOWN)
     if value is not UNKNOWN:
+        if len(_START_CACHE) > 256:
+            _START_CACHE.clear()
         _START_CACHE[pid] = (time.monotonic(), value)
     return value
 

@@ -14,8 +14,8 @@ public partial class TerrainViewerApp
     // tile's script for every NPC that moves onto it, so an NPC the AI host walks onto a tile of script 1724 (the Molochean agent's exit: stop attacking, then destroy the triggerer) is destroyed
     // there. The stage orders the walk of the NPC named 6627 (see below) to such a tile and watches the host's location notice reach the tile script (ARC-DEV-206 npc-tile) and the
     // session record the destroy. Script 1724 reads: global flag 2323 is set (the story step the agent comes after), and the triggerer is named 6627 (the agent), then destroy; anything else
-    // returns at once. The stage therefore sets the flag and picks the NPC named 6627 of the window. The agent's own heartbeat (script 1717) is not modelled yet (set day standpoint, get
-    // location, run to), so the walk is ordered here.
+    // returns at once. The stage therefore sets the flag and picks the NPC named 6627 of the window. The agent's own heartbeat (script 1717: set day standpoint, get location, run to) is
+    // admitted since ARC-SCRIPT-1359, so with the flag set it also runs the agent to its standpoint tile; the stage still orders its walk to an exit tile (an order retargets that run).
     private async Task RunAreaNpcTileSmokeAsync()
     {
         static void Require(bool value, string why)

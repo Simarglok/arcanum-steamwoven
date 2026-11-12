@@ -110,6 +110,56 @@ public sealed class ScrHeartbeatWorldTests
         Assert.AreEqual((ScrRefusalCode.WriteToNumber, 2), (refusal.Code, refusal.Slot));
     }
 
+    private static readonly ScrAdmissionSet LocationSet = new("test-heartbeat-location", Set.Conditions, Set.Actions.Append(ScrCatalogue.Action.GetLocation), Set.ValueKinds, Set.FocusKinds);
+
+    [TestMethod]
+    public void Get_location_stores_the_first_objects_tile_x_and_y_into_operands_1_and_2()
+    {
+        // ARC-SCRIPT-1359, GL1: 1717's shape reads where the attachee stands into two variables; each is tested here by its own program.
+        ScrOutcome Outcome(int slot, int expected)
+        {
+            var program = Program(
+                Do(C(ScrCatalogue.Action.GetLocation, (Attachee, -1), (Local, 0), (Local, 1))),
+                L(C(ScrCatalogue.Condition.Equal, (Local, slot), N(expected)), C(ScrCatalogue.Action.ReturnSkipDefault), C(ScrCatalogue.Action.ReturnRunDefault)));
+            var host = Host(program);
+            host.Tiles[Npc] = (480, 515);
+            return ScrDispatcher.RunObject(new(ScrPoint.Heartbeat, Npc, Npc, null), host, new() { Admission = LocationSet }).Outcome;
+        }
+        Assert.AreEqual(ScrOutcome.SkipDefault, Outcome(0, 480), "x into operand 1");
+        Assert.AreEqual(ScrOutcome.SkipDefault, Outcome(1, 515), "y into operand 2");
+        Assert.AreEqual(ScrOutcome.RunDefault, Outcome(0, 515), "the two are not swapped");
+    }
+
+    [TestMethod]
+    public void Get_location_of_an_absent_object_or_one_without_a_place_stops_the_run_and_a_literal_target_is_refused()
+    {
+        var program = Program(Do(C(ScrCatalogue.Action.GetLocation, (Attachee, -1), (Local, 0), (Local, 1))));
+        var host = Host(program);
+        Assert.AreEqual(ScrStop.MissingObject, ScrDispatcher.RunObject(new(ScrPoint.Heartbeat, Npc, Npc, null), host, new() { Admission = LocationSet }).Stop, "no place");
+        var absent = Host(Program(Do(C(ScrCatalogue.Action.GetLocation, (Triggerer, 0), (Local, 0), (Local, 1)))));
+        Assert.AreEqual(ScrStop.MissingObject, ScrDispatcher.RunObject(new(ScrPoint.Heartbeat, Npc, null, null), absent, new() { Admission = LocationSet }).Stop, "no triggerer");
+        foreach (var slot in new[] { 1, 2 })
+        {
+            var refused = Program(Do(C(ScrCatalogue.Action.GetLocation, (Attachee, -1), slot == 1 ? N(3) : (Local, 0), slot == 2 ? N(3) : (Local, 1))));
+            var refusal = ScrAdmission.Admit(refused, LocationSet).Refusal!;
+            Assert.AreEqual((ScrRefusalCode.WriteToNumber, slot), (refusal.Code, refusal.Slot), $"literal in operand {slot}");
+        }
+    }
+
+    [TestMethod]
+    public void S38_adds_only_get_location_over_S37_and_needs_a_host_that_answers_the_world_questions()
+    {
+        CollectionAssert.AreEquivalent(new[] { ScrCatalogue.Action.GetLocation }, ScrAdmissionSet.S38.Actions.Except(ScrAdmissionSet.S37.Actions).ToArray());
+        Assert.IsTrue(ScrAdmissionSet.S38.Conditions.SetEquals(ScrAdmissionSet.S37.Conditions) && ScrAdmissionSet.S37.IsSubsetOf(ScrAdmissionSet.S38));
+        var program = Program(Do(C(ScrCatalogue.Action.GetLocation, (Attachee, -1), (Local, 0), (Local, 1))));
+        Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S38).IsAdmitted);
+        Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(program, ScrAdmissionSet.S37).Refusal!.Code);
+        // A host that cannot answer the world questions cannot run a set that holds the action.
+        var plain = new FakeHost();
+        plain.Attach(Npc, ScrPoint.Heartbeat, Script, program);
+        Assert.Throws<ArgumentException>(() => ScrDispatcher.RunObject(new(ScrPoint.Heartbeat, Npc, Npc, null), plain, new() { Admission = LocationSet }));
+    }
+
     [TestMethod]
     public void Set_faction_asks_for_the_first_object_and_an_absent_object_asks_nothing()
     {

@@ -48,8 +48,7 @@ Resistance and stat changes of effects now reach combat values for the hero and 
 
 Known differences (documented, not bugs):
 
-- The character sheet's resistance lines (hero and NPC) do not show effect changes; damage does.
-- A poison tick meets an NPC's resistance without its effects (an NPC's maximum hit points and fatigue follow its effect-changed strength, willpower and constitution since ARC-WORLD-1144).
+- A poison tick meets the normal resistance of an NPC under the effect list the session holds for it, and the sheet's resistance lines (hero and NPC) show effect changes (ARC-UI-1145; an NPC's sheet reads its map-data list only when the host gave the effect rules); a list the map data stores and the session has not adopted is not laid over the NPC's life facts (its poison tick and maxima).
 - Spell damage dealt to an NPC ignores that NPC's resistance effects until PR #941 merges (the spell host reads the NPC without its list).
 - The hero's innate race and gender effects carry no resistance changes in the session.
 
@@ -812,7 +811,7 @@ Known differences (documented, not bugs):
 - When a follower is better at disarming, the original lets the best follower act instead of the hero ("let me handle it", Ctrl skips it); Steamwoven always uses the hero.
 - The original's skill-bar press builds the invocation at once, so Steamwoven does not walk the hero to the trap first; whether the original limits the distance by the difficulty is read from the shared check only.
 - A trap you placed yourself with a script trap device is a marker object in Steamwoven and cannot be targeted yet.
-- The skill pane's own Disarm Traps button is [#1113](https://github.com/Simarglok/arcanum-steamwoven/issues/1113).
+- The skill pane's own Disarm Traps button is built (ARC-UI-1113, [#1113](https://github.com/Simarglok/arcanum-steamwoven/issues/1113)).
 
 ## ARC-MAGIC-056 — Tempus Fugit speed (spell 79)
 
@@ -1014,3 +1013,12 @@ The numbers are in [DH11](../research/ledger/spell-runs.md). The owner's report 
 | --- | --- | --- | --- |
 | 1 | In the options set the difficulty to Normal (not Easy). Cast Harm (spell 55) once at a wolf, with a hero of 8 magick points (a night mage at night, or 8 points of magick). | 17 hit points per cast (3 + 37 × 40 / 100). On Easy 25, on Hard 13: the original adds half of a PC attacker's damage on Easy and takes a quarter on Hard, for spells and weapons alike. | open |
 | 2 | Press once on the wolf with the Harm cursor, with your own mouse, and watch the casts in the log (Ctrl+B). | One cast per press, as in the original (the cursor stays open for the next press). Two or three casts within a few milliseconds from one press mean the mouse sends duplicate presses. | open |
+
+## ARC-SCRIPT-1359 — the Crash Site Molochean agent after the altar talk (2026-11-12)
+
+The agent's heartbeat (script 1717) is admitted whole since this task ([GL1–GL2](../research/ledger/scripts.md)). Start a new game at the Crash Site; the checks need the story flag set by the altar talk.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Talk to Virgil at the altar (the tile script runs his dialog), then watch the Molochean agent near the altar and read the log (Ctrl+B). | No `heartbeat-refused ... script 1717` line any more. The agent sets its day and night standpoints to its tile and runs to it (goal 74), as the original's heartbeat does. | open |
+| 2 | Let the agent reach its tile. | The follow-up of the scene (talk or attack) starts as in the original. If it does not, report what the agent does (the scene may belong to another script; a new issue is then filed). | open |

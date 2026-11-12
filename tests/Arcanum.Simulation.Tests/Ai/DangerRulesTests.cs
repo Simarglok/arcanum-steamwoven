@@ -130,6 +130,20 @@ public sealed class DangerRulesTests
     }
 
     [TestMethod]
+    public void TheEnemyListPurgeDropsEntriesThatNoLongerExistAsTheRemoveWithANullHandleDoes()
+    {
+        // ARC-AI-1317 (VA16): the scan goes from the front, the last entry fills the hole and is checked at the same index.
+        bool Alive(string e) => !e.StartsWith('x');
+        CollectionAssert.AreEqual(new[] { "a", "b", "c" }, DangerRules.PurgeEnemies(["a", "b", "c"], Alive));
+        CollectionAssert.AreEqual(new[] { "a", "c" }, DangerRules.PurgeEnemies(["a", "x1", "c"], Alive), "[A, destroyed B, C] keeps A and C");
+        CollectionAssert.AreEqual(new[] { "c", "b" }, DangerRules.PurgeEnemies(["x1", "b", "c"], Alive), "the last entry fills the front hole");
+        CollectionAssert.AreEqual(new[] { "b" }, DangerRules.PurgeEnemies(["x1", "b", "x2"], Alive), "a stale last entry that fills a hole goes too");
+        CollectionAssert.AreEqual(new[] { "d", "b" }, DangerRules.PurgeEnemies(["x1", "b", "x2", "d"], Alive));
+        CollectionAssert.AreEqual(System.Array.Empty<string>(), DangerRules.PurgeEnemies(["x1", "x2"], Alive));
+        CollectionAssert.AreEqual(System.Array.Empty<string>(), DangerRules.PurgeEnemies(System.Array.Empty<string>(), Alive));
+    }
+
+    [TestMethod]
     public void TheEnemyListRemoveFillsHolesWithTheLastEntry()
     {
         CollectionAssert.AreEqual(new[] { "c", "b" }, DangerRules.RemoveEnemy(["a", "b", "a", "c"], "a"));
