@@ -26,7 +26,7 @@ The six limits the MA-8 report named are not six independent gaps. Two findings 
 | L1 | Low attack and throw not loaded | The low attack of a monster is the attack (the original's repair), except the fire elemental's own file; the throw has no consumer (no weapon can be worn in a monster body) | Load the fire elemental's low attack; leave the throw out | XS | no |
 | L2 | Weapon part of the body's art id always 0 | The original keeps 0 out of combat mode and 1 in it; with 0 **no species has an attack file**, so the attack plays the stand pose today | Weapon part follows combat mode (1 in it) and the original's repair for walk and stand | S | no |
 | L3 | Air elemental (28) has no ART, the hero keeps its own body | Missing weapon-0 stand and run are repaired by the original; palette 1 is absent from the three elemental ART sets (air, fire, water); fire needs a higher resource cap | Apply the repair, take palette 0 when the requested palette is absent (the original does, PR5), raise the monster cap | S–M | no (D3 answered) |
-| L4 | Redraw of a map NPC whose data holds the perma-polymorph | No installed NPC prototype holds the bit (0 of 510); map instances were not scanned | Census of the map instances first; build only if one exists | XS, then S | yes: build or not |
+| L4 | Redraw of a map NPC whose data holds the perma-polymorph | No installed NPC prototype holds the bit (0 of 510) and no map instance does (0 of 3,792 critters on 81 maps, ARC-MAGIC-1220) | Census done: nothing to redraw; limit closed | none | closed |
 | L5 | Body read error remembered for the run | Same rule as the human bodies; after L2 and L3 no installed spell leaves a body that cannot read | Forget the failure at the next Trait apply | XS | no |
 | L6 | Distorted provenance text (cosmetic) | `Provenance` decodes a monster art id with the human fields | Name the monster body in it | XS | no |
 
@@ -64,7 +64,26 @@ The orc also has armour codes `bn` and `pc` besides `uw`.
 So after the repair and the palette change the fire elemental also needs a higher cap.
 
 **Prototypes.** Of 510 critter prototypes in the installed `data/proto`, none holds the perma-polymorph bit (critter flags 2, 0x400000) and 184 carry a monster art (class 12) as their art. Map
-instances (the objects of the maps) were not scanned; a GrandFix install replaces NPC prototypes, so the census applies to the original data only. No installed item carries technology record 222 (the permanent polymorph); the script condition `obj_is_polymorphed` is read by 22 scripts.
+instances: see the census below (0 hits); a GrandFix install replaces NPC prototypes, so the census applies to the original data only. No installed item carries technology record 222 (the permanent polymorph); the script condition `obj_is_polymorphed` is read by 22 scripts.
+
+### Census of the map instances (L4, ARC-MAGIC-1220, 2026-11-12)
+
+A scratch program outside the repository (a console project over `Arcanum.Data`, not committed) opened the installed game's content stack (the Arcanum module, original data only, no GrandFix) and read the mobile objects of
+every map through `WorldCatalog.ReadMobiles`. For every critter (object type 16, the NPC; the player character, type 15, is not in the map files) it took the effective critter flags 2 (slot 37: the instance's own value if it stores one, else its prototype's)
+and tested bit 0x400000 (the perma-polymorph, the same bit the prototype scan tested).
+
+| Measure | Value |
+| --- | --- |
+| Maps listed / maps with mobile objects | 81 / 79 (all read from the game-generated aggregates, 0 read issues) |
+| Critters (type 16) | 3,792 |
+| Critters with their own flags 2 / flags 2 from the prototype | 28 / 3,764 (none without a prototype, none without flags 2) |
+| **Critters with bit 0x400000** | **0** |
+
+Check that the read sees bits at all: the other flags 2 bits it found are 1 (98), 6 (23), 7 (29), 8 (1), 10 (86), 11 (433), 12 (175) and 13 (1). So the zero is a real zero, not an unread field.
+
+**Decision (owner D4: build only if one exists):** none exists in the installed original data, so no redraw of a stored polymorph body is built and no consumer is open. The session's bit and Dispel undo
+(ARC-MAGIC-047) stay as they are for runtime polymorphs (the installed Polymorph and body spells, and a technology record 222 item, which is not installed). If a mod or a GrandFix-style data change ever stores the bit, the redraw (read field 24, draw it at the Dispel) is the L4 option A
+build; re-run the census then. Scope: the stored map instances of the original module only; saved games and other modules were not scanned, and a bit a script sets at run time (a script's permanent polymorph, or on a script-created critter) was not measured. So the limit is closed for stored data.
 
 ## 4. Options per limit
 
@@ -105,11 +124,12 @@ instances (the objects of the maps) were not scanned; a GrandFix install replace
 ### L4. Redraw of a map NPC whose data is a perma-polymorph
 
 - **Finding.** The restore builds the body from the critter's stored art (field 24) with the current art's rotation and animation (TR6). The session keeps the bit and the Dispel undo (ARC-MAGIC-047); the viewer
-  has no way to draw the stored body of a map NPC whose data art is already the monster. No installed prototype carries the bit and no item carries the technology record; map instances were not checked.
-- **A (recommended).** Census first (XS): scan the objects of every map for critter flags 2 bit 0x400000 with a scratch tool, as for prototypes. Build the redraw (read field 24, draw it at the Dispel) only if at least
+  has no way to draw the stored body of a map NPC whose data art is already the monster. No installed prototype carries the bit and no item carries the technology record; map instances were not checked (before the census, see the Result below).
+- **Result (census, ARC-MAGIC-1220, 2026-11-12): empty.** See "Census of the map instances" above (section 3). Option C applies; A's build step is not triggered.
+- **A (recommended, done).** Census first (XS): scan the objects of every map for critter flags 2 bit 0x400000 with a scratch tool, as for prototypes. Build the redraw (read field 24, draw it at the Dispel) only if at least
   one NPC has the bit; otherwise record "no consumer in the installed data".
 - **B.** Build it now. Unmeasured work for a case that may not exist. Not recommended.
-- **C.** Cancel the limit with the census result noted. Valid if the census is empty.
+- **C.** Cancel the limit with the census result noted. Valid if the census is empty (it is, for stored data).
 
 ### L5. Body read error remembered for the run
 
@@ -179,7 +199,7 @@ original's executable and archives, and need nothing from GrandFix.
 
 1. **Monster body: weapon part, repair, palette** (L2, L1 fire low attack, L6, L5, L3): the loader changes, the `trait-body` smoke with a combat-mode attack and an elemental
    spell (Body of Air, Fire, Water), tests on the names and the repair, a real-data test over the 32 species. Requirement rows: FR-MAGIC-007 coverage note; graphics rule: one labelled composite (before: stand pose attack, after: attack; elementals before and after).
-2. **Census of perma-polymorph NPCs in map data** (L4): a scratch scan, a result line in the ledger; the redraw only if the owner decides after seeing it.
+2. **Census of perma-polymorph NPCs in map data** (L4): **done, ARC-MAGIC-1220: 0 hits, nothing to build** (section 3, "Census of the map instances").
 3. **Corrections to the existing docs** (folded into task 1's PR): the host contract and the visual contract say species 28 lacks "the stand or walk ART" and that a monster has no armed pose; both are replaced by
    section 2 and 3 of this note.
 
@@ -189,5 +209,5 @@ original's executable and archives, and need nothing from GrandFix.
   0x502E00, 0x502E50, 0x5059F0, 0x505EB0 (the palette-absent lookups, read on 2026-11-12) and the class-12 branch of 0x41E200. Not read: 0x4B3F80's other branches, the other branches of 0x41E200 and the callers 0x43F090 and 0x43F130 of 0x502E00.
 - Measured on the installed data: the file listing of all archives for the monster folders; `monster.mes` (species names); `SpellList.mes` Trait records (species and palette); the ART headers of six species;
   `HeroBodyArt.LoadMonster` over 32 species and 4 palettes; 510 critter prototypes. All with scratch programs outside the repository; no output is committed.
-- Not measured: the objects of the maps (L4), the fire elemental's frame sizes (L3), the original's gait timing for a run replaced by the walk (it follows the gait rate, HB2, and the stride of the file used).
+- Measured (ARC-MAGIC-1220): the critter objects of all 81 maps of the installed Arcanum module (section 3). Not measured: the fire elemental's frame sizes (L3), the original's gait timing for a run replaced by the walk (it follows the gait rate, HB2, and the stride of the file used).
 - GrandFix files (section 5): a read-only unpack outside git, a byte comparison of the executables (headers and import tables left out), a list comparison of its archives against the installed ones, the prototype comparison through `CombatFieldReader`. Nothing was run, nothing is committed.
