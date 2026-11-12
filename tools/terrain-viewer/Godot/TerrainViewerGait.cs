@@ -1,4 +1,5 @@
 using Arcanum.Input;
+using Arcanum.Session.Settings;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
@@ -93,37 +94,19 @@ public partial class TerrainViewerApp
     private string GaitHudStatus() => $"Gait: {GaitSummary()} | Hero body: {_heroBodyStatus}";
 }
 
-/// <summary>The Always Run option (ARC-WORLD-020), following <see cref="VisualProfileSettingsStore"/>:
-/// <c>user://always_run_v1.json</c> holding <c>on</c> or <c>off</c>; a missing or unknown value is off.
-/// <c>ALWAYS_RUN_TEST_PATH</c> isolates tests; an automated run without it has no file at all.</summary>
+/// <summary>The Always Run option (ARC-WORLD-020): the original's <c>always run</c> line (0 or 1, default 0) of the one settings file
+/// (ARC-UI-1130, <see cref="ViewerSettingsConfig"/>, once <c>user://always_run_v1.json</c>). <c>ALWAYS_RUN_TEST_PATH</c> names a settings file
+/// for tests; an automated run without it has no file at all.</summary>
 public sealed class AlwaysRunSettingsStore
 {
     public const string TestVariable = "ALWAYS_RUN_TEST_PATH";
-    public const string UserPath = "user://always_run_v1.json";
     private readonly string? _path;
 
-    public AlwaysRunSettingsStore(bool automated)
-    {
-        var test = OS.GetEnvironment(TestVariable);
-        _path = !string.IsNullOrWhiteSpace(test) ? test : automated ? null : UserPath;
-    }
+    public AlwaysRunSettingsStore(bool automated) => _path = ViewerSettingsFile.Choose(TestVariable, automated);
 
     public bool Persistent => _path is not null;
 
-    public bool Load()
-    {
-        if (_path is null || !global::Godot.FileAccess.FileExists(_path)) return false;
-        using var file = global::Godot.FileAccess.Open(_path, global::Godot.FileAccess.ModeFlags.Read);
-        return file is not null && file.GetAsText().Trim() == "on";
-    }
+    public bool Load() => _path is not null && ViewerSettingsConfig.ReadAlwaysRun(ArcanumConfig.Read(_path));
 
-    public bool Save(bool value)
-    {
-        if (_path is null) return false;
-        using var file = global::Godot.FileAccess.Open(_path, global::Godot.FileAccess.ModeFlags.Write);
-        if (file is null) return false;
-        file.StoreString(value ? "on" : "off");
-        file.Flush();
-        return file.GetError() == Error.Ok;
-    }
+    public bool Save(bool value) => _path is not null && ArcanumConfig.Save(_path, ViewerSettingsConfig.AlwaysRunChanges(value)) == ArcanumConfigSaveStatus.Saved;
 }

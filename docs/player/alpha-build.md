@@ -127,7 +127,7 @@ The build keeps its own folder, separate from any developer build:
     macOS:    ~/Library/Application Support/Arcanum Steamwoven Game/
     Windows:  %APPDATA%\Arcanum Steamwoven Game\      (C:\Users\<you>\AppData\Roaming\Arcanum Steamwoven Game)
 
-It holds the launcher settings (`launcher_v1.json`), the game data prepared from your `Arcanum.exe` (`prototypes/`, built once; it is
+It holds your settings (`arcanum.cfg`: the launcher settings, the options, Always Run, the volumes and the HD choices), the game data prepared from your `Arcanum.exe` (`prototypes/`, built once; it is
 rebuilt by itself when the executable or the game's data change), the options, the saves (`saves/`) and Godot's log of the last runs
 (`logs/godot.log`), and the bug reports that could not be written beside the game (`reports/`, section 9). Deleting the folder starts
 the game as on its first run. The game folder of Arcanum is only read.

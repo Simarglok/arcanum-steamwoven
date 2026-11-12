@@ -230,22 +230,22 @@ public partial class TerrainViewerApp
 
         _launcherProvisionForSelfTest = (_, _, _) => new(PrototypeProvisionStatus.Present);
         // Reset replaces even a newer build's file with the defaults.
-        System.IO.File.WriteAllText(settingsPath, """{"schema":2,"gameRoot":"/x"}""");
+        System.IO.File.WriteAllText(settingsPath, "launcher={\"schema\":2,\"gameRoot\":\"/x\"}\n");
         await Start(true);
         _launcherPanel.ChooseForSelfTest(game);
         await Play();
-        Require(started is not null && System.IO.File.ReadAllText(settingsPath) == """{"schema":2,"gameRoot":"/x"}""", "Play never overwrites a newer build's file");
+        Require(started is not null && System.IO.File.ReadAllText(settingsPath) == "launcher={\"schema\":2,\"gameRoot\":\"/x\"}\n", "Play never overwrites a newer build's launcher object");
         await Start(true);
         Require(_launcher!.FileStatus == LauncherSettingsReadStatus.OtherSchema && Lines()[1].Contains("newer build's", StringComparison.Ordinal), "the newer file is named");
         _launcherPanel.ResetForSelfTest();
         Require(LauncherSettingsFile.Load(settingsPath) is { Status: LauncherSettingsReadStatus.Read } reset && reset.Settings == LauncherSettings.Defaults
                 && Lines()[5] == "Settings reset to the defaults.", "Reset wrote the defaults over it: " + Lines()[5]);
 
-        // ARC-UI-143: the HD lines on the launcher: defaults off/off/Auto, each choice saved at once in the settings files the
+        // ARC-UI-143: the HD lines on the launcher: defaults off/off/Auto, each choice saved at once in the settings file the
         // start reads, shown again by the next launcher, Custom's folder, and Reset leaving them alone.
         var hdFolder = System.IO.Directory.CreateDirectory(System.IO.Path.Combine(directory, "hd")).FullName;
-        var gameSettingsPath = System.IO.Path.Combine(hdFolder, "game_settings_v1.json");
-        var visualPath = System.IO.Path.Combine(hdFolder, "visual_profile_v1.json");
+        var gameSettingsPath = System.IO.Path.Combine(hdFolder, "game.cfg");
+        var visualPath = System.IO.Path.Combine(hdFolder, "visual.cfg");
         OS.SetEnvironment(GameSettingsStore.TestVariable, gameSettingsPath);
         OS.SetEnvironment(VisualProfileSettingsStore.TestVariable, visualPath);
         (_gameSettingsStore, _visualStore, _gameSettings, _launcherHdProfile) = (null, null, AreaGameSettings.Defaults, VisualProfile.Legacy);
@@ -293,7 +293,7 @@ public partial class TerrainViewerApp
         return "first run without a folder, a non-game folder in words, Play storing folder/identity/Original/show at start, show at start "
                + "reopening it, a stored folder going straight on, --launcher, the Rules line writing the file, the GOG installer unpacked by a stand-in "
                + "tool (no tool, progress lock, chosen folder, used folder refused, cancel), the game data prepared on the first Play (progress, cancel, refusal, "
-               + "cached, a stored folder), Reset over a newer build's file, the HD lines (saved at once in the settings files, shown again, Custom's folder, Reset leaves them)";
+               + "cached, a stored folder), Reset over a newer build's launcher object, the HD lines (saved at once in the settings file, shown again, Custom's folder, Reset leaves them)";
     }
 
     /// <summary>ARC-UI-014 native smoke: the launcher a start without inputs opened (run with <c>--launcher</c>, or a first run), over the

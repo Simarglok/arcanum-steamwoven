@@ -226,7 +226,7 @@ public partial class TerrainViewerApp
         HdFrameSource? source = null;
         try
         {
-            var path = System.IO.Path.Combine(root, "visual.json");
+            var path = System.IO.Path.Combine(root, "visual.cfg");
             OS.SetEnvironment(VisualProfileSettingsStore.TestVariable, path);
             _visualStore = new VisualProfileSettingsStore(automated: true);
             source = NearestPackSource(root, [_readyArea], result);
@@ -238,7 +238,7 @@ public partial class TerrainViewerApp
             var generation = _canvas.VisualGeneration;
             QuickKey(Key.H);
             Require(_canvas.VisualGeneration == generation + 1 && (_canvas.PendingVisualProfile == VisualProfile.Hd || _canvas.VisualProfile == VisualProfile.Hd), "H requested HD");
-            Require(System.IO.File.ReadAllText(path) == VisualProfileCodec.Serialize(VisualProfile.Hd), "the request was saved at once");
+            Require(System.IO.File.ReadAllText(path) == "visual profile=hd\n", "the request was saved at once");
             await SettleVisualAsync(); RefreshReadyStatus();
             Require(_canvas.VisualProfile == VisualProfile.Hd && _canvas.AreaHdStats.Hd > 0, "HD committed: " + _canvas.HdStatusText());
             Require(GetSelfTestSnapshot().Hud.Contains("H visual Legacy/HD: HD; pack ui006-nearest-4x 4x", StringComparison.Ordinal), "HUD names the profile and pack");
@@ -254,7 +254,7 @@ public partial class TerrainViewerApp
             var visual = (Label)_worldPanel!.FindChild("PaletteVisual", true, false)!;
             var action = _worldPanel.FindChildren("*", "Button", true, false).OfType<Button>().Single(b => b.Text == "Visual Legacy/HD (H)");
             action.EmitSignal(BaseButton.SignalName.Pressed);
-            Require(_canvas.VisualProfile == VisualProfile.Legacy && System.IO.File.ReadAllText(path) == VisualProfileCodec.Serialize(VisualProfile.Legacy),
+            Require(_canvas.VisualProfile == VisualProfile.Legacy && System.IO.File.ReadAllText(path) == "visual profile=legacy\n",
                 "the palette action switched to Legacy and saved it");
             Require(visual.Text.StartsWith("Visual: Legacy; pack ui006-nearest-4x 4x", StringComparison.Ordinal), "palette line: " + visual.Text);
             ToggleWorldSettings();

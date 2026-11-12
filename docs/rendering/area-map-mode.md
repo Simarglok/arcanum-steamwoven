@@ -1058,7 +1058,7 @@ On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the wor
 
 A development aid, never gameplay, off by default. It is on for a run started with the lone user argument `--debug-mode`
 (after Godot's `--`; `./arcanum area|map --debug-mode`, or the packaged app's executable with `-- --debug-mode`) or when the
-launcher settings store it (`debugMode` in `launcher_v1.json`, the launcher screen's "Debug mode" box; it stays on until it is
+launcher settings store it (`debugMode` in the `launcher` line of `arcanum.cfg`, the launcher screen's "Debug mode" box; it stays on until it is
 turned off there or by Reset settings). `ViewerDebugMode` holds the rules; the [player instruction](../player/alpha-build.md#7-debug-mode)
 says how to turn it on.
 

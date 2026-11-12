@@ -42,7 +42,7 @@ states what the project implements and what it leaves out.
 
 | Input | Effect |
 | --- | --- |
-| Palette **Always Run on/off** | The original's Always Run option; saved in `user://always_run_v1.json` (`ALWAYS_RUN_TEST_PATH` isolates tests; automated runs save nothing). |
+| Palette **Always Run on/off** | The original's Always Run option; saved as the `always run` line (0 or 1) of the one settings file `user://arcanum.cfg` ([settings file](../rendering/terrain-viewer.md#the-one-settings-file-arc-ui-1130); `ALWAYS_RUN_TEST_PATH` names a settings file for tests; automated runs save nothing). |
 | **Num Lock** (fresh press) | Flips the always-run lock used while the option is off (the original reads the Num Lock state; the viewer starts it off). |
 | LMB on the ground | Walks, or runs when always-run is in effect (option on, or option off and Num Lock on). |
 | **Ctrl**+LMB on the ground | Runs once with the option off; walks once with the option on. On macOS a physical Ctrl+click arrives as a right press with Ctrl held and is taken as Ctrl+LMB. |

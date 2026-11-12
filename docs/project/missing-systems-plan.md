@@ -224,7 +224,7 @@ FR-ITEM-008, FR-MEDIA-003, FR-COMBAT-002, FR-COMBAT-003.
 | E9-a | Gamepad in the game UI (inventory, logbook, dialogs, map), on the lab's input framework | L | owner's device check later |
 | E9-b | Adaptive UI layout and UI scale in game windows (`UiScalePercent` is stored, not applied) | M–L | — |
 | E9-c | Windows validation of the packaged build on a Windows machine; Linux and handheld presets | M | owner's hardware |
-| E9-d | One settings file as the original's `arcanum.cfg` | S | — |
+| E9-d | One settings file as the original's `arcanum.cfg` (done: ARC-UI-1130, [issue #1130](https://github.com/Simarglok/arcanum-steamwoven/issues/1130)) | S | — |
 
 ### E10 Deferred by owner decision (not planned here)
 

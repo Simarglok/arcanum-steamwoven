@@ -1,5 +1,6 @@
 using Arcanum.Presentation.Audio;
 using Arcanum.Session;
+using Arcanum.Session.Settings;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
@@ -136,38 +137,20 @@ public partial class TerrainViewerApp
     }
 }
 
-/// <summary>The settings of <see cref="AreaGameSettings"/> (ARC-UI-013), following <see cref="AudioVolumesStore"/>:
-/// <c>user://game_settings_v1.json</c> holding <see cref="AreaGameSettingsCodec"/> text; a missing, unreadable or invalid file reads
-/// as the original's defaults. <c>GAME_SETTINGS_TEST_PATH</c> isolates tests; an automated run without it has no file at all.</summary>
+/// <summary>The settings of <see cref="AreaGameSettings"/> (ARC-UI-013): the lines of the one settings file (ARC-UI-1130,
+/// <see cref="ViewerSettingsConfig"/>, once <c>user://game_settings_v1.json</c>); a missing line reads as the original's default. The store's test
+/// variable <c>GAME_SETTINGS_TEST_PATH</c> names a settings file for tests; an automated run without it has no file at all.</summary>
 public sealed class GameSettingsStore
 {
     public const string TestVariable = "GAME_SETTINGS_TEST_PATH";
-    public const string UserPath = "user://game_settings_v1.json";
     private readonly string? _path;
 
-    public GameSettingsStore(bool automated)
-    {
-        var test = OS.GetEnvironment(TestVariable);
-        _path = !string.IsNullOrWhiteSpace(test) ? test : automated ? null : UserPath;
-    }
+    public GameSettingsStore(bool automated) => _path = ViewerSettingsFile.Choose(TestVariable, automated);
 
     public bool Persistent => _path is not null;
-    public bool HasSaved => _path is not null && global::Godot.FileAccess.FileExists(_path);
+    public bool HasSaved => _path is not null && ViewerSettingsConfig.HasGame(ArcanumConfig.Read(_path));
 
-    public AreaGameSettings Load()
-    {
-        if (_path is null || !global::Godot.FileAccess.FileExists(_path)) return AreaGameSettings.Defaults;
-        using var file = global::Godot.FileAccess.Open(_path, global::Godot.FileAccess.ModeFlags.Read);
-        return file is null ? AreaGameSettings.Defaults : AreaGameSettingsCodec.Deserialize(file.GetAsText()) ?? AreaGameSettings.Defaults;
-    }
+    public AreaGameSettings Load() => _path is null ? AreaGameSettings.Defaults : ViewerSettingsConfig.ReadGame(ArcanumConfig.Read(_path));
 
-    public bool Save(AreaGameSettings settings)
-    {
-        if (_path is null) return false;
-        using var file = global::Godot.FileAccess.Open(_path, global::Godot.FileAccess.ModeFlags.Write);
-        if (file is null) return false;
-        file.StoreString(AreaGameSettingsCodec.Serialize(settings));
-        file.Flush();
-        return file.GetError() == Error.Ok;
-    }
+    public bool Save(AreaGameSettings settings) => _path is not null && ArcanumConfig.Save(_path, ViewerSettingsConfig.GameChanges(settings)) == ArcanumConfigSaveStatus.Saved;
 }

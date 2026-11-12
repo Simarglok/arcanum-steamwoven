@@ -230,8 +230,8 @@ light or clock change, during dialog, before or after a map change.
    no-op. A request during a pending switch cancels it (the newer generation wins);
    its partial work is dropped or kept as retained cache within budget.
 2. **Persist.** The requested profile is saved at request time to
-   `user://visual_profile_v1.json` (`{"schema":1,"profile":"Legacy"|"Hd"}`), following
-   `DiagnosticZoomSettingsStore`: a missing, unreadable or unknown value loads as
+   the `visual profile` line (`legacy` or `hd`) of `user://arcanum.cfg` (ARC-UI-1130; it was `user://visual_profile_v1.json`): a
+   missing or unknown value loads as
    `Legacy`; a test path override isolates tests. A save failure is reported in the
    HUD and does not block the switch.
 3. **Preload.** Off the main thread, decode and validate the frames of `P` for the

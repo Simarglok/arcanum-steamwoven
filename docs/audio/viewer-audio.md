@@ -46,8 +46,9 @@ The original has no master or separate ambient bar; none is added here.
 - `Tick()` once per frame frees finished one-shot players. Engine thread only; a failure is a
   status and never touches game state.
 
-`AudioVolumesStore`: `user://audio_volumes_v1.json` holding the codec text; a missing, unreadable
-or invalid file loads 5/5/5. `AUDIO_VOLUMES_TEST_PATH` isolates tests; an automated run
+`AudioVolumesStore`: the `effects volume`, `voice volume` and `music volume` lines (0–10) of the one settings file `user://arcanum.cfg`
+(ARC-UI-1130; the old `audio_volumes_v1.json` is moved in once); a missing or out-of-range line loads 5 for that channel.
+`AUDIO_VOLUMES_TEST_PATH` names a settings file for tests; an automated run
 (self-test, native smoke) without it has no file at all and never reads or changes the owner's
 setting.
 

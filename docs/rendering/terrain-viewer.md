@@ -73,7 +73,7 @@ archive bytes, and sampled colours are deliberately not shown.
 ### Start without inputs (ARC-DEV-046)
 
 Started with no viewer arguments (a player's build; `--native-smoke`, its screenshot option and `--launcher` alone also count), the
-viewer reads the launcher settings `user://launcher_v1.json` (research (deleted);
+viewer reads the launcher settings, the `launcher` line of `user://arcanum.cfg` (the one settings file, [below](#the-one-settings-file-arc-ui-1130); research (deleted);
 `LAUNCHER_SETTINGS_TEST_PATH` names another file, and an automated run without it has no file). It opens the stored
 game folder while `GameFolderLocator.Check` finds it ready, else the first ready fixed candidate (Windows: the GOG
 registry key `HKLM\SOFTWARE\WOW6432Node\GOG.com\Games\1207658829` and its 64-bit twin, `C:\GOG Games\Arcanum`, the GOG
@@ -110,14 +110,14 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   [debug mode](area-map-mode.md#debug-mode-arc-dev-050)); Play, Reset settings and Quit. The project's own look, not a
   window of the original's menu.
 - **HD lines (ARC-UI-143).** After the rules the screen has three HD lines (the Game page of the options window had them until ARC-UI-146), one row of choices each: **HD graphics**
-  Off/On (the visual profile, `visual_profile_v1.json`), **HD interface** Off/On/Generated (experimental) and **HD pack** Auto/Game/Custom
-  (`hdInterface`, `generatedInterface`, `hdPack`, `hdPackPath` of `game_settings_v1.json`, [HD pack source](../workflow/hd-pack.md#hd-pack-source-arc-dev-350)).
+  Off/On (the visual profile, the `visual profile` line of `arcanum.cfg`), **HD interface** Off/On/Generated (experimental) and **HD pack** Auto/Game/Custom
+  (the `hd interface`, `generated interface`, `hd pack` and `hd pack path` lines of `arcanum.cfg`, [HD pack source](../workflow/hd-pack.md#hd-pack-source-arc-dev-350)).
   They are the only saved-settings screen for them (the options window has no HD line since ARC-UI-146; the `H` key and the palette still
-  switch the visual profile in play, HD interface and HD pack change only here, with Shift held at the start): a choice is saved at once in the files (not at Play) and the game that Play
+  switch the visual profile in play, HD interface and HD pack change only here, with Shift held at the start): a choice is saved at once in the settings file (not at Play) and the game that Play
   starts reads them like any start. The pack source applies at the next start; the note under the rows says what that start will read (an automated run: that pack folders are not searched). Custom opens the
   system folder dialog, with the same fallback note where there is none. The rows are off while the screen is busy; **Reset settings**
-  resets `launcher_v1.json` only and leaves the HD lines as they are. A run with no settings file (an automated run) keeps the choices
-  for the screen only: its start reads the files and finds the defaults. A choice that could not be written is named under the rows. Checked by the launcher self-test (defaults, each choice saved in the files, shown again by the next screen, read by
+  resets the `launcher` line only and leaves the HD lines (and every other setting) as they are. A run with no settings file (an automated run) keeps the choices
+  for the screen only: its start reads the file and finds the defaults. A choice that could not be written is named under the rows. Checked by the launcher self-test (defaults, each choice saved in the files, shown again by the next screen, read by
   the start, Custom's folder, Reset) and by the launcher native smoke's HD lines and screenshot (`--native-smoke-screenshot PATH`
   also writes `NAME-launcher.png` beside it, the screen before Play, where `PATH` is `NAME.png`).
 - **Install from GOG installer…** (ARC-DEV-074, [research](../workflow/packaging.md) option A) is for a player
@@ -141,7 +141,7 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
 - **The game data at Play (ARC-DEV-069, [research](../research/prototype-extraction.md#e4-results-arc-dev-069)).** Before the game
   starts on a folder (Play, or the start from a stored folder) `PrototypeProvisioner` checks that the folder has its prototype
   files: an installation the original ran has them (nothing is done); otherwise the files are built once from the player's own
-  verified `Arcanum.exe` by the E3 builder, off the main thread, and kept in `prototypes/` beside `launcher_v1.json`, keyed by the
+  verified `Arcanum.exe` by the E3 builder, off the main thread, and kept in `prototypes/` beside `arcanum.cfg`, keyed by the
   executable and verified against the data they were built from at every start. The screen is busy like during an unpack (the folder,
   Play and Reset are off, the line shows `Preparing the game data from your Arcanum.exe (first start only, about half a minute)… n/1423`,
   Cancel and Quit stop it); a stored folder's start shows the same line on the status line. Success mounts the cache for every reader
@@ -156,7 +156,7 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   it and the file is kept.
 - **Reset settings** writes the defaults over the file (`LauncherSettingsFile.Reset`, the one write that replaces a
   newer build's or an unreadable file); the shown folder stays, for Play to store again.
-- **Rule mode.** Every ordinary run, with inputs or without, starts in `rules.active` of `launcher_v1.json`
+- **Rule mode.** Every ordinary run, with inputs or without, starts in `rules.active` of the `launcher` line of `arcanum.cfg`
   (`LauncherSettings.Rules`); the options window's Rules line writes it there through the same store (one owner per
   file), reading the file again and changing only `rules.active`, so a folder another run stored meanwhile is kept. An
   automated run without `LAUNCHER_SETTINGS_TEST_PATH` has no file and starts in Steamwoven. A start that fails after the
@@ -999,8 +999,8 @@ results into them.
   their live cells, an object's its map cell (no draw offset). A new scene drops every line.
 - **Settings.** The [options window](#options-window-arc-ui-013)'s Video page offers Floats (Never, Minimal, Verbose:
   0–2, default 1) and Float Speed (0–10, default 2). Level 0 draws nothing (the lines are still made and rise, as the
-  original's). Both are saved at once in `user://game_settings_v1.json` (version 3; a version 1 file reads with their
-  defaults).
+  original's). Both are saved at once as the `text floaters` and `float speed` lines of `user://arcanum.cfg` (a missing line reads
+  as their defaults).
 
 Checks: `FloatersTests` (colours, start offsets and stacking, the fade at its edges, the box and line positions, the
 field's 50 ms step and removal, the attack's lines in order at levels 1 and 2, the damage-line formats, dodges, objects
@@ -1184,7 +1184,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   critter (not a container) show the toggle buttons 338 (doll) and 339 (bag) at (23, 108) and (74, 108), which act on a release over the same button;
   the doll view draws art 349 at (0, 134) and the body's worn items (`AreaInventoryView.BodyDoll`, by the worn item's inventory location) in the nine slot
   rectangles of table 0x5CAE08, a cover (0x5CAF58) on each empty slot, and hides the grid; a worn item pressed on its slot and released on the hero's grid
-  is taken through the loot path (PROJECT: its inventory art, and a cover, stretched into the rectangle; the wheel does not scroll the hidden grid). **Doll values (ARC-UI-1121,** [ledger IW41–IW43](../research/ledger/ui-audio.md#doll-values-and-weapon-overlay-arc-ui-1121)**):** the doll view prints the body's displayed damage rating (right-aligned in the box at (105, 354)) and armour rating (from the left of the box at (227, 354)), read by `AreaCombatHost.DollRatings` into `AreaInventoryView.BodyRatings`, and fills the weapon's slot dark red when the weapon needs more strength than the body has (the numbers use the project's font). NOT READY: the hero's own window's values and fill (#1267), the
+  is taken through the loot path (PROJECT: its inventory art, and a cover, stretched into the rectangle; the wheel does not scroll the hidden grid). **Doll values (ARC-UI-1121,** [ledger IW41–IW43](../research/ledger/ui-audio.md#doll-values-and-weapon-overlay-arc-ui-1121)**):** the doll view prints the body's displayed damage rating (right-aligned in the box at (105, 354)) and armour rating (from the left of the box at (227, 354)), read by `AreaCombatHost.DollRatings` into `AreaInventoryView.BodyRatings`, and fills the weapon's slot dark red when the weapon needs more strength than the body has (the numbers use the project's font). The hero's own window prints the same two numbers (ARC-UI-1267, ledger IW25: the damage rating at the right edge of the box at (80, 358), the armour rating from the left edge of the box at (261, 358), read by `AreaCombatHost.HeroDollRatings` into `AreaInventoryView.HeroRatings`) and fills the hero's weapon slot dark red when the weapon needs more strength than the hero has. NOT READY: the
   barter window's doll, the hero's own doll toggle, the scroll bar's art, a hero's item moved into the body, a follower's portrait. The native smoke checks every Crash Site body's window
   (`ARC-UI-052 native-smoke loot-art PASS`: loot arts and the image read, every grid item's art, one item taken by a drag). The `loot-worn` stage
   (ARC-DEV-202, ARC-UI-072) drives the doll view: toggle, the worn item on its slot, the drag to the hero's grid, back to the bag view
@@ -1427,8 +1427,7 @@ it is not part of a snapshot or quick save.
 **Interface art (ARC-UI-089, ARC-UI-095).** The HD redraws of the interface (the pack's `interface` slice, ARC-DEV-242) have their own
 switch: the launcher screen has three project lines after Rules (ARC-UI-143; until ARC-UI-146 they were the options window's Game page lines, which no longer has them, the page ends with Rules). **HD graphics: Off/On** requests the Legacy or HD
 profile exactly as the key does (saved, the same toggle protocol) and switches the sprites and terrain of an HD pack only.
-**HD interface: Off/On/Generated (experimental)** (ARC-UI-095, default Off) is a separate saved setting (`hdInterface` of `game_settings_v1.json`, file version 3;
-version 1 and 2 files read it as Off); it draws the interface art alone and does not touch the visual profile, so the two can be
+**HD interface: Off/On/Generated (experimental)** (ARC-UI-095, default Off) is a separate saved setting (the `hd interface` line of `arcanum.cfg`; a missing line reads it as Off); it draws the interface art alone and does not touch the visual profile, so the two can be
 combined freely (sprites HD with a Legacy interface, or the reverse). The third value (ARC-UI-140, `generatedInterface`, file version 5;
 version 1–4 files read it as off) is the experimental [generated interface](hd-interface-density.md#viewer-slice-s1-arc-ui-140): it keeps the
 HD interface on and draws the chrome of the two HUD strips and the bar buttons by code, with the pictures from the HD redraw (else from the
@@ -1487,8 +1486,8 @@ glyph without an entry, 254 against 199 on a black canvas at 1:1; the pixel chec
   pending switch keeps the request; it commits on the new view. With nothing published (also while a
   reload or failure has cleared the scene) a pending request commits at once, and the next view's
   frames then load like any frame that becomes visible (`Pending`, then HD one by one).
-- **Persistence.** The request is saved at once to `user://visual_profile_v1.json`
-  (`{"schema":1,"profile":"Legacy"|"Hd"}`, codec `VisualProfileCodec`): a missing, unreadable or unknown
+- **Persistence.** The request is saved at once as the `visual profile` line (`legacy` or `hd`) of `user://arcanum.cfg`
+  (ARC-UI-1130; `VisualProfileCodec` still reads the old `visual_profile_v1.json` for the one-time move): a missing or unknown
   value loads as Legacy; a failed save is shown in the HUD and does not block the switch. Startup applies
   the saved profile before the first submission (an environment override above wins for that run and is
   not saved). `VISUAL_PROFILE_TEST_PATH` isolates tests; an automated run (self-test, native smoke)
@@ -1557,7 +1556,7 @@ In `area` the PC walks or runs ([walking and running](../world/gait-runtime.md))
 human ART's average time for its gait (walk 547/773 ms, run 168/235 ms per axis/diagonal step), and a run step
 draws the run ART (animation 6, loaded only in this mode). A ground click walks; Ctrl+click runs once (walks once
 with Always Run on); Num Lock flips the always-run lock; the palette's **Always Run on/off** is the original option
-(`user://always_run_v1.json`, `ALWAYS_RUN_TEST_PATH`); clicking an object always runs the approach. A following
+(the `always run` line of `user://arcanum.cfg`, `ALWAYS_RUN_TEST_PATH`); clicking an object always runs the approach. A following
 Virgil runs while he is farther than range + 2. Since ARC-SKILLS-008 the palette's **Prowl (stealth) on/off** toggles the
 hero's and its followers' concealment ([stealth](../world/stealth-runtime.md)); while concealed, a run becomes a walk unless the
 hero is a master of prowling with fatigue left (the crouch and the stealth walk animations are not drawn). HUD: `Gait: Always Run …, Num Lock run …; next ground click …;
@@ -2278,15 +2277,15 @@ project's, except as below.
   [rule modes](../world/rule-modes.md); custom mixes come after alpha (owner, 2026-10-28). A change switches the
   session at once (`GameSessionOwner.SelectRules`; the contract makes a switch in play safe), and every session the
   viewer then makes, loads or brings (start, new game, quick load, save load, map transfer) takes the chosen mode,
-  together with the difficulty. It is stored in the launcher's settings file (`launcher_v1.json`, `rules.active`),
+  together with the difficulty. It is stored in the launcher's settings (the `launcher` line of `arcanum.cfg`, `rules.active`),
   which the [launcher screen](#launcher-screen-arc-ui-014) writes too, and every ordinary run starts in it.
-- **Storage.** User preferences, never part of a save: difficulty, turn-based, auto attack, the floaters, HD interface and HD pack source in
-  `user://game_settings_v1.json` (`{"version":5,"difficulty":D,"turnBased":B,"autoAttack":B,"floats":F,"floatSpeed":S,"hdInterface":B,"hdPack":"auto|game|custom","hdPackPath":null|"FOLDER","generatedInterface":B}`;
-  a version 1 file without the last three reads with their defaults, a version 2 file without `hdInterface` reads it as off and a
-  version 3 file without `hdPack` reads it as Auto (ARC-DEV-350) and a version 4 file without `generatedInterface` reads it as off (ARC-UI-140); a
-  missing or invalid file reads as the original's defaults 1, off, on, 1, 2, off), Always Run and the volumes in their own files. Each change is saved at
+- **Storage.** User preferences, never part of a save, as lines of the one settings file `user://arcanum.cfg`
+  ([below](#the-one-settings-file-arc-ui-1130)): `difficulty` 0–2 (default 1), `turn-based` (0), `auto attack` (1), `text floaters` 0–2 (1) and `float speed` 0–10 (2)
+  with the original's names and defaults, and the project's `hd interface`, `generated interface`, `hd pack` (`auto`, `game`, `custom`) and
+  `hd pack path`; Always Run and the volumes are lines of the same file. A missing line or a value out of its range reads as that setting's
+  default and no other setting changes. Each change is saved at
   once (the original writes `arcanum.cfg` when the game exits). Space's toggle also saves the turn-based setting now. An
-  automated run (self-test, native smoke) reads and writes no file; `GAME_SETTINGS_TEST_PATH` names one for a test.
+  automated run (self-test, native smoke) reads and writes no file; `GAME_SETTINGS_TEST_PATH` names a settings file for a test.
 - **Closing.** Done goes back to the main menu, or from play closes the menu and play goes on; from play the O key
   does the same. Escape does nothing in this window, as in the original's key table.
 
@@ -2908,7 +2907,7 @@ on the original's three channels (effects, voice, music) at the original's volum
 ([contract](../audio/viewer-audio.md)); music and ambient play since ARC-UI-041 (below). The palette action **Sound test: next
 interface sound** plays the next fixed interface sound by id and reports the outcome; the palette's sound
 line shows the output device (or "no output device" in a headless run), the three settings (0–10, default
-5, `user://audio_volumes_v1.json`; automated runs use no file unless `AUDIO_VOLUMES_TEST_PATH` is set),
+5, the volume lines of `user://arcanum.cfg`; automated runs use no file unless `AUDIO_VOLUMES_TEST_PATH` is set),
 the catalogue and the last result. Self-test marker `ARC-UI-040 self-test audio PASS`; native smoke
 marker `ARC-UI-040 native-smoke audio PASS` (exterior AREA and `--area-map`).
 
@@ -3123,7 +3122,7 @@ the viewer app exits); only an ordinary run uses the `user://` file. Per setting
 | Zoom `world_diagnostic_zoom_v1.json` | `user://` | the run's folder (starts at 2.00) |
 | Quick saves `saves/`, `saves/map/` | `user://` | the run's folder (stages that test saving use their own slot as before) |
 | HD budget `hd_budget_v1.json` | `user://` | none (the contract ceilings) |
-| Always run, visual profile, audio volumes, game settings `game_settings_v1.json` (ARC-UI-013) | `user://` | none, as before (off, Legacy, defaults) |
+| The one settings file `arcanum.cfg` (always run, visual profile, volumes, game settings, launcher; ARC-UI-013, ARC-UI-1130) | `user://` | none, as before (off, Legacy, defaults) |
 | HD pack folders | discovered | not searched, as before |
 
 So a zoom the player saved (for example 1.70) no longer changes a self-test, and a self-test's own zoom steps no longer
@@ -3131,6 +3130,34 @@ land in the player's file. The self-test checks it first and fails with `SELF_TE
 input store would use a `user://` path; the log prints `ARC-DEV-032 self-test PASS settings isolated (the zoom and input stores use no user:// file)` and
 `ARC-DEV-032 automated run: settings and saves are isolated from the player's files` when the folder is first used. The
 WORLD settings validation launch still requires both explicit test paths. Checks: `ViewerStoragePathsTests`.
+
+## The one settings file (ARC-UI-1130)
+
+The player's settings are one file, `user://arcanum.cfg`, in the original's format (ledger OP8, OP9): `name=value` lines, one line a
+setting (`ArcanumConfig`, `Arcanum.Session.Settings`, Godot-free). The settings the original registers keep its names and value shape
+(`difficulty`, `turn-based`, `auto attack`, `always run`, `text floaters`, `float speed`, `effects volume`, `voice volume`, `music volume`;
+`ViewerSettingsConfig`), the project's own have project names (`hd interface`, `generated interface`, `hd pack`, `hd pack path`,
+`visual profile`, and `launcher`, the launcher object of [the launcher screen](#launcher-screen-arc-ui-014) as compact JSON on one line).
+A save changes only the lines of its own group and keeps every other line (a newer build's included) in its place, through a temporary file
+in the same folder and a rename; a line that is not a usable pair is dropped by the next write (as the original's rewrite does); a
+missing line, or a value outside its range, reads as that setting's default and no other setting changes. Settings stay saved at once, not
+at exit (the original writes at exit; owner decision, FR-LIFECYCLE-004). The file is the project's own: the original's `arcanum.cfg` in the
+installation is never read or written, and the file never holds saves or game state.
+A byte-order mark is ignored and a line with a byte that is not UTF-8 is dropped alone, so one bad byte never costs another line; a file
+longer than 1 MiB is replaced by the next write, and a file that exists but cannot be read is never replaced by an ordinary write (only
+the launcher's Reset replaces it, holding the launcher line alone). A write that was cut off leaves a temporary file, removed by a later write
+once it is an hour old. The settings are for one running game: two instances saving different groups at the same moment can lose one change
+(no lock). A folder path the file cannot hold (white space at an end, a control character) is refused by the launcher's Custom choice.
+
+The first ordinary start after this change moves the settings of the files the viewer kept before (`game_settings_v1.json`,
+`audio_volumes_v1.json`, `always_run_v1.json`, `visual_profile_v1.json`, `launcher_v1.json`, in `user://`) into `arcanum.cfg`, once, only
+when `arcanum.cfg` does not exist yet (`ViewerSettingsFile.UserFile`, `ViewerSettingsMigration`): each old file is read by its own old codec,
+an invalid one is skipped, and the old files stay where they are, unread and unchanged (the player may delete them). The test variables
+`GAME_SETTINGS_TEST_PATH`, `AUDIO_VOLUMES_TEST_PATH`, `ALWAYS_RUN_TEST_PATH`, `VISUAL_PROFILE_TEST_PATH` and `LAUNCHER_SETTINGS_TEST_PATH`
+keep their names and each now names a settings file; an automated run without one has no file. **Not in the file** (own files, own
+owners): the WORLD diagnostic's input and zoom preferences (`world_diagnostic_*_v1.json`, development diagnostics with their own validation),
+the HD device budget (`hd_budget_v1.json`, a measurement, not a setting) and the labs' files. Checks: `ArcanumConfigTests`,
+`LauncherSettingsTests`, `ViewerSettingsConfigTests`, the self-test's store sections.
 
 The same automated runs keep drawing, at full speed, while the window cannot draw (minimized): see
 [minimized window draw](../workflow/toolchain.md#minimized-window-draw-arc-dev-045) (ARC-DEV-045), and take no system

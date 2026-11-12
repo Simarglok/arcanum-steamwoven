@@ -152,7 +152,7 @@ class PackageTests(unittest.TestCase):
         smoke_command, smoke_environment = self.calls[-1]
         self.assertEqual(smoke_command[1:], ["--", "--native-smoke"])
         self.assertEqual(smoke_environment["ARC_AREA_MAP_SMOKE_ONLY"], "menu")
-        self.assertTrue(smoke_environment["LAUNCHER_SETTINGS_TEST_PATH"].endswith("launcher_v1.json"))
+        self.assertTrue(smoke_environment["LAUNCHER_SETTINGS_TEST_PATH"].endswith("launcher.cfg"))
         for text, error in ((line + "Godot/app_userdata/Arcanum Terrain Viewer\n" + passes, "user folder"),
                             (line.replace("alpha · main", "alpha · main x") + "Arcanum Steamwoven Game\n" + passes, "package of"),
                             (line + "Arcanum Steamwoven Game\nARC-UI-014 native-smoke launcher PASS\n", "main menu PASS")):
