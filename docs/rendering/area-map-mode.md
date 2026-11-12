@@ -128,6 +128,10 @@ ARC-BUG-1345 (issues #1345 and #1367): the stage's `RETIRED_GENERATION_ALIVE` af
 code=RenderFailure" line after it is only the viewer's generic wrapper of that failure) had one cause: the hover ring's overlay (`_ringOverlay`, which
 wraps the retired map's whole frame repository) stayed a field of the viewer after the scene was cleared, until a later hovered critter replaced it
 (its area, `_ringArea`, is replaced at the next frame). `ClearPublishedScene` now retires the ring (`RetireHoverRing`); a viewer field must not outlive its map.
+ARC-DEV-1426 (issue #1426, rechecked, no defect): `ClearPublishedScene` does retire the AI host (`_aiHost`, `_aiHostArea`, which hold the map's load result
+through the host's scene): `ClearReadyMetrics` reaches `RetireAiHost` through `StopAreaTransitions`, `UnbindAreaInventory` and `UnbindAreaCombat`; a window move keeps
+it on purpose (`_aiKeepAcrossWindowMove`). `RetireAiHost` also drops the line-of-fire and occupancy caches (`_aiLineOfFire`, `_aiPcOccupancy`), which the review found outliving a clear. The resources stage now pins this (`AI_HOST_HELD_AFTER_CLEAR`, when the run has a hero), because the chain is indirect and
+no area frame follows a clear to retire the host later.
 
 Since ARC-RENDER-025 the last collection of each sample compacts the large-object
 heap. On `tarant sewers-02` the earlier flake did not come from growth. In five
