@@ -811,8 +811,10 @@ on the pick of ARC-UI-005.
   (not for a broken one). The builder is `AreaItemWindowLines` (Godot-free); the local PC's aptitude, weapon training and key count
   come from `GameSessionOwner.QueryItemViewer`, an item's units, charges and condition from the session by its entity (the fields'
   own for an item no map entry is held by the session for). NOT READY: a key ring's own key count (the PC's is shown for every ring), the turn-based action-point preview (0x557370, which also moves the window while a preview is
-  up), the observer other than the local PC (an item worn by another holder reads its holder), and a long line is drawn
-  by the message window's own text rules (the original's 0x550A10 would cut or wrap it in the 291 × 18 rectangle; not checked).
+  up) and the observer other than the local PC (an item worn by another holder reads its holder). A line longer than its
+  291 × 18 rectangle is drawn as the original's 0x550A10 does with the original's font art (ARC-UI-1115, OH20; the label stand-in without the game folder is not checked): broken at the rectangle's width, only the lines
+  its height holds drawn (one for a font 10 to 18 rows high), the rest not drawn, no cut of characters and no second layout; a
+  right-aligned text wider than its rectangle starts at the left.
 - **The plane wreck at the Crash Site** is one scenery object named "Something Big" among 16 wreckage pieces that carry
   `OF_CLICK_THROUGH`. The original's pick skips them (OH1), so only that one part is hovered, highlighted and named: this is
   the original's behaviour, not a Steamwoven bug (OH8).
@@ -820,7 +822,7 @@ on the pick of ARC-UI-005.
 Checks: `AreaHoverWindowTests` (the dispatch by type, the highlighted types and flags, the images, the window's layout and
 its show and leave), `AreaHoverCritterTests` (ARC-UI-109: the second line's parts and order, the sneak states, the alignment bands and image, the dead line), `AreaCombatPanelLayoutTests` and `AttackChanceTests` (Simulation) and `AttackChanceStateTests` (Session) (ARC-UI-124: the icon table, the two layouts, the chance's terms, the cancel share, the zero cases), `AreaHoverConditionTests` (ARC-UI-107: the hit-point text, which types show hit points and a lock line, the
 lock message order, the fourth line's rectangle, red colour and right edge, the condition read from a session after damage and
-lock writes), `AreaItemWindowLinesTests` (ARC-UI-108: every line of the item window over invented items, the draw's rectangles, fonts and colours), `AreaMessageLogTests`; the native smoke stage `hover` (`./arcanum smoke pr --stages hover --hero
+lock writes), `AreaItemWindowLinesTests` (ARC-UI-108: every line of the item window over invented items, the draw's rectangles, fonts and colours), `AreaItemWindowWrapTests` (ARC-UI-1115: a long line broken at its rectangle's width and cut by its height, no wide layout or cut of characters, the right-aligned long text, the bounds check), `AreaMessageLogTests`; the native smoke stage `hover` (`./arcanum smoke pr --stages hover --hero
 human-male`, marker `ARC-UI-057 native-smoke hover-window PASS`: with the bars drawn it looks for an item, a container, a
 portal and a scenery on screen (on the start map the first, second and fourth are found; at least one kind must be) and
 hovers each found one (a body a roof covers or that is hidden is not a candidate, since it is picked but not drawn; of the first six
@@ -1041,8 +1043,8 @@ critical hit (a granted fate) on the living NPC with the most hit points floats 
 from the game's file, the critical-hit message first, stacked from 4h one height apart, the damage line in white; the
 smoke's clock raises them 3 px a step and the drawn opacity is the fade's; the NPC then attacks the hero until a hit
 lands (red lines over the hero) or is dodged (a white dodge); at level 1 the numbers go, at level 0 nothing is drawn;
-it prints `ARC-UI-021 native-smoke floaters PASS`. Not done: spell, trap and script damage and the other damage steps
-without an attack (spell blinding included), the draw offsets of the boxes' objects (the hero's while walking), the
+it prints `ARC-UI-021 native-smoke floaters PASS`. Since ARC-COMBAT-1138 the stage also checks a script's damage on a map object (a door, container or scenery with hit points to spare): `HT N` in white over it, N what the
+object lost after its material (`ARC-COMBAT-1138 floaters object-damage`; its capture hides the diagnostic HUD). Not done: spell blinding, the draw offsets of the boxes' objects (the hero's while walking), the
 original's font art 229, text
 bubbles (Text Duration) and combat taunts. Original visual parity NOT VERIFIED.
 
