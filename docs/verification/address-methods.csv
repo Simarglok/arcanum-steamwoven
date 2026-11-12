@@ -14,6 +14,8 @@ src/Arcanum.Executable/Maps/MapAggregateBuilder.cs,ModuleGuidFromArchiveFooter,p
 src/Arcanum.Executable/Prototypes/PrototypeBuilder.Aggregates.cs,InitializeColourTables,pending,
 src/Arcanum.Executable/Prototypes/PrototypeBuilder.cs,InitializeArtLibrary,pending,
 src/Arcanum.Input/OriginalWorldKeyboard.cs,CharacterKeySilenced,pending,
+src/Arcanum.Presentation/Audio/SceneryLoopSound.cs,Distance,exempt,reference
+src/Arcanum.Presentation/Audio/SceneryLoopSound.cs,RangeTiles,exempt,reference
 src/Arcanum.Presentation/Hud/Floaters.cs,LineHeight,pending,
 src/Arcanum.Presentation/Hud/Floaters.cs,Rgb,pending,
 src/Arcanum.Presentation/Hud/HotkeyBar.cs,ItemShowsInventoryArt,pending,
@@ -353,6 +355,7 @@ src/Arcanum.Simulation/Skills/PickPocketRules.cs,Caught,pending,
 src/Arcanum.Simulation/Skills/PickPocketRules.cs,NotAllowed,pending,
 src/Arcanum.Simulation/Skills/SkillCheckRules.cs,DifficultyReasons,pending,
 src/Arcanum.Simulation/Skills/SkillRules.cs,CheckBaseChange,pending,
+src/Arcanum.Simulation/Sound/SoundCueRules.cs,IsMonstrous,exempt,reference
 src/Arcanum.Simulation/Technology/ChargeCellRules.cs,Need,pending,
 src/Arcanum.Simulation/Technology/TechDeviceRules.cs,Use,pending,
 src/Arcanum.Simulation/Traps/TrapDeviceRules.cs,ScriptMarkerPrototype,pending,
@@ -501,6 +504,7 @@ src/Arcanum.World/AreaRestock.cs,Wielder,pending,
 src/Arcanum.World/AreaScenePlan.cs,BodyRanks,pending,
 src/Arcanum.World/AreaSceneryHost.cs,AddCreated,pending,
 src/Arcanum.World/AreaSceneryHost.cs,Restart,pending,
+src/Arcanum.World/AreaSceneryHost.cs,TakeSoundBegins,exempt,host
 src/Arcanum.World/AreaScriptHost.cs,ReactionOf,pending,
 src/Arcanum.World/AreaScriptSpells.cs,GiveMastery,pending,
 src/Arcanum.World/AreaShopMerchant.cs,Start,pending,
@@ -710,6 +714,10 @@ tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,LaunchProjectile,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,ProjectileGoalEnded,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,Strike,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,TurnBack,pending,
+tools/terrain-viewer/Godot/TerrainViewerSoundCallers.cs,NoteGaitFrame,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerSoundCallers.cs,PlayDroppedItemSound,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerSoundCallers.cs,PlayNpcAttackBark,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerSoundCallers.cs,StopSceneryVoices,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSpellBar.cs,SpellBarEntered,pending,
 tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs,ActivateItemSlot,pending,
 tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs,ActivateSpell,pending,
