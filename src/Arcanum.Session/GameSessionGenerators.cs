@@ -117,6 +117,8 @@ public sealed partial class GameSessionOwner
 {
     private GeneratorBook _generators = new();
     private readonly List<string> _generatedPending = [];
+    // A host that never takes them (a test, a headless run) does not grow the list without end.
+    private const int MaxGeneratedPending = 1024;
 
     /// <summary>ARC-WORLD-1157 (PO1): the live count (0..31) of a counter slot and whether the slot is blocked (script condition 46), or null for a slot outside 0..255.</summary>
     public (int Live, bool Blocked)? QueryGeneratorSlot(int slot)
@@ -141,7 +143,7 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// ARC-WORLD-1157 (PO8, script action 110 <c>toggle_monster_generator</c>): toggles the blocked bit of a slot (0..255); the spawner and condition 46 read it. One revision.
-    /// The script action itself is not admitted yet (E5-b); this is the session's half of it.
+    /// The script action itself is not admitted yet (E5-b); this is the session's half of it. A slot outside 0..255 is refused with <see cref="GameSessionFailure.InvalidCreatedObject"/> (the session has no failure of its own for a generator slot; the script action's validation, E5-b, will say it first).
     /// </summary>
     public GameSessionMutationResult ToggleGeneratorBlock(GameSessionVersion expected, int slot)
     {
@@ -188,6 +190,7 @@ public sealed partial class GameSessionOwner
         var ask = GeneratorRules.Request(settings, _generators.Live(settings.Slot), _generators.Blocked(settings.Slot), now, run.OffView);
         if (ask == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, [], delay, new(_identity, _revision));
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        var drawsBefore = _random.Draws;
         var rolls = new SessionDropRolls(_random);
         var accepted = run.SpotAccepted ?? (_ => true);
         var made = new List<SessionCreatedObject>();
@@ -202,11 +205,17 @@ public sealed partial class GameSessionOwner
             _generators.AddCopy(copy.Entity, settings.Slot);
             made.Add(copy);
         }
-        if (made.Count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, [], delay, new(_identity, _revision));
+        if (made.Count == 0)
+        {
+            // The placement's draws moved the session's generator: a snapshot of the same revision would differ, so the draws are a revision of their own.
+            if (_random.Draws == drawsBefore) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, [], delay, new(_identity, _revision));
+            Revise();
+            return new(GameSessionDisposition.Changed, GameSessionFailure.None, [], delay, new(_identity, _revision));
+        }
         // PO3: the record is written back: the live count rises by the number made, the count made too unless the budget is ignored.
         _generators.SetLive(settings.Slot, _generators.Live(settings.Slot) + made.Count);
         if (settings.BudgetCounts) _generators.SetMade(run.Entity, settings.Made + made.Count);
-        foreach (var copy in made) _generatedPending.Add(copy.Entity);
+        foreach (var copy in made) if (_generatedPending.Count < MaxGeneratedPending) _generatedPending.Add(copy.Entity);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Array.AsReadOnly(made.ToArray()), delay, new(_identity, _revision));
     }
