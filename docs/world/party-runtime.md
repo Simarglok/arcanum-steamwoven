@@ -103,7 +103,7 @@ value would leave its bounds or no reaction record is left, the NPC is jilted wi
 says why. No line, animation or script. A pass result lists the firings in `SessionEventPassResult.Waits`.
 
 **Cancel** (OL25). Every way out of waiting removes the NPC's timer wherever it is parked: `UnwaitParty`, `JoinParty`,
-`ForceJoinParty`, `LeaveParty` (forced or not) and an NPC's death (`Life` with `Died`). A refused unwait or leave keeps it.
+`ForceJoinParty`, `LeaveParty` (forced or not) and an NPC's death (`Life` with `Died`). A refused unwait or leave keeps it. The death is a forced unwait (ARC-AI-1312, kill notification 0x4AA1B0 → 0x4AA8C0): a waiting companion that dies also joins its leader again as a forced follower, appended at the end of the array, JILTED cleared, the leader's Tempus Fugit flag copied; a follower or free NPC that dies keeps its record.
 Destruction is the host's: a pass drops an event whose NPC the host no longer reports (the record stays `Waiting`, above).
 
 **Maps** (OL26). The event stays with the waiting NPC's map (only followers' events travel with the actor), so it is parked while
