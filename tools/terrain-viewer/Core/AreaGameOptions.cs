@@ -199,8 +199,8 @@ public sealed record AreaGameSettings
     public TouchScheme Touch { get; init; }
     public PromptStyle Prompts { get; init; }
 
-    /// <summary>The three as the foundation core's record (a value outside its enum reads as its default there).</summary>
-    public ControlSchemeSettings Controls => new ControlSchemeSettings(ControlSchemeSettings.CurrentVersion, Pad, Touch, Prompts).Validated();
+    /// <summary>The three as the foundation core's record (a value outside its enum reads as its default there; a file with both a pad and the touch scheme on is C alone, as the Controls line shows it).</summary>
+    public ControlSchemeSettings Controls { get { var raw = new ControlSchemeSettings(ControlSchemeSettings.CurrentVersion, Pad, Touch, Prompts).Validated(); return raw.WithChoice(raw.Choice); } }
 
     /// <summary>The "text floaters" level (<see cref="FloaterRules.Never"/>, messages, numbers).</summary>
     public int Floats

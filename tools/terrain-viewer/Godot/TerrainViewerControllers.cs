@@ -5,7 +5,7 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 // ARC-GPAD-1374 (epic #1371, concept docs/input/controller-schemes.md §0.1-§0.4): the controller foundation in the viewer. The scheme choice
-// (pad scheme, touch scheme, prompt style) is three lines of the game's Options window, saved with the game settings (AreaGameSettings, the
+// (pad scheme, touch scheme, prompt style) is the Controls line (Game page) and the Prompt style line (Video page) of the game's Options window, saved with the game settings (AreaGameSettings, the
 // lines "pad scheme", "touch scheme", "prompt style"); a change applies at once. Every input event, from any pad (never assumed to be device 0),
 // the mouse, the keyboard and the touch screen, goes to the foundation's active-device tracker ("last meaningful input wins", 250 ms hysteresis);
 // the prompt line at the bottom of the screen names the device in hand and, once a scheme has prompts, its buttons with the glyphs of the

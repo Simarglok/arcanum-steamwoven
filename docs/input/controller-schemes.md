@@ -31,7 +31,7 @@ Every scheme is an **input adapter** that emits the same semantic commands to th
 The foundation is a precondition for any fair comparison:
 
 1. **Scheme selector** in Options → Controls: `Original (mouse+keyboard)` always active;
-   `Pad scheme: A Direct / B Pointer`; `Touch: Off / C Touch+pad`. Switchable at run time without
+   `Pad scheme: A Direct / B Pointer`; `Touch: Off / C Touch+pad` (built as one Controls line: Original, A, B, C, [ARC-GPAD-1463](https://github.com/Simarglok/arcanum-steamwoven/issues/1463)). Switchable at run time without
    restart, persisted in user settings. Defaults for the test: none — the test script chooses.
 2. **Active device detection** ("last meaningful input wins"; both devices always live):
    - pad becomes active on a button or a stick/trigger beyond the deadzone (drift ignored);
@@ -246,7 +246,7 @@ The viewer hosts the core (`tools/terrain-viewer/Godot/TerrainViewerControllers.
   2026-11-12: one line instead of three), in the main menu and in play, the pattern of the removed HD lines: Original, A Direct, B Pointer,
   C Touch+pad (`ControlChoice`). C uses the pad itself for walking and hotkeys, so it is chosen instead of a pad scheme, not beside one; an
   old settings file with both on reads as C. The glyph family override is the Video page's `Prompt style` line (Auto, Xbox, PlayStation,
-  Nintendo, Steam Deck). One `AreaOption` each (`AreaGameOptions.cs`), saved with the game settings as the lines `pad scheme`,
+  Nintendo, Steam Deck). One `AreaOption` each (`ControlScheme`, `PromptStyle`; `AreaGameOptions.cs`), saved with the game settings as the lines `pad scheme`,
   `touch scheme` (the line sets both) and `prompt style` of the one settings file (`ViewerSettingsConfig`; a missing or unknown word is that
   line's default, Off, Off, Auto), applied at once with no restart; the original mouse and keyboard are not a value.
 - **Device in hand.** Every input event of any pad (its device id, never assumed 0), the mouse, the keyboard and the touch screen
