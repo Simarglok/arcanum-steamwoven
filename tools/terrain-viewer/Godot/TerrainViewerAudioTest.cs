@@ -57,13 +57,13 @@ public static partial class TerrainViewerSelfTest
         var root = System.IO.Directory.CreateTempSubdirectory("arc-ui-040-store-").FullName;
         try
         {
-            var path = System.IO.Path.Combine(root, "audio.json");
+            var path = System.IO.Path.Combine(root, "audio.cfg");
             OS.SetEnvironment(AudioVolumesStore.TestVariable, path);
             var store = new AudioVolumesStore(automated: true);
             Require(store.Persistent && store.Load() == AudioVolumes.Defaults, "a missing file loads 5/5/5");
             Require(store.Save(new AudioVolumes(2, 9, 0)) && new AudioVolumesStore(automated: false).Load() == new AudioVolumes(2, 9, 0), "saved and read back");
-            System.IO.File.WriteAllText(path, "{\"version\":1,\"effects\":12,\"voice\":9,\"music\":0}");
-            Require(store.Load() == AudioVolumes.Defaults, "an invalid file loads the defaults");
+            System.IO.File.WriteAllText(path, "effects volume=12\nvoice volume=9\nmusic volume=0\n");
+            Require(store.Load() == new AudioVolumes(5, 9, 0), "an out-of-range line loads its default and the other lines stay");
             OS.UnsetEnvironment(AudioVolumesStore.TestVariable);
             var automated = new AudioVolumesStore(automated: true);
             Require(!automated.Persistent && automated.Load() == AudioVolumes.Defaults && !automated.Save(AudioVolumes.Defaults), "an automated run has no file");

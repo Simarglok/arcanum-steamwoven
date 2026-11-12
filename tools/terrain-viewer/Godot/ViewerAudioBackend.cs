@@ -1,5 +1,7 @@
 using Arcanum.Data.Audio;
 using Arcanum.Presentation.Audio;
+using Arcanum.Session.Settings;
+using Arcanum.TerrainViewer.Core;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -242,39 +244,21 @@ public sealed class ViewerAudioBackend : IDisposable
     }
 }
 
-/// <summary>ARC-UI-040: the channel volume preference, following <see cref="VisualProfileSettingsStore"/>:
-/// <c>user://audio_volumes_v1.json</c> holding <see cref="AudioVolumesCodec"/> text; a missing, unreadable or invalid file
-/// loads the defaults (5/5/5). <c>AUDIO_VOLUMES_TEST_PATH</c> isolates tests; an automated run without it has no file at
-/// all, so it never reads or changes the owner's setting.</summary>
+/// <summary>ARC-UI-040: the channel volume preference, the three volume lines of the one settings file (ARC-UI-1130,
+/// <see cref="ViewerSettingsConfig"/>, once <c>user://audio_volumes_v1.json</c>); a missing or invalid line loads the default 5.
+/// <c>AUDIO_VOLUMES_TEST_PATH</c> names a settings file for tests; an automated run without it has no file at all, so it never reads or
+/// changes the owner's setting.</summary>
 public sealed class AudioVolumesStore
 {
     public const string TestVariable = "AUDIO_VOLUMES_TEST_PATH";
-    public const string UserPath = "user://audio_volumes_v1.json";
     private readonly string? _path;
 
-    public AudioVolumesStore(bool automated)
-    {
-        var test = OS.GetEnvironment(TestVariable);
-        _path = !string.IsNullOrWhiteSpace(test) ? test : automated ? null : UserPath;
-    }
+    public AudioVolumesStore(bool automated) => _path = ViewerSettingsFile.Choose(TestVariable, automated);
 
     public bool Persistent => _path is not null;
-    public bool HasSaved => _path is not null && global::Godot.FileAccess.FileExists(_path);
+    public bool HasSaved => _path is not null && ViewerSettingsConfig.HasAudio(ArcanumConfig.Read(_path));
 
-    public AudioVolumes Load()
-    {
-        if (_path is null || !global::Godot.FileAccess.FileExists(_path)) return AudioVolumes.Defaults;
-        using var file = global::Godot.FileAccess.Open(_path, global::Godot.FileAccess.ModeFlags.Read);
-        return file is null ? AudioVolumes.Defaults : AudioVolumesCodec.Deserialize(file.GetAsText()) ?? AudioVolumes.Defaults;
-    }
+    public AudioVolumes Load() => _path is null ? AudioVolumes.Defaults : ViewerSettingsConfig.ReadAudio(ArcanumConfig.Read(_path));
 
-    public bool Save(AudioVolumes volumes)
-    {
-        if (_path is null) return false;
-        using var file = global::Godot.FileAccess.Open(_path, global::Godot.FileAccess.ModeFlags.Write);
-        if (file is null) return false;
-        file.StoreString(AudioVolumesCodec.Serialize(volumes));
-        file.Flush();
-        return file.GetError() == Error.Ok;
-    }
+    public bool Save(AudioVolumes volumes) => _path is not null && ArcanumConfig.Save(_path, ViewerSettingsConfig.AudioChanges(volumes)) == ArcanumConfigSaveStatus.Saved;
 }

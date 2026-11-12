@@ -325,7 +325,7 @@ def package(platform: Platform, *, root: Path, output: Path, ref: str, fetch: bo
         else:
             # An automated run keeps its settings and saves in an isolated folder (ViewerStoragePaths); the launcher file is
             # a fresh one, so the launcher detects the game folder as a player's first start would.
-            smoke_environment = dict(environment, LAUNCHER_SETTINGS_TEST_PATH=str(work / "launcher_v1.json"), ARC_AREA_MAP_SMOKE_ONLY="menu")
+            smoke_environment = dict(environment, LAUNCHER_SETTINGS_TEST_PATH=str(work / "launcher.cfg"), ARC_AREA_MAP_SMOKE_ONLY="menu")
             text = step("smoke-menu", [str(executable), "--", "--native-smoke"], source, smoke_environment, logs, runner, SMOKE_MINUTES)
             check_smoke_log(text, commit)
             smoked = f"PASS (launcher and main menu, own user folder {USER_FOLDER})"

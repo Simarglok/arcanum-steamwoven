@@ -315,7 +315,7 @@ The owner asked (2026-11-11) for the generated interface as a working third vari
 element where the original puts it: only the drawing changes, not the UI or UX. S1 is the first slice.
 
 - **Setting.** The HD interface line (the launcher screen's since ARC-UI-143, the options window's before) has a third value, **Generated (experimental)**
-  (`generatedInterface` in `game_settings_v1.json`, file version 5; older files read it as off). It keeps the HD interface on,
+  (the `generated interface` line of `arcanum.cfg`; a missing line reads it as off). It keeps the HD interface on,
   so frames without a recipe still draw from the HD pack.
 - **Where it plugs in.** `HdInterfaceTexture` (the texture the interface already draws through) asks
   `InterfaceChromeRecipes.For(frame key)`; a frame with a recipe draws `InterfaceChromeRenderer.Render(...)` in place of its HD

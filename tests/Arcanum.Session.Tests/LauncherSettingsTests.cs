@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Arcanum.Data.Content;
 using Arcanum.Session.Launcher;
+using Arcanum.Session.Settings;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.Session.Tests;
@@ -139,32 +140,41 @@ public sealed class LauncherSettingsTests
     }
 
     [TestMethod]
-    public void The_file_is_replaced_whole_and_a_newer_schema_is_never_overwritten()
+    public void The_launcher_line_is_replaced_alone_and_a_newer_schema_is_never_overwritten()
     {
         var path = Path.Combine(_root, "deep", "folder", LauncherSettingsFile.FileName);
         Assert.AreEqual(LauncherSettingsReadStatus.Missing, LauncherSettingsFile.Load(path).Status);
         Assert.AreEqual(LauncherSettingsSaveStatus.Saved, LauncherSettingsFile.Save(path, Full));
         Assert.AreEqual(Full.GameRoot, LauncherSettingsFile.Load(path).Settings.GameRoot);
         CollectionAssert.AreEqual(new[] { LauncherSettingsFile.FileName }, Directory.EnumerateFiles(Path.GetDirectoryName(path)!).Select(Path.GetFileName).ToArray(), "no temporary file is left");
+        Assert.AreEqual(1, File.ReadAllLines(path).Length, "the launcher object is one line");
 
-        File.WriteAllText(path, """{"schema":1,"future":true,"showAtStart":true}""");
+        // A write changes the launcher line and no other setting of the one file.
+        File.WriteAllText(path, "always run=1\nlauncher={\"schema\":1,\"future\":true,\"showAtStart\":true}\nmusic volume=3\n");
         Assert.AreEqual(LauncherSettingsSaveStatus.Saved, LauncherSettingsFile.Save(path, LauncherSettings.Defaults));
-        Assert.IsTrue(File.ReadAllText(path).Contains("\"future\": true", StringComparison.Ordinal), "the file's unknown keys are kept");
+        var lines = File.ReadAllLines(path);
+        Assert.AreEqual(3, lines.Length);
+        Assert.AreEqual("always run=1", lines[0]);
+        Assert.IsTrue(lines[1].StartsWith("launcher=", StringComparison.Ordinal) && lines[1].Contains("\"future\":true", StringComparison.Ordinal), "the launcher object's unknown keys are kept");
+        Assert.AreEqual("music volume=3", lines[2]);
         Assert.IsFalse(LauncherSettingsFile.Load(path).Settings.ShowAtStart);
 
-        File.WriteAllText(path, """{"schema":2,"gameRoot":"/x"}""");
+        File.WriteAllText(path, "launcher={\"schema\":2,\"gameRoot\":\"/x\"}\nmusic volume=3\n");
         Assert.AreEqual(LauncherSettingsSaveStatus.RefusedOtherSchema, LauncherSettingsFile.Save(path, Full));
-        Assert.AreEqual("""{"schema":2,"gameRoot":"/x"}""", File.ReadAllText(path));
+        Assert.AreEqual("launcher={\"schema\":2,\"gameRoot\":\"/x\"}\nmusic volume=3\n", File.ReadAllText(path));
 
-        File.WriteAllBytes(path, [(byte)'{', 0xFF, (byte)'}']);
-        Assert.AreEqual(LauncherSettingsReadStatus.Invalid, LauncherSettingsFile.Load(path).Status, "not UTF-8");
-        File.WriteAllText(path, new string(' ', LauncherSettingsCodec.MaxBytes + 1), Encoding.ASCII);
+        File.WriteAllBytes(path, [(byte)'l', 0xFF, (byte)'=', (byte)'1']);
+        Assert.AreEqual(LauncherSettingsReadStatus.Missing, LauncherSettingsFile.Load(path).Status, "a line with a bad byte is dropped alone");
+        File.WriteAllText(path, new string(' ', ArcanumConfig.MaxFileBytes + 1), Encoding.ASCII);
         Assert.AreEqual(LauncherSettingsReadStatus.Invalid, LauncherSettingsFile.Load(path).Status, "too large");
         Assert.AreEqual(LauncherSettingsSaveStatus.Saved, LauncherSettingsFile.Save(path, Full), "an invalid file is replaced");
+        File.WriteAllText(path, "launcher=not json\n");
+        Assert.AreEqual(LauncherSettingsReadStatus.Invalid, LauncherSettingsFile.Load(path).Status, "a launcher line that is not a settings object");
+        Assert.AreEqual(LauncherSettingsSaveStatus.Saved, LauncherSettingsFile.Save(path, Full));
 
-        Directory.CreateDirectory(Path.Combine(_root, "dir.json"));
-        Assert.AreEqual(LauncherSettingsReadStatus.Missing, LauncherSettingsFile.Load(Path.Combine(_root, "dir.json")).Status);
-        Assert.AreEqual(LauncherSettingsSaveStatus.Failed, LauncherSettingsFile.Save(Path.Combine(_root, "dir.json"), Full));
+        Directory.CreateDirectory(Path.Combine(_root, "dir.cfg"));
+        Assert.AreEqual(LauncherSettingsReadStatus.Missing, LauncherSettingsFile.Load(Path.Combine(_root, "dir.cfg")).Status);
+        Assert.AreEqual(LauncherSettingsSaveStatus.Failed, LauncherSettingsFile.Save(Path.Combine(_root, "dir.cfg"), Full));
         if (!OperatingSystem.IsWindows())
         {
             File.SetUnixFileMode(path, UnixFileMode.None);
@@ -178,23 +188,24 @@ public sealed class LauncherSettingsTests
     }
 
     [TestMethod]
-    public void Reset_replaces_any_file_with_the_defaults()
+    public void Reset_replaces_the_launcher_line_with_the_defaults_and_keeps_the_other_settings()
     {
-        // ARC-UI-014: the player's reset is the one write that replaces a newer build's or a damaged file.
+        // ARC-UI-014: the player's reset is the one write that replaces a newer build's or a damaged launcher object.
         var path = Path.Combine(_root, "reset", LauncherSettingsFile.FileName);
         Assert.AreEqual(LauncherSettingsSaveStatus.Saved, LauncherSettingsFile.Reset(path), "no file yet");
         Assert.AreEqual((LauncherSettingsReadStatus.Read, LauncherSettings.Defaults), (LauncherSettingsFile.Load(path).Status, LauncherSettingsFile.Load(path).Settings));
-        foreach (var text in new[] { """{"schema":2,"gameRoot":"/x"}""", "not json", """{"schema":1,"future":true,"rules":{"active":"original"}}""" })
+        foreach (var text in new[] { "launcher={\"schema\":2,\"gameRoot\":\"/x\"}", "launcher=not json", "launcher={\"schema\":1,\"future\":true,\"rules\":{\"active\":\"original\"}}" })
         {
-            File.WriteAllText(path, text);
+            File.WriteAllText(path, "visual profile=hd\n" + text + "\n");
             Assert.AreEqual(LauncherSettingsSaveStatus.Saved, LauncherSettingsFile.Reset(path), text);
             var read = LauncherSettingsFile.Load(path);
             Assert.AreEqual((LauncherSettingsReadStatus.Read, LauncherSettings.Defaults), (read.Status, read.Settings), text);
-            Assert.AreEqual(0, read.UnknownKeys.Count, "a reset keeps none of the file's keys");
+            Assert.AreEqual(0, read.UnknownKeys.Count, "a reset keeps none of the launcher object's keys");
+            Assert.AreEqual("hd", ArcanumConfig.Read(path).Get("visual profile"), "a reset leaves the other settings");
         }
         CollectionAssert.AreEqual(new[] { LauncherSettingsFile.FileName }, Directory.EnumerateFiles(Path.GetDirectoryName(path)!).Select(Path.GetFileName).ToArray());
-        Directory.CreateDirectory(Path.Combine(_root, "dir.json"));
-        Assert.AreEqual(LauncherSettingsSaveStatus.Failed, LauncherSettingsFile.Reset(Path.Combine(_root, "dir.json")));
+        Directory.CreateDirectory(Path.Combine(_root, "dir.cfg"));
+        Assert.AreEqual(LauncherSettingsSaveStatus.Failed, LauncherSettingsFile.Reset(Path.Combine(_root, "dir.cfg")));
     }
 
     [TestMethod]

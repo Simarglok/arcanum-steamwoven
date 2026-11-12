@@ -322,7 +322,7 @@ public static partial class TerrainViewerSelfTest
         GD.Print("ARC-UI-006 self-test app PASS " + summary);
     }
 
-    // ARC-UI-006 persistence: the store writes exactly the codec text to its test path, reads it
+    // ARC-UI-006 persistence (ARC-UI-1130: a line of the settings file): the store writes exactly its line to its test path, reads it
     // back, loads anything else as Legacy, reports a failed save, and an automated run without a
     // test path neither reads nor writes a file.
     private static void AssertVisualProfileStore()
@@ -332,17 +332,19 @@ public static partial class TerrainViewerSelfTest
         var root = System.IO.Directory.CreateTempSubdirectory("arc-ui-006-store-").FullName;
         try
         {
-            var path = System.IO.Path.Combine(root, "visual.json");
+            var path = System.IO.Path.Combine(root, "visual.cfg");
             OS.SetEnvironment(VisualProfileSettingsStore.TestVariable, path);
             var store = new VisualProfileSettingsStore(automated: true);
             Require(store.Persistent && store.Load() == VisualProfile.Legacy, "missing file loads Legacy");
-            Require(store.Save(VisualProfile.Hd) && System.IO.File.ReadAllText(path) == "{\"schema\":1,\"profile\":\"Hd\"}", "Hd saved as codec text");
+            Require(store.Save(VisualProfile.Hd) && System.IO.File.ReadAllText(path) == "visual profile=hd\n", "Hd saved as its line");
             Require(new VisualProfileSettingsStore(automated: false).Load() == VisualProfile.Hd, "a new store reads Hd back");
-            System.IO.File.WriteAllText(path, "{\"schema\":1,\"profile\":\"Ultra\"}");
+            System.IO.File.WriteAllText(path, "visual profile=ultra\n");
             Require(store.Load() == VisualProfile.Legacy, "an unknown value loads Legacy");
             System.IO.File.WriteAllBytes(path, [0xFF, 0xFE, 0x00]);
             Require(store.Load() == VisualProfile.Legacy, "unreadable text loads Legacy");
-            OS.SetEnvironment(VisualProfileSettingsStore.TestVariable, System.IO.Path.Combine(root, "missing-dir", "visual.json"));
+            // A settings file under a file (its folder cannot be made) cannot be written.
+            System.IO.File.WriteAllText(System.IO.Path.Combine(root, "blocker"), "x");
+            OS.SetEnvironment(VisualProfileSettingsStore.TestVariable, System.IO.Path.Combine(root, "blocker", "visual.cfg"));
             Require(!new VisualProfileSettingsStore(automated: true).Save(VisualProfile.Hd), "a failed save is reported");
             OS.UnsetEnvironment(VisualProfileSettingsStore.TestVariable);
             var automated = new VisualProfileSettingsStore(automated: true);
@@ -354,6 +356,6 @@ public static partial class TerrainViewerSelfTest
             else OS.SetEnvironment(VisualProfileSettingsStore.TestVariable, previous);
             System.IO.Directory.Delete(root, true);
         }
-        GD.Print("ARC-UI-006 self-test store PASS codec text at the test path, read back, unknown/unreadable as Legacy, failed save reported, automated run without a file");
+        GD.Print("ARC-UI-006 self-test store PASS settings line at the test path, read back, unknown/unreadable as Legacy, failed save reported, automated run without a file");
     }
 }

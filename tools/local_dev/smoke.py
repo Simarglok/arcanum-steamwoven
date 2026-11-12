@@ -53,6 +53,14 @@ FULL_CHAIN: tuple[tuple[str, str, str, str | None], ...] = (
 SETTINGS = ("ALWAYS_RUN", "AUDIO_VOLUMES", "GAME_SETTINGS", "LAUNCHER_SETTINGS", "VISUAL_PROFILE",
             "WORLD_DIAGNOSTIC_SETTINGS", "WORLD_DIAGNOSTIC_ZOOM")
 STAGES_ENV = "ARC_AREA_MAP_SMOKE_ONLY"
+
+
+def settings_file(name: str) -> str:
+    """The file a smoke's settings variable names: a settings file (arcanum.cfg format, ARC-UI-1130) for the player's settings, the
+    JSON of the WORLD diagnostic's own preferences for the diagnostic's."""
+    return name.lower() + (".json" if name.startswith("WORLD_DIAGNOSTIC") else ".cfg")
+
+
 # ARC-DEV-395: the stages that check a sample unless --all (the viewer reads ALL_ENV: docs/workflow/toolchain.md#smoke-runner-arc-dev-061).
 SAMPLED_STAGES = frozenset({"container-click", "walk"})
 ALL_ENV = "ARC_SMOKE_ALL"
@@ -312,7 +320,7 @@ def godot_command(godot: str, prefs: Path, viewer: Sequence[str], environ: Mappi
     sdk = run_queue.pinned_sdk(dict(environ))
     dropped = sorted(key for key in environ if key.startswith(DROPPED_PREFIXES) and key not in KEPT_VARIABLES
                      and key != focus_guard.CARRIER)
-    settings = [f"{name}_TEST_PATH={prefs / (name.lower() + '.json')}" for name in SETTINGS]
+    settings = [f"{name}_TEST_PATH={prefs / settings_file(name)}" for name in SETTINGS]
     return ("env", *(part for key in dropped for part in ("-u", key)), "__GODOT_SHELL_ENV_SET=1", f"DOTNET_ROOT={sdk}",
             f"PATH={sdk}:/usr/bin:/bin:/usr/sbin:/sbin", *(() if headless else focus_guard.insert_arguments(focus_guard.reads(environ))),
             *settings, *([f"{STAGES_ENV}={','.join(stages)}"] if stages else []), *(f"{name}={value}" for name, value in extra),

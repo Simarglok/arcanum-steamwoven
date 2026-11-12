@@ -34,7 +34,7 @@ that is set again stays silent here.
 The palette (Ctrl+Shift+F9 / Start) has **Effects volume**, **Voice volume** and **Music volume**,
 0–10 each (the original's three bars, SN9), after the sound test. A change (SN7, SN8):
 
-- is saved at once to `user://audio_volumes_v1.json` (outside game saves; an automated run saves only
+- is saved at once to the volume lines of `user://arcanum.cfg` (outside game saves; an automated run saves only
   to `AUDIO_VOLUMES_TEST_PATH`);
 - sets every live sound of that channel to the bare channel volume (the original's flattening,
   which loses per-song volume until the next scheme load);
