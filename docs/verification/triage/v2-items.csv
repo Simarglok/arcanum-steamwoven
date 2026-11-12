@@ -6,79 +6,79 @@ address,name,score,writes,reach,smoke,slice,row
 0x467860,inventory removal,7,2,2,1,1,VP1
 0x468090,schedule item decay,7,2,2,1,1,VP16
 0x468110,item decay cancel,7,2,2,1,1,VP17
-0x43D530,item damage setter,6,2,1,1,next,
-0x43F1C0,object break,6,2,1,1,next,
-0x45F820,encumbrance recalculation,6,2,2,0,next,
+0x43D530,item damage setter,6,2,1,1,2,VP18
+0x43F1C0,object break,6,2,1,1,2,VP19
+0x45F820,encumbrance recalculation,6,2,2,0,2,VP20
 0x4617F0,item transfer,6,2,2,0,1,VP4
 0x461CA0,item transfer from a holder,6,2,2,0,1,VP5
-0x462CC0,item use,6,2,1,1,next,
-0x462FC0,item use on a tile,6,2,1,1,next,
-0x463730,drop whole inventory,6,2,1,1,next,
-0x463860,drop inventory then delete,6,2,1,1,next,
-0x463B30,inventory clear,6,2,1,1,next,
-0x463E20,inventory regeneration,6,2,1,1,next,
-0x464180,restock time event,6,2,1,1,next,
-0x4643D0,mark holder items identified,6,2,1,1,next,
-0x464970,new gold pile,6,2,1,1,next,
+0x462CC0,item use,6,2,1,1,2,VP21
+0x462FC0,item use on a tile,6,2,1,1,2,VP22
+0x463730,drop whole inventory,6,2,1,1,2,VP23
+0x463860,drop inventory then delete,6,2,1,1,2,VP24
+0x463B30,inventory clear,6,2,1,1,2,VP25
+0x463E20,inventory regeneration,6,2,1,1,2,VP26
+0x464180,restock time event,6,2,1,1,2,VP27
+0x4643D0,mark holder items identified,6,2,1,1,2,VP28
+0x464970,new gold pile,6,2,1,1,2,VP29
 0x464AE0,item wield,6,2,2,0,1,VP8
 0x464C80,item unwield,6,2,2,0,1,VP9
-0x465170,best item for a slot,6,2,1,1,next,
-0x4654F0,best items for every slot,6,2,1,1,next,
-0x465A40,new ammunition object,6,2,1,1,next,
+0x465170,best item for a slot,6,2,1,1,2,VP30
+0x4654F0,best items for every slot,6,2,1,1,2,VP31
+0x465A40,new ammunition object,6,2,1,1,2,VP32
 0x466640,item insert,6,2,2,0,1,VP3
 0x466A00,key fold,6,2,1,1,1,VP14
 0x466A50,key ring add,6,2,1,1,1,VP15
-0x466E50,drop placement,6,2,2,0,next,
+0x466E50,drop placement,6,2,2,0,2,VP33
 0x4677B0,wield on hook,6,2,2,0,1,VP10
 0x467CB0,wield off hook,6,2,2,0,1,VP11
-0x4BC090,trap spotted mark,6,2,1,1,next,
-0x4BC220,trap removal,6,2,1,1,next,
-0x4BC480,trap device on a tile,6,2,1,1,next,
-0x4BC690,trap spell timer,6,2,1,1,next,
-0x4BC780,trap time event handler,6,2,1,1,next,
-0x4BCB00,trap trigger,6,2,1,1,next,
-0x4BCB70,native trap script run,6,2,1,1,next,
-0x4C8E60,repair service,6,2,1,1,next,
-0x4C8EEA,repair service tail forced run payment refresh,6,2,1,1,next,
-0x5570D0,hotkey inventory callback,6,2,2,0,next,
-0x572640,barter open stock,6,2,1,1,next,
-0x575200,buy drop,6,2,1,1,next,
-0x575360,barter sale drop,6,2,1,1,next,
+0x4BC090,trap spotted mark,6,2,1,1,2,VP34
+0x4BC220,trap removal,6,2,1,1,2,VP35
+0x4BC480,trap device on a tile,6,2,1,1,2,VP36
+0x4BC690,trap spell timer,6,2,1,1,2,VP37
+0x4BC780,trap time event handler,6,2,1,1,2,VP38
+0x4BCB00,trap trigger,6,2,1,1,2,VP39
+0x4BCB70,native trap script run,6,2,1,1,2,VP40
+0x4C8E60,repair service,6,2,1,1,2,VP41
+0x4C8EEA,repair service tail forced run payment refresh,6,2,1,1,2,VP42
+0x5570D0,hotkey inventory callback,6,2,2,0,2,VP43
+0x572640,barter open stock,6,2,1,1,2,VP44
+0x575200,buy drop,6,2,1,1,2,VP45
+0x575360,barter sale drop,6,2,1,1,2,VP46
 0x5788C0,same-holder item move,6,2,2,0,1,VP12
-0x463540,junk pile dissolve,5,2,1,0,next,
-0x4670A0,inventory arrange,5,2,1,0,next,
-0x4BC2E0,trap device on an object,5,2,1,0,next,
-0x4BC7B0,trap disarm,5,2,1,0,next,
-0x466310,inventory grid cells mark,4,1,2,0,next,
-0x4BBE40,trap spot,4,1,1,1,next,
-0x461A90,item drop distance,3,0,2,1,next,
-0x464D20,item wear check,3,0,2,1,next,
-0x465CF0,weapon speed,3,0,2,1,next,
-0x4F4E40,drop tile try,3,0,2,1,next,
-0x571AA0,item cursor begin,3,1,1,0,next,
-0x571CB0,item cursor apply,3,1,1,0,next,
-0x45F790,encumbrance level,2,0,2,0,next,
-0x4614A0,item effective power,2,0,1,1,next,
-0x461F80,item price,2,0,1,1,next,
-0x462330,thrown item damage,2,0,1,1,next,
-0x462480,holder item by name,2,0,1,1,next,
-0x462930,stack of the same prototype,2,0,1,1,next,
-0x462B40,hotkey item count,2,0,2,0,next,
-0x462C30,inventory use check,2,0,1,1,next,
-0x463C60,restock event handler,2,0,1,1,next,
-0x4640C0,restock event schedule,2,0,1,1,next,
-0x464200,merchant buy list test,2,0,1,1,next,
-0x465870,ammunition stack by type,2,0,1,1,next,
-0x4664C0,room for item in grid,2,0,2,0,next,
-0x466510,item insert check,2,0,2,0,next,
-0x4BBFE0,trap known,2,0,1,1,next,
-0x4BCAB0,trap object on a tile,2,0,1,1,next,
-0x4BCDC0,native trap effect,2,0,1,1,next,
-0x4BF640,inventory source set loop,2,0,1,1,next,
-0x4BF7B0,loot line parse,2,0,1,1,next,
-0x5045A0,item art broken test,2,0,1,1,next,
-0x575FA0,item under inventory point,2,0,2,0,next,
-0x578760,repair quote,2,0,1,1,next,
-0x578EA0,barter transfer,2,0,1,1,next,
-0x462540,holder item by prototype,1,0,1,0,next,
-0x5719F0,item cursor mask,1,0,1,0,next,
+0x463540,junk pile dissolve,5,2,1,0,2,VP47
+0x4670A0,inventory arrange,5,2,1,0,2,VP48
+0x4BC2E0,trap device on an object,5,2,1,0,2,VP49
+0x4BC7B0,trap disarm,5,2,1,0,2,VP50
+0x466310,inventory grid cells mark,4,1,2,0,2,VP51
+0x4BBE40,trap spot,4,1,1,1,2,VP52
+0x461A90,item drop distance,3,0,2,1,2,VP53
+0x464D20,item wear check,3,0,2,1,2,VP54
+0x465CF0,weapon speed,3,0,2,1,2,VP55
+0x4F4E40,drop tile try,3,0,2,1,2,VP56
+0x571AA0,item cursor begin,3,1,1,0,2,VP57
+0x571CB0,item cursor apply,3,1,1,0,2,VP58
+0x45F790,encumbrance level,2,0,2,0,2,VP59
+0x4614A0,item effective power,2,0,1,1,2,VP60
+0x461F80,item price,2,0,1,1,2,VP61
+0x462330,thrown item damage,2,0,1,1,2,VP62
+0x462480,holder item by name,2,0,1,1,2,VP63
+0x462930,stack of the same prototype,2,0,1,1,2,VP64
+0x462B40,hotkey item count,2,0,2,0,2,VP65
+0x462C30,inventory use check,2,0,1,1,2,VP66
+0x463C60,restock event handler,2,0,1,1,2,VP67
+0x4640C0,restock event schedule,2,0,1,1,2,VP68
+0x464200,merchant buy list test,2,0,1,1,2,VP69
+0x465870,ammunition stack by type,2,0,1,1,2,VP70
+0x4664C0,room for item in grid,2,0,2,0,2,VP71
+0x466510,item insert check,2,0,2,0,2,VP72
+0x4BBFE0,trap known,2,0,1,1,2,VP73
+0x4BCAB0,trap object on a tile,2,0,1,1,2,VP74
+0x4BCDC0,native trap effect,2,0,1,1,2,VP75
+0x4BF640,inventory source set loop,2,0,1,1,2,VP76
+0x4BF7B0,loot line parse,2,0,1,1,2,VP77
+0x5045A0,item art broken test,2,0,1,1,2,VP78
+0x575FA0,item under inventory point,2,0,2,0,2,VP79
+0x578760,repair quote,2,0,1,1,2,VP80
+0x578EA0,barter transfer,2,0,1,1,2,VP81
+0x462540,holder item by prototype,1,0,1,0,2,VP82
+0x5719F0,item cursor mask,1,0,1,0,2,VP83
