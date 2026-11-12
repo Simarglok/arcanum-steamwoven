@@ -208,6 +208,7 @@ public partial class TerrainViewerApp
     private void QuarantineWorldObserved()
     {
         TraceWorldInput("Quarantine");
+        _gameMenuEscapeArmed = false; // ARC-INPUT-1124: a held Escape whose release another owner may take opens nothing later.
         _worldGate.Close(); _worldReducer.Quarantine();
         // Palette, focus loss, device change, reset/reload and faults all pass here:
         // the route stops, and the step already started still ends at its cell centre.
@@ -378,7 +379,7 @@ public partial class TerrainViewerApp
         WorldObservation(() =>
         {
             _worldFocused = focused;
-            if (!focused) { CancelPendingOrder("the window lost focus"); _orderKeyArmed = null; CancelArmedLockpicks("the window lost focus"); }
+            if (!focused) { CancelPendingOrder("the window lost focus"); _orderKeyArmed = null; _gameMenuEscapeArmed = false; CancelArmedLockpicks("the window lost focus"); }
             _worldReducer.FocusChanged(focused); QuarantineWorld(); RefreshReadyStatus();
             TraceWorldInput("NativeFocus:transition");
         });

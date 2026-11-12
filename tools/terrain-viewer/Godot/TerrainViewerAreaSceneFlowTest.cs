@@ -82,6 +82,25 @@ public partial class TerrainViewerApp
             // Launched without the menu: Escape in play opens the in-play window; Escape and Continue close it.
             Require(!MainMenuOpen && _mainMenu is null, "no menu at a launch without --main-menu");
             var running = _areaSession;
+            // ARC-INPUT-1124 (main loop 0x401705, key up): the press alone opens nothing, the release opens the menu; a release with no press
+            // before it (taken by another owner) opens nothing; the menu's own Escape press closes it and its release does not reopen it.
+            static InputEventKey EscapeEvent(bool pressed, bool echo = false) => new() { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = pressed, Echo = echo };
+            InputWorld(EscapeEvent(true));
+            Require(!MainMenuOpen && _mainMenu is null, "an Escape press alone opened the menu (the original acts on the release)");
+            InputWorld(EscapeEvent(true, echo: true));
+            Require(!MainMenuOpen, "an Escape echo opened the menu");
+            InputWorld(EscapeEvent(false));
+            Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.InPlay, "the Escape release opened the in-play menu");
+            InputWorld(EscapeEvent(true));
+            Require(!MainMenuOpen && _mainMenu is null, "the menu's own Escape press closed it");
+            InputWorld(EscapeEvent(false));
+            Require(!MainMenuOpen && _mainMenu is null, "the release of the closing press reopened the menu");
+            InputWorld(EscapeEvent(false));
+            Require(!MainMenuOpen && _mainMenu is null, "a release with no press before it opened the menu");
+            InputWorld(EscapeEvent(true)); InputWorld(EscapeEvent(false));
+            Require(MainMenuOpen, "a second press and release opened the menu");
+            InventoryKey(Key.Escape);
+            Require(!MainMenuOpen && _mainMenu is null && !WorldModal, "Escape continued play after the release step");
             InventoryKey(Key.Escape);
             Require(MainMenuOpen && WorldModal && !_worldGate.IsOpen && _mainMenu!.Window == AreaMenuWindow.InPlay && ReferenceEquals(running, _areaSession),
                 "Escape opened the in-play menu modal");
