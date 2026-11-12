@@ -519,7 +519,7 @@ While the interface bars show, the skill pane (`K` or the Skills button) is the 
    inventory window. A hero who is dead or unconscious does nothing (the recent action is still recorded, as in the original).
 3. **Drag** (SKP7). A right press on a button starts the hotkey drag of a skill-bar entry; a release over a slot of the hotkey bar puts it there.
 4. **Names** (SKP5). The pointer entering a button writes its name (`skill_ui.mes` 100 + button) in the mode's text area; leaving keeps it.
-5. **Key and window** (SKP6). `K`, acting on its release, toggles the Skills button without its sound; Spells goes up when Skills comes
+5. **Key and window** (SKP6). `K`, acting on its release (over the windows the bars stay over, as the button does), toggles the Skills button without its sound; the weapon's spells pane (mode 8) goes with the spell pane; a press on a pane button does nothing while another combatant acts in a turn-based round (GB12); Spells goes up when Skills comes
    down and the other way round (the M key and the Spells button take the window from the skill pane). As with the spell pane, the pane
    shows only while it holds the message window: the pointer above the strip gives the window to the log, a move back over the strip
    gives it back (ML8); the toggle stays down meanwhile.

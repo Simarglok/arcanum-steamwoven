@@ -51,6 +51,8 @@ public partial class AreaSkillBarView : Control
             AddChild(rect);
             _buttons[b] = rect;
         }
+        // Hidden mid-press (the bars went away): no release reaches the view, so the press and the hover are forgotten.
+        VisibilityChanged += () => { if (!Visible) { _held = null; _hovered = null; Render(); } };
         Render();
     }
 

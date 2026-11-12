@@ -173,7 +173,7 @@ public partial class TerrainViewerApp
             case AreaBarButton.Skills:
                 // The original's skills mode shows the skill buttons in the message window (ARC-UI-1113, TerrainViewerSkillBar.cs); the
                 // pair's other toggle, Spells, went up with this one coming down.
-                if (_gameBar.IsOn(AreaBarButton.Skills)) _spellPane?.HidePane();
+                if (_gameBar.IsOn(AreaBarButton.Skills)) TakeWindowFromSpells();
                 if (_gameBar.IsOn(AreaBarButton.Skills) && !SkillPaneInStrip) _gameBarNotice = "skills: the pane's art did not read";
                 break;
             case AreaBarButton.FatePoints: _gameBarNotice = "fate points: the window is not built"; break;

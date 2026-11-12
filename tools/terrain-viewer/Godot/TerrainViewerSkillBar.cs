@@ -62,6 +62,8 @@ public partial class TerrainViewerApp
         if (!over) return;
         PlayBarSound(AreaGameBarLayout.ReleaseSound, "skill pane button");
         _skillBarPressesForSelfTest++;
+        // The in-game filter passes no button event while another combatant acts in a turn-based round (GB12, CT6).
+        if (InTurnBasedRound && _areaSession?.QueryCombatRound() is { Actor.IsHero: false }) { _gameBarNotice = "skills: another critter's turn"; RefreshAreaStatus(); return; }
         if (!HotkeysActive || _areaSession is not { } session) { _gameBarNotice = "skills: needs a hero on a map"; return; }
         RecordRecentAction(HotkeyEntry.ForSkill((SkillBarButton)button));
         var life = session.QueryHeroLife()?.Status;
@@ -90,22 +92,33 @@ public partial class TerrainViewerApp
     /// reported as a reserved, unimplemented original key.</summary>
     private bool RouteSkillKey(WorldKeyDecision decision)
     {
-        if (decision.Key != WorldKey.K || !SpellMapActive || _areaSession?.QueryHero() is null) return false;
+        if (decision.Key != WorldKey.K || _areaSession?.QueryHero() is null) return false;
         if (decision.Pressed || decision.Echo) return true;
-        if (!_worldFocused || WorldModal || WorldUiFocus) _gameBarNotice = "K ignored: palette, dialog, window or UI focus owns input";
+        // The original refuses only the main menu (0x541680, no bars then); like the button, the key works over the windows the bars stay over.
+        if (!_worldFocused || WorldUiFocus) _gameBarNotice = "K ignored: palette, dialog or UI focus owns input";
         else if (_gameBarPanel is not { Visible: true }) _gameBarNotice = "K: the interface bars are not shown";
         else ToggleSkillsPane();
         RefreshAreaStatus();
         return true;
     }
 
+    /// <summary>The Skills toggle comes down (the button or K): the spell pane goes, and with it the weapon's spells pane (bar mode 8) and the
+    /// spell notice, as the mode request replaces the mode shown.</summary>
+    private void TakeWindowFromSpells()
+    {
+        _spellPane?.HidePane();
+        _spellNotice = null;
+        _itemPaneItem = null; _weaponPaneCache = null;
+    }
+
     private void ToggleSkillsPane()
     {
         var on = !_gameBar.IsOn(AreaBarButton.Skills);
         _gameBarNotice = null;
-        if (on) { _spellPane?.HidePane(); _gameBar.SetOn(AreaBarButton.Spells, false); }
+        if (on) { TakeWindowFromSpells(); _gameBar.SetOn(AreaBarButton.Spells, false); }
         else ClearMessagePaneName();
         _gameBar.SetOn(AreaBarButton.Skills, on);
+        if (on && !SkillPaneInStrip) _gameBarNotice = "skills: the pane's art did not read";
         _gameBarPanel?.Render();
     }
 }
