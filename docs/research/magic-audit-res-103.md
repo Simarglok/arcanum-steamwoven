@@ -14,7 +14,7 @@ Requirements (reference only): [FR-MAGIC-006](../requirements/combat-magic-tech.
 
 - **The audit found three holes: `ObjFlag`, Summon and the inert effect resistances.** The first and third are closed: MA-1 (ARC-DEV-358) writes every spell, object and critter flag with the original's reference count and splits the cast host's dispatch into a table
   (`SessionSpellCasterComponents.cs`, one partial file per component group); MA-2 (ARC-MAGIC-027, with ARC-MAGIC-033) lets resistance and stat changes of effect lists reach the combat resolver and the magic save for the hero and every NPC (E1-d, ARC-DEV-348, gave every critter its effect list).
-  Summon of scenery is built (E1-a ARC-DEV-347, E1-b ARC-DEV-352) and created critters exist (E1-c, ARC-DEV-359, -370, -371); **Summon of critters (E1-e) is the one big hole left.**
+  Summon of scenery is built (E1-a ARC-DEV-347, E1-b ARC-DEV-352) and created critters exist (E1-c, ARC-DEV-359, -370, -371); **Summon of critters is built (E1-e, ARC-MAGIC-053; not built: `Clear_Faction:`, `Palette:`, the concealed start SUM19).**
 - **Done slices:** MA-0 the spell census (ARC-DEV-356), MA-R the executable reads (ARC-DEV-357, ledger XR1-XR15), MA-1, MA-2, MA-3 Dispel (ARC-MAGIC-034, -039), MA-4 social and AI flags (ARC-MAGIC-035), MA-5 Movement (ARC-MAGIC-036, -038), MA-6 locks and holds (ARC-MAGIC-037),
   MA-7 Identify (ARC-MAGIC-032), MA-8 Trait and the body spells (ARC-MAGIC-040, -046, -047, -052), MA-9 Tempus Fugit (ARC-MAGIC-056). The control components that belong to the technology records and items (NoOp, Terminate, branches, Use, nested Cast) are ARC-MAGIC-044, -048 and -049.
 - **Open:** E1-e creature Summon (14, 19, 24, 29, 53, 57, 68, 71-74), E1-f AI summoning, E6 trap spotting (spell 8), MA-10 the raise script hook (58, 64), the hero and companion push of Unseen Force (2), and the windows of Identify (E8) ([slices](#slices), [open spells](#open-spells)).
@@ -35,7 +35,7 @@ Everything before the components works for any caster and map (ledger [invocatio
 [cost](ledger/magic.md#spell-cost-and-payment-arc-magic-003), [resistance](ledger/magic.md#spell-resistance-arc-magic-005)): the checks, the cost and payment, the targets of each action, the save, the anti-magic shell and reflection, the run table with BEGIN, MAINTAIN, END
 and the callbacks, the maintain bar, saved runs of the active map, the endings by death, knock-out and the AI gate, the spell pane and hotkeys, the casting goal with its missile and eye candy, the AI's choice from its ten lists. 53 of the 80 spells are maintained and two are timed.
 
-Components still not ready for the colleges: **Summon** of critters (E1-e); **Destroy** for critters and containers (E4-c); **AGoal** knockback pushes NPCs, not the hero or companions; **Heal**'s raise script (point 0x12) runs no SCR (MA-10);
+Components still not ready for the colleges: **Destroy** for critters and containers (E4-c); **AGoal** knockback pushes NPCs, not the hero or companions; **Heal**'s raise script (point 0x12) runs no SCR (MA-10);
 effect 157 (spot-trap skill, spell 8) is inert because skills are not modelled by the durable effects; the flags' readers: the combat and life rules do not read a written undead bit, the viewer does not draw translucent, shrunk or hidden critters, the NPC flag KOS_OVERRIDE of Charm (35, 50) is not kept.
 
 ## Open spells

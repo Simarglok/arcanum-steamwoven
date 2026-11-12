@@ -831,3 +831,26 @@ Known differences (documented, not bugs):
 - One prototype's hit plays a fixed extra eye candy in the original (HE3); ours does not.
 - Magnetic inversion plays the fixed entry 0x449 when no run provides the flag; which installed record sets the flag by a non-spell path is not read, so step 1's variant for it is not listed.
 
+## ARC-MAGIC-053 — Summon for creatures: Summon Undead and the other creature summons (E1-e, 2026-11-11)
+
+The rules are in [spell cast host: summon for creatures](../world/spell-cast-host.md#summon-for-creatures-arc-magic-053); the original's reading is the
+[ledger SUM5, SUM6 and SUM17–SUM22](../research/ledger/spell-runs.md#summon-component-and-the-objects-it-creates-arc-res-101). Give the hero the spells (a mage with Summoning: Summon Undead 57,
+Succour Beast 53, Orcish Champion 71, Guardian Ogre 72, Familiar 74) and compare in both games. It closes the owner's report of 2026-11-08 17:19:23 (no summoning animation and no summoned NPC).
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast Summon Undead (57) at an empty tile a few cells away. | The summoning animation plays on the tile, and when it reaches its callback frame (about two thirds of a second) the creature appears; before that nothing stands there. | open |
+| 2 | Look at who is summoned with a weak magick aptitude and, after raising it, with a strong one (thresholds 20, 60 and 85 of the aptitude). | The creature changes with the aptitude (list 5: four undead kinds, the strongest above 85). | open |
+| 3 | Watch the new creature and open the party portraits. | It is the hero's follower at once (mind control), fights the hero's enemies and follows the hero. | open |
+| 4 | Let the creature be killed. | The spell ends with it: its upkeep stops, and the body is removed. | open |
+| 5 | Stop maintaining the spell (or wait for the fatigue to run out). | The animation plays backwards and the creature goes; it leaves the party. | open |
+| 6 | Cast it on a tile with a tile script (a trap or a notice tile). | The script runs with the summoned creature as the one who stepped on it. | open |
+| 7 | Cast Succour Beast (53) and Orcish Champion (71) as well. | Beasts by aptitude (list 4) and a fixed orc (prototype 28443): the same animation, reveal and follower. | open |
+| 8 | Save while the creature stands, load, and wait. | The creature is still there and still the hero's follower (its flags, party place and run are saved). | open |
+
+Known differences (documented, not bugs):
+
+- The original starts a summoned creature whose art has a sneak pose in that pose (concealed, SUM19); Steamwoven starts it standing.
+- The creature takes the hero's alignment as the original does, but of the moment the world first reads it: a loaded game reads the hero's then.
+- The original's weighted lists overrun their table on a draw of 100 (MG9); Steamwoven fixes it in both modes (technical bug rule).
+- Familiar (74): its own flags (`OSF_FAMILIAR`, `ONF_FAMILIAR`) and its hiding with the party on the world map are MA-1's and the world map's.

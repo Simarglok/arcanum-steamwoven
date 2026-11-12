@@ -1,3 +1,4 @@
+using Arcanum.Simulation;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
 
@@ -121,9 +122,41 @@ public sealed partial class GameSessionOwner
         return CreateCritterRefusal(prototype, map, near, count);
     }
 
-    private GameSessionFailure? CreateCritterRefusal(int prototype, SessionMapId map, CellCoord near, int count) =>
-        CreateObjectRefusal(SessionCreatedKind.Critter, prototype, map, near, 0, 0, null, null, count)
+    private GameSessionFailure? CreateCritterRefusal(int prototype, SessionMapId map, CellCoord near, int count, string? summoner = null, int? run = null) =>
+        CreateObjectRefusal(SessionCreatedKind.Critter, prototype, map, near, 0, 0, summoner, run, count)
         ?? (count < 1 || (long)_objectFlags.Count + count > MaxObjectFlagCritters ? GameSessionFailure.BudgetExceeded : null);
+
+    /// <summary>ARC-MAGIC-053 (E1-e, SUM5): the object flag <c>OF_DONTDRAW</c> (0x100) and the critter flags 2 bit <c>OCF2_NO_PICKPOCKET</c> (0x80) the summon effect writes on every NPC it makes (0x450C40: 0x43D0E0 with 0x100, field 0xDB |= 0x80).</summary>
+    public const int SummonedDontDrawFlag = 0x100, SummonedNoPickpocketFlag2 = 0x80;
+
+    /// <summary>ARC-MAGIC-053 (E1-e): why <see cref="CreateSummonedCritter"/> would refuse a creation before any effect (the checks of <see cref="QueryCreateCritterRefusal"/> with the summoner and the run), or null when it would not.</summary>
+    public GameSessionFailure? QueryCreateSummonedCritterRefusal(int prototype, SessionMapId map, CellCoord cell, string? summoner, int? run)
+    {
+        ThrowIfDisposed();
+        return CreateCritterRefusal(prototype, map, cell, 1, summoner, run);
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-053 (E1-e of the missing-systems plan; ARC-RES-101, ledger SUM2, SUM3, SUM5): the Summon component's creation of a critter (0x450C40 for a type 16 object) at <paramref name="cell"/> exactly (the entry's tile: the
+    /// summon places nothing near it) from the prototype file <paramref name="prototype"/>: an <c>oid:critter:n</c> (<see cref="SessionCreatedKind.Critter"/>) marked summoned (spell flag 0x4000, the one
+    /// <see cref="SessionCreatedObject.SpellFlags"/> keeps and the written spell flags too, so the flag tests and the cast host read it), with the run that made it and its summoner, and written the flags the NPC branch of the
+    /// effect sets: the object flag <c>OF_DONTDRAW</c> (the records' CALLBACK line clears it when the summoning animation reaches its callback frame) and <c>OCF2_NO_PICKPOCKET</c>; all in one revision. It does not
+    /// carry the encounter flag (the script action's, 0x20000, is not the summon's). The session reads no game data, so the prototype being a critter is the host's to have checked. Refused before any effect: an invalid
+    /// input, the bounds of <see cref="SessionCreatedObject.MaxObjects"/> and of the critters with written flags, the version, a tile outside the ground store's range, the revision bound.
+    /// </summary>
+    [OriginalFunction(0x450C40, OriginalFunctionScope.Partial)]
+    public SessionCreatedObjectResult CreateSummonedCritter(GameSessionVersion expected, int prototype, SessionMapId map, CellCoord cell, string? summoner, int? run)
+    {
+        ThrowIfDisposed();
+        SessionCreatedObjectResult Reject(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, new(_identity, _revision));
+        if (CreateCritterRefusal(prototype, map, cell, 1, summoner, run) is { } refused) return Reject(refused);
+        if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        var made = CreateCreatedObject(SessionCreatedKind.Critter, prototype, map, cell, 0, 0, _clock.QueryClockSnapshot().GameTimestampMs, SessionCreatedObject.SummonedFlag, summoner, run);
+        _objectFlags = _objectFlags.SetItem(made.Entity, new SessionObjectFlags(unchecked((int)SessionCreatedObject.SummonedFlag), 0, 0, 0, ObjectSet: SummonedDontDrawFlag, Critter2Set: SummonedNoPickpocketFlag2));
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, made, new(_identity, _revision));
+    }
 
     /// <summary>
     /// ARC-DEV-371 (E1-c3, ledger PG1, PG2, PG12): a script's create object (action 52, 0x447220 case 0x34) of a critter prototype next to the object on <paramref name="near"/>: the tile is the action's
