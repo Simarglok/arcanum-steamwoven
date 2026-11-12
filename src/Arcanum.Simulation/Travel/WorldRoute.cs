@@ -124,10 +124,17 @@ public sealed class WorldRoute
 
     // 10 × the Chebyshev distance of two window cells (0x4200C0).
     [OriginalFunction(0x4200C0, OriginalFunctionScope.Full)]
-    private static int Estimate(int a, int b) => 10 * Math.Max(Math.Abs(a % Window - b % Window), Math.Abs(a / Window - b / Window));
+    internal static int Estimate(int a, int b) => 10 * Math.Max(Math.Abs(a % Window - b % Window), Math.Abs(a / Window - b / Window));
 
-    // The direction between two window cells (0x420110), by the sector direction rule.
+    // The direction between two window cells (0x420110): the signs of the two deltas alone. Unlike the sector direction
+    // (0x4CFCD0, WorldTravelGeometry.Direction) it has no minor-axis rule: the oracle (ARC-DEV-1105) found the function reads
+    // 8 octants of the plane, so a step of (10, 1) is a diagonal. The same cell gives 5.
     [OriginalFunction(0x420110, OriginalFunctionScope.Full)]
-    private static int WindowDirection(int from, int to) =>
-        WorldTravelGeometry.Direction(new(from % Window, from / Window), new(to % Window, to / Window));
+    internal static int WindowDirection(int from, int to)
+    {
+        int sx = Math.Sign(to % Window - from % Window), sy = Math.Sign(to / Window - from / Window);
+        for (var code = 0; code < 8; code++)
+            if (WorldTravelGeometry.DeltaX[code] == sx && WorldTravelGeometry.DeltaY[code] == sy) return code;
+        return 5;
+    }
 }

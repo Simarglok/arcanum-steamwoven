@@ -68,6 +68,16 @@ python3 -B tools/original-oracle/oracle.py list
 | 0x4521A0 | spell Heal component | the same run and component; stubs for the context init, the random range and the heal applier 0x4B58C0 (recording the context's amounts and flags) | `HealComponentMatchesTheOriginal` |
 | 0x4B5810 | spell acid steps | a context on the heap (target, normal amount, flags); stubs for the target's type, the item in each slot 1000..1008 and the damage step (recording each step's object and amount and lowering the amount in place by that item's resistance, as 0x4B6860 does) | `AcidMatchesTheOriginal` (Steamwoven differs only on MG38's inputs) |
 | 0x461F80 | barter item price | one item (type, stored worth, complexity, flags, current art, hit points, inventory location), the PC and one merchant (price multiplier, NPC flags); the worth, identified test, sale and buy checks and reaction scale run as they are; stubs for the PC test, the PC's haggle effectiveness and training, the merchant's buy-object script answer and buy-list verdict, the broken art and the standard reaction; the checks on (flag 0) | `PriceMatchesTheOriginal` (TradeOriginalExeTests) |
+| 0x4B96F0 | location distance | pure: two tile locations as four 32-bit unsigned arguments (ARC-DEV-1105); the 64-bit answer is EDX:EAX | `DistanceMatchesTheOriginal` (`PureRulesOriginalExeTests`) |
+| 0x4B8D50 | tile direction | pure: two tiles (non-negative 32-bit coordinates, many on the ratio edges); may call the runtime's 64-bit shifts 0x58AB70 and 0x58AC40 | `RotationMatchesTheOriginal` |
+| 0x4CFCD0 | sector direction | pure: two sector ids (x in bits 0..25, y above them, as two 32-bit words each); the same shifts | `SectorDirectionMatchesTheOriginal` |
+| 0x4200C0 | window distance estimate | pure: two window cells and the width 16 | `EstimateMatchesTheOriginal` |
+| 0x420110 | window direction | pure: the same inputs; the answer is AL only | `WindowDirectionMatchesTheOriginal` (the oracle found it reads the signs of the deltas alone, with no minor-axis rule) |
+| 0x4B0F50 | stat cost | pure: any 32-bit value; the cost table at 0x5B52E4 | `StatCostMatchesTheOriginal` |
+| 0x4C5F70 | key stat skill cap | pure: a stat in or around 1..20; the cap table | `KeyStatCapMatchesTheOriginal` |
+| 0x4C64E0 | basic skill minimum key stat | pure: a level; may call the cap 0x4C5F70 | `MinimumKeyStatMatchesTheOriginal` |
+| 0x4C64D0 | basic skill key stat | pure: a basic skill 0..11; the key-stat table | `BasicKeyStatMatchesTheOriginal` |
+| 0x4C6B10 | tech skill key stat | pure: a tech skill 0..3; the tech key-stat table | `TechKeyStatMatchesTheOriginal` |
 
 A stub may `peek` an argument it was given by pointer and `poke` a list it answers into the stack or the heap (a world-model
 write, not the function's). A call may name `writable` ranges (world-model outputs such as a global the function sets); any other write still fails the
