@@ -126,7 +126,7 @@ calls through it. The notes of the firings that ran are applied after the pass, 
 the fatigue from before the pass.
 
 Further limits of the host:
-- `SpellRunObject` lists of the run (the run list and the summoned object) are not filled; the target functions see none.
+- The run's object list (+0x130) is the run's own (`SpellRun.ObjectList`, ARC-MAGIC-1234: [run object list](#run-object-list-arc-magic-1234)); the summoned list (+0x134) is the session's created objects of the run.
 - An object that is not a critter has magic resistance 0.
 - A refused call (a session rejection) may still have applied the components that ran before it.
 - A critter without a life record in the session has no payer and pays nothing.
@@ -337,15 +337,17 @@ carries out the activations with the session and the cast host.
 4. **The activation** (0x54FCF0, `PcCanActivate`, `PlanItem`, `PlanItemSpell`, `SpellActivates` for 0x57C080; HK1, HK3, HK4).
    Nothing for a dead or unconscious hero. A spell is activated as a press of the spell pane is (SU1–SU3). An item-and-spell entry
    activates the spell with the item as its source when the item is the wielded weapon; any other item is first wielded into the weapon
-   slot (which empties the entry, HK6). A skill-bar button: prowling toggles the concealment (ST1); repair opens the inventory window,
+   slot (which empties the entry, HK6). A skill-bar button (`ActivateSkillButton`, also the skill pane's press, [ARC-UI-1113](#the-skill-pane-in-the-bottom-strip-arc-ui-1113)):
+   prowling toggles the concealment (ST1); pick pocket arms the pick pocket cursor ([ARC-SKILLS-010](pick-pocket-runtime.md), needs the map's AI host);
+   disarm traps arms the disarm cursor ([ARC-SKILLS-1156](trap-state-runtime.md)); repair opens the inventory window,
    whose Repair buttons stand in for the item cursor (RP4). An item entry acts on another item of its prototype first (0x462930,
    `QueryHotkeySameKind`), except a written item that keeps its text: it is used when it can be used and is not thrown, else a weapon or
    armour is worn into its slot (0x550000; the entry's own item, the occupant goes back to the pack), ammunition and gold do nothing and
    any other item is held on the cursor.
 
 The bar's art and its drag and drop are [ARC-UI-027](#the-hotkey-bars-art-and-drag-arc-ui-027); the viewer keeps stand-in keys:
-`Ctrl`+`1`..`0` puts the latest recent action on that entry (the way to put a skill-bar button on the bar while the viewer draws no skill
-bar; the original drags from the bars, not from the recent-action buttons, HK13), `Ctrl`+`Shift`+`1`..`0` empties it, a key `1`..`0` while the inventory window holds an item drops it on the entry, the
+`Ctrl`+`1`..`0` puts the latest recent action on that entry (a stand-in; the original drags from the bars, not from the recent-action buttons, HK13, and since ARC-UI-1113 a right drag
+from the skill pane's button puts a skill-bar button on the bar), `Ctrl`+`Shift`+`1`..`0` empties it, a key `1`..`0` while the inventory window holds an item drops it on the entry, the
 palette's Prowl action is the skill bar's prowling button, and the status line lists the entries. The cast smoke checks the latest recent
 action after its pane presses, `Ctrl`+`1`, the keys `1` and `A` (each opens the spell's cursor), `Ctrl`+`Shift`+`1` and an empty key, and
 the weapon's spell on entry 1 opening the weapon's cursor; marker `ARC-UI-022 native-smoke hotkeys PASS`.
@@ -373,7 +375,7 @@ The bar is drawn on the bottom strip of the [interface bars](../rendering/terrai
    dragged entry is emptied and anything else ends with no change; ARC-UI-087: an item entry's item stays on the game cursor then (HK15, 0x573630),
    thrown from there by a left press in the game view ([terrain viewer](../rendering/terrain-viewer.md#inventory-throw-from-the-game-cursor-arc-ui-063)). A left release goes on with the drag. While an entry is dragged its key skips it and the stand-in keys leave it alone.
 
-The viewer draws no skill bar, so a skill-bar button reaches the bar through `Ctrl`+`1`..`0` only. The cast smoke checks the bar after the
+A skill-bar button reaches the bar by a right drag from the skill pane (ARC-UI-1113) or through `Ctrl`+`1`..`0`. The cast smoke checks the bar after the
 hotkey keys: the slot art, a right drag of the pane's spell onto slot 2 and its icon, its key 3 skipping it while it is dragged and a drop on its own slot, a click on slot 2 opening the spell's cursor, a drag
 from slot 2 to slot 6 and one off the bar, an item entry's name and count, and the latest recent action's button (icon, click, sounds);
 marker `ARC-UI-027 native-smoke hotkey-bar PASS`.
@@ -419,8 +421,11 @@ The pointer entering a slot or a recent-action button shows its entry's descript
    (`AreaUseScriptHost.RunExamine`), and an answer of skip default leaves no description; the same step opens the world hover's description
    of every object, so a scenery or critter with an examine script is described only when it lets the default run. The script's printed
    lines go to the message window. ARC-SCRIPT-1119: an item the session made (`made:n`, no map row) runs its examine script too, from its prototype's point 0 (or the slot a run kept on the item) as a session item run (`GameSessionOwner.RunItemExamine`, `SessionItemScripts.Admission`, one revision when the run changed anything, a refused run applies nothing and the item is described as before); the world hover does not reach it (a made item on the ground has no row to point at). A run the viewer cannot apply (refused by the
-   admission, a teleport it asks for) describes as before; a conversation it asks for is not started (a made item's run that asks for one is refused, so the item is described as before). The barter and dialog windows and the
-   floating tooltip of the viewer without the interface bars (the original has none) do not run it.
+   admission, a teleport it asks for) describes as before; a conversation it asks for is not started (a made item's run that asks for one is refused, so the item is described as before). ARC-UI-1120 (HK25, HK26): the barter window's still pointer on an item runs it first, with the hero as the triggerer, and then makes the quote
+   (the window's handler is the inventory's, 0x573C74; the description is drawn only while the bars show, which the viewer hides under the window, so in practice the script runs and the item window is a known gap; the viewer runs it only with its interface on),
+   and the dialog start runs the speaker's examine script and redraws its window as the world hover does (0x567460), once, with the interface on. The
+   floating tooltip of the viewer without the interface bars (the original has none) does not run it, and the follower portraits' hover (0x56A9D0,
+   HK26) runs it too (ARC-UI-1281, [follower portraits' hover](companion-orders-runtime.md#follower-portraits-hover-arc-ui-1281)).
 5. **Inventory** (HK23). In the inventory window, the pointer resting 35 ms on another item of the doll or the grid (nothing held) draws
    that item's window the same way; resting on no item keeps the last description.
 6. **Smoke.** The hotkey-bar smoke enters slot 2 (a spell: its hint with the college's icon), a skill entry (its hint; in the spells mode
@@ -497,6 +502,37 @@ which buttons show, `AreaSpellBarView` draws it and `TerrainViewerSpellBar.cs` w
    spell's icon names it; a click on it activates it and makes it the latest recent action; the pointer above the strip hides the pane
    (marker `ARC-UI-053 native-smoke spell-pane PASS`). The drag onto slot 2 starts from the strip's icon.
 
+## The skill pane in the bottom strip (ARC-UI-1113)
+
+While the interface bars show, the skill pane (`K` or the Skills button) is the original's bar mode 2 in the bottom strip's message window
+(ledger [SKP1–SKP7](../research/ledger/spell-runs.md#skill-pane-arc-ui-1113)); `SkillPaneRules` (Presentation) holds the layout,
+`AreaSkillBarView` draws it and `TerrainViewerSkillBar.cs` wires it (the key `K` through `RouteSkillKey`).
+
+1. **Look** (SKP1, SKP2). The mode's background art 274 at (196, 492), like the spell pane's, and the skill bar's four buttons on one row
+   at y 514, x 288, 351, 414 and 477, each with the hotkey bar's skill icon (art 279 prowling, 280 pick pocket, 282 disarm traps, 278
+   repair; their frames are the bar's push button frames: down while held over the button, lit under the pointer). A hover's name is
+   written over the background in the mode's text area (208, 567, 387 × 18). A button whose art does not read is not shown.
+2. **Presses** (SKP3, SKP4). Each button plays 3000 on the press and 3001 on the release over it. The release makes the skill-bar button the
+   latest recent action (the hotkey bar's `A` key and recent-action buttons) and then runs the press the hotkey bar's skill entries run
+   (`TerrainViewerApp.ActivateSkillButton`): prowling toggles the hero's concealment, pick pocket and disarm traps arm the skill cursor
+   (interface mode 2, each replacing the other; the next left press on an NPC or a trapped object runs the skill), repair opens the
+   inventory window. A hero who is dead or unconscious does nothing (the recent action is still recorded, as in the original).
+3. **Drag** (SKP7). A right press on a button starts the hotkey drag of a skill-bar entry; a release over a slot of the hotkey bar puts it there.
+4. **Names** (SKP5). The pointer entering a button writes its name (`skill_ui.mes` 100 + button) in the mode's text area; leaving keeps it.
+5. **Key and window** (SKP6). `K`, acting on its release (over the windows the bars stay over, as the button does), toggles the Skills button without its sound; the weapon's spells pane (mode 8) goes with the spell pane; a press on a pane button does nothing while another combatant acts in a turn-based round (GB12); Spells goes up when Skills comes
+   down and the other way round (the M key and the Spells button take the window from the skill pane). As with the spell pane, the pane
+   shows only while it holds the message window: the pointer above the strip gives the window to the log, a move back over the strip
+   gives it back (ML8); the toggle stays down meanwhile.
+6. **Not built.** The buttons' lit art the original sets from game events (0x556A90); the follower who acts instead of the hero for
+   pick pocket or disarm traps (0x57A620, E8-e5); no walk to the target before the skill runs (the original's press builds the invocation at once).
+7. **Smoke.** Inside the hotkey-bar smoke (cast stage): `K` shows the pane in the strip (Skills down, Spells up) with its background and the
+   four buttons' arts; entering each button names it; a click on each plays 3000 and 3001, becomes the latest recent action and runs the
+   button's press (prowling toggles concealment, pick pocket and disarm traps arm their cursor or say why not, repair opens the inventory);
+   a right drag from disarm traps puts it on slot 5; the Spells pane takes the window back; the pointer above the strip gives it to the log
+   (marker `ARC-UI-1113 native-smoke skill-pane PASS`). The `disarm` stage checks the pick pocket button arms the pick pocket cursor over
+   an AI host. `ARC_AREA_SKILLPANE_CAPTURE=PREFIX` saves the strip before and after as `PREFIX-before.png`, `-after.png` and `-hover.png` for a
+   graphics report (never committed).
+
 ## Endings of a critter's runs (ARC-DEV-301)
 
 A critter's life step can end the spell runs it parents or sources (triage T1 of the 2026-11-08 entangle report; [ledger UE1–UE5](../research/ledger/spell-runs.md#spell-run-endings-of-a-critter-arc-dev-301)).
@@ -533,7 +569,8 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | The pick's end clears `OF_CLICK_THROUGH` on the objects it saw through, so one whose data carried the flag loses it (MG45). | No flag is written: such an object keeps it, in both modes. | — (technical bug, latent; fixed without a switch by the owner rule of 2026-10-28) |
 | Queued casts whose goals never play (the stack ended through the end step or was interrupted) keep their runs in their slots, unbegun and unpaid, until the game ends (MG43). | The runs are freed, unpaid. | — (owner decision 2026-10-28: fix in both modes, no switch) |
 | A queued goal is the casting goal 26 with its own get-up, unconceal and facing nodes and subgoals (QC2). | The viewer's goals have no subgoals and no facing turn, so the stack index is the number of queued casts. | — (not ready: the facing turn) |
-| An eye candy's sound and light are played with it; a multi-rotation eye candy turns to its object's art; `can_autoscale` sizes it to a critter's body; an eye candy sits at its object's offsets. | None of these (EC9). | — (not ready) |
+| An eye candy's sound is played with it; a multi-rotation eye candy turns to its object's art; `can_autoscale` sizes it to a critter's body; an eye candy sits at its object's offsets. | None of these (EC9). | — (not ready) |
+| An eye candy with a light art keeps a live light on its object in a free overlay light slot while its run lasts; with all four slots in use the add refuses (IW2–IW4). | Built (ARC-MAGIC-1229): `AreaEyeCandyHost.Lights` answers the light from the shown runs, `Play` refuses a lit add without a free slot, the viewer stands the light as a carried light where its object stands (`AreaEyeCandyLights`); the light is not an object light of the map and not saved itself: the overlay run is saved (ARC-MAGIC-1280) and the loaded session's host takes it again (`AdoptRestored`). | both (not ready: the object's own offsets) |
 | An eye-candy entry with no art but the translucent or tint flag is "played" (0x43EF10, SUM13): a callback-flagged add waits. | Such an entry is "not played" and calls back at once (no installed record is known to have one). | — (not ready) |
 | A callback play flag makes the run's CALLBACK action wait for the eye candy's animation (EC11). | Since ARC-DEV-352 the same ([summon](#summon-for-objects-arc-dev-352)); an add the overlay host refuses after the cast host was told it plays (no free place, a duplicate, a full goal table) calls back on the next frame, not in the same pass. | — (one frame later) |
 | A foreground or background part is scaled by the object's scale too (EC12). | Every object is taken at 100 %. | — (not ready) |
@@ -588,7 +625,7 @@ Read in the retail executable (F1, ARC-DEV-302): the ObjFlag component 0x454A10 
   record turns that spell flag on (its `SpellFlagsSet`, +0x114), the run being processed among them, counted in the table the run rules
   hold at that moment (an END inside an action sees the runs that action already ended). The critter flags count no run, so
   of two paralyses the first to end clears the bit (the original's own behaviour). The original also looks for the critter in a run's
-  two object lists (+0x130, +0x134); they are not modelled, so only the run's target counts.
+  two object lists (+0x130, +0x134); the counts are not widened to them (ARC-MAGIC-1234 keeps the run's object list, the counts still read only its target).
 - **Side effects.** Setting entangled (spell flag 0x1000000) or paralysed (critter flag 0x40) logs `HoldStarted`, and the viewer
   interrupts the critter's runs whose bottom goal is 3 or whose current goal is 61 at level 6 with their end nodes (0x44E4D0 with the
   author −1, `HoldInterrupt`): the hero's through the hero runs host, an NPC's through the AI host. Stone (spell flag 0x10000) interrupts
@@ -610,7 +647,7 @@ Read in the retail executable (F1, ARC-DEV-302): the ObjFlag component 0x454A10 
 | The step start also refuses a stunned mover (0xDA & 0x20). | Only the holds are tested here; a stun is its own goal run (57) that the damage path starts. | — (not ready) |
 
 **Not ready.** (The Effect component, and the entangle's re-resistance on a hit, are [below](#effect-component-and-the-entangle-re-resistance-arc-dev-303).) The other bits and fields of ObjFlag (invisible, shrunk, water walking, charm, mind control, fleeing, blinded, "don't
-draw", unlocking and the rest: MT13, MT14), stone's render flag (object flag 0x80000), the runs' object lists in the count, the hold of a
+draw", unlocking and the rest: MT13, MT14), stone's render flag (object flag 0x80000), the runs' object lists in the count (kept by the run since ARC-MAGIC-1234, still not read by the counts), the hold of a
 companion the companion group walks, and an NPC's or the hero's hold ending when the caster dies (MT11, ARC-DEV-301). A save keeps every
 written flag, but not a run waiting for a callback or its BEGIN (saved runs): a hold such a run wrote outlives it after a load, as its END
 does not come.
@@ -658,7 +695,7 @@ the re-resistance 0x459C10, [ledger ER1–ER9](../research/ledger/magic.md#effec
 | The resistance term of the save is subtracted (MG4). | Added. | `SaveSubtractsResistance` (MG4, shared) |
 | The aptitude scaling of the resistance reads the "fate-maximised" flag of the last processed action. | The scaling applies (the flag is not kept). | — (not ready) |
 
-**Not ready.** The spell host's own reads of an NPC under its effects (the Effect component takes an NPC target since ARC-MAGIC-027, [consumers](durable-effects-runtime.md#consumers-of-resistance-and-stat-changes-arc-magic-027), but `Combatant` and the stat getter here still read the NPC without its list: spell damage ignores its resistance effects, a save its stat effects); the poison tick's hit effect (0x4B1170 calls the damage effect after its damage step, [RH2](../research/ledger/magic.md#re-resistance-on-damage-that-is-not-a-weapon-hit-arc-magic-1143); the session runs the tick as a life timer with no cast host), a hit by a weapon with its own hit effect (0x4377C0: the original runs nothing after it), any hit path that reaches neither `FinishCritterHit` nor the AI host's three paths; the hit effect's eye candy for the spell flags 0x400 and 0x400000; the run finder's two object lists; the AI notice of the willpower
+**Not ready.** The spell host's own reads of an NPC under its effects (the Effect component takes an NPC target since ARC-MAGIC-027, [consumers](durable-effects-runtime.md#consumers-of-resistance-and-stat-changes-arc-magic-027), but `Combatant` and the stat getter here still read the NPC without its list: spell damage ignores its resistance effects, a save its stat effects); the poison tick's hit effect (0x4B1170 calls the damage effect after its damage step, [RH2](../research/ledger/magic.md#re-resistance-on-damage-that-is-not-a-weapon-hit-arc-magic-1143); the session runs the tick as a life timer with no cast host), a hit by a weapon with its own hit effect (0x4377C0: the original runs nothing after it), any hit path that reaches neither `FinishCritterHit` nor the AI host's three paths; the hit effect's eye candy for the spell flags 0x400 and 0x400000; the run finder's two object lists (the run's own list is stored since ARC-MAGIC-1234, the finder does not read it); the AI notice of the willpower
 branch (stale globals; no installed record reaches it); a hit on an entangled companion that the companion group walks.
 
 ## Spoken with dead (ARC-DEV-304)
@@ -709,7 +746,7 @@ Slice E1-b of the [missing-systems plan](../project/missing-systems-plan.md#e1-s
   round's doubling (order F1-low), and the victim's AI hears the attack (0x4A9650); a spared victim does not spend the round gate. The source is the viewer's, not saved: the first loop of the object in a
   session has it (after a load too, as the original saves the run with its slot), a loop started again on a new host (a window shown again, the sector reload) or after a sweep has none and burns
   everyone, as the original's restarted run.
-- **Lost callbacks.** The overlay runs are not saved and are given up with their map or window. A run that can only be waiting for a callback (an END with END_CALLBACK components, or a processed BEGIN
+- **Lost callbacks.** The overlay runs are saved since ARC-MAGIC-1280 (a quick load brings them back with their tag; an eye candy whose spell run is gone is written with no tag) and are given up with their map or window. A run that can only be waiting for a callback (an END with END_CALLBACK components, or a processed BEGIN
   with CALLBACK components and neither maintenance nor duration) that no callback goal will call is called back by the viewer after two frames, so a flash never outlives its run; a freed run's overlay
   runs call nobody back (the run that takes the slot next is not theirs).
 
@@ -768,7 +805,7 @@ executable reads [XR1–XR5](../research/ledger/spell-runs.md#magic-audit-execut
   (the wrappers 0x4EE4C0, 0x4EE430, 0x4EE3A0 test the local player; a single-player game does no more), so an NPC caster's Identify has no effect and is no "not ready" line. For the hero the host logs one
   answer by the target's object type: `IdentifyCritter` (a PC or NPC: the original opens the read-only NPC sheet, XR2), `IdentifyContainer` (the container's inventory in window mode 4 with no lock, jam or
   magically-held test, XR3), `IdentifyItem` (any other type: the item description, the true one when the item is identified, XR4). The viewer shows each as a line in the message log
-  (`AreaSpellCasting.Line`); the windows, and what a press in mode 4 may move (not read), are E8's, which reads the same events.
+  (`AreaSpellCasting.Line`); since ARC-UI-1127 (E8-g) `IdentifyCritter` for an NPC also opens its read-only character sheet (`TakeIdentifyEvent`, queued until nothing else owns input, the same sheet as the dialog's "show your abilities", [ARC-UI-088](../rendering/terrain-viewer.md)); the hero as the target keeps the line (its sheet is the C key). Since ARC-RES-1327 (E8-g, ledger [XR16](../research/ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)) `IdentifyContainer` opens the container's inventory window in mode 4 and `IdentifyItem` for an item (types 5 to 14) draws the item window of the hover window, both once nothing else owns input (see below).
 - **Divine Magick's identified flag (0x454A10, XR4, XR5).** Spell 9 (area `Tgt_Obj_Inven`) sets `OIF_IDENTIFIED` (`obj_f_item_flags` 0x57, bit 0x1) on its item before its Identify. In the original it is
   a plain write: no side effect for item flags, no reference count, and nothing in the run reads it back. The session keeps it as the **identification mark** that a barter window already sets
   (`GameSessionOwner.MarkItemIdentified`, `QueryItemIdentified`, saved in the inventory section: no schema step), so every reader of that mark (the name, the item window's lines, the worth in a barter, the
@@ -776,8 +813,24 @@ executable reads [XR1–XR5](../research/ledger/spell-runs.md#magic-audit-execut
   new or an existing mark. A clear of the flag, another item-flag bit, another field and a target that is no item stay "not ready" (no installed record has them).
 - **Census (MA-0).** Records 6 and 7 leave the not-ready list on both census targets; record 9 keeps its `ObjFlag` on the census's critter targets (its target is an item).
 
-**Not ready.** Nothing picks an inventory item as a spell target yet (the pane's targeting, the inventory bit of `SessionItemUseCast.InventoryTarget`, and `Tgt_Obj_Inven` in the target rules), so spell 9 cannot
-be cast from the viewer; the three windows (E8); the multiplayer packets (kinds 7, 8, 10).
+**Not ready.** The container's inventory window (mode 4) and the item description window (E8); the multiplayer packets (kinds 7, 8, 10); an inventory item of a loot, steal or barter window as a target ([below](#an-inventory-item-as-a-spell-target-arc-magic-1128)).
+
+### The container and item windows of Identify (ARC-RES-1327)
+
+Issue #1327 (E8-g), on the executable reads [XR3, XR4 and XR16](../research/ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357). Code: `AreaContainerLoot.Contents`, `AreaInventoryMode.Contents`, `AreaInventoryView.Contents`, `TerrainViewerAreaContainerLoot.cs` (`OpenContainerContents`, `CloseContainer`), `TerrainViewerAreaNpcSheet.cs` (`TakeIdentifyEvent`, `TakeIdentifyWindows`); tests `AreaContainerLootTests`, `AreaLootArtTests`, `AreaInventoryArtTests`; the item-aim smoke stage (steps 9 and 10).
+
+- **See Contents (`IdentifyContainer`, window mode 4).** The viewer queues the container (the cast host's id names its map row, which names its inventory target) and opens the window once nothing else owns input (`WorldModal`, an open sheet). The open runs **no test**: no open attempt (a locked, jammed or magically held container shows its items), no use or unlock script, no frame write and no sound; a container with flag 0x200 the session has not generated is generated first (`GenerateContainerOnce`; a restock host that is not ready refuses the open, as the loot open does). The window is the loot window's frame on interface mode 10 with `AreaInventoryView.Contents`: the other party's items are drawn and described on hover, but a press, a release or a right release lifts or moves nothing in it (the hero's own grid included), it has no Take all button and no drop or use box, the diagnostic window disables its action buttons, and the arrange button, the round view's close and Esc work. The open holds the items' decay (ID6), schedules the container's restock (RK2) and the close counts as a loot and runs the junk-pile check without closing the lid (LW3). A junk pile the session made and a container of another map are not targets (no map row here): the viewer logs it and shows no window.
+- **The item description (`IdentifyItem`, types 5 to 14).** The viewer queues the item and then runs the hover window's description for it (`DescribeItem`: the examine script first, then the item window in the message window, its name in a pane's text area in a pane mode): the true description when the item is identified (`QueryItemIdentified`: Divine Magick has marked it before its Identify, XR4), else the unknown one. The item must be one the viewer resolves: a hero item, one in the open window's grid or doll or the barter panel; an item lying on the map or held by an NPC is not drawn yet (NOT READY, issue #1411), and other object types (a portal, scenery) keep the log line (their hover windows are drawn from the pointer only). The open of the window does not write the container's arrangement the original's open does (ledger XR16 (g), issue #1410).
+
+### An inventory item as a spell target (ARC-MAGIC-1128)
+
+Issue #1128, on the executable reads SU3 and IA4 and the new [IW44](../research/ledger/ui-audio.md) (the inventory window's press in the cursor modes). Code: `TerrainViewerSpellCast.cs` (`OpenInventoryForSpell`, `OpenSpellTargeting`, `InventoryItemPicked`, `SpellTargetApply`), `TerrainViewerItemAiming.cs` (`ItemAimInventoryPick`, `ClearItemTarget`), `AreaInventoryGridArea.TargetPicking` and its press, `TerrainViewerInterfaceModes.cs` (`TargetOverInventory`); tests `SessionSpellCasterIdentifyTests` (the pick) and the cast smoke stage (`TerrainViewerInventoryTargetSmoke.cs`, marker `ARC-MAGIC-1128 native-smoke inventory-target`).
+
+- **The activation (0x57BC70, SU3).** A BEGIN area with the inventory bit (0x2000000; spell 9 is `Tgt_Obj_Inven`, 0x2000004) opens the caster's own inventory before the cursor's tests: a window already open on the stack is kept when it is the player's own (mode 8), the original closes a barter or steal window first and leaves a loot window open; the viewer closes a loot or steal window and opens the own one (the viewer picks items of the own window only), and an open window of another kind refuses with a notice. The cast's action points are asked after that (a refusal leaves the inventory open and no cursor, as in the original), then the cursor is pushed **over** the inventory (`OpenTarget(overInventory: true)`: stack Game>Inventory>SpellTarget). The per-frame window guard does not drop a target over the inventory (`TargetOverInventory`). Shift with the object bit does not cast at the hero at once for such a spell (a project choice: the quick cast skips the pick's area test, which refuses the hero as it is no item in an inventory, so the cursor opens as without Shift).
+- **The pick (IW44, 0x573850 → 0x575FA0, then 0x57C110).** A left press on an item of the window with mode 1 on top names that item as the object target (the item under the pointer in any visible list: grid and doll) and lifts nothing; a press on no item does nothing. The pick runs the same area test as a click in the game view (`SessionSpellCaster.PickTarget` with the item as the point's object: the item is an object in its holder's inventory, object flag 0x1000, at its holder's location, `Tgt_Obj_Inven` needs the flag), and a target that passes is cast at (`CastSpell`, the casting goal as for any target). A game-view press with an inventory window open picks nothing (SU9: the cursor picks in the game view only with no inventory window open).
+- **After the cast and the cancel.** The cursor stays open after a cast, as for every spell (SU9), with the window under it. A right release in the window cancels the cursor (project choice: the executable's right-release branch in the cursor modes was not read), and the cancel takes the window with it (the leave case of mode 1 sets the repeat flag, SA38); the window's own close pops the cursor.
+- **The item path (IA4, IA6).** An item whose slot-0 spell has the inventory bit and which is used from the window (`OpenItemAiming`) pushes mode 16 over the window the same way (the window stays; a press names the item, `ItemAimInventoryPick` runs the slot-0 spell's area test and applies the use to it: `ApplyItemAim` pops mode 16 once, IA5, and the window stays). The use's own cast belongs to the item use (ARC-DEV-365); the smoke hero has no usable magical item, so the smoke checks the routing up to the use.
+- **Not ready.** An item of a loot, steal or barter window as a target (those windows lay their items out themselves and the cast host knows the hero's and the shown map's NPCs' items only); the right-release branch; the multiplayer packets.
 
 
 ## Dispel (ARC-MAGIC-034)
@@ -796,7 +849,7 @@ code `SpellRunSystem.Dispel` (Simulation), `SessionSpellCasterDispel.cs`, the se
 - **The object's half (DP2).** For a portal or container (ARC-MAGIC-037, [below](#locks-and-holds-on-portals-and-containers-arc-magic-037)): the magically held bit is cleared by a plain write. For the hero and a critter this host knows: the stoned spell flag (0x10000) is cleared by a plain write (`Dispelled` with `DispelStonedCleared`: no reference count), and then the object flag stoned (0x80000) that Flesh to Stone's ObjFlag wrote is cleared too when it is set (the object flags clear 0x43D280 the original calls after the spell flag's write, ARC-MAGIC-039; `DispelObjectStonedCleared`, a flag write marked as a side effect; the render bit 0x2000000 of field 0x147 it also clears is not kept by the session); an object flag stoned without the stoned spell flag is left, because the call sits inside the spell flag's branch; a created critter the session holds with the summoned spell flag (0x4000) is destroyed (`Dispelled` with `DispelDestroyed`, then `SummonDestroyed`; the destroy waits until the runs' endings above are told, because the original reads the runs' summoned lists before 0x43CCA0, and the runs hear of it after that). A critter that is no created one of the session and holds 0x4000 logs `DispelDestroyNotReady` (no spell makes one before E1-e); the hero is never destroyed here (the original destroys a PC with the bit too). The stoned clear is not done for a created critter.
 - **`ObjectGone` fix (DP3).** The object-gone endings (0x459740) end the active runs **aimed at** the object (the run's target, +0xA0); the host read the run's other object (the attacker of an item's attack) before.
 - **Perma-polymorph (ARC-MAGIC-047, DP2).** The last step of the object half: a PC or NPC (not one the summoned bit destroys, not a created critter) whose critter flags 2 hold bit 0x400000 (the data's value with the session's writes, schema 90) gets the Trait restore (the `TraitRestored` line, the session's monster body removed, the elemental bits cleared for a body it knew as an elemental one) and then the bit cleared by a plain write; the `Dispelled` line carries `DispelPermaPolymorphUndone` (8). The viewer redraw of a map NPC whose data body is the polymorph (the stored art, field 24) is not built: nothing in the session says which body to draw.
-- **Not ready.** The other object list of a run (+0x130; no host models it), summoned critters of the map's data, and the network packet. The host does not read the spell's resistance or reflection again: the
+- **Not ready.** The summoned critters of the map's data, and the network packet. The host does not read the spell's resistance or reflection again: the
   per-target stage ran before the component, as for every component.
 - **Census (MA-0).** Records 41 and 42 leave the not-ready list on both census targets (the real-data census table lost their rows).
 
@@ -808,7 +861,7 @@ tests `SessionSpellCasterSocialTests`. The five flags the ObjFlag component of M
 
 | Flag (field) | Set | Clear |
 | --- | --- | --- |
-| Charmed (spell flags 0x800000) | NPC: an animal makes **peace** with the caster (`ISpellSocialHost.Peace`), any other NPC gets **+30** toward the hero when the caster is the hero (`ChangeReaction`); then the flag. The original also adds the NPC flag KOS_OVERRIDE (named, below). | NPC: **−30** toward the hero when the caster is the hero, then the flag off. Any other object: the plain write. |
+| Charmed (spell flags 0x800000) | NPC: an animal makes **peace** with the caster (`ISpellSocialHost.Peace`), any other NPC gets **+30** toward the hero when the caster is the hero (`ChangeReaction`); then the flag. Then the NPC flag KOS_OVERRIDE (0x800) is written into the session's [NPC flag layer](#npc-flag-layer-and-the-kill-on-sight-override-arc-magic-1142) and stays after the clear, as in the original. | NPC: **−30** toward the hero when the caster is the hero, then the flag off. Any other object: the plain write. |
 | Mind controlled (spell flags 0x8000000) | No caster: the plain write. A caster and **no NPC** (the hero): **nothing is written** (`SocialIgnored`). An NPC: **−50** toward the hero (hero caster, target not summoned) **before** the flag, the flag, a **forced join** of the NPC under the caster (`ForceJoinParty`; the hero is the party's one leader, any other caster logs `SocialNotModelled`), then **no-flee** for good (`SetNoFlee`). | NPC: the flag off, then a **forced leave** (`LeaveParty` with `Force`); the reaction is not given back and no-flee stays. |
 | Fleeing (critter flags 0x10) | NPC: **flee** from the caster (`ISpellSocialHost.Flee`, the danger setter's FLEE); the flag is **never written** (the setter's state is the session's danger record). The hero: nothing. | NPC: **stop fleeing** (the setter NONE, then the NPC's flee goals ended). The hero: nothing. |
 | Blinded (critter flags 0x80) | The life state's **blinded condition** is set (`GameSessionOwner.SetBlinded`: what the combat resolver, the skill checks and the AI gate's recovery roll read); the hero and an NPC. | The condition is cleared. |
@@ -822,8 +875,18 @@ tests `SessionSpellCasterSocialTests`. The five flags the ObjFlag component of M
   Each answers false for an NPC the host does not run.
 - **The log.** `SpellCastEventKind.SocialEffect` carries what was done (`SocialReaction` with the delta, `SocialPeace`, `SocialFlee`, `SocialStopFleeing`, `SocialJoin`, `SocialLeave`, `SocialNoFlee`, `SocialBlinded`) or not done
   (`SocialIgnored`, `SocialNotModelled`, `SocialRefused`).
-- **Not ready.** The NPC flag KOS_OVERRIDE a charm adds (the session keeps no NPC flag layer); a follower of a caster that is no hero; the undead flag's readers (the combat values and the life rules read the data's undead bit, so a created
+- **Not ready.** A follower of a caster that is no hero ([ARC-MAGIC-1142](#npc-flag-layer-and-the-kill-on-sight-override-arc-magic-1142) cut it away); the undead flag's readers (the combat values and the life rules read the data's undead bit, so a created
   undead is not undead for combat, healing or poison yet); the flags on a created critter (E1-e); an END after the NPC left the shown map (the blinded condition is cleared; charm's −30 and stop fleeing need the AI host and are logged refused); the reaction facts' `MindControlledByPc` (the host's facts carry false, so a later reaction change of a mind-controlled NPC is not skipped).
+
+
+## NPC flag layer and the kill-on-sight override (ARC-MAGIC-1142)
+
+The session keeps the NPC flags (`obj_f_npc_flags`, field 0x118) a spell or the attack event writes as a sixth field of a critter's written flags (`SessionObjectFlags.NpcSet` and `NpcCleared`, `SessionObjectFlagField.Npc`, save schema 93 with an upgrade step that gives every older row the two zero words): a bit is set or cleared over the value the NPC's data stores, and a write that gives back the data's value leaves no trace. Ledger [SO9–SO10](../research/ledger/spell-runs.md#social-and-ai-flags-arc-magic-035).
+
+- **Charm writes it.** After the reaction (or the animal's peace) a charm adds NPC flag 0x800 (`ONF_KOS_OVERRIDE`) through the layer (a log line `ObjectFlagWritten` with the side-effect detail); the clear takes only the +30 back and never the flag (SO2).
+- **The AI host reads it.** The hostility facts of an NPC (`AreaAiHost.Find`) take `KosOverride` from the layer over the data's NPC flags and `Undead` from the layer over the data's critter flags, so a kill-on-sight NPC that was charmed skips the rule's faction test (0x4AE120: without the override a kill-on-sight NPC is hostile to every critter of another faction) and falls through to the reaction and alignment tests, and an undead a spell wrote counts as undead in the rule that spares enshrouded creatures from undead.
+- **The attack event takes it off.** An NPC victim loses NPC flag 0x800 (0x4A983D reads field 0x118, clears 0x800 and writes it back with the plain write) at the attack event, after the attacker's followers were told and before the PC victim's response and the victim's followers; the host writes it through the layer with the data's value, so an NPC that never had the bit gets no row.
+- **Not ready.** The other NPC flags (the layer takes them, no writer or reader is built), a follower of a caster that is no hero ([#1322](https://github.com/Simarglok/arcanum-steamwoven/issues/1322)), the combat and life readers of a written undead bit ([#1323](https://github.com/Simarglok/arcanum-steamwoven/issues/1323)) (they read the data's bit when the life row is built), the flags on created critters (E1-e).
 
 ## Not ready
 
@@ -831,7 +894,7 @@ tests `SessionSpellCasterSocialTests`. The five flags the ObjFlag component of M
   the sounds (sound 0, the drop's item sound, SN31), the item use and the cursor hold of an item entry, the pick-pocket and disarm-traps
   buttons, the stunned or paralysed test (critter flags 0x20, 0x40) and the conditions 0x566EF0 and 0x541680 (ARC-UI-022).
 - The spell pane (ARC-UI-053): the selected college in the save, the weapon button at (161, 443) and the weapon's pane (bar mode 8:
-  background 564, five slots at y 542) on the strip, the skills pane (bar mode 2), the compact interface's pane, a spell's icon beyond
+  background 564, five slots at y 542) on the strip, the compact interface's pane, a spell's icon beyond
   spell 79.
 - The hotkey bar (ARC-UI-027, ARC-UI-032, ARC-UI-035): a spell's icon beyond spell 79 (the item window's lines after the name are built
   since ARC-UI-108, [OH12–OH18](../research/ledger/ui-audio.md#hovered-object-arc-ui-057)), the turn-based action-point preview
@@ -843,7 +906,7 @@ tests `SessionSpellCasterSocialTests`. The five flags the ObjFlag component of M
   (EC9, EC12).
 - Other goals while a cast plays: the viewer ignores world presses and the stick until the goal and its queue end, and refuses F7
   meanwhile (the session saves no goal or queue).
-- Spells on an inventory item (the inventory bit: the original opens the inventory to pick the item) and the hotkey bar (0x54FCF0,
+- The hotkey bar (0x54FCF0,
   0x57C080, IP7–IP9): later slices of ARC-UI-016. The host runs an item's own spells with the item as source since ARC-MAGIC-020
   ([item spell triggers](item-spell-triggers.md)); the weapon's spell pane is [above](#the-weapons-spell-pane-arc-ui-016).
 - The weapon's pane draws no spell icons and shows no hover description (0x5507E0).
@@ -886,7 +949,8 @@ change of place and the world map's teleport mode), `DropPlacementRules.PlaceOnc
   start map at that location with the teleport spell's change-of-place request (flags 0x120).
 - **Type 1 (random tile).** The host draws the direction (`SpellRollPurpose.MovementDirection`, 0 to 8) and logs `SpellCastEventKind.MovementRandom` (the radius, the critter, the direction); the viewer places the critter with `DropPlacementRules.PlaceOnce` and runs the relocation of the first half. A step off the map relocates nothing. The original measures the placement from the run's target block; the host uses the current target object's tile, which differs only for a run with several targets (no installed record uses type 1).
 - **The scripts' order.** The hero's relocation enqueues the tile scripts of the walked tiles and runs them **before** the interrupt and the placement, then the last tile's full entry once more; NPCs and companions run theirs through `AreaAiHost.BeforeRelocationScripts`, as the original does (MV2, MV3).
-- **Not ready.** The multiplayer host branch of type 2; an NPC or other non-critter as the target of the portal and the relocation (the viewer logs "not ready"); the town map, the compass and the waypoint journey in the teleport mode; message 640 shown as an English label; the centring of the view; the interrupt of goals other than walks.
+- **The teleport mode's window and the followers (ARC-MAGIC-1147, ledger [TP6–TP9](../research/ledger/spell-runs.md#teleport-types-and-the-anti-teleport-test-arc-magic-038)).** The original's pick has **no town map and no route points**: the scripted open clears the town number and the walkable flag, so the window opens in the map view, the town map cannot be reached, a click picks an area and never adds a waypoint, and the Travel button is hidden. The viewer does the same (`AreaWorldMapArtLayout.TravelShown`, the panel's `teleportMode`, the guard in `StartWorldMapTravel`); the compass, the continent view and the lens stay. The pick's landing is the world map's change of place of the hero (flags 0x20), so **the whole party goes with the hero** and arrives next to it (the carried companion is observed by the smoke stage `teleport-follow`, which casts spell 4, picks a known far area and checks the companion's distance and drawing); the area portal's request (flags 0x120) is the same without the wait orders. Not built: the fallback to the area portal when the map module cannot be read (TP8; it needs the same data), the carried followers of a follower and the exclusion by the follower flag field 0x118 bit 8 beyond what the change of place models.
+- **Not ready.** The multiplayer host branch of type 2; an NPC or other non-critter as the target of the portal and the relocation (the viewer logs "not ready"); message 640 shown as an English label; the centring of the view; the interrupt of goals other than walks.
 
 - **Not ready.** See MV rows: types 1 to 3, objects that are no critter, a created critter, the interrupt of goals other than walks, the scripts' order against the placement.
 
@@ -956,12 +1020,17 @@ Slice E4-e of the [technology audit](../research/technology-audit-res-125.md#6-q
 
 The viewer sets `SessionSpellCaster.CastCombat` to the combat world its item triggers use (`TerrainViewerSpellCast`); the nested runs' components log into the same cast log the viewer posts every world frame. **Not modelled:** the original's start inside the component (the slot order), the unbounded self-cast chain (bounded), and the action points of goal 73 for a host with no combat world.
 
-## Congeal Time END gap (ARC-DEV-1148)
+## Run object list (ARC-MAGIC-1234)
 
-The native stage `spell-effects` ([area-map-mode](../rendering/area-map-mode.md)) casts Congeal Time (76) at an NPC with the PC as parent: BEGIN adds effect 57 and halves the NPC's speed, but a forced END leaves the entry on the
-NPC. Spells 30, 46 and 77 take their entries off at the same END. Spell 76's END area has the list bit (the high 0x80000000: the run's stored object list) and no object bit, and the host fills no run list ("Further limits"
-above, the lists at +0x130 and +0x134), so the END removal reads an empty list. The stage expects the leftover (and removes it by hand), so it fails when a host starts filling the lists; the fix is the run's object list (issue #1234).
-Read from the data and the host, not yet confirmed in the executable's END path (the list branch of the target test, TA14).
+Found by the native stage `spell-effects` (ARC-DEV-1148): Congeal Time (76) never wore off, because its END area names the run's object list (high bit 0x80000000, no object bit) and no host kept one. Read in the executable
+([ledger TA17](../research/ledger/spell-runs.md#spell-target-areas-arc-magic-007)): the run owns a list at +0x130; the first collecting action whose area has the list bit while the list is empty stores the gathered objects (newest first), and every
+later action with the bit targets the stored objects and gathers nothing from the list. Spell 76's BEGIN gathers the non-party critters within 9 tiles and so builds the list; its END (the forced one, the duration's, a dispel's) removes effect 57
+from every one of them, wherever they stand now on the map the host casts on (a listed object is looked up on the current map, as the run's target is: after a change of map the END finds none).
+
+- **The run keeps it.** `SpellRun.ObjectList` (`SpellRunObjectList`, equal by contents); `SpellRunSystem` stores the list a collection built (`ISpellRunHost.CollectRun`: the targets and the built list) when the run's list is empty and the build holds objects. `SessionSpellCaster.CollectRun` hands the stored list to the target rules as the run list (`SpellTargetContext.RunList`, the objects still on the map; a stored list that holds objects is never rebuilt) and returns what the rules built.
+- **The save keeps it.** Schema 92 adds `objectList` (the objects in order, each id, type, aptitude) to every run row of the spells section; older saves load with an empty list (their runs never had one). Restore refuses an entity that is not an entity name.
+- **The Dispel reads it.** `SpellRunSystem.Dispel` ends an active run whose object list holds the object, as the third test of 0x451C40 (the processed run and technology runs are left, as for the other tests).
+- **Not widened.** The reference counts (0x455100 and the object-flag counts), the run finder (0x459170) and the run lookup's reference check (0x455820) still read only a run's target, source and parent (the "under the influence" test 0x459380 of the AI chooser and the scripts, over 0x458CF0, reads the list: `SpellRunRules.UnderInfluence`); no installed spell sets a flag the counts read through a list. The aptitude kept in a list entry is the object's at the build. The stage `spell-effects` expects the removal for 76 now.
 
 ## Hit eye candy and object draw flags (ARC-MAGIC-045)
 
@@ -970,3 +1039,15 @@ Slice E4-a2 of the [technology audit](../research/technology-audit-res-125.md#6-
 - **The hit effect plays the shield's eye candy.** `SessionSpellCaster.CritterHit` (the cast host's hit effect 0x459A30, called by every hit that reaches a PC or NPC) now also reads the spell flags shielded (0x400, Shield of Protection) and magnetic inversion (0x400000): for each, the first active run that targets the critter and whose record sets the flag (the run finder 0x459170 as modelled) gives an `EyeCandyAdded` event of entry `6 × spell + 5`, play flags 0, caused by the run; magnetic inversion with no such run gives the fixed entry 0x449 with run −1; shielded with no run plays nothing. They come before the entangled branch's save, as in the original. No state changes. The viewer plays them through the eye candy host it already has. Not modelled: the one prototype's fixed entry 0x4EB (HE3).
 - **The viewer draws what the object flags say.** The flags a run's ObjFlag component writes (invisible 0x200 and translucent 0x40, shrunk 0x80, don't-draw 0x100; the session keeps them over the map data's since ARC-DEV-358) change the body's draw by `AreaBodyStyleRules`: a don't-draw body, and an invisible body the player cannot see (detects invisible, or perception of 20 or more), is not drawn and not picked; a translucent or seen invisible body is drawn at alpha 128; a shrunk body at half size about its hotspot. Draw commands carry the frame's hotspot (`AreaDrawCommand.Hot`) for that; the canvas applies the styles by body (`SetAreaBodyStyles`), `TerrainViewerBodyStyles` computes them when the session changes. Eye candy and overlays are other commands and stay. Smoke stage `body-styles` (translucent, shrunk, don't-draw, invisible with and without detection, and the shield's hit eye candy on the first living NPC of the map).
 - **Not built:** the overlays and eye candy of a shrunk body are not halved (the original halves them, OD4), an un-shrink of a data-shrunk body, a carried follower's style, the hero's shrink (its marker has no hotspot), the drunk flag (SFR2: the original has no reader), the one prototype's fixed hit entry.
+
+## Remaining components, the spell stop and the focus wipe (ARC-MAGIC-1146)
+
+Leftovers of the 0x44-0x45 triage (ARC-RES-108, issue #1146); readings RM1–RM8 in the [ledger](../research/ledger/spell-runs.md#spell-component-remainders-arc-magic-1146). No schema change (the charge count is the session's saved charge list, the teleport tile one more mobile object field).
+
+- **EnvFlag** (0x452F10) is the original's stub: taken, no effect, no "not ready" line.
+- **Recharge** (0x454920): an item target (object type 5..14) the host reads gains the component's amount up to `Max:` (9999), only while the charges are below it; any other target is left. The count is `GameSessionOwner.RechargeItemCharges` (the same saved list a spent charge uses; a recorded count also marks the item magical when the host reads it). The log lines are `ItemRecharged` (the new count) and `ItemRechargeNotSaved` (the session's refusal: an untracked item, a count outside 0..1,000,000). The one installed use is record 103.
+- **Trait64** (0x452E40): for an NPC target, `Target_Tile` into the teleport tile field (242) stores the tile as the NPC's `npc.teleport.tile` with the open map as its teleport map (`SetTeleportTile`); `Caster_Obj` or `Caster_Owner_Obj` into the fleeing-from field (230) writes the run's parent as the danger record's fleeing-from (`WriteFleeingFrom`, no setter step). Every other field and source pair, the hero and other objects are not ready (`ComponentNotReady`). No installed spell uses it.
+- **TraitIdx** (0x452D80) stays not ready: its data value is an addend to the effective stat (or resistance) that becomes the base value, and the session holds no write for an NPC's base stats or resistances.
+- **Spell stop on an object** (0x459290, 0x4593F0): `FindRunOnObject(spell, object)` is the first active run (slot order) of the spell whose target, object list or summoned list holds the object; `StopSpellOnObject` interrupts it through the run rules and answers whether one was found. The script action 130 is a follow-up of the script lane.
+- **Focus wipe and decay cancel.** The life step that kills an NPC queues the `combat.focus.wipe` event ([queue runtime](game-event-queue-runtime.md)); the life step that revives one removes its pending body-decay event (0x45EC80).
+

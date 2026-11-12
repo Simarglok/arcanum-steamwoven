@@ -60,6 +60,10 @@ public sealed record AreaInventoryView(IReadOnlyList<AreaInventoryLine> Pc, stri
     /// items can be planted, and nothing is taken at once.</summary>
     public bool Steal { get; init; }
 
+    /// <summary>ARC-RES-1327 (ledger XR3, XR16): the window is the container window See Contents opens (mode 4): read-only, nothing in it is
+    /// picked, moved or taken, and it has no Take all button and no drop or use box.</summary>
+    public bool Contents { get; init; }
+
     /// <summary>ARC-WORLD-027: the PC's gold (the hero's coins; 0 without a hero).</summary>
     public int Gold { get; init; }
     /// <summary>ARC-UI-015: the hero's nine wear slots in slot order (empty without a hero).</summary>
@@ -82,6 +86,12 @@ public sealed record AreaInventoryView(IReadOnlyList<AreaInventoryLine> Pc, stri
     /// <summary>ARC-UI-072 (B30): the looted body's nine wear slots in slot order with the worn item of each (the doll view, IW29); empty for a
     /// container or a junk pile.</summary>
     public IReadOnlyList<AreaDollSlot> BodyDoll { get; init; } = Array.Empty<AreaDollSlot>();
+    /// <summary>ARC-UI-1121 (B30, IW29, IW41–IW43): the numbers the doll view prints for the looted body and whether its weapon is too heavy for it (the viewer reads them from
+    /// the combat host, <see cref="AreaCombatHost.DollRatings"/>); null when the combat host does not know the body (the doll view then prints nothing).</summary>
+    public SessionDollRatings? BodyRatings { get; init; }
+    /// <summary>ARC-UI-1267 (IW25, IW41, IW43): the numbers the hero's own window prints under its doll and whether its weapon is too heavy for it (the viewer reads them from
+    /// the combat host, <see cref="AreaCombatHost.HeroDollRatings"/>); null when the combat host does not know the hero (the own window then prints nothing).</summary>
+    public SessionDollRatings? HeroRatings { get; init; }
     /// <summary>ARC-UI-052: the interface art of the looted holder's image (<see cref="AreaLootArtLayout.HolderImage"/>); null when its facts
     /// do not decide it.</summary>
     public int? HolderImage { get; init; }
@@ -742,6 +752,13 @@ public sealed class AreaInventoryHost
     public SessionWrittenFacts? WrittenFacts(GameSessionOwner session, string entity, AreaReadingData? data)
     {
         ArgumentNullException.ThrowIfNull(session);
+        // ARC-SCRIPT-1279 (WO6): a start line a script wrote (set written start, 94) replaces the data's.
+        var facts = WrittenFactsOfData(session, entity, data);
+        return facts is { } read && session.QueryItemFieldWrites(entity).WrittenStart is { } start ? read with { TextStartLine = start } : facts;
+    }
+
+    private SessionWrittenFacts? WrittenFactsOfData(GameSessionOwner session, string entity, AreaReadingData? data)
+    {
         if (session.IsItemDestroyed(entity)) return null;
         var kit = session.QueryHeroKit().FirstOrDefault(item => item.Entity == entity);
         if (kit.Entity is not null) return data is not null && data.Prototypes.TryGetValue(kit.Kind.Prototype, out var fromKit) ? fromKit : null;
@@ -854,6 +871,8 @@ public sealed class AreaInventoryHost
         GameSessionFailure.InsertRefused when verdict == SessionInsertVerdict.TechnologyRefused => "the hero's Technophobia refuses technological items",
         GameSessionFailure.InsertRefused when verdict == SessionInsertVerdict.TooHeavy => "the PC cannot carry that much weight",
         GameSessionFailure.InsertRefused when verdict == SessionInsertVerdict.NoRoom => "no free room in the grid",
+        // ARC-WORLD-1283: the remove check's refusal (0x466DA0, code 11; the PC's message is item.mes 111, InventoryMutationResult.PcMessage), shown in the viewer's own wording.
+        GameSessionFailure.ItemNotDroppable => "the item cannot be dropped, so it cannot change hands",
         GameSessionFailure.ItemScriptUnsupported => "the item runs a script on this transfer that is not supported here",
         GameSessionFailure.HolderScriptUnsupported => "the body runs a use script (not supported here)",
         GameSessionFailure.ItemTypeUnsupported => "gold, key rings and keys without a hero's ring are not modelled",

@@ -89,7 +89,7 @@ the container flag of each added list. Tests: [`MerchantStockStateTests`](../../
 | API | Original | Rule |
 | --- | --- | --- |
 | `InventorySource(holder)` | 0x4641A0 | An NPC's or a container's source; 0 for any other object (a PC included). |
-| `Delay(draw, multiplayer)` | 0x4640C0 | The draw of 43,200,000..86,400,000 game ms (12–24 hours), a quarter in multiplayer. Only an object with a source is scheduled; the new event replaces its pending one (the caller's). The window open schedules the shown object in every mode (RK2). |
+| `Delay(draw, multiplayer)` | 0x4640C0 | The draw of 43,200,000..86,400,000 game ms (12–24 hours), a quarter in multiplayer. Only an object with a source is scheduled; the new event replaces its pending one (the caller's). The window open schedules the shown object in every mode (RK2). The original's range draw is one 15-bit value modulo the width, so its real delay is 12 hours plus at most 32,767 ms; the Original setting reproduces it, Steamwoven keeps 12–24 hours (`ItemRuleProfile.RestockDelayIsNarrow`, VPG5, owner decision 2026-11-12). |
 | `Fire(holder, merchant)` | 0x464180 → 0x463C60 | `RestockDecision`: nothing without a source; an NPC regenerates unless dead or with a PC leader; a container with flag 0x400 regenerates; on screen it is `Reschedule`d; off screen its merchant (the host's: the first NPC of the game-window-sized area whose substitute it is) decides: dead, PC leader or none is nothing, else `RegenerateMerchantAndContainer` (the merchant only with a source of its own). |
 | `Keeps(itemFlags)` | 0x463B30 (keep 1) | Only an item with the persistent flag 0x2000 stays; every other entry, worn and gold included, is destroyed. |
 | `Generate(set, rolls)` | 0x463E20 | `RestockLoot`: one coin draw in the set's range (reversed bounds swapped; a new pile only above 0), then one 1..100 draw per line in order, creating the line's item when the draw is at most its rate. Creation, insert (a refused item is destroyed) and an NPC's best-items wield are the caller's. |
@@ -108,7 +108,7 @@ through the rules above. Code: `GameSessionRestock.cs`; tests:
 
 | Step | Original | Session |
 | --- | --- | --- |
-| Schedule | 0x4640C0 at every window open (0x5733A9, RK2) | `ScheduleRestock(expected, holder, hasSource)` on the actor's map: with a source (the host's, RK1) the holder's pending event is replaced by one after a labelled `restock.delay` roll of 12–24 game hours (one revision); without one the pending event stays (`NoChange`). The multiplayer quarter delay is not modelled. |
+| Schedule | 0x4640C0 at every window open (0x5733A9, RK2) | `ScheduleRestock(expected, holder, hasSource)` on the actor's map: with a source (the host's, RK1) the holder's pending event is replaced by one after a labelled `restock.delay` roll of 12–24 game hours (Steamwoven; 12 hours plus 0..32,767 ms under the Original setting, VPG5) (one revision); without one the pending event stays (`NoChange`). The multiplayer quarter delay is not modelled. |
 | Firing | 0x464180 → 0x463C60 (RK3) | The `ISessionRestockWorld` host gives the holder's facts (`RestockFacts`: kind, source, dead, PC leader, container flags, on screen) and, for an off-screen container without flag 0x400, its merchant (`RestockMerchant`: the first NPC of the game-window-sized area whose substitute it is) and that merchant's facts; `RestockRules.Fire` decides. `Reschedule` sets a new event (a new roll); `None` sets none; a missing holder does nothing. |
 | Clear | 0x463B30 keep 1 (RK5) | Every entry of the holder's current list (its seed items still there and its added items; worn and gold included) is deleted unless the host's `Persistent` says it carries flag 0x2000. A seed item gets the deleted-item record (it hides it from the seed); a made item leaves none and its number is kept as `lastDiscardedMade` (schema 51), so restocks do not fill the deleted-item budget and a new made item never takes a discarded number. |
 | Generation | 0x463E20 (RK4, RK6) | `RestockRules.Generate` with labelled session rolls `restock.coins` and `restock.line`. Coins above 0 become a new `made:n` gold pile of `RestockPileKind` (a persistent pile that stayed takes them instead); each created line is `RestockItem(basic prototype)` made as a `made:n` item at the end of the list after the host's `RestockInsertCheck` (refused: destroyed, counted as `Refused`). Ammunition joins the holder's stack as the insertion merges it (an NPC's stack of the prototype; a container's by the type lookup, which follows AMA5). |
@@ -277,6 +277,23 @@ labelled rolls (a container with flag 0x200 seeded and recorded as at its first 
 the session cannot regenerate keeps its list (`Unsupported`, no change). Refused before any effect: an invalid entity, the version, a
 host not ready or no seed for the actor's map, an object the seed or the host does not list as that kind of holder, a full budget and
 the revision. One revision. The viewer's caller is the [opening shop merchant](../rendering/terrain-viewer.md#opening-shop-merchant-arc-ui-038).
+
+## Follower cycle and examine (ARC-UI-1120)
+
+Requirements: [FR-ITEM-008](../requirements/items-economy.md#fr-item-008) (examination), [FR-UI-003](../requirements/ui-media-lifecycle.md#fr-ui-003)
+(window flow); ledger [HK25](../research/ledger/spell-runs.md#hotkey-bar-hover-descriptions-arc-ui-035) (examine in the barter window and at the
+dialog start), [BW6](../research/ledger/ui-audio.md#barter-window-art-arc-ui-064) (the cycle).
+
+- **Examine.** In the original look a pointer resting on an item (the hero's or the merchant's) runs the item's examine script with the hero as the
+  triggerer and, unless it answered skip default, draws the item window (`TerrainViewerApp.BarterPointerStill`, the same description as the inventory's
+  still pointer), and then makes the quote. The viewer runs it only with its interface on (an automated run without bars stays quiet); it hides its bars while the window is open, so the window is
+  drawn only when they show (a known gap), the script runs either way. A ware with no map row that the session did not make runs no script. The dialog start does the same for the speaker (`DescribeDialogSpeaker`).
+- **Cycle.** A follower's window while the hero leads two or more followers (the background 825) has the buttons 757 and 758
+  (`AreaBarterArtLayout.CycleHit`, `AreaInventoryGridArea.CycleRequested`); a release over the pressed one asks for the previous or next follower of
+  the hero's follower list (`AreaBarterCycle.Step`, wrapping, skipping the followers `BarterCycleSpeaker` refuses), closes the window and opens it again
+  on that follower through the pending open of the dialog's `b:` reply. Limits: the refusal test is the can-speak head, the critter flags 0x20000008, the
+  summoned spell flag and the viewer's present-speaker test (the tail of 0x4AD800 is not modelled); the pressed frame of the buttons is not drawn; a held item blocks the press (the original puts it back first); the close-and-reopen path has no automated test of its own (the smoke `barter` stage opens no follower window); a
+  follower on another map is not a speaker here and is skipped. The follower portraits' hover (HK26) is built apart ([ARC-UI-1281](companion-orders-runtime.md#follower-portraits-hover-arc-ui-1281)).
 
 ## Not modelled (NOT READY)
 

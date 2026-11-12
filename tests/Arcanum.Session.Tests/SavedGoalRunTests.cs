@@ -154,12 +154,13 @@ public sealed class SavedGoalRunTests
         Started(owner, "npc:thrown", new GoalFrame(GoalType.Projectile), GoalStarters.NoInterrupt);
         var saved = owner.Capture().Goals;
         // ARC-DEV-289: a frame may name a spell run; one whose slot is empty (the run freed meanwhile) is saved as it is, since its goal's end then finds nothing, as live.
-        CollectionAssert.AreEquivalent(new[] { A, "npc:cast" }, saved.Runs.Select(r => r.Owner).ToArray(),
-            "the hero's with no hero, the flights without their objects, the overlays' and the knockbacks' runs have no host a load rebuilds yet");
+        // ARC-MAGIC-1280: the overlay runs (eye candy, hover) are saved now (an eye candy whose spell run is gone, as here, with no tag); the hero's with no hero, the flights without their objects and the knockbacks' runs are not.
+        CollectionAssert.AreEquivalent(new[] { A, "npc:cast", "npc:glow", "npc:plain", "npc:hover" }, saved.Runs.Select(r => r.Owner).ToArray());
+        Assert.AreEqual(-1, saved.Runs.Single(r => r.Owner == "npc:glow").Top.EyeCandy!.Tag, "its spell run slot is empty");
         using var restored = Reload(owner);
-        Assert.AreEqual(2, restored.QueryGoals().InUseCount);
+        Assert.AreEqual(5, restored.QueryGoals().InUseCount);
         Assert.IsNotNull(restored.QueryGoals()[kept.Slot]);
-        Assert.AreEqual(2, Steps(restored).Length, "no step for a run that was not saved");
+        Assert.AreEqual(5, Steps(restored).Length, "no step for a run that was not saved");
     }
 
     [TestMethod]
@@ -180,7 +181,7 @@ public sealed class SavedGoalRunTests
     {
         using var owner = Create();
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, NoGoals + NoSpells + NoNewspaper + NoGenerators + NoFlights + NoEncounters);
+        StringAssert.Contains(text, NoGoals + NoSpells + NoNewspaper + NoGenerators + NoFlights);
         using var restored = Restore(Decode(text));
         Assert.AreEqual(0, restored.QueryGoals().InUseCount);
         Assert.AreEqual(1, restored.QueryGoals().NextRunId);
@@ -197,7 +198,7 @@ public sealed class SavedGoalRunTests
         var upgraded = GameSessionSnapshotCodec.TryDecode(older);
         Assert.AreEqual(SnapshotDecodeFailure.None, upgraded.Failure, upgraded.Path);
         Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(upgraded.Snapshot!));
-        var twice = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.WithoutCritterEffects(current).Replace(NoEncounters, "").Replace(SnapshotUpgradeTests.NoCreated, "}").Replace(NoHeroKeys, "").Replace(NoTownMapCells, "").Replace("\"schemaVersion\":92,\"world\"", "\"schemaVersion\":71,\"world\""));
+        var twice = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.WithoutCritterEffects(current).Replace(NoEncounters, "").Replace(SnapshotUpgradeTests.NoCreated, "}").Replace(NoHeroKeys, "").Replace(NoTownMapCells, "").Replace("\"schemaVersion\":95,\"world\"", "\"schemaVersion\":71,\"world\""));
         Assert.AreEqual(SnapshotDecodeFailure.UnknownField, twice.Failure);
         Assert.AreEqual("$.goals", twice.Path);
     }

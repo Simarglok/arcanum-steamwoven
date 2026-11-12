@@ -51,7 +51,7 @@ public static class EncounterRules
         return null;
     }
 
-    /// <summary>0x558DE0: night is the hour before 6 or after 17.</summary>
+    /// <summary>The roll's night test: night is the hour before 6 or after 17.</summary>
     public static bool IsNight(int hour) => hour < DayStartHour || hour >= NightStartHour;
 
     /// <summary>0x5589E0 and 0x558FB0: the encounter terrain value of a terrain word, 0 when either type is unknown (above 18) or has no value.</summary>
@@ -63,7 +63,7 @@ public static class EncounterRules
         return TerrainValues[terrainBase] != 0 && TerrainValues[terrainSecond] != 0 ? TerrainValues[terrainBase] : 0;
     }
 
-    /// <summary>0x559010: the table index the roll picks without an override: the night flag plus twice the sum of the power and three times the terrain value, less 8.</summary>
+    /// <summary>The table index the roll picks without an override: the night flag plus twice the sum of the power and three times the terrain value, less 8.</summary>
     public static int TableIndex(int night, int power, int terrain) => night - 8 + (power + terrain * 3) * 2;
 
     /// <summary>0x559150: a row is eligible when the hero's level is within its range, its global flag (when it has one) is set and its use count is below its cap (when it has one).</summary>

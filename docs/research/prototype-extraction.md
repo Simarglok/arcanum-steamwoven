@@ -210,7 +210,7 @@ map readers run. `PrototypeProvisioner.Provision` (Godot-free, `src/Arcanum.Sess
 2. otherwise reads `Arcanum.exe` from the folder once (read-only) and refuses any other than the verified 1.0.7.4 one by its SHA-256
    (`UnverifiedExecutable`; the one honest fallback, in words that never tell the player to run the original);
 3. looks for a cache keyed by that SHA-256 in Steamwoven's settings folder (`prototypes/prototypes-<16 hex>/`, beside
-   `launcher_v1.json`; never in the game folder). The manifest lists the SHA-256 of every data file the executable read or looked for
+   `arcanum.cfg`, the settings file; never in the game folder). The manifest lists the SHA-256 of every data file the executable read or looked for
    (`rules\*.txt`, the MES files, the art headers; an absent file counts as absent) and the length and SHA-256 of every prototype file; the
    cache is used (`Cached`) only when the executable, all of that data and every file still match and no other file is there;
 4. otherwise builds the 1,423 files with the E3 builder (`Built`; progress to the launcher; Cancel stops it) and stores them in a temporary
@@ -276,7 +276,7 @@ and the start is refused with the reason (the prototype cache of that start stay
 catalogue's rule gives its map (else the build is refused), a prototype copy left in the cache is dropped when the installation has its own, and the build's step limit per call is 2 × 10^9
 (a map takes a few million).
 
-**Fresh installation** (`innoextract --gog` of the GOG 1.0.7.4 installer into an empty folder, stored in a `launcher_v1.json`): the first start printed
+**Fresh installation** (`innoextract --gog` of the GOG 1.0.7.4 installer into an empty folder, recorded in the `launcher` line of `arcanum.cfg`): the first start printed
 `ARC-DEV-069 prototypes status=Built files=1423 mapFiles=81`, the map plan passed and `ARC-UI-011 native-smoke main menu PASS` ended the run.
 
 **Not covered.** Windows and Linux machines; a module other than `Arcanum` (the code is by the module's plan, the Vormantown module was not run); a same-length change inside an archive outside its last 64 KiB (the cache would be kept); an installation whose aggregate

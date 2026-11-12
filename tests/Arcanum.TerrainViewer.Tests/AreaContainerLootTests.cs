@@ -140,6 +140,23 @@ public sealed class AreaContainerLootTests
     }
 
     [TestMethod]
+    public void The_pick_of_a_container_names_a_standing_container_to_the_session()
+    {
+        // ARC-UI-1127 (E8-g): the viewer's lockpicks on a container are the session's pick on the container's lock identity (the pick itself is the session's, tests PickLockStateTests; the real-data pick is the smoke's).
+        var (session, map, _, world) = Start(hero: true);
+        using var owned = session;
+        var picks = new SessionLockpick("kit:9", SessionLockpick.LockpickFlag, 10, new(10, 0, 0, false), []);
+        Assert.IsNull(AreaContainerLoot.Pick(session, map, Entity(9), picks), "an item has no lock to pick");
+        Assert.IsNull(AreaContainerLoot.Pick(session, map, "oid:nothing", picks), "no such container");
+        // The session accepts the container's lock identity and baseline, and then asks for the lockpicks the hero holds: this hero holds none.
+        var result = AreaContainerLoot.Pick(session, map, Entity(1), picks)!;
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable), (result.Disposition, result.Failure));
+        Assert.AreEqual(AreaContainerOpenOutcome.Locked, AreaContainerLoot.Open(session, map, Entity(1), frameCount: 1, world).Outcome, "a refused pick changes nothing");
+        var bare = AreaContainerLoot.Pick(session, map, Entity(1), null)!;
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, bare.Disposition, $"a pick with no lockpicks is the session's (no tool bonus): {bare.Failure}");
+    }
+
+    [TestMethod]
     public void A_junk_pile_of_the_map_s_data_taken_empty_goes_when_its_window_closes_B04()
     {
         // ARC-DEV-310 (B04, JP4, JP5): the dissolve check at the close does not ask where the pile came from.
@@ -337,6 +354,42 @@ public sealed class AreaContainerLootTests
         }
         // A container without flag 0x200 still opens: the generation changes nothing there.
         Assert.AreEqual(AreaContainerOpenOutcome.Opened, AreaContainerLoot.Open(session, map, Entity(0), 2, world).Outcome);
+    }
+
+    [TestMethod]
+    public void See_Contents_admits_every_container_with_no_test_opens_no_lid_and_generates_a_flag_0x200_container_once()
+    {
+        // ARC-RES-1327 (ledger XR3, LW1, LW2): window mode 4 runs no open attempt (a locked, jammed, magically held, scripted or unlock-scripted container shows its items), writes no frame
+        // and changes nothing in a container without flag 0x200; a container with flag 0x200 is generated first, once.
+        var (session, map, inventory, world) = Start();
+        using var owned = session;
+        var revision = session.Version.Revision;
+        foreach (var index in new[] { 0, 1, 2, 3, 4, 6, 7 })
+        {
+            var open = AreaContainerLoot.Contents(session, map, Entity(index), world);
+            Assert.AreEqual((AreaContainerOpenOutcome.Opened, false, (SessionGenerateOnceResult?)null, false), (open.Outcome, open.Opening, open.Generation, open.LockedSound), index.ToString());
+            Assert.IsNull(open.UseScript, "no use script runs");
+        }
+        Assert.AreEqual(revision, session.Version.Revision, "no frame, no generation, nothing changed");
+        Assert.AreEqual(AreaContainerOpenOutcome.Unavailable, AreaContainerLoot.Contents(session, map, Entity(9), world).Outcome, "an item is no container");
+        var first = AreaContainerLoot.Contents(session, map, Entity(5), world);
+        Assert.AreEqual((AreaContainerOpenOutcome.Opened, GameSessionDisposition.Changed, false), (first.Outcome, first.Generation!.Disposition, first.Opening));
+        Assert.IsTrue(session.QueryContainerGenerated(new(1), Entity(5)));
+        Assert.AreEqual(0, session.QueryOpenable(new(new(1), Entity(5)), new(OpenableKind.Container, (int)RestockRules.GeneratedOnceFlag, 0, 0)).Frame, "the lid stays shut");
+        Assert.IsNull(AreaContainerLoot.Contents(session, map, Entity(5), world).Generation, "a second view generates nothing");
+        // The close of a mode 4 window closes no lid: Close is not called for it, and a lid the player opened stays as it is.
+        Assert.IsTrue(AreaContainerLoot.Open(session, map, Entity(0), 2, world).Opening);
+        Assert.IsNotNull(inventory.View(session, null, 1, Entity(0)));
+        Assert.AreEqual(1, session.QueryOpenable(new(new(1), Entity(0)), new(OpenableKind.Container, 0, 0, 0)).Frame);
+        // A restock host not ready refuses the view of a container still to generate, before any change.
+        var (waiting, waitingMap, _, waitingWorld) = Start(ready: false);
+        using (waiting)
+        {
+            var before = waiting.Version.Revision;
+            Assert.AreEqual(AreaContainerOpenOutcome.GenerationRefused, AreaContainerLoot.Contents(waiting, waitingMap, Entity(5), waitingWorld).Outcome);
+            Assert.AreEqual(AreaContainerOpenOutcome.Opened, AreaContainerLoot.Contents(waiting, waitingMap, Entity(1), waitingWorld).Outcome, "a locked plain container needs no host");
+            Assert.AreEqual(before, waiting.Version.Revision);
+        }
     }
 
     private static RestockSet AreaRestockHostSet() => new(10, 900, [new(50, Axe - 20), new(50, Axe - 20), new(50, Axe - 20)]);

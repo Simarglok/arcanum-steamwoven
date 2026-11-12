@@ -44,17 +44,17 @@ Every other college spell has a code path for every component of its record (the
 
 | Spell | What is missing | Slice |
 | --- | --- | --- |
-| 2 Unseen Force | The original also pushes ground items of weight below 5 ([UO1–UO6](ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)) and the viewer's host does not (an item body, the saved mobile state and the item's hit points are open) | knockback lane |
+| 2 Unseen Force | The original also pushes ground items of weight below 5 ([UO1–UO9](ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)); **built by ARC-MAGIC-1230**: the item body of the knockback host, the saved cell (`item.moved`, no schema step) and the bump on the item's durability | done |
 | 6, 7, 9 See Contents, Read Aura, Divine Magick | The answer is a text line; the windows (container inventory in mode 4, the NPC sheet, the item description) and picking an inventory item as a target are E8's | E8 |
 | 8 Sense Hidden | Trap spotting for the detecting-traps flag works and the hero's spot roll exists (ARC-MAGIC-057); effect 157 (spot-trap skill): the hero's skill level reads the written effect's skill change since the skills lane, so the roll should see it, not run in the viewer | owner recheck |
 | 14, 19, 24, 29 Elemental summons; 53 Succour Beast; 57 Summon Undead; 68 Phantasmal Fiend; 71-74 Orcish Champion, Guardian Ogre, Hellgate, Familiar | Creature Summon (prototype or list pick, flags on the summoned, run ends when it dies) | E1-e |
-| 35, 50 Charm, Charm Beast | The NPC flag KOS_OVERRIDE a charm adds is not kept (the session has no NPC flag layer) | - |
+| 35, 50 Charm, Charm Beast | Built in ARC-MAGIC-1142: the session's NPC flag layer keeps the flag; the attack event clears it | - |
 | 47 Shrink, 34 Disintegrate, 69 Invisibility, 63 Sanctuary | The flags are written; the viewer's draw of shrunk, hidden, translucent critters is not built | render |
 | 48 Flesh to Stone | Stone render side effect; the stone-to-flesh pair on a portal holding the stoned spell flag | - |
 | 58 Create Undead, 64 Resurrect | The raise script hook; the combat and life rules read the data's undead bit, not the written one | MA-10 |
-| 65 Illuminate | The original lights the scene: a live object light on the target while the spell runs ([IW1–IW6](ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)); not built (no light is built on an object, the viewer draws saved object lights only) | lighting lane |
-| 76, 77 Congeal Time, Hasten | Speed reaches the turn-based action points and the real-time attack pause, not walking (the original does not either, XR); stage `spell-effects` (ARC-DEV-1148) casts both: BEGIN adds the effect and moves the speed (77 up, 76 down); **found there: the END of 76 leaves its effect on the NPC** (its END area names the run's object list, which no host fills), so Congeal Time never wears off | [#1234](https://github.com/Simarglok/arcanum-steamwoven/issues/1234) |
-| 79 Tempus Fugit | Built (MA-9, ARC-MAGIC-056): +10 speed to its holders and -10 to every other critter while any critter holds it (the original: while the player holds it, XR6); the follower flag writes of XR7 are not built | - |
+| 65 Illuminate | The original lights the scene: a live object light on the target while the spell runs ([IW1–IW6](ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)); built by ARC-MAGIC-1229 (the overlay host keeps the live light while the run is shown, the viewer draws it and the darkness sampler reads it; the glow after a load is built by ARC-MAGIC-1280 (the overlay runs are saved); not built: the object's own offsets) | lighting lane (done) |
+| 76, 77 Congeal Time, Hasten | Speed reaches the turn-based action points and the real-time attack pause, not walking (the original does not either, XR); stage `spell-effects` (ARC-DEV-1148) casts both: BEGIN adds the effect and moves the speed (77 up, 76 down); found there: the END of 76 left its effect on the NPC (its END area names the run's object list, which no host kept); fixed by ARC-MAGIC-1234 (the run stores the list its BEGIN gather builds, ledger TA17) and the stage now expects the removal | [#1234](https://github.com/Simarglok/arcanum-steamwoven/issues/1234) |
+| 79 Tempus Fugit | Built (MA-9, ARC-MAGIC-056): +10 speed to its holders and -10 to every other critter while any critter holds it (the original: while the player holds it, XR6); the follower join and leave flag writes of XR7 are built (ARC-MAGIC-1190) | - |
 
 ## Work order
 
@@ -102,18 +102,19 @@ Left: an NPC's life facts (maximum hit points, poison tick) ignore effect-change
 
 Done by owner decision D5(a): magic builds the state and a text answer, the windows are E8's ([contract](../world/spell-cast-host.md#identify-arc-magic-032), ledger [XR1-XR5](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)). The original's Identify writes nothing and shows a window to the casting local player only, so an NPC caster's has no effect.
 The hero's answer is a typed event and a message line by the target's type (`IdentifyCritter`, `IdentifyContainer`, `IdentifyItem`); Divine Magick's identified flag is the session's `MarkItemIdentified` mark (no schema step), now read by the weapon spell pane too.
-Left: nothing picks an inventory item as a spell target (spell 9 cannot be cast from the viewer); the three windows; what inventory mode 4 lets the player move (XR3); a clear of the identified flag stays "not ready" (no installed record has one).
+Left: the three windows (an inventory item is a spell target since ARC-MAGIC-1128); what inventory mode 4 lets the player move (XR3); a clear of the identified flag stays "not ready" (no installed record has one).
 
 ## Social and AI flags (MA-4, ARC-MAGIC-035)
 
 Done ([contract](../world/spell-cast-host.md#social-and-ai-flags-arc-magic-035), ledger [SO1-SO8](ledger/spell-runs.md#social-and-ai-flags-arc-magic-035)): charm, mind control, fleeing, blinded and undead in the original's order (0x454A10 runs the side effects with the run's parent as the caster; fleeing, blinded and a non-NPC's mind control return before the closing write).
-Left: the NPC flag KOS_OVERRIDE (SO2); a follower of a caster that is no hero; the undead flag's readers (the combat and life rules read the data's bit); created critters (E1-e); the AI host's reaction facts carry `MindControlledByPc` false; no viewer smoke stage drives these spells ([owner recheck list](../project/owner-recheck-list.md)).
+Done since: the NPC flag KOS_OVERRIDE (SO2) in the session's NPC flag layer, read by the AI host and cleared by the attack event, and the AI host's read of the written undead bit (ARC-MAGIC-1142, [SO9–SO10](ledger/spell-runs.md#social-and-ai-flags-arc-magic-035)).
+Left: a follower of a caster that is no hero; the undead flag's readers in the combat and life rules (they read the data's bit when the life row is built); created critters (E1-e); the AI host's reaction facts carry `MindControlledByPc` false; no viewer smoke stage drives these spells ([owner recheck list](../project/owner-recheck-list.md)).
 
 ## Movement (MA-5, ARC-MAGIC-036)
 
 Done in two halves (owner decision D3b): Spatial Distortion (3) by ARC-MAGIC-036 ([contract](../world/spell-cast-host.md#movement-component-arc-magic-036), ledger [MV1-MV3](ledger/spell-runs.md#movement-component-and-the-immediate-path-relocation-arc-magic-036): the immediate path relocation 0x455350, at most 8 tiles, tile scripts run before the placement) and
 Teleportation (4), the random tile and the area portal (record 218) by ARC-MAGIC-038 ([contract](../world/spell-cast-host.md#teleport-types-and-the-anti-teleport-test-arc-magic-038), ledger [TP1-TP5](ledger/spell-runs.md#teleport-types-and-the-anti-teleport-test-arc-magic-038): `Rules\AntiTeleport.mes` refuses a disabled map or a region's radius; in single player Teleportation opens the world map in a teleport mode and a pick within 320 lands the hero, paid then).
-Left: the multiplayer host branch of type 2; an NPC or other non-critter as the portal or relocation target; the town map, the compass and the waypoint journey inside the teleport mode; message 640 as the game's text; the interrupt of goals other than walks; the viewer's `Tgt_Tile_Pathable_To` test answers "not blocked", so a cast at an unreachable tile is paid and moves nothing (as the original's component does).
+Left: the fallback of an unreadable map module to the area portal (ledger TP8); the multiplayer host branch of type 2; an NPC or other non-critter as the portal or relocation target; message 640 as the game's text; the interrupt of goals other than walks; the viewer's `Tgt_Tile_Pathable_To` test answers "not blocked", so a cast at an unreachable tile is paid and moves nothing (as the original's component does).
 
 ## Locks and holds (MA-6, ARC-MAGIC-037)
 
@@ -129,7 +130,7 @@ Left: the dropped leftover of a refused take-off; an NPC's worn items (not track
 ## Tempus Fugit (MA-9, ARC-MAGIC-056)
 
 Done ([contract](../world/character-stats-runtime.md#tempus-fugit-speed-arc-magic-056), ledger [TF1-TF3](ledger/spell-runs.md#tempus-fugit-speed-arc-magic-056)): speed (stat 11) of the hero and of every NPC handed out by `WithNpcEffects` takes +10 for a critter that holds `OSF_TEMPUS_FUGIT` and -10 for every other critter while some critter holds it, before the crippled-leg -5 and the effects, clamped by the stat range; it reaches the turn-based action points, the real-time attack pause, the inventory line and the sheet, not walking (XR8). The one rule that differs from the original is the owner's XR14 (a) fix: the original tests only the player's flag, Steamwoven any critter's, so an NPC's cast works without the player holding it (who gains: the holders; who is slowed: everyone else, the player included).
-Left: the follower join and leave flag writes (XR7, TF3); no smoke stage casts it ([owner recheck list](../project/owner-recheck-list.md#arc-magic-056--tempus-fugit-speed-spell-79)).
+The follower join and leave flag writes (XR7, TF3) and the NPC sheet's shifted speed followed in ARC-MAGIC-1190. Left: no smoke stage casts it ([owner recheck list](../project/owner-recheck-list.md#arc-magic-056--tempus-fugit-speed-spell-79)).
 
 ## Decisions for the owner
 
@@ -155,7 +156,7 @@ The 60 records outside the colleges (80..139, used by monsters and items) share 
 
 ## Not read, not verified
 
-- Whether the maintained damage of the clouds (11, 27) hits the same targets as the BEGIN: not run per spell. Read by ARC-RES-1109 ([ledger](ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)): Disarm's weapon drop is not built for a spell (DW2; the original drops, XR15), Unseen Force (2) pushes ground items in the original and not in the viewer (UO5, UO6), Illuminate (65) lights the scene in the original and not in the viewer (IW5, IW6).
+- Whether the maintained damage of the clouds (11, 27) hits the same targets as the BEGIN: not run per spell. Read by ARC-RES-1109 ([ledger](ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)): Disarm's weapon drop was not built for a spell and is since ARC-MAGIC-1232 (DW2, built; the original drops, XR15), Unseen Force (2) pushes ground items in the original (UO5) and, since ARC-MAGIC-1230, in the viewer (UO6), Illuminate (65) lights the scene in the original (IW5) and, since ARC-MAGIC-1229, in the viewer (IW6; the glow after a load is open).
 - Left open by the executable reads (ledger XR1-XR15): what inventory mode 4 lets the player move, what happens on arrival to a summoned follower the travel hide left shown, whether a familiar's death reaches the follower removal.
 - The AI's use of each spell was not audited beyond the priorities in the records (60 of the 80 have one); a component that is not ready is not ready for NPCs either.
 - Records 80..139 and the technology records (140..222) are outside the per-spell view.

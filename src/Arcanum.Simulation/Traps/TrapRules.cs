@@ -100,6 +100,18 @@ public static class TrapRules
     /// <summary>A PC-placed trap's device: the explosives' prototype, or the second one when the counters' top byte is set.</summary>
     public const int PlacedDevice = 6047, PlacedDeviceSecond = 15101;
 
+    /// <summary>ARC-MAGIC-1189 (ledger SP2): the item the spot attempt reads at inventory location 1005 (the shield slot): name 2866, the
+    /// installed powered shield; the ammunition type its charges are (2); and the stat the modifier comes from (16, the magick and tech aptitude).</summary>
+    public const int ShieldLocation = 1005, PoweredShieldName = 2866, ChargeAmmoType = 2;
+
+    /// <summary>
+    /// ARC-MAGIC-1189 (ledger SP2, 0x4BBE40's roll branch): the modifier the spot trap invocation carries. When the item at location 1005 is named
+    /// <see cref="PoweredShieldName"/>, the source holds charges of ammunition type 2 (the count 0x465820 gives is above 0) and its aptitude (stat 16)
+    /// is at or below 0, the modifier is the aptitude itself (negative: a bonus); a positive aptitude clears it to 0 and any other case leaves 0.
+    /// </summary>
+    public static int SpotItemModifier(int shieldName, int charges, int aptitude) =>
+        shieldName == PoweredShieldName && charges > 0 && aptitude <= 0 ? aptitude : 0;
+
     public static bool IsNativeScript(int script) => script is >= FirstNativeScript and <= LastNativeScript;
 
     /// <summary>The trap test of an object's use script (slot 1): no script, or a header without either trap flag, is no

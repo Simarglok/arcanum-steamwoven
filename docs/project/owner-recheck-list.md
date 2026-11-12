@@ -48,8 +48,7 @@ Resistance and stat changes of effects now reach combat values for the hero and 
 
 Known differences (documented, not bugs):
 
-- The character sheet's resistance lines (hero and NPC) do not show effect changes; damage does.
-- A poison tick meets an NPC's resistance without its effects (an NPC's maximum hit points and fatigue follow its effect-changed strength, willpower and constitution since ARC-WORLD-1144).
+- A poison tick meets the normal resistance of an NPC under the effect list the session holds for it, and the sheet's resistance lines (hero and NPC) show effect changes (ARC-UI-1145; an NPC's sheet reads its map-data list only when the host gave the effect rules); a list the map data stores and the session has not adopted is not laid over the NPC's life facts (its poison tick and maxima).
 - Spell damage dealt to an NPC ignores that NPC's resistance effects until PR #941 merges (the spell host reads the NPC without its list).
 - The hero's innate race and gender effects carry no resistance changes in the session.
 
@@ -185,7 +184,7 @@ Known differences (documented, not bugs):
 | # | Step | Expected (from the original executable) | Status |
 | --- | --- | --- | --- |
 | 1 | Make a creature back off or flee from a target (a scared or surrendering NPC, a follower ordered to back off) in open ground. | It walks away along a tile found by the away-path search (0x41F6C0). Ours finds no away tile, so the back-off ends at once. | open |
-| 2 | Talk to a teacher, then to a healer, a rumor monger and a newspaper vendor (a reply that opens a skill list, a cure, a rumor or a paper). | The replies marked for trainers, healers, rumors, town directions and newspapers show their generated lines and offers; training by an apprentice costs 100 gold (0x418CA0..0x41A8C0). Ours refuses these replies as unsupported. | open |
+| 2 | Talk to a teacher, then to a healer, a rumor monger and a newspaper vendor (a reply that opens a skill list, a cure, a rumor or a paper). | The replies marked for trainers, healers, rumors, town directions and newspapers show their generated lines and offers; training by an apprentice costs 100 gold (0x418CA0..0x41A8C0). Ours now builds the trainer's `t:` reply (ARC-SCRIPT-1150: the skill menu, the price on the reaction scale, the payment and the training); the rumor monger's `r:` reply too (ARC-SCRIPT-1304: one rumor of its list, for gold when it names a price, told in the NPC's words and written to the logbook); the news reply `c:` too (ARC-SCRIPT-1321: the story line of the story state, then the one way on); the healer reply is still refused as unsupported. | open |
 | 3 | Start a talk with an NPC that is hostile on sight, then with one that cannot speak to you (too evil, too good, party full). | A hostile NPC answers with its race line and the talk ends; an NPC that cannot speak refuses with the line of its reason range (0x412FD0, 0x413A90). Ours opens the talk first. | open |
 | 4 | Ask a talkative NPC for money (a dialog money request), once with enough gold and once without. | The request, payment and no-money steps run from the reply (0x418A40, 0x418B30, 0x418C40). Ours has no such reply state. | open |
 | 5 | Save while combat music plays (any fight), reload that save and leave the fight. | In the Original setting the pre-combat music and ambient schemes are lost by the save (original bug SN18, 0x41B1D0); Steamwoven keeps them, so compare which music returns. | open |
@@ -331,21 +330,21 @@ refused in ours (the removal script does not run there yet); a book picked up fr
 ## ARC-MAGIC-032 — Identify: See Contents, Read Aura, Divine Magick (MA-7, 2026-11-11)
 
 The component rules are in [Identify](../world/spell-cast-host.md#identify-arc-magic-032) (executable reads XR1–XR5 in the [ledger](../research/ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)).
-By owner decision D5(a) the viewer shows the answer as a line in the message log; the three windows of the original are the identify-window slice E8's, so the **window itself is a known difference**, not a bug.
+By owner decision D5(a) the viewer shows the answer as a line in the message log; since ARC-UI-1127 (E8-g) the creature's sheet window of Read Aura is built too ([below](#arc-ui-1127--identify-sheet-heal-another-critter-and-lockpicks-on-containers-slice-e8-g-2026-11-12)); the container's inventory window of See Contents and the item description window are the rest of slice E8-g, so **those windows are a known difference**, not a bug.
 Compare in both games with the same hero (Divination college: See Contents 6, Read Aura 7, Divine Magick 9).
 
 | # | Step | Expected (from the original executable and data) | Status |
 | --- | --- | --- | --- |
-| 1 | Cast Read Aura (spell 7) at a creature. | The original opens the character sheet of the creature, read only (no + or − buttons, all four tabs), the same window as the dialog's "show your abilities" reply. Steamwoven: a line "identify: ..." in the message log and no window. | open |
+| 1 | Cast Read Aura (spell 7) at a creature. | The original opens the character sheet of the creature, read only (no + or − buttons, all four tabs), the same window as the dialog's "show your abilities" reply. Steamwoven since ARC-UI-1127: the same read-only sheet for an NPC (a line "identify: ... (its character sheet)" in the message log too); a creature that is the hero keeps the line only. | open |
 | 2 | Cast See Contents (spell 6) at a **locked** container. | The original opens the container's inventory at once, with no lock, jam or magically-held test, so the items of a locked chest show. Steamwoven: the line only. | open |
 | 3 | In step 2, take or move an item in that window. | Not read in the executable (what a press may move in inventory mode 4): note what the original allows (take, put, nothing). | open |
-| 4 | Cast Divine Magick (spell 9) on an unidentified magickal item in the pack (a wand or a ring with a "?" description). | The item's name and description become the true ones, its spell slots and charge gauge show, and its worth in a trader's window is its real worth. Steamwoven builds this state (the item's identification mark), but cannot cast the spell yet: nothing picks an inventory item as a target. | open |
+| 4 | Cast Divine Magick (spell 9) on an unidentified magickal item in the pack (a wand or a ring with a "?" description). | The item's name and description become the true ones, its spell slots and charge gauge show, and its worth in a trader's window is its real worth. Steamwoven (ARC-MAGIC-1128): pressing the spell opens the inventory with the spell cursor over it; a left click on the item casts at it (the cursor stays, a right click cancels and closes the window). | open |
 | 5 | Cast Divine Magick on an item that was already identified. | The description shows again; nothing else changes. | open |
 
 Known differences (documented, not bugs):
 
 - The three windows (the NPC sheet, the container's inventory, the item description) are E8's; the viewer says so in its line.
-- Divine Magick cannot be cast from the viewer yet (no spell target in the inventory).
+- Divine Magick picks an item of the hero's own inventory window only; an item of a loot, steal or barter window is not a target (ARC-MAGIC-1128).
 
 ## ARC-MAGIC-033 — Resist Magick counts in the magic save (D6c, 2026-11-11)
 
@@ -456,10 +455,11 @@ hero (a mage with these spells; a hero without the college can learn them from t
 | 6 | Cast Flash (spell 66) on a human who fights you, and watch their hits. | They are blinded (their melee is much worse); at the end, or by chance each AI pass, the blindness goes. | open |
 | 7 | Cast Create Undead (spell 58) on a corpse. | The creature rises under your control (it follows you), and at the spell's end it dies again. Note whether it is hurt by healing or poison as an undead would be. | open |
 | 8 | Dominate Will on a creature that is already your follower, and on one that is summoned. | A summoned creature does not lose reaction (no -50). | open |
+| 9 | Charm a kill-on-sight creature of another faction (a hostile wolf pack member is one), end the spell, then walk near it without attacking. | While charmed and after the end it does not attack you on sight for being of another faction (the reaction and alignment tests still apply); after you attack it, it is hostile as before (the attack takes the override off). | open |
 
 Known differences (documented, not bugs):
 
-- A charm adds the NPC flag "kill-on-sight override" in the original and never takes it off; ours does not keep that flag.
+- A charm adds the NPC flag "kill-on-sight override" in the original and never takes it off (only an attack on that NPC does); the session keeps it in its NPC flag layer (ARC-MAGIC-1142), so the step 9 can be seen.
 - Mind control makes a follower only under the hero (a spell cast by another creature on a creature does not make a follower); a mind-controlled creature of the world map is not covered.
 - The undead flag a spell writes is not read by the combat or life rules yet, so step 7's undead behaviour may differ.
 ## ARC-DEV-372 — Shared content index (O4 of the performance diagnosis, 2026-11-11)
@@ -571,7 +571,7 @@ path request the item drop uses and walks **at most eight tiles** of the route, 
 
 Read in the original executable (ledger [TP1–TP5](../research/ledger/spell-runs.md#teleport-types-and-the-anti-teleport-test-arc-magic-038), contract [teleport types](../world/spell-cast-host.md#teleport-types-and-the-anti-teleport-test-arc-magic-038)): in a single-player game Teleportation (spell 4,
 Conveyance college) moves nothing by itself. It opens the **world map in a teleport mode**; you click a known area, and the hero lands there. Places where teleporting is refused come from the data file `Rules\AntiTeleport.mes` (2 round regions and 5 whole maps in the installed game). Both rule modes behave the same.
-Use a hero who knows Teleportation, with enough fatigue (the spell's fatigue cost is charged only when an area is picked). Known differences, not to be re-reported: in the teleport mode the town map, the compass and the waypoint journey are not offered; the refusal message (the original's message 640) is shown as an
+Use a hero who knows Teleportation, with enough fatigue (the spell's fatigue cost is charged only when an area is picked). Known differences, not to be re-reported: the original's teleport mode offers no town map and no route points either (ARC-MAGIC-1147, ledger TP6–TP7; see the added steps below); the refusal message (the original's message 640) is shown as an
 English label, not the game's text; the view is not re-centred; an NPC cast of the area portal (technology 218) or of a random move does not carry the creature; a multiplayer host is not built.
 
 | # | Step | Expected (from the original executable and data) | Status |
@@ -584,6 +584,8 @@ English label, not the game's text; the view is not re-centred; an NPC cast of t
 | 6 | Open the teleport map and pick an area that lies inside one of the ban regions. | The pick is refused with a message and the map stays open; nothing is paid. Pick another area to leave. | open |
 | 7 | Use the technology device that teleports to the area (record 218) on the main map, and in a map that is not the main one. | On the main map the hero is sent to the area's location with a blank screen and no wait orders; elsewhere to the main map at the location of the area that map belongs to. | open |
 | 8 | Walk with Spatial Distortion (spell 3) over a tile that has a script, starting from a tile next to it. | The script runs **before** the caster is put on the last tile: a message from it names the caster's old tile; the last tile's script runs once more afterwards. | open |
+| 9 | (ARC-MAGIC-1147) In the teleport map, look for the Travel button, press the town-map button and the `Z` key, and click the map while a companion travels with you. | No Travel button is shown; there is no town map (not even from a town, where `W` would open it); a click picks a discovered area or does nothing, it never adds a route point; the compass arrows scroll and the continent view works as usual. | open |
+| 10 | (ARC-MAGIC-1147) Join a companion, cast Teleportation and pick a far discovered area. | The companion arrives with you and stands next to you at the destination, whatever distance it was from you before the cast; a companion you had released earlier on a foreign map is not carried (it goes home). | open |
 
 
 ## ARC-RES-121 — Function audit wave 3, groups G and I (2026-11-11)
@@ -772,9 +774,23 @@ The rules are in [trap state](../world/trap-state-runtime.md) (the Spot item) an
 
 Known differences (documented, not bugs):
 
-- The light at the trap is taken as full: an untrained hero in the dark is not penalised yet (the original adds up to 30 against an untrained hero).
-- The item that adds a modifier to the roll (inventory location 1005, name 2866) is not modelled.
-- Companions' own spot attempts are not made; disarming a trap is ARC-SKILLS-1156 (below).
+- The light at the trap enters the roll since ARC-WORLD-1149 (an untrained hero in the dark is penalised, up to 30); the item at location 1005 (name 2866, the powered shield) enters it since ARC-MAGIC-1189; companions and NPCs spot with their own roll on each step (see the ARC-MAGIC-1189 section below). A walker that fails to spot a trap still walks on without firing it; only the spot half of the NPCs' meeting is built. Disarming a trap is ARC-SKILLS-1156 (below).
+
+## ARC-MAGIC-1189 — Spot trap remainders: powered shield and companions (E6-a, 2026-11-12)
+
+The rules are in [trap state](../world/trap-state-runtime.md) (the Spot item and the NPC and companion spot item) and the [ledger SP2, TT2, TT10](../research/ledger/technology.md#spot-trap-roll-arc-magic-057). Use a hero with a technology build (tech points, so a negative aptitude), a powered shield (the technology product that uses charges) and some charges, on a map with hidden traps, in both games.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | With the powered shield worn and charges in the pack, walk over hidden traps many times (reload between tries). Repeat with the shield taken off. | With the shield worn and charges in the pack a technologist spots traps more often: its (negative) aptitude is a bonus on the roll. Without charges, or with the shield off, the odds are the ordinary ones. | open |
+| 2 | Do the same with a magickal hero (positive aptitude) wearing the shield. | No bonus: a positive aptitude clears the modifier. | open |
+| 3 | Walk with a companion across a hidden trap, in daylight and then in the dark. | The companion sometimes spots the trap with its own roll and stops before it; the trap then shows as known to you. A companion with a better Spot Trap skill spots more often; darkness makes an untrained companion worse. | open |
+| 4 | Let a companion walk onto a trap it did not spot. | It walks on. Known difference: Steamwoven does not set the trap off on a companion yet (the original does). | open |
+
+Known differences (documented, not bugs):
+
+- An NPC's or a companion's step onto a trap object, and its use of a trapped object, do not meet the trap yet; only the spot attempt on the walk check is built.
+- A companion's spot attempt is made by its walk check before each step, on the AI host's walk and on its own follow walk alike.
 
 ## ARC-SKILLS-1156 — Disarming a trap from the hotkey bar (E6-a, disarm half, 2026-11-12)
 
@@ -795,7 +811,7 @@ Known differences (documented, not bugs):
 - When a follower is better at disarming, the original lets the best follower act instead of the hero ("let me handle it", Ctrl skips it); Steamwoven always uses the hero.
 - The original's skill-bar press builds the invocation at once, so Steamwoven does not walk the hero to the trap first; whether the original limits the distance by the difficulty is read from the shared check only.
 - A trap you placed yourself with a script trap device is a marker object in Steamwoven and cannot be targeted yet.
-- The skill pane's own Disarm Traps button is [#1113](https://github.com/Simarglok/arcanum-steamwoven/issues/1113).
+- The skill pane's own Disarm Traps button is built (ARC-UI-1113, [#1113](https://github.com/Simarglok/arcanum-steamwoven/issues/1113)).
 
 ## ARC-MAGIC-056 — Tempus Fugit speed (spell 79)
 
@@ -806,12 +822,13 @@ Rules: [contract](../world/character-stats-runtime.md#tempus-fugit-speed-arc-mag
 | 1 | Cast Tempus Fugit (spell 79) on the hero. Open the character sheet (speed line) and the inventory window. | The hero's speed is 10 higher while the spell is maintained, and back to the old value when it ends. | open |
 | 2 | Cast it, then fight a creature in turn-based mode, and compare the action points of the hero and of the creature with and without the spell. | The hero has 10 more action points; every other creature has 10 fewer (at least the game's minimum of 5). | open |
 | 3 | Cast it and fight in real time; compare the pause between attacks of the hero and of the creature with and without the spell. | The hero attacks faster, the creature slower. Walking speed does not change. | open |
-| 4 | Have a companion with the hero when casting. | The companion is in the spell's area and gains the same +10 as the hero; a companion that joins after the cast does not (not built, XR7). | open |
+| 4 | Have a companion with the hero when casting. | The companion is in the spell's area and gains the same +10 as the hero; a companion that joins after the cast gains it at once (XR7, ARC-MAGIC-1190); one that leaves the party or is told to wait loses it at once (and gets it back at the unwait while the spell is held). | open |
+| 5 | With the spell active, open a companion's character sheet (talk to it, the sheet action). | The speed line shows the shift: 10 more than without the spell for a companion in the spell, 10 less for an NPC outside it (never below 1). | open |
 
 Known differences (documented, not bugs):
 
 - An NPC that casts Tempus Fugit (record 79 carries a flee priority for the AI) changes speeds even when the player does not hold the spell: the owner decided on 2026-11-11 that the original's player-only test is a bug of the game, fixed in both modes. In the original such a cast does nothing to anyone's speed.
-- The follower join and leave flag writes (XR7) are not built: a companion that joins after the cast gains nothing, and one that leaves keeps the flag until the spell ends.
+- The familiar half of the leave (the leader's familiar flag, XR10) is not built here (E1-e).
 
 ## ARC-MAGIC-060 — Item spells on the hero's hit, the cell weapon (PR #1184, 2026-11-12)
 
@@ -892,7 +909,7 @@ The rules are in the [ledger BD1–BD7](../research/ledger/npc-ai.md#body-decay-
 | # | Step | Expected (from the original executable and data) | Status |
 | --- | --- | --- | --- |
 | 1 | Kill a creature that carries an item or two (a map NPC, then a creature a generator made) and stay on the map. Pass 23 hours, look at the body; then pass another 2 hours. | The body lies there the first 23 hours and is gone a game day after the death (the Decay Dead Bodies event). | open |
-| 2 | Look at the spot after the body is gone. | The creature's items lie on its tile (in a junk pile when two or more) and disappear two game days later as any dropped item; an item the data marks "not droppable" is gone with the body. | open |
+| 2 | Look at the spot after the body is gone. | The creature's items lie on its tile (in a junk pile when two or more) and disappear two game days later as any dropped item; an item the data marks "no display" or that a spell summoned is gone with the body, any other item (a "not droppable" one too) lies on the ground. | open |
 | 3 | Kill a creature, leave the map for more than a day, come back. | The body is gone on return (the event runs late once its map is the shown one). | open |
 | 4 | Kill a creature of a generator and wait for its body to go. | The generator does not make a replacement because of the decay: only a generator whose live count the death released ticks again (PO7, PO11); the made-so-far count is never given back. | open |
 
@@ -940,6 +957,25 @@ Known differences (documented, not bugs):
 - A script in a dialog (a talk) that uses one of these actions is still refused; only use, tile, sector, heartbeat and dying scripts run them.
 - A reaction or standpoint change acts for NPCs of the map on screen only.
 
+## ARC-SCRIPT-1164 — world-object script actions (E5-b, 2026-11-12)
+
+Script commands that act on a door, chest, sector or monster generator now run from use, tile, sector, heartbeat and dying scripts ([ledger WO1–WO13](../research/ledger/scripts.md#world-object-commands-arc-script-1164-e5-b),
+[dispatcher](../scripting/scr-dispatcher-runtime.md#world-object-commands-arc-script-1164-set-s37)). No installed map is named below because the check that lists the admitted scripts is by script number, not by map; compare the same
+quest step in both games.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Reach a quest step that locks or unlocks a door or chest from a script (set lock state), then try to open it. | The object is locked or unlocked as the step says; the lock picks and keys behave as for any locked object. | open |
+| 2 | Reach a quest step that opens or closes a door or chest from a script (toggle open or closed). | A door swings open or shut at once; a chest changes to its next or previous picture frame; a script that tests the open state then branches on it. | open |
+| 3 | Reach a quest step that gives the hero or an NPC an item (create item). | The item appears in the holder's inventory (or, with no room, is not taken). | open |
+| 4 | Reach a quest step that blocks a sector, then open the world map and route into it. | The route does not enter the blocked sector, and a blocked destination is refused. | open |
+
+Known differences (documented, not bugs):
+
+- ARC-SCRIPT-1279: transfer item, set written start, destroy item named and toggle item inventory display are applied by the same hosts (limits in ledger WO17): a script that moves or destroys an item with scripts, or moves an item between two holders neither of which is the hero, is still refused. Recheck in the game: a quest item destroyed or handed over by a script leaves the hero's inventory list or arrives in it; a written start a script sets shows in the reading window; the toggled display bit is saved but not yet drawn (the inventory painters do not read it).
+- The world map's refusal when the hero's own sector is blocked, and the dimmed picture of a blocked sector, are not built.
+- A script in a dialog (a talk) that uses one of these commands is still refused.
+
 ## ARC-WORLD-1162 — beds: sleeper flags, occupied bed frame and nudge (slice 3, 2026-11-12)
 
 The rules are in [Sleep window runtime](../world/sleep-window-runtime.md#npc-beds-arc-world-1162-slice-2-ledger-swb16swb21). The occupied frame of a bed is the next frame of its art (ledger SWB15, 0x43F7F0); the build
@@ -956,6 +992,36 @@ is a bed tile (Roseborough inn2, Wheel clan, Bates mansion and others); a night 
 
 Known differences, so they are not reported as bugs: the hero gets no sleeping flag and is not hidden in the bed (the sleep window fades the screen over him); an attack aimed at the bed does not wake its occupant; a wanderer
 that lies down does not start its wander in the same step.
+
+## ARC-UI-1127 — Identify sheet, heal another critter and lockpicks on containers (slice E8-g, 2026-11-12)
+
+The rules are in [Identify](../world/spell-cast-host.md#identify-arc-magic-032), [Heal](../world/heal-runtime.md#viewer) and [Pick locks](../world/pick-locks-runtime.md#containers-in-the-viewer-arc-ui-1127). Open question the checker may settle: the original starts the heal skill goal 33 for a healing kit used on another critter (the hero walks within range 1, then heals); Steamwoven starts the item use goal 39 (the same walk, range 1), so the picture of the walk and the 4 action points should match, only the goal's number differs.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Hurt a creature (an NPC or a follower), hold the heal kit (prototype 15199) and release it on the Use icon, then press the creature. | The cursor opens; the hero walks next to the creature and the heal runs (the check of the heal skill: an amount, or a failure that may cost five uses). Steamwoven: the same, the HUD names the amount and the uses left. | open |
+| 2 | Arm lockpicks (use icon, no Shift) and press a locked chest. | The hero walks next to the chest and picks its lock (4 action points in a turn-based round); a success unlocks it, a critical failure jams it. Steamwoven: the same; the picked chest opens by the next press. | open |
+| 3 | Cast Read Aura on a creature (see ARC-MAGIC-032, step 1). | The read-only sheet of the creature opens. | open |
+
+Known differences, so they are not reported as bugs: the hero's own Read Aura keeps the message line; See Contents and Divine Magick still show a line only (their windows are not built); the pick animation of the hero is not played (as for a door).
+
+## ARC-MAGIC-1361 — Harm damage and the difficulty share (2026-11-12)
+
+The numbers are in [DH11](../research/ledger/spell-runs.md). The owner's report (Harm "twice as strong") is answered by the data: no formula differs. Compare in both games with the same hero and the same difficulty setting.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | In the options set the difficulty to Normal (not Easy). Cast Harm (spell 55) once at a wolf, with a hero of 8 magick points (a night mage at night, or 8 points of magick). | 17 hit points per cast (3 + 37 × 40 / 100). On Easy 25, on Hard 13: the original adds half of a PC attacker's damage on Easy and takes a quarter on Hard, for spells and weapons alike. | open |
+| 2 | Press once on the wolf with the Harm cursor, with your own mouse, and watch the casts in the log (Ctrl+B). | One cast per press, as in the original (the cursor stays open for the next press). Two or three casts within a few milliseconds from one press mean the mouse sends duplicate presses. | open |
+
+## ARC-SCRIPT-1359 — the Crash Site Molochean agent after the altar talk (2026-11-12)
+
+The agent's heartbeat (script 1717) is admitted whole since this task ([GL1–GL2](../research/ledger/scripts.md)). Start a new game at the Crash Site; the checks need the story flag set by the altar talk.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Talk to Virgil at the altar (the tile script runs his dialog), then watch the Molochean agent near the altar and read the log (Ctrl+B). | No `heartbeat-refused ... script 1717` line any more. The agent sets its day and night standpoints to its tile and runs to it (goal 74), as the original's heartbeat does. | open |
+| 2 | Let the agent reach its tile. | The follow-up of the scene (talk or attack) starts as in the original. If it does not, report what the agent does (the scene may belong to another script; a new issue is then filed). | open |
 
 ## ARC-WORLD-1159 — Random encounters on the world journey (E2-c, 2026-11-12)
 

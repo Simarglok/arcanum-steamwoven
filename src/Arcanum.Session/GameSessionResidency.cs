@@ -126,7 +126,7 @@ public sealed partial class GameSessionOwner
 
     private static readonly IReadOnlySet<string> ResidentFields = new HashSet<string>(StringComparer.Ordinal)
     {
-        CompanionCellProperty, AwayMapProperty, SessionNpcPlacement.Property, OffProperty, DestroyedFieldProperty, ObjectConditionProperty, ItemDroppedProperty,
+        CompanionCellProperty, AwayMapProperty, SessionNpcPlacement.Property, OffProperty, DestroyedFieldProperty, ObjectConditionProperty, ItemDroppedProperty, SessionItemMove.Property,
     };
 
     /// <summary>
@@ -402,12 +402,17 @@ public sealed partial class GameSessionOwner
         {
             // A critical's drop from an NPC (ARC-COMBAT-009) and a spilled container's items (ARC-COMBAT-008) lie loose.
             if (holderRow.Kind == SessionResidentKind.Npc && Record(map, entity, ItemDroppedProperty) is { Map: var dropMap, Value: var drop and > 0 } && dropMap == map)
-                return new(entity, row.Kind, origin, new((int)((drop - 1) & 0xFFFFFF), (int)(((drop - 1) >> 24) & 0xFFFFFF)), null, off, destroyed);
+                return new(entity, row.Kind, origin, Moved(map, entity) ?? new((int)((drop - 1) & 0xFFFFFF), (int)(((drop - 1) >> 24) & 0xFFFFFF)), null, off, destroyed);
             if (holderRow.Kind == SessionResidentKind.Container && RecordedObject(_maps, map, of) is { Condition: SessionObjectCondition.Destroyed, Spill: { } spill })
-                return new(entity, row.Kind, origin, spill, null, off, destroyed);
+                return new(entity, row.Kind, origin, Moved(map, entity) ?? spill, null, off, destroyed);
         }
-        return new(entity, row.Kind, origin, row.Cell, row.Holder, off, destroyed);
+        // ARC-MAGIC-1230: a pushed item of the map's data lies where the push left it.
+        return new(entity, row.Kind, origin, row.Cell is not null ? Moved(map, entity) ?? row.Cell : null, row.Holder, off, destroyed);
     }
+
+    // The cell a push left a map-data item on (an item of this map: the record names it).
+    private CellCoord? Moved(SessionMapId map, string entity) =>
+        Record(map, entity, SessionItemMove.Property) is { } record && record.Map == map ? SessionItemMove.Decode(record.Value) : null;
 
     // An NPC of another map's data standing here: its companion cell is recorded on this map (the transfer clears it on the map it leaves).
     private SessionResident? Visitor(SessionMapId map, string entity, bool off, bool destroyed) =>

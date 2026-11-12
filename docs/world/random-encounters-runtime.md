@@ -1,6 +1,6 @@
 # Random encounters runtime
 
-Status: **Implemented bounded component (Simulation rules, Session event and state, World host, viewer hook).** Work item ARC-WORLD-1159 (issue #1159, plan E2-c), 2026-11-12. While the game clock runs, a Random Encounters event comes due every 300 to 700 game minutes. If the hero is on the outdoor start map and in no named area, it rolls for an encounter at the place of the party: the hero's tile, or the world-map marker while the party travels with the map open. A fired roll makes created critters on two rings next to that place, closes the open world map (a journey lands where the marker stood) or the open rest window, and keeps the world map's opener closed for four real seconds. Saved state: the use count of each table row that fired (schema 92, section `encounters`); the pending event is in the `events` section.
+Status: **Implemented bounded component (Simulation rules, Session event and state, World host, viewer hook).** Work item ARC-WORLD-1159 (issue #1159, plan E2-c), 2026-11-12. While the game clock runs, a Random Encounters event comes due every 300 to 700 game minutes. If the hero is on the outdoor start map and in no named area, it rolls for an encounter at the place of the party: the hero's tile, or the world-map marker while the party travels with the map open. A fired roll makes created critters on two rings next to that place, closes the open world map (a journey lands where the marker stood) or the open rest window, and keeps the world map's opener closed for four real seconds. Saved state: the use count of each table row that fired (schema 95, section `encounters`); the pending event is in the `events` section.
 
 Requirements: [FR-TRAVEL-003](../requirements/world-travel-runtime.md#fr-travel-003) (a random encounter depends on the route, area and time), [FR-TRAVEL-004](../requirements/world-travel-runtime.md#fr-travel-004) (sleep, the rest window's chance).
 
@@ -11,7 +11,7 @@ Every rule was read in the retail 1.0.7.4 `Arcanum.exe` ([ledger PO13–PO19](..
 | Layer | Holds |
 | --- | --- |
 | `Arcanum.Simulation.Travel` | `EncounterTables.Parse` (the three charts and the tables, the loader's quirks), `EncounterRules` (region lookup, terrain value, table index, eligibility, `Roll` over an injected draw, `Spot`) |
-| `Arcanum.Session` | The event kind `encounter.random`, `GameSessionOwner.FireRandomEncounter` (re-arm, roll, create critters, count the row), `SessionEncounterState` (schema 92), notices for the host (`TakeEncounterNotices`) |
+| `Arcanum.Session` | The event kind `encounter.random`, `GameSessionOwner.FireRandomEncounter` (re-arm, roll, create critters, count the row), `SessionEncounterState` (schema 95), notices for the host (`TakeEncounterNotices`) |
 | `Arcanum.World` | `AreaEncounterHost` (tables and the place of the roll, asked at each firing), `AreaWorldMap.ReadEncounterTables`, `AreaStartMapAreas.InTownMapSector`, `AreaEventWorld` forwarding |
 | `Arcanum.Data` | `WorldAreas.TerrainWordAt`: the terrain word of a sector of the start map's grid |
 | Viewer | `TerrainViewerAreaEncounters` (the place, the notices, closing the windows, the lock), stage `encounters` |

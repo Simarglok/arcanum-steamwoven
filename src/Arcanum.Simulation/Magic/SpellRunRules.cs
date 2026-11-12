@@ -37,6 +37,29 @@ public sealed record SpellRun(int Id, int Spell, SpellRunAction Action, SpellRun
     /// <summary>The spell flags the run's components set (+0x138, MT12–MT18); the anti-magic shell (0x800) among them lets the
     /// run go on although its source is shelled (MT9a-2).</summary>
     public int SetSpellFlags { get; init; }
+
+    /// <summary>ARC-MAGIC-1234 (TA1, TA14): the run's object list (+0x130, the context's run list): empty until an action with the list bit (<c>Tgt_List</c>) gathers while it is empty, which stores the gathered objects
+    /// (newest gathered first); every later action with the bit then targets the stored objects and gathers nothing. The summoned list (+0x134) is the host's, not stored here.</summary>
+    public SpellRunObjectList ObjectList { get; init; } = SpellRunObjectList.Empty;
+}
+
+/// <summary>The objects of a run's object list in the original's order (the head is the newest node); equal by contents, so a saved and restored run equals the live one.</summary>
+public sealed record SpellRunObjectList(IReadOnlyList<SpellRunObject> Items)
+{
+    public static SpellRunObjectList Empty { get; } = new(Array.Empty<SpellRunObject>());
+
+    public int Count => Items.Count;
+
+    public bool Holds(string id) => Items.Any(o => o.Id == id);
+
+    public bool Equals(SpellRunObjectList? other) => other is not null && Items.SequenceEqual(other.Items);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        foreach (var item in Items) hash.Add(item);
+        return hash.ToHashCode();
+    }
 }
 
 /// <summary>
@@ -446,7 +469,7 @@ public static class SpellRunRules
     /// <summary>
     /// ARC-WORLD-102: whether an object is under the influence of a spell (0x459380, the AI chooser's skip): an active run of
     /// <paramref name="spell"/> (by slot, 0x458CF0 and 0x458D90) whose target object is <paramref name="target"/>, or whose two object
-    /// lists (+0x130, +0x134) hold it; a null object is under none. The run's object lists are not modelled.
+    /// lists (+0x130, +0x134) hold it; a null object is under none. The run's own list (+0x130, ARC-MAGIC-1234) is read; the summoned list (+0x134) is the host's and is not asked here.
     /// </summary>
     [OriginalFunction(0x459380, OriginalFunctionScope.Partial)]
     [OriginalFunction(0x458D90, OriginalFunctionScope.Partial)]
@@ -454,7 +477,7 @@ public static class SpellRunRules
     public static bool UnderInfluence(SpellRunTable table, string? target, int spell)
     {
         ArgumentNullException.ThrowIfNull(table);
-        return target is not null && table.Runs.Any(r => (r.Flags & SpellRunFlags.Active) != 0 && r.Spell == spell && r.Target?.Id == target);
+        return target is not null && table.Runs.Any(r => (r.Flags & SpellRunFlags.Active) != 0 && r.Spell == spell && (r.Target?.Id == target || r.ObjectList.Holds(target)));
     }
 
     /// <summary>The maintenance slots a critter has (0x450B90): its intelligence / 4, toward zero.</summary>

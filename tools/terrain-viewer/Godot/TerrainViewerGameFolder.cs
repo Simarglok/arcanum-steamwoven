@@ -8,7 +8,7 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 // ARC-DEV-046: a start without command-line inputs (a player's build) reads the game folder from the launcher settings
-// (user://launcher_v1.json), or detects one at the fixed GOG candidates when none is stored or the stored one is no longer a game
+// (the `launcher` line of user://arcanum.cfg), or detects one at the fixed GOG candidates when none is stored or the stored one is no longer a game
 // folder (for this start only), adds the identity of a stored folder that had none, and opens map mode on the main map with the main
 // menu, as ./arcanum area does. The developer launcher always passes its inputs, so its runs never come here.
 // ARC-UI-014: the launcher screen shows first on the first run, when the stored folder is gone, when the installation changed, with
@@ -17,9 +17,8 @@ namespace Arcanum.TerrainViewer;
 // options window's Rules line writes it there.
 public partial class TerrainViewerApp
 {
-    /// <summary>Isolates a test's launcher settings file; an automated run without it has no file at all.</summary>
+    /// <summary>Names a test's settings file (<c>arcanum.cfg</c> format, ARC-UI-1130); an automated run without it has no file at all.</summary>
     public const string LauncherSettingsTestVariable = "LAUNCHER_SETTINGS_TEST_PATH";
-    public const string LauncherSettingsUserPath = "user://" + LauncherSettingsFile.FileName;
     /// <summary>ARC-UI-014: how long a start that would skip the launcher screen waits for Shift (an ordinary run only).</summary>
     private const ulong LauncherShiftWaitMsec = 750;
 
@@ -48,7 +47,7 @@ public partial class TerrainViewerApp
     {
         if (_launcherPathResolved) return _launcherPath;
         var test = OS.GetEnvironment(LauncherSettingsTestVariable);
-        _launcherPath = !string.IsNullOrWhiteSpace(test) ? test : ViewerAutomatedStorage.Automated ? null : ProjectSettings.GlobalizePath(LauncherSettingsUserPath);
+        _launcherPath = !string.IsNullOrWhiteSpace(test) ? test : ViewerAutomatedStorage.Automated ? null : ViewerSettingsFile.UserFile();
         _launcherPathResolved = true;
         return _launcherPath;
     }

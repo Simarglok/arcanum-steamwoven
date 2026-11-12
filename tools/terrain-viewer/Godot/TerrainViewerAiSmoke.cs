@@ -295,8 +295,10 @@ public partial class TerrainViewerApp
             var knockback = RunAreaKnockbackSmoke(session, entity, () => TickAreaClock(hostMs += 50));
             // ARC-DEV-287: the hero is pushed too (goal 43 has no test of the pushed object's kind).
             var heroPush = RunAreaHeroKnockbackSmoke(session, () => TickAreaClock(hostMs += 50));
+            // ARC-MAGIC-1230: so is an item lying on the ground (Unseen Force, UO5).
+            var itemPush = RunAreaItemKnockbackSmoke(session, () => TickAreaClock(hostMs += 50));
             GD.Print("ARC-WORLD-092 native-smoke ai PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                map.RuntimeMap, Knockback = knockback, HeroPush = heroPush, Target = target.Row.PrototypeNumber, MaxHitPoints = LifeRules.MaxHitPoints(target.Build.Combat!.Facts, 0),
+                map.RuntimeMap, Knockback = knockback, HeroPush = heroPush, ItemPush = itemPush, Target = target.Row.PrototypeNumber, MaxHitPoints = LifeRules.MaxHitPoints(target.Build.Combat!.Facts, 0),
                 Frames = frames, Steps = host.Movers.Of(entity) is not null, StepFrames = stepFrames.Count, Hit = trace!.Hit,
                 AttackFrames = _npcAttackFrames.Count - attackFrames, ArmedStands = _npcArmedStandDraws - armedStands, Shown = $"{shown.Weapon}/{shown.Shield}", StruckBack = struckBack, Fidgets = _aiFidgets - fidgets, Skills = _aiSkills - skills,
                 HeroDamage = session.QueryHeroLife()!.Record.State.HitPointDamage - heroLife,
@@ -555,6 +557,11 @@ public partial class TerrainViewerApp
             // which flies, is drawn and arrives, its arrival beginning the run.
             var missileSpells = Enumerable.Range(0, Arcanum.Simulation.Magic.SpellBookRules.Spells).Where(s => SpellMissileArt(s) is not null).ToArray();
             Require(missileSpells.Length > 0, "the eye candy table lists spells with a missile");
+            // ARC-MAGIC-1232 (DW2): the first missile spell, Disarm (0), now takes the hero's wielded weapon (a drop that draws from the session generator and leaves the weapon on the ground), which
+            // would move the stage's later casts and saves. The hero puts its weapon away first, so Disarm finds none (the drop itself is the unit tests'); no weapon, no change from before.
+            if (session.QueryEquipment().Worn.Any(item => item.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon))
+                Require(session.Unequip(session.Version, Arcanum.Simulation.Equipment.EquipmentSlot.Weapon, _ => SessionInsertVerdict.Accepted).Disposition == GameSessionDisposition.Changed,
+                    "the hero put its weapon away before the NPC's Disarm");
             var missiles = _aiMissiles; var arrivals = _aiMissileArrivals;
             int? missileSpell = null; var missileRun = -1;
             foreach (var candidate in missileSpells)

@@ -129,6 +129,20 @@ V1 of the [function audit plan](../research/function-audit-plan.md#5-recommendat
 
 **Groups G and I (wave 3).** The slices above took the census rows of an address band. The Ghidra text export of ARC-DEV-377 and ARC-DEV-379 lists 6,717 functions with a C file and 139 thunks where the census lists 5,815, so wave 3 gives a state to the 1,042 export functions that are not census starts: **group G** is every such function in 0x470000-0x49FFFF (the census has no row of 0x47 and 0x48 and 30 of 0x49: the giant prototype fill switch, split into case blocks) and every other such function in 0x400000-0x4FFFFF; **group I** is every such function in 0x500000-0x59FFFF. The 44 census starts that have no C file (43 thunks, one inside another function) are a finding of the ledger section, not a group. The reading was docs-only, so its record is the [CSV](triage/groups-g-i.csv) (state, class, callers and pointer holders per address) and the ledger section; the 1,011 not relevant functions stay there and have no registry row. ARC-DEV-389 then gave the 31 functions with a rule state their registry rows (18 `not implemented`, 13 `full` or `partial` with an `[OriginalFunction]` mark); `FunctionRegistryTests` keeps the CSV, the registry and the marks equal.
 
+## Partial rows by risk
+
+V2 of the [function audit plan](../research/function-audit-plan.md#5-recommendation) ranks a domain's `partial` rows by the state they
+write, how often the game reaches them and whether a smoke stage exercises them, then reads the top of the list a second time and
+compares it with the code. Each domain slice keeps its ranking in `triage/v2-<domain>.csv` (columns `address`, `name`, `score`, `writes`,
+`reach`, `smoke`, `slice`, `row`; score = 2 × writes + reach + smoke) and its readings in a ledger section; a difference that writes
+other state than the original becomes an issue.
+
+| Slice | Rows | Ranking | Ledger section |
+| --- | --- | --- | --- |
+| Items 1 (ARC-RES-1104) | 83 ranked, 17 read: 6 from F1 to F2, reasons made exact, gaps #1283 (no-drop on transfers), #1284 (NPC re-wield flag) and #1288 (NPC look-for bits after a drop) | [`triage/v2-items.csv`](triage/v2-items.csv) | [partial-rows-by-risk](../research/ledger/items.md#partial-rows-by-risk-arc-res-1104) |
+| Items 2 (ARC-RES-1104) | the other 66 read: 20 from F1 to F2, reasons made exact, gaps #1299 (body decay's destroyed items), #1300 (restock delay, owner decision), #1301 (a broken generate-once container) and #1306 (items sold into a broken container) | [`triage/v2-items.csv`](triage/v2-items.csv) (slice 2) | [partial-rows-by-risk-items-slice-2](../research/ledger/items.md#partial-rows-by-risk-items-slice-2-arc-res-1104) |
+| AI 1 (ARC-RES-1104) | 92 ranked, the 21 scored 6 read: 11 from F1 to F2, reasons made exact, gaps #1312 (a waiting companion's death), #1313 (wander goals), #1314 (route state not saved, closed by ARC-AI-1314), #1315 (please move before an attack), #1316 (one change-of-place slot, owner decision) and #1317 (destroyed critters in the enemy list) | [`triage/v2-ai.csv`](triage/v2-ai.csv) | [partial-rows-by-risk-ai-slice-1](../research/ledger/npc-ai.md#partial-rows-by-risk-ai-slice-1-arc-res-1104) |
+
 ## Address-named methods
 
 ARC-DEV-1106 (V4 of the [function audit plan](../research/function-audit-plan.md#5-recommendation)). A method that names an

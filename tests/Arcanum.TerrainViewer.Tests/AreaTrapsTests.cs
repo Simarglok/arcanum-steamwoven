@@ -4,6 +4,7 @@ using Arcanum.Data.Content;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Traps;
 using Arcanum.TerrainViewer.Core;
@@ -478,6 +479,87 @@ public sealed class AreaTrapsTests
             else Assert.AreEqual(0, effects.Calls.Count);
             StringAssert.Contains(disarm.Describe(), disarm.Outcome switch { TrapDisarm.Removed => "disarmed", TrapDisarm.RemovedWithDevice => "disarmed", TrapDisarm.Failed => "failed", _ => "goes off" });
             Assert.IsNull(new AreaUseScriptHost(session, 1, [], [], null).GiveHeroPrototypeItem(6047, insert), "no item data: no device");
+        });
+    }
+
+    // ARC-MAGIC-1189 (ledger TT10, SP2): the walk check of an NPC's or a companion's step. A master NPC's sheet; the trap's tile is the NPC's east neighbour.
+    private static (SessionNpcAdvancement Loaded, Arcanum.Simulation.Character.AdvancementModifiers Modifiers)? MasterSheet(string id)
+    {
+        int[] basic = new int[12];
+        basic[(int)Arcanum.Simulation.Skills.Skill.SpotTrap] = 20 | (int)Arcanum.Simulation.Combat.SkillTraining.Master << 6;
+        var sheet = new Arcanum.Simulation.Character.AdvancementSheet(Arcanum.Simulation.Character.CharacterRace.Human, false, [8, 8, 8, 8, 20, 20, 8, 8], 0, 0, 1, 0,
+            [.. basic], [.. new int[4]], [.. new int[16]], [.. new int[8]], 0, 0, 0, 0);
+        return (new SessionNpcAdvancement(id, sheet, 0), Arcanum.Simulation.Character.AdvancementModifiers.None);
+    }
+
+    [TestMethod]
+    public void A_companion_that_spots_a_trap_on_its_next_tile_stops_and_marks_it_for_the_player()
+    {
+        WithContent(content =>
+        {
+            AreaTraps? traps = null;
+            var effects = new Effects();
+            var scene = AreaAiRouteTests.Open(AreaAiRouteTests.Npc(0, [], 0, (10, 20), (10, 20)), companion: true, led: true, traps: () => traps, sheet: MasterSheet);
+            var plate = Row(1, TrapObject, 30001, x: 11, objectFlags: TrapRules.DontDrawFlag);
+            AreaUseScriptHost host;
+            (host, traps) = Hosts(scene.Session, content, () => effects.Side, null, plate);
+            var east = new CellCoord(11, 20);
+            var blocked = false;
+            for (var attempt = 0; attempt < 60 && !blocked; attempt++)
+            {
+                var draws = scene.Session.QueryRandom().Draws;
+                blocked = scene.Host.StepBlocked(scene.Npc, east, false) == AiStepBlock.CannotStart;
+                if (!blocked) Assert.IsTrue(scene.Session.QueryRandom().Draws >= draws + 2, "a missed attempt is one spot trap roll of the NPC's own");
+            }
+            Assert.IsTrue(blocked, "a master with Perception 20 spots the trap within 60 attempts");
+            Assert.IsTrue(host.TrapState(plate)!.Value.Spotted, "a companion marks the trap: the player knows it");
+            Assert.AreEqual(AiStepBlock.Clear, scene.Host.StepBlocked(scene.Npc, east, false), "a known trap is skipped by the walk check");
+            StringAssert.Contains(scene.Host.TraceOf(scene.Npc)!.Step!, "spotted a trap");
+        });
+    }
+
+    [TestMethod]
+    public void A_free_npc_knows_every_trap_the_pc_did_not_place_and_rolls_without_marking_for_one_the_pc_placed()
+    {
+        WithContent(content =>
+        {
+            AreaTraps? traps = null;
+            var effects = new Effects();
+            var scene = AreaAiRouteTests.Open(AreaAiRouteTests.Npc(0, [], 0, (10, 20), (10, 20)), traps: () => traps, sheet: MasterSheet);
+            var plain = Row(1, TrapObject, 30001, x: 11, objectFlags: TrapRules.DontDrawFlag);
+            var placed = Row(2, TrapObject, 30001, x: 9, objectFlags: TrapRules.DontDrawFlag | TrapRules.PlacedByPcFlag);
+            AreaUseScriptHost host;
+            (host, traps) = Hosts(scene.Session, content, () => effects.Side, null, plain, placed);
+            var draws = scene.Session.QueryRandom().Draws;
+            Assert.AreEqual(AiStepBlock.Clear, scene.Host.StepBlocked(scene.Npc, new(11, 20), false), "it knows the plain trap: no roll");
+            Assert.AreEqual(draws, scene.Session.QueryRandom().Draws);
+            var spotted = false;
+            for (var attempt = 0; attempt < 60 && !spotted; attempt++)
+            {
+                var before = scene.Session.QueryRandom().Draws;
+                spotted = scene.Host.StepBlocked(scene.Npc, new(9, 20), false) == AiStepBlock.CannotStart;
+                Assert.IsTrue(scene.Session.QueryRandom().Draws > before, "the trap the PC placed is unknown to it: one roll each attempt");
+            }
+            Assert.IsTrue(spotted, "a master spots it within 60 attempts, and the step is blocked");
+            Assert.IsFalse(host.TrapState(placed)!.Value.PlacedByPc && host.TrapState(placed)!.Value.Spotted, "a free NPC marks nothing (TT4)");
+        });
+    }
+
+    [TestMethod]
+    public void Without_a_trap_host_or_a_sheet_an_npc_walks_as_before()
+    {
+        WithContent(content =>
+        {
+            var effects = new Effects();
+            var plate = Row(1, TrapObject, 30001, x: 11, objectFlags: TrapRules.DontDrawFlag);
+            var noHost = AreaAiRouteTests.Open(AreaAiRouteTests.Npc(0, [], 0, (10, 20), (10, 20)), sheet: MasterSheet);
+            Assert.AreEqual(AiStepBlock.Clear, noHost.Host.StepBlocked(noHost.Npc, new(11, 20), false));
+            AreaTraps? traps = null;
+            var noSheet = AreaAiRouteTests.Open(AreaAiRouteTests.Npc(0, [], 0, (10, 20), (10, 20)), companion: true, led: true, traps: () => traps);
+            (_, traps) = Hosts(noSheet.Session, content, () => effects.Side, null, plate);
+            var draws = noSheet.Session.QueryRandom().Draws;
+            Assert.AreEqual(AiStepBlock.Clear, noSheet.Host.StepBlocked(noSheet.Npc, new(11, 20), false));
+            Assert.AreEqual(draws, noSheet.Session.QueryRandom().Draws, "an NPC with no sheet has no skill to roll");
         });
     }
 }

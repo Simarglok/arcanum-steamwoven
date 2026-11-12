@@ -162,7 +162,7 @@ public sealed class SessionCritterCombat
     /// ARC-MAGIC-027 (MA-2): the same NPC under an effect list (the session's, else the loaded one: <see cref="GameSessionOwner.QueryNpcEffects"/>): the stat changes of the entries are
     /// applied to its stats (so its speed, strength, armour class adjustment and the rest read through them: the turn-based action points, the attack pause, the combat values) and
     /// its resistance changes to the effective resistances (0x43D6D0) it defends with. The numbers of the loaded list the host gave no rule for have none. The skills of a levelled
-    /// sheet and the NPC's life facts (maximum hit points under its strength, the normal resistance a poison tick meets) are not re-read from the stats and resistances: ledger EF1 consequences stay with the life record.
+    /// sheet and the NPC's life facts (maximum hit points under its strength, the normal resistance a poison tick meets) are not re-read here: the session lays its own list over the life facts (ARC-WORLD-1144, ARC-UI-1145), ledger EF1 consequences stay with the life record.
     /// </summary>
     internal SessionCritterCombat WithEffects(IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
     {
@@ -183,6 +183,15 @@ public sealed class SessionCritterCombat
     /// it was handed out with (<see cref="WithEffects"/>), both modes (<see cref="SpellResistanceRules.ResistanceUnderEffects"/>). The stored value itself for an NPC with no such change.
     /// </summary>
     public int SaveMagicResistance(int stored) => SpellResistanceRules.ResistanceUnderEffects(stored, _effectResistances.Magic, Monstrous);
+
+    /// <summary>
+    /// ARC-UI-1145 (ledger CHW24): the five resistance lines of the NPC's character sheet (the resistance function as the sheet reads it): the stored resistances, the poison bonus of <paramref name="constitution"/> (the sheet's own effective constitution, so the lines agree with the Constitution row)
+    /// and the changes of the effect list it was handed out with (<see cref="WithEffects"/>), clamped like the combat's resistances; the sheet reads no worn armour for an NPC. The Magick line is
+    /// <paramref name="storedMagic"/> (the fifth stored resistance) under the <c>resistmagic</c> changes (the sheet shows them; the save reads the stored value, <see cref="SaveMagicResistance"/>).
+    /// </summary>
+    public (DamageResistances Damage, int Magic) SheetResistances(int constitution, int storedMagic) =>
+        (CombatantRules.Resistances(_storedResistances, EquipmentResistances.None, constitution, Monstrous, _effectResistances),
+            CombatantRules.MagicResistance(storedMagic, 0, Monstrous, _effectResistances.Magic));
 
     /// <summary>
     /// Builds the values of the NPC <paramref name="entity"/> from its fields and the fields of the items it carries
@@ -293,6 +302,9 @@ public sealed class SessionCritterCombat
             HealRate = Effective(plain, CharacterStat.HealRate),
             PoisonRecovery = Effective(plain, CharacterStat.PoisonRecovery),
             NormalResistance = resistances.Normal,
+            // ARC-UI-1145: the sum before the effects, so a list the session holds for the NPC reaches what its poison tick meets (WithCritterEffects).
+            NormalResistanceBase = StoredResistances(fields.Object.Resistances).Normal + equipment.Resistances.Normal,
+            NormalResistanceUnclamped = monstrous,
             Traits = traits,
             Race = race,
         };
@@ -431,6 +443,36 @@ public sealed class SessionCritterCombat
     }
 
     /// <summary>
+    /// ARC-UI-1121 (B30, ledger IW25, IW29, IW41–IW43): the numbers the loot window's doll view prints for this NPC and the overlay it draws: the displayed damage rating
+    /// (0x464630, <see cref="DollRatings.Damage"/>: what <see cref="AttackValues"/> strikes with and the skill's effectiveness without a target), the displayed armour
+    /// rating (0x464700, <see cref="DollRatings.Armour"/>) and whether the weapon in the weapon slot needs more strength than the NPC has. The armour rating reads
+    /// the display form of the armour class and resistances (0x43D880 and 0x43D6D0 with their identified-only argument): a worn magickal item that is not
+    /// identified (<paramref name="identified"/> by wear slot, 0x464370) gives none of its magic adjustments. <paramref name="storedMagicResistance"/> is the
+    /// NPC's stored magic resistance (the fifth stored resistance); <paramref name="wornNow"/> as in <see cref="AttackValues"/>.
+    /// </summary>
+    public SessionDollRatings DollValues(LifeStatus status, LifeState state, CombatAnomalyProfile profile, int storedMagicResistance,
+        Func<EquipmentSlot, bool> identified, IEnumerable<EquipmentSlot>? wornNow = null)
+    {
+        ArgumentNullException.ThrowIfNull(identified);
+        var values = AttackValues(status, state, profile, wornNow);
+        var worn = wornNow is null ? _worn : _worn.Where(pair => wornNow.Contains(pair.Key)).ToDictionary(pair => pair.Key, pair => pair.Value);
+        var snapshot = _stats.Query(StatContext(state)).Snapshot!;
+        var aptitude = Math.Clamp(snapshot.GetEffective(CharacterStat.MagickTechAptitude), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);
+        var effectiveness = AttackRules.AttackEffectiveness(values.Skill, values.SkillLevel, values.Combatant.ExtraordinaryIntelligence, isPc: false,
+            GameDifficulty.Normal, targetMagneticInversion: false);
+        var damage = DollRatings.Damage(values.Weapon, values.Combatant.DamageBonus, values.Skill, effectiveness);
+        // A magickal item that is not identified shows none of its magic adjustments (an item of a neutral or technological complexity always shows them).
+        EquipmentItem Shown(EquipmentItem item, bool known) => known || item.MagickTechComplexity <= 0 || item.Armor is not { } armor ? item
+            : item with { Armor = armor with { MagicAcAdjustment = 0, MagicResistances = EquipmentResistances.None } };
+        var equipment = EquipmentRules.Evaluate(worn.ToDictionary(pair => pair.Key, pair => Shown(pair.Value, identified(pair.Key))), aptitude, SkillTraining.None);
+        var armorClass = AttackRules.ArmorClass(_baseArmorClass, equipment.ArmorClassAdjustment, snapshot.GetEffective(CharacterStat.AcAdjustment), value => value, profile);
+        var resistances = CombatantRules.Resistances(_storedResistances, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), Monstrous, _effectResistances);
+        var magic = CombatantRules.MagicResistance(storedMagicResistance, equipment.Resistances.Magic, Monstrous, _effectResistances.Magic);
+        var armour = DollRatings.Armour(armorClass, resistances.Normal, resistances.Fire, resistances.Electrical, resistances.Poison, magic);
+        return new(damage, armour, worn.ContainsKey(EquipmentSlot.Weapon) && DollRatings.TooHeavy(values.Weapon.MinimumStrength, values.Combatant.Strength));
+    }
+
+    /// <summary>
     /// ARC-WORLD-113: the level and training of the NPC's combat <paramref name="skill"/> in this life state, as
     /// <see cref="AttackValues"/> reads its weapon's skill: the stored basic skill (melee, bow, throwing; melee 20 and the tiers for a
     /// monstrous critter) under its effective dexterity, firearms from its stored tech skill, or the sheet it was levelled to. The
@@ -506,6 +548,12 @@ public sealed class SessionCritterCombat
 /// </summary>
 public sealed record SessionNpcAttackValues(Combatant Combatant, CombatWeapon Weapon, CombatSkill Skill, int SkillLevel, SkillTraining Training,
     int WeaponSpeed, int AttackCost, int Speed, int Range, bool Supported);
+
+/// <summary>
+/// ARC-UI-1121: the two numbers a doll view prints (the displayed damage rating, 0x464630, and armour rating, 0x464700) and whether the weapon in its
+/// weapon slot is too heavy for its wearer (the slot is filled, 0x465E90), as <see cref="SessionCritterCombat.DollValues"/> reads them.
+/// </summary>
+public sealed record SessionDollRatings(int Damage, int Armour, bool WeaponTooHeavy);
 
 /// <summary>
 /// What the hero attacks with (<see cref="GameSessionOwner.QueryHeroAttack"/>): its <see cref="Combatant"/> under its life state,

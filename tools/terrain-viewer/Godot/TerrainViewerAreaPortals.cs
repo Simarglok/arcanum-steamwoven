@@ -32,8 +32,8 @@ public partial class TerrainViewerApp
     private int _retiredDoorsAge;
     private AreaGoalStepRouter? _goalStepRouter;
     // The frame step's goal-step host: the doors' runs to the door host, every other run to the AI host's steps.
-    // ARC-DEV-290 (MIG14 S9a): the hero's runs a load restored are stepped before anything asked for the loaded session's hero host, so the router builds it.
-    private AreaGoalStepRouter GoalStepRouter => _goalStepRouter ??= new(() => _areaDoors, AiGoalSteps, StepMissileHost, StepProjectileHost, () => ShownKnockbackHost, () => ShownSceneryHost, () => ShownEyeCandyHost, () => ShownHeroRunsHost ?? (_areaSession is not null ? HeroRunsHost() : null));
+    // ARC-DEV-290 (MIG14 S9a): the hero's runs a load restored are stepped before anything asked for the loaded session's hero host, so the router builds it. ARC-MAGIC-1280: so is the overlay host.
+    private AreaGoalStepRouter GoalStepRouter => _goalStepRouter ??= new(() => _areaDoors, AiGoalSteps, StepMissileHost, StepProjectileHost, () => ShownKnockbackHost, () => ShownSceneryHost, () => ShownEyeCandyHost ?? RestoredEyeCandyHost(), () => ShownHeroRunsHost ?? (_areaSession is not null ? HeroRunsHost() : null));
     private Dictionary<AreaObjectKey, AreaDrawCommand> _portalBodies = [];
     // ARC-DEV-185 (MIG13 S12e): a lock pick is the hero's skill goal 33 → 67; the attempt it asked for waits here for the frame's next safe point.
     private (string Portal, string Item)? _lockpickPending;
@@ -138,7 +138,9 @@ public partial class TerrainViewerApp
         if (_areaPortals is not { } portals || _areaSession is null || _worldActor.Session is not AreaGridSession session
             || AreaObjectAtScreen(screen) is not { } hit || !portals.TryGet(hit, out var portal))
         {
-            if (pick is not null) { _portalNotice = "pick a lock cancelled: not a door or window"; RefreshAreaStatus(); }
+            // ARC-UI-1127 (E8-g): armed lockpicks on a container pick its lock.
+            if (pick is not null && TryAreaContainerPick(screen, pick)) return true;
+            if (pick is not null) { _portalNotice = "pick a lock cancelled: not a door, window or container"; RefreshAreaStatus(); }
             return false;
         }
         CancelTalkApproach("a use click replaced it"); CancelInventoryApproach("a use click replaced it"); CancelAreaUseApproach("a use click replaced it");
@@ -204,10 +206,10 @@ public partial class TerrainViewerApp
         // (Only a use run on a door: a walk to a chest or a scripted object goes on under a press that is no door's.)
         var ended = ShownHeroRunsHost is { UseTarget: { } used } host && _areaDoors?.PortalOf(used) is not null && host.EndUse(why);
         // ARC-DEV-185: so is a lock pick's walk (the skill goal 33 on a door), and a pick not yet made.
-        if (ShownHeroRunsHost is { SkillRun.Bottom.Target: { } skillTarget } skills && _areaDoors?.PortalOf(skillTarget) is not null && skills.EndSkill(why)) ended = true;
+        if (ShownHeroRunsHost is { SkillRun.Bottom.Target: { } skillTarget } skills && (_areaDoors?.PortalOf(skillTarget) is not null || IsInventoryTarget(skillTarget)) && skills.EndSkill(why)) ended = true;
         if (_lockpickPending is not null) { _lockpickPending = null; ended = true; }
         _lockpickTrying = false;
-        if (ended) _portalNotice = "walk to the door cancelled: " + why;
+        if (ended) _portalNotice = "walk to the door or container cancelled: " + why;
     }
 
     // True when no hero skill run is left on the table (a replaced session counts as ended).
@@ -263,7 +265,8 @@ public partial class TerrainViewerApp
             _lockpickPending = null; _lockpickTrying = false;
             if (!PortalUseAdmitted(out var why)) { _portalNotice = "pick a lock dropped: " + why; RefreshAreaStatus(); }
             else if (_areaDoors?.PortalOf(asked.Portal) is { } door) PickPortal(door, asked.Item);
-            else { _portalNotice = "pick a lock dropped: the door is gone"; RefreshAreaStatus(); }
+            else if (ContainerOfSkillTarget(asked.Portal) is { } container) PickContainer(container, asked.Item);
+            else { _portalNotice = "pick a lock dropped: the door or container is gone"; RefreshAreaStatus(); }
         }
         else if (_lockpickTrying && LockpickRunEnded())
         {

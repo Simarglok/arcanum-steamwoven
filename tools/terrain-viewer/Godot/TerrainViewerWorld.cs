@@ -885,7 +885,7 @@ public partial class TerrainViewerApp
         if (TryAreaAttack(screen, alt, shift)) return;
         CancelAreaAttack("another click replaced it");
         // ARC-SCRIPT-005: a press on a dialog NPC talks (or walks within reach first), under the same guards.
-        if (TryAreaTalk(screen)) { SetObjectApproachGait(); return; }
+        if (TryAreaTalk(screen, shift)) { SetObjectApproachGait(); return; }
         // ARC-WORLD-009: a press on a cave trigger sprite is a use action, under the same guards as a ground click.
         if (TryAreaUse(screen)) { SetObjectApproachGait(); return; }
         // ARC-WORLD-051: a press on a door or window uses it (walking within use range first).
@@ -1052,7 +1052,7 @@ public partial class TerrainViewerApp
             // ARC-INPUT-004: Ctrl, Alt or Command with a character letter (A C F I L R S T W) is no key in the original:
             // no window opens and nothing is reported as reserved.
             // ARC-WORLD-011: F7/F8 are quick save/load while an AREA game session exists.
-            if (!OriginalWorldKeyboard.CharacterKeySilenced(decision.Key, modifiers) && !RouteQuickKey(decision) && !RouteGameMenuKey(decision) && !RouteOrderKey(decision, modifiers) && !RouteInventoryKey(decision) && !RouteSheetKey(decision) && !RouteLogbookKey(decision) && !RouteSpellKey(decision) && !RouteHotkeyKey(decision, modifiers) && !RouteSchematicsKey(decision) && !RouteSleepKey(decision) && !RouteWorldMapKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && !RouteTurnBasedKey(decision) && !RouteCombatModeKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
+            if (!OriginalWorldKeyboard.CharacterKeySilenced(decision.Key, modifiers) && !RouteQuickKey(decision) && !RouteGameMenuKey(decision) && !RouteOrderKey(decision, modifiers) && !RouteHomeKey(decision) && !RouteInventoryKey(decision) && !RouteSheetKey(decision) && !RouteLogbookKey(decision) && !RouteSpellKey(decision) && !RouteSkillKey(decision) && !RouteHotkeyKey(decision, modifiers) && !RouteSchematicsKey(decision) && !RouteSleepKey(decision) && !RouteWorldMapKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && !RouteTurnBasedKey(decision) && !RouteCombatModeKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
             {
                 _worldLastReserved = $"{routedKey} = {decision.OriginalAction} (original; NOT IMPLEMENTED)";
                 _hud?.SetNotice($"Reserved: {routedKey} = {decision.OriginalAction} (NOT IMPLEMENTED)");
@@ -1116,7 +1116,8 @@ public partial class TerrainViewerApp
         if (!SelfTestBootstrap && !_nativeSmoke) throw new InvalidOperationException("Simulation requires an explicit test launch.");
         // The script clock is independent of camera delta, including zero,
         // invalid and huge zoom deltas. Exact motion tests supply literal times.
-        _worldTestTime = observationTime ?? new SimulationTime((_worldTestTime ?? _worldActor.Session?.State.Time ?? WorldTime).Value + ExactScalar.Create(1, 10));
+        // ARC-DEV-1251: never earlier than what the queue has observed (a quarantine at the wall clock before the first frame).
+        _worldTestTime = observationTime ?? SelfTestFrameClock.Next(_worldTestTime ?? _worldActor.Session?.State.Time ?? WorldTime, _worldGridInput.Newest);
         WorldObservation(() => ApplyWorldObservedFrame(delta, complete, keyboard, controllers, "SIMULATION complete-level frame (not physical evidence)"));
     }
     private RawInputFrame WorldKeyboardRouting(RawInputFrame raw)

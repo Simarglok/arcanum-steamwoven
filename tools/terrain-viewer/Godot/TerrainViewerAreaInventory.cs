@@ -1,6 +1,7 @@
 using Arcanum.Data.Area;
 using Arcanum.Input;
 using Arcanum.Session;
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
@@ -253,26 +254,28 @@ public partial class TerrainViewerApp
     private void OpenInventory(string? holder = null)
     {
         var mode = InventoryModeOf(holder);
-        if (!InventoryActive || InventoryOpen || !WindowCanOpen(mode)) { _containerLootSession = null; return; }
+        if (!InventoryActive || InventoryOpen || !WindowCanOpen(mode)) { _containerLootSession = null; _contentsHolder = null; return; }
         if (holder is null || SessionJunkPile.Number(holder) is not null) _containerLootSession = null;
         if (_inventoryPanel is null)
         {
             _inventoryPanel = new AreaInventoryPanel(); AddChild(_inventoryPanel);
             _inventoryPanel.CloseRequested += EndInventory;
-            _inventoryPanel.TakeRequested += TakeFromBody;
-            _inventoryPanel.TakeAllRequested += TakeAllFromBody;
+            _inventoryPanel.TakeRequested += item => { if (!ContentsWindow) TakeFromBody(item); };
+            _inventoryPanel.TakeAllRequested += () => { if (!ContentsWindow) TakeAllFromBody(); };
             _inventoryPanel.ArrangeRequested += ArrangeFromWindow;
             _inventoryPanel.SoundRequested += id => PlayInterfaceSound(id, "inventory arrange button");
-            _inventoryPanel.PlantRequested += item => PickPocketAttempt(Arcanum.Simulation.Skills.PickPocketDirection.Plant, item);
-            _inventoryPanel.UseRequested += UseItemFromWindow;
+            _inventoryPanel.PlantRequested += item => { if (!ContentsWindow) PickPocketAttempt(Arcanum.Simulation.Skills.PickPocketDirection.Plant, item); };
+            _inventoryPanel.UseRequested += item => { if (!ContentsWindow) UseItemFromWindow(item); };
+            _inventoryPanel.ItemPicked += InventoryItemPicked;
+            _inventoryPanel.PickCancelled += () => { if (_itemAiming is not null) CancelArmedLockpicks("right click"); else CancelSpellTargeting("right click"); };
             _inventoryPanel.PointerStill += InventoryPointerStill;
-            _inventoryPanel.ReadRequested += ReadItem;
-            _inventoryPanel.PickRequested += ArmLockpick;
-            _inventoryPanel.RepairRequested += RepairItem;
-            _inventoryPanel.WearRequested += WearItem;
-            _inventoryPanel.TakeOffRequested += TakeOffItem;
-            _inventoryPanel.DropRequested += DropItem;
-            _inventoryPanel.MapDropRequested += held => LiftToGameCursor(held.Entity, "round-view");
+            _inventoryPanel.ReadRequested += item => { if (!ContentsWindow) ReadItem(item); };
+            _inventoryPanel.PickRequested += item => { if (!ContentsWindow) ArmLockpick(item); };
+            _inventoryPanel.RepairRequested += item => { if (!ContentsWindow) RepairItem(item); };
+            _inventoryPanel.WearRequested += (item, slot) => { if (!ContentsWindow) WearItem(item, slot); };
+            _inventoryPanel.TakeOffRequested += slot => { if (!ContentsWindow) TakeOffItem(slot); };
+            _inventoryPanel.DropRequested += drop => { if (!ContentsWindow) DropItem(drop); };
+            _inventoryPanel.MapDropRequested += held => { if (!ContentsWindow) LiftToGameCursor(held.Entity, "round-view"); };
             _inventoryPanel.QuantityAccepted += AcceptQuantity;
             _inventoryPanel.QuantityCancelled += CancelQuantity;
             _inventoryPanel.HolderView = InventoryHolderView;
@@ -290,7 +293,7 @@ public partial class TerrainViewerApp
         var view = InventoryView(holder);
         if (!OpenWindowMode(mode, () => _inventoryPanel!.Open(view), () => _inventoryPanel!.CloseView()))
         {
-            _junkPileSession = null;
+            _junkPileSession = null; _contentsHolder = null;
             return;
         }
         // ARC-WORLD-096: a loot open schedules the looted holder's restock (RK2; a junk pile is no seed holder and has none).
@@ -319,32 +322,47 @@ public partial class TerrainViewerApp
 
     private AreaInventoryView InventoryView(string? holder) => _inventoryHost!.View(_areaSession!, _hoverNames?.Catalog, CurrentAreaMap, holder, _areaKitHealing, _areaKitLockpicks, _areaKitDurability, _areaKitWear, _areaKitUse)
         // ARC-SKILLS-010: the window on the NPC whose pocket the hero picks is in steal mode.
-        with { Steal = holder is not null && holder == _pickPocketVictim };
+        // ARC-UI-1121 (B30, IW29): the body's doll view prints the damage and armour ratings the combat host reads for it and fills a too heavy weapon's slot.
+        with { Steal = holder is not null && holder == _pickPocketVictim,
+               // ARC-RES-1327 (XR3, XR16): the container window See Contents opened (window mode 4) moves nothing.
+               Contents = holder is not null && holder == _contentsHolder,
+               BodyRatings = holder is not null && _combatHost is { } combat && combat.Covers(CurrentAreaMap) ? combat.DollRatings(_areaSession!, holder) : null,
+               // ARC-UI-1267 (IW25): the hero's own window prints its damage and armour ratings and fills a too heavy weapon's slot.
+               HeroRatings = holder is null ? _combatHost?.HeroDollRatings(_areaSession!) : null };
 
-    /// <summary>ARC-SKILLS-005: the hero uses a healing item on itself (the inventory use passes the user as the target, as the
-    /// original's inventory window does). ARC-UI-025: the item use (0x462CC0) reaches it as the heal skill with the item and has charged
-    /// the use's action points already, so the heal charges none (<paramref name="charged"/>).</summary>
-    private void HealSelf(string item, bool charged = false)
+    // The last heal's message, for the item cursor's notice (the cursor reads it after the use returns; no window is open then).
+    private string? _healMessage;
+    /// <summary>The last heal's target and the session's answer, for the smoke.</summary>
+    internal (string Target, SessionHealResult Result)? LastHealForSelfTest { get; private set; }
+
+    /// <summary>ARC-SKILLS-005: the hero uses a healing item on a critter: itself (the inventory use passes the user as the target, as the
+    /// original's inventory window does) or, since ARC-UI-1127 (E8-g), another critter the item cursor picked (a follower, an NPC). ARC-UI-025: the item use (0x462CC0) reaches it as the heal skill with the item and has charged
+    /// the use's action points already, so the heal charges none (<paramref name="charged"/>). The answer is the HUD message; an open inventory window shows it too.</summary>
+    private void HealCritter(string item, string target, bool charged = false)
     {
-        if (!InventoryOpen || !InventoryActive) return;
-        var holder = _inventoryPanel!.Holder;
-        var healing = _inventoryHost!.HealingItem(_areaSession!, item, _areaKitHealing);
+        if (_areaSession is not { } session) return;
+        var shown = InventoryOpen && InventoryActive;
+        var holder = shown ? _inventoryPanel!.Holder : null;
+        var healing = _inventoryHost!.HealingItem(session, item, _areaKitHealing);
+        var life = target == AiSchedulerRules.Pc ? SessionLifeTarget.Hero : SpellCasterNow()?.LifeTarget(target);
         string message;
         if (healing is null) message = "not used: not a healing item the hero holds";
+        else if (life is null) message = "not used: the target has no life record here";
         else
         {
             ResumeLoadedRound();
-            var result = _areaSession!.HealWithItem(_areaSession.Version, SessionLifeTarget.Hero, healing, charged ? null : CombatWorldOrNull());
-            var life = _areaSession.QueryHeroLife()?.Record.State;
+            var result = session.HealWithItem(session.Version, life, healing, charged ? null : CombatWorldOrNull());
+            LastHealForSelfTest = (target, result);
             message = result.Disposition == GameSessionDisposition.Rejected ? $"not used: {result.Failure}"
                 : (result.Check!.Success ? $"healed {result.Heal!.Value.HitPoints} hit point(s){(result.Heal.Value.Cure ? " and cured an injury" : string.Empty)}" : "the heal failed")
                 + (result.ItemDestroyed ? "; the item is used up" : $"; {result.UsesLeft} use(s) left") + (result.FateUsed ? " (fate point)" : string.Empty);
-            GD.Print($"ARC-SKILLS-005 heal disposition={result.Disposition} failure={result.Failure} success={result.Check?.Success} critical={result.Check?.Critical} " +
+            GD.Print($"ARC-SKILLS-005 heal target={target} disposition={result.Disposition} failure={result.Failure} success={result.Check?.Success} critical={result.Check?.Critical} " +
                 $"healed={result.Heal?.HitPoints} cure={result.Heal?.Cure} uses-left={result.UsesLeft?.ToString() ?? "-"} destroyed={result.ItemDestroyed} " +
-                $"hp-damage={life?.HitPointDamage}");
+                $"hp-damage={session.QueryHeroLife()?.Record.State.HitPointDamage}");
+            if (!life.IsHero && result.Disposition != GameSessionDisposition.Rejected) message = $"{target}: {message}";
         }
-        _inventoryStatus = message;
-        _inventoryPanel.Render(InventoryView(holder), message);
+        _healMessage = message;
+        if (shown) { _inventoryStatus = message; _inventoryPanel!.Render(InventoryView(holder), message); }
         RefreshReadyStatus();
     }
 
@@ -626,9 +644,10 @@ public partial class TerrainViewerApp
         var taken = 0; var refused = new List<string>(); var printed = new System.Text.StringBuilder();
         foreach (var line in InventoryView(holder).Loot)
         {
-            // ARC-UI-029: Take all moves a dead NPC's (ARC-WORLD-101: or a container's) gold pile whole without asking (the original's flag 0x20, QW1).
-            var result = line.StackKind is { Type: SessionItemType.Gold } && SessionJunkPile.Number(holder) is null
-                ? _areaSession!.TakeGoldFromNpc(_areaSession.Version, holder, line.Units, line.Entity)
+            // ARC-UI-029: Take all moves a dead NPC's (ARC-WORLD-101: or a container's; ARC-UI-1328: or a junk pile's) gold pile whole without asking (the original's flag 0x20, QW1).
+            var result = line.StackKind is { Type: SessionItemType.Gold }
+                ? SessionJunkPile.Number(holder) is not null ? _areaSession!.TakeGoldFromJunkPile(_areaSession.Version, holder, line.Entity, line.Units)
+                : _areaSession!.TakeGoldFromNpc(_areaSession.Version, holder, line.Units, line.Entity)
                 : _inventoryHost!.Loot(_areaSession!, holder, line.Entity);
             GD.Print($"ARC-UI-004 loot-all-item disposition={result.Disposition} failure={result.Failure}{InsertScriptLog(result)}");
             // One pickup sound for the whole take (the first item's), not one voice per item in the same frame.

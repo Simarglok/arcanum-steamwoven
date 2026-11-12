@@ -53,7 +53,7 @@ public sealed class SpellCensusRealDataTests
         // 85 adds effect 145 with the cause injury (7), which the session refuses as a spell effect cause (EffectDomain.OwnCause).
         (85, "EffectNotSaved", ""),
         (89, "AGoal", "AGoal"),
-        (103, "Recharge", "Recharge"),
+        // 103 (Recharge) is taken on both targets since ARC-MAGIC-1146: a critter is no item, so the component does nothing (0x454920 answers 0).
         (123, "Destroy", "Destroy"),
         (124, "Destroy", "Destroy"),
         (125, "Destroy", "Destroy"),
@@ -146,6 +146,22 @@ public sealed class SpellCensusRealDataTests
         }
         Console.WriteLine($"college spells whose every component the host takes on both targets: {ready} of {SpellRecord.CollegeSpells}");
         Assert.AreEqual(0, differences.Count, "the census changed; the rows as they are now (a row of two empty lists is removed):\n" + string.Join("\n", differences));
+    }
+
+    /// <summary>ARC-MAGIC-1361: the installed Harm (record 55) is one Damage component, normal, 3 to 40, <c>Scaled</c>, for 5 fatigue; the numbers that follow (aptitude 40: 17, easy 25) are pinned by
+    /// <c>SpellDamageRulesTests</c>.</summary>
+    [TestMethod, TestCategory("RealData")]
+    public void Harm_is_one_scaled_normal_damage_of_3_to_40_for_5_fatigue()
+    {
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("DAT_ROOT is required for the opt-in Harm check; this is not a synthetic pass.");
+        using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+        var spells = SpellData.Open(stack, SpellRecordMode.LikeOriginal);
+        Assert.AreEqual(SpellDataStatus.Read, spells.Status, $"{spells.Refusal}");
+        var record = SessionSpellRecords.Translate(spells.Data!.Records[55]);
+        var damage = record.Components.Where(c => c.Type == SpellComponentType.Damage).Single();
+        Assert.AreEqual(new SpellDamageComponent(0, 3, 40, SpellDamageFlags.Scaled), damage.Damage);
+        Assert.AreEqual(5, record.Data.Cost);
     }
 
     /// <summary>The census harness on a synthetic record (root checks): a ready Damage, a Movement no slice builds, and an Effect the host takes on the hero and on an NPC.</summary>

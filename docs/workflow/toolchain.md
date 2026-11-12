@@ -165,6 +165,14 @@ history held about 500 runs of such copies of one template).
   observation from being refused as late (`RestoreWorldTestTime`, ARC-WORLD-025). `summon-wall` and `summon-undead` read the hero's hit points before
   and after the burn and failed once in the long list (`25 -> 30`, not reproduced alone or in shorter chains); it now checks the
   hit-point damage the hero carries, which the wall's burn would raise (ARC-DEV-405).
+- **Synthetic frame clock (ARC-DEV-1251).** `./arcanum smoke self-test` failed now and then with `GRID_OBSERVATION_NONMONOTONIC` in the
+  hover and inventory stages, only on a busy machine. The cause: a synthetic frame (`WorldFrameForSelfTest`) was stamped at the actor
+  session's time plus a tenth of a second, and that session time is a wall-clock stamp taken when the session was made; before the first
+  frame the world still reads the wall clock, so `OpenHoverGate`'s pad selection (a quarantine) was observed at the later wall time, and
+  when the setup took more than 0.1 s between the two, the first frame was older than the queue's newest observation. The frame's time
+  is now `SelfTestFrameClock.Next`: a step after the test time, or after `GridInputQueue.Newest` when that is later. `OpenHoverGate`
+  waits 150 ms in a self-test so the order shows on every run, not only under load. A new self-test stage that observes before its first
+  synthetic frame needs nothing more.
 - **Stage boundary reset (ARC-DEV-408, ARC-DEV-1187).** A stage that passes alone and fails after others had a second cause besides the test
   time: what the earlier stages left in the shared session. `TerrainViewerSmokeStageSet` calls `SmokeStageBoundary`
   (`TerrainViewerSmokeStageReset.cs`) at every change of stage in the viewer. The first call with a hero and a session saves a baseline into a
@@ -205,7 +213,7 @@ history held about 500 runs of such copies of one template).
   given, and says so (`SMOKE hero human-male (auto): ...`); with
   `--main-menu` (no hero) it is refused. A menu stage (`menu`, `scene`, `options`, `bar`, `death`, `perf-menu`) needs no
   `--main-menu`: it gets its own menu process. The stages the viewer runs only without `map` (`barter`, `menu`, `scene`, `options`, `plants`, `bar`,
-  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-tile`, `tile-ghost`, `container-click`, `fire-order`, `indoor-fade`, `npc-shot`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `placement-census`, `spell-end`, `hold-hero`, `spell-effects`, `movement`, `spirit-talk`, `sleep`, `bed`, `created-scenery`, `worn-light`, `critter-light`, `summon-flash`, `summon-wall`, `summon-undead`, `tech-craft`, `tech-products`, `item-aim`, `disarm`, `perf`, `perf-menu`) get a run of their
+  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-tile`, `tile-ghost`, `container-click`, `fire-order`, `indoor-fade`, `npc-shot`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `please-move`, `placement-census`, `spell-end`, `hold-hero`, `spell-effects`, `movement`, `spirit-talk`, `sleep`, `bed`, `created-scenery`, `worn-light`, `critter-light`, `eye-light`, `summon-flash`, `summon-wall`, `summon-undead`, `tech-craft`, `tech-products`, `item-aim`, `disarm`, `perf`, `perf-menu`) get a run of their
   own (step `stages-alone`, or `map-alone`) when `map` is in the list too. `tech-craft` (ARC-DEV-362, technology audit slice T-a) needs the bullets the map's bodies hold, so it runs on the cave: `./arcanum smoke map "crash site cave" --stages tech-craft` (on a map with no bullets of the crafted gun's type it fails with that message; its steps are the helpers of `TerrainViewerTechCraftHarness.cs`). `bed` (ARC-WORLD-1162) runs on the cave (`./arcanum smoke map "crash site cave" --stages bed --hero human-male`): the cave's beds counted by script, a bed with no script refuses (message 8), an occupied one (10), the scripted bed seats the hero and a one-hour rest in it heals twice the ground's, the close empties the bed. `tech-products` (ARC-MAGIC-051, technology audit slice T-s) is `tech-craft`'s sibling on the same cave (`./arcanum smoke map "crash site cave" --stages tech-products`): it buys Therapeutics degrees 1 and 2 and Chemistry degree 1, assembles their first records, eats the two stat potions (the hero's effect list grows, record 158 adds +2 strength), uses the poison on a living NPC through the item cursor, reads the module's found schematic documents of those two disciplines through the inventory's Read button (each registers and is destroyed, a second copy of a known one is kept) and assembles the first found record the hero's expertise reaches from the window's Found tab, buys intelligence and Electric degrees up to 6, assembles the power cells (Chemistry degree 2), the powered shield (Electric degree 3: worn, its 15 s deferred call takes one cell and schedules the next) and the maintained armour (degree 6, record 168: a cell a tick), has the cave NPC assemble a learned record from its own list into its own list through the window queued the way the dialog's `su` queues it (the stage gives that NPC a Herbology degree and intelligence 8: the cave's NPCs have no degree, so this shows the window and session path for a crafter, not a real crafter), throws an assembled Explosives degree-1 grenade (record 219) at the cave NPC (a flight that lands off the tile is aimed again, up to three grenades; the item event starts the run and a cave NPC is damaged or resists), and F7/F8 keep effects, items, worn items, cells and the NPC's list (same harness helpers; it needs a living NPC in the cave). `item-aim` (ARC-DEV-365, technology audit slice T-g) opens the item cursor with a script trap device from the use icon and presses a tile (goal 41) and an NPC (goal 39); it needs a hero and a map with a living NPC. `disarm` (ARC-SKILLS-1156, E6-a second half) arms the hotkey bar's Disarm traps entry (skill cursor, interface mode 2), presses a container the stage makes trapped (the native script 30001 written as a map change) with the trap unknown (nothing rolled) and known (a fated press removes it); it needs a hero and a map with a container drawn in its window (NONE without one, or when the content's script 30001 is no trap script). A run whose stages include `debug-travel`, `follower-far` or `inv-carry`
   starts the viewer with `--debug-mode` (the stage needs the debug mode, ARC-DEV-050; ARC-WORLD-120).
 - **Stage configurations and grouping (ARC-DEV-391).** A viewer process fixes its map, start sector, hero, main menu and
@@ -216,9 +224,9 @@ history held about 500 runs of such copies of one template).
   configuration, the stages are grouped into the fewest processes (one per configuration, in order of first appearance;
   the step is named `stages-main`, `stages-wild`, `stages-town`, `stages-shrine`, `stages-crash-site-cave` ... when there
   are several, `stages` when there is one), a *portable* stage (`map`, `resources`, `report`, `knockdown`, `inv-arrange`,
-  `created-*`, `summon-*`, `item-aim`, `disarm`) rides in a process that already exists on its map (else it gets one), and the stages that end a game, move
+  `created-*`, `summon-*`, `disarm`) rides in a process that already exists on its map (else it gets one), and the stages that end a game, move
   the window, leave state behind or run long (the menu family, `walk`, `census`, `container-click`, `perf`,
-  `dead-window`, `critter-fall`, `tech-craft`, `tech-products`, `debug-travel`, `follower-far`, `inv-carry`) each get a process of
+  `dead-window`, `critter-fall`, `tech-craft`, `tech-products`, `debug-travel`, `follower-far`, `teleport-follow`, `inv-carry`) each get a process of
   their own (`stages-main-walk`). `--map`, `--sector` and `--main-menu` pin that dimension for every stage; a pinned
   value a stage cannot pass in is refused before anything waits for the queue (`stage plants does not run at --sector
   1452,1291: it needs map ... at sector 1384,239`), and so is `--main-menu` with a stage that needs a hero or a session.
@@ -409,6 +417,9 @@ before it. It replaces the earlier
     ./arcanum run --kind window|headless|export|dotnet|quick [--estimate SEC] [--timeout MIN] [--label TEXT] [--expect REGEX] [--start-within SEC] [--verbose] -- COMMAND [ARGS...]
     ./arcanum queue                 # the runs holding a place, then the waiters in order
     ./arcanum queue --history N     # the last N finished runs: waited, ran, exit
+    ./arcanum queue --pause         # no waiting run starts (running ones finish) until --resume (ARC-DEV-1344)
+    ./arcanum queue --resume
+    ./arcanum queue --app           # start the menu-bar view of the queue now (a queued run starts it by itself)
 
 | Kind | Use it for | Rule | Default limit |
 |---|---|---|---|
@@ -440,7 +451,8 @@ before it. It replaces the earlier
   whose wrapper was killed keeps its place until its command ends or runs out of time. The kernel drops the lock of a dead process, and a
   lock held only by a leftover descendant (a build server that inherited it) does not count, so a crashed run never
   blocks the queue. Process start times are compared in the C locale and UTC, so lanes with different locales agree;
-  when `ps` cannot answer, the run counts as alive. Never delete ticket files by hand; `history.jsonl` there records every run.
+  the start time is read through macOS libproc (`proc_pidinfo`), so a waiter spawns no process while it polls (ARC-DEV-1401;
+  `ps`, cached 30 s, answers only where libproc is missing); when the time cannot be read, the run counts as alive, and a zombie (already dead, its lock released) counts as gone. Never delete ticket files by hand; `history.jsonl` there records every run.
 - **Nesting.** A queued command that calls `./arcanum run` again (or `./arcanum area|world|map`) runs inside its
   parent's place when that place covers it: an export covers every kind, a `window` or `headless` run covers Godot,
   `quick` and `dotnet` runs, a `quick` run covers `quick` runs, a `dotnet` run covers `dotnet` runs. Any other nesting (an export inside a Godot run, a Godot
@@ -455,6 +467,44 @@ before it. It replaces the earlier
 
 Tests: `python3 -B -m unittest tools.local_dev.test_run_queue` (arrival and length order, lanes and their accounting, quick runs, gaps, export
 quiet, crashed and killed runs, limits, lockf, nesting, locales); they use their own `ARCANUM_LOCAL_HOME` and lock file.
+
+### Queue menu-bar app (ARC-DEV-1344)
+
+A small macOS menu-bar item shows the queue and pauses it. It is `tools/menubar/ArcanumQueue.swift`: one AppKit file, no
+dependencies, compiled on this Mac by `swiftc` (Xcode command line tools, the way the focus guard needs `clang`) into
+`~/Library/Application Support/Arcanum Steamwoven/menubar/ArcanumQueue-<hash of the source>`; the binary is never in git and a
+changed source is built again by the next start (about 30 s the first time, in the background). A Swift app was chosen over a
+Python helper because it needs nothing installed (system Python has no `rumps`/PyObjC), has no interpreter running for the
+display and reads the queue's own files, so it works from whichever checkout started it and when that checkout is gone.
+
+- **Shows.** The icon says what the queue holds (`tray`, `tray.full` with `running·waiting`, `pause.circle` while paused). The menu lists the
+  running runs, then the waiting ones in queue order: number, kind and lane, label, how long it has run or waited, the checkout
+  (the tooltip has the full command and pid). It reads the tickets the way the queue does (the flock the run holds plus a live
+  process), every second, and never writes a ticket (it only probes their locks for an instant).
+- **Cost.** While the menu is open (every 2 s) the app takes one `ps` snapshot and adds to each running run the CPU (percent of
+  one core, from the change of the tree's accumulated CPU time, so it shows from the second sample on) and RAM (resident set)
+  of its command's process tree: the process group the queue started it in plus descendants that left it. The header line shows
+  the Mac's load average, cores and RAM in use (active, wired and compressed pages). Nothing is sampled while the menu is closed.
+- **Pause.** The menu's `Pause` item and `./arcanum queue --pause` / `--resume` set and clear one flag, the file `paused` in the queue
+  folder. While it is set a waiter that would start waits instead (`ARCANUM_QUEUE queued ... waiting-for=resume paused`), and starts within the
+  poll interval after the resume, in its place in the order; runs already running finish and a nested run still runs inside its
+  parent's place; every kind waits, the owner's viewer launches and package builds too. `./arcanum queue` prints `PAUSED` and
+  `waiting ... (paused)`. A checkout that has not merged ARC-DEV-1344 ignores the flag: merge main before relying on it. The pause
+  stays until resumed, also across a restart of the app; the app never clears it by itself, so a forgotten pause holds every waiting run (they say so on stderr; the icon shows the pause).
+- **Limits.** The menu's `Godot runs at once` and `Load guard` submenus set the owner's caps of
+  [ARC-DEV-1353](#godot-lanes-arc-dev-400) (`./arcanum queue --set-lanes N|default`, `--set-max-load X|off`): they write the same
+  `settings.json` of the queue folder (`shortLanes`, `maxLoad`), under the queue lock and atomically, so the CLI, the app and every
+  wrapper agree and the next run sees it. A check on the menu is the stored value; "default" is no stored value (the app's
+  default of 2 short lanes copies `DEFAULT_SHORT_LANES`). `ARCANUM_QUEUE_LANES` in a wrapper's environment still wins there.
+- **Start.** `run_queue.run` calls `menubar.ensure_running()` after it takes a ticket: when the app does not hold `menubar/app.lock` (an
+  flock it holds for its whole life, so a crash frees it) a detached helper builds the app if needed and starts it; a second helper
+  or a second app ends at once. Nothing here can fail or delay a run: a missing compiler or a failed build is written to
+  `menubar/menubar.log` only. The app leaves by itself after `--idle-minutes` (15) with no run and no pause, and `Quit` does the
+  same; the next run starts it again. `ARCANUM_QUEUE_MENUBAR=0` never starts it; a run under `ARCANUM_LOCAL_HOME` (the tests'
+  own home) does not, unless `ARCANUM_QUEUE_MENUBAR=1`; other systems than macOS do not.
+
+Tests: `python3 -B -m unittest tools.local_dev.test_menubar tools.local_dev.test_run_queue` (the pause tests are in the latter); the app itself is checked
+by running it (`./arcanum queue --app`, then a queued run and a screenshot of the menu); `ArcanumQueue --set-pause` / `--clear-pause` / `--set-lanes` / `--set-max-load` do what its menu items do and exit, to check that the flag it writes is the one the queue reads.
 
 ### Queue order (ARC-DEV-390)
 
@@ -520,6 +570,16 @@ waiting against about 3 hours with a heavy lane and two short lanes. The owner a
   lanes. The variable is read by each wrapper, and every wrapper counts the short places from its own value, so keep it the same
   in every lane's shell: set it in the shell profile to roll back for all of them
   (a single wrapper that sets it only serialises its own runs); a ticket from a wrapper from before the lanes is also read as `single`.
+- **Owner's caps (ARC-DEV-1353).** The variable above is per wrapper; one setting for every thread lives in the queue folder
+  (`settings.json`, read by every wrapper at every poll, never created by a read). `./arcanum queue --set-lanes N` stores
+  the number of short lanes (0 to 8; `0` is one Godot run at a time, `1` is one short plus the one heavy lane, so two at
+  once, `default` removes the setting); a wrapper's own `ARCANUM_QUEUE_LANES` still wins in that wrapper. `./arcanum queue
+  --set-max-load X` (`off` removes it) is a load guard: a Godot or `quick` run whose turn has come does not start while another
+  Godot run is running and the one-minute load average is above X, and prints `waiting-for=load below X`; a lone run always
+  starts, so nothing waits for ever. `./arcanum queue` prints the caps in force on its last line. The caps hold for every
+  checkout that has this code; a checkout from before ARC-DEV-1353 ignores the file until it merges `origin/main`. The caps
+  count Godot lanes only: `dotnet` runs (2 places) and `quick` runs (2 places) come on top, so a machine under strain
+  takes `--set-lanes 0` or `1` and a guard around 12 to 16.
 - **Same environment.** The lanes need no change to a command: every lane's smoke still has its own settings and saves
   per process (the system pointer is gated, ARC-DEV-060). `lockf` users keep excluding the queue ([above](#launch-queue-arc-dev-033)); the queue's runs hold that lock shared, so with
   overlapping lane runs a `lockf` user may wait for as long as the lanes stay busy (a retired rule).
@@ -963,7 +1023,7 @@ Original inputs remain read-only and local. Set only the inputs needed for the s
 | --- | --- | --- |
 | Executable interpreter | `ARCANUM_EXE`; the replays also the oracle files of 0x4A6980 and 0x4A68B0 (`ARCANUM_ORACLE_DIR`, default `research-private/oracle`) | Executable project, `TestCategory=OriginalExe`; [contract](../project/components/Arcanum.Executable.md#verification) |
 | Prototype builder | `ARCANUM_EXE` and `ARCANUM_GAME_ROOT` (the installed game folder; inconclusive without it); the comparison also `ARCANUM_ORIGINAL_PROTO` (a folder of the 1,423 files the original wrote); `ARCANUM_PROTO_OUT` writes the built files for a look (refused inside a git repository) | Executable project, `FullyQualifiedName~PrototypeBuilderRealData`, `TestCategory=OriginalExe`; about one minute in Release (`-c Release`: Debug is several times slower), the builds run in parallel; [contract](../project/components/Arcanum.Executable.md#the-prototype-builder) |
-| Bed census (ARC-WORLD-1162) | `DAT_ROOT` = the installed game folder | World project, `FullyQualifiedName~BedCensusRealData&TestCategory=RealData` (about 40 s); the placed beds of the 80 whole maps with their use scripts, pinned (191, 19 scripted); the main map is not read; [sleep window](../world/sleep-window-runtime.md#the-bed-arc-world-1162-ledger-swb1-swb3-swb5-swb14swb16) |
+| Bed census (ARC-WORLD-1162) | `DAT_ROOT` = the installed game folder | World project, `FullyQualifiedName~BedCensusRealData&TestCategory=RealData` (about 1 min); the placed beds of the 80 whole maps with their use scripts, pinned (191, 19 scripted), and the main map's, read sector by sector (ARC-WORLD-1262: 275 beds, 32 scripted, 1556 NPC rows with a route, 150 on a bed); [sleep window](../world/sleep-window-runtime.md#the-bed-arc-world-1162-ledger-swb1-swb3-swb5-swb14swb16) |
 | DAT R1 | `DAT_ROOT`, eight documented candidates | Data project, `FullyQualifiedName~DatArchiveTests&TestCategory=RealData`; [DAT API/evidence](../project/components/Arcanum.Data.md) |
 | Resource precedence | `DAT_ROOT` = the installed game folder (with `modules/` and `data/`) | Data project, `FullyQualifiedName~ContentStackRealData&TestCategory=RealData`; probe `tools/research/Arcanum.ContentProbe` (`--self-test`, `--game-root`); [research/API](../research/content-precedence.md) |
 | GOG installer unpack (ARC-DEV-074) | `ARC_GOG_INSTALLER` = the GOG offline installer; `innoextract` installed (`PATH` or a Homebrew folder); unpacks into a temporary folder, about 1.2 GB | Session project, `FullyQualifiedName~GogInstallerUnpackerTests&TestCategory=RealData`; [research](packaging.md) |

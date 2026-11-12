@@ -58,6 +58,14 @@ public sealed class AreaAiShotTests
 
     private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, string Npc, string Bow);
 
+    private sealed class NoScreen : IAreaRestockScreen
+    {
+        public int? ShownMap => null;
+        public AreaPixelRect? GameWindow => null;
+        public (double Width, double Height) WindowSize => (0, 0);
+        public AreaPixelRect? BodyRect(AreaObjectKey key) => null;
+    }
+
     private static readonly CellCoord BystanderCell = new(12, 20);
 
     private sealed class Line(AreaObjectRecord? blocker) : ILineOfFireMap<AreaObjectRecord>
@@ -69,7 +77,20 @@ public sealed class AreaAiShotTests
         public IEnumerable<LineOfFireObject<AreaObjectRecord>> Objects(CellCoord tile) => blocker is not null && tile == BystanderCell ? [new(blocker, false, 0)] : [];
     }
 
-    private static Scene Open(Func<string, string, SessionShot, CellCoord, CellCoord, bool>? launch, bool bystander = false)
+    // ARC-COMBAT-1140: a container (type 2) on the bystander's cell that stops the line of fire.
+    private static AreaObjectRecord Chest() => new(Key(5), 0, 2, 9999, "p", "p", "r", "s", AreaScope.Core, null, BystanderCell.X, BystanderCell.Y,
+        Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true);
+
+    private static AreaObjectAttackTarget ChestTarget(AreaObjectRecord row, int points = 6) => new("sector:1:5", row, DamageableObjectKind.Container,
+        new SessionObjectTarget(new SessionMapId(1), "sector:1:5", new SessionObjectBaseline
+        {
+            Kind = DamageableObjectKind.Container, Points = points, Material = ObjectMaterial.Cloth, Cell = BystanderCell,
+            Openable = new SessionOpenableBaseline(Arcanum.Simulation.Locks.OpenableKind.Container, 0, 0, 0),
+        }), null, null, null);
+
+    private static Scene Open(Func<string, string, SessionShot, CellCoord, CellCoord, bool>? launch, bool bystander = false, AreaObjectRecord? blockerRow = null,
+        Func<AreaObjectRecord, AreaObjectAttackTarget?>? objectTarget = null, Func<string, AreaObjectRecord, SessionShot, CellCoord, CellCoord, bool>? launchAtObject = null,
+        Action<string, AreaObjectRecord, AreaObjectAttackTarget?, SessionObjectAttackResult>? struck = null)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -93,9 +114,12 @@ public sealed class AreaAiShotTests
         {
             RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = bystander ? [new(Entity(0), Npc(0), NpcCell), new(Entity(3), Npc(3, BystanderCell), BystanderCell)] : [new(Entity(0), Npc(0), NpcCell)], Combat = combat,
             HeroCell = () => HeroCell, LaunchShot = launch,
-            LineOfFire = bystander ? () => new Line(Npc(3, BystanderCell)) : null,
+            LineOfFire = blockerRow is not null ? () => new Line(blockerRow) : bystander ? () => new Line(Npc(3, BystanderCell)) : null,
+            ObjectTarget = objectTarget, LaunchShotAtObject = launchAtObject, ObjectStruck = struck,
         };
-        var host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null), new AreaCombatWorld(1, () => [], _ => null));
+        // ARC-AI-1139: the restock host answers the NPC wield the AI gate's re-wield asks for (no barter data: the map's own rows are the items).
+        var restock = new AreaRestockHost(session, inventory, null, new NoScreen());
+        var host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null, restock: () => restock), new AreaCombatWorld(1, () => [], _ => null));
         return new(session, host, Entity(0), Entity(1));
     }
 
@@ -197,5 +221,112 @@ public sealed class AreaAiShotTests
         Assert.IsTrue(launched.Count > 0, host.TraceOf(npc)?.Hit);
         Assert.AreEqual((npc, Entity(3), NpcCell, BystanderCell), (launched[0].Shooter, launched[0].Target, launched[0].From, launched[0].To),
             "the arrow is shot at the critter that stops the line, not at the hero: " + host.TraceOf(npc)?.Hit);
+    }
+
+    // ARC-COMBAT-1140 (RA4, RH5): a container that stops the line of fire takes the NPC's shot in place of the hero: the shot is decided a hit on it without a skill roll, the viewer is asked to fly it at the blocker,
+    // and the strike (the host's, as where the flight ends) damages the container while the hero is not hurt.
+    [TestMethod]
+    public void An_object_in_the_line_of_fire_takes_the_shot_instead_of_the_target()
+    {
+        var chest = Chest();
+        var target = ChestTarget(chest);
+        var launched = new List<(string Shooter, AreaObjectRecord Blocker, SessionShot Shot, CellCoord From, CellCoord To)>();
+        var (session, host, npc, _) = Open((_, _, _, _, _) => true, blockerRow: chest, objectTarget: row => row.Key == chest.Key ? target : null,
+            launchAtObject: (who, blocker, shot, from, to) => { launched.Add((who, blocker, shot, from, to)); return true; });
+        var heroHp = session.QueryHeroLife()!.Status.HitPoints;
+        for (var attempt = 0; attempt < 5 && launched.Count == 0; attempt++) host.Hit(npc, AiSchedulerRules.Pc);
+        Assert.AreEqual(1, launched.Count, host.TraceOf(npc)?.Hit);
+        Assert.AreEqual((npc, chest.Key, NpcCell, HeroCell), (launched[0].Shooter, launched[0].Blocker.Key, launched[0].From, launched[0].To), "the arrow flies at the hero's tile and strikes the chest where it crosses it");
+        Assert.IsTrue(session.QueryNpcShot(launched[0].Shot) is { Hit: true } facts && facts.Target == target.Entity, "decided a hit on the chest without the skill roll: " + host.TraceOf(npc)?.Hit);
+        Assert.AreEqual(heroHp, session.QueryHeroLife()!.Status.HitPoints, "the hero is not struck");
+        Assert.AreEqual(0, session.QueryObject(target.Object!).Damage, "the damage waits for the strike");
+
+        var landed = host.LandShotOnObject(npc, launched[0].Shot, target.Object, wall: false);
+        Assert.IsTrue(landed is { Object.Damage: > 0 }, "the chest took the carried hit: " + host.TraceOf(npc)?.Hit);
+        Assert.IsTrue(session.QueryObject(target.Object!).Damage > 0);
+        Assert.AreEqual(0, session.QueryShotsInFlight().Count);
+        Assert.AreEqual(heroHp, session.QueryHeroLife()!.Status.HitPoints);
+    }
+
+    [TestMethod]
+    public void A_shot_at_an_object_the_viewer_cannot_fly_strikes_it_at_once()
+    {
+        var chest = Chest();
+        var target = ChestTarget(chest);
+        var struck = new List<(string Shooter, AreaObjectRecord Row, AreaObjectAttackTarget? Target, SessionObjectAttackResult Result)>();
+        var (session, host, npc, _) = Open((_, _, _, _, _) => true, blockerRow: chest, objectTarget: row => row.Key == chest.Key ? target : null,
+            launchAtObject: (_, _, _, _, _) => false, struck: (who, row, info, result) => struck.Add((who, row, info, result)));
+        for (var attempt = 0; attempt < 5 && struck.Count == 0; attempt++) host.Hit(npc, AiSchedulerRules.Pc);
+        Assert.AreEqual(1, struck.Count, host.TraceOf(npc)?.Hit);
+        Assert.AreEqual((npc, chest.Key, target.Entity), (struck[0].Shooter, struck[0].Row.Key, struck[0].Target!.Entity));
+        Assert.IsTrue(struck[0].Result.Object is { Damage: > 0 }, "it landed on the chest");
+        Assert.AreEqual(0, session.QueryShotsInFlight().Count);
+    }
+
+    [TestMethod]
+    public void Without_an_object_hook_or_for_an_item_the_target_keeps_the_shot()
+    {
+        var chest = Chest();
+        var launched = new List<string>();
+        var (_, host, npc, _) = Open((_, target, _, _, _) => { launched.Add(target); return true; }, blockerRow: chest);
+        for (var attempt = 0; attempt < 5 && launched.Count == 0; attempt++) host.Hit(npc, AiSchedulerRules.Pc);
+        CollectionAssert.AreEqual(new[] { AiSchedulerRules.Pc }, launched, "no object hook: the shot goes at the hero, whose check the blocked line fails");
+
+        launched.Clear();
+        var (_, host2, npc2, _) = Open((_, target, _, _, _) => { launched.Add(target); return true; }, blockerRow: chest, objectTarget: _ => null);
+        for (var attempt = 0; attempt < 5 && launched.Count == 0; attempt++) host2.Hit(npc2, AiSchedulerRules.Pc);
+        CollectionAssert.AreEqual(new[] { AiSchedulerRules.Pc }, launched, "an object the session does not damage keeps the shot at the target");
+    }
+
+    // ARC-AI-1139 (0x4B3170 → 0x4ADFF0): a companion's bow shot the ammunition check refuses (no arrows in its pack) marks it LOOK_FOR_AMMO, LOOK_FOR_WEAPON and CHECK_WEAPON; one that is no companion
+    // spends no ammunition, is never refused and is marked with nothing.
+    private const DangerFlags EmptyBowBits = DangerFlags.LookForAmmo | DangerFlags.LookForWeapon | DangerFlags.CheckWeapon;
+
+    [TestMethod]
+    public void A_companions_shot_without_arrows_marks_it_as_needing_ammunition_a_weapon_and_a_weapon_check()
+    {
+        var (session, host, npc, _) = Open(null);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, npc).Disposition);
+        Assert.AreEqual(DangerFlags.None, session.QueryDanger(npc).Flags & EmptyBowBits);
+        host.Hit(npc, AiSchedulerRules.Pc);
+        Assert.AreEqual(EmptyBowBits, session.QueryDanger(npc).Flags & EmptyBowBits, host.TraceOf(npc)?.Hit);
+        var notice = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Hit);
+        Assert.AreEqual(AttackRefusal.OutOfAmmunition, notice.Result!.Resolution!.Refusal);
+    }
+
+    [TestMethod]
+    public void An_npc_without_a_pc_leader_is_never_marked_as_needing_ammunition()
+    {
+        var (session, host, npc, _) = Open((_, _, _, _, _) => false);
+        for (var attempt = 0; attempt < 10; attempt++) host.Hit(npc, AiSchedulerRules.Pc);
+        Assert.AreEqual(DangerFlags.None, session.QueryDanger(npc).Flags & EmptyBowBits);
+    }
+
+    // ARC-AI-1139 (0x4A8570 → 0x465170): the host's part of the gate's weapon re-wield (the gate itself, its bit clearing and the order of its steps are the scheduler's, SchedulerRulesTests and AiSchedulerTests): the
+    // empty bow of the marked companion goes to the pack (no arrows are carried), so no weapon is worn.
+    [TestMethod]
+    public void The_hosts_rewield_takes_the_empty_bow_of_a_marked_companion_off()
+    {
+        var (session, host, npc, bow) = Open(null);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, npc).Disposition);
+        host.Hit(npc, AiSchedulerRules.Pc);
+        host.DrainNotices();
+        Assert.AreEqual(EmptyBowBits, session.QueryDanger(npc).Flags & EmptyBowBits);
+        Assert.IsNull(session.QueryNpcWorn(npc), "the map data's inventory location wields the bow");
+        host.ReWield(npc, allSlots: false);
+        Assert.AreEqual(0, session.QueryNpcWorn(npc)!.Worn.Count, host.TraceOf(npc)?.Item);
+        Assert.AreEqual(-1, session.QueryHolderItems(npc)!.Single(item => item.Entity == bow).Facts.InventoryLocation, "the bow went to the pack");
+    }
+
+    [TestMethod]
+    public void The_hosts_item_search_clears_each_look_for_bit_and_starts_no_pickup_and_a_full_rewield_is_traced()
+    {
+        var (session, host, npc, _) = Open(null);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, npc).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetAiSupportBits(session.Version, npc, DangerFlags.LookForAmmo | DangerFlags.LookForArmor).Disposition);
+        Assert.IsFalse(host.SearchItems(npc));
+        Assert.AreEqual(DangerFlags.None, session.QueryDanger(npc).Flags & (DangerFlags.LookForAmmo | DangerFlags.LookForWeapon | DangerFlags.LookForArmor));
+        host.ReWield(npc, allSlots: true);
+        Assert.IsTrue(host.TraceOf(npc)!.Item!.StartsWith("rewield all "), host.TraceOf(npc)?.Item);
     }
 }

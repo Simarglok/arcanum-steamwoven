@@ -181,10 +181,10 @@ public partial class TerrainViewerApp
     /// A guarded left press (see <c>WorldRouteClick</c>): true when it hit a dialog NPC and the click rules (GS26) made it a talk. ARC-DEV-169 (MIG13 S11a): the click is an <see cref="ObjectClickRequest"/>; the hero's talk is goal 21 of the
     /// goal table (<see cref="AreaHeroRunsHost.Talk"/>): its steps test the range, walk the hero next to the NPC (goal 8) and ask for the dialog in the last node (<see cref="ViewerHeroRuns.OpenDialog"/>). There is no walk-to-talk intent any more.
     /// </summary>
-    private bool TryAreaTalk(Vector2 screen) => SpeakerAtScreen(screen) is { } speaker && TryAreaTalk(speaker);
+    private bool TryAreaTalk(Vector2 screen, bool shift = false) => SpeakerAtScreen(screen) is { } speaker && TryAreaTalk(speaker, shift);
 
     /// <summary>The talk click on one speaker (ARC-DEV-280: a press on the object, or the release on a follower's portrait, 0x54ED30 either way).</summary>
-    private bool TryAreaTalk(AreaSpeaker speaker)
+    private bool TryAreaTalk(AreaSpeaker speaker, bool shift = false)
     {
         if (ConversationOpen || ActorCell() is null) return false;
         if (HeroRunsHost() is null)
@@ -197,7 +197,7 @@ public partial class TerrainViewerApp
         }
         CancelAreaUseApproach("a talk click replaced it"); CancelInventoryApproach("a talk click replaced it");
         _talkOpenPending = null; // a dialog the last talk asked for and that has not opened yet is dropped by a new order
-        var request = HeroRequests.Apply(new ObjectClickRequest(TalkTargetOf(speaker)));
+        var request = HeroRequests.Apply(new ObjectClickRequest(TalkTargetOf(speaker), Shift: shift));
         if (request.Click != Arcanum.Simulation.Goals.HeroClickGoal.Talk) return false;
         _conversationNotice = request.Outcome == HeroRequestOutcome.Done ? $"talking: goal 21 started at script {speaker.ScriptId}" : "the talk was refused";
         GD.Print($"ARC-DEV-169 talk-click outcome={request.Outcome} goal={request.Click} script={speaker.ScriptId}");
@@ -358,8 +358,29 @@ public partial class TerrainViewerApp
         _conversationSpeaker = speaker;
         _voiceStart = start;
         var title = $"Dialog NPC (script {speaker.ScriptId}, prototype {speaker.Row.PrototypeNumber})";
-        ShowConversationPanel(title, start.Conversation, start.Status == AreaConversationStartStatus.Started ? null : $"[{start.Status}: {start.Detail}]");
+        var barsOn = InterfaceBarsOn;
+        var shown = ShowConversationPanel(title, start.Conversation, start.Status == AreaConversationStartStatus.Started ? null : $"[{start.Status}: {start.Detail}]");
+        // ARC-UI-1120 (HK25): the dialog start (0x567460, the single-player branch) describes the speaker for the hero (0x57CD60, 0x553BE0, 0x43C270) as the
+        // world's hover does: the speaker's examine script runs, and its window follows unless the script answered skip default.
+        // Only with the interface on (0x5578C0 answers 0).
+        if (shown && barsOn && start.Status == AreaConversationStartStatus.Started) DescribeDialogSpeaker(speaker);
     }
+
+    /// <summary>ARC-UI-1120 (HK25): the examine of the dialog's speaker at the dialog start, once; the speaker's window is described again even when
+    /// the pointer already held it (the original draws it afresh), and a speaker the shown map's hover index does not list (a companion carried
+    /// here) only runs its script.</summary>
+    private void DescribeDialogSpeaker(AreaSpeaker speaker)
+    {
+        _dialogExaminesForSelfTest++;
+        var key = speaker.Row.Key;
+        // ARC-UI-1281: a dialog started from the follower's portrait describes him afresh (HK25): the portrait hover's kept answer is dropped.
+        _portraitHoverKey = null; _portraitAllows = null;
+        // The speaker's window is drawn when the bars show (the viewer hides them while the dialog is open: PROJECT); the script runs either way.
+        if (_gameBarPanel is { Visible: true } && _hoverIndex is { } index && index.Contains(key)) { _hoverWindowKey = null; SyncHoverWindow(key); }
+        else ExamineAllows(speaker.Row);
+    }
+
+    private int _dialogExaminesForSelfTest;
 
     /// <summary>ARC-DEV-109: shows the conversation panel through the stack (mode 3); the smoke that holds a conversation open uses it too.</summary>
     private bool ShowConversationPanel(string title, DialogConversation? conversation, string? note) =>

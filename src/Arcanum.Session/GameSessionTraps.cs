@@ -1,4 +1,5 @@
 using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Randomness;
 using Arcanum.Simulation.Skills;
@@ -70,6 +71,10 @@ public sealed record SessionTrapDisarmResult(GameSessionMutationResult Mutation,
 public sealed record SessionSpotRoll(GameSessionDisposition Disposition, GameSessionFailure Failure, SkillCheckResult? Check, bool Spotted,
     bool SecondRoll, GameSessionVersion Version);
 
+/// <summary>ARC-MAGIC-1189: an NPC or a companion that spots a trap: its life target (an NPC), its advancement sheet and its effects' modifiers (its skills), and whether the PC
+/// leads it (a companion: it knows spotted traps and marks the ones it spots; a free NPC knows every trap the PC did not place and marks none).</summary>
+public sealed record SessionNpcSpot(SessionLifeTarget Spotter, SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers, bool LedByPc);
+
 /// <summary>One disarm traps press of the hero (ledger SP3): the session's answer, the turn-based charge of the press (null outside a round), the
 /// shared check (null when refused or gated before the roll), whether the master's second roll was drawn, whether the PC's fate point was used,
 /// and the disarm itself (<see cref="SessionTrapDisarmResult"/>: its outcome is NotTrapped or NotKnown for a trap nothing was rolled for).</summary>
@@ -116,13 +121,15 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// The hero's spot trap roll on an object whose trap it does not know (0x4BBE40's roll branch, ledger TT3 and SP1): the skill's shared
-    /// check (<see cref="SkillCheckRules.Run"/>: the hero's spot trap level and training, the light at the trap, the hero's injuries) and the
-    /// skill's own case (<see cref="TrapRules.SpotCase"/>: the master's second roll, no spotting of a magical trap below expert). Nothing
-    /// is written but the generator's draws; the caller marks the trap (<see cref="MarkTrapSpotted"/>) when <see cref="SessionSpotRoll.Spotted"/>.
+    /// The hero's spot trap roll on an object whose trap it does not know (0x4BBE40's roll branch, ledger TT3, SP1 and SP2): the skill's shared
+    /// check (<see cref="SkillCheckRules.Run"/>: the hero's spot trap level and training, the light at the trap, the hero's injuries, and the item
+    /// modifier of the powered shield, <see cref="TrapRules.SpotItemModifier"/>) and the skill's own case (<see cref="TrapRules.SpotCase"/>: the master's
+    /// second roll, no spotting of a magical trap below expert). Nothing is written but the generator's draws; the caller marks the trap
+    /// (<see cref="MarkTrapSpotted"/>) when <see cref="SessionSpotRoll.Spotted"/>.
     /// Rolled only when the gate asks for a roll (<see cref="TrapSpotGate"/> answers Roll for the player with <paramref name="playerSpellFlags"/>);
-    /// any other gate answers NoChange without a draw. NOT READY: the spot modifier of the item at inventory location 1005 (SP2). The light
-    /// at the trap is the caller's (ARC-WORLD-1149: the viewer passes the light at the trap object's cell; full light by default). Refused: no hero or a dead one
+    /// any other gate answers NoChange without a draw. The light at the trap is the caller's (ARC-WORLD-1149: the viewer passes the light at the trap
+    /// object's cell; full light by default). The item modifier is the session's: the hero's worn item at location 1005 named 2866, its charges (ammunition
+    /// type 2) and its aptitude. Refused: no hero or a dead one
     /// (<see cref="GameSessionFailure.SkillsUnavailable"/>), an invalid object or light (<see cref="GameSessionFailure.InvalidTrap"/>), the
     /// version, the generator or the revision exhausted.
     /// </summary>
@@ -138,7 +145,88 @@ public sealed partial class GameSessionOwner
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, false, false, Version);
         if (_revision == long.MaxValue) return RejectSpot(GameSessionFailure.RevisionExhausted);
         var request = HeroSkillRequest(Skill.SpotTrap, null);
-        request = request with { Difficulty = request.Difficulty with { Light = light } };
+        request = request with { Difficulty = request.Difficulty with { Light = light, Modifier = HeroSpotItemModifier() } };
+        return FinishSpotRoll(request, state);
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-1189 (ledger SP2): an NPC's or a companion's own spot trap roll on an object whose trap it does not know (the same branch 0x4BBE40 and the
+    /// same run 0x4C7160 with the NPC as the source): the shared check with the NPC's own spot trap level and training (its sheet and effects' modifiers),
+    /// the light at the trap, its blindness and crippled limbs, and the item modifier of the powered shield it wears. No fate and no difficulty-setting term (the
+    /// local PC's only). Rolled only when the gate asks for one for the spot's observer (<see cref="NpcSpotObserver"/>: a free NPC knows every trap the
+    /// PC did not place; a companion led by the PC knows the spotted and the placed ones; the player's Detect Traps flag spots without a roll). Nothing is written but
+    /// the generator's draws; the caller marks the trap (<see cref="MarkTrapSpotted"/> with the same observer; a free NPC marks nothing, so it rolls again at its next
+    /// meeting, TT4). Refused as the hero's: a spotter that is the hero, whose sheet or modifiers do not hold, that is not the sheet's NPC or is dead
+    /// (<see cref="GameSessionFailure.SkillsUnavailable"/>), an invalid object or light (<see cref="GameSessionFailure.InvalidTrap"/>), the version, the generator or the revision.
+    /// </summary>
+    public SessionSpotRoll RollNpcSpotTrap(GameSessionVersion expected, SessionNpcSpot spot, SessionTrapped trapped, SessionTrapBaseline baseline, int playerSpellFlags = 0,
+        int light = SessionPickLockTarget.FullLight)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(spot);
+        ArgumentNullException.ThrowIfNull(spot.Spotter);
+        ArgumentNullException.ThrowIfNull(spot.Loaded);
+        ArgumentNullException.ThrowIfNull(spot.Modifiers);
+        if (spot.Spotter.IsHero || spot.Loaded.Entity != spot.Spotter.Entity || !AutoLevelRules.IsValid(spot.Loaded.Sheet) || !AutoLevelRules.IsValid(spot.Modifiers))
+            return RejectSpot(GameSessionFailure.SkillsUnavailable);
+        if (Resolve(spot.Spotter, out var npc, out var facts, out _) != GameSessionFailure.None || LifeRules.Evaluate(npc.State, facts!).IsDead)
+            return RejectSpot(GameSessionFailure.SkillsUnavailable);
+        if (!ValidTrapped(trapped, baseline) || light is < 0 or > SessionPickLockTarget.FullLight) return RejectSpot(GameSessionFailure.InvalidTrap);
+        if (!IsCurrent(expected)) return RejectSpot(GameSessionFailure.StaleVersion);
+        var state = TrapState(trapped, baseline);
+        if (TrapRules.SpotGate(NpcSpotObserver(spot), false, state.Class, state.ObjectFlags, playerSpellFlags) != Arcanum.Simulation.Traps.TrapSpotGate.Roll)
+            return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, false, false, Version);
+        if (_revision == long.MaxValue) return RejectSpot(GameSessionFailure.RevisionExhausted);
+        var sheet = _advancement.Npcs.TryGetValue(spot.Loaded.Entity, out var levelled) ? levelled.Sheet : spot.Loaded.Sheet;
+        var skill = QueryNpcSkills(spot.Loaded, spot.Modifiers)[Skill.SpotTrap];
+        var aptitude = Math.Clamp(AutoLevelRules.DerivedStat(sheet, spot.Modifiers, CharacterStat.MagickTechAptitude), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);
+        var request = new SkillCheckRequest
+        {
+            Skill = Skill.SpotTrap,
+            Level = skill.Level,
+            Training = skill.Training,
+            Effectiveness = new()
+            {
+                ExtraordinaryIntelligence = AutoLevelRules.EffectiveStat(sheet, spot.Modifiers, CharacterStat.Intelligence) >= CharacterStatRules.ExtraordinaryThreshold,
+                Difficulty = _difficulty,
+            },
+            Difficulty = new()
+            {
+                SourceInjuries = SourceInjuries(npc.State.Conditions),
+                Light = light,
+                Modifier = TrapRules.SpotItemModifier(NpcItemNameAt(spot.Spotter.Entity!, TrapRules.ShieldLocation), NpcStackOfType(spot.Spotter.Entity!, TrapRules.ChargeAmmoType)?.Units ?? 0, aptitude),
+            },
+        };
+        return FinishSpotRoll(request, state);
+    }
+
+    /// <summary>The observer an NPC's spot attempt is made as (ledger TT2): a companion led by the PC, or an NPC without a PC leader.</summary>
+    public static TrapObserver NpcSpotObserver(SessionNpcSpot spot) => spot.LedByPc ? TrapObserver.LedNpc : TrapObserver.FreeNpc;
+
+    // The hero's modifier of the spot invocation (SP2): its worn item at 1005, its charges of ammunition type 2, its aptitude (stat 16).
+    private int HeroSpotItemModifier()
+    {
+        var worn = _equipment.Capture().Worn.FirstOrDefault(item => item.Slot == EquipmentSlot.Shield)?.Entity;
+        var name = worn is null ? 0 : HeroHeld().Where(item => item.Entity == worn).Select(item => item.Kind.Name).FirstOrDefault();
+        return TrapRules.SpotItemModifier(name, HeroStackOfType(TrapRules.ChargeAmmoType)?.Units ?? 0, HeroAptitude());
+    }
+
+    // The name of the item an NPC's list holds at an inventory location as the session's lists show it (a dressed NPC's record over its map data, ARC-WORLD-103); 0 for none.
+    private int NpcItemNameAt(string npc, int location)
+    {
+        foreach (var seed in _inventory.Seeds.Values)
+            if (seed.Holders.TryGetValue(npc, out var holder) && holder.Kind == SessionHolderKind.Npc)
+                foreach (var entity in holder.Items)
+                    if (!_inventory.Taken.Contains(entity) && !Dropped(entity) && _inventory.Worn(npc, entity, seed.Items[entity].Facts).InventoryLocation == location)
+                        return seed.Items[entity].Facts.Kind.Name;
+        foreach (var item in _inventory.AddedTo(npc))
+            if (_inventory.Worn(npc, item.Entity, InventoryDomain.MadeFacts(item.Kind)).InventoryLocation == location) return item.Kind.Name;
+        return 0;
+    }
+
+    // The shared end of a spot roll: the check and the skill's own case from a trial copy of the generator, which the session keeps (one revision).
+    private SessionSpotRoll FinishSpotRoll(SkillCheckRequest request, SessionTrapState state)
+    {
         var rolls = new SkillRolls(new SeededRandom(_random.Seed, _random.Draws));
         SkillCheckResult check;
         bool spotted, second = false;

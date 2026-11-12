@@ -17,6 +17,17 @@ public sealed class AreaLootArtTests
         new([], "npc:1", "Body", []) { LootGrid = loot, Grid = [new AreaGridItem("own:1", 0, 1, 1, "Own")] };
 
     [TestMethod]
+    public void TheContentsWindowOfMode4HasNoTakeAllNoTogglesForAContainerAndNoRightReleaseMove()
+    {
+        // ARC-RES-1327 (ledger XR16): Take all is mode 2's alone, the doll toggles are made for a body (mode 4 shows containers), and the right release moves nothing in mode 4.
+        Assert.IsFalse(AreaLootArtLayout.TakeAllShown(AreaInventoryMode.Contents));
+        var container = new AreaInventoryView([], "box", "Box", []) { Contents = true, HolderContainer = true, LootGrid = [new("loot:1", 0, 1, 1, "Ring", Kind)] };
+        Assert.IsFalse(AreaLootArtLayout.TogglesShown(AreaInventoryMode.Contents, container));
+        Assert.IsNull(AreaLootArtLayout.RightRelease(container, new AreaLootHit(null, null, 0, false), AreaInventoryMode.Contents));
+        Assert.AreEqual(AreaRoundViewRelease.Close, AreaInventoryHole.Release(AreaInventoryMode.Contents, false), "a release in the round view closes it, as in every mode");
+    }
+
+    [TestMethod]
     public void TheLootArtsAreRead()
     {
         CollectionAssert.AreEqual(new[] { 234, 808, 348, 347 }, AreaLootArtLayout.ArtNumbers.ToArray());
@@ -234,5 +245,17 @@ public sealed class AreaLootArtTests
         Assert.IsNull(AreaLootArtLayout.RightRelease(view, new AreaLootHit(null, null, 12, false), AreaInventoryMode.Steal), "no item");
         Assert.IsNull(AreaLootArtLayout.RightRelease(view, new AreaLootHit(null, AreaInventoryIcon.Drop, null, false), AreaInventoryMode.Steal));
         Assert.IsNull(AreaLootArtLayout.RightRelease(view, lower, AreaInventoryMode.Own), "the own window's right release is the use (IW5)");
+    }
+    [TestMethod]
+    public void TheRatingBoxesLieUnderTheDollInsideTheFrameAndTheTooHeavyFillIsDarkRed()
+    {
+        // ARC-UI-1121 (IW29, IW41, IW43): the two numbers sit under the doll's lowest slot (the boots end at y 372 on the doll art; the boxes start at 354, inside the art's frame).
+        foreach (var box in new[] { AreaLootArtLayout.DamageRatingBox, AreaLootArtLayout.ArmourRatingBox })
+        {
+            Assert.IsTrue(box.X >= 0 && box.X + box.Width <= 358 && box.Y >= AreaLootArtLayout.DollView.Y && box.Y + box.Height <= 400, $"{box} inside the 358 × 400 frame");
+            Assert.AreEqual((22, 16), (box.Width, box.Height));
+        }
+        Assert.IsTrue(AreaLootArtLayout.DamageRatingBox.X + AreaLootArtLayout.DamageRatingBox.Width < AreaLootArtLayout.ArmourRatingBox.X, "the damage rating is left of the armour rating");
+        Assert.AreEqual((0x40, 0, 0), AreaLootArtLayout.TooHeavyFill);
     }
 }

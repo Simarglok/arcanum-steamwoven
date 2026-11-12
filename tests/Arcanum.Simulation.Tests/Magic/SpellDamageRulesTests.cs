@@ -114,6 +114,25 @@ public sealed class SpellDamageRulesTests
         Assert.AreEqual((10 + 8 - 4, true), (plain.HitPointDamage, plain.DamagesArmor), "resistances, then hard takes a quarter; fire wears armour");
     }
 
+    /// <summary>
+    /// ARC-MAGIC-1361 (DH2, DH6): the numbers of Harm (installed record 55: <c>Dmg: 3-40</c>, normal, <c>Scaled</c>, cost 5) for the hero of the owner's report (level 4, a night mage at night:
+    /// 4 + 4 magick points, aptitude (50 × 8) / 10 = 40). The component gives 3 + 37 × 40 / 100 = 17 with no draw; the damage step then adds a half on easy (+8) and takes a quarter on hard (−4)
+    /// for a PC attacker, as 0x4B4390 does (a share of the settings 0 and 2, not of a spell: every attack of the PC has it). So 25 hit points on easy is the original's number, not a double.
+    /// </summary>
+    [TestMethod]
+    public void Harm_of_a_hero_with_aptitude_40_deals_17_normal_25_easy_and_13_hard_Dh2_Dh6()
+    {
+        var hero = new SpellRunObject("hero", SpellObjectFacts.PcType, 40);
+        var packet = SpellDamageRules.Damage(Component(0, 3, 40, SpellDamageFlags.Scaled), Run(hero), 0, new Rolls(), MagicAnomalyProfile.Original);
+        Assert.AreEqual(17, packet.Damage.Normal);
+        int Hit(GameDifficulty difficulty, bool pc = true) => AttackResolver.DamageStep(new()
+            { Attacker = new Combatant { IsPc = pc }, Target = new Combatant(), Difficulty = difficulty, Damage = packet.Damage }).HitPointDamage;
+        Assert.AreEqual((17, 25, 13), (Hit(GameDifficulty.Normal), Hit(GameDifficulty.Easy), Hit(GameDifficulty.Hard)));
+        Assert.AreEqual(17, Hit(GameDifficulty.Easy, pc: false), "an NPC attacker has no difficulty share");
+        // The aptitude of the same hero by day (a night mage loses 4 points): 4 − 4 = 0 magick points, aptitude 0, the minimum.
+        Assert.AreEqual(3, SpellDamageRules.Damage(Component(0, 3, 40, SpellDamageFlags.Scaled), Run(hero with { Aptitude = 0 }), 0, new Rolls(), MagicAnomalyProfile.Original).Damage.Normal);
+    }
+
     [TestMethod]
     public void A_nigh_invulnerable_critter_takes_a_spell_only_from_a_caster_with_an_uber_weapon_in_the_original_Mg36()
     {
@@ -164,6 +183,53 @@ public sealed class SpellDamageRulesTests
         Assert.IsNull(acid.Steps[0].Life, "an item is the host's object damage");
         var dead = LifeRules.ApplyDamage(LifeState.Unharmed, new LifeFacts(), life, new NoRolls());
         Assert.AreEqual(DeathAnimation.Plain, dead.Death);
+    }
+
+    [TestMethod]
+    public void A_taking_damage_veto_skips_that_objects_acid_step_and_leaves_the_chains_amounts_alone()
+    {
+        // ARC-COMBAT-1141 (GT198, GT211): the script is asked at the start of each step's damage apply, before the resistance step that lowers the context's amounts in place, so a
+        // vetoed worn item neither takes the damage nor lowers what the next object takes.
+        var world = new World();
+        world.Worn.Add(new SpellAcidItem("helmet", 1000, false, 50));
+        world.Worn.Add(new SpellAcidItem("gloves", 1007, false, 0));
+        world.Targets["helmet"] = new Combatant { Resistances = new(50, 0, 0, 0) };
+        var acid = Component(5, 30, 30);
+        var asked = new List<string>();
+        var all = SpellLifeComponents.Damage(acid, Run(), Orc, world, new Rolls(), MagicAnomalyProfile.Original, id => { asked.Add(id); return true; });
+        Assert.AreEqual("helmet:15 gloves:15 orc:5", string.Join(" ", all.Steps.Select(s => $"{s.Object}:{s.Damage.HitPointDamage}")), "the helmet takes 15 after its resistance and hands 15 on");
+        CollectionAssert.AreEqual(new[] { "helmet", "gloves", "orc" }, asked, "every worn item in slot order, then the wearer");
+
+        var vetoedHelmet = SpellLifeComponents.Damage(acid, Run(), Orc, world, new Rolls(), MagicAnomalyProfile.Original, id => id != "helmet");
+        Assert.AreEqual("helmet:vetoed gloves:30 orc:10", string.Join(" ", vetoedHelmet.Steps.Select(s => s.Vetoed ? $"{s.Object}:vetoed" : $"{s.Object}:{s.Damage.HitPointDamage}")),
+            "the vetoed helmet leaves the amount at 30 for the gloves and the wearer's third");
+        Assert.IsTrue(vetoedHelmet.Steps[0].Vetoed);
+        Assert.IsNull(vetoedHelmet.Steps[0].Life);
+
+        var vetoedWearer = SpellLifeComponents.Damage(acid, Run(), Orc, world, new Rolls(), MagicAnomalyProfile.Original, id => id != "orc");
+        Assert.AreEqual("helmet gloves orc:vetoed", string.Join(" ", vetoedWearer.Steps.Select(s => s.Vetoed ? $"{s.Object}:vetoed" : s.Object)));
+
+        var plain = SpellLifeComponents.Damage(Component(0, 12, 12), Run(), Orc, world, new Rolls(), MagicAnomalyProfile.Original, _ => false);
+        Assert.IsTrue(plain.Steps.Single().Vetoed, "a plain damage step is vetoed as one");
+    }
+
+    [TestMethod]
+    public void A_vetoed_kill_pins_the_damage_without_a_death_and_a_vetoed_poison_tick_changes_nothing()
+    {
+        // ARC-COMBAT-1141 (GT210–GT212, F1): 0x45D900 writes 32000 after its damage step whether or not the step ran; the death needs the step.
+        var facts = new LifeFacts();
+        var vetoed = LifeRules.KillVetoed(LifeState.Unharmed, facts);
+        Assert.AreEqual(LifeLimits.DeathHitPointDamage, vetoed.After.HitPointDamage);
+        Assert.AreEqual((LifeEvents.None, DeathAnimation.None, 0), (vetoed.Events, vetoed.Death, vetoed.HitPointDamage));
+        Assert.IsTrue(LifeRules.Evaluate(vetoed.After, facts).IsDead, "it reads as dead all the same");
+        var killed = LifeRules.Kill(LifeState.Unharmed, facts);
+        Assert.AreEqual(vetoed.After, killed.After, "the pin is the same either way");
+        Assert.IsTrue(killed.Events.HasFlag(LifeEvents.Died));
+
+        var poisoned = LifeState.Unharmed with { PoisonLevel = 300 };
+        var tick = LifeRules.PoisonDamageVetoed(poisoned, facts);
+        Assert.AreEqual((poisoned, poisoned, LifeEvents.None), (tick.Before, tick.After, tick.Events));
+        Assert.AreEqual(2, LifeRules.PoisonDamage(poisoned, facts).After.HitPointDamage, "an allowed tick at level 300 deals 2");
     }
 
     [TestMethod]

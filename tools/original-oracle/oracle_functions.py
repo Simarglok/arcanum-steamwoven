@@ -254,6 +254,131 @@ AI_LIST_CODE = ((0x4CC310, 0x4CC350), (0x4CC2D0, 0x4CC310), (0x58A548, 0x58A69C)
 AI_LIST_LIMIT = 4_000_000       # a sort of all 223 spells runs some hundred thousand instructions
 
 
+# Pure numeric functions (ARC-DEV-1105, V3 of the function audit plan): no world model; every input is an argument or a value of
+# a table of the image, so a call reads nothing else. A geometry function's coordinates stay inside the C# side's domain.
+GEOMETRY_HELPERS = ((0x58AB70, 0x58AB8F), (0x58AC40, 0x58AC61))   # the runtime's 64-bit shifts, __allshl and __allshr
+STAT_COST_TABLE = (0x5B52E4, 0x5B52E4 + 80)                        # the character-point cost per stat value 1..20
+TECH_KEY_STAT_TABLE = (0x5B6F34, 0x5B6F34 + 4 * 4)                 # the key stat of each tech skill
+WINDOW_WIDTH, WINDOW_CELLS = 16, 256                              # the world-map route window: 16 x 16 cells
+SECTOR_X_MASK = 0x3FFFFFF                                         # a sector id: x in bits 0..25, y above them
+TILE_LIMIT, SECTOR_Y_LIMIT = 2**31, 2**31                         # coordinates the C# side takes: non-negative ints
+SKILL_VALUE_LIMIT = 1_000_000                                     # SkillRules.MaxValue, the bound of a stat or level argument
+
+
+def _unsigned(rng: random.Random) -> int:
+    """A 32-bit coordinate: mostly small, often an edge of the 32-bit range, sometimes any value."""
+    roll = rng.random()
+    if roll < 0.6:
+        return rng.randint(0, 300)
+    if roll < 0.8:
+        return rng.choice((0, 1, 2, 2**31 - 1, 2**31, 2**31 + 1, 2**32 - 2, 2**32 - 1))
+    return rng.randrange(2**32)
+
+
+def draw_distance_case(rng: random.Random) -> tuple[int, int, int, int]:
+    ax, ay = _unsigned(rng), _unsigned(rng)
+    if rng.random() < 0.4:
+        bx, by = (min(max(c + rng.randint(-40, 40), 0), 2**32 - 1) for c in (ax, ay))
+    else:
+        bx, by = _unsigned(rng), _unsigned(rng)
+    return ax, ay, bx, by
+
+
+def _delta(rng: random.Random) -> tuple[int, int]:
+    """A step (dx, dy) that often sits on the direction rules' edges: an axis zero, equal axes, one twice the other."""
+    major = rng.randint(0, 40) if rng.random() < 0.9 else rng.randint(0, 5000)
+    roll = rng.random()
+    if roll < 0.25:
+        minor = major
+    elif roll < 0.5:
+        minor = max(0, major // 2 + rng.choice((-1, 0, 0, 1)))
+    elif roll < 0.65:
+        minor = 0
+    else:
+        minor = rng.randint(0, major)
+    sign_a, sign_b = rng.choice((-1, 1)), rng.choice((-1, 1))
+    return (sign_a * major, sign_b * minor) if rng.random() < 0.5 else (sign_a * minor, sign_b * major)
+
+
+def _moved(rng: random.Random, limit: int, delta: int) -> tuple[int, int]:
+    """A start in 0..limit-1, mostly near zero, and the point `delta` away from it, clamped into the range."""
+    start = rng.randint(0, 200) if rng.random() < 0.85 else rng.randrange(limit)
+    return start, min(max(start + delta, 0), limit - 1)
+
+
+def draw_direction_case(rng: random.Random, x_limit: int, y_limit: int) -> tuple[int, int, int, int]:
+    dx, dy = _delta(rng)
+    ax, bx = _moved(rng, x_limit, dx)
+    ay, by = _moved(rng, y_limit, dy)
+    return ax, ay, bx, by
+
+
+def draw_window_case(rng: random.Random) -> tuple[int, int]:
+    first = rng.randrange(WINDOW_CELLS)
+    roll = rng.random()
+    if roll < 0.1:
+        return first, first
+    if roll < 0.3:
+        return first, min(max(first + rng.randint(-17, 17), 0), WINDOW_CELLS - 1)
+    return first, rng.randrange(WINDOW_CELLS)
+
+
+def draw_value_case(rng: random.Random, low: int, high: int, bound: int) -> int:
+    """An integer argument: mostly around the table's range, sometimes anywhere in -bound..bound."""
+    if rng.random() < 0.85:
+        return rng.randint(low, high)
+    return rng.choice((-bound, bound, rng.randint(-bound, bound)))
+
+
+@dataclass(frozen=True)
+class PureModel:
+    fields: tuple[str, ...]            # the input fields, then the result fields, as the oracle file names them
+    draw: Callable[[random.Random], tuple[int, ...]]
+    arguments: Callable[[tuple[int, ...]], tuple[int, ...]]   # the call's 32-bit arguments of one input
+    readable: tuple[tuple[int, int], ...]
+    result: Callable[[int, int], tuple[int, ...]]            # (EAX signed, EDX) -> the result fields
+    stored: Callable[[tuple[int, ...]], tuple[int, ...]]     # the input as stored in a field (a 32-bit value is stored signed)
+
+
+def _signed(value: int) -> int:
+    value &= 0xFFFFFFFF
+    return value - (1 << 32) if value & 0x80000000 else value
+
+
+def _signed_all(inputs: tuple[int, ...]) -> tuple[int, ...]:
+    return tuple(_signed(value) for value in inputs)
+
+
+def _sector_arguments(inputs: tuple[int, ...]) -> tuple[int, ...]:
+    ax, ay, bx, by = inputs
+    first, second = (ay << 26) | ax, (by << 26) | bx
+    return first & 0xFFFFFFFF, first >> 32, second & 0xFFFFFFFF, second >> 32
+
+
+PURE_MODELS: dict[str, PureModel] = {
+    "location-distance": PureModel(("ax", "ay", "bx", "by", "low", "high"), draw_distance_case, lambda i: i, (),
+                                   lambda eax, edx: (_signed(eax), _signed(edx)), _signed_all),
+    "tile-direction": PureModel(("ax", "ay", "bx", "by", "result"), lambda rng: draw_direction_case(rng, TILE_LIMIT, TILE_LIMIT), lambda i: i,
+                                (), lambda eax, edx: (eax,), _signed_all),
+    "sector-direction": PureModel(("ax", "ay", "bx", "by", "result"),
+                                  lambda rng: draw_direction_case(rng, SECTOR_X_MASK + 1, SECTOR_Y_LIMIT), _sector_arguments, (),
+                                  lambda eax, edx: (eax,), _signed_all),
+    "window-estimate": PureModel(("from", "to", "result"), draw_window_case, lambda i: (*i, WINDOW_WIDTH), (), lambda eax, edx: (eax,), _signed_all),
+    "window-direction": PureModel(("from", "to", "result"), draw_window_case, lambda i: (*i, WINDOW_WIDTH), (),
+                                  lambda eax, edx: (eax & 0xFF,), _signed_all),   # a char answer: AL only
+    "stat-cost": PureModel(("value", "result"), lambda rng: (draw_value_case(rng, -3, 25, 2**31 - 1),), lambda i: i, (STAT_COST_TABLE,),
+                           lambda eax, edx: (eax,), _signed_all),
+    "key-stat-cap": PureModel(("keyStat", "result"), lambda rng: (draw_value_case(rng, -3, 25, SKILL_VALUE_LIMIT),), lambda i: i,
+                              (SKILL_CAPS,), lambda eax, edx: (eax,), _signed_all),
+    "minimum-key-stat": PureModel(("level", "result"), lambda rng: (draw_value_case(rng, -3, 25, SKILL_VALUE_LIMIT),), lambda i: i,
+                                  (SKILL_CAPS,), lambda eax, edx: (eax,), _signed_all),
+    "basic-key-stat": PureModel(("skill", "result"), lambda rng: (rng.randrange(BASIC_SKILLS),), lambda i: i, (KEY_STAT_TABLE,),
+                                lambda eax, edx: (eax,), _signed_all),
+    "tech-key-stat": PureModel(("skill", "result"), lambda rng: (rng.randrange(4),), lambda i: i, (TECH_KEY_STAT_TABLE,),
+                               lambda eax, edx: (eax,), _signed_all),
+}
+
+
 @dataclass(frozen=True)
 class FunctionSpec:
     address: int
@@ -305,6 +430,16 @@ FUNCTIONS: dict[int, FunctionSpec] = {spec.address: spec for spec in (
     FunctionSpec(0x4B5810, "spell-acid", ((0x4B5810, 0x4B58BA),), "spell-acid"),
     FunctionSpec(0x461F80, "item-price", ((0x461F80, 0x462170),) + PRICE_CODE, "item-price"),
     FunctionSpec(0x4CC380, "ai-global-list", ((0x4CC380, 0x4CC430),) + AI_LIST_CODE, "ai-global-list"),
+    FunctionSpec(0x4B96F0, "location-distance", ((0x4B96F0, 0x4B9751),), "location-distance"),
+    FunctionSpec(0x4B8D50, "tile-direction", ((0x4B8D50, 0x4B8FED),) + GEOMETRY_HELPERS, "tile-direction"),
+    FunctionSpec(0x4CFCD0, "sector-direction", ((0x4CFCD0, 0x4CFF9D),) + GEOMETRY_HELPERS, "sector-direction"),
+    FunctionSpec(0x4200C0, "window-estimate", ((0x4200C0, 0x420106),), "window-estimate"),
+    FunctionSpec(0x420110, "window-direction", ((0x420110, 0x4201C0),), "window-direction"),
+    FunctionSpec(0x4B0F50, "stat-cost", ((0x4B0F50, 0x4B0F78),), "stat-cost"),
+    FunctionSpec(0x4C5F70, "key-stat-cap", ((0x4C5F70, 0x4C5F98),), "key-stat-cap"),
+    FunctionSpec(0x4C64E0, "minimum-key-stat", ((0x4C64E0, 0x4C650D), (0x4C5F70, 0x4C5F98)), "minimum-key-stat"),
+    FunctionSpec(0x4C64D0, "basic-key-stat", ((0x4C64D0, 0x4C64DC),), "basic-key-stat"),
+    FunctionSpec(0x4C6B10, "tech-key-stat", ((0x4C6B10, 0x4C6B1C),), "tech-key-stat"),
 )}
 
 
@@ -2770,6 +2905,16 @@ def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str,
         finally:
             emulator.instruction_limit = limit
         document.update(fields=["list", "result", "count", "digest", "first", "second", "third", *(f"value{s}" for s in range(SPELL_RECORDS))])
+    elif spec.model in PURE_MODELS:
+        model = PURE_MODELS[spec.model]
+        readable = tuple(Range(start, end) for start, end in model.readable)
+        for case_number in range(count):
+            inputs = model.draw(rng)
+            result = emulator.call(spec.address, model.arguments(inputs), code=code, readable=readable)
+            cases.append([*model.stored(inputs), *model.result(result, emulator.edx)])
+            if progress and case_number % 1000 == 0:
+                progress(case_number)
+        document.update(fields=list(model.fields))
     else:
         raise ValueError(f"unknown model {spec.model}")
     document["cases"] = cases

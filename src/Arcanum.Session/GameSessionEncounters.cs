@@ -7,10 +7,10 @@ using Arcanum.Simulation.Travel;
 
 namespace Arcanum.Session;
 
-/// <summary>ARC-WORLD-1159 (schema 92, ledger PO19): how often a row of the encounter tables fired: its message number and its use count. The original saves one pair for every row (0x558730); only the rows used at least once are kept.</summary>
+/// <summary>ARC-WORLD-1159 (schema 95, ledger PO19): how often a row of the encounter tables fired: its message number and its use count. The original saves one pair for every row (0x558730); only the rows used at least once are kept.</summary>
 public sealed record SessionEncounterUse(int Line, int Count);
 
-/// <summary>ARC-WORLD-1159 (E2-c, schema 92, the <c>encounters</c> section): the use counts of the encounter rows that fired (the rows with a TriggerCount cap stop at it). The Random Encounters event itself is a saved event of the queue.</summary>
+/// <summary>ARC-WORLD-1159 (E2-c, schema 95, the <c>encounters</c> section): the use counts of the encounter rows that fired (the rows with a TriggerCount cap stop at it). The Random Encounters event itself is a saved event of the queue.</summary>
 public sealed record SessionEncounterState(IReadOnlyList<SessionEncounterUse> Uses)
 {
     public static SessionEncounterState Empty { get; } = new([]);

@@ -100,15 +100,18 @@ public static class AreaSpellCasting
             // ARC-MAGIC-017: eye candy is drawn, not told. ARC-DEV-352: its callbacks (play flags 0x8, 0x10) call the run back; a summon is not told either (the original says nothing), its refusal is the viewer's line.
             SpellCastEventKind.SummonRefused => $"the summoning of prototype {entry.Value} was refused",
             // ARC-MAGIC-032 (MA-7, D5(a)): the Identify answer for the hero as text (the original opens a window, E8's: the sheet, the container's inventory, the item description) and the identified mark of Divine Magick (the original tells none of them; the lines are the viewer's).
-            SpellCastEventKind.IdentifyCritter => $"identify: {Who()} (the character sheet window is not built yet)",
-            SpellCastEventKind.IdentifyContainer => $"identify: the contents of {Who()} (the inventory window is not built yet)",
-            SpellCastEventKind.IdentifyItem => $"identify: {Who()} (the item description window is not built yet)",
+            SpellCastEventKind.IdentifyCritter => entry.Value == SpellTargetObject.Pc ? $"identify: {Who()} (the hero's own sheet is the C key)" : $"identify: {Who()} (its character sheet)",
+            SpellCastEventKind.IdentifyContainer => $"identify: the contents of {Who()} (its contents window)",
+            SpellCastEventKind.IdentifyItem => $"identify: {Who()} (its item description)",
             SpellCastEventKind.ItemIdentified => $"{Who()} is identified",
             SpellCastEventKind.ItemIdentifyNotSaved => "the identification was not saved",
             // ARC-MAGIC-037 (MA-6): a lock flag a spell wrote on a portal or container (the original tells none of them; the lines are the viewer's); the refused unlock tells the "resisted" line of its own.
             SpellCastEventKind.OpenableFlagWritten when entry.Value == LockRules.LockedBit => (entry.Detail & 0x1) != 0 ? $"{Who()} is locked" : $"{Who()} is unlocked",
             SpellCastEventKind.OpenableFlagWritten when entry.Value == LockRules.MagicallyHeldBit => (entry.Detail & 0x1) != 0 ? $"{Who()} is held by magick" : $"{Who()} is no longer held by magick",
             SpellCastEventKind.OpenableFlagNotSaved => "the lock change was not saved",
+            // ARC-MAGIC-1146: the Recharge component's new charge count of an item (the original tells none; the lines are the viewer's); Trait64's writes are state, not text.
+            SpellCastEventKind.ItemRecharged => $"{Who()} is recharged to {entry.Value} charges",
+            SpellCastEventKind.ItemRechargeNotSaved => "the recharge was not saved",
             _ => null,
         };
     }

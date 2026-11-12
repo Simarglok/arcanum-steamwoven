@@ -1,5 +1,6 @@
 using Arcanum.Data.Magic;
 using Arcanum.Session;
+using Arcanum.Simulation.Magic;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -41,11 +42,21 @@ public sealed class AreaSpellCastingTests
     public void The_identify_answer_is_a_text_line_by_the_target_type_and_the_mark_a_line_of_its_own()
     {
         // ARC-MAGIC-032 (MA-7, D5(a)): the windows of the original are E8's; the line says what the window would show.
-        Assert.AreEqual("identify: Rat r1 (the character sheet window is not built yet)", AreaSpellCasting.Line(new(SpellCastEventKind.IdentifyCritter, 1, 16, "r1"), null, Name));
-        Assert.AreEqual("identify: the contents of Rat r2 (the inventory window is not built yet)", AreaSpellCasting.Line(new(SpellCastEventKind.IdentifyContainer, 1, 2, "r2"), null, Name));
-        Assert.AreEqual("identify: Rat kit:2 (the item description window is not built yet)", AreaSpellCasting.Line(new(SpellCastEventKind.IdentifyItem, 1, 5, "kit:2"), null, Name));
+        Assert.AreEqual("identify: Rat r1 (its character sheet)", AreaSpellCasting.Line(new(SpellCastEventKind.IdentifyCritter, 1, SpellTargetObject.Npc, "r1"), null, Name));
+        Assert.AreEqual("identify: Rat r1 (the hero's own sheet is the C key)", AreaSpellCasting.Line(new(SpellCastEventKind.IdentifyCritter, 1, SpellTargetObject.Pc, "r1"), null, Name));
+        Assert.AreEqual("identify: the contents of Rat r2 (its contents window)", AreaSpellCasting.Line(new(SpellCastEventKind.IdentifyContainer, 1, 2, "r2"), null, Name));
+        Assert.AreEqual("identify: Rat kit:2 (its item description)", AreaSpellCasting.Line(new(SpellCastEventKind.IdentifyItem, 1, 5, "kit:2"), null, Name));
         Assert.AreEqual("Rat kit:2 is identified", AreaSpellCasting.Line(new(SpellCastEventKind.ItemIdentified, 1, 1, "kit:2"), null, Name));
         Assert.AreEqual("the identification was not saved", AreaSpellCasting.Line(new(SpellCastEventKind.ItemIdentifyNotSaved, 1, 3, "kit:2"), null, Name));
+    }
+
+    [TestMethod]
+    public void The_recharge_of_an_item_tells_its_new_charge_count_and_trait64_tells_nothing()
+    {
+        // ARC-MAGIC-1146: the Recharge component's answer is a line of the viewer's own; Trait64 writes state only.
+        Assert.AreEqual("Rat kit:2 is recharged to 8 charges", AreaSpellCasting.Line(new(SpellCastEventKind.ItemRecharged, 1, 8, "kit:2", 5), null, Name));
+        Assert.AreEqual("the recharge was not saved", AreaSpellCasting.Line(new(SpellCastEventKind.ItemRechargeNotSaved, 1, 3, "kit:2"), null, Name));
+        Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.Trait64Written, 1, 242, "r1", 0), null, Name));
     }
 
     [TestMethod]

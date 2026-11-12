@@ -41,6 +41,11 @@ public static class AreaInventoryArtLayout
         [EquipmentSlot.Boots] = 242,
     };
 
+    /// <summary>ARC-UI-1267 (IW25, IW41): the two numbers mode 0 prints under the doll, the hero's displayed damage rating (0x464630) and armour rating (0x464700), in the rectangles
+    /// (x, y, width, height) the redraw reads at 0x5CAEF8 and 0x5CAF08 (0x576E2C..0x576EFD, font 0x681390): the damage rating ends at the right edge of its rectangle (x + width −
+    /// text width), the armour rating starts at the left edge of its.</summary>
+    public static readonly (int X, int Y, int Width, int Height) DamageRatingBox = (80, 358, 23, 35), ArmourRatingBox = (261, 358, 23, 35);
+
     /// <summary>The weight, encumbrance and speed lines' rectangles (0x5CAE98).</summary>
     public static IReadOnlyList<(int X, int Y, int Width, int Height)> Lines { get; } = [(145, 29, 185, 15), (145, 44, 185, 15), (145, 59, 185, 15)];
 

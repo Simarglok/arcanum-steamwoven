@@ -56,7 +56,7 @@ Left for the next inventory slices (each its own task):
   341 `PD_Cover4Inven` at (361, 0) and moves the doll's rectangles 348 pixels to the right (table 0x5CACE8), F0).
 - The doll art's empty box at its top-left (about 18, 14 to 160, 157): the mode-0 redraw draws nothing there (only
   modes 1–6 draw a critter image, 0x553D10, at their own places); whether another path fills it is not read (F0).
-- The two numbers at (80, 358) and (261, 358) (0x464630, 0x464700, F0) and the selected-item fill
+- The two numbers at (80, 358) and (261, 358) of the hero's own window (0x464630, 0x464700; read by ARC-UI-1121 for the body's doll and by ARC-UI-1267 for the hero's own window, [IW41](../research/ledger/ui-audio.md#doll-values-and-weapon-overlay-arc-ui-1121)) and the selected-item fill
   (0x681458, colour from the palette, F0).
 
 ## Loot window (done: ARC-UI-052)
@@ -82,7 +82,7 @@ body's grid (PROJECT: the original's scroll bar at (330, 136) is not drawn); the
 window with its Take buttons. PROJECT: a taken item goes to the hero's first free cells, not the cell it was released on.
 
 ARC-UI-072 built the body's doll view and its toggles (the loot and steal windows of a critter: the worn items on 349 `Loot_PD` at (0, 134), toggles 338 / 339 at
-(23, 108), (74, 108); IW29, IW30). Left for the next loot slices (each its own task): the doll's two values and the weapon's overlay, the hero's doll toggle at (713, 37), (751, 37), the scroll bar's art, the move of a hero's
+(23, 108), (74, 108); IW29, IW30). ARC-UI-1121 added the doll's two values and the weapon slot's fill ([IW41–IW43](../research/ledger/ui-audio.md#doll-values-and-weapon-overlay-arc-ui-1121)). ARC-UI-1267 added the same two values and the weapon fill to the hero's own window. Left for the next loot slices (each its own task): the hero's doll toggle at (713, 37), (751, 37), the scroll bar's art, the move of a hero's
 item into the body, the button 340 at (763, 197) and the hot spots of IW30, a follower's portrait as the image, the right release's
 move of a hero's item into the body (IW36), a move within the body's grid.
 
@@ -130,9 +130,9 @@ pointer and the trade messages; the "Diagnostic view" switch shows the diagnosti
 look too, docked at the screen's (0, 41) over window 15's strips, without the round view and its release (the main menu is up, IW33,
 IW34; [menu windows plan](#menu-windows-plan-arc-ui-058) item 5).
 
-Left for the next barter slices (each its own task): the gamble (check 0x579840, gamble 0x579B60, the box's on and refused arts), the
+The follower's cycle buttons 757 / 758 at (155, 55), (253, 55) are built (ARC-UI-1120, BW6). Left for the next barter slices (each its own task): the gamble (check 0x579840, gamble 0x579B60, the box's on and refused arts), the
 generated quote phrases (0x413490 and its neighbours, `gd_*` lines), the count dialog for stacks, the hero's grid moves and drop and use
-boxes inside the barter window, the follower's weight lines and cycle buttons 757 / 758 at (155, 55), (253, 55), the merchant's doll view
+boxes inside the barter window, the follower's weight lines, the merchant's doll view
 (337 `Barter_PD` at (0, 157), toggles at (8, 123), (46, 123); IW29, IW30; the barter window's toggles are not built), the scroll bar's art.
 
 ## Character sheet

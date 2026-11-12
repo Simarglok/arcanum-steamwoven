@@ -4,6 +4,7 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
@@ -112,6 +113,22 @@ public sealed class AreaCombatFloatersTests
     }
 
     [TestMethod]
+    public void A_disarm_step_floats_message_19_when_its_weapon_block_ran_on_an_item()
+    {
+        // ARC-MAGIC-1232 (DW2): a spell's weapon block floats "weapon dropped" (combat.mes 19) as an attack's critical drop does: for a drop the original tried on a weapon that was there, whatever it did.
+        var damage = new AttackDamage(DamageRecipient.Target, DamageByType.Zero, DamageByType.Zero, 0, 0, 0, DamageMultiplier.None, false,
+            CriticalHitEffects.DropWeapon, default, false, DamagePrevention.None);
+        SessionCriticalStep Drop(SessionCriticalStepOutcome outcome) => new(SessionCriticalStepKind.DropWeapon, DamageRecipient.Target, EquipmentSlot.Weapon, "sword", outcome, null);
+        SessionSpellDamageStep Step(params SessionCriticalStep[] criticals) => new("oid:rat", damage, Life(LifeEvents.None), "hero") { Criticals = criticals };
+        Assert.IsTrue(AreaCombatFloaters.Of(Step(Drop(SessionCriticalStepOutcome.Dropped)), FloaterSide.Other)!.WeaponDropped);
+        Assert.IsTrue(AreaCombatFloaters.Of(Step(Drop(SessionCriticalStepOutcome.Refused)), FloaterSide.Other)!.WeaponDropped, "a refused drop still floats it");
+        Assert.IsFalse(AreaCombatFloaters.Of(Step(Drop(SessionCriticalStepOutcome.NoItem)), FloaterSide.Other)!.WeaponDropped, "no weapon, no message");
+        Assert.IsFalse(AreaCombatFloaters.Of(Step(), FloaterSide.Other)!.WeaponDropped);
+        var lines = CombatFloaters.Of(AreaCombatFloaters.Of(Step(Drop(SessionCriticalStepOutcome.Dropped)), FloaterSide.Other)!, 2, AreaCombatTexts.Project("test").Text);
+        Assert.IsTrue(lines.Any(line => line.Text == AreaCombatTexts.Project("test").Text(19)), "message 19 floats");
+    }
+
+    [TestMethod]
     public void Misses_dodges_self_hits_and_the_dead()
     {
         Assert.IsTrue(AreaCombatFloaters.Of(Result(Resolution(AttackOutcome.Miss, cause: AttackMissCause.Dodged), null), FloaterSide.Pc, FloaterSide.Other)!.Dodged);
@@ -143,6 +160,36 @@ public sealed class AreaCombatFloatersTests
         Assert.AreEqual(2, hit.AttackerHands, "the capped loss the session applied");
         var negative = result with { Object = new ObjectHitOutcome(0, -4, false, default, 0) };
         Assert.AreEqual(0, AreaCombatFloaters.Of(negative, FloaterSide.Pc)!.HitPoints, "never below 0");
+        // ARC-COMBAT-1138: a later hit floats what it dealt, not the object's total damage.
+        var later = result with { Object = new ObjectHitOutcome(3, 8, false, default, 8) };
+        Assert.AreEqual(5, AreaCombatFloaters.Of(later, FloaterSide.Pc)!.HitPoints);
+    }
+
+    [TestMethod]
+    public void Damage_without_an_attacker_floats_the_objects_damage_line_at_level_two_only()
+    {
+        // ARC-COMBAT-1138 (CH12, CH13): a spell's, trap's, burn's or script's damage on an object floats the amount it dealt, white, no critter lines.
+        var door = new AreaObjectHit("sector:1:0", new ObjectHitOutcome(3, 8, false, ObjectBreak.None, 8), SessionObjectHostSteps.None);
+        var hit = AreaCombatFloaters.Of(door);
+        Assert.IsTrue(hit.ObjectStep && !hit.CritterStep);
+        Assert.AreEqual(5, hit.HitPoints);
+        var lines = CombatFloaters.Of(hit, FloaterRules.Numbers, n => n == CombatFloaters.HitPointsLine ? "HP" : $"[{n}]");
+        Assert.AreEqual(1, lines.Count);
+        Assert.AreEqual(("HP 5", FloaterColor.White, FloaterOver.Struck), (lines[0].Text, lines[0].Color, lines[0].Over));
+        Assert.AreEqual(0, CombatFloaters.Of(hit, FloaterRules.Messages, n => "x").Count, "level 1 shows no number");
+        Assert.AreEqual(0, CombatFloaters.Of(hit, FloaterRules.Never, n => "x").Count, "level 0 shows nothing");
+        var broken = AreaCombatFloaters.Of(door with { Hit = new ObjectHitOutcome(7, 12, true, ObjectBreak.Destroyed, 12) });
+        Assert.AreEqual(5, broken.HitPoints, "the break floats the same amount");
+        Assert.AreEqual(0, AreaCombatFloaters.Of(door with { Hit = new ObjectHitOutcome(5, 5, false, ObjectBreak.None, 5) }).HitPoints, "a hit that added nothing floats 0");
+    }
+
+    [TestMethod]
+    public void Damage_without_an_attacker_floats_an_items_amount()
+    {
+        var item = new AreaItemHit("item:1", new ItemDurabilityResult(GameSessionDisposition.Changed, GameSessionFailure.None, null, ItemBreakStep.None, null, default), SessionObjectHostSteps.None) { Amount = 4 };
+        Assert.AreEqual(4, AreaCombatFloaters.Of(item).HitPoints);
+        Assert.IsTrue(AreaCombatFloaters.Of(item).ObjectStep);
+        Assert.AreEqual(0, AreaCombatFloaters.Of(item with { Amount = -3 }).HitPoints, "never below 0");
     }
 
     [TestMethod]

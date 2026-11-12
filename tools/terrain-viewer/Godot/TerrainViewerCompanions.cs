@@ -52,6 +52,8 @@ public partial class TerrainViewerApp
         // ARC-WORLD-115: a companion the AI host holds while it fights walks only the host's steps.
         _areaCompanions.HeldByAi = entity => _aiHost?.Holds(entity) == true;
         _areaCompanions.Extra = AiMoversOverlay;
+        // ARC-MAGIC-1189 (TT10, SP2): a companion on its own follow walk checks each next tile for a trap with its own spot attempt, as the AI host's walkers do.
+        _areaCompanions.StepTrap = (entity, cell) => _aiHost?.TrapSpottedOn(entity, cell) == true;
         if (_readyMapName is not null) AdoptVisitorFrames(_areaCompanions);
         foreach (var skipped in _areaCompanions.Skipped) GD.Print("ARC-WORLD-016 companion skipped " + skipped);
         // ARC-WORLD-047: a waiting follower whose map data this run can read now gets the level steps it missed.

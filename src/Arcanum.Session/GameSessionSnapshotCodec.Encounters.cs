@@ -4,7 +4,7 @@ namespace Arcanum.Session;
 
 public static partial class GameSessionSnapshotCodec
 {
-    // ARC-WORLD-1159 (schema 92): the use counts of the world-map random encounter rows that fired, ascending by row.
+    // ARC-WORLD-1159 (schema 95): the use counts of the world-map random encounter rows that fired, ascending by row.
     private static readonly string[] EncountersFields = ["uses"];
     private static readonly string[] EncounterUseFields = ["line", "count"];
 

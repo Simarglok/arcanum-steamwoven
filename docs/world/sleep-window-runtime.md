@@ -63,12 +63,19 @@ exit object, [`AreaMapTransfers.Beds`](../../src/Arcanum.World/AreaMapTransfers.
    (`Unseat`, 0x45F3A0) and empties the bed.
 
 **What the installed data holds** ([`BedCensusRealDataTests`](../../tests/Arcanum.World.Tests/BedCensusRealDataTests.cs), opt-in `DAT_ROOT`, numbers only;
-2026-11-12, the 80 maps of the catalogue that a snapshot holds; the main map is not read): **191 placed beds**, all of one prototype (basic number 4045, eight art numbers for the styles). **19 carry a script on point 1 and 172 carry none**, so in
+2026-11-12, the 80 maps of the catalogue that a snapshot holds, then the main map, below): **191 placed beds**, all of one prototype (basic number 4045, eight art numbers for the styles). **19 carry a script on point 1 and 172 carry none**, so in
 the original 172 of them refuse the hero (message 8). The scripted ones are in four maps: Bates mansion level 1 (5 beds) and level 2 (6), script 3023 (a
 conditional script of three lines that ends *skip default* on one branch and *run default* on the other); Roseborough inn2 (4 of its 15) and Wheel clan (3 of
 its 29), script 1990 (32 lines with both ends, so the answer depends on state); the Crash Site cave (1 bed), script 1893 (a single line that ends *skip default*:
 the hero may lie down). The bed prototype itself holds no use script; the scripts are set on the placed beds. The main world map (621 sector files, more than a
-snapshot holds) is **not** read by the census; the 80 maps are every other map of the catalogue. The smoke stage `bed` pins the cave's bed.
+snapshot holds) is counted apart, by a sector-by-sector reader (ARC-WORLD-1262, next paragraph); the 80 maps are every other map of the catalogue. The smoke stage `bed` pins the cave's bed.
+
+**The main world map** (`arcanum1-024-fixed`, 621 sector files; ARC-WORLD-1262, [#1262](https://github.com/Simarglok/arcanum-steamwoven/issues/1262), the second test of `BedCensusRealDataTests`, numbers only): the test reads each sector file once
+(`WorldCatalog.ReadSector`, no window, no plan, no queued per-sector load, so the 621 files cost about 6 s) and keeps only the bed rows (scenery with a bed art id, the instance's art over its prototype's) and, from the
+map's mobile aggregate, the NPC rows' standpoints. The same reader is run over the 80 maps first and must give the numbers above (191, 19, and the NPC rows below), so the two readers agree. The main map holds **275 placed beds**, all static (none in
+the mobile aggregate), of **two** prototypes (basic numbers 4038 and 4045; the 80 maps hold only 4045), in 72 sectors. **32 carry a script on point 1 and 243 carry none**, so in the original 243 of them refuse the hero (message 8), 88 % (90 % in the 80 maps: 172 of 191). The scripted ones use four scripts: 1893 (8 beds, the single line that ends *skip default*, as in the Crash Site cave), 1990 (21; 32 lines, both ends, shared with Roseborough inn2 and Wheel clan), 2429 (2; 30 lines) and 2452
+(1; 29 lines), the last two each with one *skip default* end and two *run default* ends. The 3,999,379 sectors of the map that have no file are generated from 208 terrain templates; none of the templates holds a bed, so the generated sectors add
+none. Over the 80 maps and the main map together: **466 placed beds, 51 scripted, 415 with none**.
 
 ## The bed's picture (ARC-WORLD-1162 slice 3, ledger SWB15)
 
@@ -83,8 +90,8 @@ An NPC lies in a bed through the standpoint step, as the original's: the step ([
 radius (1 tile, 4 for a wanderer) of the current standpoint **at** it; the AI host ([`AreaAiHostBeds`](../../src/Arcanum.World/AreaAiHostBeds.cs)) then does what 0x4ACDB0 does there:
 
 - **The latch (NPC flag 0x200)** is set once: while it is clear the step looks for a bed on the standpoint tile (0x4AD140: the finder tests neither the hour nor the NPC) and seats the NPC (0x45F2D0). The seat's answer is
-  not read, so an NPC whose bed is taken (by the hero, by another NPC) keeps the latch, stands there and is not tried again until it leaves its radius (the far branch clears the latch). The latch is host state and is
-  not saved; the first bed question of a host (below) settles the latch, the occupancy and the saved flags.
+  not read, so an NPC whose bed is taken (by the hero, by another NPC) keeps the latch, stands there and is not tried again until it leaves its radius (the far branch clears the latch). The latch is the NPC's session state
+  (`npc.route.latch`, saved with the object, ARC-AI-1314, over the map row's own bit), so a loaded NPC at its standpoint is not looked up a bed again; the first bed question of a host (below) settles the occupancy and the saved flags.
 - **A seated NPC** is the bed's occupant in the occupancy the hero's rest uses, so a bed an NPC sleeps in refuses the hero with message 10, and its critter flag 0x1000 and object flag 0x100 (not drawn) are session writes (the saved `objectFlags`, no schema
   change); the host's sleeping readers see it asleep (`AreaAiHost.Sleeping`: the danger update, the item search and the heal skip a sleeper; the AI gate only lets a sleeper past its hidden test, so a sleeping NPC still reaches the route steps, which is how it is woken). An NPC that stands on the bed's own tile is moved to the neighbour tile in direction 4 (x + 1, y + 1) when the shown map holds that tile (the same placement test as every other relocation of the host: the tile is admitted and the hero is not on it; the original tests only that the tile exists), with no animation (0x45F2D0 ends with 0x43E770); any other NPC stays where it is. A seated NPC answers 1 on every later step and
   does not move.
@@ -97,7 +104,8 @@ radius (1 tile, 4 for a wanderer) of the current standpoint **at** it; the AI ho
   the original cannot reach that state, its occupant field being saved.
 
 **What the installed data holds** ([`BedCensusRealDataTests`](../../tests/Arcanum.World.Tests/BedCensusRealDataTests.cs), numbers only): of the **2236** NPC rows of the 80 read maps with a readable route, **41** have their
-night standpoint on a placed bed's tile, **21** their day standpoint and **51** either, so the step seats them.
+night standpoint on a placed bed's tile, **21** their day standpoint and **51** either, so the step seats them. On the main map (ARC-WORLD-1262; the NPC rows of its mobile aggregate, the beds above) **1556** NPC rows have a readable route; **145** have their night
+standpoint on a placed bed's tile, **23** their day standpoint and **150** either, so the step seats them.
 
 ## Budget check of the AI heartbeat (ARC-WORLD-1162 slice 4, 2026-11-12)
 
@@ -125,7 +133,7 @@ switch wakes a sleeper only when it is farther than its radius from the *current
 - **Bed, what is left** (SWB15, SWB16): the hero gets neither the sleeping flag nor the don't-draw flag nor the nudge (his window fades the screen over him and the bed is emptied at the close; a flag written
   into a saved session could outlive the window); the occupied frame's pixel offset adjustment of 0x43F7F0 is only the frame's own hotspot difference; the bed's picture is not compared with the original's yet.
 - **NPC beds, what is left** (SWB18d, SWB19–SWB21): an attack aimed at the bed (SC16: the occupant is taken out and becomes the target) does not wake its occupant; the near branch's wander start is not modelled (a seated
-  wanderer would start one in the same step); the latch is not saved; the attack resolver's and the turn-based round's sleeping tests (+hit chance, round skip) read the stored critter flag only, so a sleeping NPC the
+  wanderer would start one in the same step); the attack resolver's and the turn-based round's sleeping tests (+hit chance, round skip) read the stored critter flag only, so a sleeping NPC the
   step seated is skipped by the danger update, the item search and the heal but not by those two; NPCs of the main map's windows are seated only for the beds the window holds; an NPC a script moves or destroys while seated is not taken out (only a kill and the first bed question of a host do); an NPC still walking to its standpoint when it comes within the radius is seated without an interrupt of its walk, so it may finish the walk onto the bed's tile (hidden, not nudged: the nudge is the seat's own test; not read in the original); an NPC whose map row already has the sleeping flag is never seated (it already counts as asleep, so its step is the sleeper branch).
 - **Random encounter** (SWB13): built (ARC-WORLD-1159, [random encounters](random-encounters-runtime.md)): the roll takes five times the chance while the window is open and a fired roll closes it (0x57B450); the viewer's `HandleEncounterNotices` does the close.
 - **Followers of followers**, and followers the AI host does not run, are not healed or told of event 29.

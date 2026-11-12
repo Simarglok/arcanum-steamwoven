@@ -548,8 +548,36 @@ public static partial class GameSessionSnapshotCodec
             if (root.ContainsKey("generators")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.generators");
             root.Add("generators", new JsonObject { ["slots"] = new JsonArray(), ["made"] = new JsonArray(), ["copies"] = new JsonArray() });
         },
-        // ARC-WORLD-1159 (schema 92): the encounters section, the use counts of the world-map random encounter rows. No older build rolled an encounter, so the step adds the empty section.
+        // ARC-MAGIC-1234 (schema 92): each run row of the spells section gains its object list (the original's +0x130). No older build stored one (its runs that name a list in their END area never found
+        // it), so the step adds the empty list to every row. The spells section and its run rows the older schema carried must be there.
         [91] = root =>
+        {
+            var spells = Section(root, "spells");
+            if (!spells.TryGetPropertyValue("runs", out var rows)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.spells.runs");
+            if (rows is not JsonArray array) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.spells.runs");
+            for (var i = 0; i < array.Count; i++)
+            {
+                if (array[i] is not JsonObject row) throw new DecodeException(SnapshotDecodeFailure.WrongType, $"$.spells.runs[{i}]");
+                AddField(row, $"$.spells.runs[{i}]", "objectList", new JsonArray());
+            }
+        },
+        // ARC-MAGIC-1142 (schema 93): each written-flags row of the spells section gains the NPC flags change (the charm's kill-on-sight override and the attack event's clear). No older build wrote
+        // one, so the step adds the two words as 0 to every row. The spells section and its rows the older schema carried must be there.
+        [92] = root =>
+        {
+            var spells = Section(root, "spells");
+            if (!spells.TryGetPropertyValue("objectFlags", out var rows)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.spells.objectFlags");
+            if (rows is not JsonArray array) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.spells.objectFlags");
+            for (var i = 0; i < array.Count; i++)
+            {
+                if (array[i] is not JsonObject row) throw new DecodeException(SnapshotDecodeFailure.WrongType, $"$.spells.objectFlags[{i}]");
+                foreach (var name in new[] { "npcSet", "npcCleared" }) AddField(row, $"$.spells.objectFlags[{i}]", name, 0);
+            }
+        },
+        // ARC-SCRIPT-1279 (schema 94): the inventory section gains the item fields scripts wrote (written start, inventory display bit). No older build kept any, so the step adds the empty list. The inventory section the older schema carried must be there and an object.
+        [93] = root => AddField(Section(root, "inventory"), "$.inventory", "itemFields", new JsonArray()),
+        // ARC-WORLD-1159 (schema 95): the encounters section, the use counts of the world-map random encounter rows. No older build rolled an encounter, so the step adds the empty section.
+        [94] = root =>
         {
             if (root.ContainsKey("encounters")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.encounters");
             root.Add("encounters", new JsonObject { ["uses"] = new JsonArray() });

@@ -218,9 +218,9 @@ public static class SessionEventKinds
 
     /// <summary>Pending events a session holds: four timers for each NPC life record and four for the hero (ARC-WORLD-087: its encumbrance timer), so a life step
     /// can always set its timers, the deferred calls, the timed effects' ENDs, the Lock events, the wait timers, the respawns, the
-    /// magic-tech events, the Item Decay events, the AI ticks, (ARC-WORLD-094) the restock events, the real-time steps and (ARC-DEV-132) one goal step per slot.</summary>
+    /// magic-tech events, the Item Decay events, the Decay Dead Bodies and Combat-Focus Wipe events (ARC-MAGIC-1146), the AI ticks, (ARC-WORLD-094) the restock events, the real-time steps and (ARC-DEV-132) one goal step per slot.</summary>
     public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 4 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects
-        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxBodyDecays + MaxRandomEncounters + MaxAiTicks + MaxRestocks + MaxTrapDevices + MaxRealSteps + MaxGoalSteps;
+        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxBodyDecays + MaxRandomEncounters + MaxFocusWipes + MaxAiTicks + MaxRestocks + MaxTrapDevices + MaxRealSteps + MaxGoalSteps;
 
     /// <summary>
     /// The original's AI event (kind 10, game time, never saved by the original; ARC-WORLD-084, ledger CL7, CL8): one NPC's AI tick
@@ -273,6 +273,18 @@ public static class SessionEventKinds
     public const int MaxRandomEncounters = 1;
     /// <summary>Pending Decay Dead Bodies events a session holds: one per NPC life record.</summary>
     public const int MaxBodyDecays = GameSessionLimits.PolicyMaxLifeRecords;
+    /// <summary>
+    /// The original's Combat-Focus Wipe event (kind 26, saved, game time; ARC-MAGIC-1146, ledger RM7, 0x45ED70, handler 0x45ECE0): ten game minutes after an NPC's death its combat focus (the killer, object field 0x11B) is cleared once the killer is
+    /// 30 or more tiles away, and while the killer is nearer the event queues itself again. Scoped to the NPC's map; several may name one NPC (a revived critter that dies again queues another, as the original's queue allows). Entity: the NPC;
+    /// values: the game time it was scheduled at and its delay (<see cref="FocusWipeDelayMs"/>). Added without a new registry version, as the kinds before it.
+    /// </summary>
+    public const string FocusWipe = "combat.focus.wipe";
+    /// <summary>The Combat-Focus Wipe's delay: 600,000 game ms (0x45ED70).</summary>
+    public const long FocusWipeDelayMs = 600_000;
+    /// <summary>The distance in tiles from which the wipe clears the focus (0x45ECE0: a distance below 30 queues the event again).</summary>
+    public const int FocusWipeTiles = 30;
+    /// <summary>Pending Combat-Focus Wipe events a session holds: one per NPC life record.</summary>
+    public const int MaxFocusWipes = GameSessionLimits.PolicyMaxLifeRecords;
     /// <summary>
     /// The original's restock event (type 0x16, saved, game time; ARC-WORLD-094, ledger RK1–RK8): 12 to 24 game hours after an inventory
     /// window showed an object with an inventory source, the object's inventory is cleared and generated again
@@ -376,6 +388,8 @@ public static class SessionEventKinds
                 new BodyDecayHandler(owner), Validate: BodyDecayPayload),
             new(RandomEncounter, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.KeepExisting, GameEventScopeRule.Global, 0, 1, 0, 0,
                 new RandomEncounterHandler(owner), Validate: payload => payload.Values[0] >= 0),
+            new(FocusWipe, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.EntityMap, 1, 2, 0, 0,
+                new FocusWipeHandler(owner), Validate: FocusWipePayload),
             new(Restock, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Replace, GameEventScopeRule.EntityMap, 1, 2, 1, 0,
                 new RestockHandler(owner), Validate: RestockPayload),
             new(TrapDevice, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.EntityMap, 1, 6, 0, 0,
@@ -409,6 +423,10 @@ public static class SessionEventKinds
     internal static bool BodyDecayPayload(GameEventPayload payload) =>
         payload.Values[0] >= 0 && payload.Values[1] is Arcanum.Simulation.Combat.BloodPoolRules.CritterDecayDelayMs or Arcanum.Simulation.Items.ItemDecayRules.RetryDelayMs
         && AiTickNpc(payload.Entities[0].Code);
+
+    // Scheduled at a game time, after the fixed delay, naming an NPC (not the player).
+    internal static bool FocusWipePayload(GameEventPayload payload) =>
+        payload.Values[0] >= 0 && payload.Values[1] == FocusWipeDelayMs && AiTickNpc(payload.Entities[0].Code);
 
     // Scheduled at a game time, after a restock delay or the retry's, naming an NPC or a container (not the player, not a made item).
     internal static bool RestockPayload(GameEventPayload payload) =>
@@ -545,6 +563,12 @@ internal sealed class RandomEncounterHandler(SessionEventSink sink) : IGameEvent
 {
     public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
         sink.Owner?.FireRandomEncounter(firing) ?? GameEventHandlerOutcome.Refused;
+}
+
+internal sealed class FocusWipeHandler(SessionEventSink sink) : IGameEventHandler
+{
+    public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
+        sink.Owner?.FireFocusWipe(firing) ?? GameEventHandlerOutcome.Refused;
 }
 
 internal sealed class RestockHandler(SessionEventSink sink) : IGameEventHandler

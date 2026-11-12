@@ -135,6 +135,29 @@ public sealed class AreaWorldMapTests
     }
 
     [TestMethod]
+    public void A_sector_a_script_blocked_is_left_out_of_the_route_and_a_blocked_destination_is_refused()
+    {
+        // ARC-SCRIPT-1164 (WO5): the start map's blocked-sector list in the session (script action 106) is the route's own rule beside the terrain's.
+        using var session = ConversationSessionFixture.Create();
+        var data = Data();
+        var open = new AreaWorldMap(data, session, Sector(5, 10));
+        Assert.AreEqual(AreaWorldMapRefusal.None, open.AddArea(1));
+        Assert.IsTrue(open.RoutePixels().Any(p => WorldTravelGeometry.Sector(WorldTravelGeometry.Location(p, Width)).X == 7), "the straight route crosses sector 7");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetSectorBlocked(session.Version, new(1), 7, 10, true).Disposition);
+        var around = new AreaWorldMap(data, session, Sector(5, 10));
+        Assert.IsTrue(around.Passes(new(6, 10)) && !around.Passes(new(7, 10)));
+        Assert.AreEqual(AreaWorldMapRefusal.None, around.AddArea(1), "the detour is found");
+        Assert.IsFalse(around.RoutePixels().Any(p => WorldTravelGeometry.Sector(WorldTravelGeometry.Location(p, Width)) is { X: 7, Y: 10 }), "no step enters the blocked sector");
+        // A blocked destination refuses the route (the original's detour never ends on it).
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetSectorBlocked(session.Version, new(1), 10, 10, true).Disposition);
+        Assert.AreEqual(AreaWorldMapRefusal.NoRoute, new AreaWorldMap(data, session, Sector(5, 10)).AddArea(1));
+        // Another map's list is not this map's.
+        using var other = ConversationSessionFixture.Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, other.SetSectorBlocked(other.Version, new(2), 7, 10, true).Disposition);
+        Assert.IsTrue(new AreaWorldMap(data, other, Sector(5, 10)).Passes(new(7, 10)));
+    }
+
+    [TestMethod]
     public void A_cancel_stops_where_the_journey_stands_and_the_picture_marks_blocked_sectors()
     {
         using var session = ConversationSessionFixture.Create();

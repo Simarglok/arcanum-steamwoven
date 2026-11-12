@@ -53,6 +53,34 @@ public static class CombatantRules
             Clamp(EffectModifiers.Apply((long)stored.Fire + worn.Fire, effects.Fire)));
     }
 
+    /// <summary>
+    /// ARC-UI-1121 (ledger IW42): a critter's displayed magic resistance, the armour rating's fifth term (the combat resistance getter with the magic type, which
+    /// <see cref="Resistances(DamageResistances, EquipmentResistances, int, bool, EffectResistances)"/> leaves out): its stored value plus its worn armour's magic resistance
+    /// adjustments (<see cref="EquipmentResistances.Magic"/>), then the critter's magic resistance <paramref name="effects"/> over the sum, then clamped as the other types are.
+    /// The save reads the stored value alone (<see cref="Arcanum.Simulation.Magic.SpellResistanceRules.ResistanceUnderEffects"/>).
+    /// </summary>
+    public static int MagicResistance(int stored, int worn, bool unclamped, IReadOnlyList<EffectModifier> effects)
+    {
+        ArgumentNullException.ThrowIfNull(effects);
+        if (Math.Abs((long)stored) > MaxValue) throw new ArgumentOutOfRangeException(nameof(stored));
+        if (Math.Abs((long)worn) > MaxValue) throw new ArgumentOutOfRangeException(nameof(worn));
+        var value = EffectModifiers.Apply((long)stored + worn, effects);
+        return unclamped ? Math.Clamp(value, -AttackResolver.MaxResistance, AttackResolver.MaxResistance) : Math.Clamp(value, 0, MaxResistance);
+    }
+
+    /// <summary>
+    /// ARC-UI-1145: the effective normal resistance (the resistance function's normal type) from its sum before the effects: the stored value plus the worn armour's adjustment
+    /// (<paramref name="sum"/>), the critter's normal resistance <paramref name="effects"/> over it, then clamped as <see cref="Resistances(DamageResistances, EquipmentResistances, int, bool, EffectResistances)"/> clamps
+    /// (0..95, or ±<see cref="AttackResolver.MaxResistance"/> for a monstrous NPC, <paramref name="unclamped"/>). The poison tick reads this one.
+    /// </summary>
+    public static int NormalResistance(long sum, bool unclamped, IReadOnlyList<EffectModifier> effects)
+    {
+        ArgumentNullException.ThrowIfNull(effects);
+        // A sum beyond the bound the other resistance rules read is cut to it (a clamp, never a throw: the session lays it over facts a host built).
+        var value = EffectModifiers.Apply(Math.Clamp(sum, -MaxValue, MaxValue), effects);
+        return unclamped ? (int)Math.Clamp(value, -AttackResolver.MaxResistance, AttackResolver.MaxResistance) : (int)Math.Clamp(value, 0, MaxResistance);
+    }
+
     /// <summary>The effective resistances with no resistance effects (<see cref="EffectResistances.None"/>).</summary>
     public static DamageResistances Resistances(DamageResistances stored, EquipmentResistances worn, int constitution, bool unclamped) =>
         Resistances(stored, worn, constitution, unclamped, EffectResistances.None);

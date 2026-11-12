@@ -14,6 +14,9 @@ namespace Arcanum.TerrainViewer;
 // (a line the dialog runtime does not run yet) or a typed start status is recorded and the next speaker is tried.
 public partial class TerrainViewerApp
 {
+    private int _talkSmokeExaminesBefore;
+    private bool _talkSmokeBarsOn;
+
     private bool _talkSmokeGateEnded;
 
     private async Task RunAreaTalkSmokeAsync()
@@ -69,6 +72,7 @@ public partial class TerrainViewerApp
                     Require(hover is AreaHoverAction.Talk or AreaHoverAction.WalkToTalk, $"script {speaker.ScriptId} hover {hover}");
                     revision = session.Version.Revision;
                     _voiceStart = null;
+                    _talkSmokeExaminesBefore = _dialogExaminesForSelfTest; _talkSmokeBarsOn = InterfaceBarsOn;
                     AreaSmokeClick(pixel);
                     // ARC-DEV-324: a speaker whose dialog point ran default shows the generic greeting (a floating line) and opens no window; that is no dialog to check here.
                     for (frames = 0; frames < 600 && !ConversationOpen && _voiceStart is null; frames++) AreaSmokeTalkFrame();
@@ -83,6 +87,8 @@ public partial class TerrainViewerApp
                 var conversation = _conversationPanel!.Conversation;
                 var offered = conversation is { Phase: DialogConversationPhase.AwaitingSelection };
                 var status = conversation is null ? _conversationPanel.OutcomeForSelfTest : "Started";
+                // ARC-UI-1120 (HK25): the dialog start described the speaker for the hero (0x567460 → 0x57CD60): a started talk ran its examine step once with the interface on (the smoke runs with it off: none).
+                Require(conversation is null || _dialogExaminesForSelfTest == _talkSmokeExaminesBefore + (_talkSmokeBarsOn ? 1 : 0),  $"script {speaker.ScriptId}: the dialog start examined the speaker as many times as the interface asks (bars={_talkSmokeBarsOn} {_dialogExaminesForSelfTest - _talkSmokeExaminesBefore})");
                 // A start the content or the source refused is a regression of the wiring, not a gap of the dialog runtime.
                 Require(conversation is not null || !(status.Contains(nameof(AreaConversationStartStatus.ContentUnavailable)) || status.Contains(nameof(AreaConversationStartStatus.EntryError)) || status.Contains(nameof(AreaConversationStartStatus.ReactionRejected))
                     || status.Contains(nameof(AreaConversationStartStatus.SourceChanged))), $"script {speaker.ScriptId}: {status}");

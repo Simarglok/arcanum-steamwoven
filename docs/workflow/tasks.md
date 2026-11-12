@@ -36,11 +36,12 @@ code, even a small fix found on the way, which goes back to the coordinator
 thread. Inside one task, do not clear or restart the context while it is still
 needed for correctness (part of the same decision).
 
-Sessions compact their context at 500k tokens: the committed
-`.claude/settings.json` sets `autoCompactWindow` to 500000 for every checkout
-and worktree (ARC-DEV-058, owner decision 2026-10-29). Keep the handoff record
-current in the thread's checklist, together with the branch, changed files and
-checks run, so a compaction keeps it.
+Sessions compact their context at 500k tokens: `autoCompactWindow` is 500000
+(ARC-DEV-058, owner decision 2026-10-29). `.claude/settings.json` holds it as a
+local, untracked and ignored file of each checkout (ARC-DEV-1342, owner
+decision 2026-11-12); a new checkout or worktree creates it by hand. Keep the
+handoff record current in the thread's checklist, together with the branch,
+changed files and checks run, so a compaction keeps it.
 
 Why: a session carried across codes re-reads every earlier task's history on
 each step. The token audit of 2026-10-21 found lane sessions living 3.5 to 5
@@ -57,6 +58,13 @@ code ([naming](task-naming.md#codes-from-2026-11-12-the-issue-number)).
   `function-audit-plan`, the coverage rows) keep the research, evidence and
   status; when one lists pending work that has an issue, it links `#N` and does
   not repeat the plan. New unstarted work is an issue, not a new list row.
+- **Mandatory: file the issue when a need is found** (owner rule 2026-11-12).
+  Whenever a need for work comes up (a leftover part of the task, a gap or bug
+  found on the way, a follow-up, a review finding that is not fixed in the PR),
+  the thread or coordinator that found it creates a GitHub issue for it right
+  away, with the usual labels and without asking the owner (the owner's standing
+  permission to create and label issues), and reports the new issue numbers.
+  A need only named in a report, a PR text or a document is not recorded.
 - **One issue is one work item**: the form `.github/ISSUE_TEMPLATE/task.yml`
   has the headings `Goal` (one result, one PR), `Requirements` (FR ids or
   groups, [functional requirements](#functional-requirements)), `Components` (at

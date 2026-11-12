@@ -979,6 +979,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (delay is { } d && !WaitTimerFits(d, entity)) return Reject(GameSessionFailure.EventBudgetExceeded);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         _party.Put(current with { Standing = CompanionStanding.Waiting, Forced = false }, false);
+        // ARC-MAGIC-1190 (TF3): the wait (0x4AA7A0) leaves the leader through 0x45DFC0 and takes it back after, so the waiter loses the Tempus Fugit flag.
+        ClearTempusFugitOnLeave(entity);
         if (delay is { } wait) ScheduleWaitTimer(entity, wait, charisma);
         return Changed();
     }
@@ -1007,6 +1009,7 @@ public sealed partial class GameSessionOwner : IDisposable
         // ARC-SKILLS-008 (ST2): a follower that leaves is no longer concealed.
         _combat.Concealed.Remove(entity);
         ClearNoAttackOnLeave(entity);
+        ClearTempusFugitOnLeave(entity);
         if (current.Standing == CompanionStanding.Waiting) CancelWaitTimers(entity);
         return Changed();
     }
@@ -1101,7 +1104,7 @@ public sealed partial class GameSessionOwner : IDisposable
     {
         ThrowIfDisposed();
         return _inventory.Seeds.TryGetValue(map, out var seed)
-            ? _inventory.View(map, seed, KilledNpc, holder => SpillCell(map, seed, holder), item => DroppedCell(map, seed, item)) : null;
+            ? _inventory.View(map, seed, KilledNpc, holder => SpillCell(map, seed, holder), item => DroppedCell(map, seed, item), item => MovedCell(map, item)) : null;
     }
 
     /// <summary>Detached copy of the items the PC took from the world, in the order they entered its list. The hero's
@@ -1350,7 +1353,25 @@ public sealed partial class GameSessionOwner : IDisposable
     public SessionLifeResult Kill(GameSessionVersion expected, SessionLifeTarget target, string? killer = null)
     {
         ThrowIfDisposed();
-        return Life(expected, target, true, (state, facts, _) => LifeRules.Kill(state, facts), killer: killer);
+        // ARC-COMBAT-1141 (GT210): the kill's damage step asks the victim's taking-damage script first, with no attacker; skip default leaves only the pin at 32000, no death.
+        var goes = TakingDamageGoesOn(target, ref expected);
+        return Life(expected, target, true, (state, facts, _) => goes ? LifeRules.Kill(state, facts) : LifeRules.KillVetoed(state, facts), killer: killer);
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1141 (GT198, GT210): asks the host's taking-damage script (<see cref="TakingDamageScript"/>) of an NPC target with no attacker, before the life step is computed: true when the damage goes on (no host, the hero, an
+    /// entity-less target, run default, or a host that threw). A script that moved the session leaves a caller's current version current (<paramref name="expected"/> follows it), as the host's own writes are no stale call.
+    /// </summary>
+    private bool TakingDamageGoesOn(SessionLifeTarget target, ref GameSessionVersion expected, int map = 0)
+    {
+        if (TakingDamageScript is not { } ask || target.IsHero || target.Entity is not { } entity) return true;
+        // A call the life step will refuse (a stale version, a target it cannot resolve) runs no script: nothing is applied, so nothing is asked.
+        if (!IsCurrent(expected) || Resolve(target, out _, out _, out _) != GameSessionFailure.None) return true;
+        bool goes;
+        try { goes = ask(new(entity, map > 0 ? map : _actor.Map.RuntimeMap, null)); }
+        catch (Exception error) when (error is InvalidOperationException or ArgumentException or OverflowException) { goes = true; }
+        expected = Version;
+        return goes;
     }
 
     /// <summary>One healing (<see cref="LifeRules.Heal"/>), resurrection included; amounts are 0..1,000,000. A raise asks
@@ -1392,7 +1413,8 @@ public sealed partial class GameSessionOwner : IDisposable
     public SessionLifeResult PoisonDamageTick(GameSessionVersion expected, SessionLifeTarget target)
     {
         ThrowIfDisposed();
-        return Life(expected, target, true, (state, facts, _) => LifeRules.PoisonDamage(state, facts));
+        var goes = TakingDamageGoesOn(target, ref expected);
+        return Life(expected, target, true, (state, facts, _) => goes ? LifeRules.PoisonDamage(state, facts) : LifeRules.PoisonDamageVetoed(state, facts));
     }
 
     /// <summary>The 120-second poison recovery tick (<see cref="LifeRules.PoisonRecoveryTick"/>).</summary>
@@ -1640,7 +1662,11 @@ public sealed partial class GameSessionOwner : IDisposable
                 break;
             case LifeTimer.PoisonDamage:
                 if (state.PoisonLevel == 0) return GameEventHandlerOutcome.Completed;
-                result = Life(Version, target, true, (s, f, _) => LifeRules.PoisonDamage(s, f), (_, _) => [LifeTimer.PoisonDamage], map);
+                // ARC-COMBAT-1141 (GT210, GT211): the tick's damage step asks the victim's taking-damage script first, with no attacker; a veto writes nothing and the tick goes on.
+                // A dead victim is not asked (the tick stays the silent rules call it was; whether 0x4B1170 gates on death before the apply is unread).
+                var poisonVersion = Version;
+                var goes = dead || TakingDamageGoesOn(target, ref poisonVersion, map);
+                result = Life(poisonVersion, target, true, (s, f, _) => goes ? LifeRules.PoisonDamage(s, f) : LifeRules.PoisonDamageVetoed(s, f), (_, _) => [LifeTimer.PoisonDamage], map);
                 break;
             case LifeTimer.PoisonRecovery:
                 if (state.PoisonLevel == 0) return GameEventHandlerOutcome.Completed;
@@ -1916,13 +1942,37 @@ public sealed partial class GameSessionOwner : IDisposable
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, consent, new(_identity, _revision));
         if (!_party.Records.ContainsKey(current.Entity) && _party.Records.Count >= _limits.MaxCompanions)
             return RejectParty(GameSessionFailure.BudgetExceeded, consent);
+        // ARC-MAGIC-1190 (XR7, TF3): the join (0x45DE90) first leaves an existing leader (0x45DFC0: the flag is cleared) and then copies the leader's Tempus Fugit flag; the copy needs room in the
+        // written-flags bound, so a full bound refuses before anything changes (a clear only edits an entry that exists).
+        var copyTempus = JoinCopiesTempusFugit(current.Entity);
+        if (copyTempus && !_objectFlags.ContainsKey(current.Entity) && _objectFlags.Count >= MaxObjectFlagCritters)
+            return RejectParty(GameSessionFailure.BudgetExceeded, consent);
         if (_revision == long.MaxValue) return RejectParty(GameSessionFailure.RevisionExhausted, consent);
         _party.Put(next, true);
+        if (current.Standing != CompanionStanding.Free) ClearTempusFugitOnLeave(current.Entity);
+        if (copyTempus) WriteTempusFugitOnJoin(current.Entity);
         if (current.Standing == CompanionStanding.Waiting) CancelWaitTimers(current.Entity);
         // ARC-SKILLS-008 (ST2): a new follower takes its leader's concealment.
         if (_combat.HeroConcealed) _combat.Concealed.Add(current.Entity); else _combat.Concealed.Remove(current.Entity);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, consent, new(_identity, _revision));
+    }
+
+    // ARC-AI-1312 (VA15, VAG1, OL25, C11; 0x4AA1B0 calls 0x4AA8C0 with force 1 on the victim): an NPC with a leader and AI_WAIT_HERE loses the flag, its "NPC Wait Here" events go and
+    // it joins its leader again (0x45DE90): re-appended at the end of the follower array, FORCED_FOLLOWER set, JILTED cleared, the leader's Tempus Fugit flag copied and the leader's
+    // concealment taken, as every join does. The forced unwait runs no follow check that could refuse (the death cannot be refused), and the death's commit cannot fail, so a Tempus Fugit
+    // copy that would overflow the written-flags bound is left out (the join's own check refuses the whole join there). A free NPC and a follower are unchanged (no timer is pending for them).
+    // The caller's revision covers the writes.
+    private void ForceUnwaitOnDeath(string entity)
+    {
+        var current = _party.Get(entity);
+        CancelWaitTimers(entity);
+        if (current.Standing != CompanionStanding.Waiting) return;
+        _party.Put(current with { Standing = CompanionStanding.Following, Forced = true, Jilted = false }, true);
+        // A waiting NPC lost the flag at the wait (0x4AA7A0), so the leave half of the join has nothing to clear; the clear keeps the join's order all the same.
+        ClearTempusFugitOnLeave(entity);
+        if (JoinCopiesTempusFugit(entity) && (_objectFlags.ContainsKey(entity) || _objectFlags.Count < MaxObjectFlagCritters)) WriteTempusFugitOnJoin(entity);
+        if (_combat.HeroConcealed) _combat.Concealed.Add(entity); else _combat.Concealed.Remove(entity);
     }
 
     private PartyMutationResult RejectParty(GameSessionFailure failure, FollowConsent? consent = null) =>
@@ -2073,6 +2123,10 @@ public sealed partial class GameSessionOwner : IDisposable
         var origin = seedMap ?? _actor.Map;
         var parented = holder is not null;
         var facts = item.Facts;
+        // ARC-WORLD-1283 (NT2, VP5, VPG2): a transfer from a holder (0x461CA0) runs the item's remove check (0x466DA0) after the recipient's transfer script and before
+        // the insert check: the no-drop flag refuses it (worn or not), with message 111 for the PC. Only the dialog's negative IN goes on, to the PC's feet.
+        var noDrop = parented && HolderItemNoDrop(seed, item);
+        if (noDrop && scripts is null && !toFeet) return NoDropRefusal();
         // ARC-WORLD-123: a key item goes onto the key ring the hero holds (the insertion's last step, 0x466A00, ledger KY2); no other key is modelled.
         var folds = facts.Kind.Type == SessionItemType.Key && HeroHoldsKeyRing;
         if (!folds && !InventoryDomain.Admitted(facts.Kind.Type)) return RejectItem(GameSessionFailure.ItemTypeUnsupported);
@@ -2137,27 +2191,30 @@ public sealed partial class GameSessionOwner : IDisposable
             if (runs.Failure != GameSessionFailure.None) return RejectItem(runs.Failure) with { Scripts = runs.Runs };
             if (gate?.Outcome == ScrOutcome.SkipDefault) return Declined(gatePoint, runs);
         }
+        if (noDrop && !toFeet) return NoDropRefusal(runs?.Runs);
         // ARC-WORLD-069: the Technophobia refusal between the host's weight and room answers (0x466510).
         // ARC-WORLD-085: the weight is the session's for an item it can weigh (its seed facts or the row it keeps).
         // ARC-WORLD-123: a key going onto the ring the hero holds skips the weight and the room (slot 0, 0x466510); the background still applies.
         // ARC-DEV-333 (B48): and the room: a take needs a free grid place for the item (code 2, WE4) unless the ammunition joins a held stack; a refused item stays where it was.
-        var verdict = folds ? HeroInsertVerdict(SessionInsertVerdict.Accepted, facts.Complexity)
+        // ARC-WORLD-1283: a dialog IN -name whose item the remove check refused never reaches the insert check (0x461CA0 returns first): the item is laid at the PC's feet.
+        var verdict = noDrop ? SessionInsertVerdict.Accepted : folds ? HeroInsertVerdict(SessionInsertVerdict.Accepted, facts.Complexity)
             : HeroInsertVerdict(insertCheck(item), facts.Complexity, Incoming(item.Entity, facts), room: HeroTakeRoom(item.Entity, into is not null));
+        SessionInsertVerdict? shown = noDrop ? null : verdict;
         ThrowIfDisposed();
-        if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { Scripts = runs?.Runs ?? [] };
+        if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, shown) with { Scripts = runs?.Runs ?? [] };
         // Any answer but Accepted refuses, an undefined one included. Session policy: a refused transfer changes nothing, so a
         // gate script's writes are dropped with it (the original keeps them; census: no installed item or PC carries such a script).
-        var refused = verdict != SessionInsertVerdict.Accepted;
+        var refused = noDrop || verdict != SessionInsertVerdict.Accepted;
         if (refused && !toFeet) return RejectItem(GameSessionFailure.InsertRefused, verdict) with { Scripts = runs?.Runs ?? [] };
         if (refused)
         {
             // ARC-WORLD-1131 (0x415BA0 case 9, n < 0): the transfer did not end with the PC, so the item is taken out of the NPC's list (0x466E00, its remove-item script)
             // and laid on the PC's tile (0x466E50: a junk pile or a new one, then the decay timer). The insertion never happened: no ring, no stack merge, no insert-item script.
-            if (!DropCellFits(_actor.Cell)) return RejectItem(GameSessionFailure.DropTileUnfit, verdict) with { Scripts = runs?.Runs ?? [] };
+            if (!DropCellFits(_actor.Cell)) return RejectItem(GameSessionFailure.DropTileUnfit, shown) with { Scripts = runs?.Runs ?? [] };
             (folds, into) = (false, null);
-            if (_inventory.Held >= _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded, verdict) with { Scripts = runs?.Runs ?? [] };
+            if (_inventory.Held >= _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded, shown) with { Scripts = runs?.Runs ?? [] };
             if (ammo is not null && !_inventory.Ammo.ContainsKey(item.Entity) && _inventory.Ammo.Count >= _limits.MaxAmmoRecords)
-                return RejectItem(GameSessionFailure.BudgetExceeded, verdict) with { Scripts = runs?.Runs ?? [] };
+                return RejectItem(GameSessionFailure.BudgetExceeded, shown) with { Scripts = runs?.Runs ?? [] };
         }
 
         ScrRunResult? insertRun = null;
@@ -2172,9 +2229,9 @@ public sealed partial class GameSessionOwner : IDisposable
             if (runs.Failure == GameSessionFailure.None && !refused && facts.HasScript(SessionScriptPoint.InsertItem))
                 insertRun = runs.Run(SessionScriptPoint.InsertItem, item.Entity, SessionEventKinds.PlayerEntity, null);
             ThrowIfDisposed();
-            if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { InsertScript = insertRun, Scripts = runs.Runs };
+            if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, shown) with { InsertScript = insertRun, Scripts = runs.Runs };
             runs.Prepare();
-            if (runs.Failure != GameSessionFailure.None) return RejectItem(runs.Failure, verdict) with { InsertScript = insertRun, Scripts = runs.Runs };
+            if (runs.Failure != GameSessionFailure.None) return RejectItem(runs.Failure, shown) with { InsertScript = insertRun, Scripts = runs.Runs };
         }
         if (folds)
         {
@@ -2202,11 +2259,13 @@ public sealed partial class GameSessionOwner : IDisposable
             _inventory.SetWeight(item.Entity, facts.WeightFacts);
         }
         if (into is null && ammo is { } added) _inventory.Ammo[item.Entity] = added;
+        // ARC-WORLD-1284 (VPG1): the removal 0x467860 sets NPC flag 0x40 on the giver, a merge of the item into the hero's stack included (the removal comes first).
+        if (holder is not null && KnownNpc(holder)) MarkCheckWield(holder);
         runs?.Commit();
         if (refused) PlaceHeroItem(item.Entity, _actor.Cell);
         else Revise();
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, verdict, new(_identity, _revision))
-            { InsertScript = insertRun, Scripts = runs?.Runs ?? [], Messages = runs?.Messages ?? [] };
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, shown, new(_identity, _revision))
+            { InsertScript = insertRun, Scripts = runs?.Runs ?? [], Messages = runs?.Messages ?? [], PcMessage = noDrop ? NoDropMessage : null };
     }
 
     /// <summary>ARC-MAGIC-022: the pickup executor (0x4CBAA0, IU10) through <paramref name="triggers"/> for an item that entered the hero's
@@ -2215,7 +2274,7 @@ public sealed partial class GameSessionOwner : IDisposable
     {
         // ARC-WORLD-1131: an item the insert check refused was laid on the ground, not inserted: no pickup.
         if (triggers is null || result.Disposition != GameSessionDisposition.Changed || result.Item is not { } item || _durability.Destroyed.Contains(item) ||
-            result.Verdict is not null and not SessionInsertVerdict.Accepted)
+            result.Verdict is not null and not SessionInsertVerdict.Accepted || result.PcMessage is not null)
             return result;
         return result with { ItemSpells = [triggers.Fire(Arcanum.Simulation.Magic.ItemSpellTriggerRules.Pickup, item, SessionSpellCaster.Hero)], Version = Version };
     }
@@ -2382,6 +2441,16 @@ public sealed partial class GameSessionOwner : IDisposable
                 return GameSessionFailure.InvalidSnapshot;
             lastIdentified = entity;
             inventory.Identified.Add(entity);
+        }
+        // ARC-SCRIPT-1279: the item fields by entity in ordinal order, within the bound, none empty, none of a deleted item.
+        if (saved.ItemFields.Count > SessionInventoryState.MaxItemFields) return GameSessionFailure.BudgetExceeded;
+        string? lastFielded = null;
+        foreach (var row in saved.ItemFields)
+        {
+            if (row is null || !SessionValidation.Entity(row.Entity) || row.Writes.IsEmpty || lastFielded is not null && string.CompareOrdinal(lastFielded, row.Entity) >= 0 || destroyed.Contains(row.Entity))
+                return GameSessionFailure.InvalidSnapshot;
+            lastFielded = row.Entity;
+            inventory.ItemFields.Add(row.Entity, row.Writes);
         }
         // ARC-WORLD-094: the highest discarded made number.
         if (saved.LastDiscardedMade < 0) return GameSessionFailure.InvalidSnapshot;
@@ -2574,16 +2643,20 @@ public sealed partial class GameSessionOwner : IDisposable
             if (_life.Critters.TryGetValue(target.Entity!, out var current)) _life.Critters[target.Entity!] = current with { DeathTimeMs = now };
             TellCritterRunEnds(target, outcome, facts!, killRuns: true, demaintain: false);
         }
-        // OL25: the kill notification unwaits the NPC, which removes its wait timer.
+        // OL25, ARC-AI-1312 (VA15, VAG1; 0x4AA1B0 → 0x4AA8C0 with force 1): the kill notification unwaits the NPC: its wait timers go and a waiting companion joins its leader again.
         var npcDied = outcome.Events.HasFlag(LifeEvents.Died) && !target.IsHero && !deathStopped;
-        if (npcDied) CancelWaitTimers(target.Entity!);
+        if (npcDied) ForceUnwaitOnDeath(target.Entity!);
         // ARC-AI-1134 (DY3, 0x45DA20 after the death time): the NPC's combat focus (0x11B) := the killer, whatever its danger state; the kill notification follows the commit below.
         var killedBy = killer ?? damageStep?.Parties.Killer;
+        // ARC-MAGIC-1146 (0x45ED70, before the focus write in the original): the Combat-Focus Wipe event, ten game minutes on.
+        if (npcDied) ScheduleFocusWipe(target.Entity!, map, now);
         if (npcDied) FocusOnKiller(target.Entity!, killedBy);
         // ARC-WORLD-1157 (PO7): a critter a generator made releases its slot's live count (0x4BAB30 from the death, after the party-leave helpers).
         if (npcDied) ReleaseGeneratorSlot(target.Entity!);
         // ARC-WORLD-1158 (PO10, 0x45EBE0): the death queues the body's Decay Dead Bodies event one game day on, on the NPC's map.
         if (npcDied) ScheduleBodyDecay(target.Entity!, map, now, facts!);
+        // ARC-MAGIC-1146 (0x45EC80, the callers of the cancel): a body healed back to life no longer decays, so its pending Decay Dead Bodies event goes.
+        if (outcome.Events.HasFlag(LifeEvents.Resurrected) && !target.IsHero) CancelBodyDecay(target.Entity!);
         Revise();
         if (npcDied && KillNotice is { } notice)
         {
@@ -2628,7 +2701,7 @@ public sealed partial class GameSessionOwner : IDisposable
     private int[] StrayMaps(string entity, int map)
     {
         var maps = new SortedSet<int>();
-        foreach (var kind in NpcKinds.Append(SessionEventKinds.PartyWait).Append(SessionEventKinds.BodyDecay))
+        foreach (var kind in NpcKinds.Append(SessionEventKinds.PartyWait).Append(SessionEventKinds.BodyDecay).Append(SessionEventKinds.FocusWipe))
             _events.Any(kind, e =>
             {
                 var at = e.Payload.Entities[0];
@@ -2803,6 +2876,16 @@ public sealed partial class GameSessionOwner : IDisposable
                 converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
                 continue;
             }
+            if (pending.Kind == SessionEventKinds.FocusWipe)
+            {
+                // A Combat-Focus Wipe event (ARC-MAGIC-1146): one NPC with a life record, set no later than the saved clock, the fixed delay before its deadline, on the one map of the NPC's timers (several per NPC are allowed).
+                if (pending.Entities.Length != 1 || pending.Entities[0].Map < 1 || !SessionEventKinds.FocusWipePayload(new(pending.Entities, pending.Values)) ||
+                    !life.Critters.ContainsKey(pending.Entities[0].Code) || pending.Values[0] > clockMs || pending.DeadlineMs != pending.Values[0] + pending.Values[1] ||
+                    (!maps.TryAdd(pending.Entities[0].Code, pending.Entities[0].Map) && maps[pending.Entities[0].Code] != pending.Entities[0].Map))
+                    return GameSessionFailure.InvalidEvents;
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
+                continue;
+            }
             if (pending.Kind == SessionEventKinds.TrapDevice)
             {
                 // A trap fuse (ARC-WORLD-124): one entity on a valid map, set no later than the saved clock, the fuse or the retry before its deadline, a spell record, a cell.
@@ -2863,6 +2946,7 @@ public sealed partial class GameSessionOwner : IDisposable
             converted.Count(e => e.Kind == SessionEventKinds.ItemDecay) > SessionEventKinds.MaxItemDecays ||
             converted.Count(e => e.Kind == SessionEventKinds.BodyDecay) > SessionEventKinds.MaxBodyDecays ||
             converted.Count(e => e.Kind == SessionEventKinds.RandomEncounter) > SessionEventKinds.MaxRandomEncounters ||
+            converted.Count(e => e.Kind == SessionEventKinds.FocusWipe) > SessionEventKinds.MaxFocusWipes ||
             converted.Count(e => e.Kind == SessionEventKinds.Restock) > SessionEventKinds.MaxRestocks ||
             converted.Count(e => e.Kind == SessionEventKinds.TrapDevice) > SessionEventKinds.MaxTrapDevices ||
             converted.Count(e => e.Kind == SessionEventKinds.SpellRun) > SessionEventKinds.MaxSpellRunEvents) return GameSessionFailure.EventBudgetExceeded;

@@ -402,6 +402,7 @@ Quests named by two or more blocked scripts (numbers as the scripts name them):
 
 The census is a data answer; each slice keeps its own contract and checks.
 
+- **E5-b, world-object commands (#1164).** *Built 2026-11-12 as set S37 (ARC-SCRIPT-1164, [ledger WO1–WO13](ledger/scripts.md#world-object-commands-arc-script-1164-e5-b)); the hosts apply three conditions and six actions; ARC-SCRIPT-1279 (2026-11-12) gave transfer item, set written start, destroy item named and toggle item inventory display their host (the session's named-item move and destroy and its item fields; ledger WO14–WO18).* Census at the survey: 71 blocked scripts, 208 sites alone; installed now: 117 scripts use the 13 commands, S37 admits 84 whole.
 - **E5-a, NPC state actions (#1163).** *Built 2026-11-12 as set S36 (ARC-SCRIPT-1163, [ledger NS1–NS8](ledger/scripts.md#npc-state-commands-arc-script-1163-e5-a)); change art number is left to a slice with a per-object art overlay.* Blocked roots 166, sites 794, maps 24; 110 roots (550
   sites) are freed by the slice alone. The largest of the plan's slices, and the most useful: it
   contains the three most frequent types of the module's refusals (change script 52 roots, change art

@@ -271,7 +271,7 @@ elsewhere is a menu picture. Read in the code (`AreaMenuArtView.WidescreenBackgr
 `TerrainViewerApp.ConfigureVisualProfile`), checked on the owner's Mac on 2026-11-10:
 
 1. **It is used only when all of these hold:** the window is the main menu, the *HD interface* game setting is on
-   (`hdInterface` in `game_settings_v1.json`, independent of the Legacy/HD world profile), an HD pack is active and not
+   (the `hd interface` line of `arcanum.cfg`, independent of the Legacy/HD world profile), an HD pack is active and not
    `rejected`, and the file is an opaque 16:9 PNG of at most 3840 x 2160. Anything else leaves the original menu art from
    the game data, without a message. An automated run (smoke, self-test) looks for no pack folder and opens one only when `ARC_HD_PACK` names it, so a smoke shows the HD menu only with that variable.
 2. **The active pack** is `ARC_HD_PACK` when set; otherwise the one the **HD pack** setting of the launcher screen chooses
@@ -281,7 +281,7 @@ elsewhere is a menu picture. Read in the code (`AreaMenuArtView.WidescreenBackgr
    Before ARC-DEV-350 the game's own folder won over the iCloud copy and the packaged game never read the iCloud folder.
 3. **`user://` is not the same folder for the packaged game and for the source viewer.** The packaged game (feature
    `steamwoven_package`) uses `~/Library/Application Support/Arcanum Steamwoven Game/`: there `hd-packs/interface-redraw-4x/`
-   (the pack this page maintains) holds the menu PNG, and `game_settings_v1.json` says `hdInterface: true`. The viewer that
+   (the pack this page maintains) holds the menu PNG, and `arcanum.cfg` says `hd interface=1` (`game_settings_v1.json` says `hdInterface: true` before ARC-UI-1130). The viewer that
    `./arcanum area` and `map` start (an export that is "not a packaged build") uses
    `~/Library/Application Support/Godot/app_userdata/Arcanum Terrain Viewer/`: on 2026-11-10 its `hd-packs/` held only the old
    sprite pack `crash-site-full-4x` (no menu file) and `hd-packs-alt/` two older packs, and it has no `game_settings_v1.json`,
@@ -304,7 +304,7 @@ elsewhere is a menu picture. Read in the code (`AreaMenuArtView.WidescreenBackgr
 
 ### HD pack source (ARC-DEV-350)
 
-The game chooses its HD pack at startup from the **HD pack** line of the launcher screen (after *HD interface*; ARC-UI-143 moved it there from the options window's Game page, ARC-UI-146), saved as `hdPack` (`auto`, `game`, `custom`) and `hdPackPath` in `game_settings_v1.json` (file version 4; older files read as Auto). A change
+The game chooses its HD pack at startup from the **HD pack** line of the launcher screen (after *HD interface*; ARC-UI-143 moved it there from the options window's Game page, ARC-UI-146), saved as the `hd pack` (`auto`, `game`, `custom`) and `hd pack path` lines of `arcanum.cfg` (a missing line reads as Auto). A change
 applies at the **next start**, and the launcher screen's note says at once what that start will read:
 
 | Setting | Chain (first pack that opens, is not `rejected` and is whole wins) |

@@ -64,7 +64,8 @@ public sealed class AreaAiRouteTests
 
     // ARC-DEV-116: with companion the NPC is a companion of the shown map (a free one unless led), run as the host runs followers.
     internal static Scene Open(AreaObjectRecord row, Func<CellCoord?>? hero = null, RuleMode rules = RuleMode.Steamwoven, bool companion = false, bool led = false,
-        Func<int, bool>? mapListed = null, IAreaHeroPush? heroPush = null, AreaAiBeds? beds = null)
+        Func<int, bool>? mapListed = null, IAreaHeroPush? heroPush = null, AreaAiBeds? beds = null, Func<string, string?, bool>? takingDamage = null,
+        Func<AreaTraps?>? traps = null, Func<string, (SessionNpcAdvancement Loaded, Arcanum.Simulation.Character.AdvancementModifiers Modifiers)?>? sheet = null)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var heroDefinition = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -90,7 +91,7 @@ public sealed class AreaAiRouteTests
         var scene = new AreaAiScene
         {
             RuntimeMap = Map, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = companion ? [] : [new(Entity(0), row, NpcCell)], Combat = combat,
-            HeroCell = hero ?? (() => HeroCell), MapListed = mapListed, Homecomings = [], HeroPush = heroPush, Beds = beds,
+            HeroCell = hero ?? (() => HeroCell), MapListed = mapListed, Homecomings = [], HeroPush = heroPush, Beds = beds, TakingDamage = takingDamage, Traps = traps, NpcSheet = sheet,
             Companions = companion ? () => [(Entity(0), Key(0), walks.Cells[Entity(0)])] : null,
             Followers = companion ? walks : null,
         };
@@ -166,12 +167,45 @@ public sealed class AreaAiRouteTests
         Assert.AreEqual((new CellCoord(25, 20), 1), (Cell(scene), scene.Host.RouteIndexOf(scene.Npc)));
         var rebuilt = scene.Rebuild();
         Assert.AreEqual(new CellCoord(25, 20), rebuilt.Tile(scene.Npc), "the saved place is restored");
-        Assert.AreEqual(1, rebuilt.RouteIndexOf(scene.Npc), "the index is recovered from the waypoint it stands on, not the row's 0");
+        Assert.AreEqual(1, rebuilt.RouteIndexOf(scene.Npc), "the index is the session's (written by the step), not the row's 0");
         Assert.IsTrue(rebuilt.RunWaypoints(scene.Npc));
         Assert.AreEqual((new CellCoord(30, 20), 2), (rebuilt.Tile(scene.Npc)!.Value, rebuilt.RouteIndexOf(scene.Npc)), "the next fold moves on to waypoint 2");
         // An NPC that stands off every waypoint falls back to the row's index.
         var plain = Open(Npc(Day | Night, [(20, 20), (25, 20)], 1, (1, 1), (1, 1)));
         Assert.AreEqual(1, plain.Host.RouteIndexOf(plain.Npc));
+    }
+
+    [TestMethod]
+    public void A_patrol_goes_on_to_the_same_next_waypoint_after_a_host_rebuild_wherever_the_npc_stands()
+    {
+        // ARC-AI-1314 (VA18, VAG3): the index is the NPC's session state (field 0x120), not a guess from the place: an NPC left off every waypoint keeps it.
+        var scene = Open(Npc(Day | Night, [(20, 20), (25, 20), (30, 20)], 0, (1, 1), (1, 1)));
+        Assert.IsTrue(scene.Host.RunWaypoints(scene.Npc));
+        Assert.IsTrue(scene.Host.RunWaypoints(scene.Npc));
+        Assert.AreEqual(1, scene.Session.QueryRouteIndex(scene.Npc), "written by the step, over the row's 0");
+        Assert.AreEqual(Arcanum.Session.GameSessionFailure.None, scene.Session.RecordNpcPlace(scene.Session.Version, new SessionMapId(Map), scene.Npc, new CellCoord(23, 24), Arcanum.Simulation.Movement.NeighborDirection.XPlus).Failure);
+        var rebuilt = scene.Rebuild();
+        Assert.AreEqual(1, rebuilt.RouteIndexOf(scene.Npc), "off every waypoint, the saved index stands (it was the row's 0 before)");
+        Assert.IsTrue(rebuilt.RunWaypoints(scene.Npc));
+        Assert.AreEqual(new CellCoord(25, 20), rebuilt.Tile(scene.Npc), "waypoint 1 is still the current one: far from it, the NPC is stood on it");
+        Assert.IsTrue(rebuilt.RunWaypoints(scene.Npc));
+        Assert.AreEqual((new CellCoord(30, 20), 2), (rebuilt.Tile(scene.Npc)!.Value, rebuilt.RouteIndexOf(scene.Npc)));
+        // An NPC with no record (an older save) is at the row's index, even standing on another waypoint.
+        var plain = Open(Npc(Day | Night, [(20, 20), (25, 20), (30, 20)], 0, (1, 1), (1, 1)));
+        Assert.AreEqual(Arcanum.Session.GameSessionFailure.None, plain.Session.RecordNpcPlace(plain.Session.Version, new SessionMapId(Map), plain.Npc, new CellCoord(25, 20), Arcanum.Simulation.Movement.NeighborDirection.XPlus).Failure);
+        Assert.AreEqual(0, plain.Rebuild().RouteIndexOf(plain.Npc));
+    }
+
+    [TestMethod]
+    public void The_waypoint_index_and_the_teleport_map_are_written_in_one_revision()
+    {
+        // The NPC stands on waypoint 0 with no teleport map: the first step moves the index on and writes the open map (0x45F6D0), both in one revision; the relocation's place record is the second.
+        var scene = Open(Npc(Day | Night, [(NpcCell.X, NpcCell.Y), (25, 20)], 0, (1, 1), (1, 1)));
+        Assert.IsNull(scene.Session.QueryTeleportMap(scene.Npc));
+        var before = scene.Session.Version;
+        Assert.IsTrue(scene.Host.RunWaypoints(scene.Npc));
+        Assert.AreEqual((1, Map), (scene.Session.QueryRouteIndex(scene.Npc), scene.Session.QueryTeleportMap(scene.Npc)));
+        Assert.AreEqual(before.Revision + 2, scene.Session.Version.Revision, "index and teleport map: one revision; the relocation's place: another");
     }
 
     [TestMethod]
@@ -372,6 +406,23 @@ public sealed class AreaAiRouteTests
         StringAssert.Contains(original.Host.TraceOf(original.Npc)!.Route, $"Overwrote (lost {Entity(5)})");
         Assert.AreEqual(original.Npc, original.Session.QueryChangeOfPlace()!.Entity);
         Assert.AreEqual(0, original.Host.PendingHomecomings.Count);
+    }
+
+    // ARC-AI-1316 (VAG5, owner decision 2026-11-12, option B): a pending hero request is never replaced by an NPC's homecoming: Original refuses it, Steamwoven holds it back for a free slot.
+    // (The two-NPC rule, Original replaces and Steamwoven waits, is covered by A_former_follower_waits_for_the_slot... above.)
+    [TestMethod]
+    [DataRow(RuleMode.Original)]
+    [DataRow(RuleMode.Steamwoven)]
+    public void A_pending_hero_request_is_never_replaced_by_an_npcs_homecoming_in_either_setting(RuleMode rules)
+    {
+        var scene = Open(Npc(Day | Night, [(20, 20)], 0, (1, 1), (1, 1)), rules: rules, mapListed: map => map is Map or 9);
+        Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.EnsureTeleportMap(scene.Session.Version, scene.Npc, Home).Disposition);
+        Assert.IsTrue(scene.Session.RequestHeroChangeOfPlace(ChangeOfPlaceCaller.TeleportSpell, 9, new(1, 1), ChangeOfPlaceFlags.None, 0, _ => true).Accepted);
+        Assert.IsTrue(scene.Host.RunWaypoints(scene.Npc));
+        Assert.IsFalse(scene.Host.FlushHomecomings(), "the hero's pending request refuses the NPC's (or holds it back)");
+        Assert.IsTrue(scene.Session.QueryChangeOfPlace()!.IsPlayerCharacter, "the hero's request stays in the slot");
+        if (rules == RuleMode.Original) StringAssert.Contains(scene.Host.TraceOf(scene.Npc)!.Route, "RefusedLocalPlayerPending");
+        else Assert.AreEqual(1, scene.Host.PendingHomecomings.Count, "Steamwoven keeps the NPC's request for a free slot");
     }
 
     [TestMethod]

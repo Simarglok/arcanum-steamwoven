@@ -168,8 +168,79 @@ F1. Every direct branch and the jump table read (0x414DE0, 31 entries) stay insi
 | GP6 | reply list rebuild (0x414E60, flag argument; 0x4CEEE0, 0x4CEED0) | A first build reseeds the random generator with the current time (`time(0)`, 0x4CEEE0) and keeps that seed in the dialog record; a rebuild with the flag set reseeds it with the kept seed (0x4CEED0), so the rebuilt options show the same phrases. | Original; here a rebuild in the same turn keeps the phrases already shown (only a reply that became eligible since draws), and the session's generator is never reseeded (its labelled rolls stay reproducible; the original's generator is not the session's, RG8) |
 | GP7 | the `h:` reply (0x414810 case 11 → 0x419830) | The healer menu: the NPC's class line 14000, then by the NPC's heal skill (0x4B1AB0, skill 12) generated options of state 12 (PC lines 1100–1199) and 13 (1200–1299), spell options (0x419AC0) for spells 60, 61, 62 and 64, the skill service of 0x419A00 (skill 10) when allowed (0x4AE570), and "forget it" (800–899) with the reply's own response. | Not implemented (ARC-SCRIPT-044); the option stays blocked |
 
-Not read here: 0x4C2690 (GP4), the value 0x445090 returns (`c:`), and the conditions and actions of the questions node behind
+Not read here: 0x4C2690 (GP4) and the conditions and actions of the questions node behind
 Virgil's `K:` (`ss`, `ar`, `ia`, `ce`; ARC-SCRIPT-045).
+
+## Trainer reply (ARC-SCRIPT-1150)
+
+Source: the [conversation runtime](../../scripting/dialog-conversation-runtime.md#trainer-reply-arc-script-1150) and the installed dialogs (315
+Player replies in 58 files start with `t:`; counts only). Question: what does the original do when the Player reply `t:` is picked? Read statically
+on 2026-11-12 by one reader (the implementing session, method step 6, with the exports in `research-private`: the decompiled C of 0x416C10, 0x414810,
+0x418480, 0x418A40, 0x418B30, 0x418C40, 0x418CA0, 0x418DE0, 0x418F30, 0x417F90, 0x4C1150, 0x4C60C0, 0x4C6170 and the assembly of 0x418F30, 0x418DE0);
+the rows are F1 until the independent review reads them. Every direct branch stays inside `.text`. The talk is a state machine of the dialog record:
+the screen is a generated NPC line plus options, each option a (state, value) pair that 0x414810 runs; a state-5 pick replaces the screen without
+leaving the NPC node.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| DTR1 | option builder (0x416C10) | A Player reply whose first two characters are `t:` (case-insensitive, a prefix: the text after it is the argument) becomes an option whose text is a PC line 500..599 (the GP2 pick); the argument is stored after the phrase's terminating NUL, not shown. The option keeps state 5 and the reply's raw response as its value; the response is decoded (0x417590) later, in 0x418CA0, into the way out's state and value. The reply's own condition and action run as for any reply (a pick runs the action, the hostile check 0x413130, then 0x414810). | Original |
+| DTR2 | list reader (0x417F90) | The argument is split at commas; a part with a dash is the range `a-b` (atoi both sides, the first dash found: `-1` reads 0 to 1; an empty part reads 0), else one atoi; at most 100 numbers; a descending range adds none. | Original |
+| DTR3 | state 5 (0x414810 → 0x418CA0) | The NPC's line becomes a class line of group 3000 (0x418480: the greeting's class generator with the override 10002) and the options one per listed number in list order, state 6 with the number as value, each text the skill's name (message number below 12 from 0x4C62B0, else 0x4C69A0 of the number less 12 in `skill.mes`), then the way out: PC line 800..899 with the reply's own response (state 0, 1 or 2 and its value: the next node, the end of the dialog, a script line); the node and the reply's action are not run again. The option arrays hold five entries and the way out takes the next one: five or more numbers write past them (the data has at most four). | Original |
+| DTR4 | state 6 (0x418DE0) | For the picked number the PC's training tier (0x4C60C0, 0x4C67F0 less 12; the setters' tier is bits 6..7): a tier other than none gives the notice of line 4000 (0x418C40). Tier none: the first-tier setter is probed (0x4C6170 with tier 1; it refuses below the tier's minimum level 1, ledger SR1, SR3) and a refusal gives the notice of line 5000; an accepted probe is put back to tier 0 at once through the real setter (so the Educator update, SR11, would run twice more; not built), then the price screen follows (0x418A40 with 100, state 7). For skill 2 under the monstrous-melee flag 0x4C60C0 derives the tier from the level and stat 0x11 instead of bits 6..7 (the port's Training answers it). | Original |
+| DTR5 | price screen (0x418A40) | The price is 100 on the reaction scale (0x4C1150, BT2) of the NPC toward the PC, a price of 1 counting 2. The NPC's line is class group 1000 with its `%d` filled by the price (0x589BD0); two options: PC line 1..99 (state 4, the price as value) and PC line 100..199 with the reply's own response. The reply's response and the next state (7 with the skill) are kept for the answers. | Original |
+| DTR6 | state 4 (0x418B30) | When the PC's own gold (0x464780 of the PC alone: its stack, not the followers') is below the price the notice is line 2000 (0x418C40); else the gold moves from the PC to the NPC (0x464830 of the whole price; in a network game a message is sent first, flags 0x62AC6C bits 0 and 1), then the training state runs. | Original |
+| DTR7 | state 7 (0x418F30) | The PC's training in the number is set to the first tier (basic 0x4C6170, tech 0x4C6850 of the number less 12, both tier 1, result unchecked), then the NPC's line is class group 6000 and the only option the PC class line from 1000 (0x418390: 1000 + 50 × the NPC's social class) with the reply's own response. A training that completes runs the Educator update (SR11, not implemented). | Original |
+| DTR8 | notice (0x418C40) | An NPC class line of the given group and the single option PC line 600..699 with the reply's own response; the line groups are 1000 (price), 2000 (no gold), 3000 (menu), 4000 (already trained), 5000 (cannot be taught), 6000 (trained). | Original |
+| DTR9 | line sources (0x418480, 0x418870) | Each NPC line is first looked up in the NPC's own override dialog (record 9999 + group / 1000: 10000 for 1000 up to 10005 for 6000); when it holds none, the class file by the NPC's and the PC's gender, the dumb files for a dumb NPC, the group + 50 × the NPC's social class (not for a dumb NPC), a random entry of 50 (GD5). | Original (the greeting's reading, GP, applies unchanged) |
+
+Not read here: the price helper's reaction input beyond BT2 (0x4C0CC0, R1), the Educator update (0x4C2950, SR11), the network message branch of
+0x418B30 and of 0x4C6170 (multiplayer), the debug-prefix branch of 0x416C10 (the debug flag 0x5D1A0C). The other prefix markers of GP1 (`c`, `r`, `z`,
+and the state-dependent `d`, `q`, `u`, `x`) are later slices of ARC-SCRIPT-1150 (`c` and `r` are built: [STY1–STY4](#story-reply-arc-script-1321),
+[RMR1–RMR9](#rumor-reply-arc-script-1304)).
+
+## Rumor reply (ARC-SCRIPT-1304)
+
+Source: the [conversation runtime](../../scripting/dialog-conversation-runtime.md#rumor-reply-arc-script-1304) and the installed dialogs (239
+Player replies in 32 files start with `r:`; 233 name the price 0 and 6 the price 10; the lists name 149 distinct rumors of 1000..1202, 121 of which
+have a class-less male-to-male text; counts only). Question: what does the original do when the Player reply `r:` is picked? Read statically on
+2026-11-12 by one reader (the implementing session, method step 6, with the exports in `research-private`: the decompiled C of 0x416C10, 0x414810,
+0x418FC0, 0x4190E0, 0x418A40, 0x418B30, 0x418C40, 0x418390, 0x4C5650, 0x4C58D0, 0x4C57E0 and 0x4C5700); a second reader (the independent review, 2026-11-12) checked every row against the decompiled C and found no
+discrepancy. It is the same state machine as the trainer's talk ([DTR1–DTR9](#trainer-reply-arc-script-1150)): a pick replaces the screen without leaving
+the NPC node, and the price screen, the payment and the notices are shared.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| RMR1 | option builder (0x416C10) | A Player reply whose first two characters are `r:` (case-insensitive, a prefix) becomes an option whose text is the PC's class line of group 2000 (0x418390: 2000 + 50 × the NPC's social class, the GP2 pick); the argument is stored after the phrase's terminating NUL, not shown. The option keeps state 8 and the reply's raw response as its value, decoded later (0x417590: a positive value is state 0 with it, zero state 1, a negative value state 2 with its absolute value). The reply's own condition and action run as for any reply. | Original |
+| RMR2 | state 8 (0x414810 → 0x418FC0) | The stored argument is read as `$price,list`: the price is the atoi of the text after the first `$`, the list is read by 0x417F90 ([DTR2](#trainer-reply-arc-script-1150)) from the text after the first comma at or after the `$` (at most 100 numbers). Other characters around the numbers do not matter (the installed replies wrap them in parentheses, or put spaces around the dash). Without a `$`, or a comma after it, the original searches from address 1 (a crash). A listed number outside 1000..2999 reads its bitmaps unchecked. | Original (the last two outside this subset) |
+| RMR3 | rumor draw (0x418FC0) | Each listed number is kept, in list order and with repeats, when the rumor is not quelled (0x4C5650: bit n − 1000 of the game-wide bitmap) and the PC does not know it (0x4C58D0: only when the PC is a player character, bit n − 1000 of the PC's rumor field 0x109); the quelled test comes first. One of the kept numbers is drawn uniformly (0x4CEF00 of 0 and count − 1; equal bounds, so a single candidate, draw nothing). | Original |
+| RMR4 | nothing left (0x418FC0) | With no number kept the NPC's line is the class line 7000 (0x418480) and the only option the PC line 600..699 with the reply's own response (the notice of [DTR8](#trainer-reply-arc-script-1150)); nothing is paid or written. | Original |
+| RMR5 | price (0x418FC0, 0x418A40) | A price below 1 tells the drawn rumor at once; otherwise the price screen of [DTR5](#trainer-reply-arc-script-1150) follows with the reply's price on the reaction scale (0x4C1150, a result of 1 counting 2), its next state 9 and the drawn rumor kept for the yes; the no answer (PC line 100..199) takes the reply's own response, as does the no-gold notice (class line 2000) of [DTR6](#trainer-reply-arc-script-1150). | Original |
+| RMR6 | payment (0x418B30, state 9 of 0x414810) | Yes pays as in DTR6 (the PC's own gold against the whole price, the gold to the NPC through 0x464830) and then runs state 9 with the kept rumor. | Original |
+| RMR7 | tale (0x4190E0, 0x4C5700) | The NPC's line is the rumor's text: the file by the NPC's gender then the PC's (m2m, m2f, f2f, f2m of `mes\game_rd_npc_*`, the module-load order of 0x4C5570, ledger LB10; the dumb file is not used here), message 20 × the number + the NPC's social class + 1, else 20 × the number + 1, else an empty text; then the name substitution of 0x416B00 (`@pcname@`, `@npcname@`). The line has no voice (field 0x458 is −1, as for every generated line). | Original |
+| RMR8 | learning (0x4C57E0, 0x4C58A0) | After the text, in single player, the rumor is written to the PC's rumor log with the game time when the PC is a player character and does not know it yet (a known one stays as it is); a multiplayer game sends a message first. | Original |
+| RMR9 | answer; NPC-side marker (0x4190E0, 0x416840) | The only option after the tale is the PC's class line 1000 (0x418390) with the reply's own response. The NPC's own node text `r:` (0x416840) calls the same 0x418FC0 with the NPC record's response and no reply around it: read, not built here (slice G1 of issue #1150). | Original |
+
+Not read here: the network message branches of 0x4C57E0 and 0x418B30 (multiplayer), the debug-prefix branch of 0x416C10 (the debug flag 0x5D1A0C), the
+unchecked 1000-byte buffer of the tale (a longer text overruns it; the installed texts are short), the behaviour for a rumor number outside 1000..2999.
+
+## Story reply (ARC-SCRIPT-1321)
+
+Source: the [conversation runtime](../../scripting/dialog-conversation-runtime.md#story-reply-arc-script-1321) and the installed dialogs (212 Player replies in 41 files start with `c:`, every one exactly that marker with no further text; each of the four `gd_sto_*` files holds 275 entries, the
+25 story states 0..24 of the 11 races 0..10, numbered race + 100 × state, which fixes the numbering of STY3; counts only, never text). Question: what does the original do when the Player reply `c:` is picked, and which value of 0x445090 does it use? Read statically on 2026-11-12 by one
+reader (the implementing session, method step 6, with the exports in `research-private`: the decompiled C of 0x416C10, 0x414810, 0x41A3E0, 0x41A440, 0x418460,
+0x4182D0, 0x418390, 0x418870, 0x418250, 0x416B00, 0x445090, 0x4B0490); a second reader (the independent review) checks every row against the decompiled C. The value
+0x445090 returns is the game's story state (the global 0x5E2FA4, [SS1](scripts.md)); the reply is the original's "tell me the news" line. It overlays the dialog state
+like the trainer's and the rumor talk ([DTR1–DTR9](#trainer-reply-arc-script-1150), [RMR1–RMR9](#rumor-reply-arc-script-1304)).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| STY1 | option builder (0x416C10 → 0x418460) | A Player reply whose first two characters are `c:` (case-insensitive, a prefix; the rest of the text is not read, the installed replies have none) becomes an option whose text is the single PC line numbered 1700 + the story state (0x4182D0 over a range of one entry: `gd_pc2m` or `gd_pc2f` by the NPC's gender, the dumb files for a dumb PC, the GP2 pick with the name substitution of 0x416B00). The option keeps state 0x18 and the reply's raw response as its value (decoded later by 0x417590). The reply's own condition and action run as for any reply. This closes GP1's open value. | Original |
+| STY2 | state 0x18 (0x414810 → 0x41A3E0) | The NPC's line is built by 0x41A440 (STY3); the only option is the PC's class line 1000 (0x418390: 1000 + 50 × the NPC's social class, the GP2 pick) with the reply's own response (0x417590), one option in all (the option count is set to 1 and a per-option word at +0x182C is cleared). The line is built after the reply's action has run, so the story state is the one the action left; the PC's phrase was built before it. | Original |
+| STY3 | story line (0x41A440, 0x418870) | First the NPC's own override dialog (the dialog of its script at SAP key 31): the record numbered 10000 + the story state, its male-PC text, or its alternate text for a PC that is not male (the same lookup as the class groups of [DTR9](#trainer-reply-arc-script-1150), copied raw, the line's voice set from it). Without such a record: the story file by the NPC's gender then the PC's (`gd_sto_m2m`, `m2f`, `f2f`, `f2m`, handles 28..31, ledger GD1), the message numbered the NPC's race (stat 27) + 100 × the story state, fetched by number (no count and no draw), then the name substitution; the line has no voice (field 0x458 is −1). | Original |
+| STY4 | triage correction (0x41A440) | The triage of 0x40..0x41 (ARC-RES-117) wrote "25 per story state plus the PC's race stat" and called the marker `m:`: the C reads the NPC's race and 100 per state, and the marker is `c:` (0x416C10 compares two characters against the byte at 0x5A0AF4). | Original (corrects the triage) |
+
+Not read here: the file's missing entry (the generated-line fetch 0x4D43A0 then shows the static missing-line text, as for every generated line, rule GD-A1), the
+network branches, the debug-prefix branch of 0x416C10 (the debug flag 0x5D1A0C).
 
 ## Followers across maps (ARC-RES-076)
 

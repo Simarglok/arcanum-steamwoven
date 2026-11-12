@@ -201,7 +201,7 @@ public partial class TerrainViewerApp
         if (artLook is not null) CentreGameViewOnHolder();
         var names = _worldMapData.Data!.Areas.Areas;
         if (!OpenWindowMode(InterfaceMode.WorldMap, () => _worldMapPanel!.Open(worldMap, _areaSession!.IsAreaKnown, area => names[area].Name, DebugMode, townShow, MapNotesOf(_areaSession!, SessionStoryLimits.MapNoteView),
-            MapNotesOf(_areaSession!, SessionStoryLimits.ContinentNoteView)), () => _worldMapPanel!.CloseView()))
+            MapNotesOf(_areaSession!, SessionStoryLimits.ContinentNoteView), teleport), () => _worldMapPanel!.CloseView()))
         {
             _worldMap = null;
             return;
@@ -414,6 +414,8 @@ public partial class TerrainViewerApp
     private void StartWorldMapTravel()
     {
         if (!WorldMapOpen || _worldMap is null) return;
+        // ARC-MAGIC-1147 (TP6): the scripted open of a Teleportation cast clears the walkable flag and the waypoints (0x560790), so no journey starts from it.
+        if (_teleportMode is not null) { RenderWorldMap("teleportation: click a known area, there is no journey"); return; }
         // MIG12 S8: the journey is a chain of real-time events of the session, which only a frame step moves (a lit map's, or an unlit map's frame driver, ARC-DEV-124).
         if (!HasFrameSource)
         {

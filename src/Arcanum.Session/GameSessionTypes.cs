@@ -198,6 +198,8 @@ public enum GameSessionFailure
     InventoryUnavailable, InvalidInventorySeed, InventoryMismatch, InvalidItem, ItemNotAvailable, UnknownHolder,
     HolderNotLootable, HolderScriptUnsupported, ItemScriptUnsupported, ItemTypeUnsupported, WornItemUnsupported,
     SubstituteInventoryUnsupported, InsertRefused,
+    // ARC-SCRIPT-1279: a script moves an item between two holders neither of which is the hero.
+    HolderPairUnsupported,
     // Hero domain (ARC-WORLD-015).
     InvalidHero,
     // Session randomness (ARC-WORLD-019).
@@ -659,8 +661,12 @@ public sealed class GameSessionSnapshot
     /// Schema 90 adds the second critter flags and the blit flags change to each critter's written flags (<see cref="SessionObjectFlags.Critter2Set"/>, <see cref="SessionObjectFlags.BlitSet"/>, ARC-MAGIC-047).
     /// Schema 92 adds the <see cref="Encounters"/> section: the use counts of the world-map random encounter rows (ARC-WORLD-1159).
     /// Schema 91 adds the <see cref="Generators"/> section: the monster generators' counter table, the creatures they made so far and the slot mark of each critter they made (ARC-WORLD-1157).
-    /// Schemas 1..55 are refused, not migrated; schemas 56 to 91 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 92;
+    /// Schema 92 adds each spell run's object list to the spells section (<see cref="SpellRun.ObjectList"/>, the original's run list +0x130, ARC-MAGIC-1234).
+    /// Schema 93 adds the NPC flags change to each critter's written flags (<see cref="SessionObjectFlags.NpcSet"/>, ARC-MAGIC-1142).
+    /// Schema 94 adds the item fields scripts wrote (written start, inventory display bit) to the inventory section (<see cref="SessionInventoryState.ItemFields"/>, ARC-SCRIPT-1279).
+    /// Schema 95 adds the encounters section: the use counts of the world-map random encounter rows (<see cref="SessionEncounterState"/>, ARC-WORLD-1159).
+    /// Schemas 1..55 are refused, not migrated; schemas 56 to 94 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 95;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
@@ -749,7 +755,7 @@ public sealed class GameSessionSnapshot
     /// <summary>The monster generators' counter table, the creatures they made and the slot mark of each critter they made (ARC-WORLD-1157, schema 91).</summary>
     public SessionGeneratorState Generators { get; }
 
-    /// <summary>The use counts of the world-map random encounter rows that fired (ARC-WORLD-1159, schema 92).</summary>
+    /// <summary>The use counts of the world-map random encounter rows that fired (ARC-WORLD-1159, schema 95).</summary>
     public SessionEncounterState Encounters { get; }
 }
 

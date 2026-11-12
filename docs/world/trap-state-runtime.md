@@ -162,7 +162,18 @@ is `AreaUseScriptHost.EntityId`, as for the object damage domain.
   walk) and a use or a step rolls once more for the trap it meets, as the original's separate
   attempts do (SP2); a failed roll leaves the trap unknown and the use or step goes on, so the trap
   fires. The light at the trap is the light at its cell (ARC-WORLD-1149, as the lock pick's): the darkness term of an untrained hero
-  applies. A hero-less session rolls nothing (the trap stays unknown).
+  applies. The roll's modifier is the powered shield's (ARC-MAGIC-1189, SP2): the worn item at location 1005 named 2866, charges of
+  ammunition type 2 in the roller's list and an aptitude (stat 16) at or below 0 give the aptitude itself (negative: a bonus);
+  `TrapRules.SpotItemModifier` is the rule, the session reads the facts. A hero-less session rolls nothing (the trap stays unknown).
+- **NPC and companion spot.** `GameSessionOwner.RollNpcSpotTrap` is the same branch with an NPC as the source (ARC-MAGIC-1189, TT2, TT3, SP2):
+  the NPC's own spot trap level and training from its sheet and effects, its blindness and crippled limbs, the light at the trap, the
+  modifier of the powered shield it wears; no fate and no difficulty-setting term (the local PC's). The gate is the observer's
+  (`GameSessionOwner.NpcSpotObserver`): a free NPC knows every trap the PC did not place, a companion led by the PC knows the spotted and
+  the PC-placed ones, and the player's Detect Traps flag spots for any observer. `AreaTraps.WalkCheckNpc` is the walk check of the NPC's
+  next tile (0x427110, TT10), asked by `AreaAiHost.StepBlocked` through the scene's `Traps` provider before the step starts: the first
+  trap spotted blocks the step as a step that cannot start does (the walk ends, EX20). A companion on its own follow walk (not held by
+  the AI host) asks the same check through `AreaCompanionGroup.StepTrap`, which refuses the step with `TrapSpottedReason` (the gate stays on the companion's grid through its rebuilds; a companion the AI host holds asks nothing there, as the host's own check rolled). The AI host rolls only for a step that can start. A walker meeting a trapped door tile rolls again after its door push, as the walk node restarts; once a companion marks a trap the next frame's step goes (nothing ends its follow goal or plans around the tile yet). A companion marks what it spots (the player
+  knows it from then on); a free NPC marks nothing (TT4), so it rolls again at its next step. An NPC with no sheet or life rolls nothing.
 - **Disarm.** See [Disarm](#disarm-arc-skills-1156).
 - **Effects.** A fired native run goes to `SessionSpellCaster.ApplyTrapEffect` with the cast
   map's id of the trapped object and the hero as the triggerer. Without a cast host no trap
@@ -178,15 +189,15 @@ The hero's disarm traps press (E6-a second half; ledger [SP3](../research/ledger
 
 - **Session.** `GameSessionOwner.RollHeroDisarmTrap` takes the trap's difficulty (object field 308 = 0x134, read for a trap object only, and bounded by `MaxTrapDifficulty`) and the light at the trap. A trap that is gone or that the hero does not know is NoChange with nothing charged or rolled. In a round the press pays 4 action points first (`UseSkillCost`, 0x4B7CD0; its own revision; another's subturn or too few points refuse it as `DisarmOutOfTurn`), then the shared check, `TrapRules.DisarmCase` (a failed master that did not fail critically rolls once more; a pass of that roll has no critical) and `DisarmTrap`. The rolls, the hero's fate point and the disarm are one revision; a removal the session cannot write takes the rolls and the fate point back and refuses. Success removes the trap, an expert's critical success also yields the device prototype, a critical failure sets the trap off.
 - **Device.** `GameSessionOwner.CreateItemForHero` creates the device as a made item of the hero's pack, or on the hero's tile when the hero cannot take it (weight, Technophobia, no grid room, the host's check): one revision. `AreaUseScriptHost.GiveHeroPrototypeItem` gives it its prototype's weight and scripts.
-- **Viewer.** `AreaTraps.Disarm` is the host's press on a row (the trap object's difficulty, the light at the row, the sprung trap's effect through the cast host, the device). The hotkey bar's Disarm traps entry arms the skill cursor (interface mode 2, as the pick pocket's, `TerrainViewerAreaDisarm.cs`); a left press on a known trap (a chest, door or scenery under the pixel, else a known trap object on the pressed tile) runs the press, an unknown trap is no target, a right press, a window or another cursor cancels it. The outcome is on the status line. Smoke stage `disarm`.
+- **Viewer.** `AreaTraps.Disarm` is the host's press on a row (the trap object's difficulty, the light at the row, the sprung trap's effect through the cast host, the device). The hotkey bar's Disarm traps entry and, since ARC-UI-1113, the skill pane's Disarm Traps button (bar mode 2, [skill pane](spell-cast-host.md#the-skill-pane-in-the-bottom-strip-arc-ui-1113)) arm the skill cursor (interface mode 2, as the pick pocket's, `TerrainViewerAreaDisarm.cs`); a left press on a known trap (a chest, door or scenery under the pixel, else a known trap object on the pressed tile) runs the press, an unknown trap is no target, a right press, a window or another cursor cancels it. The outcome is on the status line. Smoke stage `disarm`.
 - **Limits.** The press's 4 action points are not refunded when the roll then fails to run or the removal cannot be written (a full change budget, an exhausted generator); a critical failure on a trap with an ordinary (non-native) script runs that script as a use with the hero as the triggerer. A pack at its item limit leaves the device on the hero's tile.
-- **Not modelled.** The follower who acts instead of the hero (0x57A620), the reach of the press (the original's skill-bar press builds the invocation at once; no walk is read for it), the interface hooks' messages, a PC-placed script trap marker as the target, the skill pane's own disarm button (#1113).
+- **Not modelled.** The follower who acts instead of the hero (0x57A620), the reach of the press (the original's skill-bar press builds the invocation at once; no walk is read for it), the interface hooks' messages, a PC-placed script trap marker as the target.
 
 ## Not modelled here
 
-- The follower who disarms instead of the hero (SP3, 0x57A620), the spot modifier of the item at inventory
-  location 1005 (SP2), and the NPCs' and companions' own
-  spot attempts.
+- The follower who disarms instead of the hero (SP3, 0x57A620), and the NPCs' and companions' use of a trapped
+  object or step onto a trap object (their spot attempt on the walk check is built, ARC-MAGIC-1189, for the AI host's walkers
+  and the companions' own follow walk).
 - The 30002 trap in the viewer (with its shot), an ordinary trap script on a step, and the
   route cost of a known trap (DC8) on the PC's route (the drop map's route has it), the
   steps of NPCs and companions onto trap objects, the attack's trap trigger in the viewer,

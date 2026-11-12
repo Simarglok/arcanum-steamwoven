@@ -117,11 +117,24 @@ public sealed record AreaAiScene
     /// <summary>ARC-DEV-282 (PF1, PF2): launches the arrow or bullet of an NPC's bow or firearms attack: the shooter, its target (an NPC's entity or the hero), the shot, the shooter's tile and the target's; true
     /// when the flight began (the viewer then lands the strike through <see cref="AreaAiHost.LandShot"/> where it ends). Null: the attack lands at once, as ARC-DEV-273's; false: the host strikes the aimed target at once.</summary>
     public Func<string, string, SessionShot, CellCoord, CellCoord, bool>? LaunchShot { get; init; }
+    /// <summary>ARC-COMBAT-1140 (RA4): the door, window, container, scenery or trap a map row of the line of fire's blocker stands for, with its session target (<see cref="AreaObjectAttackTarget.Object"/>); null for a row that is
+    /// none (an item, a projectile, one the session destroyed, a wall: a wall is struck without a target). Null delegate: no object takes an NPC's shot, the line's check just fails (ARC-DEV-284).</summary>
+    public Func<AreaObjectRecord, AreaObjectAttackTarget?>? ObjectTarget { get; init; }
+    /// <summary>ARC-COMBAT-1140 (RA4, PF2): launches the arrow or bullet of an NPC's bow or firearms attack on the object or wall that stopped its line of fire: the shooter, the blocker's row (the shot's target: it strikes it
+    /// where it crosses the tile), the shot, the shooter's tile and the aimed target's (the original keeps the target location); true when the flight began (the viewer then lands the strike through
+    /// <see cref="AreaAiHost.LandShotOnObject"/> where it ends). Null or false: the host strikes the blocker at once.</summary>
+    public Func<string, AreaObjectRecord, SessionShot, CellCoord, CellCoord, bool>? LaunchShotAtObject { get; init; }
+    /// <summary>ARC-COMBAT-1140: an NPC's shot decided and landed at once on an object or wall (the shot did not fly): the shooter, the blocker's row, its target (null for a wall) as it was before the hit, and the session's result, for what the viewer does after an object hit
+    /// (the floaters, the trap and BUST script, the sounds, the redraw). A shot that flew is landed by the viewer itself.</summary>
+    public Action<string, AreaObjectRecord, AreaObjectAttackTarget?, SessionObjectAttackResult>? ObjectStruck { get; init; }
     /// <summary>ARC-DEV-261 (MIG13 S14m, GT198–GT199): a victim's taking-damage script (point 0x17) asked by an NPC's damage: the victim and the damage's attacker (null: none) in, whether the damage goes on out (false: the script skipped the default, which cancels the whole damage step). The hero has no script data and is not asked. Null: the damage goes on.</summary>
     public Func<string, string?, bool>? TakingDamage { get; init; }
     /// <summary>ARC-WORLD-115 (NPC AI slice I9, host part): the companions of the shown map the host runs too, and their moves; null:
     /// the companions run no AI (their follow goal moves them). ARC-WORLD-119: the free ones too, as any leaderless NPC.</summary>
     public IAreaAiFollowers? Followers { get; init; }
+    /// <summary>ARC-MAGIC-1189 (ledger TT10, SP2): the shown map's trap host (<see cref="AreaTraps"/>), which checks the next tile of an NPC's or a companion's step for an unknown trap
+    /// before the step starts (0x427110) and rolls the NPC's own spot attempt; null (the provider or its answer): the NPCs meet no trap, as before.</summary>
+    public Func<AreaTraps?>? Traps { get; init; }
     /// <summary>ARC-DEV-287 (MIG13 tail T6): the hero's body for the knockback (its art rotation and its relocation onto a tile); null: the hero cannot be pushed here.</summary>
     public IAreaHeroPush? HeroPush { get; init; }
 }
@@ -241,7 +254,7 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 /// the heal skill's rung and goal 40, pickups, a thrown item's flight, grenades, the back-off's away path, the attack order's target and pass, the comment lines, NPC
 /// ranged attacks, scripts at the AI points, routines and waypoints, saved NPC positions.
 /// </summary>
-public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, ISessionBodyWorld, IAiPerformWorld, IMoraleWorld, IAiSupportWorld, IAiGrenadeWorld, IGoalStepHost
+public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, ISessionBodyWorld, IAiPerformWorld, IMoraleWorld, IAiSupportWorld, IAiGrenadeWorld, IAiItemSearchWorld, IGoalStepHost
 {
     private const string Pc = AiSchedulerRules.Pc;
     // Object flags: destroyed, off, don't draw, invisible, invulnerable; critter flags; spell flags; NPC flags (HostilityCritter's bits).
@@ -922,6 +935,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             or AttackEventStop.VictimDecoy or AttackEventStop.VictimWall or AttackEventStop.Self) return;
         // ARC-WORLD-115: the attacker's followers first, right after the early exits (0x4A9B80, side attacker, the victim the other).
         if (plan.TellsAttackerFollowers) TellFollowers(attacker, victim, FollowerSide.Attacker);
+        // ARC-MAGIC-1142 (HS14, 0x4A9650 at 0x4A983D): the NPC victim loses the kill-on-sight override (NPC flag 0x800) before the PC victim's response, whoever it was given by (a charm, the data).
+        if (plan.ClearsKosOverride) ClearKosOverride(victim);
         // A PC victim responds (0x4A9AD0): first the dialog-end callback (0x5F848C → 0x5678D0(PC, 0), GT140: an attack on the PC ends the PC's dialog, whoever the partner is), then it enters combat mode (its call of 0x4B3F50).
         if (plan.PcVictimResponds)
         {
@@ -937,6 +952,14 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (plan.Reaction == AttackReactionChange.Deliberate && attacker == Pc && ReactionFacts(victim) is { } facts && Row(victim) is { } row)
             _session.ReactToPcHit(_session.Version, victim, facts.Npc, facts.Pc, new(row.FollowerHitReaction, row.HostileReaction), deliberate: true);
         if (plan.ReactsToAttack) React(victim, attacker);
+    }
+
+    // The attack event's clear of NPC flag 0x800 on the victim (0x406D40 of field 0x118): the session's NPC flag layer takes it off the data's value; a victim without the bit writes nothing.
+    private void ClearKosOverride(string victim)
+    {
+        if (Fields(victim)?.Npc is not { } fields) return;
+        var data = (fields.Flags & KosOverrideNpc) != 0;
+        _session.WriteObjectFlag(_session.Version, victim, SessionObjectFlagField.Npc, unchecked((int)KosOverrideNpc), false, data);
     }
 
     /// <summary>
@@ -1151,6 +1174,11 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private uint SpellFlagsOf(string id, uint stored) => unchecked((uint)_session.QueryObjectFlags(id).Spell(unchecked((int)stored)));
 
     private uint ObjectFlagsOf(string id, uint stored) => unchecked((uint)_session.QueryObjectFlags(id).Object(unchecked((int)stored)));
+
+    // ARC-MAGIC-1142: an NPC's NPC flags (obj_f_npc_flags, 0x118) and critter flags (0xDA) as the session left them (a charm's kill-on-sight override, the attack event's clear, the undead bit) over its data's.
+    private uint NpcFlagsOf(string id, uint stored) => unchecked((uint)_session.QueryObjectFlags(id).Npc(unchecked((int)stored)));
+
+    private uint CritterFlagsOf(string id, uint stored) => unchecked((uint)_session.QueryObjectFlags(id).Critter(unchecked((int)stored)));
     public bool PcHidden => false;
     public AiConversation Conversation(string npc) => _scene.ConversationPartner?.Invoke() == npc ? AiConversation.Pc : AiConversation.None;
     // The dialog end callback 0x5F848C is stored once by the dialog UI's init (0x567377 → 0x4A84D0) and never cleared: it is always set (ARC-DEV-177, the S11e read GT138).
@@ -1166,7 +1194,16 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool StunAnimationRunning(string npc) => RunOf(npc) is { Bottom.Goal: GoalType.AnimateStunned };
     // ARC-DEV-143: an overlay (an eye candy or the hover) is beside the NPC's own runs and is not its animation here: a spell's eye candy on a companion or on the NPC whose subturn starts changes none of these answers (the original's own test of the animation list is not read).
     public bool AnimationRunning(string npc) => _session.QueryGoals().RunsOf(npc).Any(r => !AiExecutorRules.IsOverlayRunGoal(r.Bottom.Goal));
-    public void ReWield(string npc, bool allSlots) { }
+    /// <summary>
+    /// ARC-AI-1139 (0x4A8570 steps CHECK_WIELD and CHECK_WEAPON): the gate's re-wield of the NPC's best items, every slot (0x4654F0) or the weapon slot alone
+    /// (0x465170 with 1004), over its list and ammunition stacks (<see cref="GameSessionOwner.RewieldNpc"/>), so a companion whose bow ran dry takes it off
+    /// and fights with the best weapon it can use, fists when none. The session's answer is traced; a refusal (no wielder for the NPC, no restock world) leaves the NPC as it was.
+    /// </summary>
+    public void ReWield(string npc, bool allSlots)
+    {
+        var result = _session.RewieldNpc(_session.Version, npc, allSlots, _events as ISessionRestockWorld);
+        Trace(npc).Item = $"rewield {(allSlots ? "all" : "weapon")} {result.Disposition} {result.Failure} " + string.Join(", ", result.Steps.Select(step => $"{step.Slot} off={step.TakenOff ?? "-"} on={step.Wielded ?? "-"}"));
+    }
     // ARC-DEV-301: the gate's demaintain (0x4A8570 step 15 → 0x457450) ends the NPC's maintained spell runs through the cast host.
     public void EndMaintainedSpells(string npc) => _scene.Spells?.Invoke()?.EndMaintainedSpells(npc);
     /// <summary>
@@ -1196,7 +1233,26 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var used = AiExecutorRules.UseItemNow(this, npc, item, chosen.Target);
         Trace(npc).Item += $" used at once {used.Step} spent={used.Spent}";
     }
-    public bool SearchItems(string npc) => false;
+    /// <summary>
+    /// ARC-AI-1139: the pipeline's item search (0x4A8E70, <see cref="AiGroundRules.SearchItems"/>): each look-for bit the NPC holds is cleared just before its search
+    /// (the setters are the ranged attack without ammunition, 0x4ADFF0, and an item drop, 0x461AB0). The host has no ground source yet (<see cref="LooseItems"/>,
+    /// <see cref="JunkPiles"/>), so no search finds an item and no pickup starts: the answer is false and the pass goes on to the danger update, as in the original on a map with nothing
+    /// lying in the NPC's square. NOT READY: the loose items and junk piles of the shown map, and the end of the pickup goal (<see cref="PickUp"/>).
+    /// </summary>
+    public bool SearchItems(string npc)
+    {
+        var result = AiGroundRules.SearchItems(this, npc);
+        if (result.Cleared != DangerFlags.None) Trace(npc).Item = $"item search {result.Stop} cleared {result.Cleared}";
+        return result.Stop == AiItemSearchStop.PickupStarted;
+    }
+
+    // IAiItemSearchWorld (ARC-AI-1139): the blinded condition (critter flag 0x80), the interface object test (no window holds an object here) and the ground: no source yet.
+    public bool Blinded(string npc) => LifeState(npc)?.Conditions.HasFlag(LifeConditions.Blinded) ?? false;
+    public bool InterfaceHoldsObject => false;
+    public IReadOnlyList<AiGroundItem> LooseItems(string npc, AiGroundKind kind, int halfSize) => [];
+    public IReadOnlyList<string> JunkPiles(string npc, int halfSize) => [];
+    public AiGroundItem? FirstInPile(string pile, AiGroundKind kind) => null;
+    public bool StartPickup(string npc, string item) => false;
     public bool Loading => false;
 
     /// <summary>
@@ -1213,6 +1269,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Trace(npc).Danger = $"{plan.Path} {plan.Request?.ToString() ?? "-"} {plan.Target ?? "-"}";
         if (plan.Path == DangerUpdatePath.Flee) { _session.RunFleeSpellStep(_session.Version, npc, () => false); return; }
         if (plan.Unlocks) _session.UnlockDangerTarget(_session.Version, npc);
+        // ARC-AI-1317 (VAG6): the pick's purge of the saved enemy list (the original runs it inside the pick, before the setter).
+        if (plan.PurgesEnemies) _session.PurgeDangerEnemies(_session.Version, npc, enemy => Exists(Id(enemy)));
         if (plan.Request is not { } state) return;
         AiPassChoice? choice = null;
         if (plan.ChoosesAction && plan.Target is { } found)
@@ -1277,23 +1335,27 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Started(npc, current, AiExecutorRules.StartAttack(this, npc, target, null, current));
     }
 
-    private void Started(string npc, GoalRun? current, AiPerformResult result)
+    // True when the run is in the table now (a started run the table took).
+    private bool Started(string npc, GoalRun? current, AiPerformResult result)
     {
         Trace(npc).Perform = $"{result.Kind}{(result.Refusal == AiStartRefusal.None ? "" : " " + result.Refusal)}{(result.Started ? " started" : "")}";
-        if (!result.Started || result.Run is not { } run || ReferenceEquals(current, run)) return;
+        if (!result.Started || result.Run is not { } run || ReferenceEquals(current, run)) return false;
         // ARC-DEV-135 (MIG13 S5): the proposed run starts in the session's table with its starter's own plan (GS12, GS13): the table interrupts the NPC's runs at the starter's
         // level by the rule (the executor's starters that interrupt in their own body, the attack, throw and follow, did so already, so what is left is the runs the rule kept, a
         // no-interrupt overlay among them, and the attack retarget's, which asks no port), refuses a duplicate and a refused interrupt, and the end nodes of every run the start
         // ended run here (the replaced run's among them). The first step comes 5 ms of animation time after the start (GS7), at the next pass (a start inside the AI tick's pass waits for it).
         var started = _session.StartGoal(new GoalStartRequest(npc, StarterPlan(run.Bottom.Goal), run.Bottom, run.Flags), _startPorts ??= new StartPorts(this));
         foreach (var end in started.Ended) EndNodes(end);
-        if (started.Started) { Trace(npc).Reason = AiExecutorReason.None; return; }
+        if (started.Started) { Trace(npc).Reason = AiExecutorReason.None; return true; }
         // A start the table refused (an interrupt a priority-4 or -5 goal refuses, a duplicate, no free slot, a full queue) leaves the NPC with the runs the rule kept: the proposed
         // run's end nodes free what its starter took (a cast's magic run).
         // Only the proposed run's end nodes run: the kept run's attack animation (a priority-4 goal's run can have one) is not the proposed run's.
         Trace(npc).Perform += $" not in the table: {started.Failure} {started.Outcome}";
         AiExecutorRules.EndRun(run, this);
         FreeUnbegunCasts(run, queuedOnly: false);
+        // ARC-AI-1315 (TS4): the attack starter's own run start failing (0x44D520) ends in the step apart as its other refusals do.
+        if (run.Bottom.Goal == GoalType.Attack) AiTileSharerRules.StepApart(this, npc);
+        return false;
     }
 
     // The interrupt plan of the starter that builds a run with this bottom goal (GS12, GS13): level 3 for the walks, runs, follow, attack, throw and spread out (with the
@@ -1605,7 +1667,24 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (AiExecutorRules.Distance(from, next) != 1) return AiStepBlock.CannotStart;
         var direction = RoutePlanner.Toward(chart, ToChart(next));
         var open = new AreaRouteSource(Steps, _scene.Chart, MovedRecords, _scene.Passages).Assess(chart, direction) == RouteStepVerdict.Open;
+        // ARC-MAGIC-1189 (TT10): on a step that can start, a trap the walker spots on the next tile blocks it, which ends the walk as a step that cannot start does (EX20);
+        // a step that cannot start anyway rolls nothing, as the hero's step gate (asked for an open step only).
+        if (open && TrapSpottedOn(id, next)) return AiStepBlock.CannotStart;
         return open ? AiStepBlock.Clear : flight ? AiStepBlock.Occupied : AiStepBlock.CannotStart;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-1189 (ledger TT10, SP2): the walk check of the walker's next tile (0x427110): every unknown trap object there gets the NPC's own spot attempt
+    /// (<see cref="AreaTraps.WalkCheckNpc"/>, with the NPC's sheet for its spot trap skill and whether the PC leads it); true when it spots one, whose mark a companion writes
+    /// (the player knows it from then on). False for the hero, an NPC with no sheet or no life, and when the map has no trap host.
+    /// </summary>
+    public bool TrapSpottedOn(string id, CellCoord next)
+    {
+        if (id == Pc || _scene.Traps?.Invoke() is not { } traps || _scene.NpcSheet?.Invoke(id) is not { } sheet || RawBuild(id)?.Target is not { } life) return false;
+        var walk = traps.WalkCheckNpc(new(life, sheet.Loaded, sheet.Modifiers, Leader(id) == Pc), next);
+        if (walk.Spotted is null) return false;
+        Trace(id).Step = $"spotted a trap on {next.X},{next.Y}: the walk stops";
+        return true;
     }
 
     // ---- ARC-DEV-141 (MIG13 S8c): the pushed NPC's bodies for the knockback host (AreaAiKnockbackBodies) ----
@@ -1884,11 +1963,14 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public void Hit(string id, string target)
     {
         var aimed = target;
+        // ARC-COMBAT-1140 (RA4, RH5): a door, container, scenery, trap or wall that stops the line of fire takes the shot in place of the target.
+        if (HitBlockingObject(id, target)) return;
         target = LineOfFireStruck(id, target);
         if (NpcAttackOf(id, target, flight: _scene.LaunchShot is not null) is not { } attack) return;
         var result = _session.AttackByNpc(_session.Version, attack);
         Trace(id).Hit = $"{result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Life?.HitPointDamage}" + (target == aimed ? "" : $" (the line of fire struck {target} instead of {aimed})");
         _notices.Add(new(AreaAiNoticeKind.Hit, id, target) { Result = result });
+        NeedsAmmunition(id, result.Resolution);
         if (result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Refusal == AttackRefusal.None)
         {
             AttackEvent(id, target);
@@ -1903,6 +1985,18 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                 LandShot(id, shot, target);
                 _session.EndShot(shot);
             }
+    }
+
+    /// <summary>
+    /// ARC-AI-1139 (0x4B3170 → 0x4ADFF0): an NPC's ranged attack the ammunition check refused (<see cref="AttackRefusal.OutOfAmmunition"/>, a companion with too few units of its
+    /// weapon's type) marks the NPC as needing ammunition, a weapon and a weapon check: LOOK_FOR_AMMO, LOOK_FOR_WEAPON and CHECK_WEAPON (flags 0x0A000080) in one revision. Its next AI pass
+    /// re-wields (<see cref="ReWield"/>) and runs the item search (<see cref="SearchItems"/>). Any other outcome sets nothing.
+    /// </summary>
+    private void NeedsAmmunition(string npc, AttackResolution? resolution)
+    {
+        if (resolution?.Refusal != AttackRefusal.OutOfAmmunition) return;
+        var set = _session.SetAiSupportBits(_session.Version, npc, DangerFlags.LookForAmmo | DangerFlags.LookForWeapon | DangerFlags.CheckWeapon);
+        Trace(npc).Item = $"out of ammunition {set.Disposition} {set.Failure}";
     }
 
     /// <summary>
@@ -1945,6 +2039,65 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             HitEffect(struck, result);
             if (VictimReached(result)) Struck(struck);
         }
+        return result;
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1140 (RA4, RH5, PF8; tail T4e): on the ranged path the line of fire to the target may be stopped by a door, window, container, scenery, trap or wall, which replaces the target whatever its type (RA4); a target that is
+    /// no critter is hit without the skill roll (RH5). The NPC's attack is then <see cref="GameSessionOwner.AttackObjectByNpc"/> on that blocker, from the shooter's tile at the blocker's distance; the arrow flies toward the aimed
+    /// target's tile as the hero's does and strikes the blocker where it crosses its tile (<see cref="AreaAiScene.LaunchShotAtObject"/>, <see cref="LandShotOnObject"/>), or the attack lands at once
+    /// (<see cref="AreaAiScene.ObjectStruck"/>). True when a blocker took the attack; false leaves the shot to <see cref="LineOfFireStruck"/> (no scene hook, a critter or hero, an item or a row the host cannot place).
+    /// </summary>
+    private bool HitBlockingObject(string id, string target)
+    {
+        if (_scene.ObjectTarget is not { } objectOf || Distance(id, target) <= 1 || Tile(id) is not { } from || Tile(target) is not { } to || _scene.LineOfFire?.Invoke() is not { } map) return false;
+        var trace = LineOfFireRules.Trace(from, 0, 0, to, map, _session.Rules.Combat);
+        if (trace.Blocker is not { } blocker || blocker.Type is 15 or 16 || blocker.Key == Key(target) || blocker.WorldX is not { } bx || blocker.WorldY is not { } by) return false;
+        AreaObjectAttackTarget? info = null;
+        // A wall (type 0) is struck without a target; another blocker must be an object the session damages (an item or a projectile keeps the target, whose check the blocked line fails).
+        if (blocker.Type != 0 && ((info = objectOf(blocker)) is not { Refusal: null, Object: not null } || info.Kind == DamageableObjectKind.Item)) return false;
+        var struck = info?.Object;
+        if (Build(id) is not { } attacker) return false;
+        var cell = new CellCoord(checked((int)bx), checked((int)by));
+        var result = _session.AttackObjectByNpc(_session.Version, new SessionNpcObjectAttack(attacker)
+        {
+            Target = struck, Wall = struck is null, Distance = AiExecutorRules.Distance(from, cell), AttackerWorn = _scene.Combat.WornItems(_session, id), AttackerCell = from, DropMap = _scene.DropMap?.Invoke(),
+            Flight = _scene.LaunchShotAtObject is not null, TakingDamage = TakingDamageOfObject(id, struck),
+        });
+        Trace(id).Hit = $"shot on {(struck?.Entity ?? "a wall")} instead of {target}: {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
+        NeedsAmmunition(id, result.Resolution);
+        // A refused attack leaves the shot to the ordinary flow (the target keeps it).
+        if (result.Disposition == GameSessionDisposition.Rejected) return false;
+        if ((result.Shots.Count == 0 || result.Life is not null) && result.Resolution?.Refusal == AttackRefusal.None) _scene.ObjectStruck?.Invoke(id, blocker, info, result);
+        // The arrows leave the shooter's tile for the aimed target's; one the viewer cannot fly strikes the blocker at once.
+        foreach (var shot in result.Shots)
+            if (_scene.LaunchShotAtObject?.Invoke(id, blocker, shot, from, to) != true)
+            {
+                if (LandShotOnObject(id, shot, struck, struck is null) is { } landed && landed.Disposition != GameSessionDisposition.Rejected) _scene.ObjectStruck?.Invoke(id, blocker, info, landed);
+                _session.EndShot(shot);
+            }
+        return true;
+    }
+
+    private Func<bool>? TakingDamageOfObject(string attacker, SessionObjectTarget? target) =>
+        _scene.TakingDamage is { } asks && target is not null ? () => asks(target.Entity, attacker) : null;
+
+    /// <summary>
+    /// ARC-COMBAT-1140 (PF8, RH5, OD1–OD5; tail T4e): an arrow or bullet of <paramref name="shooter"/> reached an object it met: the one the shot was decided for (<see cref="HitBlockingObject"/>) takes the carried hit, another
+    /// object or wall past its destination a forced hit (<see cref="GameSessionOwner.LandNpcShotOnObject"/>); the object's taking-damage script is asked with the shooter as the attacker. A door, window, container,
+    /// scenery or trap is <paramref name="target"/>, a wall is none (<paramref name="wall"/>). What follows (the floaters, the trap and BUST script, the sounds, the redraw) is the viewer's, from the returned result.
+    /// Null when the shooter has no combat values (the shot is gone either way).
+    /// </summary>
+    public SessionObjectAttackResult? LandShotOnObject(string shooter, SessionShot shot, SessionObjectTarget? target, bool wall)
+    {
+        if (Build(shooter) is not { } attacker) { _session.EndShot(shot); return null; }
+        var result = _session.LandNpcShotOnObject(_session.Version, shot, new SessionNpcObjectAttack(attacker)
+        {
+            Target = target, Wall = wall, AttackerWorn = _scene.Combat.WornItems(_session, shooter), AttackerCell = Tile(shooter), DropMap = _scene.DropMap?.Invoke(),
+            TakingDamage = TakingDamageOfObject(shooter, target),
+        });
+        _session.EndShot(shot);
+        Trace(shooter).Hit = $"shot on {target?.Entity ?? "a wall"} {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
         return result;
     }
 
@@ -2710,7 +2863,43 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool BoomerangInFlight(string npc) => false;
     // The starters' interrupt (0x424070 at level 3, GS13): the end nodes of the runs it ended run now, and a refusal (a run whose current goal has priority 4 or 5) refuses the start.
     public bool InterruptLowerAnimations(string id) => InterruptOwner(id, GoalInterruptRules.OrdinaryActions).Succeeded;
-    public void StepApart(string id) { }
+
+    /// <summary>
+    /// ARC-AI-1315 (VA4, VAG4): the critters on the object's tile for the tile-sharer finder and the step apart (0x436720, 0x4364D0): the hero, the shown map's NPCs and the
+    /// companions on it, dead ones included (<see cref="CrittersOn"/>), each with its life, its busy-run test (<see cref="GoalRunTable.BusyRun"/>) and a stand-in for the handle
+    /// order: the original compares run-time pool handles (OM1), so the order of this list (the hero, the map's NPCs in the scene's order, then the companions) stands for it.
+    /// </summary>
+    public IReadOnlyList<AiTileCritter> TileCritters(string id)
+    {
+        if (Tile(id) is not { } cell) return [];
+        var goals = _session.QueryGoals();
+        var order = 0L;
+        return CrittersOn(cell).Select(c => new AiTileCritter(c, c == Pc, !DeadCritter(c), goals.BusyRun(c) is not null, order++)).ToList();
+    }
+
+    /// <summary>
+    /// ARC-AI-1315: the please-move starter's start (0x4363E0 after its choice, gate and busy test): goal 68 on <paramref name="mover"/> with <paramref name="awayFrom"/> stored,
+    /// through the table's generic start (the interrupt at the goal's own priority, the first step 5 ms later).
+    /// </summary>
+    public bool StartPleaseMove(string mover, string awayFrom)
+    {
+        var run = new GoalRun(mover, default, new GoalFrame(GoalType.PleaseMove, awayFrom));
+        return Started(mover, RunOf(mover), new AiPerformResult(AiPerformKind.PleaseMove, run) { Started = true });
+    }
+
+    /// <summary>
+    /// ARC-AI-1315: the blocked-step test of goal 68's tile choice (0x425760): the step from the object's tile to the neighbouring <paramref name="next"/> is clear when no living
+    /// critter stands on it and the terrain, walls and objects let the step through (the route source's verdict, with the moved records and the other movers' cells as the planner
+    /// sees them). No trap check and no random wait, which the walker's own step test (<see cref="StepBlocked"/>) adds.
+    /// </summary>
+    public bool StepClear(string id, CellCoord next)
+    {
+        if (Tile(id) is not { } from || AiExecutorRules.Distance(from, next) != 1) return false;
+        if (LivingCritterOn(next, id)) return false;
+        var chart = ToChart(from);
+        var direction = RoutePlanner.Toward(chart, ToChart(next));
+        return new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(id, null), _scene.Passages).Assess(chart, direction) == RouteStepVerdict.Open;
+    }
 
     public AiFleeing PerformFleeing(string npc)
     {
@@ -2878,6 +3067,14 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     // ---- the hostility and morale world (IMoraleWorld) ----
 
+    /// <summary>
+    /// ARC-AI-1317: whether the handle still names an object (<see cref="IHostilityWorld.Exists"/>): the hero always; an NPC of the shown map
+    /// until it is destroyed (<see cref="Gone"/>); a created critter until the session destroys it; any other object the host does not
+    /// hold (another map's) is kept, since only its own map can tell.
+    /// </summary>
+    public bool Exists(string id) =>
+        id == Pc || !Gone(id) && !(id.StartsWith(SessionCreatedObject.CritterPrefix, StringComparison.Ordinal) && _session.QueryCreatedObject(id) is null);
+
     public HostilityCritter? Find(string id)
     {
         if (id == Pc)
@@ -2907,7 +3104,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Destroyed = Gone(id), DontDraw = (ObjectFlagsOf(id, fields.Object.Flags) & DontDraw) != 0, ObjectInvisible = (ObjectFlagsOf(id, fields.Object.Flags) & ObjectInvisible) != 0,
             Invulnerable = (fields.Object.Flags & Invulnerable) != 0, NighInvulnerable = (critter.Flags2 & NighInvulnerable2) != 0,
             Dead = status?.IsDead ?? true, Unconscious = status?.IsUnconscious ?? false, Asleep = Sleeping(id),
-            NonLethal = (critter.Flags & NonLethal) != 0, Undead = (critter.Flags & Undead) != 0, Animal = (critter.Flags & Animal) != 0,
+            NonLethal = (critter.Flags & NonLethal) != 0, Undead = (CritterFlagsOf(id, critter.Flags) & Undead) != 0, Animal = (critter.Flags & Animal) != 0,
             AnimalEnshrouded = (critter.Flags & AnimalEnshrouded) != 0, Monstrous = build.Monstrous,
             // The NO_FLEE the AI set (session bit, ARC-WORLD-086) is ORed into the critter's stored flag.
             NoFlee = (critter.Flags & NoFleeFlag) != 0 || danger.Flags.HasFlag(DangerFlags.NoFlee),
@@ -2917,7 +3114,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             AttemptingAttack = RunOf(id)?.Top.Goal is GoalType.AttemptAttack or GoalType.AttemptSpell or GoalType.AttemptSpellWithAnimation,
             InCombatMode = _session.QueryCombatMode(SessionCombatant.Critter(id)),
             Guard = npc.SocialClass == GuardClass, WaitingHere = (npc.Flags & WaitingHereNpc) != 0 || Waiting(id),
-            KillOnSight = (npc.Flags & KillOnSightNpc) != 0, KosOverride = (npc.Flags & KosOverrideNpc) != 0,
+            KillOnSight = (npc.Flags & KillOnSightNpc) != 0, KosOverride = (NpcFlagsOf(id, npc.Flags) & KosOverrideNpc) != 0,
             Perception = build.EffectiveStat(CharacterStat.Perception, state), Intelligence = build.EffectiveStat(CharacterStat.Intelligence, state),
             Level = build.Level, Alignment = critter.BaseStats.Count > AreaCompanionData.AlignmentStat ? critter.BaseStats[AreaCompanionData.AlignmentStat] : 0,
             HealthPercent = status is null ? 0 : Percent(status), Leader = leader, PcLeader = leader,

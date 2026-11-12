@@ -628,7 +628,8 @@ attacking are the actions most refused tile scripts reach (ledger [TD1–TD3](..
 - **Hosts.** The viewer's tile and sector set (`AreaUseScriptHost.PlacedAdmission`, "S4-area-placed-dialog-actor") adds call-ex, destroy
   and stop attacking to the dialog action. A tile that an NPC steps on runs his own dialog point through call-ex as a heartbeat does
   (ARC-SCRIPT-047): Virgil on the altar tiles (1328) runs his dialog script 1324 from line 14, which asks for node 250, and the viewer
-  opens that talk. Destroy acts on an NPC of the shown map: it is kept as the map change `obj.destroyed` (1), and the view no longer draws
+  opens that talk. The talk is only a hint that the player consult the world map: all three replies end it with no action and the resumed line 15 returns, so no travel follows
+  (ledger [VA1–VA4](../research/ledger/scripts.md#virgils-altar-talk-is-a-hint-not-a-world-map-option-arc-script-1358), ARC-SCRIPT-1358). Destroy acts on an NPC of the shown map: it is kept as the map change `obj.destroyed` (1), and the view no longer draws
   or reaches the NPC (`AreaObjectTargets.Gone`, the object lists, the AI host); one destroyed already, in its map data or by a script,
   changes nothing. The PC, a follower of the PC (the party removal is not read) and an NPC whose destroy point holds a script (the
   destroy event is audit slice 4) leave the run unapplied. Stop attacking acts on the PC (each of its followers) or an NPC of the shown
@@ -782,6 +783,36 @@ every entry of its sector). Ledger [UF1–UF4](../research/ledger/scripts.md#tow
   `GameSessionOwner.SetTeleportMap`. Change art number is held by S36 only: no host applies it (limits in NS7).
 - **Tests.** `ScrNpcStateTests` (the interpreter), `AreaNpcStateScriptTests` (the host over a real session), `AreaAiRouteTests` and `AreaAiHostScriptWalkTests` (the AI host's side), `TeleportMapStateTests` (the session's fields and
   their snapshot), `AreaNpcStateScriptAdmissionTests` (the sets and, with `DAT_ROOT`, the 270 installed scripts: S36 admits 208 whole).
+
+## World-object commands (ARC-SCRIPT-1164, set S37)
+
+`ScrAdmissionSet.S37` is S36 plus three conditions (`WorldObjectConditions`: obj is open 36, sector is blocked 45, monster generator disabled 46) and ten actions (`WorldObjectActions`: transfer item 41, set lock state 53, create item 66,
+toggle open or closed 88, set written start 94, toggle sector blocked 106, toggle monster generator 110, touch art 123, destroy item named 126, toggle item inventory display 127); the interpreter runs at most S37. Ledger
+[WO1–WO18](../research/ledger/scripts.md#world-object-commands-arc-script-1164-e5-b); plan slice E5-b, its tail ARC-SCRIPT-1279.
+
+- **Object actions** hand one `ScrObjectStateRequest` each to the caller in action order (`CreateItem`, `TransferItem`, `SetLockState`, `ToggleOpenClosed`, `SetWrittenStart`, `DestroyItemNamed`, `ToggleItemInventoryDisplay`).
+- **Sector and generator toggles** (106, 110) hand a `ScrWorldRequest` (`ScrWorldChange.SectorBlocked` or `GeneratorBlocked`) that carries the state the toggle ends in; **touch art (123)** reads its operand and hands nothing.
+- **The run reads its own toggles back.** Conditions 36, 45 and 46 read the run's overlay first (the open state a toggle left, the sector list, the generator bits) and then the host through `IScrWorldObjectQueries`
+  (`IsOpen`, `CanOpen`, `SectorBlocked`, `GeneratorBlocked`); a host without the interface refuses a run that holds them (`ScrRunOptions.Validate`).
+- **The host.** `AreaUseScriptHost` holds the three conditions and all ten actions in its use, placed, heartbeat and dying sets (`WorldObjectHostActions`; ARC-SCRIPT-1164 held six of them, ARC-SCRIPT-1279 the other four). Lock state and the open toggle act on a portal or container of the shown map
+  (`AreaScriptWorld.Openable` gives the lock identity, the T0 baseline and the ART facts): the lock bit through `SetOpenableLocked` (1 locks, 0 unlocks with the Lock event, any other value a plain flag clear), the toggle through the
+  session's art frame. Create item goes through `CreateItemForHero` or `AddItemToNpc` with the viewer's insert check. The blocked sector list is the session's sector-scope map changes `map.blocked` (`SessionSectorBlock`,
+  `GameSessionOwner.QuerySectorBlocked`, `SetSectorBlocked`; no schema step) and `AreaWorldMap.Passes` leaves a blocked sector out of the route; the generator toggle is `ToggleGeneratorBlock`.
+- **The four item actions (ARC-SCRIPT-1279, ledger WO14–WO18).** Destroy item named (126) and transfer item (41) find the first item of the holder's list with the name (`GameSessionOwner.QueryNamedItem`, the finder 0x462480: the hero's kit, taken
+  and made items, or an NPC's or container's list; any other object holds nothing) and destroy it through the one destroy path (`DestroyNamedItem`) or move it to the other holder (`TransferNamedItem`: NPC to hero is `TakeItemFromNpc`, container to hero
+  `LootItem`, hero to NPC or container the gift of `GiveItemToNpc`). Set written start (94) and toggle item inventory display (127) write the session's item fields (`SetItemWrittenStart`, `ToggleItemDisplay`, `QueryItemFieldWrites`; saved in the
+  inventory section as `itemFields`, schema 94) on the item row the operand names, and the reading window's facts take a written start over the prototype's (`AreaInventoryHost.WrittenFacts`). The host asks the session before anything applies
+  (`QueryNamedItemDestroy`, `QueryNamedItemTransfer`) and leaves a run it cannot apply unapplied (the plan checks what the moves would refuse: scripts of the item and of the new holder, worn item spells, running spells, gold and keys, a container off the actor's map; a run naming one holder and item name twice is refused whole); the session's own budgets still decline a move as the original's room test does; limits in WO17.
+- **Tests.** `ScrWorldObjectTests` (the interpreter), `AreaWorldObjectScriptTests` (the host over a real session), `SectorBlockedStateTests` (the session's list), `AreaWorldMapTests` (the route), `AreaWorldObjectScriptAdmissionTests`
+  (the sets and, with `DAT_ROOT`, the 117 installed scripts: S37 admits 84 whole, the hosts' sets 39, 69, 35 and 77), `ScriptItemStateTests` (the session's finder, destroy, move and item fields with their snapshot).
+
+## Get location and the Molochean agent's heartbeat (ARC-SCRIPT-1359, set S38)
+
+`ScrAdmissionSet.S38` is S37 plus get location (95), which writes the first object's tile x and y into number operands 1 and 2 (32 bits each) through `IScrWorldQueries.Location`; an absent object or one without a place stops the run as distance
+between (71) does, and a literal in operand 1 or 2 is refused. The interpreter runs at most S38. Ledger [GL1–GL2](../research/ledger/scripts.md#get-location-and-the-crash-site-molochean-agent-arc-script-1359). The
+heartbeat set (`AreaUseScriptHost.HeartbeatAdmission`, and the dying set built on it) holds it: with global flag 2323 set, the Crash Site agent's heartbeat 1717 sets the day and night standpoints, reads where it stands and runs to its tile (run to 74 is in the set since
+ARC-DEV-231) through the AI host's goal start, so it is admitted whole. Tests: `ScrHeartbeatWorldTests` (the action and the set), `AreaHeartbeatScriptTests` (a 1717-shaped script over the host and, with `DAT_ROOT`, the installed agent).
+Not built: the use, tile, sector and talk sets (tile script 2080 also uses 95).
 
 ## Checks
 

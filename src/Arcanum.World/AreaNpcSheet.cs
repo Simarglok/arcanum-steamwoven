@@ -48,23 +48,29 @@ public static class AreaNpcSheet
         int Stored(int index) => index < stored.Count ? stored[index] : 0;
         var experience = Stored(ExperienceStat);
         var table = session.Experience?.Levels;
+        // ARC-MAGIC-1190 (TF2): the speed line shows Tempus Fugit's change as the combat reads it (the session's written spell flags over the NPC's stored ones).
+        var speedShift = session.TempusFugitShiftOf(entity, unchecked((int)fields.Object.SpellFlags));
         var primary = AreaStatsPage.StatOrder.Select(stat => new AreaSheetValue(AreaCharacterSheet.Label(stat), AutoLevelRules.EffectiveStat(sheet, modifiers, stat),
             Mark(sheet, modifiers, stat))).ToArray();
         var secondary = new[]
         {
             CharacterStat.CarryWeight, CharacterStat.DamageBonus, CharacterStat.AcAdjustment, CharacterStat.Speed, CharacterStat.HealRate,
             CharacterStat.PoisonRecovery, CharacterStat.ReactionModifier, CharacterStat.MaxFollowers,
-        }.Select(stat => new AreaSheetValue(AreaCharacterSheet.Label(stat), AutoLevelRules.DerivedStat(sheet, modifiers, stat))).ToArray();
+        }.Select(stat => new AreaSheetValue(AreaCharacterSheet.Label(stat), AutoLevelRules.DerivedStat(sheet, modifiers, stat, speedShift))).ToArray();
         var aptitude = AutoLevelRules.DerivedStat(sheet, modifiers, CharacterStat.MagickTechAptitude);
         // The stored resistances (normal, fire, electrical, poison, magic) and the constitution bonus, as 0x43D6D0 shows them; the worn armour of an NPC is not read (CHW24).
         var resist = fields.Object.Resistances;
         int Resist(int index) => index < resist.Count ? resist[index] : 0;
-        var shown = CombatantRules.Resistances(new(Resist(0), Resist(3), Resist(2), Resist(1)), EquipmentResistances.None,
-            AutoLevelRules.EffectiveStat(sheet, modifiers, CharacterStat.Constitution), sheet.Monstrous);
+        // ARC-UI-1145: under the NPC's effect list as the combat reads it (the session's, else the map data's when the host gave the rules, GameSessionOwner.WithNpcEffects): the resistance
+        // changes. The poison bonus reads the sheet's own effective constitution, the one its Constitution row shows. A critter the combat cannot build keeps the stored lines.
+        var constitution = AutoLevelRules.EffectiveStat(sheet, modifiers, CharacterStat.Constitution);
+        var (shown, magick) = SessionCritterCombat.From(entity, fields).Combat is { } built
+            ? session.WithNpcEffects(built).SheetResistances(constitution, Resist(4))
+            : (CombatantRules.Resistances(new(Resist(0), Resist(3), Resist(2), Resist(1)), EquipmentResistances.None, constitution, sheet.Monstrous), Resist(4));
         AreaSheetValue Resistance(string label, int value) => new(label, Math.Clamp(value, 0, AreaCharacterSheet.MaxResistance));
         var resistances = new[]
         {
-            Resistance("Normal", shown.Normal), Resistance("Magick", Resist(4)), Resistance("Fire", shown.Fire),
+            Resistance("Normal", shown.Normal), Resistance("Magick", magick), Resistance("Fire", shown.Fire),
             Resistance("Poison", shown.Poison), Resistance("Electrical", shown.Electrical),
         };
         var view = new AreaCharacterSheetView(name, sheet.Race, Stored(GenderStat) == 0 ? CharacterGender.Female : CharacterGender.Male, sheet.Level, experience,

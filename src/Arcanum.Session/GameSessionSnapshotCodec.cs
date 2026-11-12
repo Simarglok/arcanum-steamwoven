@@ -83,7 +83,9 @@ public static partial class GameSessionSnapshotCodec
     // generated-once containers; ARC-WORLD-103 (schema 57): the dressed NPCs' worn items. The junk piles (schema 46), the pools of blood (schema 58) and the number marks (schema 60)
     // were inventory fields until schema 61 moved them to the objects section (ARC-DEV-091).
     private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights",
-        "identified", "lastDiscardedMade", "grid", "generated", "npcWorn"];
+        "identified", "lastDiscardedMade", "grid", "generated", "npcWorn", "itemFields"];
+    // ARC-SCRIPT-1279 (schema 94): the item fields scripts wrote.
+    private static readonly string[] ItemFieldFields = ["entity", "writtenStart", "displayFlipped"];
     private static readonly string[] ObjectsFields = ["junkPiles", "bloodPools", "lastJunkNumber", "lastPoolNumber", "state", "links", "created", "lastCreatedNumber"];
     private static readonly string[] CreatedObjectFields = ["entity", "kind", "prototype", "map", "x", "y", "offsetX", "offsetY", "createdMs", "spellFlags", "summoner", "run"];
     private static readonly string[] ObjectFieldFields = ["entity", "property", "map", "value"];
@@ -610,6 +612,17 @@ public static partial class GameSessionSnapshotCodec
                     w.WriteEndObject();
                 }
                 w.WriteEndArray();
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            // ARC-SCRIPT-1279 (schema 94): the item fields scripts wrote, by entity in ordinal order.
+            w.WriteStartArray("itemFields");
+            foreach (var row in snapshot.Inventory.ItemFields)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", row.Entity);
+                if (row.Writes.WrittenStart is { } start) w.WriteNumber("writtenStart", start); else w.WriteNull("writtenStart");
+                w.WriteBoolean("displayFlipped", row.Writes.DisplayFlipped);
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -2142,8 +2155,22 @@ public static partial class GameSessionSnapshotCodec
             npcWorn[i] = new(npc, System.Array.AsReadOnly(worn));
             if (i > 0 && string.CompareOrdinal(npcWorn[i - 1].Npc, npc) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".npc");
         }
+        // ARC-SCRIPT-1279: the item fields by entity in strictly ascending ordinal order; no row empty (which items may carry one is the owner's restore).
+        var fieldRows = Array(f["itemFields"], p + ".itemFields", SessionInventoryState.MaxItemFields);
+        var itemFields = new SessionItemFieldRecord[fieldRows.Length];
+        for (var i = 0; i < fieldRows.Length; i++)
+        {
+            var path = $"{p}.itemFields[{i}]";
+            var row = Fields(fieldRows[i], path, ItemFieldFields);
+            var entity = Entity(row["entity"], path + ".entity");
+            int? start = row["writtenStart"].ValueKind == JsonValueKind.Null ? null : Int(row["writtenStart"], path + ".writtenStart", int.MinValue, int.MaxValue);
+            var writes = new SessionItemFieldWrites(start, Bool(row["displayFlipped"], path + ".displayFlipped"));
+            if (writes.IsEmpty) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
+            if (i > 0 && string.CompareOrdinal(itemFields[i - 1].Entity, entity) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            itemFields[i] = new(entity, writes);
+        }
         return new(gold, kit, pc, made, npcs, placed, ammo, given, piles, scriptSlots, weights, identified,
-            Int(f["lastDiscardedMade"], p + ".lastDiscardedMade", 0, int.MaxValue), grid, generated, npcWorn);
+            Int(f["lastDiscardedMade"], p + ".lastDiscardedMade", 0, int.MaxValue), grid, generated, npcWorn) { ItemFields = itemFields };
     }
 
     // ARC-DEV-091 (MIG6d-3, schema 61): the created objects the directory records, in the order they were made; the owner's restore checks the rest.

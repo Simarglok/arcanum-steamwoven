@@ -373,6 +373,39 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S36 { get; } = new("S36", S35.Conditions, S35.Actions.Concat(NpcStateActions), S35.ValueKinds, S35.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>The conditions <see cref="S37"/> adds to <see cref="S36"/>: obj is open (36), sector is blocked (45) and monster generator disabled (46); a host with its own set adds them and implements <see cref="IScrWorldObjectQueries"/>.</summary>
+    public static IReadOnlyList<int> WorldObjectConditions { get; } = [ScrCatalogue.Condition.ObjIsOpen, ScrCatalogue.Condition.SectorIsBlocked, ScrCatalogue.Condition.MonsterGenDisabled];
+
+    /// <summary>The actions <see cref="S37"/> adds to <see cref="S36"/>: transfer item (41), set lock state (53), create item (66), toggle open or closed (88), set written start (94), toggle sector blocked (106), toggle monster generator (110), touch art (123),
+    /// destroy item named (126) and toggle item inventory display (127).</summary>
+    public static IReadOnlyList<int> WorldObjectActions { get; } = [ScrCatalogue.Action.TransferItem, ScrCatalogue.Action.SetLockState, ScrCatalogue.Action.CreateItem, ScrCatalogue.Action.ToggleOpenClosed, ScrCatalogue.Action.SetWrittenStart,
+        ScrCatalogue.Action.ToggleSectorBlocked, ScrCatalogue.Action.ToggleMonsterGenerator, ScrCatalogue.Action.TouchArt, ScrCatalogue.Action.DestroyItemNamed, ScrCatalogue.Action.ToggleItemInventoryDisplay];
+
+    /// <summary>The actions of <see cref="WorldObjectActions"/> the area hosts apply: every one of them. ARC-SCRIPT-1164 left out transfer item (41), set written start (94), destroy item named (126) and toggle item inventory display (127) for lack of
+    /// a per-item field write and removal; ARC-SCRIPT-1279 added the session's named-item move and destroy and its item field writes, and the hosts apply them (ledger WO14, WO16).</summary>
+    public static IReadOnlyList<int> WorldObjectHostActions { get; } = [ScrCatalogue.Action.TransferItem, ScrCatalogue.Action.SetLockState, ScrCatalogue.Action.CreateItem, ScrCatalogue.Action.ToggleOpenClosed, ScrCatalogue.Action.SetWrittenStart,
+        ScrCatalogue.Action.ToggleSectorBlocked, ScrCatalogue.Action.ToggleMonsterGenerator, ScrCatalogue.Action.TouchArt, ScrCatalogue.Action.DestroyItemNamed, ScrCatalogue.Action.ToggleItemInventoryDisplay];
+
+    /// <summary>
+    /// The world-object set (ARC-SCRIPT-1164, plan slice E5-b, ledger WO1–WO10): <see cref="S36"/> plus the conditions obj is open (36), sector is blocked (45) and monster generator disabled (46), which a host answers through
+    /// <see cref="IScrWorldObjectQueries"/>, and the actions transfer item (41), set lock state (53), create item (66), toggle open or closed (88), set written start (94), toggle sector blocked (106), toggle monster generator (110), touch art (123),
+    /// destroy item named (126) and toggle item inventory display (127). The object actions hand <see cref="ScrObjectStateRequest"/>s and the sector and generator toggles <see cref="ScrWorldRequest"/>s to the host in action order; touch art
+    /// reads its operand and hands nothing. The run reads its own toggles of the sectors, the generators and the open states back.
+    /// </summary>
+    public static ScrAdmissionSet S37 { get; } = new("S37", S36.Conditions.Concat(WorldObjectConditions), S36.Actions.Concat(WorldObjectActions), S36.ValueKinds, S36.FocusKinds, counterIndexWraps: true);
+
+    /// <summary>
+    /// The get-location set (ARC-SCRIPT-1359, ledger GL1–GL2): <see cref="S37"/> plus get location (95), which writes the first object's tile x and y into its number operands 1 and 2 through <see cref="IScrWorldQueries.Location"/>
+    /// (the Crash Site Molochean agent's heartbeat 1717 reads where it stands).
+    /// </summary>
+    public static ScrAdmissionSet S38 { get; } = new("S38", S37.Conditions, S37.Actions.Append(ScrCatalogue.Action.GetLocation), S37.ValueKinds, S37.FocusKinds, counterIndexWraps: true);
+
+    /// <summary>The conditions of <see cref="S37"/> a host answers through <see cref="IScrWorldObjectQueries"/>.</summary>
+    public static IReadOnlySet<int> WorldObjectQueryConditions { get; } = new HashSet<int>(WorldObjectConditions);
+
+    /// <summary>The actions of <see cref="S37"/> a host answers through <see cref="IScrWorldObjectQueries"/> first: the sector and generator toggles read the present state, the open toggle reads whether the object can open.</summary>
+    public static IReadOnlySet<int> WorldObjectQueryActions { get; } = new HashSet<int> { ScrCatalogue.Action.ToggleSectorBlocked, ScrCatalogue.Action.ToggleMonsterGenerator, ScrCatalogue.Action.ToggleOpenClosed };
+
     /// <summary>The conditions of <see cref="S34"/> a host answers through <see cref="IScrStoryQueries"/>.</summary>
     public static IReadOnlySet<int> StoryQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.Daytime, ScrCatalogue.Condition.GlobalQuestState, ScrCatalogue.Condition.HasBlessing,
         ScrCatalogue.Condition.HasCurse, ScrCatalogue.Condition.RumorKnown, ScrCatalogue.Condition.RumorQuelled };
@@ -387,7 +420,7 @@ public sealed class ScrAdmissionSet
 
     /// <summary>The actions of <see cref="S15"/>, <see cref="S18"/> and <see cref="S19"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int>
-        { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.FloatLine };
+        { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetLocation };
 
     /// <summary>The focus kinds of <see cref="S15"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<ScrFocusKind> WorldQueryFocusKinds { get; } = new HashSet<ScrFocusKind>
@@ -585,6 +618,8 @@ public static class ScrAdmission
             if (!condition && type == ScrCatalogue.Action.MagickTechAdjustment && slot == 3 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Distance between stores into its number operand 2 (ARC-SCRIPT-049, HW3).
             if (!condition && type == ScrCatalogue.Action.DistanceBetween && slot == 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
+            // Get location stores into its number operands 1 and 2 (ARC-SCRIPT-1359, GL1).
+            if (!condition && type == ScrCatalogue.Action.GetLocation && slot is 1 or 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Get area stores into its number operand 1 (ARC-SCRIPT-050, GA1).
             if (!condition && type == ScrCatalogue.Action.GetArea && slot == 1 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Slot 0 of these types is itself an index, a store or a jump target.

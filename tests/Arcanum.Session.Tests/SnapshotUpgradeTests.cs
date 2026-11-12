@@ -9,7 +9,10 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":92,\"world\"";
+    private const string Current = "\"schemaVersion\":95,\"world\"";
+    private const string Current94 = "\"schemaVersion\":94,\"world\"";
+    private const string Current93 = "\"schemaVersion\":93,\"world\"";
+    private const string Current92 = "\"schemaVersion\":92,\"world\"";
     private const string Current91 = "\"schemaVersion\":91,\"world\"";
     private const string Current90 = "\"schemaVersion\":90,\"world\"";
     private const string Current89 = "\"schemaVersion\":89,\"world\"";
@@ -208,14 +211,6 @@ public sealed class SnapshotUpgradeTests
         return text.Replace(",\"critter2Set\":0,\"critter2Cleared\":0,\"blitSet\":0,\"blitCleared\":0}", "}").Replace(Current90, Current89);
     }
 
-    // ARC-WORLD-1159: the schema 91 text of a schema 92 one with no encounter use: the text loses the empty encounters section. A text with a used row has no older literal: no build before rolled an encounter.
-    internal static string Schema91(string text)
-    {
-        StringAssert.Contains(text, Current);
-        Assert.AreEqual(1, text.Split(NoEncounters).Length - 1, "the encounters section is a new game's (no row used)");
-        return text.Replace(NoEncounters, "").Replace(Current, Current91);
-    }
-
     // ARC-WORLD-1157: the schema 90 text of a schema 91 one with no generator state: the text loses the empty generators section. A text with a used slot, a count made or a copy has no older literal: no build
     // before ran a generator.
     internal static string Schema90(string text)
@@ -225,6 +220,46 @@ public sealed class SnapshotUpgradeTests
         Assert.AreEqual(1, text.Split(NoGenerators).Length - 1, "the generators section is a new game's (no slot, no made count, no copy)");
         return text.Replace(NoGenerators, "").Replace(Current91, Current90);
     }
+
+    // ARC-MAGIC-1234: the schema 91 text of a schema 92 one whose runs hold no object list: each run row loses its empty list at its end. A text whose run holds objects has no older literal: no build stored
+    // a run's list.
+    internal static string Schema91(string text)
+    {
+        text = Schema92(text);
+        StringAssert.Contains(text, Current92);
+        Assert.IsFalse(System.Text.RegularExpressions.Regex.IsMatch(text, "\"objectList\":\\[[^\\]]"), "a run with an object list has no schema 91 text");
+        return text.Replace(",\"objectList\":[]", "").Replace(Current92, Current91);
+    }
+
+    // ARC-MAGIC-1142: the schema 92 text of a schema 93 one with no NPC flags change on any written-flags row: each row loses its two zero words at its end. A text whose rows carry such a change has no
+    // older literal: no build before wrote one.
+    internal static string Schema92(string text)
+    {
+        text = Schema93(text);
+        StringAssert.Contains(text, Current93);
+        Assert.IsFalse(System.Text.RegularExpressions.Regex.IsMatch(text, "\"npc(Set|Cleared)\":[1-9-]"), "a row with an NPC flags change has no schema 92 text");
+        return text.Replace(",\"npcSet\":0,\"npcCleared\":0}", "}").Replace(Current93, Current92);
+    }
+
+    // ARC-SCRIPT-1279: the schema 93 text of a schema 94 one whose items carry no written field: the inventory section loses its empty list of item fields at its end. A text with a written field has no older literal: no build
+    // before wrote one.
+    internal static string Schema93(string text)
+    {
+        text = Schema94(text);
+        StringAssert.Contains(text, Current94);
+        Assert.AreEqual(1, text.Split(NoItemFields).Length - 1, "the inventory section ends with an empty list of item fields");
+        return text.Replace(NoItemFields, "").Replace(Current94, Current93);
+    }
+
+    // ARC-WORLD-1159: the schema 94 text of a schema 95 one with no encounter use: the text loses the empty encounters section. A text with a used row has no older literal: no build before rolled an encounter.
+    internal static string Schema94(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.AreEqual(1, text.Split(NoEncounters).Length - 1, "the encounters section is a new game's (no row used)");
+        return text.Replace(NoEncounters, "").Replace(Current, Current94);
+    }
+
+    internal const string NoItemFields = ",\"itemFields\":[]";
 
     // ARC-DEV-348: the schema 86 text of a schema 87 one with no NPC effect list: the effects section loses its empty list of NPC lists at its end. A text with a list has no older
     // literal: no build before saved one.
@@ -633,6 +668,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":93,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":96,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

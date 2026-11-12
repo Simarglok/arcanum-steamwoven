@@ -1,4 +1,5 @@
 using Arcanum.Data.Combat;
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
@@ -47,18 +48,18 @@ public sealed class CriticalEffectsStateTests
         return SessionCritterCombat.From(Golem, fields with { Critter = fields.Critter! with { CriticalHitChart = 0 } }).Combat!;
     }
 
-    private static SessionMapInventorySeed Seed() => new(
+    private static SessionMapInventorySeed Seed(SessionItemType? swordType = null) => new(
         [new(Golem, SessionHolderKind.Npc, false, false, [], [.. GolemItems.Values.Select(item => item.Entity)])],
         [.. GolemItems.Select(pair => new SessionSeedItem(pair.Value.Entity,
-            InventoryStateTests.Facts(pair.Key == EquipmentSlot.Weapon ? SessionItemType.Weapon : SessionItemType.Armor,
+            InventoryStateTests.Facts(pair.Key == EquipmentSlot.Weapon ? swordType ?? SessionItemType.Weapon : SessionItemType.Armor,
                 pair.Key == EquipmentSlot.Weapon ? SwordName : 2900, (int)pair.Key), null))]);
 
     private const int SwordName = 2901;
 
-    private static GameSessionOwner Owner(int missChance = 0)
+    private static GameSessionOwner Owner(int missChance = 0, SessionItemType? swordType = null)
     {
         var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
-        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, Seed()).Failure);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, Seed(swordType)).Failure);
         Assert.AreEqual(GameSessionFailure.None, owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, new(Kit[0].Kind, [], false, Blade(missChance)),
             (_, _) => true, Accept).Failure);
         return owner;
@@ -206,6 +207,87 @@ public sealed class CriticalEffectsStateTests
             }
             Assert.IsTrue(found, "a critical self-hit with both weapon effects within the bounded run");
         }
+    }
+
+    // ARC-WORLD-1288 (ledger VP6, VPG3; the item drop 0x461AB0): an NPC that dropped a weapon gets LOOK_FOR_WEAPON, one that dropped armour LOOK_FOR_ARMOR, another item
+    // type no bit, and the bit is saved. Every NPC drop of the session goes through the one Drop step: the attack's critical drop and the arm-hit drops (an attack on the
+    // golem), a spell's weapon block (SpellWeaponDrop).
+    private static DangerFlags LookFor(GameSessionOwner owner) => owner.QueryDanger(Golem).Flags & (DangerFlags.LookForWeapon | DangerFlags.LookForArmor);
+
+    [TestMethod]
+    public void AnNpcThatDropsItsWeaponThroughACriticalLooksForAWeapon()
+    {
+        using var owner = Owner();
+        var golem = GolemCombat();
+        Assert.AreEqual(DangerFlags.None, LookFor(owner), "no bit before a drop");
+        var expected = DangerFlags.None;
+        var weaponDropped = false;
+        for (var attempt = 0; attempt < 200 && !weaponDropped; attempt++)
+        {
+            var result = owner.AttackCritter(owner.Version, new(golem) { HeroWorn = HeroWorn(), TargetWorn = Worn(owner), TargetCell = GolemCell });
+            Assert.AreEqual((GameSessionFailure.None, GameSessionFailure.None), (result.Failure, result.StepFailure));
+            // The golem's weapon is type 5, its helmet and vest are armour (type 7); the bits accumulate over the drops.
+            foreach (var drop in result.Criticals.Where(step => step.Outcome == SessionCriticalStepOutcome.Dropped && step.Whose == DamageRecipient.Target))
+            {
+                expected |= drop.Entity == "golem-sword" ? DangerFlags.LookForWeapon : DangerFlags.LookForArmor;
+                weaponDropped |= drop.Entity == "golem-sword";
+            }
+            Assert.AreEqual(expected, LookFor(owner), $"attempt {attempt}");
+        }
+        Assert.IsTrue(weaponDropped, "a critical weapon drop within the bounded run");
+        // The bits are saved as today: a restore keeps them.
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(expected, restored.QueryDanger(Golem).Flags & (DangerFlags.LookForWeapon | DangerFlags.LookForArmor));
+    }
+
+    [TestMethod]
+    public void ASpellsWeaponDropSetsTheLookForBitOfTheDroppedItemType()
+    {
+        foreach (var (type, expected) in new[]
+        {
+            (SessionItemType.Weapon, DangerFlags.LookForWeapon), (SessionItemType.Armor, DangerFlags.LookForArmor),
+            (SessionItemType.Generic, DangerFlags.None), (SessionItemType.Food, DangerFlags.None),
+        })
+        {
+            // The weapon slot holds an item of the tested type (the slot decides only which item is dropped; the item's own type decides the bit).
+            using var owner = Owner(swordType: type);
+            var steps = owner.SpellWeaponDrop(GolemCombat().Target, Worn(owner), GolemCell, null, out var failure);
+            Assert.AreEqual(GameSessionFailure.None, failure);
+            Assert.AreEqual(SessionCriticalStepOutcome.Dropped, steps.Single().Outcome, type.ToString());
+            Assert.AreEqual(expected, LookFor(owner), type.ToString());
+            // Saved as today.
+            using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+            Assert.AreEqual(expected, restored.QueryDanger(Golem).Flags & (DangerFlags.LookForWeapon | DangerFlags.LookForArmor), type.ToString());
+        }
+    }
+
+    [TestMethod]
+    public void ARefusedOrMissingDropSetsNoLookForBitAndTheHeroSetsNone()
+    {
+        // No item data: the drop is not run, nothing is set.
+        using var owner = Owner();
+        var steps = owner.SpellWeaponDrop(GolemCombat().Target, null, GolemCell, null, out _);
+        Assert.AreEqual(SessionCriticalStepOutcome.Unknown, steps.Single().Outcome);
+        Assert.AreEqual(DangerFlags.None, LookFor(owner));
+        // A no-drop item is refused: no bit.
+        var noDrop = Worn(owner).ToDictionary(pair => pair.Key, pair => pair.Value with { NoDrop = true });
+        steps = owner.SpellWeaponDrop(GolemCombat().Target, noDrop, GolemCell, null, out _);
+        Assert.AreEqual(SessionCriticalStepOutcome.Refused, steps.Single().Outcome);
+        Assert.AreEqual(DangerFlags.None, LookFor(owner));
+        // The hero's dropped weapon sets no bit on any record.
+        using var heroOwner = Owner(missChance: 100);
+        var golem = GolemCombat();
+        for (var attempt = 0; attempt < 600; attempt++)
+        {
+            heroOwner.ClearStun(heroOwner.Version, SessionLifeTarget.Hero);
+            heroOwner.Heal(heroOwner.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true });
+            if (heroOwner.IsItemDestroyed("kit:1") || heroOwner.QueryEquipment().Worn.Count == 0) break;
+            var result = heroOwner.AttackCritter(heroOwner.Version, new(golem) { HeroWorn = HeroWorn(), TargetWorn = Worn(heroOwner), TargetCell = GolemCell });
+            if (!result.Criticals.Any(step => step.Whose == DamageRecipient.Attacker && step.Outcome == SessionCriticalStepOutcome.Dropped)) continue;
+            Assert.IsFalse(heroOwner.QueryDangerRecords().Records.Any(record => (record.Flags & (DangerFlags.LookForWeapon | DangerFlags.LookForArmor)) != 0));
+            return;
+        }
+        Assert.Inconclusive("no critical self-hit with a drop within the bounded run");
     }
 
     // ARC-COMBAT-010: an open map without bounds; a path is the straight line of DropPlacementRules' target, critters stand on the

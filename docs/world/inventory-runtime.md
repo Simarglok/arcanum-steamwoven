@@ -508,6 +508,8 @@ exhaustion is `RandomExhausted`. The hero, and an NPC following it, are the PC s
 item joins its placed items on that tile; an NPC's seed item is the `item.dropped` map change at that tile. Without a map the item
 lands on its holder's cell and nothing is drawn (a host without one).
 
+**Pushed items (ARC-MAGIC-1230).** An item lying on the hero's map can be moved on the ground (`QueryGroundItem`, `MoveGroundItem`, the original's object move 0x43E770, which writes only the location: no flag, no hit points, no junk pile, no decay). A placed item takes the cell in its own record; a map-data item (a seed's loose item, a broken container's spilled item, an NPC's dropped item) keeps the cell as the object field `item.moved` (`SessionItemMove`, a packed cell as `item.dropped`'s, `QueryMovedItems`), which the map inventory's ground, `LooseCell`, the pick-up and the residency overlay read before the item's own cell; the field stays harmless after a pick-up (the taken item is no ground item). No schema step: the object rows keep their form. Unseen Force's push reaches it through `AreaKnockbackItems` ([goal table, tail T7](../architecture/goal-table.md)).
+
 **Viewer port.** `AreaDropMap` (viewer Core) is the AREA viewer's map for the hero's attacks on NPCs and objects
 (`AreaDropMapNow`): the path's gate on the target's tile, the direct attempt and the 64 × 64 search exactly as read, with the
 step tests of the shown map's T0 step evidence (built on the same tile and traversal functions) and the doors' runtime passage;
@@ -894,6 +896,7 @@ up, down, a keypad digit capped at the maximum, Backspace or Delete). The host s
   returns before any move), fewer units (`AmmoShort`), the tile (`DropTileUnfit`), the durability record of an emptied stack, the ammunition, item and
   made-number budgets (`BudgetExceeded`), the revision. One revision; no insert check, no events, no action points.
 - **Takes from a dead NPC** (since ARC-WORLD-101 also from a container) use `TakeGoldFromNpc` (the pile given) and `TakeAmmoFromNpc` (ARC-WORLD-071) with the count.
+- **Takes from a junk pile** (ARC-UI-1328) use `TakeGoldFromJunkPile(expected, pile, item, count)` and `TakeAmmoFromJunkPile(expected, pile, item, count, newStackKind, insertCheck)`: the item must lie in the pile of the actor's map (a placed item on its cell, or a map's loose item that joined it). The same rules as the NPC takes (NT1, AM4): the count moves, exactly the stack deletes it and takes it out of the pile, more leaves the rest in the pile (its coin or ammunition record, saved as any other), a gold pile with an insert-item script refuses. The pile's items are unchanged by a part taken, so its dissolve rules (JP5) hold; the destroy inside the take leaves the pile standing while the window shows it. Refusals: `UnknownHolder` (no such pile on the actor's map), `ItemNotAvailable` (not in the pile or not of that kind), the NPC takes' others; a count of 0 changes nothing. Other items of a pile still move whole through `LootItem`.
 - **No snapshot change.** The new stack is a placed made item with its ammunition record (schemas 24, 32, 34).
 
 **Not ready.** The question in the barter window and for a junk pile's or container's stacks (the hero's gold pile moves in the grid, drops and throws since ARC-UI-090, ARC-UI-091 and ARC-UI-094; the map drop and throw of other items is ARC-UI-063's, the ammunition stack's lift and throw ARC-UI-086's, the hotkey bar's lift ARC-UI-087's, see the
@@ -938,6 +941,26 @@ weight and the room for it. With no ring the key stays an ordinary item. The ses
   `ItemTypeUnsupported` for a session without a hero. A number may repeat in the list.
 - **Not modelled:** the key ring item (`ItemTypeUnsupported`), a key that stays loose while the PC holds no ring, the ring merge (0x466AA0),
   keys in NPC lists, the pick-pocket steal, assembly and a script's created items (still refused), and the followers' keys the lock check also reads.
+
+## No-drop items in transfers (ARC-WORLD-1283)
+
+The original's transfer from a holder (0x461CA0, ledger NT2, VP5) runs the recipient's transfer script, then the item's remove check (0x466DA0), then the insert
+check. The remove check refuses an item with the no-drop flag (item flag 0x20), a worn item with the flag too (the flag is tested first; the worn-slot check 0x465010
+answers 0), and shows item.mes 111 (100 + code 11, 0x4673F0) to the PC that is the old or the new parent. Steamwoven runs it in `Take` (loot of a body, a container
+and a junk pile, `TakeItemFromNpc` for a steal or a purchase, the dialog's negative `IN`) and in `GiveItemTo` (`GiveItemToNpc`, a sale, a plant, a container as recipient):
+
+- The refusal is `GameSessionFailure.ItemNotDroppable` with `InventoryMutationResult.PcMessage` 111 (`GameSessionOwner.NoDropMessage`), no revision, nothing changed, and no insert check
+  is asked. The viewer's windows and the barter status show `AreaInventoryHost.Refusal` ("the item cannot be dropped, so it cannot change hands"); a pick-pocket attempt whose
+  move is refused fails without being noticed (PP3) and its status line adds the same text.
+- The dialog's negative `IN -name` goes on as the original does after any transfer that did not end with the PC (0x415BA0 case 9): the item leaves the NPC (0x466E00 tests
+  no flag) and lies on the hero's tile; the result is `Changed`, carries `PcMessage` and no verdict, and the hero gets no pickup trigger.
+- The flag is the item's own: the origin seed row's, the worn record's, or, for an item with no seed row (a kit item, a made item), its prototype's through
+  `GameSessionOwner.AttachItemNoDrop` (not saved; the viewer attaches it with the prototype scripts, `AreaPrototypeItem.NoDrop`). Without a source such an item has no flag.
+- Limits: a worn no-drop item of a living NPC taken by a steal or the dialog's `IN -name` is still refused by the older worn-item limit (`WornItemUnsupported`; the
+  loot of a body unwields it and so reaches the check); an unworn kit or taken item whose origin seed is not attached reads its prototype's flag, not its instance's;
+  a worn item's flag is the worn record's. A dialog hand-over (`IN n >= 0`) of a no-drop item to an NPC takes the original's fallback after the refusal: the item is laid on
+  the cell of an NPC the PC leads, else destroyed (TK2, `SettleRefusedHandover`).
+- Ammunition or gold moved by units (0x4658E0, 0x464830) runs no remove check. The dialog's PC message has no on-screen surface yet.
 
 ## Next steps
 

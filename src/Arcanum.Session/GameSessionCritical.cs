@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
@@ -105,7 +106,8 @@ public sealed partial class GameSessionOwner
         if (_inventory.Taken.Contains(entity) || _durability.Destroyed.Contains(entity) || ItemInFlight(entity)) return null;
         foreach (var (map, seed) in _inventory.Seeds)
             if (DroppedCell(map, seed, entity) is { } cell && seed.Items.TryGetValue(entity, out var row))
-                return new(new(entity, _inventory.WithAmmo(entity, row.Facts)), seed.HolderOf[entity], map, cell);
+                // ARC-MAGIC-1230: a push moves the dropped item on from its drop cell.
+                return new(new(entity, _inventory.WithAmmo(entity, row.Facts)), seed.HolderOf[entity], map, MovedCell(map, entity) ?? cell);
         return null;
     }
 
@@ -115,7 +117,8 @@ public sealed partial class GameSessionOwner
     /// <summary>Where a seed item lies loose on the ground: its own cell, its spilled container's (ARC-COMBAT-008) or the cell a
     /// critical dropped it on; null while a holder holds it.</summary>
     internal CellCoord? LooseCell(SessionMapId map, InventoryDomain.Seed seed, string item) =>
-        seed.Items.TryGetValue(item, out var row) ? row.Cell ?? SpilledCell(map, seed, item) ?? DroppedCell(map, seed, item) : null;
+        // ARC-MAGIC-1230: a pushed item lies on the cell the push left it on.
+        seed.Items.TryGetValue(item, out var row) && (row.Cell ?? SpilledCell(map, seed, item) ?? DroppedCell(map, seed, item)) is { } home ? MovedCell(map, item) ?? home : null;
 
     private static long DroppedValue(CellCoord cell) => ItemDroppedValue(cell);
 
@@ -167,6 +170,26 @@ public sealed partial class GameSessionOwner
             return side;
         }
         return Drop(kind, whose, side, slot, cell, dropMap, steps, ref failure);
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-1232 (DW2, XR15): the weapon block of a spell's damage step on <paramref name="who"/>: the critter's item in the weapon slot goes through <see cref="CriticalDrop"/> (the attack paths' step, not a copy), the host's
+    /// <paramref name="worn"/> items and <paramref name="cell"/> as for an attack's recipient (the hero's drop is at its own cell). Returns the one step, empty when no step ran; <paramref name="failure"/> is a refusal of the
+    /// session (the generator ran dry, a stale version), whose step is in the list as <see cref="SessionCriticalStepOutcome.Unknown"/>.
+    /// </summary>
+    internal IReadOnlyList<SessionCriticalStep> SpellWeaponDrop(SessionLifeTarget who, IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? worn, CellCoord? cell, IDropMap? dropMap,
+        out GameSessionFailure failure)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(who);
+        failure = GameSessionFailure.None;
+        var steps = new List<SessionCriticalStep>();
+        CriticalDrop(SessionCriticalStepKind.DropWeapon, DamageRecipient.Target, new SessionWearSide { Life = who, Worn = worn }, EquipmentSlot.Weapon, cell, dropMap, steps, ref failure);
+        // A drop that drew from the generator and was then refused changed no state a revision covers (an attack's own revision does): the spell's step has none, so the draw is revised here.
+        if (failure == GameSessionFailure.None && steps.Any(step => step.Outcome is SessionCriticalStepOutcome.Refused or SessionCriticalStepOutcome.ScriptUnsupported
+            or SessionCriticalStepOutcome.ItemSpellsUnsupported or SessionCriticalStepOutcome.HeroCellUnfit or SessionCriticalStepOutcome.NotSeedItem) && dropMap is not null && _revision != long.MaxValue)
+            Revise();
+        return steps;
     }
 
     // The wear check of the critter's item in the slot under its injuries now; null without the item or without its wear values.
@@ -223,11 +246,15 @@ public sealed partial class GameSessionOwner
         else
         {
             // An item the session added to the NPC (ARC-WORLD-055) lies in no seed: not ready until a store holds it.
-            if (NpcItemSeed(side.Life.Entity!, item.Entity) is null) { Skip(SessionCriticalStepOutcome.NotSeedItem, landed); return side; }
+            if (NpcItemSeed(side.Life.Entity!, item.Entity) is not { } seedItem) { Skip(SessionCriticalStepOutcome.NotSeedItem, landed); return side; }
             var written = ApplyChanges(Version, null, [new(_actor.Map, MapChangeKey.ForEntity(item.Entity, ItemDroppedProperty), DroppedValue(landed))]);
             if (written.Disposition == GameSessionDisposition.Rejected) { failure = written.Failure; Skip(SessionCriticalStepOutcome.Unknown); return side; }
             // ARC-WORLD-103: a dropped item a dressed NPC wore is worn no more.
             _inventory.Unwear(item.Entity);
+            // ARC-WORLD-1284 (VPG1): the drop's removal 0x467860 sets NPC flag 0x40 on the NPC.
+            MarkCheckWield(side.Life.Entity);
+            // ARC-WORLD-1288 (VP6, VPG3): the drop's tail for an NPC owner (0x461AB0): a dropped weapon sets LOOK_FOR_WEAPON, a dropped armour item LOOK_FOR_ARMOR.
+            NoteDropForAi(side.Life.Entity!, seedItem.Facts.Kind.Type);
             // ARC-WORLD-063: the placement may put it into a junk pile; ARC-WORLD-062: the dropped item decays (ledger ID4).
             SettleDrop(item.Entity, _actor.Map, landed);
             ScheduleDecay(item.Entity, _actor.Map);
@@ -236,6 +263,20 @@ public sealed partial class GameSessionOwner
         var left = new Dictionary<EquipmentSlot, SessionWearItem>(side.Worn);
         left.Remove(slot);
         return side with { Worn = left };
+    }
+
+    // ARC-WORLD-1288 (ledger VP6, VPG3; the item drop 0x461AB0, found in ARC-RES-1104): an NPC that dropped an item of type 5 (weapon) gets the AI's look-for-weapon bit
+    // (0x2000000), one of type 7 (armour, shields and helmets included) the look-for-armour bit (0x4000000), so its next AI pass searches the ground (0x4A8E70); any other
+    // item type sets none. Only an NPC owner reaches here: the hero's drop sets no bit. The danger record is saved by the snapshot as it is.
+    private void NoteDropForAi(string npc, SessionItemType type)
+    {
+        var bit = type switch { SessionItemType.Weapon => DangerFlags.LookForWeapon, SessionItemType.Armor => DangerFlags.LookForArmor, _ => DangerFlags.None };
+        if (bit == DangerFlags.None) return;
+        var record = _danger.Get(npc);
+        if (record.Flags.HasFlag(bit)) return;
+        // As the other writes that may start a record: a full store keeps the bit unwritten rather than exceed its limit (a snapshot over it is refused at restore).
+        if (_danger.Records.Count >= _limits.MaxDangerRecords && !_danger.Records.ContainsKey(npc)) return;
+        _danger.Put(record with { Flags = record.Flags | bit });
     }
 
     // The hero, or an NPC the PC leads (following or waiting), avoids only a spotted trap on the drop's path; another NPC avoids

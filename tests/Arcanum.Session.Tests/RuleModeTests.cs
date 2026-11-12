@@ -108,6 +108,8 @@ public sealed class RuleModeTests
         // ARC-UI-056: CUA1 is a Steamwoven fix with an Original switch.
         Assert.IsTrue(GameRules.Original.Interface.CalledShotCursorsSwapped);
         Assert.IsFalse(GameRules.Steamwoven.Interface.CalledShotCursorsSwapped);
+        Assert.IsTrue(GameRules.Original.Interface.TurnOrderListHidden, "CH6: the original shows no turn order");
+        Assert.IsFalse(GameRules.Steamwoven.Interface.TurnOrderListHidden, "the turn-order list is a Steamwoven addition");
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => GameRules.For((RuleMode)7));
     }
 

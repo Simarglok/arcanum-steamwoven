@@ -87,7 +87,14 @@ A busted window also takes the lock domain's busted bit on frame 0 in the same c
 Its busted ART is the busted bit's for the host.
 
 A spilled container lists no items in `QueryMapInventory`: they lie on the ground at its cell, after the seed's ground items,
-and `PickUpItem` takes them.
+and `PickUpItem` takes them. Since ARC-WORLD-1306 (ledger VPG7) the spill walks the container's whole list, the items a barter window sold
+into it (ARC-WORLD-090, the end of the list) first: a made item becomes a script-created ground item (as a body's dropped made item), an
+ammunition stack or an item the hero gave (kit or taken) a placed item of the hero's own, which its pickup or loot returns to its list; both
+only with a hero (a save restores a placed hero item only with one), else, and for gold, a key or a kind no ground source admits, the item is
+destroyed with the container (a recorded limit, as a body's). Before any change the break checks the created-item bound, the hero's item
+bound, the deleted-item records and, when an item is placed, that the container's cell fits the ground record (`DropTileUnfit`); a break that cannot take every item is refused
+whole (`DamageObject` and `AttackObject` report `BudgetExceeded` or `DropTileUnfit` as they report a full map-change budget) and the
+container stays whole with its sold items (every blow on it is refused too, as the damage and the break are one write, until the hero makes room). A made item the hero sold counts against the created-item bound on the ground, so picking it up again needs room in the hero's list. Saves made before the fix keep the sold items of an already spilled container hidden in its list (lost, as before); only a break after the fix spills them. `CloseMapJunkPile` still leaves a pile that holds a sold item untouched.
 
 A respawning scenery schedules the saved game event `object.respawn`:
 
@@ -122,7 +129,7 @@ damage apply (0x4B4390) with no attacker (GT194/GT195, ledger OD3, OD4, OD7–OD
   names it by); `row:Static:N` repeated from sector to sector, so two statics shared one id. A save made before holds such an id in a saved spell run that names a static object: the run loses that object on load (the old id was ambiguous, so no mapping exists; Original and Steamwoven alike, a technical fix).
 - Since ARC-DEV-260 the viewer runs what `Host` names, for this path and the hero's attack alike (see [the break's trap and BUST script](#the-breaks-trap-and-bust-script-arc-dev-260)).
 - NOT READY: the object's script
-  at point 0x17 (asked since ARC-DEV-254 and ARC-DEV-261 for a script's, a spell's, a burn's, a trap's and the hero's hit damage, with the session entity of the object; GT210–GT212); the witnesses of a PC's spell hit; objects of another map than the shown one; the damage floaters. Read in the executable once (GT195, F1), the object branch twice (OD1–OD12, F2); this slice read nothing new.
+  at point 0x17 (asked since ARC-DEV-254 and ARC-DEV-261 for a script's, a spell's, a burn's, a trap's and the hero's hit damage, with the session entity of the object, and since ARC-COMBAT-1141 for the script kill, the poison tick and each object of an acid chain (a worn item's own script is not run: it is no row of the shown map, so its ask answers run default); GT210–GT212); the witnesses of a PC's spell hit; objects of another map than the shown one; the damage floaters. Read in the executable once (GT195, F1), the object branch twice (OD1–OD12, F2); this slice read nothing new.
 
 ## Viewer (ARC-COMBAT-008 part 2)
 
@@ -200,7 +207,8 @@ damage apply (0x4B4390) with no attacker (GT194/GT195, ledger OD3, OD4, OD7–OD
 | The respawn delay multiplies in 32 bits (it wraps beyond 268,435 seconds or 35,791 minutes). | Exact. |
 | Each spilled item goes through the drop function (0x466E50, ledger OD13): a second item landing where items lie gathers them all into a new junk pile (a container of description 3023, prototype 3043), and each dropped item gets an item-decay event two days later; the container drops its last item first. | Exact since ARC-WORLD-063 ([junk piles](inventory-runtime.md#junk-piles-arc-world-063)): the items drop last first through the session's placement and decay two game days later (ARC-WORLD-062); the session's limits of the placement (scripts not run, no stack merge) apply. |
 | A respawning scenery that is off can still be damaged (ODA1). | The hero's attack on it is refused (`ObjectUnavailable`): the player cannot click an object that is off. |
-| A container never opened first generates its inventory from its inventory source, then spills it. | The session holds no inventory sources: only the T0 items spill. |
+| The spill walks the container's whole list, last first (0x463730, mode 1), so the items a barter window sold into the container (the end of its list) drop first. | Exact since ARC-WORLD-1306: the sold items are placed on the ground and drop first, then the seed's items; the limits above (sold items destroyed when the hero or a ground source is missing) are recorded. |
+| A container never opened (flag 0x200) first generates its inventory from its inventory source (the clear keeps the persistent items, RK5), then spills the whole list last first (0x463730, RK13). | Exact since ARC-WORLD-1301 when the host gives the generation's facts (`GameSessionOwner.GenerateOnceWorld`, or the event pass's world): the break runs the same seeded generation as the first loot open (tile x, the hero's race, gender, background and player name), records the container as generated, and the spill's walk drops the kept items and the goods through the placement with their decay. The generation is one revision of its own: a break the walk's budgets refuse leaves the container generated and whole, as a first open would. Limits: without the host's facts (no world, not ready, no seed facts, a set the session does not admit, a transfer script, a full budget) the break spills the stored items and the container stays ungenerated; the generated gold piles are destroyed with the spill (the ground holds none, as for a sold pile). |
 
 ## Damage to items that is no hero attack (ARC-COMBAT-025)
 
@@ -227,7 +235,8 @@ step: the item's damage and its two-step break are the durability records (`Dama
 - Read in the executable: nothing new. The object branch (OD1–OD12), the acid's steps (DH9) and the burn's victim types 5..16 (GT94–GT97) were read twice or
   more; this slice applies them to the item type. The item's taking-damage script (point 0x17) is asked where ARC-DEV-254 and ARC-DEV-261's hook asks it (by the item's cast id); the witnesses are not modelled.
 - The viewer runs an item's trap and BUST script as it runs any broken object's (ARC-DEV-260, `RunObjectBreakSteps`) for an item lying on the map; a worn item has no map row, so its BUST script is not run.
-- NOT READY: the damage floaters; an item in a pack, a container or a junk pile is never reached (areas skip them); a
+- The viewer floats the damage line of a hit on an item lying on the map (`HT N`, the packet's amount, ARC-COMBAT-1138, `AreaItemHit.Amount`); a worn item has no cell to float over. Not done: a hit whose amount the material takes all of (OD3 floats `HT 0` over the object) queues no object hit, so it floats nothing on a portal or container; an item's zero hit does float `HT 0`.
+- NOT READY: an item in a pack, a container or a junk pile is never reached (areas skip them); a
   non-kit item the hero wears; items on another map than the shown one; an NPC's item broken mid-pass is dropped by the host's build, not by the session.
 
 ## Not ready
@@ -238,7 +247,7 @@ step: the item's damage and its two-step break are the durability records (`Dama
   The viewer passes the trap flag (ARC-COMBAT-011); since ARC-DEV-260 it runs the trap and the BUST script of a broken object
   ([below](#the-breaks-trap-and-bust-script-arc-dev-260)).
 - **Host steps.** Sounds, eye candy and the witnesses' reaction are reported to the host, not run here; the trap and BUST scripts are the host's since ARC-DEV-260.
-- **Others.** NPC attacks on objects (AI); area damage reaches objects since [ARC-DEV-255](#damage-that-is-no-hero-attack-arc-dev-255) and items since
+- **Others.** An NPC's ranged attack reaches objects since ARC-COMBAT-1140 (`GameSessionOwner.AttackObjectByNpc` for the object that stops its line of fire, `LandNpcShotOnObject` for the arrow's strike; the damage step of this section with the NPC as the attacker, no witnesses, the trap and BUST script run with no triggerer or breaker, see tail T4e of the goal table); an NPC's melee attack on objects is not modelled; area damage reaches objects since [ARC-DEV-255](#damage-that-is-no-hero-attack-arc-dev-255) and items since
   [ARC-COMBAT-025](#damage-to-items-that-is-no-hero-attack-arc-combat-025) (the decay of dropped items is in since ARC-WORLD-062).
 
 ## The break's trap and BUST script (ARC-DEV-260)
@@ -260,5 +269,4 @@ that damage with no attacker dealt (`LogObjectHits`):
 - **Differences from the original.** The session applies the break in one revision, so the trap and the BUST script run after it, not as the original
   orders them (trap, then the break, whose BUST script follows the object's own change; a respawning scenery's BUST script runs before it is switched
   off). Only a script that reads the object's own state (switched off, busted, its art) sees the difference. The trap's own damage to objects queues
-  further hits: while a trap or script runs, `LogObjectHits` stands off and the outer loop takes the hits in at most 8 rounds (a window breaks again on every hit, ODA3, so its BUST script can chain). A ranged weapon with no missile art is still ranged (no trap triggerer). The hits' sounds, the witnesses and the
-  floaters stay unmodelled. A BUST script whose effects the viewer cannot apply is left unapplied, as for any script run here.
+  further hits: while a trap or script runs, `LogObjectHits` stands off and the outer loop takes the hits in at most 8 rounds (a window breaks again on every hit, ODA3, so its BUST script can chain). A ranged weapon with no missile art is still ranged (no trap triggerer). The hits' sounds and the witnesses stay unmodelled; each hit's damage line floats (ARC-COMBAT-1138, `LogObjectHits` -> `AreaCombatFloaters.Of(AreaObjectHit)`, the amount the hit added to the object's damage, "text floaters" 2 only). A BUST script whose effects the viewer cannot apply is left unapplied, as for any script run here.

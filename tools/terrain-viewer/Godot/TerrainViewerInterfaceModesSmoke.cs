@@ -88,6 +88,27 @@ public partial class TerrainViewerApp
             // The inventory family closes under the menu.
             await Press(Key.I);
             Require(InventoryOpen, "I opened the inventory: " + State());
+            // ARC-UI-1267 (IW25, IW41, IW43): the own window's doll prints the hero's damage and armour ratings, which the combat host reads from the session's hero.
+            var heroRatings = _inventoryPanel?.ViewForSelfTest?.HeroRatings;
+            Require(heroRatings is not null, "the own inventory view has the hero's ratings (the combat host did not read them)");
+            Require(heroRatings!.Damage > 0 && heroRatings.Armour >= 0, $"the hero's ratings are plausible (damage {heroRatings.Damage}, armour {heroRatings.Armour})");
+            var heroDoll = session.QueryEquipment().Worn;
+            GD.Print($"ARC-UI-1267 inv-ui hero doll ratings damage={heroRatings.Damage} armour={heroRatings.Armour} weaponTooHeavy={heroRatings.WeaponTooHeavy} worn={heroDoll.Count}");
+            steps.Add("the hero's doll ratings are read");
+            // ARC_AREA_INVENTORY_CAPTURE=<path>.png also saves the window three ways beside <path>-before, -after and -too-heavy.png (the ratings left out, as read, and the weapon forced too heavy) for the graphics report.
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_INVENTORY_CAPTURE") is { Length: > 0 } capture && _inventoryPanel is { } capturePanel)
+            {
+                var read = capturePanel.ViewForSelfTest!;
+                foreach (var (name, shown) in new[] { ("before", read with { HeroRatings = null }), ("after", read), ("too-heavy", read with { HeroRatings = heroRatings with { WeaponTooHeavy = true } }) })
+                {
+                    capturePanel.GridAreaForSelfTest.Render(shown);
+                    await Frames(2);
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    using var image = GetViewport().GetTexture().GetImage();
+                    if (image.SavePng(System.IO.Path.ChangeExtension(capture, null) + "-" + name + ".png") != Error.Ok) throw new InvalidOperationException("AREA_INVENTORY_CAPTURE_FAILED");
+                }
+                capturePanel.GridAreaForSelfTest.Render(read);
+            }
             await Press(Key.Escape);
             Require(MainMenuOpen && !InventoryOpen && StackText() == "Game" && WindowPanelsMatchStack, "Escape opened the menu, which closed the inventory: " + State());
             await Press(Key.Escape);
@@ -209,6 +230,51 @@ public partial class TerrainViewerApp
                 await Press(Key.L);
                 Require(!AnyWindowOpen, "L closed the logbook after the edge: " + State());
                 steps.Add("edge scroll runs on the border pixel under the dialog, not under the logbook");
+            }
+            finally { WorldPointerForSelfTest(null); if (_interfaceWindows.IsOpen(InterfaceMode.Dialog)) CloseWindowMode(InterfaceMode.Dialog); }
+
+            // ARC-INPUT-1122 (0x54EB60, SA44): Home centres the game view on the hero on its release in the game view's mode, and does nothing in the dialog's
+            // mode (the dialog scrolls the view but is not one of the modes 0, 1, 2 and 18 whose handler reaches the Home branch).
+            try
+            {
+                await Frames();
+                _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
+                var centred = CameraAt();
+                var homeEdge = new Vector2(WorldViewport.X - 1, (float)Math.Floor(WorldViewport.Y / 2));
+                void ScrollAway()
+                {
+                    WorldPointerForSelfTest(homeEdge);
+                    for (var frame = 0; frame < 6; frame++) WorldObservation(() => ApplyWorldObservedFrame(.1, true, Idle(), [], "ARC-INPUT-1122 smoke: scroll away"));
+                    WorldPointerForSelfTest(null);
+                }
+                Require(OpenWindowMode(InterfaceMode.Dialog, () => { }, () => { }) && _interfaceWindows.ScrollsGameView && WorldModal, "the stack-only dialog stands for Home: " + State());
+                ScrollAway();
+                var away = CameraAt();
+                Require(away != centred, $"the view scrolled away under the dialog ({centred} -> {away}; {ScrollWhy()})");
+                _homeKeyLastTarget = null;
+                await Press(Key.Home);
+                Require(CameraAt() == away && _homeKeyLastTarget is null, $"Home does nothing in the dialog's mode ({away} -> {CameraAt()}, target {_homeKeyLastTarget})");
+                CloseWindowMode(InterfaceMode.Dialog);
+                Require(StackText() == "Game" && !WorldModal, "the dialog closed for Home: " + State());
+                // The press alone does nothing; the release centres (the original acts on the key's release).
+                InputWorld(new InputEventKey { Keycode = Key.Home, PhysicalKeycode = Key.Home, Pressed = true });
+                Require(CameraAt() == away, $"the Home press alone does not move the view ({away} -> {CameraAt()})");
+                InputWorld(new InputEventKey { Keycode = Key.Home, PhysicalKeycode = Key.Home, Pressed = false });
+                await Frames();
+                Require(CameraAt() == centred && _homeKeyLastTarget == HomeKeyTarget.Pc, $"Home centred the view on the hero ({away} -> {CameraAt()}, want {centred}, target {_homeKeyLastTarget})");
+                // Home with a modifier is the same key (the original tests the scan code only).
+                ScrollAway();
+                Require(CameraAt() != centred, "the view scrolled away again for the modifier step");
+                InputWorld(new InputEventKey { Keycode = Key.Home, PhysicalKeycode = Key.Home, Pressed = true, ShiftPressed = true });
+                InputWorld(new InputEventKey { Keycode = Key.Home, PhysicalKeycode = Key.Home, Pressed = false, ShiftPressed = true });
+                await Frames();
+                Require(CameraAt() == centred, $"Shift+Home centred the view ({CameraAt()}, want {centred})");
+                // Already centred and no round: nothing happens, the view stays (a hero the map's edge keeps off the view's centre is never "centred": the key repeats the centring).
+                _homeKeyLastTarget = null;
+                await Press(Key.Home);
+                var onHero = Math.Abs(centred.X - WorldAnchor.X) < .5 && Math.Abs(centred.Y - WorldAnchor.Y) < .5;
+                Require(CameraAt() == centred && _homeKeyLastTarget == (onHero ? HomeKeyTarget.Nothing : HomeKeyTarget.Pc), $"Home on a centred view with no round changes nothing (target {_homeKeyLastTarget}, on hero {onHero})");
+                steps.Add("Home centres the view on the hero on its release, not in the dialog's mode");
             }
             finally { WorldPointerForSelfTest(null); if (_interfaceWindows.IsOpen(InterfaceMode.Dialog)) CloseWindowMode(InterfaceMode.Dialog); }
 

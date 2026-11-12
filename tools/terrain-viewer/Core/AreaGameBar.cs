@@ -10,7 +10,7 @@ namespace Arcanum.TerrainViewer.Core;
 public enum AreaBarStrip { Top, Bottom }
 
 /// <summary>The original's interface-bar buttons, in the order its interface init creates them (ledger GB2).</summary>
-public enum AreaBarButton { Skills, Spells, Combat, Schematics, Logbook, Character, Inventory, Map, FatePoints, Sleep }
+public enum AreaBarButton { Skills, Spells, Combat, Schematics, Logbook, Character, Inventory, Map, FatePoints, Sleep, Clock }
 
 /// <summary>A push button acts on its release over it; a toggle stays down until pressed again (the original's button flag 2,
 /// ledger GB3).</summary>
@@ -22,8 +22,10 @@ public enum AreaBarButtonLook { Idle, Down, Hovered }
 
 /// <param name="X">The left edge on the original's 800×600 screen (the strip's own origin is subtracted when it is drawn).</param>
 /// <param name="Art">The interface art number (<c>art\interface\interface.mes</c>).</param>
-/// <param name="HoverMessage">The <c>mes\intgame.mes</c> message the original shows while the pointer is over the button (GB5).</param>
-public sealed record AreaBarButtonSpec(AreaBarButton Button, AreaBarStrip Strip, int X, int Y, int Art, AreaBarButtonKind Kind, int HoverMessage);
+/// <param name="HoverMessage">The <c>mes\intgame.mes</c> message the original shows while the pointer is over the button (GB5); negative
+/// for none (the clock's hit area has no hover name).</param>
+/// <param name="Silent">True for a button made with no press and release sound (the clock's hit area, GB9; GB6 for the others).</param>
+public sealed record AreaBarButtonSpec(AreaBarButton Button, AreaBarStrip Strip, int X, int Y, int Art, AreaBarButtonKind Kind, int HoverMessage, bool Silent = false);
 
 /// <summary>
 /// ARC-UI-018: the layout of the original's in-game interface bars, as the 1.0.7.4 executable builds it (ledger GB1–GB7): the two
@@ -73,11 +75,16 @@ public static class AreaGameBarLayout
         new(AreaBarButton.Sleep, AreaBarStrip.Top, 605, 9, 137, AreaBarButtonKind.Push, 1009),
     ];
 
-    public static AreaBarButtonSpec Spec(AreaBarButton button) => Buttons.First(spec => spec.Button == button);
+    /// <summary>ARC-UI-1111 (GB9): the invisible push button over the clock window (0x54ABD0 from the interface init: art -1, the window's
+    /// 128 × 30 rectangle, all four sounds -1). It is not one of the ten art buttons of <see cref="Buttons"/>.</summary>
+    public static readonly AreaBarButtonSpec ClockSpec =
+        new(AreaBarButton.Clock, AreaBarStrip.Top, AreaClockLayout.WindowX, AreaClockLayout.WindowY, -1, AreaBarButtonKind.Push, -1, Silent: true);
 
-    /// <summary>Every interface art number the bars draw.</summary>
+    public static AreaBarButtonSpec Spec(AreaBarButton button) => button == AreaBarButton.Clock ? ClockSpec : Buttons.First(spec => spec.Button == button);
+
+    /// <summary>Every interface art number the bars draw (the clock's, ARC-UI-1111, among them).</summary>
     public static IReadOnlyList<int> ArtNumbers { get; } =
-        [TopArt, BottomArt, .. Buttons.Select(spec => spec.Art).Distinct(), HealthVialArt, PoisonedVialArt, FatigueVialArt, EmptyVialArt];
+        [TopArt, BottomArt, .. Buttons.Select(spec => spec.Art).Distinct(), HealthVialArt, PoisonedVialArt, FatigueVialArt, EmptyVialArt, .. AreaClockLayout.ArtNumbers];
 
     /// <summary>The frame a button draws (GB4): idle frame 0; down advances one frame and hovered two, each step wrapping to frame 0
     /// past the art's last frame (so a two-frame art shows frame 0 when hovered, a one-frame art always frame 0).</summary>
@@ -131,8 +138,10 @@ public sealed class AreaGameBar
     {
         if (Held is { } held && held != button) return AreaBarEffect.None;
         Hovered = button;
-        HoverMessage = AreaGameBarLayout.Spec(button).HoverMessage;
-        return new([], null, true, HoverMessage);
+        var message = AreaGameBarLayout.Spec(button).HoverMessage;
+        HoverMessage = message >= 0 ? message : null;
+        // The clock's hit area has no enter case in the filter: nothing is written or cleared on entering it (GB9).
+        return HoverMessage is null ? AreaBarEffect.None : new([], null, true, HoverMessage);
     }
 
     /// <summary>The pointer left <paramref name="button"/>: its hover message is cleared (0x54DC80).</summary>
@@ -146,10 +155,11 @@ public sealed class AreaGameBar
     /// <summary>A left press on <paramref name="button"/>.</summary>
     public AreaBarEffect Press(AreaBarButton button)
     {
-        if (AreaGameBarLayout.Spec(button).Kind == AreaBarButtonKind.Push)
+        var spec = AreaGameBarLayout.Spec(button);
+        if (spec.Kind == AreaBarButtonKind.Push)
         {
             Held = button;
-            return new([AreaGameBarLayout.PressSound], null, false, null);
+            return spec.Silent ? AreaBarEffect.None : new([AreaGameBarLayout.PressSound], null, false, null);
         }
         if (_on.Remove(button)) return new([AreaGameBarLayout.ReleaseSound], button, false, null);
         _on.Add(button);
@@ -164,7 +174,8 @@ public sealed class AreaGameBar
     {
         if (Held is not { } held) return AreaBarEffect.None;
         Held = null;
-        return over == held ? new([AreaGameBarLayout.ReleaseSound], held, false, null) : AreaBarEffect.None;
+        if (over != held) return AreaBarEffect.None;
+        return new(AreaGameBarLayout.Spec(held).Silent ? [] : [AreaGameBarLayout.ReleaseSound], held, false, null);
     }
 
     /// <summary>Forgets the pointer (hover, held button and hover message) and keeps the toggles: the bars were hidden, so no
@@ -198,6 +209,8 @@ public sealed class AreaGameBarTexts
     {
         [1000] = "Spells", [1001] = "Skills", [1002] = "Combat Toggle", [1003] = "Schematics", [1004] = "Log Book",
         [1005] = "Character Editor", [1006] = "Inventory", [1007] = "Maps", [1008] = "Fate Points", [1009] = "Sleep",
+        // ARC-UI-1111 (GB11): the labels of the clock's time and date line.
+        [AreaClockLayout.TimeMessage] = "Time", [AreaClockLayout.DateMessage] = "Date",
         [CostLabel] = "Fatigue cost", [WillpowerLabel] = "Minimum willpower", [SecondLabel] = "second", [SecondsLabel] = "seconds",
         // ARC-UI-107: the lock line of a hovered portal or container (the project's words until the game's file reads).
         [AreaHoverWindow.LockedMessage] = "Locked", [AreaHoverWindow.UnlockedMessage] = "Unlocked", [AreaHoverWindow.JammedMessage] = "Jammed",

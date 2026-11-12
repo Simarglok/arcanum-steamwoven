@@ -184,6 +184,8 @@ public partial class TerrainViewerApp
             MissileArt = spell => SpellMissileArt(spell) is not null,
             // ARC-WORLD-109: an NPC's skills for its skill attempts.
             NpcSheet = AreaFollowerSheet,
+            // ARC-MAGIC-1189 (TT10, SP2): an NPC's or a companion's step checks the next tile for a trap it spots with its own roll.
+            Traps = AreaTrapsNow,
             // ARC-WORLD-114: the NPCs' first-heartbeat and heartbeat scripts (the Crash Site's unchosen pre-made heroes die by theirs).
             Heartbeat = AiHeartbeat,
             CatchingThief = AiCatchingThief,
@@ -191,6 +193,10 @@ public partial class TerrainViewerApp
             LaunchThrown = AiLaunchThrown,
             // ARC-DEV-282: an NPC's arrow or bullet flies as a projectile and strikes through the AI host.
             LaunchShot = AiLaunchShot,
+            // ARC-COMBAT-1140 (RA4): a door, container, scenery, trap or wall that stops the line of fire takes the shot: its target, its flight and the follow-up of an object hit.
+            ObjectTarget = row => _areaSession is { } objectOwner && !IsAreaCompanion(row.Key) ? ObjectTargets()?.Target(objectOwner, row.Key, AreaTrapped) : null,
+            LaunchShotAtObject = AiLaunchShotAtObject,
+            ObjectStruck = NpcObjectHit,
             // ARC-DEV-261 (GT198): the victims' taking-damage scripts (point 0x17) of the NPCs' attacks, throws and knockback bumps.
             TakingDamage = TakingDamageGoesOn,
             // ARC-WORLD-115: the hero's companions here fight beside it, stepping and turning through their own walk (ARC-WORLD-119: the
@@ -460,7 +466,12 @@ public partial class TerrainViewerApp
     /// <summary>ARC-DEV-312: hands the shown session the dying-script question (<see cref="GameSessionOwner.DyingScript"/>); called wherever the viewer takes a session (created, carried over a map change, loaded).</summary>
     private void AttachAreaDyingScript()
     {
-        if (_areaSession is { } session) session.DyingScript = DyingGoesOn;
+        if (_areaSession is not { } session) return;
+        session.DyingScript = DyingGoesOn;
+        // ARC-COMBAT-1141 (GT210): the script kill and the poison tick ask the NPC's taking-damage script too (no attacker); a victim that is not on the shown map has none here.
+        session.TakingDamageScript = request => request.Map != CurrentAreaMap || TakingDamageGoesOn(request.Victim, request.Attacker);
+        // ARC-WORLD-1301 (VPG6): a container with flag 0x200 that breaks before it was opened generates its goods through the same restock host as the loot window's first open (not ready until the barter data has loaded: it then spills the stored items).
+        session.GenerateOnceWorld = () => AreaEvents;
     }
 
     /// <summary>

@@ -1,6 +1,8 @@
 using Arcanum.Data.Magic;
 using Arcanum.Simulation;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Magic;
 
 namespace Arcanum.Session;
@@ -141,7 +143,7 @@ public sealed partial class SessionSpellCaster
     public const int SideEffectDetail = 8;
 
     private static int FlagDetail(SessionObjectFlagField field, bool on) =>
-        (field switch { SessionObjectFlagField.Critter => 2, SessionObjectFlagField.Object => 4, SessionObjectFlagField.Critter2 => 16, SessionObjectFlagField.Blit => 32, _ => 0 }) | (on ? 1 : 0);
+        (field switch { SessionObjectFlagField.Critter => 2, SessionObjectFlagField.Object => 4, SessionObjectFlagField.Critter2 => 16, SessionObjectFlagField.Blit => 32, SessionObjectFlagField.Npc => 64, _ => 0 }) | (on ? 1 : 0);
 
     /// <summary>
     /// The reference count 0x455100: for a set, 0 while the critter does not have the bit now; otherwise, for the spell flags only, the active runs whose object is the critter and whose
@@ -167,8 +169,10 @@ public sealed partial class SessionSpellCaster
         {
             var written = _owner.QueryObjectFlags(id);
             return ((field switch { SessionObjectFlagField.Spell => written.SpellSet, SessionObjectFlagField.Object => written.ObjectSet, SessionObjectFlagField.Critter2 => written.Critter2Set,
-                SessionObjectFlagField.Blit => written.BlitSet, _ => written.CritterSet }) & mask) != 0 ? false : null;
+                SessionObjectFlagField.Blit => written.BlitSet, SessionObjectFlagField.Npc => written.NpcSet, _ => written.CritterSet }) & mask) != 0 ? false : null;
         }
+        // ARC-MAGIC-1142: the cast map does not carry an NPC's data flags (field 0x118), so the data's value of them is unknown here.
+        if (field == SessionObjectFlagField.Npc) return (_owner.QueryObjectFlags(id).NpcSet & mask) != 0 ? false : null;
         return ((field switch { SessionObjectFlagField.Spell => critter.SpellFlags, SessionObjectFlagField.Object => critter.ObjectFlags, SessionObjectFlagField.Critter2 => critter.CritterFlags2,
             SessionObjectFlagField.Blit => 0, _ => critter.CritterFlags }) & mask) != 0;
     }
@@ -184,6 +188,7 @@ public sealed partial class SessionSpellCaster
             SessionObjectFlagField.Object => written.Object(critter?.ObjectFlags ?? 0),
             SessionObjectFlagField.Critter2 => written.Critter2(critter?.CritterFlags2 ?? 0),
             SessionObjectFlagField.Blit => written.Blit(0),
+            SessionObjectFlagField.Npc => written.Npc(0),
             _ => written.Critter(critter?.CritterFlags ?? 0),
         };
     }
@@ -240,5 +245,7 @@ public sealed partial class SessionSpellCaster
         public (Combatant Combatant, AttackTargetKind Kind)? ObjectCombat(string id) => map.ObjectCombat(id);
         public bool DamageObject(string id, AttackDamage damage) => map.DamageObject(id, damage);
         public SpellOpenable? Openable(string id) => map.Openable(id);
+        public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? WornBySlot(string entity) => map.WornBySlot(entity);
+        public IDropMap? DropMap => map.DropMap;
     }
 }

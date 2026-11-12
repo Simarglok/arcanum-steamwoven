@@ -1,5 +1,6 @@
 using Arcanum.Data.Hd;
 using Arcanum.Input;
+using Arcanum.Session.Settings;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
@@ -10,7 +11,7 @@ namespace Arcanum.TerrainViewer;
 /// toggle (ARC-RENDER-014 path, ARC-UI-006 setting and toggle; contract
 /// docs/rendering/hd-presentation-contract.md, toggle protocol).
 /// <list type="bullet">
-/// <item>Startup applies the saved profile (<c>user://visual_profile_v1.json</c>) before the first
+/// <item>Startup applies the saved profile (the <c>visual profile</c> line of <c>user://arcanum.cfg</c>) before the first
 /// submission. A diagnostic run may override it for that run with <c>ARC_VISUAL_PROFILE=hd|legacy</c>
 /// or <c>ARC_HD_PACK=DIR</c> (which implies hd); an override is not saved.</item>
 /// <item>The active pack is <c>ARC_HD_PACK</c> when set, otherwise the one the saved HD pack source chooses (ARC-DEV-350,
@@ -221,43 +222,24 @@ public partial class TerrainViewerApp
     private string VisualHudStatus() => $"H visual Legacy/HD: {VisualSummary()}";
 }
 
-/// <summary>The visual profile preference (ARC-UI-006), following
-/// <see cref="DiagnosticZoomSettingsStore"/>: <c>user://visual_profile_v1.json</c> holding
-/// <see cref="VisualProfileCodec"/> text; a missing, unreadable or unknown value loads as Legacy.
-/// <c>VISUAL_PROFILE_TEST_PATH</c> isolates tests; an automated run without it has no file at all
+/// <summary>The visual profile preference (ARC-UI-006): the <c>visual profile</c> line (<c>legacy</c> or <c>hd</c>) of the one settings file
+/// (ARC-UI-1130, <see cref="ViewerSettingsConfig"/>, once <c>user://visual_profile_v1.json</c>); a missing or unknown value loads as Legacy.
+/// <c>VISUAL_PROFILE_TEST_PATH</c> names a settings file for tests; an automated run without it has no file at all
 /// (Legacy, nothing saved), so it never reads or changes the owner's setting.</summary>
 public sealed class VisualProfileSettingsStore
 {
     public const string TestVariable = "VISUAL_PROFILE_TEST_PATH";
-    public const string UserPath = "user://visual_profile_v1.json";
     private readonly string? _path;
 
-    public VisualProfileSettingsStore(bool automated)
-    {
-        var test = OS.GetEnvironment(TestVariable);
-        _path = !string.IsNullOrWhiteSpace(test) ? test : automated ? null : UserPath;
-    }
+    public VisualProfileSettingsStore(bool automated) => _path = ViewerSettingsFile.Choose(TestVariable, automated);
 
     /// <summary>False for an automated run without a test path: nothing is read or written.</summary>
     public bool Persistent => _path is not null;
-    /// <summary>A saved file exists (startup reports "saved setting" only then).</summary>
-    public bool HasSaved => _path is not null && global::Godot.FileAccess.FileExists(_path);
+    /// <summary>A saved line exists (startup reports "saved setting" only then).</summary>
+    public bool HasSaved => _path is not null && ViewerSettingsConfig.HasVisualProfile(ArcanumConfig.Read(_path));
 
-    public VisualProfile Load()
-    {
-        if (_path is null || !global::Godot.FileAccess.FileExists(_path)) return VisualProfile.Legacy;
-        using var file = global::Godot.FileAccess.Open(_path, global::Godot.FileAccess.ModeFlags.Read);
-        return file is null ? VisualProfile.Legacy : VisualProfileCodec.DeserializeOrLegacy(file.GetAsText());
-    }
+    public VisualProfile Load() => _path is null ? VisualProfile.Legacy : ViewerSettingsConfig.ReadVisualProfile(ArcanumConfig.Read(_path));
 
     /// <summary>Writes the profile; false when it could not be saved (the caller reports it).</summary>
-    public bool Save(VisualProfile profile)
-    {
-        if (_path is null) return false;
-        using var file = global::Godot.FileAccess.Open(_path, global::Godot.FileAccess.ModeFlags.Write);
-        if (file is null) return false;
-        file.StoreString(VisualProfileCodec.Serialize(profile));
-        file.Flush();
-        return file.GetError() == Error.Ok;
-    }
+    public bool Save(VisualProfile profile) => _path is not null && ArcanumConfig.Save(_path, ViewerSettingsConfig.VisualProfileChanges(profile)) == ArcanumConfigSaveStatus.Saved;
 }

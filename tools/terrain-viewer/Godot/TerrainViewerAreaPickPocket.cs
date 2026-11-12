@@ -11,7 +11,7 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 // ARC-SKILLS-010: the pick-pocket skill in map mode (contract docs/world/pick-pocket-runtime.md). The palette's "Pick pocket" arms the
-// skill (the skill bar's button stays a later task); the next left press on an NPC runs the start's rules at once, at sight distance
+// skill (since ARC-UI-1113 the skill bar's Pick Pocket button arms it too); the next left press on an NPC runs the start's rules at once, at sight distance
 // (PP1): a stoned target or the hero itself is refused, a "no pickpocket" or mechanical critter floats skill_ui.mes line 525, a dead one
 // is looted as any body, and a living one the hero sees opens the inventory window in steal mode. There each Steal button and each
 // Plant button is one attempt through the session (4 action points in the hero's subturn); a noticed failure runs the victim's
@@ -42,6 +42,14 @@ public partial class TerrainViewerApp
         RefreshAreaStatus();
     }
 
+    /// <summary>ARC-UI-1113: the skill bar's Pick pocket button (the hotkey bar's entry and the skill pane's button, 0x579FA0 → 0x57A0A0 with
+    /// button 1): the same arming as the palette's, whose outcome is the status text it left.</summary>
+    private string ArmPickPocketFromBar()
+    {
+        ArmPickPocket();
+        return PickPocketArmed ? "pick pocket: press an NPC" : _inventoryStatus ?? "pick pocket: not ready";
+    }
+
     // ARC-DEV-184 (MIG13 S12d): a Steal or Plant is the skill goal 33 → 86 of the table; the attempt it asks for waits here for the frame's next safe point.
     private (string Npc, string Item, bool Plant)? _pickPocketPending;
     // A Steal or Plant press whose attempt has not been made yet (the status line says "trying" meanwhile).
@@ -57,10 +65,11 @@ public partial class TerrainViewerApp
         catch (KeyNotFoundException) { return null; }
     }
 
-    /// <summary>The cell of a skill goal's target: a pick pocket's victim ("pp:") or a lock pick's door or window (the portal's session entity).</summary>
+    /// <summary>The cell of a skill goal's target: a pick pocket's victim ("pp:") or a lock pick's door, window (the portal's session entity) or container (a loot target string, ARC-UI-1127).</summary>
     private CellCoord? SkillTargetCell(string target)
     {
         if (PickPocketRowOf(target) is { } row) { var (x, y) = LiveWorldCell(row); return new(checked((int)x), checked((int)y)); }
+        if (ContainerOfSkillTarget(target) is { } container) { var (cx, cy) = LiveWorldCell(container.Row); return new(checked((int)cx), checked((int)cy)); }
         return _areaDoors?.PortalOf(target) is { } portal ? new(checked((int)portal.Cell.X), checked((int)portal.Cell.Y)) : null;
     }
 
@@ -209,6 +218,8 @@ public partial class TerrainViewerApp
             message = $"{SkillLine(result.Moved > 0 ? PickPocketRules.SuccessLine : PickPocketRules.FailureLine)} ({(direction == PickPocketDirection.Steal ? "steal" : "plant")} {itemName}" +
                 (result.Moved > 1 ? $" ×{result.Moved}" : "") + ")";
             if (result.Alignment is { } alignment) message += $"; alignment {alignment}";
+            // ARC-WORLD-1283: an item the remove check refused (the no-drop flag) shows the PC's message (item.mes 111; the thief is the source of a plant and the recipient of a steal).
+            if (result.Move is { PcMessage: not null } refused) message += $"; {AreaInventoryHost.Refusal(refused.Failure, refused.Verdict)}";
             if (result.Noticed)
             {
                 caught = AreaPickPocket.Caught(session, map.Row(npc), npc, CatchingThiefScript, victimNpc => ai.HeroAttacked(victimNpc));

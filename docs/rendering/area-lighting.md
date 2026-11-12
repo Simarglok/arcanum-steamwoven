@@ -190,6 +190,31 @@ the largest of the worn items' light sizes, each shrinking with its effective po
 - **Not drawn yet:** the light a session-dressed NPC would have after its regeneration wields its best items (its worn items' sizes would
   need the items' light flags and the NPC's aptitude; the saved light stands), a visiting companion's light on another map, shadows.
 
+### Live light of a lit eye candy (ARC-MAGIC-1229, FR-LIGHT-011, ledger IW2–IW6)
+
+Illuminate (spell 65) keeps a live light on its target while the maintained spell holds: its looping eye candy entry has light art 1 in colour
+(226, 60, 236), and the original's add takes the first free of the target's four overlay light slots, writes the light there when the run begins
+and writes the slot back as no light when the run ends ([IW2–IW5](../research/ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)).
+
+- **Where it lives.** Not among the map's object lights and not saved: `AreaEyeCandyHost.Lights` answers one light for each begun, not ended eye candy run
+  whose entry has a light (the owner, the slot, the light art number, the colour); a lit add on an owner whose four slots are taken (its own record's overlay
+  lights, `AreaLocalLighting.OverlaySlotMask`, and the lights shown before) refuses, so a critter with all four in use gets no eye candy at all (IW2).
+- **How it is drawn and sampled.** The carried-light source of the viewer (`CarriedLightSource`) adds the glow next to the hero's and the critters' lights:
+  `AreaEyeCandyLights.ToLight` makes the sector light (light ART class 9 of the entry's number, frame 0, flags 0x20 "no light animation", the entry's colour),
+  and the owner's place is the hero's placement with its offsets, a map critter's cell with the shift of its pose (the same `AreaCritterLights.Stand` as the critter's own
+  light, LT10) or a created critter's cell. The canvas draws it with the other carried lights and `AreaCellLightLevel` (FR-LIGHT-011) reads the same source, so the
+  darkness term rises while the spell holds and returns when its run ends. The source is handed to the canvas again when the number of glows changes
+  (`TickCarriedLight`).
+- **After a load (ARC-MAGIC-1280).** The original writes the live light back into the object's fields at the save (LT11) and the sector load builds it again (LT4);
+  Steamwoven saves the overlay runs ([saved runs](../architecture/saved-runs.md#overlay-runs-arc-magic-1280): the goals section holds the maintained Illuminate's looping eye candy
+  with its tag, the spell run is saved as before), so a loaded game shows the glow again with no second cast: the overlay host of the loaded session is built by the first step of a
+  restored run, and `AreaEyeCandyHost.AdoptRestored` gives each lit run its first free overlay slot of its owner again, so the four-slot rule holds from the first frame.
+- **Not ready.** The object's own offsets and scale (the eye candy parts
+  ignore them too); a light art number whose frame the map's lighting did not load (counted and logged once; number 1 is always there).
+- **Native smoke** (named stage `eye-light`, `--hero`, a lit map with a living NPC): Illuminate cast on the hero and on the nearest living NPC gives one
+  light (art 1, 226 60 236, an overlay slot), the canvas holds one carried light more, the level at the target's cell rises at night, and the forced END takes
+  all of it away again; then (ARC-MAGIC-1280) Illuminate held on the hero and the NPC is saved by F7 and loaded by F8, and the same lights, the canvas count and the darkness level are there with no second cast, and the forced END after the load takes them away.
+
 ### Animated lights (ARC-RENDER-031)
 
 A light whose ART has more than one frame animates in map mode, stationary and object lights alike, unless it carries

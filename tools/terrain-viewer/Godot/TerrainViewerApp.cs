@@ -239,6 +239,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("save-resume") == true) await RunAreaSaveResumeSmokeAsync(result);
                                 // ARC-DEV-264 (B08, SM06): only when named, an aggressive spell cast at a calm animal from afar makes it fight the hero (AI on, Crash Site, --hero).
                                 if (only?.Contains("ai-react") == true) await RunAreaAiReactSmokeAsync(result);
+                                // ARC-AI-1315 (VA4, VAG4): only when named, two NPCs put on one tile are separated by the attack starter's tile-sharer test and by the step apart (goal 68) (AI on, --hero).
+                                if (only?.Contains("please-move") == true) await RunAreaPleaseMoveSmokeAsync();
                                 // ARC-DEV-308 (B07, SM07): only when named, the map's NPC rows against the AI host's NPCs before a tick and after F7 and F8, read-only (AI on, start map, --hero).
                                 if (only?.Contains("placement-census") == true) await RunAreaPlacementCensusSmokeAsync(result);
                                 // ARC-DEV-301 (triage T1): only when named, an NPC's death and its loss of consciousness end the spell runs it casts and take their eye candy off the hero (AI on, Crash Site window, --hero).
@@ -251,6 +253,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("movement") == true) await RunAreaMovementSmokeAsync(result);
                                 // ARC-DEV-335 (V7d, B50): only when named, a light worn by the hero lights the area around it (with --hero, a lit map).
                                 if (only?.Contains("worn-light") == true) await RunAreaWornLightSmokeAsync(result);
+                                // ARC-MAGIC-1229 (FR-LIGHT-011, IW6): only when named, Illuminate keeps a live light on the hero and on an NPC while the spell holds, the darkness sampler sees it and the END takes it off (--hero, a lit map with a living NPC).
+                                if (only?.Contains("eye-light") == true) await RunAreaEyeLightSmokeAsync(result);
                                 // ARC-DEV-353 (V7d second part): only when named, an NPC's light is carried with the NPC (AI on, a lit map with an NPC that carries a light).
                                 if (only?.Contains("critter-light") == true) await RunAreaCritterLightSmokeAsync();
                                 // ARC-DEV-362 (technology audit T-a): only when named, degrees bought on the sheet, a Herbology heal and a Gun Smithy gun assembled, used and loaded again (--hero, best on the map "crash site cave").
@@ -365,6 +369,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && only?.Contains("debug-travel") == true) await RunAreaDebugTravelSmokeAsync();
                         // ARC-DEV-170 (B05): only when named (with --debug-mode and --hero), a joined speaker, the window moved to a far area and a quick load there (SM01).
                         if (_readyMapName is not null && only?.Contains("follower-far") == true) await RunAreaFollowerFarSmokeAsync();
+                        // ARC-MAGIC-1147 (MT16, TP6-TP9): only when named (with --hero), the same companion carried by a Teleportation cast's pick on the world map.
+                        if (_readyMapName is not null && only?.Contains("teleport-follow") == true) await RunAreaFollowerFarSmokeAsync(viaSpell: true);
                         // ARC-DEV-305 (B01, B36): only when named (with --debug-mode and --hero), what the hero took and made survives the window move and a quick load (SM02).
                         if (_readyMapName is not null && only?.Contains("inv-carry") == true) await RunAreaInvCarrySmokeAsync();
                         // ARC-RENDER-027: only when named, every map of the catalogue in turn (last: it leaves the last map shown).
@@ -1112,7 +1118,7 @@ public partial class TerrainViewerApp : Node
             // for the black screen runs now.
             TickMovies(delta * 1000);
             TickTransitionScreen(delta * 1000);
-            try { TickAreaClock(); TickLightAnimation(); TickCarriedLight(); DrainTraitEquipment(); SyncHeroBody(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaSleep(); SyncScriptFades(); SyncAreaWorldMap(); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncInterfaceHd(); TickWindowArtWarm(); SyncGameBar(); RefreshHeroGauges(); TickFloaters(); }
+            try { TickAreaClock(); TickLightAnimation(); TickCarriedLight(); DrainTraitEquipment(); SyncHeroBody(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaSleep(); SyncScriptFades(); SyncAreaWorldMap(); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncInterfaceHd(); TickWindowArtWarm(); SyncGameBar(); RefreshHeroGauges(); RefreshCombatHud(); TickFloaters(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");
@@ -1120,7 +1126,7 @@ public partial class TerrainViewerApp : Node
             }
             // ARC-UI-026: the hero's death, on the frame's real time.
             SyncHeroDeath(delta);
-            SyncPassabilityOverlay(); SyncAreaInventory(); UpdateAreaHover(); ProcessGameCursorItem(); SyncCursorArt();
+            SyncPassabilityOverlay(); SyncAreaInventory(); UpdateAreaHover(); SyncHoverRing(); ProcessGameCursorItem(); SyncCursorArt();
             // ARC-DEV-051: the session-event lines of the bug report's log.
             SyncBugReport();
             return;

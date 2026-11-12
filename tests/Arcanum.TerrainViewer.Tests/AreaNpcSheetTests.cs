@@ -54,6 +54,28 @@ public sealed class AreaNpcSheetTests
         Assert.IsNull(view.ToNextLevel, "no experience table in this session");
     }
 
+    private static int Speed(AreaNpcSheetPages pages) => pages.View.Secondary.Single(value => value.Label == AreaCharacterSheet.Label(CharacterStat.Speed)).Value;
+
+    [TestMethod]
+    public void The_speed_line_shows_the_tempus_fugit_change_the_combat_reads()
+    {
+        // ARC-MAGIC-1190 (TF2): the NPC's speed is dexterity 8 on the sheet; Tempus Fugit's +10 for a holder and -10 for everyone else (the stat range 1..100 clamps) show at once.
+        using var session = Session();
+        const string entity = "oid:virgil";
+        var fields = Npc();
+        var loaded = AreaAdvancement.Npc(entity, fields, Effect)!.Value;
+        int Shown() => Speed(AreaNpcSheet.Build(session, "Virgil", fields, loaded, null, null, AreaHoverIndex.TextProfile)!);
+        Assert.AreEqual(8, Shown(), "nobody holds the spell: no shift");
+        const int flag = 0x4000000;
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, session.WriteObjectFlag(session.Version, "pc", SessionObjectFlagField.Spell, flag, true).Disposition);
+        Assert.AreEqual(1, Shown(), "the hero holds it, the NPC does not: 8 - 10 is clamped to 1");
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, session.WriteObjectFlag(session.Version, entity, SessionObjectFlagField.Spell, flag, true).Disposition);
+        Assert.AreEqual(18, Shown(), "the NPC holds it (it joined the hero): +10");
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, session.WriteObjectFlag(session.Version, "pc", SessionObjectFlagField.Spell, flag, false).Disposition);
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, session.WriteObjectFlag(session.Version, entity, SessionObjectFlagField.Spell, flag, false).Disposition);
+        Assert.AreEqual(8, Shown(), "the spell is over");
+    }
+
     [TestMethod]
     public void The_resistances_are_the_stored_ones_with_the_constitution_bonus_and_no_worn_armour()
     {
@@ -61,6 +83,27 @@ public sealed class AreaNpcSheetTests
         var resist = Build(session, Npc()).View.Resistances;
         CollectionAssert.AreEqual(new[] { "Normal", "Magick", "Fire", "Poison", "Electrical" }, resist.Select(value => value.Label).ToArray(), "the sheet's order");
         CollectionAssert.AreEqual(new[] { 10, 20, 5, 20, 0 }, resist.Select(value => value.Value).ToArray(), "poison has 5 × (8 − 4) from the constitution");
+    }
+
+    /// <summary>ARC-UI-1145 (0x43D6D0, RE2): the lines read the NPC under the effect list the session holds for it, as the combat does: the resistance changes, the Magick line
+    /// among them; the poison bonus keeps the sheet's own constitution (its Constitution row). An entity the session knows no mobile NPC for has no list to read.</summary>
+    [TestMethod]
+    public void The_resistance_lines_follow_the_session_effect_list_of_the_npc()
+    {
+        using var session = Session();
+        // The combat reads an NPC row's NPC record too.
+        var fields = Npc() with { Npc = new CombatNpcFields(0, 0, 0, 0, 0, 0, 0, [new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)]) };
+        var loaded = AreaAdvancement.Npc("oid:virgil", fields, Effect)!.Value;
+        List<int> Lines() => [.. AreaNpcSheet.Build(session, "Virgil", fields, loaded, null, null, AreaHoverIndex.TextProfile)!.View.Resistances.Select(value => value.Value)];
+        CollectionAssert.AreEqual(new[] { 10, 20, 5, 20, 0 }, Lines());
+        EffectChange Resist(int attribute, int value) => new(EffectAttributeKind.Resistance, attribute, EffectChangeOperator.Add, value);
+        var target = SessionLifeTarget.Critter("oid:virgil", new(), default, [new(300, EffectCause.Spell)]);
+        var rule = new SessionEffectDefinition(150, [Resist(0, 30), Resist(3, 10), Resist(4, 25)]);
+        Assert.AreEqual(GameSessionFailure.None, session.AddNpcEffect(session.Version, target, rule, EffectCause.Spell).Failure);
+        // Normal 10 + 30, magick 20 + 25, fire and electrical as stored, poison 5 x (8 - 4) + 10: the bonus reads the sheet's own constitution (8, as its Constitution row shows).
+        CollectionAssert.AreEqual(new[] { 40, 45, 5, 30, 0 }, Lines());
+        Assert.AreEqual(GameSessionFailure.None, session.RemoveNpcEffect(session.Version, target, 150).Failure);
+        CollectionAssert.AreEqual(new[] { 10, 20, 5, 20, 0 }, Lines(), "the list gone: the stored lines again");
     }
 
     [TestMethod]
