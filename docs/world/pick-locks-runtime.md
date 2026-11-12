@@ -73,3 +73,7 @@ in a turn-based round (ARC-COMBAT-020) it passes the round's world, so the pick 
 relock, lock, jam and its day relock, fate without lockpicks, junk pile, refusals, the turn-based charge),
 `tests/Arcanum.TerrainViewer.Tests/AreaPickLockTests.cs`, the viewer self-test (the pick button) and the native smoke
 (`ARC-SKILLS-006 native-smoke pick PASS` on a map with a locked door and the halfling-male hero).
+
+ARC-INPUT-1123: the start of the armed lockpicks asks the 4 action points of the item cursor (IA4) before mode 16 opens, as the original does; with no points left in a
+turn-based round on the hero's own subturn the start is refused (the window is closed, no cursor), and the same smoke step checks it
+(`ARC-INPUT-1123 native-smoke lockpick-ap PASS`). See [interface modes](../architecture/interface-modes.md#action-points-at-the-start-of-a-target-mode-arc-input-1123).

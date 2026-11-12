@@ -14,7 +14,7 @@ public static class LifeRules
 {
     private const LifeConditions Crippled = LifeConditions.CrippledArmOne | LifeConditions.CrippledArmsBoth | LifeConditions.CrippledLegsBoth;
     private const LifeConditions AllConditions = LifeConditions.Stunned | LifeConditions.Blinded | Crippled;
-    private const LifeTraits AllTraits = (LifeTraits)((1 << 9) - 1);
+    private const LifeTraits AllTraits = (LifeTraits)((1 << 10) - 1);
     private const CriticalHitEffects AllEffects = (CriticalHitEffects)((1 << 11) - 1);
 
     /// <summary>Strength lost to poison: <c>min(3, poison / 100)</c>.</summary>

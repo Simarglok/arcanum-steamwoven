@@ -2,6 +2,7 @@ using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Randomness;
 
@@ -30,6 +31,8 @@ public sealed record SessionNpcAttack(SessionCritterCombat Attacker)
     public Func<DamageRecipient, bool>? TakingDamage { get; init; }
     /// <summary>ARC-DEV-282 (PF1, PF2): the host can fly a shot. A bow or firearms attack whose wielded weapon has a projectile art (<see cref="SessionWearItem.MissileArt"/>) is then decided now and its hit's damage waits for the strike (<see cref="GameSessionOwner.LandNpcShot"/>); the result names the shots in flight. Without it (or without the art) the attack lands at once, as ARC-DEV-273's.</summary>
     public bool Flight { get; init; }
+    /// <summary>ARC-MAGIC-1188: the trigger host the damage step's item events fire through (as <see cref="SessionAttack.ItemTriggers"/>, ARC-MAGIC-023): the attacker's worn items fire "damages opponent", "target hit" and the knockdown events, the victim's (an NPC's, or the hero's from the session) "parent hit" and the others (0x4B4390 for any attacker, IC2); a host of this session. Null: they fire nothing, as before ARC-MAGIC-1188.</summary>
+    public Arcanum.Session.ISessionItemTriggers? ItemTriggers { get; init; }
 }
 
 /// <summary>
@@ -53,6 +56,8 @@ public sealed record SessionNpcThrow(SessionCritterCombat Thrower, string Item, 
     public Arcanum.Simulation.Items.IDropMap? DropMap { get; init; }
     /// <summary>ARC-DEV-261: as <see cref="SessionNpcAttack.TakingDamage"/>.</summary>
     public Func<DamageRecipient, bool>? TakingDamage { get; init; }
+    /// <summary>ARC-MAGIC-1188: as <see cref="SessionNpcAttack.ItemTriggers"/>, for the attack on the struck critter (the thrown item is the event's weapon; the thrower's worn items exclude it).</summary>
+    public ISessionItemTriggers? ItemTriggers { get; init; }
 }
 
 /// <summary>ARC-WORLD-113: what <see cref="GameSessionOwner.ThrowByNpc"/> did: the attack on the struck critter (null without one or
@@ -155,6 +160,7 @@ public sealed partial class GameSessionOwner
             TargetCell = request.StruckHero ? null : request.StruckCell,
             DropMap = request.DropMap,
             TakingDamage = request.TakingDamage,
+            ItemTriggers = request.ItemTriggers,
         };
         var result = NpcAttack(expected, attack,
             new NpcThrowing(request.Item, request.Weight, request.Target, request.ThrowerCell, request.StruckCell.Value, request.LineOfFire), out var landed, null);
@@ -236,7 +242,7 @@ public sealed partial class GameSessionOwner
     public SessionAttackResult LandNpcShot(GameSessionVersion expected, SessionShot shot, SessionNpcAttack attack) => NpcAttack(expected, attack, null, out _, shot);
 
     /// <summary>ARC-DEV-282: an NPC's arrow or bullet in flight: the shooter, the attack values and the check decided at the shot, whether it hit, and its target (an NPC's entity; a marker for the hero).</summary>
-    private sealed record NpcArrow(string Shooter, SessionNpcAttackValues Values, AttackResolution Check, bool Hit, string Target);
+    private sealed record NpcArrow(string Shooter, SessionNpcAttackValues Values, AttackResolution Check, bool Hit, string Target, string? WeaponItem = null);
 
     private readonly Dictionary<SessionShot, NpcArrow> _npcArrows = [];
 
@@ -287,6 +293,8 @@ public sealed partial class GameSessionOwner
         if (attack.Distance < 0 || throwing is null && arrow is null && attack.Distance > values.Range || attack.AttackerCell is { } from && !DropCellFits(from) ||
             attack.TargetCell is { } to && !DropCellFits(to) || attack.LineOfFire is { Cost: < 0 or > AttackResolver.MaxMagnitude }) return RejectAttack(GameSessionFailure.InvalidAttack);
         if (!values.Supported) return RejectAttack(GameSessionFailure.AttackUnsupported);
+        // ARC-MAGIC-1188: the parent hit's melee bit reads the weapon's reach (0x4CBAD0, 0x465E30), which a throw keeps (its thrown range is the check's only).
+        var reach = values.Weapon.Kind == WeaponKind.Unarmed ? (int?)null : values.Range;
         if (throwing is not null)
         {
             // TW7: the only installed "default throws" weapon is a melee one; another skill's would follow other rules.
@@ -381,7 +389,7 @@ public sealed partial class GameSessionOwner
         if (flies && resolution.Refusal == AttackRefusal.None)
         {
             var carried = new NpcArrow(attacker.Entity!, values with { Weapon = weapon }, resolution,
-                resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, targetKey);
+                resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, targetKey, attack.AttackerWorn?.GetValueOrDefault(EquipmentSlot.Weapon)?.Entity);
             var shots = new SessionShot[projectiles];
             for (var i = 0; i < projectiles; i++)
             {
@@ -451,15 +459,32 @@ public sealed partial class GameSessionOwner
             stepFailure = RecordHeroInjuries(outcome.Events, AttackerCause(attacker));
         SessionAttackWearResult? wear = null;
         var criticals = new List<SessionCriticalStep>();
+        // ARC-MAGIC-1188 (IC2, 0x4B4390 serves any attacker): the damage step's item events of an attack on the target, in the hero's order (ARC-MAGIC-023): the parties are the NPC (the attacker
+        // and the kill's damage source) and its victim, the hero (its items as the session wears them) or another NPC; a critical self-hit fires none (its life events are the caller's).
+        var itemSteps = recipient == DamageRecipient.Target && stepFailure == GameSessionFailure.None && attack.ItemTriggers is not null
+            ? ItemSpellTriggerRules.DamageStep(targetFacts!, damage, outcome, attacker: true, killer: true, ItemSpellTriggerRules.MeleeHit(attackEntry: true, reach))
+            : [];
+        var victim = target?.Entity ?? SessionEventKinds.PlayerEntity;
+        var attackerWorn = attackerSide.Worn?.OrderBy(pair => pair.Key).Select(pair => pair.Value.Entity).ToArray() ?? [];
+        var victimWorn = target is null ? [.. _equipment.Worn.Values.OrderBy(item => item.Slot).Select(item => item.Entity)]
+            : attack.TargetWorn?.OrderBy(pair => pair.Key).Select(pair => pair.Value.Entity).ToArray() ?? [];
+        // The weapon of the event's context: the thrown item, an arrow's weapon at the shot (as the hero's pending shot; a flight restored from a save does not carry it), else the wielded one.
+        var contextWeapon = throwing?.Item ?? (arrow?.WeaponItem ?? attack.AttackerWorn?.GetValueOrDefault(EquipmentSlot.Weapon)?.Entity);
+        var itemSpells = FireDamageStepItems(attack.ItemTriggers, itemSteps.Where(step => BeforeItemSteps(step, outcome)), victim, victimWorn,
+            attacker.Entity, attackerWorn, contextWeapon).ToList();
         if (stepFailure == GameSessionFailure.None)
             (wear, stepFailure) = CriticalAndWearSteps(resolution, outcome, attackerSide, targetSide, struck is null ? null : Levelled(struck),
                 recipient == DamageRecipient.Target ? attack.TargetCell : attack.AttackerCell, attack.DropMap, criticals, (values.Weapon.AmmoType, values.Weapon.AmmoConsumption));
+        if (stepFailure == GameSessionFailure.None)
+            itemSpells.AddRange(FireDamageStepItems(attack.ItemTriggers, itemSteps.Where(step => !BeforeItemSteps(step, outcome)), victim,
+                StillWorn(victimWorn, wear, criticals), attacker.Entity, StillWorn(attackerWorn, wear, criticals, DamageRecipient.Attacker), contextWeapon));
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, outcome, null, killAward, stepFailure, Version)
         {
             Wear = wear,
             Criticals = criticals,
             Ammunition = spentAmmo,
             Shots = flying,
+            ItemSpells = itemSpells,
         };
     }
 

@@ -46,6 +46,8 @@ public enum LifeTraits
     Unrevivifiable = 1 << 7,
     /// <summary>Refuses resurrection.</summary>
     Unresurrectable = 1 << 8,
+    /// <summary>ARC-WORLD-1158: critter flag 2 "no decay" (0x40): a dead body of it is not removed (<see cref="BodyDecayRules"/>).</summary>
+    NoBodyDecay = 1 << 9,
 }
 
 /// <summary>Explicit bounds of the life rules (ARC-COMBAT-002).</summary>
@@ -122,6 +124,9 @@ public sealed record LifeFacts
     public LifeTraits Traits { get; init; }
     public ImmutableArray<EffectModifier> MaxHitPointEffects { get; init; } = ImmutableArray<EffectModifier>.Empty;
     public ImmutableArray<EffectModifier> MaxFatigueEffects { get; init; } = ImmutableArray<EffectModifier>.Empty;
+    /// <summary>The critter's race, whose stat ranges cut a stat an effect changes (ARC-WORLD-1144: the session re-reads an NPC's strength, constitution and willpower under its effect list; the life
+    /// formulas themselves do not read it). Human for a critter whose host does not say.</summary>
+    public CharacterRace Race { get; init; } = CharacterRace.Human;
 }
 
 /// <summary>

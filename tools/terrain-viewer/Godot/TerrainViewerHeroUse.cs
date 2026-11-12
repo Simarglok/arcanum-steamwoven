@@ -130,6 +130,8 @@ public partial class TerrainViewerApp
         if (UseObjectRow(key) is null) { _areaUseStatus = "the object is gone"; _inventoryStatus = "walk to pick up/loot ended: the target is gone"; RefreshAreaStatus(); return; }
         if (_worldActor.Session is not AreaGridSession session) return;
         var actor = session.Chart.ToWorld(session.State.CommittedCell);
+        // ARC-WORLD-1162 (SWB1): a bed is always used by the rest hook, never by a transition: 0x428A10 sends any scenery of art sub-type 0x16 there, and its script runs inside the hook.
+        if (_mapTransfers is { } bedTransfers && bedTransfers.IsBed(key)) { ApplyBedUse(key, actor); return; }
         if (_mapTransfers is not null)
         {
             var result = _mapTransfers.RequestUse(key, actor);

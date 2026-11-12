@@ -39,6 +39,8 @@ public sealed class AreaMapTransfers
     private readonly Dictionary<AreaStepCell, MapTransitionSite> _cells = new();
     // ARC-SCRIPT-015: use sites whose teleport stands behind guards or a computed destination; their script decides.
     private readonly Dictionary<AreaObjectKey, (MapTransitionSite Site, AreaObjectRecord Object)> _scripted = new();
+    // ARC-WORLD-1162 (SWB14): the beds of the shown map (scenery of art type 4, sub-type 0x16) by key; a click on one is a use, which the rest hook decides (AreaBeds).
+    private readonly Dictionary<AreaObjectKey, AreaObjectRecord> _beds = new();
     // ARC-SCRIPT-017: every tile script by its tile and every sector script by its sector, teleport or not.
     private readonly Dictionary<AreaStepCell, MapPlacedScript> _tiles = new();
     private readonly Dictionary<WorldSectorCoordinate, MapPlacedScript> _sectors = new();
@@ -78,6 +80,8 @@ public sealed class AreaMapTransfers
             _uses.TryAdd(row.Key, (site, row));
         }
         Exits = transitions.Unconditional.Count();
+        foreach (var bed in AreaBeds.Beds(map.Snapshot.Objects))
+            if (bed.WorldX is not null && bed.WorldY is not null) _beds.TryAdd(bed.Key, bed);
         foreach (var site in transitions.Sites.Where(s => !s.Unconditional && s.Trigger == MapTransitionTrigger.Use && (s.Guards & ~ScriptDecides) == 0)
             .OrderBy(s => s.Chain.Count).ThenBy(s => s.Line))
         {
@@ -152,7 +156,11 @@ public sealed class AreaMapTransfers
     public IReadOnlyCollection<AreaStepCell> TriggerCells => _cells.Keys;
     public MapTransitionSite? Site(AreaObjectKey key) => _uses.TryGetValue(key, out var use) ? use.Site : null;
     public MapTransitionSite? CellSite(AreaStepCell cell) => _cells.GetValueOrDefault(cell);
-    public AreaObjectRecord Object(AreaObjectKey key) => _uses.TryGetValue(key, out var use) ? use.Object : _scripted[key].Object;
+    public AreaObjectRecord Object(AreaObjectKey key) => _uses.TryGetValue(key, out var use) ? use.Object : _scripted.TryGetValue(key, out var scripted) ? scripted.Object : _beds[key];
+
+    /// <summary>ARC-WORLD-1162: the beds of the shown map; a use click on one asks the rest hook (the bed's script and seat), not a transition.</summary>
+    public IReadOnlyCollection<AreaObjectKey> Beds => _beds.Keys;
+    public bool IsBed(AreaObjectKey key) => _beds.ContainsKey(key);
 
     public AreaMapUseResult RequestUse(AreaObjectKey trigger, AreaStepCell actor)
     {

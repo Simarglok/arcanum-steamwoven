@@ -67,6 +67,8 @@ public sealed record SessionEventPassResult(GameSessionFailure Failure, GameEven
     public IReadOnlyList<SessionSpellRunFiring> SpellRuns { get; init; } = Array.Empty<SessionSpellRunFiring>();
     /// <summary>The Item Decay events that came due (ARC-WORLD-062), in firing order.</summary>
     public IReadOnlyList<SessionDecayFiring> Decays { get; init; } = Array.Empty<SessionDecayFiring>();
+    /// <summary>The Decay Dead Bodies events that came due (ARC-WORLD-1158), in firing order.</summary>
+    public IReadOnlyList<SessionBodyDecayFiring> BodyDecays { get; init; } = Array.Empty<SessionBodyDecayFiring>();
     /// <summary>MIG12 S8: the real-time steps that came due (the world-map journey's travel step, the turn-based event), in firing order; the
     /// frame step runs their hosts after the pass.</summary>
     public IReadOnlyList<SessionRealStepFiring> RealSteps { get; init; } = Array.Empty<SessionRealStepFiring>();
@@ -218,7 +220,7 @@ public static class SessionEventKinds
     /// can always set its timers, the deferred calls, the timed effects' ENDs, the Lock events, the wait timers, the respawns, the
     /// magic-tech events, the Item Decay events, the AI ticks, (ARC-WORLD-094) the restock events, the real-time steps and (ARC-DEV-132) one goal step per slot.</summary>
     public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 4 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects
-        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxAiTicks + MaxRestocks + MaxTrapDevices + MaxRealSteps + MaxGoalSteps;
+        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxBodyDecays + MaxAiTicks + MaxRestocks + MaxTrapDevices + MaxRealSteps + MaxGoalSteps;
 
     /// <summary>
     /// The original's AI event (kind 10, game time, never saved by the original; ARC-WORLD-084, ledger CL7, CL8): one NPC's AI tick
@@ -254,6 +256,15 @@ public static class SessionEventKinds
     public const string ItemDecay = "item.decay";
     /// <summary>Pending Item Decay events a session holds (project policy; the original has no bound): a drop beyond it does not decay.</summary>
     public const int MaxItemDecays = 8192;
+    /// <summary>
+    /// The original's Decay Dead Bodies event (kind 24, saved, game time; ARC-WORLD-1158, ledger PO10): a dead NPC's body is removed one game day after its death (its inventory dropped, the critter destroyed;
+    /// <see cref="Arcanum.Simulation.Combat.BodyDecayRules"/>). Scoped to the NPC's map, one per NPC (a new one replaces the earlier). Entity: the NPC; values: the game time it was scheduled at and its delay
+    /// (<see cref="Arcanum.Simulation.Combat.BloodPoolRules.CritterDecayDelayMs"/>, or the retry's <see cref="Arcanum.Simulation.Items.ItemDecayRules.RetryDelayMs"/> of a body the session could not remove yet).
+    /// Added without a new registry version, as the other kinds before it: a build without the kind refuses a save holding one.
+    /// </summary>
+    public const string BodyDecay = "body.decay";
+    /// <summary>Pending Decay Dead Bodies events a session holds: one per NPC life record.</summary>
+    public const int MaxBodyDecays = GameSessionLimits.PolicyMaxLifeRecords;
     /// <summary>
     /// The original's restock event (type 0x16, saved, game time; ARC-WORLD-094, ledger RK1–RK8): 12 to 24 game hours after an inventory
     /// window showed an object with an inventory source, the object's inventory is cleared and generated again
@@ -353,6 +364,8 @@ public static class SessionEventKinds
                 Validate: payload => payload.Values[0] >= 0 && payload.Values[1] is >= 1 and <= MaxRespawnDelayMs && payload.Entities[0].Code != AbsentRole),
             new(ItemDecay, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.EntityMap, 1, 2, 0, 0,
                 new ItemDecayHandler(owner), Validate: DecayPayload),
+            new(BodyDecay, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Replace, GameEventScopeRule.EntityMap, 1, 2, 1, 0,
+                new BodyDecayHandler(owner), Validate: BodyDecayPayload),
             new(Restock, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Replace, GameEventScopeRule.EntityMap, 1, 2, 1, 0,
                 new RestockHandler(owner), Validate: RestockPayload),
             new(TrapDevice, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.EntityMap, 1, 6, 0, 0,
@@ -381,6 +394,11 @@ public static class SessionEventKinds
     internal static bool DecayPayload(GameEventPayload payload) =>
         payload.Values[0] >= 0 && payload.Values[1] is Arcanum.Simulation.Items.ItemDecayRules.DelayMs or Arcanum.Simulation.Items.ItemDecayRules.RetryDelayMs
         && payload.Entities[0].Code != AbsentRole;
+
+    // Scheduled at a game time, after the critter decay delay or the retry's, naming an NPC (not the player: its death ends the game).
+    internal static bool BodyDecayPayload(GameEventPayload payload) =>
+        payload.Values[0] >= 0 && payload.Values[1] is Arcanum.Simulation.Combat.BloodPoolRules.CritterDecayDelayMs or Arcanum.Simulation.Items.ItemDecayRules.RetryDelayMs
+        && AiTickNpc(payload.Entities[0].Code);
 
     // Scheduled at a game time, after a restock delay or the retry's, naming an NPC or a container (not the player, not a made item).
     internal static bool RestockPayload(GameEventPayload payload) =>
@@ -505,6 +523,12 @@ internal sealed class ItemDecayHandler(SessionEventSink sink) : IGameEventHandle
 {
     public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
         sink.Owner?.FireItemDecay(firing) ?? GameEventHandlerOutcome.Refused;
+}
+
+internal sealed class BodyDecayHandler(SessionEventSink sink) : IGameEventHandler
+{
+    public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
+        sink.Owner?.FireBodyDecay(firing) ?? GameEventHandlerOutcome.Refused;
 }
 
 internal sealed class RestockHandler(SessionEventSink sink) : IGameEventHandler

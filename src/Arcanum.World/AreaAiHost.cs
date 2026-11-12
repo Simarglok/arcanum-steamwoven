@@ -239,7 +239,7 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 /// the heal skill's rung and goal 40, pickups, a thrown item's flight, grenades, the back-off's away path, the attack order's target and pass, the comment lines, NPC
 /// ranged attacks, scripts at the AI points, routines and waypoints, saved NPC positions.
 /// </summary>
-public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, IAiPerformWorld, IMoraleWorld, IAiSupportWorld, IAiGrenadeWorld, IGoalStepHost
+public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, ISessionBodyWorld, IAiPerformWorld, IMoraleWorld, IAiSupportWorld, IAiGrenadeWorld, IGoalStepHost
 {
     private const string Pc = AiSchedulerRules.Pc;
     // Object flags: destroyed, off, don't draw, invisible, invulnerable; critter flags; spell flags; NPC flags (HostilityCritter's bits).
@@ -1466,6 +1466,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return _npcs.TryGetValue(id, out var npc) ? Movers.CellOf(id, npc.Origin) : CompanionCell(id);
     }
 
+    /// <summary>ARC-WORLD-1158: where a critter of this host's map lies now (its body's cell for the Decay Dead Bodies event); null for another map or a critter the host does not hold.</summary>
+    public CellCoord? BodyCell(SessionMapId map, string entity) => map.RuntimeMap == _scene.RuntimeMap && entity != Pc ? Tile(entity) : null;
+
     public bool Gone(string id) => id != Pc && Key(id) is { } key && _scene.Removed?.Invoke().Contains(key) == true;
 
     public bool DeadCritter(string id) => Status(id)?.IsDead ?? true;
@@ -1953,6 +1956,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             TargetCell = target == Pc ? null : Tile(target),
             DropMap = _scene.DropMap?.Invoke(),
             TakingDamage = TakingDamageOf(id, target),
+            // ARC-MAGIC-1188: the damage step's item events (the NPC's worn items fire as any attacker's, 0x4B4390) through the cast host's trigger host.
+            ItemTriggers = _scene.Spells?.Invoke()?.ItemTriggers,
             // ARC-DEV-273 (RA4): a bow or firearms attack reads the line to the target (a melee one ignores it).
             LineOfFire = Distance(id, target) > 1 && Tile(id) is { } from && Tile(target) is { } to && _scene.LineOfFire?.Invoke() is { } map ? LineTo(from, to, Key(target), map) : null,
             Flight = flight,
@@ -2360,6 +2365,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             StruckWorn = struck is not { Who: { } target } ? null : hero ? _scene.HeroWorn?.Invoke() : _scene.Combat.WornItems(_session, target),
             DropMap = _scene.DropMap?.Invoke(),
             TakingDamage = TakingDamageOf(id, struck?.Who),
+            ItemTriggers = _scene.Spells?.Invoke()?.ItemTriggers,
         };
         var result = _session.ThrowByNpc(_session.Version, request);
         var attack = result.Attack;
