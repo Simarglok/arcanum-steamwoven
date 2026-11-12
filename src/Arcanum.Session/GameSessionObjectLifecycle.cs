@@ -161,6 +161,7 @@ public sealed partial class GameSessionOwner
                 try { foreach (var held in _inventory.AddedTo(entity).Select(item => item.Entity).ToArray()) Discard(held); }
                 finally { _destroyingHolder = false; }
                 _inventory.NpcWorn.Remove(entity);
+                _inventory.HolderSlots.Remove(entity);
                 foreach (var seed in _inventory.Seeds.Values) if (seed.RemoveCreatedHolder(entity)) _inventory.SeedGeneration++;
                 _inventory.Objects.RemoveCreated(entity);
                 // ARC-MAGIC-053 (E1-e): a summoned creature the mind control made a follower leaves the party with its destruction (the record would otherwise name an object that is gone).

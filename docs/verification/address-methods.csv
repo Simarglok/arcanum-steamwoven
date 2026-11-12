@@ -96,6 +96,7 @@ src/Arcanum.Session/GameSessionHeroName.cs,SetHeroPlayerName,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoForThrow,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoRefusal,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,ThrowHeroItem,pending,
+src/Arcanum.Session/GameSessionHolderGrid.cs,ArrangeHolderGrid,exempt,host
 src/Arcanum.Session/GameSessionHostility.cs,ApplyAttackEvent,pending,
 src/Arcanum.Session/GameSessionHotkeys.cs,QueryHotkeySameKind,pending,
 src/Arcanum.Session/GameSessionHotkeys.cs,RecordHotkeyAction,pending,
