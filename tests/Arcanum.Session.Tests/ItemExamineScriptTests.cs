@@ -121,11 +121,12 @@ public sealed class ItemExamineScriptTests
         var refused = owner.RunItemExamine(owner.Version, entity, host);
         Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported), (refused.Disposition, refused.Failure));
         Assert.AreEqual((false, start, 0), (ReadFlag(owner, 3), owner.Version.Revision, owner.QueryItemScriptSlots().Count));
-        // A script file the host lacks is the original's missing script: it answers run default and applies nothing.
+        // A script file the host lacks is a missing script: the dispatcher answers skip default and applies nothing.
         var (missing, missingEntity, missingHost) = Setup(null);
         using var __ = missing;
         var gone = missing.RunItemExamine(missing.Version, missingEntity, missingHost);
         Assert.AreEqual((GameSessionDisposition.NoChange, GameSessionFailure.None), (gone.Disposition, gone.Failure));
+        Assert.AreEqual(SessionScriptPoint.Examine, gone.DeclinedBy, "a missing script file answers skip default, as the dispatcher does for every point");
     }
 
     [TestMethod]
