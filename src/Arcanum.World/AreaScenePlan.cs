@@ -446,7 +446,7 @@ public sealed class AreaScenePlan
         long Field(int slot) => body.EffectiveFields.SingleOrDefault(field => field.Slot == slot && field.Presence == AreaPresence.Value)?.Number
             ?? throw new InvalidOperationException("AREA_MANDATORY_FIELD");
         var flags = unchecked((uint)Field(18)); var blit = unchecked((uint)Field(8));
-        var reason = (flags & 0x1000) != 0 ? "ExteriorSectorInsertionRefusedByInventory" : (flags & 0x103) != 0
+        var reason = (flags & 0x1000) != 0 ? "ExteriorSectorInsertionRefusedByInventory" : (flags & (body.Type == 16 ? 0x101u : 0x103u)) != 0
             ? "BodySuppressedBySerializedState" : (flags & 0x200) != 0 ? "InvisibleNoDetectionObserver" : "Eligible";
         var suppressed = reason != "Eligible";
         var scale = Field(11); var blitAlpha = Field(10);

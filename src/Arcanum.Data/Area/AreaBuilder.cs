@@ -320,7 +320,7 @@ public sealed partial class AreaDataOwner
         {
             var flags = unchecked((uint)Number(effective, 18));
             disposition = scope == AreaScope.Context ? AreaDisposition.ContextOnly : (flags & 4096) != 0 ? AreaDisposition.ExteriorSectorInsertionRefusedByInventory :
-                (flags & 0x103) != 0 ? AreaDisposition.BodySuppressedBySerializedState : AreaDisposition.BodyEligibleConditionally;
+                (flags & SuppressingFlags(record.Type)) != 0 ? AreaDisposition.BodySuppressedBySerializedState : AreaDisposition.BodyEligibleConditionally;
             if (!x.HasValue || !y.HasValue) throw Fail(AreaErrorCode.UnknownLocation, AreaStage.Appearance, offset, ordinal);
             // No body its serialized state hides at T0 is resolved (destroyed 0x1, off 0x2 or
             // don't-draw 0x100; every trap is don't-draw), whatever its type: consumers draw no
@@ -400,6 +400,13 @@ public sealed partial class AreaDataOwner
         if (!ReferenceEquals(_longestFor, maps)) { _longest = maps.Values.SelectMany(m => m.Values).Max(v => v.Length); _longestFor = maps; }
         return _longest;
     }
+    /// <summary>
+    /// The serialized object flags that suppress a body at T0: destroyed 0x1, off 0x2 and don't-draw 0x100. ARC-SCRIPT-1360: an NPC (type 16) the data stores off keeps its body resolved, since its heartbeat script
+    /// flips the flag when the story reaches it (the quest NPCs: the original's toggle state is a plain flag flip); the consumers hide it while the flag stands
+    /// (the scene plan does not suppress it, the session's removed set does, <c>AreaObjectTargets.Gone</c>).
+    /// </summary>
+    internal static uint SuppressingFlags(int type) => type == 16 ? 0x101u : 0x103u;
+
     private static readonly (int Slot, uint Bit, int Size)[] OverlayLayers = [(5, 0x8000U, 7), (6, 0x8000U, 7), (7, 0x10000U, 4)];
     // ARC-DEV-383: the snapshot's copy of a field's sparse elements, made once per wire value of a build. A prototype's fields are the same
     // wire values for every object of that prototype, so thousands of objects share one immutable copy instead of each making its own.
