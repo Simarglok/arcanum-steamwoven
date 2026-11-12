@@ -35,8 +35,8 @@ public sealed class AreaWorldObjectScriptAdmissionTests
         Console.WriteLine($"installed scripts with a world-object command {withCommand}; admitted whole: " + string.Join(", ", counts.Select(c => $"{c.Key} {c.Value}")));
         Assert.AreEqual(0, counts["S36"], "S36 refuses every one of them by construction");
         Assert.IsTrue(withCommand >= counts["S37"]);
-        // Ledger WO13: 117 installed scripts use one of the 13 commands; S37 admits 84 whole, the hosts' sets 25 (use), 43 (placed), 30 (heartbeat) and 48 (dying); the rest hold transfer item, set written start, destroy item named,
-        // toggle item inventory display (no host applies them) or a command of another planned slice.
-        Assert.AreEqual((117, 84, 25, 43, 30, 48), (withCommand, counts["S37"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
+        // Ledger WO13, WO18: 117 installed scripts use one of the 13 commands; S37 admits 84 whole, and the hosts' sets 39 (use), 69 (tile and sector), 35 (heartbeat) and 77 (dying) since ARC-SCRIPT-1279 gave the four item commands
+        // (transfer item, set written start, destroy item named, toggle item inventory display) a host (ARC-SCRIPT-1164 had left them out: 25, 43, 30, 48); the rest hold a command of another planned slice.
+        Assert.AreEqual((117, 84, 39, 69, 35, 77), (withCommand, counts["S37"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
     }
 }
