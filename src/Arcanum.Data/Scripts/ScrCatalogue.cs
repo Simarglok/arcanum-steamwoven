@@ -110,7 +110,8 @@ public static class ScrCatalogue
             Damage = 60, DamageUnresistable = 138, HealHitPoints = 75, GiveSpellMastery = 112,
             MakeFollow = 21, Attack = 36, TransformObject = 40,
             SetGlobalQuestState = 17, AddBlessing = 25, RemoveBlessing = 26, AddCurse = 27, RemoveCurse = 28, QuellRumor = 51, GiveQuestExperience = 63,
-            GetDaySinceStartup = 96, GetCurrentHour = 97, GetCurrentMinute = 98, GetHoursSinceStartup = 105, GrantFatePoint = 117, SetPcQuestUnbotched = 119;
+            GetDaySinceStartup = 96, GetCurrentHour = 97, GetCurrentMinute = 98, GetHoursSinceStartup = 105, GrantFatePoint = 117, SetPcQuestUnbotched = 119,
+            CritterDisband = 22, SetReaction = 30, AdjustReaction = 31, SetDayStandpoint = 45, SetNightStandpoint = 46, ChangeArtNumber = 59, ChangeScript = 99, SetDayStandpointEx = 140, SetNightStandpointEx = 141;
     }
 
     /// <summary>Script file flags.</summary>

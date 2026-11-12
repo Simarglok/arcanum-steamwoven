@@ -319,7 +319,14 @@ public sealed partial class AreaAiHost
         // ARC-DEV-116 (FM10): the teleport map is the session's; the row's own (field 243 of the stored object, 0 in every row of the installed maps) is the baseline.
         return new(Sleeping(npc), Hidden(npc), Leader(npc) is not null, _session.QueryClockSnapshot().Hour, route.NpcFlags, _session.QueryTeleportMap(npc) ?? route.TeleportMap, _scene.RuntimeMap,
             new((uint)cell.X, (uint)cell.Y), [.. route.Waypoints.Select(w => new RouteLocation(w.X, w.Y))], RouteIndex(npc, route),
-            new(route.StandpointDay.X, route.StandpointDay.Y), new(route.StandpointNight.X, route.StandpointNight.Y));
+            // ARC-SCRIPT-1163 (NS3): a script's set standpoint is the session's (the field is saved with the object), over the row's.
+            Standpoint(npc, route, day: true), Standpoint(npc, route, day: false));
+    }
+
+    private RouteLocation Standpoint(string npc, AreaNpcRoute route, bool day)
+    {
+        var stand = AreaUseScriptHost.Standpoint(_session, _scene.RuntimeMap, npc, day) ?? (day ? route.StandpointDay : route.StandpointNight);
+        return new(stand.X, stand.Y);
     }
 
     // The original's relocation (0x424070 at priority 4, then 0x43E770 with no offset): the run ends and the NPC stands on the target. A mover that

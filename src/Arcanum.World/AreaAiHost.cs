@@ -1992,6 +1992,20 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     /// <summary>
+    /// ARC-SCRIPT-1163 (E5-a, ledger NS2): a script's set reaction (30, <paramref name="set"/>: the delta from the NPC's standard reaction to <paramref name="value"/>) or adjust reaction (31, the delta <paramref name="value"/>) of an NPC this host runs toward the hero, through the
+    /// reaction change (0x4C0DE0, <see cref="GameSessionOwner.AdjustReaction"/> / <see cref="GameSessionOwner.SetReaction"/>) with the NPC's and the hero's facts. Answers what happened for the viewer's trace.
+    /// </summary>
+    public string ScriptReaction(string npc, int value, bool set)
+    {
+        if (npc == Pc || !TryNpc(npc, out _)) return "not an NPC of the shown map";
+        if (ReactionFacts(npc) is not { } facts) return "no reaction facts";
+        var result = set ? _session.SetReaction(_session.Version, npc, facts.Npc, facts.Pc, value) : _session.AdjustReaction(_session.Version, npc, facts.Npc, facts.Pc, value);
+        var what = $"{(set ? "set" : "adjust")} reaction {value} {result.Disposition} {result.Failure}";
+        Trace(npc).Setter = what;
+        return what;
+    }
+
+    /// <summary>
     /// ARC-MAGIC-035: peace (0x4AA300) of an NPC with the side of <paramref name="with"/> (an animal's charm): the session's peace (focus and last attacker cleared, the danger state NONE, the followers' lists), then the host's
     /// part of it: the NPC's attack run (goal 18 or 19) at that side is interrupted at level 5, as the helper 0x44E050 does. False: the NPC is not run here or the session refused.
     /// </summary>

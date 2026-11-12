@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S34"/>.
+/// <see cref="ScrAdmissionSet.S35"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -42,6 +42,8 @@ internal sealed class ScrInterpreter
         // ARC-SCRIPT-049: the objects the dispatch's toggle states left flipped (odd count) and the ones it killed, which its later dead and
         // switched-off tests read (the original flips the flag and kills at once).
         public readonly HashSet<ScrObjectRef> Toggled = new(), Killed = new();
+        // ARC-SCRIPT-1163 (NS1): the objects the dispatch's critter disbands let go, which its later following tests read (the original removes the leader at once).
+        public readonly HashSet<ScrObjectRef> Disbanded = new();
         // ARC-SCRIPT-050: the float lines (FL4).
         public readonly List<ScrFloatLine> Floats = new();
         // ARC-DEV-205: the town maps unfog town map asked to reveal (UF1).
@@ -202,7 +204,7 @@ internal sealed class ScrInterpreter
         ScrCatalogue.Condition.LessOrEqual => Get(c, 0) <= Get(c, 1),
         ScrCatalogue.Condition.GlobalFlag => Flag(GlobalFlag(Get(c, 0), line)),
         // Following: the first object's leader is the second object (both single objects in the set).
-        ScrCatalogue.Condition.FollowingPc => _host.Leader(Object(c, 0, line)) == Object(c, 1, line),
+        ScrCatalogue.Condition.FollowingPc => (_shared.Disbanded.Contains(Object(c, 0, line)) ? null : _host.Leader(Object(c, 0, line))) == Object(c, 1, line),
         ScrCatalogue.Condition.Jilted => _host.IsJilted(Object(c, 0, line)),
         // SG1: the guard conditions, one object each; the quest state's second value is its third operand.
         ScrCatalogue.Condition.PcQuestState => ScrGuards.Holds(c.Type, Object(c, 0, line), Get(c, 1), Get(c, 2), Queries),
@@ -569,6 +571,61 @@ internal sealed class ScrInterpreter
                 // TI6: the first object of operand 1 attacks every object of operand 0 in list order; nothing without an attacker (a project choice). The run goes on.
                 if (OptionalObject(a, 1) is { } attacker)
                     foreach (var victim in Objects(a, 0)) _shared.ObjectStates.Add(new(ScrObjectStateChange.Attack, victim, Other: attacker));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.CritterDisband:
+            {
+                // NS1: the first object of operand 0 goes to the disband (0x45DFC0, force 1); the run goes on. An absent object changes nothing (a project choice: the original reads the null handle's fields).
+                if (OptionalObject(a, 0) is { } obj) { _shared.ObjectStates.Add(new(ScrObjectStateChange.Disband, obj)); _shared.Disbanded.Add(obj); }
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.SetReaction:
+            case ScrCatalogue.Action.AdjustReaction:
+            {
+                // NS2: the first object of operand 0 (the NPC) and of operand 1 (the PC) and the number; the original adds the number (31) or the number less the standard reaction (30) through 0x4C0DE0, which acts
+                // for an NPC and a PC only. Nothing without both objects (a project choice). The run goes on.
+                var value = Get(a, 2);
+                var change = a.Type == ScrCatalogue.Action.SetReaction ? ScrObjectStateChange.SetReaction : ScrObjectStateChange.AdjustReaction;
+                if (OptionalObject(a, 0) is { } npc && OptionalObject(a, 1) is { } pc) _shared.ObjectStates.Add(new(change, npc, value, Other: pc));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.SetDayStandpoint:
+            case ScrCatalogue.Action.SetNightStandpoint:
+            case ScrCatalogue.Action.SetDayStandpointEx:
+            case ScrCatalogue.Action.SetNightStandpointEx:
+            {
+                // NS3: the first object of operand 0, the x and y of operands 1 and 2; the original ORs X's sign extension into the second word (a negative X gives −1 there), so the request carries that word. The extended actions
+                // also read a map number from operand 3 (the host writes it as the NPC's teleport map). An absent object changes nothing (a project choice). The run goes on.
+                var x = Get(a, 1);
+                var y = Get(a, 2) | (x >> 31);
+                var day = a.Type is ScrCatalogue.Action.SetDayStandpoint or ScrCatalogue.Action.SetDayStandpointEx;
+                int? map = a.Type is ScrCatalogue.Action.SetDayStandpointEx or ScrCatalogue.Action.SetNightStandpointEx ? Get(a, 3) : null;
+                if (OptionalObject(a, 0) is { } npc) _shared.ObjectStates.Add(new(day ? ScrObjectStateChange.SetDayStandpoint : ScrObjectStateChange.SetNightStandpoint, npc, x, y, Map: map));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.ChangeArtNumber:
+            {
+                // NS5: every object of operand 0 in list order and the art number of operand 1; the run goes on.
+                var number = Get(a, 1);
+                foreach (var obj in Objects(a, 0)) _shared.ObjectStates.Add(new(ScrObjectStateChange.ChangeArtNumber, obj, number));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.ChangeScript:
+            {
+                // NS4 (0x447220 case 99): the first object of operand 0, the attachment point of operand 1 and the script number of operand 2. The slot of the point keeps its local flags and counters and takes the number;
+                // for the run's own attachee and point the number is the run's own change (the original writes its pending result), so it takes effect when the run ends as change this script does; any other slot is
+                // written as call-ex's are. An object with no slot at the point gets a new one (project choice: flags and counters 0; the original starts from an unread stack buffer). A point outside 0..35 ends the dispatch
+                // (the original indexes past the object's script array); an absent object changes nothing (a project choice).
+                var point = Get(a, 1);
+                var number = Get(a, 2);
+                if (OptionalObject(a, 0) is not { } obj) return (Step.Next, 0);
+                if (point is < 0 or >= ScrPoint.Count) throw new CallRefusedStop(null, _number, ScrStop.CallExPoint);
+                if (_depth == 0 && _roles.Attachee == obj && point == _point) { _changedNumber = number; return (Step.Next, 0); }
+                var held = _shared.Slots.TryGetValue((obj, point), out var written) ? written : _host.Slot(obj, point) ?? new ScrSlot(0, 0, 0);
+                var stored = held with { Script = number };
+                _shared.Slots[(obj, point)] = stored;
+                _shared.SlotWrites.RemoveAll(w => w.Source == ScrSource.Object && w.Point == point && w.Attachee == obj);
+                _shared.SlotWrites.Add(new(ScrSource.Object, obj, point, stored));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.GiveSpellMastery:

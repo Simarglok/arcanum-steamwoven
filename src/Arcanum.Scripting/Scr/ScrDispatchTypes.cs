@@ -393,6 +393,22 @@ public enum ScrObjectStateChange
     MakeFollow,
     /// <summary>ARC-MAGIC-042 (T-m1, ledger TI6): attack (36): <see cref="ScrObjectStateRequest.Other"/> (the first object of operand 1) attacks <see cref="ScrObjectStateRequest.Object"/>, one request per object of operand 0 in list order (the attack event 0x4A9650, loudness 1, flags 2).</summary>
     Attack,
+    /// <summary>ARC-SCRIPT-1163 (E5-a, ledger NS1): critter disband (22) of the first object of its operand, the follower check skipped (0x45DFC0 with force 1): an NPC that follows or waits for a leader is let go (unwaited, taken out of the leader's array,
+    /// its leader cleared); any other object does nothing.</summary>
+    Disband,
+    /// <summary>ARC-SCRIPT-1163 (E5-a, ledger NS2): set reaction (30): the standard reaction of <see cref="ScrObjectStateRequest.Object"/> (the first object of operand 0, an NPC) toward <see cref="ScrObjectStateRequest.Other"/> (the first object of operand 1, a PC)
+    /// is changed by <see cref="ScrObjectStateRequest.Value"/> minus its present standard value, through the reaction change (0x4C0DE0).</summary>
+    SetReaction,
+    /// <summary>ARC-SCRIPT-1163 (E5-a, ledger NS2): adjust reaction (31): the reaction change (0x4C0DE0) of <see cref="ScrObjectStateRequest.Object"/> toward <see cref="ScrObjectStateRequest.Other"/> by <see cref="ScrObjectStateRequest.Value"/>.</summary>
+    AdjustReaction,
+    /// <summary>ARC-SCRIPT-1163 (E5-a, ledger NS3): set day standpoint (45) of the first object of its operand (an NPC; any other object does nothing): the location field 0x121 takes <see cref="ScrObjectStateRequest.Value"/> as its low word and
+    /// <see cref="ScrObjectStateRequest.Value2"/> (already the original's second word) as its high word. <see cref="ScrObjectStateRequest.Map"/> is set by the extended action (140), which also writes the NPC's teleport map (field 0xF3).</summary>
+    SetDayStandpoint,
+    /// <summary>ARC-SCRIPT-1163 (E5-a, ledger NS3): set night standpoint (46, extended 141): as <see cref="SetDayStandpoint"/> for the field 0x122.</summary>
+    SetNightStandpoint,
+    /// <summary>ARC-SCRIPT-1163 (E5-a, ledger NS5): change art number (59) of each object of its operand: the number field of the object's art id becomes <see cref="ScrObjectStateRequest.Value"/> (0x502780, then frame 0, then kept only when the art exists,
+    /// 0x502220); no host applies it yet (the viewer has no per-object art overlay), so the host sets refuse it.</summary>
+    ChangeArtNumber,
 }
 
 /// <summary>ARC-DEV-241: the invocation flags of a script cast (GT183): 0x2 casts free (the run's Free flag), 0x4 casts unresistable (the run's Unresistable flag).</summary>
@@ -402,8 +418,9 @@ public enum ScrCastFlags { None = 0, Free = 0x2, Unresistable = 0x4 }
 /// <summary>ARC-WORLD-114: a toggle-state (56) or kill (58) action for one object of its object operand, in action order (each object
 /// of the operand's list in turn, 0x44B4E0), and (ARC-SCRIPT-049) a set faction (134) for the first object of its operand with the
 /// faction as <paramref name="Value"/> (0 for the others), and (ARC-SCRIPT-052) a destroy (68) or stop attacking (109) for the first object of
-/// its operand. The host decides what the object is.</summary>
-public readonly record struct ScrObjectStateRequest(ScrObjectStateChange Change, ScrObjectRef Object, int Value = 0, int Value2 = 0, ScrObjectRef? Other = null);
+/// its operand. The host decides what the object is.
+/// ARC-SCRIPT-1163: the extended standpoint actions (140, 141) carry the catalogue map number they also write as the NPC's teleport map in <paramref name="Map"/>.</summary>
+public readonly record struct ScrObjectStateRequest(ScrObjectStateChange Change, ScrObjectRef Object, int Value = 0, int Value2 = 0, ScrObjectRef? Other = null, int? Map = null);
 
 /// <summary>ARC-SCRIPT-042: whether an effect action adds or removes.</summary>
 public enum ScrEffectChange { Add, Remove }
@@ -788,7 +805,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S34"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S35"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -809,7 +826,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S34)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S34.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S35)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S35.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.

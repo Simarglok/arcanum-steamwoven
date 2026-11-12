@@ -15,8 +15,39 @@ public static class SessionTeleportMap
     public static MapChangeKey Key(string entity) => MapChangeKey.ForEntity(entity, Property);
 }
 
+/// <summary>
+/// ARC-SCRIPT-1163 (E5-a, ledger NS3): an NPC's day and night standpoints (object fields 0x121 and 0x122), as the object state of its directory entry: the location a script's set day or night standpoint wrote, as the original stores it
+/// (x in the low word, y in the high word). No record is the standpoint its map data holds.
+/// </summary>
+public static class SessionNpcStandpoint
+{
+    /// <summary>The object fields that hold the day and the night standpoint.</summary>
+    public const string DayProperty = "npc.standpoint.day", NightProperty = "npc.standpoint.night";
+
+    /// <summary>The map change key of the NPC's day or night standpoint.</summary>
+    public static MapChangeKey Key(string entity, bool day) => MapChangeKey.ForEntity(entity, day ? DayProperty : NightProperty);
+
+    /// <summary>The stored 64-bit word of a location: <paramref name="x"/> in the low word and <paramref name="y"/> in the high word.</summary>
+    public static long Pack(uint x, uint y) => unchecked((long)(((ulong)y << 32) | x));
+}
+
 public sealed partial class GameSessionOwner
 {
+    /// <summary>
+    /// ARC-SCRIPT-1163 (NS3, 0x4EFDD0 on field 243): the extended standpoint actions write the NPC's teleport map outright (the catalogue map number less 4,999), not only while it is unset (<see cref="EnsureTeleportMap"/>). The record of a mobile object is one
+    /// whatever map it names, so it moves to <paramref name="map"/>. The same value is <see cref="GameSessionDisposition.NoChange"/>; a map below 1, or an entity that is not a mobile object, is refused as there.
+    /// </summary>
+    [Arcanum.Simulation.OriginalFunction(0x4EFDD0, Arcanum.Simulation.OriginalFunctionScope.Partial)]
+    public GameSessionMutationResult SetTeleportMap(GameSessionVersion expected, string entity, SessionMapId map)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(entity);
+        if (!SessionValidation.Map(map)) return Reject(GameSessionFailure.InvalidMap);
+        if (!SessionValidation.Entity(entity) || !entity.StartsWith(ObjectStateVocabulary.EntityPrefix, StringComparison.Ordinal)) return Reject(GameSessionFailure.InvalidChangeKey);
+        if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+        return SetMapChange(expected, map, SessionTeleportMap.Key(entity), map.RuntimeMap);
+    }
+
     /// <summary>
     /// ARC-DEV-116 (FM10): the teleport map recorded for the NPC (field 243 of the original), or null while it is 0 (never set: no change of place
     /// and no route step of the NPC has written it) or the value is unreadable.
