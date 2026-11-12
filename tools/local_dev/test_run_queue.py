@@ -653,6 +653,53 @@ class ProcessStartTests(unittest.TestCase):
         run_queue._START_CACHE.clear()
 
 
+class TaskCodeTests(unittest.TestCase):
+    """ARC-DEV-1408: the task code of a run, from its label or the branch its checkout has now."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name).resolve()
+
+    def tearDown(self) -> None:
+        self.temp.cleanup()
+
+    def checkout(self, name: str, head: str, *, worktree: bool = False) -> str:
+        path = self.root / name
+        git = self.root / f"{name}-gitdir" if worktree else path / ".git"
+        git.mkdir(parents=True)
+        path.mkdir(exist_ok=True)
+        (git / "HEAD").write_text(head + "\n")
+        if worktree:  # a worktree's .git is a file naming its git folder
+            (path / ".git").write_text(f"gitdir: {git}\n")
+        return str(path)
+
+    def test_the_label_wins_over_the_branch(self) -> None:
+        checkout = self.checkout("a", "ref: refs/heads/ARC-DEV-1403-pause")
+        self.assertEqual(run_queue.task_code({"label": "ARC-AI-1315 registry test", "checkout": checkout}), "ARC-AI-1315")
+
+    def test_the_branch_of_a_plain_checkout_and_of_a_worktree(self) -> None:
+        plain = self.checkout("plain", "ref: refs/heads/ARC-DEV-1403-pause")
+        tree = self.checkout("tree", "ref: refs/heads/ARC-UI-1357-hud", worktree=True)
+        self.assertEqual(run_queue.task_code({"label": "smoke stages", "checkout": plain}), "ARC-DEV-1403")
+        self.assertEqual(run_queue.task_code({"label": "", "checkout": tree}), "ARC-UI-1357")
+        self.assertEqual(run_queue.task_code({"checkout": tree, "cwd": str(Path(tree) / "sub")}), "ARC-UI-1357")  # a ticket of an old wrapper
+
+    def test_no_code_when_there_is_none_or_it_cannot_be_read(self) -> None:
+        self.assertIsNone(run_queue.task_code({"label": "x", "checkout": self.checkout("c", "ref: refs/heads/claude/project-thread-74wi5u")}))
+        self.assertIsNone(run_queue.task_code({"label": "x", "checkout": self.checkout("d", "0123456789abcdef")}))  # detached HEAD
+        self.assertIsNone(run_queue.task_code({"label": "x", "checkout": str(self.root / "missing")}))
+        self.assertIsNone(run_queue.task_code({"checkout": None, "cwd": None}))
+        binary = Path(self.checkout("b", "x")) / ".git" / "HEAD"
+        binary.write_bytes(b"\xff\xfe\x00")  # not text: never an error in a wait loop or in ./arcanum queue
+        self.assertIsNone(run_queue.task_code({"label": "x", "checkout": str(binary.parent.parent)}))
+        self.assertIsNone(run_queue.task_code({"label": "x", "checkout": "/tmp/a\x00b"}))
+
+    def test_describe_shows_the_code(self) -> None:
+        checkout = self.checkout("e", "ref: refs/heads/ARC-DEV-1408-code")
+        text = run_queue._describe({"seq": 3, "kind": "quick", "label": "t", "cwd": checkout, "checkout": checkout})
+        self.assertEqual(text, '#3 quick e ARC-DEV-1408 "t"')
+
+
 class QueueRunTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
