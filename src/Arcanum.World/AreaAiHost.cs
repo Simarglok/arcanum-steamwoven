@@ -1351,6 +1351,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Trace(npc).Perform += $" not in the table: {started.Failure} {started.Outcome}";
         AiExecutorRules.EndRun(run, this);
         FreeUnbegunCasts(run, queuedOnly: false);
+        // ARC-AI-1315 (TS4): the attack starter's own run start failing (0x44D520) ends in the step apart as its other refusals do.
+        if (run.Bottom.Goal == GoalType.Attack) AiTileSharerRules.StepApart(this, npc);
         return false;
     }
 

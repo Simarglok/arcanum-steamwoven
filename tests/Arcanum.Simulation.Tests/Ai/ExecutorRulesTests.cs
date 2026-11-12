@@ -940,6 +940,26 @@ public sealed class ExecutorRulesTests
     }
 
     [TestMethod]
+    public void AFoundBlockerThatCannotMoveStillEndsTheAttackStartWithoutAStepApart()
+    {
+        var world = Arena(1);
+        // The finder found the blocker (idle NPC, larger handle); the round's gate refuses the mover, which is not the actor: nothing starts, no step apart, no attack.
+        world.Sharers.AddRange([Critter(Npc, 1), Critter("oid:other", 2), Critter("oid:third", 3)]);
+        world.Round = true;
+        world.Actor = Npc;
+        world.Points[Npc] = 10;
+        var result = AiExecutorRules.StartAttack(world, Npc, Foe, null, null);
+        Assert.AreEqual((AiStartRefusal.TileSharer, false), (result.Refusal, result.Started));
+        CollectionAssert.AreEqual(Array.Empty<string>(), world.Calls);
+        // A blocker that is busy is not one: the attacker meets the next idle NPC of the tile's list.
+        world.Round = false;
+        world.Sharers.Clear();
+        world.Sharers.AddRange([Critter(Npc, 1), Critter("oid:busy", 2, busy: true), Critter("oid:third", 3)]);
+        Assert.AreEqual(AiStartRefusal.TileSharer, AiExecutorRules.StartAttack(world, Npc, Foe, null, null).Refusal);
+        CollectionAssert.AreEqual(new[] { $"please move oid:third from {Npc}" }, world.Calls);
+    }
+
+    [TestMethod]
     public void ARefusedAttackStartStepsApartTheOtherNpcsOnTheTile()
     {
         var world = Arena(1);
