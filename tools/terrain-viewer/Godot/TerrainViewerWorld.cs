@@ -140,11 +140,12 @@ public partial class TerrainViewerApp
     // ARC-DEV-109 (MIG16 S2): the windows that are modes (conversation, inventory, sheet, logbook, schematics, barter, reading, world map)
     // are read from the interface mode stack; the panels outside the stack keep their own flags.
     // This is the hero's INPUT gate and the cursor's, not the clock's: since ARC-DEV-126 (MIG12 S7, GQ3 A) a window, the palette or the bug report no longer stops the world.
-    private bool WorldModal => PaletteOpen || AnyWindowOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering || BugReportOpen;
+    private bool WorldModal => PaletteOpen || AnyWindowOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering || MovieCovering || BugReportOpen;
     // ARC-DEV-126: the one raiser of the pause is the Esc menu and a save or load list (TL23); the options screen the menu leads to is under it. `_mainMenu` covers the frames in which the menu's panel is hidden while it waits for the save list to open.
     private bool WorldMenuPause => MainMenuOpen || SaveListOpen || _mainMenu is not null;
     // ARC-DEV-126: the death cover and its slide show are frames in which the original does not ping (TL25): no stamp is observed and no clock moves.
-    private bool WorldFrozenFrame => HeroDeathCovering;
+    // ARC-RENDER-1170: a movie is such a frame too (TL25).
+    private bool WorldFrozenFrame => HeroDeathCovering || MovieCovering;
     private bool WorldUiFocus => !WorldModal && GetViewport().GuiGetFocusOwner() is not null;
     private Vec2 WorldAnchor => _worldActor.FootAnchor;
     private Vector2 WorldViewport => GetViewport().GetVisibleRect().Size;
@@ -388,6 +389,7 @@ public partial class TerrainViewerApp
     {
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Pulse accepted={intent.Accepted} confirm={intent.Confirm}");
         if (!intent.Accepted) return;
+        if (MovieCovering) { HandleMoviePulse(intent); return; }
         if (HeroDeathCovering) { HandleHeroDeathPulse(intent); return; }
         // ARC-DEV-111: the save list and the menu are on top of a window under them.
         if (SaveListOpen) { HandleSaveListPulse(intent); return; }
@@ -917,6 +919,8 @@ public partial class TerrainViewerApp
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:entry type={input.GetClass()}" + (input is InputEventKey tracedKey ? $" key={tracedKey.Keycode} pressed={tracedKey.Pressed} echo={tracedKey.Echo}" : ""));
         // ARC-DEV-051: the bug report comes first (Ctrl+B over any window, the death screen included; the open report owns every event).
         if (RouteBugReportInput(input)) return;
+        // ARC-RENDER-1170: a movie owns every event while it plays; a key press ends it.
+        if (HandleMovieInput(input)) { GetViewport().SetInputAsHandled(); return; }
         // ARC-UI-026: the death screen owns every key and mouse button while it covers the game.
         if (HandleHeroDeathInput(input)) { GetViewport().SetInputAsHandled(); return; }
         // ARC-DEV-201: a right press on a bar closes the window the bar handler pops; the release that follows is part of that press.
