@@ -46,7 +46,7 @@ public partial class TerrainViewerApp
             var second = Make("second.mkv", "64x48", 1, 880);
             _moviesForSelfTest = true; _movieSourceForSelfTest = null;
             _movieTableForSelfTest = AreaMovieTable.From(_ => "00000.bik", "synthetic table");
-            _moviePathForSelfTest = number => number == 1 ? first : number == 7 ? second : null;
+            _moviePathForSelfTest = (number, path) => path is not null ? (path.Contains("Sierra", StringComparison.Ordinal) ? second : path.Contains("Troika", StringComparison.Ordinal) ? second : null) : number == 1 ? first : number is 7 or 8 ? second : null;
             Require(MovieRefusal() is null, "movies can play: " + MovieRefusal());
             var stamp = 60_000_000L;
             bool Pump(Func<bool> until, int seconds)
@@ -73,8 +73,22 @@ public partial class TerrainViewerApp
             Require(Pump(() => !MovieCovering, 20), "the second movie ran to its end");
             Require(continued == 1 && _moviesPlayed >= 1 && !_moviePanel.IsOpen && !WorldModal && !WorldFrozenFrame && !_moviePanel.AudioPlaying,
                 $"the screen closed, the world is free and the continuation ran once (continued {continued}, played {_moviesPlayed})");
+            // ARC-RENDER-1242: the start-up sequence (the Sierra and the Troika logo by path, then movie 8) plays once, before the first menu is used.
+            _startupMoviesDone = false;
+            var playedBefore = _moviesPlayed;
+            PlayStartupMovies();
+            Require(MovieCovering && _movieQueue.Count == 3 && _movieQueue.Select(item => item.ToString()).SequenceEqual(["movies/SierraLogo.bik", "movies/TroikaLogo.bik", "8"]),
+                "the start-up queue is the two logos by path and then movie 8");
+            Require(Pump(() => !MovieCovering, 30) && _moviesPlayed == playedBefore + 3, $"the start-up movies played in full (played {_moviesPlayed - playedBefore} of 3)");
+            PlayStartupMovies();
+            Require(!MovieCovering, "the start-up movies play once a run");
+            // Outside the game build and this stage nothing plays: the dev viewer and every other smoke (ARC-RENDER-1242).
+            _moviesForSelfTest = false;
+            Require(MovieRefusal() == NotGameBuildRefusal && !PlayMovies([1], 0, () => continued++, "smoke") && !MovieCovering && continued == 1,
+                "outside the game build and the movies stage no movie plays and nothing waits");
+            _moviesForSelfTest = true;
             // A movie with no file plays nothing and the caller goes on (the original's failed open).
-            _moviePathForSelfTest = _ => null;
+            _moviePathForSelfTest = (_, _) => null;
             var failedBefore = _moviesFailed;
             Require(PlayMovies([1], 0, () => continued++, "smoke") && Pump(() => !MovieCovering, 5) && continued == 2 && _moviesFailed == failedBefore + 1 && !_moviePanel.IsOpen,
                 "a movie with no file ended at once and the continuation ran");

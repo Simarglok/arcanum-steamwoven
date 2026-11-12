@@ -175,8 +175,7 @@ Recommended scope for #1170 (E7-a), in this order, each slice its own task:
    today's "not shown" behaviour (log line, no black screen), tests over the synthetic pipe contract.
 2. **The callers that exist in the shipped data:** View Intro (movies 1 and 7), the new game's first and second
    movie steps, script action 103 (admitted with its time advance and track operand), the start-up movie 8 and the
-   two logos behind a setting that defaults off in the viewer (the exe has no switch; the show condition of movie 8
-   is still to read).
+   two logos (the exe has no switch; read in ARC-RENDER-1242: the logos play unconditionally from the game-module init, movie 8 plays after the modules loaded and its only condition is its table row, 0x40DE70).
 3. **Bundling** (O2 or shipping an LGPL FFmpeg build in the packages): only if the owner wants movies for players
    without their own FFmpeg.
 
@@ -186,7 +185,7 @@ LGPL build; **(c)** whether the start-up logos and movie 8 play in the viewer.
 
 ## 6a. Owner's decision and the implementation (ARC-RENDER-1170, 2026-11-12)
 
-The owner chose: **(a)** movies are in scope; **(b)** O1, ffmpeg as an external program the player installs; **(c)** the start-up movie 8 and the logos are not needed in the viewer (at most a separate smoke stage). The first
+The owner chose: **(a)** movies are in scope; **(b)** O1, ffmpeg as an external program the player installs; **(c)** the start-up movie 8 and the logos are not needed in the viewer (at most a separate smoke stage); on the same day the owner clarified that movies play only in the game build and in the dedicated smoke stage, so ARC-RENDER-1242 plays the logos and movie 8 in the game build too. The first
 implementation plays movies 1 and 7 from View Intro and from a new game's start, with the player in `Arcanum.Presentation.Movies` (`FfmpegMovieSource`,
 `MoviePlayback`), the movie table in `Arcanum.World.AreaMovieTable` and the movie screen in the viewer; see [FR-MEDIA-001](../requirements/coverage/ui-media-lifecycle.md) and the
 [movie decoder](../workflow/toolchain.md#movie-decoder-arc-render-1170) section. The first thing the study asked for was done on the owner's Mac (ffmpeg 9.0.2): `ffprobe` and a full decode of all ten
@@ -198,7 +197,7 @@ to equal lengths and differ), so "FFmpeg plays these files" is now a run, not a 
 - **Attachment of the six movie scripts** (to which NPC, item or sector they are attached, and so which map reaches
   them) was not resolved; E7-a resolves it with the attachment walk of the
   [script census](scr-census.md) before it admits action 103.
-- **The show condition of start-up movie 8** and the placement of the frame on the surface were not read.
+- **The show condition of start-up movie 8** was read in ARC-RENDER-1242: none besides its table row (0x40DE70 checks the table and the row; 0x401000 calls it unconditionally after the UI module data loaded). The placement of the frame on the surface was not read.
 - **Decoding:** done by ARC-RENDER-1170 (section 6a); the study itself ran none.
 - The movie contents (what each shows, which script is which ending) were not looked at; the labels above come from
   file names, script names and the table comment.

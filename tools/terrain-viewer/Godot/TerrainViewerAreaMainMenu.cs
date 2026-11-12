@@ -133,6 +133,8 @@ public partial class TerrainViewerApp
         if (root == AreaMenuWindow.Main) StartMenuMusic();
         RenderMainMenu();
         RefreshReadyStatus();
+        // ARC-RENDER-1242 (0x4020F0, 0x401000): the start-up movies play before the first menu is used; the menu stands under them (the game build only).
+        if (root == AreaMenuWindow.Main && !reopened) PlayStartupMovies();
     }
 
     /// <summary>Why a new game cannot start: null when it starts on the shown scene or on the start scene loaded again (ARC-UI-012).</summary>
