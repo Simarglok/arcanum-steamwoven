@@ -82,6 +82,14 @@ public partial class TerrainViewerApp
     private void OpenSleep()
     {
         if (!SleepActive) return;
+        // The town-map files decide a town sector (SWB3); while they are not read (or cannot be) the key answers that, not message 20.
+        if (!SleepOpen && PcTownMapNumber() > 0 && AdoptTownMapSource() is null)
+        {
+            _sleepStatus = "sleep: the town-map files are not read yet";
+            PostMessage(AreaMessageEntry.Text(AreaMessageKind.Message, _sleepStatus), "sleep town map unknown");
+            RefreshAreaStatus();
+            return;
+        }
         var exit = RestCombatExit();
         var opening = AreaRestRules.Decide(RestFacts(exit));
         GD.Print($"ARC-WORLD-1160 sleep open decision={opening.Outcome} wait={opening.Wait} message={opening.Message?.ToString() ?? "-"} leaves-combat={opening.LeavesCombatMode}");
@@ -165,9 +173,11 @@ public partial class TerrainViewerApp
     private void TickSleep(long hostMs)
     {
         _restFade.Tick(hostMs);
-        if (_rest is { } rest && rest.TakeDue(hostMs) && _areaSession is { } session && ReferenceEquals(_restSession, session))
+        // The death cover freezes the frame (TL25): no hour is jumped under it; the pending step waits.
+        if (_rest is { } rest && !WorldFrozenFrame && rest.TakeDue(hostMs) && _areaSession is { } session && ReferenceEquals(_restSession, session))
         {
-            RestJump(AreaRestRules.StepGameMs);
+            try { RestJump(AreaRestRules.StepGameMs); }
+            catch { EndSleep(); throw; } // a rejected jump must not leave the window dark and stuck
             var healed = AreaRestParty.Step(session, _aiHost is { } ai && ReferenceEquals(ai.Session, session) ? ai : null, AreaRestRules.GroundHealKind, heal: !rest.Wait);
             var hour = session.QueryClockSnapshot().Hour;
             var code = rest.Code;

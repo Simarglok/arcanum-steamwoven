@@ -47,6 +47,8 @@ Every rule was read in the retail 1.0.7.4 `Arcanum.exe` ([ledger SWB1–SWB13](.
 - **The sleeper's maintained spells** end at the press in the original (UE6, issue #1161); here they do not.
 - **Followers of followers**, and followers the AI host does not run, are not healed or told of event 29.
 - The exit gate's NPC scan uses an approximated view rectangle (`AreaAiHost.CombatThreats`); the original's is the game view's size.
+- A town-map sector whose town-map files are not read yet (or cannot be) gets a notice, not message 20; the viewer cannot decide it (SWB3).
+- No step runs under the death cover (the frame is frozen); the pending step waits. The animated-light push is also held during a rest.
 - The chain is the window's own deadline (50 ms, then 200 ms), not an entry of the session's event queue, which has no real-time kind.
 - The window is a diagnostic panel (no original art, 0x235 and 0x23D, no fonts); the fade covers the game view under the windows and the bars,
   its extent in the original is not checked.

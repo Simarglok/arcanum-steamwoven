@@ -27,6 +27,12 @@ public sealed partial class SessionSpellCaster
     /// <summary>The hold flags (GT145): entangled and stoned among the spell flags, paralysed among the critter flags.</summary>
     public const int EntangledSpellFlag = 0x1000000, StonedSpellFlag = 0x10000, ParalysedCritterFlag = 0x40;
 
+    /// <summary>ARC-MAGIC-045 (SFR3): the spell flags the hit effect (0x459A30) plays an eye candy for: shielded (0x400, Shield of Protection) and magnetic inversion (0x400000).</summary>
+    public const int ShieldedSpellFlag = 0x400, MagneticInversionSpellFlag = 0x400000;
+
+    /// <summary>ARC-MAGIC-045 (SFR3, ER4): the eye candy table entry the hit effect plays for magnetic inversion when no active run provides the flag (0x449, no run).</summary>
+    public const int MagneticInversionFixedEyeCandyEntry = 0x449;
+
     /// <summary>ARC-DEV-304 (GT216): <c>OSF_SPOKEN_WITH_DEAD</c>, the spell flag spell 56 sets on a dead critter (and removes at its END): the corpse can be spoken with.</summary>
     public const int SpokenWithDeadSpellFlag = 0x2000000;
 

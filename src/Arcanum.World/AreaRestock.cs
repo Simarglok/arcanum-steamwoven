@@ -90,10 +90,11 @@ public sealed class AreaRestockHost
 
     /// <summary>
     /// ARC-DEV-386 (RK16, RK17): whether the restock body 0x463C60 that an object's creation runs does anything for <paramref name="entity"/>: a living NPC of the map with an inventory source and no PC leader
-    /// (<see cref="RestockRules.Fire"/>). Otherwise it returns before the clear (a source of 0 is not cleared or dressed).
+    /// (<see cref="RestockRules.Fire"/>). Otherwise it returns before the clear (a source of 0 is not cleared or dressed). <paramref name="beforeLeader"/> (ARC-MAGIC-053): the creation's restock runs
+    /// before the summon effect makes the creature the summoner's follower (0x442260 inside 0x450C40), so a summoned creature's leader is not read.
     /// </summary>
-    public bool GeneratesAtCreation(SessionMapId map, string entity) =>
-        Facts(map, entity) is { Kind: RestockHolderKind.Npc } facts && RestockRules.Fire(facts, null).Step == RestockStep.Regenerate;
+    public bool GeneratesAtCreation(SessionMapId map, string entity, bool beforeLeader = false) =>
+        Facts(map, entity) is { Kind: RestockHolderKind.Npc } facts && RestockRules.Fire(beforeLeader ? facts with { PcLeader = false } : facts, null).Step == RestockStep.Regenerate;
 
     /// <summary>Whether the container's drawn body meets the game window (0x43DFD0 against 0x5E8808..0x5E8814): only on the shown map.</summary>
     [OriginalFunction(0x43DFD0, OriginalFunctionScope.Partial)]

@@ -198,6 +198,8 @@ public sealed class AreaRestockHostTests
         using var owned = session;
         var map = new SessionMapId(1);
         var critter = session.CreateObject(session.Version, SessionCreatedKind.Critter, 28359, map, new(100, 102)).Object!;
+        var led = session.CreateObject(session.Version, SessionCreatedKind.Critter, 28359, map, new(101, 102)).Object!;
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, led.Entity).Disposition);
         var created = new AreaCreatedCritters(session, made => new(CreatedRowFailure.None,
             new(new("created", 1, AreaSourceKind.Mobile, null, 0, 0, CreatedObjectRows.KeyId(made.Entity), 0), 0, 16, 0, "p", "p", "r", "s", AreaScope.Core, null, made.Cell.X, made.Cell.Y,
                 Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true)), row => 5);
@@ -206,6 +208,9 @@ public sealed class AreaRestockHostTests
         Assert.AreEqual(new RestockHolder(RestockHolderKind.Npc, 5, false, false, 0, false), host.Facts(map, critter.Entity), "the prototype's source, alive, no PC leader (RK3)");
         Assert.IsNull(host.Facts(new(2), critter.Entity), "another map");
         Assert.IsTrue(host.GeneratesAtCreation(map, critter.Entity), "a living NPC with a source and no leader: the creation's restock body generates (RK17)");
+        // ARC-MAGIC-053: a summoned creature is the summoner's follower by the time the viewer's frame generates; the creation's restock ran before that join (0x442260 inside 0x450C40), so its leader is not read.
+        Assert.IsFalse(host.GeneratesAtCreation(map, led.Entity), "a follower of the PC is skipped (RK3)");
+        Assert.IsTrue(host.GeneratesAtCreation(map, led.Entity, beforeLeader: true), "a summoned one generated before its join");
         Assert.AreEqual(GameSessionDisposition.Changed, AreaRestockHost.Schedule(session, inventory, critter.Entity)?.Disposition, "a window open on it schedules its restock as a map NPC's");
         var world = new AreaEventWorld(() => new AreaCombatHost(inventory), () => null, restock: () => host);
         var result = session.RegenerateInventory(session.Version, critter.Entity, world);
@@ -215,7 +220,7 @@ public sealed class AreaRestockHostTests
         var goods = session.QueryMapInventory(map)!.Holders.Single(holder => holder.Entity == critter.Entity).Items.Select(item => item.Facts.Kind.Prototype).ToArray();
         CollectionAssert.AreEqual(new[] { AreaBarterData.GoldPrototype, Axe, Bullets }, goods, "coins, axe and bullets of set 5");
         // A living created critter is no loot target (its corpse's is found by the key of its row among the created maps; no test or smoke kills one yet: the owner's re-check list, ARC-DEV-386 step 2).
-        Assert.IsNull(inventory.Target(session, 1, created.Maps(map).Single().Row(critter.Entity).Key), "alive: no loot target");
+        Assert.IsNull(inventory.Target(session, 1, created.Maps(map).First().Row(critter.Entity).Key), "alive: no loot target");
     }
 
     [TestMethod]

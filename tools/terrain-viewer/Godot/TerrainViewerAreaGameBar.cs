@@ -130,7 +130,7 @@ public partial class TerrainViewerApp
             case AreaBarButton.Sleep:
                 // ARC-WORLD-1160: the bar button runs the same opener as the key S (its own decision answers a dead or unconscious hero).
                 if (!SleepActive) _gameBarNotice = "sleep: not available here";
-                else if (SleepOpen) EndSleep();
+                else if (SleepOpen) OpenSleep(); // the same decision as the key: a dead hero gets nothing, even the close
                 else if (PaletteOpen || ConversationOpen || SaveListOpen || MainMenuOpen) _gameBarNotice = "sleep: ignored while another window owns input";
                 else OpenSleep();
                 break;

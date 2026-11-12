@@ -306,13 +306,13 @@ Compare in both games with the same hero and spells; a spell that also has a not
 | 5 | Cast Bonds of Magick (43) on yourself and try to cast another spell. | The cast is refused at the invocation check while the flag holds. | open |
 | 6 | Cast Reflection Shield (44) on yourself and let a creature cast a hostile spell at you. | The spell is reflected to its caster. | open |
 | 7 | Cast Sanctuary (63) on yourself near a hostile creature that has not seen you yet. | The hostility rules read the enshrouded flag; compare which creatures still attack. | open |
-| 8 | Cast Disintegrate (34) on a creature. | The creature takes 30000 electrical damage and dies; the original sets don't-draw on it. Ours writes the flag (and the paralysed bit) but the viewer still draws the body; the AI and the spell target rules treat it as gone. | open |
+| 8 | Cast Disintegrate (34) on a creature. | The creature takes 30000 electrical damage and dies; the original sets don't-draw on it. Ours writes the flag (and the paralysed bit); since ARC-MAGIC-045 the viewer draws no body for it either (the eye candy stays), and the AI and the spell target rules treat it as gone. | open |
 
 Known differences (reading only, no game step):
 
 - Water walking (spells 13, 28): the flag and its object flag are written; the original's clear then tests the tile under the critter and may run a damage step (F0, MA-8). Ours does neither.
 - Mind control, charm, undead, fleeing and blinded (MA-4) and the locks (MA-6) are still not ready and show "not ready" in the spell line.
-- The viewer draws no translucent, shrunk or hidden critter from these flags yet.
+- The viewer's draw of translucent, shrunk, hidden and seen-invisible critters is ARC-MAGIC-045 (the section at the end of this file).
 
 ## ARC-DEV-366 — Tech books give expertise equal to intelligence (PR #980, 2026-11-11)
 
@@ -380,7 +380,7 @@ Compare in both games with the same hero and spells.
 
 Known differences (reading only, no game step):
 
-- Polymorph (49) and a script's permanent polymorph (critter flags 2 bit 0x400000) are undone by the original's Dispel with the art restored; ours has neither (MA-8). Since ARC-MAGIC-040 the Trait component keeps the monster body of Polymorph and the body spells in the session and tells the host, and since ARC-MAGIC-046 the viewer draws a polymorphed NPC as its monster body and takes the hero's worn items off and chooses them again at the END; the hero's own monster body is drawn since ARC-MAGIC-052 (a species without a stand or walk ART, such as the air elemental, keeps the hero's own body). Since ARC-MAGIC-047 the elemental bodies write the critter flags 2 and blit flags (MG10: assigned in Original mode, added in Steamwoven mode) and Dispel undoes a perma-polymorph in the session (the redraw of a map NPC whose data body is the polymorph is not built).
+- Polymorph (49) and a script's permanent polymorph (critter flags 2 bit 0x400000) are undone by the original's Dispel with the art restored; ours has neither (MA-8). Since ARC-MAGIC-040 the Trait component keeps the monster body of Polymorph and the body spells in the session and tells the host, and since ARC-MAGIC-046 the viewer draws a polymorphed NPC as its monster body and takes the hero's worn items off and chooses them again at the END; the hero's own monster body is drawn since ARC-MAGIC-052 (and since ARC-MAGIC-1219 with the weapon part of combat mode, the original's missing-art repair for the air elemental and palette 0 for the elemental bodies' palette 1). Since ARC-MAGIC-047 the elemental bodies write the critter flags 2 and blit flags (MG10: assigned in Original mode, added in Steamwoven mode) and Dispel undoes a perma-polymorph in the session (the redraw of a map NPC whose data body is the polymorph is not built).
 - A portal or container held by Magelock (75) loses the hold in the original; ours does the same since MA-6 ([steps below](#arc-magic-037--locks-and-holds-unlocking-cantrip-and-magelock-ma-6-2026-11-11)).
 - A summoned critter is destroyed by the original's Dispel; ours destroys one the session created, and no spell makes one before the creature summons (E1-e).
 
@@ -812,3 +812,45 @@ Known differences (documented, not bugs):
 
 - An NPC's own worn items still fire nothing when it attacks (no trigger host on the NPC attack path yet).
 - A chain of item spells answers once per item (owner decision 2026-10-28, MG46), where the original repeats until the target dies.
+
+## ARC-MAGIC-045 — Shield hit eye candy and the draw of translucent, shrunk and hidden critters (2026-11-11)
+
+The rules and what is built are in [the cast host](../world/spell-cast-host.md#hit-eye-candy-and-object-draw-flags-arc-magic-045) and [ledger HE1–HE4, OD1–OD6](../research/ledger/spell-runs.md#object-draw-flags-and-the-hit-eye-candy-arc-magic-045). Steps need a mage hero (or scrolls) and a creature to fight.
+
+| # | Step | Expected (original) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast Shield of Protection (30) on yourself, then let a creature hit you with a weapon or a spell that damages you. | Each hit that reaches you plays the shield's hit effect on you (a short flash of the spell's own animation). Misses do not. | open |
+| 2 | Cast Invisibility (69) on yourself. | You are drawn half transparent (not gone). | open |
+| 3 | Cast Invisibility (69) on a friendly companion or NPC. | Without detection the creature is not drawn at all (a creature of high perception, 20 or more, or a Detect Invisible effect shows it half transparent). | open |
+| 4 | Cast the spell that shrinks a creature (the one with the shrunk flag; the player's spell list names it) on a creature. | It is drawn at half size, standing on its tile. | open |
+| 5 | Cast Disintegrate (34) on a creature that stands near an eye candy (a burning or magic overlay). | The body is gone at once; any overlay of the spell still plays there. | open |
+
+Known differences (documented, not bugs):
+
+- The hero's own shrink is not drawn (the hero's draw has no hotspot to scale about); a shrunk hero is drawn full size.
+- One prototype's hit plays a fixed extra eye candy in the original (HE3); ours does not.
+- Magnetic inversion plays the fixed entry 0x449 when no run provides the flag; which installed record sets the flag by a non-spell path is not read, so step 1's variant for it is not listed.
+
+## ARC-MAGIC-053 — Summon for creatures: Summon Undead and the other creature summons (E1-e, 2026-11-11)
+
+The rules are in [spell cast host: summon for creatures](../world/spell-cast-host.md#summon-for-creatures-arc-magic-053); the original's reading is the
+[ledger SUM5, SUM6 and SUM17–SUM22](../research/ledger/spell-runs.md#summon-component-and-the-objects-it-creates-arc-res-101). Give the hero the spells (a mage with Summoning: Summon Undead 57,
+Succour Beast 53, Orcish Champion 71, Guardian Ogre 72, Familiar 74) and compare in both games. It closes the owner's report of 2026-11-08 17:19:23 (no summoning animation and no summoned NPC).
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast Summon Undead (57) at an empty tile a few cells away. | The summoning animation plays on the tile, and when it reaches its callback frame (about two thirds of a second) the creature appears; before that nothing stands there. | open |
+| 2 | Look at who is summoned with a weak magick aptitude and, after raising it, with a strong one (thresholds 20, 60 and 85 of the aptitude). | The creature changes with the aptitude (list 5: four undead kinds, the strongest above 85). | open |
+| 3 | Watch the new creature and open the party portraits. | It is the hero's follower at once (mind control), fights the hero's enemies and follows the hero. | open |
+| 4 | Let the creature be killed. | The spell ends with it: its upkeep stops, and the body is removed. | open |
+| 5 | Stop maintaining the spell (or wait for the fatigue to run out). | The animation plays backwards and the creature goes; it leaves the party. | open |
+| 6 | Cast it on a tile with a tile script (a trap or a notice tile). | The script runs with the summoned creature as the one who stepped on it. | open |
+| 7 | Cast Succour Beast (53) and Orcish Champion (71) as well. | Beasts by aptitude (list 4) and a fixed orc (prototype 28443): the same animation, reveal and follower. | open |
+| 8 | Save while the creature stands, load, and wait. | The creature is still there and still the hero's follower (its flags, party place and run are saved). | open |
+
+Known differences (documented, not bugs):
+
+- The original starts a summoned creature whose art has a sneak pose in that pose (concealed, SUM19); Steamwoven starts it standing.
+- The creature takes the hero's alignment as the original does, but of the moment the world first reads it: a loaded game reads the hero's then.
+- The original's weighted lists overrun their table on a draw of 100 (MG9); Steamwoven fixes it in both modes (technical bug rule).
+- Familiar (74): its own flags (`OSF_FAMILIAR`, `ONF_FAMILIAR`) and its hiding with the party on the world map are MA-1's and the world map's.

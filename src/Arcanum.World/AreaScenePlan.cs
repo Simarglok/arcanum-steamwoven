@@ -21,6 +21,10 @@ public sealed record AreaDrawCommand(AreaVisualKey Visual, AreaFrameKey Frame, A
     /// reads it). ARC-RENDER-014 binds HD for characters and objects, not walls.</summary>
     public int ArtClass { get; init; }
 
+    /// <summary>ARC-MAGIC-045: the frame's hotspot as an offset inside <see cref="Destination"/> at the drawn size (set where a body is placed or re-placed from its frame, so a later shrink
+    /// can scale the rectangle about it, <see cref="AreaBodyStyleRules"/>); null for a command that has none (the actor marker, a terrain tile, a body some seam moved without one).</summary>
+    public (int X, int Y)? Hot { get; init; }
+
     /// <summary>ARC-RENDER-018: multiply blend (blit <c>0x40</c>): each opaque source pixel multiplies the colour
     /// beneath it; transparent pixels leave it unchanged.</summary>
     public bool Multiply { get; init; }
@@ -143,6 +147,7 @@ public sealed class AreaScenePlan
                 destination, visual.Mirrored != state.FlipX, state.FlipY, phase, checked((int)body.WorldX.Value), checked((int)body.WorldY.Value),
                 ranks.First, ranks.Second, state.Alpha, state.Additive)
             {
+                Hot = (hotX * state.Scale / 100 / (state.Shrunk ? 2 : 1), hotY * state.Scale / 100 / (state.Shrunk ? 2 : 1)),
                 ArtClass = (int)(visual.RawArt >> 28), Multiply = state.Multiply, Unlit = state.Unlit,
                 // A flat wading body is drawn whole at the wading alpha; an upright one only in its lower rows.
                 WadeRows = state.Wading ? state.Flat ? height : Math.Min(WadingRows, height) : 0,
@@ -236,6 +241,7 @@ public sealed class AreaScenePlan
             // The visual key stays the body's (ambient channel, pick and wall check go by it); only the frame changes.
             Frame = AreaFrameKey.From(frame), Source = new(0, 0, frame.Width, frame.Height), Destination = destination,
             WadeRows = command.WadeRows == 0 ? 0 : command.Phase == 4 ? Math.Min(WadingRows, h) : h,
+            Hot = (frameX * state.Scale / 100 / (state.Shrunk ? 2 : 1), frameY * state.Scale / 100 / (state.Shrunk ? 2 : 1)),
         };
     }
 
@@ -264,6 +270,7 @@ public sealed class AreaScenePlan
         {
             Frame = frame, Source = new(0, 0, width, height), Destination = destination,
             WadeRows = command.WadeRows == 0 ? 0 : command.Phase == 4 ? Math.Min(WadingRows, h) : h,
+            Hot = (hotX * state.Scale / 100 / (state.Shrunk ? 2 : 1), hotY * state.Scale / 100 / (state.Shrunk ? 2 : 1)),
         };
     }
 
@@ -281,7 +288,7 @@ public sealed class AreaScenePlan
         var destination = new TerrainRect(checked(projected.X + 40 - hotX), checked(projected.Y + 20 - hotY), visual.Width, visual.Height);
         var ranks = SameCellRanks(0, 0);
         return new(visual.Key, AreaFrameKey.From(visual), identity, new(0, 0, visual.Width, visual.Height), destination, visual.Mirrored, false,
-            flat ? 3 : 4, checked((int)worldX), checked((int)worldY), ranks.First, ranks.Second, 255, false) { ArtClass = (int)(visual.RawArt >> 28) };
+            flat ? 3 : 4, checked((int)worldX), checked((int)worldY), ranks.First, ranks.Second, 255, false) { ArtClass = (int)(visual.RawArt >> 28), Hot = (hotX, hotY) };
     }
 
     /// <summary>
@@ -320,6 +327,7 @@ public sealed class AreaScenePlan
         return command with
         {
             Destination = new TerrainRect(checked(at.X + hotX - hotX * percent / 100), checked(at.Y + hotY - hotY * percent / 100), width, height),
+            Hot = (hotX * percent / 100, hotY * percent / 100),
         };
     }
 

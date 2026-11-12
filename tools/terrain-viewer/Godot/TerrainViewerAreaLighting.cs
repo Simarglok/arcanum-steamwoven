@@ -121,6 +121,7 @@ public partial class TerrainViewerApp
         var key = local.AtHour(driver.Selection.Hour).AnimationKey((long)_lightAnimationMs);
         if (key == _lightAnimationKey) return;
         _lightAnimationKey = key;
+        if (_restDark) return; // SWB11: the light is held during a rest; the stop applies it
         PushAreaAmbient();
     }
 
