@@ -106,6 +106,9 @@ public sealed record SessionLifeResult(GameSessionDisposition Disposition, GameS
 /// <summary>ARC-DEV-312: what the session tells the host's dying script (<see cref="GameSessionOwner.DyingScript"/>): the NPC that died, the map its life step ran on and the killer, an entity id (<see cref="SessionSpellCaster.Hero"/> for the hero) or none.</summary>
 public sealed record SessionDyingRequest(string Victim, int Map, string? Killer);
 
+/// <summary>ARC-AI-1134 (ledger DY3, DY7): what the session tells the host after an NPC's death was processed (<see cref="GameSessionOwner.KillNotice"/>): the NPC that died, the map its life step ran on and the killer, an entity id (<see cref="SessionSpellCaster.Hero"/> for the hero) or none.</summary>
+public sealed record SessionKillNoticeRequest(string Victim, int Map, string? Killer);
+
 /// <summary>The life domain of one owner.</summary>
 internal sealed class LifeDomain
 {

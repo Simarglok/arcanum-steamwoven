@@ -4,7 +4,7 @@ namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>ARC-UI-140: a surface the generated interface chrome is painted with (our own colours and noise, chosen by eye; not
 /// measured from any game art).</summary>
-public enum ChromeMaterial { Wood, WoodDark, Iron, Dark, Face }
+public enum ChromeMaterial { Wood, WoodDark, Iron, Dark, Face, Pit }
 
 /// <summary>The edges of a frame that get a rim (a panel's edge facing the play view).</summary>
 [Flags]
@@ -27,6 +27,10 @@ public sealed record ChromeRivet(double X, double Y, double Radius) : ChromePart
 
 /// <summary>A picture region: its pixels come from the art (the HD redraw when the pack has one, else the Legacy frame).</summary>
 public sealed record ChromeKeep(int X, int Y, int Width, int Height) : ChromePart;
+
+/// <summary>ARC-UI-148: the lines between the cells of a grid (an inventory grid): one-unit lines on the last pixel of every cell but the last
+/// of each row and column, in <paramref name="Columns"/> × <paramref name="Rows"/> cells of <paramref name="Cell"/> Legacy pixels from (X, Y).</summary>
+public sealed record ChromeGrid(int X, int Y, int Columns, int Rows, int Cell) : ChromePart;
 
 public enum ChromeKind
 {
@@ -85,9 +89,28 @@ public static class InterfaceChromeRecipes
             new ChromeKeep(205, 37, 392, 11), new ChromeKeep(387, 0, 30, 40),
         ]);
         var bottom = new ChromeRecipe("intbotom.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.Top, bottomParts);
+        // ARC-UI-148: the inventory window's two frames (Legacy pixels of each art).
+        List<ChromePart> inventoryParts =
+        [
+            new ChromeSunk(8, 6, 324, 388, ChromeMaterial.Pit),
+            new ChromeGrid(10, 8, 10, 12, 32),
+            new ChromeKeep(332, 60, 38, 170),
+            new ChromeKeep(332, 192, 78, 32),
+        ];
+        for (var k = 0; k < 5; k++) inventoryParts.Add(new ChromeSunk(369, 71 + 23 * k, 61, 17, ChromeMaterial.Pit));
+        var inventory = new ChromeRecipe("inventor.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, inventoryParts);
+        var doll = new ChromeRecipe("pdoll.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None,
+        [
+            new ChromeSunk(124, 25, 223, 55, ChromeMaterial.Pit),
+            new ChromeSunk(18, 100, 330, 310, ChromeMaterial.Pit), // runs off the frame's bottom: the original's box has no bottom edge between its corners
+            new ChromeGrid(23, 107, 10, 9, 32),
+            new ChromeKeep(0, 0, 106, 100),
+            new ChromeKeep(10, 303, 112, 97),
+            new ChromeKeep(244, 303, 114, 97),
+        ]);
         string[] buttons = ["char_but.art", "log_but.art", "invn_but.art", "tmap_but.art", "lilgrnbut.art",
             "combat_button.art", "skills_button.art", "spells_button.art", "schematics_button.art"];
-        return [top, bottom, .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, []))];
+        return [top, bottom, inventory, doll, .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, []))];
     }
 }
 
@@ -110,11 +133,17 @@ public static class InterfaceChromeRenderer
 
     private static readonly Rgb Ink = new(20, 14, 8), BrassLight = new(214, 178, 96), Brass = new(160, 120, 52), BrassDark = new(96, 70, 30);
     private static readonly Rgb WoodLowDefault = new(58, 37, 20), WoodHighDefault = new(112, 76, 43), IronLow = new(44, 46, 50), IronHigh = new(96, 98, 104);
+    private static readonly Rgb PitFill = new(3, 3, 5), GridLine = new(48, 54, 64);
     private static readonly Rgb DarkFill = new(8, 8, 14), FaceHigh = new(82, 74, 38), FaceLow = new(34, 30, 14), White = new(255, 255, 255);
 
     private sealed class Canvas
     {
-        public readonly int W, H, LegacyW, LegacyH, S;
+        public readonly int W, H, LegacyW, LegacyH;
+        /// <summary>Device pixels per Legacy pixel (whole or, since ARC-UI-148, fractional).</summary>
+        public readonly double Scale;
+        /// <summary>The width of a one-unit line in device pixels: <c>max(1, round(Scale))</c>. A hairline stays one device pixel at every scale and equal
+        /// bands stay equal (the device-pixel grid rule of docs/rendering/hd-interface-density.md); at a whole scale it is the scale.</summary>
+        public readonly int S;
         public readonly Rgb[] Color;
         public readonly float[] Alpha;
         public readonly byte[] Legacy;
@@ -122,21 +151,39 @@ public static class InterfaceChromeRenderer
         /// <summary>The wood's darkest and lightest colour: our own defaults, or (a panel) matched to the Legacy frame's own wood (<see cref="TuneWood"/>).</summary>
         public Rgb WoodLow = InterfaceChromeRenderer.WoodLowDefault, WoodHigh = InterfaceChromeRenderer.WoodHighDefault;
 
-        public Canvas(int legacyW, int legacyH, byte[] legacy, byte[]? picture, int scale)
+        public Canvas(int legacyW, int legacyH, byte[] legacy, byte[]? picture, double scale)
         {
-            LegacyW = legacyW; LegacyH = legacyH; S = scale; W = legacyW * scale; H = legacyH * scale; Legacy = legacy; Picture = picture;
+            LegacyW = legacyW; LegacyH = legacyH; Scale = scale; S = Math.Max(1, (int)Math.Round(scale, MidpointRounding.AwayFromZero));
+            W = Edge(legacyW); H = Edge(legacyH); Legacy = legacy; Picture = picture;
             Color = new Rgb[W * H]; Alpha = new float[W * H];
             for (var y = 0; y < H; y++)
             for (var x = 0; x < W; x++)
-                Alpha[y * W + x] = LegacyOpaque(x / scale, y / scale) ? 1f : 0f;
+                Alpha[y * W + x] = LegacyOpaque(Cell(x), Cell(y)) ? 1f : 0f;
         }
+
+        /// <summary>The device pixel of an edge at <paramref name="legacy"/> Legacy pixels: <c>round(x × Scale)</c> (neighbouring rectangles never gap or overlap).</summary>
+        public int Edge(double legacy) => (int)Math.Round(legacy * Scale, MidpointRounding.AwayFromZero);
+
+        /// <summary>The Legacy pixel whose device span <c>[Edge(c), Edge(c + 1))</c> holds device pixel <paramref name="device"/> (the inverse of <see cref="Edge"/>, so a
+        /// rectangle drawn from rounded edges and the Legacy silhouette agree to the pixel); at a whole scale it is <c>device / scale</c>.</summary>
+        public int Cell(int device)
+        {
+            // Start from the exact quotient and settle on Edge itself, so rounding ties never disagree with it.
+            var cell = Math.Max(0, (int)Math.Floor((device + 0.5) / Scale));
+            while (cell > 0 && Edge(cell) > device) cell--;
+            while (Edge(cell + 1) <= device) cell++;
+            return cell;
+        }
+
+        /// <summary>A position in Legacy pixels of the centre of a device pixel (the unit the materials are sampled in).</summary>
+        public float At(int device) => (float)((device + 0.5) / Scale);
 
         public bool LegacyOpaque(int lx, int ly) => lx >= 0 && ly >= 0 && lx < LegacyW && ly < LegacyH && Legacy[(ly * LegacyW + lx) * 4 + 3] > 0;
 
         public Rgb PictureAt(int x, int y)
         {
             if (Picture is { } p) { var i = (y * W + x) * 4; return new Rgb(p[i], p[i + 1], p[i + 2]); }
-            var j = ((y / S) * LegacyW + x / S) * 4;
+            var j = (Math.Min(Cell(y), LegacyH - 1) * LegacyW + Math.Min(Cell(x), LegacyW - 1)) * 4;
             return new Rgb(Legacy[j], Legacy[j + 1], Legacy[j + 2]);
         }
 
@@ -152,13 +199,14 @@ public static class InterfaceChromeRenderer
     /// (ARC-UI-141: the window's exact device scale; 1 to <see cref="MaxScale"/>). <paramref name="legacy"/> is the Legacy RGBA
     /// (width × height × 4); <paramref name="picture"/> is the HD redraw at the same <paramref name="scale"/>× (same layout; see
     /// <see cref="ResamplePicture"/>) or empty to sample the Legacy pixels. Returns RGBA of (width × scale) × (height × scale).</summary>
-    public static byte[] Render(ChromeRecipe recipe, int width, int height, ReadOnlySpan<byte> legacy, ReadOnlySpan<byte> picture, int frameIndex, int scale = Scale)
+    public static byte[] Render(ChromeRecipe recipe, int width, int height, ReadOnlySpan<byte> legacy, ReadOnlySpan<byte> picture, int frameIndex, double scale = Scale)
     {
         ArgumentNullException.ThrowIfNull(recipe);
         if (width is < 1 or > MaxSide || height is < 1 or > MaxSide) throw new ArgumentOutOfRangeException(nameof(width), $"{width}x{height}");
-        if (scale is < 1 or > MaxScale) throw new ArgumentOutOfRangeException(nameof(scale), scale.ToString());
+        if (!(scale >= 1 && scale <= MaxScale)) throw new ArgumentOutOfRangeException(nameof(scale), scale.ToString());
         if (legacy.Length != width * height * 4) throw new ArgumentException("legacy RGBA size", nameof(legacy));
-        if (!picture.IsEmpty && picture.Length != width * scale * height * scale * 4) throw new ArgumentException("picture RGBA size", nameof(picture));
+        var (pixelWidth, pixelHeight) = PixelSize(width, height, scale);
+        if (!picture.IsEmpty && picture.Length != pixelWidth * pixelHeight * 4) throw new ArgumentException("picture RGBA size", nameof(picture));
         if (frameIndex < 0) throw new ArgumentOutOfRangeException(nameof(frameIndex));
 
         var canvas = new Canvas(width, height, legacy.ToArray(), picture.IsEmpty ? null : picture.ToArray(), scale);
@@ -177,6 +225,11 @@ public static class InterfaceChromeRenderer
         }
         return output;
     }
+
+    /// <summary>ARC-UI-148: the pixel size of a frame of <paramref name="width"/> × <paramref name="height"/> Legacy pixels painted at <paramref name="scale"/>
+    /// (each edge is <c>round(size × scale)</c>, so a whole scale gives exactly size × scale).</summary>
+    public static (int Width, int Height) PixelSize(int width, int height, double scale) =>
+        ((int)Math.Round(width * scale, MidpointRounding.AwayFromZero), (int)Math.Round(height * scale, MidpointRounding.AwayFromZero));
 
     /// <summary>ARC-UI-141: the picture a <see cref="ChromeKeep"/> copies, at the render scale: <paramref name="source"/> (RGBA,
     /// <paramref name="sourceWidth"/> × <paramref name="sourceHeight"/>, e.g. the pack's 4× redraw) averaged over the area each target pixel
@@ -238,6 +291,7 @@ public static class InterfaceChromeRenderer
             {
                 case ChromePlate plate: Plate(c, plate); break;
                 case ChromeSunk sunk: Sunk(c, sunk); break;
+                case ChromeGrid grid: Grid(c, grid); break;
             }
         }
         foreach (var hole in Holes(c)) HoleRim(c, hole);
@@ -246,7 +300,7 @@ public static class InterfaceChromeRenderer
             switch (part)
             {
                 case ChromeRivet rivet: Rivet(c, rivet); break;
-                case ChromeKeep keep: Keep(c, keep.X * c.S, keep.Y * c.S, keep.Width * c.S, keep.Height * c.S); break;
+                case ChromeKeep keep: Keep(c, c.Edge(keep.X), c.Edge(keep.Y), c.Edge(keep.X + keep.Width) - c.Edge(keep.X), c.Edge(keep.Y + keep.Height) - c.Edge(keep.Y)); break;
             }
         }
         Rim(c, recipe.Rim);
@@ -286,6 +340,7 @@ public static class InterfaceChromeRenderer
                 ChromePlate p => (p.X, p.Y, p.Width, p.Height),
                 ChromeSunk p => (p.X, p.Y, p.Width, p.Height),
                 ChromeKeep p => (p.X, p.Y, p.Width, p.Height),
+                ChromeGrid p => (p.X, p.Y, p.Columns * p.Cell, p.Rows * p.Cell),
                 _ => (0, 0, 0, 0),
             };
             if (x >= px && x < px + pw && y >= py && y < py + ph) return true;
@@ -297,7 +352,7 @@ public static class InterfaceChromeRenderer
     {
         for (var y = Math.Max(0, y0); y < Math.Min(c.H, y0 + h); y++)
         for (var x = Math.Max(0, x0); x < Math.Min(c.W, x0 + w); x++)
-            c.Color[y * c.W + x] = Material(c, material, (x + 0.5f) / c.S, (y + 0.5f) / c.S);
+            c.Color[y * c.W + x] = Material(c, material, c.At(x), c.At(y));
     }
 
     private static Rgb Material(Canvas c, ChromeMaterial material, float u, float v) => material switch
@@ -305,6 +360,7 @@ public static class InterfaceChromeRenderer
         ChromeMaterial.Wood => WoodAt(c, u, v),
         ChromeMaterial.WoodDark => WoodAt(c, u, v).Times(0.62f),
         ChromeMaterial.Iron => Rgb.Lerp(IronLow, IronHigh, Math.Clamp(0.2f + 0.65f * Fbm(u * 0.22f, v * 0.22f, 7), 0, 1)),
+        ChromeMaterial.Pit => PitFill,
         ChromeMaterial.Dark => Rgb.Lerp(DarkFill, new Rgb(16, 16, 26), Fbm(u * 0.05f, v * 0.05f, 11)),
         _ => FaceHigh,
     };
@@ -318,8 +374,8 @@ public static class InterfaceChromeRenderer
 
     private static void Plate(Canvas c, ChromePlate plate)
     {
-        int x0 = plate.X * c.S, y0 = plate.Y * c.S, x1 = (plate.X + plate.Width) * c.S, y1 = (plate.Y + plate.Height) * c.S;
-        var r = plate.CornerRadius * c.S;
+        int x0 = c.Edge(plate.X), y0 = c.Edge(plate.Y), x1 = c.Edge(plate.X + plate.Width), y1 = c.Edge(plate.Y + plate.Height);
+        var r = c.Edge(plate.CornerRadius);
         for (var y = Math.Max(0, y0); y < Math.Min(c.H, y1); y++)
         for (var x = Math.Max(0, x0); x < Math.Min(c.W, x1); x++)
         {
@@ -330,14 +386,14 @@ public static class InterfaceChromeRenderer
                 var d = r - MathF.Sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
                 if (d <= -0.5f) continue;
                 var coverage = Math.Clamp(d + 0.5f, 0, 1);
-                var fill = Bevelled(Material(c, plate.Material, px / c.S, py / c.S), d, (px - cx) + (py - cy) < 0, c.S);
+                var fill = Bevelled(Material(c, plate.Material, px / (float)c.Scale, py / (float)c.Scale), d, (px - cx) + (py - cy) < 0, c.S);
                 c.Blend(x, y, fill, coverage);
                 continue;
             }
             var (left, right, top, bottom) = (px - x0, x1 - px, py - y0, y1 - py);
             edge = MathF.Min(MathF.Min(left, right), MathF.Min(top, bottom));
             lit = edge == left || edge == top;
-            c.Color[y * c.W + x] = Bevelled(Material(c, plate.Material, px / c.S, py / c.S), edge, lit, c.S);
+            c.Color[y * c.W + x] = Bevelled(Material(c, plate.Material, px / (float)c.Scale, py / (float)c.Scale), edge, lit, c.S);
         }
     }
 
@@ -367,7 +423,7 @@ public static class InterfaceChromeRenderer
 
     private static void Sunk(Canvas c, ChromeSunk sunk)
     {
-        int x0 = sunk.X * c.S, y0 = sunk.Y * c.S, x1 = (sunk.X + sunk.Width) * c.S, y1 = (sunk.Y + sunk.Height) * c.S;
+        int x0 = c.Edge(sunk.X), y0 = c.Edge(sunk.Y), x1 = c.Edge(sunk.X + sunk.Width), y1 = c.Edge(sunk.Y + sunk.Height);
         for (var y = Math.Max(0, y0); y < Math.Min(c.H, y1); y++)
         for (var x = Math.Max(0, x0); x < Math.Min(c.W, x1); x++)
         {
@@ -376,13 +432,32 @@ public static class InterfaceChromeRenderer
             var i = y * c.W + x;
             if (edge < c.S) c.Color[i] = edge == left || edge == top ? BrassDark : BrassLight;
             else if (edge < 2 * c.S) c.Color[i] = Ink;
-            else c.Color[i] = Material(c, sunk.Fill, (x + 0.5f) / c.S, (y + 0.5f) / c.S);
+            else c.Color[i] = Material(c, sunk.Fill, c.At(x), c.At(y));
+        }
+    }
+
+    private static void Grid(Canvas c, ChromeGrid grid)
+    {
+        int left = c.Edge(grid.X), top = c.Edge(grid.Y), right = c.Edge(grid.X + grid.Columns * grid.Cell), bottom = c.Edge(grid.Y + grid.Rows * grid.Cell);
+        for (var k = 1; k < grid.Columns; k++)
+        {
+            var x0 = c.Edge(grid.X + grid.Cell * k) - c.S; // the last S device pixels of the cell, never over the next one
+            for (var x = Math.Max(0, x0); x < Math.Min(right, x0 + c.S); x++)
+            for (var y = Math.Max(0, top); y < Math.Min(c.H, bottom); y++)
+                c.Color[y * c.W + x] = GridLine;
+        }
+        for (var k = 1; k < grid.Rows; k++)
+        {
+            var y0 = c.Edge(grid.Y + grid.Cell * k) - c.S;
+            for (var y = Math.Max(0, y0); y < Math.Min(bottom, y0 + c.S); y++)
+            for (var x = Math.Max(0, left); x < Math.Min(c.W, right); x++)
+                c.Color[y * c.W + x] = GridLine;
         }
     }
 
     private static void Rivet(Canvas c, ChromeRivet rivet)
     {
-        float cx = (float)rivet.X * c.S, cy = (float)rivet.Y * c.S, r = (float)rivet.Radius * c.S;
+        float cx = (float)(rivet.X * c.Scale), cy = (float)(rivet.Y * c.Scale), r = (float)(rivet.Radius * c.Scale);
         for (var y = Math.Max(0, (int)(cy - r - 1)); y < Math.Min(c.H, (int)(cy + r + 2)); y++)
         for (var x = Math.Max(0, (int)(cx - r - 1)); x < Math.Min(c.W, (int)(cx + r + 2)); x++)
         {
@@ -467,7 +542,7 @@ public static class InterfaceChromeRenderer
     private static void HoleRim(Canvas c, Hole hole)
     {
         if (hole.Round) { RoundRim(c, hole); return; }
-        float hx0 = hole.X0 * c.S, hy0 = hole.Y0 * c.S, hx1 = hole.X1 * c.S, hy1 = hole.Y1 * c.S;
+        float hx0 = c.Edge(hole.X0), hy0 = c.Edge(hole.Y0), hx1 = c.Edge(hole.X1), hy1 = c.Edge(hole.Y1);
         var reach = (int)(2.5f * c.S);
         for (var y = Math.Max(0, (int)hy0 - reach); y < Math.Min(c.H, (int)hy1 + reach); y++)
         for (var x = Math.Max(0, (int)hx0 - reach); x < Math.Min(c.W, (int)hx1 + reach); x++)
@@ -485,8 +560,8 @@ public static class InterfaceChromeRenderer
 
     private static void RoundRim(Canvas c, Hole hole)
     {
-        float cx = (hole.X0 + hole.X1) * 0.5f * c.S, cy = (hole.Y0 + hole.Y1) * 0.5f * c.S;
-        var r = ((hole.X1 - hole.X0) + (hole.Y1 - hole.Y0)) * 0.25f * c.S;
+        float cx = (float)((hole.X0 + hole.X1) * 0.5 * c.Scale), cy = (float)((hole.Y0 + hole.Y1) * 0.5 * c.Scale);
+        var r = (float)(((hole.X1 - hole.X0) + (hole.Y1 - hole.Y0)) * 0.25 * c.Scale);
         var ring = 3f * c.S;
         var reach = (int)(r + ring + 2);
         for (var y = Math.Max(0, (int)(cy - reach)); y < Math.Min(c.H, (int)(cy + reach)); y++)
@@ -496,7 +571,7 @@ public static class InterfaceChromeRenderer
             float dx = x + 0.5f - cx, dy = y + 0.5f - cy, d = MathF.Sqrt(dx * dx + dy * dy);
             if (d < r + 0.5f)
             {
-                if (x < hole.X0 * c.S || y < hole.Y0 * c.S || x >= hole.X1 * c.S || y >= hole.Y1 * c.S) continue;
+                if (x < c.Edge(hole.X0) || y < c.Edge(hole.Y0) || x >= c.Edge(hole.X1) || y >= c.Edge(hole.Y1)) continue;
                 // Inside the socket: the anti-aliased circular edge replaces the Legacy stairs.
                 c.Alpha[i] = MathF.Min(c.Alpha[i], Math.Clamp(d - r + 0.5f, 0, 1));
                 if (c.Alpha[i] > 0) c.Color[i] = Ink;
@@ -520,7 +595,7 @@ public static class InterfaceChromeRenderer
             if (c.LegacyOpaque(x, y)) { count++; x0 = Math.Min(x0, x); y0 = Math.Min(y0, y); x1 = Math.Max(x1, x); y1 = Math.Max(y1, y); }
         if (count == 0) return;
         var round = IsRound(count, x1 - x0 + 1, y1 - y0 + 1);
-        float bx0 = x0 * c.S, by0 = y0 * c.S, bx1 = (x1 + 1) * c.S, by1 = (y1 + 1) * c.S;
+        float bx0 = c.Edge(x0), by0 = c.Edge(y0), bx1 = c.Edge(x1 + 1), by1 = c.Edge(y1 + 1);
         float cx = (bx0 + bx1) * 0.5f, cy = (by0 + by1) * 0.5f, radius = MathF.Min(bx1 - bx0, by1 - by0) * 0.5f;
         var glyph = GlyphMask(c, x0, y0, x1, y1);
         for (var y = (int)by0; y < (int)by1; y++)
@@ -550,7 +625,7 @@ public static class InterfaceChromeRenderer
             // Hover lifts the face and the rim toward light brass (the original's hover frame is the lit one).
             if (hover) { face = Rgb.Lerp(face, BrassLight, 0.3f); rim = Rgb.Lerp(rim, White, 0.2f); }
             Rgb colour = inset < c.S ? Ink : inset < 3 * c.S ? rim : inset < 3.6f * c.S ? Ink : face;
-            if (inset >= 3.6f * c.S && glyph[(y / c.S) * c.LegacyW + x / c.S]) colour = c.PictureAt(x, y);
+            if (inset >= 3.6f * c.S && glyph[Math.Min(c.Cell(y), c.LegacyH - 1) * c.LegacyW + Math.Min(c.Cell(x), c.LegacyW - 1)]) colour = c.PictureAt(x, y);
             c.Color[i] = colour;
         }
     }

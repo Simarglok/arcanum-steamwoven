@@ -312,7 +312,7 @@ public partial class TerrainViewerApp
     private void PostScriptedLines()
     {
         if (_mapTransfers?.LastScripted is not { Printed.Count: > 0 } ran) return;
-        foreach (var entry in AreaScriptMessages.Entries(ran.Printed)) PostMessage(entry, "script line");
+        foreach (var entry in ScriptLineEntries(ran.Printed)) PostMessage(entry, "script line");
     }
 
     private string ScriptedLines() => _mapTransfers?.LastScripted is { Lines.Count: > 0 } ran ? " — \"" + string.Join(" / ", ran.Lines) + "\"" : "";

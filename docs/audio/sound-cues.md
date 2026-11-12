@@ -80,6 +80,7 @@ installed file. The tile table has 31, 6, 2 and 13 tiles by category; classes 21
 
 - Playing the cues: [ARC-UI-042](positional-sound.md) (position, attenuation, pan, the variant
   draw, the fallback with its rule switch).
-- The self-hit of a critical miss; spell, eye-candy, looping scenery and AI alert sounds (later slices, audio plan "Later").
-- Callers: the viewer plays footsteps, pickup and the hero's attacks (ARC-UI-042); doors, chests and
-  other events have no caller yet.
+- The self-hit of a critical miss; spell and eye-candy sounds (later slices, audio plan "Later"). Looping scenery and AI alert sounds have callers since ARC-RENDER-1126.
+- Callers: the viewer plays footsteps, pickup and the hero's attacks (ARC-UI-042), and since ARC-RENDER-1126 the scenery loops, busting and destroying, NPC and
+  companion footsteps, the item drop and the fidget, attacking and alerted barks of NPCs ([positional sound](positional-sound.md)); doors, chests and other
+  events have no caller yet.

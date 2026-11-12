@@ -23,7 +23,9 @@ MAX_I64 = 9223372036854775807
 PIN = "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52"
 POLICY = "steamwoven-normalized-clock-v1"
 FIXTURE = Path(__file__).with_name("game_clock_policy_cases.json")
-DOCUMENT = Path(__file__).resolve().parents[2] / "docs/world/game-clock-policy.md"
+# The runtime page names every worksheet case id; the jump-*, restore-* and consumer-* ids
+# describe retired, unimplemented proposals and are kept there only as worksheet ids.
+DOCUMENT = Path(__file__).resolve().parents[2] / "docs/world/game-clock-runtime.md"
 PAUSES = {"None", "User", "Menu", "TurnBased"}
 REQUIRED = frozenset("""
 boundary-dawn-before boundary-dawn-at boundary-dawn-after

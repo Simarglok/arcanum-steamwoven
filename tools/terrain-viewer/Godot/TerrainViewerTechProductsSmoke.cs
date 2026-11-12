@@ -3,6 +3,7 @@ using Arcanum.Data.Technology;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
@@ -14,7 +15,7 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     internal const string TechProductsCode = "ARC-MAGIC-051";
-    internal const int TechDisciplineChemistry = 1, TechDisciplineTherapeutics = 7;
+    internal const int TechDisciplineChemistry = 1, TechDisciplineExplosives = 3, TechDisciplineTherapeutics = 7;
 
     // ARC-MAGIC-051 (technology audit ARC-RES-125, slice T-s, first part) native observation (stage "tech-products", only when named, with --hero, on the map "crash site cave"): the
     // technology products the stage "tech-craft" leaves unused, assembled as the player does it (the same steps, TerrainViewerTechCraftHarness.cs) and used on the player's data.
@@ -25,8 +26,14 @@ public partial class TerrainViewerApp
     //     the NPC takes the record's damage, the unit is gone.
     //  4. Found schematic: the module's found documents of those two disciplines are read through the inventory's Read button (each registers its schematic and is destroyed; a second copy of a known
     //     one is kept), and the Found tab of the schematic window assembles the first record the hero's expertise reaches.
-    //  5. F7 and F8: the hero's effect list and held items are the same after the load.
-    // The NPC's life and the hero's hit points are put back; the rest (effects, points, degrees, items) is the stage's own state, not restored: the stage runs alone (smoke.py) and its F8 replaces the session.
+    //  5. Charge cells: Chemistry degree 2 makes power cells; with intelligence bought to 17 and Electric degrees 1 to 6 the powered shield (degree 3) and the maintained armour (degree 6, record 168) are assembled and
+    //     worn: the shield's 15 s call takes one cell, the armour's maintained run a cell a tick (ChargeNBranch).
+    //  6. NPC crafter: the window queued the way `su` queues it for the cave NPC (given a Herbology degree by the stage: the cave's NPCs have none) assembles a learned record from the NPC's own list; products to the NPC, hero's pack unchanged.
+    //  7. Explosives: the degree-1 grenade (record 219) is assembled, thrown at a cave NPC from three to six cells (item event, run, damage on a cave NPC, grenade gone).
+    //  7b. Cell weapon (ARC-MAGIC-060): the Electric degree-4 weapon (record 147, Target_Hit) is wielded with the armour off and swung at the cave NPC until it dies; the firing of a hit pays its cell(s) and shocks the NPC through the record
+    //     (the original fires Target_Hit on the items of the one who damages an opponent, 0x4CBE70). The weapon comes off and the armour goes back on.
+    //  8. F7 and F8: the hero's effect list, held and worn items, cells and degrees, and the NPC's list are the same after the load.
+    // The hero's hit points and the cave NPCs' lives (all of them, after the grenade) are put back; the rest (effects, points, degrees, items) is the stage's own state, not restored: the stage runs alone (smoke.py) and its F8 replaces the session.
     private async Task RunAreaTechProductsSmokeAsync()
     {
         if (_areaSession is not { } session || session.QueryHero() is null || _inventoryHost is null || _combatHost is null || _readyArea is not { } area
@@ -35,7 +42,6 @@ public partial class TerrainViewerApp
         var data = await TechSmokeDataAsync();
         for (var i = 0; i < 1800 && SpellRecordsNow() is null; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         TechProductsRequire(SpellRecordsNow() is not null && ItemTriggersNow() is SessionItemTriggers && SpellCasterNow() is not null, "the spell data and the item-trigger host of the map");
-        var caster = SpellCasterNow()!;
         var runtime = CurrentAreaMap;
         var map = new AreaMapRuntime(area.Snapshot, grid.Snapshot, grid.Chart);
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
@@ -102,10 +108,10 @@ public partial class TerrainViewerApp
             var poisonEntity = poison.Made[0];
             var poisonProduct = TechSmokePrototype(session, poisonEntity);
             static CellCoord World(AreaObjectRecord row) => new(checked((int)row.WorldX!.Value), checked((int)row.WorldY!.Value));
-            var here = caster.Facts(SessionSpellCaster.Hero)?.Location is { } at && at != SpellLocation.None ? new CellCoord(checked((int)at.X), checked((int)at.Y)) : grid.State.CommittedCell is var c ? new CellCoord(c.X, c.Y) : default;
+            var here = SpellCasterNow()!.Facts(SessionSpellCaster.Hero)?.Location is { } at && at != SpellLocation.None ? new CellCoord(checked((int)at.X), checked((int)at.Y)) : grid.State.CommittedCell is var c ? new CellCoord(c.X, c.Y) : default;
             var npc = area.Snapshot.Objects.Where(row => row.Type == 16 && row.Scope == AreaScope.Core && row.WorldX is not null && row.WorldY is not null && !IsAreaCompanion(row.Key))
                 .Select(row => (Row: row, Id: SpellPickId(row.Key), Target: _combatHost.Target(session, runtime, row.Key)))
-                .Where(o => o.Id is not null && o.Target is { Dead: false, Follower: false, Build.Combat: not null } && caster.Facts(o.Id)?.Location is { } there && there != SpellLocation.None)
+                .Where(o => o.Id is not null && o.Target is { Dead: false, Follower: false, Build.Combat: not null } && SpellCasterNow()!.Facts(o.Id)?.Location is { } there && there != SpellLocation.None)
                 .OrderBy(o => Math.Max(Math.Abs(World(o.Row).X - here.X), Math.Abs(World(o.Row).Y - here.Y))).FirstOrDefault();
             TechProductsRequire(npc.Id is not null, "a living NPC with a cell to walk to");
             var npcId = npc.Id!;
@@ -174,8 +180,238 @@ public partial class TerrainViewerApp
             GD.Print($"{TechProductsCode} tech-products found buttons " + string.Join(";", buttons));
             TechProductsRequire(foundCraft is not null, "the Found tab assembled a record the hero's expertise reaches: " + string.Join(";", buttons));
 
-            // 5. F7 and F8: the same effects and items after the load.
-            string[] State(GameSessionOwner s) => [.. s.QueryHeroEffects()!.Effects.Select(e => "effect=" + e.Number).OrderBy(l => l, StringComparer.Ordinal), .. TechSmokeHeldLines(s),
+            // 5. Charge cells: Chemistry degree 2 makes the power cells, Electric degrees 1 to 6 (intelligence bought up to the 17 degree 6 asks) make the powered shield (degree 3) and the maintained armour (degree 6).
+            const int CellAmmoType = 2, TechDisciplineElectric = 2;
+            int Cells() => session.QueryHeroAmmo().Where(a => a.AmmoType == CellAmmoType).Sum(a => a.Units);
+            var intelligenceNeed = 17 - Stat(CharacterStat.Intelligence);
+            TechSmokeEnsurePoints(session, Math.Max(0, intelligenceNeed) + 8);
+            OpenSheet();
+            TechProductsRequire(SheetOpen, "the sheet opens for the electric degrees: " + _sheetStatus);
+            for (var i = 0; i < intelligenceNeed; i++) PressStat(6, spend: true);
+            TechProductsRequire(Stat(CharacterStat.Intelligence) >= 17, $"the stats page's + raised intelligence to 17 ({Stat(CharacterStat.Intelligence)})");
+            TechProductsRequire(TechSmokeBuyDegree(TechDisciplineChemistry) == 1, "the tech page's + buys Chemistry degree 2");
+            TechProductsRequire(TechSmokeBuyDegree(TechDisciplineExplosives) == 1, "the tech page's + buys Explosives degree 1");
+            for (var degree = 1; degree <= 6; degree++) TechProductsRequire(TechSmokeBuyDegree(TechDisciplineElectric) == 1, $"the tech page's + buys Electric degree {degree}");
+            EndSheet();
+            var cellRecord = SchematicCatalog.LearnedNumber(TechDisciplineChemistry, 2);
+            var cellCraft = TechSmokeCraft(data, TechDisciplineChemistry, cellRecord);
+            var cellsMade = Cells();
+            TechProductsRequire(cellsMade > 0 && session.QueryHeroAmmo().Any(a => a.AmmoType == CellAmmoType), $"the Chemistry degree 2 product is power cells ({cellsMade})");
+            GD.Print($"{TechProductsCode} tech-products cells record={cellRecord} made={cellCraft.Made.Length} cells={cellsMade}");
+
+            // The shield (the hero's own two-handed weapon is taken off first, it refuses a shield): worn, it asks for its cell every 15 s of the game clock.
+            var shieldRecord = SchematicCatalog.LearnedNumber(TechDisciplineElectric, 3);
+            var shield = TechSmokeCraft(data, TechDisciplineElectric, shieldRecord).Made[0];
+            OpenInventory();
+            TakeOffItem(EquipmentSlot.Weapon);
+            TechProductsRequire(InventoryOpen && _inventoryHost.Wearable(session, shield, _areaKitWear) is not null, "the made shield has wear values");
+            WearItem(shield, AreaInventoryHost.WearSlots(_inventoryHost.Wearable(session, shield, _areaKitWear)!)[0]);
+            EndInventory();
+            TechProductsRequire(session.QueryEquipment().Worn.Any(w => w.Entity == shield && w.Slot == EquipmentSlot.Shield), $"the powered shield is worn (it could not be before ARC-MAGIC-041): {_inventoryStatus}");
+            var cellsWorn = Cells();
+            GD.Print($"{TechProductsCode} tech-products shield calls clock={session.QueryClockSnapshot().GameTimestampMs} pending={string.Join(";", session.QueryScriptCalls().Select(c => $"{c.Call.Script}:{c.DeadlineMs}"))}");
+            for (var step = 0; step < 4 && Cells() == cellsWorn; step++)
+            {
+                TechProductsRequire(session.JumpClocks(session.QueryClockSnapshot().Token, 8L * 16000).Disposition == Arcanum.Simulation.Clock.ClockMutationDisposition.Changed, "the game clock moved by 16 script seconds (8 ms of game clock to the script ms)");
+                SpellCasterNow()!.ProcessEvents();
+                for (var frames = 0; frames < 200 && Cells() == cellsWorn; frames++) Frame();
+            }
+            GD.Print($"{TechProductsCode} tech-products shield calls after clock={session.QueryClockSnapshot().GameTimestampMs} pending={string.Join(";", session.QueryScriptCalls().Select(c => $"{c.Call.Script}:{c.DeadlineMs}"))} refusals={AreaEvents.CallRefusals} last={AreaEvents.LastCallRefusal}");
+            TechProductsRequire(Cells() == cellsWorn - 1, $"the worn shield's 15 s call took one cell ({cellsWorn} -> {Cells()})");
+            // The timer goes on: the next call, 15 script seconds later, takes a second cell (the wear question answered for the assembled shield).
+            TechProductsRequire(session.JumpClocks(session.QueryClockSnapshot().Token, 8L * 16000).Disposition == Arcanum.Simulation.Clock.ClockMutationDisposition.Changed, "the game clock moved by 16 more script seconds");
+            for (var frames = 0; frames < 200 && Cells() == cellsWorn - 1; frames++) Frame();
+            TechProductsRequire(Cells() == cellsWorn - 2, $"the shield's next call took a second cell ({cellsWorn} -> {Cells()})");
+            GD.Print($"{TechProductsCode} tech-products shield record={shieldRecord} cells={cellsWorn}->{Cells()}");
+
+
+            // The maintained armour (Electric degree 6, record 168): worn, its maintained run pays a cell a tick (5 s of the game clock) through ChargeNBranch.
+            // The shield comes off first: its timer must not be the one that takes the cell.
+            OpenInventory();
+            TakeOffItem(EquipmentSlot.Shield);
+            EndInventory();
+            TechProductsRequire(session.QueryEquipment().Worn.All(w => w.Slot != EquipmentSlot.Shield), "the shield is off");
+            var armourRecord = SchematicCatalog.LearnedNumber(TechDisciplineElectric, 6);
+            var armour = TechSmokeCraft(data, TechDisciplineElectric, armourRecord).Made[0];
+            OpenInventory();
+            TechProductsRequire(InventoryOpen && _inventoryHost.Wearable(session, armour, _areaKitWear) is not null, "the made armour has wear values");
+            WearItem(armour, AreaInventoryHost.WearSlots(_inventoryHost.Wearable(session, armour, _areaKitWear)!)[0]);
+            EndInventory();
+            TechProductsRequire(session.QueryEquipment().Worn.Any(w => w.Entity == armour), $"the maintained armour is worn: {_inventoryStatus}");
+            var cellsArmour = Cells();
+            for (var step = 0; step < 1 && Cells() >= cellsArmour; step++)
+            {
+                TechProductsRequire(session.JumpClocks(session.QueryClockSnapshot().Token, 8L * 6000).Disposition == Arcanum.Simulation.Clock.ClockMutationDisposition.Changed, "the game clock moved by 6 script seconds");
+                SpellCasterNow()!.ProcessEvents();
+                for (var frames = 0; frames < 200 && Cells() >= cellsArmour; frames++) Frame();
+            }
+            TechProductsRequire(Cells() < cellsArmour, $"the worn maintained armour paid a cell a tick ({cellsArmour} -> {Cells()})");
+            GD.Print($"{TechProductsCode} tech-products armour record={armourRecord} cells={cellsArmour}->{Cells()}");
+
+            // 6. An NPC crafter, as `su` opens it: the window is queued the way the conversation's `su` queues it (QueueDialogSchematics ends in the same field) for the cave NPC, whose own sheet has no technology
+            //    degree (the cave's NPCs have none), so the stage gives the crafter facts a Herbology degree 1 and intelligence 8 (the one made-up fact); the components are put in the NPC's list through the session,
+            //    the window assembles from the NPC's list and the products go to the NPC, the hero's pack and the components in it unchanged.
+            session.Heal(session.Version, life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            var caveFacts = AreaNpcCrafter(npcId);
+            TechProductsRequire(caveFacts is not null, "the cave NPC has crafter facts");
+            var cave = caveFacts!;
+            var degrees = cave.Loaded.Sheet.TechDegrees.IsDefaultOrEmpty ? new int[8] : cave.Loaded.Sheet.TechDegrees.ToArray();
+            TechProductsRequire(degrees.All(d => d == 0), $"the cave NPC has no degree of its own ({string.Join(",", degrees)})");
+            degrees[TechDisciplineHerbology] = 1;
+            var stats = cave.Loaded.Sheet.Stats.ToArray(); stats[(int)CharacterStat.Intelligence] = Math.Max(stats[(int)CharacterStat.Intelligence], 8);
+            TechProductsRequire(session.QueryNpcAdvancement(npcId) is null, "the session keeps no advancement record of the cave NPC (it would override the stage's crafter facts)");
+            var smith = new SessionNpcCrafter(cave.Loaded with { Sheet = cave.Loaded.Sheet with { TechDegrees = [.. degrees], Stats = [.. stats] } }, cave.Modifiers);
+            var npcRecord = SchematicCatalog.LearnedNumber(TechDisciplineHerbology, 1);
+            var npcRead = data.Catalog.Read(npcRecord).Record!;
+            var npcComponents = new[] { TechSmokeCheapest(data, npcRead.Component1.Bases), TechSmokeCheapest(data, npcRead.Component2.Bases) };
+            var heroLinesBefore = TechSmokeHeldLines(session);
+            var npcListBefore = session.QueryNpcInventory(npcId).Select(i => i.Entity).ToHashSet(StringComparer.Ordinal);
+            var given = npcComponents.Select(prototype =>
+            {
+                var added = session.AddItemToNpc(session.Version, npcId, data.Kind(prototype)!.Value, AreaInventoryHost.DiagnosticInsertCheck);
+                TechProductsRequire(added.Disposition == GameSessionDisposition.Changed && added.Item is not null, $"the NPC was given prototype {prototype}: {added.Disposition} {added.Failure}");
+                return added.Item!;
+            }).ToArray();
+            _schematicScriptOpen = (session, smith);
+            for (var frames = 0; frames < 600 && !SchematicsOpen; frames++) { Frame(); TakeScriptSchematics(); }
+            TechProductsRequire(SchematicsOpen && _schematicCrafter is not null, "the crafter's window opened from the queued su: " + _schematicsStatus);
+            SelectSchematicDiscipline(TechDisciplineHerbology);
+            TechProductsRequire(_schematicsPanel!.View is { Placeholder: false } npcView && npcView.Record == npcRecord && npcView.Crafter == npcId, $"the window shows record {npcRecord} of the NPC ({_schematicsPanel.View?.Record} {_schematicsPanel.View?.Crafter})");
+            TechProductsRequire(_schematicsPanel.View!.Button == Arcanum.Simulation.Technology.AssemblyButton.CanAssemble, $"the NPC's list holds the components ({_schematicsPanel.View.Button})");
+            AssembleSchematic();
+            var npcMessage = _schematicMessage ?? "";
+            TechProductsRequire(!npcMessage.StartsWith("not assembled", StringComparison.Ordinal), $"the NPC assembled record {npcRecord}: {npcMessage}");
+            EndSchematics(byPlayer: true);
+            var npcAfter = session.QueryNpcInventory(npcId).Select(i => i.Entity).ToHashSet(StringComparer.Ordinal);
+            var npcMade = npcAfter.Except(npcListBefore).Except(given).ToArray();
+            TechProductsRequire(npcMade.Length == npcRead.Quantity && given.All(e => !npcAfter.Contains(e)), $"the products ({npcMade.Length} of {npcRead.Quantity}) are in the NPC's list and the components are gone from it");
+            TechProductsRequire(TechSmokeHeldLines(session).SequenceEqual(heroLinesBefore), "the hero's pack is unchanged by the NPC's assembly");
+            GD.Print($"{TechProductsCode} tech-products npc-crafter record={npcRecord} made={npcMade.Length} message={npcMessage}");
+
+            // 7. Explosives: the degree-1 grenade (record 219: fire and normal damage, knockback, a flash summon, a destroy) is assembled, lifted onto the game cursor and thrown at the cave NPC from three to six
+            //    cells away with a clear line; its item event starts the record's run, the run's damage lands on a cave NPC (or is resisted) and the grenade is gone afterwards.
+            var lineMap = AreaLineOfFireNow();
+            TechProductsRequire(lineMap is not null, "the map's line-of-fire data");
+            var caveNpcs = area.Snapshot.Objects.Where(r => r.Type == 16 && r.Scope == AreaScope.Core && !IsAreaCompanion(r.Key)).Select(r => SpellPickId(r.Key)).Where(id => id is not null).Select(id => id!).ToHashSet(StringComparer.Ordinal);
+            CellCoord? throwFrom = null; var aimedAt = World(npc.Row);
+            for (var d = 3; d <= 6 && throwFrom is null; d++)
+            for (var dy = -d; dy <= d && throwFrom is null; dy++)
+            for (var dx = -d; dx <= d && throwFrom is null; dx++)
+            {
+                if (Math.Max(Math.Abs(dx), Math.Abs(dy)) != d) continue;
+                var from = new CellCoord(aimedAt.X + dx, aimedAt.Y + dy);
+                if (!lineMap!.Contains(from) || LineOfFireRules.Trace(from, 0, 0, aimedAt, lineMap, session.Rules.Combat).LineFailed) continue;
+                var chart = map.Chart.ToChart(new(from.X, from.Y));
+                if (map.Chart.Contains(chart) && ApproachCell(grid, aimedAt.X, aimedAt.Y, 6, c => c == chart) == chart) throwFrom = from;
+            }
+            TechProductsRequire(throwFrom is not null, "a clear line from three to six cells to the cave NPC");
+            session.Heal(session.Version, life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            TechSmokeAmmoNpc = npcId;
+            var grenadeRecord = SchematicCatalog.LearnedNumber(TechDisciplineExplosives, 1);
+            AreaSmokePlace(map, map.Chart.ToChart(new(throwFrom!.Value.X, throwFrom.Value.Y)));
+            _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+            PublishWorldSelection();
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            // The flight lands off the aimed tile by a fixed offset from where the hero stands (the grenade smoke prints it as the flight's, not judged): the first throw learns it, the next aims so that it lands on the NPC.
+            var grenadeAim = aimedAt; var grenadeHurt = Array.Empty<string>(); var grenades = 0; var grenade = "";
+            for (; grenades < 3 && grenadeHurt.Length == 0; grenades++)
+            {
+                session.Heal(session.Version, life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+                session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000 });
+                AreaSmokePlace(map, map.Chart.ToChart(new(throwFrom!.Value.X, throwFrom.Value.Y)));
+                _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+                PublishWorldSelection();
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                grenade = TechSmokeCraft(data, TechDisciplineExplosives, grenadeRecord).Made[0];
+                SyncAreaInventory();
+                var grenadeSpells = HeroItemSpells(grenade);
+                foreach (var number in (grenadeSpells?.Spells ?? []).Where(n => n >= 0 && n < spellRecords.Length && spellRecords[n] is not null))
+                    GD.Print($"{TechProductsCode} tech-products grenade spell={number} triggers=0x{spellRecords[number]!.Data.ItemTriggers:X} charges={grenadeSpells!.Charges} begin=" + string.Join(";", spellRecords[number]!.Of(SpellRunAction.Begin).Select(c => c.Type.ToString())));
+                TechProductsRequire(HoldItemOnGameCursor(grenade, "smoke") is null && GameCursorItemForSelfTest == grenade, $"the grenade is on the game cursor ({HeldThrowNoticeForSelfTest})");
+                _projectileEndsForSelfTest.Clear(); _thrownLandingsForSelfTest.Clear(); _shotEndItemEventsForSelfTest.Clear(); _lastHeldThrowForSelfTest = null;
+                var grenadeLog = SpellCasterNow()!.Log.Count;
+                TechProductsRequire(ThrowGameCursorItem(grenadeAim), $"the throw started ({HeldThrowNoticeForSelfTest})");
+                for (var frames = 0; frames < 1500 && _lastHeldThrowForSelfTest is null && HeroRunsHost() is { ThrowRun: not null }; frames++) Frame();
+                TechProductsRequire(_lastHeldThrowForSelfTest is { Disposition: GameSessionDisposition.Changed }, $"the grenade was thrown ({_lastHeldThrowForSelfTest?.Disposition} {_lastHeldThrowForSelfTest?.Failure}, {HeldThrowNoticeForSelfTest})");
+                for (var frames = 0; frames < 1500 && (_projectiles.Count > 0 || HeroRunsHost() is { ThrowRun: not null }); frames++) Frame();
+                TechProductsRequire(_projectiles.Count == 0, "the flight ended");
+                for (var frames = 0; frames < 400 && SpellCasterNow()!.Log.Count == grenadeLog; frames++) Frame();
+                for (var frames = 0; frames < 200; frames++) Frame();
+                var grenadeEvents = _shotEndItemEventsForSelfTest.ToArray();
+                grenadeHurt = [.. SpellCasterNow()!.Log.Skip(grenadeLog).Where(e => e.Kind is SpellCastEventKind.Damaged or SpellCastEventKind.Resisted && e.Object is not null && caveNpcs.Contains(e.Object)).Select(e => e.Object!).Distinct()];
+                var landed = _thrownLandingsForSelfTest.Count > 0 ? _thrownLandingsForSelfTest[0].Tile : default;
+                GD.Print($"{TechProductsCode} tech-products grenade record={grenadeRecord} throw={grenades} events={grenadeEvents.Length} started={string.Join(",", grenadeEvents.Select(e => e.Started))} hurt={grenadeHurt.Length} landed={landed.X},{landed.Y} aimed={grenadeAim.X},{grenadeAim.Y}");
+                TechProductsRequire(grenadeEvents.Any(e => e.Started > 0), $"the grenade's item event started a spell run (events {grenadeEvents.Length})");
+                TechProductsRequire(!session.QueryPlacedItems().Any(p => p.Entity == grenade) && !session.QueryPcInventory().Any(i => i.Entity == grenade) && session.IsItemDestroyed(grenade), "the grenade is gone after the explosion");
+                if (grenadeHurt.Length == 0 && _thrownLandingsForSelfTest.Count > 0) grenadeAim = new CellCoord(aimedAt.X - (landed.X - grenadeAim.X), aimedAt.Y - (landed.Y - grenadeAim.Y));
+            }
+            TechProductsRequire(grenadeHurt.Length > 0, $"the grenade's run damaged (or was resisted by) a cave NPC within {grenades} throws");
+            if (GameCursorItemForSelfTest == grenade) _gameCursorItem = null;
+            ClearSpellMissiles("the smoke's grenade ended");
+            foreach (var id in caveNpcs) if (_combatHost.Target(session, runtime, area.Snapshot.Objects.First(r => r.Type == 16 && SpellPickId(r.Key) == id).Key) is { Build.Combat: not null } hurtTarget)
+                session.Heal(session.Version, hurtTarget.Build.Combat!.Target, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+
+            // The cell weapon (Electric degree 4, record 147, event Target_Hit|Target_Attacker): the original fires Target_Hit on the items of the one that damages an opponent (0x4CBE70 walks the attacker's worn
+            // items), so the wielded weapon pays its cell(s) through ChargeNBranch and shocks the struck NPC at each hit, once per hit. The armour comes off so that only the weapon's run takes cells.
+            OpenInventory();
+            TakeOffItem(EquipmentSlot.Armor);
+            EndInventory();
+            TechProductsRequire(session.QueryEquipment().Worn.All(w => w.Slot != EquipmentSlot.Armor), "the maintained armour is off");
+            var weaponRecord = SchematicCatalog.LearnedNumber(TechDisciplineElectric, 4);
+            var weapon = TechSmokeCraft(data, TechDisciplineElectric, weaponRecord).Made[0];
+            OpenInventory();
+            TechProductsRequire(InventoryOpen && _inventoryHost.Wearable(session, weapon, _areaKitWear) is not null, "the made cell weapon has wear values");
+            WearItem(weapon, EquipmentSlot.Weapon);
+            EndInventory();
+            TechProductsRequire(session.QueryEquipment().Worn.Any(w => w.Entity == weapon && w.Slot == EquipmentSlot.Weapon), $"the cell weapon is wielded: {_inventoryStatus}");
+            const int CellWeaponSpell = 147;
+            GD.Print($"{TechProductsCode} tech-products cell-weapon spell={CellWeaponSpell} begin=" + string.Join(";", SpellRecordsNow()![CellWeaponSpell]!.Of(SpellRunAction.Begin).Select(c => c.Type + (c.Damage is { } d ? $":{d.Minimum}-{d.Maximum}/type{d.DamageType}" : ""))));
+            var weaponSpells = HeroItemSpells(weapon);
+            TechProductsRequire(weaponSpells is not null && weaponSpells.Spells.Contains(CellWeaponSpell) && SpellRecordsNow()![CellWeaponSpell] is { } weaponSpell && (weaponSpell.Data.ItemTriggers & 0x40000u) != 0,
+                $"the made weapon (schematic {weaponRecord}) carries spell {CellWeaponSpell} with the Target_Hit event ({string.Join(",", weaponSpells?.Spells ?? [])})");
+            session.Heal(session.Version, life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000 });
+            var swingTarget = _combatHost.Target(session, runtime, npc.Row.Key);
+            TechProductsRequire(swingTarget is { Build.Combat: not null }, "the cave NPC is an attack target again");
+            AreaSmokePlace(map, AreaSmokeStandable(map, map.Chart.ToChart(new(World(npc.Row).X, World(npc.Row).Y)), 1));
+            _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+            PublishWorldSelection();
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (!HeroInCombatMode) ToggleCombatMode();
+            var cellsBeforeSwing = Cells(); var weaponLog = SpellCasterNow()!.Log.Count; var weaponLifeBefore = NpcHitPoints();
+            CancelAreaAttack(null);
+            _attack = new(swingTarget!, swingTarget!.Build.Combat!, null);
+            StartAttackGoal(_attack);
+            AttackSettleForSelfTest();
+            var swings = new List<string>(); var weaponFirings = 0; var lastSeen = _lastCritterAttackForSelfTest;
+            void Swung()
+            {
+                if (_lastCritterAttackForSelfTest is not { } now || ReferenceEquals(now, lastSeen)) return;
+                lastSeen = now;
+                var started = now.ItemSpells.Count(f => f.Item == weapon && (f.Mask & 0x40000u) != 0 && f.Result.Spells.Count > 0);
+                weaponFirings += started;
+                swings.Add($"{now.Resolution?.Outcome}:{started}");
+            }
+            for (var frames = 0; frames < 20000 && _attack is not null && !session.QueryLife(life).View!.Status.IsDead; frames++) { Frame(); Swung(); }
+            for (var frames = 0; frames < 200; frames++) { Frame(); Swung(); }
+            CancelAreaAttack(null);
+            var shocks = SpellCasterNow()!.Log.Skip(weaponLog).Count(e => e.Kind == SpellCastEventKind.Damaged && e.Object == npcId);
+            var cellsSpent = cellsBeforeSwing - Cells();
+            GD.Print($"{TechProductsCode} tech-products cell-weapon record={weaponRecord} cells={cellsBeforeSwing}->{Cells()} shocks={shocks} swings={string.Join(",", swings)} weapon-firings={weaponFirings} npc-hit-points={weaponLifeBefore}->{NpcHitPoints()} notice={_attackNotice}");
+            // The cave NPCs have a few hit points: the first hit may kill, so the record's electrical damage on the (then dead) NPC is not always logged; the cell paid before it is.
+            // A cell-powered source pays the cost times (1 + power / complexity) (TC1, original bug): one cell or up to double for a technologist, per firing.
+            TechProductsRequire(weaponFirings > 0 && cellsSpent >= weaponFirings && cellsSpent <= 2 * weaponFirings, $"each hit's firing of the cell weapon paid its cells ({cellsBeforeSwing} -> {Cells()}, {weaponFirings} firings, shocks {shocks}: {_attackNotice})");
+            TechProductsRequire(NpcHitPoints() < weaponLifeBefore, $"the NPC lost hit points ({weaponLifeBefore} -> {NpcHitPoints()}, {cellsSpent} cells, {shocks} shocks logged)");
+            if (HeroInCombatMode) ToggleCombatMode();
+            // The hands and the body as the later steps expect them: the weapon off, the maintained armour on again.
+            OpenInventory();
+            TakeOffItem(EquipmentSlot.Weapon);
+            WearItem(armour, EquipmentSlot.Armor);
+            EndInventory();
+            TechProductsRequire(session.QueryEquipment().Worn.Any(w => w.Entity == armour) && session.QueryEquipment().Worn.All(w => w.Slot != EquipmentSlot.Weapon), $"the weapon is off and the armour is on again: {_inventoryStatus}");
+
+            // 8. F7 and F8: the same effects and items after the load.
+            string[] State(GameSessionOwner s) => [.. s.QueryHeroEffects()!.Effects.Select(e => "effect=" + e.Number).OrderBy(l => l, StringComparer.Ordinal), .. TechSmokeHeldLines(s), "npc-items=" + string.Join("+", s.QueryNpcInventory(npcId).Select(i => i.Entity).OrderBy(e => e, StringComparer.Ordinal)), "cells=" + s.QueryHeroAmmo().Where(a => a.AmmoType == 2).Sum(a => a.Units), .. s.QueryEquipment().Worn.Select(w => $"worn={w.Slot}:{w.Entity}"),
                 .. Enumerable.Range(0, 8).Select(d => "degree" + d + "=" + TechSmokeDegree(s, d))];
             var saved = State(session);
             _saveLibraryForSelfTest = new(saves);
@@ -191,13 +427,14 @@ public partial class TerrainViewerApp
             var loaded = State(_areaSession!);
             TechProductsRequire(loaded.SequenceEqual(saved), $"the load restored the effects, items and degrees: lost {string.Join(", ", saved.Except(loaded))}; new {string.Join(", ", loaded.Except(saved))}");
             GD.Print("ARC-MAGIC-051 native-smoke tech-products PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Map = _readyMapName, Intelligence = intelligence, Therapeutics = potions, Chemistry = new { Record = chemRecord, Product = poisonProduct, Damage = recordDamage }, Found = new { Documents = documents.Length, Assembled = foundCraft!.Record }, StateLines = saved.Length }));
+                Map = _readyMapName, Intelligence = intelligence, Therapeutics = potions, Chemistry = new { Record = chemRecord, Product = poisonProduct, Damage = recordDamage }, Found = new { Documents = documents.Length, Assembled = foundCraft!.Record }, Cells = new { Shield = shieldRecord, Armour = armourRecord, Weapon = weaponRecord, Shocks = shocks }, NpcCrafter = npcRecord, Grenade = grenadeRecord, StateLines = saved.Length }));
         }
         finally
         {
             if (InventoryOpen) EndInventory();
             if (SheetOpen) EndSheet();
             if (SchematicsOpen) EndSchematics();
+            TechSmokeAmmoNpc = null;
             CancelArmedLockpicks("the smoke ended");
             HeroRunsHost()?.LoseAll("SMOKE_TECH_PRODUCTS_END");
             if (_mapHandoff is not null) await (_lastLoad ?? Task.CompletedTask);

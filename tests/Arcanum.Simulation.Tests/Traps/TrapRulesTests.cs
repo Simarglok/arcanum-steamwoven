@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Traps;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Simulation.Traps.TrapRules;
@@ -102,5 +103,43 @@ public sealed class TrapRulesTests
         Assert.IsTrue(StepTriggers(0x1 | 0x8 | 0x100));
         Assert.IsFalse(StepTriggers(0x2));
         Assert.IsFalse(StepTriggers(0x4 | 0x10));
+    }
+
+    // ARC-MAGIC-057 (ledger SP1): the spot trap skill's case of 0x4C7160.
+    [TestMethod]
+    public void A_passed_first_roll_spots_and_keeps_its_critical_flag_without_a_second_roll()
+    {
+        var calls = 0;
+        int Second() { calls++; return 1; }
+        Assert.AreEqual((true, false), SpotCase(true, false, SkillTraining.None, TrapClass.Nonmagical, 50, 0, Second));
+        Assert.AreEqual((true, true), SpotCase(true, true, SkillTraining.Master, TrapClass.Magical, 50, 0, Second));
+        Assert.AreEqual(0, calls, "the second roll is drawn only for a failed master");
+    }
+
+    [TestMethod]
+    public void Only_a_master_that_failed_without_a_critical_failure_rolls_again_against_effectiveness_and_total()
+    {
+        var calls = 0;
+        int Roll(int value) { calls++; return value; }
+        Assert.AreEqual((false, false), SpotCase(false, false, SkillTraining.Expert, TrapClass.Nonmagical, 90, 0, () => Roll(1)));
+        Assert.AreEqual((false, true), SpotCase(false, true, SkillTraining.Master, TrapClass.Nonmagical, 90, 0, () => Roll(1)));
+        Assert.AreEqual(0, calls);
+        // Effectiveness 60, total 10: a roll of 50 passes (50 + 10 <= 60), 51 does not.
+        Assert.AreEqual((true, false), SpotCase(false, false, SkillTraining.Master, TrapClass.Nonmagical, 60, 10, () => Roll(50)));
+        Assert.AreEqual((false, false), SpotCase(false, false, SkillTraining.Master, TrapClass.Nonmagical, 60, 10, () => Roll(51)));
+        Assert.AreEqual(2, calls);
+        // A negative total (a bonus) helps.
+        Assert.AreEqual((true, false), SpotCase(false, false, SkillTraining.Master, TrapClass.Nonmagical, 60, -20, () => Roll(80)));
+    }
+
+    [TestMethod]
+    public void A_magical_trap_is_never_spotted_below_expert_whichever_roll_passed()
+    {
+        foreach (var training in new[] { SkillTraining.None, SkillTraining.Apprentice })
+            Assert.AreEqual((false, false), SpotCase(true, true, training, TrapClass.Magical, 95, 0, () => 1));
+        foreach (var training in new[] { SkillTraining.Expert, SkillTraining.Master })
+            Assert.AreEqual((true, false), SpotCase(true, false, training, TrapClass.Magical, 95, 0, () => 1));
+        Assert.AreEqual((true, false), SpotCase(false, false, SkillTraining.Master, TrapClass.Magical, 95, 0, () => 1), "a master's second roll spots a magical trap");
+        Assert.AreEqual((true, false), SpotCase(true, false, SkillTraining.Apprentice, TrapClass.Nonmagical, 95, 0, () => 1));
     }
 }

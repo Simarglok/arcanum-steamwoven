@@ -241,8 +241,8 @@ public partial class TerrainViewerApp
         Require(LauncherSettingsFile.Load(settingsPath) is { Status: LauncherSettingsReadStatus.Read } reset && reset.Settings == LauncherSettings.Defaults
                 && Lines()[5] == "Settings reset to the defaults.", "Reset wrote the defaults over it: " + Lines()[5]);
 
-        // ARC-UI-143: the HD lines of the options window on the launcher: defaults off/off/Auto, each choice saved at once in the same files the
-        // options window and the start read, shown again by the next launcher, Custom's folder, and Reset leaving them alone.
+        // ARC-UI-143: the HD lines on the launcher: defaults off/off/Auto, each choice saved at once in the settings files the
+        // start reads, shown again by the next launcher, Custom's folder, and Reset leaving them alone.
         var hdFolder = System.IO.Directory.CreateDirectory(System.IO.Path.Combine(directory, "hd")).FullName;
         var gameSettingsPath = System.IO.Path.Combine(hdFolder, "game_settings_v1.json");
         var visualPath = System.IO.Path.Combine(hdFolder, "visual_profile_v1.json");
@@ -293,7 +293,7 @@ public partial class TerrainViewerApp
         return "first run without a folder, a non-game folder in words, Play storing folder/identity/Original/show at start, show at start "
                + "reopening it, a stored folder going straight on, --launcher, the Rules line writing the file, the GOG installer unpacked by a stand-in "
                + "tool (no tool, progress lock, chosen folder, used folder refused, cancel), the game data prepared on the first Play (progress, cancel, refusal, "
-               + "cached, a stored folder), Reset over a newer build's file, the HD lines (saved at once in the options window's files, shown again, Custom's folder, Reset leaves them)";
+               + "cached, a stored folder), Reset over a newer build's file, the HD lines (saved at once in the settings files, shown again, Custom's folder, Reset leaves them)";
     }
 
     /// <summary>ARC-UI-014 native smoke: the launcher a start without inputs opened (run with <c>--launcher</c>, or a first run), over the

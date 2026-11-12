@@ -227,4 +227,19 @@ public sealed class AreaSceneryAnimationTests
         Assert.AreEqual(SceneryRestart.Start, f.Host.Restart(f.Loop.Entity, 0, AreaSceneryAnimation.BurningFlag));
         Assert.AreEqual(GoalType.AnimateLoopFireDamage, f.Host.GoalOf(f.Loop.Entity), "the goal follows the object's present flag 0x10");
     }
+
+    [TestMethod]
+    public void The_begin_node_of_each_loop_is_reported_once_for_its_looping_sound()
+    {
+        // ARC-RENDER-1126 (0x42DA50): the begin node is where the original starts the scenery's looping sound; the host reports the begin and the viewer decides.
+        var (plan, row) = Scenery(frames: 4, fps: 8);
+        using var f = new Fixture(plan, row);
+        Assert.AreEqual(0, f.Host.TakeSoundBegins().Count, "nothing began before the start");
+        f.Host.Start();
+        f.Run(40);
+        CollectionAssert.AreEqual(new[] { f.Loop.Entity }, f.Host.TakeSoundBegins().ToArray());
+        Assert.AreEqual(0, f.Host.TakeSoundBegins().Count, "taken once");
+        f.Run(1000);
+        Assert.AreEqual(0, f.Host.TakeSoundBegins().Count, "the run's frames and distance checks are no begin");
+    }
 }

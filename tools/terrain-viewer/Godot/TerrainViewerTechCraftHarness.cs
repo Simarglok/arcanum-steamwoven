@@ -20,6 +20,9 @@ public partial class TerrainViewerApp
     internal const int TechDisciplineHerbology = 0, TechDisciplineGunSmithy = 4;
     internal const string TechCraftCode = "ARC-DEV-362";
 
+    /// <summary>The NPC a technology stage lends to hold ammunition it must hand to the hero (null: none).</summary>
+    internal string? TechSmokeAmmoNpc;
+
     internal static void TechSmokeRequire(bool value, string why)
     {
         if (value) return;
@@ -41,7 +44,7 @@ public partial class TerrainViewerApp
         var scheme = session.QueryHero()!.Advancement.AutoLevelScheme;
         if (session.QueryHeroExperience() is { UnspentPoints: var have } && have >= need) return;
         if (scheme != 0) session.SetAutoLevelScheme(session.Version, SessionSchemeTarget.Hero, 0);
-        for (var round = 0; round < 12 && session.QueryHeroExperience() is { } now && now.UnspentPoints < need; round++)
+        for (var round = 0; round < 40 && session.QueryHeroExperience() is { } now && now.UnspentPoints < need; round++)
             session.AwardHeroExperience(session.Version, Math.Max(2000, (now.ToNextLevel ?? 0) * 4 / 3 + 1));
         if (scheme != 0) session.SetAutoLevelScheme(session.Version, SessionSchemeTarget.Hero, scheme);
         TechSmokeRequire(session.QueryHeroExperience() is { } after && after.UnspentPoints >= need, $"an experience award buys {need} points ({session.QueryHeroExperience()?.UnspentPoints})");
@@ -98,6 +101,17 @@ public partial class TerrainViewerApp
         kind ??= data.Kind(prototype);
         TechSmokeRequire(kind is not null && _inventoryHost is not null && AreaDropMapNow() is not null, $"prototype {prototype} has a kind and the host a drop map");
         session.AttachItemWeights(data.WeightOf);
+        if (kind!.Value.Type == SessionItemType.Ammo)
+        {
+            // The session does not create ammunition on the ground: a stack is put in the list of an NPC (TechSmokeAmmoNpc, set by the stage) and the hero takes it through the barter port, as the cave's bullets are taken.
+            TechSmokeRequire(TechSmokeAmmoNpc is { } holder && data.AmmoOf(prototype) is { } ammo, $"prototype {prototype} is ammunition: an NPC to hold it and its ammunition facts");
+            var given = session.AddItemToNpc(session.Version, TechSmokeAmmoNpc!, kind.Value, _inventoryHost!.InsertCheck, data.AmmoOf(prototype));
+            TechSmokeRequire(given.Disposition == GameSessionDisposition.Changed && given.Item is not null, $"the NPC was given ammunition prototype {prototype}: {given.Disposition} {given.Failure}");
+            var units = data.AmmoOf(prototype)!.Value.Units;
+            var taken = session.TakeAmmoFromNpc(session.Version, TechSmokeAmmoNpc!, given.Item!, units, kind.Value, _inventoryHost.InsertCheck);
+            TechSmokeRequire(AreaInventoryHost.Moved(taken) && taken.Item is not null, $"the hero took the ammunition prototype {prototype} from the NPC: {taken.Disposition} {taken.Failure}");
+            return taken.Item!;
+        }
         var created = session.CreateGroundItem(session.Version, kind!.Value, new SessionMapId(CurrentAreaMap), session.QueryActor().Cell, AreaDropMapNow()!, DropOwner.PcSide);
         TechSmokeRequire(created.Disposition == GameSessionDisposition.Changed && created.Item is not null, $"prototype {prototype} was created: {created.Disposition} {created.Failure}");
         var pick = _inventoryHost!.PickUp(session, created.Item!);
@@ -108,7 +122,10 @@ public partial class TerrainViewerApp
     /// <summary>The record's alternative of the list with the smallest complexity (the one a degree-1 hero can use), as a prototype number.</summary>
     internal static int TechSmokeCheapest(AreaSchematicData data, IEnumerable<int> bases)
     {
-        var prototypes = bases.Select(b => b + SchematicAlternatives.PrototypeOffset).Where(p => data.Facts(p) is not null).ToArray();
+        // Ammunition cannot be created on the ground by the session (a created item is not an ammunition stack), so the alternatives that are not ammunition come first.
+        var all = bases.Select(b => b + SchematicAlternatives.PrototypeOffset).Where(p => data.Facts(p) is not null).ToArray();
+        var prototypes = all.Where(p => data.Kind(p)?.Type != SessionItemType.Ammo).ToArray();
+        if (prototypes.Length == 0) prototypes = all;
         TechSmokeRequire(prototypes.Length > 0, "a component alternative has facts");
         return prototypes.OrderBy(p => Math.Abs(data.Facts(p)!.Value.Complexity)).ThenBy(p => p).First();
     }
@@ -131,6 +148,7 @@ public partial class TerrainViewerApp
         var given = components.Select(prototype => TechSmokeGive(data, prototype)).ToArray();
         var afterGive = TechSmokeHeld(session);
         var kindsGiven = TechSmokeHeldKinds(session);
+        var countGiven = components.Distinct().ToDictionary(p => p, p => kindsGiven.Where(k => k.Kind.Prototype == p).Sum(k => session.QueryAmmo(k.Entity)?.Units ?? 1));
         TechSmokeRequire(given.All(afterGive.Contains), "the components are in the pack");
 
         OpenSchematics();
@@ -153,8 +171,9 @@ public partial class TerrainViewerApp
         // Leftover components of a refused probe may stand in the pack, so what was spent is counted by prototype, not by the entities given.
         var consumed = given.Where(e => !heldAfter.Contains(e)).ToArray();
         var kindsAfter = TechSmokeHeldKinds(session);
-        var lost = components.GroupBy(p => p).All(g => kindsGiven.Count(k => k.Kind.Prototype == g.Key) - kindsAfter.Count(k => k.Kind.Prototype == g.Key) == g.Count());
-        TechSmokeRequire(made.Length == read.Quantity, $"record {record} made {read.Quantity} product(s) ({made.Length})");
+        int Count(List<(string Entity, SessionItemKind Kind)> kinds, int prototype) => kinds.Where(k => k.Kind.Prototype == prototype).Sum(k => session.QueryAmmo(k.Entity)?.Units ?? 1);
+        var lost = components.GroupBy(p => p).All(g => countGiven[g.Key] - Count(kindsAfter, g.Key) == g.Count());
+        TechSmokeRequire(made.Length == read.Quantity || (made.Length == 1 && session.QueryAmmo(made[0])?.Units is { } units && units >= read.Quantity && units % read.Quantity == 0), $"record {record} made {read.Quantity} product(s) ({made.Length}; an ammunition product is one stack of the quantity times the item's units, stack {(made.Length == 1 ? session.QueryAmmo(made[0])?.Units.ToString() ?? "none" : "-")})");
         TechSmokeRequire(lost, $"the two components are gone ({consumed.Length} of the given entities)");
         return new(record, components, made, consumed, message);
     }

@@ -1,13 +1,13 @@
 # Arcanum.Executable
 
-Status: **implemented, bounded** (ARC-DEV-067, slice E2 of the [prototype extraction](research/prototype-extraction.md),
+Status: **implemented, bounded** (ARC-DEV-067, slice E2 of the [prototype extraction](../../research/prototype-extraction.md),
 2026-11-04; the prototype builder over it, E3 / ARC-DEV-068, [below](#the-prototype-builder); the launcher's first-start build and cache over it, E4 / ARC-DEV-069, in
-`Arcanum.Session` ([results](research/prototype-extraction.md#e4-results-arc-dev-069))). The project itself stays free of the game's cache, content stack and launcher.
+`Arcanum.Session` ([results](../../research/prototype-extraction.md#e4-results-arc-dev-069))). The project itself stays free of the game's cache, content stack and launcher.
 
 `Arcanum.Executable` reads the player's own PE32 `Arcanum.exe` in place and interprets the 32-bit integer subset of x86
 that the original's prototype build reaches, so that Steamwoven can later run the original's own prototype code instead
 of transcribing it (owner decision 2026-11-03, option 1). It is Godot-independent, has no package dependencies and
-uses no emulator library: the function oracle's Unicorn ([ARC-DEV-007](../tools/original-oracle/README.md)) stays a
+uses no emulator library: the function oracle's Unicorn ([ARC-DEV-007](../../../tools/original-oracle/README.md)) stays a
 research tool, used here only as a local cross-check (below). Nothing of the executable enters git, a package or a
 test: the tests use hand-assembled synthetic code and a synthetic PE image built in the test.
 
@@ -155,7 +155,7 @@ builder writes nothing to the disk.
   (`TestCategory=OriginalExe`; `ARCANUM_EXE` and `ARCANUM_GAME_ROOT`, and `ARCANUM_ORIGINAL_PROTO` for the comparison; each is inconclusive without them): all 1,423 files are
   built, equal field by field to the files the original wrote on a Windows installation, and a second build over other uninitialized memory
   shows the only values that depend on it (word 0 of a script element); a finished installation's check rebuilds 307 files. Results
-  and the answers to the open questions: [E3 results](research/prototype-extraction.md#e3-results-arc-dev-068). A fresh
+  and the answers to the open questions: [E3 results](../../research/prototype-extraction.md#e3-results-arc-dev-068). A fresh
   installation takes about 2.43 × 10^9 steps, 26 s (Release, Apple silicon).
 
 ## Not ready
@@ -191,4 +191,4 @@ folder the source lists and returns `BuiltMapAggregate(MapName, FileName, Bytes)
 - **Verification.** Synthetic tests (refusals, the GUID rule, the file rules). Opt-in (`TestCategory=OriginalExe`, `ARCANUM_EXE`, `ARCANUM_GAME_ROOT` = an installation with the module
   and the prototype files, `ARCANUM_ORIGINAL_MAPS` = the aggregates the original wrote, such as its `modules/Arcanum/maps`; `ARCANUM_AGGREGATE_OUT` writes the built files for a
   look): all 81 equal to the original's by name (ordinal), length and every record field, and the only differing bytes are 18,399 runs of one 16-bit word with one constant offset in
-  the unused bytes of IDs. Results: [E5 results](research/prototype-extraction.md#e5-results-arc-dev-082).
+  the unused bytes of IDs. Results: [E5 results](../../research/prototype-extraction.md#e5-results-arc-dev-082).

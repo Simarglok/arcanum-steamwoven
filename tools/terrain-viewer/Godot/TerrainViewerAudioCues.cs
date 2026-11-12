@@ -51,7 +51,7 @@ public partial class TerrainViewerApp
         _cueContent = null; _tileArt = null; _prototypeSounds.Clear(); _cuePayloads.Clear();
     }
 
-    private void StopPositionalSound() { _positionalVoices.Clear(); _soundListener = null; _viewListenerTile = null; _stepFrame = null; }
+    private void StopPositionalSound() { _positionalVoices.Clear(); _sceneryVoices.Clear(); _gaitFrames.Clear(); _soundListener = null; _viewListenerTile = null; _stepFrame = null; }
 
     private static PositionalProfile Positional(SoundPositionalProfile profile)
     {
@@ -136,7 +136,7 @@ public partial class TerrainViewerApp
     /// <summary>Plays <paramref name="cue"/> on the world cell (<paramref name="x"/>, <paramref name="y"/>): the variant drawn
     /// with the audio generator, the material fallback of a weapon hit (an empty record falls back only in the Steamwoven
     /// setting, rule SN23), the start volume and pan from the listener. Returns the id and what the backend did.</summary>
-    private (int Id, ViewerAudioResult? Result) PlayCueAt(SoundCue cue, long x, long y, PositionalSize size, string kind)
+    private (int Id, ViewerAudioResult? Result) PlayCueAt(SoundCue cue, long x, long y, PositionalSize size, string kind, bool loop = false)
     {
         if (_audio is null || AreaSoundCatalog() is not { } catalog) return (cue.Id, null);
         var emptyFallsBack = _areaSession?.Rules.Sound.EmptyHitRecordSilent != true;
@@ -158,7 +158,7 @@ public partial class TerrainViewerApp
         var listener = _soundListener ??= ViewListener() ?? point;
         var level = PositionalSoundRules.Level(point, listener, Positional(catalog.Positional), size);
         var volume = AudioVolumeRules.StartVolume(level.Volume, AudioVolumeRules.ChannelVolume(_audioVolumes, AudioChannel.Effects));
-        var result = _audio.Play(payload, AudioChannel.Effects, volume, pan: PositionalSoundRules.Pan(level.Balance));
+        var result = _audio.Play(payload, AudioChannel.Effects, volume, loop, pan: PositionalSoundRules.Pan(level.Balance));
         if (result.Handle is { } handle) _positionalVoices.Add(new(handle, point, size));
         if (result.Started) _cuePlays[kind] = _cuePlays.GetValueOrDefault(kind) + 1;
         _cueNotice = $"{kind} {id}: {result.Status} volume {level.Volume} balance {level.Balance}";

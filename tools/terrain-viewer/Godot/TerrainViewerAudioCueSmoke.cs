@@ -41,7 +41,7 @@ public partial class TerrainViewerApp
             var expected = AudioVolumeRules.AdjustedVolume(AudioVolumeRules.MaxVolume, AudioVolumeRules.ChannelVolume(_audioVolumes, AudioChannel.Effects));
             Require(_audio.Volume(handle) is { } moved && Math.Abs(moved - expected) < 0.5, $"the listener on the source: {_audio.Volume(handle)} != {expected}");
             for (var frame = 0; frame < 2; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            GD.Print($"ARC-UI-042 native-smoke cues PASS tile={tile} footstep={step.Value.Id} far={tilesAway} tiles silent,right recalculated={expected} earlier=\"{earlier}\" content=\"{_cueContent?.Detail}\"");
+            GD.Print($"ARC-UI-042 native-smoke cues PASS tile={tile} footstep={step.Value.Id} far={tilesAway} tiles silent,right recalculated={expected} earlier=\"{earlier}\" callers=\"scenery-starts:{_sceneryLoopStarts},scenery-stops:{_sceneryLoopStops},npc-footsteps:{_npcFootsteps},barks:{_npcBarks},break:{_breakSounds},drop:{_dropSounds}\" content=\"{_cueContent?.Detail}\"");
         }
         finally { StopSceneSound(); }
     }

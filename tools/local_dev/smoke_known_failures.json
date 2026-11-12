@@ -4,5 +4,11 @@
     "symptom": "ranged smoke FAIL: the dagger is picked up and wielded again",
     "task": "ARC-COMBAT-026",
     "since": "2026-11-11"
+  },
+  {
+    "stage": "placement-census",
+    "symptom": "placement-census smoke FAIL: every (row|NPC)",
+    "task": "unassigned",
+    "since": "2026-11-12"
   }
 ]

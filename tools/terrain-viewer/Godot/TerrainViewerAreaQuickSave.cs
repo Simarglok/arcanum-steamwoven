@@ -44,7 +44,8 @@ public partial class TerrainViewerApp
 
     private enum QuickBusy { None, NoActor, Lifecycle, TransferPending, MapLoading }
 
-    private GameSaveLibrary SaveLibrary => _saveLibraryForSelfTest ?? (_readyMapName is not null
+    // ARC-DEV-407: the folder follows the launch map, so the menu's Load Game before the start map has loaded reads the map saves.
+    private GameSaveLibrary SaveLibrary => _saveLibraryForSelfTest ?? (AreaSaveFolder.UsesMapFolder(_readyMapName, _launchArguments?.AreaMapName)
         ? _mapSaveLibrary ??= new(SaveDirectory(MapQuickSaveDirectory))
         : _saveLibrary ??= new(SaveDirectory(QuickSaveDirectory)));
 
@@ -364,7 +365,7 @@ public partial class TerrainViewerApp
     }
 
     private string QuickSaveStatus() => !QuickKeysActive ? ""
-        : " | F7 auto-save / F8 load the newest save (" + (_readyMapName is null ? QuickSaveDirectory : MapQuickSaveDirectory) + "; save list in the palette)"
+        : " | F7 auto-save / F8 load the newest save (" + (AreaSaveFolder.UsesMapFolder(_readyMapName, _launchArguments?.AreaMapName) ? MapQuickSaveDirectory : QuickSaveDirectory) + "; save list in the palette)"
             + (_quickSaveStatus is null ? "" : ": " + _quickSaveStatus);
 
     // Native observation (ARC-WORLD-011), run after the transition smoke with the exterior published: F7 through the

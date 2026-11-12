@@ -270,8 +270,61 @@ public sealed class AreaTrapsTests
         });
     }
 
+    // ARC-MAGIC-057 (ledger SP1): without the detect flag a hero's walk check and use make the spot trap roll; the outcome depends on the seed and
+    // the hero's skill, so the test follows the counts and the state, never the odds.
     [TestMethod]
-    public void The_walk_check_spots_an_unknown_trap_object_only_with_the_detect_flag()
+    public void The_walk_check_and_a_use_roll_the_heros_spot_trap_skill_when_the_detect_flag_is_off()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var effects = new Effects();
+            var plates = Enumerable.Range(1, 24).Select(i => Row(i, TrapObject, 30001, x: 200 + i, objectFlags: TrapRules.DontDrawFlag)).ToArray();
+            var (host, traps) = Hosts(session, content, () => effects.Side, null, plates);
+            var spotted = 0;
+            foreach (var plate in plates)
+            {
+                var draws = session.QueryRandom().Draws;
+                var walk = traps.WalkCheck(Cell(plate));
+                Assert.AreEqual(1, walk.Rolls, "one spot roll for the tile's one unknown trap");
+                Assert.IsTrue(session.QueryRandom().Draws >= draws + 2, "the roll draws the check's two numbers");
+                Assert.AreEqual(walk.Spotted is not null, host.TrapState(plate)!.Value.Spotted, "a spotted trap is marked, a missed one is not");
+                spotted += walk.Spotted is null ? 0 : 1;
+                if (walk.Spotted is not null)
+                    Assert.AreEqual(0, traps.WalkCheck(Cell(plate)).Rolls, "a known trap needs no roll");
+            }
+            Assert.IsTrue(spotted <= plates.Length);
+            var use = Row(25, Scenery, 30001);
+            var (_, usingTraps) = Hosts(session, content, () => effects.Side, null, use);
+            var useDraws = session.QueryRandom().Draws;
+            var meeting = usingTraps.Use(use)!;
+            Assert.IsTrue(session.QueryRandom().Draws >= useDraws + 2, "the use rolled the spot trap skill");
+            Assert.IsTrue(meeting.Outcome is SessionTrapOutcome.Spotted or SessionTrapOutcome.Fired, "a use rolls once and then spots or fires");
+            Assert.AreEqual(meeting.Outcome == SessionTrapOutcome.Spotted, meeting.Result.PlayerLine);
+        });
+    }
+
+    // The original's step reaches the entry point (and its spot roll) only when the mover's spell flags 0x2 and 0x4 are clear (0x4305D0, TT9).
+    [TestMethod]
+    public void A_step_over_flag_means_no_spot_roll_on_the_step()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var effects = new Effects(spellFlags: 0x2);
+            var plate = Row(1, TrapObject, 30001, x: 60, objectFlags: TrapRules.DontDrawFlag);
+            var (_, traps) = Hosts(session, content, () => effects.Side, null, plate);
+            var draws = session.QueryRandom().Draws;
+            Assert.AreEqual(SessionTrapOutcome.SteppedOver, traps.Step(Cell(plate))!.Outcome);
+            Assert.AreEqual(draws, session.QueryRandom().Draws, "a stepped-over trap draws nothing");
+            effects.SpellFlags = 0;
+            traps.Step(Cell(plate));
+            Assert.IsTrue(session.QueryRandom().Draws >= draws + 2, "a step with no flag rolls");
+        });
+    }
+
+    [TestMethod]
+    public void The_walk_check_spots_an_unknown_trap_object_with_the_detect_flag_without_a_roll()
     {
         WithContent(content =>
         {
@@ -282,8 +335,6 @@ public sealed class AreaTrapsTests
             var second = Row(2, TrapObject, 30001, x: 40, objectFlags: TrapRules.DontDrawFlag);
             var (host, traps) = Hosts(session, content, () => effects.Side, gone, first, second, Row(3, TrapObject, 0, x: 41));
             Assert.AreEqual(2, traps.TrapObjectsOn(new(40, 20)).Count);
-            var unread = traps.WalkCheck(new(40, 20));
-            Assert.IsTrue(unread is { Spotted: null, RollsNotReady: 2 }, "the spot trap roll is S10's");
             Assert.AreEqual(new AreaTrapWalk(null, null, 0), traps.WalkCheck(new(41, 20)), "an untrapped trap object");
 
             effects.SpellFlags = Detect;

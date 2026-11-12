@@ -184,7 +184,7 @@ public partial class TerrainViewerApp : Node
                         // ARC-RENDER-024: ARC_AREA_MAP_SMOKE_ONLY (a comma list of map, stream, resources, transfer, roundtrip, worldmap, walk, census, cast, turn-based, knockdown, ranged, container, junk, barter, menu, scene, options, plants, bar, ai, ai-turn-based, ai-follower, premade, life, floaters, death, debug-travel, report, hover)
                         // narrows a map-mode smoke to those stages, so one map can be observed at several places quickly; absent, all but
                         // walk, census, barter, menu, scene, options, plants, bar, ai, ai-turn-based, life, floaters and death run.
-                        TerrainViewerSmokeStageSet only = new(MapSmokeStages());
+                        TerrainViewerSmokeStageSet only = new(MapSmokeStages(), SmokeStageBoundary);
                         stageClock = only;
                         bool Stage(string name) => only!.Stage(name); // "!": the ?. tests below make the compiler see a captured non-null `only` as maybe null
                         if (_readyMapName is not null)

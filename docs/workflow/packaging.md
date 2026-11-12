@@ -4,10 +4,23 @@ A packaged build is the game for a player: the terrain viewer project exported w
 folder, started without inputs, so it opens the launcher ([ARC-UI-014](../rendering/terrain-viewer.md#launcher-screen-arc-ui-014))
 and the original main menu. It is separate from the developer builds of the export endpoints (`artifacts/world-builds`,
 the build registry, `./arcanum area`/`map`), which it neither reads nor changes. The owner's build instruction
-(prerequisites, `main` or a chosen commit, outputs) is the [README](../../README.md#how-to-build-the-alpha-for-a-player); the player
+(prerequisites, `main` or a chosen commit, outputs) is this page; the player
 instruction is [docs/player/alpha-build.md](../player/alpha-build.md). Platforms: **macOS** (universal `.app`, ad-hoc signed, smoked on
 the Mac) and **Windows 11 x64** (exported on the Mac from the installed Godot 4.7.2 .NET Windows templates, unsigned,
 checked by its files only, delivered as one zip).
+
+## Prerequisites on the Mac
+
+The build runs on a Mac from a committed state of the repository, never from local changes: `git archive` of one commit
+into a fresh temporary folder, so uncommitted or untracked files cannot enter it.
+
+- .NET SDK **8.0.425** (pinned by `global.json`) in `~/.local/share/dotnet` or the folder `DOTNET_ROOT` names;
+- Godot **4.7.2 .NET** at `/Applications/Godot_mono.app`;
+- its export templates `4.7.2.stable.mono` (Godot: Editor → Manage Export Templates), which hold both the macOS and the
+  Windows templates;
+- this repository cloned with the `origin` remote (the command fetches `origin main` itself);
+- for the macOS smoke only: the game in `/Applications/Arcanum`, `~/Applications/Arcanum` or a CrossOver bottle (without
+  it the smoke is skipped and the run says so).
 
 ## Command
 
@@ -45,6 +58,19 @@ every line, stdout keeps PASS or FAIL). The builder is `tools/local_dev/package.
    and the log's last 20 lines. The temporary folder is removed, also when the queue stops the run (`--keep-work` keeps
    it). The owner's opt-in variables (`DAT_ROOT`, `ARC_*`, `ARCANUM_*` but the queue's own, `LAUNCHER_SETTINGS_*`,
    `WORLD_DIAGNOSTIC_*`) are dropped from the build and smoke environment.
+
+### Building another commit
+
+`--ref` is resolved in the main checkout with `git rev-parse` after `git fetch origin main`, so every commit of `main`
+(also an older one) works directly, and so do a tag or `origin/BRANCH`. A commit that is only on another branch must be in
+the checkout first: `git fetch origin BRANCH`, then `--ref origin/BRANCH` or the hash. Only committed files of that commit
+are built; the checkout itself is not touched. `--no-fetch` skips the fetch (offline, or a commit already present).
+Other options (`./arcanum package --help`): `--no-smoke` skips the macOS smoke, `--keep-work` keeps the temporary source and
+export folder for a look, `--verbose` streams the step lines instead of the quiet run log.
+
+Two limits: the build line in the game always reads `main <commit>`, also for a commit that is not on `main` (check
+`BUILD.txt` for the real commit), and the player instruction copied beside the build is the one of that commit, so an
+older commit ships its older instruction.
 
 ## Where the build lands
 
@@ -99,7 +125,8 @@ thread to find and fix it starts from the report; the first day after the fix pa
    Unicorn, rather than installing it into the fresh worktree each day; one that cannot load Unicorn is a failed check.
 4. `./arcanum smoke complete` ([smoke runner](toolchain.md#smoke-runner-arc-dev-061), ARC-DEV-396): its viewer build and
    import, the Crash Site smoke, the map batteries and then every stage the viewer accepts (about twenty processes; about 35
-   minutes of slot with the two long stages). A failed, not run or stopped step ends the day with no package.
+   minutes of slot with the two long stages). A failed, not run or stopped step ends the day with no package; a group of stages that fails only after other stages of its process
+   and whose every stage passes alone in the retry (order-dependent, ARC-DEV-396) is reported but does not end the day.
 5. `./arcanum package mac`, then `win`, of that same commit (`--ref COMMIT --no-fetch`), each told the chain's result as
    `--map-smoke`, which `BUILD.txt` keeps as its `map-smoke` line (`PASS (crash-site, main, town, wild, ruins, stages-main, ...)`: the steps that ran); a
    plain `./arcanum package` writes `map-smoke NOT RUN (...)`. Each platform is tried even when the other failed.

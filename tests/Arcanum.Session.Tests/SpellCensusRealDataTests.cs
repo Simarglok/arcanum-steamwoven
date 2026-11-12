@@ -59,8 +59,6 @@ public sealed class SpellCensusRealDataTests
         (125, "Destroy", "Destroy"),
         (126, "Destroy", "Destroy"),
         (128, "ObjFlag", "ObjFlag"),
-        (129, "NoOp", "NoOp"),
-        (130, "NoOp", "NoOp"),
         (135, "Destroy", "Destroy"),
     ];
 
@@ -106,6 +104,12 @@ public sealed class SpellCensusRealDataTests
         public bool Peace(string npc, string with) => true;
         public bool Flee(string npc, string from) => true;
         public bool StopFleeing(string npc) => true;
+    }
+
+    /// <summary>ARC-MAGIC-061: the viewer wires the use-script host as the cast host's <see cref="SessionSpellCaster.UseObject"/> (ARC-MAGIC-048, <c>AreaUseScriptHost.RunUseScript</c>); the census wires the seam with a stub that answers that a script ran (the real host answers false for the hero and for an object with no use script; the answer is only logged), so the Use component is read as ready, as the wired seam makes it.</summary>
+    internal static class CensusUse
+    {
+        public static bool Run(string target) => true;
     }
 
     [TestMethod, TestCategory("RealData")]
@@ -170,7 +174,7 @@ public sealed class SpellCensusRealDataTests
         using var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
         var fields = AttackStateTests.Npc(stats: AttackStateTests.Stats(), critterFlags: 0);
         var caster = new SessionSpellCaster(owner, n => n == record.Data.Number ? record : null,
-            new Map(owner, new(SessionCritterCombat.From(Npc, fields).Combat!, 0, 0, 0, 0, 0)), new Events()) { EffectDefinitions = effects, Social = new CensusSocial(), Teleport = new CensusTeleport() };
+            new Map(owner, new(SessionCritterCombat.From(Npc, fields).Combat!, 0, 0, 0, 0, 0)), new Events()) { EffectDefinitions = effects, Social = new CensusSocial(), Teleport = new CensusTeleport(), UseObject = CensusUse.Run };
         var hero = caster.RunObject(Hero)!;
         var to = caster.RunObject(target)!;
         var tile = target == Hero ? HeroTile : NpcTile;

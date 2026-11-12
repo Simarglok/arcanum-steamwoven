@@ -8,15 +8,15 @@ reimplementation: it opens the launcher and the original main menu, and much of 
 Platforms: **macOS** (Apple silicon and Intel, one universal `.app`) and **Windows 11 x64** (a folder with
 `Arcanum Steamwoven.exe`, delivered as one zip).
 
-Every key and mouse control of the game, grouped by purpose, is in the repository README:
-[Hotkeys](https://github.com/Simarglok/arcanum-steamwoven#hotkeys) (a web link, as this instruction is also copied
+Every key and mouse control of the game, grouped by purpose, is in the repository:
+[Hotkeys](https://github.com/Simarglok/arcanum-steamwoven/blob/main/docs/player/hotkeys.md) (a web link, as this instruction is also copied
 beside the build). The sections below name only the keys of their own steps.
 
 ## 1. Get the build
 
 Both builds are made on the developer's Mac with `./arcanum package mac` and `./arcanum package win`, from `main` or from
-a chosen commit. How to build them, where they land and which commit they come from is in the repository README:
-[How to build the alpha for a player](https://github.com/Simarglok/arcanum-steamwoven#how-to-build-the-alpha-for-a-player)
+a chosen commit. How to build them, where they land and which commit they come from is in the repository:
+[Packaged builds](https://github.com/Simarglok/arcanum-steamwoven/blob/main/docs/workflow/packaging.md)
 (a web link, as this instruction is also copied beside the build as its `README.md`, next to `BUILD.txt`).
 
 **macOS:** copy `Arcanum Steamwoven.app` wherever you like (for example `/Applications`). It is a self-contained app;
@@ -116,7 +116,9 @@ On the first start the **launcher** screen opens before the main menu:
    with another executable the screen says so. Your game folder is only read.
 
 To open the launcher again, **hold Shift** while the game starts. **Reset settings** on the launcher forgets the stored
-folder and rules.
+folder and rules. The launcher also has the **HD graphics**, **HD interface** and **HD pack** lines for an HD pack you
+have built or copied yourself (they are not in the Options window); each choice is saved at once, and the pack source
+applies from the next start.
 
 ## 5. Where your settings and saves live
 

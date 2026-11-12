@@ -96,15 +96,30 @@ public sealed class LootRoomStateTests
     }
 
     [TestMethod]
-    public void A_dialog_give_keeps_its_old_rule_and_does_not_fail_on_room()
+    public void A_dialog_give_with_no_room_lays_the_item_on_the_hero_tile()
     {
-        // The dialog's IN: the original drops an item the PC cannot take at the PC's feet; that is not modelled, so the give is not refused for room
-        // (a refusal would fail the conversation) and the item waits outside the grid as before (recorded limit).
+        // ARC-WORLD-1131: the dialog's IN runs the room test; an item the grid has no place for is not refused (that would fail the conversation) but laid on the
+        // PC's tile (0x415BA0), so nothing waits outside the grid and the NPC no longer holds it.
         using var owner = Hero();
         foreach (var number in Enumerable.Range(1, 7)) Assert.AreEqual(GameSessionDisposition.Changed, owner.LootItem(owner.Version, "corpse", Gem(number), Accept).Disposition);
+        var before = owner.Version.Revision;
         var given = owner.GiveItemToPc(owner.Version, "corpse", 10, Accept);
-        Assert.AreEqual(GameSessionDisposition.Changed, given.Disposition);
-        Assert.AreEqual(1, owner.QueryHeroGrid().Unplaced.Count);
+        Assert.AreEqual((GameSessionDisposition.Changed, (SessionInsertVerdict?)SessionInsertVerdict.NoRoom), (given.Disposition, given.Verdict));
+        Assert.AreEqual(before + 1, owner.Version.Revision);
+        Assert.AreEqual(0, owner.QueryHeroGrid().Unplaced.Count);
+        Assert.AreEqual(given.Item, owner.QueryPlacedItems().Single().Entity);
+        CollectionAssert.DoesNotContain(Left(owner, "corpse"), given.Item);
+    }
+
+    [TestMethod]
+    public void A_dialog_give_with_room_still_goes_into_the_grid()
+    {
+        using var owner = Hero();
+        var given = owner.GiveItemToPc(owner.Version, "corpse", 10, Accept);
+        Assert.AreEqual((GameSessionDisposition.Changed, (SessionInsertVerdict?)SessionInsertVerdict.Accepted), (given.Disposition, given.Verdict));
+        Assert.AreEqual(0, owner.QueryPlacedItems().Count);
+        Assert.AreEqual(0, owner.QueryHeroGrid().Unplaced.Count);
+        CollectionAssert.Contains(owner.QueryPcInventory().Select(item => item.Entity).ToArray(), given.Item);
     }
 
     [TestMethod]

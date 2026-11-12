@@ -285,6 +285,24 @@ public sealed class AreaScenePlan
     }
 
     /// <summary>
+    /// ARC-MAGIC-054: <paramref name="command"/> (a body made by <see cref="Place"/>) drawn with the blend the object's blit flags choose, as the map's own bodies get it in <c>State</c>
+    /// (the original's <c>object_setup_blit</c>, ARC-RENDER-018): additive (0x10) wins over multiply (0x40), which wins over constant alpha (0x100, <paramref name="blitAlpha"/>); each of these three is drawn
+    /// unlit (ARC-RENDER-026); the mirror bits 0x1 and 0x2 flip the body across x and y. A created scenery has no serialized blit state, so its prototype's flags are the object's (a wall of fire's
+    /// piece, prototype file 4051, is additive: its black frame background adds nothing instead of being painted over the ground). Any other bit draws nothing different.
+    /// </summary>
+    public static AreaDrawCommand WithBlend(AreaDrawCommand command, uint blit, int blitAlpha)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        var additive = (blit & 0x10) != 0; var multiply = !additive && (blit & 0x40) != 0;
+        var constant = !additive && !multiply && (blit & 0x100) != 0 && blitAlpha is >= 0 and <= 255;
+        return command with
+        {
+            FlipX = command.FlipX != ((blit & 1) != 0), FlipY = (blit & 2) != 0,
+            Alpha = constant ? blitAlpha : command.Alpha, Additive = additive, Multiply = multiply, Unlit = additive || multiply || constant,
+        };
+    }
+
+    /// <summary>
     /// ARC-UI-063 (PF11): <paramref name="command"/> (a body placed at full size by <see cref="Place"/>) drawn at <paramref name="percent"/> of its size
     /// around its hotspot, the way an object's scale field scales a body (width and height by the percent, the hotspot staying on the tile's
     /// centre). PROJECT: the original's renderer was not read for this; the scene plan's own scaling of a scaled object is the model.

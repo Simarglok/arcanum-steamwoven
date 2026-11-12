@@ -29,7 +29,8 @@ historical evidence below do not themselves prove the new input/rendering policy
 ## Status, source and limits
 
 ARC-DATA-008 implements the owned production API below in `Arcanum.Data.Traversal`,
-independently authored against the ratified [bounded specification](cardinal-traversal-contract.md)
+independently authored against the bounded specification on this page
+(the former research contract, retired; its live facts are below)
 and [attributed research evidence](../research/cardinal-traversal-evidence.md).
 Merged delivery: [PR #38](https://github.com/Simarglok/arcanum-steamwoven/pull/38)
 implements the default cardinal API; [PR #44](https://github.com/Simarglok/arcanum-steamwoven/pull/44)
@@ -43,7 +44,7 @@ F0 (not checked in the executable) unless the
 [verification ledger](../research/original-verification-ledger.md) lists them.
 No research implementation was ported, no clean-room or original parity claim.
 Original executable behavior remains **NOT_VERIFIED**, an accepted non-goal.
-The general [passability proposal](passability-contract.md) remains NOT READY;
+General occupancy (see the [traversal research contract](area-traversal-contract.md)) remains NOT READY;
 all historical 91 unresolved name classifications remain unchanged.
 
 Both factories admit only profile `BASE_SECTOR_1452_1290`, logical base sector
@@ -60,6 +61,74 @@ current ART class2, spell flags0, path flags0, nonpolymorph, noneditor,
 OrdinaryGround, zero supplemental registry count, actor notionally at source.
 Derived traversal flags0 are source-proved OUTPUT, not a caller shortcut.
 This is neither the rendered WORLD actor nor a recovered runtime actor.
+
+## Fixed inputs and project declarations
+
+**Original structural facts**: base sector `(1452,1290)`, origin `(92928,82560)`,
+64×64; selector `maps\\Arcanum1-024-fixed\\86570436012.sec`, ordinal 463, flag 2,
+decoded 47291. The module, resource and six prototype identities in the
+[evidence document](../research/cardinal-traversal-evidence.md) are mandatory and
+authenticated before and after use. No PATCH, `.dif`, loose-file precedence search,
+fallback or alternate resource profile is admitted.
+
+**Project policy**, not recovered original actor facts: one immutable context
+`ISOLATED_PC_CRITTER_ART_NONPOLYMORPH` (diagnostic actor kind `OBJ_TYPE_PC` 15,
+current ART class `TIG_ART_TYPE_CRITTER` 2, spell flags 0; ordinary ground,
+non-editor, non-polymorph, no floating/passwall/special override). Supplemental
+runtime registries are explicitly empty; the full selected serialized registry is
+included, not a filtered sprite/scenery subset. The actor is notionally at the
+request's source only. No door/AI-open, script, savegame, combat or spawn state is
+executed. These declarations recover no human/equipment model and do not describe
+the rendered WORLD monster. Each directed query has the same immutable predicate
+context; no actor is moved to a potentially blocked start.
+
+**Consequence of an earlier source reading** (F0), not a numeric shortcut: the
+normal adjacent animation helper starts traversal flags 0 and ORs polymorph and
+capability blocking bits; non-polymorph plus PC portal capability plus current
+CRITTER ART window capability contribute 0, so the helper flags are 0 (adjacent
+move begin 0x42E9B0, begin/run gate `0x400`). Path flags 0 select the current
+path rotation, not the ART-rotation branch; the helper's tile argument `a2=false`
+does not suppress tile blocking. This is not normal route admission/cost or success
+of the animation scheduler.
+
+**Project selection policy**: connected rectangle local x4..8/y0..3; `(6,1)->(5,1)`
+and `(6,1)->(7,1)` plus reverses were admitted. The assessor holds no whitelist of
+permissive cells. Leaving the rectangle is unsupported; y0 never authorizes a
+neighbor sector.
+
+## Complete contributor proof and ordered components
+
+All relevant evidence is evaluated before composition, even when an unconditional
+blocker exists. Synthetic and original modes call the same `Assess` seam; the
+original mode projects existing terrain inspections and checks full loader and
+ordinary-static agreement without changing their contracts. Per-contributor
+classification:
+
+| Component / classification | Required evidence and meaning |
+| --- | --- |
+| ACTOR / project tuple + source helpers | Exact kind 15, ART class 2, non-polymorph-derived flags 0; no blanket flags default |
+| FROM_TO MASK/FACADE/NAME / source-inapplicable | Source tile data retained numerically but not queried by the helper; a blocking source tile does not reject departure (not proof of start reachability) |
+| TO_MASK / serialized fact | Destination ordinal, word index/bit/word; a set bit is an unconditional blocker in this context |
+| TO_FACADE / packed fact | Class 11 uses bit 0: clear blocks, set is nonblocking; non-facade NotApplicable; no visual extent inference |
+| TO_NAME / selected resource fact | Bounded category/material name rule with reason/provenance; missing/ambiguous entry, mapping or value keeps a gap |
+| REGISTRATION and EXTENT / source proof | Load normalizes the location and inserts one node at the head of the tile index list (0x4D7090); exact-cell queries read that head; visual offsets affect ordering, not neighbor admission; inventory cannot be inserted; OFF/DESTROYED are query-excluded (non-editor); no runtime registration change is performed |
+| CENSUS / original structural fact | Terminal count equals all unique source-index records; every type, strict unmasked world location, flags and provenance surveyed before cell lookup; a filtered subset or `LocationCoverageComplete` alone is insufficient |
+| RECORD_n / original + source rule | Each record in source-index order; unlocated/outside/unresolved flags/other types/dynamic facts create gaps even if hidden by a subset; direct slot 18 overrides the prototype, else a resolved inherited default is required; OFF/DESTROYED/inventory are explicit exclusions, not NO_BLOCK; at the destination, flags 0 with NO_BLOCK `0x400` clear is an unconditional Blocked, set is nonblocking; same-cell multiplicity never collapsed |
+| SOURCE_EDGES / serialized absence | The admitted census has no wall/portal type, so the source mask has zero contributors; no guessed orientation, portal state, passwall or AI-open call |
+| DESTINATION_OTHER_TYPES / serialized absence | The census holds only scenery type 3; destination mask `0x3801F` (wall/portal/container/scenery/projectile/PC/NPC/trap) other branches are absent in these inputs, not globally |
+| SUPPLEMENTAL_REGISTRY / project policy | Explicit zero registries; no claim about the installed game, savegame, mobiles, spawns or mutable state |
+| ACTOR_SELF / project policy + source | Actor at the source only; the PC is excluded from the source mask and differs from the destination; this cannot hide another destination critter |
+| ROUTE_TRAP_FIRE_WINDOW / source-inapplicable | The normal route function checks spotted traps, fire and window indicator; the adjacent helper does not; a serialized trap is still accounted under the destination mask; no trap/fire absence fabricated |
+| SCRIPT_EXECUTION / source-inapplicable + no-execution | No script callback in the helper/tile/exact-cell branch; 8 tile scripts and 12 sector-script bytes are structural counts, not evidence of zero scripts |
+
+Source proof is tied to the named pin and the selected loaded base registry. Runtime
+sector-lock failure or limits, state mutation, unavailable registrations/extents or
+extra runtime inputs are never permissive defaults; missing registration/extent
+creates a gap, and a scenery blocker cannot be certified unconditional until its
+membership is proven. Output prints component and census numeric identifiers
+(suppressing only repetitive off-destination scenery rows) but never original MES
+text, assets, bytes or local paths; re-querying reverses, return/finish or rejected
+requests does not mutate the snapshot or context (not a movement simulation).
 
 ## Actual API and ownership
 
@@ -288,7 +357,7 @@ opportunity/start/material-key/revision/positive duration contract. Diagnostic P
 context is not the rendered monster by convenience. Map enums deliberately;
 Data epoch is not Simulation EvidenceRevision. Simulation summary caps cannot
 justify discarding full317 records or gaps as a silent Open. See
-[grid runtime](grid-movement-runtime.md) and [readiness frontier](grid-movement-contract.md#real-traversal-readiness-frontier).
+[grid runtime](grid-movement-runtime.md) and [traversal research contract](area-traversal-contract.md).
 
 Implemented: production assessment/factories, bounded existing-reader projections,
 complete owned evidence, synthetic and read-only original-data gates. Not implemented:

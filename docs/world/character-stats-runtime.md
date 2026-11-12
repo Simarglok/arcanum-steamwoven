@@ -96,10 +96,20 @@ paths that copy a stat owner still pass 0 ([ledger AQ wiring note](../research/l
 Every accepted mutation increments `Revision` once; rejected and no-op calls leave state
 and revision unchanged. The owner is caller-serialized: no locks, events or callbacks.
 
+## Tempus Fugit speed (ARC-MAGIC-056)
+
+`CharacterStatContext.SpeedShift` is added to speed before the effects, with the crippled legs' -5 (`CharacterStatRules.Situational`, stat getter 0x4B0490, ledger
+[XR6, TF1-TF3](../research/ledger/spell-runs.md#tempus-fugit-speed-arc-magic-056)); the stat range still clamps. The rule `CharacterStatRules.TempusFugitShift` is +10 for a critter
+holding `OSF_TEMPUS_FUGIT` (spell flag 0x4000000), -10 for every other critter while some critter holds it, 0 while nobody does. The original tests only the local player's flag; the owner
+decided 2026-11-11 that this is a bug of the game, fixed in both modes with no setting, so an NPC's cast works without the player holding it. The session works the value out from the written
+spell flags (`GameSessionOwner.TempusFugitShiftOf`, `HeroTempusFugitShift`): the hero's context (`HeroStatContext`, the hero's attack and round stat) and every NPC handed out by
+`WithNpcEffects` (`SessionCritterCombat.SpeedShift`) carry it, so it reaches the turn-based action points, the real-time attack pause, the inventory line and the sheet, not walking.
+The follower join and leave flag writes (XR7) are not built; the NPC sheet window (`AreaNpcSheet`) still shows speed without the shift; destroying an object drops its written flags, so a destroyed holder ends the change, but a living caster whose spell run ends without clearing its flag is the run rules' business.
+
 ## Not implemented
 
 Skill/spell/tech prerequisite checks when lowering a stat; background,
-Tempus Fugit, persuasion-expert and the other backgrounds' adjustments (the four mage backgrounds are rules, ARC-MAGIC-028); level,
+persuasion-expert and the other backgrounds' adjustments (the four mage backgrounds are rules, ARC-MAGIC-028); level,
 experience, alignment, fate, unspent points, age and poison stats; HP/fatigue and
 encumbrance recalculation on effect changes; effect lifetimes and durations (FR-CHAR-022);
 skills and resistances; character creation beyond the pre-made start of

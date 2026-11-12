@@ -478,11 +478,44 @@ public sealed partial class GameSessionOwner
         ArgumentNullException.ThrowIfNull(npc);
         // ARC-DEV-358: the body spell its spell flags hold (the session's written flags) feeds its unarmed attacks.
         npc = npc.WithUnarmedBody(UnarmedBodyOf(npc.Entity, npc.DataSpellFlags));
+        // ARC-MAGIC-056 (MA-9): the speed change of Tempus Fugit, from the spell flags held now.
+        npc = npc.WithSpeedShift(TempusFugitShiftOf(npc.Entity, npc.DataSpellFlags));
         // No session list and no host rules for the loaded one: its entries have no changes, nothing to apply (the common case, kept cheap).
         if (!_effects.Critters.ContainsKey(npc.Entity) && NpcEffectRules is null) return npc;
         if (QueryNpcEffects(npc.Target) is not { Entries.Count: > 0 } view) return npc;
         return npc.WithEffects(view.Entries, view.Definitions.ToDictionary(definition => definition.Number));
     }
+
+    /// <summary>
+    /// ARC-MAGIC-056 (MA-9, ledger XR6, XR14 (a)): the speed change of Tempus Fugit for a critter, over <paramref name="dataSpellFlags"/> (the flags its map data stores, 0 when unknown) with the
+    /// session's written flags: +10 when the critter holds the spell, -10 when it does not but some critter's written flags hold it, else 0 (a bit that only a critter's map data stores starts nothing) (<see cref="CharacterStatRules.TempusFugitShift"/>).
+    /// </summary>
+    public int TempusFugitShiftOf(string entity, int dataSpellFlags)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(entity);
+        var holds = (QueryObjectFlags(entity).Spell(dataSpellFlags) & TempusFugitSpell) != 0;
+        return CharacterStatRules.TempusFugitShift(holds, AnyHoldsTempusFugit());
+    }
+
+    /// <summary>ARC-MAGIC-056: the speed change of Tempus Fugit for the hero (<see cref="TempusFugitShiftOf"/> for the hero's written flags; the hero has no stored spell flags).</summary>
+    public int HeroTempusFugitShift() => TempusFugitShiftOf(SessionSpellCaster.Hero, 0);
+
+    // Whether any critter's written spell flags hold Tempus Fugit: the hero (the original's only test, 0x458A80) or an NPC that cast it or was handed it (the owner's fix of XR14 (a)).
+    // The answer is kept for the dictionary it was worked out from (the dictionary is immutable and replaced by every write), so a scene of many NPC builds scans it once per change.
+    private bool AnyHoldsTempusFugit()
+    {
+        var flagsNow = _objectFlags;
+        if (ReferenceEquals(flagsNow, _tempusFlagsScanned)) return _tempusAnyHolds;
+        var any = false;
+        foreach (var flags in flagsNow.Values)
+            if ((flags.Spell(0) & TempusFugitSpell) != 0) { any = true; break; }
+        (_tempusFlagsScanned, _tempusAnyHolds) = (flagsNow, any);
+        return any;
+    }
+
+    private object? _tempusFlagsScanned;
+    private bool _tempusAnyHolds;
 
     /// <summary>
     /// ARC-DEV-358 (MA-1; the unarmed damage block 0x4B67F1 of the original, in this order): the body spell a critter's spell flags hold: Body of Earth (+5 normal damage), else Fire (+15 fire), else
@@ -498,5 +531,5 @@ public sealed partial class GameSessionOwner
             : (spell & BodyOfWaterSpell) != 0 ? UnarmedBodySpell.BodyOfWater : (spell & HardenedHandsSpell) != 0 ? UnarmedBodySpell.HardenedHands : UnarmedBodySpell.None;
     }
 
-    private const int BodyOfEarthSpell = 0x8, BodyOfFireSpell = 0x10, BodyOfWaterSpell = 0x20, HardenedHandsSpell = unchecked((int)0x80000000);
+    private const int BodyOfEarthSpell = 0x8, BodyOfFireSpell = 0x10, BodyOfWaterSpell = 0x20, HardenedHandsSpell = unchecked((int)0x80000000), TempusFugitSpell = 0x4000000;
 }

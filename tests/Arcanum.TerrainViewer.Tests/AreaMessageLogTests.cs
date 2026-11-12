@@ -250,4 +250,45 @@ public sealed class AreaMessageLogTests
             Of(AreaMessageLayout.Draw(new(AreaMessageKind.Item, "Sword") { Icon = 391, TitleColour = AreaMessageColour.Magick })));
         Assert.AreEqual("- False: (290, 504, 291, 19) Title 'Rock'", Of(AreaMessageLayout.Draw(new(AreaMessageKind.Item, "Rock"))));
     }
+
+    [TestMethod]
+    public void The_script_print_line_types_1_to_3_and_12_follow_0x5529C0_cases_1_2_3_and_12()
+    {
+        // ARC-SCRIPT-1118 (PY1–PY4, ML4 to ML6): sounds, icons, the stored rule, the layouts.
+        Assert.AreEqual(3006, AreaMessageLog.Sound(AreaMessageKind.PoisonAbsorbed));
+        Assert.AreEqual(3003, AreaMessageLog.Sound(AreaMessageKind.Curse));
+        Assert.AreEqual(3002, AreaMessageLog.Sound(AreaMessageKind.Blessing));
+        Assert.IsNull(AreaMessageLog.Sound(AreaMessageKind.ScriptHover));
+        CollectionAssert.AreEqual(new[] { 439, 440, 441, 444 }, new[] { AreaMessageKind.PoisonAbsorbed, AreaMessageKind.Curse, AreaMessageKind.Blessing, AreaMessageKind.ScriptHover }
+            .Select(AreaMessageLayout.Icon).ToArray());
+        CollectionAssert.IsSubsetOf(new[] { 439, 440, 441 }, AreaMessageLayout.ArtNumbers.ToArray());
+        var poison = new AreaMessageEntry(AreaMessageKind.PoisonAbsorbed, "Pillar", "You have absorbed 0 unit(s) of poison.");
+        var curse = AreaMessageEntry.Text(AreaMessageKind.Curse, "Doom");
+        var blessing = AreaMessageEntry.Text(AreaMessageKind.Blessing, "Grace");
+        var hover = AreaMessageEntry.Text(AreaMessageKind.ScriptHover, "Wards");
+        Assert.IsTrue(poison.Stored && curse.Stored && blessing.Stored);
+        Assert.IsFalse(hover.Stored);
+        Assert.ThrowsExactly<ArgumentException>(() => AreaMessageEntry.Text(AreaMessageKind.PoisonAbsorbed, "x"));
+
+        var log = new AreaMessageLog();
+        Assert.AreEqual(new AreaMessagePost(true, true, 3006), log.Post(poison, 10_000));
+        Assert.AreEqual(new AreaMessagePost(true, true, 3003), log.Post(curse, 11_000));
+        Assert.AreEqual(new AreaMessagePost(true, true, 3002), log.Post(blessing, 12_000));
+        // Only types 4 and 5 are compared with the newest entry (0x552770): the same text of a type 2 entry is stored again.
+        Assert.AreEqual(new AreaMessagePost(true, true, 3003), log.Post(curse, 13_000));
+        Assert.AreEqual(4, log.Count);
+        Assert.AreEqual(new AreaMessagePost(false, false, null), log.Post(hover, 14_000), "within 3 s of the last stored entry");
+        Assert.AreEqual(new AreaMessagePost(false, true, null), log.Post(hover, 16_001));
+        Assert.AreEqual(4, log.Count);
+
+        static string Of(AreaMessageDraw draw) => $"{draw.Icon?.ToString() ?? "-"} {draw.Widens}: " + string.Join(" | ",
+            draw.Texts.Select(t => $"{t.Rect} {t.Font}{(t.Right ? " right" : "")}{(t.Colour != AreaMessageColour.White ? " " + t.Colour : "")} '{t.Text}'"));
+        Assert.AreEqual("439 False: (290, 504, 291, 19) Title 'Pillar' | (290, 528, 291, 18) Text Red 'You have absorbed 0 unit(s) of poison.'", Of(AreaMessageLayout.Draw(poison)));
+        Assert.AreEqual("440 False: (290, 504, 291, 19) Title 'Doom'", Of(AreaMessageLayout.Draw(curse)), "the body of number 0 is empty and not drawn");
+        Assert.AreEqual("441 False: (290, 504, 291, 19) Title 'Grace' | (290, 528, 291, 54) Text 'Because.'", Of(AreaMessageLayout.Draw(blessing with { Detail = "Because." })));
+        // Case 12 is the transient text's layout without its second layout.
+        Assert.AreEqual("444 False: (290, 504, 291, 78) Text 'Wards'", Of(AreaMessageLayout.Draw(hover)));
+        Assert.AreEqual("444 False: (290, 504, 291, 19) Title 'Wards' | (290, 528, 291, 54) Text 'a'", Of(AreaMessageLayout.Draw(AreaMessageEntry.Text(AreaMessageKind.ScriptHover, "Wards\na"))));
+        Assert.AreEqual("444 True: (290, 504, 291, 78) Text 'Wards'", Of(AreaMessageLayout.Draw(Hover("Wards"))), "type 6 does widen");
+    }
 }

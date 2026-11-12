@@ -1,6 +1,7 @@
 # What the original saves of actions in flight: casts, missiles, projectiles and the hero's runs (ARC-RES-096)
 
-Status: **Research**, work item ARC-RES-096, 2026-11-08. Docs only; no code changes, no checks run.
+Status: **Research (evidence)**, work item ARC-RES-096, 2026-11-08. Docs only; no code changes, no checks run. The owner decided on 2026-11-08 to save
+them as the original does; MIG14 S6-S10 are built ([saved runs](../architecture/saved-runs.md#4-slices)). Rows SV1-SV8 are the only copy of this reading.
 Question (owner, MIG14 tails): MIG14 closed at S5 with the cast in progress, the missiles and
 projectiles in flight and the hero's runs left out of the save
 ([saved runs](../architecture/saved-runs.md), S6 cancelled 2026-11-07). How does the original
@@ -45,21 +46,3 @@ PS15 (no owner or player filter; the load-end recount); PS20 (the exact `mobile.
 The goal numbers of SV4 are the reader's from the casting start; the saved-runs concept names the
 casting goals 26, 27 and 83 after the session's own goal table, and which of the two numberings
 applies to each variant was not reconciled here.
-
-## What it means for Steamwoven (MIG14)
-
-- The owner's cancellation of S6 ("saving in the middle of a cast is excessive") was a choice
-  about scope, not a copy of the original: the original saves all three and has **no gate**.
-  The two quick-save gates of the viewer ("a cast is playing", "a spell missile is flying") are
-  Steamwoven-only refusals.
-- The original does not save the AI-driven pieces differently: NPC casts, missiles and shots
-  go the same way as the hero's, so a faithful save also keeps those of NPCs (today the runs that name a cut
-  spell run are not written, saved-runs §3.1).
-- The design left in [saved runs](../architecture/saved-runs.md) §3.5 covers the three parts: the
-  cast (spell run, caster's marks, casting goals), the missile objects (position, flight line,
-  pace) and the projectiles (the hero's attack facts plus the decided resolution, the original's
-  fields 77–80). The original resolves hit or miss at launch and keeps it in the projectile's fields, which is the
-  shape of the design's `PendingShot` with its decided `AttackResolution`.
-- Differences an "as the original" reopening would have to accept: the cast sound is not resumed,
-  a held-button walk is not renewed, and an armed target cursor is dropped.
-- **Owner decision 2026-11-08:** save them as the original does. MIG14 S6 is reopened as S7–S10 ([saved runs](../architecture/saved-runs.md#4-slices)); S7 (ARC-DEV-288) saves the projectiles in flight with their shots (the decided outcome kept as the fields 77–80 keep it); S8 (ARC-DEV-289) the spell missiles in flight and the NPCs' casting goals with the spell runs they wait to begin (the viewer's gate for a flying missile is gone); S9a–S9e (ARC-DEV-290, 317, 318, 319, 321) the hero's runs: walk, turn and states, attack and throw, cast with its queue (the gate for a playing cast is gone), talk, use, pickup, lock pick and pick pocket; S10 (ARC-DEV-291) re-checked B10–B12. Every saved-in-flight sub-step passed on `main` 34ad913f5.

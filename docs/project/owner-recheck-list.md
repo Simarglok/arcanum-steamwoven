@@ -20,7 +20,7 @@ for this comparison was `artifacts/packages/macos` at commit d2899817a; any late
 | --- | --- | --- | --- |
 | 1 | Cast Fireflash (spell 22) at empty ground. | A flash appears on the strike tile for about 0.75 s and goes away by itself. | open |
 | 2 | Cast Fireflash at a creature that stands on a tile. | No flash object, because the tile is not empty (`Tgt_Tile_Empty`). Note also what the creature itself gets (eye candy, damage): the Summon rules do not decide that, so it is part of the comparison. The owner does not remember this empty-tile rule, so it is the main thing to check. | open |
-| 3 | Cast Wall of Fire (spell 21), once on open ground and once next to a wall. | A straight line of 5 pieces centred on the target tile; the line runs along the direction from the caster to the target (TA12). A tile with a wall gets no piece (`Tgt_Tile_Empty_Immobiles`); creatures do not stop a piece. Also check that the line runs along the cast direction, not across it. | open |
+| 3 | Cast Wall of Fire (spell 21), once on open ground and once next to a wall. | A straight line of 5 pieces centred on the target tile; the line runs along the direction from the caster to the target (TA12). A tile with a wall gets no piece (`Tgt_Tile_Empty_Immobiles`); creatures do not stop a piece. Also check that the line runs along the cast direction, not across it. ARC-MAGIC-054: the pieces are drawn additive, as the original's translucent flames. The owner saw 5 pieces in the retail game (2026-11-12) ([note](../research/wall-of-fire-look-magic-054.md)); ARC-MAGIC-055 drops pieces on blocking terrain. | same (5 pieces, owner 2026-11-12) |
 | 4 | Walk the hero or a creature through the wall. | The pieces do not block passage: their prototype carries the "no block" flag in the data. | open |
 | 5 | Stand the caster and a companion in the wall, then a hostile creature. | The caster and creatures led by the caster's party are not burned. Other creatures burn each step, and in turn-based mode once per round. | open |
 | 6 | Stop maintaining Wall of Fire (or let it run out). | All pieces disappear at the same moment. | open |
@@ -586,26 +586,6 @@ English label, not the game's text; the view is not re-centred; an NPC cast of t
 | 8 | Walk with Spatial Distortion (spell 3) over a tile that has a script, starting from a tile next to it. | The script runs **before** the caster is put on the last tile: a message from it names the caster's old tile; the last tile's script runs once more afterwards. | open |
 
 
-## ARC-DEV-381 — Main menu opens before the start map (O1 of the performance diagnosis, 2026-11-11)
-
-The menu now opens as soon as its art is read, while the start map loads behind it ([early menu](../rendering/terrain-viewer.md#main-menu-arc-ui-011)). The original shows
-its menu before any map exists, so the comparison is about the order and the waiting, not about the menu's contents (they are unchanged). Compare on a start with the menu
-(`./arcanum area`, or a packaged build); the first build for this comparison is any build from `main` that contains this task.
-
-| # | Step | Expected (from the original executable and data) | Status |
-| --- | --- | --- | --- |
-| 1 | Start the game and watch how soon the main menu appears. | Like the original: the menu is the first thing on screen, a second or two after the window opens, with no map shown behind it. The music of the menu starts a few seconds later, when the start map is ready. | open |
-| 2 | Open Single Player, New Game, Pick Character and browse the heroes at once, before the map is ready. | Everything works as in the original: the same windows, the same twelve heroes. Nothing waits. | open |
-| 3 | Press Start on a hero before the map is ready. | The menu shows that the world is still loading and the game starts by itself when it is ready (the original has no such wait, because it loads the map after the choice; this is the one visible difference). Escape takes the choice back. | open |
-| 4 | Press Load Game or Last Save at once, with a save present. | Superseded by ARC-DEV-387 (below): they no longer wait for the start map. | superseded |
-| 5 | Press New Character at once, then go through the window, the editor and the shop. | The wait note first; then the windows work as before (the shop's merchant loads behind it). | open |
-| 6 | Open Options at once and change a setting, then Done. | The window works before the map is ready and the change holds; the main window returns. | open |
-
-Known differences (documented, not bugs):
-
-- A choice that needs the game world waits for the start map's load, which the original does not do. It is the price of showing the menu first.
-- The main thread is busy while the start map is published, for about a second after the load ends, so the menu may answer late then (O6 of the diagnosis).
-
 ## ARC-RES-121 — Function audit wave 3, groups G and I (2026-11-11)
 
 The audit changes no behaviour. It first named two places where the original behaves in a way our code does not reproduce and the export showed no caller for ([ledger GI-5](../research/ledger/census-triage-gi.md#findings-of-wave-3)). Task T5 (ARC-RES-123) then searched the whole executable bytes and found no reference to either, so both are dead code as far as a static search shows: the typed-order garbling 0x4C3120 is not run (an order should arrive whole) and the bar hide toggle 0x54ACB0 is not what F10 runs. One confirmation of the live F10 path remains.
@@ -616,7 +596,7 @@ The audit changes no behaviour. It first named two places where the original beh
 
 
 
-## ARC-DEV-387 — The start map loads only when a new game needs it (follow-up of ARC-DEV-381, 2026-11-11)
+## ARC-DEV-387 — The start map loads only when a new game needs it (O1 of the performance diagnosis, 2026-11-11)
 
 The start map is no longer loaded when the game starts with the menu ([early menu](../rendering/terrain-viewer.md#main-menu-arc-ui-011)). It begins to load when you
 enter the New Game window (the pre-made heroes or New Character); Last Save and a save chosen in the Load Game window load the map of the save itself, once. The
@@ -637,7 +617,8 @@ build); the first build for this comparison is any build from `main` that contai
 
 Known differences (documented, not bugs):
 
-- A new game still waits for the start map, which now begins to load when the New Game window opens (one press later than in ARC-DEV-381).
+- A new game still waits for the start map, which begins to load when the New Game window opens.
+- The main thread is busy while the start map is published, for about a second after the load ends, so the menu may answer late then (O6 of the diagnosis).
 - The menu's music was silent until the start map was loaded; ARC-UI-139 (below) plays it from the start without a scene.
 - While a save's map loads the menu stays on screen with a note; the original shows its own loading screen.
 
@@ -697,6 +678,119 @@ Known differences (documented, not bugs):
 
 - The refusal lines appear in the viewer's status text, not in a message window.
 - A marker does not go off when the hero steps on it yet, and it cannot be disarmed or spotted by a roll yet (a later slice): in the original it fires on the step. Check steps 5 and 6 only.
+
+## ARC-UI-147 — The character editor of the new-character flow in the original's look (2026-11-11)
+
+The editor is the in-game character sheet's original look between the menu's strips, with the opening shop's Accept and Back buttons ([viewer](../rendering/terrain-viewer.md#character-editor-in-creation-mode-arc-ui-034)). Compare in both games.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | New Game, New Character, give a name, Accept. | The editor opens as the character sheet (the wooden window with the portrait, the five points, the eight stats and the skills page) between the top and bottom strips, with the green arrow (Accept) and the red arrow (Back) in the bottom strip. | open |
+| 2 | Press the + and − of a stat, of a skill, of a college's spell rank and of a tech degree; try a − before any + . | Points move as in the game's sheet; a − at the start values is refused (in the original with its text in the text bar, here in the note line at the top). | open |
+| 3 | Click the portrait's round area. | Nothing happens: the editor does not close (in the game the same click closes the sheet). | open |
+| 4 | Accept, then Back in the shop, then change a stat again. | The points spent before the shop can still be taken back. | open |
+
+Known differences (documented, not bugs):
+
+- The hover hints of the buttons and values are not shown in the editor (the original shows them in the game's text bar).
+
+## ARC-UI-148 — Generated interface: the inventory window (S3, 2026-11-12)
+
+The rules are in [viewer slice S3](../rendering/hd-interface-density.md#viewer-slice-s3-arc-ui-148). Set the HD interface line on the launcher screen to **Generated (experimental)**, start a game
+and press `I`. Compare with the same window under **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open the inventory in a 1280 × 800 window, then press `I` again. | The pack grid, the doll grid, the count bars and the name box are drawn by code in the same places as in HD; the grid cells, the slots and every click land where they did. | open |
+| 2 | Drag the window's edge to make it bigger and smaller while the inventory is open. | The frame redraws at the new size (the previous picture stays until it is ready); the lines of the grid stay sharp and one unit wide at every size. | open |
+| 3 | Pick up an item and drop it into a cell and into a wear slot. | Same behaviour as in HD and Legacy. | open |
+| 4 | Look at the drop and use boxes. | Still the original's picture (the glow and the green or red corners show the state). | open |
+
+Known differences (documented, not bugs):
+
+- The curved flourishes at the corners of the original's boxes are not drawn in Generated: the boxes are plain rectangles with a brass rim.
+
+## ARC-MAGIC-058 — Spell runs at the hero's change of map (2026-11-12)
+
+The hero's change to another map (a jump point, the Crash Site cave, a map-mode exit) ends every spell run that names an object that does not travel with the hero (the hero, the followers that go along and what they hold); runs of the hero and of the followers that travel go on. Built from the executable (functions 0x45C720, 0x44F7A0, 0x44FA70, 0x44FC30; [rules](../world/spell-run-rules.md#runs-at-the-players-change-of-map-arc-magic-058-mt9b)). Compare in both games.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast a maintained spell on yourself (for example a protective spell with a slot in the top bar), walk through an exit to another map. | The spell and its slot are still there on the new map. | open |
+| 2 | With a follower in the party, cast a maintained spell on the follower and change map with the follower coming along. | The spell on the follower goes on; its slot stays. | open |
+| 3 | Cast a maintained spell on a creature that is not in the party (or on a follower you ordered to wait), then leave the map. | The spell ends as you leave: the slot is empty on the new map and the creature is without the effect when you come back. | open |
+| 4 | Cast Wall of Fire (or another spell that makes scenery) and leave the map. | The run ends as you leave and its fire pieces are gone when you return. (A summoned creature that follows you travels and its run goes on; creature summons are not built yet.) | open |
+| 5 | Cast a lock or hold spell on a door or chest of the map and leave. | The effect is over when you return (the run ended at the exit). | open |
+
+Known differences (documented, not bugs):
+
+- A run that travels keeps its next tick time; the original queues the tick again at the map entry (the time 0x459500 gives is not read).
+- The change of map by the world map is not covered (the endings on rest and world-map travel are MT11's).
+
+## ARC-MAGIC-059 — Spells end when a world-map journey starts (MT11, 2026-11-12)
+
+The world-map start check (0x565140) ends the hero's maintained spells ([ledger UE6](../research/ledger/spell-runs.md#spell-run-endings-of-a-critter-arc-dev-301), [cast host](../world/spell-cast-host.md#the-world-map-travel-start-arc-magic-059)). Compare in both games with a hero who can cast a maintained spell (for example a protection or light spell, one that shows on the top strip).
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast a maintained spell on the hero, open the world map, plan a route and start the journey. | The spell's slot leaves the top strip as the journey starts and its effect is gone on arrival. | open |
+| 2 | Plan a route of two or more waypoints and start it. | The spells end at the start; the journey goes on through every segment. | open |
+| 3 | Start a journey while the hero is walking or has just clicked a target. | The walk stops and the journey starts. | open |
+| 4 | Start a journey while the hero is in the middle of a cast (its casting animation). | The original refuses the start when the cast cannot be interrupted (a cast attempt of priority 4 or 5); Steamwoven shows "the hero's action cannot be interrupted" and keeps the route. | open |
+
+Known differences (documented, not bugs):
+
+- Resting (the rest option click, 0x57B710) also ends the sleeper's maintained spells in the original, but the rest window is not built yet (missing-systems E3-a), so only travel is wired.
+
+
+## ARC-MAGIC-057 — The hero's spot trap roll (E6-a, spot half, 2026-11-12)
+
+The rules are in [trap state](../world/trap-state-runtime.md) (the Spot item) and the [ledger SP1–SP2](../research/ledger/technology.md#spot-trap-roll-arc-magic-057). Use a hero with a low and one with a high Spot Trap skill (and Perception), on a map with a hidden floor trap (a trap plate) or a trapped chest or door, in both games.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Walk along a route that crosses a hidden floor trap with a low-skill hero. Repeat on a reloaded save a few times. | Sometimes the walk stops one tile before the trap with the "trap spotted" line and the trap is shown; other times the hero steps on it and it goes off. The chance rises with the skill and Perception. | open |
+| 2 | The same with a high-skill hero (a master of Spot Trap if you have one). | The trap is spotted much more often; a master gets a second chance on every miss. | open |
+| 3 | Open a trapped chest or use a trapped door that you have not spotted. | Either the use is stopped with the "trap spotted" line (the trap now shows as known) or the trap goes off as you open it. | open |
+| 4 | Find a magical trap (a trap whose script is a spell) with a hero below Expert in Spot Trap. | It is never spotted; it goes off on the step or the use. From Expert on it can be spotted. | open |
+| 5 | Cast Sense Hidden (spell 8), then repeat step 1. | The trap is spotted without a roll every time (the spell flag), and the hero's Spot Trap level should also be higher while the spell runs (effect 157): compare the sheet's skill value in both games. | open |
+
+Known differences (documented, not bugs):
+
+- The light at the trap is taken as full: an untrained hero in the dark is not penalised yet (the original adds up to 30 against an untrained hero).
+- The item that adds a modifier to the roll (inventory location 1005, name 2866) is not modelled.
+- Companions' own spot attempts are not made; disarming a trap and the skill-bar button are the next slice.
+
+## ARC-MAGIC-056 — Tempus Fugit speed (spell 79)
+
+Rules: [contract](../world/character-stats-runtime.md#tempus-fugit-speed-arc-magic-056), ledger [TF1–TF3](../research/ledger/spell-runs.md#tempus-fugit-speed-arc-magic-056). Compare in both games with the same hero (any Temporal hero with Tempus Fugit) and a hostile or neutral creature near.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast Tempus Fugit (spell 79) on the hero. Open the character sheet (speed line) and the inventory window. | The hero's speed is 10 higher while the spell is maintained, and back to the old value when it ends. | open |
+| 2 | Cast it, then fight a creature in turn-based mode, and compare the action points of the hero and of the creature with and without the spell. | The hero has 10 more action points; every other creature has 10 fewer (at least the game's minimum of 5). | open |
+| 3 | Cast it and fight in real time; compare the pause between attacks of the hero and of the creature with and without the spell. | The hero attacks faster, the creature slower. Walking speed does not change. | open |
+| 4 | Have a companion with the hero when casting. | The companion is in the spell's area and gains the same +10 as the hero; a companion that joins after the cast does not (not built, XR7). | open |
+
+Known differences (documented, not bugs):
+
+- An NPC that casts Tempus Fugit (record 79 carries a flee priority for the AI) changes speeds even when the player does not hold the spell: the owner decided on 2026-11-11 that the original's player-only test is a bug of the game, fixed in both modes. In the original such a cast does nothing to anyone's speed.
+- The follower join and leave flag writes (XR7) are not built: a companion that joins after the cast gains nothing, and one that leaves keeps the flag until the spell ends.
+
+## ARC-MAGIC-060 — Item spells on the hero's hit, the cell weapon (PR #1184, 2026-11-12)
+
+The hero's melee swings and shots now fire the combat events of the worn items (before, they did not in the game). The cell weapon of Electric degree 4 (record 147) is the one installed item that shows it; armour 8215 (record 87) answers a hit too. Compare in both games.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | With Electric degree 4 and power cells in the pack, assemble the degree-4 melee weapon, wield it and hit an NPC. | Each hit that lands takes cells from the pack (a technologist pays up to double) and adds an electrical shock to the weapon's own damage; a missed swing takes nothing. In the original the shock's own damage fires the weapon again until the NPC dies or the cells run out (MG46), here once per hit: only the first shock and its cells are compared. | open |
+| 2 | Hit with no cells in the pack. | The weapon still hits for its own damage; no shock, no cells. | open |
+| 3 | Kill an NPC with the weapon. | The killing hit pays the cells of its firing; nothing is expected to fire after the NPC is dead (the original's repeat per MG46 ends with the kill). | open |
+
+Known differences (documented, not bugs):
+
+- An NPC's own worn items still fire nothing when it attacks (no trigger host on the NPC attack path yet).
+- A chain of item spells answers once per item (owner decision 2026-10-28, MG46), where the original repeats until the target dies.
 
 ## ARC-MAGIC-053 — Summon for creatures: Summon Undead and the other creature summons (E1-e, 2026-11-11)
 

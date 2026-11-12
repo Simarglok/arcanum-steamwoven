@@ -112,6 +112,7 @@ public partial class TerrainViewerApp
         host.ProjectileEnds = ProjectileRunEnded;
         host.KnockbackEnds = KnockbackRunEnded;
         host.HeroEnds = HeroRunEnded;
+        session.KillNotice = request => { if (request.Map == mapNumber) host.NoticeKill(request.Victim, request.Killer); };
         // ARC-DEV-104 (MIG9 S4): a whole map opens its residency and sector cache once per map open; the arrival pre-cache folds the 3 × 3
         // sectors around the hero, whose NPCs get their first tick there. The delayed ticks below go only to NPCs without one.
         if (AreaResidency.Open(session, area, map, scene.HeroCell()) is { } opened)
@@ -189,6 +190,7 @@ public partial class TerrainViewerApp
             Followers = _areaCompanions is { } followerGroup ? new AiFollowers(followerGroup, () => _areaCompanions, chart) : null,
             // ARC-RENDER-038: an NPC's attack plays its body's attack ART for its animation and the weapon it shows.
             AttackArt = NpcAttackArt,
+            AlertedSound = AiAlertedSound,
             // ARC-DEV-116 (MIG11 S5): the maps an NPC's change of place can name.
             MapListed = MapListedNow,
             Homecomings = HomecomingQueue(session, mapNumber),
@@ -487,7 +489,7 @@ public partial class TerrainViewerApp
     /// casting goal's magic run does not outlive it.</summary>
     private void RetireAiHost()
     {
-        if (_aiHost is { } host && ReferenceEquals(host.Session, _areaSession)) host.Retire();
+        if (_aiHost is { } host && ReferenceEquals(host.Session, _areaSession)) { host.Retire(); _areaSession!.KillNotice = null; }
         _aiHost = null; _aiHostArea = null;
         _heartbeatDialog = null;
         _npcTilePending.Clear();
@@ -589,6 +591,7 @@ public partial class TerrainViewerApp
             switch (notice.Kind)
             {
                 case AreaAiNoticeKind.Swing:
+                    if (notice.AttackBark) PlayNpcAttackBark(host, notice.Npc);
                     GD.Print($"ARC-WORLD-092 ai-swing npc={notice.Npc} target={notice.Target} action={notice.Swing.ActionFrameMs} rest={notice.Swing.RestMs}"
                         + $" animation={notice.Play?.Wanted.Animation} weapon={notice.Play?.Wanted.Weapon} shield={notice.Play?.Wanted.Shield}"
                         + $" art={(notice.Play?.Art is { } art ? $"{art.Animation}/{art.Weapon}/{art.Shield} frames={art.Frames} actionFrame={art.ActionFrame}" : "fixed")}");
@@ -646,7 +649,12 @@ public partial class TerrainViewerApp
                     // ARC-DEV-272: the hero's fidget (after every done run of its in combat mode) is counted apart and not logged, a held stick ends a walk about four times a second.
                     if (notice.Npc == Arcanum.Simulation.Ai.AiSchedulerRules.Pc) { _heroFidgets++; break; }
                     _aiFidgets++;
+                    PlayNpcFidgetBark(host, notice.Npc);
                     GD.Print($"ARC-WORLD-099 ai-fidget npc={notice.Npc}");
+                    break;
+                case AreaAiNoticeKind.Sound:
+                    // ARC-RENDER-1126: the combat approach goal's alerted bark (0x4296D0), the id the setter stored (AreaAiScene.AlertedSound).
+                    PlayNpcSoundId(host, notice.Npc, notice.Sound, "alerted bark");
                     break;
             }
         }

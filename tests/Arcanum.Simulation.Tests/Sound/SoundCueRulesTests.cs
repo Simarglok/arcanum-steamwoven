@@ -173,4 +173,14 @@ public sealed class SoundCueRulesTests
         Assert.AreEqual(7307, SoundCueRules.Choose(new(7307, 1, new(7040, 2)), Lookup, Draw, true), "a named id plays");
         Assert.ThrowsExactly<InvalidOperationException>(() => SoundCueRules.Choose(new(2900, 4), Lookup, (_, _) => 4, false));
     }
+
+    [TestMethod]
+    public void A_critter_with_the_undead_animal_monster_or_mechanical_flag_is_monstrous_and_its_footsteps_are_silent()
+    {
+        // ARC-RENDER-1126 (0x45F730, mask 0x2000800C): the footstep caller skips monstrous critters (SN26).
+        foreach (var flag in new uint[] { 0x4, 0x8, 0x8000, 0x20000000 }) Assert.IsTrue(SoundCueRules.IsMonstrous(flag), $"0x{flag:X}");
+        Assert.IsFalse(SoundCueRules.IsMonstrous(0));
+        Assert.IsFalse(SoundCueRules.IsMonstrous(0x10000000), "other critter flags do not count");
+        Assert.IsTrue(SoundCueRules.IsMonstrous(0x10000000 | 0x4));
+    }
 }

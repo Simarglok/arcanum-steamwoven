@@ -7,8 +7,8 @@ Status: **research only, 2026-11-07; U3 (redraw + fit) run on the owner's 12 red
 Goal: an HD interface for any screen resolution. [ARC-RES-093](../research/screen-size-and-ui-layout.md) settled the
 layout (UI in 800 × 600 "UI units" at UI scale `s`, blocks anchored to screen edges, strips centred with tiled sides).
 This note asks how interface art gets more detail than the 1× original without moving a pixel of its geometry. It
-follows [HD alternatives](hd-alternatives.md) (ARC-RES-053), [generative re-detailing](hd-generative-redetail.md)
-(ARC-RES-038) and [upscale research](hd-upscale-research.md) (ARC-RES-033), which did not cover interface art.
+follows the closed HD alternatives (ARC-RES-053) and generative re-detailing (ARC-RES-038) notes (removed; their rules
+are under [Methods](#methods-32)) and [upscale research](hd-upscale-research.md) (ARC-RES-033), which did not cover interface art.
 
 No original or derived image, crop, sheet, weight or harness file is in this repository or its PR. Everything stayed
 under the ignored `local/` of the owner's Mac (the sheets are in `local/res094/sheets/` of the main checkout). The
@@ -109,6 +109,21 @@ Same inputs for every method: the decoded RGBA at slot 0.
 | U2 | U1 with edge decontamination (the bleed starts one pixel inside the silhouette: the ring is replaced from the interior; the frame border counts as interior) and a coarse colour lock (the chroma error blurred over one source pixel, two iterations) | smooth alpha | run |
 | U3 | redraw + fit (external redraw, registration, luma and coarse colour lock, Legacy alpha with an anti-aliased edge and exact holes, repeated-part step) | Legacy | **run** on the owner's 12 redraws (OpenAI's built-in image generator, in the owner's own account; no local generator, ARC-RES-053); the repeated-part step and a local warp not run; the lock is U2's (U3) or coarse (U3c); [results below](#u3-results-the-owners-redraws) |
 | U4 | tileable side pieces of the 9-slice, cut from U1/U2 | n/a | run on the strips (below) |
+
+Rules of the U1/U2 methods (defined in the closed ARC-RES-038 and ARC-RES-053 notes, whose models the owner rejected;
+history in git):
+
+- **Smooth alpha.** The binary Legacy mask, nearest ×4, Gaussian blur with σ = 3.2 output px, then the linear ramp
+  `clip((b − 0.5) · 3 + 0.5)`. It removes the 4-px staircase of the nearest mask and keeps the silhouette's position:
+  no pixel with α > 0 lies outside one Legacy texel of the Legacy silhouette (checked on the five statics and 50 walk
+  frames, with the pack format's exact `soft` rule).
+- **Shading lock.** Iterative back-projection on luminance: downsample the 4× result to source size by an
+  alpha-weighted 4×4 box, take the per-pixel Rec. 601 luma error against the original on opaque source pixels,
+  upsample that error bicubically (after bleeding it into the transparent area), add it to all three channels; four
+  iterations. It keeps the network's own high-frequency detail and colour but forces its low-frequency light and shadow
+  back to the original's (luma MAE about 0.1 by construction; at most 0.3 s a frame on the CPU).
+- **Colour bleed.** Opaque colours spread 12 px into the transparent area by repeated 8-neighbour averaging, the rest
+  filled with the mean opaque colour.
 
 The Legacy-alpha variant of U1/U2 is the same RGB with the Legacy alpha (the pack's `legacy` mode); it is not a fifth
 method. Its alpha, hole and key results are exact by construction. Its colour metrics were re-measured on the whole

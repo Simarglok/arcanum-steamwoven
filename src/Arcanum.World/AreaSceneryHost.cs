@@ -15,7 +15,7 @@ namespace Arcanum.World;
 /// character is within 30 tiles, or sleeps 800 ms when it is away. The runs step on the animation clock inside the frame step (<see cref="IGoalStepHost"/>), so the loops stop with the Esc pause and take a round's
 /// time jump; a step that moves a frame marks the host (<see cref="TakeChanged"/>) and the viewer redraws the scenery's body. This host answers the scenery ports (<see cref="IAiSceneryWorld"/>) from the loops.
 /// ARC-DEV-144 (S9c): goal 77's fire damage burns the critters on the scenery's tile through <see cref="AreaFireBurner"/> (3 fire, once per round and doubled in a round).
-/// <b>Not ready:</b> the loop's ambient sound, the restart of a loop after an art change or a cleared off flag (the original's restart sites 0x43F710, GT78: the viewer changes neither at run time; <see cref="Restart"/> is
+/// <b>Not ready:</b> the loop's ambient sound of a one-frame ART and of a created scenery (the begin node's sound of the map's own loops is <see cref="TakeSoundBegins"/>, ARC-RENDER-1126), the restart of a loop after an art change or a cleared off flag (the original's restart sites 0x43F710, GT78: the viewer changes neither at run time; <see cref="Restart"/> is
 /// the rule for them), and a loop whose object is stoned later (the spell flag is read at the start only). A loop whose run a table-exhaustion sweep ended stays still until its sector is shown again, as in the original (GT98).
 /// ARC-DEV-352 (E1-b, SUM4, GT77): a scenery the session created at run time (a Summon's piece, <see cref="SessionCreatedObject"/>) gets its loop through <see cref="AddCreated"/> when the viewer first shows it (the original starts the
 /// main run when the object enters the object list) and loses it through <see cref="RemoveCreated"/> when it is destroyed. Its burn carries the summoner as the source (the run's bottom frame slot 4, SUM4): the summoner and the NPCs led by a PC
@@ -33,6 +33,8 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
     // ARC-DEV-352: the created sceneries' loops, by entity, with whether they burn and the burn's source.
     private readonly Dictionary<string, (SceneryLoop Loop, bool Burning, string? Source, bool Begun)> _created = new(StringComparer.Ordinal);
     private bool _changed, _createdChanged;
+    // ARC-RENDER-1126: the map's loops whose begin node ran since the last take (the loop sound's decision point).
+    private readonly List<string> _soundBegins = [];
 
     /// <param name="player">The local player character's tile (the distance test of the loop), or null when it has none.</param>
     /// <param name="fire">The burn of goal 77's fire damage (GT94), or null when nothing burns (the damage is counted only).</param>
@@ -134,6 +136,19 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
     /// <summary>The goal a scenery's run is on, or null when it has none.</summary>
     public GoalType? GoalOf(string entity) => _session.QueryGoals().MainRunOf(entity)?.Top.Goal;
 
+    /// <summary>
+    /// ARC-RENDER-1126 (0x42DA50): the map's loops whose begin node ran since the last call, in order, each time its run began (a loop that began again after a
+    /// restart is listed again: the caller keeps the voice it started, as the original's begin node tests its sound handle). The begin node is where the original
+    /// starts the object's looping misc sound; deciding it needs the sound data and the PC, which the host leaves to the caller.
+    /// </summary>
+    public IReadOnlyList<string> TakeSoundBegins()
+    {
+        if (_soundBegins.Count == 0) return [];
+        var begins = _soundBegins.ToArray();
+        _soundBegins.Clear();
+        return begins;
+    }
+
     /// <summary>True once after a step moved a frame: the scenery's body must be drawn again.</summary>
     public bool TakeChanged()
     {
@@ -205,7 +220,13 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
 
     // ---- the scenery ports ----
 
-    public int? SceneryBegin(string scenery) => Loop(scenery) is { } loop ? (int)Math.Min(loop.PauseMs, int.MaxValue) : null;
+    public int? SceneryBegin(string scenery)
+    {
+        if (Loop(scenery) is not { } loop) return null;
+        // ARC-RENDER-1126: the begin node starts the object's looping sound (0x42DA50, SceneryLoopSoundRules): the viewer takes the begins and decides it.
+        if (_byEntity.ContainsKey(scenery) && !_soundBegins.Contains(scenery)) _soundBegins.Add(scenery);
+        return (int)Math.Min(loop.PauseMs, int.MaxValue);
+    }
 
     // The distance test (0x441AE0): a player character that is not on the map is far away.
     public bool SceneryNear(string scenery) => Loop(scenery) is { } loop && _player() is { } pc && SceneryAnimationRules.Near(loop.X, loop.Y, pc);

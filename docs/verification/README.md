@@ -113,17 +113,50 @@ What the numbers do not say:
 
 ## Function triage
 
-V1 of the [function audit plan](../research/function-audit-plan.md#5-recommendation) gives every census function that the registry lacked one state, slice by slice (address bands). The states: **not relevant** with a reason class (recorded in the slice's ledger section only), **read and implemented** (a registry row, `full` or `partial`, and an `[OriginalFunction]` mark in code), **read, not implemented** (a `not implemented` row) and **not yet read** (an F0 row). Read functions start at F1; F2 only where an existing document holds two independent readings.
+V1 of the [function audit plan](../research/function-audit-plan.md#5-recommendation) gives every census function that the registry lacked one state, slice by slice (address bands). Slices A to F cover the bands 0x400000-0x4FFFFF with a census row, H1 and H2 the bands 0x500000-0x59FFFF, G and I the export functions the census lacks; each row gives the counts of its own ledger section on the day it merged (a later task may have changed a state in the registry, which holds the current one). The states: **not relevant** with a reason class (recorded in the slice's ledger section only), **read and implemented** (a registry row, `full` or `partial`, and an `[OriginalFunction]` mark in code), **read, not implemented** (a `not implemented` row) and **not yet read** (an F0 row). Read functions start at F1; F2 only where an existing document holds two independent readings.
 
 | Slice | Band | Functions triaged | Ledger section |
 | --- | --- | --- | --- |
-| C (ARC-RES-108) | 0x440000-0x45FFFF | 389 added (0x452830 and 0x45A060 got their rows from other PRs): 95 implemented, 68 not implemented, 226 not relevant | [census-triage-0x44-0x45](../research/ledger/census-triage-0x44-0x45.md) |
 | A (ARC-RES-117) | 0x400000-0x41FFFF | 402 added: 37 implemented, 68 not implemented, 297 not relevant | [census-triage-a](../research/ledger/census-triage-a.md) |
+| B (ARC-RES-118) | 0x420000-0x43FFFF | 364 added (94 of the band's 458 starts had rows): 39 implemented (2 full, 37 partial), 169 not implemented, 156 not relevant, none not yet read | [census-triage-b](../research/ledger/census-triage-b.md) |
+| C (ARC-RES-108) | 0x440000-0x45FFFF | 389 added (0x452830 and 0x45A060 got their rows from other PRs): 95 implemented, 68 not implemented, 226 not relevant | [census-triage-0x44-0x45](../research/ledger/census-triage-0x44-0x45.md) |
+| D (ARC-RES-110) | 0x460000-0x46FFFF and 0x490000-0x4AFFFF | 381 rows: 22 implemented (1 full, 21 partial), 168 not implemented (88 of them the deferred network game), 191 not relevant, none not yet read | [census-triage-d](../research/ledger/census-triage-d.md) |
+| E (ARC-RES-109) | 0x4B0000-0x4CFFFF | 474 added (211 of the band's 685 starts had rows): 145 implemented (12 got a row and a mark, 133 are implemented in several methods or in a host with no mark yet), 2 not implemented, 78 not yet read (F0), 249 not relevant | [function-audit-4b-4c](../research/ledger/function-audit-4b-4c.md) |
+| F (ARC-RES-111) | 0x4D0000-0x4FFFFF | 855 of the band's 922 starts triaged (67 had rows): 633 registry rows added (3 implemented, 167 not implemented, 463 not yet read, F0) and 222 not relevant; the state of every address is in [`triage/band-4d-4f.csv`](triage/band-4d-4f.csv) | [census-triage-4d-4f](../research/ledger/census-triage-4d-4f.md) |
 | H1 (ARC-RES-119) | 0x500000-0x54FFFF | 933 added (50 of the band's 983 had rows): 17 implemented, 225 not implemented, 691 not relevant | [census-triage-h1](../research/ledger/census-triage-h1.md) |
 | H2 (ARC-RES-120) | 0x550000-0x59FFFF | 1,143 added (93 had rows): 41 implemented, 152 not implemented, 950 not relevant | [census-triage-h2](../research/ledger/census-triage-h2.md) |
 | G and I (ARC-RES-121) | the export functions that are not census starts: G = 0x470000-0x49FFFF and the other 0x400000-0x4FFFFF, I = 0x500000-0x59FFFF | 1,042 read: 1,011 not relevant, 31 with a rule state (18 `not implemented` rows and 13 implemented rows with marks, ARC-DEV-389) | [census-triage-gi](../research/ledger/census-triage-gi.md), [`triage/groups-g-i.csv`](triage/groups-g-i.csv) |
 
 **Groups G and I (wave 3).** The slices above took the census rows of an address band. The Ghidra text export of ARC-DEV-377 and ARC-DEV-379 lists 6,717 functions with a C file and 139 thunks where the census lists 5,815, so wave 3 gives a state to the 1,042 export functions that are not census starts: **group G** is every such function in 0x470000-0x49FFFF (the census has no row of 0x47 and 0x48 and 30 of 0x49: the giant prototype fill switch, split into case blocks) and every other such function in 0x400000-0x4FFFFF; **group I** is every such function in 0x500000-0x59FFFF. The 44 census starts that have no C file (43 thunks, one inside another function) are a finding of the ledger section, not a group. The reading was docs-only, so its record is the [CSV](triage/groups-g-i.csv) (state, class, callers and pointer holders per address) and the ledger section; the 1,011 not relevant functions stay there and have no registry row. ARC-DEV-389 then gave the 31 functions with a rule state their registry rows (18 `not implemented`, 13 `full` or `partial` with an `[OriginalFunction]` mark); `FunctionRegistryTests` keeps the CSV, the registry and the marks equal.
+
+## Address-named methods
+
+ARC-DEV-1106 (V4 of the [function audit plan](../research/function-audit-plan.md#5-recommendation)). A method that names an
+executable function in its XML `<summary>` but carries no `OriginalFunction` mark is invisible to the mark and row tests above, so
+the root test `FunctionRegistryTests.EveryAddressNamedMethodIsMarkedExemptOrPending` finds those methods and requires each to be in
+one of three states:
+
+| State | Where it is written | Meaning |
+| --- | --- | --- |
+| **marked** | `[OriginalFunction(address, scope)]` on the method, with its registry row | the method implements the function; the tests above check the pairing |
+| **exempt** | a row with `state` `exempt` in [`address-methods.csv`](address-methods.csv) and a class: `host` (the method only calls a marked rule or hosts it; one method per address, the mark stays on the rule) or `reference` (the summary cites the address as evidence or context and the method implements none of that function) | the missing mark is deliberate |
+| **pending** | a row with `state` `pending` and no class | a known gap: nobody has yet read the method against the function; the V1 and V2 slices turn it into marked or exempt |
+
+How the test reads the code: it reads the tracked `.cs` files under `src/`, `tools/` and `experiments/`, takes each method (a
+declaration with a return type, a parameter list and a body that follows the doc comment and its attributes; types, constructors,
+properties, fields and interface or abstract declarations are left out) and looks in its `<summary>` for `0x` and six hex digits
+that are a function start in [`census.csv`](census.csv) (an address that is not a census start, such as a mid-function label or a
+global, does not count). A member name with overloads, or the same name in two types of one file, is one row and counts as marked only when every one is. Plain `//` comments and preprocessor lines between the doc comment and the declaration are skipped; an attribute may share the declaration's line. It fails when
+
+- an unmarked method naming a census function has no row (mark it and add its registry row, or add an `exempt` row with its class);
+- a row names a member that is marked now, no longer names a census function in its summary or no longer exists (remove the row);
+- the file is malformed (header `file,member,state,class`, rows sorted by file and member, one row per member, an existing file);
+- the number of `pending` rows is not exactly `PendingCeiling` in the test. The constant only goes down, with the row that closes: a new method is marked or
+  exempt, never pending. The first run (2026-11-12, 744 rows) recorded every unmarked method as pending, because telling a host
+  from an unread implementation needs a reading of the function; V1 and V2 close the rows, and the PR that turns a row into marked
+  or exempt removes or edits it and lowers the ceiling.
+
+A new `.cs` file is read from the moment it is tracked (`git add`), like the mark scan above.
 
 ## Rule-mode switches
 

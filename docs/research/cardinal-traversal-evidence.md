@@ -16,7 +16,7 @@ implementation checks, not independent review, ordinary acceptance or delivery.
 ## Result and classification boundary
 
 One independently authored research candidate implements the
-[bounded contract](../world/cardinal-traversal-contract.md) in the existing
+[bounded contract](../world/cardinal-traversal-assessment.md) in the existing
 [standalone probe](../../tools/research/Arcanum.CrashSiteProbe/Program.cs).
 **Original structural observations + interpretation from an earlier source reading (F0)**, under
 explicit **Project diagnostic policy**, establish the four gap-free directed rows

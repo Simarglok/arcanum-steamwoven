@@ -111,17 +111,28 @@ internal static class CharacterStatRules
     /// <summary>
     /// Part of the original's situational adjustment of a base value before effects: poison lowers strength and dexterity by
     /// <c>min(3, poison / 100)</c>, crippled legs lower speed by 5, and the four mage backgrounds move magick points by 4
-    /// (<see cref="MageBackgroundAdjustment"/>) (the stat getter 0x4B0490, ledger IF12, BG6; Tempus Fugit, the follower bonus
-    /// and the other backgrounds' adjustments (66, 67, 68) are not modelled).
+    /// (<see cref="MageBackgroundAdjustment"/>) (the stat getter 0x4B0490, ledger IF12, BG6, XR6; Tempus Fugit is the context's
+    /// <see cref="CharacterStatContext.SpeedShift"/>; the follower bonus and the other backgrounds' adjustments (66, 67, 68) are not modelled).
     /// </summary>
     [OriginalFunction(0x4B0490, OriginalFunctionScope.Partial)]
     public static int Situational(CharacterStat stat, CharacterStatContext context) => stat switch
     {
         CharacterStat.Strength or CharacterStat.Dexterity => -Math.Min(3, context.PoisonLevel / 100),
-        CharacterStat.Speed => context.CrippledLegs ? -5 : 0,
+        CharacterStat.Speed => context.SpeedShift + (context.CrippledLegs ? -5 : 0),
         CharacterStat.MagickPoints => MageBackgroundAdjustment(context),
         _ => 0,
     };
+
+    /// <summary>The speed change of Tempus Fugit that holders gain and every other critter loses (stat getter 0x4B0490, ledger XR6).</summary>
+    public const int TempusFugitSpeed = 10;
+
+    /// <summary>
+    /// ARC-MAGIC-056 (MA-9, ledger XR6, owner decision on XR14 (a)): the speed change of Tempus Fugit for one critter. The original (0x4B0490) changes speed only while the
+    /// <b>local player</b> holds the spell flag: a holder gains 10, every other critter loses 10; an NPC's cast changes nobody's speed unless the player holds it too. The owner's decision
+    /// (2026-11-11, both modes, no setting) fixes that bug: the change applies while <b>any</b> critter holds the spell, not only the player. With the player holding it the result is the
+    /// original's; with only an NPC holding it, that NPC and the critters that hold it gain 10 and every other critter loses 10.
+    /// </summary>
+    public static int TempusFugitShift(bool critterHolds, bool anyCritterHolds) => !anyCritterHolds ? 0 : critterHolds ? TempusFugitSpeed : -TempusFugitSpeed;
 
     /// <summary>
     /// The magick points of the Day, Night, Sky and Nature Mage backgrounds (62..65) at read time (0x4B0490, the magick-points

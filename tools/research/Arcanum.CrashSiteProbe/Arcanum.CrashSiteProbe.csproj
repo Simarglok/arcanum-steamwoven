@@ -4,5 +4,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../../src/Arcanum.Data/Arcanum.Data.csproj" />
+    <ProjectReference Include="../../../src/Arcanum.Scripting/Arcanum.Scripting.csproj" />
   </ItemGroup>
 </Project>

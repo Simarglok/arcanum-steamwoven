@@ -274,7 +274,7 @@ elsewhere is a menu picture. Read in the code (`AreaMenuArtView.WidescreenBackgr
    (`hdInterface` in `game_settings_v1.json`, independent of the Legacy/HD world profile), an HD pack is active and not
    `rejected`, and the file is an opaque 16:9 PNG of at most 3840 x 2160. Anything else leaves the original menu art from
    the game data, without a message. An automated run (smoke, self-test) looks for no pack folder and opens one only when `ARC_HD_PACK` names it, so a smoke shows the HD menu only with that variable.
-2. **The active pack** is `ARC_HD_PACK` when set; otherwise the one the **HD pack** setting of the options window chooses
+2. **The active pack** is `ARC_HD_PACK` when set; otherwise the one the **HD pack** setting of the launcher screen chooses
    ([below](#hd-pack-source-arc-dev-350), ARC-DEV-350): by default (Auto) the iCloud pack folder when it is on this device and the pack in it
    is whole, else the first pack that opens and is not `rejected` in the collection `user://hd-packs/` (the installed copy), then, **only for a
    run of the Godot editor binary** (`Godot --path`, feature `editor`), the checkout's `local/hd-packs/` (the same iCloud folder by its symlink).
@@ -304,9 +304,8 @@ elsewhere is a menu picture. Read in the code (`AreaMenuArtView.WidescreenBackgr
 
 ### HD pack source (ARC-DEV-350)
 
-The game chooses its HD pack at startup from the **HD pack** line of the options window (Game page, after *HD interface*; main menu and in-play
-menu), saved as `hdPack` (`auto`, `game`, `custom`) and `hdPackPath` in `game_settings_v1.json` (file version 4; older files read as Auto). A change
-applies at the **next start**, and the window's note says at once what that start will read:
+The game chooses its HD pack at startup from the **HD pack** line of the launcher screen (after *HD interface*; ARC-UI-143 moved it there from the options window's Game page, ARC-UI-146), saved as `hdPack` (`auto`, `game`, `custom`) and `hdPackPath` in `game_settings_v1.json` (file version 4; older files read as Auto). A change
+applies at the **next start**, and the launcher screen's note says at once what that start will read:
 
 | Setting | Chain (first pack that opens, is not `rejected` and is whole wins) |
 | --- | --- |
@@ -401,6 +400,9 @@ not a font change, stop and look. The real `apply` (then `verify --deep`, then `
   written) when one frame fails. On 2026-11-11 the five fonts of the first trace (arts 27, 171, 229, 327, 840) built as 1113 entries in one run (a local observation).
 - `fonts-plan` overwrites only a plan it wrote (every item a `coverage` item), never the pipeline's `ready/plan.json`, and writes only under a checkout's `local/`.
 - Rolling back is `rollback` of the `apply` backup, as for any update.
+- **Replacing the installed fonts (ARC-UI-145).** A new trace of the same fonts (other `hd_font` parameters) changes the *bytes* of keys that are already installed, so
+  the update is not `--add-new`: run `plan --staged <staging> --base INSTALLED` without `--add-new`; it must say `1106 interface entries differ` (the five fonts: 1113 entries, 7 of them
+  byte-identical under the new trace; a local dry run of 2026-11-11, `staged-only entries: 0`) and no CONFLICT, then `apply` the same way. The viewer draws the glyphs bilinear without mipmaps since ARC-UI-145 (the interface frames stay trilinear).
 
 ## Producing and repairing art (who does what)
 

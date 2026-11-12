@@ -1,7 +1,7 @@
 # NPC AI morale
 
 Status: **Research**, work item ARC-RES-058 (2026-10-20), stage A4 of the
-[NPC combat AI plan](npc-combat-ai-plan.md#research-stages-source-reading-one-document-each)
+[NPC combat AI plan](npc-combat-ai-plan.md#phase-1-faithful-reconstruction)
 (source units S14 morale and S15 back off). It fixes when an NPC decides to
 flee, how a flight turns into a surrender and how a surrender ends, what a
 surrendered NPC does and how the rest of the game treats it, and when and how an
