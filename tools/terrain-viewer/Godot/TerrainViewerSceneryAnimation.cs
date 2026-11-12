@@ -19,6 +19,8 @@ public partial class TerrainViewerApp
     // The plan the loops were made from (not the load result, which a retired generation must be free to release).
     private AreaScenePlan? _sceneryStamp;
     private Dictionary<AreaObjectKey, AreaDrawCommand> _sceneryBodies = [];
+    // The occupancy revision the beds were last drawn at (ARC-WORLD-1162).
+    private long _bedRevisionDrawn = -1;
 
     /// <summary>The scenery host as far as it belongs to the shown session; null when there is none or when it still belongs to a replaced session (a quick load, a carried session: its session is disposed). The goal-step router goes through this; <see cref="ProcessAreaSceneryAnimation"/> replaces the stale host.</summary>
     private AreaSceneryHost? ShownSceneryHost => _sceneryHost is { } host && ReferenceEquals(host.Session, _areaSession) ? host : null;
@@ -54,7 +56,8 @@ public partial class TerrainViewerApp
         changed |= _sceneryHost.TakeChanged();
         // ARC-RENDER-1126: the loops whose begin node ran decide their looping sound (0x42DA50).
         TickSceneryLoopSounds(_sceneryHost);
-        if (changed && _sceneryAnimation is { } animation) SyncSceneryBodies(animation);
+        // ARC-WORLD-1162: a bed that took or lost a sleeper is drawn at its next frame or its own.
+        if ((changed || _bedRevisionDrawn != _bedOccupancy.Revision) && _sceneryAnimation is { } animation) SyncSceneryBodies(animation);
         // A created scenery is a ground body drawn at its loop's frame: the ground is drawn again only when a created loop came, went or moved a frame.
         if (_sceneryHost.TakeCreatedChanged()) { _groundStamp = null; SyncAreaInventory(); }
     }
@@ -74,8 +77,24 @@ public partial class TerrainViewerApp
             bodies[loop.Key] = AreaScenePlan.SceneryFrame(command, loop.Row, body, loop.Visual,
                 loop.Loop.OffsetX, loop.Loop.OffsetY);
         }
+        AddOccupiedBeds(bodies, overlay.Bodies, overlay.Visuals);
+        _bedRevisionDrawn = _bedOccupancy.Revision;
         if (bodies.Count == 0 && _sceneryBodies.Count == 0) return;
         _sceneryBodies = bodies;
         _canvas?.SetAreaMovingBodies(AreaMovingCommands());
+    }
+
+    /// <summary>ARC-WORLD-1162 (ledger SWB15, 0x43F7F0): a bed that holds a sleeper is drawn at the next frame of its ART (the sleeper itself is not drawn, object flag 0x100). The frames come from the plan's extra frames of the bed (<see cref="AreaBedArt"/>).</summary>
+    private void AddOccupiedBeds(Dictionary<AreaObjectKey, AreaDrawCommand> bodies, Dictionary<AreaObjectKey, AreaDrawCommand> drawn, Dictionary<AreaVisualKey, AreaVisualRecord> visuals)
+    {
+        if (_mapTransfers is not { } transfers || _readyArea is not { } shown) return;
+        foreach (var key in transfers.Beds)
+        {
+            if (_bedOccupancy.Occupant(key) is null || bodies.ContainsKey(key)) continue;
+            if (!shown.Plan.SceneryFrames.TryGetValue(key, out var frames) || !drawn.TryGetValue(key, out var command) || !visuals.TryGetValue(command.Visual, out var body)) continue;
+            var next = AreaBeds.OccupiedFrame((int)((body.RawArt >> 14) & 31), body.FrameCount);
+            if (frames.FirstOrDefault(f => (int)((f.RawArt >> 14) & 31) == next) is not { } frame) continue;
+            bodies[key] = AreaScenePlan.SceneryFrame(command, transfers.Object(key), body, frame, 0, 0);
+        }
     }
 }

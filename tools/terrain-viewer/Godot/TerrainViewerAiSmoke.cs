@@ -557,6 +557,11 @@ public partial class TerrainViewerApp
             // which flies, is drawn and arrives, its arrival beginning the run.
             var missileSpells = Enumerable.Range(0, Arcanum.Simulation.Magic.SpellBookRules.Spells).Where(s => SpellMissileArt(s) is not null).ToArray();
             Require(missileSpells.Length > 0, "the eye candy table lists spells with a missile");
+            // ARC-MAGIC-1232 (DW2): the first missile spell, Disarm (0), now takes the hero's wielded weapon (a drop that draws from the session generator and leaves the weapon on the ground), which
+            // would move the stage's later casts and saves. The hero puts its weapon away first, so Disarm finds none (the drop itself is the unit tests'); no weapon, no change from before.
+            if (session.QueryEquipment().Worn.Any(item => item.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon))
+                Require(session.Unequip(session.Version, Arcanum.Simulation.Equipment.EquipmentSlot.Weapon, _ => SessionInsertVerdict.Accepted).Disposition == GameSessionDisposition.Changed,
+                    "the hero put its weapon away before the NPC's Disarm");
             var missiles = _aiMissiles; var arrivals = _aiMissileArrivals;
             int? missileSpell = null; var missileRun = -1;
             foreach (var candidate in missileSpells)

@@ -548,6 +548,19 @@ public static partial class GameSessionSnapshotCodec
             if (root.ContainsKey("generators")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.generators");
             root.Add("generators", new JsonObject { ["slots"] = new JsonArray(), ["made"] = new JsonArray(), ["copies"] = new JsonArray() });
         },
+        // ARC-MAGIC-1234 (schema 92): each run row of the spells section gains its object list (the original's +0x130). No older build stored one (its runs that name a list in their END area never found
+        // it), so the step adds the empty list to every row. The spells section and its run rows the older schema carried must be there.
+        [91] = root =>
+        {
+            var spells = Section(root, "spells");
+            if (!spells.TryGetPropertyValue("runs", out var rows)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.spells.runs");
+            if (rows is not JsonArray array) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.spells.runs");
+            for (var i = 0; i < array.Count; i++)
+            {
+                if (array[i] is not JsonObject row) throw new DecodeException(SnapshotDecodeFailure.WrongType, $"$.spells.runs[{i}]");
+                AddField(row, $"$.spells.runs[{i}]", "objectList", new JsonArray());
+            }
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

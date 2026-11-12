@@ -191,7 +191,8 @@ public partial class TerrainViewerApp
         RefreshAreaStatus();
     }
 
-    /// <summary>A left click on a length (SWB8): the pending step is removed and the first is due 50 ms later; the screen fades out once; script event 29 runs on the direct followers.</summary>
+    /// <summary>A left click on a length (SWB8): the pending step is removed and the first is due 50 ms later; the screen fades out once; script event 29 runs on the direct followers; then the sleeper's maintained spells end
+    /// (0x457450, ledger UE6, ARC-MAGIC-1161: the sleeper only, no interrupt of its actions, in the wait window too).</summary>
     private void SleepPressed(int button)
     {
         if (!SleepOpen || _rest is not { } rest || _areaSession is not { } session || !ReferenceEquals(_restSession, session)) return;
@@ -199,7 +200,9 @@ public partial class TerrainViewerApp
         _sleepPanel!.HideButtons();
         if (!_restDark) { _restDark = true; _restFade.Out(_clockHostMs); }
         RunLeaderSleeping(session);
-        GD.Print($"ARC-WORLD-1160 sleep press button={button} code={rest.Code} wait={rest.Wait} due={rest.DueMs} (the sleeper's maintained spells: ARC-MAGIC #1161, not ended here)");
+        var caster = SpellCasterNow();
+        caster?.EndMaintainedSpells(SessionSpellCaster.Hero);
+        GD.Print($"ARC-WORLD-1160 sleep press button={button} code={rest.Code} wait={rest.Wait} due={rest.DueMs} maintained-spells-ended={caster is not null} (ARC-MAGIC-1161)");
         RefreshReadyStatus();
     }
 

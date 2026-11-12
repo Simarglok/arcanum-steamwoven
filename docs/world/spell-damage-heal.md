@@ -84,6 +84,12 @@ The packet's effects (`LifeDamage`) go to the session's damage step (`LifeRules.
 blinding (0x200), an arm (0x400), the legs (0x800), a scar (0x1000) and the dropped weapon (0x2000, the item owner's).
 `Crippling` in the data is all three of 0x200, 0x400 and 0x800. A death with the death flag falls with the plain animation.
 
+**The weapon block (ARC-MAGIC-1232, DW2, XR15).** A step that ran on a critter (not prevented, not already dead) with the dropped-weapon bit (`Weap_Dropped`, 0x2000: Disarm, one component of amount 0) takes the **target's**
+wielded weapon (slot 1004) through the session's critical drop (`GameSessionOwner.SpellWeaponDrop` → `CriticalDrop`, the step an attack's critical uses): CR14's drop place from the cast map's drop map
+(`ISpellCastMap.DropMap`; none lands the item on its holder's cell), the drop script and the no-drop flag refuse, the hero's weapon joins its placed items and an NPC's seed item lies loose, with decay. The zero amount is no exit
+(DW1), a spell's step has no critical procedure (an NPC's Disarm drops a PC's weapon), and a step the game stops has no weapon block. The step carries the drop in `SessionSpellDamageStep.Criticals` (message 19 floats from it),
+the cast host's log has `WeaponDropped`. The items by slot come from `ISpellCastMap.WornBySlot` (the area cast map lists an NPC's worn items, the hero's starting kit).
+
 **Acid** (`SpellDamageRules.Acid`, 0x4B5810).
 - On a critter, each item worn in slots 1000..1008 takes the normal amount, in slot order. The step lowers the amount in
   place by that item's resistance, so it shrinks from item to item. The executor chains the amounts through the steps
@@ -96,7 +102,7 @@ source: the run's other object, else its parent, which the original uses for exp
 duties:
 - the AI's attack notice, once per target per run (0x453F20);
 - the experience share and the AI reaction of the step;
-- the item effects;
+- the item effects, the weapon block (above) among them;
 - the damage effect when the step dealt damage;
 - the taking-damage script (point 0x17), which can cancel the step.
 
