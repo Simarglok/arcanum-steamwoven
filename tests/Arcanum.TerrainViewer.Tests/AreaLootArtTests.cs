@@ -235,4 +235,16 @@ public sealed class AreaLootArtTests
         Assert.IsNull(AreaLootArtLayout.RightRelease(view, new AreaLootHit(null, AreaInventoryIcon.Drop, null, false), AreaInventoryMode.Steal));
         Assert.IsNull(AreaLootArtLayout.RightRelease(view, lower, AreaInventoryMode.Own), "the own window's right release is the use (IW5)");
     }
+    [TestMethod]
+    public void TheRatingBoxesLieUnderTheDollInsideTheFrameAndTheTooHeavyFillIsDarkRed()
+    {
+        // ARC-UI-1121 (IW29, IW41, IW43): the two numbers sit under the doll's lowest slot (the boots end at y 372 on the doll art; the boxes start at 354, inside the art's frame).
+        foreach (var box in new[] { AreaLootArtLayout.DamageRatingBox, AreaLootArtLayout.ArmourRatingBox })
+        {
+            Assert.IsTrue(box.X >= 0 && box.X + box.Width <= 358 && box.Y >= AreaLootArtLayout.DollView.Y && box.Y + box.Height <= 400, $"{box} inside the 358 × 400 frame");
+            Assert.AreEqual((22, 16), (box.Width, box.Height));
+        }
+        Assert.IsTrue(AreaLootArtLayout.DamageRatingBox.X + AreaLootArtLayout.DamageRatingBox.Width < AreaLootArtLayout.ArmourRatingBox.X, "the damage rating is left of the armour rating");
+        Assert.AreEqual((0x40, 0, 0), AreaLootArtLayout.TooHeavyFill);
+    }
 }

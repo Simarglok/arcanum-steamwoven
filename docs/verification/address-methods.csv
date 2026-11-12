@@ -45,6 +45,7 @@ src/Arcanum.Session/GameSessionAssembly.cs,QueryHeroAssembly,pending,
 src/Arcanum.Session/GameSessionAttack.cs,AttackCritter,pending,
 src/Arcanum.Session/GameSessionAttack.cs,AttackValues,pending,
 src/Arcanum.Session/GameSessionAttack.cs,CriticalAndWearSteps,pending,
+src/Arcanum.Session/GameSessionAttack.cs,DollValues,exempt,host
 src/Arcanum.Session/GameSessionAttack.cs,FirearmsLevel,pending,
 src/Arcanum.Session/GameSessionAttack.cs,LandShot,pending,
 src/Arcanum.Session/GameSessionAttack.cs,QueryHeroAttackChance,pending,
@@ -97,6 +98,7 @@ src/Arcanum.Session/GameSessionHotkeys.cs,RecordHotkeyAction,pending,
 src/Arcanum.Session/GameSessionIdentify.cs,MarkItemIdentified,pending,
 src/Arcanum.Session/GameSessionItemDamage.cs,QueryItemCombat,pending,
 src/Arcanum.Session/GameSessionItemExamine.cs,RunItemExamine,exempt,reference
+src/Arcanum.Session/GameSessionItemMove.cs,MoveGroundItem,exempt,reference
 src/Arcanum.Session/GameSessionItemScripts.cs,PowerRatio,pending,
 src/Arcanum.Session/GameSessionItemScripts.cs,Stat,pending,
 src/Arcanum.Session/GameSessionItemTriggers.cs,FireDamageStepItems,pending,

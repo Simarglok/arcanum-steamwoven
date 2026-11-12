@@ -47,6 +47,8 @@ public partial class AreaWorldMapArtView : Control
     private readonly Dictionary<int, bool> _townFiles = [];
     private const int MaxTownTextures = 6000;
     private AreaWorldMapKind _kind;
+    // ARC-MAGIC-1147 (TP6, WM2): the window was opened by a Teleportation cast (0x560790): no journey, so no Travel button.
+    private bool _teleportMode;
     private AreaWorldMapArtButton? _hovered, _pressed;
     private bool _compassDragged, _pressedInView;
     // ARC-UI-085, WM101/WM103: the armed flag (a press adds or selects a waypoint only while it is set; it is set at the open, on a kind switch and on every
@@ -179,10 +181,10 @@ public partial class AreaWorldMapArtView : Control
 
     /// <summary>Shows the window over <paramref name="map"/> in the map view, centred on the party (WM12; off the start map, which only a debug teleport
     /// reaches, on the picture's middle).</summary>
-    public void Open(AreaWorldMap map, Func<int, bool> known, AreaTownMapShow? town = null, AreaTownNotes? mapNotes = null, AreaTownNotes? continentNotes = null)
+    public void Open(AreaWorldMap map, Func<int, bool> known, AreaTownMapShow? town = null, AreaTownNotes? mapNotes = null, AreaTownNotes? continentNotes = null, bool teleportMode = false)
     {
         if (_look is null) throw new InvalidOperationException("ARC-UI-073: the world-map art is not set");
-        _map = map; _known = known; _message = "";
+        _map = map; _known = known; _message = ""; _teleportMode = teleportMode;
         _max = AreaWorldMapArtLayout.MaxOffset(map.Data.Width, map.Data.Width);
         (_hovered, _pressed, _compassDragged, _pressedInView) = (null, null, false, false);
         (_armed, _dragging) = (map.OnStartMap, false);
@@ -394,10 +396,12 @@ public partial class AreaWorldMapArtView : Control
         ScrollBy(direction, AreaWorldMapArtLayout.CompassStep);
     }
 
+    internal bool TravelButtonShownForSelfTest => Shown(AreaWorldMapArtButton.Travel);
+
     // The buttons shown now: Travel only on the walkable map view, the compass not in the continent view (WM31, WM62).
     private bool Shown(AreaWorldMapArtButton button) => button switch
     {
-        AreaWorldMapArtButton.Travel => (_map?.OnStartMap == true && _kind == AreaWorldMapKind.Map) || _kind == AreaWorldMapKind.Town,
+        AreaWorldMapArtButton.Travel => AreaWorldMapArtLayout.TravelShown(_map?.OnStartMap == true, _teleportMode, _kind),
         AreaWorldMapArtButton.Compass => _kind != AreaWorldMapKind.Continent,
         _ => true,
     };
