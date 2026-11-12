@@ -18,7 +18,7 @@ Requirements (reference only): [FR-MAGIC-006](../requirements/combat-magic-tech.
 - **Done slices:** MA-0 the spell census (ARC-DEV-356), MA-R the executable reads (ARC-DEV-357, ledger XR1-XR15), MA-1, MA-2, MA-3 Dispel (ARC-MAGIC-034, -039), MA-4 social and AI flags (ARC-MAGIC-035), MA-5 Movement (ARC-MAGIC-036, -038), MA-6 locks and holds (ARC-MAGIC-037),
   MA-7 Identify (ARC-MAGIC-032), MA-8 Trait and the body spells (ARC-MAGIC-040, -046, -047, -052), MA-9 Tempus Fugit (ARC-MAGIC-056). The control components that belong to the technology records and items (NoOp, Terminate, branches, Use, nested Cast) are ARC-MAGIC-044, -048 and -049.
 - **Open:** E1-e creature Summon (14, 19, 24, 29, 53, 57, 68, 71-74), E1-f AI summoning, E6 trap spotting (spell 8), MA-10 the raise script hook (58, 64), the hero and companion push of Unseen Force (2), and the windows of Identify (E8) ([slices](#slices), [open spells](#open-spells)).
-- **Only three spells are named by a smoke stage** (51, 56 and, by its data filter, 55); the others are covered by unit tests of their components and by the census. "Runs" is a code-path claim, not parity (parity stays with the [ledger](original-verification-ledger.md)).
+- **Only seven spells are named by a smoke stage** (51, 56 and, by its data filter, 55; since ARC-DEV-1148 30, 46, 76 and 77 by the stage `spell-effects`); the others are covered by unit tests of their components and by the census. "Runs" is a code-path claim, not parity (parity stays with the [ledger](original-verification-ledger.md)).
 - **Decisions for the owner** were six; the owner decided all of them on 2026-11-11 (D1 a, D2 a, D3 b, D4 a, D5 a, D6 c) ([decisions](#decisions-for-the-owner)).
 
 ## Method and limits
@@ -53,7 +53,7 @@ Every other college spell has a code path for every component of its record (the
 | 48 Flesh to Stone | Stone render side effect; the stone-to-flesh pair on a portal holding the stoned spell flag | - |
 | 58 Create Undead, 64 Resurrect | The raise script hook; the combat and life rules read the data's undead bit, not the written one | MA-10 |
 | 65 Illuminate | The original lights the scene: a live object light on the target while the spell runs ([IW1–IW6](ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)); not built (no light is built on an object, the viewer draws saved object lights only) | lighting lane |
-| 76, 77 Congeal Time, Hasten | Speed reaches the turn-based action points and the real-time attack pause, not walking (the original does not either, XR); no per-spell smoke | - |
+| 76, 77 Congeal Time, Hasten | Speed reaches the turn-based action points and the real-time attack pause, not walking (the original does not either, XR); stage `spell-effects` (ARC-DEV-1148) casts both: BEGIN adds the effect and moves the speed (77 up, 76 down); **found there: the END of 76 leaves its effect on the NPC** (its END area names the run's object list, which no host fills), so Congeal Time never wears off | [#1234](https://github.com/Simarglok/arcanum-steamwoven/issues/1234) |
 | 79 Tempus Fugit | Built (MA-9, ARC-MAGIC-056): +10 speed to its holders and -10 to every other critter while any critter holds it (the original: while the player holds it, XR6); the follower flag writes of XR7 are not built | - |
 
 ## Work order
@@ -96,7 +96,7 @@ Found: the run's object block at +0xA0 is its **target**, not its other object (
 
 Done ([contract](../world/durable-effects-runtime.md#consumers-of-resistance-and-stat-changes-arc-magic-027), ledger [RE1-RE3](ledger/magic.md#effect-consumers-arc-magic-027)): the effective resistance (0x43D6D0) puts effects after the armour and the poison bonus and before the clamp to 0..95; the hero's effects and every NPC's list feed attacks, spell damage and poison; an NPC's speed and strength reach its combat values, attack pause and the round's action points.
 The original's magic save does not read the effects (RE2); the owner decided D6 (c): Resist Magick (40) works in both modes, done by ARC-MAGIC-033 ([RS11-RS13](ledger/magic.md#resist-magick-in-the-magic-save-arc-magic-033)), also in the AI's predictor.
-Left: an NPC's life facts (maximum hit points, poison tick) ignore effect-changed strength, constitution and resistance; the character sheet's resistance lines show no effect changes; the hero's innate (race, gender) effects have no resistance changes; no smoke stage names 30, 46, 76 or 77.
+Left: an NPC's life facts (maximum hit points, poison tick) ignore effect-changed strength, constitution and resistance; the character sheet's resistance lines show no effect changes; the hero's innate (race, gender) effects have no resistance changes; the stage `spell-effects` (ARC-DEV-1148) names 30, 46, 76 and 77 (BEGIN adds the effects and moves the stats; a forced END takes them off for 30, 46 and 77 and, a known gap, not for 76).
 
 ## Identify (MA-7, ARC-MAGIC-032)
 

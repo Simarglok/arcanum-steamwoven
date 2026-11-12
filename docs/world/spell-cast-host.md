@@ -927,3 +927,10 @@ Slice E4-e of the [technology audit](../research/technology-audit-res-125.md#6-q
 | The log | `NestedCast`: run = the run whose component asked, value = the spell, object = the target (none for a tile), detail = the new run's slot or −1. `NestedCastsDropped`: the requests beyond `MaxNestedCastsPerStart` (64) in one start. |
 
 The viewer sets `SessionSpellCaster.CastCombat` to the combat world its item triggers use (`TerrainViewerSpellCast`); the nested runs' components log into the same cast log the viewer posts every world frame. **Not modelled:** the original's start inside the component (the slot order), the unbounded self-cast chain (bounded), and the action points of goal 73 for a host with no combat world.
+
+## Congeal Time END gap (ARC-DEV-1148)
+
+The native stage `spell-effects` ([area-map-mode](../rendering/area-map-mode.md)) casts Congeal Time (76) at an NPC with the PC as parent: BEGIN adds effect 57 and halves the NPC's speed, but a forced END leaves the entry on the
+NPC. Spells 30, 46 and 77 take their entries off at the same END. Spell 76's END area has the list bit (the high 0x80000000: the run's stored object list) and no object bit, and the host fills no run list ("Further limits"
+above, the lists at +0x130 and +0x134), so the END removal reads an empty list. The stage expects the leftover (and removes it by hand), so it fails when a host starts filling the lists; the fix is the run's object list (issue #1234).
+Read from the data and the host, not yet confirmed in the executable's END path (the list branch of the target test, TA14).
