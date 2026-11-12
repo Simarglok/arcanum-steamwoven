@@ -759,7 +759,28 @@ Known differences (documented, not bugs):
 
 - The light at the trap is taken as full: an untrained hero in the dark is not penalised yet (the original adds up to 30 against an untrained hero).
 - The item that adds a modifier to the roll (inventory location 1005, name 2866) is not modelled.
-- Companions' own spot attempts are not made; disarming a trap and the skill-bar button are the next slice.
+- Companions' own spot attempts are not made; disarming a trap is ARC-SKILLS-1156 (below).
+
+## ARC-SKILLS-1156 — Disarming a trap from the hotkey bar (E6-a, disarm half, 2026-11-12)
+
+The rules are in [trap state](../world/trap-state-runtime.md#disarm-arc-skills-1156) and the [ledger SP3, TT5, TT6](../research/ledger/technology.md#spot-trap-roll-arc-magic-057). Put the Disarm Traps skill button on the hotkey bar (the skill bar's entry), and use heroes with a low, an expert and a master Disarm Traps skill, on a map with a spotted trap (a trap plate you saw, or a trapped chest or door you spotted), in both games. Compare the odds over several reloads and the device.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Press the Disarm Traps entry on the hotkey bar, then click a trap you have not spotted. | Nothing is rolled: the trap is not a target (no known trap there) and the cursor is back to normal. | open |
+| 2 | Press the entry, then click a spotted trap (the plate, a chest or a door) with a low-skill hero. Reload and repeat a few times. | Sometimes the trap is gone, sometimes nothing happens, sometimes (a critical failure) the trap goes off on you. The odds rise with the skill. | open |
+| 3 | The same with a trap object that has a high difficulty (a strong trap plate) against one with a low difficulty. | The strong trap is disarmed less often at the same skill. A chest's or a door's trap has no such difficulty term. | open |
+| 4 | As an Expert, disarm a trap and look at the pack after a critical success. | The trap's device item (a trap kit the trap's script names) lands in the pack, or on the ground at your feet when the pack cannot take it. Compare which items you get and how often. | open |
+| 5 | As a Master, repeat step 2 many times and count successes against an Expert of the same stats. | A Master succeeds clearly more often (a failed roll gets a second chance). | open |
+| 6 | In turn-based mode, press the entry and click a spotted trap with fewer than 4 action points left, then with enough. | With too few the subturn ends and nothing is rolled; otherwise 4 action points are spent. | open |
+| 7 | Right-click while the cursor is armed. | The cursor is cancelled. | open |
+
+Known differences (documented, not bugs):
+
+- When a follower is better at disarming, the original lets the best follower act instead of the hero ("let me handle it", Ctrl skips it); Steamwoven always uses the hero.
+- The original's skill-bar press builds the invocation at once, so Steamwoven does not walk the hero to the trap first; whether the original limits the distance by the difficulty is read from the shared check only.
+- A trap you placed yourself with a script trap device is a marker object in Steamwoven and cannot be targeted yet.
+- The skill pane's own Disarm Traps button is [#1113](https://github.com/Simarglok/arcanum-steamwoven/issues/1113).
 
 ## ARC-MAGIC-056 — Tempus Fugit speed (spell 79)
 

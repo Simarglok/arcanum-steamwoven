@@ -295,6 +295,8 @@ public enum GameSessionFailure
     InvalidMapNotes,
     // Created scenery and eye-candy objects (ARC-DEV-347): a kind, prototype, map, cell or offset outside its bounds, or a kind-prefixed entity that is no created object's.
     InvalidCreatedObject,
+    // Disarm traps (ARC-SKILLS-1156): in a turn-based round, not the hero's turn or too few action points for the press.
+    DisarmOutOfTurn,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }

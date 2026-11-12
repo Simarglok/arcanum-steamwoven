@@ -81,7 +81,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-DEV-110: the armed pick pocket is the skill target mode (2) on the stack: the stack is the flag.</summary>
-    private bool PickPocketArmed => TargetModeOpen(InterfaceMode.SkillTarget);
+    private bool PickPocketArmed => TargetModeOpen(InterfaceMode.SkillTarget) && !_disarmArmed;
 
     /// <summary>ARC-DEV-110: true when the target or overlay mode is on the stack.</summary>
     private bool TargetModeOpen(InterfaceMode mode) => _interfaceWindows.IsOpen(mode);
@@ -94,6 +94,7 @@ public partial class TerrainViewerApp
         CancelArmedLockpicks(why);
         // Only the armed skill: a walk to a victim already under way (its press left the mode) keeps going, as before.
         if (PickPocketArmed) CancelPickPocket(why);
+        CancelDisarm(why);
         CancelPendingOrder(why);
     }
 
