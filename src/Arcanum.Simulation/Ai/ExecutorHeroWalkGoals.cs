@@ -224,7 +224,7 @@ public static partial class AiExecutorRules
         GoalType.AttemptMove => HeroStepNode(goal, state, world),
         GoalType.MoveToPause => PauseNode(goal),
         GoalType.Rotate => world.TurnStep(goal.Rotation) is > 0 and var wait ? new(Move.Restart, Delay: wait) : new(Move.Pop),
-        GoalType.Talk => HeroTalkNode(goal, world),
+        GoalType.Talk => HeroTalkNode(goal, state, world),
         GoalType.UseObject or GoalType.UseContainer => HeroUseNode(goal, world),
         GoalType.PickupItem => HeroPickupNode(goal, world),
         GoalType.AttemptPickup => HeroAttemptPickupNode(goal, world),

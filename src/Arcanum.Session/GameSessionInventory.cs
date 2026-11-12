@@ -319,6 +319,12 @@ public readonly record struct InventoryMutationResult(GameSessionDisposition Dis
     /// Changed only when that run wrote global flags.</summary>
     public int? DeclinedBy { get; init; }
 
+    /// <summary>ARC-WORLD-1283 (ledger NT2, VP5): the item message number the original shows to the PC when a transfer refuses at the item's remove check
+    /// (0x466DA0: the no-drop flag, code 11; the message is item.mes 100 + code, <see cref="GameSessionOwner.NoDropMessage"/>, through 0x4673F0), set on that refusal
+    /// whether the hero is the source or the recipient. A dialog <c>IN -name</c> that ends this way is <see cref="GameSessionDisposition.Changed"/> (the item laid at the PC's
+    /// tile, as the original does after any transfer that did not end with the PC) and carries the number too; null otherwise.</summary>
+    public int? PcMessage { get; init; }
+
     private readonly IReadOnlyList<SessionItemTriggerResult>? _itemSpells;
 
     /// <summary>ARC-MAGIC-022: what the item trigger host's executors did after the move (the pickup 0x4CBAA0 of an item the hero got,
@@ -658,7 +664,8 @@ internal sealed class InventoryDomain
         // ARC-MAGIC-1230: a pushed item of the map's data lies on the cell the push left it on (the session's record), wherever its data puts it.
         seed.Source.Items.Where(item => item.Cell is not null && !Taken.Contains(item.Entity))
             .Select(item => new SessionGroundItem(new(item.Entity, WithAmmo(item.Entity, item.Facts)), moved?.Invoke(item.Entity) ?? item.Cell!.Value))
-            // ARC-WORLD-090: the items a barter window sold into a container stay out of its spill (not modelled).
+            // ARC-WORLD-1306: the items a barter window sold into a container leave its list at the break and lie on the ground as placed items
+            // (Placed below); only a save made before that fix can still hold some in a spilled container's list, and they stay hidden.
             .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Container).SelectMany(holder =>
                 spilled(holder.Entity) is { } cell ? Current(seed, holder, dropped, added: false).Select(item => new SessionGroundItem(item, moved?.Invoke(item.Entity) ?? cell)) : []))
             .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Npc).SelectMany(holder => holder.Items

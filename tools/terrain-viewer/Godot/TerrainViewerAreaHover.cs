@@ -73,7 +73,7 @@ public partial class TerrainViewerApp
     /// <summary>Hides the tooltip and gives the default cursor back; the loaded names stay for the next publication.</summary>
     private void UnbindAreaHover()
     {
-        _hoverIndex = null; _hoverIndexArea = null; _hoverRoutes = null; _hoverRoutesSession = null;
+        _hoverIndex = null; _hoverIndexArea = null; _hoverRoutes = null; _hoverRoutesSession = null; _portraitHoverKey = null; _portraitAllows = null;
         ShowAreaHover(null, AreaHoverAction.None, null, refreshStatus: false);
         _hoverStamp = null;
     }
@@ -229,7 +229,9 @@ public partial class TerrainViewerApp
         // ARC-UI-056: while the original's cursor art is shown these shapes are not (it does not change per target).
         if (cursor != _hoverCursor) { _hoverCursor = cursor; if (_cursorShown is null) SetCursorShape(cursor); }
         // ARC-UI-057: the hovered portal, container, scenery or item is drawn once more, additive (0x43C690).
-        if (_canvas is not null) _canvas.AreaHighlight = key is { } lit && _hoverIndex is { } rows && rows.Contains(lit) && AreaHoverWindow.Highlighted(rows.Row(lit)) ? lit : null;
+        // ARC-UI-1281 (HK26): with no object under the pointer, the follower whose portrait it rests on is the hovered one (0x56A9D0 calls 0x57CD60, 0x553BE0 and 0x43C270 for it).
+        var hovered = key ?? _portraitHoverKey;
+        if (_canvas is not null) _canvas.AreaHighlight = hovered is { } lit && _hoverIndex is { } rows && rows.Contains(lit) && AreaHoverWindow.Highlighted(rows.Row(lit)) ? lit : null;
         // ARC-UI-057: with the interface bars drawn the object is described in the message window, as the original does; the floating
         // tooltip is the viewer's without the bars.
         var inBars = _gameBarPanel is { Visible: true };
@@ -251,7 +253,7 @@ public partial class TerrainViewerApp
             }
         }
         // ARC-UI-024, ARC-UI-057: the hovered object's window (a follower's portrait among it) in the message window while the bars are drawn.
-        SyncHoverWindow(key);
+        SyncHoverWindow(hovered);
         if (changed && refreshStatus) RefreshAreaStatus();
     }
 

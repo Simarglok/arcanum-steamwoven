@@ -65,10 +65,11 @@ public partial class TerrainViewerApp
         catch (KeyNotFoundException) { return null; }
     }
 
-    /// <summary>The cell of a skill goal's target: a pick pocket's victim ("pp:") or a lock pick's door or window (the portal's session entity).</summary>
+    /// <summary>The cell of a skill goal's target: a pick pocket's victim ("pp:") or a lock pick's door, window (the portal's session entity) or container (a loot target string, ARC-UI-1127).</summary>
     private CellCoord? SkillTargetCell(string target)
     {
         if (PickPocketRowOf(target) is { } row) { var (x, y) = LiveWorldCell(row); return new(checked((int)x), checked((int)y)); }
+        if (ContainerOfSkillTarget(target) is { } container) { var (cx, cy) = LiveWorldCell(container.Row); return new(checked((int)cx), checked((int)cy)); }
         return _areaDoors?.PortalOf(target) is { } portal ? new(checked((int)portal.Cell.X), checked((int)portal.Cell.Y)) : null;
     }
 
@@ -217,6 +218,8 @@ public partial class TerrainViewerApp
             message = $"{SkillLine(result.Moved > 0 ? PickPocketRules.SuccessLine : PickPocketRules.FailureLine)} ({(direction == PickPocketDirection.Steal ? "steal" : "plant")} {itemName}" +
                 (result.Moved > 1 ? $" ×{result.Moved}" : "") + ")";
             if (result.Alignment is { } alignment) message += $"; alignment {alignment}";
+            // ARC-WORLD-1283: an item the remove check refused (the no-drop flag) shows the PC's message (item.mes 111; the thief is the source of a plant and the recipient of a steal).
+            if (result.Move is { PcMessage: not null } refused) message += $"; {AreaInventoryHost.Refusal(refused.Failure, refused.Verdict)}";
             if (result.Noticed)
             {
                 caught = AreaPickPocket.Caught(session, map.Row(npc), npc, CatchingThiefScript, victimNpc => ai.HeroAttacked(victimNpc));

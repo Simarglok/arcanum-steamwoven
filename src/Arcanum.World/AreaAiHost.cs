@@ -254,7 +254,7 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 /// the heal skill's rung and goal 40, pickups, a thrown item's flight, grenades, the back-off's away path, the attack order's target and pass, the comment lines, NPC
 /// ranged attacks, scripts at the AI points, routines and waypoints, saved NPC positions.
 /// </summary>
-public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, ISessionBodyWorld, IAiPerformWorld, IMoraleWorld, IAiSupportWorld, IAiGrenadeWorld, IGoalStepHost
+public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, ISessionBodyWorld, IAiPerformWorld, IMoraleWorld, IAiSupportWorld, IAiGrenadeWorld, IAiItemSearchWorld, IGoalStepHost
 {
     private const string Pc = AiSchedulerRules.Pc;
     // Object flags: destroyed, off, don't draw, invisible, invulnerable; critter flags; spell flags; NPC flags (HostilityCritter's bits).
@@ -935,6 +935,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             or AttackEventStop.VictimDecoy or AttackEventStop.VictimWall or AttackEventStop.Self) return;
         // ARC-WORLD-115: the attacker's followers first, right after the early exits (0x4A9B80, side attacker, the victim the other).
         if (plan.TellsAttackerFollowers) TellFollowers(attacker, victim, FollowerSide.Attacker);
+        // ARC-MAGIC-1142 (HS14, 0x4A9650 at 0x4A983D): the NPC victim loses the kill-on-sight override (NPC flag 0x800) before the PC victim's response, whoever it was given by (a charm, the data).
+        if (plan.ClearsKosOverride) ClearKosOverride(victim);
         // A PC victim responds (0x4A9AD0): first the dialog-end callback (0x5F848C → 0x5678D0(PC, 0), GT140: an attack on the PC ends the PC's dialog, whoever the partner is), then it enters combat mode (its call of 0x4B3F50).
         if (plan.PcVictimResponds)
         {
@@ -950,6 +952,14 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (plan.Reaction == AttackReactionChange.Deliberate && attacker == Pc && ReactionFacts(victim) is { } facts && Row(victim) is { } row)
             _session.ReactToPcHit(_session.Version, victim, facts.Npc, facts.Pc, new(row.FollowerHitReaction, row.HostileReaction), deliberate: true);
         if (plan.ReactsToAttack) React(victim, attacker);
+    }
+
+    // The attack event's clear of NPC flag 0x800 on the victim (0x406D40 of field 0x118): the session's NPC flag layer takes it off the data's value; a victim without the bit writes nothing.
+    private void ClearKosOverride(string victim)
+    {
+        if (Fields(victim)?.Npc is not { } fields) return;
+        var data = (fields.Flags & KosOverrideNpc) != 0;
+        _session.WriteObjectFlag(_session.Version, victim, SessionObjectFlagField.Npc, unchecked((int)KosOverrideNpc), false, data);
     }
 
     /// <summary>
@@ -1164,6 +1174,11 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private uint SpellFlagsOf(string id, uint stored) => unchecked((uint)_session.QueryObjectFlags(id).Spell(unchecked((int)stored)));
 
     private uint ObjectFlagsOf(string id, uint stored) => unchecked((uint)_session.QueryObjectFlags(id).Object(unchecked((int)stored)));
+
+    // ARC-MAGIC-1142: an NPC's NPC flags (obj_f_npc_flags, 0x118) and critter flags (0xDA) as the session left them (a charm's kill-on-sight override, the attack event's clear, the undead bit) over its data's.
+    private uint NpcFlagsOf(string id, uint stored) => unchecked((uint)_session.QueryObjectFlags(id).Npc(unchecked((int)stored)));
+
+    private uint CritterFlagsOf(string id, uint stored) => unchecked((uint)_session.QueryObjectFlags(id).Critter(unchecked((int)stored)));
     public bool PcHidden => false;
     public AiConversation Conversation(string npc) => _scene.ConversationPartner?.Invoke() == npc ? AiConversation.Pc : AiConversation.None;
     // The dialog end callback 0x5F848C is stored once by the dialog UI's init (0x567377 → 0x4A84D0) and never cleared: it is always set (ARC-DEV-177, the S11e read GT138).
@@ -1179,7 +1194,16 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool StunAnimationRunning(string npc) => RunOf(npc) is { Bottom.Goal: GoalType.AnimateStunned };
     // ARC-DEV-143: an overlay (an eye candy or the hover) is beside the NPC's own runs and is not its animation here: a spell's eye candy on a companion or on the NPC whose subturn starts changes none of these answers (the original's own test of the animation list is not read).
     public bool AnimationRunning(string npc) => _session.QueryGoals().RunsOf(npc).Any(r => !AiExecutorRules.IsOverlayRunGoal(r.Bottom.Goal));
-    public void ReWield(string npc, bool allSlots) { }
+    /// <summary>
+    /// ARC-AI-1139 (0x4A8570 steps CHECK_WIELD and CHECK_WEAPON): the gate's re-wield of the NPC's best items, every slot (0x4654F0) or the weapon slot alone
+    /// (0x465170 with 1004), over its list and ammunition stacks (<see cref="GameSessionOwner.RewieldNpc"/>), so a companion whose bow ran dry takes it off
+    /// and fights with the best weapon it can use, fists when none. The session's answer is traced; a refusal (no wielder for the NPC, no restock world) leaves the NPC as it was.
+    /// </summary>
+    public void ReWield(string npc, bool allSlots)
+    {
+        var result = _session.RewieldNpc(_session.Version, npc, allSlots, _events as ISessionRestockWorld);
+        Trace(npc).Item = $"rewield {(allSlots ? "all" : "weapon")} {result.Disposition} {result.Failure} " + string.Join(", ", result.Steps.Select(step => $"{step.Slot} off={step.TakenOff ?? "-"} on={step.Wielded ?? "-"}"));
+    }
     // ARC-DEV-301: the gate's demaintain (0x4A8570 step 15 → 0x457450) ends the NPC's maintained spell runs through the cast host.
     public void EndMaintainedSpells(string npc) => _scene.Spells?.Invoke()?.EndMaintainedSpells(npc);
     /// <summary>
@@ -1209,7 +1233,26 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var used = AiExecutorRules.UseItemNow(this, npc, item, chosen.Target);
         Trace(npc).Item += $" used at once {used.Step} spent={used.Spent}";
     }
-    public bool SearchItems(string npc) => false;
+    /// <summary>
+    /// ARC-AI-1139: the pipeline's item search (0x4A8E70, <see cref="AiGroundRules.SearchItems"/>): each look-for bit the NPC holds is cleared just before its search
+    /// (the setters are the ranged attack without ammunition, 0x4ADFF0, and an item drop, 0x461AB0). The host has no ground source yet (<see cref="LooseItems"/>,
+    /// <see cref="JunkPiles"/>), so no search finds an item and no pickup starts: the answer is false and the pass goes on to the danger update, as in the original on a map with nothing
+    /// lying in the NPC's square. NOT READY: the loose items and junk piles of the shown map, and the end of the pickup goal (<see cref="PickUp"/>).
+    /// </summary>
+    public bool SearchItems(string npc)
+    {
+        var result = AiGroundRules.SearchItems(this, npc);
+        if (result.Cleared != DangerFlags.None) Trace(npc).Item = $"item search {result.Stop} cleared {result.Cleared}";
+        return result.Stop == AiItemSearchStop.PickupStarted;
+    }
+
+    // IAiItemSearchWorld (ARC-AI-1139): the blinded condition (critter flag 0x80), the interface object test (no window holds an object here) and the ground: no source yet.
+    public bool Blinded(string npc) => LifeState(npc)?.Conditions.HasFlag(LifeConditions.Blinded) ?? false;
+    public bool InterfaceHoldsObject => false;
+    public IReadOnlyList<AiGroundItem> LooseItems(string npc, AiGroundKind kind, int halfSize) => [];
+    public IReadOnlyList<string> JunkPiles(string npc, int halfSize) => [];
+    public AiGroundItem? FirstInPile(string pile, AiGroundKind kind) => null;
+    public bool StartPickup(string npc, string item) => false;
     public bool Loading => false;
 
     /// <summary>
@@ -1921,6 +1964,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var result = _session.AttackByNpc(_session.Version, attack);
         Trace(id).Hit = $"{result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Life?.HitPointDamage}" + (target == aimed ? "" : $" (the line of fire struck {target} instead of {aimed})");
         _notices.Add(new(AreaAiNoticeKind.Hit, id, target) { Result = result });
+        NeedsAmmunition(id, result.Resolution);
         if (result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Refusal == AttackRefusal.None)
         {
             AttackEvent(id, target);
@@ -1935,6 +1979,18 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                 LandShot(id, shot, target);
                 _session.EndShot(shot);
             }
+    }
+
+    /// <summary>
+    /// ARC-AI-1139 (0x4B3170 → 0x4ADFF0): an NPC's ranged attack the ammunition check refused (<see cref="AttackRefusal.OutOfAmmunition"/>, a companion with too few units of its
+    /// weapon's type) marks the NPC as needing ammunition, a weapon and a weapon check: LOOK_FOR_AMMO, LOOK_FOR_WEAPON and CHECK_WEAPON (flags 0x0A000080) in one revision. Its next AI pass
+    /// re-wields (<see cref="ReWield"/>) and runs the item search (<see cref="SearchItems"/>). Any other outcome sets nothing.
+    /// </summary>
+    private void NeedsAmmunition(string npc, AttackResolution? resolution)
+    {
+        if (resolution?.Refusal != AttackRefusal.OutOfAmmunition) return;
+        var set = _session.SetAiSupportBits(_session.Version, npc, DangerFlags.LookForAmmo | DangerFlags.LookForWeapon | DangerFlags.CheckWeapon);
+        Trace(npc).Item = $"out of ammunition {set.Disposition} {set.Failure}";
     }
 
     /// <summary>
@@ -2003,6 +2059,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Flight = _scene.LaunchShotAtObject is not null, TakingDamage = TakingDamageOfObject(id, struck),
         });
         Trace(id).Hit = $"shot on {(struck?.Entity ?? "a wall")} instead of {target}: {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
+        NeedsAmmunition(id, result.Resolution);
         // A refused attack leaves the shot to the ordinary flow (the target keeps it).
         if (result.Disposition == GameSessionDisposition.Rejected) return false;
         if ((result.Shots.Count == 0 || result.Life is not null) && result.Resolution?.Refusal == AttackRefusal.None) _scene.ObjectStruck?.Invoke(id, blocker, info, result);
@@ -2997,7 +3054,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Destroyed = Gone(id), DontDraw = (ObjectFlagsOf(id, fields.Object.Flags) & DontDraw) != 0, ObjectInvisible = (ObjectFlagsOf(id, fields.Object.Flags) & ObjectInvisible) != 0,
             Invulnerable = (fields.Object.Flags & Invulnerable) != 0, NighInvulnerable = (critter.Flags2 & NighInvulnerable2) != 0,
             Dead = status?.IsDead ?? true, Unconscious = status?.IsUnconscious ?? false, Asleep = Sleeping(id),
-            NonLethal = (critter.Flags & NonLethal) != 0, Undead = (critter.Flags & Undead) != 0, Animal = (critter.Flags & Animal) != 0,
+            NonLethal = (critter.Flags & NonLethal) != 0, Undead = (CritterFlagsOf(id, critter.Flags) & Undead) != 0, Animal = (critter.Flags & Animal) != 0,
             AnimalEnshrouded = (critter.Flags & AnimalEnshrouded) != 0, Monstrous = build.Monstrous,
             // The NO_FLEE the AI set (session bit, ARC-WORLD-086) is ORed into the critter's stored flag.
             NoFlee = (critter.Flags & NoFleeFlag) != 0 || danger.Flags.HasFlag(DangerFlags.NoFlee),
@@ -3007,7 +3064,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             AttemptingAttack = RunOf(id)?.Top.Goal is GoalType.AttemptAttack or GoalType.AttemptSpell or GoalType.AttemptSpellWithAnimation,
             InCombatMode = _session.QueryCombatMode(SessionCombatant.Critter(id)),
             Guard = npc.SocialClass == GuardClass, WaitingHere = (npc.Flags & WaitingHereNpc) != 0 || Waiting(id),
-            KillOnSight = (npc.Flags & KillOnSightNpc) != 0, KosOverride = (npc.Flags & KosOverrideNpc) != 0,
+            KillOnSight = (npc.Flags & KillOnSightNpc) != 0, KosOverride = (NpcFlagsOf(id, npc.Flags) & KosOverrideNpc) != 0,
             Perception = build.EffectiveStat(CharacterStat.Perception, state), Intelligence = build.EffectiveStat(CharacterStat.Intelligence, state),
             Level = build.Level, Alignment = critter.BaseStats.Count > AreaCompanionData.AlignmentStat ? critter.BaseStats[AreaCompanionData.AlignmentStat] : 0,
             HealthPercent = status is null ? 0 : Percent(status), Leader = leader, PcLeader = leader,

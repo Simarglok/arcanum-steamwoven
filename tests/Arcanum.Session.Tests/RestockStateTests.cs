@@ -117,6 +117,52 @@ public sealed class RestockStateTests
         Assert.AreEqual((2L, 1), (owner.Version.Revision, owner.QueryRestocks().Count));
     }
 
+    // ARC-WORLD-1300 (VP68, VPG5, owner decision 2026-11-12): the Original setting schedules 12 hours plus the original's 15-bit draw (at
+    // most 32,767 ms); Steamwoven keeps the intended 12..24 hours. Both settings are bounded by the same payload check.
+    [TestMethod]
+    public void The_original_setting_restocks_after_twelve_hours_plus_a_15_bit_draw_and_steamwoven_after_twelve_to_twenty_four()
+    {
+        foreach (var mode in new[] { RuleMode.Steamwoven, RuleMode.Original })
+        {
+            using var owner = Owner();
+            owner.SelectRules(mode);
+            var deadlines = new HashSet<long>();
+            var late = 0;
+            for (var i = 0; i < 40; i++)
+            {
+                var now = owner.QueryClockSnapshot().GameTimestampMs;
+                Schedule(owner, "smith");
+                var delay = owner.QueryRestocks().Single().DeadlineMs - now;
+                deadlines.Add(delay);
+                Assert.IsTrue(delay is >= RestockRules.MinDelayMs and <= RestockRules.MaxDelayMs, $"{mode}: inside the payload check's range");
+                if (mode == RuleMode.Original) Assert.IsTrue(delay <= RestockRules.NarrowMaxDelayMs, $"{mode}: 12 hours plus at most 32,767 ms ({delay})");
+                else if (delay > RestockRules.NarrowMaxDelayMs) late++;
+            }
+            Assert.IsTrue(deadlines.Count > 1, $"{mode}: the delay is still drawn");
+            // Forty draws over 12 hours all landing in the first 33 seconds has no chance, so Steamwoven shows the whole range.
+            if (mode == RuleMode.Steamwoven) Assert.IsTrue(late > 30, $"Steamwoven draws the whole 12..24 hours ({late} of 40 later than 12 h + 32.8 s)");
+        }
+        Assert.AreEqual((true, false), (ItemRuleProfile.Original.RestockDelayIsNarrow, ItemRuleProfile.Steamwoven.RestockDelayIsNarrow));
+    }
+
+    // ARC-WORLD-1300 (AC2): a saved restock event keeps loading whatever the setting that drew it, and the setting can change between
+    // the schedule and the load (D4).
+    [TestMethod]
+    public void A_restock_event_saved_under_either_setting_loads_under_both()
+    {
+        foreach (var (saved, loaded) in new[] { (RuleMode.Original, RuleMode.Steamwoven), (RuleMode.Steamwoven, RuleMode.Original) })
+        {
+            using var owner = Owner();
+            owner.SelectRules(saved);
+            Schedule(owner, "smith");
+            var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+            using var restored = Restore(Decode(text));
+            restored.SelectRules(loaded);
+            Assert.AreEqual(owner.QueryRestocks().Single(), restored.QueryRestocks().Single(), $"{saved} saved, {loaded} loaded");
+            Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()), $"{saved} saved, {loaded} loaded");
+        }
+    }
+
     [TestMethod]
     public void A_living_npc_is_cleared_but_for_its_persistent_items_and_generated_again()
     {

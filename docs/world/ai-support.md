@@ -99,9 +99,8 @@ line, the critter mask and the threshold, with counts by threshold. It prints no
   once (0x462CC0, EX4) and `AiExecutorRules.StartPickup` from the item search.
 - **Host (slice I10).** ARC-WORLD-102: the viewer's AI host implements `IAiSupportWorld`'s spell half, holds the list cache and calls
   `ChooseSpell` from the danger stage, with the magic predicates from the map's cast host
-  ([casting](ai-host.md#casting-arc-world-102)); the item half (inventory, hexed weapon, item spells and AI actions), `Heal`,
-  `SearchItems`, `Grenade` and the `IAiItemSearchWorld`, `IAiGrenadeWorld` and `IAiRedirectWorld` worlds have no host yet.
-- **Setters.** The out-of-ammunition attack (0x4ADFF0) and the item drop (0x461AB0) do not call `SetAiSupportBits` yet; the
+  ([casting](ai-host.md#casting-arc-world-102)); the item half (inventory, hexed weapon, item spells and AI actions) and the `IAiRedirectWorld` world have no host yet (`Heal` and `Grenade` have since ARC-WORLD-108 and ARC-DEV-364). Since ARC-AI-1139 the host runs `SearchItems` over `IAiItemSearchWorld` with no ground source: the bits are cleared as the original does and no pickup starts (NOT READY: the loose items and junk piles of the shown map and the end of the pickup goal, `AreaAiHost.PickUp`); the gate's re-wield is `GameSessionOwner.RewieldNpc`.
+- **Setters.** The out-of-ammunition attack (0x4ADFF0) calls `SetAiSupportBits` since ARC-AI-1139 (`AreaAiHost.NeedsAmmunition`: LOOK_FOR_AMMO, LOOK_FOR_WEAPON and CHECK_WEAPON after a refused ranged attack of an NPC); the item drop (0x461AB0) sets LOOK_FOR_WEAPON (a dropped weapon, item type 5) or LOOK_FOR_ARMOR (armour, type 7) on an NPC owner since ARC-WORLD-1288 (`GameSessionOwner.NoteDropForAi`, in the session's one drop step: a critical's, an arm hit's and a spell's weapon block; the hero and other item types set none; written straight to the danger record, no separate revision); the
   cache's clears on an insert, a force-removal and an exhausted item are the host's calls.
 - **Redirect callers.** The AI redirect component is run by the spell run's component step (the magic domain), which does not call
   `Redirect` yet.

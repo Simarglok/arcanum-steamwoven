@@ -25,7 +25,7 @@ public sealed class HeroRequestsTests
         public HeroClickFacts Click = new(true, false, false, false, false, HeroClickTarget.Critter);
         public bool TalkStarts = true;
         public HeroClickFacts ClickFacts(string target, bool alt, bool shift) => Click with { Alt = alt, Shift = shift };
-        public bool StartTalk(string target, bool run) { Calls.Add($"talk {target} run={run}"); return TalkStarts; }
+        public bool StartTalk(string target, bool run, bool noWalk) { Calls.Add($"talk {target} run={run}{(noWalk ? " nowalk" : "")}"); return TalkStarts; }
         public bool StartUse(string target, bool container, bool run) { Calls.Add($"use {target} container={container} run={run}"); return TalkStarts; }
         public bool StartPickup(string target, bool run) { Calls.Add($"pickup {target} run={run}"); return TalkStarts; }
         public bool StartAttack(string target, bool run) { Calls.Add($"attack {target} run={run}"); return TalkStarts; }
@@ -210,6 +210,18 @@ public sealed class HeroRequestsTests
         Assert.AreEqual(HeroClickGoal.Talk, result.Click);
         Assert.IsTrue(result.Run, "GS27: after the decision running is turned on, whatever the always-run option says");
         CollectionAssert.AreEqual(new[] { "talk npc:1 run=True" }, hero.Calls);
+    }
+
+    [TestMethod]
+    public void AShiftClickOnAnNpcStartsTheTalkWithTheNoWalkFlagAndNoRunning()
+    {
+        // ARC-AI-1137 (GT122): the Shift branch of the start replaces the running call: run flag 0x100 and no running.
+        var hero = new Hero { Input = new(AlwaysRunOption: true, NumLockRun: false) };
+        var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("npc:1", Shift: true));
+        Assert.AreEqual(HeroRequestOutcome.Done, result.Outcome);
+        Assert.AreEqual(HeroClickGoal.Talk, result.Click);
+        Assert.IsFalse(result.Run);
+        CollectionAssert.AreEqual(new[] { "talk npc:1 run=False nowalk" }, hero.Calls);
     }
 
     [TestMethod]
