@@ -933,9 +933,10 @@ public sealed partial class GameSessionOwner : IDisposable
     }
 
     /// <summary>
-    /// Dialog <c>UW force node</c> (C11): only a waiting NPC; runs the follow check (charisma limit ignored when
+    /// Dialog <c>UW force node</c> (C11): only an NPC with the WAIT bit (<see cref="SessionCompanion.WaitBit"/>); runs the follow check (charisma limit ignored when
     /// <paramref name="force"/>; waiting NPCs are never forced and are outside the array). A refusal keeps it waiting.
-    /// Success re-appends it at the end of the array, forced when <paramref name="force"/>.
+    /// Success re-appends it at the end of the array, forced when <paramref name="force"/>, the bit cleared. A follower that carries the flag (a join kept it, CF9) is unwaited the same way;
+    /// a free NPC with the flag has no leader: NoChange (ARC-SCRIPT-1136).
     /// </summary>
     public PartyMutationResult UnwaitParty(GameSessionVersion expected, string entity, PartyConsentFacts facts, bool force)
     {
@@ -945,22 +946,27 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!ValidFacts(facts)) return RejectParty(GameSessionFailure.InvalidConsentFacts);
         if (!IsCurrent(expected)) return RejectParty(GameSessionFailure.StaleVersion);
         var current = _party.Get(entity);
-        if (current.Standing != CompanionStanding.Waiting) return RejectParty(GameSessionFailure.NotWaiting);
+        // ARC-SCRIPT-1136 (CF9): the unwait (0x4AA8C0) returns at once for an NPC with no leader, whatever its flag: nothing changes, and the flag stays.
+        if (current.Standing == CompanionStanding.Free && current.WaitFlag) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, new(_identity, _revision));
+        if (!current.WaitBit) return RejectParty(GameSessionFailure.NotWaiting);
         // The PC leads a waiting NPC, so facts naming another leader contradict the session.
         if (facts.OtherLeaderCharisma is not null) return RejectParty(GameSessionFailure.InvalidConsentFacts);
-        var consent = Consent(facts, false, force);
+        var consent = Consent(facts, current.Forced, force);
         if (consent != FollowConsent.Accepted) return RejectParty(GameSessionFailure.ConsentRefused, consent);
-        return Append(current, force, consent);
+        return Append(current, force, consent, clearWait: true);
     }
 
     /// <summary>
     /// Wait (C11; the source's dialog WA action (ARC-DEV-195, run through the dialog companion port), the wait order and the
-    /// script wait): a follower leaves the array (forced cleared) and keeps the PC as leader. Already waiting is NoChange; a free NPC is <see cref="GameSessionFailure.NotInParty"/>.
+    /// script wait): a follower leaves the array (forced cleared) and keeps the PC as leader. Already waiting is NoChange; a free NPC gets the flag below.
     /// With <paramref name="timer"/> (ARC-WORLD-045, OL23) the original's wait timer is scheduled on the actor's map when the
     /// leader's charisma is not extraordinary, the NPC is not mind controlled and its wait index (one step higher with any
     /// leader Persuasion training) is below 6; when it comes due the NPC stops waiting, jilted (<see cref="SessionEventKinds.PartyWait"/>).
     /// No room for the timer is <see cref="GameSessionFailure.EventBudgetExceeded"/> and changes nothing; an undefined training
     /// is <see cref="GameSessionFailure.InvalidConsentFacts"/>. Without <paramref name="timer"/> no timer is scheduled.
+    /// An NPC whose WAIT bit is already set (a waiting standing, or the flag, <see cref="SessionCompanion.WaitBit"/>) is NoChange, as the source returns before anything else.
+    /// A free NPC (ARC-SCRIPT-1136, ledger CF8): the source never tests the leader, so the wait still runs: the flag is set, the NPC stays free and outside the array, and the timer is the one of its
+    /// wait index with no leader to read (no Persuasion step, no charisma test; the mind-control test still applies); the follower it leaves is not touched, so the Tempus Fugit flag stays.
     /// </summary>
     public GameSessionMutationResult WaitParty(GameSessionVersion expected, string entity, PartyWaitFacts? timer = null)
     {
@@ -969,11 +975,20 @@ public sealed partial class GameSessionOwner : IDisposable
         if (timer is not null && !Enum.IsDefined(timer.LeaderPersuasion)) return Reject(GameSessionFailure.InvalidConsentFacts);
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         var current = _party.Get(entity);
-        if (current.Standing == CompanionStanding.Free) return Reject(GameSessionFailure.NotInParty);
-        if (current.Standing == CompanionStanding.Waiting) return NoChange();
-        var delay = WaitDelay(timer, out var charisma);
+        if (current.WaitBit) return NoChange();
+        var leaderless = current.Standing == CompanionStanding.Free;
+        var charisma = 0;
+        var delay = leaderless ? LeaderlessWaitDelay(timer) : WaitDelay(timer, out charisma);
         if (delay is { } d && !WaitTimerFits(d, entity)) return Reject(GameSessionFailure.EventBudgetExceeded);
+        // A free NPC without a record needs room for the new one.
+        if (leaderless && !_party.Records.ContainsKey(entity) && _party.Records.Count >= _limits.MaxCompanions) return Reject(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        if (leaderless)
+        {
+            _party.Put(current with { WaitFlag = true }, false);
+            if (delay is { } leaderlessWait) ScheduleWaitTimer(entity, leaderlessWait, 0);
+            return Changed();
+        }
         _party.Put(current with { Standing = CompanionStanding.Waiting, Forced = false }, false);
         // ARC-MAGIC-1190 (TF3): the wait (0x4AA7A0) leaves the leader through 0x45DFC0 and takes it back after, so the waiter loses the Tempus Fugit flag.
         ClearTempusFugitOnLeave(entity);
@@ -984,7 +999,7 @@ public sealed partial class GameSessionOwner : IDisposable
     /// <summary>
     /// Leave (C6): a follower or waiting NPC becomes free, forced and waiting cleared, spread out kept; jilted when
     /// <see cref="PartyLeave.Jilt"/>. An unforced leave is <see cref="GameSessionFailure.LeaveRefused"/> under an
-    /// extraordinary-charisma leader or mind control. A free NPC is NoChange. A waiting NPC's wait timer is removed (OL25).
+    /// extraordinary-charisma leader or mind control. A free NPC is NoChange (with a wait flag too: no leader to leave, CF3, CF9). A waiting NPC's wait timer is removed (OL25); a follower that carries the flag loses it with the leave.
     /// </summary>
     [OriginalFunction(0x45E040, OriginalFunctionScope.Partial)]
     [OriginalFunction(0x45DFC0, OriginalFunctionScope.Partial)]
@@ -1001,12 +1016,12 @@ public sealed partial class GameSessionOwner : IDisposable
             return Reject(GameSessionFailure.LeaveRefused);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         // The NPC already has a record, so a flagged free record needs no new budget.
-        _party.Put(current with { Standing = CompanionStanding.Free, Forced = false, Jilted = leave.Jilt }, false);
+        _party.Put(current with { Standing = CompanionStanding.Free, Forced = false, Jilted = leave.Jilt, WaitFlag = false }, false);
         // ARC-SKILLS-008 (ST2): a follower that leaves is no longer concealed.
         _combat.Concealed.Remove(entity);
         ClearNoAttackOnLeave(entity);
         ClearTempusFugitOnLeave(entity);
-        if (current.Standing == CompanionStanding.Waiting) CancelWaitTimers(entity);
+        if (current.WaitBit) CancelWaitTimers(entity);
         return Changed();
     }
 
@@ -1534,7 +1549,7 @@ public sealed partial class GameSessionOwner : IDisposable
                     // ARC-MAGIC-041: an item the hero holds is an object a deferred call may name (the powered shield's attachee): the host's map
                     // rows do not list the hero's kit and made items.
                     : world is ISessionScriptWorld scripts ? scripts.ObjectExists(new(entity.Map), entity.Code) || HeroHeld().Any(item => item.Entity == entity.Code)
-                    : LockObjectExists(entity) || RespawnObjectExists(entity) || _party.Get(entity.Code).Standing == CompanionStanding.Waiting)));
+                    : LockObjectExists(entity) || RespawnObjectExists(entity) || _party.Get(entity.Code).HoldsWaitTimer)));
         }
         finally
         {
@@ -1932,9 +1947,11 @@ public sealed partial class GameSessionOwner : IDisposable
 
     // Join and unwait share the commit: leave any standing, append at the end of the array. A waiting NPC's wait timer is
     // removed (OL25: join leaves first, and unwait cancels it).
-    private PartyMutationResult Append(SessionCompanion current, bool forced, FollowConsent? consent)
+    private PartyMutationResult Append(SessionCompanion current, bool forced, FollowConsent? consent, bool clearWait = false)
     {
-        var next = current with { Standing = CompanionStanding.Following, Forced = forced, Jilted = false };
+        // ARC-SCRIPT-1136 (CF9): the join (0x45DE90) neither tests nor clears the WAIT bit itself, so a free NPC that carries the flag joins with it. An NPC that already has the PC as leader is left first
+        // (0x45DFC0 runs the forced unwait 0x4AA8C0), which clears the bit: a follower or waiting NPC joining again loses it.
+        var next = current with { Standing = CompanionStanding.Following, Forced = forced, Jilted = false, WaitFlag = !clearWait && current.Standing == CompanionStanding.Free && current.WaitFlag };
         var order = _party.Order;
         if (next == current && order.Count > 0 && order[^1] == current.Entity)
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, consent, new(_identity, _revision));
@@ -1949,7 +1966,8 @@ public sealed partial class GameSessionOwner : IDisposable
         _party.Put(next, true);
         if (current.Standing != CompanionStanding.Free) ClearTempusFugitOnLeave(current.Entity);
         if (copyTempus) WriteTempusFugitOnJoin(current.Entity);
-        if (current.Standing == CompanionStanding.Waiting) CancelWaitTimers(current.Entity);
+        // Not modelled (ARC-SCRIPT-1136): the original keeps the timer of a free NPC that joins with the flag, and its expiry would jilt the follower in the array; here the join removes it.
+        if (current.WaitBit) CancelWaitTimers(current.Entity);
         // ARC-SKILLS-008 (ST2): a new follower takes its leader's concealment.
         if (_combat.HeroConcealed) _combat.Concealed.Add(current.Entity); else _combat.Concealed.Remove(current.Entity);
         Revise();
@@ -1959,14 +1977,15 @@ public sealed partial class GameSessionOwner : IDisposable
     // ARC-AI-1312 (VA15, VAG1, OL25, C11; 0x4AA1B0 calls 0x4AA8C0 with force 1 on the victim): an NPC with a leader and AI_WAIT_HERE loses the flag, its "NPC Wait Here" events go and
     // it joins its leader again (0x45DE90): re-appended at the end of the follower array, FORCED_FOLLOWER set, JILTED cleared, the leader's Tempus Fugit flag copied and the leader's
     // concealment taken, as every join does. The forced unwait runs no follow check that could refuse (the death cannot be refused), and the death's commit cannot fail, so a Tempus Fugit
-    // copy that would overflow the written-flags bound is left out (the join's own check refuses the whole join there). A free NPC and a follower are unchanged (no timer is pending for them).
+    // copy that would overflow the written-flags bound is left out (the join's own check refuses the whole join there). A follower that carries the wait flag (ARC-SCRIPT-1136) is unwaited the same way; a free NPC (also one with the flag, whose timer goes) and a follower without it are unchanged.
     // The caller's revision covers the writes.
     private void ForceUnwaitOnDeath(string entity)
     {
         var current = _party.Get(entity);
         CancelWaitTimers(entity);
-        if (current.Standing != CompanionStanding.Waiting) return;
-        _party.Put(current with { Standing = CompanionStanding.Following, Forced = true, Jilted = false }, true);
+        // ARC-SCRIPT-1136 (CF9): the forced unwait (0x4AA8C0) acts for any NPC with a leader and the WAIT bit, so a follower that carries the flag loses it and joins again too; a free one has no leader: unchanged.
+        if (current.Standing != CompanionStanding.Waiting && !(current.Standing == CompanionStanding.Following && current.WaitFlag)) return;
+        _party.Put(current with { Standing = CompanionStanding.Following, Forced = true, Jilted = false, WaitFlag = false }, true);
         // A waiting NPC lost the flag at the wait (0x4AA7A0), so the leave half of the join has nothing to clear; the clear keeps the join's order all the same.
         ClearTempusFugitOnLeave(entity);
         if (JoinCopiesTempusFugit(entity) && (_objectFlags.ContainsKey(entity) || _objectFlags.Count < MaxObjectFlagCritters)) WriteTempusFugitOnJoin(entity);
@@ -1994,7 +2013,8 @@ public sealed partial class GameSessionOwner : IDisposable
         {
             if (!SessionValidation.Entity(record.Entity) || record.Forced || record.IsBaseline || !CompanionLoyaltyRules.IsValid(record.Loyalty) ||
                 record.Standing is not (CompanionStanding.Waiting or CompanionStanding.Free) ||
-                (record.Standing == CompanionStanding.Waiting && record.Jilted)) return GameSessionFailure.InvalidCompanion;
+                // A waiting standing is the bit itself (the flag is never set with it).
+                (record.Standing == CompanionStanding.Waiting && (record.Jilted || record.WaitFlag))) return GameSessionFailure.InvalidCompanion;
             if (party.Records.ContainsKey(record.Entity) ||
                 (previous is not null && string.CompareOrdinal(previous, record.Entity) >= 0)) return GameSessionFailure.InvalidSnapshot;
             previous = record.Entity;
@@ -2916,9 +2936,9 @@ public sealed partial class GameSessionOwner : IDisposable
             }
             if (pending.Kind == SessionEventKinds.PartyWait)
             {
-                // A wait timer (ARC-WORLD-045): one NPC the saved party records waiting, set no later than the saved clock, its
+                // A wait timer (ARC-WORLD-045): one NPC the saved party records waiting (or free with the wait flag, ARC-SCRIPT-1136), set no later than the saved clock, its
                 // duration of the wait table (0 stored as 1 ms) before its deadline, any charisma; one per NPC.
-                if (pending.Entities.Length != 1 || pending.Entities[0].Map < 1 || party.Get(pending.Entities[0].Code).Standing != CompanionStanding.Waiting ||
+                if (pending.Entities.Length != 1 || pending.Entities[0].Map < 1 || !party.Get(pending.Entities[0].Code).HoldsWaitTimer ||
                     pending.Values[0] < 0 || pending.Values[0] > clockMs || !CompanionLoyaltyRules.WaitDurationsMs.Contains(pending.Values[1]) ||
                     pending.DeadlineMs != pending.Values[0] + Math.Max(pending.Values[1], 1) || pending.Values[2] is < int.MinValue or > int.MaxValue ||
                     converted.Any(e => e.Kind == SessionEventKinds.PartyWait && SessionEventKinds.NamesNpc(e, pending.Entities[0].Code)) ||

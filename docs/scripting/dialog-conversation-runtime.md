@@ -384,7 +384,7 @@ port, `IsWaiting`) and `WT` is the only one here without an installed field.
   the subset (the rule of `FP`). Each is recorded as a `CompanionCommand` in field order; none ends the string early, so the reply's hostile check still follows (HR2). A rejection fails the
   conversation (`CommandRejected`), a thrown exception is `CommandIndeterminate`.
 - **Session.** `SessionDialogCompanionPort` over `GameSessionOwner`: `QueryCompanion` (`LedByPc`, `Jilted`), `WaitParty` with the host's wait timer facts, `LeaveParty` with `Force`, `SetSpreadOut`. Waiting
-  while already waiting, leaving while not in the party and a flag already in the asked state are Applied with no change. `WA` on an NPC that is not in the party is Rejected (CF6).
+  while already waiting (the bit set), leaving while not in the party and a flag already in the asked state are Applied with no change. `WA` on an NPC that is not in the party sets the wait flag on its free record (ARC-SCRIPT-1136, CF8 to CF10, schema 96): the NPC stays free and the timer is the one of its wait index; the `WA 0/1` condition reads that bit alone (`SessionDialogPartyPort.IsWaiting`).
 - **Viewer.** The AREA conversation host passes the port for every speaker, also where the party port is not wired (the session party needs no hero; there `fo` reads the session record, which is free, and `wa` is refused); a wait gets the roster's timer facts (`AreaCompanionRoster.WaitFacts`) for a roster
   companion and none for another speaker.
 - **Installed data.** `FO` appears in 2 Player condition fields, `WT` in none; `WA` 49, `LV` 83, `SO` 47 and `SC` 49 action fields; none stops outside the subset. Both rule settings behave the same.

@@ -62,9 +62,9 @@ every standing, and so are the loyalty marks (`Loyalty`, ARC-WORLD-045).
 | `QueryCompanion(entity)` / `QueryParty()` | One record (an unrecorded NPC reads as free with no flags; an invalid id throws) / detached `SessionPartyState`: `Followers` in array order, `Others` (waiting, or free with a flag) in ordinal entity order, and `NonForcedFollowers`. |
 | `JoinParty(expected, entity, facts, force)` | Dialog `JO force node` ([C1](../research/companion-follow-evidence.md#findings), [C5](../research/companion-follow-evidence.md#findings)): the follow check with the session's own inputs added (the NPC's forced flag, the PC's non-forced follower count, `IgnoreCharismaLimit = force`). A refusal is `ConsentRefused` with the reason in `PartyMutationResult.Consent`. Success leaves any standing and appends the NPC at the end of the array (never a duplicate), forced when `force`, jilted cleared. The last follower joining again unchanged is `NoChange`. As read in the source, an NPC already in the array counts toward the limit itself, and an unforced join makes a forced follower unforced. |
 | `ForceJoinParty(expected, entity)` | Script follow, mind control, the follow spell ([C17](../research/companion-follow-evidence.md#findings)): no check, always forced; also brings a waiting NPC back. |
-| `UnwaitParty(expected, entity, facts, force)` | Dialog `UW force node` ([C11](../research/companion-follow-evidence.md#findings)): only a waiting NPC (`NotWaiting` otherwise); the check as for join (a waiting NPC is never forced and is outside the array). A refusal keeps it waiting; success re-appends it. |
-| `WaitParty(expected, entity, timer?)` | The source's dialog `WA` action (not admitted by the conversation runtime yet), wait order, script wait: a follower leaves the array, forced cleared (wait is a forced leave), PC kept. Already waiting is `NoChange`; a free NPC is `NotInParty`. With `PartyWaitFacts` the wait timer is scheduled ([below](#wait-timer-and-loyalty-arc-world-045)). |
-| `LeaveParty(expected, entity, PartyLeave)` | [C6](../research/companion-follow-evidence.md#findings): a follower or waiting NPC becomes free, forced cleared, `SpreadOut` kept, `Jilted` when `Jilt`. An unforced leave under an extraordinary-charisma leader or mind control is `LeaveRefused`; a free NPC is `NoChange`. A waiting NPC's wait timer is removed. |
+| `UnwaitParty(expected, entity, facts, force)` | Dialog `UW force node` ([C11](../research/companion-follow-evidence.md#findings)): only an NPC with the WAIT bit (`NotWaiting` otherwise; a free NPC with the wait flag is `NoChange`, it has no leader, CF9); the check as for join (a waiting NPC is never forced and is outside the array). A refusal keeps it waiting; success re-appends it and clears the bit (also for a follower that carries the flag). |
+| `WaitParty(expected, entity, timer?)` | The source's dialog `WA` action, wait order, script wait: a follower leaves the array, forced cleared (wait is a forced leave), PC kept. An NPC whose WAIT bit is set (waiting, or the wait flag) is `NoChange`. A free NPC (ARC-SCRIPT-1136, CF8) gets the wait flag and stays free and outside the array; its timer is the one of its wait index with no leader read ([below](#wait-timer-and-loyalty-arc-world-045)); no room for a new record is `BudgetExceeded`. With `PartyWaitFacts` the wait timer is scheduled ([below](#wait-timer-and-loyalty-arc-world-045)). |
+| `LeaveParty(expected, entity, PartyLeave)` | [C6](../research/companion-follow-evidence.md#findings): a follower or waiting NPC becomes free, forced cleared, `SpreadOut` kept, `Jilted` when `Jilt`. An unforced leave under an extraordinary-charisma leader or mind control is `LeaveRefused`; a free NPC is `NoChange` (with the wait flag too). A waiting NPC's wait timer is removed; a follower that carries the wait flag loses it. |
 | `SetSpreadOut(expected, entity, value)` | Dialog `SO` / `SC` in any standing. |
 
 Facts naming another leader (`OtherLeaderCharisma`) for an NPC the PC already leads contradict the
@@ -86,6 +86,12 @@ The original's wait timer and follower loyalty, read in the retail executable
 rows OL17–OL26; registry rows 0x4AA7A0, 0x4AA990, 0x4AAA30, 0x4AC380, 0x4ADB50 at F2). Universal: nothing names Virgil.
 Pure rules in `Arcanum.Simulation.Party.CompanionLoyaltyRules`; state and entry points in `GameSessionOwner`
 (`GameSessionLoyalty.cs`).
+
+**Wait flag of an NPC with no leader (ARC-SCRIPT-1136, ledger CF8 to CF10).** The original's `wa` (0x4AA7A0) tests only the NPC's own guards, so an NPC nobody leads still gets the WAIT bit (0x8): `SessionCompanion.WaitFlag`, saved with the party record
+(schema 96; the record of a free NPC with the flag is listed in `Others`). `WaitBit` (a waiting standing or the flag) is what the dialog `wa` condition and the AI's waiting test read. The timer of such an NPC
+is queued by its wait index alone (the leader's charisma and Persuasion are not read; the mind-control test stands) and does nothing when it runs out (0x4AA990 acts only for a non-null leader). A join
+keeps the flag (0x45DE90 never writes the bit): the follower then stands in the array with it set, its loyalty step returns early (0x4AC380), and only an unwait (`UW`, the forced unwait of a death)
+or a leave clears it. A save holds a timer only for a waiting NPC or a free one with the flag. Not modelled and the open point: [CF10](../research/ledger/scripts.md#dialog-companion-state-and-actions-arc-dev-195).
 
 **Wait timer.** `WaitParty(expected, entity, PartyWaitFacts(WaitIndex, LeaderPersuasion, LeaderCharisma, MindControlled))`
 schedules the event `party.wait` ([event queue](game-event-queue-runtime.md#session-wiring-arc-world-024)) on the actor's map, naming the NPC,
@@ -148,11 +154,11 @@ mode, the follow request, the item search) and the lines' text and speech.
                    {"entity":"virgil","standing":"Free","spreadOut":false,"jilted":true,"loyalty":0}]}
 ```
 
-(`loyalty` since schema 27, ARC-WORLD-045.)
+(`loyalty` since schema 27, ARC-WORLD-045; `waitFlag`, a boolean at the end of every record, since schema 96, ARC-SCRIPT-1136: the WAIT bit of a free or following NPC; never set with the `Waiting` standing, which is that bit itself; the schema 95 upgrade adds `false`.)
 
 Decoding keeps the follower order and refuses an entity listed twice anywhere or unsorted
 `others` (`NotCanonical`), a standing other than `Waiting`/`Free`, a waiting record marked
-jilted or a free record without a flag (`OutOfRange`), and more than 64 records
+jilted or flagged `waitFlag`, or a free record without a flag (`OutOfRange`), and more than 64 records
 (`BudgetExceeded`). `Restore` re-checks the same rules (`InvalidCompanion`, `InvalidSnapshot`)
 and the caller's lower limit (`BudgetExceeded`). **Migration decision: none.** Schemas 1..3 are
 `UnsupportedSchema`; a schema-3 quick save loads as "written by an incompatible version" with

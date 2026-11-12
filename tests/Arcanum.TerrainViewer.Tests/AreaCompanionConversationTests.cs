@@ -60,16 +60,22 @@ public sealed class AreaCompanionConversationTests
     }
 
     [TestMethod]
-    public void A_wait_on_an_npc_that_is_not_in_the_party_fails_the_conversation_and_changes_nothing()
+    public void A_wait_on_an_npc_that_is_not_in_the_party_sets_its_wait_flag_and_changes_the_free_record_only()
     {
+        // ARC-SCRIPT-1136 (ledger CF8 to CF10): the original sets the WAIT bit on an NPC with no leader. The speaker is no roster companion, so no wait timer facts (no timer) and no party port (the wa condition
+        // is read by the session-level tests, where the port exists).
         using var f = AreaReactionConversationTests.Fixture.Create("{1}{Hello.}{}{}{}{}{}{2}{Wait.}{}{1}{}{0}{wa}");
         f.Host.EndReaction();
         var talk = f.Host.Begin(f.Speaker).Conversation!;
         var revision = f.Session.Version.Revision;
-        talk.Select(talk.Options.Single().Token);
-        Assert.AreEqual(DialogConversationFailureKind.CommandRejected, talk.Failure!.Kind);
-        Assert.AreEqual(CompanionStanding.Free, f.Session.QueryCompanion(f.Entity).Standing);
-        Assert.AreEqual(revision, f.Session.Version.Revision);
+        Assert.AreEqual(DialogConversationSelectStatus.Ended, talk.Select(talk.Options.Single().Token).Status);
+        Assert.IsNull(talk.Failure);
+        var record = f.Session.QueryCompanion(f.Entity);
+        Assert.AreEqual(CompanionStanding.Free, record.Standing, "no leader: the NPC stays free");
+        Assert.IsTrue(record.WaitFlag);
+        Assert.IsFalse(record.LedByPc);
+        Assert.AreEqual(revision + 1, f.Session.Version.Revision);
+        Assert.IsNull(f.Session.QueryWaitTimer(f.Entity), "no timer facts, no timer");
         StringAssert.Contains(AreaConversationText.Effect(talk.Effects.Last()), "WA NPC waits");
     }
 }

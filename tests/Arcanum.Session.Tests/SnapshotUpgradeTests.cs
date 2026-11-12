@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":95,\"world\"";
+    private const string Current = "\"schemaVersion\":96,\"world\"";
+    private const string Current95 = "\"schemaVersion\":95,\"world\"";
     private const string Current94 = "\"schemaVersion\":94,\"world\"";
     private const string Current93 = "\"schemaVersion\":93,\"world\"";
     private const string Current92 = "\"schemaVersion\":92,\"world\"";
@@ -257,10 +258,21 @@ public sealed class SnapshotUpgradeTests
     // no build before saved one.
     internal static string Schema94(string text)
     {
-        StringAssert.Contains(text, Current);
+        text = Schema95(text);
+        StringAssert.Contains(text, Current95);
         Assert.AreEqual(1, text.Split(NoHolderSlots).Length - 1, "the inventory section ends with an empty list of holder slots");
-        return text.Replace(NoHolderSlots, "").Replace(Current, Current94);
+        return text.Replace(NoHolderSlots, "").Replace(Current95, Current94);
     }
+
+    // ARC-SCRIPT-1136: the schema 95 text of a schema 96 one with no wait flag set: every party record loses its false wait flag at its end. A text with a flag set has no older literal: no build before saved one.
+    internal static string Schema95(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.IsFalse(text.Contains("\"waitFlag\":true"), "a set wait flag has no schema 95 text");
+        return text.Replace(NoWaitFlag, "").Replace(Current, Current95);
+    }
+
+    internal const string NoWaitFlag = ",\"waitFlag\":false";
 
     internal const string NoHolderSlots = ",\"holderSlots\":[]";
 
@@ -671,6 +683,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":96,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":97,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }
