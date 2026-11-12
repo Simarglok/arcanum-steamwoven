@@ -14,7 +14,6 @@ None: B47, the last open report, is closed by ARC-MAGIC-053 (below); the owner's
 | ID | Residual | FR |
 | --- | --- | --- |
 | B11 | The hero's hold is built (ARC-DEV-302/303/304, stage `hold-hero`). Not exercised: Original mode keeps the steps of a goal 4, 55 or 56 run of an entangled hero (owner decision D8); the stage produces no such run | FR-MAGIC-007 |
-| B30 | The body's doll/bag view is built (ARC-UI-072); the doll's two values and the weapon overlay were left open there; no later task is named | FR-UI-004 |
 | B25 | Tile scripts run for every moved critter except the followers of a same-map teleport, and the arrival sector's script and point 27 for followers (ARC-DEV-351, exe read TG9 in [ledger/scripts.md](ledger/scripts.md)); created critters are done by ARC-DEV-371 | n/r |
 | B07 | No defect found (ARC-DEV-308: the data and the stage agree). Reopen only on a new report from a current build taken in the first minutes of a new game Data: 46 NPC rows within ten sectors of (1452,1289): 13 Ailing Wolves, 8 Wolves and 3 Lesser Boars together (within 18 cells, 43-61 cells west of the first report's hero cell), no boar row east of the wreck. The reports' build predates npc.pos and the residency (PR #624, #640, #650, #652), and the stage looks at places before the first tick, not at hours of wandering (the original's wander of these animals was not read) | n/r |
 
@@ -33,7 +32,7 @@ Every B-id not in the tables above is closed. A code in brackets was a part of t
   B21 ARC-DEV-309, ARC-DEV-312 (the refusal is the original's rule, gate flag 2365); B22 ARC-DEV-205; B23 ARC-DEV-157,
   ARC-DEV-299 (stage `container-click`; the 8 roofed house containers are the original's rule, ARC-DEV-330); B24 ARC-DEV-304,
   ARC-DEV-324; B25 ARC-DEV-206, ARC-DEV-298, ARC-DEV-328, ARC-DEV-351, ARC-DEV-371 (created critters; the residual is above); B26 ARC-DEV-178.
-- **Interface, messages, fonts:** B27 ARC-DEV-156; B28 ARC-DEV-156; B29 ARC-UI-071; B30 ARC-UI-072 (the sort button is B54);
+- **Interface, messages, fonts:** B27 ARC-DEV-156; B28 ARC-DEV-156; B29 ARC-UI-071; B30 ARC-UI-072, ARC-UI-1121 (the doll's two values and the weapon fill; the hero's own window's: #1267; the sort button is B54);
   B31 ARC-DEV-306; B32 ARC-DEV-306 (ARC-DEV-316, ARC-DEV-336, ARC-DEV-354); B33 ARC-DEV-280 (ARC-DEV-263, stage
   `companion-click`); B34 and B35 ARC-DEV-168.
 - **Hosts:** B36 ARC-DEV-305 (ARC-DEV-315); B37 ARC-UI-107; B38 ARC-DEV-296; B39 ARC-DEV-295; B40 ARC-DEV-161; B41 ARC-DEV-306

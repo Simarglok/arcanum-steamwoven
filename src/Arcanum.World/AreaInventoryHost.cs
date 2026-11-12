@@ -82,6 +82,9 @@ public sealed record AreaInventoryView(IReadOnlyList<AreaInventoryLine> Pc, stri
     /// <summary>ARC-UI-072 (B30): the looted body's nine wear slots in slot order with the worn item of each (the doll view, IW29); empty for a
     /// container or a junk pile.</summary>
     public IReadOnlyList<AreaDollSlot> BodyDoll { get; init; } = Array.Empty<AreaDollSlot>();
+    /// <summary>ARC-UI-1121 (B30, IW29, IW41–IW43): the numbers the doll view prints for the looted body and whether its weapon is too heavy for it (the viewer reads them from
+    /// the combat host, <see cref="AreaCombatHost.DollRatings"/>); null when the combat host does not know the body (the doll view then prints nothing).</summary>
+    public SessionDollRatings? BodyRatings { get; init; }
     /// <summary>ARC-UI-052: the interface art of the looted holder's image (<see cref="AreaLootArtLayout.HolderImage"/>); null when its facts
     /// do not decide it.</summary>
     public int? HolderImage { get; init; }
