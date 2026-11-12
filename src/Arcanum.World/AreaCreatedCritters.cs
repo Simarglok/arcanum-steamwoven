@@ -20,7 +20,14 @@ public sealed class AreaCreatedCritters
 
     /// <param name="prototypes">The game's prototype reader (<see cref="Arcanum.Data.Content.ContentPrototypes.Read"/>), the file lookup the row builder takes.</param>
     public AreaCreatedCritters(GameSessionOwner session, Func<int, PrototypeFile> prototypes)
-        : this(session, made => CreatedObjectRows.Critter(prototypes ?? throw new ArgumentNullException(nameof(prototypes)), made.Prototype, made.Entity, made.Map.RuntimeMap, made.Cell.X, made.Cell.Y)) { }
+        : this(session, made => CreatedObjectRows.Critter(prototypes ?? throw new ArgumentNullException(nameof(prototypes)), made.Prototype, made.Entity, made.Map.RuntimeMap, made.Cell.X, made.Cell.Y,
+            SummonOf(session, made))) { }
+
+    // ARC-MAGIC-053 (SUM5): a critter a Summon made (spell flag 0x4000) has its experience cleared and takes the alignment of its summoner when that is the hero (the session keeps no NPC alignment, so an NPC
+    // summoner's is not known here); the row is built once, when the critter is first handed to the world, so the alignment is the hero's of that moment (a load builds it again from the hero's then).
+    private static CreatedCritterSummon? SummonOf(GameSessionOwner session, SessionCreatedObject made) =>
+        (made.SpellFlags & SessionCreatedObject.SummonedFlag) == 0 ? null
+        : new(made.Summoner == SessionSpellCaster.Hero ? session.QueryHero()?.Alignment : null);
 
     /// <param name="row">Builds the row of a created critter (a test gives synthetic rows).</param>
     /// <param name="inventorySource">ARC-DEV-386: the inventory source (field 0xEF) of a created critter's row; null reads it from the row's critter fields (a test gives synthetic rows no fields).</param>

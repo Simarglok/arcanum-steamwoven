@@ -66,13 +66,20 @@ public partial class TerrainViewerApp
     private GameSessionOwner? _createdInventorySession;
     private readonly Dictionary<string, SessionRegenerateResult> _createdInventoryDone = new(StringComparer.Ordinal);
 
-    private void QueueCreatedInventory(string entity) => _createdInventoryPending.Add(entity);
+    /// <summary>The queued critters whose restock runs before they join the party (a summoned creature, ARC-MAGIC-053): the PC leader its mind-control line gives it is not read by the gate.</summary>
+    private readonly HashSet<string> _createdInventoryBeforeLeader = new(StringComparer.Ordinal);
+
+    private void QueueCreatedInventory(string entity, bool beforeLeader = false)
+    {
+        _createdInventoryPending.Add(entity);
+        if (beforeLeader) _createdInventoryBeforeLeader.Add(entity);
+    }
 
     /// <summary>Generates the inventory of each queued created critter once the restock host is ready (the barter data loaded or failed); one regeneration per critter, logged.</summary>
     private void TakeCreatedInventories(GameSessionOwner session)
     {
         // A replaced session (a load) has none of the queued critters: the queue and the results belong to one session.
-        if (!ReferenceEquals(_createdInventorySession, session)) { _createdInventorySession = session; _createdInventoryPending.Clear(); _createdInventoryDone.Clear(); }
+        if (!ReferenceEquals(_createdInventorySession, session)) { _createdInventorySession = session; _createdInventoryPending.Clear(); _createdInventoryBeforeLeader.Clear(); _createdInventoryDone.Clear(); }
         if (_createdInventoryPending.Count == 0 || RestockHostNow() is not { } restock || _inventoryHost is not { } inventory || _createdPrototypeRead is not { } read) return;
         // The resolver answers the restock host for a critter created since the last sync.
         var map = new SessionMapId(CurrentAreaMap);
@@ -80,11 +87,12 @@ public partial class TerrainViewerApp
         foreach (var entity in _createdInventoryPending.ToArray())
         {
             // A critter the session no longer holds is dropped; one of another map than the shown one waits until its map is shown (the regeneration runs on the actor's map).
-            if (session.QueryCreatedObject(entity) is not { } held) { _createdInventoryPending.Remove(entity); continue; }
+            if (session.QueryCreatedObject(entity) is not { } held) { _createdInventoryPending.Remove(entity); _createdInventoryBeforeLeader.Remove(entity); continue; }
             if (held.Map != map) continue;
             _createdInventoryPending.Remove(entity);
+            var beforeLeader = _createdInventoryBeforeLeader.Remove(entity);
             // RK3 (0x463C60): the body does nothing for an NPC without an inventory source, a dead one or one with a PC leader (the source is read first, 0x4641A0); only then it clears and generates.
-            if (!restock.GeneratesAtCreation(map, entity))
+            if (!restock.GeneratesAtCreation(map, entity, beforeLeader))
             {
                 GD.Print($"ARC-DEV-386 created-critter-inventory entity={entity} nothing (no inventory source, dead, led by the PC or not a holder here: source={restock.Facts(map, entity)?.InventorySource.ToString() ?? "-"})");
                 continue;
@@ -157,6 +165,8 @@ public partial class TerrainViewerApp
         var map = new SessionMapId(CurrentAreaMap);
         foreach (var npc in CreatedCrittersOf(session, read).Npcs(map))
         {
+            // ARC-MAGIC-053 (SUM5): a summoned creature is made with OF_DONTDRAW set and shows when the summoning animation's callback clears it (the ground bodies are computed again with every session revision).
+            if (CreatedHidden(session, npc.Entity)) continue;
             if (CreatedCritterBody(area, frames, extra, npc) is not { } made) continue;
             var key = npc.Row.Key;
             bodies[key] = made.Command;
@@ -193,7 +203,10 @@ public partial class TerrainViewerApp
     // A dead one is no body of the group (the fallen pose draws it, as for a map companion); its death changes the set, so the group is rebuilt without it.
     private string CreatedPartyEntities(GameSessionOwner session) => string.Join(",", session.QueryCreatedObjects(new SessionMapId(CurrentAreaMap))
         .Where(made => made.Kind == SessionCreatedKind.Critter && session.QueryCompanion(made.Entity).Standing != Arcanum.Session.CompanionStanding.Free
-            && _combatHost?.Target(session, made.Entity) is not { Dead: true }).Select(made => made.Entity));
+            && !CreatedHidden(session, made.Entity) && _combatHost?.Target(session, made.Entity) is not { Dead: true }).Select(made => made.Entity));
+
+    /// <summary>ARC-MAGIC-053 (SUM5): a created critter that carries OF_DONTDRAW (a summoned creature until its summoning animation's callback) is not drawn, as a body of the ground or of the party; the flag going changes the set the party's bodies are built for.</summary>
+    private static bool CreatedHidden(GameSessionOwner session, string entity) => (session.QueryObjectFlags(entity).Object(0) & Arcanum.Simulation.Magic.SpellTargetObject.DontDraw) != 0;
 
     /// <summary>Rebuilds the companions when the created critters in the party are not the ones the group was last built for (a joined pet, one that left, a load). The group's own walk state is recorded first.</summary>
     private void SyncCreatedCompanions(GameSessionOwner session)
@@ -219,7 +232,7 @@ public partial class TerrainViewerApp
         var templates = new List<(AreaCompanionTemplate, IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame>)>();
         foreach (var npc in critters.Npcs(map))
         {
-            if (session.QueryCompanion(npc.Entity).Standing == Arcanum.Session.CompanionStanding.Free || SessionCreatedObject.Number(npc.Entity) is not { } number) continue;
+            if (session.QueryCompanion(npc.Entity).Standing == Arcanum.Session.CompanionStanding.Free || CreatedHidden(session, npc.Entity) || SessionCreatedObject.Number(npc.Entity) is not { } number) continue;
             if (CreatedCritterBody(area, (AreaFrameOverlay)AreaFrames(), extra, npc) is not { } body) continue;
             var template = AreaCompanionTemplate.ForCreated(number, npc.Row, MapCompanionFacts, map, grid.Chart, body.Command, body.Visual);
             if (template is null) { GD.Print($"ARC-MAGIC-050 created-companion entity={npc.Entity} no follow facts (the AI row or fields do not read)"); continue; }
