@@ -7,8 +7,10 @@ namespace Arcanum.TerrainViewer;
 /// clock per stage. The smoke chain asks <see cref="Contains"/> (a named stage) or <see cref="Stage"/> (a stage the battery also runs)
 /// before each stage in the order it runs them, so the answer "yes" is the moment the stage starts and the next "yes" (or
 /// <see cref="Finish"/>) the moment it ended. Each ended stage prints <c>ARC-DEV-399 stage-time NAME ms=N</c>, which the smoke runner
-/// (tools/local_dev/smoke.py) reads from the run's log into the queue's stage history. The clock changes no answer: it only measures.</summary>
-internal sealed class TerrainViewerSmokeStageSet(HashSet<string>? named)
+/// (tools/local_dev/smoke.py) reads from the run's log into the queue's stage history. The clock changes no answer: it only measures.
+/// <para>ARC-DEV-408: <paramref name="boundary"/> is called (previous stage or null, next stage) at every change of stage, before the next
+/// stage's clock starts: the one place where the state a stage leaves behind is put back to what the next stage starts from.</para></summary>
+internal sealed class TerrainViewerSmokeStageSet(HashSet<string>? named, Action<string?, string>? boundary = null)
 {
     private readonly Stopwatch _clock = new();
     private string? _running;
@@ -41,7 +43,9 @@ internal sealed class TerrainViewerSmokeStageSet(HashSet<string>? named)
         // A stage the chain asks for twice in a row (a stage that two lines run, such as transfer and follower-home) goes on
         // under the clock it already has.
         if (_running == stage) return;
+        var previous = _running;
         Finish();
+        boundary?.Invoke(previous, stage);
         _running = stage;
         _clock.Restart();
     }

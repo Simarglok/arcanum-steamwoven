@@ -165,6 +165,19 @@ history held about 500 runs of such copies of one template).
   observation from being refused as late (`RestoreWorldTestTime`, ARC-WORLD-025). `summon-wall` read the hero's hit points before
   and after the burn and failed once in the long list (`25 -> 30`, not reproduced alone or in shorter chains); it now checks the
   hit-point damage the hero carries, which the wall's burn would raise (ARC-DEV-405).
+- **Stage boundary reset (ARC-DEV-408).** A stage that passes alone and fails after others had a second cause besides the test time:
+  what the earlier stages left in the shared session. `TerrainViewerSmokeStageSet` calls `SmokeStageBoundary`
+  (`TerrainViewerSmokeStageReset.cs`) at every change of stage in the viewer: the first call with a hero and a session takes the baseline (the hero's world cell
+  and the roll sequence's position, `GameSessionOwner.QueryRandom`), every later call puts back what a stage must not inherit and prints
+  `ARC-DEV-408 stage-reset PREVIOUS -> NEXT: ...` for what it changed: the hero's combat mode (`worldmap` refused "leave combat mode
+  first"), the roll sequence (`GameSessionOwner.RestoreRandom`; `floaters`' critical hit knocked its NPC out after `barter` and `life` had
+  rolled, so the NPC could not strike back) and the hero's cell when it is still on the shown map (`door-close` left the hero in the cell
+  `npc-door` walks its NPC into). A new kind of leak is one more line there, not a change to one stage. Not reset: world objects a stage
+  changed (a killed NPC, a used door, a looted container) and the viewer's windows. `ARC_SMOKE_STAGE_RESET=0` (as `--env`) switches the
+  reset off, to tell a leak from a stage's own failure; `=full` is an experiment that also loads a baseline save back at every boundary
+  (it fixes the killed-NPC leaks, but a loaded session is not a fresh one: `inv-arrange` counts revisions and sees one more). A process
+  stops at its first failing stage, so a leak fixed here can show the next one that was hidden behind it (`placement-census` after a
+  `pickpocket`/`loot-worn` kill: the AI host does not hold the dead NPC the census expects).
 - **Every requested stage runs (ARC-DEV-063).** `PASS` means each requested stage ran: a map smoke passes only when
   its log holds the `PASS` line of every stage in its list (`STAGE_PASS` in `tools/local_dev/smoke.py`, checked against
   the viewer's sources by the tests), the whole map battery (`full`, `map` without `--stages`) that of `map` and

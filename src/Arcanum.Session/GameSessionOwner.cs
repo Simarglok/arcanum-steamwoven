@@ -1215,6 +1215,17 @@ public sealed partial class GameSessionOwner : IDisposable
     /// <summary>The generator's seed and position (draws made so far).</summary>
     public SessionRandomState QueryRandom() { ThrowIfDisposed(); return new(_random.Seed, _random.Draws); }
 
+    /// <summary>ARC-DEV-408: puts the generator back at a position it was read at (<see cref="QueryRandom"/>), for a host that replays work
+    /// from a known state: the smoke harness returns the session to the position a stage would start at alone, so one stage's rolls do not
+    /// decide the next one's. No revision is taken; a negative position is refused.</summary>
+    public bool RestoreRandom(SessionRandomState state)
+    {
+        ThrowIfDisposed();
+        if (state.Draws < 0) return false;
+        _random = new SeededRandom(state.Seed, state.Draws);
+        return true;
+    }
+
     /// <summary>
     /// One labelled gameplay roll (ARC-WORLD-019): a uniform integer in <paramref name="min"/>..<paramref name="max"/>
     /// inclusive from the session's seeded sequence. The label (1..64 ASCII letters, digits and <c>. _ : -</c>, such as

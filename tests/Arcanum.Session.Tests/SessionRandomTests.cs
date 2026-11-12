@@ -234,12 +234,30 @@ public sealed class SessionRandomTests
     }
 
     [TestMethod]
+    public void RestoreRandomPutsTheSequenceBackWithoutMovingTheRevision()
+    {
+        // ARC-DEV-408: the smoke harness returns the generator to the position a stage starts from.
+        using var owner = Seeded();
+        var start = owner.QueryRandom();
+        var first = Rolled(owner.Roll("combat.AttackCheck", 1, 100));
+        Rolled(owner.Roll("loot:gold", 1, 100));
+        var version = owner.Version;
+        Assert.IsTrue(owner.RestoreRandom(start));
+        Assert.AreEqual(start, owner.QueryRandom());
+        Assert.AreEqual(version, owner.Version);
+        Assert.AreEqual(first, Rolled(owner.Roll("combat.AttackCheck", 1, 100)), "the same roll again from the same position");
+        Assert.IsFalse(owner.RestoreRandom(new(Seed, -1)), "a negative position is refused");
+        Assert.AreEqual(1, owner.QueryRandom().Draws);
+    }
+
+    [TestMethod]
     public void ADisposedSessionNoLongerRolls()
     {
         var owner = Seeded();
         owner.Dispose();
         Assert.ThrowsExactly<ObjectDisposedException>(() => owner.Roll("late", 1, 100));
         Assert.ThrowsExactly<ObjectDisposedException>(() => owner.QueryRandom());
+        Assert.ThrowsExactly<ObjectDisposedException>(() => owner.RestoreRandom(new(Seed, 0)));
         Assert.ThrowsExactly<ObjectDisposedException>(() => owner.CombatRolls);
     }
 }
