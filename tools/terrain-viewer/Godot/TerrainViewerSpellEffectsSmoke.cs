@@ -42,6 +42,7 @@ public partial class TerrainViewerApp
         var heroBefore = session.QueryHeroLife()!.Record.State;
         var runs = new List<int>();
         var willpowerAdded = false;
+        SessionLifeTarget? npcTarget = null;
         try
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
@@ -70,6 +71,7 @@ public partial class TerrainViewerApp
             Require(npc.Id is not null, "a living free NPC with a cell on the map");
             var npcId = npc.Id!;
             var npcCombat = npc.Target!.Build.Combat!;
+            npcTarget = npcCombat.Target;
 
             int HeroStat(CharacterStat stat) => session.QueryHeroStats(new(0))!.Value.Snapshot!.GetEffective(stat);
             int NpcStat(CharacterStat stat) => session.WithNpcEffects(npcCombat).EffectiveStat(stat, npcCombat.Loaded);
@@ -104,7 +106,7 @@ public partial class TerrainViewerApp
                 var expected = added.Sum(e => e.Count);
                 // A cast with no caster has no casting goal: the run's BEGIN is an event of the session's queue (due now), which the next frames fire.
                 for (var i = 0; i < 400 && list().Length < listBefore.Length + expected; i++) { Frame(); FlushSpellLog(null); }
-                var gained = list().Except(listBefore).Count();
+                var gained = list().Length - listBefore.Length;
                 Require(list().Length >= listBefore.Length + expected, $"the BEGIN of spell {spell} added its effects within 400 frames: {string.Join(",", listBefore)} -> {string.Join(",", list())} (expected +{expected} of {string.Join(",", added.Select(e => e.Effect))}; goal {_spellGoal?.Run}, notice \"{_spellNotice}\", run {_areaSession?.QuerySpellRuns()[run]?.Action}, log {string.Join(",", Caster().Log.TakeLast(14).Select(e => $"{e.Kind}:{e.Run}:{e.Value}:{e.Detail}"))})");
                 foreach (var effect in added) Require(list().Contains("effect=" + effect.Effect), $"effect {effect.Effect} of spell {spell} is on the target: {string.Join(",", list())}");
                 var during = Enum.GetValues<CharacterStat>().ToDictionary(s => s, stat);
@@ -152,8 +154,12 @@ public partial class TerrainViewerApp
         {
             if (SpellCasterNow() is { } caster)
                 foreach (var run in runs) if (_areaSession?.QuerySpellRuns()[run] is not null) caster.Act(new(SessionSpellRunActionKind.ForceEnd, run));
+            HeroRunsHost()?.LoseAll("SMOKE_SPELL_EFFECTS_END");
             if (_areaSession is { } now)
             {
+                // A failure before the stage's own removal (spell 76's END leaves its effect) must not leave the spells' entries on the NPC.
+                if (npcTarget is { } left && now.QueryNpcEffects(left) is { } npcList)
+                    foreach (var number in new[] { 154, 326, 57 }) { var count = npcList.Count(number); if (count > 0) now.RemoveNpcEffect(now.Version, left, number, count); }
                 if (willpowerAdded) now.RemoveHeroEffect(now.Version, WillpowerEffectNumber, 1);
                 RestoreHeroForSmoke(now, heroBefore);
             }
