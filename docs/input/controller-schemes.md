@@ -214,6 +214,32 @@ FR-UI-003, FR-UI-004, FR-UI-005, FR-UI-006, FR-UI-007, FR-UI-008 (see the
 [#1173](https://github.com/Simarglok/arcanum-steamwoven/issues/1173) (gamepad in the game UI) is covered by
 the focus-layer and window slices.
 
+## Foundation core (ARC-GPAD-1373, merged parts)
+
+The Godot-free parts of §0 live in `src/Arcanum.Input` and are tested in `tests/Arcanum.TerrainViewer.Tests`:
+
+- `ControlSchemeSettings` and its codec (§0.1): `Pad` Off/Direct/Pointer, `Touch` Off/TouchPad, `Prompts`
+  Auto/Xbox/PlayStation/Nintendo/SteamDeck; defaults are Off/Off/Auto; `OriginalActive` is always true, so no
+  value of the record can switch the original controls off. A corrupt, oversized or foreign-version text gives the
+  defaults; an unknown value of one field gives that field's default and keeps the others. The host owns storage.
+- `ActiveDeviceTracker` (§0.2): "last meaningful input wins" over `DeviceSignal`s with the host's own time. Pad:
+  a button, or an axis beyond the deadzone (0.3 by default; drift is ignored). Mouse: a click, a key, or motion over 12 px
+  within 100 ms. Touch: a touch event. Pointer-from-pad: mouse motion alone within 2 s of pad use keeps the pad
+  prompts and only reports `CursorVisible` (for 3 s). A click or key still switches. With emulated touch on, a click that
+  jumps more than 24 px from the last mouse position with no motion before it counts as touch (the Deck touch
+  screen under Proton). A change shows after 250 ms and is dropped if the active device is used again within that time.
+  The tracker holds no window or focus state, so its consumer must not reset open windows on `Changed` (checked in
+  the viewer slice, [#1374](https://github.com/Simarglok/arcanum-steamwoven/issues/1374)). The pad id of the last pad signal is
+  kept (`LastPadDeviceId`), never assumed to be 0.
+- `GlyphFamilyDetector` and `ControllerGlyphs` (§0.3): family from the override, then the vendor id in the GUID
+  (Sony, Nintendo, Valve), then name words; an unknown pad is Xbox. A pad behind Steam Input reports a virtual Xbox pad, so
+  on a Deck host (`SteamDeck` environment variable, read by the host) an Xbox-looking pad is the Deck. This is a
+  heuristic and needs a check on a real Deck. Labels are text per physical position (Nintendo's bottom button is B).
+
+Still open in the foundation: the viewer wiring and storage ([#1374](https://github.com/Simarglok/arcanum-steamwoven/issues/1374)),
+hold/toggle, pause rules and stick settings ([#1375](https://github.com/Simarglok/arcanum-steamwoven/issues/1375)), the evidence log
+([#1376](https://github.com/Simarglok/arcanum-steamwoven/issues/1376)).
+
 ## 5. Test protocol (human test)
 
 **Devices.** P: Mac + Xbox Series pad (owner's) — schemes A, B. H: Steam Deck — schemes A, B, C
