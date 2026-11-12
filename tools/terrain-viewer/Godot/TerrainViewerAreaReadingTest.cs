@@ -150,6 +150,30 @@ public partial class TerrainViewerApp
             HandleWorldPulse(Pulse(confirm: false, cancel: true), true);
             Require(!ReadingOpen && !PaletteOpen, "controller cancel closed the window without opening the palette");
 
+            // ARC-UI-1125 (SA40): a script's plaque replaces the open inventory at once (its opener pops the top mode), the inventory leaving through its End
+            // routine; a second request closes the window (the opener toggles, WR2).
+            InventoryKey(Key.I);
+            Require(InventoryOpen && !ReadingOpen, "the inventory is open for the replacement");
+            QueueScriptReadings([new(ScrReadingKind.Plaque, 500, pc)]);
+            TakeScriptReadings();
+            Require(ReadingOpen && !InventoryOpen && WindowPanelsMatchStack && StackText() == "Game>Book" && _readingScriptOpen is null, "the plaque replaced the inventory: " + StackText());
+            QueueScriptReadings([new(ScrReadingKind.Plaque, 500, pc)]);
+            TakeScriptReadings();
+            Require(!ReadingOpen && WindowPanelsMatchStack && _readingScriptOpen is null && _readingSounds.Last() == BookCloseSound, "a second request closed the reading (the opener toggles)");
+            // The dialog opener pops the top mode too (0x567460 with 0x553320): the hero's talk goal opens its dialog over an open window; the click path keeps refusing.
+            var standInRow = _readyArea.Snapshot.Objects[0];
+            _selfTestStandInSpeaker = new AreaSpeaker(0, standInRow, 1, standInRow.WorldX ?? 0, standInRow.WorldY ?? 0);
+            InventoryKey(Key.I);
+            BeginConversation(_selfTestStandInSpeaker);
+            Require(InventoryOpen && !ConversationOpen, "a plain dialog start leaves the open inventory alone");
+            BeginConversation(_selfTestStandInSpeaker, replaceWindows: true);
+            Require(ConversationOpen && !InventoryOpen && WindowPanelsMatchStack && StackText() == "Game>Dialog", "the talk goal's dialog replaced the inventory: " + StackText());
+            BeginConversation(_selfTestStandInSpeaker, replaceWindows: true);
+            Require(ConversationOpen && WindowPanelsMatchStack, "a dialog opened over a dialog is refused");
+            _conversationPanel!.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+            Require(!ConversationOpen && !WorldModal, "the dialog closed");
+            _selfTestStandInSpeaker = null;
+
             // Action 65 with a picture art outside 0..4095: refused in both modes (the original draws out of bounds).
             QueueScriptReadings([new(ScrReadingKind.Picture, 5000, pc)]);
             TakeScriptReadings();

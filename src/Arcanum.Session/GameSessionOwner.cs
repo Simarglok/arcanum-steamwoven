@@ -1030,7 +1030,7 @@ public sealed partial class GameSessionOwner : IDisposable
 
     /// <summary>
     /// Attaches (or replaces) the T0 inventory of one map, the baseline the inventory rules read. The seed is checked and
-    /// copied (<see cref="GameSessionFailure.InvalidInventorySeed"/>). Every item the PC took from this map must be in it
+    /// copied (<see cref="GameSessionFailure.InvalidInventorySeed"/>). A holder's saved arranged slot outside the grid of its kind (container 0..959, NPC 0..119) is <see cref="GameSessionFailure.InventoryMismatch"/> too (ARC-RES-1466). Every item the PC took from this map must be in it
     /// with its saved kind, and no item the PC took from another map or another attached seed lists may be in it, else
     /// <see cref="GameSessionFailure.InventoryMismatch"/> (a save of other data, or one object on two maps). A seed is not session state: like recorded
     /// lighting it moves no revision, it is never saved and the host attaches it again after a restore.
@@ -1089,6 +1089,10 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         // ARC-DEV-386 (E1-c4): the critters the session created on this map are holders of its seed whatever the host's data lists (a created critter is in no map file).
         foreach (var made in _inventory.Objects.Created.Where(made => made.Kind == SessionCreatedKind.Critter && made.Map == map)) admitted.AddCreatedHolder(made.Entity);
+        // ARC-RES-1466: the slots a save kept for a holder (ARC-RES-1441) lie in the grid of the holder's kind (a container's 96 rows, a critter's 12), checked once the seed tells the kind, created critters (kind Npc) included.
+        if (admitted.Holders.Values.Any(holder => _inventory.HolderSlots.TryGetValue(holder.Entity, out var slots) &&
+                slots.Values.Any(slot => slot >= InventoryGridRules.Columns * (holder.Kind == SessionHolderKind.Container ? InventoryGridRules.ContainerRows : InventoryGridRules.CritterRows))))
+            return Reject(GameSessionFailure.InventoryMismatch);
         _inventory.Seeds[map] = admitted;
         _inventory.SeedGeneration++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, new(_identity, _revision));

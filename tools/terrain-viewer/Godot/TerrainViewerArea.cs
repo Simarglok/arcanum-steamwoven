@@ -24,7 +24,13 @@ public partial class TerrainViewerApp
             throw new InvalidOperationException("AREA_GENERATION_MISMATCH");
         var core = area.Snapshot.Terrain.Where(record => record.Scope == AreaScope.Core).Select(record => record.Key).ToHashSet();
         var drawn = area.Plan.Commands.Where(command => command.Identity is null).Select(command => command.Visual).ToArray();
-        if (drawn.Length != core.Count || !core.SetEquals(drawn)) throw new InvalidOperationException("AREA_TERRAIN_COVERAGE");
+        if (drawn.Length != core.Count || !core.SetEquals(drawn))
+        {
+            var drawnSet = drawn.ToHashSet();
+            // ARC-DEV-1454: the counts say which side differs, as the failure line is all a flaky run leaves.
+            throw new InvalidOperationException($"AREA_TERRAIN_COVERAGE drawn={drawn.Length} distinct={drawnSet.Count} core={core.Count} terrain={area.Snapshot.Terrain.Count} commands={area.Plan.Commands.Count} " +
+                $"drawnNotCore={drawnSet.Count(key => !core.Contains(key))} coreNotDrawn={core.Count(key => !drawnSet.Contains(key))} generation={area.Generation}");
+        }
         var objectRows = area.Plan.Coverage.Where(row => row.Identity is not null).ToArray();
         if (objectRows.Length != area.Snapshot.Objects.Count || objectRows.Select(row => row.Identity).Distinct().Count() != objectRows.Length)
             throw new InvalidOperationException("AREA_OBJECT_COVERAGE");

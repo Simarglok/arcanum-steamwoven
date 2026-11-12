@@ -769,6 +769,7 @@ tools/terrain-viewer/Godot/TerrainViewerHotkeyHover.cs,HotkeyDescriptionLeft,pen
 tools/terrain-viewer/Godot/TerrainViewerHotkeys.cs,ActivateHotkey,pending,
 tools/terrain-viewer/Godot/TerrainViewerHotkeys.cs,ActivateSkillButton,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerHotkeys.cs,RecordRecentAction,pending,
+tools/terrain-viewer/Godot/TerrainViewerInterfaceModes.cs,ClearWindowsForProgrammaticOpen,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerInterfaceModes.cs,HandleGlobalKeyOverInterface,pending,
 tools/terrain-viewer/Godot/TerrainViewerInterfaceModes.cs,HandleRightPressOverWindow,pending,
 tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,ApplyItemAim,pending,
