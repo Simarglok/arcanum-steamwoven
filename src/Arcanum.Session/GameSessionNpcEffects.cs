@@ -113,13 +113,59 @@ public sealed partial class GameSessionOwner
     private SessionEffectDefinition LoadedRule(int number) =>
         number is >= SessionEffectLimits.FirstNumber and <= SessionEffectLimits.LastNumber && NpcEffectRules?.Invoke(number) is { } rule && rule.Number == number && EffectDomain.IsValid(rule) ? rule : new(number, []);
 
-    // The facts with the maxima an effect list gives (the host's facts carry none: the list replaces them).
-    private static LifeFacts WithCritterEffects(LifeFacts facts, IEnumerable<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions) =>
-        facts with
+    // The facts with what an effect list gives: its maxima (the host's facts carry none: the list replaces them) and the stats it changes. The list is laid over the host's own facts, never over facts
+    // that already carry it: the stat changes would apply twice (ARC-WORLD-1144).
+    private static LifeFacts WithCritterEffects(LifeFacts facts, IEnumerable<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
+    {
+        var list = entries as IReadOnlyList<SessionEffect> ?? [.. entries];
+        return WithStatEffects(facts, list, definitions) with
         {
-            MaxHitPointEffects = EffectDomain.Modifiers(entries, definitions, EffectSpecial.MaxHitPoints),
-            MaxFatigueEffects = EffectDomain.Modifiers(entries, definitions, EffectSpecial.MaxFatigue),
+            MaxHitPointEffects = EffectDomain.Modifiers(list, definitions, EffectSpecial.MaxHitPoints),
+            MaxFatigueEffects = EffectDomain.Modifiers(list, definitions, EffectSpecial.MaxFatigue),
         };
+    }
+
+    // ARC-WORLD-1144 (exe 0x43D5A0, 0x43D630, 0x45D670): the maxima read the effective stats, the strength (poisoned or not), the willpower and the constitution, through the stat getter (0x4B0490) that
+    // lays the critter's effect list over the stored value. The host's facts carry the stats without the list, so the stats the list changes are read again here, through the character owner every
+    // other consumer of an NPC's stats uses (the same order, operators and the race's range). Facts the list does not change keep their values. The level is not a stat of that owner: a level change stays inert.
+    private static LifeFacts WithStatEffects(LifeFacts facts, IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
+    {
+        if (entries.Count == 0) return facts;
+        var modifiers = entries.Select(entry => definitions.TryGetValue(entry.Number, out var rule) ? EffectDomain.Stats(rule) : null).OfType<StatEffectDefinition>().ToArray();
+        bool Touches(CharacterStat stat) => modifiers.Any(definition => definition.Modifiers.Any(modifier => modifier.Stat == stat));
+        var strength = Touches(CharacterStat.Strength);
+        var willpower = Touches(CharacterStat.Willpower);
+        var constitution = Touches(CharacterStat.Constitution);
+        var recovery = constitution || Touches(CharacterStat.HealRate) || Touches(CharacterStat.PoisonRecovery);
+        if (!strength && !willpower && !recovery) return facts;
+        var created = CharacterStatsOwner.Create(new(facts.Race, CharacterGender.Female, InnateEffectTable.Empty, CharacterStatLimits.Default with { MaxAppliedEffects = SessionNpcEffectLimits.MaxEntries }));
+        if (created.Owner is not { } owner) return facts;
+        foreach (var (stat, value) in new[] { (CharacterStat.Strength, facts.Strength), (CharacterStat.Constitution, facts.Constitution), (CharacterStat.Willpower, facts.Willpower) })
+        {
+            var range = owner.RangeOf(stat);
+            if (owner.SetBase(stat, Math.Clamp(value, range.Minimum, range.Maximum)).Disposition == CharacterStatsDisposition.Rejected) return facts;
+        }
+        foreach (var modifier in modifiers)
+            if (owner.AddEffect(modifier, EffectCause.Spell).Disposition == CharacterStatsDisposition.Rejected) return facts;
+        CharacterStatsSnapshot At(int poison) => owner.Query(new(0, poison)).Snapshot!;
+        var plain = At(0);
+        var changed = facts;
+        if (strength)
+            changed = changed with { Strength = plain.GetEffective(CharacterStat.Strength),
+                PoisonedStrength = [At(100).GetEffective(CharacterStat.Strength), At(200).GetEffective(CharacterStat.Strength), At(300).GetEffective(CharacterStat.Strength)] };
+        if (willpower) changed = changed with { Willpower = plain.GetEffective(CharacterStat.Willpower) };
+        if (constitution) changed = changed with { Constitution = plain.GetEffective(CharacterStat.Constitution) };
+        if (recovery) changed = changed with { HealRate = plain.GetEffective(CharacterStat.HealRate), PoisonRecovery = plain.GetEffective(CharacterStat.PoisonRecovery) };
+        return changed;
+    }
+
+    // The largest base maxima the NPC's facts give once effects have moved its stats to their race's limits (the bound of an effect list's maxima, the hero's ceiling of the NPC).
+    private static long StatCeiling(LifeFacts bare)
+    {
+        int Top(CharacterStat stat) => CharacterStatRules.Range(bare.Race, stat).Maximum;
+        var top = bare with { Strength = Top(CharacterStat.Strength), PoisonedStrength = [], Constitution = Top(CharacterStat.Constitution), Willpower = Top(CharacterStat.Willpower) };
+        return Math.Max(0L, Math.Max(LifeRules.MaxHitPoints(top, 0), LifeRules.MaxFatigue(top)));
+    }
 
     // The session's list laid over the host's facts, when it holds one for the NPC (the hold flags are WithWrittenHolds').
     // Facts the life rules refuse with the list laid over them (a level-up or a stronger stat after the add) keep the host's maxima: the life API never throws for a list.
@@ -184,7 +230,7 @@ public sealed partial class GameSessionOwner
 
         var recorded = _life.Critters.TryGetValue(entity, out var life);
         if (!recorded) life = new(target.Loaded, null);
-        var host = WithWrittenHolds(entity, target.Facts!);
+        var host = WithHoldFlags(entity, target.Facts!);
         var state = life.State;
         var facts = WithCritterEffects(host, entries, definitions);
         if (!LifeRules.IsValid(facts)) return RejectEffect(GameSessionFailure.InvalidEffect);
@@ -204,7 +250,7 @@ public sealed partial class GameSessionOwner
         foreach (var number in definitions.Keys.Where(n => !used.Contains(n)).ToArray()) definitions.Remove(number);
         // Bounded for any subset of the entries, over the largest base maximum this NPC's facts give (not the hero's ceiling): no later removal can be refused for the maxima.
         var bare = WithCritterEffects(host, [], definitions);
-        var ceiling = Math.Max(0L, Math.Max(LifeRules.MaxHitPoints(bare, 0), LifeRules.MaxFatigue(bare)));
+        var ceiling = Math.Max(Math.Max(0L, Math.Max(LifeRules.MaxHitPoints(bare, 0), LifeRules.MaxFatigue(bare))), StatCeiling(bare));
         if (!EffectDomain.Bounded(entries, definitions, ceiling)) return RejectEffect(GameSessionFailure.InvalidEffect);
 
         var lifeChanged = state != life.State;

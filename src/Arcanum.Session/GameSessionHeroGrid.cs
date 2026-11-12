@@ -248,6 +248,37 @@ public sealed partial class GameSessionOwner
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, EquipmentRefusal.None, null, SessionInsertVerdict.Accepted, Version);
     }
 
+    // ARC-WORLD-1132 (ledger NT1, HG1): coins that reach a hero with no gold pile. The original's transfer (0x464830) makes a new pile object on the
+    // receiver's tile (0x464970) and moves it in through the insert path (0x4617F0 -> 0x461810), whose check (0x466510) asks the grid for a free place
+    // for the pile's size (code 2, WE4): when none is left the insert is refused, the new pile stays on the ground and the call still reports success,
+    // so the coins never reach the hero. A hero that already holds a pile (a coin) grows it with no check. The pile weighs nothing (the weight test is
+    // not modelled for gold) and a pile is no item of an insert-item script, so only the room decides. The ground pile is a plain created object: the
+    // drop's placement (junk pile, decay timer, 0x466E50) is not run (the assembly's refused product lies the same way, ID9).
+    private bool HeroGoldNeedsGround() => _inventory.Gold == 0 && NewItemPlace(SessionHeroGrid.GoldEntity, SessionHeroGrid.GoldKind) is null;
+
+    private readonly record struct GoldGround(string Entity, SessionItemKind Kind, SessionItemWeight Weight);
+
+    // The checks of a pile left on the ground, all before the first change: the tile, the coin-record budget and a free made number. The weight
+    // callback is the host's, so it runs here too.
+    // extraRecords: coin records the same call adds besides the ground pile's (a partial take from a seed pile that has none yet). The ground pile is an
+    // item of the hero's own placed items, so it also counts against the hero's item budget, as a drop's does.
+    private GameSessionFailure PlanGoldGround(SessionItemKind kind, out GoldGround ground, int extraRecords = 0)
+    {
+        ground = default;
+        if (!DropCellFits(_actor.Cell)) return GameSessionFailure.DropTileUnfit;
+        if (_inventory.Piles.Count + extraRecords >= _limits.MaxGoldRecords || _inventory.Held + 1 > _limits.MaxPcItems) return GameSessionFailure.BudgetExceeded;
+        if (NextObjectEntity(SessionObjectOrigin.Made) is not { } entity) return GameSessionFailure.BudgetExceeded;
+        ground = new(entity, kind, CreatedWeight(kind.Prototype));
+        return GameSessionFailure.None;
+    }
+
+    private string LeaveGoldOnGround(GoldGround ground, int count)
+    {
+        CreateMadeItem(new(ground.Entity, ground.Kind, SessionCreatePlace.Ground, ground.Weight, 0, null, _actor.Map, _actor.Cell, SessionPlacedSource.Made));
+        _inventory.Piles[ground.Entity] = count;
+        return ground.Entity;
+    }
+
     // Whether a rectangle lies inside the hero's grid and meets no cell of another grid item (the original's target test, IW4).
     private bool GridCellsFree(InventoryGridItem cells, string? except)
     {
