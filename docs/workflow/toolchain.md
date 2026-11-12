@@ -178,6 +178,13 @@ history held about 500 runs of such copies of one template).
   (it fixes the killed-NPC leaks, but a loaded session is not a fresh one: `inv-arrange` counts revisions and sees one more). A process
   stops at its first failing stage, so a leak fixed here can show the next one that was hidden behind it (`placement-census` after a
   `pickpocket`/`loot-worn` kill: the AI host does not hold the dead NPC the census expects).
+- **A stage waits for a state, not for a time (ARC-DEV-1193).** `bar` failed by chance (`feedback settles to Hover with combat
+  still on`) because it waited a fixed 0.15 s after a quick click and then read the button: the panel keeps Down for 80 ms
+  counted from the first frame actually drawn, and on a loaded machine that draw comes late (the failing run showed 24 ms since
+  the draw after the 150 ms wait; reproduced by keeping every CPU core busy). The stage now polls frames until the expected
+  frame shows, up to 2 s, and prints a line when that took 200 ms or more; a Down that never ends still fails. A new stage that
+  expects feedback after an input waits for that state the same way; to reproduce a load-dependent failure, run the stage in a loop
+  with every core busy.
 - **Every requested stage runs (ARC-DEV-063).** `PASS` means each requested stage ran: a map smoke passes only when
   its log holds the `PASS` line of every stage in its list (`STAGE_PASS` in `tools/local_dev/smoke.py`, checked against
   the viewer's sources by the tests), the whole map battery (`full`, `map` without `--stages`) that of `map` and

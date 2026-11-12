@@ -6,12 +6,6 @@
     "since": "2026-11-11"
   },
   {
-    "stage": "bar",
-    "symptom": "bar smoke FAIL feedback settles to Hover with combat still on",
-    "task": "unassigned",
-    "since": "2026-11-12"
-  },
-  {
     "stage": "placement-census",
     "symptom": "placement-census smoke FAIL: every (row|NPC)",
     "task": "unassigned",
