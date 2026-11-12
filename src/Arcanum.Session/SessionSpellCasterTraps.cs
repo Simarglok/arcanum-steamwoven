@@ -124,7 +124,7 @@ public sealed partial class SessionSpellCaster
         if (LifeTarget(victim) is not { } who || LifeDamage.FromStep(step) is not { } damage) return (SessionTrapHit.NotApplied, 0);
         // TT13: the trapped object is the attacker, the player of a PC-placed trap the damage source.
         var maxHitPoints = Life(victim)?.Status.MaxHitPoints ?? 1;
-        // ARC-MAGIC-1143 (HR3): the trap's context flag 0x80000 runs the attack end (0x4B6930) at the start of the damage step, before the resistance step and the dead check: the hit effect asks an entangled victim's save again.
+        // ARC-MAGIC-1143 (RH4): the trap's context flag 0x80000 runs the attack end (0x4B6930) inside the damage step, after the resistance step and before the dead check: the hit effect asks an entangled victim's save again.
         TrapDamageHit(victim, step);
         var applied = _owner.ApplyDamage(_owner.Version, who, damage, new(trap, killer));
         _itemEvents.AddRange(applied.ItemEvents);

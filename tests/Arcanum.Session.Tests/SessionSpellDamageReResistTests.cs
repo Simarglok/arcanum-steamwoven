@@ -7,7 +7,7 @@ using static Arcanum.Session.Tests.SessionSpellRecordsTests;
 
 namespace Arcanum.Session.Tests;
 
-// ARC-MAGIC-1143 (ledger HR1–HR4): the entangle's re-resistance on a hit that is not a weapon's: a spell's Damage component (0x4518D0 → 0x433020) and a native trap's damage (the attack end 0x4B6930 through
+// ARC-MAGIC-1143 (ledger RH1–RH5): the entangle's re-resistance on a hit that is not a weapon's: a spell's Damage component (0x4518D0 → 0x433020) and a native trap's damage (the attack end 0x4B6930 through
 // context flag 0x80000) ask an entangled victim's save again; a burn (0x42A720) never does (no hit effect in the original). An invented map (the hero, an NPC caster, a victim NPC and a trap) and invented
 // records: the entangle's save modifier is +100 (every d20 is at most the save: it always resists again) or -100 (never).
 [TestClass]
@@ -185,6 +185,12 @@ public sealed class SessionSpellDamageReResistTests
         // No positive hit-point slot: the hit effect is called directly (0x4B6930 → 0x459A30); positive: through the damage effect.
         Assert.IsTrue(caster.TrapDamageHit(SessionSpellCaster.Hero, AttackDamageOf(0, 0, DamageByType.Zero)));
         Assert.IsTrue(Asked(caster, entangle));
+        // The attack end reads the amounts left after resistance: a fully resisted trap hit calls the hit effect directly, so even a flagged critter is asked.
+        var (r, rc) = Setup(victimFlags2: 0x100);
+        using var ___ = r;
+        var resisted = Cast(r, rc, Entangle(100), SessionSpellCaster.Hero, Victim);
+        Assert.IsTrue(rc.TrapDamageHit(Victim, AttackDamageOf(0, 0, new(5, 0, 0, 0, 0)) with { Final = DamageByType.Zero }));
+        Assert.IsTrue(Asked(rc, resisted));
         // A flagged critter is skipped by the damage effect only: with a positive slot it is not asked, with none it is.
         foreach (var (amount, asked) in new[] { (5, false), (0, true) })
         {
@@ -225,7 +231,7 @@ public sealed class SessionSpellDamageReResistTests
         Assert.AreEqual((true, false, false), caster.Holds(SessionSpellCaster.Hero));
     }
 
-    // A damage packet the way the damage step draws one: the rolled amounts in <paramref name="rolled"/>, final hit-point and fatigue damage as given.
+    // A damage packet the way the damage step draws one: the per-type amounts in <paramref name="rolled"/> (rolled and final alike), hit-point and fatigue damage as given.
     private static AttackDamage AttackDamageOf(int hitPoints, int fatigue, DamageByType rolled) =>
         new(DamageRecipient.Target, rolled, rolled, hitPoints, fatigue, 0, DamageMultiplier.None, false, CriticalHitEffects.None, CriticalMissEffects.None, false, DamagePrevention.None);
 }
