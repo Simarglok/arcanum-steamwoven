@@ -640,11 +640,11 @@ internal sealed class InventoryDomain
     /// <paramref name="dropped"/>), which leave their holder's list, then the hero's items placed on this map (ARC-WORLD-059) in
     /// placing order.</summary>
     internal SessionMapInventory View(SessionMapId map, Seed seed, Func<string, bool> killed, Func<string, CellCoord?> spilled,
-        Func<string, CellCoord?> dropped)
+        Func<string, CellCoord?> dropped, Func<string, CellCoord?>? moved = null)
     {
         // ARC-WORLD-063: an item in a junk pile lies in the pile, not on the ground.
         var inPile = Objects.Piles.Where(pile => pile.Map == map).SelectMany(pile => pile.Items).Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
-        var inventory = WithPiled(map, seed, killed, spilled, dropped);
+        var inventory = WithPiled(map, seed, killed, spilled, dropped, moved);
         var ground = inventory.Ground.ToDictionary(item => item.Item.Entity, StringComparer.Ordinal);
         return new(map, inventory.Ground.Where(item => !inPile.Contains(item.Item.Entity)).ToArray(), inventory.Holders.ToArray(),
             Objects.Piles.Where(pile => pile.Map == map).Select(pile => new SessionJunkPileInventory(pile.Entity, pile.Cell,
@@ -654,15 +654,16 @@ internal sealed class InventoryDomain
 
     /// <summary>The map's inventory with every item on its ground, those in junk piles included (ARC-WORLD-063).</summary>
     internal SessionMapInventory WithPiled(SessionMapId map, Seed seed, Func<string, bool> killed, Func<string, CellCoord?> spilled,
-        Func<string, CellCoord?> dropped) => new(map,
+        Func<string, CellCoord?> dropped, Func<string, CellCoord?>? moved = null) => new(map,
+        // ARC-MAGIC-1230: a pushed item of the map's data lies on the cell the push left it on (the session's record), wherever its data puts it.
         seed.Source.Items.Where(item => item.Cell is not null && !Taken.Contains(item.Entity))
-            .Select(item => new SessionGroundItem(new(item.Entity, WithAmmo(item.Entity, item.Facts)), item.Cell!.Value))
+            .Select(item => new SessionGroundItem(new(item.Entity, WithAmmo(item.Entity, item.Facts)), moved?.Invoke(item.Entity) ?? item.Cell!.Value))
             // ARC-WORLD-090: the items a barter window sold into a container stay out of its spill (not modelled).
             .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Container).SelectMany(holder =>
-                spilled(holder.Entity) is { } cell ? Current(seed, holder, dropped, added: false).Select(item => new SessionGroundItem(item, cell)) : []))
+                spilled(holder.Entity) is { } cell ? Current(seed, holder, dropped, added: false).Select(item => new SessionGroundItem(item, moved?.Invoke(item.Entity) ?? cell)) : []))
             .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Npc).SelectMany(holder => holder.Items
                 .Where(entity => !Taken.Contains(entity) && dropped(entity) is not null)
-                .Select(entity => new SessionGroundItem(new(entity, WithAmmo(entity, seed.Items[entity].Facts)), dropped(entity)!.Value))))
+                .Select(entity => new SessionGroundItem(new(entity, WithAmmo(entity, seed.Items[entity].Facts)), moved?.Invoke(entity) ?? dropped(entity)!.Value))))
             .Concat(Placed.Where(item => item.Map == map).Select(item => new SessionGroundItem(new(item.Entity, WithAmmo(item.Entity, MadeFacts(item.Kind, PlacedComplexity(item)))), item.Cell)))
             .ToArray(),
         seed.Source.Holders.Select(holder => new SessionHolderInventory(holder.Entity, holder.Kind,

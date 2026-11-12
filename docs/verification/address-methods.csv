@@ -45,6 +45,7 @@ src/Arcanum.Session/GameSessionAssembly.cs,QueryHeroAssembly,pending,
 src/Arcanum.Session/GameSessionAttack.cs,AttackCritter,pending,
 src/Arcanum.Session/GameSessionAttack.cs,AttackValues,pending,
 src/Arcanum.Session/GameSessionAttack.cs,CriticalAndWearSteps,pending,
+src/Arcanum.Session/GameSessionAttack.cs,DollValues,exempt,host
 src/Arcanum.Session/GameSessionAttack.cs,FirearmsLevel,pending,
 src/Arcanum.Session/GameSessionAttack.cs,LandShot,pending,
 src/Arcanum.Session/GameSessionAttack.cs,QueryHeroAttackChance,pending,
@@ -97,6 +98,7 @@ src/Arcanum.Session/GameSessionHotkeys.cs,RecordHotkeyAction,pending,
 src/Arcanum.Session/GameSessionIdentify.cs,MarkItemIdentified,pending,
 src/Arcanum.Session/GameSessionItemDamage.cs,QueryItemCombat,pending,
 src/Arcanum.Session/GameSessionItemExamine.cs,RunItemExamine,exempt,reference
+src/Arcanum.Session/GameSessionItemMove.cs,MoveGroundItem,exempt,reference
 src/Arcanum.Session/GameSessionItemScripts.cs,PowerRatio,pending,
 src/Arcanum.Session/GameSessionItemScripts.cs,Stat,pending,
 src/Arcanum.Session/GameSessionItemTriggers.cs,FireDamageStepItems,pending,
@@ -169,6 +171,9 @@ src/Arcanum.Session/GameSessionScriptStores.cs,SetPcFlag,pending,
 src/Arcanum.Session/GameSessionScriptStores.cs,SetPcVariable,pending,
 src/Arcanum.Session/GameSessionScriptTrapDevices.cs,PlaceScriptTrapDevice,pending,
 src/Arcanum.Session/GameSessionScriptTrapDevices.cs,QueryScriptTrapMarkers,pending,
+src/Arcanum.Session/GameSessionSectorBlocked.cs,Pack,exempt,reference
+src/Arcanum.Session/GameSessionSectorBlocked.cs,QuerySectorBlocked,exempt,reference
+src/Arcanum.Session/GameSessionSectorBlocked.cs,SetSectorBlocked,exempt,reference
 src/Arcanum.Session/GameSessionSectors.cs,QuerySectorLoaded,pending,
 src/Arcanum.Session/GameSessionSkills.cs,SetHeroSkillTraining,pending,
 src/Arcanum.Session/GameSessionSpellBook.cs,MasterHeroCollege,pending,
@@ -207,6 +212,7 @@ src/Arcanum.Session/SessionSpellCasterAi.cs,AiKnows,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,AiSpell,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,AiUnderInfluence,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,CastByAi,pending,
+src/Arcanum.Session/SessionSpellCasterDisarm.cs,DropWeapon,exempt,host
 src/Arcanum.Session/SessionSpellCasterEffects.cs,CacheReAimedKind,pending,
 src/Arcanum.Session/SessionSpellCasterEffects.cs,DamageEffect,exempt,host
 src/Arcanum.Session/SessionSpellCasterEffects.cs,RunProvidingFlag,exempt,host
@@ -542,6 +548,7 @@ src/Arcanum.World/AreaUseScripts.cs,RunTakingDamage,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunTrapScript,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunUseScript,pending,
 src/Arcanum.World/AreaUseScripts.cs,TakingDamageVetoes,pending,
+src/Arcanum.World/AreaWorldMap.cs,Passes,exempt,host
 src/Arcanum.World/DiagnosticGridSession.cs,Relocate,pending,
 src/Arcanum.World/GoalStepper.cs,Step,pending,
 src/Arcanum.World/GoalStepper.cs,StepOverlay,pending,

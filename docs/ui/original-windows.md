@@ -56,7 +56,7 @@ Left for the next inventory slices (each its own task):
   341 `PD_Cover4Inven` at (361, 0) and moves the doll's rectangles 348 pixels to the right (table 0x5CACE8), F0).
 - The doll art's empty box at its top-left (about 18, 14 to 160, 157): the mode-0 redraw draws nothing there (only
   modes 1–6 draw a critter image, 0x553D10, at their own places); whether another path fills it is not read (F0).
-- The two numbers at (80, 358) and (261, 358) (0x464630, 0x464700, F0) and the selected-item fill
+- The two numbers at (80, 358) and (261, 358) of the hero's own window (0x464630, 0x464700; read by ARC-UI-1121 for the body's doll, [IW41](../research/ledger/ui-audio.md#doll-values-and-weapon-overlay-arc-ui-1121); the hero's own: #1267) and the selected-item fill
   (0x681458, colour from the palette, F0).
 
 ## Loot window (done: ARC-UI-052)
@@ -82,7 +82,7 @@ body's grid (PROJECT: the original's scroll bar at (330, 136) is not drawn); the
 window with its Take buttons. PROJECT: a taken item goes to the hero's first free cells, not the cell it was released on.
 
 ARC-UI-072 built the body's doll view and its toggles (the loot and steal windows of a critter: the worn items on 349 `Loot_PD` at (0, 134), toggles 338 / 339 at
-(23, 108), (74, 108); IW29, IW30). Left for the next loot slices (each its own task): the doll's two values and the weapon's overlay, the hero's doll toggle at (713, 37), (751, 37), the scroll bar's art, the move of a hero's
+(23, 108), (74, 108); IW29, IW30). ARC-UI-1121 added the doll's two values and the weapon slot's fill ([IW41–IW43](../research/ledger/ui-audio.md#doll-values-and-weapon-overlay-arc-ui-1121)). Left for the next loot slices (each its own task): the hero's own window's two values and fill (#1267), the hero's doll toggle at (713, 37), (751, 37), the scroll bar's art, the move of a hero's
 item into the body, the button 340 at (763, 197) and the hot spots of IW30, a follower's portrait as the image, the right release's
 move of a hero's item into the body (IW36), a move within the body's grid.
 

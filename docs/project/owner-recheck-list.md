@@ -571,7 +571,7 @@ path request the item drop uses and walks **at most eight tiles** of the route, 
 
 Read in the original executable (ledger [TP1–TP5](../research/ledger/spell-runs.md#teleport-types-and-the-anti-teleport-test-arc-magic-038), contract [teleport types](../world/spell-cast-host.md#teleport-types-and-the-anti-teleport-test-arc-magic-038)): in a single-player game Teleportation (spell 4,
 Conveyance college) moves nothing by itself. It opens the **world map in a teleport mode**; you click a known area, and the hero lands there. Places where teleporting is refused come from the data file `Rules\AntiTeleport.mes` (2 round regions and 5 whole maps in the installed game). Both rule modes behave the same.
-Use a hero who knows Teleportation, with enough fatigue (the spell's fatigue cost is charged only when an area is picked). Known differences, not to be re-reported: in the teleport mode the town map, the compass and the waypoint journey are not offered; the refusal message (the original's message 640) is shown as an
+Use a hero who knows Teleportation, with enough fatigue (the spell's fatigue cost is charged only when an area is picked). Known differences, not to be re-reported: the original's teleport mode offers no town map and no route points either (ARC-MAGIC-1147, ledger TP6–TP7; see the added steps below); the refusal message (the original's message 640) is shown as an
 English label, not the game's text; the view is not re-centred; an NPC cast of the area portal (technology 218) or of a random move does not carry the creature; a multiplayer host is not built.
 
 | # | Step | Expected (from the original executable and data) | Status |
@@ -584,6 +584,8 @@ English label, not the game's text; the view is not re-centred; an NPC cast of t
 | 6 | Open the teleport map and pick an area that lies inside one of the ban regions. | The pick is refused with a message and the map stays open; nothing is paid. Pick another area to leave. | open |
 | 7 | Use the technology device that teleports to the area (record 218) on the main map, and in a map that is not the main one. | On the main map the hero is sent to the area's location with a blank screen and no wait orders; elsewhere to the main map at the location of the area that map belongs to. | open |
 | 8 | Walk with Spatial Distortion (spell 3) over a tile that has a script, starting from a tile next to it. | The script runs **before** the caster is put on the last tile: a message from it names the caster's old tile; the last tile's script runs once more afterwards. | open |
+| 9 | (ARC-MAGIC-1147) In the teleport map, look for the Travel button, press the town-map button and the `Z` key, and click the map while a companion travels with you. | No Travel button is shown; there is no town map (not even from a town, where `W` would open it); a click picks a discovered area or does nothing, it never adds a route point; the compass arrows scroll and the continent view works as usual. | open |
+| 10 | (ARC-MAGIC-1147) Join a companion, cast Teleportation and pick a far discovered area. | The companion arrives with you and stands next to you at the destination, whatever distance it was from you before the cast; a companion you had released earlier on a foreign map is not carried (it goes home). | open |
 
 
 ## ARC-RES-121 — Function audit wave 3, groups G and I (2026-11-11)
@@ -939,6 +941,25 @@ Known differences (documented, not bugs):
 - Change art number (a door, scenery or creature changing its picture from a script) is not built: scripts that use it are still refused, so those quest steps do nothing in Steamwoven.
 - A script in a dialog (a talk) that uses one of these actions is still refused; only use, tile, sector, heartbeat and dying scripts run them.
 - A reaction or standpoint change acts for NPCs of the map on screen only.
+
+## ARC-SCRIPT-1164 — world-object script actions (E5-b, 2026-11-12)
+
+Script commands that act on a door, chest, sector or monster generator now run from use, tile, sector, heartbeat and dying scripts ([ledger WO1–WO13](../research/ledger/scripts.md#world-object-commands-arc-script-1164-e5-b),
+[dispatcher](../scripting/scr-dispatcher-runtime.md#world-object-commands-arc-script-1164-set-s37)). No installed map is named below because the check that lists the admitted scripts is by script number, not by map; compare the same
+quest step in both games.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Reach a quest step that locks or unlocks a door or chest from a script (set lock state), then try to open it. | The object is locked or unlocked as the step says; the lock picks and keys behave as for any locked object. | open |
+| 2 | Reach a quest step that opens or closes a door or chest from a script (toggle open or closed). | A door swings open or shut at once; a chest changes to its next or previous picture frame; a script that tests the open state then branches on it. | open |
+| 3 | Reach a quest step that gives the hero or an NPC an item (create item). | The item appears in the holder's inventory (or, with no room, is not taken). | open |
+| 4 | Reach a quest step that blocks a sector, then open the world map and route into it. | The route does not enter the blocked sector, and a blocked destination is refused. | open |
+
+Known differences (documented, not bugs):
+
+- Transfer item, set written start, destroy item named and toggle item inventory display are not applied by any host yet: scripts that use them are still refused.
+- The world map's refusal when the hero's own sector is blocked, and the dimmed picture of a blocked sector, are not built.
+- A script in a dialog (a talk) that uses one of these commands is still refused.
 
 ## ARC-WORLD-1162 — beds: sleeper flags, occupied bed frame and nudge (slice 3, 2026-11-12)
 

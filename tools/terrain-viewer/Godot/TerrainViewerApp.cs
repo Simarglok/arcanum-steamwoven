@@ -251,6 +251,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("movement") == true) await RunAreaMovementSmokeAsync(result);
                                 // ARC-DEV-335 (V7d, B50): only when named, a light worn by the hero lights the area around it (with --hero, a lit map).
                                 if (only?.Contains("worn-light") == true) await RunAreaWornLightSmokeAsync(result);
+                                // ARC-MAGIC-1229 (FR-LIGHT-011, IW6): only when named, Illuminate keeps a live light on the hero and on an NPC while the spell holds, the darkness sampler sees it and the END takes it off (--hero, a lit map with a living NPC).
+                                if (only?.Contains("eye-light") == true) await RunAreaEyeLightSmokeAsync(result);
                                 // ARC-DEV-353 (V7d second part): only when named, an NPC's light is carried with the NPC (AI on, a lit map with an NPC that carries a light).
                                 if (only?.Contains("critter-light") == true) await RunAreaCritterLightSmokeAsync();
                                 // ARC-DEV-362 (technology audit T-a): only when named, degrees bought on the sheet, a Herbology heal and a Gun Smithy gun assembled, used and loaded again (--hero, best on the map "crash site cave").
@@ -363,6 +365,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && only?.Contains("debug-travel") == true) await RunAreaDebugTravelSmokeAsync();
                         // ARC-DEV-170 (B05): only when named (with --debug-mode and --hero), a joined speaker, the window moved to a far area and a quick load there (SM01).
                         if (_readyMapName is not null && only?.Contains("follower-far") == true) await RunAreaFollowerFarSmokeAsync();
+                        // ARC-MAGIC-1147 (MT16, TP6-TP9): only when named (with --hero), the same companion carried by a Teleportation cast's pick on the world map.
+                        if (_readyMapName is not null && only?.Contains("teleport-follow") == true) await RunAreaFollowerFarSmokeAsync(viaSpell: true);
                         // ARC-DEV-305 (B01, B36): only when named (with --debug-mode and --hero), what the hero took and made survives the window move and a quick load (SM02).
                         if (_readyMapName is not null && only?.Contains("inv-carry") == true) await RunAreaInvCarrySmokeAsync();
                         // ARC-RENDER-027: only when named, every map of the catalogue in turn (last: it leaves the last map shown).

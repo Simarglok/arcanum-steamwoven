@@ -1,4 +1,5 @@
 using Arcanum.Session;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
@@ -8,7 +9,7 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 // ARC-DEV-141 (MIG13 S8c): a knockback (goals 43 and 64, the S8 read GT59–GT62) is a goal run of the pushed NPC that the frame step hands to the knockback host through the router. A spell or technology with an
-// AGoal component for goal 43 logs the request (SpellCastEventKind.Knockback); the host starts the run and the slide moves the NPC through the AI host's movers. The hero's, a companion's and the objects' slides are not ready.
+// AGoal component for goal 43 logs the request (SpellCastEventKind.Knockback); the host starts the run and the slide moves the NPC through the AI host's movers. An item lying on the ground is pushed too (ARC-MAGIC-1230); scenery, portals and containers are not.
 public partial class TerrainViewerApp
 {
     private AreaKnockbackHost? _knockbackHost;
@@ -26,7 +27,8 @@ public partial class TerrainViewerApp
     {
         if (_knockbackHost is { } host && ReferenceEquals(host.Session, _areaSession)) return host;
         _knockbackHost?.LoseAll("the session changed");
-        return _knockbackHost = new(_areaSession!, new AreaAiKnockbackBodies(() => _aiHost), OnKnockbackFinished, end => _aiHost?.RunEndNodes(end));
+        // ARC-MAGIC-1230: an item lying on the ground is pushed through the session's ground cell (Unseen Force, UO5); its bump damages it through the cast host.
+        return _knockbackHost = new(_areaSession!, new AreaAiKnockbackBodies(() => _aiHost, new AreaKnockbackItems(_areaSession!, (target, left, tested) => _aiHost?.PushBlock(target, left, tested) ?? KnockbackBlock.Terrain, () => _spellCaster)), OnKnockbackFinished, end => _aiHost?.RunEndNodes(end));
     }
 
     /// <summary>A cast host log entry asking for a push (an AGoal component 43): the target is pushed away from the entry's source tile. Nothing without an AI host or for an object that cannot be pushed here.</summary>

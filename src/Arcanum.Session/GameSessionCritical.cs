@@ -105,7 +105,8 @@ public sealed partial class GameSessionOwner
         if (_inventory.Taken.Contains(entity) || _durability.Destroyed.Contains(entity) || ItemInFlight(entity)) return null;
         foreach (var (map, seed) in _inventory.Seeds)
             if (DroppedCell(map, seed, entity) is { } cell && seed.Items.TryGetValue(entity, out var row))
-                return new(new(entity, _inventory.WithAmmo(entity, row.Facts)), seed.HolderOf[entity], map, cell);
+                // ARC-MAGIC-1230: a push moves the dropped item on from its drop cell.
+                return new(new(entity, _inventory.WithAmmo(entity, row.Facts)), seed.HolderOf[entity], map, MovedCell(map, entity) ?? cell);
         return null;
     }
 
@@ -115,7 +116,8 @@ public sealed partial class GameSessionOwner
     /// <summary>Where a seed item lies loose on the ground: its own cell, its spilled container's (ARC-COMBAT-008) or the cell a
     /// critical dropped it on; null while a holder holds it.</summary>
     internal CellCoord? LooseCell(SessionMapId map, InventoryDomain.Seed seed, string item) =>
-        seed.Items.TryGetValue(item, out var row) ? row.Cell ?? SpilledCell(map, seed, item) ?? DroppedCell(map, seed, item) : null;
+        // ARC-MAGIC-1230: a pushed item lies on the cell the push left it on.
+        seed.Items.TryGetValue(item, out var row) && (row.Cell ?? SpilledCell(map, seed, item) ?? DroppedCell(map, seed, item)) is { } home ? MovedCell(map, item) ?? home : null;
 
     private static long DroppedValue(CellCoord cell) => ItemDroppedValue(cell);
 
@@ -167,6 +169,26 @@ public sealed partial class GameSessionOwner
             return side;
         }
         return Drop(kind, whose, side, slot, cell, dropMap, steps, ref failure);
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-1232 (DW2, XR15): the weapon block of a spell's damage step on <paramref name="who"/>: the critter's item in the weapon slot goes through <see cref="CriticalDrop"/> (the attack paths' step, not a copy), the host's
+    /// <paramref name="worn"/> items and <paramref name="cell"/> as for an attack's recipient (the hero's drop is at its own cell). Returns the one step, empty when no step ran; <paramref name="failure"/> is a refusal of the
+    /// session (the generator ran dry, a stale version), whose step is in the list as <see cref="SessionCriticalStepOutcome.Unknown"/>.
+    /// </summary>
+    internal IReadOnlyList<SessionCriticalStep> SpellWeaponDrop(SessionLifeTarget who, IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? worn, CellCoord? cell, IDropMap? dropMap,
+        out GameSessionFailure failure)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(who);
+        failure = GameSessionFailure.None;
+        var steps = new List<SessionCriticalStep>();
+        CriticalDrop(SessionCriticalStepKind.DropWeapon, DamageRecipient.Target, new SessionWearSide { Life = who, Worn = worn }, EquipmentSlot.Weapon, cell, dropMap, steps, ref failure);
+        // A drop that drew from the generator and was then refused changed no state a revision covers (an attack's own revision does): the spell's step has none, so the draw is revised here.
+        if (failure == GameSessionFailure.None && steps.Any(step => step.Outcome is SessionCriticalStepOutcome.Refused or SessionCriticalStepOutcome.ScriptUnsupported
+            or SessionCriticalStepOutcome.ItemSpellsUnsupported or SessionCriticalStepOutcome.HeroCellUnfit or SessionCriticalStepOutcome.NotSeedItem) && dropMap is not null && _revision != long.MaxValue)
+            Revise();
+        return steps;
     }
 
     // The wear check of the critter's item in the slot under its injuries now; null without the item or without its wear values.

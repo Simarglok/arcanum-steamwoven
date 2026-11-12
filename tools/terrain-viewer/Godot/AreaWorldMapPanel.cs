@@ -22,6 +22,8 @@ public partial class AreaWorldMapPanel : CanvasLayer
     private Label _status = null!;
     private Label _message = null!;
     private Label _header = null!, _hint = null!;
+    // ARC-MAGIC-1147 (TP6): opened by a Teleportation cast, which has no journey.
+    private bool _teleportMode;
     private Button _travel = null!, _clear = null!, _close = null!, _teleport = null!;
     private bool _debugMode;
     private AreaWorldMapArtView _artView = null!;
@@ -67,6 +69,8 @@ public partial class AreaWorldMapPanel : CanvasLayer
     internal bool RoundViewShown => _roundView.Visible;
     internal string StatusForSelfTest => _status.Text;
     internal string MessageForSelfTest => _message.Text;
+    /// <summary>ARC-MAGIC-1147 (TP6): whether the original look shows its Travel button now (hidden in a Teleportation cast's window).</summary>
+    internal bool TravelShownForSelfTest => _artView.TravelButtonShownForSelfTest;
     /// <summary>ARC-DEV-050: the area list and Teleport are shown (debug mode only).</summary>
     internal bool DebugControlsShownForSelfTest => _areas.Visible && _teleport.Visible;
     /// <summary>Selects an area in the list and presses Teleport, as a player does.</summary>
@@ -161,16 +165,16 @@ public partial class AreaWorldMapPanel : CanvasLayer
     /// <summary>Opens the view; ARC-DEV-050: <paramref name="debugMode"/> shows the area list and Teleport, otherwise hidden. ARC-UI-084:
     /// <paramref name="town"/> is the town map of the PC's sector (the original look opens on it, WM6).</summary>
     public void Open(AreaWorldMap map, Func<int, bool> known, Func<int, string> names, bool debugMode, AreaTownMapShow? town = null, AreaTownNotes? mapNotes = null,
-        AreaTownNotes? continentNotes = null)
+        AreaTownNotes? continentNotes = null, bool teleportMode = false)
     {
-        _map = map; _known = known; _debugMode = debugMode;
+        _map = map; _known = known; _debugMode = debugMode; _teleportMode = teleportMode;
         // ARC-UI-073: the original look when its art read; debug mode keeps the diagnostic panel (its area list and Teleport).
         ArtMode = _artLook is not null && !debugMode;
         _panel.Visible = !ArtMode;
         _areas.Visible = _teleport.Visible = debugMode;
         _header.Text = debugMode ? "World map | DEBUG MODE: every area open to Teleport (not gameplay)" : "World map";
         _header.Modulate = debugMode ? new Color(.6f, .1f, .05f) : new Color(.15f, .1f, .05f);
-        _hint.Text = (map.OnStartMap ? "Click the map to add a waypoint" + (debugMode ? " (or double-click an area)" : "") + "; Enter or confirm travels; " : "Not on the start map: no journey from here; ")
+        _hint.Text = teleportMode ? "Teleportation: click a known area to land there (no journey, no town map); W or cancel closes and pays nothing | PROJECT diagnostic panel" : (map.OnStartMap ? "Click the map to add a waypoint" + (debugMode ? " (or double-click an area)" : "") + "; Enter or confirm travels; " : "Not on the start map: no journey from here; ")
             + "W or cancel closes (during travel: lands where the journey stands); Escape opens the menu over the map"
             + (debugMode ? "; Teleport moves to the selected area at once, with no game time and nothing discovered" : "")
             + " | PROJECT diagnostic panel: terrain picture, not the original's map art; parity NOT_VERIFIED";
@@ -183,11 +187,11 @@ public partial class AreaWorldMapPanel : CanvasLayer
             _areas.SetItemMetadata(index, area);
         }
         Show();
-        if (ArtMode) _artView.Open(map, known, town, mapNotes, continentNotes);
+        if (ArtMode) _artView.Open(map, known, town, mapNotes, continentNotes, teleportMode);
         Render(null);
     }
 
-    public void CloseView() { Hide(); _artView.CloseView(); _roundView.Visible = false; _map = null; _known = null; _debugMode = false; ArtMode = false; }
+    public void CloseView() { Hide(); _artView.CloseView(); _roundView.Visible = false; _map = null; _known = null; _debugMode = false; _teleportMode = false; ArtMode = false; }
 
     /// <summary>ARC-UI-134 (WM140, WM141): the lens shows the game view around the hero, at half size, while the original look is up and no journey runs; the view
     /// keeps up with the hero and the window's place every frame (the executable copies on every redraw of the game view, IW33).</summary>
@@ -214,7 +218,7 @@ public partial class AreaWorldMapPanel : CanvasLayer
             : $"{map.Waypoints.Count} waypoint(s), {steps} sector step(s), about {hours} h"
                 + (map.Landing is { } landing ? $" | landed at ({landing.X},{landing.Y})" : "");
         _message.Text = message ?? "";
-        _travel.Disabled = map.Travelling || map.Waypoints.Count == 0;
+        _travel.Disabled = map.Travelling || map.Waypoints.Count == 0 || _teleportMode;
         _clear.Disabled = map.Travelling || map.Waypoints.Count == 0;
         _teleport.Disabled = !_debugMode || map.Travelling;
         _overlay.QueueRedraw();

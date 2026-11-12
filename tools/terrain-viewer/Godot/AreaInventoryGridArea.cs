@@ -659,8 +659,8 @@ public partial class AreaInventoryGridArea : Control
             : (AreaLootArtLayout.GridY, AreaLootArtLayout.GridY + AreaLootArtLayout.ShownRows * AreaLootArtLayout.CellPixels);
         // ARC-UI-072 (B30, IW29): the body's doll view replaces the holder's grid: art 349 at (0, 134), each worn item in its slot rectangle (PROJECT:
         // its inventory art, as the hero's doll draws it; the original draws the paper-doll art at two thirds of its size), and a cover stretched to
-        // the rectangle of every empty slot or of the slot whose item is on the cursor. NOT READY: the two numbers (0x464630, 0x464700) and the
-        // weapon slot's strength overlay (0x465E90).
+        // the rectangle of every empty slot or of the slot whose item is on the cursor. ARC-UI-1121 (IW29, IW41, IW43): the weapon's slot is filled
+        // dark red first when the weapon is too heavy for the body (0x465E90), and the body's two ratings (0x464630, 0x464700) are printed under the doll.
         var doll = BodyDoll && barter is null;
         if (doll)
         {
@@ -668,8 +668,27 @@ public partial class AreaInventoryGridArea : Control
             foreach (var (slot, rect) in AreaLootArtLayout.BodySlotRects)
             {
                 var entry = view.BodyDoll.FirstOrDefault(entry => entry.Slot == slot);
+                if (slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon && entry?.Entity is not null && view.BodyRatings is { WeaponTooHeavy: true })
+                {
+                    var (red, green, blue) = AreaLootArtLayout.TooHeavyFill;
+                    DrawRect(Scaled(rect.X, rect.Y, rect.Width, rect.Height), new Color(red / 255f, green / 255f, blue / 255f));
+                }
                 if (entry?.Entity is { } worn && worn != Held?.Entity) Item(look.ItemArt(worn), rect, entry.Name ?? "?");
                 else if (look.Art.GetValueOrDefault(AreaInventoryArtLayout.Covers[slot]) is { } cover) DrawTextureRect(cover, Scaled(rect.X, rect.Y, rect.Width, rect.Height), false);
+            }
+            if (view.BodyRatings is { } ratings)
+            {
+                // The damage rating ends at the right edge of its box, the armour rating starts at the left edge of its box (0x576AF7..0x576C38).
+                void Rating(int value, (int X, int Y, int Width, int Height) rect, bool rightAligned)
+                {
+                    var box = Scaled(rect.X, rect.Y, rect.Width, rect.Height);
+                    var text = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var width = font.GetStringSize(text, HorizontalAlignment.Left, -1, size).X;
+                    DrawString(font, new((rightAligned ? box.End.X - width : box.Position.X), box.Position.Y + (box.Size.Y + size) / 2 - 2), text, HorizontalAlignment.Left, -1, size,
+                        AreaInventoryArtLook.TextColour);
+                }
+                Rating(ratings.Damage, AreaLootArtLayout.DamageRatingBox, true);
+                Rating(ratings.Armour, AreaLootArtLayout.ArmourRatingBox, false);
             }
         }
         foreach (var item in doll ? [] : view.LootGrid)
