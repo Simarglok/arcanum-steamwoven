@@ -621,6 +621,15 @@ public readonly record struct ScrReadingRequest(ScrReadingKind Kind, int Number,
 /// </summary>
 public readonly record struct ScrAmmoUse(ScrObjectRef Holder, int Count, int AmmoType);
 
+/// <summary>
+/// ARC-SCRIPT-1241 (script action 103 `fade`, <c>docs/research/bink-movies.md</c> MV5): the four number operands in order. The original fades the
+/// screen out, jumps the game clock by <see cref="Seconds"/> × 1000 ms when that is above 0, then plays movie number <see cref="Movie"/>
+/// (<see cref="Sound"/>, when above 0, is the movie's audio track id) or, when <see cref="Movie"/> is 0, the sound <see cref="Sound"/> when above 0,
+/// and brings the screen back at once when <see cref="Flag"/> is 0 or after <see cref="Flag"/> seconds. The whole action is skipped in a network
+/// host game; a single-player game never does. The interpreter hands the operands as read, the host does the rest.
+/// </summary>
+public readonly record struct ScrFade(int Seconds, int Sound, int Movie, int Flag);
+
 /// <summary>The final value of a global flag the run changed.</summary>
 public readonly record struct ScrFlagWrite(int Index, bool Value);
 
@@ -696,8 +705,9 @@ public sealed class ScrEffects
         IReadOnlyList<ScrReadingRequest>? readings = null, IReadOnlyList<ScrSkillUse>? skillUses = null, IReadOnlyList<ScrStateRequest>? states = null,
         IReadOnlyList<ScrEffectRequest>? effectChanges = null, IReadOnlyList<ScrEyeCandy>? eyeCandies = null, IReadOnlyList<ScrWriteback>? slotWrites = null,
         IReadOnlyList<ScrCreateRequest>? creations = null, IReadOnlyList<ScrObjectStateRequest>? objectStates = null, IReadOnlyList<ScrFloatLine>? floats = null,
-        ScrStoreWrites? stores = null, IReadOnlyList<int>? townMaps = null, IReadOnlyList<ScrAmmoUse>? ammoUses = null)
+        ScrStoreWrites? stores = null, IReadOnlyList<int>? townMaps = null, IReadOnlyList<ScrAmmoUse>? ammoUses = null, IReadOnlyList<ScrFade>? fades = null)
     {
+        Fades = fades ?? Array.Empty<ScrFade>();
         AmmoUses = ammoUses ?? Array.Empty<ScrAmmoUse>();
         TownMaps = townMaps ?? Array.Empty<int>();
         GlobalVariables = stores?.GlobalVariables ?? Array.Empty<ScrVariableWrite>();
@@ -774,11 +784,13 @@ public sealed class ScrEffects
     public IReadOnlyList<int> TownMaps { get; }
     /// <summary>ARC-MAGIC-041: the use ammunition units requests (135), in action order (ledger TI8).</summary>
     public IReadOnlyList<ScrAmmoUse> AmmoUses { get; }
+    /// <summary>ARC-SCRIPT-1241: the fade actions (103), in action order, each with its four operands as read (MV5).</summary>
+    public IReadOnlyList<ScrFade> Fades { get; }
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
         && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0 && Readings.Count == 0 && SkillUses.Count == 0 && States.Count == 0
         && EffectChanges.Count == 0 && EyeCandies.Count == 0 && SlotWrites.Count == 0 && Creations.Count == 0 && ObjectStates.Count == 0
         && Floats.Count == 0 && GlobalVariables.Count == 0 && PcVariables.Count == 0 && PcFlags.Count == 0
-        && TownMaps.Count == 0 && AmmoUses.Count == 0;
+        && TownMaps.Count == 0 && AmmoUses.Count == 0 && Fades.Count == 0;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went
@@ -805,7 +817,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S35"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S36"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -826,7 +838,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S35)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S35.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S36)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S36.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.

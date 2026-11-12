@@ -351,7 +351,14 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S34 { get; } = new("S34", S33.Conditions.Concat(StoryConditions), S33.Actions.Concat(StoryActions), S33.ValueKinds, S33.FocusKinds, counterIndexWraps: true);
 
-    /// <summary>The actions <see cref="S35"/> adds to <see cref="S34"/>: critter disband (22), set and adjust reaction (30, 31), set day and night standpoint (45, 46) and their extended forms (140, 141), change art number (59) and change script (99).
+    /// <summary>
+    /// The fade set (ARC-SCRIPT-1241, <c>docs/research/bink-movies.md</c> MV5): <see cref="S34"/> plus fade (103), which hands one <see cref="ScrFade"/> (seconds, sound, movie, flag) to the host in action order;
+    /// the script goes on whatever the host does with it. The host jumps the game clock by the seconds, plays the movie or the sound and brings the screen back. Six installed scripts carry a movie in it
+    /// (1093, 1105, 1109, 2862, 2863, 3061).
+    /// </summary>
+    public static ScrAdmissionSet S35 { get; } = new("S35", S34.Conditions, S34.Actions.Append(ScrCatalogue.Action.Fade), S34.ValueKinds, S34.FocusKinds, counterIndexWraps: true);
+
+    /// <summary>The actions <see cref="S36"/> adds to <see cref="S35"/>: critter disband (22), set and adjust reaction (30, 31), set day and night standpoint (45, 46) and their extended forms (140, 141), change art number (59) and change script (99).
     /// A host with its own set adds the ones it applies (<see cref="NpcStateHostActions"/> are the ones the area hosts apply).</summary>
     public static IReadOnlyList<int> NpcStateActions { get; } = [ScrCatalogue.Action.CritterDisband, ScrCatalogue.Action.SetReaction, ScrCatalogue.Action.AdjustReaction, ScrCatalogue.Action.SetDayStandpoint,
         ScrCatalogue.Action.SetNightStandpoint, ScrCatalogue.Action.SetDayStandpointEx, ScrCatalogue.Action.SetNightStandpointEx, ScrCatalogue.Action.ChangeArtNumber, ScrCatalogue.Action.ChangeScript];
@@ -360,11 +367,11 @@ public sealed class ScrAdmissionSet
     public static IReadOnlyList<int> NpcStateHostActions { get; } = [.. NpcStateActions.Where(a => a != ScrCatalogue.Action.ChangeArtNumber)];
 
     /// <summary>
-    /// The NPC state set (ARC-SCRIPT-1163, plan slice E5-a, ledger NS1–NS8): <see cref="S34"/> plus critter disband (22), set reaction (30), adjust reaction (31), set day standpoint (45), set night standpoint (46), change art number (59), change script (99) and the extended
+    /// The NPC state set (ARC-SCRIPT-1163, plan slice E5-a, ledger NS1–NS8): <see cref="S35"/> plus critter disband (22), set reaction (30), adjust reaction (31), set day standpoint (45), set night standpoint (46), change art number (59), change script (99) and the extended
     /// standpoints (140, 141). Disband, the reactions, the standpoints and change art number hand <see cref="ScrObjectStateRequest"/>s to the host in action order; change script (99) changes the slot of an attachment point of any object
     /// (<see cref="ScrEffects.SlotWrites"/>, or the run's own result when it names its own slot).
     /// </summary>
-    public static ScrAdmissionSet S35 { get; } = new("S35", S34.Conditions, S34.Actions.Concat(NpcStateActions), S34.ValueKinds, S34.FocusKinds, counterIndexWraps: true);
+    public static ScrAdmissionSet S36 { get; } = new("S36", S35.Conditions, S35.Actions.Concat(NpcStateActions), S35.ValueKinds, S35.FocusKinds, counterIndexWraps: true);
 
     /// <summary>The conditions of <see cref="S34"/> a host answers through <see cref="IScrStoryQueries"/>.</summary>
     public static IReadOnlySet<int> StoryQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.Daytime, ScrCatalogue.Condition.GlobalQuestState, ScrCatalogue.Condition.HasBlessing,
