@@ -84,9 +84,10 @@ public sealed partial class GameSessionOwner
     /// ARC-WORLD-1159 (0x559640 from a new game's start, ledger PO17): arms the Random Encounters chain when the host has tables and none is pending, 300 to 700 game minutes on. The original adds the first event when a
     /// new game starts; here it is the first event pass of a host that has the tables (a build's old save has none pending), so a session no host with the tables ever passed never draws. One revision when it armed.
     /// </summary>
-    private void ArmRandomEncounter(ISessionEventWorld world)
+    private void ArmRandomEncounter()
     {
-        if (world is not ISessionEncounterWorld { EncounterTables.Status: EncounterTablesStatus.Loaded } || _events.Any(SessionEventKinds.RandomEncounter)) return;
+        // Through the unwrapping lookup the handler uses: a pass that goes through the spell caster holds the host's world inside a wrapper.
+        if (PassWorldAs<ISessionEncounterWorld>() is not { EncounterTables.Status: EncounterTablesStatus.Loaded } || _events.Any(SessionEventKinds.RandomEncounter)) return;
         if (!ScheduleRandomEncounter(_clock.QueryClockSnapshot().GameTimestampMs) || _revision == long.MaxValue) return;
         Revise();
     }
@@ -140,7 +141,7 @@ public sealed partial class GameSessionOwner
             Notice(SessionEncounterOutcome.Stopped, EncounterOutcome.ChanceMissed, site.Place);
             return GameEventHandlerOutcome.Completed;
         }
-        if (roll.UsedRow is { } used) _encounterUses[used] = (_encounterUses.TryGetValue(used, out var before) ? before : 0) + 1;
+        if (roll.UsedRow is { } used) _encounterUses[used] = Math.Min((_encounterUses.TryGetValue(used, out var before) ? before : 0) + 1, SessionEncounterState.MaxCount);
         if (!roll.Fired)
         {
             Notice(SessionEncounterOutcome.Stopped, roll.Outcome, site.Place, roll.Table, roll.UsedRow ?? -1);

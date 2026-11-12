@@ -1511,7 +1511,7 @@ public sealed partial class GameSessionOwner : IDisposable
         _passSpellRuns = spellRuns;
         _passWorld = world;
         // ARC-WORLD-1159: a host with the encounter tables starts the Random Encounters chain with its first pass.
-        ArmRandomEncounter(world);
+        ArmRandomEncounter();
         // ARC-DEV-104: a pass that threw leaves no fold ticks behind for this one.
         _passFoldTicks = null;
         _passFirings = firings;

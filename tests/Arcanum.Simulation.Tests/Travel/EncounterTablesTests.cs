@@ -86,4 +86,33 @@ public sealed class EncounterTablesTests
         var badPower = EncounterTables.Parse(Minimal().Select(m => m.Number == 20001 ? (20001, "5000, 5000, 100, Mighty") : m).ToList());
         StringAssert.Contains(badPower.Detail, "20001");
     }
+
+    [TestMethod]
+    public void A_chart_is_sorted_by_radius_so_the_smallest_covering_circle_answers()
+    {
+        // The big circle is listed first; the original sorts each chart by its radius field (0x558D00) and the lookup (0x558F30) takes the first match.
+        var messages = new List<(int, string)>
+        {
+            (10000, "100, 100, 100, 5"), (10001, "100, 100, 10, 90"), (10002, "100, 100, 50, 40"),
+            (20000, "0, 0, 1, Easy"), (30000, "0, 0, 1, 2"), (49999, "0"),
+        };
+        var tables = EncounterTables.Parse(messages);
+        CollectionAssert.AreEqual(new long[] { 10, 50, 100 }, tables.Frequency.Select(r => r.Radius).ToArray());
+        Assert.AreEqual(90, EncounterRules.RegionValue(tables.Frequency, new(105, 100)));
+        Assert.AreEqual(40, EncounterRules.RegionValue(tables.Frequency, new(140, 100)));
+        Assert.AreEqual(5, EncounterRules.RegionValue(tables.Frequency, new(190, 100)));
+        Assert.IsNull(EncounterRules.RegionValue(tables.Frequency, new(300, 100)));
+    }
+
+    [TestMethod]
+    public void A_chart_row_is_read_by_its_line_number_and_a_missing_number_is_a_zero_row()
+    {
+        // 0x558B80 counts the messages of the span (two) and reads the consecutive numbers from the base: 10001 is missing (a row of zeros), 10002 is never read.
+        var tables = EncounterTables.Parse([(10000, "10, 10, 5, 7"), (10002, "1, 1, 1, 99"), (20000, "0, 0, 1, Easy"), (30000, "0, 0, 1, 2"), (49999, "0")]);
+        Assert.AreEqual(EncounterTablesStatus.Loaded, tables.Status);
+        CollectionAssert.AreEqual(new[] { new EncounterRegion(0, 0, 0, 0), new EncounterRegion(10, 10, 5, 7) }, tables.Frequency.ToArray());
+        // A power chart with a missing line has no power name to read: the loader fails and the encounters are off.
+        var failed = EncounterTables.Parse([(10000, "0, 0, 1, 5"), (20000, "0, 0, 1, Easy"), (20002, "0, 0, 1, Easy"), (30000, "0, 0, 1, 2"), (49999, "0")]);
+        Assert.AreEqual(EncounterTablesStatus.Disabled, failed.Status);
+    }
 }

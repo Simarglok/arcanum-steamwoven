@@ -40,6 +40,9 @@ public sealed class EncounterTables
     /// <summary>The encounters are off: nothing was loaded, so no roll happens (the original's loader disables them on any error).</summary>
     public static EncounterTables Disabled(string detail) => new(EncounterTablesStatus.Disabled, detail, [], [], [], []);
 
+    // What the message reader answers for a line number that has no message (0x4D43A0); it parses to zeros.
+    private const string MissingLineText = "Error: Missing line";
+
     private static readonly string[] SlotKeys = ["First:", "Second:", "Third:", "Fourth:", "Fifth:"];
     private static readonly string[] PowerNames = ["none", "easy", "average", "powerful"];
 
@@ -56,7 +59,9 @@ public sealed class EncounterTables
 
         IReadOnlyList<(int Number, string Text)> Range(int from, int span) => sorted.Where(m => m.Number >= from && m.Number < (long)from + span).ToArray();
 
-        // 0x558B80: the chart rows are the first <count> messages from the base on, x, y and radius then the value (a number, or a power name).
+        // 0x558B80: the count is the number of messages in the chart's span (0x558A40); the rows are read by the consecutive line numbers from the base (a missing number gives the loader's error text, which
+        // parses to zeros, and no power name), x, y and radius then the value (a number, or a power name); the rows are then sorted by their radius, smallest first (0x558D00 over the comparator 0x558D20), so a
+        // lookup (0x558F30) finds the smallest circle that covers a place. The sort of equal radii is not specified by the original (its quicksort), the project keeps the file order.
         EncounterRegion[]? Chart(int baseLine, bool named, out string detail)
         {
             detail = "";
@@ -65,19 +70,21 @@ public sealed class EncounterTables
             var regions = new EncounterRegion[lines.Count];
             for (var i = 0; i < lines.Count; i++)
             {
-                var cursor = new Cursor(lines[i].Text);
+                var line = baseLine + i;
+                var cursor = new Cursor(byNumber.TryGetValue(line, out var rowText) ? rowText : MissingLineText);
                 var x = cursor.ReadLong(); var y = cursor.ReadLong(); var radius = cursor.ReadLong();
                 int value;
                 if (named)
                 {
                     var name = cursor.ReadToken();
                     value = name is null ? -1 : Array.FindIndex(PowerNames, n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
-                    if (value < 0) { detail = $"line {lines[i].Number}: unknown power name"; return null; }
+                    if (value < 0) { detail = $"line {line}: unknown power name"; return null; }
                 }
                 else value = cursor.ReadInt();
                 regions[i] = new(x, y, radius, value);
             }
-            return regions;
+            // OrderBy is stable; the radius is a signed 32-bit field in the original.
+            return regions.OrderBy(r => unchecked((int)r.Radius)).ToArray();
         }
 
         var frequency = Chart(FrequencyBase, false, out var detail1);

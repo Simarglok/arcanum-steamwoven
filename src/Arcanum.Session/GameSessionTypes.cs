@@ -659,7 +659,6 @@ public sealed class GameSessionSnapshot
     /// Schema 88 adds the object-flags change (<c>obj_f_flags</c>) to each critter's written flags in the spells section (<see cref="SessionObjectFlags.ObjectSet"/>, ARC-DEV-358).
     /// Schema 89 adds the monster bodies of the Trait component (Polymorph, the body spells) to the spells section (<see cref="SessionSpellState.TraitArt"/>, ARC-MAGIC-040).
     /// Schema 90 adds the second critter flags and the blit flags change to each critter's written flags (<see cref="SessionObjectFlags.Critter2Set"/>, <see cref="SessionObjectFlags.BlitSet"/>, ARC-MAGIC-047).
-    /// Schema 92 adds the <see cref="Encounters"/> section: the use counts of the world-map random encounter rows (ARC-WORLD-1159).
     /// Schema 91 adds the <see cref="Generators"/> section: the monster generators' counter table, the creatures they made so far and the slot mark of each critter they made (ARC-WORLD-1157).
     /// Schema 92 adds each spell run's object list to the spells section (<see cref="SpellRun.ObjectList"/>, the original's run list +0x130, ARC-MAGIC-1234).
     /// Schema 93 adds the NPC flags change to each critter's written flags (<see cref="SessionObjectFlags.NpcSet"/>, ARC-MAGIC-1142).

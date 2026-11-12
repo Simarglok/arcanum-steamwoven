@@ -9,13 +9,20 @@ using static Arcanum.Session.Tests.SessionFixtures;
 
 namespace Arcanum.Session.Tests;
 
-/// <summary>ARC-WORLD-1159 (E2-c, schema 92, ledger PO15–PO19): the Random Encounters event in the session: the chain a host with tables arms, the roll at its firing, the critters it creates, the use counts and the save. Invented tables.</summary>
+/// <summary>ARC-WORLD-1159 (E2-c, schema 95, ledger PO15–PO19): the Random Encounters event in the session: the chain a host with tables arms, the roll at its firing, the critters it creates, the use counts and the save. Invented tables.</summary>
 [TestClass]
 public sealed class EncounterStateTests
 {
     private sealed class PlainWorld : ISessionEventWorld
     {
         public LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
+    }
+
+    // The spell caster's pass world holds the host's world inside a wrapper; the chain must arm through it too.
+    private sealed class WrappingWorld(ISessionEventWorld wrapped) : ISessionWrappingEventWorld
+    {
+        public ISessionEventWorld Wrapped => wrapped;
+        public LifeFacts? CritterFacts(SessionMapId map, string entity) => wrapped.CritterFacts(map, entity);
     }
 
     // Every step is open; the host's critters stand nowhere.
@@ -79,6 +86,16 @@ public sealed class EncounterStateTests
     }
 
     private const long MinDelay = 300 * 60_000, MaxDelay = 700 * 60_000;
+
+    [TestMethod]
+    public void The_chain_arms_through_a_wrapped_pass_world()
+    {
+        using var owner = Create();
+        Pass(owner, new WrappingWorld(HostWith()));
+        Assert.AreEqual(1, owner.QueryRandomEncounterDeadlines().Count, "a pass that goes through the spell caster's wrapper arms the chain");
+        Pass(owner, new WrappingWorld(new PlainWorld()));
+        Assert.AreEqual(1, owner.QueryRandomEncounterDeadlines().Count);
+    }
 
     [TestMethod]
     public void A_host_with_tables_arms_one_chain_event_and_a_plain_world_arms_none()
