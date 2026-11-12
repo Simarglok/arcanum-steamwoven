@@ -176,7 +176,7 @@ public partial class TerrainViewerApp
         {
             // The shown scene is gone: the failure is published as for any load (the session ends with the scene).
             EndMapStream(moved);
-            GD.Print("ARC-RENDER-024 stream publication failed " + Frontier(refused));
+            GD.Print("ARC-RENDER-024 stream publication failed " + FailureDetail(refused));
             PublishFailure(TerrainViewerMode.Area, new(TerrainViewerErrorCode.RenderFailure, Stage: TerrainViewerFailureStage.Upload));
             if (_nativeSmoke) { GD.Print("ARC-RENDER-007 frontier=AREA_STREAM_PUBLICATION"); GetTree().Quit(1); }
             return;
@@ -216,6 +216,20 @@ public partial class TerrainViewerApp
     private static string Frontier(Exception exception) => exception is AreaException refused ? $"{refused.Issue.Stage}/{refused.Issue.Code}"
         : exception.Message.StartsWith("AREA_", StringComparison.Ordinal) && exception.Message.All(c => char.IsAsciiLetterOrDigit(c) || c == '_') ? exception.Message
         : exception.GetType().Name;
+
+    /// <summary>ARC-RENDER-1355: a failed publication's log line: the frontier, the exception's type and message, and its first stack
+    /// frames (a bare type name hid which lookup failed).</summary>
+    internal static string FailureDetail(Exception exception, int frames = 6)
+    {
+        var top = (exception.StackTrace ?? string.Empty).Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Take(frames);
+        return Frontier(exception) + " | " + exception.GetType().Name + ": " + exception.Message.ReplaceLineEndings(" ") + " | at " + string.Join(" <- ", top.Select(f => f.StartsWith("at ", StringComparison.Ordinal) ? f[3..] : f));
+    }
+
+    private static AreaStepCell? EnvCell(string name)
+    {
+        var parts = (System.Environment.GetEnvironmentVariable(name) ?? string.Empty).Split(',', StringSplitOptions.TrimEntries);
+        return parts.Length == 2 && long.TryParse(parts[0], out var x) && long.TryParse(parts[1], out var y) ? new AreaStepCell(x, y) : null;
+    }
 
     private const int StreamSmokeMoves = 3;
     // Every window publication of this run (smoke report): the centres, the actor's cell, the walk and the session.
@@ -257,25 +271,58 @@ public partial class TerrainViewerApp
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest(); _mapStreamSmokeActive = true;
             var carried = _areaSession;
+            // ARC-RENDER-1355 (opt-in ARC_AREA_STREAM_JOIN=script): the speaker of that script joins the party as the opening's Virgil (1324) does, while a conversation with it is open.
+            if (int.TryParse(System.Environment.GetEnvironmentVariable("ARC_AREA_STREAM_JOIN"), out var joinScript) && carried is { } party)
+            {
+                var template = _companionTemplates.FirstOrDefault(t => t.Speaker.ScriptId == joinScript && t.Home.RuntimeMap == CurrentAreaMap);
+                Require(template is not null && _conversationHost is { PartyWired: true }, $"JOIN_NO_TEMPLATE script={joinScript} templates={_companionTemplates.Count}");
+                BeginConversation(template!.Speaker);
+                AreaSmokeFramesUntilConversation(); Require(ConversationOpen, "JOIN_NO_CONVERSATION " + _conversationNotice);
+                Require(party.ForceJoinParty(party.Version, template.Entity).Disposition != GameSessionDisposition.Rejected, "JOIN_REJECTED");
+                for (var close = 0; close < 4 && ConversationOpen; close++) _conversationPanel!.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+                Require(!ConversationOpen && _areaCompanions?.Companions.SingleOrDefault(c => c.Entity == template.Entity) is { Standing: CompanionStanding.Following }, "JOIN_NOT_FOLLOWING");
+            }
+            // ARC-RENDER-1355 (opt-in ARC_AREA_STREAM_LANDING=x,y): the walk starts from a world-map landing on that cell, as a report's did.
+            if (EnvCell("ARC_AREA_STREAM_LANDING") is { } landing)
+            {
+                var before = _readyArea;
+                // ARC-RENDER-1355 (opt-in ARC_AREA_STREAM_HOURS=n): the journey's game time, an hour per sector step, passes before the landing (a report's was 42 hours).
+                if (long.TryParse(System.Environment.GetEnvironmentVariable("ARC_AREA_STREAM_HOURS"), out var hours) && hours > 0)
+                    JumpWorldMapClock(hours * Arcanum.Simulation.Travel.WorldJourney.MsPerSector);
+                for (var i = 0; i < 1200 && _worldMapData is null; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); AdoptWorldMapData(); }
+                Require(_worldMapData is { Status: AreaWorldMapDataStatus.Ready, Data: not null }, "LANDING_NO_WORLD_MAP_DATA");
+                LandWorldMap(new((int)landing.X, (int)landing.Y), "stream smoke landing");
+                // The frames are the engine's own while the scene is gone (no smoke frame observes a session that is not there).
+                for (var i = 0; i < 4000 && (_readyArea is null || ReferenceEquals(_readyArea, before) || MapStreamInFlight || _worldActor.Session is not AreaGridSession); i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                Require(!ReferenceEquals(_readyArea, before) && _mapWindowCentre is not null, "LANDING_NOT_LOADED");
+            }
             // ARC-DEV-119 (MIG9 S5c, opt-in: ARC_AREA_STREAM_AI=1): the AI runs through the window moves, and the one host built for the map must still be the shown map's
             // after them, rebound once per move. The NPCs start calm (the main map's residency wakes those near the walk).
-            observeAi = System.Environment.GetEnvironmentVariable("ARC_AREA_STREAM_AI") == "1" && carried is not null && !_aiForSmoke;
+            // ARC-RENDER-1355: ARC_AREA_STREAM_AI=live runs the AI as in play (the NPCs not calmed, so they walk and are drawn as AI movers across a window move).
+            var aiMode = System.Environment.GetEnvironmentVariable("ARC_AREA_STREAM_AI"); var aiLive = aiMode == "live";
+            observeAi = (aiMode == "1" || aiLive) && carried is not null && !_aiForSmoke;
             AreaAiHost? aiHost = null; int aiBuilds = 0, aiRebinds = 0;
-            var visited = new HashSet<AreaSectorCoordinate> { _mapWindowCentre.Value };
+            var visited = new HashSet<AreaSectorCoordinate> { _mapWindowCentre!.Value };
             var walks = new List<object>();
             {
                 var start = (AreaGridSession)_worldActor.Session!;
-                AreaSmokePlace(new AreaMapRuntime(_readyArea!.Snapshot, start.Snapshot, start.Chart), start.State.CommittedCell);
+                // ARC-RENDER-1355 (opt-in ARC_AREA_STREAM_START=x,y): the first walk starts on that world cell (a report's walk).
+                var begin = EnvCell("ARC_AREA_STREAM_START") is { } placed ? start.Chart.ToChart(placed) : start.State.CommittedCell;
+                Require(EnvCell("ARC_AREA_STREAM_START") is null || start.Chart.Contains(begin), "START_OUTSIDE_WINDOW");
+                AreaSmokePlace(new AreaMapRuntime(_readyArea!.Snapshot, start.Snapshot, start.Chart), begin);
             }
             _mapStreamLog.Clear();
             if (observeAi)
             {
-                CalmNpcsForSmoke(carried!, carried!.QueryMapInventory(new(CurrentAreaMap))?.Holders.Where(h => h.Kind == SessionHolderKind.Npc).Select(h => h.Entity) ?? []);
+                if (!aiLive) CalmNpcsForSmoke(carried!, carried!.QueryMapInventory(new(CurrentAreaMap))?.Holders.Where(h => h.Kind == SessionHolderKind.Npc).Select(h => h.Entity) ?? []);
                 _aiForSmoke = true; _aiHostBuilds = _aiHostRebinds = 0;
                 AreaSmokeFrame();
                 aiHost = AreaAiHostNow();
-                Require(aiHost is not null && _aiHostBuilds == 1, $"AI_HOST_NOT_BUILT builds={_aiHostBuilds} hero={carried.QueryHero() is not null} combat={_combatHost is not null} inventory={_inventoryHost is not null} grid={_worldActor.Session is AreaGridSession}");
+                Require(aiHost is not null && _aiHostBuilds == 1, $"AI_HOST_NOT_BUILT builds={_aiHostBuilds} hero={carried!.QueryHero() is not null} combat={_combatHost is not null} inventory={_inventoryHost is not null} grid={_worldActor.Session is AreaGridSession}");
             }
+            // ARC-RENDER-1355 (opt-in ARC_AREA_STREAM_SETTLE=frames, with the live AI): the NPCs walk about before the first walk starts, as they do in play.
+            if (int.TryParse(System.Environment.GetEnvironmentVariable("ARC_AREA_STREAM_SETTLE"), out var settle))
+                for (var i = 0; i < settle; i++) { AreaSmokeFrame(); if (i % 4 == 0) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
             for (var walk = 0; walk < 6 && _mapStreamLog.Count < StreamSmokeMoves; walk++)
             {
                 var session = (AreaGridSession)_worldActor.Session!; var chart = session.Chart; var centre = _mapWindowCentre!.Value;
@@ -300,7 +347,9 @@ public partial class TerrainViewerApp
                         seen.Add(next, cell); queue.Enqueue(next);
                     }
                 }
-                CellCoord? goal = new[] { false, true }.SelectMany(v => new[] { 40, 24, 8 }.Select(d => (v, d)))
+                // ARC-RENDER-1355 (opt-in ARC_AREA_STREAM_GOAL=x,y): the first walk goes to that world cell when the window reaches it.
+                CellCoord? goal = walk == 0 && EnvCell("ARC_AREA_STREAM_GOAL") is { } named && chart.Contains(chart.ToChart(named)) && seen.ContainsKey(chart.ToChart(named))
+                    ? chart.ToChart(named) : new[] { false, true }.SelectMany(v => new[] { 40, 24, 8 }.Select(d => (v, d)))
                     .Where(best.ContainsKey).Select(k => (CellCoord?)best[k]).FirstOrDefault();
                 Require(goal is not null, $"NO_NEW_SECTOR from {chart.ToWorld(origin)} reached {seen.Count}");
                 var goalWorld = chart.ToWorld(goal!.Value);
@@ -356,6 +405,8 @@ public partial class TerrainViewerApp
                 Require(carried is null || ReferenceEquals(session, carried), "SESSION_NOT_CARRIED");
             }
             Require(_mapStreamLog.Count >= StreamSmokeMoves, "MOVES");
+            // ARC-RENDER-1355: no window move left a body of the window before among the drawn ones (its frame is not in the new repository).
+            Require(_staleMovingDropped == 0, $"STALE_MOVING_BODIES {_staleMovingDropped}");
             Require(_mapStreamLog[0].Walking, "FIRST_MOVE_NOT_MID_WALK");
             Require(carried is null || ReferenceEquals(_areaSession, carried), "SESSION_NOT_CARRIED");
             if (observeAi)
