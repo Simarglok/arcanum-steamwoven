@@ -116,6 +116,7 @@ public partial class TerrainViewerApp
                 {
                     SkillBarButton.Prowling => ToggleProwlFromBar(session),
                     SkillBarButton.Repair => OpenRepair(),
+                    SkillBarButton.DisarmTraps => ArmDisarmTraps(),
                     var other => $"{other}: the skill bar's targeting is not ready",
                 };
                 break;

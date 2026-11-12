@@ -4,6 +4,7 @@ Status: **Research with options and a recommendation**, work item ARC-RES-145 (2
 later task. Read on 2026-11-12 in the 1.0.7.4 executable (`VERSION:1.0.7.4`) from the Ghidra export (F1, one reader; no emulator, no patching) and
 in the player's installed archives (`arcanum1.dat` to `Arcanum4.dat`, the module archive and its patch). No original bytes, decompiled text, art or
 GrandFix files are in git; addresses and behaviour are prose.
+**Part 1 is implemented by ARC-MAGIC-1219** (issue #1219: L1 fire low attack, L2, L3, L5, L6 and the corrections of the host and visual contracts; the monster read measured at 505 frames and 20.3 MB RGBA for the fire elemental, its limit is now 32 MiB; the smoke `trait-body` casts the four body spells in the data's END order and with the Trait restore first). Part 2 (the census of L4) is a separate task.
 Owner answers of 2026-11-12 are in section 6; the two reads they asked for (the palette-absent draw, the GrandFix files) are in PR5 and section 5.
 
 Requirements (reference only, no coverage row changes): [FR-MAGIC-007](../requirements/combat-magic-tech.md#fr-magic-007),
@@ -197,7 +198,7 @@ original's executable and archives, and need nothing from GrandFix.
 
 ## 7. Proposed tasks (codes from the coordinator)
 
-1. **Monster body: weapon part, repair, palette** (L2, L1 fire low attack, L6, L5, L3): the loader changes, the `trait-body` smoke with a combat-mode attack and an elemental
+1. **Monster body: weapon part, repair, palette** (done in ARC-MAGIC-1219; L2, L1 fire low attack, L6, L5, L3): the loader changes, the `trait-body` smoke with a combat-mode attack and an elemental
    spell (Body of Air, Fire, Water), tests on the names and the repair, a real-data test over the 32 species. Requirement rows: FR-MAGIC-007 coverage note; graphics rule: one labelled composite (before: stand pose attack, after: attack; elementals before and after).
 2. **Census of perma-polymorph NPCs in map data** (L4): **done, ARC-MAGIC-1220: 0 hits, nothing to build** (section 3, "Census of the map instances").
 3. **Corrections to the existing docs** (folded into task 1's PR): the host contract and the visual contract say species 28 lacks "the stand or walk ART" and that a monster has no armed pose; both are replaced by

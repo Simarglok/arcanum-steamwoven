@@ -55,6 +55,17 @@ public partial class TerrainViewerApp
                 "the number row reached the hotkey slot with the logbook open: " + _hotkeyNotice);
             steps.Add("number row picks a slot over the logbook");
 
+            // ARC-INPUT-1124 (main loop 0x401705, key up): the press alone opens nothing over the logbook; the release opens the menu.
+            InputWorld(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = true });
+            await Frames();
+            Require(!MainMenuOpen && LogbookOpen, "an Escape press alone opened the menu over the logbook: " + State());
+            InputWorld(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = false });
+            await Frames();
+            Require(MainMenuOpen && LogbookOpen, "the Escape release opened the menu over the logbook: " + State());
+            await Press(Key.Escape);
+            Require(!MainMenuOpen && LogbookOpen, "Escape pressed and released closed the menu and the release did not reopen it: " + State());
+            steps.Add("Escape acts on the release");
+
             // Escape opens the menu over the logbook, which stays; Continue returns to it (0x541180, 0x5412D0).
             await Press(Key.Escape);
             Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.InPlay && LogbookOpen && StackText() == "Game>Logbook" && WindowPanelsMatchStack,
