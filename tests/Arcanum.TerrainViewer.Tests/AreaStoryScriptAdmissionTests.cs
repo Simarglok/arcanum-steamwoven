@@ -49,7 +49,7 @@ public sealed class AreaStoryScriptAdmissionTests
         Console.WriteLine($"installed scripts with a story or time command {withStory}; admitted whole: " + string.Join(", ", counts.Select(c => $"{c.Key} {c.Value}")));
         Assert.AreEqual(0, counts["S33"], "S33 refuses every one of them by construction");
         // Ledger SQ13: 96 installed scripts use one of the 19 commands; S34 admits 52 of them whole (the others also hold a command of the other planned slices, which the census ranks), the hosts' sets
-        // 23 (use), 35 (placed), 24 (heartbeat), 47 (dying) and 26 (talk).
-        Assert.AreEqual((96, 52, 23, 35, 24, 47, 26), (withStory, counts["S34"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"]));
+        // 23 (use), 35 (placed), 24 (heartbeat), 47 (dying) and 26 (talk); ARC-SCRIPT-1163 (S36: the use and heartbeat sets also hold the NPC state actions) moves placed to 36, heartbeat to 25 and dying to 51.
+        Assert.AreEqual((96, 52, 23, 36, 25, 51, 26), (withStory, counts["S34"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"]));
     }
 }
