@@ -132,6 +132,7 @@ public partial class TerrainViewerApp
     /// </summary>
     private void ItemAimInventoryPick(ItemAiming aim, string item)
     {
+        if (HeroLyingDown || AnotherHasTheTurn || AreaTransferPending) { ItemAimNotice("the hero cannot act now"); return; }
         if (SpellCasterNow() is not { } caster || aim.Spell is not { } spell) { ItemAimNotice("not a valid target"); return; }
         var pick = caster.PickTarget(SessionSpellCaster.Hero, spell, aim.Mask, item, null);
         GD.Print($"ARC-MAGIC-1128 inventory-pick item-cursor={aim.Item} item={item} passes={pick.Test.Passes} reason=0x{pick.Test.Reason:X}");

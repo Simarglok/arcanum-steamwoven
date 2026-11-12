@@ -606,6 +606,8 @@ public partial class TerrainViewerApp
         if (inventory && !OpenInventoryForSpell()) { RefreshAreaStatus(); return; }
         var activation = SpellUiRules.Activate(active, record.Data.Enabled, begin, record.Resist.Aggressive, Godot.Input.IsKeyPressed(Key.Alt),
             Godot.Input.IsKeyPressed(Key.Shift), owner.QueryActionPointCheck(SessionCombatant.Hero, TurnBasedRules.CastSpellCost));
+        // ARC-MAGIC-1128: the quick cast at the hero (Shift) would skip the pick's area test, which refuses the hero for an inventory spell (it is no item in an inventory): the cursor opens instead.
+        if (inventory && activation.Kind == SpellActivationKind.CastAtPlayer) activation = new(SpellActivationKind.Target, activation.Mask);
         GD.Print($"ARC-MAGIC-015 activate spell={spell} kind={activation.Kind} mask=0x{activation.Mask:X}" + (item is null ? "" : " item=" + item));
         switch (activation.Kind)
         {
@@ -765,6 +767,8 @@ public partial class TerrainViewerApp
     /// </summary>
     private void InventoryItemPicked(string item)
     {
+        // The game view's guards of a press (WorldRouteClick): a hero lying down, another participant's turn in a round, a map transfer under way.
+        if (HeroLyingDown || AnotherHasTheTurn || AreaTransferPending) { _spellNotice = "the hero cannot act now"; RefreshAreaStatus(); return; }
         if (_itemAiming is { } aim && TargetModeOpen(InterfaceMode.ItemTarget) && SpellUiRules.TargetsInventory(aim.Mask)) { ItemAimInventoryPick(aim, item); return; }
         if (_spellTargeting is not { } targeting || !SpellUiRules.TargetsInventory(targeting.Mask) || SpellCasterNow() is not { } caster) return;
         var pick = caster.PickTarget(SessionSpellCaster.Hero, targeting.Spell, targeting.Mask, item, null);
