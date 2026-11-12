@@ -60,8 +60,7 @@ public partial class AreaGameBarPanel : CanvasLayer
     internal (Texture2D? Image, Rect2 Rect) HoverPortraitForSelfTest => (_hoverImage.Visible ? _hoverImage.Texture : null, _hoverImage.GetGlobalRect());
 
     /// <summary>The whole factor at which the original's 800 × 600 screen fits a window of <paramref name="size"/> (at least 1).</summary>
-    public static int ScreenFactor(Vector2 size) =>
-        Math.Max(1, (int)Math.Floor(Math.Min(size.X / AreaGameBarLayout.ScreenWidth, size.Y / AreaGameBarLayout.ScreenHeight)));
+    public static int ScreenFactor(Vector2 size) => AreaUiScale.ScreenFactor(size.X, size.Y);
 
     /// <summary>
     /// ARC-UI-127: the window y of a window of <paramref name="heightUnits"/> original pixels that sits between the strips. In the original's

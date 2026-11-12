@@ -31,7 +31,7 @@ public readonly record struct ViewerAudioResult(ViewerAudioStatus Status, Viewer
 }
 
 /// <summary>
-/// ARC-UI-040: the viewer's sound output (docs/audio/viewer-audio.md). It owns three engine buses under Master, named after
+/// ARC-UI-040: the viewer's sound output (docs/audio/viewer-audio.md). It owns three engine buses under Master (plus 24 panning buses beneath them, all built at start), named after
 /// the original's channels, and up to <see cref="MaxVoices"/> stream players. A sound is an admitted payload
 /// (<see cref="SoundCatalog.OpenPayload"/>) decoded by the engine (WAV PCM, MP3) at a 0–127 volume on a channel; the volume
 /// arithmetic is <see cref="AudioVolumeRules"/>. Engine thread only. It never touches game state: a failure is a status.
@@ -56,14 +56,30 @@ public sealed class ViewerAudioBackend : IDisposable
     {
         _parent = parent;
         Driver = AudioServer.GetDriverName();
-        foreach (var channel in Enum.GetValues<AudioChannel>())
+        // ARC-BUG-1396: the engine's AddBus, SetBusName and SetBusSend do not take the audio driver lock (RemoveBus and SetBusCount
+        // do), so a bus added while the CoreAudio thread mixes races its bus list and bus map; a packaged run crashed there (null
+        // channel buffer in the mixer). Every bus the backend will ever route to is therefore built here, under the lock, once.
+        AudioServer.Lock();
+        try
         {
-            var name = BusName(channel);
-            if (AudioServer.GetBusIndex(name) >= 0) continue;
-            var index = AudioServer.BusCount;
-            AudioServer.AddBus(index); AudioServer.SetBusName(index, name); AudioServer.SetBusSend(index, "Master");
-            _createdBuses.Add(name);
+            foreach (var channel in Enum.GetValues<AudioChannel>())
+            {
+                var name = BusName(channel);
+                if (AudioServer.GetBusIndex(name) < 0) AddBus(name, "Master");
+                for (var step = -PanSteps; step <= PanSteps; step++)
+                    if (step != 0 && AudioServer.GetBusIndex(PanBusName(channel, step)) < 0)
+                        AddBus(PanBusName(channel, step), name, new AudioEffectPanner { Pan = (float)step / PanSteps });
+            }
         }
+        finally { AudioServer.Unlock(); }
+    }
+
+    private void AddBus(string name, string send, AudioEffect? effect = null)
+    {
+        var index = AudioServer.BusCount;
+        AudioServer.AddBus(index); AudioServer.SetBusName(index, name); AudioServer.SetBusSend(index, send);
+        if (effect is not null) AudioServer.AddBusEffect(index, effect);
+        _createdBuses.Add(name);
     }
 
     /// <summary>The engine's audio driver; "Dummy" means no output device (<see cref="Audible"/> false).</summary>
@@ -88,7 +104,7 @@ public sealed class ViewerAudioBackend : IDisposable
 
     /// <summary>Starts <paramref name="payload"/> on <paramref name="channel"/> at <paramref name="volume"/> (0–127, mapped
     /// linearly to amplitude). A looped WAV repeats its whole sample range, a looped MP3 the whole file. <paramref name="pan"/>
-    /// (−1 left … 1 right) routes the voice through one of nine panning buses of the channel (steps of 0.25, a Steamwoven
+    /// (−1 left … 1 right) routes the voice through one of nine panning buses of the channel, all built at start (steps of 0.25, a Steamwoven
     /// choice; the original's mixer pans continuously).</summary>
     public ViewerAudioResult Play(SoundPayload payload, AudioChannel channel, int volume, bool loop = false, double pan = 0)
     {
@@ -136,18 +152,17 @@ public sealed class ViewerAudioBackend : IDisposable
 
     public const int PanSteps = 4;
 
-    /// <summary>The bus for a pan: the channel bus at the centre, else a child bus with a panner at the nearest quarter.</summary>
-    private string PanBus(AudioChannel channel, double pan)
+    private static string PanBusName(AudioChannel channel, int step) => $"{BusName(channel)} pan {step:+0;-0}";
+
+    /// <summary>The bus for a pan: the channel bus at the centre, else a child bus with a panner at the nearest quarter. The pan
+    /// buses exist from the constructor on; none is added while sounds play (ARC-BUG-1396), and a missing one (not expected) falls
+    /// back to the channel bus.</summary>
+    private static string PanBus(AudioChannel channel, double pan)
     {
         var step = (int)Math.Round(Math.Clamp(double.IsFinite(pan) ? pan : 0, -1, 1) * PanSteps);
         if (step == 0) return BusName(channel);
-        var name = $"{BusName(channel)} pan {step:+0;-0}";
-        if (AudioServer.GetBusIndex(name) >= 0) return name;
-        var index = AudioServer.BusCount;
-        AudioServer.AddBus(index); AudioServer.SetBusName(index, name); AudioServer.SetBusSend(index, BusName(channel));
-        AudioServer.AddBusEffect(index, new AudioEffectPanner { Pan = (float)step / PanSteps });
-        _createdBuses.Add(name);
-        return name;
+        var name = PanBusName(channel, step);
+        return AudioServer.GetBusIndex(name) >= 0 ? name : BusName(channel);
     }
 
     /// <summary>Fades the handle's sound to silence over <paramref name="milliseconds"/> and releases it; a stale handle is a
