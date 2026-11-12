@@ -917,6 +917,13 @@ Limits, each checked and settled:
   `ddraw.dll`, WON `mm_won.dll`, `SierraPt.dll`, `msiexec.exe`) get the PE summary only, no decompilation: their behaviour is the
   vendors', and the game's calls into them are in `data/imports.tsv`. `RemoveProtos.exe` (a Troika tool by its name and strings, which mention the prototype folder) is the one original program besides the game; a Ghidra project of it is a task of its own if one needs it.
 
+## Movie decoder (ARC-RENDER-1170)
+
+The original's Bink movies play through an external `ffmpeg` (owner decision 2026-11-12, [Bink movies](../research/bink-movies.md) option O1): nothing of FFmpeg is linked, shipped or committed, and no decoded frame or sound is written to disk. The viewer finds `ffmpeg` and `ffprobe` through `ARC_FFMPEG` (the path of the `ffmpeg` program, its `ffprobe` is looked for beside it), then the search path, then `/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin`, `/snap/bin`. Install it with `brew install ffmpeg` on a Mac. Without it the main menu hides View Intro with the reason, a new game starts without its two movies and the viewer says so in one log line; nothing waits and nothing blacks out.
+
+- **Where movies play:** the main menu's View Intro and a new game's start (movies 1 and 7); not the start-up movie 8 and the logos (owner: not needed in the viewer). A key press ends a movie. Automated runs (smokes, self-tests) play none unless a check turns them on.
+- **Checks:** the player's unit tests (`MoviePlaybackTests`, `FfmpegMovieSourceTests`; the ffmpeg ones generate a pattern file with ffmpeg itself and report `Inconclusive`, not a pass, without it), the opt-in real-data tests (`DAT_ROOT`, category `RealData`: `AreaMovieTableTests` finds the eight files, `FfmpegMovieSourceTests` opens them with the header numbers of the research), and the smoke stage `movies` (`./arcanum smoke pr --stages movies`, with `--hero` by default): it plays two generated test movies on the movie screen and checks the covering, the frozen clocks, the key skip, the finish and the failures that must not hang; it prints `NONE` without ffmpeg. `--env ARC_AREA_MOVIE_CAPTURE=FOLDER` saves a `before.png` and an `after.png` of the installed movie 8 for a graphics report (never committed).
+
 ## Function oracle
 
 ARC-DEV-007, [`tools/original-oracle`](../../tools/original-oracle/README.md), method in the

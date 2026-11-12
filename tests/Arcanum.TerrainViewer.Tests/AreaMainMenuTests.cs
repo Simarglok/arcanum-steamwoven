@@ -12,6 +12,26 @@ public sealed class AreaMainMenuTests
 
     private static string[] Labels(AreaMainMenu menu) => [.. menu.Shown.Select(button => menu.Texts.Text(button.Message))];
 
+    /// <summary>ARC-RENDER-1170: View Intro (message 53, window 5) is shown and asks the host to play the intro only when the host found a decoder and the
+    /// movie table (<see cref="AreaMainMenu.IntroRefusal"/> null); the typed hotkey letter does the same; it hides again with a reason when it cannot.</summary>
+    [TestMethod]
+    public void View_Intro_is_shown_and_asks_for_the_intro_only_when_the_host_can_play_movies()
+    {
+        var menu = Menu();
+        menu.IntroRefusal = null;
+        menu.Activate(0);
+        Assert.AreEqual(AreaMenuWindow.SinglePlayer, menu.Window);
+        CollectionAssert.AreEqual(new[] { "New Game", "Load Game", "Last Save", "View Intro", "Cancel" }, Labels(menu));
+        Assert.AreEqual(0, menu.HiddenNotes.Count);
+        var command = menu.Activate(3);
+        Assert.AreEqual(AreaMenuCommandKind.ViewIntro, command.Kind);
+        Assert.AreEqual(AreaMenuWindow.SinglePlayer, menu.Window, "the menu stays on its window; the host shows it again after the movies");
+        menu.IntroRefusal = "movies need ffmpeg (install it or set ARC_FFMPEG)";
+        CollectionAssert.AreEqual(new[] { "New Game", "Load Game", "Last Save", "Cancel" }, Labels(menu));
+        CollectionAssert.AreEqual(new[] { "View Intro: movies need ffmpeg (install it or set ARC_FFMPEG)" }, menu.HiddenNotes.ToArray());
+        Assert.AreEqual(AreaMenuCommandKind.None, menu.Activate(3).Kind, "with the intro hidden the fourth shown button is Cancel, not the intro");
+    }
+
     [TestMethod]
     public void The_windows_list_the_originals_buttons_in_order_and_hide_what_is_not_built()
     {

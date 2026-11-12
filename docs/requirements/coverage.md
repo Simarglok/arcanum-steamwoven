@@ -28,10 +28,10 @@ This table is the **status of the requirements**. A requirement's description, t
 | <a id="items-and-economy"></a>[Items and economy](coverage/items-economy.md) | 0 | 18 | 0 | 1 | 0 | 19 |
 | <a id="dialogue-story-social-systems-and-ai"></a>[Dialogs, story, social systems and AI](coverage/story-social-ai.md) | 0 | 18 | 1 | 2 | 0 | 21 |
 | <a id="navigation-travel-and-runtime"></a>[Navigation, travel and runtime](coverage/world-travel-runtime.md) | 0 | 15 | 0 | 0 | 1 | 16 |
-| <a id="ui-media-and-lifecycle"></a>[UI, media and lifecycle](coverage/ui-media-lifecycle.md) | 0 | 15 | 1 | 0 | 0 | 16 |
+| <a id="ui-media-and-lifecycle"></a>[UI, media and lifecycle](coverage/ui-media-lifecycle.md) | 0 | 16 | 0 | 0 | 0 | 16 |
 | <a id="data-compatibility-and-modern-goals"></a>[Data, compatibility and modern goals](coverage/content-product.md) | 0 | 13 | 1 | 0 | 1 | 15 |
 | <a id="network-play"></a>[Network play](coverage/network.md) | 0 | 0 | 0 | 8 | 0 | 8 |
-| **Total** | **4** | **169** | **4** | **11** | **3** | **191** |
+| **Total** | **4** | **170** | **3** | **11** | **3** | **191** |
 
 This is the number of requirements by status, not a percentage of game completeness: the requirements differ in size.
 
