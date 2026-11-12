@@ -622,7 +622,7 @@ def _wait_turn(fd: int, ticket: dict[str, Any], sleep: Callable[[float], None]) 
                 say(f"queued ticket={ticket['seq']} kind={ticket['kind']} ahead={position} waiting-for=load below {limit:g} "
                     f"(now {_load()}; ./arcanum queue --set-max-load off removes the guard){suffix}")
             else:  # ARC-DEV-1344: its turn has come, but the queue is paused
-                say(f"queued ticket={ticket['seq']} kind={ticket['kind']} ahead={position} waiting-for=resume{suffix}")
+                say(f"queued ticket={ticket['seq']} kind={ticket['kind']} ahead={position} waiting-for=resume{suffix.replace(' paused', '', 1)}")
             last = state
         sleep(POLL_SECONDS)
 

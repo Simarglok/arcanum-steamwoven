@@ -95,8 +95,17 @@ struct QueueFolder {
         return json
     }
 
-    var shortLanes: Int? { (settings()["shortLanes"] as? NSNumber).flatMap { 0...8 ~= $0.intValue ? $0.intValue : nil } }
-    var maxLoad: Double? { (settings()["maxLoad"] as? NSNumber).flatMap { $0.doubleValue > 0 ? $0.doubleValue : nil } }
+    // read as strictly as the queue reads them (run_queue._whole_lanes, max_load): a whole number 0...8, a finite number above 0
+    var shortLanes: Int? {
+        guard let number = settings()["shortLanes"] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+              !CFNumberIsFloatType(number), 0...8 ~= number.intValue else { return nil }
+        return number.intValue
+    }
+    var maxLoad: Double? {
+        guard let number = settings()["maxLoad"] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+              number.doubleValue > 0, number.doubleValue.isFinite else { return nil }
+        return number.doubleValue
+    }
 
     /// Merge changes into settings.json the way the queue does: under the queue lock, written aside and renamed (nil removes a key).
     func change(_ changes: [String: Any?]) {
@@ -359,7 +368,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         sub.addItem(header("Short Godot lanes (a heavy run and an export come on top)"))
         let choices: [(String, Int)] = [("1 Godot run at a time", 0), ("1 short + 1 heavy", 1), ("2 short + 1 heavy", 2),
                                         ("3 short + 1 heavy", 3), ("4 short + 1 heavy", 4)]
-        for (label, value) in choices {
+        var shown = choices
+        if let current = current, !choices.contains(where: { $0.1 == current }) { shown.append(("\(current) short + 1 heavy", current)) }
+        for (label, value) in shown {
             let entry = NSMenuItem(title: label + (value == defaultShortLanes ? "  (default)" : ""), action: #selector(setLanes(_:)), keyEquivalent: "")
             entry.target = self
             entry.tag = value
@@ -503,8 +514,16 @@ while let flag = arguments.first {
     case "--set-lanes", "--set-max-load":  // the same writes as the menu's submenus, for the self-check: N|default, X|off
         let value = arguments.isEmpty ? "" : arguments.removeFirst()
         if flag == "--set-lanes" {
+            guard value == "default" || Int(value).map({ 0...8 ~= $0 }) == true else {
+                FileHandle.standardError.write("--set-lanes takes default or a whole number from 0 to 8\n".data(using: .utf8)!)
+                exit(2)
+            }
             QueueFolder(url: queueURL).change(["shortLanes": Int(value)])
         } else {
+            guard value == "off" || Double(value).map({ $0 > 0 && $0.isFinite }) == true else {
+                FileHandle.standardError.write("--set-max-load takes off or a positive number\n".data(using: .utf8)!)
+                exit(2)
+            }
             QueueFolder(url: queueURL).change(["maxLoad": Double(value)])
         }
         exit(0)
