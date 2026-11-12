@@ -771,9 +771,8 @@ internal sealed class ScrInterpreter
             {
                 // SQ10 (case 63 at 0x448B57): the first object of operand 0, then the quest experience level of operand 1 (0x4C53C0 looks up the experience of a level, as the quest state's completion
                 // does with the quest's own level), given to a PC (0x45F110). An absent object asks for nothing.
-                var level = 0;
                 var who = OptionalObject(a, 0);
-                level = Get(a, 1);
+                var level = Get(a, 1);
                 if (who is { } pc) _states.Add(new(ScrStateKind.QuestExperience, pc, level));
                 return (Step.Next, 0);
             }
@@ -1160,9 +1159,11 @@ internal sealed class ScrInterpreter
 
     private bool KnownRumor(ScrClause c, int line)
     {
-        var obj = Object(c, 0, line);
+        // A null handle gives false (0x4C58D0: the type test of 0x406CA0 fails), so an absent object is not a missing-object stop.
+        var obj = OptionalObject(c, 0);
         var rumor = Get(c, 1);
-        return (_shared.Learned.Contains(rumor) && _host.IsPc(obj)) || (Storyline.RumorKnown(obj, rumor) ?? throw new MissingObjectStop(line));
+        if (obj is not { } who) return false;
+        return (_shared.Learned.Contains(rumor) && _host.IsPc(who)) || (Storyline.RumorKnown(who, rumor) ?? throw new MissingObjectStop(line));
     }
 
     private IScrSpellQueries Spells => _host as IScrSpellQueries

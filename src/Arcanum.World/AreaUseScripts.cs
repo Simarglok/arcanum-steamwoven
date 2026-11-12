@@ -1130,6 +1130,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     private bool Apply(ScrEffects effects, Func<ScrWriteback, bool> writeSlot)
     {
         if (effects.DestroyTrapObject is not null) return false;
+        // The effect rule of every blessing or curse the run adds is known before anything applies (a missing rule refuses the run whole).
+        if (!AreaScriptStory.BlessingRulesResolve(_session, effects, IsPc, BlessingEffects)) return false;
         foreach (var write in effects.GlobalFlags)
         {
             var flags = _session.Flags;

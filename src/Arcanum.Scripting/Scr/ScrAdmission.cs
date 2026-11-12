@@ -355,9 +355,9 @@ public sealed class ScrAdmissionSet
     public static IReadOnlySet<int> StoryQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.Daytime, ScrCatalogue.Condition.GlobalQuestState, ScrCatalogue.Condition.HasBlessing,
         ScrCatalogue.Condition.HasCurse, ScrCatalogue.Condition.RumorKnown, ScrCatalogue.Condition.RumorQuelled };
 
-    /// <summary>The actions of <see cref="S34"/> a host answers through <see cref="IScrStoryQueries"/>: the four clock actions.</summary>
+    /// <summary>The actions of <see cref="S34"/> a host answers through <see cref="IScrStoryQueries"/>: the four clock actions and the two that read the game-wide quest state first (set global quest state, unbotch).</summary>
     public static IReadOnlySet<int> StoryQueryActions { get; } = new HashSet<int> { ScrCatalogue.Action.GetDaySinceStartup, ScrCatalogue.Action.GetCurrentHour, ScrCatalogue.Action.GetCurrentMinute,
-        ScrCatalogue.Action.GetHoursSinceStartup };
+        ScrCatalogue.Action.GetHoursSinceStartup, ScrCatalogue.Action.SetGlobalQuestState, ScrCatalogue.Action.SetPcQuestUnbotched };
 
     /// <summary>The conditions of <see cref="S31"/> a host answers through <see cref="IScrSpellQueries"/>.</summary>
     public static IReadOnlySet<int> SpellQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.HasBodySpell, ScrCatalogue.Condition.InfluencedBySpell, ScrCatalogue.Condition.KnowsSpell,

@@ -1786,7 +1786,8 @@ public sealed partial class GameSessionOwner : IDisposable
 
     // Beyond each record's own range, the records must agree with the rules: no time after the saved clock, a PC
     // record Completed/OtherCompleted only under a shared Completed state, a botched one only under shared Botched,
-    // and any other PC record only while the shared state is Accepted. A shared state without a PC record is kept
+    // and an open PC record (Accepted, Unknown or one not completed) under any shared state, since a script can finish a quest game-wide
+    // before the PC record follows (ARC-SCRIPT-1165). A shared state without a PC record is kept
     // (the source's shared state is not owned by one PC).
     private static GameSessionFailure ImportStory(SessionStoryState saved, long clockMs, out Story story)
     {

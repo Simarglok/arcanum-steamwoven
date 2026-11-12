@@ -365,6 +365,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
             floats.Add(new(line.Speaker, printed.Text));
         }
         _floats.AddRange(floats);
+        // The effect rule of every blessing or curse the run adds is known before anything applies (a missing rule refuses the run whole).
+        if (!AreaScriptStory.BlessingRulesResolve(_session, effects, IsPc, BlessingEffects)) return false;
         foreach (var write in effects.GlobalFlags)
         {
             var flags = _session.Flags;

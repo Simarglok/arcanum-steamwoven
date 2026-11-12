@@ -173,6 +173,13 @@ public sealed class ScrStoryTimeTests
         known.Unknown.Add(Pc);
         Assert.AreEqual(ScrStop.MissingObject, Beat(known).Stop, "an object the host does not know stops the run");
 
+        // A null handle gives false in the original (0x4C58D0), so an absent triggerer takes the false branch and does not stop the run.
+        var absent = Host(Test(ScrCatalogue.Condition.RumorKnown, (Triggerer, 0), N(1066)));
+        absent.Known.Add((Pc, 1066));
+        var none = ScrDispatcher.RunObject(new(ScrPoint.Heartbeat, Npc, null, null), absent, Options);
+        Assert.AreEqual(ScrOutcome.RunDefault, none.Outcome);
+        Assert.AreNotEqual(ScrStop.MissingObject, none.Stop);
+
         var quelled = Host(Test(ScrCatalogue.Condition.RumorQuelled, N(1066)));
         Assert.AreEqual(ScrOutcome.RunDefault, Beat(quelled).Outcome);
         quelled.Quelled.Add(1066);
@@ -292,5 +299,15 @@ public sealed class ScrStoryTimeTests
         var host = new FakeHost();
         host.Attach(Npc, ScrPoint.Heartbeat, Script, Test(ScrCatalogue.Condition.Daytime));
         Assert.ThrowsExactly<ArgumentException>(() => ScrDispatcher.RunObject(new(ScrPoint.Heartbeat, Npc, Pc, null), host, Options));
+    }
+
+    [TestMethod]
+    public void Set_global_quest_state_and_unbotch_need_a_host_with_story_queries_up_front()
+    {
+        // The two actions read the game-wide state before they write, so a set holding either (and no story condition) is refused by Validate, not by an exception mid-run.
+        var set = new ScrAdmissionSet("test-quest-writes", ScrAdmissionSet.S2.Conditions, ScrAdmissionSet.S2.Actions.Append(ScrCatalogue.Action.SetGlobalQuestState), ScrAdmissionSet.S2.ValueKinds, ScrAdmissionSet.S3.FocusKinds);
+        var host = new FakeHost();
+        host.Attach(Npc, ScrPoint.Heartbeat, Script, Program(Do(C(ScrCatalogue.Action.SetGlobalQuestState, N(1001), N(4)))));
+        Assert.ThrowsExactly<ArgumentException>(() => ScrDispatcher.RunObject(new(ScrPoint.Heartbeat, Npc, Pc, null), host, new ScrRunOptions { Admission = set }));
     }
 }

@@ -851,6 +851,7 @@ public sealed class AreaUseScriptHostTests
             var ran = host.Run(gate, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, ran.Outcome, ran.Detail);
             Assert.AreEqual(0, session.QueryHeroBlessings(SessionBlessingKind.Blessing)!.Count);
+            Assert.IsFalse(host.GlobalFlag(66), "the missing rule is found before anything applies, so the flag the script set before the blessing is not kept");
         });
     }
 

@@ -263,7 +263,7 @@ public interface IScrSpellQueries
     int? MasteredCollege(ScrObjectRef obj);
 }
 
-/// <summary>The game clock as the story commands read it (ledger SQ7): the day index (0 on the first day) and the hour and minute of the day.</summary>
+/// <summary>The game clock as the story commands read it (ledger SQ1, SQ5): the day index (0 on the first day) and the hour and minute of the day.</summary>
 public readonly record struct ScrGameTime(long DayIndex, int Hour, int Minute)
 {
     /// <summary>Whether it is day (0x45ACF0): the hour is 6 to 17.</summary>
@@ -835,7 +835,7 @@ public sealed record ScrRunOptions
         if (host is not IScrAreaQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetArea))
             throw new ArgumentException("A set with get area needs a host that implements IScrAreaQueries.", nameof(Admission));
         if (host is not IScrStoryQueries && (Admission.Conditions.Any(ScrAdmissionSet.StoryQueryConditions.Contains) || Admission.Actions.Any(ScrAdmissionSet.StoryQueryActions.Contains)))
-            throw new ArgumentException("A set with daytime, global quest state, a rumor, blessing or curse condition or a clock action needs a host that implements IScrStoryQueries.", nameof(Admission));
+            throw new ArgumentException("A set with daytime, global quest state, a rumor, blessing or curse condition a clock action, set global quest state or unbotch needs a host that implements IScrStoryQueries.", nameof(Admission));
         if (host is not IScrStoreQueries && Admission.ValueKinds.Any(ScrAdmissionSet.StoreValueKinds.Contains))
             throw new ArgumentException("A set with a global variable, PC variable or PC flag operand needs a host that implements IScrStoreQueries.", nameof(Admission));
     }

@@ -17,6 +17,20 @@ namespace Arcanum.World;
 /// </summary>
 public static class AreaScriptStory
 {
+    /// <summary>Whether every add blessing or add curse request that would change the hero has its effect rule, asked before anything of the run applies, so a missing rule refuses the run whole and not partway (a held number needs no rule, BC4).</summary>
+    public static bool BlessingRulesResolve(GameSessionOwner session, ScrEffects effects, Func<ScrObjectRef, bool> isPc, Func<SessionBlessingKind, int, SessionEffectDefinition?>? blessingEffect)
+    {
+        ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(effects); ArgumentNullException.ThrowIfNull(isPc);
+        foreach (var request in effects.States)
+        {
+            if (request.Kind is not (ScrStateKind.AddBlessing or ScrStateKind.AddCurse) || request.Object is not { } who || !isPc(who)) continue;
+            var kind = request.Kind is ScrStateKind.AddBlessing ? SessionBlessingKind.Blessing : SessionBlessingKind.Curse;
+            if (session.QueryHeroBlessings(kind) is not { } held || held.Any(b => b.Number == request.Number)) continue;
+            if (blessingEffect?.Invoke(kind, request.Number) is null) return false;
+        }
+        return true;
+    }
+
     /// <param name="award">Takes the experience a completed quest gave (the host passes its follower step and level-up messages on,
     /// as for a dialog's quest command).</param>
     /// <param name="blessingEffect">The effect rule of a blessing or curse number (<c>BlessingRules.EffectOf</c> over the tables, then the effect table); null when the host has none.</param>
