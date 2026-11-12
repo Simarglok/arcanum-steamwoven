@@ -127,6 +127,12 @@ public sealed class AreaWorldMap
     public Func<bool>? TravelCheck { get; set; }
     private TravelRuleProfile Rules => _session.Rules.Travel;
 
+    /// <summary>
+    /// ARC-SCRIPT-1164 (ledger WO5, 0x4207D0, 0x420900, 0x4209C0): whether a route may enter the sector: the map data's rule (<see cref="AreaWorldMapData.Passes"/>) and the start map's blocked-sector list as the session holds it now
+    /// (a script's toggle sector blocked, 106, adds a sector to it; the installed module ships none).
+    /// </summary>
+    public bool Passes(TravelSector sector) => _data.Passes(sector) && !_session.QuerySectorBlocked(new SessionMapId(_data.StartRuntime), sector.X, sector.Y);
+
     /// <summary>The world-map pixel at the centre of a picture pixel.</summary>
     public static WorldMapPixel PixelOf(int pictureX, int pictureY) => new(pictureX * (long)PictureScale + PictureScale / 2, pictureY * (long)PictureScale + PictureScale / 2);
 
@@ -137,7 +143,7 @@ public sealed class AreaWorldMap
         if (Travelling) return AreaWorldMapRefusal.Travelling;
         if (pixel.X < 1 || pixel.X > _data.Width || pixel.Y < 0 || pixel.Y >= _data.Width) return AreaWorldMapRefusal.OffMap;
         Landing = null;
-        var refusal = _journey.AddWaypoint(pixel, _session.IsAreaKnown, _data.Passes, Rules);
+        var refusal = _journey.AddWaypoint(pixel, _session.IsAreaKnown, Passes, Rules);
         if (refusal == TravelWaypointRefusal.None) Selected = _journey.Waypoints.Count - 1;
         return refusal switch
         {
@@ -174,7 +180,7 @@ public sealed class AreaWorldMap
         var count = _journey.Waypoints.Count;
         if (count == 0) return new(AreaWorldMapRemoved.Nothing, null);
         var index = Travelling || Selected < 0 ? count - 1 : Selected;
-        if (_journey.RemoveWaypoint(index, _data.Passes, Rules) != TravelWaypointRefusal.None) return new(AreaWorldMapRemoved.NoRoute, null);
+        if (_journey.RemoveWaypoint(index, Passes, Rules) != TravelWaypointRefusal.None) return new(AreaWorldMapRemoved.NoRoute, null);
         Selected = Math.Min(index, _journey.Waypoints.Count - 1);
         if (!Travelling) return new(AreaWorldMapRemoved.Removed, null);
         Selected = -1;

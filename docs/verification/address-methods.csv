@@ -538,6 +538,7 @@ src/Arcanum.World/AreaUseScripts.cs,RunTakingDamage,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunTrapScript,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunUseScript,pending,
 src/Arcanum.World/AreaUseScripts.cs,TakingDamageVetoes,pending,
+src/Arcanum.World/AreaWorldMap.cs,Passes,exempt,host
 src/Arcanum.World/DiagnosticGridSession.cs,Relocate,pending,
 src/Arcanum.World/GoalStepper.cs,Step,pending,
 src/Arcanum.World/GoalStepper.cs,StepOverlay,pending,

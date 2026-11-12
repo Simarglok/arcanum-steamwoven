@@ -783,6 +783,24 @@ every entry of its sector). Ledger [UF1–UF4](../research/ledger/scripts.md#tow
 - **Tests.** `ScrNpcStateTests` (the interpreter), `AreaNpcStateScriptTests` (the host over a real session), `AreaAiRouteTests` and `AreaAiHostScriptWalkTests` (the AI host's side), `TeleportMapStateTests` (the session's fields and
   their snapshot), `AreaNpcStateScriptAdmissionTests` (the sets and, with `DAT_ROOT`, the 270 installed scripts: S36 admits 208 whole).
 
+## World-object commands (ARC-SCRIPT-1164, set S37)
+
+`ScrAdmissionSet.S37` is S36 plus three conditions (`WorldObjectConditions`: obj is open 36, sector is blocked 45, monster generator disabled 46) and ten actions (`WorldObjectActions`: transfer item 41, set lock state 53, create item 66,
+toggle open or closed 88, set written start 94, toggle sector blocked 106, toggle monster generator 110, touch art 123, destroy item named 126, toggle item inventory display 127); the interpreter runs at most S37. Ledger
+[WO1–WO13](../research/ledger/scripts.md#world-object-commands-arc-script-1164-e5-b); plan slice E5-b.
+
+- **Object actions** hand one `ScrObjectStateRequest` each to the caller in action order (`CreateItem`, `TransferItem`, `SetLockState`, `ToggleOpenClosed`, `SetWrittenStart`, `DestroyItemNamed`, `ToggleItemInventoryDisplay`).
+- **Sector and generator toggles** (106, 110) hand a `ScrWorldRequest` (`ScrWorldChange.SectorBlocked` or `GeneratorBlocked`) that carries the state the toggle ends in; **touch art (123)** reads its operand and hands nothing.
+- **The run reads its own toggles back.** Conditions 36, 45 and 46 read the run's overlay first (the open state a toggle left, the sector list, the generator bits) and then the host through `IScrWorldObjectQueries`
+  (`IsOpen`, `CanOpen`, `SectorBlocked`, `GeneratorBlocked`); a host without the interface refuses a run that holds them (`ScrRunOptions.Validate`).
+- **The host.** `AreaUseScriptHost` holds the three conditions and six actions in its use, placed, heartbeat and dying sets (`WorldObjectHostActions`). Lock state and the open toggle act on a portal or container of the shown map
+  (`AreaScriptWorld.Openable` gives the lock identity, the T0 baseline and the ART facts): the lock bit through `SetOpenableLocked` (1 locks, 0 unlocks with the Lock event, any other value a plain flag clear), the toggle through the
+  session's art frame. Create item goes through `CreateItemForHero` or `AddItemToNpc` with the viewer's insert check. The blocked sector list is the session's sector-scope map changes `map.blocked` (`SessionSectorBlock`,
+  `GameSessionOwner.QuerySectorBlocked`, `SetSectorBlocked`; no schema step) and `AreaWorldMap.Passes` leaves a blocked sector out of the route; the generator toggle is `ToggleGeneratorBlock`.
+- **Not applied.** Transfer item, set written start, destroy item named and toggle item inventory display are in S37 and the interpreter, but no host applies them (WO12): a script that uses one stays refused.
+- **Tests.** `ScrWorldObjectTests` (the interpreter), `AreaWorldObjectScriptTests` (the host over a real session), `SectorBlockedStateTests` (the session's list), `AreaWorldMapTests` (the route), `AreaWorldObjectScriptAdmissionTests`
+  (the sets and, with `DAT_ROOT`, the 117 installed scripts: S37 admits 84 whole).
+
 ## Checks
 
 - `tests/Arcanum.Scripting.Tests/Scr/ScrDispatcherTests.cs`: every step of the

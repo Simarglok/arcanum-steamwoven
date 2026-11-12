@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S36"/>.
+/// <see cref="ScrAdmissionSet.S37"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -44,6 +44,11 @@ internal sealed class ScrInterpreter
         public readonly HashSet<ScrObjectRef> Toggled = new(), Killed = new();
         // ARC-SCRIPT-1163 (NS1): the objects the dispatch's critter disbands let go, which its later following tests read (the original removes the leader at once).
         public readonly HashSet<ScrObjectRef> Disbanded = new();
+        // ARC-SCRIPT-1164 (E5-b): the sector and generator toggles of the dispatch, which its later conditions and toggles read back (the original writes the tables at once), the open states its open toggles left, and the requests themselves.
+        public readonly Dictionary<(int X, int Y), bool> SectorBlocked = new();
+        public readonly Dictionary<int, bool> GeneratorBlocked = new();
+        public readonly Dictionary<ScrObjectRef, bool> OpenStates = new();
+        public readonly List<ScrWorldRequest> WorldChanges = new();
         // ARC-SCRIPT-050: the float lines (FL4).
         public readonly List<ScrFloatLine> Floats = new();
         // ARC-DEV-205: the town maps unfog town map asked to reveal (UF1).
@@ -197,7 +202,8 @@ internal sealed class ScrInterpreter
             _shared.Floats.Count == 0 ? null : Array.AsReadOnly(_shared.Floats.ToArray()), stores,
             _shared.TownMaps.Count == 0 ? null : Array.AsReadOnly(_shared.TownMaps.ToArray()),
             _shared.AmmoUses.Count == 0 ? null : Array.AsReadOnly(_shared.AmmoUses.ToArray()),
-            _shared.Fades.Count == 0 ? null : Array.AsReadOnly(_shared.Fades.ToArray()));
+            _shared.Fades.Count == 0 ? null : Array.AsReadOnly(_shared.Fades.ToArray()),
+            _shared.WorldChanges.Count == 0 ? null : Array.AsReadOnly(_shared.WorldChanges.ToArray()));
     }
 
     private bool Condition(ScrClause c, int line) => c.Type switch
@@ -236,6 +242,11 @@ internal sealed class ScrInterpreter
         ScrCatalogue.Condition.HasBlessing or ScrCatalogue.Condition.HasCurse => BlessingHolds(c, line),
         ScrCatalogue.Condition.RumorKnown => KnownRumor(c, line),
         ScrCatalogue.Condition.RumorQuelled => RumorQuelled(Get(c, 0)),
+        // WO4, WO5, WO9 (ARC-SCRIPT-1164): obj is open (case 0x24: the first object's portal or container art frame is not 0; any other object and an absent one is false), sector is blocked (case 0x2D: the sector of the two numbers, y ORed with x's
+        // sign word, is on the blocked list) and monster generator disabled (case 0x2E: bit 0x80 of the slot's table byte), each as the run's own toggles left it.
+        ScrCatalogue.Condition.ObjIsOpen => OptionalObject(c, 0) is { } openable && IsOpenNow(openable, line),
+        ScrCatalogue.Condition.SectorIsBlocked => SectorIsBlockedNow(Get(c, 0), Get(c, 1)),
+        ScrCatalogue.Condition.MonsterGenDisabled => GeneratorIsBlockedNow(Get(c, 0)),
         _ => throw new InvalidOperationException("Condition outside the interpreter's set."),
     };
 
@@ -619,6 +630,83 @@ internal sealed class ScrInterpreter
                 // NS5: every object of operand 0 in list order and the art number of operand 1; the run goes on.
                 var number = Get(a, 1);
                 foreach (var obj in Objects(a, 0)) _shared.ObjectStates.Add(new(ScrObjectStateChange.ChangeArtNumber, obj, number));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.CreateItem:
+            {
+                // WO1 (0x447220 case 0x42): the prototype number of operand 0 (+20 for the file, as create object) and the first object of operand 1, the holder; the new object is made at the holder's location and, when it is an item, put into its inventory.
+                // An absent holder creates nothing (a project choice: the original reads the null handle's location). The run goes on whatever the host does with it.
+                var prototype = Get(a, 0);
+                if (OptionalObject(a, 1) is { } holder) _shared.ObjectStates.Add(new(ScrObjectStateChange.CreateItem, holder, prototype));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.TransferItem:
+            {
+                // WO2 (case 0x29): the name number of operand 0, the first objects of operands 1 (the holder) and 2 (the new holder); the item is found in the holder's own list (0x462480) and inserted into the other's (0x4617F0). Nothing without both objects.
+                var name = Get(a, 0);
+                if (OptionalObject(a, 1) is { } from && OptionalObject(a, 2) is { } to) _shared.ObjectStates.Add(new(ScrObjectStateChange.TransferItem, from, name, Other: to));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.SetLockState:
+            {
+                // WO3 (case 0x35): the first object of operand 0 and the state of operand 1 (1 locks, any other value unlocks). An absent object changes nothing.
+                var state = Get(a, 1);
+                if (OptionalObject(a, 0) is { } lockable) _shared.ObjectStates.Add(new(ScrObjectStateChange.SetLockState, lockable, state));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.ToggleOpenClosed:
+            {
+                // WO4 (case 0x58): the first object of operand 0, a portal (opened or closed at once) or a container (opened or closed by one frame); any other object type does nothing. The run keeps the state the toggle leaves, so its later obj is open tests read it.
+                if (OptionalObject(a, 0) is not { } toggled) return (Step.Next, 0);
+                var open = _shared.OpenStates.TryGetValue(toggled, out var left) ? left : WorldObjects.IsOpen(toggled) ?? false;
+                _shared.OpenStates[toggled] = !open && (WorldObjects.CanOpen(toggled) ?? false);
+                _shared.ObjectStates.Add(new(ScrObjectStateChange.ToggleOpenClosed, toggled));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.SetWrittenStart:
+            {
+                // WO6 (case 0x5E): the first object of operand 0 and the start of operand 1; the field is written for a written item (type 13) only, which the host decides.
+                var start = Get(a, 1);
+                if (OptionalObject(a, 0) is { } written) _shared.ObjectStates.Add(new(ScrObjectStateChange.SetWrittenStart, written, start));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.ToggleSectorBlocked:
+            {
+                // WO5 (case 0x6A): the sector of the two numbers (y ORed with x's sign word) is put on the blocked list when it is not on it and taken off when it is; the request carries the state it ends in.
+                var x = Get(a, 0);
+                var y = Get(a, 1) | (x >> 31);
+                var blocked = !SectorIsBlockedNow(x, y);
+                _shared.SectorBlocked[(x, y)] = blocked;
+                _shared.WorldChanges.Add(new(ScrWorldChange.SectorBlocked, x, y, blocked));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.ToggleMonsterGenerator:
+            {
+                // WO9 (case 0x6E): bit 0x80 of the slot's byte is set when clear and cleared when set; a slot outside 0..255 changes nothing (0x4BABF0 and 0x4BABD0 test the range).
+                var slot = Get(a, 0);
+                if (slot is < 0 or > 255) return (Step.Next, 0);
+                var blocked = !GeneratorIsBlockedNow(slot);
+                _shared.GeneratorBlocked[slot] = blocked;
+                _shared.WorldChanges.Add(new(ScrWorldChange.GeneratorBlocked, slot, 0, blocked));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.TouchArt:
+            {
+                // WO10 (case 0x7B, 0x4EF190 → 0x502290): the original asks the art cache whether the art number is known and uses nothing of the answer; the operand is read, nothing else happens.
+                _ = Get(a, 0);
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.DestroyItemNamed:
+            {
+                // WO7 (case 0x7E): the name number of operand 0 and the first object of operand 1; the first item of that name in its own list is destroyed (0x43CCA0). Nothing for an absent object.
+                var name = Get(a, 0);
+                if (OptionalObject(a, 1) is { } holder) _shared.ObjectStates.Add(new(ScrObjectStateChange.DestroyItemNamed, holder, name));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.ToggleItemInventoryDisplay:
+            {
+                // WO8 (case 0x7F): the first object of operand 0 (an item of type 5..14 only, which the host decides) has bit 0x10 of its item flags flipped.
+                if (OptionalObject(a, 0) is { } item) _shared.ObjectStates.Add(new(ScrObjectStateChange.ToggleItemInventoryDisplay, item));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.ChangeScript:
@@ -1233,6 +1321,20 @@ internal sealed class ScrInterpreter
         if (obj is not { } who) return false;
         return (_shared.Learned.Contains(rumor) && _host.IsPc(who)) || (Storyline.RumorKnown(who, rumor) ?? throw new MissingObjectStop(line));
     }
+
+    // WO4, WO5, WO9: the open state, the sector blocked list and the generator block bits as the run sees them (its own toggles first), then the host's.
+    private IScrWorldObjectQueries WorldObjects => _host as IScrWorldObjectQueries
+        ?? throw new InvalidOperationException("SCR_WORLD_OBJECT_QUERIES_REQUIRED: the admission set holds a world-object command the host cannot answer.");
+
+    private bool IsOpenNow(ScrObjectRef obj, int line) => _shared.OpenStates.TryGetValue(obj, out var open) ? open : WorldObjects.IsOpen(obj) ?? throw new MissingObjectStop(line);
+
+    private bool SectorIsBlockedNow(int x, int y)
+    {
+        var key = (x, y | (x >> 31));
+        return _shared.SectorBlocked.TryGetValue(key, out var blocked) ? blocked : WorldObjects.SectorBlocked(key.Item1, key.Item2);
+    }
+
+    private bool GeneratorIsBlockedNow(int slot) => slot is >= 0 and <= 255 && (_shared.GeneratorBlocked.TryGetValue(slot, out var blocked) ? blocked : WorldObjects.GeneratorBlocked(slot));
 
     private IScrSpellQueries Spells => _host as IScrSpellQueries
         ?? throw new InvalidOperationException("SCR_SPELL_QUERIES_REQUIRED: the admission set holds a spell condition and the host cannot answer it.");

@@ -924,3 +924,22 @@ Known differences (documented, not bugs):
 - Change art number (a door, scenery or creature changing its picture from a script) is not built: scripts that use it are still refused, so those quest steps do nothing in Steamwoven.
 - A script in a dialog (a talk) that uses one of these actions is still refused; only use, tile, sector, heartbeat and dying scripts run them.
 - A reaction or standpoint change acts for NPCs of the map on screen only.
+
+## ARC-SCRIPT-1164 — world-object script actions (E5-b, 2026-11-12)
+
+Script commands that act on a door, chest, sector or monster generator now run from use, tile, sector, heartbeat and dying scripts ([ledger WO1–WO13](../research/ledger/scripts.md#world-object-commands-arc-script-1164-e5-b),
+[dispatcher](../scripting/scr-dispatcher-runtime.md#world-object-commands-arc-script-1164-set-s37)). No installed map is named below because the check that lists the admitted scripts is by script number, not by map; compare the same
+quest step in both games.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Reach a quest step that locks or unlocks a door or chest from a script (set lock state), then try to open it. | The object is locked or unlocked as the step says; the lock picks and keys behave as for any locked object. | open |
+| 2 | Reach a quest step that opens or closes a door or chest from a script (toggle open or closed). | A door swings open or shut at once; a chest changes to its next or previous picture frame; a script that tests the open state then branches on it. | open |
+| 3 | Reach a quest step that gives the hero or an NPC an item (create item). | The item appears in the holder's inventory (or, with no room, is not taken). | open |
+| 4 | Reach a quest step that blocks a sector, then open the world map and route into it. | The route does not enter the blocked sector, and a blocked destination is refused. | open |
+
+Known differences (documented, not bugs):
+
+- Transfer item, set written start, destroy item named and toggle item inventory display are not applied by any host yet: scripts that use them are still refused.
+- The world map's refusal when the hero's own sector is blocked, and the dimmed picture of a blocked sector, are not built.
+- A script in a dialog (a talk) that uses one of these commands is still refused.

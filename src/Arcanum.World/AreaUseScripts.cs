@@ -35,7 +35,8 @@ namespace Arcanum.World;
 /// refused as before. <see cref="CreatedRow"/> answers a created critter's base record by its entity (the run's NPC rows are the shown map's and the loaded maps'; a critter created at run time has none of them).
 /// ARC-DEV-386 (E1-c4): <see cref="CritterMade"/> is told the entity of each critter the run created, right after it exists, so the host generates its inventory (the original's create finish runs the restock body 0x463C60, OM16, RK14);
 /// without it a created critter's list stays empty. ARC-SCRIPT-1163 (E5-a, NS2): <see cref="ScriptReaction"/> changes an NPC of the shown map's reaction toward the PC (set reaction 30 when its flag is true, adjust reaction 31) in the AI host and answers what happened;
-/// without it a run with a reaction action is left unapplied.
+/// without it a run with a reaction action is left unapplied. ARC-SCRIPT-1164 (E5-b, WO3, WO4): <see cref="Openable"/> answers a portal's or container's lock identity, T0 baseline and ART facts on the shown map
+/// (<see cref="AreaScriptOpenable"/>; null for an object that is neither or not shown), for set lock state (53), toggle open or closed (88) and obj is open (36); without it those runs are left unapplied and the condition stops the run.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
@@ -44,7 +45,18 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Func<ScrObjectRef, int, bool>? HealFatigue = null, Func<string, int, string>? ScriptAnimate = null, Func<string, string, string>? ScriptSteal = null, Func<string, string>? ScriptProne = null,
     Func<string?, string, int, bool, bool, string>? ScriptCast = null, Func<string, int, int, bool, string>? ScriptDamage = null, Func<string, int, string>? ScriptHeal = null,
     Func<string, bool>? ScriptDamageAsk = null, Func<int, bool>? Critter = null, Func<string, AreaObjectRecord?>? CreatedRow = null,
-    Action<string>? CritterMade = null, Func<string, int, bool, string>? ScriptReaction = null);
+    Action<string>? CritterMade = null, Func<string, int, bool, string>? ScriptReaction = null, Func<ScrObjectRef, AreaScriptOpenable?>? Openable = null);
+
+/// <summary>ARC-SCRIPT-1164 (WO3, WO4): what a script's lock and open actions need of a portal or container of the shown map: the session's lock identity and T0 baseline (<see cref="GameSessionOwner.QueryOpenable"/>) and, for a portal, its ART
+/// (<see cref="PortalArt"/>, the frames a toggle steps through, ledger LK10); for a container the ART's frame count (it opens to frame 1 when it has a second frame).</summary>
+public sealed record AreaScriptOpenable(SessionOpenable Openable, SessionOpenableBaseline Baseline, Arcanum.Simulation.Locks.PortalArt? Art, int FrameCount)
+{
+    /// <summary>Whether a toggle of the closed object ends open: a portal has an open frame (<see cref="Arcanum.Simulation.Locks.PortalFrameRules.Toggled"/> from frame 0), a container a second frame.</summary>
+    public bool CanOpen => Art is { } art ? Arcanum.Simulation.Locks.PortalFrameRules.Toggled(art, 0) != 0 : FrameCount > 1;
+
+    /// <summary>The frame a toggle leaves from <paramref name="frame"/>: a portal's (<see cref="Arcanum.Simulation.Locks.PortalFrameRules.Toggled"/>), a container's previous frame when it is open (not frame 0) and 1 (its next frame) when closed (ledger WO4) with a second frame.</summary>
+    public int ToggledFrame(int frame) => Art is { } art ? Arcanum.Simulation.Locks.PortalFrameRules.Toggled(art, frame) : frame != 0 ? frame - 1 : FrameCount > 1 ? 1 : 0;
+}
 
 /// <summary>ARC-WORLD-081: one create object a run applied: the prototype number as the script named it, the object it was created next to,
 /// and the session's result (<see cref="InventoryMutationResult.Item"/> the new item; none under the Steamwoven limit).</summary>
@@ -105,7 +117,7 @@ public readonly record struct AreaPrintedLine(int Type, string Text);
 /// The PC's reputations are the session's (ARC-WORLD-044); no other object has one. Everything else the viewer does not model
 /// answers "no", as for the dialog and item hosts.
 /// </summary>
-public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries, IScrStoryQueries
+public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries, IScrStoryQueries
 {
     /// <summary>Map-change keys of an object's use slot.</summary>
     public const string LocalFlagsProperty = "use.lf", CountersProperty = "use.counters", ScriptProperty = "use.script";
@@ -152,14 +164,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// ARC-SCRIPT-1241: plus fade (103) of <see cref="ScrAdmissionSet.S35"/>, which jumps the game clock and hands its movie to the viewer (<see cref="TakeFades"/>); the use script 2862 of the Vendigroth
     /// underground and the dying scripts 2863 and 3061 of Kerghan carry it, and the placed and dying sets are built on this one.
     /// </summary>
-    public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading-objects-story-world", ScrAdmissionSet.S4.Conditions.Concat(ScrAdmissionSet.SpellQueryConditions).Concat(ScrAdmissionSet.StoryConditions),
+    public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading-objects-story-world", ScrAdmissionSet.S4.Conditions.Concat(ScrAdmissionSet.SpellQueryConditions).Concat(ScrAdmissionSet.StoryConditions).Concat(ScrAdmissionSet.WorldObjectConditions),
         ScrAdmissionSet.S4.Actions.Where(a => a is not ScrCatalogue.Action.Dialog)
             .Concat([ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque,
                 ScrCatalogue.Action.CallScript, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType,
                 ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation,
                 ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.CreateObject, ScrCatalogue.Action.GetStat,
-                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, .. ScrAdmissionSet.NpcStateHostActions]),
+                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
         ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]),
         counterIndexWraps: true);
@@ -202,11 +214,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// </summary>
     public static ScrAdmissionSet HeartbeatAdmission { get; } = new("S2-area-heartbeat-state-kill-talk-world",
         ScrAdmissionSet.S2.Conditions.Concat([ScrCatalogue.Condition.FollowingPc, ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsDead,
-            ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasReputation, .. ScrAdmissionSet.SpellQueryConditions, .. ScrAdmissionSet.StoryConditions]),
+            ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasReputation, .. ScrAdmissionSet.SpellQueryConditions, .. ScrAdmissionSet.StoryConditions, .. ScrAdmissionSet.WorldObjectConditions]),
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
             ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
-            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. CastActions, .. DamageActions]),
+            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. DamageActions]),
         ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]));
 
@@ -674,6 +686,31 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
 
     // SG2: a direct item of the object's current list (the hero: kit and carried items; a holder: its list now).
     public bool HoldsItemNamed(ScrObjectRef obj, int name) => Items(obj).Any(item => item.Name == name);
+
+    // ARC-SCRIPT-1164 (WO4, WO5, WO9): the world-object questions. A portal's or container's open state is the session's ART frame (0x4F08C0, 0x502B50: not 0 is open); any other object is not open; an object the host has no row of is unknown.
+    private AreaScriptOpenable? OpenableOf(ScrObjectRef obj) => _world?.Openable?.Invoke(obj);
+
+    bool? IScrWorldObjectQueries.IsOpen(ScrObjectRef obj)
+    {
+        if (IsPc(obj)) return false;
+        if (Row(obj) is not { } row) return null;
+        if (row.Type is not (PortalObjectType or ContainerObjectType)) return false;
+        return OpenableOf(obj) is { } facts ? _session.QueryOpenable(facts.Openable, facts.Baseline).Open : null;
+    }
+
+    bool? IScrWorldObjectQueries.CanOpen(ScrObjectRef obj)
+    {
+        if (IsPc(obj)) return false;
+        if (Row(obj) is not { } row) return null;
+        if (row.Type is not (PortalObjectType or ContainerObjectType)) return false;
+        return OpenableOf(obj)?.CanOpen;
+    }
+
+    bool IScrWorldObjectQueries.SectorBlocked(int x, int y) => _session.QuerySectorBlocked(new SessionMapId(_shownMap), x, y);
+
+    bool IScrWorldObjectQueries.GeneratorBlocked(int slot) => _session.QueryGeneratorSlot(slot)?.Blocked ?? false;
+
+    private const int PortalObjectType = 1, ContainerObjectType = 2;
 
     // SG3: the object's own name number (field 22) and spell flags (field 20) of any type, from its row's effective fields.
     // The PC has no row: its name number is not modelled and reads 0, its spell flags none.
@@ -1248,9 +1285,24 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             _created.Add(new(request.Prototype, request.Near, result));
             if (result.Disposition == GameSessionDisposition.Rejected) return false;
         }
+        // ARC-SCRIPT-1164 (WO5, WO9): the sector and generator toggles, each to the state the run left it in.
+        foreach (var change in effects.WorldChanges)
+        {
+            if (change.Change == ScrWorldChange.SectorBlocked)
+            {
+                if (_session.SetSectorBlocked(_session.Version, new SessionMapId(_shownMap), change.A, change.B, change.Blocked).Disposition == GameSessionDisposition.Rejected) return false;
+            }
+            else if (_session.QueryGeneratorSlot(change.A) is { } slot && slot.Blocked != change.Blocked
+                && _session.ToggleGeneratorBlock(_session.Version, change.A).Disposition == GameSessionDisposition.Rejected) return false;
+        }
         // ARC-WORLD-114: toggle state and kill in action order (ObjectStateRefusal checked them); ARC-SCRIPT-052: destroy and stop attacking.
         foreach (var request in effects.ObjectStates)
         {
+            if (request.Change is ScrObjectStateChange.SetLockState or ScrObjectStateChange.ToggleOpenClosed or ScrObjectStateChange.CreateItem)
+            {
+                if (!ApplyWorldObject(request)) return false;
+                continue;
+            }
             if (request.Change == ScrObjectStateChange.Kill) { if (!_world!.Kill!(request.Object)) return false; continue; }
             if (request.Change == ScrObjectStateChange.Destroy)
             {
@@ -1384,6 +1436,43 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         return effects.Writeback is not { } writeback || writeSlot(writeback);
     }
 
+    /// <summary>ARC-SCRIPT-1164 (WO1): what the session answered to the last create item a run applied (smoke and test seam; null before any).</summary>
+    public InventoryMutationResult? LastCreatedItem { get; private set; }
+
+    /// <summary>ARC-SCRIPT-1164 (WO1): the insert check the created item's holder answers (the viewer's inventory host's); null: every item is taken.</summary>
+    public SessionInsertCheck? InsertCheck { get; init; }
+
+    // ARC-SCRIPT-1164 (E5-b): set lock state (53, 0x441DD0), toggle open or closed (88, 0x4EEF80 and the container's 0x4EEF20, 0x4EEEC0) and create item (66) on what ObjectStateRefusal admitted. False when the session refuses.
+    private bool ApplyWorldObject(ScrObjectStateRequest request)
+    {
+        if (request.Change == ScrObjectStateChange.CreateItem)
+        {
+            var item = _world!.Item(request.Value)!;
+            _session.AttachItemWeights(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.Weight);
+            _session.AttachItemScripts(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.Scripts);
+            var check = InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck;
+            var created = IsPc(request.Object) ? _session.CreateItemForHero(_session.Version, item.Kind, check) : _session.AddItemToNpc(_session.Version, request.Object.Code, item.Kind, check);
+            LastCreatedItem = created;
+            // A full list or an insert check that says no leaves the item not taken (the hero's path drops it to the ground); the run's other effects stay applied, so this is no refusal of the run (review of ARC-SCRIPT-1164).
+            return created.Disposition != GameSessionDisposition.Rejected || created.Failure is GameSessionFailure.BudgetExceeded or GameSessionFailure.InsertRefused;
+        }
+        // Any other object type (and the PC) does nothing, as in the original (WO3, WO4).
+        if (IsPc(request.Object) || Row(request.Object) is not { Type: PortalObjectType or ContainerObjectType } || OpenableOf(request.Object) is not { } facts) return true;
+        if (request.Change == ScrObjectStateChange.SetLockState)
+        {
+            // WO3: the value 1 locks and 0 unlocks, both as a key or script does (the Lock event an hour after unlocking a locked object); any other value clears the locked bit with a plain write, no event (0x441DD0).
+            var locked = request.Value == 1 ? _session.SetOpenableLocked(_session.Version, facts.Openable, facts.Baseline, true)
+                : request.Value == 0 ? _session.SetOpenableLocked(_session.Version, facts.Openable, facts.Baseline, false)
+                : _session.WriteOpenableFlag(_session.Version, facts.Openable, facts.Baseline, Arcanum.Simulation.Locks.LockRules.LockedBit, false);
+            return locked.Disposition != GameSessionDisposition.Rejected;
+        }
+        // WO4: a destroyed object is left as it is; a portal goes to the frame its steps end on (LK10), a container opens to its next frame or closes to 0.
+        if (AlreadyDestroyed(request.Object)) return true;
+        var frame = _session.QueryOpenable(facts.Openable, facts.Baseline).Frame;
+        var target = facts.ToggledFrame(frame);
+        return target == frame || _session.SetOpenableFrame(_session.Version, facts.Openable, facts.Baseline, target).Disposition != GameSessionDisposition.Rejected;
+    }
+
     /// <summary>ARC-DEV-231: what the AI host answered to the last walk to or run to a run applied (smoke and test seam; null before any).</summary>
     public string? LastWalk { get; private set; }
 
@@ -1460,6 +1549,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     // read) or has a destroy-point script (the destroy event is audit slice 4); stop attacking acts on the PC or an NPC of the shown map.
     private string? ObjectStateRefusal(ScrEffects effects)
     {
+        // ARC-SCRIPT-1164 (WO5): a sector with a negative number, or an x beyond the 26 packed bits, is not kept in the session's keys.
+        foreach (var change in effects.WorldChanges)
+            if (change.Change == ScrWorldChange.SectorBlocked && SessionSectorBlock.Pack(change.A, change.B) is null)
+                return $"toggle sector blocked of ({change.A},{change.B}) is not modelled (a negative sector or an x beyond 26 bits)";
         foreach (var request in effects.ObjectStates)
         {
             if (request.Change == ScrObjectStateChange.StopAttacking)
@@ -1558,6 +1651,29 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
                     return $"set faction of {request.Object.Code} is not modelled (no loaded row)";
                 continue;
             }
+            // ARC-SCRIPT-1164 (E5-b, WO1, WO3, WO4): lock state and the open toggle act on a portal or container of the shown map (any other object type does nothing, as in the original), create item on the PC or an NPC with an
+            // inventory list; the item, written-start and display actions have no host here.
+            if (request.Change is ScrObjectStateChange.SetLockState or ScrObjectStateChange.ToggleOpenClosed)
+            {
+                var action = request.Change == ScrObjectStateChange.SetLockState ? "set lock state" : "toggle open or closed";
+                if (IsPc(request.Object)) continue;
+                if (Row(request.Object) is not { } lockRow) return $"{action} of {request.Object.Code} is not modelled (no loaded row)";
+                if (lockRow.Type is not (PortalObjectType or ContainerObjectType)) continue;
+                if (request.Object.Map != _shownMap || OpenableOf(request.Object) is null) return $"{action} of {request.Object.Code} needs its lock and art facts, which only a portal or container of the shown map has";
+                continue;
+            }
+            if (request.Change == ScrObjectStateChange.CreateItem)
+            {
+                if (_world?.Item(request.Value) is not { } made) return $"create item {request.Value}: no item prototype";
+                if (made.Kind.Type is SessionItemType.Gold or SessionItemType.Key or SessionItemType.KeyRing or SessionItemType.Ammo) return $"create item {request.Value}: a {made.Kind.Type} is not modelled";
+                if (IsPc(request.Object)) continue;
+                if (Row(request.Object) is not { Type: NpcType }) return $"create item in {request.Object.Code} is not modelled (only the PC or an NPC)";
+                if (_session.QueryMapInventory(new SessionMapId(request.Object.Map))?.Holders.Any(h => h.Entity == request.Object.Code) != true)
+                    return $"create item in {request.Object.Code}: the NPC has no inventory list";
+                continue;
+            }
+            if (request.Change is ScrObjectStateChange.TransferItem or ScrObjectStateChange.SetWrittenStart or ScrObjectStateChange.DestroyItemNamed or ScrObjectStateChange.ToggleItemInventoryDisplay)
+                return $"{request.Change} is not modelled (no per-item field write or removal in the viewer)";
             var name = request.Change == ScrObjectStateChange.Kill ? "kill" : "toggle state";
             if (request.Object.Map != _shownMap || IsPc(request.Object) || Row(request.Object) is not { Type: NpcType } row)
                 return $"{name} of {request.Object.Code} is not modelled (only an NPC of the shown map)";
