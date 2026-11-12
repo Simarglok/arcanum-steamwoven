@@ -1,5 +1,6 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Traversal;
+using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.TerrainViewer.Core;
@@ -199,6 +200,12 @@ public partial class TerrainViewerApp
         InventoryKey(Key.I);
         Require(InventoryOpen && _inventoryPanel!.PickButtonsForSelfTest.Count > 0, "the window lists a Pick a lock button");
         var listed = _inventoryPanel!.ViewForSelfTest!.Pc.First(line => line.Lockpick).Entity;
+        // ARC-INPUT-1123: with no action points left on the hero's own subturn, the button's start is refused and the window stays closed.
+        if (LockpickActionPointsRefusedSmoke(listed))
+        {
+            InventoryKey(Key.I);
+            Require(InventoryOpen && _inventoryPanel.PickButtonsForSelfTest.Count > 0, "the window reopened after the refused start");
+        }
         _inventoryPanel.PickButtonsForSelfTest[0].EmitSignal(BaseButton.SignalName.Pressed);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Require(!InventoryOpen && _lockpickArmed == listed, "the button closed the window and armed the listed lockpicks: " + _portalNotice);
@@ -222,6 +229,43 @@ public partial class TerrainViewerApp
         Require(!TargetModeOpen(InterfaceMode.ItemTarget) && _interfaceWindows.Stack.Depth == 1 && TargetsMatchStack, $"the press left mode 16: {StackText()}");
         GD.Print("ARC-SKILLS-006 native-smoke pick PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             Map = _readyMapName, door.Entity, door.LockDifficulty, Notice = notice, Locked = state.Locked, Parity = "NOT_VERIFIED" }));
+    }
+
+    /// <summary>
+    /// ARC-INPUT-1123 (IA4, SA52): in a turn-based round, on the hero's subturn with no action points left, the lockpicks' start (the item
+    /// cursor's opener, cost 4) is refused: the window closes (the opener closes it before the check), mode 16 does not open and the
+    /// interface stays on the base. True when the check ran (the window is then closed and the round ended); false (printed NONE) when no
+    /// round with the hero's subturn could be made here.
+    /// </summary>
+    private bool LockpickActionPointsRefusedSmoke(string listed)
+    {
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print("ARC-INPUT-1123 lockpick-ap smoke FAIL: " + why);
+            throw new InvalidOperationException("AREA_LOCKPICK_AP_SMOKE_FAILED");
+        }
+        var session = _areaSession!;
+        var world = AreaCombatWorldNow();
+        if (session.QueryCombatRound() is not null || session.StartCombatRound(session.Version, world).Disposition != GameSessionDisposition.Changed)
+        { GD.Print($"ARC-INPUT-1123 native-smoke lockpick-ap NONE map={_readyMapName} (no round could start)"); return false; }
+        try
+        {
+            // The first subturn may be an NPC's: end those until the hero's (the participants are few).
+            for (var i = 0; i < 64 && session.QueryCombatRound() is { Actor.IsHero: false } other; i++) session.EndCombatTurn(session.Version, other.Actor, world);
+            if (session.QueryCombatRound() is not { Actor.IsHero: true } mine)
+            { GD.Print($"ARC-INPUT-1123 native-smoke lockpick-ap NONE map={_readyMapName} (the hero's subturn did not come)"); return false; }
+            var paid = session.ConsumeActionPoints(session.Version, SessionCombatant.Hero, mine.ActionPoints, world);
+            Require(paid.Charge == SessionActionPointUse.Paid && session.QueryCombatRound() is { Actor.IsHero: true, ActionPoints: 0 }, $"the grant {mine.ActionPoints} was paid out: {paid.Charge}");
+            Require(!session.QueryActionPointCheck(SessionCombatant.Hero, 4), "no action points left: the check refuses");
+            ArmLockpick(listed);
+            Require(!InventoryOpen && _lockpickArmed is null && !TargetModeOpen(InterfaceMode.ItemTarget) && _interfaceWindows.Stack.Depth == 1 && TargetsMatchStack && WindowPanelsMatchStack,
+                $"the refused start left the interface on the base: {StackText()}");
+            Require(_portalNotice == "pick a lock: not enough action points", "the refusal's notice: " + _portalNotice);
+            GD.Print($"ARC-INPUT-1123 native-smoke lockpick-ap PASS map={_readyMapName} grant={mine.ActionPoints}");
+            return true;
+        }
+        finally { if (session.QueryCombatRound() is not null) session.EndCombatRound(session.Version); }
     }
 
     // A point of the command's destination rectangle the shared pick resolves to it: its centre, else a scan.

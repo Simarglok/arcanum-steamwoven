@@ -854,3 +854,13 @@ Known differences (documented, not bugs):
 - The creature takes the hero's alignment as the original does, but of the moment the world first reads it: a loaded game reads the hero's then.
 - The original's weighted lists overrun their table on a draw of 100 (MG9); Steamwoven fixes it in both modes (technical bug rule).
 - Familiar (74): its own flags (`OSF_FAMILIAR`, `ONF_FAMILIAR`) and its hiding with the party on the world map are MA-1's and the world map's.
+
+## ARC-INPUT-1123 — Lockpicks need 4 action points to start (2026-11-12)
+
+The rule is in [interface modes](../architecture/interface-modes.md#action-points-at-the-start-of-a-target-mode-arc-input-1123). Compare it in both games in a turn-based fight (turn-based on, combat mode, a fight with a creature near) with a hero that carries lockpicks.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | On your own turn spend all action points (walk until they are gone), then pick the lockpicks from the inventory. | The inventory closes and no lock cursor opens; nothing is said. (Steamwoven shows "pick a lock: not enough action points" on its status line, a known difference.) | open |
+| 2 | On your own turn with 4 or more points left, pick the lockpicks. | The inventory closes and the lock cursor opens. | open |
+| 3 | Outside a turn-based fight, pick the lockpicks. | The lock cursor opens whatever the points. | open |
