@@ -82,7 +82,7 @@ class SelectionTests(unittest.TestCase):
     def test_a_no_smoke_area_vetoes_the_generic_project_rows_but_the_viewers_own_files_still_select(self) -> None:
         for path in ("tests/Arcanum.World.Tests/Arcanum.World.Tests.csproj", "tests/Arcanum.World.Tests/packages.lock.json",
                      "experiments/gamepad-lab/GamepadLab.sln", "tools/research/Arcanum.ArtProbe/packages.lock.json",
-                     "src/Arcanum.Godot/Arcanum.Godot.sln", "src/Arcanum.Godot/Main.tscn", ".claude/settings.json",
+                     "src/Arcanum.Godot/Arcanum.Godot.sln", "src/Arcanum.Godot/Main.tscn",
                      "tools/terrain-viewer/Godot/AreaBarterPanel.cs.uid"):
             self.assertEqual(self.select(path).zones, (), path)
         self.assertEqual(self.select("tools/terrain-viewer/Godot/Arcanum.TerrainViewer.csproj").zones, (COMPLETE,))

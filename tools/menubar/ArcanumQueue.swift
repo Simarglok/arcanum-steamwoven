@@ -85,6 +85,37 @@ struct QueueFolder {
         return found.sorted { key($0) < key($1) }
     }
 
+    /// The owner's caps (ARC-DEV-1353: `./arcanum queue --set-lanes / --set-max-load`): the file `settings.json` of the queue
+    /// folder, {"shortLanes": 0...8, "maxLoad": number}; a missing key is the default / no guard.
+    var settingsURL: URL { url.appendingPathComponent("settings.json") }
+
+    func settings() -> [String: Any] {
+        guard let data = FileManager.default.contents(atPath: settingsURL.path),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
+        return json
+    }
+
+    var shortLanes: Int? { (settings()["shortLanes"] as? NSNumber).flatMap { 0...8 ~= $0.intValue ? $0.intValue : nil } }
+    var maxLoad: Double? { (settings()["maxLoad"] as? NSNumber).flatMap { $0.doubleValue > 0 ? $0.doubleValue : nil } }
+
+    /// Merge changes into settings.json the way the queue does: under the queue lock, written aside and renamed (nil removes a key).
+    func change(_ changes: [String: Any?]) {
+        let lock = open(url.appendingPathComponent("queue.lock").path, O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0o600)
+        if lock < 0 { return }
+        defer { close(lock) }
+        flock(lock, LOCK_EX)
+        defer { flock(lock, LOCK_UN) }
+        var merged = settings()
+        for (key, value) in changes {
+            if let value = value { merged[key] = value } else { merged.removeValue(forKey: key) }
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: merged, options: [.sortedKeys]) else { return }
+        let hidden = url.appendingPathComponent(".settings-menubar-\(getpid())")
+        guard (try? data.write(to: hidden)) != nil else { return }
+        chmod(hidden.path, 0o600)
+        rename(hidden.path, settingsURL.path)
+    }
+
     func setPaused(_ on: Bool) {
         if !on {
             try? FileManager.default.removeItem(at: pauseURL)
@@ -98,6 +129,8 @@ struct QueueFolder {
         rename(hidden.path, pauseURL.path)
     }
 }
+
+let defaultShortLanes = 2  // run_queue.DEFAULT_SHORT_LANES
 
 func age(_ seconds: Double) -> String {
     let total = max(0, Int(seconds))
@@ -150,6 +183,16 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         refresh()
     }
 
+    @objc func setLanes(_ sender: NSMenuItem) {
+        queue.change(["shortLanes": sender.tag < 0 ? nil : sender.tag])
+        refresh(force: true)
+    }
+
+    @objc func setMaxLoad(_ sender: NSMenuItem) {
+        queue.change(["maxLoad": (sender.representedObject as? NSNumber)?.doubleValue])
+        refresh(force: true)
+    }
+
     @objc func quit() { NSApp.terminate(nil) }
     @objc func nothing() {}
 
@@ -179,6 +222,52 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return entry
     }
 
+    /// "Godot runs at once": the number of short lanes (the heavy lane and an export come on top), as `--set-lanes` sets it.
+    func lanesItem(_ current: Int?) -> NSMenuItem {
+        let effective = current ?? defaultShortLanes
+        let title = effective == 0 ? "Godot runs at once: 1" : "Godot runs at once: up to \(effective) short + 1 heavy"
+        let item = NSMenuItem(title: title + (current == nil ? " (default)" : ""), action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        sub.addItem(header("Short Godot lanes (a heavy run and an export come on top)"))
+        let choices: [(String, Int)] = [("1 Godot run at a time", 0), ("1 short + 1 heavy", 1), ("2 short + 1 heavy", 2),
+                                        ("3 short + 1 heavy", 3), ("4 short + 1 heavy", 4)]
+        for (label, value) in choices {
+            let entry = NSMenuItem(title: label + (value == defaultShortLanes ? "  (default)" : ""), action: #selector(setLanes(_:)), keyEquivalent: "")
+            entry.target = self
+            entry.tag = value
+            entry.state = (current ?? -1) == value ? .on : .off
+            sub.addItem(entry)
+        }
+        let reset = NSMenuItem(title: "Default (\(defaultShortLanes) short + 1 heavy)", action: #selector(setLanes(_:)), keyEquivalent: "")
+        reset.target = self
+        reset.tag = -1
+        reset.state = current == nil ? .on : .off
+        sub.addItem(.separator())
+        sub.addItem(reset)
+        item.submenu = sub
+        return item
+    }
+
+    /// "Load guard": a run that is next waits while another Godot run is going and the one-minute load is above X (`--set-max-load`).
+    func loadItem(_ current: Double?) -> NSMenuItem {
+        var averages = [Double](repeating: 0, count: 1)
+        let load = getloadavg(&averages, 1) == 1 ? String(format: "%.1f", averages[0]) : "?"
+        let item = NSMenuItem(title: "Load guard: " + (current.map { String(format: "%g", $0) } ?? "off"), action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        sub.addItem(header("A run waits while another Godot run is going and load > X (now \(load))"))
+        var options: [Double?] = [nil, 8, 12, 16, 24, 32, 48]
+        if let current = current, !options.contains(where: { $0 == current }) { options.append(current) }
+        for option in options {
+            let entry = NSMenuItem(title: option.map { String(format: "%g", $0) } ?? "Off", action: #selector(setMaxLoad(_:)), keyEquivalent: "")
+            entry.target = self
+            entry.representedObject = option.map { NSNumber(value: $0) }
+            entry.state = option == current ? .on : .off
+            sub.addItem(entry)
+        }
+        item.submenu = sub
+        return item
+    }
+
     func header(_ text: String) -> NSMenuItem {
         let entry = NSMenuItem(title: text, action: nil, keyEquivalent: "")
         entry.isEnabled = false
@@ -188,6 +277,8 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func refresh(force: Bool = false) {
         let jobs = queue.jobs()
         let paused = queue.isPaused
+        let lanes = queue.shortLanes
+        let guardLimit = queue.maxLoad
         let now = Date().timeIntervalSince1970
         let running = jobs.filter { $0.startedAt != nil }
         let waiting = jobs.filter { $0.startedAt == nil }
@@ -209,7 +300,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // an open menu is only given new times while the same runs are in it: rebuilding it under the pointer flickers
         let positions = Dictionary(waiting.enumerated().map { ($1.seq, $0) }, uniquingKeysWith: { first, _ in first })
         let before = signature
-        signature = jobs.map { "\($0.seq):\($0.startedAt != nil)" }.joined(separator: ",") + (paused ? "|paused" : "")
+        signature = jobs.map { "\($0.seq):\($0.startedAt != nil)" }.joined(separator: ",") + (paused ? "|paused" : "") + "|lanes=\(lanes.map(String.init) ?? "-")|load=\(guardLimit.map { String($0) } ?? "-")"
         if menuIsOpen && signature == before {
             for (seq, entry) in rows { entry.0.title = text(entry.1, position: positions[seq], now: now) }
             return
@@ -234,6 +325,10 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pause.target = self
         pause.state = paused ? .on : .off
         menu.addItem(pause)
+        menu.addItem(.separator())
+        menu.addItem(lanesItem(lanes))
+        menu.addItem(loadItem(guardLimit))
+        menu.addItem(.separator())
         let quit = NSMenuItem(title: "Quit (starts again with the next run)", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
@@ -269,11 +364,19 @@ while let flag = arguments.first {
     case "--lock": if let value = arguments.first { lockURL = URL(fileURLWithPath: value); arguments.removeFirst() }
     case "--idle-minutes": if let value = arguments.first, let minutes = Double(value) { idleMinutes = minutes; arguments.removeFirst() }
     case "--open-menu": openMenu = true
+    case "--set-lanes", "--set-max-load":  // the same writes as the menu's submenus, for the self-check: N|default, X|off
+        let value = arguments.isEmpty ? "" : arguments.removeFirst()
+        if flag == "--set-lanes" {
+            QueueFolder(url: queueURL).change(["shortLanes": Int(value)])
+        } else {
+            QueueFolder(url: queueURL).change(["maxLoad": Double(value)])
+        }
+        exit(0)
     case "--set-pause", "--clear-pause":  // what the menu's Pause item does, for scripts and the self-check: act and exit
         QueueFolder(url: queueURL).setPaused(flag == "--set-pause")
         exit(0)
     default:
-        FileHandle.standardError.write("usage: ArcanumQueue [--queue-dir DIR] [--lock FILE] [--idle-minutes N (0: never)] [--open-menu] [--set-pause|--clear-pause]\n".data(using: .utf8)!)
+        FileHandle.standardError.write("usage: ArcanumQueue [--queue-dir DIR] [--lock FILE] [--idle-minutes N (0: never)] [--open-menu] [--set-pause|--clear-pause] [--set-lanes N|default] [--set-max-load X|off]\n".data(using: .utf8)!)
         exit(2)
     }
 }

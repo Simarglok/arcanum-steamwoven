@@ -238,6 +238,34 @@ def positive(value: str) -> int:
     return number
 
 
+def _set_lanes(text: str) -> int:
+    """ARC-DEV-1353: store the number of short Godot lanes in the queue folder (0 = one Godot run at a time)."""
+    value = None if text == "default" else int(text)
+    run_queue.write_settings({"shortLanes": value})
+    return 0
+
+
+def _set_max_load(text: str) -> int:
+    run_queue.write_settings({"maxLoad": None if text == "off" else float(text)})
+    return 0
+
+
+def lane_count(text: str) -> str:
+    if text != "default" and not (text.isascii() and text.isdigit() and int(text) <= run_queue.MAX_SHORT_LANES):
+        raise argparse.ArgumentTypeError(f"N must be 'default' or a whole number from 0 to {run_queue.MAX_SHORT_LANES}")
+    return text
+
+
+def max_load_value(text: str) -> str:
+    try:
+        ok = text == "off" or (text.isascii() and "_" not in text and 0 < float(text) < float("inf"))
+    except ValueError:
+        ok = False
+    if not ok:
+        raise argparse.ArgumentTypeError("X must be 'off' or a positive load average, e.g. 12")
+    return text
+
+
 def queue(args: argparse.Namespace) -> int:
     if args.pause or args.resume:  # ARC-DEV-1344: the same flag the menu-bar app sets
         changed = run_queue.set_paused(args.pause)
@@ -254,8 +282,20 @@ def queue(args: argparse.Namespace) -> int:
                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             print("menu-bar app started")
         return 0
+    if (args.set_lanes is not None or args.set_max_load is not None) and (args.lanes or args.history):
+        print("arcanum queue: --set-lanes and --set-max-load cannot be combined with --lanes or --history", file=sys.stderr)
+        return 2
+    if args.set_lanes is not None or args.set_max_load is not None:
+        if args.set_lanes is not None:
+            _set_lanes(args.set_lanes)
+        if args.set_max_load is not None:
+            _set_max_load(args.set_max_load)
+        print(run_queue.settings_line())
+        return 0
     for line in (run_queue.lane_report(args.history) if args.lanes else run_queue.status(args.history)):
         print(line)
+    if not args.lanes and not args.history:
+        print(run_queue.settings_line())  # last, so a reader of the run lines above sees them unchanged
     return 0
 
 
@@ -416,6 +456,14 @@ def parser() -> argparse.ArgumentParser:
     group.add_argument("--resume", action="store_true", help="clear the pause: the waiting runs start in their order")
     command.add_argument("--app", action="store_true", help="start the menu-bar app now (ARC-DEV-1344; a queued run starts it by itself)")
     command.add_argument("--open-menu", action="store_true", help=argparse.SUPPRESS)
+    command.add_argument("--set-lanes", metavar="N", type=lane_count,
+                         help="cap the Godot runs of every thread (ARC-DEV-1353): N short lanes 0-" + str(run_queue.MAX_SHORT_LANES)
+                         + " (0: one Godot run at a time; 1: one short and one heavy; 'default': back to "
+                         + str(run_queue.DEFAULT_SHORT_LANES) + "); an export runs alone, and the variable "
+                         + run_queue.LANES_ENV + " still wins in the wrapper that sets it")
+    command.add_argument("--set-max-load", metavar="X", type=max_load_value,
+                         help="load guard: a Godot run that is next does not start while another Godot run is running and the "
+                              "one-minute load average is above X (a lone run always starts); 'off' removes it")
     command.set_defaults(func=queue)
     return result
 

@@ -269,7 +269,7 @@ def tickets(prune: bool = True) -> list[tuple[Path, dict[str, Any]]]:
         for path in base.glob(".new-*"):
             if not _locked(path):
                 _unlink(path)
-        for pattern in (".counter-*", ".history-*"):  # left by a process interrupted mid-replace
+        for pattern in (".counter-*", ".history-*", ".settings-*"):  # left by a process interrupted mid-replace
             for path in base.glob(pattern):
                 try:
                     if now - path.stat().st_mtime > 60:
@@ -329,23 +329,85 @@ def order_of(live: Sequence[dict[str, Any]]) -> Callable[[dict[str, Any]], tuple
 
 
 _LANE_NOTE = [False]
+SETTINGS_FILE = "settings.json"  # ARC-DEV-1353: the owner's caps, in the queue folder: {"shortLanes": 0..8, "maxLoad": number}
 
 
-def short_lanes(environment: dict[str, str] | None = None) -> int:
-    """The number of short Godot lanes: LANES_ENV, else DEFAULT_SHORT_LANES. 0 is the rollback (one Godot slot); a value
-    that is not a whole number from 0 to MAX_SHORT_LANES is read as the rollback too, with a note once."""
+def read_settings() -> dict[str, Any]:
+    """The owner's caps from the queue folder (./arcanum queue --set-lanes / --set-max-load); {} when none or unreadable.
+    Read only: it never creates the folder. Every wrapper reads it, so one setting caps every thread's runs."""
+    try:
+        value = json.loads((folder() / SETTINGS_FILE).read_text())
+    except (OSError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def write_settings(changes: dict[str, Any]) -> dict[str, Any]:
+    """Merge the changes into the settings file (a value of None removes the key); the write is atomic."""
+    with _QueueLock():
+        settings = read_settings()
+        for key, value in changes.items():
+            if value is None:
+                settings.pop(key, None)
+            else:
+                settings[key] = value
+        path = _open_folder() / SETTINGS_FILE
+        temp = path.parent / f".settings-{os.getpid()}"
+        temp.write_text(json.dumps(settings, sort_keys=True))
+        os.replace(temp, path)
+    return settings
+
+
+def _whole_lanes(value: Any) -> int | None:
+    if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= MAX_SHORT_LANES:
+        return value
+    return None
+
+
+def lanes_setting(environment: dict[str, str] | None = None) -> tuple[int, str]:
+    """The number of short lanes and where it comes from: LANES_ENV (this wrapper's environment), else the owner's file,
+    else DEFAULT_SHORT_LANES. 0 is the rollback (one Godot slot); an unreadable variable is read as the rollback, with a
+    note once. The file is read only for the real environment (environment=None): a given mapping is a test's."""
     value = (os.environ if environment is None else environment).get(LANES_ENV)
     if value is None or not value.strip():
-        return DEFAULT_SHORT_LANES
+        stored = _whole_lanes(read_settings().get("shortLanes")) if environment is None else None
+        return (DEFAULT_SHORT_LANES, "default") if stored is None else (stored, "settings file")
     text = value.strip().lower()
     if text == "off":
-        return 0
+        return 0, "environment"
     if text.isascii() and text.isdigit() and int(text) <= MAX_SHORT_LANES:
-        return int(text)
+        return int(text), "environment"
     if not _LANE_NOTE[0]:
         _LANE_NOTE[0] = True
         say(f"note: {LANES_ENV}={value!r} is not a number from 0 to {MAX_SHORT_LANES}; using one Godot slot")
-    return 0
+    return 0, "environment"
+
+
+def short_lanes(environment: dict[str, str] | None = None) -> int:
+    """The number of short Godot lanes (see lanes_setting)."""
+    return lanes_setting(environment)[0]
+
+
+def max_load() -> float | None:
+    """The owner's load guard (a one-minute load average), None when none is set."""
+    value = read_settings().get("maxLoad")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            limit = float(value)
+        except OverflowError:  # a hand-edited, absurdly large integer
+            return None
+        return limit if 0 < limit < math.inf else None
+    return None
+
+
+def too_loaded(peers: int, load: float | None = None) -> float | None:
+    """The limit a run that is next for its place must wait for: the load guard, when another Godot run is already running
+    and the one-minute load is above it. A lone run (no peer) always starts, so nothing waits for ever."""
+    limit = max_load()
+    if limit is None or peers <= 0:
+        return None
+    current = _load() if load is None else load
+    return limit if current is not None and current > limit else None
 
 
 def lane_for(kind: str, estimate: float, lanes: int | None = None) -> str | None:
@@ -535,8 +597,14 @@ def _wait_turn(fd: int, ticket: dict[str, Any], sleep: Callable[[float], None]) 
         with _QueueLock():
             live = [item for _, item in tickets()]
             waiting_for = blocker(ticket, live)
+            # the guard holds the runs with a window or headless (GODOT_KINDS) behind running ones of those kinds only: a
+            # `quick` run (an import, a self-test) never waits for a long viewer window because of the load
+            limit = None
+            if waiting_for is None and ticket["kind"] in GODOT_KINDS:
+                limit = too_loaded(sum(1 for item in live if item["seq"] != ticket["seq"] and item.get("startedAt")
+                                       and item["kind"] in GODOT_KINDS))
             held = pause_state() is not None  # ARC-DEV-1344: a paused queue starts nothing (it only ever looks at waiters)
-            if waiting_for is None and not held:
+            if waiting_for is None and limit is None and not held:
                 ticket["startedAt"] = time.time()
                 if ticket["kind"] in HOLD_KINDS:  # ARC-DEV-400: the conditions it starts under, for the lane accounting
                     ticket["peers"] = _peers(live, ticket["seq"])
@@ -545,11 +613,16 @@ def _wait_turn(fd: int, ticket: dict[str, Any], sleep: Callable[[float], None]) 
                 return
         order = order_of(live)
         position = sum(1 for item in live if not item.get("startedAt") and order(item) < order(ticket))
-        state = (waiting_for["seq"] if waiting_for else None, position, held)
+        state = (waiting_for["seq"] if waiting_for else ("load", limit) if limit is not None else None, position, held)
         if state != last:
-            reason = f"waiting-for={_describe(waiting_for)}" if waiting_for else "waiting-for=resume"
-            say(f"queued ticket={ticket['seq']} kind={ticket['kind']} ahead={position} {reason}"
-                + (" paused (./arcanum queue --resume)" if held else ""))
+            suffix = " paused (./arcanum queue --resume)" if held else ""
+            if waiting_for is not None:
+                say(f"queued ticket={ticket['seq']} kind={ticket['kind']} ahead={position} waiting-for={_describe(waiting_for)}{suffix}")
+            elif limit is not None:  # ARC-DEV-1353: its turn has come, but the machine is busier than the owner's guard
+                say(f"queued ticket={ticket['seq']} kind={ticket['kind']} ahead={position} waiting-for=load below {limit:g} "
+                    f"(now {_load()}; ./arcanum queue --set-max-load off removes the guard){suffix}")
+            else:  # ARC-DEV-1344: its turn has come, but the queue is paused
+                say(f"queued ticket={ticket['seq']} kind={ticket['kind']} ahead={position} waiting-for=resume{suffix}")
             last = state
         sleep(POLL_SECONDS)
 
@@ -948,6 +1021,15 @@ def status(history: int = 0) -> list[str]:
             result.append(f"waiting {_describe(ticket)} for {_age(now - ticket['enqueuedAt'])}"
                           + (f" behind #{waiting_for['seq']}" if waiting_for else " (paused)" if paused is not None else " (starting)"))
     return result
+
+
+def settings_line() -> str:
+    """The caps in force, for ./arcanum queue (ARC-DEV-1353): the short lanes (the heavy lane and an export come on top)."""
+    lanes, source = lanes_setting()
+    limit = max_load()
+    guard = f"load guard {limit:g} (now {_load()})" if limit else "load guard off"
+    most = "1 Godot run at a time" if lanes <= 0 else f"up to {lanes} short + 1 heavy Godot run at once"
+    return f"limits: short lanes {lanes} from {source} ({most}); {guard}"
 
 
 def is_red(exit_code: Any) -> bool:
