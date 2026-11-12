@@ -68,6 +68,9 @@ public sealed record AreaInventoryItem(AreaObjectKey Key, AreaItemType Type, int
     /// <summary>ARC-WORLD-085: the magic weight adjustment (field 0x5A), which the holder's power scales into the item's weight.</summary>
     public int MagicWeight { get; init; }
 
+    /// <summary>ARC-WORLD-1299: the object's spell flags (field 0x13, slot 19): bit 0x4000 marks a summoned item, which a dead body's inventory walk destroys (0x463860). A field that does not read as a number reads as no flag.</summary>
+    public uint SpellFlags { get; init; }
+
     public int SourceIndex => Key.SourceIndex;
     public bool InInventory => Holder is not null;
     /// <summary>Identified when its complexity is not positive or the identified item flag is set.</summary>
@@ -153,7 +156,7 @@ public static class AreaInventoryReader
     internal const uint InventoryObjectFlag = 0x1000, IdentifiedItemFlag = 0x1;
 
     // Effective-field slots: common block, then the type's first and second group.
-    private const int ObjectFlagsSlot = 18, NameSlot = 21, DescriptionSlot = 22, ScriptsSlot = 31;
+    private const int ObjectFlagsSlot = 18, SpellFlagsSlot = 19, NameSlot = 21, DescriptionSlot = 22, ScriptsSlot = 31;
     private const int ContainerFlagsSlot = 36, ContainerKeySlot = 38, ContainerCountSlot = 39, ContainerListSlot = 40, ContainerSourceSlot = 41;
     private const int CritterGoldSlot = 50, CritterCountSlot = 55, CritterListSlot = 56, CritterSourceSlot = 57;
     private const int NpcLeaderSlot = 70, NpcSubstituteSlot = 83;
@@ -251,7 +254,7 @@ public static class AreaInventoryReader
                 Number(o, ItemWeightSlot), Number(o, ItemWorthSlot), Number(o, ItemLocationSlot),
                 type is AreaItemType.Gold or AreaItemType.Ammo ? Number(o, ItemSecondGroupSlot + 1) : null,
                 type == AreaItemType.Key ? Number(o, ItemSecondGroupSlot) : null, Scripts(o), holderIndex, listIndex,
-                type == AreaItemType.Ammo ? Number(o, ItemSecondGroupSlot + 2) : null) { MagicWeight = Number(o, ItemMagicWeightSlot) });
+                type == AreaItemType.Ammo ? Number(o, ItemSecondGroupSlot + 2) : null) { MagicWeight = Number(o, ItemMagicWeightSlot), SpellFlags = SpellFlagsOf(o) });
         }
 
         var holders = new List<AreaInventoryHolder>(holderRows.Length);
@@ -278,6 +281,10 @@ public static class AreaInventoryReader
     }
 
     private static AreaFieldValue? Field(AreaObjectRecord o, int slot) => o.EffectiveFields.FirstOrDefault(f => f.Slot == slot);
+
+    // ARC-WORLD-1299: a spell flags field that is not a plain number reads as clear (the facts only decide a dead body's item walk; the item is never refused for it).
+    private static uint SpellFlagsOf(AreaObjectRecord o) =>
+        Field(o, SpellFlagsSlot) is { Presence: AreaPresence.Value, Number: { } n } && n is >= int.MinValue and <= uint.MaxValue ? unchecked((uint)n) : 0;
 
     private static int Number(AreaObjectRecord o, int slot) =>
         Field(o, slot) is { Presence: AreaPresence.Value, Number: { } n } && n is >= int.MinValue and <= int.MaxValue
