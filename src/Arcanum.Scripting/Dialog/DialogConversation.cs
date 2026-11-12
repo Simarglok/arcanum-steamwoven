@@ -153,7 +153,7 @@ public sealed partial class DialogConversation
                 BuildOffers(_step!);
                 return Phase == DialogConversationPhase.AwaitingSelection ? new(DialogConversationSelectStatus.StaleSelection) : Result();
             }
-            var pending = plan.Reply.Action!.Count + (plan.Reply.Insult is null ? 0 : 1) + (plan.Reply.Barter is null ? 0 : 1);
+            var pending = plan.Reply.Action!.Count + (plan.Reply.Insult is null ? 0 : 1) + (plan.Reply.Barter is null ? 0 : 1) + (plan.Reply.WorldMap is null ? 0 : 1);
             if (!Admit(plan.Target, pending))
             {
                 return Result();
@@ -230,6 +230,12 @@ public sealed partial class DialogConversation
                 if (OpenBarter(plan!.Reply.Barter!.Value))
                 {
                     Finish(new DialogConversationEnd(DialogEndKind.BarterWindow, null));
+                }
+                return Result();
+            case DialogOptionTransition.WorldMap:
+                if (OpenWorldMap(plan!.Reply.WorldMap!.Value))
+                {
+                    Finish(new DialogConversationEnd(DialogEndKind.WorldMapWindow, null));
                 }
                 return Result();
             case DialogOptionTransition.Exit:
@@ -1290,6 +1296,31 @@ public sealed partial class DialogConversation
         return true;
     }
 
+    // ARC-SCRIPT-1358: the world map open after the reply's action (0x413130 state 30 → dialog state 6 → 0x567E30 → 0x560760).
+    private bool OpenWorldMap(DialogOperationSource source)
+    {
+        var command = new OpenWorldMapCommand(_request.Participants.Npc, _request.Participants.PlayerCharacter);
+        DialogCommandResult result;
+        try
+        {
+            result = _ports.WorldMap!.Execute(command);
+        }
+        catch (Exception)
+        {
+            Record(command, source, DialogCommandAttemptOutcome.Indeterminate);
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.CommandIndeterminate, CurrentNode, source));
+            return false;
+        }
+        if (result != DialogCommandResult.Applied)
+        {
+            Record(command, source, DialogCommandAttemptOutcome.Rejected);
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.CommandRejected, CurrentNode, source));
+            return false;
+        }
+        Record(command, source, DialogCommandAttemptOutcome.Applied);
+        return true;
+    }
+
     private void Record(DialogCommand command, DialogOperationSource source, DialogCommandAttemptOutcome outcome, GlobalFlagWriteReceipt? receipt = null) =>
         _effects.Add(new DialogEffectReceipt(_effects.Count, Turn, command, source, outcome, receipt));
 
@@ -1446,6 +1477,7 @@ public sealed partial class DialogConversation
         DialogOptionBlock? block = null;
         DialogOperationSource? insult = null;
         DialogOperationSource? barter = null;
+        DialogOperationSource? worldMap = null;
         int[]? trainer = null;
         RumorOffer? rumor = null;
         var story = false;
@@ -1482,6 +1514,16 @@ public sealed partial class DialogConversation
             marker = found;
             text = string.Empty;
             barter = new DialogOperationSource(new DialogNodeId(record.Id), record.SerializedIndex, DlgFieldKind.Text,
+                record.Text.PayloadOffset, 0, 2, 0);
+        }
+        else if (found is { Letter: 'l' } && exact && _ports.WorldMap is not null)
+        {
+            // ARC-SCRIPT-1358 (ledger VA5): the original's world map reply (exactly "l:", 0x416C10): a generated phrase (PC lines 2300..2399) whose
+            // pick sets state 30 (0x414810), so the dialog ends and the world map opens (0x567E30, 0x560760); the reply's response is not followed.
+            kind = DialogOptionTextKind.Generated;
+            marker = found;
+            text = string.Empty;
+            worldMap = new DialogOperationSource(new DialogNodeId(record.Id), record.SerializedIndex, DlgFieldKind.Text,
                 record.Text.PayloadOffset, 0, 2, 0);
         }
         else if (found is { Letter: 't' } && TrainerAvailable && ParseTrainerSkills(text) is { } skills)
@@ -1542,6 +1584,10 @@ public sealed partial class DialogConversation
         else if (barter is not null)
         {
             transition = DialogOptionTransition.Barter;
+        }
+        else if (worldMap is not null)
+        {
+            transition = DialogOptionTransition.WorldMap;
         }
         else if (value > 0)
         {
@@ -1647,6 +1693,12 @@ public sealed partial class DialogConversation
             // A dialog transfer or the schematic window in the same reply is outside this subset.
             block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedInteraction, barter);
         }
+        if (block is null && worldMap is not null && action is not null && action.Any(operation => operation is ConversationJoin or ConversationUnwait or
+                ConversationFinalLine or ConversationExpertTeacher or ConversationSchematics or ConversationWindow))
+        {
+            // A dialog transfer or a window in the same reply is outside this subset.
+            block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedInteraction, worldMap);
+        }
         if (block is null && action is not null && action.LastOrDefault(OpensWindow) is { } schematics)
         {
             // SU (0x415BA0) sets the pending window code and every action of the field still runs; the reply's target node is never
@@ -1671,7 +1723,7 @@ public sealed partial class DialogConversation
             }
         }
         return new ReplyPlan(record, gender.Value, record.IqValue!.Value, condition, kind, text, marker, transition, target, line, action, block,
-            block is null ? insult : null, block is null ? barter : null, phrase, block is null ? trainer : null, block is null ? rumor : null, block is null && story);
+            block is null ? insult : null, block is null ? barter : null, block is null ? worldMap : null, phrase, block is null ? trainer : null, block is null ? rumor : null, block is null && story);
     }
 
     private static bool CheckTokens(string text, DialogNodeId node, DialogResponseId? response, out DialogConversationFrontier? frontier, out DialogConversationFailure? failure)
@@ -1825,6 +1877,7 @@ public sealed partial class DialogConversation
         DialogOptionBlock? Block,
         DialogOperationSource? Insult,
         DialogOperationSource? Barter = null,
+        DialogOperationSource? WorldMap = null,
         bool Phrase = false,
         int[]? Trainer = null,
         RumorOffer? Rumor = null,

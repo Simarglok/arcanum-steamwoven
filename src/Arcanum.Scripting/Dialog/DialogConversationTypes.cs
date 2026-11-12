@@ -95,7 +95,8 @@ public sealed record DialogConversationPorts(
     IDialogNewspaperPort? Newspaper = null,
     IDialogOriginPort? Origins = null,
     IDialogTrainerPort? Trainer = null,
-    IDialogPcGoldPort? Purse = null);
+    IDialogPcGoldPort? Purse = null,
+    IDialogWorldMapPort? WorldMap = null);
 
 public enum DialogReactionMode
 {
@@ -459,6 +460,20 @@ public interface IDialogBarterPort
     DialogCommandResult Execute(OpenBarterCommand command);
 }
 
+/// <summary>ARC-SCRIPT-1358: a Player <c>l:</c> reply, the world map (ledger VA5: state 30 of 0x414810 sets the dialog state 6, whose case in
+/// 0x567E30 ends the talk and opens the world map, 0x560760).</summary>
+public sealed record OpenWorldMapCommand(DialogParticipantId Npc, DialogParticipantId PlayerCharacter) : DialogCommand;
+
+/// <summary>
+/// World map seam (ARC-SCRIPT-1358). Without it an <c>l:</c> reply stays blocked as an unsupported interaction. Applied means the host will
+/// try to open the world map once the conversation has ended (<see cref="DialogEndKind.WorldMapWindow"/>); the open itself refuses with its own
+/// messages as the bar's Map button does (0x5607E0). Rejected fails the conversation; a thrown exception is recorded as indeterminate.
+/// </summary>
+public interface IDialogWorldMapPort
+{
+    DialogCommandResult Execute(OpenWorldMapCommand command);
+}
+
 /// <summary>
 /// Skill seam (ARC-SKILLS-004): the PC's effective skill level (0..20) and training (0 none .. 3 master) for the skill gates
 /// and the expert-teacher gate, and the training action. Calls are synchronous and serialized by the host. Applied covers the
@@ -671,6 +686,9 @@ public enum DialogOptionTransition
     /// <summary>ARC-UI-050: a Player <c>b:</c> reply with a barter port: the reply's action runs, its response value is not followed,
     /// and the dialog ends for the barter window (<see cref="DialogEndKind.BarterWindow"/>).</summary>
     Barter,
+    /// <summary>ARC-SCRIPT-1358: a Player <c>l:</c> reply with a world map port: the reply's action runs, its response value is not followed,
+    /// and the dialog ends for the world map (<see cref="DialogEndKind.WorldMapWindow"/>).</summary>
+    WorldMap,
     /// <summary>ARC-SCRIPT-1150: a Player <c>t:</c> reply with a trainer port: the reply's action runs, then the NPC's skill menu replaces the NPC line
     /// and the replies (state 5, ledger DTR1); its own transition (<see cref="DialogOption.Target"/>, <see cref="DialogOption.ScriptLine"/>) is followed
     /// when the player leaves the menu or the training talk.</summary>
@@ -762,6 +780,9 @@ public enum DialogEndKind
     /// as merchant (the original's interface-mode change ends the dialog, BT7); no SCR continuation follows and the talk does not resume
     /// when the window closes.</summary>
     BarterWindow,
+    /// <summary>ARC-SCRIPT-1358: an <c>l:</c> reply: the dialog ended without another NPC line and the host opens the world map (the original's
+    /// dialog state 6, 0x567E30); no SCR continuation follows.</summary>
+    WorldMapWindow,
 }
 
 public sealed record DialogConversationEnd(DialogEndKind Kind, DialogScriptLine? ScriptLine);
