@@ -18,7 +18,7 @@ public sealed class AreaNpcStateScriptAdmissionTests
         {
             foreach (var action in ScrAdmissionSet.NpcStateHostActions) Assert.IsTrue(set.Actions.Contains(action), $"{set.Id}: action {action}");
             Assert.IsFalse(set.Actions.Contains(ScrCatalogue.Action.ChangeArtNumber), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S37), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S38), set.Id);
         }
         // The dialog host does not apply the requests yet: its sets stay without them.
         foreach (var set in new[] { AreaScriptHost.Admission, AreaScriptHost.SkillAdmission, AreaScriptHost.TalkAdmission, AreaScriptHost.SkillTalkAdmission })
@@ -55,6 +55,7 @@ public sealed class AreaNpcStateScriptAdmissionTests
         // S36 admits 208 whole, the hosts' sets 56 (use), 117 (placed), 89 (heartbeat) and 143 (dying); the rest hold change art number (no host applies it) or a command of another planned slice.
         // ARC-SCRIPT-1164 (set S37, the world-object commands): the placed set admits 120, the heartbeat set 91 and the dying set 147 of them (3, 2 and 4 more); the use set stays at 56.
         // ARC-SCRIPT-1279 (the four item commands got a host): the placed set admits 123 and the dying set 150 (3 more each); the use and heartbeat sets stay at 56 and 91.
-        Assert.AreEqual((270, 208, 56, 123, 91, 150), (withState, counts["S36"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
+        // ARC-SCRIPT-1359 (set S38, get location 95): the heartbeat set admits 94 and the dying set 153 (3 more each, among them the Crash Site agent's heartbeat 1717).
+        Assert.AreEqual((270, 208, 56, 123, 94, 153), (withState, counts["S36"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
     }
 }

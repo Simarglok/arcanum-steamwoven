@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S37"/>.
+/// <see cref="ScrAdmissionSet.S38"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -544,6 +544,15 @@ internal sealed class ScrInterpreter
                 var from = World.Location(Object(a, 0, line)) ?? throw new MissingObjectStop(line);
                 var to = World.Location(Object(a, 1, line)) ?? throw new MissingObjectStop(line);
                 Set(a, 2, unchecked((int)Math.Max(Math.Abs(from.X - to.X), Math.Abs(from.Y - to.Y))), line);
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.GetLocation:
+            {
+                // GL1 (0x4498.., action table entry 94): the first object of operand 0 (0x44B960) goes to the object field reader (0x406DA0, field 2, the location), whose 64-bit answer is stored as its low half
+                // (the tile x) into operand 1 and its high half (the tile y) into operand 2, each cut to 32 bits. An absent object, or one without a place, stops the run (the original reads a null handle's location).
+                var at = World.Location(Object(a, 0, line)) ?? throw new MissingObjectStop(line);
+                Set(a, 1, unchecked((int)at.X), line);
+                Set(a, 2, unchecked((int)at.Y), line);
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.SetFaction:

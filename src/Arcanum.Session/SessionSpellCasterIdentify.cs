@@ -8,8 +8,8 @@ namespace Arcanum.Session;
 /// ARC-MAGIC-032 (MA-7 of the magic audit ARC-RES-103, decision D5(a); ledger XR1–XR5): the Identify component (0x4522A0) and Divine Magick's identified-flag line. The original's Identify
 /// <b>writes nothing</b>: it opens a window or a description for the casting <b>local player</b> (the wrappers 0x4EE4C0, 0x4EE430, 0x4EE3A0 act only when the run's parent is the player; a
 /// single-player game does nothing else, and so an NPC caster's Identify has no effect). The host builds the answer as a typed event (<see cref="SpellCastEventKind.IdentifyCritter"/>,
-/// <see cref="SpellCastEventKind.IdentifyContainer"/>, <see cref="SpellCastEventKind.IdentifyItem"/>) that the viewer shows as a text line; the windows themselves (the read-only NPC sheet,
-/// the container's inventory in mode 4, the item description window) are the identify-window slice E8's. The item's identification is the session's mark (<see cref="GameSessionOwner.MarkItemIdentified"/>).
+/// <see cref="SpellCastEventKind.IdentifyContainer"/>, <see cref="SpellCastEventKind.IdentifyItem"/>) that the viewer shows as a text line and as the window of E8-g (the read-only NPC sheet, ARC-UI-1127; the
+/// container's inventory in mode 4 and the item description, ARC-RES-1327). The item's identification is the session's mark (<see cref="GameSessionOwner.MarkItemIdentified"/>).
 /// </summary>
 public sealed partial class SessionSpellCaster
 {

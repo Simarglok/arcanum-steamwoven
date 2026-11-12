@@ -1013,3 +1013,12 @@ The numbers are in [DH11](../research/ledger/spell-runs.md). The owner's report 
 | --- | --- | --- | --- |
 | 1 | In the options set the difficulty to Normal (not Easy). Cast Harm (spell 55) once at a wolf, with a hero of 8 magick points (a night mage at night, or 8 points of magick). | 17 hit points per cast (3 + 37 × 40 / 100). On Easy 25, on Hard 13: the original adds half of a PC attacker's damage on Easy and takes a quarter on Hard, for spells and weapons alike. | open |
 | 2 | Press once on the wolf with the Harm cursor, with your own mouse, and watch the casts in the log (Ctrl+B). | One cast per press, as in the original (the cursor stays open for the next press). Two or three casts within a few milliseconds from one press mean the mouse sends duplicate presses. | open |
+
+## ARC-SCRIPT-1359 — the Crash Site Molochean agent after the altar talk (2026-11-12)
+
+The agent's heartbeat (script 1717) is admitted whole since this task ([GL1–GL2](../research/ledger/scripts.md)). Start a new game at the Crash Site; the checks need the story flag set by the altar talk.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Talk to Virgil at the altar (the tile script runs his dialog), then watch the Molochean agent near the altar and read the log (Ctrl+B). | No `heartbeat-refused ... script 1717` line any more. The agent sets its day and night standpoints to its tile and runs to it (goal 74), as the original's heartbeat does. | open |
+| 2 | Let the agent reach its tile. | The follow-up of the scene (talk or attack) starts as in the original. If it does not, report what the agent does (the scene may belong to another script; a new issue is then filed). | open |
