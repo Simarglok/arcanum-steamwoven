@@ -49,4 +49,18 @@ public sealed class ControlSchemeSettingsTests
         Assert.AreEqual(ControlSchemeSettings.Default, s);
         Assert.AreEqual(ControlSchemeSettings.Default, new ControlSchemeSettings(3, PadScheme.Direct).Validated());
     }
+
+    [TestMethod]
+    public void The_one_controls_line_maps_to_the_pad_and_touch_fields_and_back()
+    {
+        var start = new ControlSchemeSettings(Prompts: PromptStyle.Nintendo);
+        Assert.AreEqual(ControlChoice.Original, start.Choice);
+        Assert.AreEqual((PadScheme.Direct, TouchScheme.Off, PromptStyle.Nintendo), (start.WithChoice(ControlChoice.Direct).Pad, start.WithChoice(ControlChoice.Direct).Touch, start.WithChoice(ControlChoice.Direct).Prompts), "the prompt style stays");
+        Assert.AreEqual((PadScheme.Pointer, TouchScheme.Off), (start.WithChoice(ControlChoice.Pointer).Pad, start.WithChoice(ControlChoice.Pointer).Touch));
+        Assert.AreEqual((PadScheme.Off, TouchScheme.TouchPad), (start.WithChoice(ControlChoice.TouchPad).Pad, start.WithChoice(ControlChoice.TouchPad).Touch), "scheme C uses the pad itself, so no pad scheme beside it");
+        foreach (var choice in Enum.GetValues<ControlChoice>()) Assert.AreEqual(choice, start.WithChoice(choice).Choice, choice.ToString());
+        Assert.AreEqual(ControlChoice.TouchPad, new ControlSchemeSettings(Pad: PadScheme.Direct, Touch: TouchScheme.TouchPad).Choice, "a file with both on reads as C");
+        Assert.AreEqual(ControlChoice.Original, start.WithChoice(ControlChoice.Pointer).WithChoice(ControlChoice.Original).Choice);
+        Assert.IsTrue(start.WithChoice(ControlChoice.TouchPad).OriginalActive, "the original mouse and keyboard stay live in every choice");
+    }
 }

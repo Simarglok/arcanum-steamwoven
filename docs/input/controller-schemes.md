@@ -31,7 +31,7 @@ Every scheme is an **input adapter** that emits the same semantic commands to th
 The foundation is a precondition for any fair comparison:
 
 1. **Scheme selector** in Options → Controls: `Original (mouse+keyboard)` always active;
-   `Pad scheme: A Direct / B Pointer`; `Touch: Off / C Touch+pad`. Switchable at run time without
+   `Pad scheme: A Direct / B Pointer`; `Touch: Off / C Touch+pad` (built as one Controls line: Original, A, B, C, [ARC-GPAD-1463](https://github.com/Simarglok/arcanum-steamwoven/issues/1463)). Switchable at run time without
    restart, persisted in user settings. Defaults for the test: none — the test script chooses.
 2. **Active device detection** ("last meaningful input wins"; both devices always live):
    - pad becomes active on a button or a stick/trigger beyond the deadzone (drift ignored);
@@ -242,11 +242,13 @@ The Godot-free parts of §0 live in `src/Arcanum.Input` and are tested in `tests
 The viewer hosts the core (`tools/terrain-viewer/Godot/TerrainViewerControllers.cs`, the Godot-free `ControllerFoundation` and
 `PromptStrip` in `src/Arcanum.Input`):
 
-- **Scheme selector.** Three project lines at the end of the **Video** page of the Options window (the Game page's eight slots are full with Rules and the
-  evidence log's two lines), in the main menu and in play, the pattern of the removed HD lines: `Pad scheme` (Off, A Direct, B Pointer), `Touch` (Off, C Touch+pad) and `Prompt style` (Auto, Xbox,
-  PlayStation, Nintendo, Steam Deck). One `AreaOption` each (`AreaGameOptions.cs`), saved with the game settings as the lines
-  `pad scheme`, `touch scheme` and `prompt style` of the one settings file (`ViewerSettingsConfig`; a missing or unknown word is that
-  line's default, Off, Off, Auto), applied at once with no restart; the original mouse and keyboard are not a value. The Video page now holds five.
+- **Scheme selector.** One **Controls** line, the Game page's eighth and last slot of the Options window (ARC-GPAD-1463; owner request
+  2026-11-12: one line instead of three), in the main menu and in play, the pattern of the removed HD lines: Original, A Direct, B Pointer,
+  C Touch+pad (`ControlChoice`). C uses the pad itself for walking and hotkeys, so it is chosen instead of a pad scheme, not beside one; an
+  old settings file with both on reads as C. The glyph family override is the Video page's `Prompt style` line (Auto, Xbox, PlayStation,
+  Nintendo, Steam Deck). One `AreaOption` each (`ControlScheme`, `PromptStyle`; `AreaGameOptions.cs`), saved with the game settings as the lines `pad scheme`,
+  `touch scheme` (the line sets both) and `prompt style` of the one settings file (`ViewerSettingsConfig`; a missing or unknown word is that
+  line's default, Off, Off, Auto), applied at once with no restart; the original mouse and keyboard are not a value.
 - **Device in hand.** Every input event of any pad (its device id, never assumed 0), the mouse, the keyboard and the touch screen
   goes to the `ActiveDeviceTracker` from `_Input` (`ObserveControllerInput`); `_Process` applies a change after the 250 ms
   hysteresis. The foundation holds no window or focus state, so a change of device or of a line resets no open window (checked in the
@@ -254,7 +256,7 @@ The viewer hosts the core (`tools/terrain-viewer/Godot/TerrainViewerControllers.
   signal (`Input.GetJoyName/GetJoyGuid`), the `SteamDeck` environment variable and the Prompt style line.
 - **Prompt strip.** One line at the bottom of the screen (layer 90, ignores the mouse), empty while the mouse or keyboard is the active
   device, so the original is unchanged (KM-01; no keyboard or mouse glyph is ever in a pad or touch line). With a pad in hand it names the
-  pad family and the scheme ("PlayStation pad - A Direct", "Xbox pad - pad scheme Off (Options > Pad scheme)"); with touch the same
+  pad family and the scheme ("PlayStation pad - A Direct", "Xbox pad - original controls (Options > Controls)"); with touch the same
   ("Touch - C Touch+pad"). Once a scheme has prompts (`PromptBindings.ForPad/ForTouch`, none built yet: a prompt must never name an input
   that does nothing) the line lists them per context (`Modal` is the bottom line of every window, `Target` the near-target prompt) with the
   glyphs of the pad's family, rebound by the user's remaps (`PromptBindings.Remapped`, by prompt id).

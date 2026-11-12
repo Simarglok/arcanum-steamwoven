@@ -330,7 +330,7 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-WORLD-016/065: the PC's live overlay: the companions' (which moves the removed objects too), or with no
     /// companions the removed objects alone (null when there are none).</summary>
-    private AreaOccupancy? AreaPcOccupancy() => WithAiMovers(CompanionPcOccupancy());
+    private AreaOccupancy? AreaPcOccupancy() => WithSwitchedOn(WithAiMovers(CompanionPcOccupancy()));
 
     // ARC-WORLD-092: the AI's moved NPCs are added by WithAiMovers.
     private AreaOccupancy? CompanionPcOccupancy()

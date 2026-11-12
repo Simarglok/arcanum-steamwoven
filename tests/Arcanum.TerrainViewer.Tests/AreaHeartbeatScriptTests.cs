@@ -714,6 +714,35 @@ public sealed class AreaHeartbeatScriptTests
         });
     }
 
+    // ARC-WORLD-1436: the live overlay holds the data cell of an NPC the heartbeat switched on (the T0 evidence lists no blocker for a data-off record), so a combat step onto it is refused.
+    [TestMethod]
+    public void A_switched_on_npc_holds_its_data_cell_in_the_step_overlay_until_the_ai_walks_it_off()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = Row(1, 16, 806, StoredOff);
+            var stayingOff = Row(2, 16, 806, StoredOff);
+            var onFromData = Row(3, 16, 0, StoredOn);
+            var host = Host(session, content, null, npc, stayingOff, onFromData);
+            var targets = new AreaObjectTargets(1, [npc, stayingOff, onFromData], new Dictionary<AreaObjectKey, (string, SessionOpenableBaseline)>(), null);
+            Assert.AreEqual(0, targets.SwitchedOn(session).Count, "stored off and still off: not a blocker, and one stored on is the T0 evidence's own");
+            Assert.AreEqual(GameSessionDisposition.Changed, session.SetQuestState(session.Version, 1158, SessionQuestState.Accepted).Disposition);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            var held = targets.SwitchedOn(session);
+            Assert.AreEqual((npc.Key, Entity(1), new Arcanum.Simulation.Movement.CellCoord(11, 20)), (held[0].Key, held[0].Entity, held[0].World));
+            Assert.AreEqual(1, held.Count);
+            Assert.AreSame(held, targets.SwitchedOn(session), "the same list while the session does not change");
+            // The overlay holds the cell: a step onto it is a live actor's block, the same overlay is returned when it already holds it.
+            var overlay = AreaOccupancy.None.WithHeld([new Arcanum.Simulation.Movement.CellCoord(11, 20)]);
+            Assert.IsTrue(overlay.Occupied.Contains(new(11, 20)));
+            Assert.AreSame(overlay, overlay.WithHeld([new Arcanum.Simulation.Movement.CellCoord(11, 20)]));
+            // Switched off again by a toggle: it holds no cell.
+            Assert.AreEqual(GameSessionDisposition.Changed, session.WriteObjectFlag(session.Version, Entity(1), SessionObjectFlagField.Object, 0x2, true, dataHas: false).Disposition);
+            Assert.AreEqual(0, targets.SwitchedOn(session).Count, "switched off again: nothing to hold");
+        });
+    }
+
     [TestMethod]
     public void A_toggle_state_flips_the_data_off_bit_each_time_and_leaves_an_npc_stored_on_to_the_toggle_key()
     {
