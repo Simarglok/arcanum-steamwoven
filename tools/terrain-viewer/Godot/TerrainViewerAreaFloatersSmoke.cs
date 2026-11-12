@@ -155,6 +155,48 @@ public partial class TerrainViewerApp
             Require(caster.TakeDamageSteps().Count == 0, "the tick took the damage steps");
             GD.Print($"ARC-DEV-296 floaters spell-damage npc={entity} lines={string.Join("|", spellLines.Select(l => l.Text))}");
 
+            // ARC-COMBAT-1138 (CH12, CH13): the same script damage on a door, window, container or scenery floats "HP n" in white over the object (n = what it lost after the
+            // material). NONE when the map has no such object with enough hit points to take the hit without breaking.
+            // The first object whose line stands on screen is taken, so the capture shows it; else any one.
+            var objectView = GetViewport().GetVisibleRect();
+            var damageables = ObjectTargets() is { } objectTargets
+                ? objectTargets.Keys.Select(k => objectTargets.Target(session, k, AreaTrapped)).Where(t => t?.Object is { Baseline: { JunkPile: false, Invulnerable: false, Points: > 0 } b } o
+                    && b.Kind is DamageableObjectKind.Portal or DamageableObjectKind.Container or DamageableObjectKind.Scenery
+                    && session.QueryObject(o) is { Condition: SessionObjectCondition.Whole } state && state.HitPoints > 40).ToArray()
+                : [];
+            var damageable = damageables.FirstOrDefault(t =>
+            {
+                var castId = ObjectTargets()!.KeyOfEntity(t!.Object!.Entity) is { } key ? _spellCastMap?.IdOf(key) : null;
+                if (castId is null || _spellCastMap?.Row(castId) is not { WorldX: not null, WorldY: not null } candidate) return false;
+                _floaterCells[castId] = LiveWorldCell(candidate);
+                return FloaterAnchor(castId) is { } point && objectView.HasPoint(point);
+            }) ?? damageables.FirstOrDefault();
+            if (damageable?.Object is { } doomed && ObjectTargets()!.KeyOfEntity(doomed.Entity) is { } doomedKey && _spellCastMap?.IdOf(doomedKey) is { } doomedId)
+            {
+                var objectBefore = session.QueryObject(doomed);
+                if (FloaterCell(doomedId) is null && _spellCastMap?.Row(doomedId) is { WorldX: not null, WorldY: not null } doomedRow) _floaterCells[doomedId] = LiveWorldCell(doomedRow);
+                // The diagnostic HUD covers the top of the window: hidden for the two captures only.
+                if (!string.IsNullOrWhiteSpace(capture)) _hud!.Visible = false;
+                try
+                {
+                    await Capture("object-before");
+                    var objectAnswer = DamageByScript(doomed.Entity, 25, 0, true);
+                    var objectAfter = session.QueryObject(doomed);
+                    var lost = objectAfter.Damage - objectBefore.Damage;
+                    Require(lost > 0, $"the script's damage reached the {doomed.Baseline.Kind} {doomed.Entity}: {objectBefore} -> {objectAfter} {objectAnswer}");
+                    var objectLines = layer.Field.Lines(doomedId);
+                    Require(objectLines.Count == 1 && objectLines[0].Color == FloaterColor.White
+                        && objectLines[0].Text == texts.Text(CombatFloaters.HitPointsLine) + " " + lost.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        $"the object's damage line 'HP {lost}' in white: " + string.Join("|", objectLines.Select(l => $"{l.Color}:{l.Text}")));
+                    for (var step = 0; step < 8; step++) layer.Field.Advance(400_000 + step * FloaterRules.StepMs, FloaterRules.DefaultSpeed);
+                    layer.Redraw();
+                    await Capture("object-after");
+                    GD.Print($"ARC-COMBAT-1138 floaters object-damage anchor={FloaterAnchor(doomedId)} kind={doomed.Baseline.Kind} id={doomedId} lost={lost} line={objectLines[0].Text}");
+                }
+                finally { _hud!.Visible = true; }
+            }
+            else GD.Print("ARC-COMBAT-1138 floaters object-damage NONE (no unbroken object with hit points to spare on the map)");
+
             // Level 1: a plain hit floats no number; level 0 draws nothing.
             _gameSettings = _gameSettings with { Floats = FloaterRules.Messages };
             var count = layer.Field.Count;
