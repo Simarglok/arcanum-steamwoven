@@ -245,6 +245,7 @@ public partial class TerrainViewerApp
     private int AreaCellLightLevel(long worldX, long worldY)
     {
         const int Full = Arcanum.Simulation.Combat.AttackRules.MaxLightLevel, Reach = 1024;
+        if (_cellLightForSelfTest is { } fixedLevel) return fixedLevel;
         if (_areaAmbient is not { } driver || _readyArea?.Lighting is not { Local: { } basis } lighting || LightsNow(basis, driver) is not { } local) return Full;
         // A cell the shown lighting has no tile for (a row of another map's snapshot, a body outside the loaded window) is lit by nothing here: full light.
         if (!local.HasTile(worldX, worldY)) return Full;
@@ -256,6 +257,10 @@ public partial class TerrainViewerApp
         }
         return view.LightLevel(worldX, worldY, driver.Selection.Pair);
     }
+
+    /// <summary>ARC-WORLD-1149 smoke seam: a stage that judges something other than the darkness penalty (the tech-products grenade, in the dark cave)
+    /// fixes the level every check reads at full light for its throws; null: the shown lighting's.</summary>
+    private int? _cellLightForSelfTest;
 
     /// <summary>ARC-WORLD-1149: the light level at the cell a critter row stands on now (<see cref="AreaCellLightLevel"/>); full light for a row without a cell.</summary>
     private int AreaRowLightLevel(AreaObjectRecord row)
