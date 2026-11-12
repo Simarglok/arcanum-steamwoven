@@ -682,6 +682,9 @@ public enum DialogOptionTransition
     Rumor,
     /// <summary>ARC-SCRIPT-1304: an option of the rumor talk (the price's yes) that stays inside it.</summary>
     RumorStep,
+    /// <summary>ARC-SCRIPT-1321: a Player <c>c:</c> reply with the story and greeting ports: the reply's action runs, then the NPC tells the story line of the current story
+    /// state and the PC's class line 1000 is the only way on, which follows the reply's own transition (ledger STY1).</summary>
+    Story,
     /// <summary>Generated interaction (barter, training, …) this runtime does not perform.</summary>
     Unsupported,
 }
