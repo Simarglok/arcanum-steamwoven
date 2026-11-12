@@ -44,7 +44,7 @@ Every other college spell has a code path for every component of its record (the
 
 | Spell | What is missing | Slice |
 | --- | --- | --- |
-| 2 Unseen Force | The original also pushes ground items of weight below 5 ([UO1–UO6](ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)) and the viewer's host does not (an item body, the saved mobile state and the item's hit points are open) | knockback lane |
+| 2 Unseen Force | The original also pushes ground items of weight below 5 ([UO1–UO9](ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)); **built by ARC-MAGIC-1230**: the item body of the knockback host, the saved cell (`item.moved`, no schema step) and the bump on the item's durability | done |
 | 6, 7, 9 See Contents, Read Aura, Divine Magick | The answer is a text line; the windows (container inventory in mode 4, the NPC sheet, the item description) and picking an inventory item as a target are E8's | E8 |
 | 8 Sense Hidden | Trap spotting for the detecting-traps flag works and the hero's spot roll exists (ARC-MAGIC-057); effect 157 (spot-trap skill): the hero's skill level reads the written effect's skill change since the skills lane, so the roll should see it, not run in the viewer | owner recheck |
 | 14, 19, 24, 29 Elemental summons; 53 Succour Beast; 57 Summon Undead; 68 Phantasmal Fiend; 71-74 Orcish Champion, Guardian Ogre, Hellgate, Familiar | Creature Summon (prototype or list pick, flags on the summoned, run ends when it dies) | E1-e |
@@ -113,7 +113,7 @@ Left: the NPC flag KOS_OVERRIDE (SO2); a follower of a caster that is no hero; t
 
 Done in two halves (owner decision D3b): Spatial Distortion (3) by ARC-MAGIC-036 ([contract](../world/spell-cast-host.md#movement-component-arc-magic-036), ledger [MV1-MV3](ledger/spell-runs.md#movement-component-and-the-immediate-path-relocation-arc-magic-036): the immediate path relocation 0x455350, at most 8 tiles, tile scripts run before the placement) and
 Teleportation (4), the random tile and the area portal (record 218) by ARC-MAGIC-038 ([contract](../world/spell-cast-host.md#teleport-types-and-the-anti-teleport-test-arc-magic-038), ledger [TP1-TP5](ledger/spell-runs.md#teleport-types-and-the-anti-teleport-test-arc-magic-038): `Rules\AntiTeleport.mes` refuses a disabled map or a region's radius; in single player Teleportation opens the world map in a teleport mode and a pick within 320 lands the hero, paid then).
-Left: the multiplayer host branch of type 2; an NPC or other non-critter as the portal or relocation target; the town map, the compass and the waypoint journey inside the teleport mode; message 640 as the game's text; the interrupt of goals other than walks; the viewer's `Tgt_Tile_Pathable_To` test answers "not blocked", so a cast at an unreachable tile is paid and moves nothing (as the original's component does).
+Left: the fallback of an unreadable map module to the area portal (ledger TP8); the multiplayer host branch of type 2; an NPC or other non-critter as the portal or relocation target; message 640 as the game's text; the interrupt of goals other than walks; the viewer's `Tgt_Tile_Pathable_To` test answers "not blocked", so a cast at an unreachable tile is paid and moves nothing (as the original's component does).
 
 ## Locks and holds (MA-6, ARC-MAGIC-037)
 
@@ -155,7 +155,7 @@ The 60 records outside the colleges (80..139, used by monsters and items) share 
 
 ## Not read, not verified
 
-- Whether the maintained damage of the clouds (11, 27) hits the same targets as the BEGIN: not run per spell. Read by ARC-RES-1109 ([ledger](ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)): Disarm's weapon drop was not built for a spell and is since ARC-MAGIC-1232 (DW2, built; the original drops, XR15), Unseen Force (2) pushes ground items in the original and not in the viewer (UO5, UO6), Illuminate (65) lights the scene in the original (IW5) and, since ARC-MAGIC-1229, in the viewer (IW6; the glow after a load is open).
+- Whether the maintained damage of the clouds (11, 27) hits the same targets as the BEGIN: not run per spell. Read by ARC-RES-1109 ([ledger](ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)): Disarm's weapon drop was not built for a spell and is since ARC-MAGIC-1232 (DW2, built; the original drops, XR15), Unseen Force (2) pushes ground items in the original (UO5) and, since ARC-MAGIC-1230, in the viewer (UO6), Illuminate (65) lights the scene in the original (IW5) and, since ARC-MAGIC-1229, in the viewer (IW6; the glow after a load is open).
 - Left open by the executable reads (ledger XR1-XR15): what inventory mode 4 lets the player move, what happens on arrival to a summoned follower the travel hide left shown, whether a familiar's death reaches the follower removal.
 - The AI's use of each spell was not audited beyond the priorities in the records (60 of the 80 have one); a component that is not ready is not ready for NPCs either.
 - Records 80..139 and the technology records (140..222) are outside the per-spell view.

@@ -409,6 +409,54 @@ public enum ScrObjectStateChange
     /// <summary>ARC-SCRIPT-1163 (E5-a, ledger NS5): change art number (59) of each object of its operand: the number field of the object's art id becomes <see cref="ScrObjectStateRequest.Value"/> (0x502780, then frame 0, then kept only when the art exists,
     /// 0x502220); no host applies it yet (the viewer has no per-object art overlay), so the host sets refuse it.</summary>
     ChangeArtNumber,
+    /// <summary>ARC-SCRIPT-1164 (E5-b, ledger WO1): create item (66): <see cref="ScrObjectStateRequest.Object"/> (the first object of operand 1, the holder) gets a new object of the basic prototype <see cref="ScrObjectStateRequest.Value"/> (the file is that number + 20)
+    /// made at its location and, when it is an item (type 5..14), put into its inventory (0x4617F0, slot -1: the first free place); a prototype of another type leaves the new object where it was made.</summary>
+    CreateItem,
+    /// <summary>ARC-SCRIPT-1164 (E5-b, ledger WO2): transfer item (41): the first direct inventory item of <see cref="ScrObjectStateRequest.Object"/> (the first object of operand 1) whose name number is <see cref="ScrObjectStateRequest.Value"/> is put into the
+    /// inventory of <see cref="ScrObjectStateRequest.Other"/> (the first object of operand 2) by the same insert (0x4617F0); nothing when the holder is no critter or container or holds no such item.</summary>
+    TransferItem,
+    /// <summary>ARC-SCRIPT-1164 (E5-b, ledger WO3): set lock state (53) of <see cref="ScrObjectStateRequest.Object"/> (the first object of operand 0): a portal or container (not the junk pile, description 3023) has its locked bit cleared and, for the value 1, set again (0x441DD0);
+    /// clearing a locked object schedules the Lock event an hour later, as a key does.</summary>
+    SetLockState,
+    /// <summary>ARC-SCRIPT-1164 (E5-b, ledger WO4): toggle open or closed (88) of <see cref="ScrObjectStateRequest.Object"/> (the first object of operand 0): a portal is opened or closed at once to the end of its steps (0x4EEF80, 0x4F08F0), a container opens (the ART's next
+    /// frame) or closes (the previous), a destroyed object does nothing, any other object type nothing.</summary>
+    ToggleOpenClosed,
+    /// <summary>ARC-SCRIPT-1164 (E5-b, ledger WO6): set written start (94) of <see cref="ScrObjectStateRequest.Object"/> (the first object of operand 0, a written item, type 13): its written-start field (0xCB) takes <see cref="ScrObjectStateRequest.Value"/>.</summary>
+    SetWrittenStart,
+    /// <summary>ARC-SCRIPT-1164 (E5-b, ledger WO7): destroy item named (126): the first direct inventory item of <see cref="ScrObjectStateRequest.Object"/> (the first object of operand 1) whose name number is <see cref="ScrObjectStateRequest.Value"/> is destroyed (0x43CCA0).</summary>
+    DestroyItemNamed,
+    /// <summary>ARC-SCRIPT-1164 (E5-b, ledger WO8): toggle item inventory display (127) of <see cref="ScrObjectStateRequest.Object"/> (the first object of operand 0, an item of type 5..14): bit 0x10 of its item flags (field 0x57) is flipped.</summary>
+    ToggleItemInventoryDisplay,
+}
+
+/// <summary>ARC-SCRIPT-1164 (E5-b): which game state a <see cref="ScrWorldRequest"/> changes.</summary>
+public enum ScrWorldChange
+{
+    /// <summary>Toggle sector blocked (106, ledger WO5): the sector (<see cref="ScrWorldRequest.A"/>, <see cref="ScrWorldRequest.B"/> = x, y as the action's second word reads) is added to or taken off the current map's blocked-sector list (0x4EF010 → 0x4D0F00);
+    /// <see cref="ScrWorldRequest.Blocked"/> is the state it ends in.</summary>
+    SectorBlocked,
+    /// <summary>Toggle monster generator (110, ledger WO9): bit 0x80 of the slot <see cref="ScrWorldRequest.A"/> of the generators' counter table (0x4BABF0, 0x4BABD0), game-wide; <see cref="ScrWorldRequest.Blocked"/> is the state it ends in.</summary>
+    GeneratorBlocked,
+}
+
+/// <summary>ARC-SCRIPT-1164 (E5-b, ledger WO5, WO9): a toggle of a game-wide table the action reads and writes without an object: the sector blocked list of the current map or the monster generators' block bits. The request carries the state the toggle
+/// ends in, so a host applies the absolute state whatever it held (the run read the same state through <see cref="IScrWorldObjectQueries"/>).</summary>
+public readonly record struct ScrWorldRequest(ScrWorldChange Change, int A, int B, bool Blocked);
+
+/// <summary>
+/// ARC-SCRIPT-1164 (E5-b, ledger WO4, WO5, WO9): the world-object questions of set <see cref="ScrAdmissionSet.S37"/>: whether a portal or container is open (condition 36, and the open toggle's present state), whether a sector is on the current map's
+/// blocked list (condition 45, and the sector toggle), whether a generator slot is blocked (condition 46, and the generator toggle). A host whose admission set holds them implements this interface; the interpreter asks only for what a clause names.
+/// </summary>
+public interface IScrWorldObjectQueries
+{
+    /// <summary>Whether the object is open as the original's test reads it (a portal's or container's ART frame is not 0, 0x4F08C0, 0x502B50); false for any other object; null for an object the host does not know (the run then stops as for an absent object).</summary>
+    bool? IsOpen(ScrObjectRef obj);
+    /// <summary>Whether a toggle of a closed object ends open: its ART has another frame to open to (a portal of one frame and a container of one frame stay closed); false for any other object; null when the host does not know the object.</summary>
+    bool? CanOpen(ScrObjectRef obj);
+    /// <summary>Whether the sector (x, y) is on the current map's blocked-sector list (0x4D0EE0).</summary>
+    bool SectorBlocked(int x, int y);
+    /// <summary>Whether bit 0x80 of the generator counter table's slot is set (0x4BABA0); false for a slot outside 0..255.</summary>
+    bool GeneratorBlocked(int slot);
 }
 
 /// <summary>ARC-DEV-241: the invocation flags of a script cast (GT183): 0x2 casts free (the run's Free flag), 0x4 casts unresistable (the run's Unresistable flag).</summary>
@@ -705,8 +753,10 @@ public sealed class ScrEffects
         IReadOnlyList<ScrReadingRequest>? readings = null, IReadOnlyList<ScrSkillUse>? skillUses = null, IReadOnlyList<ScrStateRequest>? states = null,
         IReadOnlyList<ScrEffectRequest>? effectChanges = null, IReadOnlyList<ScrEyeCandy>? eyeCandies = null, IReadOnlyList<ScrWriteback>? slotWrites = null,
         IReadOnlyList<ScrCreateRequest>? creations = null, IReadOnlyList<ScrObjectStateRequest>? objectStates = null, IReadOnlyList<ScrFloatLine>? floats = null,
-        ScrStoreWrites? stores = null, IReadOnlyList<int>? townMaps = null, IReadOnlyList<ScrAmmoUse>? ammoUses = null, IReadOnlyList<ScrFade>? fades = null)
+        ScrStoreWrites? stores = null, IReadOnlyList<int>? townMaps = null, IReadOnlyList<ScrAmmoUse>? ammoUses = null, IReadOnlyList<ScrFade>? fades = null,
+        IReadOnlyList<ScrWorldRequest>? worldChanges = null)
     {
+        WorldChanges = worldChanges ?? Array.Empty<ScrWorldRequest>();
         Fades = fades ?? Array.Empty<ScrFade>();
         AmmoUses = ammoUses ?? Array.Empty<ScrAmmoUse>();
         TownMaps = townMaps ?? Array.Empty<int>();
@@ -786,11 +836,13 @@ public sealed class ScrEffects
     public IReadOnlyList<ScrAmmoUse> AmmoUses { get; }
     /// <summary>ARC-SCRIPT-1241: the fade actions (103), in action order, each with its four operands as read (MV5).</summary>
     public IReadOnlyList<ScrFade> Fades { get; }
+    /// <summary>ARC-SCRIPT-1164: the sector blocked and monster generator toggles (106, 110), in action order, each with the state it ends in (ledger WO5, WO9).</summary>
+    public IReadOnlyList<ScrWorldRequest> WorldChanges { get; }
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
         && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0 && Readings.Count == 0 && SkillUses.Count == 0 && States.Count == 0
         && EffectChanges.Count == 0 && EyeCandies.Count == 0 && SlotWrites.Count == 0 && Creations.Count == 0 && ObjectStates.Count == 0
         && Floats.Count == 0 && GlobalVariables.Count == 0 && PcVariables.Count == 0 && PcFlags.Count == 0
-        && TownMaps.Count == 0 && AmmoUses.Count == 0 && Fades.Count == 0;
+        && TownMaps.Count == 0 && AmmoUses.Count == 0 && Fades.Count == 0 && WorldChanges.Count == 0;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went
@@ -817,7 +869,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S36"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S37"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -838,7 +890,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S36)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S36.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S37)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S37.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -865,6 +917,8 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with get area needs a host that implements IScrAreaQueries.", nameof(Admission));
         if (host is not IScrStoryQueries && (Admission.Conditions.Any(ScrAdmissionSet.StoryQueryConditions.Contains) || Admission.Actions.Any(ScrAdmissionSet.StoryQueryActions.Contains)))
             throw new ArgumentException("A set with daytime, global quest state, a rumor, blessing or curse condition a clock action, set global quest state or unbotch needs a host that implements IScrStoryQueries.", nameof(Admission));
+        if (host is not IScrWorldObjectQueries && (Admission.Conditions.Any(ScrAdmissionSet.WorldObjectQueryConditions.Contains) || Admission.Actions.Any(ScrAdmissionSet.WorldObjectQueryActions.Contains)))
+            throw new ArgumentException("A set with obj is open, sector is blocked, monster generator disabled or a sector, generator or open toggle needs a host that implements IScrWorldObjectQueries.", nameof(Admission));
         if (host is not IScrStoreQueries && Admission.ValueKinds.Any(ScrAdmissionSet.StoreValueKinds.Contains))
             throw new ArgumentException("A set with a global variable, PC variable or PC flag operand needs a host that implements IScrStoreQueries.", nameof(Admission));
     }

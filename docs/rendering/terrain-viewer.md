@@ -1184,11 +1184,11 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   critter (not a container) show the toggle buttons 338 (doll) and 339 (bag) at (23, 108) and (74, 108), which act on a release over the same button;
   the doll view draws art 349 at (0, 134) and the body's worn items (`AreaInventoryView.BodyDoll`, by the worn item's inventory location) in the nine slot
   rectangles of table 0x5CAE08, a cover (0x5CAF58) on each empty slot, and hides the grid; a worn item pressed on its slot and released on the hero's grid
-  is taken through the loot path (PROJECT: its inventory art, and a cover, stretched into the rectangle; the wheel does not scroll the hidden grid). NOT READY: the doll's two values and the weapon overlay, the
+  is taken through the loot path (PROJECT: its inventory art, and a cover, stretched into the rectangle; the wheel does not scroll the hidden grid). **Doll values (ARC-UI-1121,** [ledger IW41–IW43](../research/ledger/ui-audio.md#doll-values-and-weapon-overlay-arc-ui-1121)**):** the doll view prints the body's displayed damage rating (right-aligned in the box at (105, 354)) and armour rating (from the left of the box at (227, 354)), read by `AreaCombatHost.DollRatings` into `AreaInventoryView.BodyRatings`, and fills the weapon's slot dark red when the weapon needs more strength than the body has (the numbers use the project's font). NOT READY: the hero's own window's values and fill (#1267), the
   barter window's doll, the hero's own doll toggle, the scroll bar's art, a hero's item moved into the body, a follower's portrait. The native smoke checks every Crash Site body's window
   (`ARC-UI-052 native-smoke loot-art PASS`: loot arts and the image read, every grid item's art, one item taken by a drag). The `loot-worn` stage
   (ARC-DEV-202, ARC-UI-072) drives the doll view: toggle, the worn item on its slot, the drag to the hero's grid, back to the bag view
-  (`ARC_AREA_LOOT_DOLL_CAPTURE=PATH.png` saves the doll view).
+  (`ARC_AREA_LOOT_DOLL_CAPTURE=PATH.png` saves the doll view; ARC-UI-1121 makes it require the body's ratings).
 - **Arrange button (ARC-DEV-339,** [ledger IW37–IW40](../research/ledger/ui-audio.md#arrange-button-arc-dev-339)**; bug B54):** every mode of the original look
   (own, loot, steal and barter windows) draws the button 340 `tiny_butt` at (763, 197) of the window (`AreaInventoryArtLayout.ArrangeButton`, drawn with its
   first frame); a press and a release on it (nothing held; sounds 3000 and 3001) lay the hero's items out again with
