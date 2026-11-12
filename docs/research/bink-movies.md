@@ -197,7 +197,7 @@ to equal lengths and differ), so "FFmpeg plays these files" is now a run, not a 
 Action 103 is admitted (`ScrAdmissionSet.S35`, S34 plus fade) and the interpreter hands one `ScrFade(seconds, sound, movie, flag)` per action to the host. The dialog host and the use host
 (use, tile, sector and dying scripts) apply it with `AreaScriptFades`: the game clock jumps by seconds × 1000 ms (32-bit, only above 0; TL26), then a non-zero movie number goes to the viewer with
 the sound operand as its audio track (above 0; else the default track), and with no movie a sound above 0 plays as an effect sound (dialog host). The viewer starts the movies one at a time
-through `PlayMovies` (`SyncScriptFades`). The screen's fade out and in is not drawn and the flag operand is carried, not used (the exe's fade-in event after the flag's seconds was not read further).
+through `PlayMovies` (`SyncScriptFades`). The screen's fade out and in is not drawn and the flag operand is carried, not used (the exe schedules a fade event after flag × 1000 ms, or fades in at once for 0; what the event does was not read further).
 The action is skipped in a network host game; the single-player host is never one.
 
 **The attachment walk (D, probe `--script-attachments` and a scan of every script for calls to the six).** Where the six scripts run and what blocks each (first refusal of S35 and of the host sets):

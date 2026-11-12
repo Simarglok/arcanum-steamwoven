@@ -1192,8 +1192,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             if (IsPc(request.Viewer)) _readings.Add(request);
         // ARC-SCRIPT-1241 (MV5): each fade's clock jump, then its movie for the viewer; the later steps stop when the clock refuses.
         var asked = new List<AreaScriptFade>();
-        if (!AreaScriptFades.Apply(_session, effects, asked)) return false;
-        _fades.AddRange(asked.Where(fade => fade.Movie != 0));
+        var fadesApplied = AreaScriptFades.Apply(_session, effects, asked);
+        _fades.AddRange(asked.Where(fade => fade.Movie != 0));   // the fades before a refused jump keep their movie, as their clock jumps stay
+        if (!fadesApplied) return false;
         // ARC-WORLD-081: each create object adds its item to the ground next to its object (Creatable checked them); under Steamwoven a patch
         // at the limit takes no more (no change).
         // An item a script creates has its prototype's weight (not saved, so attached before the creations).

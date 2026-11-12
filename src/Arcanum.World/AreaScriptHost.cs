@@ -441,9 +441,10 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
             if (IsPc(request.Viewer)) _readings.Add(request);
         // ARC-SCRIPT-1241 (MV5): each fade's clock jump, then its movie for the viewer, or (no movie) its sound as an effect sound; the later steps stop when the clock refuses.
         var asked = new List<AreaScriptFade>();
-        if (!AreaScriptFades.Apply(_session, effects, asked)) return false;
-        foreach (var fade in asked)
+        var fadesApplied = AreaScriptFades.Apply(_session, effects, asked);
+        foreach (var fade in asked)   // the fades before a refused jump keep their movie or sound, as their clock jumps stay
             if (fade.Movie != 0) _fades.Add(fade); else _sounds.Add(new(ScrSoundKind.Effect, fade.Sound));
+        if (!fadesApplied) return false;
         if (effects.Writeback is not { } writeback) return true;
         if (writeback.Source != ScrSource.Object || writeback.Point != ScrPoint.Dialog || writeback.Attachee is not { } attachee
             || Speaker(attachee) is not { } speaker || LoadedSlot(speaker) is not { } loaded) return false;

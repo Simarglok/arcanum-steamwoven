@@ -94,7 +94,7 @@ public partial class TerrainViewerApp
                 "a movie with no file ended at once and the continuation ran");
             // ARC-SCRIPT-1241: the movies of two script fades (action 103; the clock jump belongs to the run's effects, tested apart) start one after the other through the viewer's poll, the
             // second has no file and is passed over, and nothing is left waiting.
-            _moviePathForSelfTest = number => number == 7 ? second : null;
+            _moviePathForSelfTest = (number, _) => number == 7 ? second : null;
             var (fadesBefore, failedFades) = (_scriptFadesPlayed, _moviesFailed);
             _scriptFades.Enqueue(new AreaScriptFade(0, 7, 0, 0, 0)); _scriptFades.Enqueue(new AreaScriptFade(0, 9, 0, 0, 0));
             SyncScriptFades();

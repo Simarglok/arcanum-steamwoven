@@ -384,8 +384,8 @@ internal sealed class ScrInterpreter
             case ScrCatalogue.Action.Fade:
             {
                 // MV5 (ARC-SCRIPT-1241; 0x447220 case 0x67): four numbers, seconds, sound, movie and the flag that picks how the screen comes back.
-                // The original reads all four (an operand of any value kind) and then fades, advances the clock and plays; here the host does that
-                // from the operands as read. The run goes on, as the original's does after the movie.
+                // The original fades out first, then reads seconds, sound and movie, jumps the clock and plays, and reads the flag last (operand reads have no side
+                // effects, so reading all four here is the same); the host does the rest from the operands as read. The run goes on, as the original's does after the movie.
                 _shared.Fades.Add(new(Get(a, 0), Get(a, 1), Get(a, 2), Get(a, 3)));
                 return (Step.Next, 0);
             }
