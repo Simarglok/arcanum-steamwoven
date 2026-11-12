@@ -375,6 +375,23 @@ public sealed class AreaAiRouteTests
         Assert.AreEqual(0, original.Host.PendingHomecomings.Count);
     }
 
+    // ARC-AI-1316 (VAG5, owner decision 2026-11-12, option B): a pending hero request is never replaced by an NPC's homecoming: Original refuses it, Steamwoven holds it back for a free slot.
+    // (The two-NPC rule, Original replaces and Steamwoven waits, is covered by A_former_follower_waits_for_the_slot... above.)
+    [TestMethod]
+    [DataRow(RuleMode.Original)]
+    [DataRow(RuleMode.Steamwoven)]
+    public void A_pending_hero_request_is_never_replaced_by_an_npcs_homecoming_in_either_setting(RuleMode rules)
+    {
+        var scene = Open(Npc(Day | Night, [(20, 20)], 0, (1, 1), (1, 1)), rules: rules, mapListed: map => map is Map or 9);
+        Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.EnsureTeleportMap(scene.Session.Version, scene.Npc, Home).Disposition);
+        Assert.IsTrue(scene.Session.RequestHeroChangeOfPlace(ChangeOfPlaceCaller.TeleportSpell, 9, new(1, 1), ChangeOfPlaceFlags.None, 0, _ => true).Accepted);
+        Assert.IsTrue(scene.Host.RunWaypoints(scene.Npc));
+        Assert.IsFalse(scene.Host.FlushHomecomings(), "the hero's pending request refuses the NPC's (or holds it back)");
+        Assert.IsTrue(scene.Session.QueryChangeOfPlace()!.IsPlayerCharacter, "the hero's request stays in the slot");
+        if (rules == RuleMode.Original) StringAssert.Contains(scene.Host.TraceOf(scene.Npc)!.Route, "RefusedLocalPlayerPending");
+        else Assert.AreEqual(1, scene.Host.PendingHomecomings.Count, "Steamwoven keeps the NPC's request for a free slot");
+    }
+
     [TestMethod]
     public void A_hidden_or_unreadable_npc_has_no_route_step()
     {
