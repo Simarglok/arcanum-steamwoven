@@ -12,6 +12,7 @@
 .env.*
 !.env.example
 *.local.json
+/.claude/settings.json
 *.local.yaml
 .DS_Store
 .idea/
