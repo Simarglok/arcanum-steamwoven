@@ -236,6 +236,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="npc-ai-heal-skill-tool-arc-world-116"></a>[NPC AI heal skill tool (ARC-WORLD-116)](ledger/npc-ai.md#npc-ai-heal-skill-tool-arc-world-116) | [NPC AI](ledger/npc-ai.md) | HI1–HI2 |
 | <a id="npc-waypoints-and-standpoints-arc-dev-117"></a>[NPC waypoints and standpoints (ARC-DEV-117)](ledger/npc-ai.md#npc-waypoints-and-standpoints-arc-dev-117) | [NPC AI](ledger/npc-ai.md) | WS1–WS12 |
 | <a id="trap-state-arc-world-076"></a>[Trap state (ARC-WORLD-076)](ledger/technology.md#trap-state-arc-world-076) | [Technology](ledger/technology.md) | TT1–TT10 |
+| <a id="generators-encounter-creatures-and-body-decay-arc-res-1103"></a>[Generators, encounter creatures and body decay (ARC-RES-1103)](ledger/npc-ai.md#generators-encounter-creatures-and-body-decay-arc-res-1103) | [NPC AI](ledger/npc-ai.md) | PO1–PO12 |
 | <a id="spot-trap-roll-arc-magic-057"></a>[Spot trap roll (ARC-MAGIC-057)](ledger/technology.md#spot-trap-roll-arc-magic-057) | [Technology](ledger/technology.md) | SP1–SP3 |
 | <a id="trap-effects-arc-world-107"></a>[Trap effects (ARC-WORLD-107)](ledger/technology.md#trap-effects-arc-world-107) | [Technology](ledger/technology.md) | TT11–TT16 |
 | <a id="technology-item-scripts-and-generic-item-flags-arc-res-112"></a>[Technology item scripts and generic item flags (ARC-RES-112)](ledger/technology.md#technology-item-scripts-and-generic-item-flags-arc-res-112) | [Technology](ledger/technology.md) | TI1–TI10 |
@@ -284,6 +285,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="sector-fold-arc-dev-104"></a>[Sector fold (ARC-DEV-104)](ledger/world.md#sector-fold-arc-dev-104) | [World, maps and movement](ledger/world.md) | CX7–CX9 |
 | <a id="sector-eviction-history-arc-dev-106"></a>[Sector eviction history (ARC-DEV-106)](ledger/world.md#sector-eviction-history-arc-dev-106) | [World, maps and movement](ledger/world.md) | CX10, CX11 |
 | <a id="same-tile-draw-order-arc-dev-173"></a>[Same-tile draw order (ARC-DEV-173)](ledger/world.md#same-tile-draw-order-arc-dev-173) | [World, maps and movement](ledger/world.md) | SO1–SO3 |
+| <a id="sleep-wait-and-beds-arc-res-1102"></a>[Sleep, wait and beds (ARC-RES-1102)](ledger/world.md#sleep-wait-and-beds-arc-res-1102) | [World, maps and movement](ledger/world.md) | SWB1–SWB22 |
 | <a id="world-map-window-arc-ui-073"></a>[World map window (ARC-UI-073)](ledger/ui-audio.md#world-map-window-arc-ui-073) | [Interface windows and audio](ledger/ui-audio.md) | WM1–WM139 |
 | <a id="screen-size-and-layout-arc-res-093"></a>[Screen size and layout (ARC-RES-093)](ledger/ui-audio.md#screen-size-and-layout-arc-res-093) | [Interface windows and audio](ledger/ui-audio.md) | SZ1–SZ14 |
 | <a id="function-audit-wave-3-groups-g-and-i-arc-res-121"></a>[Function audit wave 3, groups G and I (ARC-RES-121)](ledger/census-triage-gi.md#function-audit-wave-3-groups-g-and-i-arc-res-121) | [Function audit, groups G and I](ledger/census-triage-gi.md) | 1,042 functions: 1,011 not relevant, 18 not implemented, 13 implemented (registry rows since ARC-DEV-389); GI-1..GI-9 |
