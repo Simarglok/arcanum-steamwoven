@@ -748,6 +748,13 @@ public sealed class AreaInventoryHost
     public SessionWrittenFacts? WrittenFacts(GameSessionOwner session, string entity, AreaReadingData? data)
     {
         ArgumentNullException.ThrowIfNull(session);
+        // ARC-SCRIPT-1279 (WO6): a start line a script wrote (set written start, 94) replaces the data's.
+        var facts = WrittenFactsOfData(session, entity, data);
+        return facts is { } read && session.QueryItemFieldWrites(entity).WrittenStart is { } start ? read with { TextStartLine = start } : facts;
+    }
+
+    private SessionWrittenFacts? WrittenFactsOfData(GameSessionOwner session, string entity, AreaReadingData? data)
+    {
         if (session.IsItemDestroyed(entity)) return null;
         var kit = session.QueryHeroKit().FirstOrDefault(item => item.Entity == entity);
         if (kit.Entity is not null) return data is not null && data.Prototypes.TryGetValue(kit.Kind.Prototype, out var fromKit) ? fromKit : null;
@@ -860,6 +867,8 @@ public sealed class AreaInventoryHost
         GameSessionFailure.InsertRefused when verdict == SessionInsertVerdict.TechnologyRefused => "the hero's Technophobia refuses technological items",
         GameSessionFailure.InsertRefused when verdict == SessionInsertVerdict.TooHeavy => "the PC cannot carry that much weight",
         GameSessionFailure.InsertRefused when verdict == SessionInsertVerdict.NoRoom => "no free room in the grid",
+        // ARC-WORLD-1283: the remove check's refusal (0x466DA0, code 11; the PC's message is item.mes 111, InventoryMutationResult.PcMessage), shown in the viewer's own wording.
+        GameSessionFailure.ItemNotDroppable => "the item cannot be dropped, so it cannot change hands",
         GameSessionFailure.ItemScriptUnsupported => "the item runs a script on this transfer that is not supported here",
         GameSessionFailure.HolderScriptUnsupported => "the body runs a use script (not supported here)",
         GameSessionFailure.ItemTypeUnsupported => "gold, key rings and keys without a hero's ring are not modelled",

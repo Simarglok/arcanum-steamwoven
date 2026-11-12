@@ -104,6 +104,20 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
 - **HUD and log**: the companion line names each reached follower's effect and line range ("F4: oid:… SpreadOut -> SpreadSet lines
   2100-2199"); the log prints `ARC-WORLD-046 order source=<F1..F6|portrait> type=… disposition=… reached=N | …`.
 
+## Follower portraits' hover (ARC-UI-1281)
+
+Ledger [HK26](../research/ledger/spell-runs.md) (callback 0x56A9D0, strip message type 1, code 2, the call 0x56AD44 into 0x57CD60; leave 0x550720).
+A pointer entering a portrait button (`AreaFollowerPortraits`: `Button.MouseEntered`, raised as `PortraitHovered`) with no order menu open (0x67BC0C = −1)
+and no dialog active (0x567400 = 0; the viewer reads the dialog window) describes the follower for the hero as the world's hover describes an object
+(`TerrainViewerApp.FollowerPortraitHovered`): the follower's examine script (point 0, `ExamineAllows`) runs once, its printed lines go to the message
+window, and unless it answered skip default the follower's window follows in the message window (the same `SyncHoverWindow` path as the world hover and the
+dialog start, HK25), the highlight (0x43C270) and the rings (ARC-UI-1117) go on him too. Leaving the portrait (`MouseExited`, or the frames being rebuilt under
+the pointer, `PortraitHoverLeft`; 0x550720, 0x43C270) clears the window and the highlight, and the world's hover takes over again. The pointer moving inside
+the portrait runs nothing more, and a redraw of his window (the bars shown again) reuses the kept answer instead of running the script again;
+a dialog started from the portrait describes him afresh (HK25). With the interface bars off the script still runs and no window is drawn (as the dialog start). The order menu's own rows
+(OL34) are not part of it. The "hovered" key of the highlight, the window and the rings is the one under the pointer, else the portrait's follower
+(`HoveredKeyNow`). A follower the shown map's hover index does not list (carried from another map) only runs his script.
+
 ## Tests
 
 - `tests/Arcanum.Simulation.Tests/Party/CompanionOrderRulesTests.cs`: presets with F6 under both settings (D2), the portrait items and
@@ -118,6 +132,10 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
   mouse right click on his portrait button (ARC-DEV-280; a left click is a talk) opens the order menu without a focus change of the world window (no focus-exit signal; the
   check failed with a popup, also without OS focus) and a press on its wait button makes him wait (no timer, wait index 6) and
   removes his portrait; the GUI takes both presses (no world click, the PC does not move). The reserved-key smoke now uses F10.
+- Native smoke, ARC-UI-1281 (HK26): the `hover` stage prints `ARC-UI-1281 native-smoke hover-portrait portrait=Nfacts` (a free companion of the shown map joins,
+  comes up to the hero, and with motion events the pointer enters his portrait: his examine runs once, the pointer moving inside runs nothing more, his window
+  shows with the bars drawn, leaving clears it, entering with the order menu open runs nothing; he leaves the party again; `none (…)` when the map has no free
+  companion), and the `companion-click` stage's fact list has the same facts plus "a portrait hover with the dialog active runs nothing".
 
 ```sh
 "$DOTNET" test tests/Arcanum.Simulation.Tests --no-build --filter "FullyQualifiedName~CompanionOrder|FullyQualifiedName~CompanionFollow"

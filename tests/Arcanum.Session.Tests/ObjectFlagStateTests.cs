@@ -88,8 +88,8 @@ public sealed class ObjectFlagStateTests
         owner.WriteObjectFlag(owner.Version, SessionSpellCaster.Hero, SessionObjectFlagField.Object, 0x200, true);
         owner.WriteObjectFlag(owner.Version, SessionSpellCaster.Hero, SessionObjectFlagField.Object, 0x80, false);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        var list = "\"objectFlags\":[{\"entity\":\"" + Npc + "\",\"spellSet\":0,\"spellCleared\":0,\"critterSet\":64,\"critterCleared\":0,\"objectSet\":0,\"objectCleared\":0,\"critter2Set\":0,\"critter2Cleared\":0,\"blitSet\":0,\"blitCleared\":0},"
-            + "{\"entity\":\"pc\",\"spellSet\":16777216,\"spellCleared\":65536,\"critterSet\":0,\"critterCleared\":0,\"objectSet\":512,\"objectCleared\":128,\"critter2Set\":0,\"critter2Cleared\":0,\"blitSet\":0,\"blitCleared\":0}]";
+        var list = "\"objectFlags\":[{\"entity\":\"" + Npc + "\",\"spellSet\":0,\"spellCleared\":0,\"critterSet\":64,\"critterCleared\":0,\"objectSet\":0,\"objectCleared\":0,\"critter2Set\":0,\"critter2Cleared\":0,\"blitSet\":0,\"blitCleared\":0,\"npcSet\":0,\"npcCleared\":0},"
+            + "{\"entity\":\"pc\",\"spellSet\":16777216,\"spellCleared\":65536,\"critterSet\":0,\"critterCleared\":0,\"objectSet\":512,\"objectCleared\":128,\"critter2Set\":0,\"critter2Cleared\":0,\"blitSet\":0,\"blitCleared\":0,\"npcSet\":0,\"npcCleared\":0}]";
         StringAssert.Contains(text, list);
         using var restored = Restore(Decode(text));
         Assert.AreEqual(new SessionObjectFlags(0x1000000, 0x10000, 0, 0, 0x200, 0x80), restored.QueryObjectFlags(SessionSpellCaster.Hero));
@@ -104,7 +104,7 @@ public sealed class ObjectFlagStateTests
         void Refused(string damaged) => Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(Decode(damaged), RestoreOptions()).Failure);
         Fails(text.Replace("\"entity\":\"pc\"", "\"entity\":\"" + Npc + "\""), SnapshotDecodeFailure.NotCanonical, "$.spells.objectFlags[1].entity");
         Fails(text.Replace("\"critterSet\":64", "\"critterSet\":\"64\""), SnapshotDecodeFailure.WrongType, "$.spells.objectFlags[0].critterSet");
-        Fails(text.Replace(",\"objectSet\":512,\"objectCleared\":128,\"critter2Set\":0,\"critter2Cleared\":0,\"blitSet\":0,\"blitCleared\":0}]", "}]"), SnapshotDecodeFailure.MissingField, "$.spells.objectFlags[1].objectSet");
+        Fails(text.Replace(",\"objectSet\":512,\"objectCleared\":128,\"critter2Set\":0,\"critter2Cleared\":0,\"blitSet\":0,\"blitCleared\":0,\"npcSet\":0,\"npcCleared\":0}]", "}]"), SnapshotDecodeFailure.MissingField, "$.spells.objectFlags[1].objectSet");
         Fails(text.Replace("\"objectCleared\":128", "\"objectCleared\":\"128\""), SnapshotDecodeFailure.WrongType, "$.spells.objectFlags[1].objectCleared");
         Refused(text.Replace("\"entity\":\"pc\"", "\"entity\":\"sector:1:2\""));
         Refused(text.Replace("\"critterSet\":64,\"critterCleared\":0", "\"critterSet\":64,\"critterCleared\":64"));
@@ -148,6 +148,50 @@ public sealed class ObjectFlagStateTests
         using var restored = Restore(Decode(text));
         Assert.AreEqual(hero, restored.QueryObjectFlags(SessionSpellCaster.Hero));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()), "canonical");
+    }
+
+    // ARC-MAGIC-1142 (schema 93): the NPC flags (obj_f_npc_flags) are a sixth field of the written flags: written over the data's value, saved, restored, and given back to the data's value without a trace.
+    [TestMethod]
+    public void The_NPC_flags_are_a_sixth_field_written_saved_and_restored()
+    {
+        using var owner = Create();
+        Changed(owner.WriteObjectFlag(owner.Version, Npc, SessionObjectFlagField.Npc, 0x800, true), owner, 1);
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.WriteObjectFlag(owner.Version, Npc, SessionObjectFlagField.Npc, 0x800, true).Disposition);
+        var written = owner.QueryObjectFlags(Npc);
+        Assert.AreEqual(new SessionObjectFlags(0, 0, 0, 0, NpcSet: 0x800), written);
+        Assert.AreEqual(0x800 | 0x100, written.Npc(0x100), "over the data's bits: set, the rest kept");
+        Assert.AreEqual(0x1234, written.Critter(0x1234), "the other fields are untouched");
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        StringAssert.Contains(text, "\"npcSet\":2048,\"npcCleared\":0");
+        using var restored = Restore(Decode(text));
+        Assert.AreEqual(written, restored.QueryObjectFlags(Npc));
+        Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()), "canonical");
+        // A clear over a data that has the bit is a change; over a data that lacks it (and a set before) it leaves nothing behind.
+        Changed(owner.WriteObjectFlag(owner.Version, Npc, SessionObjectFlagField.Npc, 0x800, false, dataHas: true), owner, 2);
+        Assert.AreEqual(new SessionObjectFlags(0, 0, 0, 0, NpcCleared: 0x800), owner.QueryObjectFlags(Npc));
+        Assert.AreEqual(0x100, owner.QueryObjectFlags(Npc).Npc(0x900));
+        Changed(owner.WriteObjectFlag(owner.Version, Npc, SessionObjectFlagField.Npc, 0x800, false, dataHas: false), owner, 3);
+        Assert.IsTrue(owner.QueryObjectFlags(Npc).IsEmpty);
+        RefusedKey(owner.WriteObjectFlag(owner.Version, "sector:1:2", SessionObjectFlagField.Npc, 0x800, true));
+    }
+
+    private static void RefusedKey(GameSessionMutationResult result) => Assert.AreEqual(GameSessionFailure.InvalidChangeKey, result.Failure);
+
+    [TestMethod]
+    public void The_ninety_two_to_ninety_three_step_gives_every_row_the_zero_NPC_flags_and_refuses_a_row_that_has_them()
+    {
+        using var owner = Create();
+        owner.WriteObjectFlag(owner.Version, Npc, SessionObjectFlagField.Critter, 0x40, true);
+        var current = GameSessionSnapshotCodec.Encode(owner.Capture());
+        var older = SnapshotUpgradeTests.Schema92(current);
+        StringAssert.Contains(older, "\"schemaVersion\":92,\"world\"");
+        Assert.IsFalse(older.Contains("npcSet", StringComparison.Ordinal));
+        var upgraded = Decode(older);
+        Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, upgraded.SchemaVersion);
+        Assert.AreEqual(new SessionObjectFlags(0, 0, 0x40, 0), upgraded.Spells.ObjectFlags.Single().Flags);
+        Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(upgraded));
+        var damaged = GameSessionSnapshotCodec.TryDecode(older.Replace("\"blitCleared\":0}]", "\"blitCleared\":0,\"npcSet\":0}]"));
+        Assert.AreEqual((SnapshotDecodeFailure.UnknownField, "$.spells.objectFlags[0].npcSet"), (damaged.Failure, damaged.Path));
     }
 
     [TestMethod]

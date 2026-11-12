@@ -1,6 +1,7 @@
 using Arcanum.Data.Area;
 using Arcanum.Input;
 using Arcanum.Session;
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
@@ -265,6 +266,8 @@ public partial class TerrainViewerApp
             _inventoryPanel.SoundRequested += id => PlayInterfaceSound(id, "inventory arrange button");
             _inventoryPanel.PlantRequested += item => PickPocketAttempt(Arcanum.Simulation.Skills.PickPocketDirection.Plant, item);
             _inventoryPanel.UseRequested += UseItemFromWindow;
+            _inventoryPanel.ItemPicked += InventoryItemPicked;
+            _inventoryPanel.PickCancelled += () => { if (_itemAiming is not null) CancelArmedLockpicks("right click"); else CancelSpellTargeting("right click"); };
             _inventoryPanel.PointerStill += InventoryPointerStill;
             _inventoryPanel.ReadRequested += ReadItem;
             _inventoryPanel.PickRequested += ArmLockpick;
@@ -325,30 +328,39 @@ public partial class TerrainViewerApp
                // ARC-UI-1267 (IW25): the hero's own window prints its damage and armour ratings and fills a too heavy weapon's slot.
                HeroRatings = holder is null ? _combatHost?.HeroDollRatings(_areaSession!) : null };
 
-    /// <summary>ARC-SKILLS-005: the hero uses a healing item on itself (the inventory use passes the user as the target, as the
-    /// original's inventory window does). ARC-UI-025: the item use (0x462CC0) reaches it as the heal skill with the item and has charged
-    /// the use's action points already, so the heal charges none (<paramref name="charged"/>).</summary>
-    private void HealSelf(string item, bool charged = false)
+    // The last heal's message, for the item cursor's notice (the cursor reads it after the use returns; no window is open then).
+    private string? _healMessage;
+    /// <summary>The last heal's target and the session's answer, for the smoke.</summary>
+    internal (string Target, SessionHealResult Result)? LastHealForSelfTest { get; private set; }
+
+    /// <summary>ARC-SKILLS-005: the hero uses a healing item on a critter: itself (the inventory use passes the user as the target, as the
+    /// original's inventory window does) or, since ARC-UI-1127 (E8-g), another critter the item cursor picked (a follower, an NPC). ARC-UI-025: the item use (0x462CC0) reaches it as the heal skill with the item and has charged
+    /// the use's action points already, so the heal charges none (<paramref name="charged"/>). The answer is the HUD message; an open inventory window shows it too.</summary>
+    private void HealCritter(string item, string target, bool charged = false)
     {
-        if (!InventoryOpen || !InventoryActive) return;
-        var holder = _inventoryPanel!.Holder;
-        var healing = _inventoryHost!.HealingItem(_areaSession!, item, _areaKitHealing);
+        if (_areaSession is not { } session) return;
+        var shown = InventoryOpen && InventoryActive;
+        var holder = shown ? _inventoryPanel!.Holder : null;
+        var healing = _inventoryHost!.HealingItem(session, item, _areaKitHealing);
+        var life = target == AiSchedulerRules.Pc ? SessionLifeTarget.Hero : SpellCasterNow()?.LifeTarget(target);
         string message;
         if (healing is null) message = "not used: not a healing item the hero holds";
+        else if (life is null) message = "not used: the target has no life record here";
         else
         {
             ResumeLoadedRound();
-            var result = _areaSession!.HealWithItem(_areaSession.Version, SessionLifeTarget.Hero, healing, charged ? null : CombatWorldOrNull());
-            var life = _areaSession.QueryHeroLife()?.Record.State;
+            var result = session.HealWithItem(session.Version, life, healing, charged ? null : CombatWorldOrNull());
+            LastHealForSelfTest = (target, result);
             message = result.Disposition == GameSessionDisposition.Rejected ? $"not used: {result.Failure}"
                 : (result.Check!.Success ? $"healed {result.Heal!.Value.HitPoints} hit point(s){(result.Heal.Value.Cure ? " and cured an injury" : string.Empty)}" : "the heal failed")
                 + (result.ItemDestroyed ? "; the item is used up" : $"; {result.UsesLeft} use(s) left") + (result.FateUsed ? " (fate point)" : string.Empty);
-            GD.Print($"ARC-SKILLS-005 heal disposition={result.Disposition} failure={result.Failure} success={result.Check?.Success} critical={result.Check?.Critical} " +
+            GD.Print($"ARC-SKILLS-005 heal target={target} disposition={result.Disposition} failure={result.Failure} success={result.Check?.Success} critical={result.Check?.Critical} " +
                 $"healed={result.Heal?.HitPoints} cure={result.Heal?.Cure} uses-left={result.UsesLeft?.ToString() ?? "-"} destroyed={result.ItemDestroyed} " +
-                $"hp-damage={life?.HitPointDamage}");
+                $"hp-damage={session.QueryHeroLife()?.Record.State.HitPointDamage}");
+            if (!life.IsHero && result.Disposition != GameSessionDisposition.Rejected) message = $"{target}: {message}";
         }
-        _inventoryStatus = message;
-        _inventoryPanel.Render(InventoryView(holder), message);
+        _healMessage = message;
+        if (shown) { _inventoryStatus = message; _inventoryPanel!.Render(InventoryView(holder), message); }
         RefreshReadyStatus();
     }
 

@@ -255,7 +255,8 @@ public sealed partial class GameSessionOwner
     /// or (worn) wield-off script (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), a full list, store or durability budget or a sum
     /// past 32 bits (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision, the host's verdict
     /// (<see cref="GameSessionFailure.InsertRefused"/>; a call back into the owner from it is <see cref="GameSessionFailure.StaleVersion"/>).
-    /// The original's no-drop item flag is not modelled. ARC-WORLD-1284: a moved item that is not merged marks the NPC with its re-wield bit (NPC flag 0x40, <see cref="Arcanum.Simulation.Ai.DangerFlags.CheckWield"/>). One revision.
+    /// ARC-WORLD-1283: an item with the no-drop flag (item flag 0x20; the worn record's, the origin seed row's, else its prototype's through <see cref="AttachItemNoDrop"/>) is refused by the original's remove check (0x466DA0) after the transfer script and before the insert check: <see cref="GameSessionFailure.ItemNotDroppable"/> with <see cref="InventoryMutationResult.PcMessage"/> 111, nothing changed. The NPC flag 0x40 (re-wield) is not modelled. One revision.
+    /// ARC-WORLD-1284: a moved item that is not merged marks the NPC with its re-wield bit (NPC flag 0x40, <see cref="Arcanum.Simulation.Ai.DangerFlags.CheckWield"/>). One revision.
     /// ARC-MAGIC-022: an item that is the source of a spell run needs <paramref name="triggers"/> (else
     /// <see cref="GameSessionFailure.ItemEffectUnsupported"/>); with one, the removal's spell steps run after the move
     /// (<see cref="ISessionItemTriggers.Remove"/>, <see cref="InventoryMutationResult.ItemSpells"/>).
@@ -287,6 +288,9 @@ public sealed partial class GameSessionOwner
     {
         if (HeroListed(item) is not { } held) return RejectItem(GameSessionFailure.ItemNotAvailable);
         if (HolderHasScript(npc, kind, SessionScriptPoint.Transfer)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
+        // ARC-WORLD-1283 (NT2, VP5, VPG2): the recipient's transfer script is the first gate of 0x461CA0, the item's remove check (0x466DA0) the second: the no-drop flag refuses
+        // the hero's item (worn or not) with message 111 before any other check, so a barter sale, a plant or a hand-over of such an item changes nothing.
+        if (HeroItemNoDrop(item, held.Kind, held.Origin)) return NoDropRefusal();
         var worn = _equipment.SlotOf(item) is not null;
         // ARC-SCRIPT-042: a worn item with item event scripts (a kit or made item too) would leave without its wield-off and remove-item runs.
         if (_equipment.SlotOf(item) is { } wornIn && _equipment.Worn[wornIn].ScriptPoints.Count > 0) return RejectItem(GameSessionFailure.ItemScriptUnsupported);

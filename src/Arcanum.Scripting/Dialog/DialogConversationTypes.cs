@@ -55,6 +55,9 @@ public sealed record DialogConversationRequest(
 /// <paramref name="Greeting"/> (ARC-WORLD-058) resolves an NPC <c>g:</c> greeting; without it the node is a static frontier.
 /// <paramref name="Trainer"/> (ARC-SCRIPT-1150) admits the <c>t:</c> trainer reply; it also needs the <paramref name="World"/>, <paramref name="Skills"/>
 /// and <paramref name="Gold"/> ports (the price, the training and the payment); without any of them the reply stays blocked.
+/// <paramref name="Purse"/> (ARC-SCRIPT-1304) reads the PC's own gold for a paid <c>r:</c> rumor, where <paramref name="Trainer"/> is not given (it answers the same read).
+/// The <c>r:</c> reply needs the <paramref name="Rumors"/> and <paramref name="Greeting"/> ports (the rumor state, the lines, texts and the draw); a paid one also the
+/// <paramref name="World"/>, <paramref name="Gold"/> and purse (the price on the reaction scale, the payment); without any of them the reply stays blocked.
 /// </summary>
 public sealed record DialogConversationPorts(
     IDialogStateQueryPort LocalFlags,
@@ -91,7 +94,8 @@ public sealed record DialogConversationPorts(
     IDialogWindowPort? Windows = null,
     IDialogNewspaperPort? Newspaper = null,
     IDialogOriginPort? Origins = null,
-    IDialogTrainerPort? Trainer = null);
+    IDialogTrainerPort? Trainer = null,
+    IDialogPcGoldPort? Purse = null);
 
 public enum DialogReactionMode
 {
@@ -475,9 +479,17 @@ public interface IDialogSkillPort
 /// <see cref="IDialogGoldPort"/>, the training through the <see cref="IDialogSkillPort"/>, the price through the world port's reaction. Calls are
 /// synchronous and serialized by the host; a thrown exception fails the conversation.
 /// </summary>
-public interface IDialogTrainerPort
+public interface IDialogTrainerPort : IDialogPcGoldPort
 {
     string? SkillName(int skill);
+}
+
+/// <summary>
+/// Purse seam (ARC-SCRIPT-1150, ARC-SCRIPT-1304): the PC's own gold as 0x464780 reads it (the PC's stack only, not its followers'), what a talk's price is
+/// checked against. Calls are synchronous and serialized by the host; a thrown exception fails the conversation.
+/// </summary>
+public interface IDialogPcGoldPort
+{
     int PcGold(DialogGoldQuery query);
 }
 
@@ -665,6 +677,14 @@ public enum DialogOptionTransition
     Trainer,
     /// <summary>ARC-SCRIPT-1150: an option of the trainer's talk (a skill of the menu, the price's yes) that stays inside it.</summary>
     TrainerStep,
+    /// <summary>ARC-SCRIPT-1304: a Player <c>r:</c> reply with a rumor port: the reply's action runs, then one rumor of its list is drawn and told (for a price
+    /// when the reply names one); its own transition is followed when the player leaves the talk (ledger RMR1).</summary>
+    Rumor,
+    /// <summary>ARC-SCRIPT-1304: an option of the rumor talk (the price's yes) that stays inside it.</summary>
+    RumorStep,
+    /// <summary>ARC-SCRIPT-1321: a Player <c>c:</c> reply with the story and greeting ports: the reply's action runs, then the NPC tells the story line of the current story
+    /// state and the PC's class line 1000 is the only way on, which follows the reply's own transition (ledger STY1).</summary>
+    Story,
     /// <summary>Generated interaction (barter, training, …) this runtime does not perform.</summary>
     Unsupported,
 }

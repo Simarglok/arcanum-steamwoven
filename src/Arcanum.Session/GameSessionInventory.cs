@@ -55,8 +55,14 @@ public sealed record SessionItemFacts(SessionItemKind Kind, int Weight, int Comp
     /// <summary>ARC-WORLD-062: the item flag 0x20000 (field 0x57) that keeps a dropped item from decaying.</summary>
     public bool NoDecay { get; init; }
 
-    /// <summary>ARC-WORLD-1158: the item flag 0x20 (field 0x57) "not droppable": the remove check (0x466DA0) refuses the item's drop, so a dead body's inventory walk destroys it instead (0x463860).</summary>
+    /// <summary>ARC-WORLD-1158: the item flag 0x20 (field 0x57) "not droppable": the remove check (0x466DA0) refuses the item's drop (the grid, wear and throw paths). ARC-WORLD-1299: a dead body's inventory walk (0x463860) ignores it and lays the item down like any other.</summary>
     public bool NoDrop { get; init; }
+
+    /// <summary>ARC-WORLD-1299: the item flag 0x10 (field 0x57) "no display": a dead body's inventory walk destroys such an item (0x463860). A seed that does not say reads as clear.</summary>
+    public bool NoDisplay { get; init; }
+
+    /// <summary>ARC-WORLD-1299: the spell flag 0x4000 (field 0x14) "summoned": a dead body's inventory walk destroys such an item (0x463860). A seed that does not say reads as clear.</summary>
+    public bool Summoned { get; init; }
 
     /// <summary>ARC-WORLD-085: the magic weight adjustment (field 0x5A), which the holder's power scales into the item's weight.</summary>
     public int MagicWeight { get; init; }
@@ -184,6 +190,19 @@ public sealed record SessionPlacedItem(string Entity, SessionItemKind Kind, Sess
     CellCoord Cell, int Complexity = 0);
 
 /// <summary>
+/// ARC-SCRIPT-1279 (ledger WO14, WO16): what the session wrote on one item's own fields through the script actions set written start (94, field 0xCB of a written item) and toggle item inventory
+/// display (127, bit 0x10 of the item flags, field 0x57): the written start line the item now has (null: the data's), and whether the display bit is flipped against what the data stores (a toggle
+/// is an exclusive-or, so the session keeps the parity, not the bit).
+/// </summary>
+public readonly record struct SessionItemFieldWrites(int? WrittenStart, bool DisplayFlipped)
+{
+    public bool IsEmpty => WrittenStart is null && !DisplayFlipped;
+}
+
+/// <summary>One item's written fields in a save (the <c>inventory</c> section's <c>itemFields</c>, schema 94).</summary>
+public sealed record SessionItemFieldRecord(string Entity, SessionItemFieldWrites Writes);
+
+/// <summary>
 /// Saved inventory state: the PC's gold (ARC-WORLD-015: the hero's starting coins; 0 without a hero), the hero's starting
 /// kit in kit number order, the items the PC took from the world in the order they entered its list, (ARC-TECHNOLOGY-004) the
 /// items the hero made from schematics or took from an NPC that held made items, in the order they entered its list,
@@ -247,6 +266,12 @@ public sealed class SessionInventoryState
     /// <summary>ARC-WORLD-103: the worn items of the NPCs the session dressed (a regeneration's best-items wield, ledger RK15), by NPC entity
     /// in ordinal order; for such an NPC they replace the inventory locations of its map data.</summary>
     public IReadOnlyList<SessionNpcWear> NpcWorn { get; }
+
+    /// <summary>ARC-SCRIPT-1279 (schema 94): the item fields scripts wrote (written start, inventory display bit), by entity in ordinal order; no row is empty.</summary>
+    public IReadOnlyList<SessionItemFieldRecord> ItemFields { get; init; } = [];
+
+    /// <summary>ARC-SCRIPT-1279: how many items carry written fields at once (two full lists, many times over).</summary>
+    public const int MaxItemFields = 16384;
 
     /// <summary>ARC-WORLD-090: how many identified items a session keeps (two full lists, a merchant's and its container's, many times over).</summary>
     public const int MaxIdentified = 16384;
@@ -318,6 +343,12 @@ public readonly record struct InventoryMutationResult(GameSessionDisposition Dis
     /// <see cref="SessionScriptPoint.Transfer"/>), so the item did not move; <see cref="Item"/> is null then, and the disposition is
     /// Changed only when that run wrote global flags.</summary>
     public int? DeclinedBy { get; init; }
+
+    /// <summary>ARC-WORLD-1283 (ledger NT2, VP5): the item message number the original shows to the PC when a transfer refuses at the item's remove check
+    /// (0x466DA0: the no-drop flag, code 11; the message is item.mes 100 + code, <see cref="GameSessionOwner.NoDropMessage"/>, through 0x4673F0), set on that refusal
+    /// whether the hero is the source or the recipient. A dialog <c>IN -name</c> that ends this way is <see cref="GameSessionDisposition.Changed"/> (the item laid at the PC's
+    /// tile, as the original does after any transfer that did not end with the PC) and carries the number too; null otherwise.</summary>
+    public int? PcMessage { get; init; }
 
     private readonly IReadOnlyList<SessionItemTriggerResult>? _itemSpells;
 
@@ -466,6 +497,9 @@ internal sealed class InventoryDomain
     /// <summary>ARC-WORLD-090: the items the session marked identified (item flag 0x1).</summary>
     internal SortedSet<string> Identified { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>ARC-SCRIPT-1279: the item fields scripts wrote (<see cref="SessionItemFieldWrites"/>), by entity; a row never holds an empty change.</summary>
+    internal SortedDictionary<string, SessionItemFieldWrites> ItemFields { get; } = new(StringComparer.Ordinal);
+
     /// <summary>ARC-WORLD-094: the highest made number a regeneration discarded (<see cref="SessionInventoryState.LastDiscardedMade"/>).</summary>
     internal int LastDiscardedMade { get; set; }
 
@@ -603,7 +637,8 @@ internal sealed class InventoryDomain
         CaptureScriptSlots(), Weights.Select(pair => new SessionItemWeightRecord(pair.Key, pair.Value)).ToArray(), Identified.ToArray(),
         LastDiscardedMade, Grid.Values.OrderBy(item => item.Slot).ToArray(),
         Generated.OrderBy(row => row.Map.RuntimeMap).ThenBy(row => row.Entity, StringComparer.Ordinal).ToArray(),
-        NpcWorn.Select(pair => new SessionNpcWear(pair.Key, Array.AsReadOnly(pair.Value.Select(worn => new SessionNpcWornItem(worn.Key, worn.Value)).ToArray()))).ToArray());
+        NpcWorn.Select(pair => new SessionNpcWear(pair.Key, Array.AsReadOnly(pair.Value.Select(worn => new SessionNpcWornItem(worn.Key, worn.Value)).ToArray()))).ToArray())
+        { ItemFields = ItemFields.Select(pair => new SessionItemFieldRecord(pair.Key, pair.Value)).ToArray() };
 
     /// <summary>ARC-UI-019: the hero's items in its inventory grid, by entity (a worn item and one without room have none).</summary>
     internal Dictionary<string, SessionHeroGridItem> Grid { get; } = new(StringComparer.Ordinal);
@@ -658,7 +693,8 @@ internal sealed class InventoryDomain
         // ARC-MAGIC-1230: a pushed item of the map's data lies on the cell the push left it on (the session's record), wherever its data puts it.
         seed.Source.Items.Where(item => item.Cell is not null && !Taken.Contains(item.Entity))
             .Select(item => new SessionGroundItem(new(item.Entity, WithAmmo(item.Entity, item.Facts)), moved?.Invoke(item.Entity) ?? item.Cell!.Value))
-            // ARC-WORLD-090: the items a barter window sold into a container stay out of its spill (not modelled).
+            // ARC-WORLD-1306: the items a barter window sold into a container leave its list at the break and lie on the ground as placed items
+            // (Placed below); only a save made before that fix can still hold some in a spilled container's list, and they stay hidden.
             .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Container).SelectMany(holder =>
                 spilled(holder.Entity) is { } cell ? Current(seed, holder, dropped, added: false).Select(item => new SessionGroundItem(item, moved?.Invoke(item.Entity) ?? cell)) : []))
             .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Npc).SelectMany(holder => holder.Items

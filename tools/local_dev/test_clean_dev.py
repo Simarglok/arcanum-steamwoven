@@ -267,16 +267,19 @@ class CleanDevTests(unittest.TestCase):
         environment = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
         def git(*arguments: str, cwd: Path = checkout) -> None:
             subprocess.run(["git", *arguments], cwd=cwd, check=True, capture_output=True, env=environment)
-        git("init", "-q", "-b", "main"); (checkout / "f").write_text("x"); git("add", "f"); git("commit", "-qm", "c")
+        git("init", "-q", "-b", "main"); (checkout / "f").write_text("x"); (checkout / ".gitignore").write_text("/.claude/settings.json\n*.tmp\n")
+        git("add", "f", ".gitignore"); git("commit", "-qm", "c")
         git("update-ref", "refs/remotes/origin/main", "HEAD")
-        for name in ("merged", "dirty", "ahead"):
+        for name in ("merged", "dirty", "ahead", "stray"):
             git("worktree", "add", "-q", "-b", name, str(checkout / ".claude/worktrees" / name))
         git("worktree", "add", "-q", "-b", "hermes", str(checkout / ".worktrees/t_1"))
         (checkout / ".claude/worktrees/merged/bin").mkdir()
+        (checkout / ".claude/worktrees/merged/.claude").mkdir(); (checkout / ".claude/worktrees/merged/.claude/settings.json").write_text("{}")
+        (checkout / ".claude/worktrees/stray/other.tmp").write_text("x")
         (checkout / ".claude/worktrees/dirty/new").write_text("x")
         ahead = checkout / ".claude/worktrees/ahead"; (ahead / "g").write_text("y"); git("add", "g", cwd=ahead); git("commit", "-qm", "g", cwd=ahead)
         found = {Path(item["path"]).name: item["class"] for item in clean.worktrees(checkout)}
-        self.assertEqual(found, {"merged": "removable", "dirty": "keep", "ahead": "keep", "t_1": "keep"})
+        self.assertEqual(found, {"merged": "removable", "dirty": "keep", "ahead": "keep", "stray": "keep", "t_1": "keep"})
 
 
 if __name__ == "__main__":

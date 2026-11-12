@@ -6,12 +6,12 @@ public sealed partial class GameSessionOwner
 {
     /// <summary>
     /// ARC-DEV-238 (ledger TK2): what the original does with the hero's item when a hand-over to an NPC was refused (the dialog action <c>in</c> n ≥ 0, 0x416091–0x4160F7, after
-    /// <see cref="GiveItemToNpc"/> answered <see cref="GameSessionFailure.InsertRefused"/>): an NPC with no leader destroys it (<paramref name="placeAt"/> null; 0x43CCA0), one with a leader
+    /// <see cref="GiveItemToNpc"/> answered <see cref="GameSessionFailure.InsertRefused"/> or, ARC-WORLD-1283, <see cref="GameSessionFailure.ItemNotDroppable"/>: the remove check fails the transfer before the insert check): an NPC with no leader destroys it (<paramref name="placeAt"/> null; 0x43CCA0), one with a leader
     /// has it taken out of the hero's list and laid on the NPC's cell (0x466E00, 0x466E50: a junk pile or a new one, then the decay timer; the item joins the hero's placed items).
     /// Refused before any effect: an invalid input (<see cref="GameSessionFailure.InvalidItem"/>), the version, an item the hero does not hold (<see cref="GameSessionFailure.ItemNotAvailable"/>),
     /// a worn item with item event scripts, an item with a remove-item, insert-item or (worn) wield-off script on its origin seed (<see cref="GameSessionFailure.ItemScriptUnsupported"/>),
     /// a worn item with the item spells mark or an item that is the source of a spell run (<see cref="GameSessionFailure.ItemEffectUnsupported"/>; the removal's events are not run here), a cell
-    /// the ground cannot hold (<see cref="GameSessionFailure.DropTileUnfit"/>), the revision. One revision. The placement is on the actor's map (the dialog's NPC stands on it). The caller owns the proof that the insert was refused (<see cref="SessionDialogItemTakePort"/> asks only after <see cref="GameSessionFailure.InsertRefused"/>).
+    /// the ground cannot hold (<see cref="GameSessionFailure.DropTileUnfit"/>), the revision. One revision. The placement is on the actor's map (the dialog's NPC stands on it). The caller owns the proof that the insert was refused (<see cref="SessionDialogItemTakePort"/> asks only after <see cref="GameSessionFailure.InsertRefused"/> or <see cref="GameSessionFailure.ItemNotDroppable"/>).
     /// </summary>
     internal InventoryMutationResult SettleRefusedHandover(GameSessionVersion expected, string item, CellCoord? placeAt)
     {

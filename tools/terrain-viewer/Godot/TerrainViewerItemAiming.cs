@@ -14,7 +14,7 @@ namespace Arcanum.TerrainViewer;
 // cast host's map) and applies: on an object the use at once (0x462CC0 with the target) or the item-use goal 39 (a walk next to the target, then the use), as AreaItemAiming.ApplyOnObject decides (IA8: a charged
 // item in its slot-0 spell's range uses at once, out of range or with OIF_NO_RANGED_USE it walks first); on a tile a charged item uses at once (0x462FC0, IA12) and a trap device starts goal 41 (IA9, IA11; the device's own use is NOT READY,
 // E6-b). A right press cancels (IA5); a press that finds nothing keeps the cursor open (IA6). The use script runs without the target object (the use script host has none yet), and a healing kit aimed at
-// a target is NOT READY here (the heal skill on another critter is slice E8-g).
+// another critter is the heal skill (ARC-UI-1127, E8-g): goal 39 walks next to it and the session's heal runs at the goal's last node.
 public partial class TerrainViewerApp
 {
     /// <summary>The open item cursor: the item, its use facts, the target mask (IA3) and the slot-0 spell when the mask is the spell's.</summary>
@@ -86,13 +86,24 @@ public partial class TerrainViewerApp
         {
             case AreaItemAimBegin.Nothing: ItemAimNotice($"{name}: nothing happens (the hero cannot act)"); return;
             case AreaItemAimBegin.NoActionPoints: ItemAimNotice($"{name}: not enough action points"); return;
-            case AreaItemAimBegin.InventoryTarget: ItemAimNotice($"not used: {name}'s target is an inventory item (NOT READY)"); return;
+            case AreaItemAimBegin.InventoryTarget:
+                // ARC-MAGIC-1128 (IA4): the inventory bit pushes mode 16 over the inventory window, which stays and picks the item (the window's press, IW44).
+                if (!OpenTargetMode(InterfaceMode.ItemTarget, _ => ClearItemTarget(), overInventory: true))
+                {
+                    ItemAimNotice($"not used: {name}: the item cursor could not open over this window");
+                    return;
+                }
+                _itemAiming = new ItemAiming(item, facts, mask, spell, charged);
+                _inventoryPanel!.TargetPicking = true;
+                _hoverStamp = null;
+                ItemAimNotice($"{name}: left-click an item of the pack, right click cancels");
+                return;
             case AreaItemAimBegin.UseAtOwnTile:
                 if (caster.Facts(SessionSpellCaster.Hero)?.Location is { } own && own != SpellLocation.None) ApplyItemAim(new(item, facts, mask, spell, charged), null, own, false, false);
                 else ItemAimNotice($"not used: {name}: the hero's tile is not known here");
                 return;
         }
-        if (!OpenTargetMode(InterfaceMode.ItemTarget, _ => { _lockpickArmed = null; _itemAiming = null; _hoverStamp = null; }))
+        if (!OpenTargetMode(InterfaceMode.ItemTarget, _ => ClearItemTarget()))
         {
             ItemAimNotice($"not used: {name}: the interface mode did not open");
             return;
@@ -106,6 +117,33 @@ public partial class TerrainViewerApp
             return;
         }
         ItemAimNotice($"{name}: left-click a target, right click cancels");
+    }
+
+    /// <summary>The leave step of mode 16: the item cursor's and the armed lockpicks' state goes, and the inventory window stops picking.</summary>
+    private void ClearItemTarget()
+    {
+        _lockpickArmed = null; _itemAiming = null; _hoverStamp = null;
+        if (_inventoryPanel is not null) _inventoryPanel.TargetPicking = false;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-1128 (IA6, the mode-16 branch of the inventory window's press, 0x575FA0 → 0x571CB0): an item of the window picked while the item cursor stands over it. The area test of the item's slot-0 spell runs as for a
+    /// click in the game view; a target that passes is applied (an item of the hero's pack is at the hero's tile, in range: the use at once).
+    /// </summary>
+    private void ItemAimInventoryPick(ItemAiming aim, string item)
+    {
+        if (HeroLyingDown || AnotherHasTheTurn || AreaTransferPending) { ItemAimNotice("the hero cannot act now"); return; }
+        if (SpellCasterNow() is not { } caster || aim.Spell is not { } spell) { ItemAimNotice("not a valid target"); return; }
+        var pick = caster.PickTarget(SessionSpellCaster.Hero, spell, aim.Mask, item, null);
+        GD.Print($"ARC-MAGIC-1128 inventory-pick item-cursor={aim.Item} item={item} passes={pick.Test.Passes} reason=0x{pick.Test.Reason:X}");
+        if (!pick.Test.Passes) { ItemAimRefused(pick); return; }
+        ApplyItemAim(aim, pick.Object?.Id, pick.Tile, false, false);
+    }
+
+    private void ItemAimRefused(SpellPick pick)
+    {
+        if (SpellUiRules.NoTargetMessage(pick.Test.Reason) is { } message) { var text = AreaSpellCasting.Message(_spellData?.Data?.Texts, message); PostSpellMessage(text); ItemAimNotice(text); }
+        else ItemAimNotice("not a valid target");
     }
 
     /// <summary>The cursor's pick (0x4F2830 → 0x4F28A0, IA6; SU15–SU19): the object under the pointer (seeing through what the mask spares), the objects on the tile under it, the tile; a spell's mask is tested by the spell's
@@ -135,12 +173,7 @@ public partial class TerrainViewerApp
     {
         if (_itemAiming is not { } aim) return;
         if (ItemAimPick(aim, screen) is not { } pick) { ItemAimNotice("no target here"); return; }
-        if (!pick.Test.Passes)
-        {
-            if (SpellUiRules.NoTargetMessage(pick.Test.Reason) is { } message) { var text = AreaSpellCasting.Message(_spellData?.Data?.Texts, message); PostSpellMessage(text); ItemAimNotice(text); }
-            else ItemAimNotice("not a valid target");
-            return;
-        }
+        if (!pick.Test.Passes) { ItemAimRefused(pick); return; }
         ApplyItemAim(aim, pick.Object?.Id, pick.Tile, ctrl, shift);
     }
 
@@ -158,7 +191,8 @@ public partial class TerrainViewerApp
             var inRange = true;
             if (aim.Charged && aim.Spell is { } spell && SpellRecordsNow() is { } records && caster.Facts(SessionSpellCaster.Hero)?.Location is { } from && caster.Facts(target)?.Location is { } there)
                 inRange = Math.Max(Math.Abs((long)from.X - there.X), Math.Abs((long)from.Y - there.Y)) <= records[spell].Data.Range;
-            var decision = AreaItemAiming.ApplyOnObject(aim.Charged, inRange, aim.Facts.NoRangedUse);
+            // ARC-UI-1127 (E8-g, IA14): a healing kit aimed at another critter is the heal skill goal 33 of the original (range 1: walk next to the target, then heal); Steamwoven walks with goal 39 (the same approach and range, IA8) and heals at its last node.
+            var decision = AreaItemAiming.ApplyOnObject(aim.Charged, inRange, aim.Facts.NoRangedUse, healsAnother: aim.Facts.HealingKit && !aim.Charged && target != AiSchedulerRules.Pc && caster.LifeTarget(target) is not null);
             GD.Print($"ARC-DEV-365 aim-apply item={aim.Item} object={target} in-range={inRange} decision={decision}");
             if (decision == AreaItemAimObject.UseNow) { ItemAimNotice(ItemAimUse(aim.Item, aim.Facts, target, null)); return; }
             var request = HeroRequests.Apply(new UseItemRequest(aim.Item, target, ctrl, shift));
@@ -184,14 +218,15 @@ public partial class TerrainViewerApp
         var session = _areaSession!;
         var name = _inventoryHost!.ItemName(session, item, _hoverNames?.Catalog);
         if (UseNotReady(item, facts) is { } notReady) return notReady;
-        // The heal skill on another critter is slice E8-g: nothing is charged or run for a healing kit aimed at a target.
-        if (facts.HealingKit && !facts.Magical && HeroItemSpells(item) is not { Charges: not 0 }) return $"not used: {name} aimed at a target (the heal skill on another critter is NOT READY)";
+        _healMessage = null;
         var world = new HeroItemUse(this, facts);
         var used = tile is { } at ? AiExecutorRules.UseItemOnTileNow(world, AiSchedulerRules.Pc, item, at) : AiExecutorRules.UseItemNow(world, AiSchedulerRules.Pc, item, target);
         var message = world.Message ?? StepText(used, name);
         GD.Print($"ARC-DEV-365 aim-use item={item} target={target ?? "-"} tile={(tile is { } t ? $"{t.X},{t.Y}" : "-")} step={used.Step} charged={used.Charged} spent={used.Spent} aborted={world.Aborted}");
         _lastItemUse = (item, AreaItemUseGate.Use, used.Step, message);
         world.After?.Invoke();
+        // ARC-UI-1127: a heal on the picked critter answers with its own line (the item cursor has closed the window).
+        if (_healMessage is { } healed) { message = healed; _healMessage = null; }
         SyncAreaInventory();
         return message;
     }

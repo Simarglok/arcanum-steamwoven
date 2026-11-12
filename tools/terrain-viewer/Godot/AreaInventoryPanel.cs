@@ -76,6 +76,12 @@ public partial class AreaInventoryPanel : CanvasLayer
     /// <summary>ARC-SKILLS-005: use a healing item of the PC's list on the PC; ARC-UI-025: use any item of the hero's as a right click on
     /// it does (the item use 0x462CC0 with the hero as user and target, IW5).</summary>
     public event Action<string>? UseRequested;
+    /// <summary>ARC-MAGIC-1128: with <see cref="TargetPicking"/> a left press on an item of the own window names it as the spell's target (ledger IW44).</summary>
+    public event Action<string>? ItemPicked;
+    /// <summary>ARC-MAGIC-1128: a right release in the window while a spell's cursor stands over it cancels the cursor.</summary>
+    public event Action? PickCancelled;
+    /// <summary>ARC-MAGIC-1128: a spell's cursor (interface mode 1) stands over the window.</summary>
+    public bool TargetPicking { get => _area.TargetPicking; set => _area.TargetPicking = value; }
     /// <summary>ARC-UI-035: the pointer rested on another item of the doll or the grid (its entity) or on none (null).</summary>
     public event Action<string?>? PointerStill;
     /// <summary>ARC-UI-049: use a written item of the PC's list (read it, or register a schematic document).</summary>
@@ -176,6 +182,8 @@ public partial class AreaInventoryPanel : CanvasLayer
         _area = new AreaInventoryGridArea { Name = "DollAndGrid" };
         _area.DropRequested += drop => DropRequested?.Invoke(drop);
         _area.UseRequested += held => UseRequested?.Invoke(held.Entity);
+        _area.ItemPicked += held => ItemPicked?.Invoke(held.Entity);
+        _area.PickCancelled += () => PickCancelled?.Invoke();
         _area.PointerStill += item => PointerStill?.Invoke(item);
         _area.TakeAllRequested += () => TakeAllRequested?.Invoke();
         _area.ArrangeRequested += () => ArrangeRequested?.Invoke();

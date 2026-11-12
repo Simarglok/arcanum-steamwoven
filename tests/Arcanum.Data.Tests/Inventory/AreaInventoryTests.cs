@@ -136,6 +136,22 @@ public sealed class AreaInventoryTests
         Assert.IsFalse(inventory.TryGetItem(50, out _), "scenery is neither item nor holder");
     }
 
+    // ARC-WORLD-1299: the spell flags (slot 19) of an item are kept (the summoned bit decides a dead body's item walk); an absent or non-number field reads as no flag.
+    [TestMethod]
+    public void An_items_spell_flags_are_read_and_a_missing_field_reads_as_clear()
+    {
+        var world = World();
+        world[1] = Item(11, 2, Armor, 1, 2804, extra: [Scripts((0, 1142)), Value(19, 0x4000 | 0x2)]);
+        world[2] = Item(12, 3, Food, 1, 3600, location: 2, complexity: 5, itemFlags: 1, extra: Null(19));
+        var inventory = Read(world);
+        Assert.IsTrue(inventory.TryGetItem(11, out var summoned));
+        Assert.AreEqual(0x4002u, summoned.SpellFlags);
+        Assert.IsTrue(inventory.TryGetItem(12, out var plain));
+        Assert.AreEqual(0u, plain.SpellFlags, "a field that is not a number reads as clear");
+        Assert.IsTrue(inventory.TryGetItem(13, out var gold));
+        Assert.AreEqual(0u, gold.SpellFlags, "no field at all reads as clear");
+    }
+
     [TestMethod]
     public void Unloaded_leader_and_substitute_handles_keep_their_identity_without_an_index()
     {

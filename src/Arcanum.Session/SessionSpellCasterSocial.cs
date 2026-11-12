@@ -29,7 +29,7 @@ public interface ISpellSocialHost
 /// do more than a write it **returns before the closing write** (fleeing, blinded set, and mind control of anything that is no NPC) or writes the flag itself in the middle of its work (mind control).
 /// <list type="bullet">
 /// <item><b>Charmed</b>, set, on an NPC: an animal (critter flag 0x8) makes peace with the caster (0x4AA300); any other NPC gets <c>+30</c> toward the hero when the caster is the hero (0x4C0DE0);
-/// then the NPC flag 0x800 (<c>ONF_KOS_OVERRIDE</c>) is added, which the session does not keep (named, SO2). Clear, on an NPC: <c>−30</c> toward the hero when the caster is the hero; the NPC flag stays.
+/// then the NPC flag 0x800 (<c>ONF_KOS_OVERRIDE</c>) is added, which the session keeps in its NPC flag layer (SO2, ARC-MAGIC-1142). Clear, on an NPC: <c>−30</c> toward the hero when the caster is the hero; the NPC flag stays.
 /// Any other object: the plain write.</item>
 /// <item><b>Mind controlled</b>, set: without a caster the plain write; with one, **nothing at all** for an object that is no NPC (the flag is not written, SO3); for an NPC the reaction <c>−50</c> toward the hero when the
 /// caster is the hero and the NPC does not hold the summoned spell flag (0x4000), then the flag, then the NPC joins the caster as a forced follower (0x45DE90), then no-flee for good (0x4AF1D0). Clear, on an NPC: the flag, then a forced
@@ -46,9 +46,12 @@ public sealed partial class SessionSpellCaster
     public ISpellSocialHost? Social { get; set; }
 
     /// <summary>The detail codes of a <see cref="SpellCastEventKind.SocialEffect"/> line (its <see cref="SpellCastEvent.Value"/>): the reaction change (detail: the delta), peace, flee, stop fleeing, a forced join, a forced leave, no-flee for good, a blinded
-    /// condition written (detail 1 on, 0 off), the original's no-ops (<see cref="SocialIgnored"/>) and a step the session does not model (<see cref="SocialNotModelled"/>, detail: 1 a leader that is no hero, 2 the NPC flag KOS_OVERRIDE) or a host that did not run
+    /// condition written (detail 1 on, 0 off), the original's no-ops (<see cref="SocialIgnored"/>) and a step the session does not model (<see cref="SocialNotModelled"/>, detail: 1 a leader that is no hero) or a host that did not run
     /// the step (<see cref="SocialRefused"/>, detail: the effect it was asked).</summary>
     public const int SocialReaction = 1, SocialPeace = 2, SocialFlee = 3, SocialStopFleeing = 4, SocialJoin = 5, SocialLeave = 6, SocialNoFlee = 7, SocialBlinded = 8, SocialIgnored = 9, SocialNotModelled = 10, SocialRefused = 11;
+
+    /// <summary>ARC-MAGIC-1142: the NPC flag 0x800 (<c>ONF_KOS_OVERRIDE</c>, field 0x118) a charm adds and the attack event clears on an NPC victim.</summary>
+    public const int KosOverrideNpcFlag = 0x800;
 
     /// <summary>ARC-MAGIC-035: the critter flag 0x8 (animal), the object flag 0x20000000 the undead bit sets, and the reactions the spells give: charm +30 / −30, mind control −50.</summary>
     public const int AnimalCritterFlag = 0x8, ObjectUndeadMark = 0x20000000, CharmReaction = 30, MindControlReaction = -50;
@@ -104,8 +107,8 @@ public sealed partial class SessionSpellCaster
                     }
                 }
                 else if (parent == Hero) Reaction(run, id, CharmReaction);
-                // NPC flag 0x800 (ONF_KOS_OVERRIDE) is added after it; the session keeps no NPC flags (named left-over).
-                SocialLine(run, SocialNotModelled, id, 2);
+                // NPC flag 0x800 (ONF_KOS_OVERRIDE) is added after it (0x454C74, SO2): the session's NPC flag layer (ARC-MAGIC-1142), a bit the clear branch never takes back.
+                WriteFlag(run, id, SessionObjectFlagField.Npc, KosOverrideNpcFlag, true, sideEffect: true);
             }
             else if (parent == Hero) Reaction(run, id, -CharmReaction);
         }

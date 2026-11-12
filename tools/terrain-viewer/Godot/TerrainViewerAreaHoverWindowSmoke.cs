@@ -227,6 +227,11 @@ public partial class TerrainViewerApp
             {
                 if (!aiBefore) { _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null; }
             }
+            // ARC-UI-1281 (HK26): a follower's portrait hover runs the examine and describes him; leaving clears (a free companion of the map joins for it).
+            HoverReleaseForSelfTest(); HoverAtForSelfTest(null);
+            var portraitSeen = await PortraitHoverStageAsync(_areaSession, Require);
+            GD.Print($"ARC-UI-1281 native-smoke hover-portrait {portraitSeen}");
+            _messageLog.ClearHover();
             // A window with no hoverable body of any kind (the generated wilderness has none) has nothing to observe: NONE, not a failure.
             if (seen.All(s => s.EndsWith("=none", StringComparison.Ordinal)) && !index.Bodies.Any(c => c.Identity is { } id && AreaHoverWindow.Highlighted(index.Row(id))
                 && !string.IsNullOrEmpty(index.Name(id)) && !AreaTakenByPc(c) && !canvas.AreaHiddenOf(c)))
@@ -235,7 +240,7 @@ public partial class TerrainViewerApp
             // A click-through body (OF_CLICK_THROUGH) is never the pick, so it is neither highlighted nor described (OH1).
             var through = area.Plan.Commands.FirstOrDefault(c => c.Identity is { } id && index.Contains(id) && AreaHoverIndex.ClickThrough(index.Row(id)));
             Require(through is null || index.Bodies.All(c => c.Identity != through.Identity), "click-through bodies are not pickable");
-            GD.Print($"ARC-UI-057 native-smoke hover-window PASS map={_readyMapName} {string.Join(" ", seen)} click-through={(through is null ? "none" : "skipped")} ring={ringSeen}");
+            GD.Print($"ARC-UI-057 native-smoke hover-window PASS map={_readyMapName} {string.Join(" ", seen)} click-through={(through is null ? "none" : "skipped")} ring={ringSeen} {portraitSeen}");
         }
         finally
         {

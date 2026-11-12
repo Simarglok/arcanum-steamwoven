@@ -46,8 +46,9 @@ public sealed record DialogGreetingFacts(bool NpcMale, bool PcMale, bool NpcDumb
 
 /// <summary>The texts a greeting reads: the module's generated-dialog files, its four reputation greeting files (NPC gender to
 /// PC gender: m2m, m2f, f2f, f2m; null when absent) and the NPC's own override dialog (the DLG of its script at SAP key 31, null
-/// without one).</summary>
-public sealed record DialogGreetingSources(GeneratedDialogFiles Files, IReadOnlyList<MesFile?> ReputationLines, DlgDocument? Overrides);
+/// without one). <c>RumorLines</c> (ARC-SCRIPT-1304) are the four rumor files in the same order, for the tale of an <c>r:</c> reply; null reads as no text.</summary>
+public sealed record DialogGreetingSources(GeneratedDialogFiles Files, IReadOnlyList<MesFile?> ReputationLines, DlgDocument? Overrides,
+    IReadOnlyList<MesFile?>? RumorLines = null);
 
 /// <summary>What a greeting roll decides (the host names the session roll by it).</summary>
 public enum DialogGreetingRoll
@@ -60,6 +61,8 @@ public enum DialogGreetingRoll
     ReputationPick,
     /// <summary>ARC-SCRIPT-043: the entry of a generated Player option (a phrase).</summary>
     Phrase,
+    /// <summary>ARC-SCRIPT-1304: which of the rumors an <c>r:</c> reply lists is told (the candidate's index).</summary>
+    Rumor,
 }
 
 /// <summary>
@@ -89,6 +92,8 @@ public enum DialogLineOriginKind
     Override,
     /// <summary>A reputation greeting (<see cref="DialogLineOrigin.Number"/> is the reputation).</summary>
     Reputation,
+    /// <summary>ARC-SCRIPT-1304: the tale of a rumor (<see cref="DialogLineOrigin.Number"/> is the rumor); no voice.</summary>
+    Rumor,
 }
 
 /// <summary>Where a generated NPC line came from. The original gives generated and reputation lines no voice (speech id −1) and
@@ -306,14 +311,16 @@ internal static class DialogGreeting
     /// </summary>
     [OriginalFunction(0x416C10, OriginalFunctionScope.Partial)]
     [OriginalFunction(0x419190, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x418460, OriginalFunctionScope.Partial)]
     public static GreetingOutcome? Phrase(char? letter, bool pcDumb, DialogGreetingFacts facts, DialogGreetingSources sources, IDialogGreetingPort port,
-        DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes)
+        DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes, int storyState = 0)
     {
         var context = new Context(facts, sources, port, names, encoding, maxTextBytes);
         return letter switch
         {
             null or 'e' => PcLine(context, pcDumb, 400, 499),
             'a' => PcClassLine(context, pcDumb, 1000),
+            'c' => PcLine(context, pcDumb, StoryPcLine + storyState, StoryPcLine + storyState),
             'b' => facts.NpcLedByPc ? PcLine(context, pcDumb, 1600, 1699) : PcLine(context, pcDumb, 300, 399),
             'f' => PcLine(context, pcDumb, 800, 899),
             'h' => PcLine(context, pcDumb, 700, 799),
@@ -324,6 +331,7 @@ internal static class DialogGreeting
             'p' => PcLine(context, pcDumb, 1900, 1999),
             's' => PcLine(context, pcDumb, 200, 299),
             't' => PcLine(context, pcDumb, 500, 599),
+            'r' => PcClassLine(context, pcDumb, 2000),
             'w' => PcLine(context, pcDumb, 1800, 1899),
             'y' => PcLine(context, pcDumb, 1, 99),
             _ => null,
@@ -337,6 +345,48 @@ internal static class DialogGreeting
     public static GreetingOutcome NpcClassGroup(int group, DialogGreetingFacts facts, DialogGreetingSources sources, IDialogGreetingPort port,
         DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes) =>
         ClassLine(new Context(facts, sources, port, names, encoding, maxTextBytes), group);
+
+    /// <summary>
+    /// ARC-SCRIPT-1304 (ledger RMR7): the text of the rumor the NPC tells: the file by the NPC's gender then the PC's (the same order as the
+    /// reputation greetings), message 20 × rumor + the NPC's social class + 1, else 20 × rumor + 1, then the name substitution of the dialog text. A rumor without a text, or without its file, is an empty line (origin <see cref="DialogLineOriginKind.Empty"/>).
+    /// </summary>
+    public static GreetingOutcome RumorTale(int rumor, DialogGreetingFacts facts, DialogGreetingSources sources, IDialogGreetingPort port,
+        DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes)
+    {
+        var index = facts.NpcMale ? (facts.PcMale ? 0 : 1) : (facts.PcMale ? 3 : 2);
+        var file = sources.RumorLines is { } lines && index < lines.Count ? lines[index] : null;
+        var message = file?.Find(rumor * RumorStride + facts.NpcSocialClass + 1) ?? file?.Find(rumor * RumorStride + 1);
+        var empty = new GreetingOutcome(GreetingOutcomeKind.Line, string.Empty, new(DialogLineOriginKind.Empty, rumor));
+        if (message is null || message.Bytes.Length == 0) return empty;
+        return Text(new Context(facts, sources, port, names, encoding, maxTextBytes), message.Bytes.ToArray(), new(DialogLineOriginKind.Rumor, rumor), substitute: true);
+    }
+
+    private const int RumorStride = 20;
+
+    /// <summary>The PC's line of a <c>c:</c> reply is the single line this number plus the story state (0x418460).</summary>
+    public const int StoryPcLine = 1700;
+
+    /// <summary>The story line's message is the NPC's race plus this many per story state (0x41A440).</summary>
+    public const int StoryStateStride = 100;
+
+    /// <summary>
+    /// ARC-SCRIPT-1321 (ledger STY1–STY3): the NPC's story line (0x41A440): the NPC's own override record 10000 + the story state when it has one,
+    /// else the entry numbered the NPC's race (stat 27) + 100 × the story state of the story file by the NPC's gender then the PC's, fetched by number
+    /// (no draw) and name-substituted. An entry or file the module lacks reads like a missing generated line (the missing-line text, or an empty line without the file).
+    /// </summary>
+    [OriginalFunction(0x41A440, OriginalFunctionScope.Partial)]
+    public static GreetingOutcome StoryTale(int storyState, DialogGreetingFacts facts, DialogGreetingSources sources, IDialogGreetingPort port,
+        DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes)
+    {
+        var context = new Context(facts, sources, port, names, encoding, maxTextBytes);
+        if (OverrideLine(context, 10000 + storyState) is { } overridden) return overridden;
+        var number = facts.NpcRace + StoryStateStride * storyState;
+        var file = GeneratedDialogFiles.StoryLineFile(facts.NpcMale, facts.PcMale);
+        if (sources.Files.File(file) is null) return new(GreetingOutcomeKind.Line, Origin: new(DialogLineOriginKind.Empty, number, file));
+        var line = sources.Files.Line(file, number);
+        if (line.Message is null) return new(GreetingOutcomeKind.Line, MissingLine(number, file), new(DialogLineOriginKind.MissingLine, number, file));
+        return Text(context, line.Message.Bytes.ToArray(), new(DialogLineOriginKind.Generated, number, file), substitute: true);
+    }
 
     /// <summary>ARC-SCRIPT-1150: a PC line of the range <paramref name="first"/>..<paramref name="last"/> (the trainer talk's answers).</summary>
     public static GreetingOutcome PcRange(int first, int last, bool pcDumb, DialogGreetingFacts facts, DialogGreetingSources sources,

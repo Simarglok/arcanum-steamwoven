@@ -8,7 +8,7 @@ namespace Arcanum.Session;
 /// command's (its starting kit, then the items it took, then the made ones) goes to the NPC through <see cref="GameSessionOwner.GiveItemToNpc"/> with the host's insert check for the NPC.
 /// Nobody holding such an item is the source's no-effect case (Applied). The source takes the item from the first follower holding it when the PC has none; the session has no move from
 /// one NPC's list to another's, so that case (unless the NPC is itself the first follower holding it: the item is with it already, Applied), and every refusal of the move (the version, an NPC the session does not know, a script or item effect it cannot run, a full list, the host's
-/// verdict), is Rejected and the conversation fails on the command. A move the host's insert check refused (<see cref="GameSessionFailure.InsertRefused"/>) is the source's transfer that did not
+/// verdict), is Rejected and the conversation fails on the command. A move the host's insert check refused (<see cref="GameSessionFailure.InsertRefused"/>) or the item's remove check refused (the no-drop flag, <see cref="GameSessionFailure.ItemNotDroppable"/>, ARC-WORLD-1283, which the original tests first) is the source's transfer that did not
 /// end with the NPC (ledger TK2, ARC-DEV-238): an NPC the PC leads has the item laid on its cell (<paramref name="locationOf"/>; no cell, or one the ground cannot hold, is Rejected), any other NPC
 /// destroys it (<see cref="GameSessionOwner.SettleRefusedHandover"/>); both are Applied and the string goes on. The leader is the PC's party (an NPC following another NPC is not modelled). A PC other than <paramref name="playerCharacter"/> or an NPC without a session entity is Rejected. The last move's result is kept in <see cref="LastResult"/>. The session is read
 /// at each call; the port must be rebuilt when the host replaces the owner.
@@ -62,7 +62,8 @@ public sealed class SessionDialogItemTakePort(
         {
             var result = _session.GiveItemToNpc(_session.Version, npc, held.Entity, _insertCheck);
             LastResult = result;
-            if (result.Disposition == GameSessionDisposition.Rejected && result.Failure == GameSessionFailure.InsertRefused) return Settle(npc, held.Entity);
+            // ARC-WORLD-1283: the item's remove check (the no-drop flag) fails the transfer too, before the insert check; the original's fallback is the same (0x416091).
+            if (result.Disposition == GameSessionDisposition.Rejected && result.Failure is GameSessionFailure.InsertRefused or GameSessionFailure.ItemNotDroppable) return Settle(npc, held.Entity);
             return result.Disposition == GameSessionDisposition.Rejected ? DialogCommandResult.Rejected : DialogCommandResult.Applied;
         }
         foreach (var follower in _session.QueryParty().Followers)

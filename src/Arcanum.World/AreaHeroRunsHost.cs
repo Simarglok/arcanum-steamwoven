@@ -364,10 +364,10 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     /// </summary>
     public bool MayTalk => _viewer.MayStart();
 
-    public bool Talk(string target, bool run)
+    public bool Talk(string target, bool run, bool noWalk = false)
     {
         if (!MayTalk) return false;
-        var request = new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(GoalType.Talk, target), run ? GoalRunFlags.Running : GoalRunFlags.None);
+        var request = new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(GoalType.Talk, target), (run ? GoalRunFlags.Running : GoalRunFlags.None) | (noWalk ? GoalRunFlags.NoWalk : GoalRunFlags.None));
         var started = _session.StartGoal(request, _ports);
         // A walk, an approach or a turn this start interrupted is over: its end node stops the route (the talk's own approach sets its own).
         foreach (var end in started.Ended) EndNodes(end, "ROUTE_REPLACED_BY_TALK");
