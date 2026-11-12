@@ -196,7 +196,7 @@ project); the audit proposed no decoder.
 | Slice | Content | Size | Needs |
 | --- | --- | --- | --- |
 | E7-r | **Done (ARC-RES-1108, [Bink movies](../research/bink-movies.md)):** decoder options and licences (ffmpeg's Bink support is LGPL; or ship no video and show stills), the movie list and where scripts and maps call it. Ten Bink 1 files (`BIKi`), 8 numbered; callers: start-up, logos, View Intro, new game, script action 103 (6 scripts); recommended decoder: ffmpeg as an external program; the owner chooses the scope (issue #1170) | S–M | owner decision on scope |
-| E7-a | **Part done (ARC-RENDER-1170, issue #1170, owner decision 2026-11-12):** movie player over an external ffmpeg, menu "View Intro" and the new game's two movies; the start-up movie 8 and the logos are not wanted. **Open:** script action 103 (`fade`, six scripts) in the script engine and its host (time advance, track operand, movie by number), a task of its own; the teleport request's own movie numbers are 0 in every shipped script | M–L | E7-r |
+| E7-a | **Part done (ARC-RENDER-1170, issue #1170, owner decision 2026-11-12):** movie player over an external ffmpeg, menu "View Intro", the new game's two movies and (ARC-RENDER-1242) the start-up logos and movie 8, all only in the game build and the `movies` smoke stage. **Open:** script action 103 (`fade`, six scripts) in the script engine and its host (time advance, track operand, movie by number), a task of its own; the teleport request's own movie numbers are 0 in every shipped script | M–L | E7-r |
 | E7-b | Credits screen and slide types 0 and 2; script-queued slides (`queue_slide`), fades; ending selection | M | E5-c (media actions) |
 
 ### E8 Player windows and economy leftovers

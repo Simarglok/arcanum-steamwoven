@@ -14,6 +14,9 @@ public sealed class AreaMovieTable
 {
     public const string TablePath = "movies/movies.mes";
     public const string Folder = "movies/";
+    private static readonly string[] LogoFiles = [Folder + "SierraLogo.bik", Folder + "TroikaLogo.bik"];
+    /// <summary>The movie the start-up plays after the logos and before the first menu (0x401000, <c>0x40DE70(8, 8, 0)</c>); its only condition is its table row.</summary>
+    public const int StartupMovie = 8;
     /// <summary>A name longer than this is refused (a path the content stack would refuse anyway).</summary>
     public const int MaxName = 64;
     private readonly Func<int, string?> _names;
@@ -62,6 +65,10 @@ public sealed class AreaMovieTable
         if (Name(number) is not { } name) return null;
         return PathOf(stack, Folder + name, cacheFolder);
     }
+
+    /// <summary>The two logo movies the game-module init plays by path: Sierra, then Troika (no table row, no condition; the game only).</summary>
+    [OriginalFunction(0x404810, OriginalFunctionScope.Partial)]
+    public static IReadOnlyList<string> LogoPaths() => LogoFiles;
 
     /// <summary>The local path of the movie at the virtual path <paramref name="virtualPath"/> (<c>movies/&lt;name&gt;</c>); see <see cref="Path"/>.</summary>
     public static string? PathOf(ContentStack stack, string virtualPath, string cacheFolder)

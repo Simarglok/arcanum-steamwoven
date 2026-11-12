@@ -39,6 +39,14 @@ public sealed class AreaMovieTableTests
         Assert.AreEqual("no game folder", none.Detail);
     }
 
+    [TestMethod]
+    public void The_start_up_plays_the_two_logos_by_path_and_then_movie_8()
+    {
+        // 0x404810: Sierra, then Troika, by path (not in the table); 0x401000: movie 8 by number.
+        CollectionAssert.AreEqual(new[] { "movies/SierraLogo.bik", "movies/TroikaLogo.bik" }, AreaMovieTable.LogoPaths().ToArray());
+        Assert.IsNull(Table().Name(AreaMovieTable.StartupMovie), "the synthetic table has no row 8: the start-up movie then plays nothing");
+    }
+
     [TestMethod, TestCategory("RealData")]
     public void The_installed_table_names_the_eight_movies_and_their_files_are_found()
     {
@@ -61,6 +69,13 @@ public sealed class AreaMovieTableTests
             }
             Assert.IsNull(table.Name(0));
             Assert.IsNull(table.Name(9));
+            foreach (var logo in AreaMovieTable.LogoPaths())
+            {
+                var path = AreaMovieTable.PathOf(stack, logo, cache);
+                Console.WriteLine($"ARC-RENDER-1242 logo {logo} found={path is not null}");
+                Assert.IsNotNull(path, $"{logo} resolves");
+                Assert.IsTrue(File.Exists(path));
+            }
         }
         finally { if (Directory.Exists(cache)) Directory.Delete(cache, recursive: true); }
     }

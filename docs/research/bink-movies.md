@@ -64,7 +64,7 @@ All calls go through one player; there is no other video path in the exe.
 
 | Id | Caller | What it asks for |
 | --- | --- | --- |
-| MV1 | start-up 0x401000, right after the default module has loaded and before the first menu loop | movie 8, flags 8, default track. The condition that shows it was not read in this study ([FR-MEDIA-001](../requirements/ui-media-lifecycle.md#fr-media-001) says the same). |
+| MV1 | start-up 0x401000, right after the default module has loaded and before the first menu loop | movie 8, flags 8, default track. The only condition is its table row (read in ARC-RENDER-1242, section 7); the study itself had not read it. |
 | MV2 | game-module init 0x4020F0 through 0x404810 | the two logo movies by path (Sierra, then Troika), flags 0 |
 | MV3 | menu "View Intro" 0x5445F0 (the single player window 10) | movie 1, then movie 7, flags 0, then the menu returns to window 5 |
 | MV4 | teleport process 0x4D3460 (the [change of place](../architecture/change-of-place.md) CP3) | the request's first movie (flag 0x1, number in the request) and second movie (flag 0x40), flags 0, default track; skipped in a network host game. The new game's request (flag word 0x45) carries movies 1 and 7. |
@@ -175,8 +175,7 @@ Recommended scope for #1170 (E7-a), in this order, each slice its own task:
    today's "not shown" behaviour (log line, no black screen), tests over the synthetic pipe contract.
 2. **The callers that exist in the shipped data:** View Intro (movies 1 and 7), the new game's first and second
    movie steps, script action 103 (admitted with its time advance and track operand), the start-up movie 8 and the
-   two logos behind a setting that defaults off in the viewer (the exe has no switch; the show condition of movie 8
-   is still to read).
+   two logos (the exe has no switch; read in ARC-RENDER-1242: the logos play unconditionally from the game-module init, movie 8 plays after the modules loaded and its only condition is its table row, 0x40DE70).
 3. **Bundling** (O2 or shipping an LGPL FFmpeg build in the packages): only if the owner wants movies for players
    without their own FFmpeg.
 
@@ -186,7 +185,7 @@ LGPL build; **(c)** whether the start-up logos and movie 8 play in the viewer.
 
 ## 6a. Owner's decision and the implementation (ARC-RENDER-1170, 2026-11-12)
 
-The owner chose: **(a)** movies are in scope; **(b)** O1, ffmpeg as an external program the player installs; **(c)** the start-up movie 8 and the logos are not needed in the viewer (at most a separate smoke stage). The first
+The owner chose: **(a)** movies are in scope; **(b)** O1, ffmpeg as an external program the player installs; **(c)** the start-up movie 8 and the logos are not needed in the viewer (at most a separate smoke stage); on the same day the owner clarified that movies play only in the game build and in the dedicated smoke stage, so ARC-RENDER-1242 plays the logos and movie 8 in the game build too. The first
 implementation plays movies 1 and 7 from View Intro and from a new game's start, with the player in `Arcanum.Presentation.Movies` (`FfmpegMovieSource`,
 `MoviePlayback`), the movie table in `Arcanum.World.AreaMovieTable` and the movie screen in the viewer; see [FR-MEDIA-001](../requirements/coverage/ui-media-lifecycle.md) and the
 [movie decoder](../workflow/toolchain.md#movie-decoder-arc-render-1170) section. The first thing the study asked for was done on the owner's Mac (ffmpeg 9.0.2): `ffprobe` and a full decode of all ten
@@ -219,7 +218,7 @@ that would make them play are end-game slides (132, with the ending of FR-MEDIA-
 ## 8. Open items and limits
 
 - **Attachment of the six movie scripts:** resolved in section 7 (ARC-SCRIPT-1241).
-- **The show condition of start-up movie 8** and the placement of the frame on the surface were not read.
+- **The show condition of start-up movie 8** was read in ARC-RENDER-1242: none besides its table row (0x40DE70 checks the table and the row; 0x401000 calls it unconditionally after the UI module data loaded). The placement of the frame on the surface was not read.
 - **Decoding:** done by ARC-RENDER-1170 (section 6a); the study itself ran none.
 - The movie contents (what each shows, which script is which ending) were not looked at; the labels above come from
   file names, script names and the table comment.

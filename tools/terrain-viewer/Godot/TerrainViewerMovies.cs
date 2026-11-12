@@ -10,17 +10,30 @@ namespace Arcanum.TerrainViewer;
 // is the installed Bink file of the movie table (movies\movies.mes) decoded by the player's own ffmpeg program (FfmpegMovieSource, O1);
 // nothing of the movie is written to disk, and without a decoder or a table nothing plays and nothing waits (the failed open of the
 // original: the caller goes on). It covers the whole window, ends on any key press (every shipped movie is skippable, section 2), and the
-// world stands still under it as it does under the death slides (TL25: a movie does not ping). The callers: the main menu's View Intro
-// (movies 1 and 7), a new game's start (movies 1 and 7, the request's flags 0x45) and (ARC-SCRIPT-1241) the script action 103 fade, whose movies 2 to 6 the dialog, use, tile, sector and
-// dying scripts hand over after jumping the game clock (SyncScriptFades). The start-up movie 8 and the two logos are not
-// played (owner: not needed in the viewer). Sound: the scene's and the menu's sounds stop for the movie and nothing starts under it
+// world stands still under it as it does under the death slides (TL25: a movie does not ping). The callers: the start-up (the Sierra and
+// the Troika logo by path, 0x404810, then movie 8, 0x401000: before the first menu), the main menu's View Intro (movies 1 and 7), a new
+// game's start (movies 1 and 7, the request's flags 0x45) and (ARC-SCRIPT-1241) the script action 103 fade, whose movies 2 to 6 the dialog, use, tile, sector and dying scripts hand over after
+// jumping the game clock (SyncScriptFades). Movies play only in the game build (a packaged build, ARC-RENDER-1242, owner
+// 2026-11-12) and in the dedicated `movies` smoke stage; the viewer of a source run and every other automated run play none. Sound: the scene's and the menu's sounds stop for the movie and nothing starts under it
 // (the original locks its sound system around a movie, 0x41C610; the session's own lock state is not touched here, as no scheme
 // request can come while the world stands still).
 public partial class TerrainViewerApp
 {
     private AreaMoviePanel? _moviePanel;
     private MoviePlayback? _moviePlayback;
-    private readonly Queue<int> _movieQueue = new();
+    private readonly Queue<MovieItem> _movieQueue = new();
+    private bool _startupMoviesDone;
+
+    /// <summary>One entry of a movie queue: a number of the movie table (0x40DE70) or a movie by its path (0x40DEE0, the two logos).</summary>
+    private readonly record struct MovieItem(int Number, string? VirtualPath)
+    {
+        public override string ToString() => VirtualPath ?? Number.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>The start-up sequence of the original (docs/research/bink-movies.md MV1, MV2): the two logos by path (the game only, no
+    /// condition), then movie 8 (after the modules loaded and before the first menu; its only condition is its table row).</summary>
+    private static IReadOnlyList<MovieItem> StartupMovieItems() =>
+        [.. AreaMovieTable.LogoPaths().Select(path => new MovieItem(0, path)), new MovieItem(AreaMovieTable.StartupMovie, null)];
     private bool _movieActive;
     private Action? _movieDone;
     private int _movieTrack;
@@ -30,7 +43,7 @@ public partial class TerrainViewerApp
     private string? _movieCache;
     private IMovieSource? _movieSourceForSelfTest;
     private AreaMovieTable? _movieTableForSelfTest;
-    private Func<int, string?>? _moviePathForSelfTest;
+    private Func<int, string?, string?>? _moviePathForSelfTest;
     private bool _moviesForSelfTest;
     private string? _movieStatus;
     private int _moviesPlayed, _moviesSkipped, _moviesFailed;
@@ -56,21 +69,28 @@ public partial class TerrainViewerApp
         return table;
     }
 
-    /// <summary>Why movies cannot play (null: they can): no decoder program, or no movie table in the shown module.</summary>
+    /// <summary>Why movies cannot play (null: they can): not the game build, no decoder program, or no movie table in the shown module.</summary>
     private string? MovieRefusal()
     {
+        if (!MoviesEnabled) return NotGameBuildRefusal;
         if (MovieSource() is FfmpegMovieSource { HasDecoder: false }) return $"movies need ffmpeg (install it or set {FfmpegLocator.EnvironmentVariable})";
         var table = MovieTable();
         return table.Loaded ? null : "the movie table is not read: " + table.Detail;
     }
 
-    /// <summary>An automated run (a smoke, a self-test, an exported check) plays no movie unless its own check turns them on: movies last
-    /// seconds to minutes, wait for a key, and many runs start new games for other checks.</summary>
-    private bool MoviesEnabled => _moviesForSelfTest || !AutomatedVisualRun;
+    internal const string NotGameBuildRefusal = "movies play in the game build only";
+
+    /// <summary>Movies play only in the game build (a packaged build, not an automated run) and where a check turns them on (the
+    /// <c>movies</c> smoke stage): they last seconds to minutes, wait for a key, and the source viewer and the other smokes start games for
+    /// other checks (owner 2026-11-12, ARC-RENDER-1242).</summary>
+    private bool MoviesEnabled => _moviesForSelfTest || (!AutomatedVisualRun && ViewerBuild.Current.IsPackage);
 
     /// <summary>Plays <paramref name="numbers"/> one after another on the movie screen, each ended by a key or by its last frame, then runs
     /// <paramref name="done"/>. False, and nothing started (the caller goes on at once), when movies cannot play or are off for this run.</summary>
     private bool PlayMovies(IReadOnlyList<int> numbers, int track, Action? done, string reason)
+        => PlayMovieItems([.. numbers.Select(number => new MovieItem(number, null))], track, done, reason);
+
+    private bool PlayMovieItems(IReadOnlyList<MovieItem> numbers, int track, Action? done, string reason)
     {
         if (_movieActive || !MoviesEnabled || MovieRefusal() is { } refusal)
         {
@@ -86,6 +106,15 @@ public partial class TerrainViewerApp
         StopMenuMusic(); _audio?.StopAll();
         (_moviePanel ??= NewMoviePanel()).Open();
         return true;
+    }
+
+    /// <summary>The start-up movies, once a run, before the first menu is used: the logos and movie 8 (the game build only). The menu opened
+    /// under them is served at once when they end or cannot play.</summary>
+    private void PlayStartupMovies()
+    {
+        if (_startupMoviesDone) return;
+        _startupMoviesDone = true;
+        PlayMovieItems(StartupMovieItems(), 0, null, "start-up");
     }
 
     private AreaMoviePanel NewMoviePanel()
@@ -126,9 +155,13 @@ public partial class TerrainViewerApp
     {
         while (_movieQueue.Count > 0)
         {
-            var number = _movieQueue.Dequeue();
-            var path = _moviePathForSelfTest?.Invoke(number) ?? (MovieTable() is { } table && _soundContent?.Stack is { } stack
-                ? table.Path(stack, number, _movieCache ??= System.IO.Path.Combine(System.IO.Path.GetTempPath(), "arcanum-steamwoven-movies-" + System.Environment.UserName)) : null);
+            var item = _movieQueue.Dequeue();
+            var number = item.ToString();
+            var cache = _movieCache ??= System.IO.Path.Combine(System.IO.Path.GetTempPath(), "arcanum-steamwoven-movies-" + System.Environment.UserName);
+            // A movie by path (the logos) does not need the table, only the content stack; a movie by number needs the table (0x40DE70).
+            var path = _moviePathForSelfTest?.Invoke(item.Number, item.VirtualPath) ?? (item.VirtualPath is { } virtualPath
+                ? (_soundContent?.Stack is { } logoStack ? AreaMovieTable.PathOf(logoStack, virtualPath, cache) : null)
+                : MovieTable() is { } table && _soundContent?.Stack is { } stack ? table.Path(stack, item.Number, cache) : null);
             if (path is null) { _moviesFailed++; GD.Print($"ARC-RENDER-1170 movie {number}: no file, nothing plays"); continue; }
             var opened = MovieSource().Open(path, _movieTrack);
             if (!opened.Opened) { _moviesFailed++; GD.Print($"ARC-RENDER-1170 movie {number}: not opened ({opened.Status}: {opened.Detail})"); continue; }
