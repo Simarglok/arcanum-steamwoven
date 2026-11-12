@@ -740,7 +740,7 @@ The world-map start check (0x565140) ends the hero's maintained spells ([ledger 
 
 Known differences (documented, not bugs):
 
-- Resting (the rest option click, 0x57B710) also ends the sleeper's maintained spells in the original, but the rest window is not built yet (missing-systems E3-a), so only travel is wired.
+- Resting (the rest option click, 0x57B710) also ends the sleeper's maintained spells in the original, but the rest window (ARC-WORLD-1160) does not end them yet (issue #1161), so only travel is wired.
 
 
 ## ARC-MAGIC-057 — The hero's spot trap roll (E6-a, spot half, 2026-11-12)
