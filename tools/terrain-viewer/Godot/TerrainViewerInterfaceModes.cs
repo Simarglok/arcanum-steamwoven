@@ -102,9 +102,9 @@ public partial class TerrainViewerApp
     /// <summary>ARC-DEV-110: opens a target mode (1, 2 or 16) through the stack, which replaces the top (a target already open is left
     /// first and its leave step clears its state). <paramref name="onLeave"/> clears the viewer's state for the mode and runs from the leave
     /// step. False (and logged) when a window is open or the stack did not take it; nothing changed then.</summary>
-    private bool OpenTargetMode(InterfaceMode mode, Action<InterfaceModeStep>? onLeave = null)
+    private bool OpenTargetMode(InterfaceMode mode, Action<InterfaceModeStep>? onLeave = null, bool overInventory = false)
     {
-        var opened = _interfaceWindows.OpenTarget(mode, overInventory: false, onLeave);
+        var opened = _interfaceWindows.OpenTarget(mode, overInventory, onLeave);
         // A target that is already open stays open (the palette's Pick pocket pressed twice, lockpicks chosen again).
         if (opened == AreaTargetOpen.AlreadyOpen) return true;
         if (opened != AreaTargetOpen.Opened)
@@ -170,10 +170,14 @@ public partial class TerrainViewerApp
     /// <summary>ARC-DEV-111 (SA52): the hero's state the window openers refuse for.</summary>
     private (bool Dead, bool Unconscious) HeroDownState() => _areaSession?.QueryHeroLife()?.Status is { } life ? (life.IsDead, life.IsUnconscious) : (false, false);
 
+    /// <summary>ARC-MAGIC-1128: a spell's or an item's target mode stands over the player's own inventory window (the spell's target area has the inventory bit,
+    /// IA4, SU3): the window is the cursor's picking surface, so it does not drop the target.</summary>
+    private bool TargetOverInventory => (TargetModeOpen(InterfaceMode.SpellTarget) || _itemAiming is not null && TargetModeOpen(InterfaceMode.ItemTarget)) && WindowOpen(InterfaceMode.Inventory);
+
     /// <summary>ARC-DEV-111 (SA51, 0x541180): what drops an open target mode. A window that opens pops it (SA40) and so do the palette, the
     /// death cover and the bug report; the in-play menu does not (it is no mode: it changes nothing on the stack, and Continue returns to the
     /// same cursor).</summary>
-    private bool TargetsDroppedByModal => PaletteOpen || AnyWindowOpen || HeroDeathCovering || MovieCovering || BugReportOpen;
+    private bool TargetsDroppedByModal => PaletteOpen || AnyWindowOpen && !TargetOverInventory || HeroDeathCovering || MovieCovering || BugReportOpen;
 
     /// <summary>
     /// ARC-DEV-111 (MIG16 S4; SA45, SA40, SA44; main loop 0x401560 and bar handler 0x54C8E0, read in the executable): with a window open,

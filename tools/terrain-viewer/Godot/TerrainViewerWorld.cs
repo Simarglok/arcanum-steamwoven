@@ -885,7 +885,7 @@ public partial class TerrainViewerApp
         if (TryAreaAttack(screen, alt, shift)) return;
         CancelAreaAttack("another click replaced it");
         // ARC-SCRIPT-005: a press on a dialog NPC talks (or walks within reach first), under the same guards.
-        if (TryAreaTalk(screen)) { SetObjectApproachGait(); return; }
+        if (TryAreaTalk(screen, shift)) { SetObjectApproachGait(); return; }
         // ARC-WORLD-009: a press on a cave trigger sprite is a use action, under the same guards as a ground click.
         if (TryAreaUse(screen)) { SetObjectApproachGait(); return; }
         // ARC-WORLD-051: a press on a door or window uses it (walking within use range first).

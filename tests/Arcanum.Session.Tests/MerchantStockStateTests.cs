@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Movement;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.InventoryStateTests;
@@ -238,5 +239,103 @@ public sealed class MerchantStockStateTests
         // A deleted item cannot stay identified.
         var deleted = Decode(text.Replace("\"bullets\",\"gold-zero\"", "\"bullets\",\"gold-a\",\"gold-zero\""));
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(deleted, RestoreOptions()).Failure);
+    }
+
+    // ARC-WORLD-1306 (VPG7): the break's spill walks the container's whole list, the items a barter window sold into it included.
+    private static readonly CellCoord ChestCell = new(120, 210);
+
+    private static SessionObjectTarget Chest() => new(Exterior, "chest", new SessionObjectBaseline
+    {
+        Kind = Arcanum.Simulation.Combat.DamageableObjectKind.Container, Points = 1, Cell = ChestCell,
+        Openable = new(Arcanum.Simulation.Locks.OpenableKind.Container, 0, 0, 0),
+    });
+
+    private static void Break(GameSessionOwner owner)
+    {
+        var broke = owner.DamageObject(owner.Version, Chest(), 50);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, Arcanum.Simulation.Combat.ObjectBreak.ContainerSpilled),
+            (broke.Disposition, broke.Failure, broke.Hit!.Break));
+    }
+
+    [TestMethod]
+    public void A_broken_container_spills_an_item_the_hero_sold_into_it_and_a_save_keeps_it()
+    {
+        // The chest's own items (gold, amulet, axe, bullets) and the sold kit:1 spill last first, each through the drop placement.
+        var plain = Seed() with
+        {
+            Holders = [.. Seed().Holders.Select(h => h.Entity == "chest" ? h with { Items = ["amulet", "axe", "bullets"] } : h)],
+            Items = [.. Seed().Items.Where(item => !item.Entity.StartsWith("gold", StringComparison.Ordinal))],
+        };
+        using var owner = Hero(plain);
+        Changed(owner.BarterSell(owner.Version, "smith", "kit:1", 1, 0, Bullets, Accept, container: "chest"), "kit:1");
+        Assert.IsTrue(owner.QueryHeroKit().All(item => item.Entity != "kit:1"));
+        Break(owner);
+        Assert.AreEqual(0, List(owner, "chest").Length, "a spilled container lists nothing");
+        Assert.AreEqual(0, owner.Capture().Inventory.Npcs.Count, "the sold item left the container's list");
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(GameSessionDisposition.Changed, restored.AttachMapInventory(Exterior, plain).Disposition);
+        CollectionAssert.AreEqual(new[] { "kit:1", "bullets", "axe", "amulet" }, restored.QueryMapInventory(Exterior)!.JunkPiles.Single().Items.Select(item => item.Entity).ToArray(), "a save keeps the pile");
+        var inventory = owner.QueryMapInventory(Exterior)!;
+        var pile = inventory.JunkPiles.Single();
+        Assert.AreEqual(ChestCell, pile.Cell);
+        CollectionAssert.AreEqual(new[] { "kit:1", "bullets", "axe", "amulet" }, pile.Items.Select(item => item.Entity).ToArray(), "the list's end first");
+        CollectionAssert.AreEqual(new[] { "kit:1", "bullets", "axe", "amulet" }, owner.QueryItemDecays().Select(d => d.Entity).ToArray(), "each decays");
+        Assert.AreEqual(GameSessionFailure.None, owner.LootItem(owner.Version, pile.Entity, "kit:1", Accept).Failure, "the hero's sold item is loot again");
+        Assert.IsTrue(owner.QueryHeroKit().Any(item => item.Entity == "kit:1"), "it goes back to the kit");
+    }
+
+    [TestMethod]
+    public void A_lone_sold_item_lies_on_the_containers_cell_and_a_save_restores_it()
+    {
+        var empty = Seed() with { Holders = [.. Seed().Holders.Select(h => h.Entity == "chest" ? h with { Items = [] } : h)], Items = [.. Seed().Items.Where(item => item.Entity is "purse" or "hammer")] };
+        using var owner = Hero(empty);
+        Changed(owner.BarterSell(owner.Version, "smith", "kit:1", 1, 0, Bullets, Accept, container: "chest"), "kit:1");
+        Break(owner);
+        var ground = owner.QueryMapInventory(Exterior)!.Ground;
+        Assert.AreEqual(("kit:1", ChestCell), (ground.Single().Item.Entity, ground.Single().Cell));
+        Assert.AreEqual("kit:1", owner.QueryItemDecays().Single().Entity);
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        using var restored = Restore(Decode(text));
+        Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
+        Assert.AreEqual(GameSessionDisposition.Changed, restored.AttachMapInventory(Exterior, empty).Disposition);
+        var back = restored.QueryMapInventory(Exterior)!.Ground;
+        Assert.AreEqual(("kit:1", ChestCell), (back.Single().Item.Entity, back.Single().Cell));
+        Assert.AreEqual(GameSessionFailure.None, restored.PickUpItem(restored.Version, "kit:1", Accept).Failure);
+        Assert.IsTrue(restored.QueryHeroKit().Any(item => item.Entity == "kit:1"));
+    }
+
+    [TestMethod]
+    public void An_ammunition_stack_sold_into_a_container_lies_on_the_ground_with_its_units()
+    {
+        // The Original setting makes the sold units a new stack of the container's list (AMA5).
+        var empty = Seed() with { Holders = [.. Seed().Holders.Select(h => h.Entity == "chest" ? h with { Items = ["bullets"] } : h)], Items = [.. Seed().Items.Where(item => item.Entity is "purse" or "hammer" or "bullets")] };
+        using var owner = Hero(empty, RuleMode.Original);
+        Changed(owner.BarterBuy(owner.Version, "smith", "bullets", 15, 0, Bullets, GoldPile, Accept, Accept, container: "chest"));
+        var mine = owner.QueryHeroAmmo().Single().Entity;
+        Changed(owner.BarterSell(owner.Version, "smith", mine, 10, 0, Bullets, Accept, container: "chest"));
+        var sold = List(owner, "chest").Last();
+        Break(owner);
+        Assert.AreEqual(10, owner.QueryAmmo(sold)!.Value.Units, "the units stay with the stack");
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        using var restored = Restore(Decode(text));
+        Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
+        Assert.AreEqual(GameSessionDisposition.Changed, restored.AttachMapInventory(Exterior, empty).Disposition);
+        CollectionAssert.AreEqual(new[] { sold, "bullets" }, restored.QueryMapInventory(Exterior)!.JunkPiles.Single().Items.Select(item => item.Entity).ToArray());
+        Assert.AreEqual(10, restored.QueryAmmo(sold)!.Value.Units);
+    }
+
+    [TestMethod]
+    public void A_break_that_cannot_hold_every_sold_item_is_refused_whole()
+    {
+        var seed = Seed();
+        using var owner = GameSessionOwner.Create(Descriptor(new GameSessionLimits(maxPcItems: 3)) with { Hero = HeroStateTests.HalfElf() }).Owner!;
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, seed).Failure);
+        Changed(owner.BarterSell(owner.Version, "smith", "kit:1", 1, 0, Bullets, Accept, container: "chest"), "kit:1");
+        Changed(owner.LootItem(owner.Version, "chest", "axe", Accept), "axe");
+        var before = GameSessionSnapshotCodec.Encode(owner.Capture());
+        var refused = owner.DamageObject(owner.Version, Chest(), 50);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded), (refused.Disposition, refused.Failure));
+        Assert.AreEqual(before, GameSessionSnapshotCodec.Encode(owner.Capture()), "nothing changed: the chest is whole and keeps the sold item");
+        Assert.AreEqual(SessionObjectCondition.Whole, owner.QueryObject(Chest()).Condition);
     }
 }

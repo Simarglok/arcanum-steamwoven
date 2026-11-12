@@ -338,13 +338,13 @@ Compare in both games with the same hero (Divination college: See Contents 6, Re
 | 1 | Cast Read Aura (spell 7) at a creature. | The original opens the character sheet of the creature, read only (no + or − buttons, all four tabs), the same window as the dialog's "show your abilities" reply. Steamwoven since ARC-UI-1127: the same read-only sheet for an NPC (a line "identify: ... (its character sheet)" in the message log too); a creature that is the hero keeps the line only. | open |
 | 2 | Cast See Contents (spell 6) at a **locked** container. | The original opens the container's inventory at once, with no lock, jam or magically-held test, so the items of a locked chest show. Steamwoven: the line only. | open |
 | 3 | In step 2, take or move an item in that window. | Not read in the executable (what a press may move in inventory mode 4): note what the original allows (take, put, nothing). | open |
-| 4 | Cast Divine Magick (spell 9) on an unidentified magickal item in the pack (a wand or a ring with a "?" description). | The item's name and description become the true ones, its spell slots and charge gauge show, and its worth in a trader's window is its real worth. Steamwoven builds this state (the item's identification mark), but cannot cast the spell yet: nothing picks an inventory item as a target. | open |
+| 4 | Cast Divine Magick (spell 9) on an unidentified magickal item in the pack (a wand or a ring with a "?" description). | The item's name and description become the true ones, its spell slots and charge gauge show, and its worth in a trader's window is its real worth. Steamwoven (ARC-MAGIC-1128): pressing the spell opens the inventory with the spell cursor over it; a left click on the item casts at it (the cursor stays, a right click cancels and closes the window). | open |
 | 5 | Cast Divine Magick on an item that was already identified. | The description shows again; nothing else changes. | open |
 
 Known differences (documented, not bugs):
 
 - The three windows (the NPC sheet, the container's inventory, the item description) are E8's; the viewer says so in its line.
-- Divine Magick cannot be cast from the viewer yet (no spell target in the inventory).
+- Divine Magick picks an item of the hero's own inventory window only; an item of a loot, steal or barter window is not a target (ARC-MAGIC-1128).
 
 ## ARC-MAGIC-033 — Resist Magick counts in the magic save (D6c, 2026-11-11)
 
@@ -455,10 +455,11 @@ hero (a mage with these spells; a hero without the college can learn them from t
 | 6 | Cast Flash (spell 66) on a human who fights you, and watch their hits. | They are blinded (their melee is much worse); at the end, or by chance each AI pass, the blindness goes. | open |
 | 7 | Cast Create Undead (spell 58) on a corpse. | The creature rises under your control (it follows you), and at the spell's end it dies again. Note whether it is hurt by healing or poison as an undead would be. | open |
 | 8 | Dominate Will on a creature that is already your follower, and on one that is summoned. | A summoned creature does not lose reaction (no -50). | open |
+| 9 | Charm a kill-on-sight creature of another faction (a hostile wolf pack member is one), end the spell, then walk near it without attacking. | While charmed and after the end it does not attack you on sight for being of another faction (the reaction and alignment tests still apply); after you attack it, it is hostile as before (the attack takes the override off). | open |
 
 Known differences (documented, not bugs):
 
-- A charm adds the NPC flag "kill-on-sight override" in the original and never takes it off; ours does not keep that flag.
+- A charm adds the NPC flag "kill-on-sight override" in the original and never takes it off (only an attack on that NPC does); the session keeps it in its NPC flag layer (ARC-MAGIC-1142), so the step 9 can be seen.
 - Mind control makes a follower only under the hero (a spell cast by another creature on a creature does not make a follower); a mind-controlled creature of the world map is not covered.
 - The undead flag a spell writes is not read by the combat or life rules yet, so step 7's undead behaviour may differ.
 ## ARC-DEV-372 — Shared content index (O4 of the performance diagnosis, 2026-11-11)
