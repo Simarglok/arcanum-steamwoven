@@ -24,16 +24,14 @@ namespace Arcanum.World;
 /// (<see cref="SendHome"/>, caller <see cref="ChangeOfPlaceCaller.NpcWaypoint"/>, flags 0), which the viewer pings once per frame.
 /// ARC-DEV-170 (B06, ledger WS14): the unforced pass is <see cref="RunRoutine"/>, the routine of a leaderless NPC: the same two steps, unforced, start the walk goal 7 to the waypoint or standpoint (<see cref="StartRouteWalk"/>).
 /// ARC-WORLD-1162 (ledger SWB17–SWB21): the near branch's bed lookup and seat, the NPC flag 0x200 latch and a sleeper's re-seat are <see cref="AreaAiHostBeds"/>.
-/// Left out (NOT READY, each named in the ledger): the wander of the standpoint step, the saved latch, and the saved waypoint
-/// index: the saved schema holds none (S6 may add it), so the index lives here for the host's life and a rebuilt host recovers it from the saved place
-/// when the NPC stands exactly on one of its waypoints (<see cref="RouteIndexOf"/>).
+/// ARC-AI-1314 (ledger VA18, VA19, VAG3): the waypoint index (the original's field 0x120) and the standpoint latch (NPC flag 0x200) are the NPC's object state in the session
+/// (<see cref="SessionNpcRouteState"/>), written with the step's teleport map in one revision, saved and loaded with the object; a rebuilt host and a loaded game go on from them.
+/// Left out (NOT READY, each named in the ledger): the wander of the standpoint step.
 /// </summary>
 public sealed partial class AreaAiHost
 {
     // The route of each NPC row, read once (null: the row's route fields are not readable, so the NPC has no route step).
     private readonly Dictionary<string, AreaNpcRoute?> _routes = new(StringComparer.Ordinal);
-    // The waypoint index each NPC's steps stored (field 0x120 of the original); absent: the row's own.
-    private readonly Dictionary<string, int> _routeIndex = new(StringComparer.Ordinal);
 
     // How many route steps each outcome had, waypoint and standpoint together (the smoke prints them).
     private readonly Dictionary<NpcRouteOutcome, int> _routeOutcomes = [];
@@ -41,33 +39,22 @@ public sealed partial class AreaAiHost
     /// <summary>How many fold steps (waypoint and standpoint) ended in each outcome since the host was built.</summary>
     public IReadOnlyDictionary<NpcRouteOutcome, int> RouteOutcomes => _routeOutcomes;
 
-    /// <summary>The waypoint index the NPC's steps work from, or null when the NPC has no route: the one a step stored in this host; else, for an NPC the
-    /// session left on a cell that is exactly one of its waypoints (a relocation of an earlier host, restored from the saved place), that waypoint's index;
-    /// else the row's own. The original keeps the index in field 0x120, saved with the object; here it is recovered from the saved place, so a rebuilt
-    /// host goes on from the waypoint the NPC stands on (an NPC that has left its waypoint since falls back to the row's index).</summary>
+    /// <summary>The waypoint index the NPC's steps work from, or null when the NPC has no route: the one a step stored in the session (the original's field 0x120, saved with the object); else the row's own.</summary>
     public int? RouteIndexOf(string npc) => RouteOf(npc) is { } route ? RouteIndex(npc, route) : null;
 
-    private int RouteIndex(string npc, AreaNpcRoute route)
-    {
-        if (_routeIndex.TryGetValue(npc, out var held)) return held;
-        if (!Movers.IsMoved(npc) || Tile(npc) is not { } cell || cell.X < 0 || cell.Y < 0) return route.WaypointIndex;
-        var here = new AreaRouteLocation((uint)cell.X, (uint)cell.Y);
-        if (route.WaypointIndex >= 0 && route.WaypointIndex < route.Waypoints.Count && route.Waypoints[route.WaypointIndex] == here) return route.WaypointIndex;
-        var found = route.Waypoints.ToList().IndexOf(here);
-        return found >= 0 ? found : route.WaypointIndex;
-    }
+    private int RouteIndex(string npc, AreaNpcRoute route) => _session.QueryRouteIndex(npc) ?? route.WaypointIndex;
 
     private bool RunRouteStep(string npc, Func<NpcRouteFacts, NpcRouteStep> rule, bool waypoints)
     {
         if (RouteFacts(npc) is not { } facts) return false;
         var step = rule(facts);
         _routeOutcomes[step.Outcome] = _routeOutcomes.GetValueOrDefault(step.Outcome) + 1;
-        if (step.NewWaypointIndex is { } index) _routeIndex[npc] = index;
-        // 0x45F6D0 (WS3): the teleport map is written with the open map while it is 0, also when the step then ends.
-        var written = step.TeleportMapSet is { } open ? WriteTeleportMap(npc, open) : null;
         var what = waypoints ? "waypoint" : "standpoint";
-        // ARC-WORLD-1162 (SWB21): the far branch of the standpoint step clears NPC flag 0x200 before it relocates or walks the NPC.
-        if (!waypoints && step.Outcome is NpcRouteOutcome.Relocate or NpcRouteOutcome.RequestTeleport or NpcRouteOutcome.StartWalk) _arrived.Remove(npc);
+        // ARC-AI-1314 (0x4ACBB0, 0x4ACDB0): the step's writes on the NPC are one revision: the waypoint index (field 0x120), the teleport map (0x45F6D0, WS3: the open map while it is 0, also when the step then ends)
+        // and, from ARC-WORLD-1162 (SWB21), the far branch of the standpoint step's clear of NPC flag 0x200 before it relocates or walks the NPC.
+        var clearsLatch = !waypoints && step.Outcome is NpcRouteOutcome.Relocate or NpcRouteOutcome.RequestTeleport or NpcRouteOutcome.StartWalk && LatchOf(npc);
+        var refused = WriteRouteState(npc, step, clearsLatch);
+        var written = refused is null ? step.TeleportMapSet?.ToString(System.Globalization.CultureInfo.InvariantCulture) : null;
         var bed = BedStep(npc, step, route: RouteOf(npc));
         // ARC-AI-1313 (VAG2, 0x4ACDB0 near branch): after the bed look-up a wanderer starts its wander goal, even when a bed was just taken (VA19).
         var wander = step.WanderGoal is { } wanderGoal && step.Standpoint is { } tether ? StartWander(npc, wanderGoal, tether) : null;
@@ -89,6 +76,7 @@ public sealed partial class AreaAiHost
                 break;
         }
         if (written is not null) Trace(npc).Route += $" [teleport map {written}]";
+        if (refused is not null) Trace(npc).Route += $" [route state not written: {refused}]";
         if (bed is not null) Trace(npc).Route += $" [bed: {bed}]";
         if (wander is not null) Trace(npc).Route += $" [wander: {wander}]";
         return step.Answer;
@@ -275,11 +263,13 @@ public sealed partial class AreaAiHost
     // The 3 the script walks put in the frame's range slot (GT158, GT161): no node reads it.
     private const int ScriptWalkRange = 3;
 
-    // The getter's write (a refusal leaves the field 0: the next step writes it again).
-    private string WriteTeleportMap(string npc, int open)
+    // The step's writes (a refusal leaves the fields as they were: the next step writes them again). Returns the refusal, or null when they were written or there was nothing to write.
+    private GameSessionFailure? WriteRouteState(string npc, NpcRouteStep step, bool clearsLatch)
     {
-        var result = _session.EnsureTeleportMap(_session.Version, npc, new SessionMapId(open));
-        return result.Failure == GameSessionFailure.None ? open.ToString(System.Globalization.CultureInfo.InvariantCulture) : "not written: " + result.Failure;
+        if (RouteOf(npc) is not { } route) return null;
+        var open = new SessionMapId(step.TeleportMapSet ?? _scene.RuntimeMap);
+        var result = _session.WriteRouteStep(_session.Version, npc, open, step.NewWaypointIndex, route.WaypointIndex, clearsLatch ? false : null, LatchData(route), step.TeleportMapSet is not null);
+        return result.Failure == GameSessionFailure.None ? null : result.Failure;
     }
 
     // ---- ARC-DEV-116 (MIG11 S5): a former follower goes home ----

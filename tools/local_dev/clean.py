@@ -381,7 +381,8 @@ def worktrees(checkout: Path) -> list[dict[str, Any]]:
             lines = status.splitlines()
             changed = [line for line in lines if not line.startswith("!!")]
             ignored = [line[3:].rstrip("/") for line in lines if line.startswith("!!")]
-            extra = [name for name in ignored if Path(name).name not in REGENERABLE and Path(name).name != "__pycache__"]
+            extra = [name for name in ignored if Path(name).name not in REGENERABLE and Path(name).name != "__pycache__"
+                     and name not in (".claude", ".claude/settings.json", ".claude/settings.local.json")]  # per-checkout Claude settings
             if "locked" in fields:
                 reason, kind = "locked worktree", "keep"
             elif not merged:

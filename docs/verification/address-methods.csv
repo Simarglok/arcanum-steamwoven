@@ -165,6 +165,13 @@ src/Arcanum.Session/GameSessionReading.cs,UseWrittenItem,pending,
 src/Arcanum.Session/GameSessionRestock.cs,RegenerateInventory,pending,
 src/Arcanum.Session/GameSessionRestock.cs,ScheduleRestock,pending,
 src/Arcanum.Session/GameSessionSchematics.cs,ReadWrittenItem,pending,
+src/Arcanum.Session/GameSessionScriptItems.cs,DestroyNamedItem,exempt,reference
+src/Arcanum.Session/GameSessionScriptItems.cs,QueryNamedItem,exempt,reference
+src/Arcanum.Session/GameSessionScriptItems.cs,QueryNamedItemDestroy,exempt,reference
+src/Arcanum.Session/GameSessionScriptItems.cs,QueryNamedItemTransfer,exempt,reference
+src/Arcanum.Session/GameSessionScriptItems.cs,SetItemWrittenStart,exempt,reference
+src/Arcanum.Session/GameSessionScriptItems.cs,ToggleItemDisplay,exempt,reference
+src/Arcanum.Session/GameSessionScriptItems.cs,TransferNamedItem,exempt,reference
 src/Arcanum.Session/GameSessionScriptStats.cs,QueryHeroScriptStat,pending,
 src/Arcanum.Session/GameSessionScriptStores.cs,QueryGlobalVariable,pending,
 src/Arcanum.Session/GameSessionScriptStores.cs,QueryPcFlag,pending,
@@ -740,12 +747,14 @@ tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,ApplyItemAim,pending,
 tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,HeroUseItem,pending,
 tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,HeroUseItemOnTile,pending,
 tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,ItemAimClick,pending,
+tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,ItemAimInventoryPick,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,ItemAimPick,pending,
 tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,ItemAimUse,pending,
 tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,OpenItemAiming,pending,
 tools/terrain-viewer/Godot/TerrainViewerMaintainBar.cs,MaintainSlotEntered,pending,
 tools/terrain-viewer/Godot/TerrainViewerMaintainBar.cs,StopMaintainSlot,pending,
 tools/terrain-viewer/Godot/TerrainViewerMaintainBar.cs,SyncMaintainClosing,pending,
+tools/terrain-viewer/Godot/TerrainViewerPortraitHover.cs,FollowerPortraitHoverLeft,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,BoomerangReturned,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,CrossTile,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,EndOnTile,pending,
@@ -771,6 +780,8 @@ tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs,HeroCastActionFrame,pending
 tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs,HeroCastEnds,pending,
 tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs,HeroReleaseCast,pending,
 tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs,HeroStartCast,pending,
+tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs,InventoryItemPicked,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs,OpenInventoryForSpell,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs,OpenSpellTargeting,pending,
 tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs,PressPaneSpell,pending,
 tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs,RefuseSpellGoal,pending,
