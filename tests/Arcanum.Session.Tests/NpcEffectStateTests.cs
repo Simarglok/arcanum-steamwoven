@@ -19,7 +19,7 @@ public sealed class NpcEffectStateTests
     private static readonly SessionEffectDefinition Hardy = new(122, [Special(0, 10), Special(1, -50, EffectChangeOperator.Percent)]);
     // Maximum hit points −5.
     private static readonly SessionEffectDefinition Weak = new(125, [Special(0, -5)]);
-    // Only a stat (strength +2): kept in the list, no maximum moves.
+    // Only a stat (strength +2): no maximum of its own changes, but the strength moves the hit-point maximum by 4 (ARC-WORLD-1144).
     private static readonly SessionEffectDefinition Strong = new(120, [new(EffectAttributeKind.Stat, 0, EffectChangeOperator.Add, 2)]);
 
     private static SessionLifeTarget Target(string entity = Wolf, LifeState loaded = default, params SessionEffect[] stored) =>
