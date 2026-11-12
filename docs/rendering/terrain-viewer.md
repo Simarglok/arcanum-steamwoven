@@ -785,10 +785,10 @@ on the pick of ARC-UI-005.
   session gets two rings: art 467 `hoverunder` under every body (after the terrain, before the flat and upright bodies) and art 468 `hoverover` over every
   body (before the roofs), both additive and tinted by the ring colour (`TerrainCanvasArea.AreaRing`, rules in `AreaHoverRingRules`, the frames read from
   `art\interface` through `interface.mes`). The colour is white; an NPC's is its reaction category's row of `rules\reaction_colors.mes` (seven rows read at
-  start, the category of the AI host's standard reaction; Neutral reads yellow in the installed data). While the hero is in combat mode both arts are 555
-  `hoverattack`. Arts and colour are decided when the pointer enters the creature (a combat toggle under the pointer changes them at the next hover, as the
+  start, the category of the AI host's standard reaction; Neutral reads yellow in the installed data). While the hero is in combat mode an NPC's two arts are 555
+  `hoverattack` (a PC or a trap keeps 467 and 468). Arts and colour are decided when the pointer enters the creature (a combat toggle under the pointer changes them at the next hover, as the
   original's setter does nothing for the same handle). The ring is the frame placed at the body's anchor plus the frame's delta less its centre (15 pixels lower
-  for a wading body) and follows a moving body; each ring steps to the art's next frame every 1000 / fps ms (15 frames at installed data). Deviations:
+  for a wading body) and follows a moving body; each ring steps to the next frame of its art every 1000 / fps ms of art 467 or 468 (the periods the original fixes at start; 15 frames at installed data). Deviations:
   the frame stamps start at the hover; an NPC with no reaction (no AI host: an automated run leaves it off, or no combat values) is white; HD does not apply
   (the interface art stays Legacy); a body with no hotspot (a seam moved it without placing it from its frame) shows no ring; a missing art or colour file
   degrades to no ring or white and is said once in the log (`ARC-UI-1117 hover-ring`).

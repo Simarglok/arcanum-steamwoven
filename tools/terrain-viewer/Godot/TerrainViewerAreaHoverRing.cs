@@ -15,6 +15,7 @@ public partial class TerrainViewerApp
     private AreaHoverRingContent? _ringContent;
     private string? _ringModule;
     private AreaObjectKey? _ringTarget;
+    private AreaLoadResult? _ringArea;
     private (int Under, int Over) _ringArts;
     private (byte R, byte G, byte B) _ringColour = AreaHoverRingRules.White;
     private readonly AreaHoverRingClock _ringClock = new();
@@ -48,6 +49,8 @@ public partial class TerrainViewerApp
     private void SyncHoverRing()
     {
         if (_canvas is null) return;
+        // A new map (or a reloaded one) decides again even for an equal key.
+        if (!ReferenceEquals(_ringArea, _readyArea)) { _ringArea = _readyArea; _ringTarget = null; }
         if (_hoverKey is not { } key || _readyArea is null || _readyMode != TerrainViewerMode.Area || _areaSession is null
             || _hoverIndex is not { } index || !index.Contains(key) || !AreaHoverRingRules.Applies(index.Row(key).Type)
             || _areaSession.QueryHero() is null)
@@ -63,7 +66,7 @@ public partial class TerrainViewerApp
             _ringTarget = key;
             var type = index.Row(key).Type;
             int? reaction = type == AreaHoverRingRules.NpcType && HoverEntity(key) is { } entity ? _aiHost?.StandardReaction(entity) : null;
-            _ringArts = AreaHoverRingRules.Arts(HeroInCombatMode);
+            _ringArts = AreaHoverRingRules.Arts(type, HeroInCombatMode);
             _ringColour = AreaHoverRingRules.Colour(type, reaction, content?.Colours);
             _ringClock.Start(now);
         }
@@ -72,7 +75,9 @@ public partial class TerrainViewerApp
             foreach (var number in new[] { _ringArts.Under, _ringArts.Over }.Distinct())
                 if (content.Arts.TryGetValue(number, out var load) && load.Art is null && _ringSaid.Add($"{_ringModule}:{number}"))
                     GD.Print($"ARC-UI-1117 hover-ring art {number} {load.Status} {load.Detail}: no ring drawn from it");
-        var (underFrame, overFrame) = _ringClock.Step(now, under?.FramesPerSecond ?? 0, under?.Frames.Count ?? 0, over?.FramesPerSecond ?? 0, over?.Frames.Count ?? 0);
+        // The periods are the ones 0x43A330 reads from arts 467 and 468 at start; swapping to 555 does not change them (0x43A6D0 never re-reads).
+        var (underFrame, overFrame) = _ringClock.Step(now, content?.Art(AreaHoverRingRules.UnderArt)?.FramesPerSecond ?? 0, under?.Frames.Count ?? 0,
+            content?.Art(AreaHoverRingRules.OverArt)?.FramesPerSecond ?? 0, over?.Frames.Count ?? 0);
         var frames = (AreaFrameOverlay)AreaFrames();
         if (!ReferenceEquals(_ringOverlay, frames)) { _ringOverlay = frames; _ringAdded.Clear(); }
         AreaHoverRingFrame? Use(AreaHoverRingArt? art, int frame)

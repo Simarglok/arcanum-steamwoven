@@ -43,10 +43,13 @@ public sealed class AreaHoverRingTests
     }
 
     [TestMethod]
-    public void TheArtsAre467And468AndBoth555InCombatMode()
+    public void TheArtsAre467And468AndAnNpcsBoth555InCombatMode()
     {
-        Assert.AreEqual((467, 468), AreaHoverRingRules.Arts(false));
-        Assert.AreEqual((555, 555), AreaHoverRingRules.Arts(true));
+        Assert.AreEqual((467, 468), AreaHoverRingRules.Arts(16, false));
+        Assert.AreEqual((555, 555), AreaHoverRingRules.Arts(16, true));
+        // The setter's combat check sits in its NPC branch: a PC or a trap keeps 467 and 468.
+        Assert.AreEqual((467, 468), AreaHoverRingRules.Arts(15, true));
+        Assert.AreEqual((467, 468), AreaHoverRingRules.Arts(17, true));
     }
 
     [TestMethod]

@@ -60,8 +60,8 @@ public sealed record AreaHoverRingContent(IReadOnlyList<(byte R, byte G, byte B)
 /// hovered object of type 15 to 17 (a PC, an NPC, a trap) two rings while a local PC exists: art 467 <c>hoverunder</c> under every object
 /// (blit order 99,999,999, after the terrain and before the flat and upright bodies, SO1) and art 468 <c>hoverover</c> over them (0x7FFFFFFF),
 /// both additive (blit 0x2010) with a constant colour; the colour is white, and for an NPC the colour of its reaction category (0x4C0FC0 of
-/// the standard effective reaction 0x4C0CC0, the table of <c>rules\reaction_colors.mes</c>, 0x444150). While the local PC is in combat mode
-/// both arts are 555 <c>hoverattack</c>. The ring's rectangle is the art's frame placed like an object's own frame (0x443880): the object's
+/// the standard effective reaction 0x4C0CC0, the table of <c>rules\reaction_colors.mes</c>, 0x444150). For an NPC, while the local PC is in combat mode,
+/// both arts are 555 <c>hoverattack</c> (a PC or a trap keeps 467 and 468). The ring's rectangle is the art's frame placed like an object's own frame (0x443880): the object's
 /// anchor plus the frame's delta less its centre, 15 pixels lower for a wading object; each ring steps to the art's next frame every
 /// 1000 / frames-per-second milliseconds (0x43A6D0). Godot-free.
 /// </summary>
@@ -85,8 +85,9 @@ public static class AreaHoverRingRules
     /// <summary>Whether a hovered object of this type gets rings (OH2): a critter or a trap.</summary>
     public static bool Applies(int type) => type is >= FirstRingType and <= LastRingType;
 
-    /// <summary>The two ring arts (under, over): 467 and 468, both 555 while the local PC is in combat mode.</summary>
-    public static (int Under, int Over) Arts(bool combatMode) => combatMode ? (AttackArt, AttackArt) : (UnderArt, OverArt);
+    /// <summary>The two ring arts (under, over): 467 and 468; for an NPC (only: the setter's combat check sits in its type-16 branch, so a PC or a trap keeps 467 and 468)
+    /// both 555 while the local PC is in combat mode.</summary>
+    public static (int Under, int Over) Arts(int type, bool combatMode) => combatMode && type == NpcType ? (AttackArt, AttackArt) : (UnderArt, OverArt);
 
     /// <summary>The ring colour: white; for an NPC with a reaction toward the PC, its reaction category's row of the table (0x43C270).</summary>
     public static (byte R, byte G, byte B) Colour(int type, int? reaction, IReadOnlyList<(byte R, byte G, byte B)>? table)

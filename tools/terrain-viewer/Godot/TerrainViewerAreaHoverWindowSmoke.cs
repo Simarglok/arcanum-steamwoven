@@ -174,7 +174,7 @@ public partial class TerrainViewerApp
                     await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                     using var after = await Frame();
                     var content = HoverRingContent();
-                    var arts = AreaHoverRingRules.Arts(HeroInCombatMode);
+                    var arts = AreaHoverRingRules.Arts(AreaHoverRingRules.NpcType, HeroInCombatMode);
                     Require(HoverRingArtsForSelfTest == arts, $"ring: the arts follow the combat mode: {HoverRingArtsForSelfTest} expected {arts}");
                     if (content?.Art(arts.Under) is null || content.Art(arts.Over) is null)
                     {
@@ -206,7 +206,8 @@ public partial class TerrainViewerApp
                             if (a.R < b.R - Step || a.G < b.G - Step || a.B < b.B - Step) darker++;
                             if (a.R > b.R + Step || a.G > b.G + Step || a.B > b.B + Step) brighter++;
                         }
-                        Require(darker == 0 && (brighter > 0 || colour == (0, 0, 0)), $"ring: of {total} pixels of the ring's rectangle {brighter} brighter and {darker} darker");
+                        // The NPC's own animated pixels share the rectangle, so a step of its idle animation between the two readbacks may darken a few (the ring itself adds only).
+                        Require(darker <= total / 25 && (brighter > 0 || colour == (0, 0, 0)), $"ring: of {total} pixels of the ring's rectangle {brighter} brighter and {darker} darker");
                         // The rings step through their frames at the art's rate (an art of one frame stays).
                         var frames = content.Art(arts.Under)!.Frames.Count; var first = canvas.AreaRing!.Under!.Key;
                         var stepped = frames <= 1;
