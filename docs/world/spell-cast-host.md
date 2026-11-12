@@ -423,7 +423,7 @@ The pointer entering a slot or a recent-action button shows its entry's descript
    (the window's handler is the inventory's, 0x573C74; the description is drawn only while the bars show, which the viewer hides under the window, so in practice the script runs and the item window is a known gap; the viewer runs it only with its interface on),
    and the dialog start runs the speaker's examine script and redraws its window as the world hover does (0x567460), once, with the interface on. The
    floating tooltip of the viewer without the interface bars (the original has none) does not run it, and the follower portraits' hover (0x56A9D0,
-   HK26) is not built.
+   HK26) runs it too (ARC-UI-1281, [follower portraits' hover](companion-orders-runtime.md#follower-portraits-hover-arc-ui-1281)).
 5. **Inventory** (HK23). In the inventory window, the pointer resting 35 ms on another item of the doll or the grid (nothing held) draws
    that item's window the same way; resting on no item keeps the last description.
 6. **Smoke.** The hotkey-bar smoke enters slot 2 (a spell: its hint with the college's icon), a skill entry (its hint; in the spells mode
@@ -780,8 +780,17 @@ executable reads [XR1–XR5](../research/ledger/spell-runs.md#magic-audit-execut
   new or an existing mark. A clear of the flag, another item-flag bit, another field and a target that is no item stay "not ready" (no installed record has them).
 - **Census (MA-0).** Records 6 and 7 leave the not-ready list on both census targets; record 9 keeps its `ObjFlag` on the census's critter targets (its target is an item).
 
-**Not ready.** Nothing picks an inventory item as a spell target yet (the pane's targeting, the inventory bit of `SessionItemUseCast.InventoryTarget`, and `Tgt_Obj_Inven` in the target rules), so spell 9 cannot
-be cast from the viewer; the container's inventory window (mode 4) and the item description window (E8); the multiplayer packets (kinds 7, 8, 10).
+**Not ready.** The container's inventory window (mode 4) and the item description window (E8); the multiplayer packets (kinds 7, 8, 10); an inventory item of a loot, steal or barter window as a target ([below](#an-inventory-item-as-a-spell-target-arc-magic-1128)).
+
+### An inventory item as a spell target (ARC-MAGIC-1128)
+
+Issue #1128, on the executable reads SU3 and IA4 and the new [IW44](../research/ledger/ui-audio.md) (the inventory window's press in the cursor modes). Code: `TerrainViewerSpellCast.cs` (`OpenInventoryForSpell`, `OpenSpellTargeting`, `InventoryItemPicked`, `SpellTargetApply`), `TerrainViewerItemAiming.cs` (`ItemAimInventoryPick`, `ClearItemTarget`), `AreaInventoryGridArea.TargetPicking` and its press, `TerrainViewerInterfaceModes.cs` (`TargetOverInventory`); tests `SessionSpellCasterIdentifyTests` (the pick) and the cast smoke stage (`TerrainViewerInventoryTargetSmoke.cs`, marker `ARC-MAGIC-1128 native-smoke inventory-target`).
+
+- **The activation (0x57BC70, SU3).** A BEGIN area with the inventory bit (0x2000000; spell 9 is `Tgt_Obj_Inven`, 0x2000004) opens the caster's own inventory before the cursor's tests: a window already open on the stack is kept when it is the player's own (mode 8), the original closes a barter or steal window first and leaves a loot window open; the viewer closes a loot or steal window and opens the own one (the viewer picks items of the own window only), and an open window of another kind refuses with a notice. The cast's action points are asked after that (a refusal leaves the inventory open and no cursor, as in the original), then the cursor is pushed **over** the inventory (`OpenTarget(overInventory: true)`: stack Game>Inventory>SpellTarget). The per-frame window guard does not drop a target over the inventory (`TargetOverInventory`). Shift with the object bit does not cast at the hero at once for such a spell (a project choice: the quick cast skips the pick's area test, which refuses the hero as it is no item in an inventory, so the cursor opens as without Shift).
+- **The pick (IW44, 0x573850 → 0x575FA0, then 0x57C110).** A left press on an item of the window with mode 1 on top names that item as the object target (the item under the pointer in any visible list: grid and doll) and lifts nothing; a press on no item does nothing. The pick runs the same area test as a click in the game view (`SessionSpellCaster.PickTarget` with the item as the point's object: the item is an object in its holder's inventory, object flag 0x1000, at its holder's location, `Tgt_Obj_Inven` needs the flag), and a target that passes is cast at (`CastSpell`, the casting goal as for any target). A game-view press with an inventory window open picks nothing (SU9: the cursor picks in the game view only with no inventory window open).
+- **After the cast and the cancel.** The cursor stays open after a cast, as for every spell (SU9), with the window under it. A right release in the window cancels the cursor (project choice: the executable's right-release branch in the cursor modes was not read), and the cancel takes the window with it (the leave case of mode 1 sets the repeat flag, SA38); the window's own close pops the cursor.
+- **The item path (IA4, IA6).** An item whose slot-0 spell has the inventory bit and which is used from the window (`OpenItemAiming`) pushes mode 16 over the window the same way (the window stays; a press names the item, `ItemAimInventoryPick` runs the slot-0 spell's area test and applies the use to it: `ApplyItemAim` pops mode 16 once, IA5, and the window stays). The use's own cast belongs to the item use (ARC-DEV-365); the smoke hero has no usable magical item, so the smoke checks the routing up to the use.
+- **Not ready.** An item of a loot, steal or barter window as a target (those windows lay their items out themselves and the cast host knows the hero's and the shown map's NPCs' items only); the right-release branch; the multiplayer packets.
 
 
 ## Dispel (ARC-MAGIC-034)
@@ -812,7 +821,7 @@ tests `SessionSpellCasterSocialTests`. The five flags the ObjFlag component of M
 
 | Flag (field) | Set | Clear |
 | --- | --- | --- |
-| Charmed (spell flags 0x800000) | NPC: an animal makes **peace** with the caster (`ISpellSocialHost.Peace`), any other NPC gets **+30** toward the hero when the caster is the hero (`ChangeReaction`); then the flag. The original also adds the NPC flag KOS_OVERRIDE (named, below). | NPC: **−30** toward the hero when the caster is the hero, then the flag off. Any other object: the plain write. |
+| Charmed (spell flags 0x800000) | NPC: an animal makes **peace** with the caster (`ISpellSocialHost.Peace`), any other NPC gets **+30** toward the hero when the caster is the hero (`ChangeReaction`); then the flag. Then the NPC flag KOS_OVERRIDE (0x800) is written into the session's [NPC flag layer](#npc-flag-layer-and-the-kill-on-sight-override-arc-magic-1142) and stays after the clear, as in the original. | NPC: **−30** toward the hero when the caster is the hero, then the flag off. Any other object: the plain write. |
 | Mind controlled (spell flags 0x8000000) | No caster: the plain write. A caster and **no NPC** (the hero): **nothing is written** (`SocialIgnored`). An NPC: **−50** toward the hero (hero caster, target not summoned) **before** the flag, the flag, a **forced join** of the NPC under the caster (`ForceJoinParty`; the hero is the party's one leader, any other caster logs `SocialNotModelled`), then **no-flee** for good (`SetNoFlee`). | NPC: the flag off, then a **forced leave** (`LeaveParty` with `Force`); the reaction is not given back and no-flee stays. |
 | Fleeing (critter flags 0x10) | NPC: **flee** from the caster (`ISpellSocialHost.Flee`, the danger setter's FLEE); the flag is **never written** (the setter's state is the session's danger record). The hero: nothing. | NPC: **stop fleeing** (the setter NONE, then the NPC's flee goals ended). The hero: nothing. |
 | Blinded (critter flags 0x80) | The life state's **blinded condition** is set (`GameSessionOwner.SetBlinded`: what the combat resolver, the skill checks and the AI gate's recovery roll read); the hero and an NPC. | The condition is cleared. |
@@ -826,8 +835,18 @@ tests `SessionSpellCasterSocialTests`. The five flags the ObjFlag component of M
   Each answers false for an NPC the host does not run.
 - **The log.** `SpellCastEventKind.SocialEffect` carries what was done (`SocialReaction` with the delta, `SocialPeace`, `SocialFlee`, `SocialStopFleeing`, `SocialJoin`, `SocialLeave`, `SocialNoFlee`, `SocialBlinded`) or not done
   (`SocialIgnored`, `SocialNotModelled`, `SocialRefused`).
-- **Not ready.** The NPC flag KOS_OVERRIDE a charm adds (the session keeps no NPC flag layer); a follower of a caster that is no hero; the undead flag's readers (the combat values and the life rules read the data's undead bit, so a created
+- **Not ready.** A follower of a caster that is no hero ([ARC-MAGIC-1142](#npc-flag-layer-and-the-kill-on-sight-override-arc-magic-1142) cut it away); the undead flag's readers (the combat values and the life rules read the data's undead bit, so a created
   undead is not undead for combat, healing or poison yet); the flags on a created critter (E1-e); an END after the NPC left the shown map (the blinded condition is cleared; charm's −30 and stop fleeing need the AI host and are logged refused); the reaction facts' `MindControlledByPc` (the host's facts carry false, so a later reaction change of a mind-controlled NPC is not skipped).
+
+
+## NPC flag layer and the kill-on-sight override (ARC-MAGIC-1142)
+
+The session keeps the NPC flags (`obj_f_npc_flags`, field 0x118) a spell or the attack event writes as a sixth field of a critter's written flags (`SessionObjectFlags.NpcSet` and `NpcCleared`, `SessionObjectFlagField.Npc`, save schema 93 with an upgrade step that gives every older row the two zero words): a bit is set or cleared over the value the NPC's data stores, and a write that gives back the data's value leaves no trace. Ledger [SO9–SO10](../research/ledger/spell-runs.md#social-and-ai-flags-arc-magic-035).
+
+- **Charm writes it.** After the reaction (or the animal's peace) a charm adds NPC flag 0x800 (`ONF_KOS_OVERRIDE`) through the layer (a log line `ObjectFlagWritten` with the side-effect detail); the clear takes only the +30 back and never the flag (SO2).
+- **The AI host reads it.** The hostility facts of an NPC (`AreaAiHost.Find`) take `KosOverride` from the layer over the data's NPC flags and `Undead` from the layer over the data's critter flags, so a kill-on-sight NPC that was charmed skips the rule's faction test (0x4AE120: without the override a kill-on-sight NPC is hostile to every critter of another faction) and falls through to the reaction and alignment tests, and an undead a spell wrote counts as undead in the rule that spares enshrouded creatures from undead.
+- **The attack event takes it off.** An NPC victim loses NPC flag 0x800 (0x4A983D reads field 0x118, clears 0x800 and writes it back with the plain write) at the attack event, after the attacker's followers were told and before the PC victim's response and the victim's followers; the host writes it through the layer with the data's value, so an NPC that never had the bit gets no row.
+- **Not ready.** The other NPC flags (the layer takes them, no writer or reader is built), a follower of a caster that is no hero ([#1322](https://github.com/Simarglok/arcanum-steamwoven/issues/1322)), the combat and life readers of a written undead bit ([#1323](https://github.com/Simarglok/arcanum-steamwoven/issues/1323)) (they read the data's bit when the life row is built), the flags on created critters (E1-e).
 
 ## Not ready
 
@@ -847,7 +866,7 @@ tests `SessionSpellCasterSocialTests`. The five flags the ObjFlag component of M
   (EC9, EC12).
 - Other goals while a cast plays: the viewer ignores world presses and the stick until the goal and its queue end, and refuses F7
   meanwhile (the session saves no goal or queue).
-- Spells on an inventory item (the inventory bit: the original opens the inventory to pick the item) and the hotkey bar (0x54FCF0,
+- The hotkey bar (0x54FCF0,
   0x57C080, IP7–IP9): later slices of ARC-UI-016. The host runs an item's own spells with the item as source since ARC-MAGIC-020
   ([item spell triggers](item-spell-triggers.md)); the weapon's spell pane is [above](#the-weapons-spell-pane-arc-ui-016).
 - The weapon's pane draws no spell icons and shows no hover description (0x5507E0).

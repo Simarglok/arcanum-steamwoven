@@ -569,6 +569,8 @@ public partial class TerrainViewerApp
                 lastMissileSpell = missile!.Data.Number;
             }
             var weaponCast = await WeaponPaneCastAsync();
+            // ARC-MAGIC-1128: a spell on an inventory item (spell 9) casts through the inventory window.
+            await InventoryItemCastSmokeAsync(session, records);
             // ARC-UI-022: the pane's last press is the latest recent action; Ctrl+1 puts it on entry 0, the keys 1 and A activate it, Ctrl+Shift+1
             // empties the entry and an empty entry does nothing.
             var latest = session.QueryHotkeys().Recent[0];
