@@ -41,8 +41,10 @@ func processAlive(_ pid: Any?) -> Bool {
 
 struct QueueFolder {
     let url: URL
-    var pauseURL: URL { url.appendingPathComponent("paused") }
-    var isPaused: Bool { FileManager.default.fileExists(atPath: pauseURL.path) }
+    /// The pause is a ticket no wrapper can read, held by a `lockf` process (run_queue.py explains why: every wrapper, old ones too,
+    /// counts a held unreadable ticket as a running export and waits behind it).
+    var pauseURL: URL { url.appendingPathComponent("t-pause.json") }
+    var isPaused: Bool { lockedByOthers(pauseURL.path) }
 
     /// Live tickets in the queue's own order (priority, then arrival plus three of the run's estimates, then number;
     /// by number alone while a ticket of an older wrapper, with no estimate, waits).
@@ -125,18 +127,53 @@ struct QueueFolder {
         rename(hidden.path, settingsURL.path)
     }
 
-    func setPaused(_ on: Bool) {
+    @discardableResult
+    func setPaused(_ on: Bool) -> Bool {
         if !on {
-            try? FileManager.default.removeItem(at: pauseURL)
-            return
+            try? FileManager.default.removeItem(at: pauseURL)  // the holder sees the file gone and ends within a second
+            return true
         }
-        if isPaused { return }
+        if isPaused { return true }
         let hidden = url.appendingPathComponent(".pause-menubar-\(getpid())")
-        let text = "{\"by\": \"menubar\", \"since\": \(Date().timeIntervalSince1970)}"
-        guard (try? text.write(to: hidden, atomically: false, encoding: .utf8)) != nil else { return }
+        let text = "{\"schema\": \"arcanum-run-queue-pause-v1\", \"by\": \"menubar\", \"since\": \(Date().timeIntervalSince1970)}"
+        guard (try? text.write(to: hidden, atomically: false, encoding: .utf8)) != nil else { return false }
         chmod(hidden.path, 0o600)
+        // its own session, so closing a terminal or killing this process group does not end the pause
+        let script = "while [ -e \"$0\" ] || [ -e \"$1\" ]; do sleep 1; done"
+        guard let pid = spawnDetached("/usr/bin/lockf", ["lockf", "-k", hidden.path, "/bin/sh", "-c", script, hidden.path, pauseURL.path]) else {
+            try? FileManager.default.removeItem(at: hidden)
+            return false
+        }
+        for _ in 0..<100 where !lockedByOthers(hidden.path) { usleep(50_000) }  // up to 5 s for the holder to take the lock
+        guard lockedByOthers(hidden.path) else {
+            kill(pid, SIGTERM)
+            try? FileManager.default.removeItem(at: hidden)
+            return false
+        }
         rename(hidden.path, pauseURL.path)
+        return true
     }
+}
+
+/// Start a process in a new session with no stdio (posix_spawn with POSIX_SPAWN_SETSID); its pid, or nil.
+func spawnDetached(_ path: String, _ arguments: [String]) -> pid_t? {
+    var attributes: posix_spawnattr_t? = nil
+    var actions: posix_spawn_file_actions_t? = nil
+    posix_spawnattr_init(&attributes)
+    posix_spawn_file_actions_init(&actions)
+    defer {
+        posix_spawnattr_destroy(&attributes)
+        posix_spawn_file_actions_destroy(&actions)
+    }
+    posix_spawnattr_setflags(&attributes, Int16(0x0400))  // POSIX_SPAWN_SETSID
+    for descriptor in [0, 1, 2] as [Int32] {
+        posix_spawn_file_actions_addopen(&actions, descriptor, "/dev/null", descriptor == 0 ? O_RDONLY : O_WRONLY, 0)
+    }
+    var argv: [UnsafeMutablePointer<CChar>?] = arguments.map { strdup($0) } + [nil]
+    defer { for pointer in argv { free(pointer) } }
+    var pid: pid_t = 0
+    let status = posix_spawn(&pid, path, &actions, &attributes, &argv, environ)
+    return status == 0 ? pid : nil
 }
 
 let defaultShortLanes = 2  // run_queue.DEFAULT_SHORT_LANES
@@ -528,8 +565,7 @@ while let flag = arguments.first {
         }
         exit(0)
     case "--set-pause", "--clear-pause":  // what the menu's Pause item does, for scripts and the self-check: act and exit
-        QueueFolder(url: queueURL).setPaused(flag == "--set-pause")
-        exit(0)
+        exit(QueueFolder(url: queueURL).setPaused(flag == "--set-pause") ? 0 : 1)
     default:
         FileHandle.standardError.write("usage: ArcanumQueue [--queue-dir DIR] [--lock FILE] [--idle-minutes N (0: never)] [--open-menu] [--set-pause|--clear-pause] [--set-lanes N|default] [--set-max-load X|off]\n".data(using: .utf8)!)
         exit(2)
