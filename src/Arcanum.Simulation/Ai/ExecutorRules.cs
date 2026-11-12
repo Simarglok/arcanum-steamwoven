@@ -29,7 +29,7 @@ public static partial class AiExecutorRules
         GoalType.ThrowItem, GoalType.UseItem, GoalType.MoveAway, GoalType.RunNear, GoalType.MeleeApproach, GoalType.AttemptPickLocks, GoalType.SpreadOut,
         GoalType.CombatApproach, GoalType.RangedApproach, GoalType.CastSpellWithAnimation, GoalType.AttemptSpellWithAnimation, GoalType.AttemptPickpocket,
         GoalType.AnimateStunned, GoalType.KnockDown, GoalType.GetUp, GoalType.Dying, GoalType.RunNearTile, GoalType.Animate, GoalType.AnimateKneelMagicHands, GoalType.AnimateReverse,
-        GoalType.OpenDoor, GoalType.AttemptOpenDoor, GoalType.CloseDoor, GoalType.AttemptCloseDoor,
+        GoalType.OpenDoor, GoalType.AttemptOpenDoor, GoalType.CloseDoor, GoalType.AttemptCloseDoor, GoalType.PleaseMove,
     ];
 
     /// <summary>Whether the executor interprets <paramref name="goal"/>'s nodes (<see cref="InterpretedGoals"/>).</summary>
@@ -270,11 +270,14 @@ public static partial class AiExecutorRules
             if (queued.Bottom.Target == target || queued.Bottom.Goal == GoalType.AttemptAttack) refusal = AiStartRefusal.AlreadyQueued;
             else return new(AiPerformKind.Attack, queued.WithFrames([new GoalFrame(GoalType.Attack, target, sound: sound)])) { Started = true };
         }
+        // ARC-AI-1315 (VA4, VAG4): before its interrupt the attacker asks the tile-sharer finder (0x436720): another living, not busy NPC on its tile is asked to move (goal 68,
+        // 0x4363E0) and no attack starts, with no step apart after it.
+        if (refusal == AiStartRefusal.None && AiTileSharerRules.AskBlocker(world, attacker)) return new(AiPerformKind.Attack, current, AiStartRefusal.TileSharer);
         if (refusal == AiStartRefusal.None && !world.InterruptLowerAnimations(attacker)) refusal = AiStartRefusal.Interrupt;
         if (refusal == AiStartRefusal.None && world.BoomerangInFlight(attacker)) refusal = AiStartRefusal.BoomerangInFlight;
         if (refusal != AiStartRefusal.None)
         {
-            world.StepApart(attacker);
+            AiTileSharerRules.StepApart(world, attacker);
             return new(AiPerformKind.Attack, current, refusal);
         }
         var mover = world.Mover(attacker);
@@ -431,6 +434,7 @@ public static partial class AiExecutorRules
         GoalType.Flee => FleeNode(owner, top, flags, world),
         GoalType.MoveAway => MoveAwayNode(owner, top, frames, flags, world, profile),
         GoalType.RunToTile or GoalType.MoveNearTile or GoalType.RunNearTile => RunToTileNode(owner, top, flags, world),
+        GoalType.PleaseMove => PleaseMoveNode(owner, top, flags, world, rolls),
         GoalType.Follow or GoalType.SpreadOut => FollowNode(owner, top, world),
         GoalType.MoveNear or GoalType.RunNear => MoveNearNode(owner, top, flags, world),
         GoalType.CastSpell or GoalType.CastSpellWithAnimation => CastNode(owner, top, world),
@@ -678,6 +682,22 @@ public static partial class AiExecutorRules
         var path = Plan(world, owner, new(AiPathKind.ToTile, null, tile, 0, false, Running(world, owner, flags)));
         if (path is null) return NoPath(owner, world, AiExecutorReason.NoPath);
         return new(Move.Push, Frame: Child(GoalType.AttemptMove, goal) with { Path = path.Steps }, Reason: AiExecutorReason.RunToTile);
+    }
+
+    /// <summary>
+    /// Goal 68, the order to step aside (ARC-AI-1315, descriptor 0x5ADDD0, ledger VAG4): node 1 (0x424E00) chooses the tile once (<see cref="AiTileSharerRules.StepTile"/>; none clear
+    /// pops the goal), then nodes 2 to 8 are the run to a tile's (goals 3 and 4: arrival test 0x424D90, get up, unconceal, plan 0x426040, push 5 walk, the pause when no path):
+    /// <see cref="RunToTileNode"/>. The delay code -3 after node 1 is a global whose value is whatever the last writer left (a projectile tick's 35 ms, else none); no wait is
+    /// modelled (A).
+    /// </summary>
+    private static Transition PleaseMoveNode(string owner, GoalFrame goal, GoalRunFlags flags, IAiGoalWorld world, IAiRollSource rolls)
+    {
+        if (goal.Tile is null)
+        {
+            if (AiTileSharerRules.StepTile(world, owner, rolls) is not { } tile) return new(Move.Pop, Reason: AiExecutorReason.PleaseMoveNoTile);
+            goal = goal with { Tile = tile };
+        }
+        return RunToTileNode(owner, goal, flags, world) with { Top = goal };
     }
 
     // ---- following (goals 24, 69, 8, 56) ----

@@ -276,6 +276,19 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
+    /// ARC-AI-1317 (ledger VAG6): the enemy-list remove with a null handle (0x4AF9D0), which the pick calls first: every entry
+    /// <paramref name="exists"/> is false for (its object no longer exists) is dropped, in the original's order
+    /// (<see cref="DangerRules.PurgeEnemies{T}"/>). <paramref name="exists"/> must not call back into the owner. Nothing to drop is
+    /// NoChange.
+    /// </summary>
+    public SessionDangerResult PurgeDangerEnemies(GameSessionVersion expected, string owner, Func<SessionCombatant, bool> exists)
+    {
+        ArgumentNullException.ThrowIfNull(exists);
+        return ChangeDanger(expected, owner, null, false, plan =>
+            plan.Update(owner, record => record with { Enemies = DangerRules.PurgeEnemies(record.Enemies, exists) }));
+    }
+
+    /// <summary>
     /// Allow attacking (0x4AA580): an NPC that follows or waits for the hero loses NO_ATTACK; for the hero every NPC of its
     /// follower array does (the original's recursive follower list; the session has no followers of followers). Any other NPC
     /// is NoChange. The hero's combat-mode entry runs it for the hero.

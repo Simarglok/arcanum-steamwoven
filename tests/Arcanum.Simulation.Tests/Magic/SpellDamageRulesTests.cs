@@ -114,6 +114,25 @@ public sealed class SpellDamageRulesTests
         Assert.AreEqual((10 + 8 - 4, true), (plain.HitPointDamage, plain.DamagesArmor), "resistances, then hard takes a quarter; fire wears armour");
     }
 
+    /// <summary>
+    /// ARC-MAGIC-1361 (DH2, DH6): the numbers of Harm (installed record 55: <c>Dmg: 3-40</c>, normal, <c>Scaled</c>, cost 5) for the hero of the owner's report (level 4, a night mage at night:
+    /// 4 + 4 magick points, aptitude (50 × 8) / 10 = 40). The component gives 3 + 37 × 40 / 100 = 17 with no draw; the damage step then adds a half on easy (+8) and takes a quarter on hard (−4)
+    /// for a PC attacker, as 0x4B4390 does (a share of the settings 0 and 2, not of a spell: every attack of the PC has it). So 25 hit points on easy is the original's number, not a double.
+    /// </summary>
+    [TestMethod]
+    public void Harm_of_a_hero_with_aptitude_40_deals_17_normal_25_easy_and_13_hard_Dh2_Dh6()
+    {
+        var hero = new SpellRunObject("hero", SpellObjectFacts.PcType, 40);
+        var packet = SpellDamageRules.Damage(Component(0, 3, 40, SpellDamageFlags.Scaled), Run(hero), 0, new Rolls(), MagicAnomalyProfile.Original);
+        Assert.AreEqual(17, packet.Damage.Normal);
+        int Hit(GameDifficulty difficulty, bool pc = true) => AttackResolver.DamageStep(new()
+            { Attacker = new Combatant { IsPc = pc }, Target = new Combatant(), Difficulty = difficulty, Damage = packet.Damage }).HitPointDamage;
+        Assert.AreEqual((17, 25, 13), (Hit(GameDifficulty.Normal), Hit(GameDifficulty.Easy), Hit(GameDifficulty.Hard)));
+        Assert.AreEqual(17, Hit(GameDifficulty.Easy, pc: false), "an NPC attacker has no difficulty share");
+        // The aptitude of the same hero by day (a night mage loses 4 points): 4 − 4 = 0 magick points, aptitude 0, the minimum.
+        Assert.AreEqual(3, SpellDamageRules.Damage(Component(0, 3, 40, SpellDamageFlags.Scaled), Run(hero with { Aptitude = 0 }), 0, new Rolls(), MagicAnomalyProfile.Original).Damage.Normal);
+    }
+
     [TestMethod]
     public void A_nigh_invulnerable_critter_takes_a_spell_only_from_a_caster_with_an_uber_weapon_in_the_original_Mg36()
     {

@@ -216,9 +216,16 @@ public sealed class DangerStateTests
         // The remove fills the hole with the last entry.
         Changed(owner.RemoveDangerEnemy(owner.Version, Wolf, Hero), owner, revision + 3);
         CollectionAssert.AreEqual(new[] { SoggHandle, VirgilHandle }, owner.QueryDanger(Wolf).Enemies.ToArray());
-        Changed(owner.SetDangerHitBy(owner.Version, Wolf, SoggHandle), owner, revision + 4);
+        // ARC-AI-1317: the purge (the remove with a null handle) drops the entries the host says no longer exist, in the remove's order, in one revision.
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.PurgeDangerEnemies(owner.Version, Wolf, _ => true).Disposition, "nothing stale");
+        Assert.AreEqual(revision + 3, owner.Version.Revision);
+        Changed(owner.PurgeDangerEnemies(owner.Version, Wolf, entry => entry != SoggHandle), owner, revision + 4);
+        CollectionAssert.AreEqual(new[] { VirgilHandle }, owner.QueryDanger(Wolf).Enemies.ToArray());
+        Rejected(owner.PurgeDangerEnemies(owner.Version, "bad id", _ => true), owner, GameSessionFailure.InvalidDangerTarget, revision + 4);
+        Changed(owner.AddDangerEnemy(owner.Version, Wolf, SoggHandle), owner, revision + 5);
+        Changed(owner.SetDangerHitBy(owner.Version, Wolf, SoggHandle), owner, revision + 6);
         Assert.AreEqual(SoggHandle, owner.QueryDanger(Wolf).HitBy);
-        Rejected(owner.AddDangerEnemy(owner.Version, "bad id", Hero), owner, GameSessionFailure.InvalidDangerTarget, revision + 4);
+        Rejected(owner.AddDangerEnemy(owner.Version, "bad id", Hero), owner, GameSessionFailure.InvalidDangerTarget, revision + 6);
     }
 
     [TestMethod]
