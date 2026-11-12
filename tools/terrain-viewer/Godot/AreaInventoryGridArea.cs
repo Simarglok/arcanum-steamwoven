@@ -520,6 +520,20 @@ public partial class AreaInventoryGridArea : Control
             var (x, y) = AreaInventoryArtLayout.Box(icon);
             Art(AreaInventoryArtLayout.BoxArt(icon, over == icon), x, y);
         }
+        // ARC-UI-1267 (IW25, IW41): the hero's damage and armour ratings (0x464630, 0x464700) under the doll, in the rectangles of 0x5CAEF8 and 0x5CAF08: the first ends at the
+        // right edge of its rectangle, the second starts at the left edge of its (PROJECT: the text's top sits on the rectangle's top, F0 for the original's vertical anchor).
+        if (_view.HeroRatings is { } ratings)
+        {
+            void Rating(int value, (int X, int Y, int Width, int Height) rect, bool rightAligned)
+            {
+                var box = Scaled(rect.X, rect.Y, rect.Width, rect.Height);
+                var text = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var width = font.GetStringSize(text, HorizontalAlignment.Left, -1, size).X;
+                DrawString(font, new(rightAligned ? box.End.X - width : box.Position.X, box.Position.Y + size), text, HorizontalAlignment.Left, -1, size, AreaInventoryArtLook.TextColour);
+            }
+            Rating(ratings.Damage, AreaInventoryArtLayout.DamageRatingBox, true);
+            Rating(ratings.Armour, AreaInventoryArtLayout.ArmourRatingBox, false);
+        }
         // ARC-DEV-339: the arrange button, drawn with its first frame as the other buttons are.
         Art(AreaInventoryArtLayout.ArrangeArt, AreaInventoryArtLayout.ArrangeButton.X, AreaInventoryArtLayout.ArrangeButton.Y);
         foreach (var item in _view.Grid)
@@ -534,6 +548,12 @@ public partial class AreaInventoryGridArea : Control
         {
             // A held worn item leaves its slot to the cover, as an empty one (0x5772B4 skips it, 0x577851 covers every unmarked slot).
             var entry = _view.Doll.FirstOrDefault(entry => entry.Slot == slot);
+            // ARC-UI-1267 (IW43): the weapon's slot is filled dark red first when the weapon needs more strength than the hero has (0x465E90); the item is drawn on the fill.
+            if (slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon && entry?.Entity is { } wielded && wielded != Held?.Entity && _view.HeroRatings is { WeaponTooHeavy: true })
+            {
+                var (red, green, blue) = AreaLootArtLayout.TooHeavyFill;
+                DrawRect(Scaled(rect.X, rect.Y, rect.Width, rect.Height), new Color(red / 255f, green / 255f, blue / 255f));
+            }
             if (entry?.Entity is { } worn && worn != Held?.Entity) Item(look.ItemArt(worn), rect, name: entry.Name ?? "?");
             else Art(AreaInventoryArtLayout.Covers[slot], rect.X, rect.Y);
         }

@@ -88,6 +88,27 @@ public partial class TerrainViewerApp
             // The inventory family closes under the menu.
             await Press(Key.I);
             Require(InventoryOpen, "I opened the inventory: " + State());
+            // ARC-UI-1267 (IW25, IW41, IW43): the own window's doll prints the hero's damage and armour ratings, which the combat host reads from the session's hero.
+            var heroRatings = _inventoryPanel?.ViewForSelfTest?.HeroRatings;
+            Require(heroRatings is not null, "the own inventory view has the hero's ratings (the combat host did not read them)");
+            Require(heroRatings!.Damage > 0 && heroRatings.Armour >= 0, $"the hero's ratings are plausible (damage {heroRatings.Damage}, armour {heroRatings.Armour})");
+            var heroDoll = session.QueryEquipment().Worn;
+            GD.Print($"ARC-UI-1267 inv-ui hero doll ratings damage={heroRatings.Damage} armour={heroRatings.Armour} weaponTooHeavy={heroRatings.WeaponTooHeavy} worn={heroDoll.Count}");
+            steps.Add("the hero's doll ratings are read");
+            // ARC_AREA_INVENTORY_CAPTURE=<path>.png also saves the window three ways beside <path>-before, -after and -too-heavy.png (the ratings left out, as read, and the weapon forced too heavy) for the graphics report.
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_INVENTORY_CAPTURE") is { Length: > 0 } capture && _inventoryPanel is { } capturePanel)
+            {
+                var read = capturePanel.ViewForSelfTest!;
+                foreach (var (name, shown) in new[] { ("before", read with { HeroRatings = null }), ("after", read), ("too-heavy", read with { HeroRatings = heroRatings with { WeaponTooHeavy = true } }) })
+                {
+                    capturePanel.GridAreaForSelfTest.Render(shown);
+                    await Frames(2);
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    using var image = GetViewport().GetTexture().GetImage();
+                    if (image.SavePng(System.IO.Path.ChangeExtension(capture, null) + "-" + name + ".png") != Error.Ok) throw new InvalidOperationException("AREA_INVENTORY_CAPTURE_FAILED");
+                }
+                capturePanel.GridAreaForSelfTest.Render(read);
+            }
             await Press(Key.Escape);
             Require(MainMenuOpen && !InventoryOpen && StackText() == "Game" && WindowPanelsMatchStack, "Escape opened the menu, which closed the inventory: " + State());
             await Press(Key.Escape);
