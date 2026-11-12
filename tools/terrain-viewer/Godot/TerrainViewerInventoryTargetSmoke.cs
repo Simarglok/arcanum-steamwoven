@@ -36,7 +36,11 @@ public partial class TerrainViewerApp
         var weaponSlot = worn.FirstOrDefault(w => w.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon);
         var wand = worn.FirstOrDefault(w => w.Entity != weaponSlot?.Entity);
         if (weaponSlot is null || wand is null) { GD.Print("ARC-MAGIC-1128 native-smoke inventory-target SKIP (the hero wears no second item to be the wand)"); return; }
-        _lentItemSpellsForSelfTest = new(wand.Entity, SessionSpellCaster.Hero, 14, [9, 10000, 10000, 10000, 10000], -1, 1, ItemSpellPaneRules.IdentifiedFlag); _weaponPaneCache = null;
+        // ARC-BUG-1413: a technologist hero (negative aptitude, the dwarf) draws no power from a wand whose complexity is not above the aptitude's magnitude and the invocation refuses the cast (ItemAptitude): the wand's
+        // complexity is lent above it, so the smoke does not depend on which pre-made hero runs it.
+        var aptitude = SpellCasterNow()?.Facts(SessionSpellCaster.Hero)?.Aptitude ?? 0;
+        var complexity = Math.Clamp(2 - aptitude, 2, Arcanum.Simulation.Equipment.EquipmentLimits.MaxMagnitude);
+        _lentItemSpellsForSelfTest = new(wand.Entity, SessionSpellCaster.Hero, 14, [9, 10000, 10000, 10000, 10000], -1, complexity, ItemSpellPaneRules.IdentifiedFlag); _weaponPaneCache = null;
         try { await InventoryItemCastBodyAsync(session, wand.Entity); }
         finally { _lentItemSpellsForSelfTest = null; _weaponPaneCache = null; }
     }
@@ -87,7 +91,8 @@ public partial class TerrainViewerApp
         var wasIdentified = item is not null && session.QueryItemIdentified(item.Entity);
         Require(item is not null, $"[{way}] a listed item the cast host knows: " + string.Join(",", view.Grid.Select(g => g.Entity)));
         // A press on an empty cell picks nothing and the cursor stays.
-        var empty = Enumerable.Range(0, 60).First(cell => view.Grid.All(g => g.Slot != cell && !(cell >= g.Slot && cell < g.Slot + g.Width)));
+        // The grid is ten cells wide and an item covers Width x Height of them (a tall item hides the cells under its first row), so the empty cell is one no item's rectangle holds.
+        var empty = Enumerable.Range(0, 60).First(cell => view.Grid.All(g => !(cell % 10 >= g.Slot % 10 && cell % 10 < g.Slot % 10 + g.Width && cell / 10 >= g.Slot / 10 && cell / 10 < g.Slot / 10 + g.Height)));
         var casts = _spellCasts;
         _inventoryPanel.GridAreaForSelfTest.PressAt(AreaInventoryGridArea.CellCentre(empty));
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

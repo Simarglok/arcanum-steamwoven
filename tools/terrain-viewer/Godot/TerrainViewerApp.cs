@@ -305,6 +305,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("indoor-fade") == true) await RunIndoorFadeSmokeAsync(result);
                                 // ARC-DEV-206 (B25): only when named, an NPC walked onto the agent's exit tile runs the tile's script (AI on, --hero, --sector 1452,1291) (SM28).
                                 if (only?.Contains("npc-tile") == true) await RunAreaNpcTileSmokeAsync();
+                                // ARC-AI-1313 (VAG2): only when named, the standpoint step's wander goal 65/66 moves an NPC about its tether within four tiles (AI on, --hero, --sector 1452,1291).
+                                if (only?.Contains("npc-wander") == true) await RunAreaNpcWanderSmokeAsync();
                                 // ARC-DEV-298 (B20): only when named, the cave tiles of script 2768 (the ghost of Brego) run and cast (AI on, --hero, map crash site cave) (SM16).
                                 if (only?.Contains("tile-ghost") == true) await RunAreaGhostTileSmokeAsync();
                                 // ARC-DEV-299 (B23): only when named, every container of the window is clicked as the player does (--hero, best on --sector 1409,1314) (SM16).
@@ -1281,6 +1283,7 @@ public partial class TerrainViewerApp : Node
     {
         if (_exiting) return;
         _exiting = true;
+        CloseEvidence(); // ARC-GPAD-1376: an open evidence session ends with its last line
         _walkPlanCancellation?.Cancel(); // ARC-WORLD-042: the walk smoke's background route plan
         HdOptimizedStore.Stop(); // ARC-DEV-376: the background texture conversion must not be inside an engine call at shutdown
         _installCancel?.Cancel(); // ARC-DEV-074: closing the window stops a running innoextract (it would write on after the app)
