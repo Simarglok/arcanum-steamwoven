@@ -129,9 +129,9 @@ public sealed partial class GameSessionOwner
         if (kind == SessionHolderKind.Container && !ShownContainer(other))
             return new(item, $"transfer item: the container {other} is not on the actor's map or has spilled its items", GameSessionFailure.HolderNotLootable);
         if (item.Worn && from is not null) return new(item, $"transfer item of {item.Entity}, worn by {from}, is not modelled", GameSessionFailure.WornItemUnsupported);
-        // The move runs none of the item's scripts: a hero's worn item with any, or any item with a get, insert-item, remove-item or wield-off point, is refused.
-        if (item.ScriptPoints.Any(point => point is SessionScriptPoint.Get or SessionScriptPoint.InsertItem or SessionScriptPoint.RemoveItem or SessionScriptPoint.WieldOff) || item.Worn && item.ScriptPoints.Count > 0)
-            return new(item, $"transfer item of {item.Entity}, which has a get, insert-item, remove-item or wield-off script, is not modelled", GameSessionFailure.ItemScriptUnsupported);
+        // The move runs none of the item's scripts: a hero's worn item with any, or any item with an insert-item, remove-item or wield-off point, is refused.
+        if (item.ScriptPoints.Any(point => point is SessionScriptPoint.InsertItem or SessionScriptPoint.RemoveItem or SessionScriptPoint.WieldOff) || item.Worn && item.ScriptPoints.Count > 0)
+            return new(item, $"transfer item of {item.Entity}, which has an insert-item, remove-item or wield-off script, is not modelled", GameSessionFailure.ItemScriptUnsupported);
         if (item.Worn && item.ItemSpells) return new(item, $"transfer item of {item.Entity}, worn with item spells, is not modelled", GameSessionFailure.ItemEffectUnsupported);
         if (to is not null)
         {
@@ -150,6 +150,8 @@ public sealed partial class GameSessionOwner
                 if (_story.HeroKeys.Count >= SessionStoryLimits.MaxKeys) return new(item, "transfer item: the hero's key ring is full", GameSessionFailure.KeyRingFull);
             }
             else if (!InventoryDomain.Admitted(type)) return new(item, $"transfer item: a {type} is not modelled", GameSessionFailure.ItemTypeUnsupported);
+            else if (type == SessionItemType.Ammo && QueryHolderItems(from!)?.FirstOrDefault(listed => listed.Entity == item.Entity) is { } listedAmmo && AmmoOf(item.Entity, listedAmmo.Facts) is null)
+                return new(item, $"transfer item: the ammunition {item.Entity} has no type or units", GameSessionFailure.InvalidItem);
         }
         return new(item, null);
     }
