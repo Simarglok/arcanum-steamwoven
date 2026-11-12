@@ -236,17 +236,26 @@ public partial class TerrainViewerApp
     /// ARC-DEV-089: whether a combat smoke can fight the body in this window. The stages first took the weakest NPC of the map, which
     /// on the Crash Site stands in the open; in a town it may be under a roof, walled in or off the screen. A body is usable when
     /// the hero can stand <paramref name="range"/> cells from it (and next to it when <paramref name="alsoAdjacent"/>), and, with the
-    /// hero placed there, a pixel of it is the frontmost pick. The hero is left on that cell, the camera framed on it.
+    /// hero placed on each of those cells, a pixel of it is the frontmost pick. The hero is left on that cell, the camera framed on it.
     /// </summary>
     private async Task<CellCoord?> AreaSmokeFightableStartAsync(AreaMapRuntime map, AreaDrawCommand body, CellCoord targetCell, int range, int minDistance, bool alsoAdjacent)
     {
-        if (alsoAdjacent && AreaSmokeNearTarget(map, targetCell, 1, maxDistance: 1) is null) return null;
+        // ARC-UI-1425: the adjacent cell is the one a caller will place the hero on later (the same lookup), so it is checked here too.
+        var adjacent = alsoAdjacent ? AreaSmokeNearTarget(map, targetCell, 1, maxDistance: 1) : null;
+        if (alsoAdjacent && adjacent is null) return null;
         var start = AreaSmokeNearTarget(map, targetCell, range, minDistance);
         if (start is null) return null;
-        AreaSmokePlace(map, start.Value);
-        _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
-        PublishWorldSelection();
-        return await HoverPointAsync(this, body) is null ? null : start;
+        async Task<bool> VisibleFromAsync(CellCoord cell)
+        {
+            AreaSmokePlace(map, cell);
+            _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
+            PublishWorldSelection();
+            return await HoverPointAsync(this, body) is not null;
+        }
+        if (!await VisibleFromAsync(start.Value)) return null;
+        // The hero is left on the range cell, the camera framed on it, whichever cell was checked last.
+        if (adjacent is not null && (!await VisibleFromAsync(adjacent.Value) || !await VisibleFromAsync(start.Value))) return null;
+        return start;
     }
 
     /// <summary>A point of the cell's diamond with no pickable object over it, outside the HUD.</summary>
