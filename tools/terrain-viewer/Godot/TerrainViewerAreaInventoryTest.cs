@@ -846,7 +846,8 @@ public partial class TerrainViewerApp
         var session = _areaSession!;
         var panel = _inventoryPanel!;
         var coins = session.QueryGold();
-        if (coins < 6 || session.QueryHeroAmmo().Cast<SessionAmmoRecord?>().FirstOrDefault(entry => entry!.Value.Units >= 3) is not { } ammo || !HeroLocationKnown())
+        if (coins < 6 || session.QueryHeroAmmo().Cast<SessionAmmoRecord?>().FirstOrDefault(entry => entry!.Value.Units >= 3) is not { } ammo
+            || session.QueryHeroAmmo().First(entry => entry.AmmoType == ammo.AmmoType).Entity != ammo.Entity || !HeroLocationKnown())
         {
             GD.Print($"ARC-UI-1328 native-smoke junk-stack SKIP coins={coins} ammo={session.QueryHeroAmmo().Count}");
             return;
