@@ -14,7 +14,7 @@ public sealed partial class GameSessionOwner
     /// place of an empty grid, 96 rows for a container, 12 for a critter): a taken item's old cell closes up at the next open, and items the map's data
     /// places in an order of its own take the sorted one. When an item finds no place nothing changes (<see cref="SessionGridArrangement.NoRoom"/>, the
     /// original writes nothing). The slots are written straight (no insert check, no weight, no script event, no action points, IW40): a seed holder's in
-    /// the inventory's transient map of holder slots (not saved: every open arranges again), a junk
+    /// the inventory's map of holder slots (saved with the inventory section, ARC-RES-1441; at most <c>MaxHolderSlots</c> holders, past that nothing is written), a junk
     /// pile's in its record. Refused before any effect: an invalid entity or a holder the actor's map does not have (<see cref="GameSessionFailure.UnknownHolder"/>),
     /// a stale version, the revision bound. One revision when some slot changed. PROJECT: the list order is the session's list order (the seed's, then the
     /// made items added); the multiplayer branch (0x4EDE80) is not built; the open table test (no other window on the object) always passes in a single-player
@@ -55,6 +55,8 @@ public sealed partial class GameSessionOwner
         var moved = placements.Count(placement => locations[placement.Key] != placement.Slot);
         if (moved == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, false, 0, Version);
         if (_revision == long.MaxValue) return Rejected(GameSessionFailure.RevisionExhausted);
+        // ARC-RES-1441: a save keeps the slots of so many holders (<c>SessionInventoryState.MaxHolderSlots</c>); past that bound the layout stays the map data's (nothing is written).
+        if (pile is null && !_inventory.HolderSlots.ContainsKey(holder) && _inventory.HolderSlots.Count >= SessionInventoryState.MaxHolderSlots) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, true, 0, Version);
         if (pile is not null)
         {
             var slots = placements.ToDictionary(placement => placement.Key, placement => placement.Slot, StringComparer.Ordinal);

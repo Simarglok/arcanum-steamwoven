@@ -2446,6 +2446,26 @@ public sealed partial class GameSessionOwner : IDisposable
             lastFielded = row.Entity;
             inventory.ItemFields.Add(row.Entity, row.Writes);
         }
+        // ARC-RES-1441 (schema 95): the arranged slots of seed holders by holder entity in ordinal order, within the bound, none empty: a holder (a container or an NPC of a map),
+        // its items in strictly ascending ordinal order, none deleted, each in a cell of the largest grid.
+        if (saved.HolderSlots.Count > SessionInventoryState.MaxHolderSlots) return GameSessionFailure.BudgetExceeded;
+        string? lastArranged = null;
+        foreach (var row in saved.HolderSlots)
+        {
+            if (row?.Slots is null || row.Slots.Count == 0 || row.Slots.Count > InventoryGridRules.Columns * InventoryGridRules.ContainerRows || !SessionEventKinds.RestockHolder(row.Holder) ||
+                lastArranged is not null && string.CompareOrdinal(lastArranged, row.Holder) >= 0) return GameSessionFailure.InvalidSnapshot;
+            lastArranged = row.Holder;
+            var slots = new SortedDictionary<string, int>(StringComparer.Ordinal);
+            string? lastItem = null;
+            foreach (var slot in row.Slots)
+            {
+                if (!SessionValidation.Entity(slot.Item) || slot.Slot is < 0 or >= InventoryGridRules.Columns * InventoryGridRules.ContainerRows || destroyed.Contains(slot.Item) ||
+                    lastItem is not null && string.CompareOrdinal(lastItem, slot.Item) >= 0) return GameSessionFailure.InvalidSnapshot;
+                lastItem = slot.Item;
+                slots.Add(slot.Item, slot.Slot);
+            }
+            inventory.HolderSlots.Add(row.Holder, slots);
+        }
         // ARC-WORLD-094: the highest discarded made number.
         if (saved.LastDiscardedMade < 0) return GameSessionFailure.InvalidSnapshot;
         inventory.LastDiscardedMade = saved.LastDiscardedMade;

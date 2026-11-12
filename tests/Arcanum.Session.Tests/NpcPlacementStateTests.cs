@@ -82,7 +82,7 @@ public sealed class NpcPlacementStateTests
         using var owner = Create();
         Changed(owner.RecordNpcPlace(owner.Version, Exterior, Guard, new CellCoord(1410, 1314), NeighborDirection.YPlus), owner, 1);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, "\"schemaVersion\":94,");
+        StringAssert.Contains(text, "\"schemaVersion\":95,");
         StringAssert.Contains(text, "\"state\":[{\"entity\":\"oid:guard\",\"property\":\"npc.pos\",\"map\":79,\"value\":");
         Assert.AreEqual(0, owner.Capture().Maps.Count, "the place is an object field, not a map change");
         using var restored = Restore(Decode(text));
