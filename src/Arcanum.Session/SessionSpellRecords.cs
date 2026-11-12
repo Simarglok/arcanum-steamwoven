@@ -34,6 +34,10 @@ public sealed record SessionSpellComponent(SpellRunAction Action, int Index, Spe
     public TraitData? Trait { get; init; }
     /// <summary>ARC-MAGIC-049: a Cast component's <c>Spell:</c> (10000 when the key is absent), else null (an Interrupt component's <c>MagicTech:</c> is not read).</summary>
     public SpellReferenceData? Cast { get; init; }
+    /// <summary>ARC-MAGIC-1146: a Recharge component's amount and <c>Max:</c>, else null.</summary>
+    public RechargeData? Recharge { get; init; }
+    /// <summary>ARC-MAGIC-1146: a Trait64 component's field and source, else null.</summary>
+    public Trait64Data? Trait64 { get; init; }
 }
 
 /// <summary>ARC-MAGIC-017: an EyeCandy component's data: its number in the spell's eye-candy group, Add or Remove, the <c>Play:</c> flags.</summary>
@@ -84,7 +88,8 @@ public static class SessionSpellRecords
                 ObjectFlag = component.Data is ObjectFlagData o ? new(o.Field, o.Flag, o.On) : null,
                 Effect = component.Data as EffectData, Summon = component.Data as SummonData, Movement = component.Data as MovementData, Trait = component.Data as TraitData,
                 ChargeBranch = component.Data as ChargeBranchData, TestBranch = component.Data as TestBranchData,
-                Cast = component.Type == SpellComponentType.Cast ? component.Data as SpellReferenceData : null });
+                Cast = component.Type == SpellComponentType.Cast ? component.Data as SpellReferenceData : null,
+                Recharge = component.Data as RechargeData, Trait64 = component.Data as Trait64Data });
         }
         var invocation = new SpellInvocationRecord(record.IsTechnology, record.Range, unchecked((int)record.DisallowedCasterSpellFlags),
             unchecked((int)record.DisallowedTargetSpellFlags), unchecked((int)record.DisallowedTargetCritterFlags));
