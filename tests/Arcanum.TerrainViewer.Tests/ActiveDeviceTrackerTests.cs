@@ -26,10 +26,15 @@ public sealed class ActiveDeviceTrackerTests
         var t = new ActiveDeviceTracker();
         for (var i = 0; i < 100; i++) t.Observe(DeviceSignal.PadAxis(i * .01, .2 + (i % 2) * .05));
         t.Update(5); Assert.AreEqual(ActiveDevice.KeyboardMouse, t.Active);
-        t.Observe(DeviceSignal.PadAxis(5, -.9)); t.Update(5.3);
-        Assert.AreEqual(ActiveDevice.Pad, t.Active);
-        t.Observe(DeviceSignal.PadAxis(6, double.NaN)); t.Update(7);
-        Assert.AreEqual(ActiveDevice.Pad, t.Active);
+        Assert.AreEqual(-1, t.LastPadDeviceId, "drift leaves no trace");
+        t.Observe(DeviceSignal.PadAxis(5, -.9, 2)); t.Update(5.3);
+        Assert.AreEqual(ActiveDevice.Pad, t.Active); Assert.AreEqual(2, t.LastPadDeviceId);
+        foreach (var bad in new[] { double.NaN, double.PositiveInfinity })
+        {
+            var fresh = new ActiveDeviceTracker();
+            fresh.Observe(DeviceSignal.PadAxis(6, bad)); fresh.Update(7);
+            Assert.AreEqual(ActiveDevice.KeyboardMouse, fresh.Active, bad.ToString());
+        }
     }
 
     [TestMethod]
@@ -123,5 +128,37 @@ public sealed class ActiveDeviceTrackerTests
         var t = new ActiveDeviceTracker(initial: ActiveDevice.Pad);
         t.Observe(DeviceSignal.MouseClick(1, P(900, 400))); t.Update(1.3);
         Assert.AreEqual(ActiveDevice.KeyboardMouse, t.Active);
+    }
+
+    [TestMethod]
+    public void AMouseEchoOfARealTouchDoesNotFlipTheDevice()
+    {
+        var t = new ActiveDeviceTracker(initial: ActiveDevice.Pad);
+        t.Observe(DeviceSignal.Touch(1, P(5, 5)));
+        t.Observe(DeviceSignal.MouseClick(1.01, P(5, 5)));
+        t.Observe(DeviceSignal.MouseMotion(1.02, P(60, 5), P(55, 0))); // an echoed drag
+        t.Update(1.3); Assert.AreEqual(ActiveDevice.Touch, t.Active);
+        t.Update(2); Assert.AreEqual(ActiveDevice.Touch, t.Active);
+        t.Observe(DeviceSignal.MouseMotion(3, P(100, 5), P(40, 0))); t.Update(3.3);
+        Assert.AreEqual(ActiveDevice.KeyboardMouse, t.Active, "after the echo window the mouse is the mouse");
+    }
+
+    [TestMethod]
+    public void AChangeThatStoodLongEnoughSurvivesALateUpdate()
+    {
+        var t = new ActiveDeviceTracker();
+        t.Observe(DeviceSignal.PadButton(1)); t.Observe(DeviceSignal.Key(1.26)); // no Update between them
+        Assert.AreEqual(ActiveDevice.Pad, t.Active, "the pad change had stood 260 ms");
+    }
+
+    [TestMethod]
+    public void BadTimesAndPositionsAreIgnoredAndAClockResetDoesNotFakeMotion()
+    {
+        var t = new ActiveDeviceTracker(initial: ActiveDevice.Pad);
+        t.Observe(DeviceSignal.MouseMotion(double.NaN, P(0, 0), P(50, 0)));
+        t.Observe(DeviceSignal.MouseMotion(1, P(double.PositiveInfinity, 0), P(50, 0)));
+        t.Update(5); Assert.AreEqual(ActiveDevice.Pad, t.Active);
+        for (var i = 0; i < 20; i++) t.Observe(DeviceSignal.MouseMotion(100 - i, P(i, 0), P(1, 0))); // the clock runs backwards
+        t.Update(200); Assert.AreEqual(ActiveDevice.Pad, t.Active);
     }
 }

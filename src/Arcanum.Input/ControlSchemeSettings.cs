@@ -47,7 +47,7 @@ public static class ControlSchemeSettingsCodec
     /// and keeps the others, so a newer build's file never switches the original controls or breaks a launch.</summary>
     public static ControlSchemeSettings DeserializeOrDefault(string? json)
     {
-        if (json is null || json.Length > MaximumBytes) return ControlSchemeSettings.Default;
+        if (json is null || System.Text.Encoding.UTF8.GetByteCount(json) > MaximumBytes) return ControlSchemeSettings.Default;
         try
         {
             using var document = JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = 8 });
@@ -57,7 +57,8 @@ public static class ControlSchemeSettingsCodec
                 || !version.TryGetInt32(out var number) || number != ControlSchemeSettings.CurrentVersion) return ControlSchemeSettings.Default;
             return new ControlSchemeSettings(number, Read(root, "pad", PadScheme.Off), Read(root, "touch", TouchScheme.Off), Read(root, "prompts", PromptStyle.Auto));
         }
-        catch (JsonException) { return ControlSchemeSettings.Default; }
+        // A lone surrogate or a bad escape throws ArgumentException or InvalidOperationException, not JsonException.
+        catch (Exception e) when (e is JsonException or ArgumentException or InvalidOperationException) { return ControlSchemeSettings.Default; }
     }
 
     private static string Token<T>(T value) where T : struct, Enum => value.ToString().ToLowerInvariant();

@@ -18,12 +18,12 @@ public static class GlyphFamilyDetector
         _ => Detect(joyName, joyGuid, hostIsSteamDeck)
     };
 
-    /// <summary>Order: vendor id from the GUID, then name words, then the Deck host fallback; anything unknown is Xbox, the most common layout.</summary>
+    /// <summary>Order: Deck by name (or by Valve vendor on a Deck host), then vendor id from the GUID, then name words, then the Deck host fallback; a Valve virtual pad on an ordinary PC is not a Deck; anything unknown is Xbox, the most common layout.</summary>
     public static GlyphFamily Detect(string? joyName, string? joyGuid, bool hostIsSteamDeck = false)
     {
         var name = (joyName ?? string.Empty).ToLowerInvariant();
         var vendor = VendorOf(joyGuid);
-        if (vendor == VendorValve || name.Contains("steam deck") || name.Contains("steam controller") || name.Contains("steamdeck")) return GlyphFamily.SteamDeck;
+        if ((vendor == VendorValve && hostIsSteamDeck) || name.Contains("steam deck") || name.Contains("steam controller") || name.Contains("steamdeck")) return GlyphFamily.SteamDeck;
         if (vendor == VendorSony || Has(name, "dualsense", "dualshock", "playstation", "ps5", "ps4", "ps3", "sony")) return GlyphFamily.PlayStation;
         if (vendor == VendorNintendo || Has(name, "nintendo", "switch", "pro controller", "joy-con", "joycon")) return GlyphFamily.Nintendo;
         // Steam Input hands the game a virtual Xbox pad; on a Deck host that is the Deck's own pad.

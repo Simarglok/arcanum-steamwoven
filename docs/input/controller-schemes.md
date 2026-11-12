@@ -5,7 +5,8 @@ Status: **concept accepted for building as an experiment** (owner request 2026-1
 **next to** the original mouse + keyboard (which keeps the original scheme, owner-accepted; KM-01 in
 [the original's controls](../requirements/original-keyboard-mouse.md): two adapters over one shared simulation), so they can be built into the
 prototype (`./arcanum area` / packaged build) and compared by a person. The existing lab and its
-presets are described in [gamepad presets](gamepad-presets.md). Nothing here is implemented yet; the
+presets ([gamepad presets](gamepad-presets.md)) are a reference only: owner decision 2026-11-12, nothing already built for the
+gamepad has to be kept and the schemes may be rewritten from scratch where that is better. Nothing here is implemented yet; the
 slices and their status are in the [issue map](#issue-map).
 
 Target segments:
@@ -69,7 +70,7 @@ single-point emulated touch.
 
 ## 1. Scheme A — Direct (cursorless)
 
-Promotes the ARC-GPAD-005 lab (Radial preset) into the game. Precision moments (ground target,
+Takes the ideas of the ARC-GPAD-005 lab (Radial preset) into the game as a reference, not as a base. Precision moments (ground target,
 area spell, turn-based step) use a **target reticle**, not a free cursor.
 
 | Input | Exploration (real time) | Combat (real time) | Turn-based | Windows |
@@ -205,7 +206,7 @@ All work items are GitHub issues under the epic [#1371](https://github.com/Simar
 | Scheme B Pointer | [#1380](https://github.com/Simarglok/arcanum-steamwoven/issues/1380), [#1381](https://github.com/Simarglok/arcanum-steamwoven/issues/1381) |
 | Scheme A Direct | [#1382](https://github.com/Simarglok/arcanum-steamwoven/issues/1382), [#1383](https://github.com/Simarglok/arcanum-steamwoven/issues/1383), [#1384](https://github.com/Simarglok/arcanum-steamwoven/issues/1384), [#1385](https://github.com/Simarglok/arcanum-steamwoven/issues/1385) |
 | Scheme C Touch+pad | [#1389](https://github.com/Simarglok/arcanum-steamwoven/issues/1389), [#1390](https://github.com/Simarglok/arcanum-steamwoven/issues/1390) |
-| Deck build path; physical check of the lab | [#1386](https://github.com/Simarglok/arcanum-steamwoven/issues/1386), [#1388](https://github.com/Simarglok/arcanum-steamwoven/issues/1388) |
+| Deck build path; physical check of the lab (cancelled) | [#1386](https://github.com/Simarglok/arcanum-steamwoven/issues/1386), [#1388](https://github.com/Simarglok/arcanum-steamwoven/issues/1388) |
 | Human test and decision | [#1391](https://github.com/Simarglok/arcanum-steamwoven/issues/1391) |
 
 Requirements covered: FR-PRODUCT-002 (keyboard/mouse and semantic gamepad control), FR-UI-002,
@@ -227,12 +228,12 @@ The Godot-free parts of §0 live in `src/Arcanum.Input` and are tested in `tests
   within 100 ms. Touch: a touch event. Pointer-from-pad: mouse motion alone within 2 s of pad use keeps the pad
   prompts and only reports `CursorVisible` (for 3 s). A click or key still switches. With emulated touch on, a click that
   jumps more than 24 px from the last mouse position with no motion before it counts as touch (the Deck touch
-  screen under Proton). A change shows after 250 ms and is dropped if the active device is used again within that time.
+  screen under Proton). A click or motion within 0.5 s of a touch is the engine's mouse echo of that touch and is ignored. A change shows after 250 ms and is dropped if the active device is used again within that time.
   The tracker holds no window or focus state, so its consumer must not reset open windows on `Changed` (checked in
   the viewer slice, [#1374](https://github.com/Simarglok/arcanum-steamwoven/issues/1374)). The pad id of the last pad signal is
   kept (`LastPadDeviceId`), never assumed to be 0.
-- `GlyphFamilyDetector` and `ControllerGlyphs` (§0.3): family from the override, then the vendor id in the GUID
-  (Sony, Nintendo, Valve), then name words; an unknown pad is Xbox. A pad behind Steam Input reports a virtual Xbox pad, so
+- `GlyphFamilyDetector` and `ControllerGlyphs` (§0.3): family from the override, then a Deck name (or the Valve vendor id on a Deck host), then the vendor id in the GUID
+  (Sony, Nintendo), then name words; an unknown pad is Xbox. A pad behind Steam Input reports a virtual Xbox pad, so
   on a Deck host (`SteamDeck` environment variable, read by the host) an Xbox-looking pad is the Deck. This is a
   heuristic and needs a check on a real Deck. Labels are text per physical position (Nintendo's bottom button is B).
 
@@ -283,8 +284,14 @@ reusable parts (e.g. reticle, loupe) kept.
    a stub in all schemes.
 3. **Text legibility on 7"** ([#1377](https://github.com/Simarglok/arcanum-steamwoven/issues/1377)): which UI scale of the original windows is acceptable on the Deck
    (relates to ARC-RES-093/094).
-4. **Physical check of the existing lab** (deferred in PR #266, [#1388](https://github.com/Simarglok/arcanum-steamwoven/issues/1388)) before scheme A builds on it.
+4. ~~Physical check of the existing lab~~ ([#1388](https://github.com/Simarglok/arcanum-steamwoven/issues/1388), cancelled 2026-11-12: the lab is no longer the base).
 5. Whether the test may record the evidence log on the owner's devices (local, not committed, [#1376](https://github.com/Simarglok/arcanum-steamwoven/issues/1376)).
+
+**Owner decisions 2026-11-12:** (1) the Deck runs the Windows package under Proton first, scheme C is built on
+single-point emulated touch, a Linux export is not planned now; (2) the UI scale of the original windows is a whole
+number with the smallest text at least 9 px; (3) the physical check of the old lab is cancelled, the schemes are
+checked on the new builds, and the lab is a reference only; (4) the followers' party radial item stays a stub; (5) the
+evidence log may be recorded on the owner's devices (local, opt-in, never committed).
 
 ## Sources
 

@@ -30,7 +30,7 @@ public sealed class ControlSchemeSettingsTests
     [TestMethod]
     public void CorruptOrForeignTextGivesDefaults()
     {
-        foreach (var text in new string?[] { null, "", "not json", "[]", "{}", "{\"version\":2,\"pad\":\"direct\"}", "{\"version\":\"1\"}", "{\"version\":1.5}",
+        foreach (var text in new string?[] { null, "", "not json", "[]", "{}", "{\"version\":2,\"pad\":\"direct\"}", "{\"version\":\"1\"}", "{\"version\":1.5}", "{\"version\":1,\"pad\":\"\uD800\"}", "{\"version\":1,\"pad\":\"\\uD800\\\"}",
             new string(' ', ControlSchemeSettingsCodec.MaximumBytes + 1) })
             Assert.AreEqual(ControlSchemeSettings.Default, ControlSchemeSettingsCodec.DeserializeOrDefault(text), text);
     }

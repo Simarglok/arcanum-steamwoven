@@ -21,7 +21,7 @@ public readonly record struct DeviceSignal(DeviceSignalKind Kind, double Time, V
 /// <summary>Numbers of concept §0.2; the defaults are the concept's.</summary>
 public sealed record ActiveDeviceOptions(double PadDeadzone = .3, double MouseMotionPixels = 12, double MouseMotionWindow = .1,
     double PointerFromPadWindow = 2, double PointerFromPadFade = 3, double Hysteresis = .25,
-    bool EmulatedTouchClicks = true, double EmulatedTouchJump = 24);
+    bool EmulatedTouchClicks = true, double EmulatedTouchJump = 24, double TouchMouseEchoWindow = .5);
 
 /// <summary>"Last meaningful input wins" with hysteresis, no clocks and no Godot. Meaningful input: a pad button, a stick or trigger beyond the
 /// deadzone (drift is ignored), a mouse click or key, mouse motion over a threshold, a touch. Mouse motion alone that follows pad use within the
@@ -41,6 +41,7 @@ public sealed class ActiveDeviceTracker
     private bool _hasMouseAt;
     private Vec2 _mouseAt;
     private bool _motionSinceClick;
+    private double _lastTouchTime = double.NegativeInfinity;
 
     public ActiveDeviceTracker(ActiveDeviceOptions? options = null, ActiveDevice initial = ActiveDevice.KeyboardMouse)
     { _options = options ?? new ActiveDeviceOptions(); Active = initial; }
@@ -55,6 +56,8 @@ public sealed class ActiveDeviceTracker
 
     public void Observe(in DeviceSignal signal)
     {
+        if (!double.IsFinite(signal.Time) || !Finite(signal.Position) || !Finite(signal.Delta)) return;
+        Update(signal.Time);
         var device = Classify(signal);
         if (device is { } d) Meaningful(d, signal.Time);
         Update(signal.Time);
@@ -82,12 +85,15 @@ public sealed class ActiveDeviceTracker
             case DeviceSignalKind.Key:
                 return ActiveDevice.KeyboardMouse;
             case DeviceSignalKind.Touch:
-                _mouseAt = s.Position; _hasMouseAt = true; _motionSinceClick = false; return ActiveDevice.Touch;
+                _mouseAt = s.Position; _hasMouseAt = true; _motionSinceClick = false; _lastTouchTime = s.Time; return ActiveDevice.Touch;
             case DeviceSignalKind.MouseClick:
             {
+                // The engine's mouse emulation echoes a real touch as a click or motion at the same spot: not the mouse.
+                if (s.Time - _lastTouchTime <= _options.TouchMouseEchoWindow) { _mouseAt = s.Position; _hasMouseAt = true; _motionSinceClick = false; return null; }
                 var jumped = _options.EmulatedTouchClicks && _hasMouseAt && !_motionSinceClick
                     && Vec2.Distance(_mouseAt, s.Position) > _options.EmulatedTouchJump;
                 _mouseAt = s.Position; _hasMouseAt = true; _motionSinceClick = false;
+                if (jumped) _lastTouchTime = s.Time;
                 return jumped ? ActiveDevice.Touch : ActiveDevice.KeyboardMouse;
             }
             default:
@@ -97,15 +103,21 @@ public sealed class ActiveDeviceTracker
 
     private ActiveDevice? Motion(in DeviceSignal s)
     {
-        _mouseAt = s.Position; _hasMouseAt = true; _motionSinceClick = true;
+        _mouseAt = s.Position; _hasMouseAt = true;
+        if (s.Time - _lastTouchTime <= _options.TouchMouseEchoWindow) return null;
+        _motionSinceClick = true;
+        if (_motion.Count > 0 && s.Time < _motion.Peek().Time) { _motion.Clear(); _motionSum = 0; } // the host clock went backwards
         var pixels = s.Delta.Length;
         if (!double.IsFinite(pixels)) return null;
         _motion.Enqueue((s.Time, pixels)); _motionSum += pixels;
         while (_motion.Count > 0 && s.Time - _motion.Peek().Time > _options.MouseMotionWindow) _motionSum -= _motion.Dequeue().Pixels;
+        if (_motion.Count == 0) _motionSum = 0;
         if (_motionSum <= _options.MouseMotionPixels) return null;
         if (s.Time - _lastPadTime <= _options.PointerFromPadWindow) { _lastPointerFromPadTime = s.Time; return null; }
         return ActiveDevice.KeyboardMouse;
     }
+
+    private static bool Finite(Vec2 v) => double.IsFinite(v.X) && double.IsFinite(v.Y);
 
     private void PadUsed(in DeviceSignal s) { _lastPadTime = s.Time; if (s.PadDeviceId >= 0) LastPadDeviceId = s.PadDeviceId; }
 

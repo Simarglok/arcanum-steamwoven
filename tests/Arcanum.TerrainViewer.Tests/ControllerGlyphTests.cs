@@ -30,7 +30,8 @@ public sealed class ControllerGlyphTests
             ("Nintendo Switch Pro Controller", null, GlyphFamily.Nintendo),
             ("Gamepad", Guid(0x057e), GlyphFamily.Nintendo),
             ("Steam Deck Controller", null, GlyphFamily.SteamDeck),
-            ("anything", Guid(0x28de), GlyphFamily.SteamDeck),
+            ("anything", Guid(0x28de), GlyphFamily.Xbox),
+            ("Xbox 360 Controller", Guid(0x28de), GlyphFamily.Xbox),
             ("Unknown pad", "not a guid", GlyphFamily.Xbox),
             (null, null, GlyphFamily.Xbox)
         ];
@@ -42,6 +43,7 @@ public sealed class ControllerGlyphTests
     {
         Assert.AreEqual(GlyphFamily.SteamDeck, GlyphFamilyDetector.Detect("Xbox 360 Controller", Guid(0x045e), hostIsSteamDeck: true));
         Assert.AreEqual(GlyphFamily.Xbox, GlyphFamilyDetector.Detect("Xbox 360 Controller", Guid(0x045e), hostIsSteamDeck: false));
+        Assert.AreEqual(GlyphFamily.SteamDeck, GlyphFamilyDetector.Detect("anything", Guid(0x28de), hostIsSteamDeck: true));
         Assert.AreEqual(GlyphFamily.PlayStation, GlyphFamilyDetector.Detect("PS5 Controller", null, hostIsSteamDeck: true), "a real external pad keeps its own family");
     }
 
