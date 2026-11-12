@@ -59,4 +59,4 @@ nothing, as in the original.
 
 ## Not ready
 
-- Sounds and tinting are read but not played (the live light of a lit entry is built, ARC-MAGIC-1229); `can_autoscale` and the rotation are carried in the art id but not applied.
+- Sounds and tinting are read but not played (the live light of a lit entry is built, ARC-MAGIC-1229, and its run is saved, ARC-MAGIC-1280); `can_autoscale` and the rotation are carried in the art id but not applied.

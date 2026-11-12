@@ -222,6 +222,14 @@ public enum SpellCastEventKind
     WeaponDropped,
     /// <summary>ARC-MAGIC-1232: the session refused the weapon block's drop on <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the damage stands.</summary>
     WeaponDropNotSaved,
+    /// <summary>ARC-MAGIC-1146 (the Recharge component 0x454920): the item <see cref="SpellCastEvent.Object"/> now has <see cref="SpellCastEvent.Value"/> spell charges; <see cref="SpellCastEvent.Detail"/> is the component's amount.</summary>
+    ItemRecharged,
+    /// <summary>ARC-MAGIC-1146: the session refused the recharge of the item <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the spell goes on.</summary>
+    ItemRechargeNotSaved,
+    /// <summary>ARC-MAGIC-1146 (the Trait64 component 0x452E40): the NPC <see cref="SpellCastEvent.Object"/> got the field <see cref="SpellCastEvent.Value"/> (242 teleport tile with its map, 230 fleeing from) written; <see cref="SpellCastEvent.Detail"/> is the source index.</summary>
+    Trait64Written,
+    /// <summary>ARC-MAGIC-1146: the session refused the Trait64 write on <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the spell goes on.</summary>
+    Trait64NotSaved,
 }
 
 /// <summary>
