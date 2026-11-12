@@ -269,7 +269,7 @@ public partial class TerrainViewerApp
                 AreaSmokePlace(new AreaMapRuntime(_readyArea!.Snapshot, start.Snapshot, start.Chart), start.State.CommittedCell);
             }
             _mapStreamLog.Clear();
-            var releasesAtStart = _cursorReleases; var reappliesAtStart = CursorReappliesForSelfTest; var cursorArtReady = _cursorShown is not null;
+            var releasesAtStart = _cursorReleases; var reappliesAtStart = CursorReappliesForSelfTest;
             if (observeAi)
             {
                 CalmNpcsForSmoke(carried!, carried!.QueryMapInventory(new(CurrentAreaMap))?.Holders.Where(h => h.Kind == SessionHolderKind.Npc).Select(h => h.Entity) ?? []);
@@ -360,7 +360,7 @@ public partial class TerrainViewerApp
             Require(_mapStreamLog.Count >= StreamSmokeMoves, "MOVES");
             GD.Print($"ARC-UI-056 stream cursor releases={_cursorReleases - releasesAtStart} reapplies={CursorReappliesForSelfTest - reappliesAtStart} shown={_cursorShown is not null}");
             // ARC-UI-056 (#1357): the cursor art stays set across every window move (never released), and is handed over again after each swap.
-            if (cursorArtReady)
+            if (CursorContent() is { Ready: true })
             {
                 Require(_cursorReleases == releasesAtStart, $"CURSOR_RELEASED {_cursorReleases - releasesAtStart}");
                 Require(_cursorShown is not null && CursorReappliesForSelfTest - reappliesAtStart >= _mapStreamLog.Count, $"CURSOR_NOT_REAPPLIED {CursorReappliesForSelfTest - reappliesAtStart}/{_mapStreamLog.Count}");

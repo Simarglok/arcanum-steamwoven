@@ -73,6 +73,7 @@ public partial class TerrainViewerApp
         {
             // ARC-UI-056 (#1357): a map window that is loading or being swapped in keeps the cursor art; only a scene that ended releases it.
             if (!_exiting && _cursorShown is not null && MapStreamInFlight) return;
+            _cursorReapply = false;
             if (_cursorShown is not null)
             {
                 _cursorReleases++;

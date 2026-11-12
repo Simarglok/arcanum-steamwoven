@@ -872,8 +872,8 @@ game's state, never the object under the pointer: what a click would do there st
   once and `ARC-UI-056 cursor art=N mode=M` at each change.
 - **Across a map window move** (ARC-UI-1357, FR-UI-002). While a window loads (`MapStreamInFlight`) the cursor art is not released
   even if the scene's ready mode is momentarily not `area`, and the first frame after the window swap hands the art to Godot
-  again (`ARC-UI-056 window swap …` logs the swap's main-thread time and Godot's shape). The `stream` smoke stage checks that no
-  move released the art and that every swap re-applied it. The swap itself is one synchronous step of about 0.2-0.4 s, with no frame
+  again (`ARC-UI-056 window swap …` logs the swap's main-thread time and Godot's shape). The `stream` smoke stage checks (when the game's cursor art reads) that the art is shown, that no
+  move released it and that every swap re-applied it. `ClearPublishedScene` does set the ready mode to `TerrainOnly` for that span, so the hold is hardening, not a proven cure. The swap itself is one synchronous step of about 0.2-0.4 s, with no frame
   between the clear and the publish, so the state never showed the system shape in the smoke; the owner's report of a system
   cursor for a moment at a window move is kept on the owner recheck list.
 - **Without the art** (`AreaCursorContent.Ready` false: the self-test, another layout, a missing or unreadable file, a frame
