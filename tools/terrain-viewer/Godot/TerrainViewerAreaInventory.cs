@@ -60,6 +60,9 @@ public partial class TerrainViewerApp
         var kept = keepLeft ? _homes?.Reads ?? [] : [];
         _homes = new AreaHomeDirectory(new AreaMapHomes(arguments, MapCompanionFacts));
         foreach (var read in kept) _homes.Remember(read);
+        // ARC-DEV-1151: taken (and cleared) before any early return, so a scene that binds no host does not leave the list to a later one.
+        var unreadLeft = keepLeft ? _unreadCarriedLeft : [];
+        _unreadCarriedLeft = [];
         if (_areaSession is not { } session || result.Area is not { } area || result.AreaStepSnapshot is not { } steps) return;
         var sources = new List<(string Name, AreaSnapshot Snapshot, Arcanum.Data.Traversal.AreaStepSnapshot Steps)> { ("exterior", area.Snapshot, steps) };
         if (result.Cave is { } cave) sources.Add(("cave", cave.Area.Snapshot, cave.Steps));
@@ -92,8 +95,7 @@ public partial class TerrainViewerApp
         // ARC-DEV-314 (B01): the rows of the items the hero holds, read from the host of the window the run left (a window of the main map is runtime map 1 each time).
         host.Retain(heldLeft);
         // ARC-DEV-1151: and the items whose row the last host could not read, so a map change does not ask for them again.
-        host.RetainUnread(keepLeft ? _unreadCarriedLeft : []);
-        _unreadCarriedLeft = [];
+        host.RetainUnread(unreadLeft);
         AdoptAreaInventory(host);
     }
 
