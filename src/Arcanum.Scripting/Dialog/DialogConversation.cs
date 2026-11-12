@@ -220,6 +220,9 @@ public sealed partial class DialogConversation
             case DialogOptionTransition.Trainer:
                 OpenTalk(plan!);
                 return Result();
+            case DialogOptionTransition.Rumor:
+                OpenRumor(plan!);
+                return Result();
             case DialogOptionTransition.Barter:
                 if (OpenBarter(plan!.Reply.Barter!.Value))
                 {
@@ -426,7 +429,7 @@ public sealed partial class DialogConversation
                 reply.TextKind,
                 text,
                 reply.Marker,
-                reply.Trainer is null ? reply.Transition : DialogOptionTransition.Trainer,
+                reply.Trainer is not null ? DialogOptionTransition.Trainer : reply.Rumor is not null ? DialogOptionTransition.Rumor : reply.Transition,
                 reply.Target is null ? null : new DialogNodeId(reply.Target.Id),
                 reply.ScriptLine,
                 new DialogOptionToken(_identity, Turn, _generation, response),
@@ -1439,6 +1442,7 @@ public sealed partial class DialogConversation
         DialogOperationSource? insult = null;
         DialogOperationSource? barter = null;
         int[]? trainer = null;
+        RumorOffer? rumor = null;
         var found = DialogText.Marker(text, out var exact);
         if (found is { Letter: 'd' or 'q' or 'u' or 'x' })
         {
@@ -1483,6 +1487,16 @@ public sealed partial class DialogConversation
             text = string.Empty;
             phrase = true;
             trainer = skills;
+        }
+        else if (found is { Letter: 'r' } && ToOffer(ParseRumorReply(text)) is { } offer && RumorAvailable(offer))
+        {
+            // ARC-SCRIPT-1304 (ledger RMR1): the original's rumor reply (the prefix "r:", either case, 0x416C10): a generated phrase (the PC's class line
+            // 2000) whose pick runs the reply's action and then draws one rumor of the list after the marker (state 8, 0x414810).
+            kind = DialogOptionTextKind.Generated;
+            marker = found;
+            text = string.Empty;
+            phrase = true;
+            rumor = offer;
         }
         else if (found is { Letter: 'b' or 'h' or 'l' or 'p' } && exact || found is { Letter: 'c' or 'r' or 't' or 'z' })
         {
@@ -1580,7 +1594,7 @@ public sealed partial class DialogConversation
                 block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedInteraction, transfer.Source);
             }
         }
-        if (block is null && trainer is not null && (transfer is not null || action?.Any(OpensWindow) == true))
+        if (block is null && (trainer is not null || rumor is not null) && (transfer is not null || action?.Any(OpensWindow) == true))
         {
             // A dialog transfer or a window in the same reply moves the dialog itself: outside this subset, as for b:.
             block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedInteraction, transfer?.Source ?? action!.First(OpensWindow).Source);
@@ -1641,7 +1655,7 @@ public sealed partial class DialogConversation
             }
         }
         return new ReplyPlan(record, gender.Value, record.IqValue!.Value, condition, kind, text, marker, transition, target, line, action, block,
-            block is null ? insult : null, block is null ? barter : null, phrase, block is null ? trainer : null);
+            block is null ? insult : null, block is null ? barter : null, phrase, block is null ? trainer : null, block is null ? rumor : null);
     }
 
     private static bool CheckTokens(string text, DialogNodeId node, DialogResponseId? response, out DialogConversationFrontier? frontier, out DialogConversationFailure? failure)
@@ -1796,7 +1810,8 @@ public sealed partial class DialogConversation
         DialogOperationSource? Insult,
         DialogOperationSource? Barter = null,
         bool Phrase = false,
-        int[]? Trainer = null);
+        int[]? Trainer = null,
+        RumorOffer? Rumor = null);
 
     private sealed record OfferPlan(ReplyPlan Reply, StepPlan? Target);
 }
