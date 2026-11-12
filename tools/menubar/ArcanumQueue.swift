@@ -269,8 +269,11 @@ while let flag = arguments.first {
     case "--lock": if let value = arguments.first { lockURL = URL(fileURLWithPath: value); arguments.removeFirst() }
     case "--idle-minutes": if let value = arguments.first, let minutes = Double(value) { idleMinutes = minutes; arguments.removeFirst() }
     case "--open-menu": openMenu = true
+    case "--set-pause", "--clear-pause":  // what the menu's Pause item does, for scripts and the self-check: act and exit
+        QueueFolder(url: queueURL).setPaused(flag == "--set-pause")
+        exit(0)
     default:
-        FileHandle.standardError.write("usage: ArcanumQueue [--queue-dir DIR] [--lock FILE] [--idle-minutes N (0: never)] [--open-menu]\n".data(using: .utf8)!)
+        FileHandle.standardError.write("usage: ArcanumQueue [--queue-dir DIR] [--lock FILE] [--idle-minutes N (0: never)] [--open-menu] [--set-pause|--clear-pause]\n".data(using: .utf8)!)
         exit(2)
     }
 }

@@ -494,7 +494,7 @@ display and reads the queue's own files, so it works from whichever checkout sta
   own home) does not, unless `ARCANUM_QUEUE_MENUBAR=1`; other systems than macOS do not.
 
 Tests: `python3 -B -m unittest tools.local_dev.test_menubar tools.local_dev.test_run_queue` (the pause tests are in the latter); the app itself is checked
-by running it (`./arcanum queue --app`, then a queued run and a screenshot of the menu).
+by running it (`./arcanum queue --app`, then a queued run and a screenshot of the menu); `ArcanumQueue --set-pause` / `--clear-pause` do what its Pause item does and exit, to check that the flag it writes is the one the queue reads.
 
 ### Queue order (ARC-DEV-390)
 
