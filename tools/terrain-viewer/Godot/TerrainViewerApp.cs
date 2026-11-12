@@ -245,6 +245,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("spell-end") == true) await RunAreaSpellEndSmokeAsync(result);
                                 // ARC-DEV-304 (B11, SM09): only when named, the spell holds (stone, paralysis, entangle) written on the hero stop its steps, drop its clicks and let a walk resume after the END (--hero, Crash Site).
                                 if (only?.Contains("hold-hero") == true) await RunAreaHoldHeroSmokeAsync(result);
+                                // ARC-DEV-1148 (magic audit leftover): only when named, spells 30 and 77 on the hero and 46 and 76 on an NPC add their effects, move the stats and take them off at the END (--hero, Crash Site).
+                                if (only?.Contains("spell-effects") == true) await RunAreaSpellEffectsSmokeAsync(result);
                                 // ARC-MAGIC-036 (MA-5): only when named, Spatial Distortion's Movement component relocates the hero along the path request, at most eight tiles (--hero, Crash Site).
                                 if (only?.Contains("movement") == true) await RunAreaMovementSmokeAsync(result);
                                 // ARC-DEV-335 (V7d, B50): only when named, a light worn by the hero lights the area around it (with --hero, a lit map).
