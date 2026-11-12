@@ -812,8 +812,8 @@ on the pick of ARC-UI-005.
   come from `GameSessionOwner.QueryItemViewer`, an item's units, charges and condition from the session by its entity (the fields'
   own for an item no map entry is held by the session for). NOT READY: a key ring's own key count (the PC's is shown for every ring), the turn-based action-point preview (0x557370, which also moves the window while a preview is
   up) and the observer other than the local PC (an item worn by another holder reads its holder). A line longer than its
-  291 × 18 rectangle is drawn as the original's 0x550A10 does (ARC-UI-1115, OH20): broken at the rectangle's width, only the lines
-  its height holds drawn (one for a font up to 18 rows high), the rest not drawn, no cut of characters and no second layout; a
+  291 × 18 rectangle is drawn as the original's 0x550A10 does with the original's font art (ARC-UI-1115, OH20; the label stand-in without the game folder is not checked): broken at the rectangle's width, only the lines
+  its height holds drawn (one for a font 10 to 18 rows high), the rest not drawn, no cut of characters and no second layout; a
   right-aligned text wider than its rectangle starts at the left.
 - **The plane wreck at the Crash Site** is one scenery object named "Something Big" among 16 wreckage pieces that carry
   `OF_CLICK_THROUGH`. The original's pick skips them (OH1), so only that one part is hovered, highlighted and named: this is
