@@ -1050,3 +1050,15 @@ A repair of the game's own view, not original behaviour. Compare in the current 
 | # | Step | Expected | Status |
 | --- | --- | --- | --- |
 | 1 | Land at Misty Hills by the world map, rest the mouse pointer on the gypsy trader and walk west along the road (cells about 90172 to 90158 on y = 84179) across the window boundary. | The view goes on with the interface; no bare terrain-only screen, no `stream publication failed` line in `godot.log`. | open |
+
+## ARC-SCRIPT-1360 — The NPC of the first building (PR #1452, 2026-11-12)
+
+The quest NPC of the house at the first building (prototype 17156, dialog 2786, heartbeat 2787) is stored off in the map data; its heartbeat switches him on once the PC's quest 1158 is no longer unknown
+([toggle state](../world/ai-host.md), [ledger SU6](../research/ledger/npc-ai.md)). Compare in both games with a hero whose quest 1158 (from the spirit's task) has been accepted.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | With quest 1158 not started, stand inside the house. | The room is empty. | open |
+| 2 | Accept quest 1158 and stand inside the house (the heartbeat runs every few seconds while the hero is near). | The NPC appears at his cell within a few seconds and his talk (dialog 2786) opens. | open |
+
+Known differences (documented, not bugs): a hero step is not blocked by the switched-on NPC yet (issue #1436).
