@@ -211,7 +211,7 @@ public sealed partial class DialogConversation
             var follow = option.Choice.Kind == TrainerChoiceKind.Follow;
             var reply = _talk!.Reply;
             var rumor = reply.Rumor is not null;
-            offers.Add(new DialogOption(index + 1, response, -1, DialogOptionTextKind.Generated, option.Text, new DialogGeneratedMarker(rumor ? 'r' : 't'),
+            offers.Add(new DialogOption(index + 1, response, -1, DialogOptionTextKind.Generated, option.Text, new DialogGeneratedMarker(rumor ? 'r' : reply.Story ? 'c' : 't'),
                 follow ? reply.Transition : rumor ? DialogOptionTransition.RumorStep : DialogOptionTransition.TrainerStep,
                 follow && reply.Target is not null ? new DialogNodeId(reply.Target.Id) : null,
                 follow ? reply.ScriptLine : null,
