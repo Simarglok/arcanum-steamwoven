@@ -2,8 +2,8 @@
 
 Status: **concept accepted for building as an experiment** (owner request 2026-11-12), epic
 [#1371](https://github.com/Simarglok/arcanum-steamwoven/issues/1371). It defines three schemes that sit
-**next to** the original mouse + keyboard (which stays untouched, owner policy KM-01 in
-[the original's controls](../requirements/original-keyboard-mouse.md)), so they can be built into the
+**next to** the original mouse + keyboard (which keeps the original scheme, owner-accepted; KM-01 in
+[the original's controls](../requirements/original-keyboard-mouse.md): two adapters over one shared simulation), so they can be built into the
 prototype (`./arcanum area` / packaged build) and compared by a person. The existing lab and its
 presets are described in [gamepad presets](gamepad-presets.md). Nothing here is implemented yet; the
 slices and their status are in the [issue map](#issue-map).
