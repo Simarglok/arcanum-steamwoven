@@ -905,3 +905,22 @@ The rule is in [First gold pile](../world/inventory-runtime.md). Compare in both
 | --- | --- | --- | --- |
 | 1 | Fill the whole inventory grid, hold no gold, then receive coins (a dialog reward, selling an item, a successful steal). | The coins do not reach the hero: a pile of coins lies on the hero's tile and the call reports success. | open |
 | 2 | Pick the pile up with the grid still full. | The pickup is refused and the pile stays on the ground; with a free place the coins join the hero's gold. | open |
+
+## ARC-SCRIPT-1163 — NPC state script actions (E5-a, 2026-11-12)
+
+Script actions that change an NPC's own state now run from use, tile, sector, heartbeat and dying scripts ([ledger NS1–NS8](../research/ledger/scripts.md#npc-state-commands-arc-script-1163-e5-a),
+[dispatcher](../scripting/scr-dispatcher-runtime.md#npc-state-commands-arc-script-1163-set-s36)). No installed map is named below because the check that lists the admitted scripts is by script number, not by map; use a
+companion, a shopkeeper and a guard in any town where a quest script touches them, and compare the same quest step in both games.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Make a script release a companion (quest steps that end a companion's service: critter disband). | The companion stops following at once, leaves the party list and keeps standing where it is; it does not say anything. | open |
+| 2 | Reach a quest step that sets or adjusts an NPC's reaction toward the hero, then talk to it. | Its reaction category in the conversation (and the barter prices) match the original after the step; an NPC the hero mind-controls does not change. | open |
+| 3 | Reach a quest step that moves an NPC's day or night standpoint, then wait until the matching time of day (and, for the two extended standpoints, change map). | After the step the NPC goes to the new standpoint at the next day or night change, not the old one. | open |
+| 4 | Reach a quest step that changes the script of an NPC or scenery (change script), then use or talk to it again. | The object runs the new script from then on, with its local flags and counters kept. | open |
+
+Known differences (documented, not bugs):
+
+- Change art number (a door, scenery or creature changing its picture from a script) is not built: scripts that use it are still refused, so those quest steps do nothing in Steamwoven.
+- A script in a dialog (a talk) that uses one of these actions is still refused; only use, tile, sector, heartbeat and dying scripts run them.
+- A reaction or standpoint change acts for NPCs of the map on screen only.

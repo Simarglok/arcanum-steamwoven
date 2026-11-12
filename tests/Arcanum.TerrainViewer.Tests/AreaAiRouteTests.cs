@@ -118,6 +118,18 @@ public sealed class AreaAiRouteTests
     }
 
     [TestMethod]
+    public void A_standpoint_a_script_wrote_is_the_one_the_standpoint_step_uses()
+    {
+        // ARC-SCRIPT-1163 (NS3): the session's day and night standpoints (object fields 0x121, 0x122) win over the row's, whichever period the clock is in.
+        var scene = Open(Npc(0, [], 0, (1, 1), (1, 1)));
+        var packed = SessionNpcStandpoint.Pack(20, 25);
+        Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.SetMapChange(scene.Session.Version, new SessionMapId(Map), SessionNpcStandpoint.Key(scene.Npc, day: true), packed).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.SetMapChange(scene.Session.Version, new SessionMapId(Map), SessionNpcStandpoint.Key(scene.Npc, day: false), packed).Disposition);
+        scene.Host.RunStandpoints(scene.Npc);
+        Assert.AreEqual(new CellCoord(20, 25), Cell(scene), scene.Host.TraceOf(scene.Npc)?.Route);
+    }
+
+    [TestMethod]
     public void An_npc_on_its_standpoint_is_not_moved_and_a_standpoint_beside_it_leaves_it_in_place()
     {
         var scene = Open(Npc(0, [], 0, (10, 20), (10, 20)));

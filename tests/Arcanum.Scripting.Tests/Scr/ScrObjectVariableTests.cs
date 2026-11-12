@@ -156,7 +156,7 @@ public sealed class ScrObjectVariableTests
         var host = With(Program(Do(C(7, N(601), N(0), (Triggerer, 0), (Attachee, 0))), Do(C(100, N(9))), Do(C(1))));
         Assert.AreEqual(9, Use(host).Effects.GlobalFlags.Single().Index, "a missing script returns at once");
 
-        host.Inner.Scripts[601] = ScrScriptLookup.Of(Program(Do(C(CritterDisband))));
+        host.Inner.Scripts[601] = ScrScriptLookup.Of(Program(Do(C(UnsupportedAction))));
         var refused = Use(host);
         Assert.AreEqual((ScrOutcome.Refused, 601, ScrRefusalCode.ActionNotAdmitted), (refused.Outcome, refused.Script, refused.Refusal!.Code));
         Assert.AreSame(ScrEffects.None, refused.Effects);
@@ -193,7 +193,7 @@ public sealed class ScrObjectVariableTests
 
         // A refusal two levels down crosses the middle level.
         host.Inner.Scripts[610] = ScrScriptLookup.Of(Program(Do(C(100, N(40))), Do(C(7, N(611), N(0), (Triggerer, 0), (Attachee, 0))), Do(C(1))));
-        host.Inner.Scripts[611] = ScrScriptLookup.Of(Program(Do(C(100, N(41))), Do(C(CritterDisband))));
+        host.Inner.Scripts[611] = ScrScriptLookup.Of(Program(Do(C(100, N(41))), Do(C(UnsupportedAction))));
         var deep = Use(host);
         Assert.AreEqual((ScrOutcome.Refused, 611, ScrRefusalCode.ActionNotAdmitted, 1), (deep.Outcome, deep.Script, deep.Refusal!.Code, deep.Refusal.Line));
     }

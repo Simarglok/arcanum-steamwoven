@@ -119,6 +119,18 @@ public sealed class AreaAiHostScriptWalkTests
     }
 
     [TestMethod]
+    public void A_script_reaction_names_what_happened_and_ignores_what_is_not_an_npc_of_the_host()
+    {
+        // ARC-SCRIPT-1163 (NS2): the reaction change of an NPC this host runs toward the hero; anything else is answered, not changed.
+        var (f, host) = Open();
+        using var fixture = f;
+        StringAssert.Contains(host.ScriptReaction("npc:nobody", 5, set: false), "not an NPC");
+        StringAssert.Contains(host.ScriptReaction("pc", 5, set: true), "not an NPC");
+        var answer = host.ScriptReaction(f.A, 5, set: false);
+        Assert.AreEqual("adjust reaction 5 Changed None", answer, "the session took the change");
+    }
+
+    [TestMethod]
     public void A_script_prone_is_refused_by_a_priority_5_run_and_changes_nothing()
     {
         var (f, host) = Open();
