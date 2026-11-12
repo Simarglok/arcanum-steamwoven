@@ -149,6 +149,11 @@ class OracleSelfTest(unittest.TestCase):
     def test_a_stub_may_answer_a_64_bit_handle(self):
         self.assertEqual(self.emulator().call(HIGH_HALF, (), code=own(HIGH_HALF), stubs={STUB: lambda argument: (7, 0x42)}), 0x42)
 
+    def test_the_high_word_of_a_64_bit_answer_is_kept(self):
+        emulator = self.emulator()
+        self.assertEqual(emulator.call(HIGH_HALF, (), code=own(HIGH_HALF), stubs={STUB: lambda argument: (7, 0xFFFFFFFE)}), -2)
+        self.assertEqual(emulator.edx, 0xFFFFFFFE)
+
     def test_a_stub_rejecting_its_arguments_fails_the_run(self):
         stub, _ = self.stat_stub(0x12, 5)
         self.assertEqual(self.failure(STAT, (1, 2), code=own(STAT), stubs={STUB: stub}, readable=(Range(GLOBAL, GLOBAL + 4),)).kind, "stub")
@@ -373,12 +378,13 @@ class OracleSelfTest(unittest.TestCase):
             with self.assertRaises(StubRejected, msg=f"{address:#x}{arguments}"):
                 call(address, *arguments)
 
-    def test_the_registry_names_thirty_eight_functions_with_their_own_code_first(self):
-        self.assertEqual(sorted(oracle_functions.FUNCTIONS), [0x4507D0, 0x4508A0, 0x4518D0, 0x4521A0, 0x452F20, 0x453410, 0x4534E0, 0x4537B0,
-                                                              0x453B20, 0x453D40, 0x453EE0, 0x453FA0, 0x4545E0, 0x454700, 0x455250, 0x455550,
-                                                              0x456430, 0x456A10, 0x457110, 0x461F80, 0x4A68B0, 0x4A6900, 0x4A6980, 0x4B1660, 0x4B1790,
-                                                              0x4B5810, 0x4C5EB0, 0x4C6170, 0x4C62E0, 0x4C6410, 0x4C69F0, 0x4CC380, 0x4F2D20,
-                                                              0x4F40B0, 0x4F5090, 0x4F50C0, 0x4F51B0, 0x4F5270])
+    def test_the_registry_names_forty_eight_functions_with_their_own_code_first(self):
+        self.assertEqual(sorted(oracle_functions.FUNCTIONS), sorted([
+            0x4507D0, 0x4508A0, 0x4518D0, 0x4521A0, 0x452F20, 0x453410, 0x4534E0, 0x4537B0, 0x453B20, 0x453D40, 0x453EE0, 0x453FA0, 0x4545E0,
+            0x454700, 0x455250, 0x455550, 0x456430, 0x456A10, 0x457110, 0x461F80, 0x4A68B0, 0x4A6900, 0x4A6980, 0x4B1660, 0x4B1790, 0x4B5810,
+            0x4C5EB0, 0x4C6170, 0x4C62E0, 0x4C6410, 0x4C69F0, 0x4CC380, 0x4F2D20, 0x4F40B0, 0x4F5090, 0x4F50C0, 0x4F51B0, 0x4F5270,
+            # ARC-DEV-1105: the first batch of pure numeric functions (V3 of the function audit plan)
+            0x4200C0, 0x420110, 0x4B0F50, 0x4B8D50, 0x4B96F0, 0x4C5F70, 0x4C64D0, 0x4C64E0, 0x4C6B10, 0x4CFCD0]))
         for address, spec in oracle_functions.FUNCTIONS.items():
             self.assertEqual(spec.code[0][0], address)
             self.assertTrue(all(start < end for start, end in spec.code))
@@ -386,6 +392,44 @@ class OracleSelfTest(unittest.TestCase):
         self.assertEqual(oracle_functions.parse_address("0x4a6900"), 0x4A6900)
         with self.assertRaises(ValueError):
             oracle_functions.parse_address("0x401000")
+
+    def test_the_pure_models_stay_in_the_csharp_domain_and_reach_the_edges(self):
+        rng = random.Random(11)
+        models = oracle_functions.PURE_MODELS
+        self.assertEqual(sorted(models), sorted(spec.model for spec in oracle_functions.FUNCTIONS.values() if spec.model in models))
+
+        def draw(name):
+            return [models[name].draw(rng) for _ in range(10_000)]
+        distance = draw("location-distance")
+        self.assertTrue(all(0 <= c < 2**32 for case in distance for c in case))
+        self.assertTrue(any(c == 2**32 - 1 for case in distance for c in case) and any(a == b for a, _, b, _ in distance))
+        for name, x_limit, y_limit in (("tile-direction", 2**31, 2**31), ("sector-direction", 2**26, 2**31)):
+            cases = draw(name)
+            self.assertTrue(all(0 <= ax < x_limit and 0 <= bx < x_limit and 0 <= ay < y_limit and 0 <= by < y_limit for ax, ay, bx, by in cases), name)
+            deltas = {(abs(bx - ax), abs(by - ay)) for ax, ay, bx, by in cases}
+            self.assertTrue(any(dx == dy and dx > 0 for dx, dy in deltas), name)            # equal axes
+            self.assertTrue(any(2 * dy == dx and dy > 0 for dx, dy in deltas), name)        # exactly twice
+            self.assertTrue(any(2 * dy == dx - 1 or 2 * dy == dx + 1 for dx, dy in deltas), name)  # either side of the edge
+            self.assertTrue(any(dx == 0 or dy == 0 for dx, dy in deltas) and any(ax == bx and ay == by for ax, ay, bx, by in cases), name)
+        sectors = draw("sector-direction")
+        self.assertEqual(oracle_functions._sector_arguments(sectors[0])[2:], ((sectors[0][3] << 26 | sectors[0][2]) & 0xFFFFFFFF,
+                                                                           (sectors[0][3] << 26 | sectors[0][2]) >> 32))
+        for name in ("window-estimate", "window-direction"):
+            cases = draw(name)
+            self.assertTrue(all(0 <= a < 256 and 0 <= b < 256 for a, b in cases), name)
+            self.assertTrue(any(a == b for a, b in cases) and any(abs(a - b) == 16 for a, b in cases), name)
+            self.assertEqual(models[name].arguments(cases[0]), (*cases[0], 16))
+        for name in ("stat-cost", "key-stat-cap", "minimum-key-stat"):
+            values = [v for (v,) in draw(name)]
+            bound = 2**31 - 1 if name == "stat-cost" else 1_000_000
+            self.assertTrue(all(-bound <= v <= bound for v in values), name)
+            self.assertTrue({-3, 0, 1, 20, 21} <= set(values) and any(abs(v) == bound for v in values), name)
+        self.assertEqual({v for (v,) in draw("basic-key-stat")}, set(range(12)))
+        self.assertEqual({v for (v,) in draw("tech-key-stat")}, set(range(4)))
+        for name in ("tile-direction", "sector-direction"):                       # the shift helpers are the only callees
+            self.assertEqual(oracle_functions.FUNCTIONS[0x4B8D50 if name == "tile-direction" else 0x4CFCD0].code[1:], oracle_functions.GEOMETRY_HELPERS)
+        self.assertEqual(models["location-distance"].result(-1, 2), (-1, 2))
+        self.assertEqual(models["window-direction"].result(0x1234_5605, 0), (5,))
 
     def test_the_price_model_stays_in_the_csharp_domain_and_rejects_anything_else(self):
         rng = random.Random(7)
