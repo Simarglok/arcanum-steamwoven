@@ -792,6 +792,49 @@ class QueueRunTests(unittest.TestCase):
         self.assertEqual(len(history), 2)
         self.assertIn("exit=0", history[0])
 
+    def test_a_paused_queue_starts_no_waiting_run_until_resume(self) -> None:
+        self.assertTrue(run_queue.set_paused(True, "test"))
+        self.assertFalse(run_queue.set_paused(True, "test"))  # already set
+        self.assertEqual(run_queue.pause_state()["by"], "test")
+        process = self.queued("dotnet", "a", 0.1)
+        self.until(lambda: len(self.live()) == 1)
+        time.sleep(1.5)  # several polls: it neither starts nor leaves
+        self.assertIsNone(process.poll())
+        self.assertFalse(self.log.exists())
+        self.assertIsNone(self.live()[0]["startedAt"])
+        lines = run_queue.status()
+        self.assertTrue(lines[0].startswith("PAUSED") and "--resume" in lines[0], lines)
+        self.assertTrue(lines[1].startswith("waiting #") and lines[1].endswith("(paused)"), lines)
+        self.assertTrue(run_queue.set_paused(False))
+        self.assertFalse(run_queue.set_paused(False))
+        self.finish()
+        self.assertIn("end a", self.events())
+        self.assertFalse(any(line.startswith("PAUSED") for line in run_queue.status()))
+
+    def test_pause_lets_the_running_run_finish_and_holds_the_next(self) -> None:
+        self.queued("window", "a", 1.5)
+        self.until(lambda: self.log.exists())
+        run_queue.set_paused(True, "test")
+        self.queued("window", "b", 0.1)
+        self.until(lambda: any(item.get("startedAt") is None for item in self.live()))
+        self.until(lambda: "end a" in self.log.read_text())
+        time.sleep(1.5)  # a gap far over the poll: b still waits for the resume
+        self.assertNotIn("start b", self.log.read_text())
+        run_queue.set_paused(False)
+        self.finish()
+        found = self.events()
+        self.assertGreaterEqual(found["start b"], found["end a"])
+
+    def test_a_nested_run_is_not_held_by_the_pause(self) -> None:
+        inner = f"sleep 1.5; {sys.executable} -B {ARCANUM} run --kind window -- {sys.executable} -c pass"
+        process = self.wrapper("window", "outer", ["sh", "-c", inner])
+        self.until(lambda: len(self.live()) == 1 and self.live()[0].get("startedAt"))
+        run_queue.set_paused(True, "test")
+        try:
+            self.assertEqual(process.wait(30), 0)  # a run holding a place keeps working: its nested run is not queued
+        finally:
+            run_queue.set_paused(False)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -15,7 +15,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from tools.local_dev import clean, config, daily, launch, manifests, run_queue, smoke, start_check  # noqa: E402
+from tools.local_dev import clean, config, daily, launch, manifests, menubar, run_queue, smoke, start_check  # noqa: E402
 
 LOCAL = ROOT / "tools" / "arcanum-local"
 DEFAULT_GAME_ROOT = Path("/Applications/Arcanum")
@@ -239,6 +239,21 @@ def positive(value: str) -> int:
 
 
 def queue(args: argparse.Namespace) -> int:
+    if args.pause or args.resume:  # ARC-DEV-1344: the same flag the menu-bar app sets
+        changed = run_queue.set_paused(args.pause)
+        print(("paused" if args.pause else "resumed") if changed else ("already paused" if args.pause else "was not paused"))
+    if args.app:  # ARC-DEV-1344: start the menu-bar app now (builds it first when needed), in the foreground until it is up
+        target, why = menubar.build()
+        if target is None:
+            print(f"menu-bar app not available: {why}", file=sys.stderr)
+            return 1
+        if menubar.running():
+            print("menu-bar app already running")
+        else:
+            subprocess.Popen([str(target), *(["--open-menu"] if args.open_menu else [])], start_new_session=True,
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print("menu-bar app started")
+        return 0
     for line in (run_queue.lane_report(args.history) if args.lanes else run_queue.status(args.history)):
         print(line)
     return 0
@@ -396,6 +411,11 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--history", type=positive, default=0, metavar="N", help="show the last N finished runs instead")
     command.add_argument("--lanes", action="store_true", help="count the finished runs and the red ones per Godot lane, alone and "
                          "beside other runs, with the load of the latest red ones (ARC-DEV-400; --history N limits the runs)")
+    group = command.add_mutually_exclusive_group()
+    group.add_argument("--pause", action="store_true", help="stop new runs from starting (running runs finish) until --resume (ARC-DEV-1344)")
+    group.add_argument("--resume", action="store_true", help="clear the pause: the waiting runs start in their order")
+    command.add_argument("--app", action="store_true", help="start the menu-bar app now (ARC-DEV-1344; a queued run starts it by itself)")
+    command.add_argument("--open-menu", action="store_true", help=argparse.SUPPRESS)
     command.set_defaults(func=queue)
     return result
 

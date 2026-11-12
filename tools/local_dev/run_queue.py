@@ -28,7 +28,7 @@ import sys
 import time
 from typing import Any, Callable, Sequence
 
-from . import config, run_log, start_check
+from . import config, menubar, run_log, start_check
 
 SCHEMA = "arcanum-run-queue-v1"
 KINDS = ("window", "headless", "export", "dotnet", "quick")
@@ -85,6 +85,49 @@ def legacy_lock() -> Path:
 
 def say(message: str) -> None:
     print(f"ARCANUM_QUEUE {message}", file=sys.stderr, flush=True)
+
+
+PAUSE_NAME = "paused"  # ARC-DEV-1344: the pause flag, a file in the queue folder (set by `queue --pause` or the menu-bar app)
+
+
+def pause_flag() -> Path:
+    return folder() / PAUSE_NAME
+
+
+def pause_state() -> dict[str, Any] | None:
+    """The pause flag's content ({"since": epoch seconds, "by": who}) when the queue is paused, else None. A flag file
+    that cannot be read as that still pauses (an unreadable flag is a flag): {} then."""
+    try:
+        text = pause_flag().read_text()
+    except FileNotFoundError:
+        return None
+    except OSError:
+        return {}
+    try:
+        value = json.loads(text)
+    except ValueError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def set_paused(on: bool, by: str = "cli") -> bool:
+    """Set or clear the pause flag; True when the state changed. While it is set no waiting run starts (running runs finish,
+    nested runs are not queued): a waiter checks it every POLL_SECONDS, so a resume starts the next run within that."""
+    base = _open_folder()
+    path = base / PAUSE_NAME
+    if not on:
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            return False
+        return True
+    if pause_state() is not None:
+        return False
+    hidden = base / f".pause-{os.getpid()}"
+    hidden.write_text(json.dumps({"since": time.time(), "by": by}))
+    os.chmod(hidden, 0o600)
+    os.replace(hidden, path)
+    return True
 
 
 def _open_folder() -> Path:
@@ -492,7 +535,8 @@ def _wait_turn(fd: int, ticket: dict[str, Any], sleep: Callable[[float], None]) 
         with _QueueLock():
             live = [item for _, item in tickets()]
             waiting_for = blocker(ticket, live)
-            if waiting_for is None:
+            held = pause_state() is not None  # ARC-DEV-1344: a paused queue starts nothing (it only ever looks at waiters)
+            if waiting_for is None and not held:
                 ticket["startedAt"] = time.time()
                 if ticket["kind"] in HOLD_KINDS:  # ARC-DEV-400: the conditions it starts under, for the lane accounting
                     ticket["peers"] = _peers(live, ticket["seq"])
@@ -501,9 +545,11 @@ def _wait_turn(fd: int, ticket: dict[str, Any], sleep: Callable[[float], None]) 
                 return
         order = order_of(live)
         position = sum(1 for item in live if not item.get("startedAt") and order(item) < order(ticket))
-        state = (waiting_for["seq"], position)
+        state = (waiting_for["seq"] if waiting_for else None, position, held)
         if state != last:
-            say(f"queued ticket={ticket['seq']} kind={ticket['kind']} ahead={position} waiting-for={_describe(waiting_for)}")
+            reason = f"waiting-for={_describe(waiting_for)}" if waiting_for else "waiting-for=resume"
+            say(f"queued ticket={ticket['seq']} kind={ticket['kind']} ahead={position} {reason}"
+                + (" paused (./arcanum queue --resume)" if held else ""))
             last = state
         sleep(POLL_SECONDS)
 
@@ -639,6 +685,7 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
             hold()
         return code
     fd, path, ticket = _enqueue(kind, label, command, priority, minutes, seconds)
+    menubar.ensure_running()  # ARC-DEV-1344: the menu-bar view of the queue starts with the first run it shows
     log = None
     reason: list[str] = []
     if quiet:
@@ -884,9 +931,14 @@ def status(history: int = 0) -> list[str]:
     with _QueueLock():
         live = [item for _, item in tickets()]
     now = time.time()
-    if not live:
-        return ["queue empty"]
+    paused = pause_state()
     result = []
+    if paused is not None:
+        since = paused.get("since")
+        result.append("PAUSED: no waiting run starts" + (f" (for {_age(now - since)})" if isinstance(since, (int, float)) else "")
+                      + "; running runs finish; ./arcanum queue --resume")
+    if not live:
+        return [*result, "queue empty"]
     for ticket in live:
         if ticket.get("startedAt"):
             result.append(f"running {_describe(ticket)} for {_age(now - ticket['startedAt'])} pid={ticket.get('childPid')}")
@@ -894,7 +946,7 @@ def status(history: int = 0) -> list[str]:
         if not ticket.get("startedAt"):
             waiting_for = blocker(ticket, live)
             result.append(f"waiting {_describe(ticket)} for {_age(now - ticket['enqueuedAt'])}"
-                          + (f" behind #{waiting_for['seq']}" if waiting_for else " (starting)"))
+                          + (f" behind #{waiting_for['seq']}" if waiting_for else " (paused)" if paused is not None else " (starting)"))
     return result
 
 
