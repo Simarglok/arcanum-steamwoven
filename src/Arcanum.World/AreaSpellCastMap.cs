@@ -172,7 +172,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     private SpellTargetObject? DroppedItem(string id)
     {
         if (_session.QueryDroppedItem(id) is not { } dropped || dropped.Map.RuntimeMap != _map) return null;
-        return new(id, (int)dropped.Item.Facts.Kind.Type, Location(dropped.Cell), HitPoints: 1);
+        return new(id, (int)dropped.Item.Facts.Kind.Type, Location(dropped.Cell), HitPoints: 1, Weight: ItemWeight(id));
     }
 
     // ARC-DEV-259 (B14): an item of the hero's the session lists as placed on this map, and not in flight, is a map object on its cell: a thrown
@@ -185,14 +185,44 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         {
             if (placed.Entity != id) continue;
             if (placed.Map.RuntimeMap != _map || _session.QueryItemInFlight(id) || _session.IsItemDestroyed(id)) return null;
-            return new(id, (int)placed.Kind.Type, Location(placed.Cell), HitPoints: 1);
+            return new(id, (int)placed.Kind.Type, Location(placed.Cell), HitPoints: 1, Weight: ItemWeight(id));
         }
         return null;
     }
 
     // A row's cell now: a placed row's live cell (none while on another map), any other its map cell.
+    // ARC-MAGIC-1230: a map-data item a push left elsewhere stands on the cell of the push.
     private (long X, long Y)? Cell(AreaObjectRecord row, IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?> placed) =>
-        placed.TryGetValue(row.Key, out var live) ? live : _visitorKeys.ContainsKey(row.Key) ? null : (row.WorldX!.Value, row.WorldY!.Value);
+        placed.TryGetValue(row.Key, out var live) ? live : _visitorKeys.ContainsKey(row.Key) ? null
+            : _keys.TryGetValue(row.Key, out var id) && Moved().TryGetValue(id, out var pushed) ? (pushed.X, pushed.Y) : (row.WorldX!.Value, row.WorldY!.Value);
+
+    // ARC-MAGIC-1230: the map-data items a push left on another cell than their data holds (UO5), by id, read again when the session's state changed.
+    private (long Revision, IReadOnlyDictionary<string, CellCoord> Moved)? _movedAt;
+
+    private IReadOnlyDictionary<string, CellCoord> Moved()
+    {
+        if (_movedAt is { } known && known.Revision == _session.Version.Revision) return known.Moved;
+        var moved = _session.QueryMovedItems();
+        _movedAt = (_session.Version.Revision, moved);
+        return moved;
+    }
+
+    // ARC-MAGIC-1230 (UO2): the weight of each item lying on the map's ground (the spell area test "weight below 5" reads it), by id, built again when the session's state changed.
+    private (long Revision, Dictionary<string, int> Weights)? _weightsAt;
+
+    private int ItemWeight(string id)
+    {
+        if (_weightsAt is not { } known || known.Revision != _session.Version.Revision)
+        {
+            var weights = new Dictionary<string, int>(StringComparer.Ordinal);
+            if (_session.QueryMapInventory(new SessionMapId(_map)) is { } view)
+                foreach (var ground in view.Ground)
+                    weights[ground.Item.Entity] = _session.QueryItemWeight(ground.Item.Entity)?.Weight ?? ground.Item.Facts.Weight;
+            _weightsAt = known = (_session.Version.Revision, weights);
+        }
+        // An item the ground view does not list (in a junk pile, a pushed carried row) weighs what the session keeps for it, else 0.
+        return known.Weights.TryGetValue(id, out var weight) ? weight : _session.QueryItemWeight(id)?.Weight ?? 0;
+    }
 
     [OriginalFunction(0x440B40, OriginalFunctionScope.Partial)]
     public IReadOnlyList<SpellTargetObject> ObjectsInSquare(SpellLocation centre, int radius, int typeMask)
@@ -225,9 +255,21 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     // The rows on a map cell, without the placed ones (they are added where they stand, after the cell's own rows).
     private void Add(List<SpellTargetObject> found, long x, long y, int typeMask, IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?> placed)
     {
-        if (!_cells.TryGetValue((x, y), out var ids)) return;
-        foreach (var id in ids)
+        foreach (var id in IdsAt(x, y))
             if (!placed.ContainsKey(_rows[id].Key) && Matches(_rows[id], typeMask) && !_held(id)) found.Add(RowObject(id, _rows[id], (x, y)));
+    }
+
+    // The rows on a map cell: those of the cell index that a push did not move away, then the map-data items a push left here (ARC-MAGIC-1230).
+    private IEnumerable<string> IdsAt(long x, long y)
+    {
+        var moved = Moved();
+        if (_cells.TryGetValue((x, y), out var ids))
+            foreach (var id in ids)
+                if (moved.Count == 0 || !moved.TryGetValue(id, out var live) || live.X == x && live.Y == y) yield return id;
+        foreach (var (id, live) in moved)
+            // A carried row (flag 0x1000: an NPC's dropped item, a broken container's) has no map cell, so it joins the area queries as little after a push as before it.
+            if (live.X == x && live.Y == y && _rows.TryGetValue(id, out var row) && (row.WorldX != x || row.WorldY != y)
+                && (Flags(row, ObjectFlagsSlot) & SpellTargetObject.Inventory) == 0) yield return id;
     }
 
     private void AddPlaced(List<SpellTargetObject> found, IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?> placed, int typeMask,
@@ -392,8 +434,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     /// <summary>ARC-COMBAT-025: the items lying on <paramref name="cell"/> that damage reaches now (types 5..14 of the cell's rows, not taken or deleted, not in
     /// a container or a junk pile), by cast id in row order, for the burn of a burning object's tile (<see cref="AreaFireBurner"/>).</summary>
     public IReadOnlyList<string> GroundItemsAt(CellCoord cell) =>
-        _cells.TryGetValue((cell.X, cell.Y), out var ids)
-            ? ids.Where(id => _rows[id].Type is >= 5 and <= 14 && !_gone(_rows[id].Key) && !_held(id) && ItemTarget(id) is { OnGround: true }).ToArray() : [];
+        IdsAt(cell.X, cell.Y).Where(id => _rows[id].Type is >= 5 and <= 14 && !_gone(_rows[id].Key) && !_held(id) && ItemTarget(id) is { OnGround: true }).ToArray();
 
     /// <summary>ARC-COMBAT-025: the hits the damage reached items with since the last call (id, durability result, host steps), for the host to log and
     /// show; the items' state itself is the session's.</summary>
@@ -461,7 +502,8 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         // ARC-MAGIC-037: a portal's or container's lock flags are the session's, so a spell's "locked" and "not magically held" area tests see what a spell wrote.
         var lockFlags = row.Type is SpellTargetObject.Portal or SpellTargetObject.Container ? LockFlagsNow(id) : 0;
         return new(id, row.Type, location, objectFlags, Flags(row, SpellFlagsSlot), HitPoints: 1,
-            PortalFlags: row.Type == SpellTargetObject.Portal ? lockFlags : 0, ContainerFlags: row.Type == SpellTargetObject.Container ? lockFlags : 0);
+            PortalFlags: row.Type == SpellTargetObject.Portal ? lockFlags : 0, ContainerFlags: row.Type == SpellTargetObject.Container ? lockFlags : 0,
+            Weight: row.Type is >= 5 and <= 14 ? ItemWeight(id) : 0);
     }
 
     private static long Number(AreaObjectRecord row, int slot) => row.EffectiveFields.FirstOrDefault(f => f.Slot == slot && f.Presence == AreaPresence.Value)?.Number ?? 0;

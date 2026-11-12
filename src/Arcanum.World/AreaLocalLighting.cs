@@ -81,6 +81,12 @@ public sealed class AreaLocalLighting
     public IReadOnlyList<ObjectLight> CritterLights => _critterLights;
     public IReadOnlyDictionary<int, StationaryLightFrame> CritterFrames => _critterFrames;
 
+    /// <summary>ARC-MAGIC-1229 (ledger IW2): the overlay light slots of an object of this map whose own record holds a light (bit i for slot i of its four): the critters' lights and the sector's object lights.
+    /// An eye candy with a light takes a slot that is not in this mask; with all four in use the add refuses.</summary>
+    public int OverlaySlotMask(AreaObjectKey owner) =>
+        AreaEyeCandyLights.Mask(_critterLights.Where(light => light.Object == owner && light.Slot >= 0).Select(light => light.Slot)
+            .Concat(Field.Source.Lights.Where(light => light.Owner == owner && light.Slot >= 0).Select(light => light.Slot)));
+
     /// <summary>
     /// ARC-DEV-353: this lighting with <paramref name="lights"/> carried (the hero's and the critters' lights where they stand now) over the
     /// frames of their light ART. See <see cref="WithCarried(StationaryLightFrame, IEnumerable{CarriedLight})"/>.
