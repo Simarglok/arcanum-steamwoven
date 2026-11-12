@@ -288,7 +288,9 @@ public static class HostilityRules
     /// <summary>
     /// The enemy-list pick (0x4AFA90): <c>start := random(0, n − 1)</c> (<see cref="AiRollPurpose.EnemyListStart"/>; an empty list
     /// draws −1..0, a one-entry list draws nothing), then entries <c>start, start + 1, …</c> modulo n, the first
-    /// <paramref name="valid"/> one; none → default. The original first drops null entries, which a session list never holds.
+    /// <paramref name="valid"/> one; none → default. The original first purges entries of objects that no longer exist; that is the
+    /// caller's step (<see cref="DangerRules.PurgeEnemies{T}"/>, which <see cref="DangerUpdate"/> runs on the list it passes here), so
+    /// the roll's bounds are the purged count.
     /// </summary>
     [OriginalFunction(0x4AFA90, OriginalFunctionScope.Partial)]
     public static T? PickEnemy<T>(IReadOnlyList<T> enemies, Func<T, bool> valid, IAiRollSource rolls) where T : class
@@ -341,10 +343,13 @@ public static class HostilityRules
                 if (scan.Target is { } found) return new(DangerUpdatePath.Rescan, found, DangerState.CombatFocus, true, scan);
                 if (Check(world, n, danger.HitBy, false, profile) == TargetValidity.Valid)
                     return new(DangerUpdatePath.HitBy, danger.HitBy, DangerState.CombatFocus, true, scan);
-                var pick = PickEnemy(danger.Enemies, entry => Check(world, n, entry, false, profile) == TargetValidity.Valid, rolls);
+                // ARC-AI-1317 (VAG6): the pick first purges the list of objects that no longer exist (0x4AF9D0, null handle) and rolls over what is left.
+                var enemies = DangerRules.PurgeEnemies(danger.Enemies, world.Exists);
+                var purges = enemies.Length != danger.Enemies.Count;
+                var pick = PickEnemy(enemies, entry => Check(world, n, entry, false, profile) == TargetValidity.Valid, rolls);
                 return pick is not null
-                    ? new(DangerUpdatePath.EnemyList, pick, DangerState.CombatFocus, true, scan)
-                    : new(DangerUpdatePath.CalmDown, null, DangerState.None, true, scan);
+                    ? new(DangerUpdatePath.EnemyList, pick, DangerState.CombatFocus, true, scan, purges)
+                    : new(DangerUpdatePath.CalmDown, null, DangerState.None, true, scan, purges);
             }
             case DangerState.Flee:
                 return new(DangerUpdatePath.Flee, null, null, false, null);

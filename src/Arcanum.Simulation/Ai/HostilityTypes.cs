@@ -97,6 +97,13 @@ public sealed record HostilityDanger(DangerState State, string? Source, string? 
 public interface IHostilityWorld
 {
     HostilityCritter? Find(string id);
+    /// <summary>
+    /// Whether the handle still names an object (the original's handle test 0x4E5470 behind every field read): false for an object
+    /// destroyed since the record was written, true for one the world holds even when it cannot describe it (another map's
+    /// object). The enemy-list purge (<see cref="DangerRules.PurgeEnemies{T}"/>) drops the entries it is false for. Default: the
+    /// world describes the object and it is not destroyed.
+    /// </summary>
+    bool Exists(string id) => Find(id) is { Destroyed: false };
     int Distance(string from, string to);
     bool FactionSame(string a, string b);
     int HostilityReaction(string npc, string pc);
@@ -277,9 +284,11 @@ public enum DangerUpdatePath
 /// <see cref="DangerUpdatePath.Asleep"/>, <see cref="DangerUpdatePath.NoTarget"/>, <see cref="DangerUpdatePath.Flee"/> and
 /// <see cref="DangerUpdatePath.SurrenderStays"/>), whether the target lock is cleared first and the scan that ran. For a fight
 /// the spell and item choice (0x4ABC20, slice I8) runs before the setter; <see cref="HostilityRules.FocusTarget"/> then names
-/// the setter's target (SP16).
+/// the setter's target (SP16). <see cref="PurgesEnemies"/>: the enemy-list pick ran and its purge (<see cref="DangerRules.PurgeEnemies{T}"/>)
+/// dropped entries, so the host writes the same purge to the saved list (ARC-AI-1317).
 /// </summary>
-public sealed record DangerUpdatePlan(DangerUpdatePath Path, string? Target, DangerState? Request, bool Unlocks, ScanResult? Scan)
+public sealed record DangerUpdatePlan(DangerUpdatePath Path, string? Target, DangerState? Request, bool Unlocks, ScanResult? Scan,
+    bool PurgesEnemies = false)
 {
     /// <summary>A fight request: the spell and item choice runs for <see cref="Target"/> before the setter.</summary>
     public bool ChoosesAction => Request == DangerState.CombatFocus;

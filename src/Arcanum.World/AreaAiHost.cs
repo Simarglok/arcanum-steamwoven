@@ -1269,6 +1269,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Trace(npc).Danger = $"{plan.Path} {plan.Request?.ToString() ?? "-"} {plan.Target ?? "-"}";
         if (plan.Path == DangerUpdatePath.Flee) { _session.RunFleeSpellStep(_session.Version, npc, () => false); return; }
         if (plan.Unlocks) _session.UnlockDangerTarget(_session.Version, npc);
+        // ARC-AI-1317 (VAG6): the pick's purge of the saved enemy list (the original runs it inside the pick, before the setter).
+        if (plan.PurgesEnemies) _session.PurgeDangerEnemies(_session.Version, npc, enemy => Exists(Id(enemy)));
         if (plan.Request is not { } state) return;
         AiPassChoice? choice = null;
         if (plan.ChoosesAction && plan.Target is { } found)
@@ -3024,6 +3026,14 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     // ---- the hostility and morale world (IMoraleWorld) ----
+
+    /// <summary>
+    /// ARC-AI-1317: whether the handle still names an object (<see cref="IHostilityWorld.Exists"/>): the hero always; an NPC of the shown map
+    /// until it is destroyed (<see cref="Gone"/>); a created critter until the session destroys it; any other object the host does not
+    /// hold (another map's) is kept, since only its own map can tell.
+    /// </summary>
+    public bool Exists(string id) =>
+        id == Pc || !Gone(id) && !(id.StartsWith(SessionCreatedObject.CritterPrefix, StringComparison.Ordinal) && _session.QueryCreatedObject(id) is null);
 
     public HostilityCritter? Find(string id)
     {
