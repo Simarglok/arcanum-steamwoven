@@ -140,6 +140,23 @@ public sealed class AreaContainerLootTests
     }
 
     [TestMethod]
+    public void The_pick_of_a_container_names_a_standing_container_to_the_session()
+    {
+        // ARC-UI-1127 (E8-g): the viewer's lockpicks on a container are the session's pick on the container's lock identity (the pick itself is the session's, tests PickLockStateTests; the real-data pick is the smoke's).
+        var (session, map, _, world) = Start(hero: true);
+        using var owned = session;
+        var picks = new SessionLockpick("kit:9", SessionLockpick.LockpickFlag, 10, new(10, 0, 0, false), []);
+        Assert.IsNull(AreaContainerLoot.Pick(session, map, Entity(9), picks), "an item has no lock to pick");
+        Assert.IsNull(AreaContainerLoot.Pick(session, map, "oid:nothing", picks), "no such container");
+        // The session accepts the container's lock identity and baseline, and then asks for the lockpicks the hero holds: this hero holds none.
+        var result = AreaContainerLoot.Pick(session, map, Entity(1), picks)!;
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable), (result.Disposition, result.Failure));
+        Assert.AreEqual(AreaContainerOpenOutcome.Locked, AreaContainerLoot.Open(session, map, Entity(1), frameCount: 1, world).Outcome, "a refused pick changes nothing");
+        var bare = AreaContainerLoot.Pick(session, map, Entity(1), null)!;
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, bare.Disposition, $"a pick with no lockpicks is the session's (no tool bonus): {bare.Failure}");
+    }
+
+    [TestMethod]
     public void A_junk_pile_of_the_map_s_data_taken_empty_goes_when_its_window_closes_B04()
     {
         // ARC-DEV-310 (B04, JP4, JP5): the dissolve check at the close does not ask where the pile came from.

@@ -678,7 +678,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterPointerStill,pending
 tools/terrain-viewer/Godot/TerrainViewerAreaContainerLoot.cs,CloseContainer,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaHoverWindow.cs,HoverCombatPanel,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaInventory.cs,ArmLockpick,pending,
-tools/terrain-viewer/Godot/TerrainViewerAreaInventory.cs,HealSelf,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaInventory.cs,HealCritter,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaInventory.cs,TryAreaInventoryClick,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaInventoryArt.cs,AttachAreaItemArtSizes,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaInventoryTest.cs,StillPointerForSmoke,pending,
@@ -747,6 +747,7 @@ tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,ApplyItemAim,pending,
 tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,HeroUseItem,pending,
 tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,HeroUseItemOnTile,pending,
 tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,ItemAimClick,pending,
+tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,ItemAimInventoryPick,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,ItemAimPick,pending,
 tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,ItemAimUse,pending,
 tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,OpenItemAiming,pending,
@@ -778,6 +779,8 @@ tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs,HeroCastActionFrame,pending
 tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs,HeroCastEnds,pending,
 tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs,HeroReleaseCast,pending,
 tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs,HeroStartCast,pending,
+tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs,InventoryItemPicked,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs,OpenInventoryForSpell,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs,OpenSpellTargeting,pending,
 tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs,PressPaneSpell,pending,
 tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs,RefuseSpellGoal,pending,

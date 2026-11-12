@@ -423,7 +423,7 @@ The pointer entering a slot or a recent-action button shows its entry's descript
    (the window's handler is the inventory's, 0x573C74; the description is drawn only while the bars show, which the viewer hides under the window, so in practice the script runs and the item window is a known gap; the viewer runs it only with its interface on),
    and the dialog start runs the speaker's examine script and redraws its window as the world hover does (0x567460), once, with the interface on. The
    floating tooltip of the viewer without the interface bars (the original has none) does not run it, and the follower portraits' hover (0x56A9D0,
-   HK26) is not built.
+   HK26) runs it too (ARC-UI-1281, [follower portraits' hover](companion-orders-runtime.md#follower-portraits-hover-arc-ui-1281)).
 5. **Inventory** (HK23). In the inventory window, the pointer resting 35 ms on another item of the doll or the grid (nothing held) draws
    that item's window the same way; resting on no item keeps the last description.
 6. **Smoke.** The hotkey-bar smoke enters slot 2 (a spell: its hint with the college's icon), a skill entry (its hint; in the spells mode
@@ -772,7 +772,7 @@ executable reads [XR1–XR5](../research/ledger/spell-runs.md#magic-audit-execut
   (the wrappers 0x4EE4C0, 0x4EE430, 0x4EE3A0 test the local player; a single-player game does no more), so an NPC caster's Identify has no effect and is no "not ready" line. For the hero the host logs one
   answer by the target's object type: `IdentifyCritter` (a PC or NPC: the original opens the read-only NPC sheet, XR2), `IdentifyContainer` (the container's inventory in window mode 4 with no lock, jam or
   magically-held test, XR3), `IdentifyItem` (any other type: the item description, the true one when the item is identified, XR4). The viewer shows each as a line in the message log
-  (`AreaSpellCasting.Line`); the windows, and what a press in mode 4 may move (not read), are E8's, which reads the same events.
+  (`AreaSpellCasting.Line`); since ARC-UI-1127 (E8-g) `IdentifyCritter` for an NPC also opens its read-only character sheet (`TakeIdentifyEvent`, queued until nothing else owns input, the same sheet as the dialog's "show your abilities", [ARC-UI-088](../rendering/terrain-viewer.md)); the hero as the target keeps the line (its sheet is the C key). The container's inventory window and the item description window, and what a press in mode 4 may move (not read), are E8's still.
 - **Divine Magick's identified flag (0x454A10, XR4, XR5).** Spell 9 (area `Tgt_Obj_Inven`) sets `OIF_IDENTIFIED` (`obj_f_item_flags` 0x57, bit 0x1) on its item before its Identify. In the original it is
   a plain write: no side effect for item flags, no reference count, and nothing in the run reads it back. The session keeps it as the **identification mark** that a barter window already sets
   (`GameSessionOwner.MarkItemIdentified`, `QueryItemIdentified`, saved in the inventory section: no schema step), so every reader of that mark (the name, the item window's lines, the worth in a barter, the
@@ -780,8 +780,17 @@ executable reads [XR1–XR5](../research/ledger/spell-runs.md#magic-audit-execut
   new or an existing mark. A clear of the flag, another item-flag bit, another field and a target that is no item stay "not ready" (no installed record has them).
 - **Census (MA-0).** Records 6 and 7 leave the not-ready list on both census targets; record 9 keeps its `ObjFlag` on the census's critter targets (its target is an item).
 
-**Not ready.** Nothing picks an inventory item as a spell target yet (the pane's targeting, the inventory bit of `SessionItemUseCast.InventoryTarget`, and `Tgt_Obj_Inven` in the target rules), so spell 9 cannot
-be cast from the viewer; the three windows (E8); the multiplayer packets (kinds 7, 8, 10).
+**Not ready.** The container's inventory window (mode 4) and the item description window (E8); the multiplayer packets (kinds 7, 8, 10); an inventory item of a loot, steal or barter window as a target ([below](#an-inventory-item-as-a-spell-target-arc-magic-1128)).
+
+### An inventory item as a spell target (ARC-MAGIC-1128)
+
+Issue #1128, on the executable reads SU3 and IA4 and the new [IW44](../research/ledger/ui-audio.md) (the inventory window's press in the cursor modes). Code: `TerrainViewerSpellCast.cs` (`OpenInventoryForSpell`, `OpenSpellTargeting`, `InventoryItemPicked`, `SpellTargetApply`), `TerrainViewerItemAiming.cs` (`ItemAimInventoryPick`, `ClearItemTarget`), `AreaInventoryGridArea.TargetPicking` and its press, `TerrainViewerInterfaceModes.cs` (`TargetOverInventory`); tests `SessionSpellCasterIdentifyTests` (the pick) and the cast smoke stage (`TerrainViewerInventoryTargetSmoke.cs`, marker `ARC-MAGIC-1128 native-smoke inventory-target`).
+
+- **The activation (0x57BC70, SU3).** A BEGIN area with the inventory bit (0x2000000; spell 9 is `Tgt_Obj_Inven`, 0x2000004) opens the caster's own inventory before the cursor's tests: a window already open on the stack is kept when it is the player's own (mode 8), the original closes a barter or steal window first and leaves a loot window open; the viewer closes a loot or steal window and opens the own one (the viewer picks items of the own window only), and an open window of another kind refuses with a notice. The cast's action points are asked after that (a refusal leaves the inventory open and no cursor, as in the original), then the cursor is pushed **over** the inventory (`OpenTarget(overInventory: true)`: stack Game>Inventory>SpellTarget). The per-frame window guard does not drop a target over the inventory (`TargetOverInventory`). Shift with the object bit does not cast at the hero at once for such a spell (a project choice: the quick cast skips the pick's area test, which refuses the hero as it is no item in an inventory, so the cursor opens as without Shift).
+- **The pick (IW44, 0x573850 → 0x575FA0, then 0x57C110).** A left press on an item of the window with mode 1 on top names that item as the object target (the item under the pointer in any visible list: grid and doll) and lifts nothing; a press on no item does nothing. The pick runs the same area test as a click in the game view (`SessionSpellCaster.PickTarget` with the item as the point's object: the item is an object in its holder's inventory, object flag 0x1000, at its holder's location, `Tgt_Obj_Inven` needs the flag), and a target that passes is cast at (`CastSpell`, the casting goal as for any target). A game-view press with an inventory window open picks nothing (SU9: the cursor picks in the game view only with no inventory window open).
+- **After the cast and the cancel.** The cursor stays open after a cast, as for every spell (SU9), with the window under it. A right release in the window cancels the cursor (project choice: the executable's right-release branch in the cursor modes was not read), and the cancel takes the window with it (the leave case of mode 1 sets the repeat flag, SA38); the window's own close pops the cursor.
+- **The item path (IA4, IA6).** An item whose slot-0 spell has the inventory bit and which is used from the window (`OpenItemAiming`) pushes mode 16 over the window the same way (the window stays; a press names the item, `ItemAimInventoryPick` runs the slot-0 spell's area test and applies the use to it: `ApplyItemAim` pops mode 16 once, IA5, and the window stays). The use's own cast belongs to the item use (ARC-DEV-365); the smoke hero has no usable magical item, so the smoke checks the routing up to the use.
+- **Not ready.** An item of a loot, steal or barter window as a target (those windows lay their items out themselves and the cast host knows the hero's and the shown map's NPCs' items only); the right-release branch; the multiplayer packets.
 
 
 ## Dispel (ARC-MAGIC-034)
@@ -847,7 +856,7 @@ tests `SessionSpellCasterSocialTests`. The five flags the ObjFlag component of M
   (EC9, EC12).
 - Other goals while a cast plays: the viewer ignores world presses and the stick until the goal and its queue end, and refuses F7
   meanwhile (the session saves no goal or queue).
-- Spells on an inventory item (the inventory bit: the original opens the inventory to pick the item) and the hotkey bar (0x54FCF0,
+- The hotkey bar (0x54FCF0,
   0x57C080, IP7–IP9): later slices of ARC-UI-016. The host runs an item's own spells with the item as source since ARC-MAGIC-020
   ([item spell triggers](item-spell-triggers.md)); the weapon's spell pane is [above](#the-weapons-spell-pane-arc-ui-016).
 - The weapon's pane draws no spell icons and shows no hover description (0x5507E0).

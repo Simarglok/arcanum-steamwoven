@@ -46,7 +46,8 @@ public partial class TerrainViewerApp
         var row = index.Row(hit);
         // ARC-DEV-326 (B18, OH1): the pointer entering an object describes it for the hero (0x57CCF0 → 0x57CD60), whose first step is the object's
         // examine script; one that answers skip default leaves the window without a description (the highlight stays: it is drawn after, 0x43C270).
-        if (!ExamineAllows(row)) return;
+        // ARC-UI-1281: a follower the pointer rests on by his portrait was examined when it entered (once); the answer is kept for the redraws.
+        if (!(key == _portraitHoverKey && _portraitAllows is { } examined ? examined : ExamineAllows(row))) return;
         var kind = AreaHoverWindow.Kind(row.Type);
         var name = index.Name(hit);
         if (kind == AreaHoverWindowKind.None || string.IsNullOrEmpty(name)) return;

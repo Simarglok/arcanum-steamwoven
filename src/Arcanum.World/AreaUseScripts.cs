@@ -984,6 +984,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (_world?.Item(prototype) is not { } item) return null;
         _session.AttachItemWeights(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.Weight);
         _session.AttachItemScripts(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.Scripts);
+        _session.AttachItemNoDrop(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.NoDrop == true);
         return _session.CreateItemForHero(_session.Version, item.Kind, insertCheck);
     }
 
@@ -1266,6 +1267,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             _session.AttachItemWeights(prototype => _world!.Item(prototype - AreaPrototypeItems.PrototypeOffset)?.Weight);
             // ARC-DEV-097 (MIG8, SA4): and their prototypes' script arrays, which an item a script creates reads until its first write.
             _session.AttachItemScripts(prototype => _world!.Item(prototype - AreaPrototypeItems.PrototypeOffset)?.Scripts);
+            _session.AttachItemNoDrop(prototype => _world!.Item(prototype - AreaPrototypeItems.PrototypeOffset)?.NoDrop == true);
         }
         foreach (var request in effects.Creations)
         {
@@ -1453,6 +1455,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             var item = _world!.Item(request.Value)!;
             _session.AttachItemWeights(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.Weight);
             _session.AttachItemScripts(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.Scripts);
+            _session.AttachItemNoDrop(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.NoDrop == true);
             var check = InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck;
             var created = IsPc(request.Object) ? _session.CreateItemForHero(_session.Version, item.Kind, check) : _session.AddItemToNpc(_session.Version, request.Object.Code, item.Kind, check);
             LastCreatedItem = created;

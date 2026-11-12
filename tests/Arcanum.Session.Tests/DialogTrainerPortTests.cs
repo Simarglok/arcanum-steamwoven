@@ -24,4 +24,17 @@ public sealed class DialogTrainerPortTests
         using var heroless = Attached();
         Assert.ThrowsExactly<InvalidOperationException>(() => new SessionDialogTrainerPort(heroless, Pc, _ => null).PcGold(new DialogGoldQuery(Pc)));
     }
+
+    // ARC-SCRIPT-1304: the paid r: rumor reads the same own gold through the purse port alone.
+    [TestMethod]
+    public void ThePursePortAnswersTheHerosOwnGold()
+    {
+        var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf(), null);
+        using var _ = owner;
+        var port = new SessionDialogPursePort(owner, Pc);
+        Assert.AreEqual(385, port.PcGold(new DialogGoldQuery(Pc)));
+        Assert.ThrowsExactly<ArgumentException>(() => port.PcGold(new DialogGoldQuery(new DialogParticipantId(2))));
+        using var heroless = Attached();
+        Assert.ThrowsExactly<InvalidOperationException>(() => new SessionDialogPursePort(heroless, Pc).PcGold(new DialogGoldQuery(Pc)));
+    }
 }

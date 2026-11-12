@@ -197,7 +197,7 @@ Anomalies (none needs a switch):
 - CRA4 (CR13, CR14): NOT READY, not a difference: since ARC-COMBAT-010 the session makes the drop's draws (2..4, one direction
   per try) and chooses the tile through the host's map ([drop cell](#drop-cell-arc-combat-010)); a host that passes no map
   still gets the owner's cell without draws. The hero's drops lie in its placed items
-  ([placed items](../../world/inventory-runtime.md#placed-items-arc-world-059)). The NPC flags of CR14 and the PC's injury record of CR13 are not session state and the drop and armour scripts are
+  ([placed items](../../world/inventory-runtime.md#placed-items-arc-world-059)). The NPC look-for flags of CR14 are session state since ARC-WORLD-1288 (the drop step sets LOOK_FOR_WEAPON or LOOK_FOR_ARMOR on the NPC's danger record by the dropped item's type); the PC's injury record of CR13 is not session state, and the drop and armour scripts are
   not run. Since ARC-COMBAT-013 the hero's critical-miss ammunition effects spend its stack (CR15); an NPC's are not reached yet.
 
 ## Drop cell (ARC-COMBAT-010)
