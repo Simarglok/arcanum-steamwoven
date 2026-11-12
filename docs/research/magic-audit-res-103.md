@@ -52,9 +52,9 @@ Every other college spell has a code path for every component of its record (the
 | 47 Shrink, 34 Disintegrate, 69 Invisibility, 63 Sanctuary | The flags are written; the viewer's draw of shrunk, hidden, translucent critters is not built | render |
 | 48 Flesh to Stone | Stone render side effect; the stone-to-flesh pair on a portal holding the stoned spell flag | - |
 | 58 Create Undead, 64 Resurrect | The raise script hook; the combat and life rules read the data's undead bit, not the written one | MA-10 |
-| 65 Illuminate | The original lights the scene: a live object light on the target while the spell runs ([IW1–IW6](ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)); built by ARC-MAGIC-1229 (the overlay host keeps the live light while the run is shown, the viewer draws it and the darkness sampler reads it; not built: the glow after a load and the object's own offsets) | lighting lane (done) |
+| 65 Illuminate | The original lights the scene: a live object light on the target while the spell runs ([IW1–IW6](ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)); built by ARC-MAGIC-1229 (the overlay host keeps the live light while the run is shown, the viewer draws it and the darkness sampler reads it; the glow after a load is built by ARC-MAGIC-1280 (the overlay runs are saved); not built: the object's own offsets) | lighting lane (done) |
 | 76, 77 Congeal Time, Hasten | Speed reaches the turn-based action points and the real-time attack pause, not walking (the original does not either, XR); stage `spell-effects` (ARC-DEV-1148) casts both: BEGIN adds the effect and moves the speed (77 up, 76 down); found there: the END of 76 left its effect on the NPC (its END area names the run's object list, which no host kept); fixed by ARC-MAGIC-1234 (the run stores the list its BEGIN gather builds, ledger TA17) and the stage now expects the removal | [#1234](https://github.com/Simarglok/arcanum-steamwoven/issues/1234) |
-| 79 Tempus Fugit | Built (MA-9, ARC-MAGIC-056): +10 speed to its holders and -10 to every other critter while any critter holds it (the original: while the player holds it, XR6); the follower flag writes of XR7 are not built | - |
+| 79 Tempus Fugit | Built (MA-9, ARC-MAGIC-056): +10 speed to its holders and -10 to every other critter while any critter holds it (the original: while the player holds it, XR6); the follower join and leave flag writes of XR7 are built (ARC-MAGIC-1190) | - |
 
 ## Work order
 
@@ -129,7 +129,7 @@ Left: the dropped leftover of a refused take-off; an NPC's worn items (not track
 ## Tempus Fugit (MA-9, ARC-MAGIC-056)
 
 Done ([contract](../world/character-stats-runtime.md#tempus-fugit-speed-arc-magic-056), ledger [TF1-TF3](ledger/spell-runs.md#tempus-fugit-speed-arc-magic-056)): speed (stat 11) of the hero and of every NPC handed out by `WithNpcEffects` takes +10 for a critter that holds `OSF_TEMPUS_FUGIT` and -10 for every other critter while some critter holds it, before the crippled-leg -5 and the effects, clamped by the stat range; it reaches the turn-based action points, the real-time attack pause, the inventory line and the sheet, not walking (XR8). The one rule that differs from the original is the owner's XR14 (a) fix: the original tests only the player's flag, Steamwoven any critter's, so an NPC's cast works without the player holding it (who gains: the holders; who is slowed: everyone else, the player included).
-Left: the follower join and leave flag writes (XR7, TF3); no smoke stage casts it ([owner recheck list](../project/owner-recheck-list.md#arc-magic-056--tempus-fugit-speed-spell-79)).
+The follower join and leave flag writes (XR7, TF3) and the NPC sheet's shifted speed followed in ARC-MAGIC-1190. Left: no smoke stage casts it ([owner recheck list](../project/owner-recheck-list.md#arc-magic-056--tempus-fugit-speed-spell-79)).
 
 ## Decisions for the owner
 

@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Goals;
+using Arcanum.Simulation.Magic;
 
 namespace Arcanum.Session;
 
@@ -35,17 +36,35 @@ public sealed partial class GameSessionOwner
         && (!run.Owner.StartsWith(SessionProjectile.EntityPrefix, StringComparison.Ordinal) || ProjectileRunIsSaved(run))
         && (!run.Owner.StartsWith(SessionMissile.EntityPrefix, StringComparison.Ordinal) || MissileRunIsSaved(run));
 
-    // The kinds a save holds: the hero's runs wait for their slice. The restore applies the same test, so an edited file never brings a frame that dangles.
+    // The kinds a save holds. The restore applies the same test, so an edited file never brings a frame that dangles.
+    // The knockback slide has a viewer host that a load does not rebuild (it is built by its first push), so its run stays out until its slice. ARC-DEV-288: a projectile's flight (goal 36 on its own projectile) is saved, the
+    // projectile host rebuilds it from the saved projectile; a goal 36 run of another owner, or another goal on a projectile, is not. ARC-DEV-289: a missile's flight (goal 28 on its own missile) the same way, and a frame may
+    // name a spell run (the casting goals 26, 82, 27, 83 and the missile's 28); an eye candy tied to a spell run is an overlay (below), not part of a casting goal's stack.
+    // ARC-MAGIC-1280: the overlay runs (eye candy 45–48, 58, 59, 75, 76 and the hover 44) are saved (OverlayRunIsSavedKind): the overlay host is built again by the first step of a restored run.
     private static bool GoalRunIsSavedKind(GoalRun run) =>
-        // The overlays (eye candy, burning, hover) and the knockback slide have a viewer host that a load does not rebuild (it is built by its first Play or push), so a saved
-        // run would be given up at its first step: they stay out until their slices. ARC-DEV-288: a projectile's flight (goal 36 on its own projectile) is saved, the projectile host
-        // rebuilds it from the saved projectile; a goal 36 run of another owner, or another goal on a projectile, is not. ARC-DEV-289: a missile's flight (goal 28 on its own missile)
-        // the same way, and a frame may name a spell run (the casting goals 26, 82, 27, 83 and the missile's 28); an eye candy tied to a spell run is an overlay and stays out.
-        !AiExecutorRules.IsOverlayRunGoal(run.Bottom.Goal) && !AiExecutorRules.IsKnockbackRunGoal(run.Bottom.Goal)
+        AiExecutorRules.IsOverlayRunGoal(run.Bottom.Goal) ? OverlayRunIsSavedKind(run)
+        : !AiExecutorRules.IsKnockbackRunGoal(run.Bottom.Goal)
         && AiExecutorRules.IsProjectileRunGoal(run.Bottom.Goal) == run.Owner.StartsWith(SessionProjectile.EntityPrefix, StringComparison.Ordinal)
         && AiExecutorRules.IsMissileRunGoal(run.Bottom.Goal) == run.Owner.StartsWith(SessionMissile.EntityPrefix, StringComparison.Ordinal)
         && (!string.Equals(run.Owner, AiSchedulerRules.Pc, StringComparison.Ordinal) || HeroRunIsSavedKind(run))
         && run.Frames.All(f => f.EyeCandy is not { Tag: >= 0 });
+
+    // ARC-MAGIC-1280 (saved-runs.md, the overlay runs): an overlay run is a stack of eye candy goals (a stack-flag add queues one under another) or the hover, on any owner but a missile or a projectile (their
+    // runs are the flight's own); the hero's overlay runs are written with a hero only (GoalRunIsSavedAlone). Every frame is an overlay goal of its own kind: an eye candy goal holds its eye candy and a hover frame
+    // none, and none names a target, an item, a tile, a skill, a spell run or a path (the add builds none). The tag an eye candy holds is the spell run it belongs to: it is written only as a slot of the spell
+    // run table or as none (a negative), a tag of a run that is gone is written as none (OverlayRunTagged); the restore checks the slot is held (CheckCastRuns).
+    private static bool OverlayRunIsSavedKind(GoalRun run) =>
+        !run.Owner.StartsWith(SessionProjectile.EntityPrefix, StringComparison.Ordinal) && !run.Owner.StartsWith(SessionMissile.EntityPrefix, StringComparison.Ordinal)
+        && run.Frames.All(f => AiExecutorRules.IsOverlayGoal(f.Goal) && (f.EyeCandy is not null) == AiExecutorRules.IsEyeCandyGoal(f.Goal)
+            && f.Target is null && f.Item is null && f.Tile is null && f.Skill is null && f.SpellRun is null && f.Path.IsEmpty && f.PlannedTargetTile is null
+            && f.EyeCandy is not { Tag: >= SpellRunTable.Slots });
+
+    // ARC-MAGIC-1280: the overlay run as a save writes it: an eye candy whose spell run is gone (its slot is empty now, or reused) calls nobody back any more, so it is written with no tag (the host's stale mark of
+    // the live game, ARC-DEV-352, which a load does not keep); the other frames and runs are written as they are.
+    private GoalRun SavedOverlayRun(GoalRun run) =>
+        AiExecutorRules.IsOverlayRunGoal(run.Bottom.Goal) && run.Frames.Any(f => f.EyeCandy is { Tag: >= 0 } eye && _spellRuns[eye.Tag] is null)
+            ? run.WithFrames([.. run.Frames.Select(f => f.EyeCandy is { Tag: >= 0 } eye && _spellRuns[eye.Tag] is null ? f with { EyeCandy = eye with { Tag = -1 } } : f)])
+            : run;
 
     // ARC-DEV-290 (MIG14 S9a): the hero's runs this build saves: its walk (goals 3 and 4 at the bottom; the step 5, the turn 53 and the pause the walk pushed above), its turn (53) and its states (the stun 57,
     // the knock-down 62, the get-up 63, dying 31), which the hero's host steps over the session and the viewer's body alone; ARC-DEV-317 (S9b): its attack and throw, whose viewer holders a load rebuilds from the run.
@@ -117,7 +136,7 @@ public sealed partial class GameSessionOwner
     {
         if (_goals.InUseCount == 0) return new(_goals.NextRunId, []);
         var saved = SavedCasts().Goals;
-        return new(_goals.NextRunId, [.. _goals.Runs.Where(run => saved.Contains(run.Handle.Slot)).Select(SavedHeroWalk)]);
+        return new(_goals.NextRunId, [.. _goals.Runs.Where(run => saved.Contains(run.Handle.Slot)).Select(run => SavedOverlayRun(SavedHeroWalk(run)))]);
     }
 
     // Shapes the codec cannot know: the owners and entities are session entities, every goal has a descriptor (the run type guarantees it), the slots are
@@ -143,7 +162,8 @@ public sealed partial class GameSessionOwner
             }
         }
         // ARC-DEV-290: the hero has at most one run of each kind the build saves (the walk starter retargets the one walk; a turn, a stun or a state interrupts the hero's runs before it starts).
-        if (saved.Runs.Where(r => string.Equals(r.Owner, AiSchedulerRules.Pc, StringComparison.Ordinal)).GroupBy(r => HeroRunKind(r.Bottom.Goal)).Any(g => g.Count() > 1)) return GameSessionFailure.InvalidSnapshot;
+        // ARC-MAGIC-1280: its overlay runs (eye candy, hover) are not of these kinds: it may hold several.
+        if (saved.Runs.Where(r => string.Equals(r.Owner, AiSchedulerRules.Pc, StringComparison.Ordinal) && !AiExecutorRules.IsOverlayRunGoal(r.Bottom.Goal)).GroupBy(r => HeroRunKind(r.Bottom.Goal)).Any(g => g.Count() > 1)) return GameSessionFailure.InvalidSnapshot;
         var restored = GoalRunTable.Restore(saved.NextRunId, [.. saved.Runs.Select(SavedHeroWalk)]);
         if (restored is null) return GameSessionFailure.InvalidSnapshot;
         table = restored;

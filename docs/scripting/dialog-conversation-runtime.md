@@ -104,8 +104,8 @@ picking it runs the reply's action, then a `ReactionCommand` of −10 (`DialogCo
 port, then reads the effective reaction; at most 20 (`InsultEndsAtOrBelow`) the talk ends as `Ended(Insulted)` with no SCR
 continuation (the NPC's generated reply is not loaded), above 20 its transition follows (0x4191E0). Without a world port, or
 with an action ending in `JO`/`UW`/`FL`/`ET` (the original then skips the insult, read for FL), it is offered blocked. `b h l p` (exact) and
-`c r t z` (prefix) are offered blocked as
-`UnsupportedInteraction`; `d q u x` have state-dependent visibility and make the step a
+`c r z` (prefix) are offered blocked as
+`UnsupportedInteraction`, and so is a prefix `t` without the [trainer ports](#trainer-reply-arc-script-1150); with them `t:` is the trainer reply; `d q u x` have state-dependent visibility and make the step a
 frontier. NPC `g:` (prefix) is the original's greeting when the conversation has a greeting port (ARC-WORLD-058,
 [dialog greeting](dialog-greeting.md)), else a frontier; `m:`/`r:` (prefix) and exact `i:` are frontiers. Other text is literal.
 
@@ -485,9 +485,45 @@ A PC line (0x4182D0) reads `gd_pc2m` or `gd_pc2f` by the NPC's gender, a PC clas
 a dumb PC (its intelligence as the reply gates read it at most 4, the original's 0x45FC00) reads their dumb variants, the class
 offset still applied. Without the port, or when its facts are unknown, the text stays empty and the reply works as before; a refused
 roll, a port exception or an undecodable phrase fails the conversation (`InvalidQueryResult`, `QueryException`, `InvalidText`). The
-phrase changes only the text: the transitions and blocks above stay. Not built: the phrases of the prefix markers (`c d q r t u x z`;
-`d r t x` append the reply's text after a phrase), the healer menu behind `h:` (ARC-SCRIPT-044) and the NPC's generated line after
+phrase changes only the text: the transitions and blocks above stay. The `t:` phrase (PC lines 500..599) is built (ARC-SCRIPT-1150); its argument is
+stored after the phrase, not appended to it (ledger DTR1). Not built: the phrases of the prefix markers (`c d q r u x z`;
+`d r x` keep the reply's text after a phrase, `c` reads one line), the healer menu behind `h:` (ARC-SCRIPT-044) and the NPC's generated line after
 an insult (group 1000).
+
+## Trainer reply (ARC-SCRIPT-1150)
+
+With the optional `IDialogTrainerPort` (`DialogConversationPorts.Trainer`: the skill names and the hero's own gold), the world port (the price's
+reaction), the skill port (the training) and the gold port (the payment), a Player reply whose text starts with `t:` (either case) is the original's
+**trainer reply** ([ledger DTR1–DTR9](../research/ledger/social.md#trainer-reply-arc-script-1150)). It is offered as `Generated` (marker `t`, the
+phrase PC line 500..599 through the greeting port) with the transition `DialogOptionTransition.Trainer`; the numbers after the marker (comma-separated,
+`a-b` ranges, read like the original's list reader 0x417F90, `DialogConversation.ParseTrainerSkills`) are the skills it teaches: 0..11 basic, 12..15 tech.
+A reply with a number that is no skill, with more numbers than four (five options hold the skills and the way out), with a dialog transfer or window
+action (`JO`, `UW`, `FL`, `ET`, `SU`, ...) or without one of the ports stays blocked (`UnsupportedInteraction`) as before.
+
+Picking it runs the reply's action (the hostile check too), then opens the **talk** without leaving the node: `NpcLine` and `Options` are replaced
+screen by screen (`Turn` and `CurrentNode` stay; `RefreshOptions` rebuilds a screen with the texts it showed, `Close` ends the dialog):
+
+| Screen | NPC line | Options |
+| --- | --- | --- |
+| Menu (0x418CA0) | class line 3000 | one per listed skill (its `skill.mes` name; `TrainerStep`), then the way out: PC line 800..899 with the reply's own transition |
+| Already trained (0x418C40) | class line 4000 | PC line 600..699, the reply's own transition |
+| Cannot be taught | class line 5000 | as above; the setter refuses the first tier below effective level 1 (ledger SR1), asked through `IDialogSkillPort.Level` without a write |
+| Price (0x418A40) | class line 1000 with its `%d` = 100 on the reaction scale (0x4C1150: 200 below reaction 0, 200 − 2r below 50, else 120 − 2r/5, r at most 100; a price of 1 is 2) | PC line 1..99 (pay) and 100..199 (the reply's own transition) |
+| No gold (0x418B30) | class line 2000 when the hero's own gold (`IDialogTrainerPort.PcGold`, not the followers') is below the price | as the first notice |
+| Trained (0x418F30) | class line 6000 after the hero paid the NPC (`GoldCommand` of −price through the gold port) and the first tier was set (`SkillTrainingCommand` tier 1 through the skill port) | the PC class line 1000 (+ 50 × the NPC's social class), the reply's own transition |
+
+"The reply's own transition" is the reply's response decoded as for any reply: a positive value continues at that node (the reply's action is not run
+again), zero ends the dialog at the caller's next line, a negative value ends it at that SCR line. The lines come from the greeting port's generated-dialog
+files like the greeting's (the class group + 50 × the NPC's social class, the dumb files, the override line 9999 + group / 1000); without the port, or when
+it does not know the facts, a line is empty and the talk works. The talk reads the same `Phrase` roll as a Player phrase for PC lines and the `Line` roll
+for NPC lines. Receipts: the payment and the training are effects of the turn (a refusal fails the conversation with `CommandRejected`; the budget of
+two effects is checked before the payment). The Educator update after a training (ledger SR11) and the debug prefix are not built.
+
+Session seam: `SessionDialogTrainerPort` over `GameSessionOwner.QueryGold` (the hero's own stack only) with the host's skill names; a PC other than the
+session's or a session without a hero throws on a read (a query failure). The AREA host builds it when the session has a hero and the module's
+`mes\skill.mes` loaded with the greeting texts (`AreaGreetingTexts.Skills`, decoded with the hover text profile); otherwise the reply stays blocked.
+Tests: `DialogTrainerTests` (synthetic), `DialogTrainerPortTests`, and the opt-in `DialogTrainerRealDataTests` (`DAT_ROOT`: all 315 installed `t:` replies
+in 58 files are admitted, the files hold groups 1000..6000 and the PC ranges).
 
 ## Barter reply (ARC-UI-050)
 
