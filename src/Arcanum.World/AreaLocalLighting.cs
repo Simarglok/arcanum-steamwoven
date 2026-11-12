@@ -264,7 +264,7 @@ public sealed class AreaLocalLighting
     /// ARC-WORLD-1149 (FR-LIGHT-011): the light level 0..254 a light-aware check reads for something standing at the cell: the grey of
     /// <see cref="Point"/>, the colour an object there is lit with (the indoor or outdoor ambient of the tile under it, the sector's lights and,
     /// on a view made with them, the carried lights), through <see cref="LightLuminance.Gray"/>. Not the colour of an object the original
-    /// pins (flag 0x147 bit 0x2000000 and the object colour rules of 0x442520 are not modelled), nor a mover's pixel offsets.
+    /// pins (flag 0x147 bit 0x2000000 and the object colour rules of the original's object-colour function (ledger LL1) are not modelled), nor a mover's pixel offsets.
     /// </summary>
     public int LightLevel(long worldX, long worldY, AmbientPair pair) => LightLuminance.Gray(Point(worldX, worldY, 0, 0, pair));
 
