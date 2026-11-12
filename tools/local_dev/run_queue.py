@@ -196,9 +196,15 @@ def _load_libproc() -> Any:
 _LIBPROC = _load_libproc()
 
 
+_DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
 def _start_text(seconds: int) -> str:
     """The text `ps -o lstart=` prints in the C locale and UTC (`Thu Nov 12 17:07:19 2026`, day padded by a space)."""
-    return time.strftime("%a %b %e %H:%M:%S %Y", time.gmtime(seconds))
+    moment = time.gmtime(seconds)  # fixed English names: strftime would follow a locale the importing process set
+    return (f"{_DAYS[moment.tm_wday]} {_MONTHS[moment.tm_mon - 1]} {moment.tm_mday:2d} "
+            f"{moment.tm_hour:02d}:{moment.tm_min:02d}:{moment.tm_sec:02d} {moment.tm_year}")
 
 
 def _process_start_libproc(pid: int) -> str | None:

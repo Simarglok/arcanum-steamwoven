@@ -635,9 +635,13 @@ class ProcessStartTests(unittest.TestCase):
         self.assertIsNone(run_queue._process_start(child.pid))
         self.assertFalse(run_queue._alive(child.pid, "Thu Nov 12 17:07:19 2026"))
 
-    @unittest.skipUnless(sys.platform == "darwin", "libproc is macOS only")
+    @unittest.skipUnless(sys.platform == "darwin" and os.geteuid() != 0, "libproc is macOS only; root may read launchd")
     def test_another_users_process_is_unknown_not_gone(self) -> None:
         self.assertEqual(run_queue._process_start(1), run_queue.UNKNOWN)  # launchd: root's, the kernel refuses
+
+    def test_start_text_ignores_the_locale(self) -> None:
+        self.assertEqual(run_queue._start_text(1794503239), "Thu Nov 12 17:07:19 2026")
+        self.assertEqual(run_queue._start_text(1794503239 - 10 * 86400 + 3600 * 7), "Mon Nov  2 00:07:19 2026")
 
     def test_fallback_asks_ps_and_caches(self) -> None:
         run_queue._START_CACHE.clear()
