@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
@@ -245,11 +246,13 @@ public sealed partial class GameSessionOwner
         else
         {
             // An item the session added to the NPC (ARC-WORLD-055) lies in no seed: not ready until a store holds it.
-            if (NpcItemSeed(side.Life.Entity!, item.Entity) is null) { Skip(SessionCriticalStepOutcome.NotSeedItem, landed); return side; }
+            if (NpcItemSeed(side.Life.Entity!, item.Entity) is not { } seedItem) { Skip(SessionCriticalStepOutcome.NotSeedItem, landed); return side; }
             var written = ApplyChanges(Version, null, [new(_actor.Map, MapChangeKey.ForEntity(item.Entity, ItemDroppedProperty), DroppedValue(landed))]);
             if (written.Disposition == GameSessionDisposition.Rejected) { failure = written.Failure; Skip(SessionCriticalStepOutcome.Unknown); return side; }
             // ARC-WORLD-103: a dropped item a dressed NPC wore is worn no more.
             _inventory.Unwear(item.Entity);
+            // ARC-WORLD-1288 (VP6, VPG3): the drop's tail for an NPC owner (0x461AB0): a dropped weapon sets LOOK_FOR_WEAPON, a dropped armour item LOOK_FOR_ARMOR.
+            NoteDropForAi(side.Life.Entity!, seedItem.Facts.Kind.Type);
             // ARC-WORLD-063: the placement may put it into a junk pile; ARC-WORLD-062: the dropped item decays (ledger ID4).
             SettleDrop(item.Entity, _actor.Map, landed);
             ScheduleDecay(item.Entity, _actor.Map);
@@ -258,6 +261,17 @@ public sealed partial class GameSessionOwner
         var left = new Dictionary<EquipmentSlot, SessionWearItem>(side.Worn);
         left.Remove(slot);
         return side with { Worn = left };
+    }
+
+    // ARC-WORLD-1288 (ledger VP6, VPG3; the item drop 0x461AB0, found in ARC-RES-1104): an NPC that dropped an item of type 5 (weapon) gets the AI's look-for-weapon bit
+    // (0x2000000), one of type 7 (armour, shields and helmets included) the look-for-armour bit (0x4000000), so its next AI pass searches the ground (0x4A8E70); any other
+    // item type sets none. Only an NPC owner reaches here: the hero's drop sets no bit. The danger record is saved by the snapshot as it is.
+    private void NoteDropForAi(string npc, SessionItemType type)
+    {
+        var bit = type switch { SessionItemType.Weapon => DangerFlags.LookForWeapon, SessionItemType.Armor => DangerFlags.LookForArmor, _ => DangerFlags.None };
+        if (bit == DangerFlags.None) return;
+        var record = _danger.Get(npc);
+        if (!record.Flags.HasFlag(bit)) _danger.Put(record with { Flags = record.Flags | bit });
     }
 
     // The hero, or an NPC the PC leads (following or waiting), avoids only a spotted trap on the drop's path; another NPC avoids
