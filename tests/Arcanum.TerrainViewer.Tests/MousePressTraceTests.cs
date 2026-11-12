@@ -6,7 +6,7 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class MousePressTraceTests
 {
-    private static MousePressTrace.Press P(MousePressTrace.Stage stage, string button, long us, long frame = 10, double x = 100, double y = 50, long id = 1)
+    private static MousePressTrace.Press P(MousePressTrace.Stage stage, string button, long us, long frame = 10, double x = 100, double y = 50, ulong id = 1)
         => new(stage, button, us, frame, 0, x, y, id, false, 1);
 
     [TestMethod]

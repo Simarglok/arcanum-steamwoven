@@ -15,6 +15,6 @@ public partial class TerrainViewerApp
     {
         if (AutomatedVisualRun || input is not InputEventMouseButton { Pressed: true } press) return;
         GD.Print(_pressTrace.Note(new MousePressTrace.Press(stage, press.ButtonIndex.ToString(), (long)Time.GetTicksUsec(), (long)Engine.GetProcessFrames(), press.Device,
-            press.Position.X, press.Position.Y, (long)press.GetInstanceId(), press.DoubleClick, (int)press.ButtonMask)));
+            press.Position.X, press.Position.Y, press.GetInstanceId(), press.DoubleClick, (int)press.ButtonMask)));
     }
 }

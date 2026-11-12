@@ -25,7 +25,7 @@ public sealed class MousePressTrace
 
     /// <summary>One press as the viewer saw it.</summary>
     public readonly record struct Press(Stage Stage, string Button, long Microseconds, long Frame, int Device, double X, double Y,
-        long EventId, bool DoubleClick, int ButtonMask);
+        ulong EventId, bool DoubleClick, int ButtonMask);
 
     private readonly Dictionary<(Stage, string), (Press Press, int Burst)> _last = new();
 
@@ -45,7 +45,7 @@ public sealed class MousePressTrace
             burst = gap >= 0 && gap < BurstGapMicroseconds ? previous.Burst + 1 : 1;
         }
         _last[key] = (press, burst);
-        var line = FormattableString.Invariant($"ARC-INPUT-1400 press stage={press.Stage} button={press.Button} t={press.Microseconds / 1000.0:F3}ms frame={press.Frame} device={press.Device} pos=({press.X:F1},{press.Y:F1}) id={press.EventId} double={press.DoubleClick} mask={press.ButtonMask}");
+        var line = FormattableString.Invariant($"ARC-INPUT-1400 press stage={press.Stage} button={press.Button} t={press.Microseconds / 1000.0:F3}ms frame={press.Frame} device={press.Device} pos=({press.X:F1},{press.Y:F1}) id={press.EventId:X} double={press.DoubleClick} mask={press.ButtonMask}");
         line += gap < 0 ? " gap=first" : FormattableString.Invariant($" gap={gap / 1000.0:F3}ms same-pos={samePosition} same-event={sameEvent}");
         return burst > 1 ? line + FormattableString.Invariant($" BURST={burst}") : line;
     }
