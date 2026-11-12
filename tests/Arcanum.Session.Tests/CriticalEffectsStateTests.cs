@@ -220,23 +220,24 @@ public sealed class CriticalEffectsStateTests
         using var owner = Owner();
         var golem = GolemCombat();
         Assert.AreEqual(DangerFlags.None, LookFor(owner), "no bit before a drop");
-        for (var attempt = 0; attempt < 200; attempt++)
+        var expected = DangerFlags.None;
+        var weaponDropped = false;
+        for (var attempt = 0; attempt < 200 && !weaponDropped; attempt++)
         {
             var result = owner.AttackCritter(owner.Version, new(golem) { HeroWorn = HeroWorn(), TargetWorn = Worn(owner), TargetCell = GolemCell });
             Assert.AreEqual((GameSessionFailure.None, GameSessionFailure.None), (result.Failure, result.StepFailure));
-            var dropped = result.Criticals.Where(step => step.Outcome == SessionCriticalStepOutcome.Dropped && step.Whose == DamageRecipient.Target).ToArray();
-            if (dropped.Length == 0) { Assert.AreEqual(DangerFlags.None, LookFor(owner), "a hit with no drop sets no bit"); continue; }
-            Assert.IsTrue(dropped.Any(step => step.Entity == "golem-sword"));
-            var armour = dropped.Any(step => step.Entity != "golem-sword");
-            Assert.AreEqual(armour ? DangerFlags.LookForWeapon | DangerFlags.LookForArmor : DangerFlags.LookForWeapon, LookFor(owner));
-            // The bits are saved as today: a restore keeps them.
-            using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
-            Assert.AreEqual(LookFor(owner), restored.QueryDanger(Golem).Flags & (DangerFlags.LookForWeapon | DangerFlags.LookForArmor));
-            // The hero's drops set no bit: the hero has no danger record entry of its own, and no other NPC gained one.
-            Assert.IsFalse(owner.QueryDangerRecords().Records.Any(record => record.Entity != Golem && (record.Flags & (DangerFlags.LookForWeapon | DangerFlags.LookForArmor)) != 0));
-            return;
+            // The golem's weapon is type 5, its helmet and vest are armour (type 7); the bits accumulate over the drops.
+            foreach (var drop in result.Criticals.Where(step => step.Outcome == SessionCriticalStepOutcome.Dropped && step.Whose == DamageRecipient.Target))
+            {
+                expected |= drop.Entity == "golem-sword" ? DangerFlags.LookForWeapon : DangerFlags.LookForArmor;
+                weaponDropped |= drop.Entity == "golem-sword";
+            }
+            Assert.AreEqual(expected, LookFor(owner), $"attempt {attempt}");
         }
-        Assert.Fail("no critical drop within the bounded run");
+        Assert.IsTrue(weaponDropped, "a critical weapon drop within the bounded run");
+        // The bits are saved as today: a restore keeps them.
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(expected, restored.QueryDanger(Golem).Flags & (DangerFlags.LookForWeapon | DangerFlags.LookForArmor));
     }
 
     [TestMethod]

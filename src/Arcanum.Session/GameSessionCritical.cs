@@ -271,7 +271,10 @@ public sealed partial class GameSessionOwner
         var bit = type switch { SessionItemType.Weapon => DangerFlags.LookForWeapon, SessionItemType.Armor => DangerFlags.LookForArmor, _ => DangerFlags.None };
         if (bit == DangerFlags.None) return;
         var record = _danger.Get(npc);
-        if (!record.Flags.HasFlag(bit)) _danger.Put(record with { Flags = record.Flags | bit });
+        if (record.Flags.HasFlag(bit)) return;
+        // As the other writes that may start a record: a full store keeps the bit unwritten rather than exceed its limit (a snapshot over it is refused at restore).
+        if (_danger.Records.Count >= _limits.MaxDangerRecords && !_danger.Records.ContainsKey(npc)) return;
+        _danger.Put(record with { Flags = record.Flags | bit });
     }
 
     // The hero, or an NPC the PC leads (following or waiting), avoids only a spotted trap on the drop's path; another NPC avoids
