@@ -684,13 +684,21 @@ public partial class TerrainViewerApp
     /// <summary>ARC-UI-012: Escape in play opens the in-play menu (the original's window 3, or window 4: ledger SF1). ARC-DEV-111 (MIG16
     /// S4, SA45, SA51; read in the executable, main loop 0x401705): Escape is a global key of the main loop that no mode and no window
     /// handles itself, so it opens the menu in every interface mode: window 4 while a dialog, the world map or a barter (its dialog is
-    /// still active) is up or another has the turn in a round, else window 3. A press the palette or UI focus owns does nothing.</summary>
+    /// still active) is up or another has the turn in a round, else window 3. A press the palette or UI focus owns does nothing.
+    /// ARC-INPUT-1124 (main loop, the Escape branch at 0x401705 is in the key-up arm, record flag 0): the menu opens on the key's
+    /// RELEASE, not its press. The press only arms the route while no menu is open; the release of an armed press opens the menu. The
+    /// release of a press that another owner took (the palette, a note entry, the bug report, the death box, the menu's own Escape) finds
+    /// the route unarmed and does nothing, so one physical press never closes something and reopens the menu.</summary>
     private bool RouteGameMenuKey(WorldKeyDecision decision)
     {
         if (!QuickKeysActive || decision.Key != WorldKey.Escape) return false;
         // The palette's own Escape closes it (its pulse); a menu waiting for the save window to open takes no second one.
-        if (PaletteOpen) return false;
-        if (!decision.Pressed || decision.Echo || _mainMenu is not null) return true;
+        if (PaletteOpen) { _gameMenuEscapeArmed = false; return false; }
+        if (decision.Echo) return true;
+        if (decision.Pressed) { _gameMenuEscapeArmed = _mainMenu is null; return true; }
+        if (!_gameMenuEscapeArmed) return true;
+        _gameMenuEscapeArmed = false;
+        if (_mainMenu is not null) return true;
         if (!_worldFocused || PanelOutsideStackOpen || WorldUiFocus) { _mainMenuStatus = "Escape ignored: palette, menu or UI focus owns input"; RefreshAreaStatus(); return true; }
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending || _mapHandoff is { Kind: not MapHandoffKind.Stream })
         {
@@ -705,6 +713,9 @@ public partial class TerrainViewerApp
         OpenMainMenu(MainMenuTexts(_arguments ?? _launchArguments!), limited ? AreaMenuWindow.InPlayLimited : AreaMenuWindow.InPlay);
         return true;
     }
+
+    // ARC-INPUT-1124: an Escape pressed while the in-play route owned it; its release opens the menu (the original acts on key up).
+    private bool _gameMenuEscapeArmed;
 
     private string AreaMainMenuStatus() => !QuickKeysActive ? "" : MainMenuOpen ? " | main menu open"
         : _mainMenuStatus is null ? "" : " | main menu: " + _mainMenuStatus;
