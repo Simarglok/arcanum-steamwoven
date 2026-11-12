@@ -21,7 +21,7 @@ public enum HomeKeyTarget
 /// same way. Reached only through the game view's input handler (0x54DE50, key 199 on the release, in the modes of
 /// <see cref="InterfaceModes.FollowerOrderKeys"/>), which returns before it when a round runs and its current participant is not the
 /// player: so the participant the second case centres on is always the player character itself, and the case only repeats the first centring.
-/// The centring (0x4B8CE0 through 0x4B8B30) clamps the view to the map's rectangle, so a character near an edge is never "already centred".
+/// The centring (0x4B8CE0 through 0x4B8B30) refuses a move that would leave the map's rectangle (the view stays), so a character near an edge is never "already centred".
 /// </summary>
 public static class OriginalHomeKey
 {

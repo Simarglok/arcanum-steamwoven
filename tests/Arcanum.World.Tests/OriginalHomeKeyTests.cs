@@ -34,11 +34,8 @@ public sealed class OriginalHomeKeyTests
     [TestMethod]
     public void TheKeyIsHandledInTheModesOfTheFollowerOrderKeysAndNeverInAnothersTurn()
     {
-        for (var i = 0; i < InterfaceModes.Count; i++)
-        {
-            var mode = (InterfaceMode)i;
-            Assert.AreEqual(mode is InterfaceMode.Game or InterfaceMode.SpellTarget or InterfaceMode.SkillTarget or InterfaceMode.FollowerOrder, InterfaceModes.FollowerOrderKeys(mode));
-            Assert.IsFalse(InterfaceModes.FollowerOrderKeys(mode, anotherHasTheTurn: true));
-        }
+        var all = Enumerable.Range(0, InterfaceModes.Count).Select(i => (InterfaceMode)i).ToArray();
+        CollectionAssert.AreEqual(new[] { 0, 1, 2, 18 }, all.Where(m => InterfaceModes.FollowerOrderKeys(m)).Select(m => (int)m).ToArray());
+        Assert.IsTrue(all.All(m => !InterfaceModes.FollowerOrderKeys(m, anotherHasTheTurn: true)));
     }
 }

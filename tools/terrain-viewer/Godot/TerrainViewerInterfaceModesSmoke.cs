@@ -230,8 +230,9 @@ public partial class TerrainViewerApp
                 ScrollAway();
                 var away = CameraAt();
                 Require(away != centred, $"the view scrolled away under the dialog ({centred} -> {away}; {ScrollWhy()})");
+                _homeKeyLastTarget = null;
                 await Press(Key.Home);
-                Require(CameraAt() == away && _homeKeyLastTarget == HomeKeyTarget.Nothing, $"Home does nothing in the dialog's mode ({away} -> {CameraAt()})");
+                Require(CameraAt() == away && _homeKeyLastTarget is null, $"Home does nothing in the dialog's mode ({away} -> {CameraAt()}, target {_homeKeyLastTarget})");
                 CloseWindowMode(InterfaceMode.Dialog);
                 Require(StackText() == "Game" && !WorldModal, "the dialog closed for Home: " + State());
                 // The press alone does nothing; the release centres (the original acts on the key's release).
@@ -240,7 +241,15 @@ public partial class TerrainViewerApp
                 InputWorld(new InputEventKey { Keycode = Key.Home, PhysicalKeycode = Key.Home, Pressed = false });
                 await Frames();
                 Require(CameraAt() == centred && _homeKeyLastTarget == HomeKeyTarget.Pc, $"Home centred the view on the hero ({away} -> {CameraAt()}, want {centred}, target {_homeKeyLastTarget})");
+                // Home with a modifier is the same key (the original tests the scan code only).
+                ScrollAway();
+                Require(CameraAt() != centred, "the view scrolled away again for the modifier step");
+                InputWorld(new InputEventKey { Keycode = Key.Home, PhysicalKeycode = Key.Home, Pressed = true, ShiftPressed = true });
+                InputWorld(new InputEventKey { Keycode = Key.Home, PhysicalKeycode = Key.Home, Pressed = false, ShiftPressed = true });
+                await Frames();
+                Require(CameraAt() == centred, $"Shift+Home centred the view ({CameraAt()}, want {centred})");
                 // Already centred and no round: nothing happens, the view stays (a hero the map's edge keeps off the view's centre is never "centred": the key repeats the centring).
+                _homeKeyLastTarget = null;
                 await Press(Key.Home);
                 var onHero = Math.Abs(centred.X - WorldAnchor.X) < .5 && Math.Abs(centred.Y - WorldAnchor.Y) < .5;
                 Require(CameraAt() == centred && _homeKeyLastTarget == (onHero ? HomeKeyTarget.Nothing : HomeKeyTarget.Pc), $"Home on a centred view with no round changes nothing (target {_homeKeyLastTarget}, on hero {onHero})");

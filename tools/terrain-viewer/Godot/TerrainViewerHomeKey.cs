@@ -8,21 +8,20 @@ namespace Arcanum.TerrainViewer;
 // release in the modes 0, 1, 2 and 18, the F1–F6 order keys' branch) centres the view on the player character at the current zoom and does nothing without
 // one. The original's second case (the view already centred and a round runs) centres on the round's current participant, which the handler's own gate makes
 // the player character again (it returns before the Home branch while another has the turn), so here every case is the one centring the inventory's open
-// does too (`CentreGameViewOnHolder`, 0x4B8CE0, clamped to the map's rectangle). Like F1–F6, a press arms the key only while the world owns the input; the
+// does too (`CentreGameViewOnHolder`, 0x4B8CE0; the viewer's camera clamps to its bounds where the original refuses the move). Like F1–F6, a press arms the key only while the world owns the input; the
 // release acts only while it still does.
 public partial class TerrainViewerApp
 {
     private bool _homeKeyArmed;
 
     // The centring's last decision, for the smoke: what OriginalHomeKey chose for the last accepted release.
-    private HomeKeyTarget _homeKeyLastTarget = HomeKeyTarget.Nothing;
-    internal HomeKeyTarget HomeKeyLastTargetForSelfTest => _homeKeyLastTarget;
+    private HomeKeyTarget? _homeKeyLastTarget;
 
-    /// <summary>Home without modifiers while the AREA view has a hero session: centres the view on the hero on the release of a press the world saw. The world
+    /// <summary>Home (the original tests the scan code only, so any modifier) while the AREA view has a hero session: centres the view on the hero on the release of a press the world saw. The world
     /// map's own Home (its panel owns the keys) and the diagnostic worlds without a session are not this key.</summary>
-    private bool RouteHomeKey(WorldKeyDecision decision, WorldKeyModifiers modifiers)
+    private bool RouteHomeKey(WorldKeyDecision decision)
     {
-        if (decision.Key != WorldKey.Home || modifiers != WorldKeyModifiers.None || WorldMapOpen) return false;
+        if (decision.Key != WorldKey.Home || WorldMapOpen) return false;
         if (_areaSession is not { } session || _camera is null || _worldActor.Session is not AreaGridSession) return false;
         if (decision.Echo) return true;
         if (!OrderInputOpen)
