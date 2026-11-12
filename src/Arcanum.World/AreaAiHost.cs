@@ -52,6 +52,8 @@ public sealed record AreaAiScene
     /// <summary>ARC-DEV-137 (MIG13 S6): the ART of an NPC's animation (frames and rate) for the critter-state goals' timing; null (the provider, or its answer) when the header does not read or
     /// the viewer cannot read that animation (the stun's 23 is not read yet: the stun then ends at once, GT26).</summary>
     public Func<string, int, AiAnimationClip?>? AnimationClip { get; init; }
+    /// <summary>ARC-AI-1313 (0x4D9240 at the dark wander's node 0x425D60): the light level 0..255 at a world cell, as the viewer's lighting answers it for a light-aware check; null: full light everywhere, so the dark wander accepts every tile.</summary>
+    public Func<CellCoord, int>? CellLight { get; init; }
     /// <summary>ARC-WORLD-1162 (SWB17–SWB21): the beds of the shown map and who lies in them, shared with the hero's rest; null: the map has none, so an NPC at its standpoint finds no bed.</summary>
     public AreaAiBeds? Beds { get; init; }
     /// <summary>The hero's world cell now, or null without a hero on this map.</summary>
@@ -1588,6 +1590,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         : Values(id)?.AttackCost ?? TurnBasedRules.AttackCost(TurnBasedRules.UnarmedWeaponSpeed);
 
     public AiPath? PlanPath(string id, AiPathRequest request) => PlanPath(id, request, touch: true);
+
+    /// <summary>ARC-AI-1313: the light level at a world cell for the dark wander (<see cref="AreaAiScene.CellLight"/>; full light without one).</summary>
+    public int CellLight(CellCoord cell) => _scene.CellLight?.Invoke(cell) ?? AttackRules.MaxLightLevel;
 
     // A facts question (AttackFacts) plans without touching: a touch can load a sector and run its fold, which a question must not do.
     private AiPath? PlanPath(string id, AiPathRequest request, bool touch)
