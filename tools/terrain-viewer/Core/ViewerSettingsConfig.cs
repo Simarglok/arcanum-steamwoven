@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Arcanum.Input;
 using Arcanum.Presentation.Audio;
 using Arcanum.Presentation.Hud;
 using Arcanum.Session.Launcher;
@@ -14,6 +15,8 @@ namespace Arcanum.TerrainViewer.Core;
 /// The settings the original registers keep the original's names and value shape (OP5, <see cref="AreaOptionTable"/>): <c>difficulty</c> 0–2,
 /// <c>turn-based</c> and <c>auto attack</c> and <c>always run</c> 0 or 1, <c>text floaters</c> 0–2, <c>float speed</c> 0–10 and the three
 /// volumes <c>effects volume</c>, <c>voice volume</c> and <c>music volume</c> 0–10. The project's own settings have project names:
+/// <c>pad scheme</c> (<c>off</c>, <c>direct</c>, <c>pointer</c>), <c>touch scheme</c> (<c>off</c>, <c>touchpad</c>) and <c>prompt style</c> (<c>auto</c>, <c>xbox</c>,
+/// <c>playstation</c>, <c>nintendo</c>, <c>steamdeck</c>; ARC-GPAD-1374, the controller scheme choice of <see cref="ControlSchemeSettings"/>),
 /// <c>hd interface</c> and <c>generated interface</c> (0 or 1), <c>hd pack</c> (<c>auto</c>, <c>game</c>, <c>custom</c>), <c>hd pack path</c>,
 /// <c>visual profile</c> (<c>legacy</c> or <c>hd</c>) and <c>launcher</c> (the launcher object, <see cref="LauncherSettingsFile"/>). A line that is
 /// absent or has a value outside its range reads as that setting's default and no other setting changes (the old files lost a whole group
@@ -35,8 +38,11 @@ public static class ViewerSettingsConfig
     public const string HdPack = "hd pack";
     public const string HdPackPath = "hd pack path";
     public const string VisualProfileLine = "visual profile";
+    public const string PadSchemeLine = "pad scheme";
+    public const string TouchSchemeLine = "touch scheme";
+    public const string PromptStyleLine = "prompt style";
 
-    private static readonly string[] GameLines = [Difficulty, TurnBased, AutoAttack, TextFloaters, FloatSpeed, HdInterface, GeneratedInterface, HdPack, HdPackPath];
+    private static readonly string[] GameLines = [Difficulty, TurnBased, AutoAttack, TextFloaters, FloatSpeed, HdInterface, GeneratedInterface, HdPack, HdPackPath, PadSchemeLine, TouchSchemeLine, PromptStyleLine];
     private static readonly string[] AudioLines = [EffectsVolume, VoiceVolume, MusicVolume];
 
     private static int? Int(ArcanumConfigRead read, string name, int minimum, int maximum)
@@ -45,6 +51,17 @@ public static class ViewerSettingsConfig
     private static bool? Flag(ArcanumConfigRead read, string name) => read.Get(name) switch { "0" => false, "1" => true, _ => null };
 
     private static string Flag(bool value) => value ? "1" : "0";
+
+    /// <summary>ARC-GPAD-1374: an enum line is its lower-case name; an unknown word reads as the default of that line alone.</summary>
+    private static T Choice<T>(ArcanumConfigRead read, string name, T fallback) where T : struct, Enum
+    {
+        if (read.Get(name) is not { } text) return fallback;
+        foreach (var candidate in Enum.GetValues<T>())
+            if (string.Equals(candidate.ToString(), text, StringComparison.OrdinalIgnoreCase)) return candidate;
+        return fallback;
+    }
+
+    private static string Choice<T>(T value) where T : struct, Enum => value.ToString().ToLowerInvariant();
 
     private static string Number(int value) => value.ToString(CultureInfo.InvariantCulture);
 
@@ -71,6 +88,9 @@ public static class ViewerSettingsConfig
             GeneratedInterface = (Flag(read, GeneratedInterface) ?? false) && hdInterface,
             HdPackSource = HdPackSourceResolver.TryParseMode(read.Get(HdPack)?.ToLowerInvariant(), out var mode) ? mode : defaults.HdPackSource,
             HdPackPath = folder,
+            Pad = Choice(read, PadSchemeLine, defaults.Pad),
+            Touch = Choice(read, TouchSchemeLine, defaults.Touch),
+            Prompts = Choice(read, PromptStyleLine, defaults.Prompts),
         };
     }
 
@@ -86,6 +106,7 @@ public static class ViewerSettingsConfig
             new(TextFloaters, Number(settings.Floats)), new(FloatSpeed, Number(settings.FloatSpeed)),
             new(HdInterface, Flag(settings.HdInterface)), new(GeneratedInterface, Flag(settings.GeneratedInterface && settings.HdInterface)),
             new(HdPack, HdPackSourceResolver.ModeName(settings.HdPackSource)), new(HdPackPath, path),
+            new(PadSchemeLine, Choice(settings.Controls.Pad)), new(TouchSchemeLine, Choice(settings.Controls.Touch)), new(PromptStyleLine, Choice(settings.Controls.Prompts)),
         ];
     }
 

@@ -2308,7 +2308,7 @@ project's, except as below.
   arrows 667 and 668 at (+6, +21) and (+180, +21), a slider's bar 623 `SkilGauge` at (+47, +24) as wide as value × 120 / top, a
   list's value centred in red `Flare12Font` at (+47, +30). An arrow is a push button: the pointer over it shows its lit frame, a
   press its down frame with sound 3000, the release over it plays 3001 and changes the value. PROJECT: the shown controls take the
-  page's first slots in order (the Rules line the Game page's fifth and last, at (531, 122); ARC-UI-146 removed the HD graphics, HD interface and HD pack lines that stood after it, they are the [launcher screen](#launcher-screen-arc-ui-014)'s); the control with the keyboard or controller
+  page's first slots in order (the Rules line the Game page's fifth, at (531, 122), then the evidence log's two lines (ARC-GPAD-1376), seven of the page's eight slots; ARC-GPAD-1374's Pad scheme, Touch and Prompt style lines are the Video page's third to fifth, after the floats; ARC-UI-146 removed the HD graphics, HD interface and HD pack lines that stood after Rules, they are the [launcher screen](#launcher-screen-arc-ui-014)'s); the control with the keyboard or controller
   focus has its label lit in the page buttons' hover red; a text is one line. The line at the top names the hidden controls and the
   notice. Without the game's art (the synthetic self-tests) the whole window is the project's panel.
 
