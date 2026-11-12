@@ -76,4 +76,44 @@ public sealed class AttackChanceStateTests
         Assert.AreEqual(owner.QueryHeroAttackChance(Combat("oid:rat"), 1, null), owner.QueryHeroAttackChance(Combat("oid:other"), 1, null),
             "the same stored values give the same chance");
     }
+
+    // ARC-WORLD-1149 (FR-LIGHT-011): the light level at the target's cell reaches the darkness term of the check, the shown chance and the attack alike.
+    [TestMethod]
+    public void TheTargetsLightReachesTheDarknessTermOfTheChanceAndOfTheAttack()
+    {
+        using var owner = Owner();
+        var rat = Combat();
+        var bright = owner.QueryHeroAttackChance(rat, 1, null)!;
+        Assert.AreEqual(bright, owner.QueryHeroAttackChance(rat, 1, null, AttackRules.MaxLightLevel), "full light is the default");
+        var dark = owner.QueryHeroAttackChance(rat, 1, null, 0)!;
+        Assert.IsTrue(dark.Reasons.HasFlag(SkillDifficultyReasons.Darkness), "no light at the target's cell is a reason");
+        Assert.IsTrue(dark.Percent < bright.Percent);
+        var dim = owner.QueryHeroAttackChance(rat, 1, null, 128)!;
+        Assert.IsTrue(dim.Percent < bright.Percent && dim.Percent > dark.Percent, "half light costs about half the penalty");
+
+        // The attack resolves the same term: its darkness difficulty is the penalty of the level it was given.
+        var seen = owner.AttackCritter(owner.Version, new(rat)).Resolution!;
+        using var darkOwner = Owner();
+        var blind = darkOwner.AttackCritter(darkOwner.Version, new(rat) { TargetLight = 0 }).Resolution!;
+        Assert.AreEqual(0, seen.Difficulty!.Light, "full light: no darkness");
+        Assert.AreEqual(30, blind.Difficulty!.Light, "30 at no light for an untrained melee swing");
+        Assert.AreEqual(seen.Difficulty.Total + 30, blind.Difficulty.Total);
+    }
+
+    [TestMethod]
+    public void ALightLevelOutsideTheRangeRefusesTheChanceAndTheAttack()
+    {
+        using var owner = Owner();
+        var rat = Combat();
+        Assert.IsNull(owner.QueryHeroAttackChance(rat, 1, null, -1));
+        Assert.IsNull(owner.QueryHeroAttackChance(rat, 1, null, AttackRules.MaxLightLevel + 1));
+        var version = owner.Version;
+        foreach (var light in new[] { -1, AttackRules.MaxLightLevel + 1 })
+        {
+            var result = owner.AttackCritter(owner.Version, new(rat) { TargetLight = light });
+            Assert.AreEqual(GameSessionDisposition.Rejected, result.Disposition);
+            Assert.AreEqual(GameSessionFailure.InvalidAttack, result.Failure);
+        }
+        Assert.AreEqual(version, owner.Version, "a refusal spends nothing");
+    }
 }

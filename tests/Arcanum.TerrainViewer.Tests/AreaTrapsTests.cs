@@ -82,10 +82,13 @@ public sealed class AreaTrapsTests
     }
 
     private static (AreaUseScriptHost Host, AreaTraps Traps) Hosts(GameSessionOwner session, ScriptContent content, Func<AreaTrapEffects?> effects,
-        HashSet<AreaObjectKey>? gone, params AreaObjectRecord[] shown)
+        HashSet<AreaObjectKey>? gone, params AreaObjectRecord[] shown) => Hosts(session, content, effects, gone, null, shown);
+
+    private static (AreaUseScriptHost Host, AreaTraps Traps) Hosts(GameSessionOwner session, ScriptContent content, Func<AreaTrapEffects?> effects,
+        HashSet<AreaObjectKey>? gone, Func<AreaObjectRecord, int>? light, params AreaObjectRecord[] shown)
     {
         var host = new AreaUseScriptHost(session, 1, shown, [], content);
-        var traps = new AreaTraps(session, host, shown, row => gone?.Contains(row.Key) == true, effects);
+        var traps = new AreaTraps(session, host, shown, row => gone?.Contains(row.Key) == true, effects, light);
         host.Traps = traps.Use;
         return (host, traps);
     }
@@ -267,6 +270,29 @@ public sealed class AreaTrapsTests
             Assert.IsNull(traps.Step(new(70, 20)), "the first trap object carries no trap (TT9: the first one only)");
             Assert.IsNull(traps.Step(new(71, 20)), "an ordinary trap script on a step is a later slice");
             Assert.AreEqual(0, effects.Calls.Count);
+        });
+    }
+
+    // ARC-WORLD-1149 (FR-LIGHT-011): the spot roll reads the light at the trap object's cell from the host's delegate; a level outside 0..255 refuses the roll.
+    [TestMethod]
+    public void The_spot_roll_asks_for_the_light_at_the_trap_and_refuses_a_level_outside_the_range()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var effects = new Effects();
+            var plate = Row(1, TrapObject, 30001, x: 200, objectFlags: TrapRules.DontDrawFlag);
+            var asked = new List<AreaObjectRecord>();
+            var level = 128;
+            var (_, traps) = Hosts(session, content, () => effects.Side, null, row => { asked.Add(row); return level; }, plate);
+            Assert.AreEqual(1, traps.WalkCheck(Cell(plate)).Rolls);
+            Assert.AreSame(plate, asked.Single(), "one roll asked for the light at its trap");
+            level = 300;
+            var other = Row(2, TrapObject, 30001, x: 201, objectFlags: TrapRules.DontDrawFlag);
+            var (_, refusing) = Hosts(session, content, () => effects.Side, null, row => level, other);
+            var draws = session.QueryRandom().Draws;
+            Assert.AreEqual(0, refusing.WalkCheck(Cell(other)).Rolls, "a light outside 0..255 refuses the roll");
+            Assert.AreEqual(draws, session.QueryRandom().Draws, "a refused roll draws nothing");
         });
     }
 

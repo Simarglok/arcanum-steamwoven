@@ -314,6 +314,8 @@ public partial class TerrainViewerApp
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             // The flight lands off the aimed tile by a fixed offset from where the hero stands (the grenade smoke prints it as the flight's, not judged): the first throw learns it, the next aims so that it lands on the NPC.
             var grenadeAim = aimedAt; var grenadeHurt = Array.Empty<string>(); var grenades = 0; var grenade = "";
+            // ARC-WORLD-1149: the cave is dark, so a throw at the NPC would meet the darkness penalty and miss; this stage judges the grenade's run, not the hit chance.
+            _cellLightForSelfTest = Arcanum.Simulation.Combat.AttackRules.MaxLightLevel;
             for (; grenades < 3 && grenadeHurt.Length == 0; grenades++)
             {
                 session.Heal(session.Version, life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
@@ -345,6 +347,7 @@ public partial class TerrainViewerApp
                 TechProductsRequire(!session.QueryPlacedItems().Any(p => p.Entity == grenade) && !session.QueryPcInventory().Any(i => i.Entity == grenade) && session.IsItemDestroyed(grenade), "the grenade is gone after the explosion");
                 if (grenadeHurt.Length == 0 && _thrownLandingsForSelfTest.Count > 0) grenadeAim = new CellCoord(aimedAt.X - (landed.X - grenadeAim.X), aimedAt.Y - (landed.Y - grenadeAim.Y));
             }
+            _cellLightForSelfTest = null;
             TechProductsRequire(grenadeHurt.Length > 0, $"the grenade's run damaged (or was resisted by) a cave NPC within {grenades} throws");
             if (GameCursorItemForSelfTest == grenade) _gameCursorItem = null;
             ClearSpellMissiles("the smoke's grenade ended");

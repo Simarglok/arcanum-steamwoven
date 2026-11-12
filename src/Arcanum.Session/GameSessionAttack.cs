@@ -559,6 +559,9 @@ public sealed record SessionAttack(SessionCritterCombat Target)
     public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? TargetWorn { get; init; }
     /// <summary>The target's cell now, where a critical drops its items (ARC-COMBAT-009); null: its drops are not applied.</summary>
     public Arcanum.Simulation.Movement.CellCoord? TargetCell { get; init; }
+    /// <summary>ARC-WORLD-1149 (FR-LIGHT-011): the light level 0..255 at the target's cell (the host's <c>LightLuminance</c> grey, at most 254, of the colour the target is lit with; 255 is full light),
+    /// which the check's darkness penalty reads (<see cref="AttackRules.LightPenalty"/>); null: full light, no penalty (the hosts that have no lighting).</summary>
+    public int? TargetLight { get; init; }
     /// <summary>The actor's map as the original's drop reads it (ARC-COMBAT-010): with it a drop draws its distance and directions and
     /// lands where the original's placement puts it; null: on the holder's cell, without draws.</summary>
     public Arcanum.Simulation.Items.IDropMap? DropMap { get; init; }
@@ -680,9 +683,9 @@ public sealed partial class GameSessionOwner
     /// (no roll, no revision): the hero's wielded weapon and its skill against the NPC's stored values (a follower's levelled sheet first), at
     /// <paramref name="distance"/> tiles with the host's <paramref name="lineOfFire"/> for the skills that read it (<see cref="AttackChanceRules"/>).
     /// A boomerang is checked with its thrown range as in its attack. Null without a hero, for a target whose values do not hold, or for
-    /// values the shared check refuses. Not modelled, as in the attack: the target's awareness and light.
+    /// values the shared check refuses, or for a <paramref name="targetLight"/> outside 0..255 (ARC-WORLD-1149: the light level at the target's cell for the darkness penalty, full light by default). Not modelled, as in the attack: the target's awareness.
     /// </summary>
-    public AttackChance? QueryHeroAttackChance(SessionCritterCombat target, int distance, SessionLineOfFire? lineOfFire)
+    public AttackChance? QueryHeroAttackChance(SessionCritterCombat target, int distance, SessionLineOfFire? lineOfFire, int targetLight = AttackRules.MaxLightLevel)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(target);
@@ -693,7 +696,8 @@ public sealed partial class GameSessionOwner
         var defending = Levelled(target);
         try
         {
-            var defender = defending.Combatant(status, record.State, _rules.Combat);
+            if (targetLight is < 0 or > AttackRules.MaxLightLevel) return null;
+            var defender = defending.Combatant(status, record.State, _rules.Combat) with { LightLevel = targetLight };
             return AttackChanceRules.Preview(new AttackRequest
             {
                 Attacker = hero.Combatant,
@@ -784,7 +788,8 @@ public sealed partial class GameSessionOwner
         var targetSide = new SessionWearSide { Life = target.Target, Worn = attack.TargetWorn };
         if (!ValidWear(heroSide, targetSide, targetBroken: false, wear: null)) return RejectAttack(GameSessionFailure.InvalidWear);
         if (attack.Aim is HitLocation.Torso || attack.Aim is { } aim && !Enum.IsDefined(aim) || pending is null && !AttackDistanceFits(hero, attack.Distance) ||
-            attack.LineOfFire is { Cost: < 0 or > AttackResolver.MaxMagnitude } || attack.TargetCell is { } cell && !DropCellFits(cell))
+            attack.LineOfFire is { Cost: < 0 or > AttackResolver.MaxMagnitude } || attack.TargetCell is { } cell && !DropCellFits(cell) ||
+            attack.TargetLight is < 0 or > AttackRules.MaxLightLevel)
             return RejectAttack(GameSessionFailure.InvalidAttack);
         // ARC-COMBAT-019: the attack start refuses while the hero's boomerang is away (0x434B00, attacker field 219 bit 0x4).
         // ARC-COMBAT-023: the throw starter (0x434F80) makes no such test.
@@ -812,6 +817,8 @@ public sealed partial class GameSessionOwner
         // ARC-COMBAT-009: the items the critical-hit procedure looks at are the ones the host says the NPC wears now (an earlier
         // critical may have dropped or destroyed some of its map data's).
         if (attack.TargetWorn is { } targetWorn) defender = defender with { Worn = CombatantRules.WornItems(targetWorn.Keys) };
+        // ARC-WORLD-1149: the light at the target's cell, for the darkness penalty (full light without a host that knows it).
+        if (attack.TargetLight is { } targetLight) defender = defender with { LightLevel = targetLight };
         var request = new AttackRequest
         {
             Attacker = hero.Combatant,

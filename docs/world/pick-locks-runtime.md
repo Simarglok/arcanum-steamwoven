@@ -47,7 +47,7 @@ answer carries the check, the outcome, the object's state after it and whether t
 The AREA inventory window lists **Pick a lock with:** for each lockpicks item in the PC's list (the kit's from the hero load's
 prototype fields, a taken item's from its object row). The button closes the window and arms the lockpicks; the next left press on
 a door or window in map mode picks its lock, walking within range 1 first (the use-item-with-skill goal's range); a press anywhere
-else, a key press, the window's focus loss, a follower walk order, a map change or a reload cancels it. The HUD reports "the lock opens", "locked it", "the lock jams" or "the pick failed". The viewer passes full light;
+else, a key press, the window's focus loss, a follower walk order, a map change or a reload cancels it. The HUD reports "the lock opens", "locked it", "the lock jams" or "the pick failed". The viewer passes the light at the portal's cell (ARC-WORLD-1149, [FR-LIGHT-011](../rendering/area-lighting.md#light-level-for-checks-arc-world-1149));
 in a turn-based round (ARC-COMBAT-020) it passes the round's world, so the pick charges its 4 action points on the hero's subturn.
 
 ## Boundaries (NOT READY)
@@ -56,7 +56,7 @@ in a turn-based round (ARC-COMBAT-020) it passes the round's world, so the pick 
   attack is wired to it, the AI hostility slice does not exist yet).
 - **Not modelled:** the best-follower substitution and its line (PL5), the timed pick-lock goal of the AI, scripts and dialog
   services with its apprentice speed-up (PL3), the floating text and its messages, containers in the viewer (the session takes
-  them; the viewer has no container use), the light at the object in the viewer, the multiplayer packets, keys (the session holds
+  them; the viewer has no container use, so no light is passed for one), the multiplayer packets, keys (the session holds
   none, ARC-WORLD-050).
 
 ## Real-data census
