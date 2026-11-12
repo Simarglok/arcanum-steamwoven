@@ -514,6 +514,8 @@ public partial class TerrainViewerApp
     {
         if (_aiHost is { } host && ReferenceEquals(host.Session, _areaSession)) { host.Retire(); _areaSession!.KillNotice = null; }
         _aiHost = null; _aiHostArea = null;
+        // ARC-DEV-1426: the caches built over the retired map (its line of fire holds the map's rows and steps) go with the host.
+        _aiLineOfFire = null; _aiPcOccupancy = null;
         _heartbeatDialog = null;
         _npcTilePending.Clear();
     }
