@@ -105,7 +105,8 @@ public sealed partial class GameSessionOwner
         if (_inventory.Taken.Contains(entity) || _durability.Destroyed.Contains(entity) || ItemInFlight(entity)) return null;
         foreach (var (map, seed) in _inventory.Seeds)
             if (DroppedCell(map, seed, entity) is { } cell && seed.Items.TryGetValue(entity, out var row))
-                return new(new(entity, _inventory.WithAmmo(entity, row.Facts)), seed.HolderOf[entity], map, cell);
+                // ARC-MAGIC-1230: a push moves the dropped item on from its drop cell.
+                return new(new(entity, _inventory.WithAmmo(entity, row.Facts)), seed.HolderOf[entity], map, MovedCell(map, entity) ?? cell);
         return null;
     }
 
@@ -115,7 +116,8 @@ public sealed partial class GameSessionOwner
     /// <summary>Where a seed item lies loose on the ground: its own cell, its spilled container's (ARC-COMBAT-008) or the cell a
     /// critical dropped it on; null while a holder holds it.</summary>
     internal CellCoord? LooseCell(SessionMapId map, InventoryDomain.Seed seed, string item) =>
-        seed.Items.TryGetValue(item, out var row) ? row.Cell ?? SpilledCell(map, seed, item) ?? DroppedCell(map, seed, item) : null;
+        // ARC-MAGIC-1230: a pushed item lies on the cell the push left it on.
+        seed.Items.TryGetValue(item, out var row) && (row.Cell ?? SpilledCell(map, seed, item) ?? DroppedCell(map, seed, item)) is { } home ? MovedCell(map, item) ?? home : null;
 
     private static long DroppedValue(CellCoord cell) => ItemDroppedValue(cell);
 

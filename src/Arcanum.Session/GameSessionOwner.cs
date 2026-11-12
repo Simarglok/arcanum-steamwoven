@@ -1097,7 +1097,7 @@ public sealed partial class GameSessionOwner : IDisposable
     {
         ThrowIfDisposed();
         return _inventory.Seeds.TryGetValue(map, out var seed)
-            ? _inventory.View(map, seed, KilledNpc, holder => SpillCell(map, seed, holder), item => DroppedCell(map, seed, item)) : null;
+            ? _inventory.View(map, seed, KilledNpc, holder => SpillCell(map, seed, holder), item => DroppedCell(map, seed, item), item => MovedCell(map, item)) : null;
     }
 
     /// <summary>Detached copy of the items the PC took from the world, in the order they entered its list. The hero's
