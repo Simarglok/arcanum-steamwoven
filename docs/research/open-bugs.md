@@ -10,7 +10,6 @@ mechanics behind each fix are in [docs/research/ledger](ledger/) under the task 
 | ID | Bug | Cause / state | FR |
 | --- | --- | --- | --- |
 | B47 | Summon Undead has no summoning animation and no summoned creature (one of three reports; Fireflash and Wall of Fire are closed, below) | The Summon component for creatures falls through to `ComponentNotReady`; slice E1-e of [missing-systems-plan](../project/missing-systems-plan.md) (prototype or list pick, summoned flags, faction, run ends when the summon dies, Summon Undead's ObjFlag). Not built | FR-MAGIC-006, FR-MAGIC-007, FR-MAGIC-008 |
-| B55 | Wall of Fire looks unlike the original (owner screenshots 2026-11-11): opaque dark blobs with a black fringe, 5 pieces where the original shows 3 | Look fixed by ARC-MAGIC-054 (a created scenery takes its prototype's blit flags: the piece, prototype 4031, is additive 0x10). **Count:** the rules read from the executable give 5 pieces on open ground; the original showed 3 in a cave. ARC-MAGIC-055 made the cast map's tile-blocked test the terrain verdict (it only tested the sector before), so blocking terrain now drops pieces as in the original (our cave run makes 3). Whether that explains the owner's 3 is open: needs the cave and cast tile, or the owner's cast on open ground; see [note](wall-of-fire-look-magic-054.md) | FR-MAGIC-008 |
 
 ## Closed with a residual (uncertain: the docs do not say whether the residual is wanted)
 
@@ -47,6 +46,7 @@ Every B-id not in the tables above is closed. A code in brackets was a part of t
   ARC-DEV-333 (stage `loot-room`); B49 ARC-DEV-334; B50 ARC-DEV-335 (hero), ARC-DEV-353 (companions and NPCs); B51
   ARC-DEV-336 (ARC-DEV-354, fresh load); B52 ARC-DEV-337; B53 ARC-DEV-338 (stage `tile-ghost`); B54 ARC-DEV-339 (stage
   `inv-arrange`).
+- **Third report (B55):** B55 (Wall of Fire look and piece count) ARC-MAGIC-054 (a created scenery takes its prototype's blit flags: additive 0x10), ARC-MAGIC-055 (the cast map's tile-blocked test is the terrain verdict); the retail game makes 5 pieces (owner, 2026-11-12), so the count was right and the 3 pieces came from Arcanum CE; [note](wall-of-fire-look-magic-054.md).
 
 ## Triage work lists and stage ids
 

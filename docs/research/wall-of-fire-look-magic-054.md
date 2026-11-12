@@ -1,12 +1,12 @@
 # Wall of Fire: how the wall looks, and how many pieces (ARC-MAGIC-054)
 
-Status: **Bug fixed in part, one question open.** Register entry B55 in [open bugs](open-bugs.md). Owner report 2026-11-11, with two screenshots (the original game in a cave, Steamwoven on the main map).
+Status: **Closed.** The owner found on 2026-11-12 that the retail game makes 5 pieces, as the rules read; the 3 pieces of the first screenshot came from Arcanum Community Edition, no longer a comparison reference. Register entry B55 in [open bugs](open-bugs.md). Owner report 2026-11-11, with two screenshots (Arcanum CE in a cave, Steamwoven on the main map).
 Requirements (reference only): [FR-MAGIC-008](../requirements/combat-magic-tech.md#fr-magic-008). Earlier reading:
 ledger [SUM11, SUM13](ledger/spell-runs.md#summon-component-and-the-objects-it-creates-arc-res-101).
 
-## What the screenshots show
+## What the screenshots show (the first one was not the retail game)
 
-| | Original | Steamwoven (before this change) |
+| | First screenshot (Arcanum CE, as it turned out) | Steamwoven (before this change) |
 | --- | --- | --- |
 | Pieces | 3 | 5 |
 | Step between pieces | one tile (80 px at 800 x 600) | one tile |
@@ -15,7 +15,7 @@ ledger [SUM11, SUM13](ledger/spell-runs.md#summon-component-and-the-objects-it-c
 
 The step and the size of a piece are the same in both. The line's direction is decided by the cast: the original's wall gather turns the direction from the caster to the target tile
 into a step perpendicular to the cast (TA12, read again in `0x4F40B0`: the table agrees with the one in `SpellTargetRules`), so two casts from different places lie along different
-lines; this is no bug. The two real differences are the blend and the count.
+lines; this is no bug. The one real difference was the blend; the count turned out to be no difference (Question 3).
 
 ## Cause 1, fixed: the blend
 
@@ -34,7 +34,6 @@ terrain verdict, as the drop map and the path request do (a tile the evidence ca
 is dropped, and the hero's own start tile is dropped for another reason (an object the test counts: a wall, portal, scenery or trap without "no block"). Open ground still gives 5 (smoke stage `summon-wall`).
 The oracle (F3) had already run the collector and the area test on 10,000 inputs each; the input it could not check was the world's tile verdict, which is what this fixes.
 
-## Question 3, open: does the owner's cave explain 3?
+## Question 3, closed
 
-The terrain (and an object on a tile) can drop pieces, so 3 in a cave is possible with 5 rules. Whether the owner's two outer tiles were blocked is not known: the cave and the cast tile are not named in the report.
-To settle it, the owner casts once on open ground in the original (5 expected) or says where the cave cast was.
+The owner found that the retail game makes 5 pieces; the 3 pieces seen first were Arcanum Community Edition's. Our count of 5 on open ground stands, and Cause 2 stays as a faithful change (terrain drops pieces where the executable's `tile_is_blocking` would); it is unrelated to the CE count, and our own cave run's 3 pieces is a separate result.
