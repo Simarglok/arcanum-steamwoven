@@ -162,7 +162,18 @@ is `AreaUseScriptHost.EntityId`, as for the object damage domain.
   walk) and a use or a step rolls once more for the trap it meets, as the original's separate
   attempts do (SP2); a failed roll leaves the trap unknown and the use or step goes on, so the trap
   fires. The light at the trap is the light at its cell (ARC-WORLD-1149, as the lock pick's): the darkness term of an untrained hero
-  applies. A hero-less session rolls nothing (the trap stays unknown).
+  applies. The roll's modifier is the powered shield's (ARC-MAGIC-1189, SP2): the worn item at location 1005 named 2866, charges of
+  ammunition type 2 in the roller's list and an aptitude (stat 16) at or below 0 give the aptitude itself (negative: a bonus);
+  `TrapRules.SpotItemModifier` is the rule, the session reads the facts. A hero-less session rolls nothing (the trap stays unknown).
+- **NPC and companion spot.** `GameSessionOwner.RollNpcSpotTrap` is the same branch with an NPC as the source (ARC-MAGIC-1189, TT2, TT3, SP2):
+  the NPC's own spot trap level and training from its sheet and effects, its blindness and crippled limbs, the light at the trap, the
+  modifier of the powered shield it wears; no fate and no difficulty-setting term (the local PC's). The gate is the observer's
+  (`GameSessionOwner.NpcSpotObserver`): a free NPC knows every trap the PC did not place, a companion led by the PC knows the spotted and
+  the PC-placed ones, and the player's Detect Traps flag spots for any observer. `AreaTraps.WalkCheckNpc` is the walk check of the NPC's
+  next tile (0x427110, TT10), asked by `AreaAiHost.StepBlocked` through the scene's `Traps` provider before the step starts: the first
+  trap spotted blocks the step as a step that cannot start does (the walk ends, EX20). A companion on its own follow walk (not held by
+  the AI host) asks the same check through `AreaCompanionGroup.StepTrap`, which refuses the step with `TrapSpottedReason` (the gate stays on the companion's grid through its rebuilds; a companion the AI host holds asks nothing there, as the host's own check rolled). The AI host rolls only for a step that can start. A walker meeting a trapped door tile rolls again after its door push, as the walk node restarts; once a companion marks a trap the next frame's step goes (nothing ends its follow goal or plans around the tile yet). A companion marks what it spots (the player
+  knows it from then on); a free NPC marks nothing (TT4), so it rolls again at its next step. An NPC with no sheet or life rolls nothing.
 - **Disarm.** See [Disarm](#disarm-arc-skills-1156).
 - **Effects.** A fired native run goes to `SessionSpellCaster.ApplyTrapEffect` with the cast
   map's id of the trapped object and the hero as the triggerer. Without a cast host no trap
@@ -184,9 +195,9 @@ The hero's disarm traps press (E6-a second half; ledger [SP3](../research/ledger
 
 ## Not modelled here
 
-- The follower who disarms instead of the hero (SP3, 0x57A620), the spot modifier of the item at inventory
-  location 1005 (SP2), and the NPCs' and companions' own
-  spot attempts.
+- The follower who disarms instead of the hero (SP3, 0x57A620), and the NPCs' and companions' use of a trapped
+  object or step onto a trap object (their spot attempt on the walk check is built, ARC-MAGIC-1189, for the AI host's walkers
+  and the companions' own follow walk).
 - The 30002 trap in the viewer (with its shot), an ordinary trap script on a step, and the
   route cost of a known trap (DC8) on the PC's route (the drop map's route has it), the
   steps of NPCs and companions onto trap objects, the attack's trap trigger in the viewer,

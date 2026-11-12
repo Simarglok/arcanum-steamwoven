@@ -976,6 +976,36 @@ portrait (it is not session state, and the PC is not a hover target), the rule t
 portrait another one (0x4CEB80, it needs the PC's), the hovered panel's art for anyone else, and the original's hide
 toggle. Original visual parity NOT VERIFIED.
 
+### Combat action points and turn order (ARC-UI-1114)
+
+Slice 2 of the [combat HUD plan](../research/combat-hud.md#slices) (FR-COMBAT-011, FR-COMBAT-003, FR-UI-005), in `area` with plain Godot
+controls (no original interface art), read in the 1.0.7.4 executable ([ledger CH2–CH6 and CH14](../research/ledger/ui-audio.md#combat-hud-arc-ui-017)).
+The rules are `ActionPointRules` and `TurnOrderRules` in `Arcanum.Presentation.Hud`, the cost preview is `AreaActionPointPreview` in
+`Arcanum.World`; the view is `AreaCombatHud` and its host `TerrainViewerAreaCombatHud.cs`. Shown only while a turn-based round runs (a combat
+mode with a round), with a hero, while no window the bars do not reach is open.
+
+- **Lamps** (CH2). A panel of 20 lamps in four groups of five at the original's place just above the interface bar (the lamp panel at 222, 412 of the
+  800 × 600 screen, scaled with the bars; the lamp art and exact lamp places are not drawn, plain rectangles stand for them). On the hero's subturn they
+  light from the left in three shares: the points left after the previewed action (green), the action's cost (orange) and the part of it the points do not
+  cover (red), the colours of the original's hidden-interface bar (CH3); more than 20 show what fits, no points light nothing. On another participant's
+  subturn three green lights run along the lamps, seven apart, one step every 100 ms (CH5); the lights' clock runs only while another participant acts and starts again with each round, as the original's.
+- **Pending cost** (CH4, CH14). The lamps preview the last action-point check's cost. In a round the action under the pointer previews its cost
+  (`AreaActionPointPreview.Cost`: walk 2 a step or 1 for an always-running hero, use or loot 2 plus the approach, pick up 1 plus the walk, attack with the weapon's
+  cost plus the approach for a weapon that reaches one cell or less, cast 4); an action that runs no check (a talk, no route, nothing under the pointer) leaves it as
+  it was. The hero's own charges (a step, an attack, a pickup, a use) store their cost too, and a charge does not clear it. Each subturn start, the end of the round and a new session
+  reset it (the original's subturn start runs the check with 0). The approach is counted in straight-line cells, the original asks its pathfinder for the path (a limit; the charge of each step stays exact).
+- **Turn order** (CH6; a Steamwoven addition approved by the owner on 2026-10-28). A list at the top right under the interface strip (the follower portraits stand at the left edge): `Round N`, then the
+  participants in round order, the one whose subturn it is marked with `>` (the hero as `Hero`, an NPC by the name the hover gives it). More than 8 participants
+  show 8 from the current one on and `+N more`. It hides behind any open window. The list is shown in the Steamwoven rule mode and hidden in Original
+  (`InterfaceRuleProfile.TurnOrderListHidden`, [rule modes](../world/rule-modes.md)); the lamps show in both.
+- **Not done.** The 25-point bar of the hidden-interface layout (the viewer has no hide toggle), the lamp arts and positions, the end-turn button on the lamp panel,
+  the item and skill cursors' previews, the Alt variants of the original's preview (attack check on a portal, container or party member), a throw's own cost in the preview (it shows the attack's), the hero's name in the list, a created critter's name in the list (it shows its entity id), the lamps for a negative point count (the original lights the shortfall, the viewer nothing; points are never negative in a round). Visual parity NOT VERIFIED.
+
+Checks: `CombatHudTests` (shares, the three cases of the 20-lamp cap, the cue, the list window), `AreaActionPointPreviewTests`, `RuleModeTests`; the native smoke
+stage `turn-based` reads the HUD in a real round on `Arcanum1-024-fixed`: three running lights and a marked NPC on the NPC's subturn, the hero's points as lamps and
+the marked hero on its own, the walk preview's 2 shown as the cost, the same cost kept after the step, the attack preview equal to the weapon's cost, and the HUD gone
+with the round (`ARC_AREA_HUD_CAPTURE=<ignored path prefix>` saves the readbacks the graphics composite is made from).
+
 ### Floating text (ARC-UI-021)
 
 Slice 4 of the [combat HUD plan](../research/combat-hud.md#slices) (FR-UI-005), in `area`, drawn with the

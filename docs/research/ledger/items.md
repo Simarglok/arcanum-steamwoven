@@ -662,7 +662,7 @@ bound or policy, **H** a host or another method, **A** no effect on state, **G**
 | VP49 | trap device on an object 0x4BC2E0 | Agree (TP2, IA13). The second reading adds that a mechanical device is armed without checking that it carries a script. | Match within the reason (A for a device without a script, as VP36). | F2; partial |
 | VP50 | trap disarm 0x4BC7B0 | Agree (TT5, TT6), except the item of a PC-placed trap with a spell byte: the second reading wrote 11005, a slip of its sum: the export adds 0x235E to 0x179F, 15101 (TT6). | Match (the outcome; the item's creation is the caller's, H). | F2; partial |
 | VP51 | inventory grid cells mark 0x466310 | Agree (JP3); no bounds check (an art of width or height 0 would mark 2^27 cells). | The session rebuilds occupancy and refuses a rectangle off the grid (S). | F2; partial |
-| VP52 | trap spot 0x4BBE40 | Agree (TT3, SP2). | Match within the reason (#1189 holds the item modifier and the NPC attempts). | F2; partial |
+| VP52 | trap spot 0x4BBE40 | Agree (TT3, SP2). | Match within the reason: the item modifier and the NPCs' walk-check attempts are built (ARC-MAGIC-1189); an NPC's use of a trapped object and its step onto a trap object are not (S). | F2; partial |
 | VP53 | item drop distance 0x461A90 | Agree (PI1). | Match. | F2; partial |
 | VP54 | item wear check 0x464D20 | Agree (EQ1). | Match; the art lookups are the caller's (H). | F2; partial |
 | VP55 | weapon speed 0x465CF0 | Agree (EQ10). | Match. | F2; partial |

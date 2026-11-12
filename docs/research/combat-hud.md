@@ -58,7 +58,8 @@ Each slice is its own task code, thread and pull request (owner rule 2026-10-28)
 
 1. **This study** (ARC-UI-017): the ledger rows and this plan. Docs only.
 2. **Action points and turn cue**: the 20-cell panel with the three shares and the cost preview, the running light on other
-   subturns, the turn-order list (Steamwoven mode only); FR-COMBAT-011.
+   subturns, the turn-order list (Steamwoven mode only); FR-COMBAT-011. Done in ARC-UI-1114
+   ([viewer](../rendering/terrain-viewer.md#combat-action-points-and-turn-order-arc-ui-1114)).
 3. **Health and fatigue bars**: the hero's gauges with numbers and poison, the follower portraits' bars and red tint, the
    hovered critter's bars; FR-UI-002. Done in ARC-UI-020 ([viewer](../rendering/terrain-viewer.md#health-and-fatigue-bars-arc-ui-020)),
    the original's art since ARC-UI-024 ([panel art](../rendering/terrain-viewer.md#panel-art-arc-ui-024)).
