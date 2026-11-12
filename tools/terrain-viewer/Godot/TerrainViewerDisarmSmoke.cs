@@ -19,7 +19,7 @@ public partial class TerrainViewerApp
     // entry arms the skill cursor; the player's data supplies the target, a container the smoke makes trapped with the native trap script 30001 (the use slot's script
     // written as the session's map change, the original object keeps its other data) and known to the hero (the spot mark). Steps:
     //  1. Armed on a trap the hero does not know, a press on the container says so, rolls nothing and closes the cursor.
-    //  2. The hotkey bar's entry arms mode 2 (skill target) as the disarm cursor (the pick pocket's arming replaces it and the other way round); a right press cancels it.
+    //  2. The hotkey bar's entry arms mode 2 (skill target) as the disarm cursor (the pick pocket button's arming, ARC-UI-1113, replaces it and the other way round); a right press cancels it.
     //  3. With the trap known, a fated press (fate point armed: a critical success) removes the trap in one revision; the container is no trapped object any more.
     // NONE without a container the hero can stand beside with a pixel to press.
     private async Task RunAreaDisarmSmokeAsync()
@@ -83,8 +83,9 @@ public partial class TerrainViewerApp
             // 2. Arming, the pick pocket's arming replacing it, and a right press cancelling.
             ActivateHotkey(hotkey, "smoke");
             Require(DisarmArmed, "armed again");
-            ArmPickPocket();
-            Require(!DisarmArmed && PickPocketArmed, "the pick pocket's arming replaced the disarm cursor");
+            // ARC-UI-1113: the skill bar's Pick pocket button (the hotkey bar's entry, as the skill pane's button) arms it.
+            ActivateHotkey(HotkeyEntry.ForSkill(SkillBarButton.PickPocket), "smoke");
+            Require(!DisarmArmed && PickPocketArmed && _hotkeyNotice == "hotkey smoke: pick pocket: press an NPC", $"the pick pocket's button replaced the disarm cursor: {_hotkeyNotice}");
             ActivateHotkey(hotkey, "smoke");
             Require(DisarmArmed && !PickPocketArmed, "the disarm cursor replaced the pick pocket's");
             CancelDisarm("the smoke's right press");

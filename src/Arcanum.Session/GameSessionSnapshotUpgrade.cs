@@ -574,6 +574,8 @@ public static partial class GameSessionSnapshotCodec
                 foreach (var name in new[] { "npcSet", "npcCleared" }) AddField(row, $"$.spells.objectFlags[{i}]", name, 0);
             }
         },
+        // ARC-SCRIPT-1279 (schema 94): the inventory section gains the item fields scripts wrote (written start, inventory display bit). No older build kept any, so the step adds the empty list. The inventory section the older schema carried must be there and an object.
+        [93] = root => AddField(Section(root, "inventory"), "$.inventory", "itemFields", new JsonArray()),
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

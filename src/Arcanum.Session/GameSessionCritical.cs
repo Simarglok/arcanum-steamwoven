@@ -251,6 +251,8 @@ public sealed partial class GameSessionOwner
             if (written.Disposition == GameSessionDisposition.Rejected) { failure = written.Failure; Skip(SessionCriticalStepOutcome.Unknown); return side; }
             // ARC-WORLD-103: a dropped item a dressed NPC wore is worn no more.
             _inventory.Unwear(item.Entity);
+            // ARC-WORLD-1284 (VPG1): the drop's removal 0x467860 sets NPC flag 0x40 on the NPC.
+            MarkCheckWield(side.Life.Entity);
             // ARC-WORLD-1288 (VP6, VPG3): the drop's tail for an NPC owner (0x461AB0): a dropped weapon sets LOOK_FOR_WEAPON, a dropped armour item LOOK_FOR_ARMOR.
             NoteDropForAi(side.Life.Entity!, seedItem.Facts.Kind.Type);
             // ARC-WORLD-063: the placement may put it into a junk pile; ARC-WORLD-062: the dropped item decays (ledger ID4).

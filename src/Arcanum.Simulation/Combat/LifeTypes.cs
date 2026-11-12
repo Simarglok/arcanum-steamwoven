@@ -121,6 +121,11 @@ public sealed record LifeFacts
     /// <summary>Effective PoisonRecovery stat (poison removed per recovery tick).</summary>
     public int PoisonRecovery { get; init; } = 8;
     public int NormalResistance { get; init; }
+    /// <summary>ARC-UI-1145: the normal resistance before the critter's effect changes and the clamp (its stored value plus its worn armour's), when the host knows it. A host that gives it lets the
+    /// session lay the critter's effect list over it (<see cref="CombatantRules.NormalResistance"/>) so the poison tick meets the effect-changed value; null keeps <see cref="NormalResistance"/> as given.</summary>
+    public int? NormalResistanceBase { get; init; }
+    /// <summary>ARC-UI-1145: the clamp <see cref="NormalResistanceBase"/> takes when the effects are laid over it (a monstrous NPC's resistance is not cut to 0..95).</summary>
+    public bool NormalResistanceUnclamped { get; init; }
     public LifeTraits Traits { get; init; }
     public ImmutableArray<EffectModifier> MaxHitPointEffects { get; init; } = ImmutableArray<EffectModifier>.Empty;
     public ImmutableArray<EffectModifier> MaxFatigueEffects { get; init; } = ImmutableArray<EffectModifier>.Empty;

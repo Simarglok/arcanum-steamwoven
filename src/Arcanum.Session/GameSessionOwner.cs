@@ -2236,6 +2236,8 @@ public sealed partial class GameSessionOwner : IDisposable
             _inventory.SetWeight(item.Entity, facts.WeightFacts);
         }
         if (into is null && ammo is { } added) _inventory.Ammo[item.Entity] = added;
+        // ARC-WORLD-1284 (VPG1): the removal 0x467860 sets NPC flag 0x40 on the giver, a merge of the item into the hero's stack included (the removal comes first).
+        if (holder is not null && KnownNpc(holder)) MarkCheckWield(holder);
         runs?.Commit();
         if (refused) PlaceHeroItem(item.Entity, _actor.Cell);
         else Revise();
@@ -2416,6 +2418,16 @@ public sealed partial class GameSessionOwner : IDisposable
                 return GameSessionFailure.InvalidSnapshot;
             lastIdentified = entity;
             inventory.Identified.Add(entity);
+        }
+        // ARC-SCRIPT-1279: the item fields by entity in ordinal order, within the bound, none empty, none of a deleted item.
+        if (saved.ItemFields.Count > SessionInventoryState.MaxItemFields) return GameSessionFailure.BudgetExceeded;
+        string? lastFielded = null;
+        foreach (var row in saved.ItemFields)
+        {
+            if (row is null || !SessionValidation.Entity(row.Entity) || row.Writes.IsEmpty || lastFielded is not null && string.CompareOrdinal(lastFielded, row.Entity) >= 0 || destroyed.Contains(row.Entity))
+                return GameSessionFailure.InvalidSnapshot;
+            lastFielded = row.Entity;
+            inventory.ItemFields.Add(row.Entity, row.Writes);
         }
         // ARC-WORLD-094: the highest discarded made number.
         if (saved.LastDiscardedMade < 0) return GameSessionFailure.InvalidSnapshot;
