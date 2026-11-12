@@ -854,3 +854,12 @@ Known differences (documented, not bugs):
 - The creature takes the hero's alignment as the original does, but of the moment the world first reads it: a loaded game reads the hero's then.
 - The original's weighted lists overrun their table on a draw of 100 (MG9); Steamwoven fixes it in both modes (technical bug rule).
 - Familiar (74): its own flags (`OSF_FAMILIAR`, `ONF_FAMILIAR`) and its hiding with the party on the world map are MA-1's and the world map's.
+
+## ARC-WORLD-1132 — First gold pile (2026-11-12)
+
+The rule is in [First gold pile](../world/inventory-runtime.md). Compare in both games with a hero whose inventory grid is full and who holds no coin.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Fill the whole inventory grid, hold no gold, then receive coins (a dialog reward, selling an item, a successful steal). | The coins do not reach the hero: a pile of coins lies on the hero's tile and the call reports success. | open |
+| 2 | Pick the pile up with the grid still full. | The pickup is refused and the pile stays on the ground; with a free place the coins join the hero's gold. | open |
