@@ -18,14 +18,4 @@ public static class AreaUiScale
     /// device pixels (at least 1: a smaller window still draws the screen once and the window clips it).</summary>
     public static int ScreenFactor(float width, float height) =>
         Math.Max(1, (int)Math.Floor(Math.Min(width / AreaGameBarLayout.ScreenWidth, height / AreaGameBarLayout.ScreenHeight)));
-
-    /// <summary>True for a window no larger than the handheld's (the policy's compact class); every larger window keeps the ordinary factor.</summary>
-    public static bool IsHandheld(float width, float height) => width <= HandheldWidth && height <= HandheldHeight;
-
-    /// <summary>The height in pixels a text of <paramref name="fontPx"/> (the font's own size: the number in the original's font name,
-    /// <c>Garmond9Font</c> = 9) shows at <paramref name="factor"/>.</summary>
-    public static int TextPx(int fontPx, int factor) => fontPx * factor;
-
-    /// <summary>True when a text of <paramref name="fontPx"/> shows at <paramref name="factor"/> at <see cref="MinimumTextPx"/> or more.</summary>
-    public static bool TextIsLegible(int fontPx, int factor) => TextPx(fontPx, factor) >= MinimumTextPx;
 }

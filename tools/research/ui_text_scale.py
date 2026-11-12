@@ -6,7 +6,12 @@ The original composes every window inside its 800 x 600 screen; the viewer draws
 2026-11-12: whole scale only, smallest text >= 9 px). This script, per resolution and per window of the viewer, takes the original fonts the
 window draws (read from the player's own installation, never copied anywhere), and prints three heights at the window's factor: the font's own
 size (the number in its file name, `Garmond9Font` = 9; the gate), its line height (tallest glyph) and its capital height (ink rows of "H").
-It also scans the viewer's Godot-label text sizes (the fallback drawing) and fails on one under 9 px.
+It also scans the viewer's Godot text sizes and fails on one under 9 px at the factor. Scope of the scan (the rest is not seen): the
+literal or constant argument of `AddThemeFontSizeOverride("font_size", ...)` (an expression takes its smallest part; an expression with an
+unresolved name is a failure, never a skip), `const int ...FontSize` constants of the files that draw with `DrawString`, and the inventory
+and barter drawing's `Math.Max(floor, N * _scale)` sizes (the size at scale 1 is the larger of the floor and N). Labels without an override
+(the theme's default size) and a `DrawString` with a computed size elsewhere are not scanned. A font without a number in its file name is
+gated on its tallest glyph instead.
 
     python3 -B tools/research/ui_text_scale.py                       # 1280x800 and 1920x1080, the installation from ARCANUM_GAME_DIR
     python3 -B tools/research/ui_text_scale.py --size 1280x800 --game-dir PATH
@@ -59,9 +64,8 @@ WINDOWS = (
     Window("world map", (840,), "tools/terrain-viewer/Core/AreaWorldMapArt.cs"),
 )
 
-# Godot-label sizes that are not text a player reads: the save list's keyboard field keeps size 1 and is drawn transparent
-# (AreaSaveListPanel: "the field keeps the keyboard in the original's look but is not seen").
-HIDDEN_FIELD = {("tools/terrain-viewer/Godot/AreaSaveListPanel.cs", 1)}
+# A line carrying this marker is not text a player reads (the save list's transparent keyboard field keeps size 1).
+HIDDEN_MARKER = "ui-text-scale: hidden"
 FONT_SIZE = re.compile(r'AddThemeFontSizeOverride\(\s*"font_size"\s*,\s*([^)]*?)\s*\)')
 FONT_CONSTANT = re.compile(r'\b(?:private\s+|public\s+|internal\s+)?const\s+int\s+([^;]*(?:Font|FontSize)[^;]*);')
 
@@ -92,9 +96,24 @@ def font_fact(font) -> FontFact:
                     ink_rows(capital.width, capital.height, capital.red) if capital else 0)
 
 
-def scan_label_sizes(root: Path = ROOT) -> list[tuple[str, int, int]]:
-    """(file, line, size) of every literal Godot-label font size in the viewer; a constant is resolved when it is a plain number."""
-    found = []
+def resolve_size(argument: str, constants: dict[str, int]) -> int | None:
+    """The smallest size an expression can show: its integer literals and the constants it names; None when it names something unresolved."""
+    names = re.findall(r"[A-Za-z_]\w*", argument)
+    values = [int(number) for number in re.findall(r"(?<![\w.])\d+(?![\w.])", argument)]
+    for name in names:
+        if name in constants:
+            values.append(constants[name])
+        elif name not in {"text", "Font", "AreaMessageFont", "Title", "Number", "Math", "Round", "int"}:
+            return None
+    return min(values) if values else None
+
+
+INVENTORY_FLOOR = re.compile(r"Math\.Max\(\s*(\d+)\s*,\s*\(int\)\s*(?:Math\.Round\()?\(?\s*(\d+)\s*\*\s*_scale")
+
+
+def scan_label_sizes(root: Path = ROOT) -> tuple[list[tuple[str, int, int]], list[str]]:
+    """((file, line, size at scale 1) of every Godot text size the scan covers, unresolved sizes as messages)."""
+    found, unresolved = [], []
     for path in sorted((root / "tools" / "terrain-viewer" / "Godot").glob("*.cs")):
         if any(word in path.name for word in ("Smoke", "Test")):
             continue
@@ -104,15 +123,22 @@ def scan_label_sizes(root: Path = ROOT) -> list[tuple[str, int, int]]:
             for name, value in re.findall(r"(\w+)\s*=\s*(\d+)", declaration.group(1)):
                 constants[name] = int(value)
         relative = path.relative_to(root).as_posix()
+        draws = "DrawString(" in text
         for index, line in enumerate(text.splitlines(), 1):
+            if HIDDEN_MARKER in line:
+                continue
             for match in FONT_SIZE.finditer(line):
                 argument = match.group(1).strip()
-                value = int(argument) if argument.isdigit() else constants.get(argument)
-                if value is None and "AreaUiScale.MinimumTextPx" in argument:
-                    value = MINIMUM_PX
-                if value is not None:
+                value = MINIMUM_PX if "AreaUiScale.MinimumTextPx" in argument else resolve_size(argument, constants)
+                if value is None:
+                    unresolved.append(f"{relative}:{index} font size '{argument}' is not resolvable")
+                else:
                     found.append((relative, index, value))
-    return found
+            for floor, base in INVENTORY_FLOOR.findall(line):
+                found.append((relative, index, max(int(floor), int(base))))
+            if draws and (const := re.search(r"const\s+int\s+FontSize\s*=\s*(\d+)", line)):
+                found.append((relative, index, int(const.group(1))))
+    return found, unresolved
 
 
 def check_sources(root: Path = ROOT) -> list[str]:
@@ -130,7 +156,7 @@ def check_sources(root: Path = ROOT) -> list[str]:
     return problems
 
 
-def report(sizes, facts: dict[int, FontFact], labels, minimum: int = MINIMUM_PX) -> tuple[list[str], list[str]]:
+def report(sizes, facts: dict[int, FontFact], labels, minimum: int = MINIMUM_PX, unresolved=()) -> tuple[list[str], list[str]]:
     lines, failures = [], []
     for width, height in sizes:
         factor = screen_factor(width, height)
@@ -150,14 +176,13 @@ def report(sizes, facts: dict[int, FontFact], labels, minimum: int = MINIMUM_PX)
                 if not ok:
                     failures.append(f"{width}x{height}: {window.name}: {fact.file} is {shown} px")
                 lines.append(f"   {window.name:<42} {number:>3} {fact.file:<30} {shown:>4} {fact.line * factor:>4} {fact.capital * factor:>4}  {verdict}")
+        failures.extend(f"{width}x{height}: {message}" for message in unresolved)
         for file, line, value in labels:
-            if (file, value) in HIDDEN_FIELD:
-                continue
             shown = value * factor
             if shown < minimum:
                 failures.append(f"{width}x{height}: {file}:{line} Godot label font size {value} -> {shown} px")
-        seen = [value for file, _, value in labels if (file, value) not in HIDDEN_FIELD]
-        lines.append(f"   Godot-label sizes: {len(seen)} read, smallest {min(seen) * factor if seen else 'none'} px at x{factor}")
+        seen = [value for _, _, value in labels]
+        lines.append(f"   Godot text sizes: {len(seen)} read, {len(unresolved)} unresolved, smallest {min(seen) * factor if seen else 'none'} px at x{factor}")
     return lines, failures
 
 
@@ -191,8 +216,15 @@ def self_test() -> int:
     assert any("a.cs:5" in failure for failure in failures)
     _, failures = report([(640, 480)], {n: FontFact(n, "SyntheticFont.ART", 12, 12, 9) for window in WINDOWS for n in window.fonts}, [])
     assert any("does not fit" in failure for failure in failures)
-    scan = scan_label_sizes()
-    assert scan and all(len(item) == 3 for item in scan)
+    scan, unresolved = scan_label_sizes()
+    assert scan and not unresolved, unresolved
+    assert all(len(item) == 3 for item in scan)
+    assert resolve_size("text.Font == AreaMessageFont.Title ? TitleFontSize : TextFontSize", {"TitleFontSize": 13, "TextFontSize": 12}) == 12
+    assert resolve_size("someTable[i]", {}) is None and resolve_size("9", {}) == 9
+    assert INVENTORY_FLOOR.findall("var size = Math.Max(8, (int)(11 * _scale));") == [("8", "11")]
+    assert INVENTORY_FLOOR.findall("var size = Math.Max(6, (int)Math.Round(12 * _scale));") == [("6", "12")]
+    _, failures = report([(1280, 800)], synthetic, [], unresolved=["x.cs:1 font size 'q' is not resolvable"])
+    assert any("not resolvable" in failure for failure in failures)
     assert not check_sources(), check_sources()
     print("ui_text_scale: self-test passed")
     return 0
@@ -218,7 +250,8 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as error:  # noqa: BLE001 - a missing installation or font is a usage error, reported once
         print(f"ui_text_scale: cannot read the original fonts: {error}", file=sys.stderr)
         return 2
-    lines, failures = report(args.size or DEFAULT_SIZES, facts, scan_label_sizes())
+    labels, unresolved = scan_label_sizes()
+    lines, failures = report(args.size or DEFAULT_SIZES, facts, labels, unresolved=unresolved)
     print("\n".join(lines))
     print(f"ui_text_scale: {'FAIL' if failures else 'PASS'} ({len(failures)} failures)")
     for failure in failures:

@@ -27,23 +27,10 @@ public sealed class AreaUiScaleTests
     }
 
     [TestMethod]
-    public void The_handheld_class_is_a_window_no_larger_than_1280_by_800()
+    public void The_text_rule_is_nine_pixels_at_least_and_twelve_recommended()
     {
-        Assert.IsTrue(AreaUiScale.IsHandheld(1280, 800));
-        Assert.IsTrue(AreaUiScale.IsHandheld(1280, 720));
-        Assert.IsFalse(AreaUiScale.IsHandheld(1920, 1080));
-        Assert.IsFalse(AreaUiScale.IsHandheld(1280, 801));
-    }
-
-    [TestMethod]
-    public void Text_is_legible_from_nine_pixels_at_the_windows_factor()
-    {
-        // The owner's numbers (2026-11-12): 9 px at least, 12 px recommended; the boundary is exact.
+        // The owner's numbers (2026-11-12); the viewer's smallest Godot text and tools/research/ui_text_scale.py read the same two.
         var limits = new[] { AreaUiScale.MinimumTextPx, AreaUiScale.PreferredTextPx };
         CollectionAssert.AreEqual(new[] { 9, 12 }, limits);
-        Assert.IsTrue(AreaUiScale.TextIsLegible(9, 1));
-        Assert.IsFalse(AreaUiScale.TextIsLegible(8, 1));
-        Assert.IsTrue(AreaUiScale.TextIsLegible(6, 2));
-        Assert.AreEqual(24, AreaUiScale.TextPx(12, 2));
     }
 }

@@ -26,13 +26,14 @@ glyph, the viewer's own "text height"; capital height = ink rows of "H", shown f
 | Garmond9 (483) | character sheet skills and tech pages | **9** | 10 | 7 |
 | every other font a window draws | all the rest | 12 to 32 | 16 to 38 | 11 to 23 |
 
-The only text under the 12 px recommendation is Garmond9 on the character sheet's skills and tech pages, which sits exactly on the 9 px minimum.
+The only original-font text under the 12 px recommendation is Garmond9 on the character sheet's skills and tech pages, which sits exactly on the 9 px minimum.
 Its capital letters are 7 rows high; if the owner reads "9 px" as a capital height instead of the font size, that text and Flare12's 9-row capitals
 are the margin to judge on the device (human gate below).
 
-The Godot-label drawing (the fallback without the player's fonts and a few viewer-only labels) had one size under the rule: the hotkey bar's
-stand-in names at 8 px. They are 9 px now (`AreaUiScale.MinimumTextPx`). The other literal sizes are 9 to 13; the save list's invisible keyboard
-field keeps size 1 on purpose and is exempt.
+The Godot drawing (the fallback without the player's fonts and the viewer-only labels) had one size under the rule: the hotkey bar's stand-in
+names at 8 px. They are 9 px now (`AreaUiScale.MinimumTextPx`). The scan reads 16 sizes, from 9 (life bars, follower initials, the logbook button,
+the hotkey stand-ins) to 14 (the floaters), including the inventory and barter drawing's own sizes (11 and 12 at factor 1; its floors of 6 and 8 apply
+only below factor 1); the save list's transparent keyboard field keeps size 1 on purpose and carries a marker comment the scan honours.
 
 ## Measuring
 
@@ -51,6 +52,10 @@ literal Godot-label sizes, and exits 1 on any text under 9 px or a screen that d
 - The **reading windows** (telegram, newspaper, notes) are not drawn with the original fonts yet (`AreaReadingPanel`: "fonts are not drawn"). The original's
   newspaper masthead uses Garmond8 (size 8, below the rule) and Garmond6 would be 6; when that window is built the text needs a decision
   (a text-only factor 2 for those lines, or the viewer's fallback font at 9 px or more) before it ships on the handheld.
-- The inventory, barter, logbook and reading windows draw their text with Godot labels, not the original fonts; their sizes are in the scan above.
+- The scan covers `AddThemeFontSizeOverride` sizes, `FontSize` constants of the files that draw with `DrawString`, and the inventory and barter
+  `Math.Max(floor, N * _scale)` sizes; a label left at the theme's default size or a computed `DrawString` size elsewhere is not seen (a size it cannot
+  resolve fails, it is never skipped).
+- `AreaUiScale` holds the factor (used by every window through `AreaGameBarPanel.ScreenFactor`) and the two text limits (used by the hotkey bar); the script
+  mirrors the factor, `AreaUiScaleTests` and `--self-test` keep both in step.
 - Hit areas larger than the art (touch, controller focus) belong to the schemes' own slices of the epic.
 - **Human gate:** the owner picks the final scale on a real 7 inch screen (the Deck) and on the 1080p handheld; physical readability is NOT VERIFIED here.
