@@ -46,7 +46,7 @@ public partial class TerrainViewerApp
             var hostMs = 30_000_000L;
             var frames = 0;
             bool Handled((SessionHolderInventory Holder, AreaObjectRecord Row, int Script) h) => h.Holder.Entity == chosen.Holder.Entity
-                ? AreaUseScriptHost.SwitchedOff(session, map.RuntimeMap, h.Holder.Entity) : session.QueryNpcKilled(h.Holder.Entity);
+                ? AreaUseScriptHost.NpcOff(session, map.RuntimeMap, h.Holder.Entity, h.Row.EffectiveFields.FirstOrDefault(f => f.Slot == 18) is { Presence: AreaPresence.Value, Number: { } dataFlags } ? dataFlags : 0) : session.QueryNpcKilled(h.Holder.Entity);
             // The north group, then the south group: a heartbeat runs only for an NPC within 30 tiles of the PC (0x4AD420).
             var byY = heroes.OrderBy(h => h.Row.WorldY!.Value).ToArray();
             foreach (var group in new[] { byY[..6], byY[6..] })

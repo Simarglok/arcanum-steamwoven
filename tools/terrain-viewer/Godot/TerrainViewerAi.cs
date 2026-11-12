@@ -163,6 +163,7 @@ public partial class TerrainViewerApp
             Companions = () => _areaCompanions is { } group
                 ? group.Companions.Select(c => (c.Entity, c.Key, World(chart.ToWorld(c.Grid.State.CommittedCell)))).ToArray() : [],
             Removed = AreaRemovedObjects,
+            SwitchedOn = AreaSwitchedOnNpcs,
             LineOfFire = () => AiLineOfFire(host()),
             DropMap = AreaDropMapNow,
             // ARC-WORLD-1157 (SZ6): a generator's off-screen option reads the game window and the generator's drawn rectangle.
@@ -820,7 +821,27 @@ public partial class TerrainViewerApp
     private readonly Dictionary<AreaOccupancy, AreaOccupancy> _aiCompanionOccupancy = new(ReferenceEqualityComparer.Instance);
     private long _aiCompanionOccupancyVersion = -1;
 
-    private AreaOccupancy AiMoversOverlay(AreaOccupancy occupancy)
+    /// <summary>ARC-WORLD-1436: the NPCs the map data stores off that the session switched on, with their data cells (none without object targets or a session).</summary>
+    private IReadOnlyList<(AreaObjectKey Key, string Entity, CellCoord World)> AreaSwitchedOnNpcs() =>
+        _areaSession is { } session && ObjectTargets() is { } targets ? targets.SwitchedOn(session) : [];
+
+    private (AreaOccupancy? Base, object List, object? Host, long Moved, AreaOccupancy? Value)? _switchedOnOccupancy;
+
+    /// <summary>ARC-WORLD-1436: the overlay with the cells of the NPCs switched on from the map data's off flag held (the T0 evidence lists no blocker for them); the ones the AI walked off their cell are its movers'.</summary>
+    private AreaOccupancy? WithSwitchedOn(AreaOccupancy? occupancy)
+    {
+        if (_worldActor.Session is not AreaGridSession grid || AreaSwitchedOnNpcs() is not { Count: > 0 } list) return occupancy;
+        var moved = _aiHost?.Movers.Version ?? -1;
+        if (_switchedOnOccupancy is { } known && ReferenceEquals(known.Base, occupancy) && ReferenceEquals(known.List, list) && ReferenceEquals(known.Host, _aiHost) && known.Moved == moved) return known.Value;
+        var cells = list.Where(n => _aiHost?.Movers.IsMoved(n.Entity) != true).Select(n => grid.Chart.ToChart(new(n.World.X, n.World.Y))).ToArray();
+        var value = cells.Length == 0 ? occupancy : (occupancy ?? AreaOccupancy.None).WithHeld(cells);
+        _switchedOnOccupancy = (occupancy, list, _aiHost, moved, value);
+        return value;
+    }
+
+    private AreaOccupancy AiMoversOverlay(AreaOccupancy occupancy) => WithSwitchedOn(AiMoversMoved(occupancy)) ?? occupancy;
+
+    private AreaOccupancy AiMoversMoved(AreaOccupancy occupancy)
     {
         if (_aiHost is not { } host || host.Movers.All.Count == 0 || _worldActor.Session is not AreaGridSession grid) return occupancy;
         if (_aiCompanionOccupancyVersion != host.Movers.Version || _aiCompanionOccupancy.Count > 64)

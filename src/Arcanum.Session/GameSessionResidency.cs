@@ -307,6 +307,9 @@ public sealed partial class GameSessionOwner
         // The same properties of an entity that is no mobile identity (no oid:) stay among the map's own changes.
         foreach (var key in _maps.MapKeys(map))
             if (key.Scope == MapChangeScope.Entity && key.Entity is { } keyed && ResidentFields.Contains(key.Property)) candidates.Add(keyed);
+        // ARC-WORLD-1436: an object whose "off" flag the session wrote (a toggle state of a data-off NPC) is a changed resident whatever else it did.
+        foreach (var record in QueryAllObjectFlags())
+            if (((record.Flags.ObjectSet | record.Flags.ObjectCleared) & ObjectOffFlag) != 0) candidates.Add(record.Entity);
         candidates.UnionWith(_durability.Destroyed);
         candidates.UnionWith(_inventory.Taken);
         candidates.UnionWith(pack.Keys);
@@ -429,11 +432,14 @@ public sealed partial class GameSessionOwner
     }
 
     // A recorded flag wins over the data's (value 1 set, any other value clear); the condition of a broken object sets them too.
+    private const int ObjectOffFlag = 0x2;
+
     private (bool Off, bool Destroyed) ResidentFlags(SessionMapId map, string entity, SessionResidentRow? row)
     {
         bool? Field(string property) => Record(map, entity, property) is { } record ? record.Value == 1 : null;
         var condition = Record(map, entity, ObjectConditionProperty) is { } c && c.Value >= 0 ? (SessionObjectCondition)(c.Value & 0xFF) : (SessionObjectCondition?)null;
-        var off = Field(OffProperty) ?? row?.Off ?? false;
+        // ARC-WORLD-1436: the session's object-flag change over the data's (a toggle state flips the flag of the original, so a data-off NPC a heartbeat switched on is on).
+        var off = QueryObjectFlags(entity).Object((Field(OffProperty) ?? row?.Off ?? false) ? ObjectOffFlag : 0) is var flags && (flags & ObjectOffFlag) != 0;
         var destroyed = Field(DestroyedFieldProperty) ?? row?.Destroyed ?? false;
         return (off || condition == SessionObjectCondition.Off, destroyed || condition == SessionObjectCondition.Destroyed);
     }

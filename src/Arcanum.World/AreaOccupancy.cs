@@ -34,6 +34,14 @@ public sealed class AreaOccupancy
         ArgumentNullException.ThrowIfNull(removed);
         return removed.Count == 0 || removed.IsSubsetOf(Moved) ? this : new(Moved.Concat(removed), Occupied);
     }
+
+    /// <summary>ARC-WORLD-1436: this overlay with <paramref name="cells"/> (chart cells) held too, the cells of NPCs the map data stores off that the session switched on (the
+    /// T0 evidence lists no blocker for them); the same overlay when there are none.</summary>
+    public AreaOccupancy WithHeld(IReadOnlyCollection<CellCoord> cells)
+    {
+        ArgumentNullException.ThrowIfNull(cells);
+        return cells.Count == 0 || cells.All(Occupied.Contains) ? this : new(Moved, Occupied.Concat(cells));
+    }
 }
 
 /// <summary>One directed step's verdict after the live overlay; <see cref="Overlaid"/> when it differs from the T0 assessment.</summary>

@@ -184,6 +184,22 @@ public sealed class ResidencyStateTests
         Assert.IsFalse(Of(owner, Stone).Off);
     }
 
+    // ARC-WORLD-1436: a toggle state flips the object flag of the original, so a resident the data stores off is on once the session cleared the bit (the NPC of the first building), and off again when it sets it.
+    [TestMethod]
+    public void ADataOffResidentTheSessionSwitchedOnIsOnAndOffAgainWhenSwitchedOff()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(ResidencyStatus.Open, owner.OpenResidency(Exterior, [.. Rows().Where(r => r.Entity != Stone), new(Stone, SessionResidentKind.Generic, StoneCell) { Off = true }]).Status);
+        Assert.IsTrue(Of(owner, Stone).Off);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteObjectFlag(owner.Version, Stone, SessionObjectFlagField.Object, 0x2, false, dataHas: true).Disposition);
+        Assert.IsFalse(Of(owner, Stone).Off, "the session's change over the data's");
+        Assert.IsFalse(Of(owner, Stone).Excluded);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteObjectFlag(owner.Version, Stone, SessionObjectFlagField.Object, 0x2, true, dataHas: false).Disposition);
+        Assert.IsTrue(Of(owner, Stone).Off);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteObjectFlag(owner.Version, Smith, SessionObjectFlagField.Object, 0x2, true, dataHas: false).Disposition);
+        Assert.IsTrue(Of(owner, Smith).Off, "a resident the data stores on, switched off by the flag");
+    }
+
     [TestMethod]
     public void ItemsFollowTheHeroTheGroundAndTheirHolders()
     {

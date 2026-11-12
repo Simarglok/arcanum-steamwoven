@@ -60,6 +60,22 @@ public sealed class AreaRemovedObjectsTests
         CollectionAssert.AreEquivalent(new[] { new CellCoord(5, 5) }, merged.Occupied.ToArray());
     }
 
+    // ARC-WORLD-1436: the T0 evidence lists no blocker for an NPC the map data stores off; once the session switched it on the overlay holds its cell, so a step onto it is refused like onto any live actor.
+    [TestMethod]
+    public void AHeldCellRefusesTheStepOntoItLikeALiveActor()
+    {
+        var steps = Steps();
+        var open = steps.Assess(steps.Request(new(10, 11), new(11, 11), CardinalTraversalDirection.XPlus));
+        Assert.AreEqual(CardinalTraversalDisposition.Open, AreaOccupancyRules.Apply(open, new(10, 11), NeighborDirection.XPlus, AreaOccupancy.None).Disposition);
+        var held = AreaOccupancy.None.WithHeld([new CellCoord(11, 11)]);
+        var verdict = AreaOccupancyRules.Apply(open, new(10, 11), NeighborDirection.XPlus, held);
+        Assert.AreEqual((CardinalTraversalDisposition?)CardinalTraversalDisposition.Blocked, verdict.Disposition);
+        Assert.AreEqual(AreaOccupancyRules.DestinationActor, verdict.ReasonCode);
+        Assert.AreSame(AreaOccupancy.None, AreaOccupancy.None.WithHeld([]));
+        // A mover that passes living critters (a walk outside combat) is not stopped by it.
+        Assert.AreEqual(CardinalTraversalDisposition.Open, AreaOccupancyRules.ApplyPassingCritters(open, new(10, 11), NeighborDirection.XPlus, held).Disposition);
+    }
+
     [TestMethod]
     public void ARemovedObjectNoLongerBlocksAFarRoute()
     {
