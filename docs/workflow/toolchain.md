@@ -477,6 +477,12 @@ changed source is built again by the next start (about 30 s the first time, in t
 Python helper because it needs nothing installed (system Python has no `rumps`/PyObjC), has no interpreter running for the
 display and reads the queue's own files, so it works from whichever checkout started it and when that checkout is gone.
 
+- **Task code.** Every run row (the menu's and `./arcanum queue`'s) shows the task code `ARC-<TYPE>-<issue>` it belongs to: the one in its
+  label, else the one in the branch its checkout has now, read from the checkout's `HEAD` file (a worktree's `.git` file names its git
+  folder), so a run of any wrapper version shows it and nothing is added to the ticket; a branch with no code (`claude/project-thread-...`)
+  shows none.
+- **Layout.** What stays the same is on top (Pause, `Godot runs at once`, `Load guard`, Quit); below it what changes: the counts, the
+  Mac's load and RAM, then the running and the waiting runs.
 - **Shows.** The icon says what the queue holds (`tray`, `tray.full` with `running·waiting`, `pause.circle` while paused). The menu lists the
   running runs, then the waiting ones in queue order: number, kind and lane, label, how long it has run or waited, the checkout
   (the tooltip has the full command and pid). It reads the tickets the way the queue does (the flock the run holds plus a live

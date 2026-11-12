@@ -23,6 +23,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import signal
 import subprocess
 import sys
@@ -587,11 +588,45 @@ def blocker(mine: dict[str, Any], live: Sequence[dict[str, Any]]) -> dict[str, A
     return None
 
 
+TASK_CODE = re.compile(r"ARC-[A-Z]+-[0-9]+")
+
+
+def checkout_branch(checkout: str | None) -> str | None:
+    """The branch a checkout (a worktree too: its `.git` is a file naming its git folder) has now, from its HEAD file; None when
+    detached or unreadable. No process is run."""
+    if not checkout:
+        return None
+    try:
+        dot = Path(checkout) / ".git"
+        git_dir = dot
+        if dot.is_file():
+            text = dot.read_text().strip()
+            if not text.startswith("gitdir:"):
+                return None
+            git_dir = Path(checkout) / text[len("gitdir:"):].strip()  # an absolute path replaces the checkout's
+        head = (git_dir / "HEAD").read_text().strip()
+    except OSError:
+        return None
+    return head[len("ref: refs/heads/"):] if head.startswith("ref: refs/heads/") else None
+
+
+def task_code(ticket: dict[str, Any]) -> str | None:
+    """The task code (ARC-<TYPE>-<issue>) a run belongs to: in its label, else in the branch its checkout has now (a
+    ticket of any wrapper version carries a label and a checkout, so none needs a new field)."""
+    found = TASK_CODE.search(str(ticket.get("label") or ""))
+    if found:
+        return found.group()
+    found = TASK_CODE.search(checkout_branch(checkout_of(ticket)) or "")
+    return found.group() if found else None
+
+
 def _describe(ticket: dict[str, Any]) -> str:
     if ticket.get("paused"):
         return "queue PAUSED (./arcanum queue --resume)"
     lane = lane_of(ticket)
-    return f"#{ticket['seq']} {ticket['kind']}{'/' + lane if lane else ''} {Path(ticket.get('cwd', '?')).name} \"{ticket.get('label', '')}\""
+    code = task_code(ticket)
+    return (f"#{ticket['seq']} {ticket['kind']}{'/' + lane if lane else ''} {Path(ticket.get('cwd', '?')).name}"
+            f"{' ' + code if code else ''} \"{ticket.get('label', '')}\"")
 
 
 def _write(fd: int, ticket: dict[str, Any]) -> None:
