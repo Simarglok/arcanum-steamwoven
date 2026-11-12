@@ -1,0 +1,84 @@
+address,name,score,writes,reach,smoke,slice,row
+0x461A70,item drop on the owner's tile,7,2,2,1,1,VP7
+0x461AB0,item drop,7,2,2,1,1,VP6
+0x464830,gold units,7,2,2,1,1,VP13
+0x466A00,key fold,7,2,2,1,1,VP14
+0x466A50,key ring add,7,2,2,1,1,VP15
+0x466E00,item removal from holder,7,2,2,1,1,VP2
+0x467860,inventory removal,7,2,2,1,1,VP1
+0x468090,schedule item decay,7,2,2,1,1,VP16
+0x468110,item decay cancel,7,2,2,1,1,VP17
+0x43D530,item damage setter,6,2,1,1,next,
+0x43F1C0,object break,6,2,1,1,next,
+0x45F820,encumbrance recalculation,6,2,2,0,next,
+0x4617F0,item transfer,6,2,2,0,1,VP4
+0x461CA0,item transfer from a holder,6,2,2,0,1,VP5
+0x462CC0,item use,6,2,1,1,next,
+0x462FC0,item use on a tile,6,2,1,1,next,
+0x463730,drop whole inventory,6,2,1,1,next,
+0x463860,drop inventory then delete,6,2,1,1,next,
+0x463B30,inventory clear,6,2,1,1,next,
+0x463E20,inventory regeneration,6,2,1,1,next,
+0x464180,restock time event,6,2,1,1,next,
+0x4643D0,mark holder items identified,6,2,1,1,next,
+0x464970,new gold pile,6,2,1,1,next,
+0x464AE0,item wield,6,2,2,0,1,VP8
+0x464C80,item unwield,6,2,2,0,1,VP9
+0x465170,best item for a slot,6,2,1,1,next,
+0x4654F0,best items for every slot,6,2,1,1,next,
+0x465A40,new ammunition object,6,2,1,1,next,
+0x466640,item insert,6,2,2,0,1,VP3
+0x466E50,drop placement,6,2,2,0,next,
+0x4677B0,wield on hook,6,2,2,0,1,VP10
+0x467CB0,wield off hook,6,2,2,0,1,VP11
+0x4BC090,trap spotted mark,6,2,1,1,next,
+0x4BC220,trap removal,6,2,1,1,next,
+0x4BC480,trap device on a tile,6,2,1,1,next,
+0x4BC690,trap spell timer,6,2,1,1,next,
+0x4BC780,trap time event handler,6,2,1,1,next,
+0x4BCB00,trap trigger,6,2,1,1,next,
+0x4BCB70,native trap script run,6,2,1,1,next,
+0x4C8E60,repair service,6,2,1,1,next,
+0x4C8EEA,repair service tail forced run payment refresh,6,2,1,1,next,
+0x5570D0,hotkey inventory callback,6,2,2,0,next,
+0x572640,barter open stock,6,2,1,1,next,
+0x575200,buy drop,6,2,1,1,next,
+0x575360,barter sale drop,6,2,1,1,next,
+0x5788C0,same-holder item move,6,2,2,0,1,VP12
+0x463540,junk pile dissolve,5,2,1,0,next,
+0x4670A0,inventory arrange,5,2,1,0,next,
+0x4BC2E0,trap device on an object,5,2,1,0,next,
+0x4BC7B0,trap disarm,5,2,1,0,next,
+0x466310,inventory grid cells mark,4,1,2,0,next,
+0x4BBE40,trap spot,4,1,1,1,next,
+0x461A90,item drop distance,3,0,2,1,next,
+0x464D20,item wear check,3,0,2,1,next,
+0x465CF0,weapon speed,3,0,2,1,next,
+0x4F4E40,drop tile try,3,0,2,1,next,
+0x571AA0,item cursor begin,3,1,1,0,next,
+0x571CB0,item cursor apply,3,1,1,0,next,
+0x45F790,encumbrance level,2,0,2,0,next,
+0x4614A0,item effective power,2,0,1,1,next,
+0x461F80,item price,2,0,1,1,next,
+0x462330,thrown item damage,2,0,1,1,next,
+0x462480,holder item by name,2,0,1,1,next,
+0x462930,stack of the same prototype,2,0,1,1,next,
+0x462B40,hotkey item count,2,0,2,0,next,
+0x462C30,inventory use check,2,0,1,1,next,
+0x463C60,restock event handler,2,0,1,1,next,
+0x4640C0,restock event schedule,2,0,1,1,next,
+0x464200,merchant buy list test,2,0,1,1,next,
+0x465870,ammunition stack by type,2,0,1,1,next,
+0x4664C0,room for item in grid,2,0,2,0,next,
+0x466510,item insert check,2,0,2,0,next,
+0x4BBFE0,trap known,2,0,1,1,next,
+0x4BCAB0,trap object on a tile,2,0,1,1,next,
+0x4BCDC0,native trap effect,2,0,1,1,next,
+0x4BF640,inventory source set loop,2,0,1,1,next,
+0x4BF7B0,loot line parse,2,0,1,1,next,
+0x5045A0,item art broken test,2,0,1,1,next,
+0x575FA0,item under inventory point,2,0,2,0,next,
+0x578760,repair quote,2,0,1,1,next,
+0x578EA0,barter transfer,2,0,1,1,next,
+0x462540,holder item by prototype,1,0,1,0,next,
+0x5719F0,item cursor mask,1,0,1,0,next,
