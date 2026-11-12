@@ -72,6 +72,14 @@ public partial class TerrainViewerApp
         Float(hit, attacker ?? HeroFloater, result.Life is null ? target : attacker ?? HeroFloater);
     }
 
+    /// <summary>ARC-COMBAT-1138: the damage line of an object (or a ground item) that damage without an attacker reached (a spell, a trap, a burn, a
+    /// script), over the object's cell; shown at "text floaters" 2 only, in white (CH12, CH13).</summary>
+    private void FloatObjectDamage(string target, AreaObjectRecord? row, CombatFloaterHit hit)
+    {
+        if (row is { WorldX: not null, WorldY: not null }) _floaterCells[target] = LiveWorldCell(row);
+        Float(hit, HeroFloater, target);
+    }
+
     private void Float(CombatFloaterHit? hit, string attacker, string struck)
     {
         if (hit is null || _readyMode != TerrainViewerMode.Area || _readyArea is null) return;

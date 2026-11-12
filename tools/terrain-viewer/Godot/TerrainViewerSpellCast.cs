@@ -868,6 +868,8 @@ public partial class TerrainViewerApp
             foreach (var hit in hits)
             {
                 GD.Print($"ARC-DEV-255 object-damage target={hit.Id} damage={hit.Hit.Damage - hit.Hit.DamageBefore} total={hit.Hit.Damage} broken={hit.Hit.Broken} break={hit.Hit.Break} host={hit.Host}");
+                // ARC-COMBAT-1138: the damage function floats the object's damage line whoever dealt it (CH12, CH13).
+                FloatObjectDamage(hit.Id, _spellCastMap?.Row(hit.Id), AreaCombatFloaters.Of(hit));
                 if (_spellCastMap?.Row(hit.Id) is { } row) RunObjectBreakSteps(row, hit.Host, false, false);
             }
         }
@@ -894,7 +896,12 @@ public partial class TerrainViewerApp
             foreach (var hit in hits)
             {
                 GD.Print($"ARC-COMBAT-025 item-damage target={hit.Id} condition={hit.Item.Condition} break={hit.Item.Break} host={hit.Host}");
-                if (_spellCastMap?.Row(hit.Id) is { } row) RunObjectBreakSteps(row, hit.Host, false, false);
+                // ARC-COMBAT-1138: an item lying on the map floats its damage line over its cell; a worn item has no row and no cell to float over.
+                if (_spellCastMap?.Row(hit.Id) is { } row)
+                {
+                    FloatObjectDamage(hit.Id, row, AreaCombatFloaters.Of(hit));
+                    RunObjectBreakSteps(row, hit.Host, false, false);
+                }
             }
         }
         if (!any) return;
