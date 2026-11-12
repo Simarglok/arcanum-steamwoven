@@ -81,6 +81,7 @@ public partial class TerrainViewerApp
         foreach (var map in _inventoryHost?.Maps ?? [])
             if (map.TryGetRow(item, out var found)) { row = found; break; }
         if (row is not null && !ExamineAllows(row)) return;
+        if (row is null && !ExamineAllowsMade(session, item)) return;
         var catalog = _hoverNames?.Catalog;
         var fallback = row is not null && _inventoryHost is { } host ? host.Name(item, catalog) : AreaInventoryHost.KindName(kind, catalog);
         var described = _hotkeyItemIcons?.Describe(kind, row, session.QueryItemIdentified(item), catalog, fallback, ItemWindowContext(session, item))
@@ -105,6 +106,24 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-DEV-326 examine entity={AreaUseScriptHost.EntityId(row)} outcome={ran.Outcome} run={ran.Run?.Outcome.ToString() ?? "-"} detail={ran.Detail}");
         foreach (var entry in AreaScriptMessages.Entries(ran.Printed)) PostMessage(entry, "script line");
         return !AreaUseScriptHost.ExamineSkips(ran);
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-1119 (HK24): the same first step for an item the session made (<c>made:n</c>), which has no object row: its examine script is the
+    /// prototype's point 0 (or the slot a run kept on the item), run by the session as an item run with the hero as the triggerer
+    /// (<see cref="GameSessionOwner.RunItemExamine"/>). The description follows only when the answer is not "skip default"; the printed lines go to the
+    /// message window. An item with no script, a viewer without the script content or a run the session cannot apply (refused, nothing applied)
+    /// describes as before.
+    /// </summary>
+    private bool ExamineAllowsMade(GameSessionOwner session, string item)
+    {
+        if (!item.StartsWith("made:", StringComparison.Ordinal) || _inventoryHost?.ItemScripts(session) is not { } host) return true;
+        var ran = session.RunItemExamine(session.Version, item, host);
+        if (ran.Scripts.Count == 0) return true;
+        _examineRunsForSelfTest++;
+        GD.Print($"ARC-SCRIPT-1119 examine entity={item} disposition={ran.Disposition} failure={ran.Failure} declined={ran.DeclinedBy?.ToString() ?? "-"}");
+        foreach (var entry in AreaScriptMessages.Entries(ran.Messages.Select(message => new AreaPrintedLine(message.Kind, message.Text)))) PostMessage(entry, "script line");
+        return ran.DeclinedBy is null;
     }
 
     private int _examineRunsForSelfTest;

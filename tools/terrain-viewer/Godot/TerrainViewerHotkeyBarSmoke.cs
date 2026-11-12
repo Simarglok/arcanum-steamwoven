@@ -158,7 +158,7 @@ public partial class TerrainViewerApp
                 Arcanum.Data.Area.AreaObjectRecord? examined = null;
                 foreach (var map in _inventoryHost?.Maps ?? [])
                     if (map.TryGetRow(entity, out var found)) { examined = found; break; }
-                return examined is null || ExamineAllows(examined);
+                return examined is null ? ExamineAllowsMade(session, entity) : ExamineAllows(examined);
             }
             var item = held.Where(h => !worn.ContainsKey(h.Entity)).Select(h => h.Entity).FirstOrDefault(ExaminePasses);
             Arcanum.Simulation.Equipment.EquipmentSlot? lent = null;
