@@ -44,7 +44,7 @@ Every other college spell has a code path for every component of its record (the
 
 | Spell | What is missing | Slice |
 | --- | --- | --- |
-| 2 Unseen Force | Hero and companions as targets are not pushed (knockback runs of the hero); the original also pushes ground items of weight below 5 ([UO1–UO6](ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)) and the viewer's host does not (an item body, the saved mobile state and the item's hit points are open) | knockback lane |
+| 2 Unseen Force | The original also pushes ground items of weight below 5 ([UO1–UO6](ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)) and the viewer's host does not (an item body, the saved mobile state and the item's hit points are open) | knockback lane |
 | 6, 7, 9 See Contents, Read Aura, Divine Magick | The answer is a text line; the windows (container inventory in mode 4, the NPC sheet, the item description) and picking an inventory item as a target are E8's | E8 |
 | 8 Sense Hidden | Trap spotting for the detecting-traps flag works and the hero's spot roll exists (ARC-MAGIC-057); effect 157 (spot-trap skill): the hero's skill level reads the written effect's skill change since the skills lane, so the roll should see it, not run in the viewer | owner recheck |
 | 14, 19, 24, 29 Elemental summons; 53 Succour Beast; 57 Summon Undead; 68 Phantasmal Fiend; 71-74 Orcish Champion, Guardian Ogre, Hellgate, Familiar | Creature Summon (prototype or list pick, flags on the summoned, run ends when it dies) | E1-e |
