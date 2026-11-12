@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":94,\"world\"";
+    private const string Current = "\"schemaVersion\":95,\"world\"";
+    private const string Current94 = "\"schemaVersion\":94,\"world\"";
     private const string Current93 = "\"schemaVersion\":93,\"world\"";
     private const string Current92 = "\"schemaVersion\":92,\"world\"";
     private const string Current91 = "\"schemaVersion\":91,\"world\"";
@@ -244,12 +245,24 @@ public sealed class SnapshotUpgradeTests
     // before wrote one.
     internal static string Schema93(string text)
     {
-        StringAssert.Contains(text, Current);
+        text = Schema94(text);
+        StringAssert.Contains(text, Current94);
         Assert.AreEqual(1, text.Split(NoItemFields).Length - 1, "the inventory section ends with an empty list of item fields");
-        return text.Replace(NoItemFields, "").Replace(Current, Current93);
+        return text.Replace(NoItemFields, "").Replace(Current94, Current93);
     }
 
     internal const string NoItemFields = ",\"itemFields\":[]";
+
+    // ARC-RES-1441: the schema 94 text of a schema 95 one whose seed holders keep no arranged slot: the inventory section loses its empty list of holder slots at its end. A text with arranged slots has no older literal:
+    // no build before saved one.
+    internal static string Schema94(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.AreEqual(1, text.Split(NoHolderSlots).Length - 1, "the inventory section ends with an empty list of holder slots");
+        return text.Replace(NoHolderSlots, "").Replace(Current, Current94);
+    }
+
+    internal const string NoHolderSlots = ",\"holderSlots\":[]";
 
     // ARC-DEV-348: the schema 86 text of a schema 87 one with no NPC effect list: the effects section loses its empty list of NPC lists at its end. A text with a list has no older
     // literal: no build before saved one.
@@ -658,6 +671,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":95,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":96,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

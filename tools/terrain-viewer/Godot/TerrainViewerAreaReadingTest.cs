@@ -127,6 +127,13 @@ public partial class TerrainViewerApp
             Require(!ReadingOpen && !WorldModal && _readingSounds.Last() == BookCloseSound, "the player's close closed it (3009)");
             Require(GetViewport().GuiGetFocusOwner() is null, "closing releases the GUI focus");
             Require(owner.QueryHeroKit().Any(k => k.Entity == bookEntity), "reading kept the book");
+            // ARC-UI-1428: a header line of a font under 9 px at the screen factor (Garmond8, art 482) takes the text-only factor (8 x 2 = 16 px), Zurich20 stays 20,
+            // an unknown font takes 16, and the panel's other texts carry explicit sizes.
+            _readingPanel!.Render(new AreaReadingView(WrittenSubtype.Newspaper, 487, ["Masthead", "Small line", "Other"], "", "", 0, 1, null, null, [485, 482, 999]), "synthetic");
+            var readingFactor = AreaGameBarPanel.ScreenFactor(_readingPanel.GetViewport().GetVisibleRect().Size);
+            Require(_readingPanel.HeaderForSelfTest == "Masthead  ·  Small line  ·  Other"
+                && _readingPanel.HeaderSizesForSelfTest.SequenceEqual([AreaReadingText.HeaderLinePx(485, readingFactor), AreaReadingText.HeaderLinePx(482, readingFactor), AreaReadingText.HeaderLinePx(999, readingFactor)])
+                && (readingFactor != 1 || _readingPanel.HeaderSizesForSelfTest.SequenceEqual([20, 16, 16])), "masthead sizes: " + string.Join(",", _readingPanel.HeaderSizesForSelfTest));
 
             // Script action 114 (a plaque, PC viewer) waits while the palette owns input, then opens; a controller cancel closes it.
             var pc = new ScrObjectRef(actor.Map.RuntimeMap, AreaScriptHost.PcCode);
@@ -142,6 +149,30 @@ public partial class TerrainViewerApp
                 new(default, default, confirm, cancel, false, false, false, false, false, 0, 0, GamepadLab.Core.InputMethod.Gamepad, true, "ARC-UI-049 self-test");
             HandleWorldPulse(Pulse(confirm: false, cancel: true), true);
             Require(!ReadingOpen && !PaletteOpen, "controller cancel closed the window without opening the palette");
+
+            // ARC-UI-1125 (SA40): a script's plaque replaces the open inventory at once (its opener pops the top mode), the inventory leaving through its End
+            // routine; a second request closes the window (the opener toggles, WR2).
+            InventoryKey(Key.I);
+            Require(InventoryOpen && !ReadingOpen, "the inventory is open for the replacement");
+            QueueScriptReadings([new(ScrReadingKind.Plaque, 500, pc)]);
+            TakeScriptReadings();
+            Require(ReadingOpen && !InventoryOpen && WindowPanelsMatchStack && StackText() == "Game>Book" && _readingScriptOpen is null, "the plaque replaced the inventory: " + StackText());
+            QueueScriptReadings([new(ScrReadingKind.Plaque, 500, pc)]);
+            TakeScriptReadings();
+            Require(!ReadingOpen && WindowPanelsMatchStack && _readingScriptOpen is null && _readingSounds.Last() == BookCloseSound, "a second request closed the reading (the opener toggles)");
+            // The dialog opener pops the top mode too (0x567460 with 0x553320): the hero's talk goal opens its dialog over an open window; the click path keeps refusing.
+            var standInRow = _readyArea.Snapshot.Objects[0];
+            _selfTestStandInSpeaker = new AreaSpeaker(0, standInRow, 1, standInRow.WorldX ?? 0, standInRow.WorldY ?? 0);
+            InventoryKey(Key.I);
+            BeginConversation(_selfTestStandInSpeaker);
+            Require(InventoryOpen && !ConversationOpen, "a plain dialog start leaves the open inventory alone");
+            BeginConversation(_selfTestStandInSpeaker, replaceWindows: true);
+            Require(ConversationOpen && !InventoryOpen && WindowPanelsMatchStack && StackText() == "Game>Dialog", "the talk goal's dialog replaced the inventory: " + StackText());
+            BeginConversation(_selfTestStandInSpeaker, replaceWindows: true);
+            Require(ConversationOpen && WindowPanelsMatchStack, "a dialog opened over a dialog is refused");
+            _conversationPanel!.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+            Require(!ConversationOpen && !WorldModal, "the dialog closed");
+            _selfTestStandInSpeaker = null;
 
             // Action 65 with a picture art outside 0..4095: refused in both modes (the original draws out of bounds).
             QueueScriptReadings([new(ScrReadingKind.Picture, 5000, pc)]);

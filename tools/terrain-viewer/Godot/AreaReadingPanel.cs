@@ -13,9 +13,13 @@ namespace Arcanum.TerrainViewer;
 /// </summary>
 public partial class AreaReadingPanel : CanvasLayer
 {
+    // ARC-UI-1428: every text of the panel has an explicit size (the fallback font), none under AreaUiScale.MinimumTextPx at the screen factor;
+    // a header line takes its original font's size with the text-only factor (AreaReadingText.HeaderLinePx).
+    private const int HeaderFontSize = 14, BodyFontSize = 16, NoteFontSize = 14, HintFontSize = 12, ButtonFontSize = 14;
+
     private PanelContainer _panel = null!;
     private Label _header = null!;
-    private Label _masthead = null!;
+    private VBoxContainer _masthead = null!;
     private RichTextLabel _left = null!, _right = null!;
     private Label _note = null!;
     private Button _previous = null!, _next = null!, _close = null!;
@@ -27,7 +31,8 @@ public partial class AreaReadingPanel : CanvasLayer
     public AreaReadingView? View => _view;
     internal AreaReadingView? ViewForSelfTest => _view;
     internal string TextForSelfTest => _left.GetParsedText() + "\n" + _right.GetParsedText();
-    internal string HeaderForSelfTest => _masthead.Text;
+    internal string HeaderForSelfTest => string.Join("  ·  ", _masthead.GetChildren().OfType<Label>().Select(label => label.Text));
+    internal IReadOnlyList<int> HeaderSizesForSelfTest => _masthead.GetChildren().OfType<Label>().Select(label => label.GetThemeFontSize("font_size")).ToArray();
 
     public override void _Ready()
     {
@@ -41,7 +46,8 @@ public partial class AreaReadingPanel : CanvasLayer
         AddChild(_panel);
         var contents = new VBoxContainer(); _panel.AddChild(contents);
         _header = new Label { Modulate = new Color(.15f, .1f, .05f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        _masthead = new Label { Modulate = new Color(.1f, .1f, .1f), AutowrapMode = TextServer.AutowrapMode.WordSmart, HorizontalAlignment = HorizontalAlignment.Center };
+        _header.AddThemeFontSizeOverride("font_size", HeaderFontSize);
+        _masthead = new VBoxContainer();
         var buttons = new HBoxContainer();
         _previous = Plain("Previous", () => PageRequested?.Invoke(-1));
         _next = Plain("Next", () => PageRequested?.Invoke(1));
@@ -51,12 +57,14 @@ public partial class AreaReadingPanel : CanvasLayer
         _left = Page(); _right = Page();
         pages.AddChild(_left); pages.AddChild(_right);
         _note = new Label { Modulate = new Color(.35f, .05f, .05f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        _note.AddThemeFontSizeOverride("font_size", NoteFontSize);
         var hint = new Label
         {
             Modulate = new Color(.3f, .3f, .3f), AutowrapMode = TextServer.AutowrapMode.WordSmart,
             Text = "Escape or cancel closes; Left/Right or Page Up/Down turn a book's pages | PROJECT diagnostic window: the original's " +
                 "background, frame and page art and its fonts are not drawn; pages break by characters, not pixels; layout parity NOT_VERIFIED",
         };
+        hint.AddThemeFontSizeOverride("font_size", HintFontSize);
         foreach (var control in new Control[] { _header, buttons, _masthead, pages, _note, hint }) contents.AddChild(control);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
@@ -65,6 +73,7 @@ public partial class AreaReadingPanel : CanvasLayer
     private static Button Plain(string text, Action pressed)
     {
         var button = new Button { Name = text, Text = text, FocusMode = Control.FocusModeEnum.All };
+        button.AddThemeFontSizeOverride("font_size", ButtonFontSize);
         button.Pressed += pressed;
         return button;
     }
@@ -78,6 +87,7 @@ public partial class AreaReadingPanel : CanvasLayer
             CustomMinimumSize = new Vector2(0, 320),
         };
         page.AddThemeColorOverride("default_color", Colors.Black);
+        page.AddThemeFontSizeOverride("normal_font_size", BodyFontSize);
         return page;
     }
 
@@ -98,7 +108,18 @@ public partial class AreaReadingPanel : CanvasLayer
         _previous.Disabled = !view.HasPrevious; _next.Disabled = !view.HasNext;
         _header.Text = $"{title} | {view.Subtype} | background art {(view.BackgroundArt < 0 ? "none" : view.BackgroundArt)}, frame art {WrittenTexts.FrameArt}"
             + (book ? $" | spread {view.Spread + 1}/{view.Spreads}" : "");
-        _masthead.Text = string.Join("  ·  ", view.Header);
+        foreach (var child in _masthead.GetChildren()) { _masthead.RemoveChild(child); child.QueueFree(); }
+        var factor = AreaGameBarPanel.ScreenFactor(GetViewport().GetVisibleRect().Size);
+        for (var i = 0; i < view.Header.Count; i++)
+        {
+            var line = new Label
+            {
+                Text = view.Header[i], Modulate = new Color(.1f, .1f, .1f), HorizontalAlignment = HorizontalAlignment.Center,
+                AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            };
+            line.AddThemeFontSizeOverride("font_size", AreaReadingText.HeaderLinePx(view.HeaderFont(i), factor));
+            _masthead.AddChild(line);
+        }
         _masthead.Visible = view.Header.Count > 0;
         _left.Text = view.Left; _right.Text = view.Right;
         _right.Visible = book;

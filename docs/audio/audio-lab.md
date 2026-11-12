@@ -52,7 +52,9 @@ paused; `Tick` must use presentation real time, never authoritative game time.
 
 This adapter exclusively owns a standalone process's `Master -> Music/Voice/
 SFX/Ambient` topology. It creates only its four children, restores the original
-Master volume/mute and removes its children at disposal. It never selects an
+Master volume/mute and removes its children at disposal. The children are built once at start inside
+`AudioServer.Lock()`/`Unlock()`, because the engine's `AddBus`/`SetBusName`/
+`SetBusSend` take no driver lock (ARC-DEV-1431, same race as ARC-BUG-1396). It never selects an
 output device, changes OS volume, system/default routing or gamepad settings.
 A game host with existing buses requires a separately accepted ownership adapter,
 not removal or renaming of its buses. Substantive integration belongs in new

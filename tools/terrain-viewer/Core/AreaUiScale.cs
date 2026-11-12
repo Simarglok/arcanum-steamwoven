@@ -14,6 +14,18 @@ public static class AreaUiScale
     /// <summary>The smallest text, and the recommended one, on the handheld in pixels at the window's factor (owner 2026-11-12).</summary>
     public const int MinimumTextPx = 9, PreferredTextPx = 12;
 
+    /// <summary>
+    /// ARC-UI-1428: the text-only whole factor of a line whose original font is under <see cref="MinimumTextPx"/> at the screen's factor: the
+    /// smallest whole multiplier (at least 1) that brings <paramref name="fontPx"/> × <paramref name="screenFactor"/> to the minimum. Only the
+    /// text is multiplied (Garmond8 at screen factor 1 draws at 16 px, Garmond6 at 12 px); the window art keeps the screen factor. A font at or
+    /// above the minimum, or with an unknown size (0 or less), is never multiplied.
+    /// </summary>
+    public static int TextOnlyFactor(int fontPx, int screenFactor)
+    {
+        var shown = fontPx * Math.Max(1, screenFactor);
+        return fontPx <= 0 || shown >= MinimumTextPx ? 1 : (MinimumTextPx + shown - 1) / shown;
+    }
+
     /// <summary>The whole factor at which the original's 800 × 600 screen fits a window of <paramref name="width"/> × <paramref name="height"/>
     /// device pixels (at least 1: a smaller window still draws the screen once and the window clips it).</summary>
     public static int ScreenFactor(float width, float height) =>

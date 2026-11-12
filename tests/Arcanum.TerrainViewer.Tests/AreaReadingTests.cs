@@ -62,9 +62,15 @@ public sealed class AreaReadingTests
         Assert.AreEqual(("Note A\nNote B\n", 489, 1, false), (note.Left, note.BackgroundArt, note.Spreads, note.HasNext));
         var telegram = AreaReading.View(texts.Read(3, 400), texts, 0, Profile)!;
         Assert.AreEqual(12, telegram.Header.Count);
+        // ARC-UI-1428: the telegram's form lines carry Courier10 (WR7), the masthead its six fonts (WR8); an index outside gives 0.
+        CollectionAssert.AreEqual(Enumerable.Repeat(AreaReading.TelegramFont, 12).ToArray(), telegram.HeaderFonts!.ToArray());
+        Assert.AreEqual(480, telegram.HeaderFont(11));
+        Assert.AreEqual(0, telegram.HeaderFont(12));
+        Assert.AreEqual(0, telegram.HeaderFont(-1));
         Assert.AreEqual("Arrive STOP", telegram.Left, "each message followed by 1012");
         var paper = AreaReading.View(texts.Read(2, 1300), texts, 0, Profile)!;
         CollectionAssert.AreEqual(new[] { "Mast A", "Mast B", "Mast A", "Mast C", "Mast D", "Mast C" }, paper.Header.ToArray());
+        CollectionAssert.AreEqual(new[] { 485, 484, 485, 482, 482, 482 }, paper.HeaderFonts!.ToArray());
         StringAssert.StartsWith(paper.Left, "Headline\nColumn\n[filler] ");
         var plaque = AreaReading.View(texts.Read(6, 500), texts, 0, Profile)!;
         Assert.AreEqual(("[centred] Plaque text", 633), (plaque.Left, plaque.BackgroundArt));

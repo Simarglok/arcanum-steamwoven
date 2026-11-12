@@ -663,8 +663,9 @@ public sealed class GameSessionSnapshot
     /// Schema 92 adds each spell run's object list to the spells section (<see cref="SpellRun.ObjectList"/>, the original's run list +0x130, ARC-MAGIC-1234).
     /// Schema 93 adds the NPC flags change to each critter's written flags (<see cref="SessionObjectFlags.NpcSet"/>, ARC-MAGIC-1142).
     /// Schema 94 adds the item fields scripts wrote (written start, inventory display bit) to the inventory section (<see cref="SessionInventoryState.ItemFields"/>, ARC-SCRIPT-1279).
-    /// Schemas 1..55 are refused, not migrated; schemas 56 to 93 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 94;
+    /// Schema 95 adds the arranged slots of seed holders (a container's or an NPC's grid laid out at a loot, steal or See Contents open) to the inventory section (<see cref="SessionInventoryState.HolderSlots"/>, ARC-RES-1441).
+    /// Schemas 1..55 are refused, not migrated; schemas 56 to 94 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 95;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
