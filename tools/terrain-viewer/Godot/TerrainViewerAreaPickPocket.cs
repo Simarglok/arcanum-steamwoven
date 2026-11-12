@@ -210,6 +210,8 @@ public partial class TerrainViewerApp
             message = $"{SkillLine(result.Moved > 0 ? PickPocketRules.SuccessLine : PickPocketRules.FailureLine)} ({(direction == PickPocketDirection.Steal ? "steal" : "plant")} {itemName}" +
                 (result.Moved > 1 ? $" ×{result.Moved}" : "") + ")";
             if (result.Alignment is { } alignment) message += $"; alignment {alignment}";
+            // ARC-WORLD-1283: an item the remove check refused (the no-drop flag) shows the PC's message (item.mes 111; the thief is the source of a plant and the recipient of a steal).
+            if (result.Move is { PcMessage: not null } refused) message += $"; {AreaInventoryHost.Refusal(refused.Failure, refused.Verdict)}";
             if (result.Noticed)
             {
                 caught = AreaPickPocket.Caught(session, map.Row(npc), npc, CatchingThiefScript, victimNpc => ai.HeroAttacked(victimNpc));
