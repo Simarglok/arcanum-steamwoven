@@ -306,13 +306,13 @@ Compare in both games with the same hero and spells; a spell that also has a not
 | 5 | Cast Bonds of Magick (43) on yourself and try to cast another spell. | The cast is refused at the invocation check while the flag holds. | open |
 | 6 | Cast Reflection Shield (44) on yourself and let a creature cast a hostile spell at you. | The spell is reflected to its caster. | open |
 | 7 | Cast Sanctuary (63) on yourself near a hostile creature that has not seen you yet. | The hostility rules read the enshrouded flag; compare which creatures still attack. | open |
-| 8 | Cast Disintegrate (34) on a creature. | The creature takes 30000 electrical damage and dies; the original sets don't-draw on it. Ours writes the flag (and the paralysed bit) but the viewer still draws the body; the AI and the spell target rules treat it as gone. | open |
+| 8 | Cast Disintegrate (34) on a creature. | The creature takes 30000 electrical damage and dies; the original sets don't-draw on it. Ours writes the flag (and the paralysed bit); since ARC-MAGIC-045 the viewer draws no body for it either (the eye candy stays), and the AI and the spell target rules treat it as gone. | open |
 
 Known differences (reading only, no game step):
 
 - Water walking (spells 13, 28): the flag and its object flag are written; the original's clear then tests the tile under the critter and may run a damage step (F0, MA-8). Ours does neither.
 - Mind control, charm, undead, fleeing and blinded (MA-4) and the locks (MA-6) are still not ready and show "not ready" in the spell line.
-- The viewer draws no translucent, shrunk or hidden critter from these flags yet.
+- The viewer's draw of translucent, shrunk, hidden and seen-invisible critters is ARC-MAGIC-045 (the section at the end of this file).
 
 ## ARC-DEV-366 — Tech books give expertise equal to intelligence (PR #980, 2026-11-11)
 
@@ -380,7 +380,7 @@ Compare in both games with the same hero and spells.
 
 Known differences (reading only, no game step):
 
-- Polymorph (49) and a script's permanent polymorph (critter flags 2 bit 0x400000) are undone by the original's Dispel with the art restored; ours has neither (MA-8). Since ARC-MAGIC-040 the Trait component keeps the monster body of Polymorph and the body spells in the session and tells the host, and since ARC-MAGIC-046 the viewer draws a polymorphed NPC as its monster body and takes the hero's worn items off and chooses them again at the END; the hero's own monster body is drawn since ARC-MAGIC-052 (a species without a stand or walk ART, such as the air elemental, keeps the hero's own body). Since ARC-MAGIC-047 the elemental bodies write the critter flags 2 and blit flags (MG10: assigned in Original mode, added in Steamwoven mode) and Dispel undoes a perma-polymorph in the session (the redraw of a map NPC whose data body is the polymorph is not built).
+- Polymorph (49) and a script's permanent polymorph (critter flags 2 bit 0x400000) are undone by the original's Dispel with the art restored; ours has neither (MA-8). Since ARC-MAGIC-040 the Trait component keeps the monster body of Polymorph and the body spells in the session and tells the host, and since ARC-MAGIC-046 the viewer draws a polymorphed NPC as its monster body and takes the hero's worn items off and chooses them again at the END; the hero's own monster body is drawn since ARC-MAGIC-052 (and since ARC-MAGIC-1219 with the weapon part of combat mode, the original's missing-art repair for the air elemental and palette 0 for the elemental bodies' palette 1). Since ARC-MAGIC-047 the elemental bodies write the critter flags 2 and blit flags (MG10: assigned in Original mode, added in Steamwoven mode) and Dispel undoes a perma-polymorph in the session (the redraw of a map NPC whose data body is the polymorph is not built).
 - A portal or container held by Magelock (75) loses the hold in the original; ours does the same since MA-6 ([steps below](#arc-magic-037--locks-and-holds-unlocking-cantrip-and-magelock-ma-6-2026-11-11)).
 - A summoned critter is destroyed by the original's Dispel; ours destroys one the session created, and no spell makes one before the creature summons (E1-e).
 
@@ -759,7 +759,28 @@ Known differences (documented, not bugs):
 
 - The light at the trap is taken as full: an untrained hero in the dark is not penalised yet (the original adds up to 30 against an untrained hero).
 - The item that adds a modifier to the roll (inventory location 1005, name 2866) is not modelled.
-- Companions' own spot attempts are not made; disarming a trap and the skill-bar button are the next slice.
+- Companions' own spot attempts are not made; disarming a trap is ARC-SKILLS-1156 (below).
+
+## ARC-SKILLS-1156 — Disarming a trap from the hotkey bar (E6-a, disarm half, 2026-11-12)
+
+The rules are in [trap state](../world/trap-state-runtime.md#disarm-arc-skills-1156) and the [ledger SP3, TT5, TT6](../research/ledger/technology.md#spot-trap-roll-arc-magic-057). Put the Disarm Traps skill button on the hotkey bar (the skill bar's entry), and use heroes with a low, an expert and a master Disarm Traps skill, on a map with a spotted trap (a trap plate you saw, or a trapped chest or door you spotted), in both games. Compare the odds over several reloads and the device.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Press the Disarm Traps entry on the hotkey bar, then click a trap you have not spotted. | Nothing is rolled: the trap is not a target (no known trap there) and the cursor is back to normal. | open |
+| 2 | Press the entry, then click a spotted trap (the plate, a chest or a door) with a low-skill hero. Reload and repeat a few times. | Sometimes the trap is gone, sometimes nothing happens, sometimes (a critical failure) the trap goes off on you. The odds rise with the skill. | open |
+| 3 | The same with a trap object that has a high difficulty (a strong trap plate) against one with a low difficulty. | The strong trap is disarmed less often at the same skill. A chest's or a door's trap has no such difficulty term. | open |
+| 4 | As an Expert, disarm a trap and look at the pack after a critical success. | The trap's device item (a trap kit the trap's script names) lands in the pack, or on the ground at your feet when the pack cannot take it. Compare which items you get and how often. | open |
+| 5 | As a Master, repeat step 2 many times and count successes against an Expert of the same stats. | A Master succeeds clearly more often (a failed roll gets a second chance). | open |
+| 6 | In turn-based mode, press the entry and click a spotted trap with fewer than 4 action points left, then with enough. | With too few the subturn ends and nothing is rolled; otherwise 4 action points are spent. | open |
+| 7 | Right-click while the cursor is armed. | The cursor is cancelled. | open |
+
+Known differences (documented, not bugs):
+
+- When a follower is better at disarming, the original lets the best follower act instead of the hero ("let me handle it", Ctrl skips it); Steamwoven always uses the hero.
+- The original's skill-bar press builds the invocation at once, so Steamwoven does not walk the hero to the trap first; whether the original limits the distance by the difficulty is read from the shared check only.
+- A trap you placed yourself with a script trap device is a marker object in Steamwoven and cannot be targeted yet.
+- The skill pane's own Disarm Traps button is [#1113](https://github.com/Simarglok/arcanum-steamwoven/issues/1113).
 
 ## ARC-MAGIC-056 — Tempus Fugit speed (spell 79)
 
@@ -791,3 +812,22 @@ Known differences (documented, not bugs):
 
 - An NPC's own worn items still fire nothing when it attacks (no trigger host on the NPC attack path yet).
 - A chain of item spells answers once per item (owner decision 2026-10-28, MG46), where the original repeats until the target dies.
+
+## ARC-MAGIC-045 — Shield hit eye candy and the draw of translucent, shrunk and hidden critters (2026-11-11)
+
+The rules and what is built are in [the cast host](../world/spell-cast-host.md#hit-eye-candy-and-object-draw-flags-arc-magic-045) and [ledger HE1–HE4, OD1–OD6](../research/ledger/spell-runs.md#object-draw-flags-and-the-hit-eye-candy-arc-magic-045). Steps need a mage hero (or scrolls) and a creature to fight.
+
+| # | Step | Expected (original) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast Shield of Protection (30) on yourself, then let a creature hit you with a weapon or a spell that damages you. | Each hit that reaches you plays the shield's hit effect on you (a short flash of the spell's own animation). Misses do not. | open |
+| 2 | Cast Invisibility (69) on yourself. | You are drawn half transparent (not gone). | open |
+| 3 | Cast Invisibility (69) on a friendly companion or NPC. | Without detection the creature is not drawn at all (a creature of high perception, 20 or more, or a Detect Invisible effect shows it half transparent). | open |
+| 4 | Cast the spell that shrinks a creature (the one with the shrunk flag; the player's spell list names it) on a creature. | It is drawn at half size, standing on its tile. | open |
+| 5 | Cast Disintegrate (34) on a creature that stands near an eye candy (a burning or magic overlay). | The body is gone at once; any overlay of the spell still plays there. | open |
+
+Known differences (documented, not bugs):
+
+- The hero's own shrink is not drawn (the hero's draw has no hotspot to scale about); a shrunk hero is drawn full size.
+- One prototype's hit plays a fixed extra eye candy in the original (HE3); ours does not.
+- Magnetic inversion plays the fixed entry 0x449 when no run provides the flag; which installed record sets the flag by a non-spell path is not read, so step 1's variant for it is not listed.
+

@@ -625,6 +625,7 @@ public partial class TerrainViewerApp
         // One target mode at a time: the other cursors and a pending order leave first, each with its notice.
         CancelArmedLockpicks("a spell's cursor took the next press");
         if (PickPocketArmed) CancelPickPocket("a spell's cursor took the next press");
+        CancelDisarm("a spell's cursor took the next press");
         CancelPendingOrder("a spell's cursor took the next press");
         if (!OpenTargetMode(InterfaceMode.SpellTarget, _ => ClearSpellTargeting()))
         {
@@ -893,7 +894,8 @@ public partial class TerrainViewerApp
         if (lead is not null) lines.Add(lead);
         var texts = _spellData?.Data?.Texts;
         // A snapshot: a tile script run by a relocation event may cast and flush the log in turn (ARC-MAGIC-038), and the nested flush owns the entries added meanwhile.
-        foreach (var entry in entries.ToArray())
+        var taken = entries.ToArray();
+        foreach (var entry in taken)
         {
             GD.Print($"ARC-MAGIC-015 log kind={entry.Kind} run={entry.Run} value={entry.Value} object={entry.Object} detail={entry.Detail}");
             TakeEyeCandyEvent(entry);
@@ -905,6 +907,8 @@ public partial class TerrainViewerApp
             TakeTraitEvent(entry);
             if (AreaSpellCasting.Line(entry, texts, SpellObjectName) is { } line) lines.Add(line);
         }
+        // ARC-MAGIC-045: a run wrote or took off an object flag (invisible, translucent, shrunk, don't-draw): the bodies are styled again without waiting for the next selection.
+        if (taken.Any(e => e.Kind is SpellCastEventKind.ObjectFlagWritten or SpellCastEventKind.ObjectFlagKept)) SyncAreaBodyStyles();
         if (lines.Count == 0) return;
         _spellNotice = string.Join("; ", lines);
         PostSpellMessage(_spellNotice);

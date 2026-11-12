@@ -245,6 +245,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("spell-end") == true) await RunAreaSpellEndSmokeAsync(result);
                                 // ARC-DEV-304 (B11, SM09): only when named, the spell holds (stone, paralysis, entangle) written on the hero stop its steps, drop its clicks and let a walk resume after the END (--hero, Crash Site).
                                 if (only?.Contains("hold-hero") == true) await RunAreaHoldHeroSmokeAsync(result);
+                                // ARC-DEV-1148 (magic audit leftover): only when named, spells 30 and 77 on the hero and 46 and 76 on an NPC add their effects, move the stats and take them off at the END (--hero, Crash Site).
+                                if (only?.Contains("spell-effects") == true) await RunAreaSpellEffectsSmokeAsync(result);
                                 // ARC-MAGIC-036 (MA-5): only when named, Spatial Distortion's Movement component relocates the hero along the path request, at most eight tiles (--hero, Crash Site).
                                 if (only?.Contains("movement") == true) await RunAreaMovementSmokeAsync(result);
                                 // ARC-DEV-335 (V7d, B50): only when named, a light worn by the hero lights the area around it (with --hero, a lit map).
@@ -257,6 +259,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("item-aim") == true) await RunAreaItemAimSmokeAsync();
                                 // ARC-MAGIC-051 (technology audit T-s): only when named, Therapeutics and Chemistry products assembled and used on the player's data (--hero, the Crash Site cave).
                                 if (only?.Contains("tech-products") == true) await RunAreaTechProductsSmokeAsync();
+                                // ARC-SKILLS-1156: only when named, the hotkey bar's Disarm traps entry arms the skill cursor and a press disarms a trapped container (--hero, a map with a container in its window).
+                                if (only?.Contains("disarm") == true) await RunAreaDisarmSmokeAsync();
                                 // ARC-DEV-367 (O10): only when named, the timing probe's tables: the startup marks, six opens of each window, a map change out and back (--hero, a sector with a map exit).
                                 if (only?.Contains("perf") == true) await RunAreaPerfSmokeAsync();
                                 // ARC-DEV-367 (O10): only when named, the startup marks to the main menu's first frame and a new game from it (--main-menu).
@@ -268,6 +272,8 @@ public partial class TerrainViewerApp : Node
                                 // ARC-DEV-370 (E1-c2): only when named, a critter the session creates by prototype is drawn, picked, moved by the AI's movers with a walk frame and gone once destroyed (--hero, a map window with the inventory).
                                 if (only?.Contains("created-critter") == true) await RunAreaCreatedCritterStageAsync();
                                 if (only?.Contains("trait-body") == true) await RunAreaTraitBodyStageAsync();
+                                // ARC-MAGIC-045 (E4-a2): only when named, the object flags a spell writes (translucent, shrunk, don't-draw, invisible) change how an NPC's body is drawn, and a hit on a shielded critter plays the run spell's hit eye candy (--hero, a map window with the inventory).
+                                if (only?.Contains("body-styles") == true) await RunAreaBodyStylesStageAsync();
                                 // ARC-DEV-371 (E1-c3): only when named, the installed tile script 1629 creates critters next to the hero (--hero, a map window with the inventory): flagged, hosted by the AI host, notified, destroyed.
                                 if (only?.Contains("script-critters") == true) await RunAreaScriptCrittersStageAsync();
                                 // ARC-DEV-352 (E1-b): only when named, Fireflash's flash on an empty tile and none on an occupied one; Wall of Fire's pieces, their burn and their END (--hero, a map window).

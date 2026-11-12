@@ -209,6 +209,7 @@ public partial class TerrainViewerApp
     private void QuarantineWorldObserved()
     {
         TraceWorldInput("Quarantine");
+        _gameMenuEscapeArmed = false; // ARC-INPUT-1124: a held Escape whose release another owner may take opens nothing later.
         _worldGate.Close(); _worldReducer.Quarantine();
         // Palette, focus loss, device change, reset/reload and faults all pass here:
         // the route stops, and the step already started still ends at its cell centre.
@@ -379,7 +380,7 @@ public partial class TerrainViewerApp
         WorldObservation(() =>
         {
             _worldFocused = focused;
-            if (!focused) { CancelPendingOrder("the window lost focus"); _orderKeyArmed = null; CancelArmedLockpicks("the window lost focus"); }
+            if (!focused) { CancelPendingOrder("the window lost focus"); _orderKeyArmed = null; _gameMenuEscapeArmed = false; CancelArmedLockpicks("the window lost focus"); }
             _worldReducer.FocusChanged(focused); QuarantineWorld(); RefreshReadyStatus();
             TraceWorldInput("NativeFocus:transition");
         });
@@ -549,6 +550,7 @@ public partial class TerrainViewerApp
             FollowAreaPortals();
             lap?.Step("moving");
             SyncTraitBodies();
+            SyncAreaBodyStyles();
             _canvas!.SetAreaMovingBodies(AreaMovingCommands()); _canvas.SetAreaAbsent(_areaCompanions?.Absent);
             lap?.Step("canvas");
             _canvas.PublishArea(_readyArea.Plan, AreaFrames(), actor, input, _cache); return;
@@ -785,11 +787,11 @@ public partial class TerrainViewerApp
             WorldObservation(() => WorldRouteClick(ctrlClick.Position, true));
         }
         // ARC-MAGIC-015: a right press closes the spell's targeting cursor (0x57BFF0).
-        else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } && (_spellTargeting is not null || _itemAiming is not null))
+        else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } && (_spellTargeting is not null || _itemAiming is not null || DisarmArmed))
         {
             _rightPressTaken = true;
             // ARC-DEV-365: the same right press cancels the item cursor (IA5, IA6).
-            WorldObservation(() => { CancelSpellTargeting("right click"); CancelArmedLockpicks("right click"); RefreshAreaStatus(); });
+            WorldObservation(() => { CancelSpellTargeting("right click"); CancelArmedLockpicks("right click"); CancelDisarm("right click"); RefreshAreaStatus(); });
         }
         else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true }) _rightPressTaken = false;
         // ARC-COMBAT-022: the right release leaves combat mode or concealment, unless its press was taken above.
@@ -869,6 +871,13 @@ public partial class TerrainViewerApp
         {
             CancelAreaAttack("an armed pick pocket took the press");
             PickPocketPress(screen);
+            return;
+        }
+        // ARC-SKILLS-1156: an armed disarm traps skill takes this press: a known trap runs the skill, anything else cancels it.
+        if (DisarmArmed)
+        {
+            CancelAreaAttack("an armed disarm traps skill took the press");
+            DisarmPress(screen);
             return;
         }
         // ARC-COMBAT-005: in combat mode a press on an NPC attacks it (or walks within reach first) instead of talking.
