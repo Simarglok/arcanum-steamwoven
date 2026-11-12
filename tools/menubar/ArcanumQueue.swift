@@ -16,6 +16,7 @@ struct Job {
     let label: String
     let command: String
     let checkout: String
+    let checkoutPath: String
     let enqueuedAt: Double
     let startedAt: Double?
     let childPid: Int32?
@@ -58,7 +59,7 @@ struct QueueFolder {
                   json["schema"] as? String == "arcanum-run-queue-v1", let seq = json["seq"] as? Int else {
                 // a held ticket this version cannot read (another version's format) blocks the queue like a running export
                 if lockedByOthers(path), let seq = Int(name.dropFirst(2).dropLast(5)) {
-                    found.append(Job(seq: seq, kind: "export", lane: nil, label: "unreadable ticket", command: "", checkout: "?",
+                    found.append(Job(seq: seq, kind: "export", lane: nil, label: "unreadable ticket", command: "", checkout: "?", checkoutPath: "",
                                      enqueuedAt: Date().timeIntervalSince1970, startedAt: Date().timeIntervalSince1970,
                                      childPid: nil, priority: 0, estimate: nil))
                 }
@@ -69,6 +70,7 @@ struct QueueFolder {
             found.append(Job(seq: seq, kind: json["kind"] as? String ?? "?", lane: json["lane"] as? String,
                              label: json["label"] as? String ?? "", command: json["command"] as? String ?? "",
                              checkout: URL(fileURLWithPath: json["checkout"] as? String ?? cwd).lastPathComponent,
+                             checkoutPath: json["checkout"] as? String ?? cwd,
                              enqueuedAt: (json["enqueuedAt"] as? NSNumber)?.doubleValue ?? 0,
                              startedAt: (json["startedAt"] as? NSNumber)?.doubleValue,
                              childPid: (json["childPid"] as? NSNumber)?.int32Value,
@@ -177,6 +179,31 @@ func spawnDetached(_ path: String, _ arguments: [String]) -> pid_t? {
 }
 
 let defaultShortLanes = 2  // run_queue.DEFAULT_SHORT_LANES
+
+/// The task code (ARC-<TYPE>-<issue>) of a run: in its label, else in the branch its checkout has now (run_queue.task_code does the same).
+func taskCode(label: String, checkoutPath: String) -> String? {
+    let pattern = "ARC-[A-Z]+-[0-9]+"
+    if let range = label.range(of: pattern, options: .regularExpression) { return String(label[range]) }
+    guard let branch = checkoutBranch(checkoutPath), let range = branch.range(of: pattern, options: .regularExpression) else { return nil }
+    return String(branch[range])
+}
+
+/// The branch name from the checkout's HEAD file (a worktree's `.git` is a file that names its git folder); nil when detached.
+func checkoutBranch(_ path: String) -> String? {
+    if path.isEmpty { return nil }
+    let dot = (path as NSString).appendingPathComponent(".git")
+    var gitDir = dot
+    var isDirectory: ObjCBool = false
+    guard FileManager.default.fileExists(atPath: dot, isDirectory: &isDirectory) else { return nil }
+    if !isDirectory.boolValue {
+        guard let text = try? String(contentsOfFile: dot, encoding: .utf8), text.hasPrefix("gitdir:") else { return nil }
+        let target = text.dropFirst("gitdir:".count).trimmingCharacters(in: .whitespacesAndNewlines)
+        gitDir = target.hasPrefix("/") ? target : (path as NSString).appendingPathComponent(target)
+    }
+    guard let head = try? String(contentsOfFile: (gitDir as NSString).appendingPathComponent("HEAD"), encoding: .utf8),
+          head.hasPrefix("ref: refs/heads/") else { return nil }
+    return head.dropFirst("ref: refs/heads/".count).trimmingCharacters(in: .whitespacesAndNewlines)
+}
 
 func age(_ seconds: Double) -> String {
     let total = max(0, Int(seconds))
@@ -376,7 +403,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func text(_ job: Job, position: Int?, now: Double) -> String {
         let lane = job.lane.map { "/" + $0 } ?? ""
         let label = job.label.isEmpty ? clip(job.command, 48) : clip(job.label, 48)
-        var text = "#\(job.seq)  \(job.kind)\(lane)  \(label)"
+        // the code is shown unless the label already starts with it
+        let task = taskCode(label: job.label, checkoutPath: job.checkoutPath).flatMap { job.label.contains($0) ? nil : $0 + "  " } ?? ""
+        var text = "#\(job.seq)  \(task)\(job.kind)\(lane)  \(label)"
         if let started = job.startedAt {
             text += "  ·  running \(age(now - started))"
             if let pid = job.childPid, let usage = sampler.usage(of: pid) {
@@ -488,34 +517,34 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         rows = [:]
         menu.removeAllItems()
-        menu.addItem(header("Launch queue: \(running.count) running, \(waiting.count) waiting" + (paused ? "  —  PAUSED" : "")))
-        let machine = header(machineLine())
-        machineItem = machine
-        menu.addItem(machine)
-        menu.addItem(.separator())
-        if jobs.isEmpty {
-            menu.addItem(header("No runs"))
-        }
-        if !running.isEmpty {
-            menu.addItem(header("Running"))
-            for job in running { let entry = row(job, position: nil, now: now); rows[job.seq] = (entry, job); menu.addItem(entry) }
-        }
-        if !waiting.isEmpty {
-            menu.addItem(header(paused ? "Waiting (paused: none starts)" : "Waiting, in order"))
-            for (index, job) in waiting.enumerated() { let entry = row(job, position: index, now: now); rows[job.seq] = (entry, job); menu.addItem(entry) }
-        }
-        menu.addItem(.separator())
+        // what stays the same on top (the pause, the caps, quit), what changes below (the counts, the Mac, the runs)
         let pause = NSMenuItem(title: "Pause (new runs do not start)", action: #selector(togglePause), keyEquivalent: "p")
         pause.target = self
         pause.state = paused ? .on : .off
         menu.addItem(pause)
-        menu.addItem(.separator())
         menu.addItem(lanesItem(lanes))
         menu.addItem(loadItem(guardLimit))
-        menu.addItem(.separator())
         let quit = NSMenuItem(title: "Quit (starts again with the next run)", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
+        menu.addItem(.separator())
+        menu.addItem(header("Launch queue: \(running.count) running, \(waiting.count) waiting" + (paused ? "  —  PAUSED" : "")))
+        let machine = header(machineLine())
+        machineItem = machine
+        menu.addItem(machine)
+        if jobs.isEmpty {
+            menu.addItem(header("No runs"))
+        }
+        if !running.isEmpty {
+            menu.addItem(.separator())
+            menu.addItem(header("Running"))
+            for job in running { let entry = row(job, position: nil, now: now); rows[job.seq] = (entry, job); menu.addItem(entry) }
+        }
+        if !waiting.isEmpty {
+            menu.addItem(.separator())
+            menu.addItem(header(paused ? "Waiting (paused: none starts)" : "Waiting, in order"))
+            for (index, job) in waiting.enumerated() { let entry = row(job, position: index, now: now); rows[job.seq] = (entry, job); menu.addItem(entry) }
+        }
 
         // leave by itself after a quiet while: nothing queued and not paused (the next run starts it again)
         if jobs.isEmpty && !paused && idleMinutes > 0 {

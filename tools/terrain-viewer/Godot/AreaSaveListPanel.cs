@@ -233,7 +233,7 @@ public partial class AreaSaveListPanel : CanvasLayer
         // The field keeps the keyboard in the original's look but is not seen: its text is drawn in the new-save row.
         _description.Modulate = art ? new Color(1, 1, 1, 0) : Colors.White;
         _description.MouseFilter = art ? Control.MouseFilterEnum.Ignore : Control.MouseFilterEnum.Stop;
-        if (art) _description.AddThemeFontSizeOverride("font_size", 1);
+        if (art) _description.AddThemeFontSizeOverride("font_size", 1); // ui-text-scale: hidden (a transparent keyboard field, not read text)
         else _description.RemoveThemeFontSizeOverride("font_size");
         // The box lets the pointer through to the art outside its Yes/No buttons.
         _panel.MouseFilter = art ? Control.MouseFilterEnum.Ignore : Control.MouseFilterEnum.Stop;
