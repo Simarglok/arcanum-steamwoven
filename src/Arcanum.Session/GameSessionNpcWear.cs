@@ -62,9 +62,44 @@ public sealed partial class GameSessionOwner
     /// </summary>
     private SessionNpcWield WieldNpcBest(ISessionRestockWorld world, SessionMapId map, InventoryDomain.Seed seed, string npc)
     {
+        var planned = PlanNpcWield(world, map, seed, npc, Enum.GetValues<EquipmentSlot>());
+        if (planned.Failure != GameSessionFailure.None) return new(planned.Failure, []);
+        _inventory.NpcWorn[npc] = planned.Record!;
+        return new(GameSessionFailure.None, planned.Steps);
+    }
+
+    /// <summary>
+    /// ARC-AI-1139: the AI gate's re-wield of a live NPC (0x4A8570): CHECK_WIELD calls the best-items wield of every slot (0x4654F0,
+    /// <paramref name="allSlots"/>), CHECK_WEAPON alone the best item of the weapon slot (0x465170 with 1004), over the NPC's list as the session
+    /// shows it now and the NPC's ammunition stacks, so a bow whose ammunition the NPC no longer carries is not chosen and goes to its pack (fists
+    /// when no weapon qualifies). The same rules, policy and refusals as <see cref="WieldNpcBest"/> (the world is the host's restock world; none, or no wielder for the NPC: <see cref="GameSessionFailure.EquipmentUnavailable"/>). One revision and the NPC's worn
+    /// record when a worn item changed, else <see cref="GameSessionDisposition.NoChange"/> with the NPC's record untouched.
+    /// </summary>
+    public EquipBestResult RewieldNpc(GameSessionVersion expected, string npc, bool allSlots, ISessionRestockWorld? world)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(npc)) return RejectBest(GameSessionFailure.InvalidItem);
+        if (!IsCurrent(expected)) return RejectBest(GameSessionFailure.StaleVersion);
+        if (world is null) return RejectBest(GameSessionFailure.EquipmentUnavailable);
+        if (!NpcHolderSeed(npc, out var map, out var seed, out _)) return RejectBest(UnseededHolder());
+        var planned = PlanNpcWield(world, map, seed, npc, allSlots ? Enum.GetValues<EquipmentSlot>() : [EquipmentSlot.Weapon]);
+        if (planned.Failure != GameSessionFailure.None) return RejectBest(planned.Failure);
+        if (!planned.Changed) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, planned.Steps, Version);
+        if (_revision == long.MaxValue) return RejectBest(GameSessionFailure.RevisionExhausted);
+        // A first record for an NPC the session never dressed counts against the saved budget (a save holds at most MaxNpcWorn, as the restock's wield checks).
+        if (!_inventory.NpcWorn.ContainsKey(npc) && _inventory.NpcWorn.Count >= SessionInventoryState.MaxNpcWorn) return RejectBest(GameSessionFailure.BudgetExceeded);
+        _inventory.NpcWorn[npc] = planned.Record!;
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, planned.Steps, Version);
+    }
+
+    // One NPC wield over <slots>: the plan with the worn record it would write and whether a worn item differs from what the NPC wears now.
+    private (GameSessionFailure Failure, IReadOnlyList<SessionEquipBestStep> Steps, SortedDictionary<EquipmentSlot, string>? Record, bool Changed)
+        PlanNpcWield(ISessionRestockWorld world, SessionMapId map, InventoryDomain.Seed seed, string npc, IReadOnlyList<EquipmentSlot> slots)
+    {
         if (world.RestockWielder(map, npc) is not { Wearer: not null, Chooser: not null, Items: not null, ArtCheck: not null } wielder)
-            return new(GameSessionFailure.EquipmentUnavailable, []);
-        if (!ValidChooser(wielder.Chooser)) return new(GameSessionFailure.InvalidEquipment, []);
+            return (GameSessionFailure.EquipmentUnavailable, [], null, false);
+        if (!ValidChooser(wielder.Chooser)) return (GameSessionFailure.InvalidEquipment, [], null, false);
         var current = _inventory.Current(seed, seed.Holders[npc], item => DroppedCell(map, seed, item)).ToArray();
         var insert = world.RestockInsertCheck(map, npc);
         var listed = current.ToDictionary(item => item.Entity, StringComparer.Ordinal);
@@ -77,6 +112,7 @@ public sealed partial class GameSessionOwner
         // An item a step takes off goes to the NPC's pack (the original's unwield to the grid).
         var plan = new BestPlan(this, [], wielder.Wearer, chooser, wielder.ArtCheck,
             worn => insert(new(worn.Entity, listed[worn.Entity].Facts with { InventoryLocation = -1 })));
+        var before = new SortedDictionary<EquipmentSlot, string>();
         try
         {
             foreach (var item in current)
@@ -103,14 +139,15 @@ public sealed partial class GameSessionOwner
                     ScriptPoints = EquipmentDomain.MovePoints(facts.ScriptPoints),
                     ItemSpells = facts.HasItemSpells,
                 };
+                before[slot] = item.Entity;
             }
-            foreach (var slot in Enum.GetValues<EquipmentSlot>()) WieldBest(plan, slot);
+            foreach (var slot in slots) WieldBest(plan, slot);
         }
-        catch (BestPlan.Refused refused) { return new(refused.Failure, []); }
+        catch (BestPlan.Refused refused) { return (refused.Failure, [], null, false); }
         var record = new SortedDictionary<EquipmentSlot, string>();
         foreach (var (slot, worn) in plan.Worn) record[slot] = worn.Entity;
-        _inventory.NpcWorn[npc] = record;
-        return new(GameSessionFailure.None, Array.AsReadOnly(plan.Steps.ToArray()));
+        var changed = record.Count != before.Count || record.Any(pair => !before.TryGetValue(pair.Key, out var entity) || entity != pair.Value);
+        return (GameSessionFailure.None, Array.AsReadOnly(plan.Steps.ToArray()), record, changed);
     }
 
     // The bounds the choice's weapon score reads: skill levels 0..20, the aptitude's range, a damage bonus the combat rules admit.
