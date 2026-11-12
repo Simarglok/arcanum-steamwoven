@@ -116,6 +116,30 @@ public static class LifeRules
     }
 
     /// <summary>
+    /// ARC-COMBAT-1141 (GT210–GT212, F1): a kill whose damage step the victim's taking-damage script vetoed (attachment point 23, skip default). The script runs
+    /// at the start of the damage apply, before every gate, so the death flag's step does nothing: no hit points taken, no poison write, no
+    /// death procedure (<see cref="LifeEvents.Died"/>, the plain fall). The kill's own pin follows all the same (the kill writes
+    /// <see cref="LifeLimits.DeathHitPointDamage"/> after the step), so the critter reads as dead without a death: the "dead" state the source never
+    /// processes (the "dead" procedure is not read). A dead, invulnerable or living critter alike: the script is asked first, so nothing else is reported.
+    /// </summary>
+    public static LifeOutcome KillVetoed(LifeState state, LifeFacts facts)
+    {
+        Check(state, facts);
+        var after = state with { HitPointDamage = LifeLimits.DeathHitPointDamage };
+        return new(state, after, Consciousness(state, after, facts), 0, DeathAnimation.None);
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1141 (GT210, GT211): a poison tick whose damage step the victim's taking-damage script vetoed: nothing is written and nothing is
+    /// reported; the tick's event still reschedules itself as any tick does (the poison goes on, GT211).
+    /// </summary>
+    public static LifeOutcome PoisonDamageVetoed(LifeState state, LifeFacts facts)
+    {
+        Check(state, facts);
+        return new(state, state, LifeEvents.None, 0, DeathAnimation.None);
+    }
+
+    /// <summary>
     /// Heals (the source's heal step). In order: scar removal without <see cref="LifeHeal.Full"/>; a dead critter stops
     /// here unless <see cref="LifeHeal.Resurrect"/>, and a resurrection is refused for an unrevivifiable critter that is
     /// reanimated or an unresurrectable one that is not, or by the target's raise script (<paramref name="raiseScript"/>, the

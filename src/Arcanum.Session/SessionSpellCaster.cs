@@ -1203,11 +1203,13 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
 
     private void ApplyDamage(SpellRun run, SpellDamageComponent data, SpellRunObject target)
     {
-        var result = SpellLifeComponents.Damage(data, run, target, this, Rolls, Profile);
+        // ARC-DEV-261 (GT198, DH1): the victim's taking-damage script comes first for each damaged object, with the run's parent as the attacker; a veto cancels that victim's damage step only.
+        // ARC-COMBAT-1141 (GT211): the component asks it while it builds the steps (the acid's worn items and the wearer, each as a target), so a vetoed item's step also leaves the chain's amounts alone.
+        var result = SpellLifeComponents.Damage(data, run, target, this, Rolls, Profile, TakingDamage is { } asks ? id => asks(id, run.Parent?.Id) : null);
         foreach (var step in result.Steps)
         {
-            // ARC-DEV-261 (GT198, DH1): the victim's taking-damage script comes first for each damaged object, with the run's parent as the attacker; a veto cancels that victim's damage step only.
-            if (TakingDamage is { } asks && !asks(step.Object, run.Parent?.Id)) { _log.Add(new(SpellCastEventKind.DamageVetoed, run.Id, 0, step.Object)); continue; }
+            if (step.Vetoed) { _log.Add(new(SpellCastEventKind.DamageVetoed, run.Id, 0, step.Object)); continue; }
+            var damage = step.Damage;
             if (step.Life is { } life && LifeTarget(step.Object) is { } who)
             {
                 // DH1: the run's parent is the attacker, its other object (else its parent) the damage source.
@@ -1217,7 +1219,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
                 if (applied.Outcome is { } outcome)
                 {
                     _log.Add(new(SpellCastEventKind.Damaged, run.Id, outcome.HitPointDamage, step.Object));
-                    QueueDamageStep(step.Object, step.Damage, outcome, run.Parent?.Id);
+                    QueueDamageStep(step.Object, damage, outcome, run.Parent?.Id);
                     // ARC-DEV-295 (XP9, XP10): the same damage function pays the pool share and the kill award, with the source as the killer.
                     RecordDamageExperience(step.Object, outcome, maxHitPoints, source, run.Id, applied.DeathStopped);
                 }
@@ -1228,8 +1230,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
                 // ARC-MAGIC-1143 (RH1, RH3): the Damage component's tail (0x4518D0, 0x451AE2) runs the damage effect, so an entangled victim that took the damage asks its save again; a dead victim took nothing.
                 if (applied.Outcome is { Changed: true }) SpellDamageHit(step.Object, step.Damage);
             }
-            else if (step.Life is null && step.Damage.Prevented == DamagePrevention.None && _map.DamageObject(step.Object, step.Damage))
-                _log.Add(new(SpellCastEventKind.Damaged, run.Id, step.Damage.HitPointDamage, step.Object));
+            else if (step.Life is null && damage.Prevented == DamagePrevention.None && _map.DamageObject(step.Object, damage))
+                _log.Add(new(SpellCastEventKind.Damaged, run.Id, damage.HitPointDamage, step.Object));
         }
     }
 
