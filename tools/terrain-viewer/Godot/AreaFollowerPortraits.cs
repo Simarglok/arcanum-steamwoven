@@ -81,6 +81,16 @@ public partial class AreaFollowerPortraits : CanvasLayer
     /// <summary>The left button was released over a follower's portrait (no menu open): a click on that follower (ARC-DEV-280).</summary>
     public event Action<string>? PortraitClicked;
 
+    /// <summary>ARC-UI-1281 (ledger HK26, callback 0x56A9D0, strip message type 1, code 2): the pointer entered a follower's portrait button while no
+    /// order menu is open; the viewer's handler adds the dialog test (0x567400) and runs the examine.</summary>
+    public event Action<string>? PortraitHovered;
+
+    /// <summary>ARC-UI-1281 (HK26, 0x550720): the pointer left the portrait it entered (or the frames were rebuilt under it): the description and
+    /// highlight go.</summary>
+    public event Action? PortraitHoverLeft;
+
+    private string? _hovered;
+
     internal IReadOnlyList<string> EntitiesForSelfTest { get; private set; } = [];
     private const string EntityMeta = "follower_entity";
 
@@ -99,6 +109,8 @@ public partial class AreaFollowerPortraits : CanvasLayer
             ? (entry.Frame.Texture is not null, entry.Portrait.Visible ? entry.Portrait.Texture : null, entry.Health.Art, entry.Fatigue.Art,
                 entry.Button.GetGlobalRect(), entry.Portrait.GetGlobalRect())
             : null;
+    /// <summary>The follower whose portrait the pointer rests on now (null none), as the strip's hover tracks it.</summary>
+    internal string? HoveredForSelfTest => _hovered;
     internal Vector2? MenuItemCentreForSelfTest(FollowerMenuItem item) =>
         _menuItems.GetChildren().OfType<Button>().FirstOrDefault(b => b.HasMeta(ItemMeta) && (int)b.GetMeta(ItemMeta) == (int)item)?.GetGlobalRect().GetCenter();
 
@@ -153,6 +165,8 @@ public partial class AreaFollowerPortraits : CanvasLayer
         if (signature != _signature)
         {
             _signature = signature;
+            // The button the pointer rested on is freed with the rebuild, and a freed button sends no exit.
+            if (_hovered is not null) { _hovered = null; PortraitHoverLeft?.Invoke(); }
             foreach (var child in _root.GetChildren()) { _root.RemoveChild(child); child.QueueFree(); }
             _entries.Clear();
             EntitiesForSelfTest = shown.Select(f => f.Entity).ToArray();
@@ -172,6 +186,9 @@ public partial class AreaFollowerPortraits : CanvasLayer
                     if (_menu.Visible) { CloseMenu(); return; }
                     if (new Rect2(Vector2.Zero, button.Size).HasPoint(release.Position)) OpenMenu(entity, button);
                 };
+                // ARC-UI-1281 (HK26): entering a portrait with no menu open is the follower's hover; leaving it clears (0x550720).
+                button.MouseEntered += () => { _hovered = entity; if (!_menu.Visible) PortraitHovered?.Invoke(entity); };
+                button.MouseExited += () => { if (_hovered != entity) return; _hovered = null; PortraitHoverLeft?.Invoke(); };
                 button.SetMeta(EntityMeta, entity);
                 var frame = _art.GetValueOrDefault(AreaFollowerFrameLayout.FrameArt);
                 var back = new ColorRect { Color = Back, Size = size, MouseFilter = Control.MouseFilterEnum.Ignore, Visible = frame is null };

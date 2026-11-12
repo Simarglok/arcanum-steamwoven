@@ -423,7 +423,7 @@ The pointer entering a slot or a recent-action button shows its entry's descript
    (the window's handler is the inventory's, 0x573C74; the description is drawn only while the bars show, which the viewer hides under the window, so in practice the script runs and the item window is a known gap; the viewer runs it only with its interface on),
    and the dialog start runs the speaker's examine script and redraws its window as the world hover does (0x567460), once, with the interface on. The
    floating tooltip of the viewer without the interface bars (the original has none) does not run it, and the follower portraits' hover (0x56A9D0,
-   HK26) is not built.
+   HK26) runs it too (ARC-UI-1281, [follower portraits' hover](companion-orders-runtime.md#follower-portraits-hover-arc-ui-1281)).
 5. **Inventory** (HK23). In the inventory window, the pointer resting 35 ms on another item of the doll or the grid (nothing held) draws
    that item's window the same way; resting on no item keeps the last description.
 6. **Smoke.** The hotkey-bar smoke enters slot 2 (a spell: its hint with the college's icon), a skill entry (its hint; in the spells mode
