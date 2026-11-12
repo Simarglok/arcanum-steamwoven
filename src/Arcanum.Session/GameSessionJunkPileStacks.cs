@@ -6,8 +6,8 @@ public sealed partial class GameSessionOwner
 {
     /// <summary>
     /// ARC-UI-1328: moves <paramref name="count"/> coins of the gold pile <paramref name="item"/> that lies in the junk pile
-    /// <paramref name="pile"/> of the actor's map to the hero: the quantity window's move out of the loot window (0x464830 with the pile
-    /// given, as <see cref="TakeGoldFromNpc"/> does for a body or a container, NT1). A pile with exactly that many coins is destroyed and
+    /// <paramref name="pile"/> of the actor's map to the hero: the quantity window's move out of the loot window (the gold move
+    /// <see cref="TakeGoldFromNpc"/> makes for a body or a container, with the pile given, NT1). A pile with exactly that many coins is destroyed and
     /// leaves the junk pile; a larger one stays in it with the rest, so the junk pile still holds the same items and its dissolve rules
     /// (<see cref="CloseJunkPile"/>) are unchanged: the window shows the pile while it is taken from, so even a pile left with no item
     /// stands until the window closes (JP5). The gold item is a pile the hero dropped (a placed item) or a map's loose pile that joined
@@ -39,8 +39,8 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// ARC-UI-1328: moves <paramref name="count"/> units of the ammunition stack <paramref name="item"/> in the junk pile
-    /// <paramref name="pile"/> of the actor's map to the hero (0x4658E0 with the stack given, as <see cref="TakeAmmoFromNpc"/> does for a
-    /// body or a container, AM4): a stack with exactly that many is deleted and leaves the junk pile, a larger one stays in it with the
+    /// <paramref name="pile"/> of the actor's map to the hero (the ammunition move <see cref="TakeAmmoFromNpc"/> makes for a
+    /// body or a container, with the stack given, AM4): a stack with exactly that many is deleted and leaves the junk pile, a larger one stays in it with the
     /// rest; the hero's first stack of the type grows or a new <c>made:n</c> stack of <paramref name="newStackKind"/> enters its list after the host's
     /// insert check. The junk pile's items and dissolve rules are those of <see cref="TakeGoldFromJunkPile"/>. The refusals are
     /// <see cref="TakeAmmoFromNpc"/>'s with the junk pile as the holder. A count of 0 changes nothing. One revision.
