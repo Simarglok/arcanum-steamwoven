@@ -238,7 +238,7 @@ step: the item's damage and its two-step break are the durability records (`Dama
   The viewer passes the trap flag (ARC-COMBAT-011); since ARC-DEV-260 it runs the trap and the BUST script of a broken object
   ([below](#the-breaks-trap-and-bust-script-arc-dev-260)).
 - **Host steps.** Sounds, eye candy and the witnesses' reaction are reported to the host, not run here; the trap and BUST scripts are the host's since ARC-DEV-260.
-- **Others.** NPC attacks on objects (AI); area damage reaches objects since [ARC-DEV-255](#damage-that-is-no-hero-attack-arc-dev-255) and items since
+- **Others.** An NPC's ranged attack reaches objects since ARC-COMBAT-1140 (`GameSessionOwner.AttackObjectByNpc` for the object that stops its line of fire, `LandNpcShotOnObject` for the arrow's strike; the damage step of this section with the NPC as the attacker, no witnesses, the trap and BUST script run with no triggerer or breaker, see tail T4e of the goal table); an NPC's melee attack on objects is not modelled; area damage reaches objects since [ARC-DEV-255](#damage-that-is-no-hero-attack-arc-dev-255) and items since
   [ARC-COMBAT-025](#damage-to-items-that-is-no-hero-attack-arc-combat-025) (the decay of dropped items is in since ARC-WORLD-062).
 
 ## The break's trap and BUST script (ARC-DEV-260)

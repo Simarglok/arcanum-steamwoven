@@ -191,6 +191,10 @@ public partial class TerrainViewerApp
             LaunchThrown = AiLaunchThrown,
             // ARC-DEV-282: an NPC's arrow or bullet flies as a projectile and strikes through the AI host.
             LaunchShot = AiLaunchShot,
+            // ARC-COMBAT-1140 (RA4): a door, container, scenery, trap or wall that stops the line of fire takes the shot: its target, its flight and the follow-up of an object hit.
+            ObjectTarget = row => _areaSession is { } objectOwner && !IsAreaCompanion(row.Key) ? ObjectTargets()?.Target(objectOwner, row.Key, AreaTrapped) : null,
+            LaunchShotAtObject = AiLaunchShotAtObject,
+            ObjectStruck = NpcObjectHit,
             // ARC-DEV-261 (GT198): the victims' taking-damage scripts (point 0x17) of the NPCs' attacks, throws and knockback bumps.
             TakingDamage = TakingDamageGoesOn,
             // ARC-WORLD-115: the hero's companions here fight beside it, stepping and turning through their own walk (ARC-WORLD-119: the

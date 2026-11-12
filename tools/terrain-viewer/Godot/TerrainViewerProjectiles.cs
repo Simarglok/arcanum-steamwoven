@@ -205,22 +205,37 @@ public partial class TerrainViewerApp
 
     private bool AiLaunchShot(string shooter, string target, SessionShot shot, CellCoord from, CellCoord destination)
     {
-        if (_areaSession is not { } owner || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map || !map.TryGetRow(shooter, out var shooterRow)
-            || owner.QueryNpcShot(shot) is not { } facts) return false;
+        if (_inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map) return false;
         var targetRow = HeroRow;
         if (target != Arcanum.Simulation.Ai.AiSchedulerRules.Pc && !map.TryGetRow(target, out targetRow!)) return false;
+        return AiFlyShot(shooter, target, targetRow, null, shot, from, destination);
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1140 (RA4, PF2): the flight of an NPC's arrow on the door, window, container, scenery, trap or wall that stopped its line of fire (<see cref="AreaAiScene.LaunchShotAtObject"/>): as
+    /// <see cref="AiLaunchShot"/>, with the blocker as the shot's target (the shot was decided a hit on it) and the aimed target's tile as the destination; it strikes the blocker where it crosses its tile.
+    /// </summary>
+    private bool AiLaunchShotAtObject(string shooter, AreaObjectRecord blocker, SessionShot shot, CellCoord from, CellCoord destination) =>
+        AiFlyShot(shooter, blocker.Type == 0 ? $"wall:{blocker.Key.SourceIndex}" : ObjectTargets()?.EntityOfKey(blocker.Key) ?? $"{blocker.Key.Kind}:{blocker.Key.SourceIndex}", blocker,
+            blocker.Type == 0 || _areaSession is not { } owner ? null : ObjectTargets()?.Target(owner, blocker.Key, AreaTrapped), shot, from, destination);
+
+    private bool AiFlyShot(string shooter, string target, AreaObjectRecord targetRow, AreaObjectAttackTarget? obj, SessionShot shot, CellCoord from, CellCoord destination)
+    {
+        if (_areaSession is not { } owner || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map || !map.TryGetRow(shooter, out var shooterRow)
+            || owner.QueryNpcShot(shot) is not { } facts) return false;
         var art = _combatHost?.WornItems(owner, CurrentAreaMap, shooter)?.GetValueOrDefault(Arcanum.Simulation.Equipment.EquipmentSlot.Weapon)?.MissileArt;
         var direction = ProjectileRules.Direction(from, destination);
         var faced = art is { } raw ? ProjectileRules.FacedArt(raw, direction) : null;
+        var atObject = targetRow.Type != 15 && targetRow.Type != 16;
         var projectile = new AreaProjectile
         {
-            Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = targetRow, Shooter = shooterRow, Destination = destination, Art = faced,
+            Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = targetRow, Object = obj, Shooter = shooterRow, Destination = destination, Art = faced,
             Flight = new(from, from, [(0, 0)], 1, from, 0, 0, 0), State = new(facts.Hit, false, facts.Range),
-            Launched = new(target, false, false, shooter, null),
+            Launched = new(atObject && obj is null ? null : target, false, obj is not null, shooter, null),
         };
         _npcShotLaunching = shot.Id;
         bool launched;
-        try { launched = ProjectileHost().Launch(projectile, from, target == Arcanum.Simulation.Ai.AiSchedulerRules.Pc ? null : target); }
+        try { launched = ProjectileHost().Launch(projectile, from, target == Arcanum.Simulation.Ai.AiSchedulerRules.Pc || atObject && obj is null ? null : target); }
         finally { _npcShotLaunching = null; }
         if (!launched)
         {
@@ -426,8 +441,8 @@ public partial class TerrainViewerApp
             FireShotEnd(projectile, events);
             return ProjectileCrossResult.Ended;
         }
-        // ARC-DEV-282 (PF2, PF3): an NPC's arrow strikes through the AI host: the shot's target takes the carried hit, another critter it met on the way a forced hit; anything else it meets
-        // (a wall, a door, a container) ends it (an NPC's shot on an object is not ready).
+        // ARC-DEV-282 (PF2, PF3): an NPC's arrow strikes through the AI host: the shot's target takes the carried hit, another critter it met on the way a forced hit; ARC-COMBAT-1140: an object or a wall
+        // (a door, a container, scenery, a trap) it meets takes a forced hit too; a companion or an object the viewer has no target for (an item, a critter without the AI host) ends it.
         if (projectile.Shooter is { } shooter)
         {
             var struckHero = struck.Key == HeroRow.Key;
@@ -435,12 +450,14 @@ public partial class TerrainViewerApp
             var struckId = struckHero ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : AreaConversationState.EntityId(struck);
             var shooterId = AreaConversationState.EntityId(shooter);
             _projectileHost?.Finish(projectile);
-            if (!struckCritter || AreaAiHostNow() is not { } ai)
+            if (AreaAiHostNow() is not { } ai)
             {
                 owner.EndShot(projectile.Shot);
-                Ended(projectile, kind, null, $"an NPC's shot met {(struckCritter ? "a critter without the AI host" : $"an object of type {struck.Type}")}: no strike");
+                Ended(projectile, kind, null, $"an NPC's shot met {(struckCritter ? "a critter" : $"an object of type {struck.Type}")} without the AI host: no strike");
                 return ProjectileCrossResult.Ended;
             }
+            // ARC-COMBAT-1140 (PF8, RH5): an object or a wall the arrow meets takes it as a forced hit (the damage step of an object, its break and the trap and BUST script of it).
+            if (!struckCritter) return NpcShotOnObject(projectile, kind, struck, ai, shooterId);
             var landed = ai.LandShot(shooterId, projectile.Shot, struckId);
             _npcShotStrikesForSelfTest.Add((projectile.Shot.Id, struckId, landed?.Disposition ?? GameSessionDisposition.Rejected, landed?.Life?.HitPointDamage));
             Ended(projectile, kind, struckId, $"an NPC's shot: disposition={landed?.Disposition} failure={landed?.Failure} outcome={landed?.Resolution?.Outcome} damage={landed?.Life?.HitPointDamage}");
@@ -494,6 +511,58 @@ public partial class TerrainViewerApp
         FireShotEnd(projectile, events);
         RunThrownItemScriptAfterStrike();
         return end;
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1140 (ledger PF8, RH5, OD1–OD5): an NPC's arrow met a non-critter object: a door, window, container, scenery or trap takes the hit through the session (<see cref="AreaAiHost.LandShotOnObject"/>), a wall takes
+    /// nothing, as the hero's strike; then the floaters, the status line and the object's trap and BUST script (the shooter is no triggerer or breaker here, as for a hit with no attacker: not modelled), the inventory a spill changed.
+    /// An item on the ground, a companion's row or an object with no target ends the shot with no strike (as before).
+    /// </summary>
+    private ProjectileCrossResult NpcShotOnObject(AreaProjectile projectile, ProjectileStrikeKind kind, AreaObjectRecord struck, AreaAiHost ai, string shooterId)
+    {
+        var owner = projectile.Owner;
+        if (struck.Type == 0)
+        {
+            var result = ai.LandShotOnObject(shooterId, projectile.Shot, null, wall: true);
+            Ended(projectile, kind, $"wall:{struck.Key.SourceIndex}", $"an NPC's shot on a wall: disposition={result?.Disposition} failure={result?.Failure} prevented={result?.Resolution?.Damage?.Prevented}");
+            _npcShotStrikesForSelfTest.Add((projectile.Shot.Id, $"wall:{struck.Key.SourceIndex}", result?.Disposition ?? GameSessionDisposition.Rejected, null));
+            if (result is { Disposition: not GameSessionDisposition.Rejected }) NpcObjectHit(shooterId, struck, null, result);
+            return ProjectileCrossResult.Ended;
+        }
+        if (IsAreaCompanion(struck.Key) || ObjectTargets()?.Target(owner, struck.Key, AreaTrapped) is not { Refusal: null, Object: { } objectTarget } target || target.Kind is DamageableObjectKind.Item)
+        {
+            owner.EndShot(projectile.Shot);
+            Ended(projectile, kind, null, $"an NPC's shot met an object of type {struck.Type} it cannot strike: no strike");
+            return ProjectileCrossResult.Ended;
+        }
+        var landed = ai.LandShotOnObject(shooterId, projectile.Shot, objectTarget, wall: false);
+        Ended(projectile, kind, target.Entity, $"an NPC's shot on an object: disposition={landed?.Disposition} failure={landed?.Failure} outcome={landed?.Resolution?.Outcome} damage={landed?.Object?.Damage}");
+        _npcShotStrikesForSelfTest.Add((projectile.Shot.Id, target.Entity, landed?.Disposition ?? GameSessionDisposition.Rejected, landed?.Object is { } hit ? hit.Damage - hit.DamageBefore : null));
+        if (landed is { Disposition: not GameSessionDisposition.Rejected }) NpcObjectHit(shooterId, struck, target, landed);
+        return ProjectileCrossResult.Ended;
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1140: what follows an NPC's shot that struck an object or a wall (the AI host's <see cref="AreaAiScene.ObjectStruck"/>, or the arrow's landing): the floaters over the object, the status line, the trap and BUST script
+    /// of a break (no triggerer or breaker: the shooter is an NPC, not modelled), the redraw and the inventory a spill changed. <paramref name="target"/> is null for a wall.
+    /// </summary>
+    private void NpcObjectHit(string shooter, AreaObjectRecord row, AreaObjectAttackTarget? target, SessionObjectAttackResult result)
+    {
+        if (target is not null) FinishObjectHit(null, target, result, ranged: true, byHero: false, attacker: shooter);
+        else
+        {
+            _attackNotice = "an NPC's shot struck a wall: " + AreaObjectTargets.Describe(result);
+            FloatObjectAttack(result, $"wall:{row.Key.SourceIndex}", null, shooter);
+        }
+        // A critical miss hurt the shooter itself (its stun is its goal on the table; a fall is drawn from the bodies).
+        if (result.Life is { } self)
+        {
+            _attackNotice = $"{AiName(shooter)}'s shot misfired: it takes {self.HitPointDamage} damage";
+            if (self.Events.HasFlag(LifeEvents.Died)) _deathAnimations[(CurrentAreaMap, shooter)] = AreaFallenPoses.Animation(self.Death);
+            SyncAreaCombatBodies();
+            SyncAreaInventory();
+        }
+        RefreshAreaStatus();
     }
 
     /// <summary>ARC-COMBAT-019: after a strike a boomerang turns back (the original's end runs just before the hit, PF8); any other
