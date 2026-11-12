@@ -592,7 +592,7 @@ Findings, each with its follow-up issue:
 - **VPG2.** The transfer between holders runs the remove check after the transfer script: an item with the no-drop flag is refused with
   a message to a PC source or recipient (NT2, VP5). Steamwoven's loot from a body, container or junk pile, the pick pocket, the give to an
   NPC, the barter and the dialog's negative `IN -name` (0x415BA0 → 0x4617F0 → 0x461CA0) ran no such check, so a no-drop item could leave its
-  holder. Fixed by ARC-WORLD-1283 ([#1283](https://github.com/Simarglok/arcanum-steamwoven/issues/1283)): the check runs after the (modelled) transfer
+  holder. Fixed by ARC-WORLD-1283 ([#1283](https://github.com/Simarglok/arcanum-steamwoven/issues/1283)): the check (for whole items; an ammunition stack moved by units, as the barter does, runs none) runs after the (modelled) transfer
   script and before the insert check in `Take` and `GiveItemTo`, the refusal is `ItemNotDroppable` with the PC message 111
   (`InventoryMutationResult.PcMessage`), a worn no-drop item is refused too (the flag is tested first, 0x466DA0), and the dialog's `IN -name` lays the
   item at the PC's feet (the original's fallback, NT2) instead of failing. The flag is read from the item's own seed row or worn record, and for an

@@ -1452,7 +1452,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             var item = _world!.Item(request.Value)!;
             _session.AttachItemWeights(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.Weight);
             _session.AttachItemScripts(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.Scripts);
-        _session.AttachItemNoDrop(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.NoDrop == true);
+            _session.AttachItemNoDrop(number => _world.Item(number - AreaPrototypeItems.PrototypeOffset)?.NoDrop == true);
             var check = InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck;
             var created = IsPc(request.Object) ? _session.CreateItemForHero(_session.Version, item.Kind, check) : _session.AddItemToNpc(_session.Version, request.Object.Code, item.Kind, check);
             LastCreatedItem = created;

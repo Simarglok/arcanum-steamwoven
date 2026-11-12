@@ -34,7 +34,7 @@ public sealed partial class GameSessionOwner
     // (a seed row's, or the flag the facts carry), else, when no seed row holds it (a made item), its prototype's. A worn item is refused too (the flag is tested
     // first; the worn-slot check 0x465010 answers 0 for the items the session lets leave).
     private bool HolderItemNoDrop(InventoryDomain.Seed seed, SessionInventoryItem item) =>
-        item.Facts.NoDrop || !seed.Items.ContainsKey(item.Entity) && PrototypeNoDrop(item.Facts.Kind);
+        item.Facts.NoDrop || (seed.Items.TryGetValue(item.Entity, out var row) ? row.Facts.NoDrop : PrototypeNoDrop(item.Facts.Kind));
 
     // ARC-WORLD-1283: the same for one of the hero's held items (not placed): the worn record's flag, the attached origin seed row's, else its prototype's.
     private bool HeroItemNoDrop(string item, SessionItemKind kind, SessionMapId? origin)
