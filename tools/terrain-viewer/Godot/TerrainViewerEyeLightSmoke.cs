@@ -2,6 +2,7 @@ using Arcanum.Data.Area;
 using Arcanum.Data.Lighting;
 using Arcanum.Data.Magic;
 using Arcanum.Session;
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
@@ -20,7 +21,9 @@ public partial class TerrainViewerApp
     //    darkness check reads at the hero's cell rises (the clock is moved to a night hour first, as the worn-light stage does: a bright day saturates the level);
     //  - the same on the nearest living NPC whose cell the lighting covers (its light is built where it stands);
     //  - the spell's forced END interrupts the run, the end node writes the slot back: no light, the canvas holds its old count and the level is back at its first value;
-    //  - a second cast on the same target would find its slot free again (the four overlay slots of the object are the host's rule, unit tests).
+    //  - a second cast on the same target would find its slot free again (the four overlay slots of the object are the host's rule, unit tests);
+    //  - ARC-MAGIC-1280 (saved): Illuminate maintained on the hero (and the NPC) is saved by F7 and loaded by F8: the new session's table holds the overlay runs, the glow is back with no second cast (one light each, the canvas
+    //    count and the darkness level as before the save), the four-slot rule holds, and the forced END after the load takes the restored light off.
     // The spell runs and the hero's state are put back for the later stages (the clock is not put back, as in worn-light).
     private async Task RunAreaEyeLightSmokeAsync(TerrainLoadResult? mapMode = null)
     {
@@ -127,13 +130,74 @@ public partial class TerrainViewerApp
                     && AreaRowLightLevel(o.Row) < Arcanum.Simulation.Combat.AttackRules.MaxLightLevel)
                 .OrderBy(o => Math.Max(Math.Abs(World(o.Row).X - here.X), Math.Abs(World(o.Row).Y - here.Y))).Take(8).ToArray();
             var lit = false;
+            string? litNpc = null;
             foreach (var npc in npcs)
             {
-                try { await Probe("npc " + npc.Id, npc.Id!, () => AreaRowLightLevel(npc.Row)); lit = true; break; }
+                try { await Probe("npc " + npc.Id, npc.Id!, () => AreaRowLightLevel(npc.Row)); lit = true; litNpc = npc.Id; break; }
                 catch (InvalidOperationException) when (npc.Row != npcs[^1].Row) { /* a place the glow cannot raise (a lit cell, a cell outside the window): the next NPC */ }
             }
             if (!lit) GD.Print($"{EyeLightCode} eye-light npc NONE (no living NPC with room above its level among {npcs.Length} candidates)");
-            GD.Print("ARC-MAGIC-1229 native-smoke eye-light PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Targets = report }));
+
+            // ARC-MAGIC-1280: the maintained glow in a save. Cast on the hero (and the NPC), F7, F8, then the same glow with no second cast.
+            var saves = System.IO.Directory.CreateTempSubdirectory("arc-magic-1280-").FullName;
+            var libraryBefore = _saveLibraryForSelfTest;
+            _saveLibraryForSelfTest = new(saves);
+            object saved;
+            try
+            {
+                string[] targets = litNpc is null ? [SessionSpellCaster.Hero] : [SessionSpellCaster.Hero, litNpc];
+                var carried0 = Carried();
+                var casts = new List<(string Target, int Run)>();
+                foreach (var target in targets)
+                {
+                    var attempt = Caster().CastByScript(null, 65, target, free: true, unresistable: true);
+                    Require(attempt.Outcome == SpellCastAttemptOutcome.Started && attempt.RunId is not null, $"the script cast of Illuminate on {target} started before the save: {attempt.Outcome}");
+                    casts.Add((target, attempt.RunId!.Value)); runs.Add(attempt.RunId.Value);
+                }
+                for (var i = 0; i < 400 && (ShownEyeCandyHost?.Lights().Count() ?? 0) < targets.Length; i += 5) await Frames(5);
+                await Frames(3);
+                (string Owner, int Art, (byte, byte, byte) Color)[] Lit() => [.. (ShownEyeCandyHost?.Lights() ?? []).Select(l => (l.Owner, l.ArtNumber, l.Color)).OrderBy(l => l.Owner, StringComparer.Ordinal)];
+                var litBefore = Lit();
+                var carriedLit = Carried();
+                var levelLit = AreaCellLightLevel(heroCell.X, heroCell.Y);
+                Require(litBefore.Length == targets.Length && carriedLit == carried0 + targets.Length, $"one light for each cast before the save ({litBefore.Length}, canvas {carried0} -> {carriedLit})");
+                QuickKey(Key.F7);
+                Require(_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved while Illuminate holds: " + _quickSaveStatus);
+                var written = _areaSession!.Capture();
+                foreach (var (target, run) in casts)
+                    Require(written.Goals.Runs.Count(r => r.Owner == target && AiExecutorRules.IsEyeCandyGoal(r.Bottom.Goal) && r.Frames.Any(f => f.EyeCandy?.Tag == run)) == 1 && written.Spells.Runs.Any(r => r.Id == run),
+                        $"the snapshot holds the eye candy run of {target} and the maintained spell run {run}");
+                for (var i = 0; i < 3; i++) TechSmokeFrame(); // the smoke clock is in twentieths here (AreaSmokeFrame's tenths would put the grid input in the past)
+                var running = _areaSession;
+                QuickKey(Key.F8);
+                Require(_mapHandoff is not null || _quickSaveStatus?.StartsWith("F8 quick loaded", StringComparison.Ordinal) == true, "F8 loaded: " + _quickSaveStatus);
+                if (_mapHandoff is not null) await (_lastLoad ?? Task.CompletedTask);
+                for (var i = 0; i < 36000 && _mapHandoff is not null; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                Require(_mapHandoff is null && !ReferenceEquals(running, _areaSession) && _areaSession is not null, "the load published a new session: " + _quickSaveStatus);
+                foreach (var (target, run) in casts)
+                    Require(_areaSession!.QuerySpellRuns()[run] is not null && _areaSession.QueryGoals().Runs.Any(r => !r.Done && r.Owner == target && AiExecutorRules.IsEyeCandyGoal(r.Bottom.Goal)), $"after the load the maintained run {run} and the eye candy run of {target} are the saved ones");
+                for (var i = 0; i < 400 && (ShownEyeCandyHost?.Lights().Count() ?? 0) < targets.Length; i += 5) await Frames(5);
+                await Frames(5);
+                var litAfter = Lit();
+                Require(ShownEyeCandyHost is not null && litAfter.SequenceEqual(litBefore), $"the glow is back with no second cast, one light each: {string.Join(";", litAfter)} against {string.Join(";", litBefore)}");
+                Require(Carried() == carriedLit, $"the canvas holds the glow again ({carriedLit} / {Carried()})");
+                var levelLoaded = AreaCellLightLevel(heroCell.X, heroCell.Y);
+                // The glow goes with the spell after the load too: the forced END finds the restored run by its tag.
+                foreach (var (_, run) in casts) Caster().Act(new(SessionSpellRunActionKind.ForceEnd, run));
+                for (var i = 0; i < 60 && (ShownEyeCandyHost?.Lights().Any() ?? false); i += 5) await Frames(5);
+                await Frames(3);
+                Require(!(ShownEyeCandyHost?.Lights().Any() ?? false), "the END after the load took the restored light off");
+                Require(Carried() == carriedLit - targets.Length && AreaCellLightLevel(heroCell.X, heroCell.Y) < levelLoaded, $"the canvas count ({Carried()}) and the level ({AreaCellLightLevel(heroCell.X, heroCell.Y)} < {levelLoaded}) fell with the END");
+                saved = new { Targets = targets, Level = new { Lit = levelLit, Loaded = levelLoaded } };
+                GD.Print($"{EyeLightCode} eye-light saved targets={string.Join(",", targets)} lights={string.Join(";", litAfter)} level={levelLit}->{levelLoaded}");
+            }
+            finally
+            {
+                if (_mapHandoff is not null) await (_lastLoad ?? Task.CompletedTask);
+                _saveLibraryForSelfTest = libraryBefore; _quickKeys.Reset();
+                try { System.IO.Directory.Delete(saves, recursive: true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { }
+            }
+            GD.Print("ARC-MAGIC-1229 native-smoke eye-light PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Targets = report, Saved = saved }));
         }
         finally
         {
@@ -143,7 +207,7 @@ public partial class TerrainViewerApp
             _eyeCandyHost?.LoseAll();
             if (_areaSession is { } now) RestoreHeroForSmoke(now, heroBefore);
             if (scaled) _areaSmokeTime = (_areaSmokeTime + 19) / 20;
-            driver.Enabled = wasEnabled; PushAreaAmbient();
+            (_areaAmbient ?? driver).Enabled = wasEnabled; PushAreaAmbient();
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
             PublishWorldSelection();

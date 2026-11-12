@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x4C64D0",
+  "name": "basic-key-stat",
+  "method": "Arcanum.Simulation.Skills.SkillRules.KeyStat",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 3,
+  "mutantsCaught": 3,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "ce6b868b0efeabd227c74420b114610985deb1318d3fa3e41bcfd2362769dcf2",
+  "configuration": "Debug"
+}

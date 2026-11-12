@@ -88,6 +88,9 @@ public sealed class AreaSpellCastObjectDamageTests
         Assert.AreEqual(1, hits.Count);
         Assert.AreEqual((id, 5, false), (hits[0].Id, hits[0].Hit.Damage, hits[0].Hit.Broken));
         Assert.AreEqual(0, f.Map.TakeObjectHits().Count, "taken once");
+        // ARC-COMBAT-1138: the floater of the hit reads what the door lost (5), later hits what they added, not the door's total.
+        Assert.AreEqual(5, AreaCombatFloaters.Of(hits[0]).HitPoints);
+        Assert.IsTrue(AreaCombatFloaters.Of(hits[0]).ObjectStep);
 
         // 17 more (12 after the wood) bring the door to 0: it is destroyed.
         var last = f.Caster.ApplyScriptDamage(id, 17, 0, unresistable: true);
