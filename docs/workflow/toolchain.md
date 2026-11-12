@@ -417,6 +417,9 @@ before it. It replaces the earlier
     ./arcanum run --kind window|headless|export|dotnet|quick [--estimate SEC] [--timeout MIN] [--label TEXT] [--expect REGEX] [--start-within SEC] [--verbose] -- COMMAND [ARGS...]
     ./arcanum queue                 # the runs holding a place, then the waiters in order
     ./arcanum queue --history N     # the last N finished runs: waited, ran, exit
+    ./arcanum queue --pause         # no waiting run starts (running ones finish) until --resume (ARC-DEV-1344)
+    ./arcanum queue --resume
+    ./arcanum queue --app           # start the menu-bar view of the queue now (a queued run starts it by itself)
 
 | Kind | Use it for | Rule | Default limit |
 |---|---|---|---|
@@ -463,6 +466,44 @@ before it. It replaces the earlier
 
 Tests: `python3 -B -m unittest tools.local_dev.test_run_queue` (arrival and length order, lanes and their accounting, quick runs, gaps, export
 quiet, crashed and killed runs, limits, lockf, nesting, locales); they use their own `ARCANUM_LOCAL_HOME` and lock file.
+
+### Queue menu-bar app (ARC-DEV-1344)
+
+A small macOS menu-bar item shows the queue and pauses it. It is `tools/menubar/ArcanumQueue.swift`: one AppKit file, no
+dependencies, compiled on this Mac by `swiftc` (Xcode command line tools, the way the focus guard needs `clang`) into
+`~/Library/Application Support/Arcanum Steamwoven/menubar/ArcanumQueue-<hash of the source>`; the binary is never in git and a
+changed source is built again by the next start (about 30 s the first time, in the background). A Swift app was chosen over a
+Python helper because it needs nothing installed (system Python has no `rumps`/PyObjC), has no interpreter running for the
+display and reads the queue's own files, so it works from whichever checkout started it and when that checkout is gone.
+
+- **Shows.** The icon says what the queue holds (`tray`, `tray.full` with `running·waiting`, `pause.circle` while paused). The menu lists the
+  running runs, then the waiting ones in queue order: number, kind and lane, label, how long it has run or waited, the checkout
+  (the tooltip has the full command and pid). It reads the tickets the way the queue does (the flock the run holds plus a live
+  process), every second, and never writes a ticket (it only probes their locks for an instant).
+- **Cost.** While the menu is open (every 2 s) the app takes one `ps` snapshot and adds to each running run the CPU (percent of
+  one core, from the change of the tree's accumulated CPU time, so it shows from the second sample on) and RAM (resident set)
+  of its command's process tree: the process group the queue started it in plus descendants that left it. The header line shows
+  the Mac's load average, cores and RAM in use (active, wired and compressed pages). Nothing is sampled while the menu is closed.
+- **Pause.** The menu's `Pause` item and `./arcanum queue --pause` / `--resume` set and clear one flag, the file `paused` in the queue
+  folder. While it is set a waiter that would start waits instead (`ARCANUM_QUEUE queued ... waiting-for=resume paused`), and starts within the
+  poll interval after the resume, in its place in the order; runs already running finish and a nested run still runs inside its
+  parent's place; every kind waits, the owner's viewer launches and package builds too. `./arcanum queue` prints `PAUSED` and
+  `waiting ... (paused)`. A checkout that has not merged ARC-DEV-1344 ignores the flag: merge main before relying on it. The pause
+  stays until resumed, also across a restart of the app; the app never clears it by itself, so a forgotten pause holds every waiting run (they say so on stderr; the icon shows the pause).
+- **Limits.** The menu's `Godot runs at once` and `Load guard` submenus set the owner's caps of
+  [ARC-DEV-1353](#godot-lanes-arc-dev-400) (`./arcanum queue --set-lanes N|default`, `--set-max-load X|off`): they write the same
+  `settings.json` of the queue folder (`shortLanes`, `maxLoad`), under the queue lock and atomically, so the CLI, the app and every
+  wrapper agree and the next run sees it. A check on the menu is the stored value; "default" is no stored value (the app's
+  default of 2 short lanes copies `DEFAULT_SHORT_LANES`). `ARCANUM_QUEUE_LANES` in a wrapper's environment still wins there.
+- **Start.** `run_queue.run` calls `menubar.ensure_running()` after it takes a ticket: when the app does not hold `menubar/app.lock` (an
+  flock it holds for its whole life, so a crash frees it) a detached helper builds the app if needed and starts it; a second helper
+  or a second app ends at once. Nothing here can fail or delay a run: a missing compiler or a failed build is written to
+  `menubar/menubar.log` only. The app leaves by itself after `--idle-minutes` (15) with no run and no pause, and `Quit` does the
+  same; the next run starts it again. `ARCANUM_QUEUE_MENUBAR=0` never starts it; a run under `ARCANUM_LOCAL_HOME` (the tests'
+  own home) does not, unless `ARCANUM_QUEUE_MENUBAR=1`; other systems than macOS do not.
+
+Tests: `python3 -B -m unittest tools.local_dev.test_menubar tools.local_dev.test_run_queue` (the pause tests are in the latter); the app itself is checked
+by running it (`./arcanum queue --app`, then a queued run and a screenshot of the menu); `ArcanumQueue --set-pause` / `--clear-pause` / `--set-lanes` / `--set-max-load` do what its menu items do and exit, to check that the flag it writes is the one the queue reads.
 
 ### Queue order (ARC-DEV-390)
 

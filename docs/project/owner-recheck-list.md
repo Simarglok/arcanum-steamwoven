@@ -910,7 +910,7 @@ The rules are in the [ledger BD1–BD7](../research/ledger/npc-ai.md#body-decay-
 | # | Step | Expected (from the original executable and data) | Status |
 | --- | --- | --- | --- |
 | 1 | Kill a creature that carries an item or two (a map NPC, then a creature a generator made) and stay on the map. Pass 23 hours, look at the body; then pass another 2 hours. | The body lies there the first 23 hours and is gone a game day after the death (the Decay Dead Bodies event). | open |
-| 2 | Look at the spot after the body is gone. | The creature's items lie on its tile (in a junk pile when two or more) and disappear two game days later as any dropped item; an item the data marks "not droppable" is gone with the body. | open |
+| 2 | Look at the spot after the body is gone. | The creature's items lie on its tile (in a junk pile when two or more) and disappear two game days later as any dropped item; an item the data marks "no display" or that a spell summoned is gone with the body, any other item (a "not droppable" one too) lies on the ground. | open |
 | 3 | Kill a creature, leave the map for more than a day, come back. | The body is gone on return (the event runs late once its map is the shown one). | open |
 | 4 | Kill a creature of a generator and wait for its body to go. | The generator does not make a replacement because of the decay: only a generator whose live count the death released ticks again (PO7, PO11); the made-so-far count is never given back. | open |
 
@@ -973,7 +973,7 @@ quest step in both games.
 
 Known differences (documented, not bugs):
 
-- Transfer item, set written start, destroy item named and toggle item inventory display are not applied by any host yet: scripts that use them are still refused.
+- ARC-SCRIPT-1279: transfer item, set written start, destroy item named and toggle item inventory display are applied by the same hosts (limits in ledger WO17): a script that moves or destroys an item with scripts, or moves an item between two holders neither of which is the hero, is still refused. Recheck in the game: a quest item destroyed or handed over by a script leaves the hero's inventory list or arrives in it; a written start a script sets shows in the reading window; the toggled display bit is saved but not yet drawn (the inventory painters do not read it).
 - The world map's refusal when the hero's own sector is blocked, and the dimmed picture of a blocked sector, are not built.
 - A script in a dialog (a talk) that uses one of these commands is still refused.
 
@@ -1005,3 +1005,12 @@ The rules are in [Identify](../world/spell-cast-host.md#identify-arc-magic-032),
 | 3 | Cast Read Aura on a creature (see ARC-MAGIC-032, step 1). | The read-only sheet of the creature opens. | open |
 
 Known differences, so they are not reported as bugs: the hero's own Read Aura keeps the message line; See Contents and Divine Magick still show a line only (their windows are not built); the pick animation of the hero is not played (as for a door).
+
+## ARC-MAGIC-1361 — Harm damage and the difficulty share (2026-11-12)
+
+The numbers are in [DH11](../research/ledger/spell-runs.md). The owner's report (Harm "twice as strong") is answered by the data: no formula differs. Compare in both games with the same hero and the same difficulty setting.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | In the options set the difficulty to Normal (not Easy). Cast Harm (spell 55) once at a wolf, with a hero of 8 magick points (a night mage at night, or 8 points of magick). | 17 hit points per cast (3 + 37 × 40 / 100). On Easy 25, on Hard 13: the original adds half of a PC attacker's damage on Easy and takes a quarter on Hard, for spells and weapons alike. | open |
+| 2 | Press once on the wolf with the Harm cursor, with your own mouse, and watch the casts in the log (Ctrl+B). | One cast per press, as in the original (the cursor stays open for the next press). Two or three casts within a few milliseconds from one press mean the mouse sends duplicate presses. | open |

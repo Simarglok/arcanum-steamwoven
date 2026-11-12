@@ -148,6 +148,22 @@ public sealed class SpellCensusRealDataTests
         Assert.AreEqual(0, differences.Count, "the census changed; the rows as they are now (a row of two empty lists is removed):\n" + string.Join("\n", differences));
     }
 
+    /// <summary>ARC-MAGIC-1361: the installed Harm (record 55) is one Damage component, normal, 3 to 40, <c>Scaled</c>, for 5 fatigue; the numbers that follow (aptitude 40: 17, easy 25) are pinned by
+    /// <c>SpellDamageRulesTests</c>.</summary>
+    [TestMethod, TestCategory("RealData")]
+    public void Harm_is_one_scaled_normal_damage_of_3_to_40_for_5_fatigue()
+    {
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("DAT_ROOT is required for the opt-in Harm check; this is not a synthetic pass.");
+        using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+        var spells = SpellData.Open(stack, SpellRecordMode.LikeOriginal);
+        Assert.AreEqual(SpellDataStatus.Read, spells.Status, $"{spells.Refusal}");
+        var record = SessionSpellRecords.Translate(spells.Data!.Records[55]);
+        var damage = record.Components.Where(c => c.Type == SpellComponentType.Damage).Single();
+        Assert.AreEqual(new SpellDamageComponent(0, 3, 40, SpellDamageFlags.Scaled), damage.Damage);
+        Assert.AreEqual(5, record.Data.Cost);
+    }
+
     /// <summary>The census harness on a synthetic record (root checks): a ready Damage, a Movement no slice builds, and an Effect the host takes on the hero and on an NPC.</summary>
     [TestMethod]
     public void The_census_lists_the_components_the_host_logs_as_not_ready_per_target()
