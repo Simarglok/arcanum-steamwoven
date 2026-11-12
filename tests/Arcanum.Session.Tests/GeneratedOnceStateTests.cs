@@ -311,8 +311,10 @@ public sealed class GeneratedOnceStateTests
     {
         using var owner = Owner();
         owner.GenerateOnceWorld = () => new World();
+        var revision = owner.Version.Revision;
         var broke = owner.DamageObject(owner.Version, CrateTarget(), 100);
         Assert.AreEqual((GameSessionDisposition.Changed, ObjectBreak.ContainerSpilled), (broke.Disposition, broke.Hit!.Break));
+        Assert.AreEqual(revision + 2, owner.Version.Revision, "the generation and the break");
         Assert.IsTrue(owner.QueryContainerGenerated(Exterior, "crate"), "recorded as generated");
         Assert.IsTrue(owner.IsItemDestroyed("gold-a") && owner.IsItemDestroyed("axe"), "the clear deletes all but the persistent ring (RK5)");
         var loot = RestockRules.GenerateOnce(CrateSet, HeroSeed());
@@ -337,11 +339,14 @@ public sealed class GeneratedOnceStateTests
         var world = new World();
         generated.GenerateOnceWorld = () => world;
         var opened = generated.GenerateContainerOnce(generated.Version, "crate", world).Regeneration!;
-        var before = Items(generated, "crate").Select(item => item.Entity).Where(entity => SessionMadeItem.Number(entity) is null).ToArray();
+        var revision = generated.Version.Revision;
         Assert.AreEqual(ObjectBreak.ContainerSpilled, generated.DamageObject(generated.Version, CrateTarget(), 100).Hit!.Break);
-        // Only the stored (seed) items spill; the goods made at the open stay in the container's own store (VPG7, not modelled).
-        CollectionAssert.AreEqual(before, OnTheGround(generated).Where(entity => SessionMadeItem.Number(entity) is null).ToArray());
-        Assert.IsFalse(OnTheGround(generated).Any(entity => opened.Created.Contains(entity)));
+        Assert.AreEqual(revision + 1, generated.Version.Revision, "the break alone: nothing is generated twice");
+        // The whole list spills (ARC-WORLD-1306): the kept ring and the goods made at the open, but not the destroyed seed items.
+        var lying = OnTheGround(generated);
+        CollectionAssert.IsSubsetOf(opened.Created.ToArray(), lying);
+        CollectionAssert.Contains(lying, "ring");
+        CollectionAssert.DoesNotContain(lying, "axe");
         // A container without flag 0x200 is not generated: its stored items spill and none are destroyed.
         using var plain = Owner();
         plain.GenerateOnceWorld = () => new World();
