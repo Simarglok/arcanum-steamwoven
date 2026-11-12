@@ -257,7 +257,7 @@ Not built or only stubbed (each has an epic in the plan):
 - The native trap script 30002, the follower who disarms instead of the hero and the hero's step onto a placed trap marker (E6; the placing of devices is built, ARC-WORLD-124, -125; the hero's spot trap roll is built, ARC-MAGIC-057; the disarm action from the hotkey bar and the skill pane is built, ARC-SKILLS-1156, ARC-UI-1113).
 - Movies, credits, intro and endings (E7).
 - Fate window and Fate Points, companions screen, gambling, identify window, several sound callers and the hidden options (E8).
-- Gamepad in the game UI, UI scale, and Windows, Linux and handheld validation (E9; the Windows package exists and was never run on Windows).
+- Gamepad in the game UI, UI scale, and Windows, Linux and handheld validation (E9; the Windows package exists and was never run on Windows); the three experimental controller schemes are planned in the epic [#1371](https://github.com/Simarglok/arcanum-steamwoven/issues/1371), [concept](../input/controller-schemes.md).
 - The network game, a second module and mods (E10, deferred by the owner).
 
 This is not yet a playable game. The [missing systems plan](missing-systems-plan.md) describes the order of the unbuilt systems; the [vision](vision.md) describes accepted direction. Requirements/product completeness and milestone scope need their own decisions.
