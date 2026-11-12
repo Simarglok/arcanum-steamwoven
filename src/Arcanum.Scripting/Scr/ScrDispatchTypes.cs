@@ -869,7 +869,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S37"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S38"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -890,7 +890,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S37)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S37.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S38)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S38.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -908,7 +908,7 @@ public sealed record ScrRunOptions
         if (host is not IScrItemQueries && (Admission.Conditions.Any(ScrAdmissionSet.ItemQueryConditions.Contains) || Admission.Actions.Contains(ScrCatalogue.Action.MagickTechAdjustment)))
             throw new ArgumentException("A set with the identified or rewielding condition or the magick-tech adjustment needs a host that implements IScrItemQueries.", nameof(Admission));
         if (host is not IScrWorldQueries && (Admission.Actions.Any(ScrAdmissionSet.WorldQueryActions.Contains) || Admission.FocusKinds.Any(ScrAdmissionSet.WorldQueryFocusKinds.Contains)))
-            throw new ArgumentException("A set with random, loop for, distance between, float line or the vicinity focus kinds needs a host that implements IScrWorldQueries.", nameof(Admission));
+            throw new ArgumentException("A set with random, loop for, distance between, get location, float line or the vicinity focus kinds needs a host that implements IScrWorldQueries.", nameof(Admission));
         if (host is not IScrObjectStateQueries && Admission.Conditions.Any(ScrAdmissionSet.ObjectStateQueryConditions.Contains))
             throw new ArgumentException("A set with the dead or switched-off condition needs a host that implements IScrObjectStateQueries.", nameof(Admission));
         if (host is not IScrSpellQueries && Admission.Conditions.Any(ScrAdmissionSet.SpellQueryConditions.Contains))

@@ -168,7 +168,8 @@ public partial class TerrainViewerApp
         {
             // ARC-DEV-119 (MIG9 S5c): the session goes on across the window move, so the map's AI host does too (it is bound to the new window below).
             _aiKeepAcrossWindowMove = true;
-            try { RecordAreaCompanions("window move"); ClearPublishedScene(); _arguments = arrived; PublishReadyResult(arrived, result); }
+            var swap = System.Diagnostics.Stopwatch.StartNew();
+            try { RecordAreaCompanions("window move"); ClearPublishedScene(); _arguments = arrived; PublishReadyResult(arrived, result); _cursorReapply = _cursorShown is not null; GD.Print($"ARC-UI-056 window swap on the main thread {swap.ElapsedMilliseconds} ms shown={_cursorShown is not null} shape={Godot.Input.GetCurrentCursorShape()}"); }
             catch (Exception exception) { refused = exception; }
             finally { _aiKeepAcrossWindowMove = false; }
         });
@@ -223,7 +224,7 @@ public partial class TerrainViewerApp
 
     // "walk" (ARC-WORLD-042) and "census" (ARC-RENDER-027) run only when named: they walk across the main map or open every
     // map, for minutes.
-    private static readonly string[] MapSmokeStageNames = ["map", "resources", "transfer", "roundtrip", "stream", "worldmap", "walk", "census", "cast", "turn-based", "knockdown", "ranged", "container", "junk", "barter", "menu", "scene", "options", "plants", "bar", "ai", "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "life", "floaters", "death", "pickpocket", "loot-worn", "loot-room", "inv-arrange", "wreck", "altar", "debug-travel", "report", "hover", "door-close", "dead-window", "inv-ui", "follower-home", "follower-far", "teleport-follow", "npc-resident", "saved-runs", "npc-door", "npc-tile", "tile-ghost", "container-click", "fire-order", "indoor-fade", "route-barrel", "critter-fall", "save-resume", "cast-multi", "grenade", "companion-click", "npc-shot", "ai-react", "placement-census", "inv-carry", "spell-end", "hold-hero", "spell-effects", "movement", "spirit-talk", "sleep", "bed", "created-scenery", "created-critter", "script-critters", "worn-light", "critter-light", "eye-light", "summon-flash", "summon-wall", "summon-undead", "tech-craft", "tech-products", "item-aim", "disarm", "creature-item", "trait-body", "movies", "body-styles", "perf", "perf-menu"];
+    private static readonly string[] MapSmokeStageNames = ["map", "resources", "transfer", "roundtrip", "stream", "worldmap", "walk", "census", "cast", "turn-based", "knockdown", "ranged", "container", "junk", "barter", "menu", "scene", "options", "plants", "bar", "ai", "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "life", "floaters", "death", "pickpocket", "loot-worn", "loot-room", "inv-arrange", "wreck", "altar", "debug-travel", "report", "hover", "door-close", "dead-window", "inv-ui", "follower-home", "follower-far", "teleport-follow", "npc-resident", "saved-runs", "npc-door", "npc-tile", "tile-ghost", "container-click", "fire-order", "indoor-fade", "route-barrel", "critter-fall", "save-resume", "cast-multi", "grenade", "companion-click", "npc-shot", "ai-react", "please-move", "placement-census", "inv-carry", "spell-end", "hold-hero", "spell-effects", "movement", "spirit-talk", "sleep", "bed", "created-scenery", "created-critter", "script-critters", "worn-light", "critter-light", "eye-light", "summon-flash", "summon-wall", "summon-undead", "tech-craft", "tech-products", "item-aim", "disarm", "creature-item", "trait-body", "movies", "body-styles", "perf", "perf-menu"];
 
     /// <summary>The stages <c>ARC_AREA_MAP_SMOKE_ONLY</c> names (null: all); an unknown name is refused, so a typo cannot skip
     /// every stage and still pass.</summary>
@@ -268,6 +269,7 @@ public partial class TerrainViewerApp
                 AreaSmokePlace(new AreaMapRuntime(_readyArea!.Snapshot, start.Snapshot, start.Chart), start.State.CommittedCell);
             }
             _mapStreamLog.Clear();
+            var releasesAtStart = _cursorReleases; var reappliesAtStart = CursorReappliesForSelfTest;
             if (observeAi)
             {
                 CalmNpcsForSmoke(carried!, carried!.QueryMapInventory(new(CurrentAreaMap))?.Holders.Where(h => h.Kind == SessionHolderKind.Npc).Select(h => h.Entity) ?? []);
@@ -356,6 +358,13 @@ public partial class TerrainViewerApp
                 Require(carried is null || ReferenceEquals(session, carried), "SESSION_NOT_CARRIED");
             }
             Require(_mapStreamLog.Count >= StreamSmokeMoves, "MOVES");
+            GD.Print($"ARC-UI-056 stream cursor releases={_cursorReleases - releasesAtStart} reapplies={CursorReappliesForSelfTest - reappliesAtStart} shown={_cursorShown is not null}");
+            // ARC-UI-056 (#1357): the cursor art stays set across every window move (never released), and is handed over again after each swap.
+            if (CursorContent() is { Ready: true })
+            {
+                Require(_cursorReleases == releasesAtStart, $"CURSOR_RELEASED {_cursorReleases - releasesAtStart}");
+                Require(_cursorShown is not null && CursorReappliesForSelfTest - reappliesAtStart >= _mapStreamLog.Count, $"CURSOR_NOT_REAPPLIED {CursorReappliesForSelfTest - reappliesAtStart}/{_mapStreamLog.Count}");
+            }
             Require(_mapStreamLog[0].Walking, "FIRST_MOVE_NOT_MID_WALK");
             Require(carried is null || ReferenceEquals(_areaSession, carried), "SESSION_NOT_CARRIED");
             if (observeAi)

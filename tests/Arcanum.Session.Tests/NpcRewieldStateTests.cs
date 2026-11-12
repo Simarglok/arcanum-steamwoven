@@ -147,4 +147,30 @@ public sealed class NpcRewieldStateTests
         Assert.AreEqual(version, owner.Version);
         CollectionAssert.AreEqual(new[] { (EquipmentSlot.Weapon, "club"), (EquipmentSlot.Armor, "coat") }, owner.QueryNpcWorn(Archer)!.Worn.Select(worn => (worn.Slot, worn.Item)).ToArray());
     }
+
+    // ARC-WORLD-1284 (flag 0x40, NT3, VPG1): an item that enters the NPC's list marks it, and its next AI pass re-wields every slot (0x4A8570 → 0x4654F0) and clears the bit: the hero's gift of a better
+    // weapon is wielded by the archer at its pass (the bow it wielded goes to the pack).
+    [TestMethod]
+    public void ABetterWeaponTheHeroGivesAnNpcIsWieldedAtItsNextAiPassAndTheBitGoesOut()
+    {
+        using var owner = Open(units: 5);
+        var restock = new World();
+        restock.Wear["kit:1"] = new(HeroStateTests.HalfElf().Kit[0].Kind, [], false, Weapon(20, 30, CombatSkill.Melee)) { Worth = 500 };
+        var ai = new AiSchedulerTests.World().With(Archer);
+        ai.OnReWield = (npc, allSlots) => owner.RewieldNpc(owner.Version, npc, allSlots, restock);
+
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.GiveItemToNpc(owner.Version, Archer, "kit:1", _ => SessionInsertVerdict.Accepted).Disposition);
+        Assert.IsTrue(owner.QueryDanger(Archer).Flags.HasFlag(Arcanum.Simulation.Ai.DangerFlags.CheckWield), "the insert marked the NPC");
+        Assert.IsNull(owner.QueryNpcWorn(Archer), "nothing is wielded before its pass");
+
+        var pass = owner.RunAiPass(owner.Version, Archer, ai);
+        Assert.AreEqual(GameSessionFailure.None, pass.Failure);
+        Assert.IsTrue(pass.Pass!.Gate!.Steps.HasFlag(Arcanum.Simulation.Ai.AiGateSteps.ReWieldAll), "the gate's CHECK_WIELD step ran");
+        CollectionAssert.AreEqual(new[] { (EquipmentSlot.Weapon, "kit:1") }, owner.QueryNpcWorn(Archer)!.Worn.Select(worn => (worn.Slot, worn.Item)).ToArray(), "the better weapon is wielded");
+        Assert.AreEqual(-1, Locations(owner).Single(pair => pair.Item1 == "bow").Item2, "the bow it wielded is in the pack");
+        Assert.IsFalse(owner.QueryDanger(Archer).Flags.HasFlag(Arcanum.Simulation.Ai.DangerFlags.CheckWield), "the gate cleared the bit");
+        // The next pass has nothing to re-wield.
+        var again = owner.RunAiPass(owner.Version, Archer, ai);
+        Assert.IsFalse(again.Pass!.Gate!.Steps.HasFlag(Arcanum.Simulation.Ai.AiGateSteps.ReWieldAll));
+    }
 }

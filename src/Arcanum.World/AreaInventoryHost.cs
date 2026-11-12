@@ -60,6 +60,10 @@ public sealed record AreaInventoryView(IReadOnlyList<AreaInventoryLine> Pc, stri
     /// items can be planted, and nothing is taken at once.</summary>
     public bool Steal { get; init; }
 
+    /// <summary>ARC-RES-1327 (ledger XR3, XR16): the window is the container window See Contents opens (mode 4): read-only, nothing in it is
+    /// picked, moved or taken, and it has no Take all button and no drop or use box.</summary>
+    public bool Contents { get; init; }
+
     /// <summary>ARC-WORLD-027: the PC's gold (the hero's coins; 0 without a hero).</summary>
     public int Gold { get; init; }
     /// <summary>ARC-UI-015: the hero's nine wear slots in slot order (empty without a hero).</summary>
@@ -748,6 +752,13 @@ public sealed class AreaInventoryHost
     public SessionWrittenFacts? WrittenFacts(GameSessionOwner session, string entity, AreaReadingData? data)
     {
         ArgumentNullException.ThrowIfNull(session);
+        // ARC-SCRIPT-1279 (WO6): a start line a script wrote (set written start, 94) replaces the data's.
+        var facts = WrittenFactsOfData(session, entity, data);
+        return facts is { } read && session.QueryItemFieldWrites(entity).WrittenStart is { } start ? read with { TextStartLine = start } : facts;
+    }
+
+    private SessionWrittenFacts? WrittenFactsOfData(GameSessionOwner session, string entity, AreaReadingData? data)
+    {
         if (session.IsItemDestroyed(entity)) return null;
         var kit = session.QueryHeroKit().FirstOrDefault(item => item.Entity == entity);
         if (kit.Entity is not null) return data is not null && data.Prototypes.TryGetValue(kit.Kind.Prototype, out var fromKit) ? fromKit : null;

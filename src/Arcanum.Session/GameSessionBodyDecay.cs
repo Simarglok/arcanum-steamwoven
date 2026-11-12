@@ -65,11 +65,13 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// ARC-WORLD-1158 (the event 0x45EB50, the inventory walk 0x463860, the destroy 0x43CCA0; ledger PO10): a dead critter drops its whole inventory, last item first, and is destroyed. An item the host's facts mark
-    /// "not droppable" is destroyed; every other one is laid on the body's cell by the drop rule (a junk pile with room, else loose, SettleDrop) and gets its decay event as any drop does. A critter that is not dead is left
+    /// ARC-WORLD-1158 (the event 0x45EB50, the inventory walk 0x463860, the destroy 0x43CCA0; ledger PO10): a dead critter drops its whole inventory, last item first, and is destroyed. ARC-WORLD-1299 (VP24, VPG4): an item with spell flag
+    /// 0x4000 (summoned) or item flag 0x10 (no display) is destroyed (<see cref="SessionItemFacts.Summoned"/>, <see cref="SessionItemFacts.NoDisplay"/>, read from the seed; a fact the session does not have reads as clear), every
+    /// other one is laid on the body's cell by the drop rule (a junk pile with room, else loose, SettleDrop) and gets its decay event as any drop does, an item with the no-drop flag 0x20 included. A critter that is not dead is left
     /// as it is (the original's error line, no further action). A map NPC's destroy is the script destroy's map change (<see cref="ObjectDestroyedProperty"/>); a created critter's is <see cref="DestroyObject"/>'s.
-    /// The host's runs of the critter end (<see cref="ISessionAiWorld.Destroy"/>). A revision step for a created critter, two for a map NPC (its destroy is a map change, which revises itself). Limits: the items of a holder in another map's seed than the body's stay with the destroyed critter, a drop script is not run
-    /// (the original's flag-1 walk is not read for it; the spill of a container does the same), and the hero's death queues no event, an added item the ground cannot hold (gold, ammunition, a given kit or taken item) is destroyed with the body, and a map NPC's other pending events (a restock, an AI tick) stay queued as after a script's destroy.
+    /// The host's runs of the critter end (<see cref="ISessionAiWorld.Destroy"/>). A revision step for a created critter, two for a map NPC (its destroy is a map change, which revises itself). Limits: the items of a holder in another map's seed than the body's stay with the destroyed critter,
+    /// a drop script is not run (the original's flag-1 walk is not read for it; the spill of a container does the same), the hero's death queues no event, a made item's flags read as clear (its prototype is the host's, not the session's), a key or key ring added to the NPC (the ground holds none)
+    /// and, in a session with no hero, a given item, gold pile or ammunition stack (their ground records exist only as a hero's drops) are destroyed with the body (<see cref="AddedBodyItem"/>), and a map NPC's other pending events (a restock, an AI tick) stay queued as after a script's destroy.
     /// </summary>
     [OriginalFunction(0x463860, OriginalFunctionScope.Partial)]
     internal GameEventHandlerOutcome FireBodyDecay(GameEventFiring firing)
@@ -103,22 +105,22 @@ public sealed partial class GameSessionOwner
             return GameEventHandlerOutcome.Completed;
         }
 
-        // 0x463860 walks the list last first: the seed's items of the critter on this map, then the items the session added to it.
-        var held2 = new List<(string Entity, bool Seed, bool Destroy)>();
+        // 0x463860 walks the list last first: the seed's items of the critter on this map, then the items the session added to it. An item with spell flag 0x4000 (summoned) or item flag 0x10 (no display) is
+        // destroyed, every other one is laid down, an item with the no-drop flag 0x20 included (the remove check's refusal is not asked on this path; ledger VP24, VPG4).
+        var held2 = new List<BodyItem>();
         if (_inventory.Seeds.TryGetValue(map, out var seed) && seed.Holders.TryGetValue(at.Code, out var holder) && holder.Kind == SessionHolderKind.Npc)
             foreach (var item in _inventory.Current(seed, holder, entity => DroppedCell(map, seed, entity), added: false))
-                held2.Add((item.Entity, true, seed.Items[item.Entity].Facts.NoDrop));
-        // An added item lies on the ground only when a save of it restores: a made item of a kind the ground admits (not gold, ammunition or a pile, and not one the hero gave: kit and taken items keep their identity and given
-        // record, which a ground item of source Created has no place for); any other is destroyed with the body (a recorded limit).
+                held2.Add(new(item.Entity, null, true, seed.Items[item.Entity].Facts is { Summoned: true } or { NoDisplay: true }));
         foreach (var made in _inventory.AddedTo(at.Code))
-            held2.Add((made.Entity, false, SessionMadeItem.Number(made.Entity) is null || !InventoryDomain.Admitted(made.Kind.Type) || !InventoryDomain.KitAdmitted(made.Kind.Type) ||
-                _inventory.Piles.ContainsKey(made.Entity) || _inventory.Ammo.ContainsKey(made.Entity) || _inventory.Hero.IsGiven(made.Entity)));
+            held2.Add(AddedBodyItem(made, map, where));
         held2.Reverse();
 
-        // The budgets first, so the event either does all of it or waits: the deleted-item records of the destroyed items, the created items' bound of the dropped made items.
+        // The budgets first, so the event either does all of it or waits: the deleted-item records of the destroyed items, the created items' bound of the dropped made items, the hero's items' bound of the other placed ones.
         var destroyedItems = held2.Where(item => item.Destroy).ToArray();
-        var droppedMade = held2.Count(item => !item.Seed && !item.Destroy);
-        if (_durability.Count + destroyedItems.Length > _limits.MaxDurabilityRecords || (long)_inventory.Created + droppedMade > _limits.MaxCreatedItems)
+        var droppedCreated = held2.Count(item => item.Placed is { Source: SessionPlacedSource.Created });
+        var droppedHeld = held2.Count(item => item.Placed is { } placed && placed.Source != SessionPlacedSource.Created);
+        if (_durability.Count + destroyedItems.Length > _limits.MaxDurabilityRecords || (long)_inventory.Created + droppedCreated > _limits.MaxCreatedItems ||
+            (long)_inventory.Held + droppedHeld > _limits.MaxPcItems)
         {
             _passBodyDecays?.Add(Report(WaitAMinute() ? SessionBodyDecayOutcome.Postponed : SessionBodyDecayOutcome.Lost));
             return GameEventHandlerOutcome.Completed;
@@ -138,15 +140,16 @@ public sealed partial class GameSessionOwner
 
         // The items leave their holder in the walk's order (last first); each placement sees the items still to come as not yet dropped (as a container's spill does).
         var later = held2.Where(item => !item.Destroy).Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
-        foreach (var (entity, isSeed, destroy) in held2)
+        foreach (var (entity, placed, isSeed, destroy) in held2)
         {
             if (destroy) { DestroyObject(entity); continue; }
             later.Remove(entity);
-            if (!isSeed)
+            if (placed is not null)
             {
-                var item = _inventory.AddedTo(at.Code).First(listed => listed.Entity == entity);
                 _inventory.RemoveFromNpc(entity);
-                _inventory.Hero.AddPlaced(new(entity, item.Kind, SessionPlacedSource.Created, null, map, where, item.Complexity));
+                // A given item goes back to the hero's side of the books: it is no longer given, it lies on the ground as a placed kit or taken item.
+                _inventory.Hero.TakeGiven(entity);
+                _inventory.Hero.AddPlaced(placed);
             }
             else _inventory.Unwear(entity);
             SettleDrop(entity, map, where, later);
@@ -159,6 +162,39 @@ public sealed partial class GameSessionOwner
         Revise();
         _passBodyDecays?.Add(Report(SessionBodyDecayOutcome.Removed, held2.Count - destroyedItems.Length, destroyedItems.Length));
         return GameEventHandlerOutcome.Completed;
+    }
+
+    /// <summary>One item of a body's inventory walk: a seed item (<paramref name="Seed"/>), or an added one with the ground record it becomes (<paramref name="Placed"/>); <paramref name="Destroy"/> when it is destroyed instead.</summary>
+    private readonly record struct BodyItem(string Entity, SessionPlacedItem? Placed, bool Seed, bool Destroy);
+
+    /// <summary>
+    /// ARC-WORLD-1299 (ledger BD3, the dead body's inventory walk of FireBodyDecay): what an item the session added to the dying NPC becomes. It is laid down like every other item unless its flags say it is destroyed: a made item's flags are not known to the session
+    /// (its prototype is the host's), so it reads as clear, a given taken item's come from its origin seed's row when that seed is attached (else clear), a given kit item's read as clear. The ground record is the one the hero's own
+    /// drops make, so that a save of it restores: a given kit or taken item goes back to the placed kit or taken items with its origin, a gold pile or an ammunition stack the made items of the hero with their coin or unit record, any other
+    /// made item (not a key or key ring, which the ground does not hold) the created items. The limits left: a key or key ring is destroyed with the body, and so is every item whose ground record only a hero's drop makes (given, pile, stack) in a session
+    /// with no hero.
+    /// </summary>
+    private BodyItem AddedBodyItem(SessionMadeItem item, SessionMapId map, CellCoord where)
+    {
+        var given = _inventory.Hero.GivenOf(item.Entity);
+        var facts = given is { Origin: { } origin } && _inventory.Seeds.TryGetValue(origin, out var seed) && seed.Items.TryGetValue(item.Entity, out var row) ? row.Facts : null;
+        if (facts is { Summoned: true } or { NoDisplay: true }) return new(item.Entity, null, false, true);
+        if (given is { } record)
+        {
+            // Only a hero's drops place a kit, taken or made item (a save of such an item restores only with a hero).
+            if (_hero is null) return new(item.Entity, null, false, true);
+            var source = record.Origin is null ? SessionPlacedSource.Kit : SessionPlacedSource.Pc;
+            return new(item.Entity, new(item.Entity, item.Kind, source, record.Origin, map, where), false, false);
+        }
+        if (SessionMadeItem.Number(item.Entity) is null) return new(item.Entity, null, false, true);
+        var pile = _inventory.Piles.ContainsKey(item.Entity);
+        if (pile || item.Kind.Type == SessionItemType.Ammo)
+            return _hero is null || pile && item.Kind.Type != SessionItemType.Gold
+                ? new(item.Entity, null, false, true)
+                : new(item.Entity, new(item.Entity, item.Kind, SessionPlacedSource.Made, null, map, where, item.Complexity), false, false);
+        return InventoryDomain.Admitted(item.Kind.Type)
+            ? new(item.Entity, new(item.Entity, item.Kind, SessionPlacedSource.Created, null, map, where, item.Complexity), false, false)
+            : new(item.Entity, null, false, true);
     }
 
     private const long ItemDecayRulesRetryMs = Arcanum.Simulation.Items.ItemDecayRules.RetryDelayMs;
