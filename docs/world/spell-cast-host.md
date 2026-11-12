@@ -812,7 +812,7 @@ tests `SessionSpellCasterSocialTests`. The five flags the ObjFlag component of M
 
 | Flag (field) | Set | Clear |
 | --- | --- | --- |
-| Charmed (spell flags 0x800000) | NPC: an animal makes **peace** with the caster (`ISpellSocialHost.Peace`), any other NPC gets **+30** toward the hero when the caster is the hero (`ChangeReaction`); then the flag. The original also adds the NPC flag KOS_OVERRIDE (named, below). | NPC: **−30** toward the hero when the caster is the hero, then the flag off. Any other object: the plain write. |
+| Charmed (spell flags 0x800000) | NPC: an animal makes **peace** with the caster (`ISpellSocialHost.Peace`), any other NPC gets **+30** toward the hero when the caster is the hero (`ChangeReaction`); then the flag. Then the NPC flag KOS_OVERRIDE (0x800) is written into the session's [NPC flag layer](#npc-flag-layer-and-the-kill-on-sight-override-arc-magic-1142) and stays after the clear, as in the original. | NPC: **−30** toward the hero when the caster is the hero, then the flag off. Any other object: the plain write. |
 | Mind controlled (spell flags 0x8000000) | No caster: the plain write. A caster and **no NPC** (the hero): **nothing is written** (`SocialIgnored`). An NPC: **−50** toward the hero (hero caster, target not summoned) **before** the flag, the flag, a **forced join** of the NPC under the caster (`ForceJoinParty`; the hero is the party's one leader, any other caster logs `SocialNotModelled`), then **no-flee** for good (`SetNoFlee`). | NPC: the flag off, then a **forced leave** (`LeaveParty` with `Force`); the reaction is not given back and no-flee stays. |
 | Fleeing (critter flags 0x10) | NPC: **flee** from the caster (`ISpellSocialHost.Flee`, the danger setter's FLEE); the flag is **never written** (the setter's state is the session's danger record). The hero: nothing. | NPC: **stop fleeing** (the setter NONE, then the NPC's flee goals ended). The hero: nothing. |
 | Blinded (critter flags 0x80) | The life state's **blinded condition** is set (`GameSessionOwner.SetBlinded`: what the combat resolver, the skill checks and the AI gate's recovery roll read); the hero and an NPC. | The condition is cleared. |
@@ -826,8 +826,18 @@ tests `SessionSpellCasterSocialTests`. The five flags the ObjFlag component of M
   Each answers false for an NPC the host does not run.
 - **The log.** `SpellCastEventKind.SocialEffect` carries what was done (`SocialReaction` with the delta, `SocialPeace`, `SocialFlee`, `SocialStopFleeing`, `SocialJoin`, `SocialLeave`, `SocialNoFlee`, `SocialBlinded`) or not done
   (`SocialIgnored`, `SocialNotModelled`, `SocialRefused`).
-- **Not ready.** The NPC flag KOS_OVERRIDE a charm adds (the session keeps no NPC flag layer); a follower of a caster that is no hero; the undead flag's readers (the combat values and the life rules read the data's undead bit, so a created
+- **Not ready.** A follower of a caster that is no hero ([ARC-MAGIC-1142](#npc-flag-layer-and-the-kill-on-sight-override-arc-magic-1142) cut it away); the undead flag's readers (the combat values and the life rules read the data's undead bit, so a created
   undead is not undead for combat, healing or poison yet); the flags on a created critter (E1-e); an END after the NPC left the shown map (the blinded condition is cleared; charm's −30 and stop fleeing need the AI host and are logged refused); the reaction facts' `MindControlledByPc` (the host's facts carry false, so a later reaction change of a mind-controlled NPC is not skipped).
+
+
+## NPC flag layer and the kill-on-sight override (ARC-MAGIC-1142)
+
+The session keeps the NPC flags (`obj_f_npc_flags`, field 0x118) a spell or the attack event writes as a sixth field of a critter's written flags (`SessionObjectFlags.NpcSet` and `NpcCleared`, `SessionObjectFlagField.Npc`, save schema 93 with an upgrade step that gives every older row the two zero words): a bit is set or cleared over the value the NPC's data stores, and a write that gives back the data's value leaves no trace. Ledger [SO9–SO10](../research/ledger/spell-runs.md#social-and-ai-flags-arc-magic-035).
+
+- **Charm writes it.** After the reaction (or the animal's peace) a charm adds NPC flag 0x800 (`ONF_KOS_OVERRIDE`) through the layer (a log line `ObjectFlagWritten` with the side-effect detail); the clear takes only the +30 back and never the flag (SO2).
+- **The AI host reads it.** The hostility facts of an NPC (`AreaAiHost.Find`) take `KosOverride` from the layer over the data's NPC flags and `Undead` from the layer over the data's critter flags, so a kill-on-sight NPC that was charmed skips the rule's faction test (0x4AE120: without the override a kill-on-sight NPC is hostile to every critter of another faction) and falls through to the reaction and alignment tests, and an undead a spell wrote counts as undead in the rule that spares enshrouded creatures from undead.
+- **The attack event takes it off.** An NPC victim loses NPC flag 0x800 (0x4A983D reads field 0x118, clears 0x800 and writes it back with the plain write) at the attack event, after the attacker's followers were told and before the PC victim's response and the victim's followers; the host writes it through the layer with the data's value, so an NPC that never had the bit gets no row.
+- **Not ready.** The other NPC flags (the layer takes them, no writer or reader is built), a follower of a caster that is no hero, the combat and life readers of a written undead bit (they read the data's bit when the life row is built), the flags on created critters (E1-e).
 
 ## Not ready
 
