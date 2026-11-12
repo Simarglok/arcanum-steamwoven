@@ -57,6 +57,13 @@ public partial class AreaFateView : Control
         QueueRedraw();
     }
 
+    /// <summary>Forgets the art and the lines (the module changed); the host sets them again when the new ones have read.</summary>
+    public void ClearArt()
+    {
+        _art = new Dictionary<int, Texture2D[]>(); _font = null; _texts = AreaFateTexts.Project("not set");
+        QueueRedraw();
+    }
+
     /// <summary>Shows the window (the host sets its buttons from the hero's fate with <see cref="Follow"/>).</summary>
     public void Open()
     {

@@ -2694,17 +2694,18 @@ the session calls and the key). The rules and the session calls exist since ARC-
   (frames idle, down, lit as the bar's, GB4). The window is no interface mode: the world keeps running and clicks outside it reach the world; a press
   over it never does.
 - **Opening.** The button and the key `F` call one function: an open window closes; otherwise it opens for a living hero (a dead hero, or none, gets
-  a notice in the bar's status line). The key is ignored while another window, the palette or a UI control owns input, as `S` is; the button only while
-  the dialog, the save list, the menu or the palette owns input. Space closes the window and goes no further. PROJECT: the window also closes when the
-  dialog, barter, reading, save-list, menu, palette, world-map or movie covers the screen, when the hero dies and when the session is replaced
-  (the original's own close paths, 0x541710, 0x541D40 and 0x542200, are called from interface paths this task did not follow).
+  a notice in the bar's status line). Neither opens it while another interface window (sheet, inventory, logbook, schematics, sleep), the dialog,
+  barter, reading, the world map, the save list, the menu or the palette owns the screen (the key is also ignored while a UI control owns input, as `S`
+  is), and a window opened by its own button or key closes it (the original's interface close paths close it with the others, 0x541710, 0x541D40 and
+  0x542200, F0 for which events call them). Space closes it and goes no further. PROJECT: it also closes when any of those covers the screen, when
+  the hero dies and when the session is replaced.
 - **The buttons.** A press flips a button (sound 3000 turning on, 3001 turning off; the release does nothing) and asks the session: on arms the kind
   (`ArmHeroFate`: one point is spent, a kind already armed or no point left is refused; the full heal is applied at once) and off undoes it
   (`UndoHeroFate`: the point comes back, up to 100). After each answer and each frame the buttons are set from the hero's armed kinds, so a refused
   press pops back (lit under the pointer, as the original's pop, FW4), the full heal pops up at once and a kind an event used (a critical hit, a
   skill check, a conversation start, a spell) pops its button up while the window is open (FW6). A kind armed when the window opens shows down.
-- **Technical bug, fixed (FW3).** The original makes an already armed kind's button without the toggle flag, so once undone it cannot be armed again
-  until the window is opened again. Every button toggles here, in both rule modes (the technical bug rule).
+- **Technical bug, fixed (FW3).** The original makes an already armed kind's button without the toggle flag, so it works as a push button that
+  cannot stay armed until the window is opened again. Every button toggles here, in both rule modes (the technical bug rule).
 - **Not modelled.** The multiplayer network messages of the buttons (FT3, FT4); a button takes the pointer on its art's rectangle, not its opaque
   pixels; the controller has no focus row in the window; the fate points left are not shown (the original window shows no count either).
 

@@ -12,8 +12,8 @@ namespace Arcanum.TerrainViewer;
 // window has twelve toggle buttons, one for each fate kind: a press that turns one on arms the kind (GameSessionOwner.ArmHeroFate: a point is spent; the
 // full heal is applied at once), turning it off undoes it (UndoHeroFate: the point comes back). The buttons follow the hero's armed kinds after each
 // answer and each frame, so a refused press pops back and a kind used by an event (or the full heal) pops up. Space closes the window (0x56FE70). The window
-// is no interface mode of the stack (the original's modes are the 21 of SA37): it stays while the world runs, and it closes when the dialog, the barter,
-// reading, save-list, menu, palette or world-map windows take the screen, when the hero dies or the session is replaced (PROJECT: the original's
+// is no interface mode of the stack (the original's modes are the 21 of SA37): it stays while the world runs, and it closes when another interface window or the dialog, the barter,
+// reading, save-list, menu, palette or world-map windows take the screen (it opens in none of them), when the hero dies or the session is replaced (PROJECT: the original's
 // callers 0x541710, 0x541D40 and 0x542200 close it with the other interfaces; which events call them is not read here).
 public partial class TerrainViewerApp
 {
@@ -36,6 +36,7 @@ public partial class TerrainViewerApp
         if (_fateModule == arguments.ModulePath && _fateContentTask is not null) return;
         _fateModule = arguments.ModulePath; _fateContent = null;
         _fateView?.CloseView();
+        _fateView?.ClearArt();
         var module = arguments.ModulePath;
         _fateContentTask = SelfTestBootstrap || module is null ? Task.FromResult(AreaFateContent.Empty("self-test: no game folder"))
             : Task.Run(() => AreaFateContent.Load(module));
@@ -86,7 +87,11 @@ public partial class TerrainViewerApp
             case AreaFateWindowRules.Toggle.RefusedNoHero: _fateNotice = "fate points: needs a hero"; break;
             case AreaFateWindowRules.Toggle.RefusedDead: _fateNotice = "fate points: not for a dead hero"; break;
             default:
-                if (FateViewOrNull() is not { } view) { _fateNotice = "fate points: the window's art did not read"; break; }
+                if (FateViewOrNull() is not { } view)
+                {
+                    _fateNotice = _fateContent is null ? "fate points: the window's art is still reading" : "fate points: the window's art did not read";
+                    break;
+                }
                 _fateNotice = null;
                 _fateSession = _areaSession;
                 view.Open();
@@ -119,7 +124,8 @@ public partial class TerrainViewerApp
     private void SyncAreaFate()
     {
         if (!FateOpen) return;
-        var covered = ConversationOpen || BarterOpen || ReadingOpen || SaveListOpen || MainMenuOpen || PaletteOpen || WorldMapOpen || HeroDeathCovering || MovieCovering;
+        // Another interface window (the sheet, the inventory, the logbook, the schematics, the sleep window ...), the dialog and the panels that take the screen close it.
+        var covered = WorldModal || ConversationOpen || BarterOpen || ReadingOpen || WorldMapOpen;
         if (_areaSession is not { } session || !ReferenceEquals(session, _fateSession) || session.QueryHero() is null || HeroDownState().Dead || covered)
         {
             CloseFate();

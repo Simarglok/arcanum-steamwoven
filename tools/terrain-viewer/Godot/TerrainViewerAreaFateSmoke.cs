@@ -30,6 +30,7 @@ public partial class TerrainViewerApp
         var session = _areaSession ?? throw new InvalidOperationException("ARC-UI-1112 fate smoke: no session");
         if (AnyWindowOpen) { CloseOtherInterfaceWindows(); await frames(2); }
         Require(!FateOpen, "the window starts closed");
+        // Assumptions: the world has the focus (the bar smoke simulates it) and the hero starts with no fate points beyond the three granted here.
         for (var i = 0; i < 3; i++) Require(session.GrantHeroFatePoint(session.Version).Disposition == GameSessionDisposition.Changed, "a point was granted");
         int Points() => session.QueryHeroFate()?.Points ?? -1;
         var start = Points();
@@ -99,13 +100,16 @@ public partial class TerrainViewerApp
         await frames(2);
         Require(!view.DownForSelfTest((int)FateKind.Gambling) && Points() == 1, "the used kind's button popped up, no point back");
 
+        // One point is left: arm the heal fate, close with Space and open with F: the kind armed at opening shows down.
+        await Press((int)FateKind.Heal);
+        Require(session.HeroFateArmed(FateKind.Heal) && Points() == 0 && view.DownForSelfTest((int)FateKind.Heal), "the last point armed the heal fate");
         key(Godot.Key.Space);
         await frames(1);
         Require(!FateOpen, "Space closed the window");
 
         key(Godot.Key.F);
         await frames(1);
-        Require(FateOpen && view.DownForSelfTest((int)FateKind.Heal) == session.HeroFateArmed(FateKind.Heal), "the key F opened the window with the buttons set from the hero: " + _gameBarNotice);
+        Require(FateOpen && view.DownForSelfTest((int)FateKind.Heal) && session.HeroFateArmed(FateKind.Heal), "the key F opened the window with the armed kind down: " + _gameBarNotice);
         key(Godot.Key.F);
         await frames(1);
         Require(!FateOpen, "the key F closed it");

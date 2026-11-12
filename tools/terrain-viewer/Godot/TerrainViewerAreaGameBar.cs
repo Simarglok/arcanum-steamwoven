@@ -179,7 +179,7 @@ public partial class TerrainViewerApp
             case AreaBarButton.FatePoints:
                 // ARC-UI-1112: the button and the key F call one function (0x56FBF0); only the dialog's modal hook and the panels outside the stack keep the press from acting.
                 if (!FateActive) _gameBarNotice = "fate points: not available here";
-                else if (!FateOpen && (PaletteOpen || ConversationOpen || SaveListOpen || MainMenuOpen)) _gameBarNotice = "fate points: ignored while another window owns input";
+                else if (!FateOpen && (WorldModal || ConversationOpen || BarterOpen || ReadingOpen || WorldMapOpen)) _gameBarNotice = "fate points: ignored while another window owns input";
                 else ToggleFate("button");
                 break;
             case AreaBarButton.Clock: ClockButton(); break;
@@ -219,6 +219,8 @@ public partial class TerrainViewerApp
         if (BarterOpen) CloseBarterByPlayer();
         if (ReadingOpen) CloseReadingByPlayer();
         if (SleepOpen) EndSleep();
+        // ARC-UI-1112: the original's interface close paths close the Fate Point window with the others (0x541710, 0x541D40, 0x542200).
+        if (FateOpen) CloseFate();
     }
 
     /// <summary>The Spells toggle changed: on shows the spell pane, off hides it. False when an on press is refused.</summary>

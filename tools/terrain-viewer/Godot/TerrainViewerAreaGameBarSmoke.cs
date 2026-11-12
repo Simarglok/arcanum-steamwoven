@@ -424,6 +424,8 @@ public partial class TerrainViewerApp
                 Require(_spellPane?.Shown != true && !_gameBar.IsOn(AreaBarButton.Spells), "a second press hid it");
             }
             else Require(!_gameBar.IsOn(AreaBarButton.Spells) && _gameBarNotice is not null, "Spells refused off a cast map: " + _gameBarNotice);
+            // ARC-UI-1112: the Fate Point window opens in no other interface window (the inventory of the steps above is still open).
+            if (AnyWindowOpen) { CloseOtherInterfaceWindows(); await Frames(2); }
             for (var wait = 0; wait < 600 && !FateArtReadyForSelfTest; wait++) await Frames(1);
             Require(FateArtReadyForSelfTest, "the Fate Point window's art read: " + _fateContent?.Detail);
             var topStrip = panel.StripRectForSelfTest(AreaBarStrip.Top);
