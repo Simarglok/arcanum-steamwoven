@@ -22,12 +22,15 @@ public sealed class SessionSpellRunListTests
         /// <summary>Whether the radius gather sees the two victims (false once they have walked away).</summary>
         public bool InRange { get; set; } = true;
 
+        /// <summary>Whether the two victims are off the map (their ids resolve to nothing).</summary>
+        public bool Gone { get; set; }
+
         public SpellTargetObject? Object(string id) => id switch
         {
             SessionSpellCaster.Hero => new(id, SpellTargetObject.Pc, new(5, 5), HitPoints: owner.QueryHeroLife()!.Status.HitPoints),
             Npc => new(id, SpellTargetObject.Npc, new(7, 5), HitPoints: 10),
-            Near => new(id, SpellTargetObject.Npc, new(8, 5), HitPoints: 10),
-            Far => new(id, SpellTargetObject.Npc, new(9, 6), HitPoints: 10),
+            Near when !Gone => new(id, SpellTargetObject.Npc, new(8, 5), HitPoints: 10),
+            Far when !Gone => new(id, SpellTargetObject.Npc, new(9, 6), HitPoints: 10),
             _ => null,
         };
         public IReadOnlyList<SpellTargetObject> ObjectsInSquare(SpellLocation centre, int radius, int typeMask) =>
@@ -110,11 +113,23 @@ public sealed class SessionSpellRunListTests
         var (owner, caster, map) = Setup();
         using var _ = owner;
         var run = Cast(owner, caster);
-        var stored = owner.QuerySpellRuns()[run]!.ObjectList;
+        Assert.AreEqual(2, owner.QuerySpellRuns()[run]!.ObjectList.Count);
         map.InRange = false;
         caster.Act(new(SessionSpellRunActionKind.Interrupt, run));
         Assert.AreEqual((0, 0), (Count(owner, Near), Count(owner, Far)), "the critters left the radius, but the END still reaches them through the stored list");
-        Assert.AreEqual(2, stored.Count);
+    }
+
+    [TestMethod]
+    public void A_stored_list_is_never_rebuilt_even_when_its_objects_are_gone_from_the_map()
+    {
+        var (owner, caster, map) = Setup();
+        using var _ = owner;
+        var run = Cast(owner, caster);
+        map.Gone = true;
+        caster.Act(new(SessionSpellRunActionKind.Interrupt, run));
+        Assert.IsNull(owner.QuerySpellRuns()[run], "the END ran with no listed object on the map");
+        map.Gone = false;
+        Assert.AreEqual((1, 1), (Count(owner, Near), Count(owner, Far)), "nothing was gathered anew and nothing took the effect off the objects that were away");
     }
 
     [TestMethod]

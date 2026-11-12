@@ -469,7 +469,7 @@ public static class SpellRunRules
     /// <summary>
     /// ARC-WORLD-102: whether an object is under the influence of a spell (0x459380, the AI chooser's skip): an active run of
     /// <paramref name="spell"/> (by slot, 0x458CF0 and 0x458D90) whose target object is <paramref name="target"/>, or whose two object
-    /// lists (+0x130, +0x134) hold it; a null object is under none. The run's object lists are not modelled.
+    /// lists (+0x130, +0x134) hold it; a null object is under none. The run's own list (+0x130, ARC-MAGIC-1234) is read; the summoned list (+0x134) is the host's and is not asked here.
     /// </summary>
     [OriginalFunction(0x459380, OriginalFunctionScope.Partial)]
     [OriginalFunction(0x458D90, OriginalFunctionScope.Partial)]
@@ -477,7 +477,7 @@ public static class SpellRunRules
     public static bool UnderInfluence(SpellRunTable table, string? target, int spell)
     {
         ArgumentNullException.ThrowIfNull(table);
-        return target is not null && table.Runs.Any(r => (r.Flags & SpellRunFlags.Active) != 0 && r.Spell == spell && r.Target?.Id == target);
+        return target is not null && table.Runs.Any(r => (r.Flags & SpellRunFlags.Active) != 0 && r.Spell == spell && (r.Target?.Id == target || r.ObjectList.Holds(target)));
     }
 
     /// <summary>The maintenance slots a critter has (0x450B90): its intelligence / 4, toward zero.</summary>

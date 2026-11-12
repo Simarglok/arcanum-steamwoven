@@ -410,7 +410,18 @@ public sealed class SpellRunSystemTests
         nothing.Records[7] = Record();
         var empty = System(nothing, Run());
         empty.Begin(0);
-        Assert.AreEqual(SpellRunObjectList.Empty, empty.Table[0]?.ObjectList ?? SpellRunObjectList.Empty, "an empty built list leaves the run's list empty");
+        Assert.AreEqual(0, empty.Table[0]?.ObjectList.Count ?? 0, "an empty built list leaves the run's list empty");
+        var timed = new Host { Built = [] };
+        timed.Records[7] = Record() with { Duration = new(30) };
+        var waiting = System(timed, Run());
+        waiting.Begin(0);
+        Assert.IsNotNull(waiting.Table[0], "the run waits for its duration");
+        Assert.AreEqual(SpellRunObjectList.Empty, waiting.Table[0]!.ObjectList, "an empty built list leaves a live run's list empty");
+        // UnderInfluence reads the run's object list as well as its target (0x458CF0).
+        var listing = Run(0, flags: SpellRunFlags.Active) with { ObjectList = new([Wand]) };
+        Assert.IsTrue(SpellRunRules.UnderInfluence(SpellRunTable.Empty.With(listing), "wand", 7));
+        Assert.IsFalse(SpellRunRules.UnderInfluence(SpellRunTable.Empty.With(listing), "wand", 8));
+        Assert.IsFalse(SpellRunRules.UnderInfluence(SpellRunTable.Empty.With(listing with { Flags = SpellRunFlags.Free }), "wand", 7), "an inactive run influences nothing");
         Assert.IsTrue(new SpellRunObjectList([Orc, Wand]).Equals(new SpellRunObjectList([Orc, Wand])), "lists are equal by contents");
     }
 
