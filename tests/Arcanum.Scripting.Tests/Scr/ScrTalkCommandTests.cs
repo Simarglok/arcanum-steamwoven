@@ -159,7 +159,7 @@ public sealed class ScrTalkCommandTests
             ScrAdmissionSet.S3.ValueKinds, ScrAdmissionSet.S3.FocusKinds);
         foreach (var set in new[] { area, floats })
             Assert.ThrowsExactly<ArgumentException>(() => ScrDispatcher.RunObject(new(ScrPoint.Dialog, Npc, Pc, null), plain, new() { Admission = set }), set.Id);
-        var beyond = new ScrAdmissionSet("beyond", ScrAdmissionSet.S19.Conditions, ScrAdmissionSet.S19.Actions.Append(CritterDisband),
+        var beyond = new ScrAdmissionSet("beyond", ScrAdmissionSet.S19.Conditions, ScrAdmissionSet.S19.Actions.Append(UnsupportedAction),
             ScrAdmissionSet.S19.ValueKinds, ScrAdmissionSet.S19.FocusKinds, counterIndexWraps: true);
         Assert.ThrowsExactly<ArgumentException>(() => ScrDispatcher.RunObject(new(ScrPoint.Dialog, Npc, Pc, null), Host(Program(Do(C(ScrCatalogue.Action.ReturnSkipDefault))), Pc), new() { Admission = beyond }));
     }

@@ -854,3 +854,23 @@ Known differences (documented, not bugs):
 - The creature takes the hero's alignment as the original does, but of the moment the world first reads it: a loaded game reads the hero's then.
 - The original's weighted lists overrun their table on a draw of 100 (MG9); Steamwoven fixes it in both modes (technical bug rule).
 - Familiar (74): its own flags (`OSF_FAMILIAR`, `ONF_FAMILIAR`) and its hiding with the party on the world map are MA-1's and the world map's.
+
+## ARC-SCRIPT-1163 — NPC state script actions (E5-a, 2026-11-12)
+
+Script actions that change an NPC's own state now run from use, tile, sector, heartbeat and dying scripts ([ledger NS1–NS8](../research/ledger/scripts.md#npc-state-commands-arc-script-1163-e5-a),
+[dispatcher](../scripting/scr-dispatcher-runtime.md#npc-state-commands-arc-script-1163-set-s36)). No installed map is named below because the check that lists the admitted scripts is by script number, not by map; use a
+companion, a shopkeeper and a guard in any town where a quest script touches them, and compare the same quest step in both games.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Make a script release a companion (quest steps that end a companion's service: critter disband). | The companion stops following at once, leaves the party list and keeps standing where it is; it does not say anything. | open |
+| 2 | Reach a quest step that sets or adjusts an NPC's reaction toward the hero, then talk to it. | Its reaction category in the conversation (and the barter prices) match the original after the step; an NPC the hero mind-controls does not change. | open |
+| 3 | Reach a quest step that moves an NPC's day or night standpoint, then wait until the matching time of day (and, for the two extended standpoints, change map). | After the step the NPC goes to the new standpoint at the next day or night change, not the old one. | open |
+| 4 | Reach a quest step that changes the script of an NPC or scenery (change script), then use or talk to it again. | The object runs the new script from then on, with its local flags and counters kept. | open |
+
+Known differences (documented, not bugs):
+
+- Change art number (a door, scenery or creature changing its picture from a script) is not built: scripts that use it are still refused, so those quest steps do nothing in Steamwoven.
+- A script in a dialog (a talk) that uses one of these actions is still refused; only use, tile, sector, heartbeat and dying scripts run them.
+- A reaction or standpoint change acts for NPCs of the map on screen only.
+

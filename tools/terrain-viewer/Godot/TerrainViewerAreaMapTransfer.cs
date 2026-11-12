@@ -284,7 +284,9 @@ public partial class TerrainViewerApp
             // ARC-DEV-371 (E1-c3): a script's create object of a critter prototype makes a critter; a created critter's row is the session's (the maps' rows hold none).
             ScriptCritterPrototype, entity => CreatedCrittersRow(entity),
             // ARC-DEV-386 (E1-c4): the creation's finish generates the new critter's inventory (queued for the frame, see TakeCreatedInventories).
-            CritterMade: entity => QueueCreatedInventory(entity));
+            CritterMade: entity => QueueCreatedInventory(entity),
+            // ARC-SCRIPT-1163 (E5-a): a script's set and adjust reaction go through the AI host's reaction change of an NPC toward the hero.
+            ScriptReaction: (npc, value, set) => AreaAiHostNow()?.ScriptReaction(npc, value, set) ?? "no AI host");
         var inventory = _inventoryHost;
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, inventory?.Maps ?? [], content, world)
         {

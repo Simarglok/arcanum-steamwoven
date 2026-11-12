@@ -227,7 +227,7 @@ public sealed class ScrWorldTests
         // From line 0 the region reaches the loop body through the loop end's jump back, and the line after the loop end.
         var program = Program(
             Do(C(ScrCatalogue.Action.Goto, N(2))),
-            Do(C(CritterDisband)),
+            Do(C(UnsupportedAction)),
             Do(C(ScrCatalogue.Action.LoopFor, (Scenery, 0))),
             Do(C(ScrCatalogue.Action.LoopEnd)),
             Do(C(ScrCatalogue.Action.ReturnRunDefault)));

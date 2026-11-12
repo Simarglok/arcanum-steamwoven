@@ -37,7 +37,6 @@ public sealed partial class GameSessionOwner
     /// ARC-SCRIPT-1163 (NS3, 0x4EFDD0 on field 243): the extended standpoint actions write the NPC's teleport map outright (the catalogue map number less 4,999), not only while it is unset (<see cref="EnsureTeleportMap"/>). The record of a mobile object is one
     /// whatever map it names, so it moves to <paramref name="map"/>. The same value is <see cref="GameSessionDisposition.NoChange"/>; a map below 1, or an entity that is not a mobile object, is refused as there.
     /// </summary>
-    [Arcanum.Simulation.OriginalFunction(0x4EFDD0, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     public GameSessionMutationResult SetTeleportMap(GameSessionVersion expected, string entity, SessionMapId map)
     {
         ThrowIfDisposed();
