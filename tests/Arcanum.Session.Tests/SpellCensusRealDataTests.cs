@@ -53,7 +53,7 @@ public sealed class SpellCensusRealDataTests
         // 85 adds effect 145 with the cause injury (7), which the session refuses as a spell effect cause (EffectDomain.OwnCause).
         (85, "EffectNotSaved", ""),
         (89, "AGoal", "AGoal"),
-        (103, "Recharge", "Recharge"),
+        // 103 (Recharge) is taken on both targets since ARC-MAGIC-1146: a critter is no item, so the component does nothing (0x454920 answers 0).
         (123, "Destroy", "Destroy"),
         (124, "Destroy", "Destroy"),
         (125, "Destroy", "Destroy"),

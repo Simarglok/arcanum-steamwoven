@@ -51,10 +51,10 @@ Since 2026-11-11 a slice merges without waiting for the owner's in-game comparis
 | Spot-trap roll, disarm action, trap script 30002, the hero's step onto a placed marker | **Partial:** traps on maps fire and hurt; placed trap devices are built (E6-b ARC-WORLD-124: timer bombs 15154 and 15193; ARC-WORLD-125: script traps 15100 and 15120 on a portal, a container or a cell; stage `item-aim`); the spot roll logs "not ready", disarm has no viewer action, a device used on a target the rules refuse says "NOT READY" | `TerrainViewerTraps.cs`, `TerrainViewerAreaItemUse.cs` | Read ([ARC-TECHNOLOGY-010](../research/technology-evidence.md), TP1–TP8) | E6 |
 | Movies (Bink), credits, intro, script-queued slides, endings | **Stub / absent** (menu buttons are "Unavailable"; only the death slide exists) | `AreaMainMenu.cs`, `AreaHeroDeath.cs`; no Bink code | Slide table read | E7 |
 | Fate window and Fate Points button; Skill pane; combat action-point readout | **Stub / absent** ("not built" notices) | `TerrainViewerAreaGameBar.cs:127-129` | UI ledger partly | E8 |
-| Companions screen and follower menu | **Absent** | survey | Not read | E8 |
+| Companions screen and follower menu | **Partly built** (the survey of 2026-11-10 said absent; re-checked 2026-11-12, ARC-RES-1107): the frames, bars and portraits (ARC-UI-020, ARC-UI-024), the order menu with six live rows and the barter follower form with its cycle buttons (ARC-WORLD-046, ARC-DEV-280, ARC-UI-1120); no show/hide button, no scroll arrows past six followers, no portrait click aiming a spell or skill, the menu's Inventory and Character Sheet rows disabled | `AreaFollowerPortraits.cs` | **Read** ([FP1–FP13](../research/ledger/ui-audio.md#follower-panel-and-menu-arc-res-1107)); the hover is #1281 | E8 |
 | Gambling (FR-ITEM-019), identify window, heal another critter | **Stub / absent** | survey | Gambling read (S14) | E8 |
 | Misc sound callers (scenery loops, busting, NPC footsteps, item drop, non-death AI barks) | **Absent** (hero footsteps, pickups, doors, chests, attack and death barks are wired) | no caller of the misc, fidget and drop cue kinds | Sound ledger | E8 |
-| Options: module select, violence filter, brightness, auto-switch weapons, autosave timer | **Hidden** with reasons | `AreaGameOptions.cs` | UI ledger | E8 |
+| Options: module select, violence filter, brightness, auto-switch weapons, follower skills, combat taunts | **Hidden** with reasons (the original has **no autosave timer**, OH6: not a missing system) | `AreaGameOptions.cs` | **Read** ([OH1–OH6](../research/ledger/ui-audio.md#hidden-options-arc-res-1107)) | E8 |
 | Gamepad in the game UI, UI scale, Windows and Linux validation | **Lab only / partial / not run** | survey; `export_presets.cfg` has a Windows package; the coverage matrix (FR-PRODUCT-005, not re-checked) says it was never run on Windows | — | E9 |
 | Network game, second module, mods, original-save import | **Absent** (requirements and research only) | no socket code; `ContentMountPlan` takes a module name but nothing selects one | Network read (NT1–NT16) | E10 |
 
@@ -139,8 +139,8 @@ FR-MAGIC-011, FR-TRAVEL-005, FR-SCRIPT-002.
 | --- | --- | --- | --- |
 | E4-a | **Built (MA-1, ARC-DEV-358); the viewer draw is E4-a2 in the [technology audit](../research/technology-audit-res-125.md#6-queue).** Remaining ObjFlag flags with render and movement effects (invisible, shrunk, water walking, "don't draw", blind), Effect on NPCs | M | E1-d |
 | E4-b | **Built except AIRedirect (MA-4, ARC-MAGIC-035; AIRedirect goes with E1-e).** Social and AI flags: charm (+30/−30), mind control, undead, fleeing, blinded as AI notifications; reaction adjustments; AIRedirect | M–L | E4-a |
-| E4-c | **Built except Interrupt, EnvFlag, TraitIdx and Trait64** (Dispel ARC-MAGIC-034, MA-3; Terminate, TestNBranch, ChargeNBranch, NoOp ARC-MAGIC-044; Use ARC-MAGIC-048). Control components: Dispel, Interrupt, Terminate, TestNBranch, ChargeNBranch, Noop, EnvFlag, TraitIdx, Trait64, Use; Destroy for critters and containers | L (two slices) | E1-d |
-| E4-d | **Identify built (MA-7, ARC-MAGIC-032); Recharge is not.** Item recharge and Identify components | S–M | E4-c |
+| E4-c | **Built except Interrupt (a no-op in the original) and TraitIdx** (Dispel ARC-MAGIC-034, MA-3; Terminate, TestNBranch, ChargeNBranch, NoOp ARC-MAGIC-044; Use ARC-MAGIC-048; EnvFlag and Trait64 ARC-MAGIC-1146, with the spell stop on an object and the Combat-Focus Wipe event). Control components: Dispel, Interrupt, Terminate, TestNBranch, ChargeNBranch, Noop, EnvFlag, TraitIdx, Trait64, Use; Destroy for critters and containers | L (two slices) | E1-d |
+| E4-d | **Identify built (MA-7, ARC-MAGIC-032); Recharge built (ARC-MAGIC-1146).** Item recharge and Identify components | S–M | E4-c |
 | E4-e | **Built (MA-5, ARC-MAGIC-036, -038; nested Cast ARC-MAGIC-049).** Movement: teleport to a tile, a random tile, the world map; no-teleport area data (FR-TRAVEL-005); what a teleport does to followers; nested Cast | M–L | E4-c |
 | E4-f | **Built except the permanent polymorph's ObjFlag part (MA-8, ARC-MAGIC-040, -046, -047, -052; record 222).** Polymorph (Trait): drop what the new art cannot wield, monster art and palette, restore (MG10 as a technical bug) | M | E4-a |
 | E4-g | Script hooks: conditions `knows_spell`, `mastered_spell_college`, `obj_is_influenced_by_spell`, `obj_has_body_spell`; the PC as a script caster; give spell mastery; paid spellcasting services. **Part done (ARC-MAGIC-029, MT21a):** set S31 holds the four conditions and give mastery in the interpreter; the host side is ARC-MAGIC-030 (MT21b): the use and talk hosts answer them and write the mastery (the PC and an NPC of the shown map); the body-of-element spell-flag bits and the rest stay | M | E5-c |
@@ -208,12 +208,28 @@ FR-ITEM-008, FR-MEDIA-003, FR-COMBAT-002, FR-COMBAT-003.
 | --- | --- | --- | --- |
 | E8-a | Fate window and the Fate Points button (rules and the grant exist) | S–M | — |
 | E8-b | Skill pane of the game bar; PickPocket and DisarmTraps hotkeys | S | E6-a for disarm |
-| E8-c | Companions screen and follower menu; barter follower switch | M | Mac read |
+| E8-c | Companions screen and follower menu (read, ARC-RES-1107: slices E8-c1…E8-c3 [below](#e8-c-and-e8-e-slices-read-by-arc-res-1107)); the barter follower switch is **done** (ARC-UI-1120, #1275) | M | — |
 | E8-d | Combat action-point readout and the turn-order list (owner decision 2026-10-28) | M | — (UI-124 runs beside) |
-| E8-e | Options windows hidden today: violence filter, brightness, auto-switch weapons, follower skills, combat taunts, autosave timer | M | Mac read for each |
+| E8-e | Options windows hidden today: violence filter, brightness, auto-switch weapons, follower skills, combat taunts (read, ARC-RES-1107: slices E8-e1…E8-e5 [below](#e8-c-and-e8-e-slices-read-by-arc-res-1107)); the autosave timer is **dropped** (the original has none, OH6) | M | — |
 | E8-f | **Done (ARC-RENDER-1126, #1126).** Sound callers: scenery loops, busting, AI barks, NPC footsteps, item drop | S–M | — |
 | E8-g | Identify window, heal another critter, lockpicks on chests (viewer wiring; the session takes containers), junk-pile partial take, poison sources | M | — |
 | E8-h | Gambling and newspapers queue (K10; proposed for after the alpha) | M | E5-c |
+
+#### E8-c and E8-e slices (read by ARC-RES-1107)
+
+The two Mac reads of section 6 are done (2026-11-12, [ARC-RES-1107](https://github.com/Simarglok/arcanum-steamwoven/issues/1107): ledger [FP1–FP13](../research/ledger/ui-audio.md#follower-panel-and-menu-arc-res-1107) and [OH1–OH6](../research/ledger/ui-audio.md#hidden-options-arc-res-1107)). They show that part of E8-c was already built, and that E8-e had one item with nothing to copy. The slices below are planning labels (one result each, size and what each needs); the coordinator makes the issues and gives the task codes. They are all in the UI/viewer lane except E8-e4 and E8-e5, which touch the session.
+
+| Slice | Content (ledger rows) | Size | Needs |
+| --- | --- | --- | --- |
+| E8-c1 | Follower panel shell: the show/hide button (art 501, 502) and the scroll arrows (art 506–509) for seven or more followers, the six frames showing `offset .. offset + 5` (FP1, FP3, FP5, FP13). Whether the shown flag and offset travel with the save (FP2: the original saves them; they have no gameplay effect) is the slice's one decision: recommended in the session only, since FR-LIFECYCLE-004 keeps saves for game state | S | — |
+| E8-c2 | Menu form and the two disabled rows: the menu as art 826 with eight text rows at 18 pixels (FP8), Wait greyed instead of hidden, Inventory opening the barter follower form when the can-open test passes (FP11, reusing the cycle's `BarterCycleSpeaker`), Character Sheet opening the NPC sheet (FP12, `AreaNpcSheet`), the open menu consuming every release (FP9), no clamp to the screen (FP7) | M | — (E8-c1 is not needed) |
+| E8-c3 | A left click on a portrait aims a spell, a skill or an item at that follower in the target modes and is an ordinary click otherwise (FP6; a heal or buff on a follower through the portrait) | S–M | the viewer's target modes (spell, skill, item use); the hover is #1281 |
+| E8-e1 | Violence filter: the hit effect and the dying animation read it, the blood pool wiring, the options row (OH2) | S | — |
+| E8-e2 | Brightness: the Video page's slider 0–9, the final colour multiply 1.0 + 0.1 × value, fades returning to it (OH1) | S–M | — |
+| E8-e3 | Combat taunts: the host call at the end of an attack, the options row, default on, never in a network game (OH5, `FollowerRules.Taunt`) | S | the floating text layer (built, ARC-UI-021) |
+| E8-e4 | Auto Switch Weapons: the PC's re-wield after no ammunition, a destroyed weapon and (for a struck PC) the item-loss branches of the damage step, the options row, default off (OH3, PI5) | M | the best-item-for-slot function 0x465170 (partly built, starting kit) |
+| E8-e5 | Follower Skills and the hand-over: the better follower does a lockpick use or the skill bar's Disarm Traps (only these two, OH4), Ctrl skips it, the hand-over line floats, the options row (PL5; owner recheck 8 expects repair to hand over too, which the original does not do) | M | E8-b and E6-a for the Disarm Traps bar path |
+
 
 ### E9 Platform, controller and presentation
 
@@ -265,7 +281,7 @@ Threads of different lanes run beside each other.
 ## 6. Reads of the original that the plan needs
 
 Mac reads, each a docs-only research slice that ends in ledger rows: E1-r, E2-r, E3-r, E5-r (a data census, done), E7-r (a research on decoders),
-E8-c and E8-e (UI rows). Everything else uses reads that already exist in the [ledger](../research/original-verification-ledger.md); each
+E8-c and E8-e (UI rows; **done**, ARC-RES-1107, 2026-11-12). Everything else uses reads that already exist in the [ledger](../research/original-verification-ledger.md); each
 implementing slice still reads the F0 facts of the functions it changes, as the owner decided on 2026-10-20.
 
 ## 9. Owner answers (Aleksandr, 2026-11-10)
