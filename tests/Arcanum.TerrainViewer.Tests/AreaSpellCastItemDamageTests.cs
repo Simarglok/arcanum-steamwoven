@@ -233,7 +233,7 @@ public sealed class AreaSpellCastItemDamageTests
         // ARC-MAGIC-1232 (DW2): the same items by wear slot are what a spell's weapon block (Disarm) takes the target's weapon from; the drop map is the host's.
         var bySlot = withKit.WornBySlot(SessionSpellCaster.Hero)!;
         Assert.AreEqual(("kit:1", 1), (bySlot[EquipmentSlot.Weapon].Entity, bySlot.Count));
-        Assert.AreEqual(0, new AreaSpellCastMap(session, 1, Steps(), rows, combat, () => null, () => null).WornBySlot(SessionSpellCaster.Hero)!.Count);
+        Assert.IsNull(new AreaSpellCastMap(session, 1, Steps(), rows, combat, () => null, () => null).WornBySlot(SessionSpellCaster.Hero), "no kit values: unknown items, not an empty slot");
         Assert.IsNull(withKit.DropMap, "no drop map given");
         var dropMap = new NoDrops();
         Assert.AreSame(dropMap, new AreaSpellCastMap(session, 1, Steps(), rows, combat, () => null, () => null, dropMap: () => dropMap).DropMap);

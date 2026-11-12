@@ -319,11 +319,14 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         return worn.Select(item => new SpellAcidItem(item.Wear.Entity, (int)item.Slot, false, Math.Clamp(item.Facts.Resistances.Normal, 0, 95))).ToArray();
     }
 
-    /// <summary>ARC-MAGIC-1232 (DW2): the critter's worn items by slot with their baselines, the same list the acid and an attack's wear read (<see cref="Worn"/>).</summary>
+    /// <summary>ARC-MAGIC-1232 (DW2): the critter's worn items by slot with their durability values, as the attack path's worn-items lists give them (an item's stored facts are not needed, as for the acid): the NPC's from the combat
+    /// host, the hero's from its starting kit (<see cref="AreaCombatHost.HeroWorn"/>: none while it wears an item that is no kit item, as for an attack). Null when the host has no item data (no kit values, an unknown NPC): the weapon block
+    /// then reports an unknown step, not an empty slot.</summary>
     public IReadOnlyDictionary<Arcanum.Simulation.Equipment.EquipmentSlot, SessionWearItem>? WornBySlot(string entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        return Worn(entity).ToDictionary(item => item.Slot, item => item.Wear);
+        if (entity == SessionSpellCaster.Hero) return AreaCombatHost.HeroWorn(_session, _heroKit?.Invoke());
+        return _combat.Worn(_session, entity) is { } worn ? worn.ToDictionary(item => item.Slot, item => item.Wear) : null;
     }
 
     /// <summary>ARC-MAGIC-1232: the shown map's drop map now, or null.</summary>

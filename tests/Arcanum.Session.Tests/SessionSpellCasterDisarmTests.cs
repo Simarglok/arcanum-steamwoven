@@ -183,6 +183,60 @@ public sealed class SessionSpellCasterDisarmTests
     }
 
     [TestMethod]
+    public void A_critter_already_dead_takes_no_weapon_block()
+    {
+        var record = Disarm();
+        var (owner, caster, _) = Session(record);
+        using var _ = owner;
+        Assert.IsTrue(caster.ApplyScriptDamage(Rat, 1000, 0, unresistable: true).Applied, "the rat is dead");
+        caster.TakeDamageSteps();
+        Cast(owner, caster, record, Hero, Rat);
+        Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.WeaponDropped), string.Join(" | ", caster.Log));
+        Assert.IsFalse(caster.TakeDamageSteps().Any(step => step.Criticals.Count > 0));
+        Assert.IsFalse(owner.QueryMapInventory(Exterior)!.Ground.Any(g => g.Item.Entity == Sword));
+    }
+
+    // An open map without bounds (as the critical-effects tests): a path is the straight line, critters stand on the listed cells.
+    private sealed class OpenMap(params CellCoord[] critters) : IDropMap
+    {
+        private static readonly (int X, int Y)[] Offsets = [(-1, -1), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1)];
+        public CellCoord? Step(CellCoord from, int rotation) => rotation == 8 ? from : new(from.X + Offsets[rotation].X, from.Y + Offsets[rotation].Y);
+        public DropPath Path(CellCoord from, CellCoord to, DropOwner who)
+        {
+            var rotations = new List<int>();
+            for (var cell = from; cell != to; cell = Step(cell, rotations[^1])!.Value)
+                rotations.Add(Array.IndexOf(Offsets, (Math.Sign(to.X - cell.X), Math.Sign(to.Y - cell.Y))));
+            return new(rotations.Count, 0, rotations);
+        }
+        public bool HasCritter(CellCoord cell) => critters.Contains(cell);
+    }
+
+    [TestMethod]
+    public void With_the_hosts_drop_map_the_weapon_lands_where_the_drops_tries_lead_and_a_refused_drop_still_revises()
+    {
+        var record = Disarm();
+        var (owner, caster, map) = Session(record);
+        using var _ = owner;
+        map.Drops = new OpenMap(new CellCoord(6, 5));
+        Cast(owner, caster, record, Hero, Rat);
+        var drop = caster.TakeDamageSteps().Single().Criticals.Single();
+        Assert.AreEqual(SessionCriticalStepOutcome.Dropped, drop.Outcome);
+        Assert.AreNotEqual(new CellCoord(6, 5), drop.Cell, "the rat's own tile has a critter: the item lands off it");
+        Assert.IsTrue(Math.Abs(drop.Cell!.Value.X - 6) <= 4 && Math.Abs(drop.Cell.Value.Y - 5) <= 4, "within the drop's 2..4 tiles");
+        Assert.AreEqual(drop.Cell, owner.QueryMapInventory(Exterior)!.Ground.Single(g => g.Item.Entity == Sword).Cell);
+
+        // A refused drop (no-drop flag) draws its distance first: the draw is a revision of the session.
+        var (o, c, m) = Session(record);
+        using var __ = o;
+        m.Drops = new OpenMap();
+        m.Worn[Rat] = new() { [EquipmentSlot.Weapon] = new(Sword, Sturdy) { NoDrop = true } };
+        var before = o.Version;
+        Cast(o, c, record, Hero, Rat);
+        Assert.AreEqual(SessionCriticalStepOutcome.Refused, c.TakeDamageSteps().Single().Criticals.Single().Outcome);
+        Assert.AreNotEqual(before, o.Version);
+    }
+
+    [TestMethod]
     public void A_no_drop_weapon_is_refused_and_a_spell_without_the_flag_drops_nothing()
     {
         var record = Disarm();

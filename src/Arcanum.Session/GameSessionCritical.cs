@@ -182,6 +182,10 @@ public sealed partial class GameSessionOwner
         failure = GameSessionFailure.None;
         var steps = new List<SessionCriticalStep>();
         CriticalDrop(SessionCriticalStepKind.DropWeapon, DamageRecipient.Target, new SessionWearSide { Life = who, Worn = worn }, EquipmentSlot.Weapon, cell, dropMap, steps, ref failure);
+        // A drop that drew from the generator and was then refused changed no state a revision covers (an attack's own revision does): the spell's step has none, so the draw is revised here.
+        if (failure == GameSessionFailure.None && steps.Any(step => step.Outcome is SessionCriticalStepOutcome.Refused or SessionCriticalStepOutcome.ScriptUnsupported
+            or SessionCriticalStepOutcome.ItemSpellsUnsupported or SessionCriticalStepOutcome.HeroCellUnfit or SessionCriticalStepOutcome.NotSeedItem) && dropMap is not null && _revision != long.MaxValue)
+            Revise();
         return steps;
     }
 
