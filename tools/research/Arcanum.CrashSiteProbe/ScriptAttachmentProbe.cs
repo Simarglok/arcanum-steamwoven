@@ -26,7 +26,7 @@ internal static partial class Program
         return ((int)(key & 0x3FFFFFF), (int)(key >> 26));
     }
 
-    internal sealed record SaHit(string Map, string Kind, string File, int? SourceIndex, int? Type, int? Prototype, int Sap, int Script, int? Name, int? Description, int? X, int? Y);
+    internal sealed record SaHit(string Map, string Kind, string File, int? SourceIndex, int? Type, int? Prototype, int Sap, int Script, int? Name, int? Description, int? X, int? Y, uint Counters = 0);
 
     // A lenient GF writer scan over raw DLG text: an ASCII letter pair "GF" (any case) as an
     // operation code, then optional spaces and the flag number. It reads every file, including
@@ -171,7 +171,7 @@ internal static partial class Program
             if (!prototypes.TryAdd(number, proto)) refusals.Add("prototype|duplicate_number");
             int? Num(int slot) => proto.NumericFields.TryGetValue(slot, out var v) ? v : null;
             foreach (var s in proto.Scripts.Where(s => want(s.script)))
-                hits.Add(new("", "prototype", key, null, proto.Type, number, s.sap, s.script, Num(SaNameSlot), Num(SaDescriptionSlot), null, null));
+                hits.Add(new("", "prototype", key, null, proto.Type, number, s.sap, s.script, Num(SaNameSlot), Num(SaDescriptionSlot), null, null, s.counters));
         }
 
         var unresolvedPrototypes = 0;
@@ -186,7 +186,7 @@ internal static partial class Program
                 {
                     int? Num(int slot) => instance.NumericFields.TryGetValue(slot, out var v) ? v : proto is not null && proto.NumericFields.TryGetValue(slot, out var w) ? w : null;
                     int? x = instance.Location is { } loc ? unchecked((int)loc) : null, y = instance.Location is { } loc2 ? unchecked((int)(loc2 >> 32)) : null;
-                    hits.Add(new(map, kind, file, instance.SourceIndex, instance.Type, proto is null ? null : instance.PrototypeId.AidValue(), s.sap, s.script, Num(SaNameSlot), Num(SaDescriptionSlot), x, y));
+                    hits.Add(new(map, kind, file, instance.SourceIndex, instance.Type, proto is null ? null : instance.PrototypeId.AidValue(), s.sap, s.script, Num(SaNameSlot), Num(SaDescriptionSlot), x, y, s.counters));
                 }
             }
         }

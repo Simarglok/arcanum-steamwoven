@@ -57,6 +57,9 @@ public sealed class AreaSpellCastingTests
         Assert.AreEqual("Rat kit:2 is recharged to 8 charges", AreaSpellCasting.Line(new(SpellCastEventKind.ItemRecharged, 1, 8, "kit:2", 5), null, Name));
         Assert.AreEqual("the recharge was not saved", AreaSpellCasting.Line(new(SpellCastEventKind.ItemRechargeNotSaved, 1, 3, "kit:2"), null, Name));
         Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.Trait64Written, 1, 242, "r1", 0), null, Name));
+        // ARC-MAGIC-1295: TraitIdx writes state only too.
+        Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.TraitIndexWritten, 1, 220, "r1", 1), null, Name));
+        Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.TraitIndexRefused, 1, 0, "r1", 1), null, Name));
     }
 
     [TestMethod]

@@ -110,19 +110,23 @@ public partial class TerrainViewerApp
         return ran.Run?.Outcome == ScrOutcome.SkipDefault ? (reading ? "its use script stopped the reading" : "its use script stopped the use") + lines : null;
     }
 
-    private void OpenReading(WrittenDocument document, string title)
+    /// <param name="replaceWindows">ARC-UI-1125: a script's request (the opener pops whatever mode is on top, SA40): an open window other than the
+    /// dialog leaves first, once the document has a view to show (the original's start refuses before the open pops, so a refused reading leaves the
+    /// window as it is).</param>
+    private void OpenReading(WrittenDocument document, string title, bool replaceWindows = false)
     {
         if (!ReadingActive || _readingData?.Data is not { } data) return;
-        // The original's open toggles: a second open closes the window (WR2). The viewer's callers never reach it today: the inventory
-        // closes first and a script request waits while any window is open.
+        // The original's open toggles: a second open closes the window (WR2). The hero's callers never reach it: the inventory closes first;
+        // a script's request does (ARC-UI-1125), and closes the open reading.
         if (ReadingOpen) { CloseReadingByPlayer(); return; }
-        if (!WindowCanOpen(InterfaceMode.Book)) return;
+        if (!replaceWindows && !WindowCanOpen(InterfaceMode.Book)) return;
         if (AreaReading.View(document, data.Texts, 0, AreaHoverIndex.TextProfile, _areaSession!.Rules.Written) is not { } view)
         {
             _readingStatus = "not read: " + AreaReading.Refused(document.Status);
             RefreshAreaStatus();
             return;
         }
+        if (replaceWindows && !ClearWindowsForProgrammaticOpen(InterfaceMode.Book, "script reading")) return;
         if (_readingPanel is null)
         {
             _readingPanel = new AreaReadingPanel(); AddChild(_readingPanel);
@@ -192,11 +196,12 @@ public partial class TerrainViewerApp
         if (_useScriptHost is { } use) QueueScriptReadings(use.Host.TakeReadings());
         if (_readingScriptOpen is not { } pending) return;
         if (!ReferenceEquals(pending.Session, _areaSession)) { _readingScriptOpen = null; return; }
-        if (WorldModal || _readingData is null) return;
+        // ARC-UI-1125: an open window does not hold the request (its opener replaces it); the panels outside the stack and a dialog still do.
+        if (ProgrammaticOpenBlocked || ConversationOpen || _readingData is null) return;
         _readingScriptOpen = null;
         if (_readingData.Data is not { } data) { _readingStatus = $"script reading: the written texts are unavailable ({_readingData.Status})"; RefreshAreaStatus(); return; }
         var document = _areaSession!.QueryWrittenDocument(AreaReading.ScriptFacts(pending.Request), data.Texts);
-        OpenReading(document, $"script {pending.Request.Kind} {pending.Request.Number}");
+        OpenReading(document, $"script {pending.Request.Kind} {pending.Request.Number}", replaceWindows: true);
     }
 
     private void QueueScriptReadings(IEnumerable<ScrReadingRequest> requests)
