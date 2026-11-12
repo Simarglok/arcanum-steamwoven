@@ -1185,14 +1185,14 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   [ledger QW1–QW6](../research/ledger/ui-audio.md#quantity-window-arc-ui-029)). It starts at 0; the keypad digits append (capped
   at the stack), Backspace and Delete erase the last digit, Enter accepts, Escape and I cancel; the main-row digits do nothing.
   While it asks the rest of the window, the doll and the grid do nothing (QW6); closing the window cancels it. Accept with 0 moves
-  nothing. The moves are the session's `TakeGoldFromNpc`, `TakeAmmoFromNpc` and `DropHeroAmmo`
+  nothing. The moves are the session's `TakeGoldFromNpc`, `TakeAmmoFromNpc`, (a junk pile's, ARC-UI-1328) `TakeGoldFromJunkPile`, `TakeAmmoFromJunkPile` and `DropHeroAmmo`
   ([stack drop](../world/inventory-runtime.md#stack-drop-and-the-quantity-window-arc-ui-029)). *Take all* moves whole stacks
   without asking, a gold pile too (QW1; a session without a hero refuses the gold, as it has none to hold it); a stack of one unit moves at once by the same stack path. The new stack keeps the moved
   stack's kind (the original makes the type's base prototype, QW5; every installed stack is one). A dead NPC with two gold piles
   answers with its first pile (the session's `TakeGoldFromNpc`, NT1), so a take from the second asks with its coins but moves from
   the first (no installed NPC holds two). The loot list
   shows a gold pile's coins (×N) and the header the hero's gold and its four ammunition counts (arrows, bullets, charges, fuel; IW9).
-  NOT READY: the question in the barter window and for a junk pile's stacks, the art of the original's
+  A junk pile's stacks ask the same way (ARC-UI-1328): the session moves the count and leaves the rest in the pile, which keeps its items and its dissolve rules (a window that shows it keeps it standing; closing it dissolves one item or none); a container's stacks asked since ARC-WORLD-101. NOT READY: the question in the barter window, the art of the original's
   bar. The self-test takes 2 of 12 synthetic arrows by keypad and buttons, cancels with Escape, and drops 1 of the 2
   (`ARC-UI-029 self-test quantity`); the native smoke drops one unit of an ammunition stack of the hero's
   through its *Drop* button, keypad 1 and Enter, and takes it back (`ARC-UI-029 native-smoke quantity PASS`; the crash site holds no

@@ -57,6 +57,13 @@ code ([naming](task-naming.md#codes-from-2026-11-12-the-issue-number)).
   `function-audit-plan`, the coverage rows) keep the research, evidence and
   status; when one lists pending work that has an issue, it links `#N` and does
   not repeat the plan. New unstarted work is an issue, not a new list row.
+- **Mandatory: file the issue when a need is found** (owner rule 2026-11-12).
+  Whenever a need for work comes up (a leftover part of the task, a gap or bug
+  found on the way, a follow-up, a review finding that is not fixed in the PR),
+  the thread or coordinator that found it creates a GitHub issue for it right
+  away, with the usual labels and without asking the owner (the owner's standing
+  permission to create and label issues), and reports the new issue numbers.
+  A need only named in a report, a PR text or a document is not recorded.
 - **One issue is one work item**: the form `.github/ISSUE_TEMPLATE/task.yml`
   has the headings `Goal` (one result, one PR), `Requirements` (FR ids or
   groups, [functional requirements](#functional-requirements)), `Components` (at
