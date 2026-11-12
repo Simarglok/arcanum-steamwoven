@@ -107,7 +107,8 @@ public partial class TerrainViewerApp
                 for (var wait = 0; wait < 10 && ConversationOpen; wait++) AreaSmokeFrame();
                 Require(!ConversationOpen, "the world map reply closed the talk");
                 Require(_conversationNotice is null || !_conversationNotice.Contains("script", StringComparison.OrdinalIgnoreCase), "no script continues after it: " + _conversationNotice);
-                for (var wait = 0; wait < 10 && _dialogWorldMapPending is not null; wait++) { AreaSmokeFrame(); TakeDialogWorldMap(); }
+                // The world-map data may still load in the background: the request waits for it (up to 600 frames), so the smoke gives it real time.
+                for (var wait = 0; wait < 400 && _dialogWorldMapPending is not null; wait++) { AreaSmokeFrame(); TakeDialogWorldMap(); if (_dialogWorldMapPending is not null) System.Threading.Thread.Sleep(50); }
                 Require(_dialogWorldMapPending is null, "the queued world map request was taken");
                 worldMapOpened = WorldMapOpen; worldMapStatus = _worldMapStatus;
                 Require(worldMapOpened, $"the world map opened after the reply (status {worldMapStatus})");
