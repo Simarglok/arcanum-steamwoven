@@ -43,6 +43,29 @@ public sealed class TeleportMapStateTests
     }
 
     [TestMethod]
+    public void A_script_writes_the_teleport_map_outright_and_the_standpoints_are_saved_object_fields()
+    {
+        // ARC-SCRIPT-1163 (NS3, 0x4EFDD0): the extended standpoint action overwrites field 243 (the getter's write only fills an empty one); the day and night standpoints are object fields of the entry as well.
+        using var owner = Create();
+        Changed(owner.EnsureTeleportMap(owner.Version, Virgil, Exterior), owner, 1);
+        Changed(owner.SetTeleportMap(owner.Version, Virgil, Cave), owner, 2);
+        Assert.AreEqual(Cave.RuntimeMap, owner.QueryTeleportMap(Virgil));
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.SetTeleportMap(owner.Version, Virgil, Cave).Disposition);
+        Assert.AreEqual(GameSessionFailure.InvalidChangeKey, owner.SetTeleportMap(owner.Version, "bad id", Cave).Failure);
+        Assert.AreEqual(1, owner.QueryObjectState(Virgil).Count(field => field.Property == "npc.teleport"), "one record whatever map it names");
+        var day = SessionNpcStandpoint.Pack(480, 521);
+        var night = SessionNpcStandpoint.Pack(unchecked((uint)-3), uint.MaxValue);
+        Assert.AreEqual(521L << 32 | 480, day);
+        Changed(owner.SetMapChange(owner.Version, Exterior, SessionNpcStandpoint.Key(Virgil, day: true), day), owner, 3);
+        Changed(owner.SetMapChange(owner.Version, Exterior, SessionNpcStandpoint.Key(Virgil, day: false), night), owner, 4);
+        Assert.AreEqual(day, owner.QueryObjectChange(Cave, SessionNpcStandpoint.Key(Virgil, day: true)), "found by the object's identity, whatever map is asked");
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(day, restored.QueryObjectChange(Exterior, SessionNpcStandpoint.Key(Virgil, day: true)));
+        Assert.AreEqual(night, restored.QueryObjectChange(Exterior, SessionNpcStandpoint.Key(Virgil, day: false)));
+        Assert.AreEqual(Cave.RuntimeMap, restored.QueryTeleportMap(Virgil));
+    }
+
+    [TestMethod]
     public void A_refused_write_changes_nothing()
     {
         using var owner = Create();

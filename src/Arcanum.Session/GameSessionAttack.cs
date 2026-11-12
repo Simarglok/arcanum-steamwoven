@@ -250,6 +250,8 @@ public sealed class SessionCritterCombat
         Trait((flags2 & NighInvulnerable2) != 0, LifeTraits.NighInvulnerable);
         Trait((flags & Unrevivifiable) != 0, LifeTraits.Unrevivifiable);
         Trait((flags & Unresurrectable) != 0, LifeTraits.Unresurrectable);
+        // ARC-WORLD-1158 (PO10): critter flags 2's "no decay" keeps the body.
+        Trait(!Arcanum.Simulation.Combat.BodyDecayRules.Schedules(flags2), LifeTraits.NoBodyDecay);
         var conditions = LifeConditions.None;
         void Condition(bool on, LifeConditions condition) { if (on) conditions |= condition; }
         Condition((flags & Stunned) != 0, LifeConditions.Stunned);
@@ -939,13 +941,13 @@ public sealed partial class GameSessionOwner
         var npcWorn = attack.TargetWorn?.OrderBy(pair => pair.Key).Select(pair => pair.Value.Entity).ToArray() ?? [];
         // The stun's and the knockdown's walks come before the step's drops and wear (IC3), the others after them.
         var itemSpells = FireDamageStepItems(attack.ItemTriggers, itemSteps.Where(step => BeforeItemSteps(step, outcome)), target.Entity, npcWorn,
-            heroWorn, contextWeapon).ToList();
+            SessionEventKinds.PlayerEntity, heroWorn, contextWeapon).ToList();
         if (stepFailure == GameSessionFailure.None)
             (wear, stepFailure) = CriticalAndWearSteps(resolution, outcome, heroSide, targetSide, recipient == DamageRecipient.Target ? target : null,
                 attack.TargetCell, attack.DropMap, criticals);
         if (stepFailure == GameSessionFailure.None)
             itemSpells.AddRange(FireDamageStepItems(attack.ItemTriggers, itemSteps.Where(step => !BeforeItemSteps(step, outcome)), target.Entity,
-                StillWorn(npcWorn, wear, criticals), heroWorn, contextWeapon));
+                StillWorn(npcWorn, wear, criticals), SessionEventKinds.PlayerEntity, heroWorn, contextWeapon));
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, outcome, hitAward, killAward, stepFailure, Version)
         {
             Wear = wear,

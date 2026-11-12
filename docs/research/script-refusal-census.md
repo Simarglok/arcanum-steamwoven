@@ -402,7 +402,7 @@ Quests named by two or more blocked scripts (numbers as the scripts name them):
 
 The census is a data answer; each slice keeps its own contract and checks.
 
-- **E5-a, NPC state actions (#1163).** Blocked roots 166, sites 794, maps 24; 110 roots (550
+- **E5-a, NPC state actions (#1163).** *Built 2026-11-12 as set S36 (ARC-SCRIPT-1163, [ledger NS1–NS8](ledger/scripts.md#npc-state-commands-arc-script-1163-e5-a)); change art number is left to a slice with a per-object art overlay.* Blocked roots 166, sites 794, maps 24; 110 roots (550
   sites) are freed by the slice alone. The largest of the plan's slices, and the most useful: it
   contains the three most frequent types of the module's refusals (change script 52 roots, change art
   41, day and night standpoints 44 and 36). *Follow* (action 21) and *attack* (action 36) are already in S33, so the

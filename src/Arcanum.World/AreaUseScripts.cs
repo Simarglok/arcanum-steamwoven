@@ -34,7 +34,8 @@ namespace Arcanum.World;
 /// session can create (a prototype file that reads as an NPC's), so a create object of it makes a critter (<see cref="GameSessionOwner.CreateCritterNear"/>) and not a ground item; without it a critter prototype is
 /// refused as before. <see cref="CreatedRow"/> answers a created critter's base record by its entity (the run's NPC rows are the shown map's and the loaded maps'; a critter created at run time has none of them).
 /// ARC-DEV-386 (E1-c4): <see cref="CritterMade"/> is told the entity of each critter the run created, right after it exists, so the host generates its inventory (the original's create finish runs the restock body 0x463C60, OM16, RK14);
-/// without it a created critter's list stays empty.
+/// without it a created critter's list stays empty. ARC-SCRIPT-1163 (E5-a, NS2): <see cref="ScriptReaction"/> changes an NPC of the shown map's reaction toward the PC (set reaction 30 when its flag is true, adjust reaction 31) in the AI host and answers what happened;
+/// without it a run with a reaction action is left unapplied.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
@@ -43,7 +44,7 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Func<ScrObjectRef, int, bool>? HealFatigue = null, Func<string, int, string>? ScriptAnimate = null, Func<string, string, string>? ScriptSteal = null, Func<string, string>? ScriptProne = null,
     Func<string?, string, int, bool, bool, string>? ScriptCast = null, Func<string, int, int, bool, string>? ScriptDamage = null, Func<string, int, string>? ScriptHeal = null,
     Func<string, bool>? ScriptDamageAsk = null, Func<int, bool>? Critter = null, Func<string, AreaObjectRecord?>? CreatedRow = null,
-    Action<string>? CritterMade = null);
+    Action<string>? CritterMade = null, Func<string, int, bool, string>? ScriptReaction = null);
 
 /// <summary>ARC-WORLD-081: one create object a run applied: the prototype number as the script named it, the object it was created next to,
 /// and the session's result (<see cref="InventoryMutationResult.Item"/> the new item; none under the Steamwoven limit).</summary>
@@ -119,7 +120,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     public const string FactionProperty = "npc.faction";
     /// <summary>ARC-SCRIPT-052: the map-change key of an NPC a script's destroy (68) took out of the world (value 1). The original sets object
     /// flag 0x1 (TD2); a destroyed NPC is neither drawn nor in the object lists, and the view no longer reaches it (<see cref="Destroyed"/>).</summary>
-    public const string DestroyedProperty = "obj.destroyed";
+    public const string DestroyedProperty = GameSessionOwner.ObjectDestroyedProperty;
     private const int NpcType = 16, DestroyedObjectFlag = 0x1, OffObjectFlag = 0x2;
     private const string ScriptPart = "script", LocalFlagsPart = "lf", CountersPart = "counters";
 
@@ -158,7 +159,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
                 ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation,
                 ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.CreateObject, ScrCatalogue.Action.GetStat,
-                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade]),
+                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, .. ScrAdmissionSet.NpcStateHostActions]),
         ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]),
         counterIndexWraps: true);
@@ -205,7 +206,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
             ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
-            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, .. ScrAdmissionSet.StoryActions, .. CastActions, .. DamageActions]),
+            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. CastActions, .. DamageActions]),
         ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]));
 
@@ -227,6 +228,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         return session.QueryMapChange(new SessionMapId(row.Key.RuntimeMap), MapChangeKey.ForEntity(EntityId(row), FactionProperty)) is { } set
             ? unchecked((int)set) : loaded;
     }
+
+    /// <summary>ARC-SCRIPT-1163 (NS3): the standpoint of the NPC <paramref name="entity"/> now: the location a script's set day or night standpoint wrote (<see cref="SessionNpcStandpoint"/>), else null (the map data's stands).</summary>
+    public static AreaRouteLocation? Standpoint(GameSessionOwner session, int map, string entity, bool day) =>
+        (session ?? throw new ArgumentNullException(nameof(session))).QueryObjectChange(new SessionMapId(map), SessionNpcStandpoint.Key(entity, day)) is { } set ? AreaRouteLocation.FromNumber(set) : null;
 
     /// <summary>ARC-WORLD-081: the label of a script's random draws on the session's generator.</summary>
     public const string RandomLabel = "scr.random";
@@ -1170,7 +1175,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         // attachment array), leaves the run unapplied, checked before anything applies.
         if (effects.SlotWrites.FirstOrDefault(w => w.Source != ScrSource.Object || !KeptAsMapChanges(w.Point) || w.Attachee is not { } owner
             || Row(owner) is not { } held || LoadedOrPlaced(held, owner.Code, w.Point) is null) is { } unkept)
-            return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: the point {unkept.Point} slot of {unkept.Attachee?.Code ?? "no object"} a callee changed is not kept (no loaded element)");
+            return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: the point {unkept.Point} slot of {unkept.Attachee?.Code ?? "no object"} a callee or a change script wrote is not kept (no loaded element)");
         if (!Apply(effects, write)) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects");
         _floats.AddRange(floats);
         var teleport = effects.Teleports.FirstOrDefault();
@@ -1327,6 +1332,36 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
                     LastWalk = _world!.ScriptWalk!(request.Object.Code, new CellCoord(request.Value, request.Value2), request.Change == ScrObjectStateChange.RunTo);
                 continue;
             }
+            if (request.Change == ScrObjectStateChange.Disband)
+            {
+                // NS1: a follower or waiting NPC of the PC is let go (the session's leave with the follow check skipped); a free object, the PC and any object that is no party member do nothing. The AI host sees the leave on its next tick.
+                if (IsPc(request.Object)) continue;
+                var left = _session.LeaveParty(_session.Version, request.Object.Code, new PartyLeave(Force: true));
+                if (left.Disposition == GameSessionDisposition.Rejected && left.Failure != GameSessionFailure.InvalidCompanion) return false;
+                continue;
+            }
+            if (request.Change is ScrObjectStateChange.SetReaction or ScrObjectStateChange.AdjustReaction)
+            {
+                // NS2: the NPC of the shown map toward the PC only; any other pair is left as it is (the original acts for an NPC and a PC only, and this viewer's facts are the shown map's).
+                if (ShownNpc(request.Object) && request.Other is { } who && IsPc(who))
+                    LastReaction = _world!.ScriptReaction!(request.Object.Code, request.Value, request.Change == ScrObjectStateChange.SetReaction);
+                continue;
+            }
+            if (request.Change is ScrObjectStateChange.SetDayStandpoint or ScrObjectStateChange.SetNightStandpoint)
+            {
+                // NS3: an NPC (type 16) of the shown map takes the location as its standpoint (the record is kept even when it equals the row's); any other object is left as it is. The extended actions also write the teleport map.
+                if (!ShownNpc(request.Object)) continue;
+                var day = request.Change == ScrObjectStateChange.SetDayStandpoint;
+                var packed = SessionNpcStandpoint.Pack(unchecked((uint)request.Value), unchecked((uint)request.Value2));
+                var set = _session.SetMapChange(_session.Version, new SessionMapId(request.Object.Map), SessionNpcStandpoint.Key(request.Object.Code, day), packed);
+                if (set.Disposition == GameSessionDisposition.Rejected) return false;
+                if (request.Map is { } catalogueMap)
+                {
+                    var teleport = _session.SetTeleportMap(_session.Version, request.Object.Code, new SessionMapId(unchecked(catalogueMap - 4999)));
+                    if (teleport.Disposition == GameSessionDisposition.Rejected) return false;
+                }
+                continue;
+            }
             if (request.Change == ScrObjectStateChange.SetFaction)
             {
                 // HW4: an NPC only (ObjectStateRefusal checked the map); a faction equal to its map data's clears the key.
@@ -1369,6 +1404,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
 
     /// <summary>ARC-DEV-236: what the AI host answered to the last become prone a run applied (smoke and test seam; null before any).</summary>
     public string? LastProne { get; private set; }
+
+    /// <summary>ARC-SCRIPT-1163 (NS2): what the AI host answered for the last reaction change a run applied (null: none yet).</summary>
+    public string? LastReaction { get; private set; }
 
     // ARC-DEV-233: an NPC of the shown map, the only target the goal-starting actions (62, 69, 74, 76) are applied to; the PC, another map's object and a non-NPC are left as they are.
     private bool ShownNpc(ScrObjectRef obj) => obj.Map == _shownMap && !IsPc(obj) && Row(obj) is { Type: NpcType };
@@ -1494,6 +1532,22 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
                 if (_world?.ScriptWalk is null) return $"{walkName} needs the AI host";
                 continue;
             }
+            // ARC-SCRIPT-1163 (E5-a, NS1–NS3): disband acts through the session's party and needs nothing of the viewer; the reactions need the AI host's facts of an NPC of the shown map; the standpoints are written for an NPC of the shown
+            // map (any other object does nothing, as in the original); change art number has no host yet.
+            if (request.Change == ScrObjectStateChange.Disband) continue;
+            if (request.Change is ScrObjectStateChange.SetReaction or ScrObjectStateChange.AdjustReaction)
+            {
+                if (_world?.ScriptReaction is null) return "a reaction change needs the AI host";
+                continue;
+            }
+            if (request.Change is ScrObjectStateChange.SetDayStandpoint or ScrObjectStateChange.SetNightStandpoint)
+            {
+                // The extended actions' teleport map is the catalogue map less 4,999; the session holds maps from 1 (the original stores any value), so a lower one is left unapplied before anything applies.
+                if (ShownNpc(request.Object) && request.Map is { } catalogueMap && unchecked(catalogueMap - 4999) < 1)
+                    return $"set standpoint of {request.Object.Code} names the map {catalogueMap}, which the session cannot keep as a teleport map";
+                continue;
+            }
+            if (request.Change == ScrObjectStateChange.ChangeArtNumber) return "change art number is not modelled (no per-object art overlay)";
             // ARC-SCRIPT-049 (HW4): set faction changes an NPC and leaves any other object as it is; an NPC of another map is not kept.
             if (request.Change == ScrObjectStateChange.SetFaction)
             {

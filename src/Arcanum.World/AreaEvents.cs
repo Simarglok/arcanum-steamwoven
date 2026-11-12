@@ -2,6 +2,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
+using Arcanum.Simulation.Movement;
 using Arcanum.Simulation;
 
 namespace Arcanum.World;
@@ -16,7 +17,7 @@ namespace Arcanum.World;
 /// diagnostic NPC facts, and the hero's or the diagnostic PC's facts); without a conversation host it has none. ARC-WORLD-096: a
 /// restock event runs through the viewer's restock host (<see cref="AreaRestockHost"/>); without one it waits a minute.
 /// </summary>
-public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, ISessionAiWorld, ISessionRestockWorld
+public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, ISessionAiWorld, ISessionRestockWorld, ISessionBodyWorld
 {
     private readonly Func<IAreaEventObjects?> _combat;
     private readonly Func<AreaConversationHost?> _talk;
@@ -46,6 +47,9 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
     }
 
     public bool LootWindowShowsContainer => _lootShowsContainer?.Invoke() == true;
+
+    /// <summary>ARC-WORLD-1158: where a critter's body lies now, from the shown map's AI host (null without one, or for a critter it does not hold).</summary>
+    public CellCoord? BodyCell(SessionMapId map, string entity) => (_ai?.Invoke() as ISessionBodyWorld)?.BodyCell(map, entity);
 
     // ---- ARC-WORLD-096: the restock event's host, forwarded to the viewer's restock host ----
 

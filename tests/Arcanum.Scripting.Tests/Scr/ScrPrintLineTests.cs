@@ -57,7 +57,7 @@ public sealed class ScrPrintLineTests
         var call = ScrDispatcher.RunCall(new(1341, 0, Pc, Item), host, S6);
         CollectionAssert.AreEqual(new[] { new ScrPrintLine(1341, 1, 6), new ScrPrintLine(1341, 3, 2) }, call.Effects.Lines.ToArray());
 
-        var wider = new ScrAdmissionSet("wider", ScrAdmissionSet.S6.Conditions, ScrAdmissionSet.S6.Actions.Append(CritterDisband),
+        var wider = new ScrAdmissionSet("wider", ScrAdmissionSet.S6.Conditions, ScrAdmissionSet.S6.Actions.Append(UnsupportedAction),
             ScrAdmissionSet.S6.ValueKinds, ScrAdmissionSet.S6.FocusKinds);
         Assert.ThrowsExactly<ArgumentException>(() => ScrDispatcher.RunObject(new(InsertItem, Item, Pc, null), host, new() { Admission = wider }));
         Assert.IsTrue(ScrAdmissionSet.S5.IsSubsetOf(ScrAdmissionSet.S6));

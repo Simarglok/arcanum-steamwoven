@@ -810,8 +810,23 @@ The hero's melee swings and shots now fire the combat events of the worn items (
 
 Known differences (documented, not bugs):
 
-- An NPC's own worn items still fire nothing when it attacks (no trigger host on the NPC attack path yet).
+- An NPC's own worn items fire when it attacks since ARC-MAGIC-1188 (below).
 - A chain of item spells answers once per item (owner decision 2026-10-28, MG46), where the original repeats until the target dies.
+
+## ARC-MAGIC-1188 — Item spells of an NPC's attack (2026-11-12)
+
+Worn items of an NPC that attacks now fire their combat events, as the hero's do (the same rule in the original executable, 0x4B4390 serves any attacker). The one installed case you can see: armour 8215 (record 87) answers a hit when worn by an NPC or by you. Compare in both games.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Let an NPC that wears armour 8215 (or other armour with a hit spell) be hit by a hostile NPC (a companion fighting an enemy). | The wearer's armour spell starts on each hit that lands, as for you wearing it; a miss starts nothing. | open |
+| 2 | Let an NPC that wields or wears a combat-event item (a weapon or armour with an "attacks"/"damages" spell) hit you or another NPC. | The item's spell starts on each hit that lands, aimed as the original's executor aims it; a missed swing starts nothing. | open |
+| 3 | Watch a bow or firearms shot of an NPC that wears such an item. | The events come when the arrow strikes, not when it leaves the bow. | open |
+
+Known differences (documented, not bugs):
+
+- A critical self-hit of the attacker (a critical miss that hurts the NPC itself) starts none of these events; its life events are the caller's and not built for NPCs yet.
+- The attacker's weapon that a thrown-item attack throws is not among its worn items when the events fire (the thrown item is the context weapon).
 
 ## ARC-MAGIC-045 — Shield hit eye candy and the draw of translucent, shrunk and hidden critters (2026-11-11)
 
@@ -855,6 +870,23 @@ Known differences (documented, not bugs):
 - The original's weighted lists overrun their table on a draw of 100 (MG9); Steamwoven fixes it in both modes (technical bug rule).
 - Familiar (74): its own flags (`OSF_FAMILIAR`, `ONF_FAMILIAR`) and its hiding with the party on the world map are MA-1's and the world map's.
 
+## ARC-WORLD-1158 — Body decay of dead creatures (E2-b, 2026-11-12)
+
+The rules are in the [ledger BD1–BD7](../research/ledger/npc-ai.md#body-decay-built-arc-world-1158) (the executable's PO10). Compare in both games with a creature you kill and then leave lying: wait or sleep one game day (the game bar's wait, key S) near the body.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Kill a creature that carries an item or two (a map NPC, then a creature a generator made) and stay on the map. Pass 23 hours, look at the body; then pass another 2 hours. | The body lies there the first 23 hours and is gone a game day after the death (the Decay Dead Bodies event). | open |
+| 2 | Look at the spot after the body is gone. | The creature's items lie on its tile (in a junk pile when two or more) and disappear two game days later as any dropped item; an item the data marks "not droppable" is gone with the body. | open |
+| 3 | Kill a creature, leave the map for more than a day, come back. | The body is gone on return (the event runs late once its map is the shown one). | open |
+| 4 | Kill a creature of a generator and wait for its body to go. | The generator does not make a replacement because of the decay: only a generator whose live count the death released ticks again (PO7, PO11); the made-so-far count is never given back. | open |
+
+Known differences (documented, not bugs):
+
+- The hero's own death queues no decay event here (the game is over); the original queues one for a PC too.
+- The items of a dead follower that died away from its home map stay with the destroyed critter (a seed other than the body's map is not read).
+- Whether any installed creature carries the "no decay" critter flag (0x40 of critter flags 2) is read from the data when each creature is built: such a body is never removed, as in the original.
+
 ## ARC-INPUT-1123 — Lockpicks need 4 action points to start (2026-11-12)
 
 The rule is in [interface modes](../architecture/interface-modes.md#action-points-at-the-start-of-a-target-mode-arc-input-1123). Compare it in both games in a turn-based fight (turn-based on, combat mode, a fight with a creature near) with a hero that carries lockpicks.
@@ -873,3 +905,22 @@ The rule is in [First gold pile](../world/inventory-runtime.md). Compare in both
 | --- | --- | --- | --- |
 | 1 | Fill the whole inventory grid, hold no gold, then receive coins (a dialog reward, selling an item, a successful steal). | The coins do not reach the hero: a pile of coins lies on the hero's tile and the call reports success. | open |
 | 2 | Pick the pile up with the grid still full. | The pickup is refused and the pile stays on the ground; with a free place the coins join the hero's gold. | open |
+
+## ARC-SCRIPT-1163 — NPC state script actions (E5-a, 2026-11-12)
+
+Script actions that change an NPC's own state now run from use, tile, sector, heartbeat and dying scripts ([ledger NS1–NS8](../research/ledger/scripts.md#npc-state-commands-arc-script-1163-e5-a),
+[dispatcher](../scripting/scr-dispatcher-runtime.md#npc-state-commands-arc-script-1163-set-s36)). No installed map is named below because the check that lists the admitted scripts is by script number, not by map; use a
+companion, a shopkeeper and a guard in any town where a quest script touches them, and compare the same quest step in both games.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Make a script release a companion (quest steps that end a companion's service: critter disband). | The companion stops following at once, leaves the party list and keeps standing where it is; it does not say anything. | open |
+| 2 | Reach a quest step that sets or adjusts an NPC's reaction toward the hero, then talk to it. | Its reaction category in the conversation (and the barter prices) match the original after the step; an NPC the hero mind-controls does not change. | open |
+| 3 | Reach a quest step that moves an NPC's day or night standpoint, then wait until the matching time of day (and, for the two extended standpoints, change map). | After the step the NPC goes to the new standpoint at the next day or night change, not the old one. | open |
+| 4 | Reach a quest step that changes the script of an NPC or scenery (change script), then use or talk to it again. | The object runs the new script from then on, with its local flags and counters kept. | open |
+
+Known differences (documented, not bugs):
+
+- Change art number (a door, scenery or creature changing its picture from a script) is not built: scripts that use it are still refused, so those quest steps do nothing in Steamwoven.
+- A script in a dialog (a talk) that uses one of these actions is still refused; only use, tile, sector, heartbeat and dying scripts run them.
+- A reaction or standpoint change acts for NPCs of the map on screen only.

@@ -57,6 +57,7 @@ public sealed partial class GameSessionOwner : IDisposable
     private List<SessionWaitFiring>? _passWaits;
     private List<SessionRespawnFiring>? _passRespawns;
     private List<SessionDecayFiring>? _passDecays;
+    private List<SessionBodyDecayFiring>? _passBodyDecays;
     private List<SessionAiTickFiring>? _passAiTicks;
     private List<SessionRestockFiring>? _passRestocks;
     private List<SessionTrapDeviceFiring>? _passTrapDevices;
@@ -1454,6 +1455,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var respawns = new List<SessionRespawnFiring>();
         var spellRuns = new List<SessionSpellRunFiring>();
         var decays = new List<SessionDecayFiring>();
+        var bodyDecays = new List<SessionBodyDecayFiring>();
         var aiTicks = new List<SessionAiTickFiring>();
         var restocks = new List<SessionRestockFiring>();
         var trapDevices = new List<SessionTrapDeviceFiring>();
@@ -1464,6 +1466,7 @@ public sealed partial class GameSessionOwner : IDisposable
         // ARC-DEV-132: a run whose step went missing (a host that threw, a step carried off the active map) is killed before the pass, so no run is left without one.
         var goalsReconciled = ReconcileGoalSteps();
         _passDecays = decays;
+        _passBodyDecays = bodyDecays;
         _passAiTicks = aiTicks;
         _passRestocks = restocks;
         _passTrapDevices = trapDevices;
@@ -1518,6 +1521,7 @@ public sealed partial class GameSessionOwner : IDisposable
             _passRespawns = null;
             _passSpellRuns = null;
             _passDecays = null;
+            _passBodyDecays = null;
             _passAiTicks = null;
             _passRestocks = null;
             _passTrapDevices = null;
@@ -1529,7 +1533,7 @@ public sealed partial class GameSessionOwner : IDisposable
         return new(pass.Failure == GameEventFailure.None ? GameSessionFailure.None : GameSessionFailure.InvalidEventPass, pass,
             firings.AsReadOnly(), new(_identity, _revision)) { ScriptCalls = calls.AsReadOnly(), Effects = effects.AsReadOnly(),
             Locks = locks.AsReadOnly(), Waits = waits.AsReadOnly(), Respawns = respawns.AsReadOnly(), SpellRuns = spellRuns.AsReadOnly(),
-            Decays = decays.AsReadOnly(), AiTicks = aiTicks.AsReadOnly(), Restocks = restocks.AsReadOnly(), TrapDevices = trapDevices.AsReadOnly(), RealSteps = realSteps.AsReadOnly(), GoalSteps = goalSteps.AsReadOnly(), GoalsReconciled = goalsReconciled,
+            Decays = decays.AsReadOnly(), BodyDecays = bodyDecays.AsReadOnly(), AiTicks = aiTicks.AsReadOnly(), Restocks = restocks.AsReadOnly(), TrapDevices = trapDevices.AsReadOnly(), RealSteps = realSteps.AsReadOnly(), GoalSteps = goalSteps.AsReadOnly(), GoalsReconciled = goalsReconciled,
             DeferredFoldTicks = foldTicks, DeferredFoldTicksRefused = foldTicksRefused };
     }
 
@@ -2572,6 +2576,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (npcDied) FocusOnKiller(target.Entity!, killedBy);
         // ARC-WORLD-1157 (PO7): a critter a generator made releases its slot's live count (0x4BAB30 from the death, after the party-leave helpers).
         if (npcDied) ReleaseGeneratorSlot(target.Entity!);
+        // ARC-WORLD-1158 (PO10, 0x45EBE0): the death queues the body's Decay Dead Bodies event one game day on, on the NPC's map.
+        if (npcDied) ScheduleBodyDecay(target.Entity!, map, now, facts!);
         Revise();
         if (npcDied && KillNotice is { } notice)
         {
@@ -2616,7 +2622,7 @@ public sealed partial class GameSessionOwner : IDisposable
     private int[] StrayMaps(string entity, int map)
     {
         var maps = new SortedSet<int>();
-        foreach (var kind in NpcKinds.Append(SessionEventKinds.PartyWait))
+        foreach (var kind in NpcKinds.Append(SessionEventKinds.PartyWait).Append(SessionEventKinds.BodyDecay))
             _events.Any(kind, e =>
             {
                 var at = e.Payload.Entities[0];
@@ -2779,6 +2785,18 @@ public sealed partial class GameSessionOwner : IDisposable
                 converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
                 continue;
             }
+            if (pending.Kind == SessionEventKinds.BodyDecay)
+            {
+                // A Decay Dead Bodies event (ARC-WORLD-1158): one NPC with a life record, set no later than the saved clock, the decay delay or the retry's before its deadline, one per NPC
+                // (the queue's key check), on the one map of the NPC's timers.
+                if (pending.Entities.Length != 1 || pending.Entities[0].Map < 1 || !SessionEventKinds.BodyDecayPayload(new(pending.Entities, pending.Values)) ||
+                    !life.Critters.ContainsKey(pending.Entities[0].Code) || pending.Values[0] > clockMs || pending.DeadlineMs != pending.Values[0] + pending.Values[1] ||
+                    converted.Any(e => e.Kind == SessionEventKinds.BodyDecay && SessionEventKinds.NamesNpc(e, pending.Entities[0].Code)) ||
+                    (!maps.TryAdd(pending.Entities[0].Code, pending.Entities[0].Map) && maps[pending.Entities[0].Code] != pending.Entities[0].Map))
+                    return GameSessionFailure.InvalidEvents;
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
+                continue;
+            }
             if (pending.Kind == SessionEventKinds.TrapDevice)
             {
                 // A trap fuse (ARC-WORLD-124): one entity on a valid map, set no later than the saved clock, the fuse or the retry before its deadline, a spell record, a cell.
@@ -2828,6 +2846,7 @@ public sealed partial class GameSessionOwner : IDisposable
             converted.Count(e => e.Kind == SessionEventKinds.LockReset) > SessionEventKinds.MaxLockResets ||
             converted.Count(e => e.Kind == SessionEventKinds.ObjectRespawn) > SessionEventKinds.MaxObjectRespawns ||
             converted.Count(e => e.Kind == SessionEventKinds.ItemDecay) > SessionEventKinds.MaxItemDecays ||
+            converted.Count(e => e.Kind == SessionEventKinds.BodyDecay) > SessionEventKinds.MaxBodyDecays ||
             converted.Count(e => e.Kind == SessionEventKinds.Restock) > SessionEventKinds.MaxRestocks ||
             converted.Count(e => e.Kind == SessionEventKinds.TrapDevice) > SessionEventKinds.MaxTrapDevices ||
             converted.Count(e => e.Kind == SessionEventKinds.SpellRun) > SessionEventKinds.MaxSpellRunEvents) return GameSessionFailure.EventBudgetExceeded;
