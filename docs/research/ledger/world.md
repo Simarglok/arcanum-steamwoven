@@ -502,7 +502,7 @@ goal on a bed); the hero leaves combat mode before a bed script or an occupied b
 (SWB21); a sleeper who is not in a bed at a standpoint is not woken by the re-seat (SWB17). None changes a mechanic the player would call a bug, so each
 stays as the original until the implementing task (E3-a, E3-d) decides under the [bug rule](../../world/rule-modes.md#what-is-a-mode-difference).
 
-**Steamwoven now (checked 2026-11-12):** no window, no sleep conditions and no bed: the game bar's Sleep button writes that the window is not built, the
+**Steamwoven now (ARC-WORLD-1160, 2026-11-12):** the window, the conditions and the steps of SWB1 to SWB13 are built without the bed and the random encounter ([contract](../../world/sleep-window-runtime.md)); the rest of this paragraph is the state when it was read (2026-11-12): no window, no sleep conditions and no bed: the game bar's Sleep button writes that the window is not built, the
 palette has an explicit "+1 hour" wait (`LifeRules.RestHeal`, `LifeRules.RestingHours`, the session Timers' NPC rest timer cover SWB10 and SWB19 as rules);
 `NpcRouteRules` stops at the bed, the sleep and the wander of the standpoint step (SWB21) and the re-seat (SWB17, SWB18); no kind 15 event, no overlay, no
 event 29 and no random-encounter event. The follow-ups carry these rows: the sleep window and rest action [#1160](https://github.com/Simarglok/arcanum-steamwoven/issues/1160)

@@ -325,10 +325,10 @@ public partial class TerrainViewerApp
             else Require(!_gameBar.IsOn(AreaBarButton.Spells) && _gameBarNotice is not null, "Spells refused off a cast map: " + _gameBarNotice);
             var topStrip = panel.StripRectForSelfTest(AreaBarStrip.Top);
             var outsideTopButtons = topStrip.Position + new Vector2(720, 20) * panel.Factor;
-            foreach (var (button, notice) in new[]
+            foreach (var (button, notice) in new (AreaBarButton, string?)[]
             {
                 (AreaBarButton.FatePoints, "fate points: the window is not built"),
-                (AreaBarButton.Sleep, "sleep: the window is not built"),
+                (AreaBarButton.Sleep, null), // ARC-WORLD-1160: the button toggles the sleep window (a notice only without a session hero)
             })
             {
                 var spec = AreaGameBarLayout.Spec(button);
@@ -351,10 +351,12 @@ public partial class TerrainViewerApp
                 var hoverPixels = ButtonPixels(rect);
                 var soundsBefore = _gameBarSoundsForSelfTest.Count;
                 var previousNotice = _gameBarNotice;
+                var sleepWas = SleepOpen;
+                bool Acted(bool opened) => notice is not null ? _gameBarNotice == notice : SleepOpen == (opened ? !sleepWas : sleepWas);
                 SendButton(at, true);
                 Require(_gameBar.Held == button && _gameBarNotice == previousNotice, $"{button} press only holds the button");
                 SendButton(at, false);
-                Require(_gameBar.Held is null && _gameBarNotice == notice, $"{button} release acts immediately");
+                Require(_gameBar.Held is null && Acted(true), $"{button} release acts immediately");
                 await Frames(1);
                 var firstFrame = panel.FrameForSelfTest(button);
                 Require(firstFrame == 1, $"{button} first draw after quick click is Down, got {firstFrame}");
@@ -370,7 +372,7 @@ public partial class TerrainViewerApp
                 Require(TextureSource() == downSource && ButtonPixels(rect).AsSpan().SequenceEqual(downPixels),
                     $"{button} quick Down matches held Down in the viewport");
                 await Button(at, false);
-                Require(_gameBar.Held is null && _gameBarNotice == notice && panel.FrameForSelfTest(button) == hoverFrame,
+                Require(_gameBar.Held is null && Acted(notice is not null) && panel.FrameForSelfTest(button) == hoverFrame,
                     $"{button} held release acts and shows Hover");
 
                 await Button(at, true);
