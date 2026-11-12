@@ -764,8 +764,34 @@ installed `art\interface` files. One reader (F1); every direct branch stays insi
 
 **F0 facts raised:** the spell pane of [FR-MAGIC-012](../../requirements/combat-magic-tech.md#fr-magic-012) and
 [FR-UI-002](../../requirements/ui-media-lifecycle.md#fr-ui-002) (0x551210 case 1, 0x550BD0, 0x550C60, 0x54BE1F, 0x54BAF5, 0x550860: F1,
-implemented). Left at F0: whether hiding a button resets its state (the button library, 0x538840), the skills pane (0x551210 case 2,
-records 0x5C6C68), the weapon's pane on the strip (case 8, 0x551660) and the compact interface's pane.
+implemented). Left at F0: whether hiding a button resets its state (the button library, 0x538840), the weapon's pane on the strip
+(case 8, 0x551660) and the compact interface's pane. The skills pane (0x551210 case 2, records 0x5C6C68) is read below
+([Skill pane](#skill-pane-arc-ui-1113)).
+
+## Skill pane (ARC-UI-1113)
+
+Source: the [spell cast host](../../world/spell-cast-host.md#the-skill-pane-in-the-bottom-strip-arc-ui-1113); issue #1113 (the Skills
+button of the bar only said "not built"). Read on 2026-11-12 by this task in the exports of `research-private/ghidra-export` (the decompiled C
+and the listing of the in-game handler): the mode build 0x551210 (case 2) and its leave 0x5504F0, the background draw 0x5503F0 (table 0x5C6548),
+the interface's button init 0x5501C0 (the skill records 0x5C6C68, the button creator 0x54AAE0 → 0x54AA60), the skill bar's tables 0x579F50
+(0x5CB220), 0x57A6A0 (0x5CB240) and 0x57A700 (names loaded at 0x579ED5 from `mes\skill_ui.mes` 100 + button), the in-game handler 0x54B5D0 (its
+enter branch, release branch 0x54BB9x with the call at 0x54BBED, move branch and key branch 0x54C3xx), the Spells/Skills toggle 0x54DBF0, the
+mode request 0x5506C0, the hover 0x5508C0 and name draw 0x5509C0 (text areas 0x5C6D60), the drag start 0x57E5D0 with its hit test 0x557B60.
+The activation 0x579FA0 → 0x57A0A0 is the hotkey bar's type-2 path ([IP7](#hotkey-bar-arc-ui-022), [ST1](skills.md#stealth-arc-skills-008)), already built. One reader
+(F1); every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| SKP1 | mode build (0x551210 case 2, 0x5503F0, table 0x5C6548, 0x579F50, table 0x5CB220) | Bar mode 2 first draws its background, art 274, at (196, 492) like every mode (SPN1), then shows the skill bar's four buttons, one for each index 0..3 whose art (0x579F50, table 0x5CB220: 279 prowling, 280 pick pocket, 282 disarm traps, 278 repair; an index outside 0..3 answers the first) is not −1. Nothing else: no text, no button state set. The mode's leave hides the same four. | Original |
+| SKP2 | button records (0x5501C0, 0x54AAE0 → 0x54AA60; records 0x5C6C68, handle slot +0xC at 0x5C6C74) | The interface's init gives each skill button its art (0x579F50) and creates it as one of the bar's push buttons (sounds 3000 and 3001 and none for the pointer entering or leaving, GB6) at the record's place: x 288, 351, 414 and 477 (63 apart), y 514, all four on one row; its hit rectangle is the art's own size. The buttons are hidden outside bar mode 2. | Original |
+| SKP3 | release (0x54B5D0 release branch, the calls 0x54BBDD → 0x57EFA0 and 0x54BBED → 0x579FA0) | There is no press branch for mode 2: the press only plays 3000 (GB3). A release over button *i* records the skill-bar button as the latest recent action (0x57EFA0 with type 2 and index *i*, HK2) and then calls 0x579FA0 with the PC and *i* (the third argument is the index pushed at 0x54BBE5 and left on the stack under the PC's handle). | Original |
+| SKP4 | activation (0x579FA0 → 0x57A0A0) | The call is the one the hotkey bar's type-2 entry makes (IP7): nothing for a PC (or a target critter) that is dead or unconscious; button 0 toggles concealment, 1 and 2 close a pending skill cursor and open one with the table's target mask (a critter for pick pocket, an object or a tile for disarm traps), 3 opens the inventory for repair; a pane press has no other side. | Original |
+| SKP5 | enter (0x54B5D0 enter branch → 0x5508C0, 0x57A700, 0x5509C0; text areas 0x5C6D60 + 20 × mode) | In mode 2 the pointer entering button *i* writes `skill_ui.mes` 100 + *i* (0x57A700) centred in the mode's text area (208, 567, 387 × 18). In the message mode the same enter posts the type-7 hint (HK20) instead. Leaving changes nothing in mode 2 (0x550720 acts in mode 0 only). | Original |
+| SKP6 | key and window (0x54B5D0 key branch: scancode 0x25 → 0x54DBF0 with 0 and 2, 0x5506C0, ML8; toggle handles 0x5C648C Skills and 0x5C649C Spells) | The release of K (scancode 0x25, unless the main menu is up, 0x541680) toggles the Skills button as a press on it does, without its sound: when it is down it goes up and the mode returns to 0; otherwise the Spells toggle is set up, the Skills toggle down and mode 2 requested; a request for the mode already shown returns to mode 0 (SPN1). Mode 2 holds the message window like mode 1 does (ML8): a move above the strip (y below 441) requests mode 0, a move back over it mode 2 while the Skills toggle is down. | Original |
+| SKP7 | drag start (0x57E5D0, hit test 0x557B60) | With no item held and no drag going on, a right press on a skill button in mode 2 (0x557B60 answers its index, 4 for none; it answers 4 outside mode 2) starts the hotkey drag of a type-2 entry with that index, after the bar's own entries and the spell pane's slots have been tried (HK15); the icon is the button's art 0x579F70. | Original |
+
+**F0 facts raised:** the skills pane of [FR-UI-002](../../requirements/ui-media-lifecycle.md#fr-ui-002) (0x551210 case 2, 0x54B5D0's
+mode-2 branches, 0x5508C0, 0x557B60: F1, implemented). Left at F0: the buttons' lit art the original sets from game events (0x556A90, GB).
 
 ## Spell destroy component (ARC-DEV-259)
 

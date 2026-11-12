@@ -337,15 +337,17 @@ carries out the activations with the session and the cast host.
 4. **The activation** (0x54FCF0, `PcCanActivate`, `PlanItem`, `PlanItemSpell`, `SpellActivates` for 0x57C080; HK1, HK3, HK4).
    Nothing for a dead or unconscious hero. A spell is activated as a press of the spell pane is (SU1–SU3). An item-and-spell entry
    activates the spell with the item as its source when the item is the wielded weapon; any other item is first wielded into the weapon
-   slot (which empties the entry, HK6). A skill-bar button: prowling toggles the concealment (ST1); repair opens the inventory window,
+   slot (which empties the entry, HK6). A skill-bar button (`ActivateSkillButton`, also the skill pane's press, [ARC-UI-1113](#the-skill-pane-in-the-bottom-strip-arc-ui-1113)):
+   prowling toggles the concealment (ST1); pick pocket arms the pick pocket cursor ([ARC-SKILLS-010](pick-pocket-runtime.md), needs the map's AI host);
+   disarm traps arms the disarm cursor ([ARC-SKILLS-1156](trap-state-runtime.md)); repair opens the inventory window,
    whose Repair buttons stand in for the item cursor (RP4). An item entry acts on another item of its prototype first (0x462930,
    `QueryHotkeySameKind`), except a written item that keeps its text: it is used when it can be used and is not thrown, else a weapon or
    armour is worn into its slot (0x550000; the entry's own item, the occupant goes back to the pack), ammunition and gold do nothing and
    any other item is held on the cursor.
 
 The bar's art and its drag and drop are [ARC-UI-027](#the-hotkey-bars-art-and-drag-arc-ui-027); the viewer keeps stand-in keys:
-`Ctrl`+`1`..`0` puts the latest recent action on that entry (the way to put a skill-bar button on the bar while the viewer draws no skill
-bar; the original drags from the bars, not from the recent-action buttons, HK13), `Ctrl`+`Shift`+`1`..`0` empties it, a key `1`..`0` while the inventory window holds an item drops it on the entry, the
+`Ctrl`+`1`..`0` puts the latest recent action on that entry (a stand-in; the original drags from the bars, not from the recent-action buttons, HK13, and since ARC-UI-1113 a right drag
+from the skill pane's button puts a skill-bar button on the bar), `Ctrl`+`Shift`+`1`..`0` empties it, a key `1`..`0` while the inventory window holds an item drops it on the entry, the
 palette's Prowl action is the skill bar's prowling button, and the status line lists the entries. The cast smoke checks the latest recent
 action after its pane presses, `Ctrl`+`1`, the keys `1` and `A` (each opens the spell's cursor), `Ctrl`+`Shift`+`1` and an empty key, and
 the weapon's spell on entry 1 opening the weapon's cursor; marker `ARC-UI-022 native-smoke hotkeys PASS`.
@@ -373,7 +375,7 @@ The bar is drawn on the bottom strip of the [interface bars](../rendering/terrai
    dragged entry is emptied and anything else ends with no change; ARC-UI-087: an item entry's item stays on the game cursor then (HK15, 0x573630),
    thrown from there by a left press in the game view ([terrain viewer](../rendering/terrain-viewer.md#inventory-throw-from-the-game-cursor-arc-ui-063)). A left release goes on with the drag. While an entry is dragged its key skips it and the stand-in keys leave it alone.
 
-The viewer draws no skill bar, so a skill-bar button reaches the bar through `Ctrl`+`1`..`0` only. The cast smoke checks the bar after the
+A skill-bar button reaches the bar by a right drag from the skill pane (ARC-UI-1113) or through `Ctrl`+`1`..`0`. The cast smoke checks the bar after the
 hotkey keys: the slot art, a right drag of the pane's spell onto slot 2 and its icon, its key 3 skipping it while it is dragged and a drop on its own slot, a click on slot 2 opening the spell's cursor, a drag
 from slot 2 to slot 6 and one off the bar, an item entry's name and count, and the latest recent action's button (icon, click, sounds);
 marker `ARC-UI-027 native-smoke hotkey-bar PASS`.
@@ -499,6 +501,37 @@ which buttons show, `AreaSpellBarView` draws it and `TerrainViewerSpellBar.cs` w
    rank in; a click on the spell's college selects it (drawn down, 3000 and 3001) and shows its spells with their icons; entering the
    spell's icon names it; a click on it activates it and makes it the latest recent action; the pointer above the strip hides the pane
    (marker `ARC-UI-053 native-smoke spell-pane PASS`). The drag onto slot 2 starts from the strip's icon.
+
+## The skill pane in the bottom strip (ARC-UI-1113)
+
+While the interface bars show, the skill pane (`K` or the Skills button) is the original's bar mode 2 in the bottom strip's message window
+(ledger [SKP1–SKP7](../research/ledger/spell-runs.md#skill-pane-arc-ui-1113)); `SkillPaneRules` (Presentation) holds the layout,
+`AreaSkillBarView` draws it and `TerrainViewerSkillBar.cs` wires it (the key `K` through `RouteSkillKey`).
+
+1. **Look** (SKP1, SKP2). The mode's background art 274 at (196, 492), like the spell pane's, and the skill bar's four buttons on one row
+   at y 514, x 288, 351, 414 and 477, each with the hotkey bar's skill icon (art 279 prowling, 280 pick pocket, 282 disarm traps, 278
+   repair; their frames are the bar's push button frames: down while held over the button, lit under the pointer). A hover's name is
+   written over the background in the mode's text area (208, 567, 387 × 18). A button whose art does not read is not shown.
+2. **Presses** (SKP3, SKP4). Each button plays 3000 on the press and 3001 on the release over it. The release makes the skill-bar button the
+   latest recent action (the hotkey bar's `A` key and recent-action buttons) and then runs the press the hotkey bar's skill entries run
+   (`TerrainViewerApp.ActivateSkillButton`): prowling toggles the hero's concealment, pick pocket and disarm traps arm the skill cursor
+   (interface mode 2, each replacing the other; the next left press on an NPC or a trapped object runs the skill), repair opens the
+   inventory window. A hero who is dead or unconscious does nothing (the recent action is still recorded, as in the original).
+3. **Drag** (SKP7). A right press on a button starts the hotkey drag of a skill-bar entry; a release over a slot of the hotkey bar puts it there.
+4. **Names** (SKP5). The pointer entering a button writes its name (`skill_ui.mes` 100 + button) in the mode's text area; leaving keeps it.
+5. **Key and window** (SKP6). `K`, acting on its release, toggles the Skills button without its sound; Spells goes up when Skills comes
+   down and the other way round (the M key and the Spells button take the window from the skill pane). As with the spell pane, the pane
+   shows only while it holds the message window: the pointer above the strip gives the window to the log, a move back over the strip
+   gives it back (ML8); the toggle stays down meanwhile.
+6. **Not built.** The buttons' lit art the original sets from game events (0x556A90); the follower who acts instead of the hero for
+   pick pocket or disarm traps (0x57A620, E8-e5); no walk to the target before the skill runs (the original's press builds the invocation at once).
+7. **Smoke.** Inside the hotkey-bar smoke (cast stage): `K` shows the pane in the strip (Skills down, Spells up) with its background and the
+   four buttons' arts; entering each button names it; a click on each plays 3000 and 3001, becomes the latest recent action and runs the
+   button's press (prowling toggles concealment, pick pocket and disarm traps arm their cursor or say why not, repair opens the inventory);
+   a right drag from disarm traps puts it on slot 5; the Spells pane takes the window back; the pointer above the strip gives it to the log
+   (marker `ARC-UI-1113 native-smoke skill-pane PASS`). The `disarm` stage checks the pick pocket button arms the pick pocket cursor over
+   an AI host. `ARC_AREA_SKILLPANE_CAPTURE=PREFIX` saves the strip before and after as `PREFIX-before.png`, `-after.png` and `-hover.png` for a
+   graphics report (never committed).
 
 ## Endings of a critter's runs (ARC-DEV-301)
 
@@ -835,7 +868,7 @@ tests `SessionSpellCasterSocialTests`. The five flags the ObjFlag component of M
   the sounds (sound 0, the drop's item sound, SN31), the item use and the cursor hold of an item entry, the pick-pocket and disarm-traps
   buttons, the stunned or paralysed test (critter flags 0x20, 0x40) and the conditions 0x566EF0 and 0x541680 (ARC-UI-022).
 - The spell pane (ARC-UI-053): the selected college in the save, the weapon button at (161, 443) and the weapon's pane (bar mode 8:
-  background 564, five slots at y 542) on the strip, the skills pane (bar mode 2), the compact interface's pane, a spell's icon beyond
+  background 564, five slots at y 542) on the strip, the compact interface's pane, a spell's icon beyond
   spell 79.
 - The hotkey bar (ARC-UI-027, ARC-UI-032, ARC-UI-035): a spell's icon beyond spell 79 (the item window's lines after the name are built
   since ARC-UI-108, [OH12–OH18](../research/ledger/ui-audio.md#hovered-object-arc-ui-057)), the turn-based action-point preview

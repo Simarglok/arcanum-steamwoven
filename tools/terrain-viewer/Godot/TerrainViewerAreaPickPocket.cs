@@ -42,6 +42,14 @@ public partial class TerrainViewerApp
         RefreshAreaStatus();
     }
 
+    /// <summary>ARC-UI-1113: the skill bar's Pick pocket button (the hotkey bar's entry and the skill pane's button, 0x579FA0 → 0x57A0A0 with
+    /// button 1): the same arming as the palette's, whose outcome is the status text it left.</summary>
+    private string ArmPickPocketFromBar()
+    {
+        ArmPickPocket();
+        return PickPocketArmed ? "pick pocket: press an NPC" : _inventoryStatus ?? "pick pocket: not ready";
+    }
+
     // ARC-DEV-184 (MIG13 S12d): a Steal or Plant is the skill goal 33 → 86 of the table; the attempt it asks for waits here for the frame's next safe point.
     private (string Npc, string Item, bool Plant)? _pickPocketPending;
     // A Steal or Plant press whose attempt has not been made yet (the status line says "trying" meanwhile).

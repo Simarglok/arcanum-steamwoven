@@ -50,7 +50,7 @@ Since 2026-11-11 a slice merges without waiting for the owner's in-game comparis
 | Dialog markers `c r t z` (trainers and special replies), `r:`, positive `IN` | **Partial: `t:` built** (ARC-SCRIPT-1150, issue #1150, [ledger DTR1–DTR9](../research/ledger/social.md#trainer-reply-arc-script-1150)); `c`, `r`, `z`, `r:`, positive `IN` stay blocked (`UnsupportedInteraction`) | `DialogConversation.cs`, `DialogConversationTrainer.cs` | The remaining slices of E5-d (issue #1150) | E5 |
 | Spot-trap roll, disarm action, trap script 30002, the hero's step onto a placed marker | **Partial:** traps on maps fire and hurt; placed trap devices are built (E6-b ARC-WORLD-124: timer bombs 15154 and 15193; ARC-WORLD-125: script traps 15100 and 15120 on a portal, a container or a cell; stage `item-aim`); the spot roll logs "not ready", disarm has no viewer action, a device used on a target the rules refuse says "NOT READY" | `TerrainViewerTraps.cs`, `TerrainViewerAreaItemUse.cs` | Read ([ARC-TECHNOLOGY-010](../research/technology-evidence.md), TP1–TP8) | E6 |
 | Movies (Bink), credits, intro, script-queued slides, endings | **Stub / absent** (menu buttons are "Unavailable"; only the death slide exists) | `AreaMainMenu.cs`, `AreaHeroDeath.cs`; no Bink code | Slide table read | E7 |
-| Fate window and Fate Points button; Skill pane; ~~combat action-point readout~~ (built, ARC-UI-1114) | **Stub / absent** ("not built" notices) | `TerrainViewerAreaGameBar.cs:127-129` | UI ledger partly | E8 |
+| Fate window and Fate Points button; ~~Skill pane~~ (built, ARC-UI-1113); ~~combat action-point readout~~ (built, ARC-UI-1114) | **Stub / absent** ("not built" notices) | `TerrainViewerAreaGameBar.cs` | UI ledger partly | E8 |
 | Companions screen and follower menu | **Partly built** (the survey of 2026-11-10 said absent; re-checked 2026-11-12, ARC-RES-1107): the frames, bars and portraits (ARC-UI-020, ARC-UI-024), the order menu with six live rows and the barter follower form with its cycle buttons (ARC-WORLD-046, ARC-DEV-280, ARC-UI-1120); no show/hide button, no scroll arrows past six followers, no portrait click aiming a spell or skill, the menu's Inventory and Character Sheet rows disabled | `AreaFollowerPortraits.cs` | **Read** ([FP1–FP13](../research/ledger/ui-audio.md#follower-panel-and-menu-arc-res-1107)); the hover is #1281 | E8 |
 | Gambling (FR-ITEM-019), identify window, heal another critter | **Stub / absent** | survey | Gambling read (S14) | E8 |
 | Misc sound callers (scenery loops, busting, NPC footsteps, item drop, non-death AI barks) | **Absent** (hero footsteps, pickups, doors, chests, attack and death barks are wired) | no caller of the misc, fidget and drop cue kinds | Sound ledger | E8 |
@@ -183,7 +183,7 @@ FR-CHAR-017, FR-CHAR-019. Skills plan slice **S10**, audit slice K6.
 
 | Slice | Content | Size | Needs |
 | --- | --- | --- | --- |
-| E6-a | Spot-trap roll on every path step and use, the master second roll (**done**, ARC-MAGIC-057); disarm action and the skill-bar button; the expert's device (**done**, ARC-SKILLS-1156, [SP3](../research/ledger/technology.md#spot-trap-roll-arc-magic-057): the skill cursor, 4 action points; the follower substitution and the skill pane's button [#1113](https://github.com/Simarglok/arcanum-steamwoven/issues/1113) are open) | M | — |
+| E6-a | Spot-trap roll on every path step and use, the master second roll (**done**, ARC-MAGIC-057); disarm action and the skill-bar button; the expert's device (**done**, ARC-SKILLS-1156, [SP3](../research/ledger/technology.md#spot-trap-roll-arc-magic-057): the skill cursor, 4 action points; the skill pane's button is **done**, ARC-UI-1113, [#1113](https://github.com/Simarglok/arcanum-steamwoven/issues/1113); the follower substitution is open) | M | — |
 | E6-b | **Built (ARC-WORLD-124 timer bombs, ARC-WORLD-125 script traps).** Placed devices: use an item with the trap-device flag on an object or tile, the device is spent, the marker object, the NPC alarm for record 176 | M | E1-a |
 | E6-c | The native trap script 30002 (the shot) | S | E6-a |
 
@@ -207,7 +207,7 @@ FR-ITEM-008, FR-MEDIA-003, FR-COMBAT-002, FR-COMBAT-003.
 | Slice | Content | Size | Needs |
 | --- | --- | --- | --- |
 | E8-a | Fate window and the Fate Points button (rules and the grant exist) | S–M | — |
-| E8-b | Skill pane of the game bar; PickPocket and DisarmTraps hotkeys | S | E6-a for disarm |
+| E8-b | **Done (ARC-UI-1113, #1113).** Skill pane of the game bar (bar mode 2, `K`); PickPocket and DisarmTraps hotkeys | S | E6-a for disarm |
 | E8-c | Companions screen and follower menu (read, ARC-RES-1107: slices E8-c1…E8-c3 [below](#e8-c-and-e8-e-slices-read-by-arc-res-1107)); the barter follower switch is **done** (ARC-UI-1120, #1275) | M | — |
 | E8-d | **Done (ARC-UI-1114, #1114).** Combat action-point readout and the turn-order list (owner decision 2026-10-28) | M | — (UI-124 runs beside) |
 | E8-e | Options windows hidden today: violence filter, brightness, auto-switch weapons, follower skills, combat taunts (read, ARC-RES-1107: slices E8-e1…E8-e5 [below](#e8-c-and-e8-e-slices-read-by-arc-res-1107)); the autosave timer is **dropped** (the original has none, OH6) | M | — |

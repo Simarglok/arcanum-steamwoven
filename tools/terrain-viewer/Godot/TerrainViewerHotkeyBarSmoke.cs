@@ -225,6 +225,8 @@ public partial class TerrainViewerApp
             Require(_gameBarSoundsForSelfTest.Select(s => s.Id).SequenceEqual([AreaGameBarLayout.PressSound, AreaGameBarLayout.ReleaseSound]),
                 "the button played 3000 then 3001: " + string.Join(",", _gameBarSoundsForSelfTest.Select(s => s.Id)));
             CancelSpellTargeting(null);
+            // ARC-UI-1113: the skill pane in the bottom strip (bar mode 2) and the key K.
+            await RunSkillPaneStripSmokeAsync(session, Frames, Click, Hover, (at, which, pressed) => Button(at, which, pressed));
             GD.Print($"ARC-UI-027 native-smoke hotkey-bar PASS spell={spell} item={item ?? "-"} count={itemCount ?? "-"} recent={latest.Index} art={_hotkeyBarContent!.ReadyCount}");
             GD.Print($"ARC-UI-035 native-smoke hotkey-hover PASS {string.Join("; ", hovers)} described={_hotkeyDescriptionsForSelfTest}");
             GD.Print($"ARC-UI-032 native-smoke hotkey-item-icons PASS items={icons.Length} inventory-art={inventoryArts} type-icon={icons.Length - inventoryArts} slot3={itemIcon ?? "-"}");

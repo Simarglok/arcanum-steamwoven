@@ -254,9 +254,9 @@ Not built or only stubbed (each has an epic in the plan):
 - Sleep and rest windows, the NPC hourly day (beds, walking between day and night standpoints) and the HUD clock (E3).
 - 6 of the 25 spell component types have no handler (AIRedirect, EnvFlag, Interrupt, Recharge, TraitIdx, Trait64; 19 run), item recharge, the viewer draw of hidden, shrunk and translucent critters, the permanent polymorph's ObjFlag part (technology record 222), Tempus Fugit and the raise script hook (E4; [technology audit](../research/technology-audit-res-125.md)).
 - 114 of 142 script actions and 29 of 53 conditions are admitted by the widest admission set (`ScrAdmissionSet.S37`, S36 plus the ten world-object actions and three conditions of E5-b, ARC-SCRIPT-1164, six actions and the three conditions applied by the area hosts; S36 is S35 plus the nine NPC state actions of E5-a, ARC-SCRIPT-1163, eight of them applied by the area hosts; S35 is S34 plus fade 103, ARC-SCRIPT-1241; the survey of the missing systems plan found 81 and 20 under S33, E5-c added 13 and 6 in S34); dialogue markers `c r t z` and positive `IN` (E5).
-- The native trap script 30002, the follower who disarms instead of the hero, the skill pane's disarm button (#1113) and the hero's step onto a placed trap marker (E6; the placing of devices is built, ARC-WORLD-124, -125; the hero's spot trap roll is built, ARC-MAGIC-057; the disarm action from the hotkey bar is built, ARC-SKILLS-1156).
+- The native trap script 30002, the follower who disarms instead of the hero and the hero's step onto a placed trap marker (E6; the placing of devices is built, ARC-WORLD-124, -125; the hero's spot trap roll is built, ARC-MAGIC-057; the disarm action from the hotkey bar and the skill pane is built, ARC-SKILLS-1156, ARC-UI-1113).
 - Movies, credits, intro and endings (E7).
-- Fate window and Fate Points, skill pane, companions screen, gambling, identify window, several sound callers and the hidden options (E8).
+- Fate window and Fate Points, companions screen, gambling, identify window, several sound callers and the hidden options (E8).
 - Gamepad in the game UI, UI scale, and Windows, Linux and handheld validation (E9; the Windows package exists and was never run on Windows).
 - The network game, a second module and mods (E10, deferred by the owner).
 

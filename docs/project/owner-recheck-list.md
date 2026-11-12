@@ -811,7 +811,7 @@ Known differences (documented, not bugs):
 - When a follower is better at disarming, the original lets the best follower act instead of the hero ("let me handle it", Ctrl skips it); Steamwoven always uses the hero.
 - The original's skill-bar press builds the invocation at once, so Steamwoven does not walk the hero to the trap first; whether the original limits the distance by the difficulty is read from the shared check only.
 - A trap you placed yourself with a script trap device is a marker object in Steamwoven and cannot be targeted yet.
-- The skill pane's own Disarm Traps button is [#1113](https://github.com/Simarglok/arcanum-steamwoven/issues/1113).
+- The skill pane's own Disarm Traps button is built (ARC-UI-1113, [#1113](https://github.com/Simarglok/arcanum-steamwoven/issues/1113)).
 
 ## ARC-MAGIC-056 — Tempus Fugit speed (spell 79)
 

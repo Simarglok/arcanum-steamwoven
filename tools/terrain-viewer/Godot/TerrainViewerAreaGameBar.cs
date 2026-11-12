@@ -24,6 +24,8 @@ public partial class TerrainViewerApp
     private readonly List<(int Id, bool Started)> _gameBarSoundsForSelfTest = [];
     // ARC-UI-023: whether a pane (spells, the weapon's spells, skills) held the message window at the last frame.
     private bool _messagePaneShown;
+    // ARC-UI-1113: the bar mode the pane held at the last frame (1 spells, 2 skills, 8 the weapon's spells; 0 none): a change gives the window a clean text area.
+    private int _messagePaneMode;
     // ARC-UI-1111: the clock window's refresh chain (GB10) follows the area session; the date order is the system's (GB11).
     private AreaGameClock _gameClock = new();
     private GameSessionOwner? _gameClockSession;
@@ -54,6 +56,7 @@ public partial class TerrainViewerApp
             }
             HideHotkeyBar();
             HideSpellBar();
+            HideSkillBar();
             return;
         }
         if (_gameBarPanel is null)
@@ -85,6 +88,9 @@ public partial class TerrainViewerApp
         }
         // ARC-UI-023: a pane taking the message window (its button down) or giving it back (ML8).
         var pane = spells || _gameBar.IsOn(AreaBarButton.Skills);
+        var paneMode = pane ? MessagePaneMode : 0;
+        if (pane && _messagePaneShown && paneMode != _messagePaneMode) ClearMessagePaneName();
+        _messagePaneMode = paneMode;
         if (pane != _messagePaneShown)
         {
             _messagePaneShown = pane;
@@ -97,6 +103,7 @@ public partial class TerrainViewerApp
         SyncHotkeyBar();
         SyncMaintainBar();
         SyncSpellBar();
+        SyncSkillBar();
     }
 
     private static int ClockArtWidth(AreaGameBarContent content, int art, int fallback) =>
@@ -164,8 +171,10 @@ public partial class TerrainViewerApp
                 if (!BarSpells() && effect.LetGo is { } other) _gameBar.SetOn(other, true);
                 break;
             case AreaBarButton.Skills:
-                // The original's skills mode shows the skill buttons in the message window; the viewer has no such pane yet.
-                if (_gameBar.IsOn(AreaBarButton.Skills)) { _spellPane?.HidePane(); _gameBarNotice = "skills: the skill pane is not built"; }
+                // The original's skills mode shows the skill buttons in the message window (ARC-UI-1113, TerrainViewerSkillBar.cs); the
+                // pair's other toggle, Spells, went up with this one coming down.
+                if (_gameBar.IsOn(AreaBarButton.Skills)) _spellPane?.HidePane();
+                if (_gameBar.IsOn(AreaBarButton.Skills) && !SkillPaneInStrip) _gameBarNotice = "skills: the pane's art did not read";
                 break;
             case AreaBarButton.FatePoints: _gameBarNotice = "fate points: the window is not built"; break;
             case AreaBarButton.Clock: ClockButton(); break;
