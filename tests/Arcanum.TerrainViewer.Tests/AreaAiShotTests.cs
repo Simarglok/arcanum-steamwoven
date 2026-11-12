@@ -69,7 +69,20 @@ public sealed class AreaAiShotTests
         public IEnumerable<LineOfFireObject<AreaObjectRecord>> Objects(CellCoord tile) => blocker is not null && tile == BystanderCell ? [new(blocker, false, 0)] : [];
     }
 
-    private static Scene Open(Func<string, string, SessionShot, CellCoord, CellCoord, bool>? launch, bool bystander = false)
+    // ARC-COMBAT-1140: a container (type 2) on the bystander's cell that stops the line of fire.
+    private static AreaObjectRecord Chest() => new(Key(5), 0, 2, 9999, "p", "p", "r", "s", AreaScope.Core, null, BystanderCell.X, BystanderCell.Y,
+        Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true);
+
+    private static AreaObjectAttackTarget ChestTarget(AreaObjectRecord row, int points = 6) => new("sector:1:5", row, DamageableObjectKind.Container,
+        new SessionObjectTarget(new SessionMapId(1), "sector:1:5", new SessionObjectBaseline
+        {
+            Kind = DamageableObjectKind.Container, Points = points, Material = ObjectMaterial.Cloth, Cell = BystanderCell,
+            Openable = new SessionOpenableBaseline(Arcanum.Simulation.Locks.OpenableKind.Container, 0, 0, 0),
+        }), null, null, null);
+
+    private static Scene Open(Func<string, string, SessionShot, CellCoord, CellCoord, bool>? launch, bool bystander = false, AreaObjectRecord? blockerRow = null,
+        Func<AreaObjectRecord, AreaObjectAttackTarget?>? objectTarget = null, Func<string, AreaObjectRecord, SessionShot, CellCoord, CellCoord, bool>? launchAtObject = null,
+        Action<string, AreaObjectRecord, AreaObjectAttackTarget?, SessionObjectAttackResult>? struck = null)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -93,7 +106,8 @@ public sealed class AreaAiShotTests
         {
             RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = bystander ? [new(Entity(0), Npc(0), NpcCell), new(Entity(3), Npc(3, BystanderCell), BystanderCell)] : [new(Entity(0), Npc(0), NpcCell)], Combat = combat,
             HeroCell = () => HeroCell, LaunchShot = launch,
-            LineOfFire = bystander ? () => new Line(Npc(3, BystanderCell)) : null,
+            LineOfFire = blockerRow is not null ? () => new Line(blockerRow) : bystander ? () => new Line(Npc(3, BystanderCell)) : null,
+            ObjectTarget = objectTarget, LaunchShotAtObject = launchAtObject, ObjectStruck = struck,
         };
         var host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null), new AreaCombatWorld(1, () => [], _ => null));
         return new(session, host, Entity(0), Entity(1));
@@ -197,5 +211,60 @@ public sealed class AreaAiShotTests
         Assert.IsTrue(launched.Count > 0, host.TraceOf(npc)?.Hit);
         Assert.AreEqual((npc, Entity(3), NpcCell, BystanderCell), (launched[0].Shooter, launched[0].Target, launched[0].From, launched[0].To),
             "the arrow is shot at the critter that stops the line, not at the hero: " + host.TraceOf(npc)?.Hit);
+    }
+
+    // ARC-COMBAT-1140 (RA4, RH5): a container that stops the line of fire takes the NPC's shot in place of the hero: the shot is decided a hit on it without a skill roll, the viewer is asked to fly it at the blocker,
+    // and the strike (the host's, as where the flight ends) damages the container while the hero is not hurt.
+    [TestMethod]
+    public void An_object_in_the_line_of_fire_takes_the_shot_instead_of_the_target()
+    {
+        var chest = Chest();
+        var target = ChestTarget(chest);
+        var launched = new List<(string Shooter, AreaObjectRecord Blocker, SessionShot Shot, CellCoord From, CellCoord To)>();
+        var (session, host, npc, _) = Open((_, _, _, _, _) => true, blockerRow: chest, objectTarget: row => row.Key == chest.Key ? target : null,
+            launchAtObject: (who, blocker, shot, from, to) => { launched.Add((who, blocker, shot, from, to)); return true; });
+        var heroHp = session.QueryHeroLife()!.Status.HitPoints;
+        for (var attempt = 0; attempt < 5 && launched.Count == 0; attempt++) host.Hit(npc, AiSchedulerRules.Pc);
+        Assert.AreEqual(1, launched.Count, host.TraceOf(npc)?.Hit);
+        Assert.AreEqual((npc, chest.Key, NpcCell, HeroCell), (launched[0].Shooter, launched[0].Blocker.Key, launched[0].From, launched[0].To), "the arrow flies at the hero's tile and strikes the chest where it crosses it");
+        Assert.IsTrue(session.QueryNpcShot(launched[0].Shot) is { Hit: true } facts && facts.Target == target.Entity, "decided a hit on the chest without the skill roll: " + host.TraceOf(npc)?.Hit);
+        Assert.AreEqual(heroHp, session.QueryHeroLife()!.Status.HitPoints, "the hero is not struck");
+        Assert.AreEqual(0, session.QueryObject(target.Object!).Damage, "the damage waits for the strike");
+
+        var landed = host.LandShotOnObject(npc, launched[0].Shot, target.Object, wall: false);
+        Assert.IsTrue(landed is { Object.Damage: > 0 }, "the chest took the carried hit: " + host.TraceOf(npc)?.Hit);
+        Assert.IsTrue(session.QueryObject(target.Object!).Damage > 0);
+        Assert.AreEqual(0, session.QueryShotsInFlight().Count);
+        Assert.AreEqual(heroHp, session.QueryHeroLife()!.Status.HitPoints);
+    }
+
+    [TestMethod]
+    public void A_shot_at_an_object_the_viewer_cannot_fly_strikes_it_at_once()
+    {
+        var chest = Chest();
+        var target = ChestTarget(chest);
+        var struck = new List<(string Shooter, AreaObjectRecord Row, AreaObjectAttackTarget? Target, SessionObjectAttackResult Result)>();
+        var (session, host, npc, _) = Open((_, _, _, _, _) => true, blockerRow: chest, objectTarget: row => row.Key == chest.Key ? target : null,
+            launchAtObject: (_, _, _, _, _) => false, struck: (who, row, info, result) => struck.Add((who, row, info, result)));
+        for (var attempt = 0; attempt < 5 && struck.Count == 0; attempt++) host.Hit(npc, AiSchedulerRules.Pc);
+        Assert.AreEqual(1, struck.Count, host.TraceOf(npc)?.Hit);
+        Assert.AreEqual((npc, chest.Key, target.Entity), (struck[0].Shooter, struck[0].Row.Key, struck[0].Target!.Entity));
+        Assert.IsTrue(struck[0].Result.Object is { Damage: > 0 }, "it landed on the chest");
+        Assert.AreEqual(0, session.QueryShotsInFlight().Count);
+    }
+
+    [TestMethod]
+    public void Without_an_object_hook_or_for_an_item_the_target_keeps_the_shot()
+    {
+        var chest = Chest();
+        var launched = new List<string>();
+        var (_, host, npc, _) = Open((_, target, _, _, _) => { launched.Add(target); return true; }, blockerRow: chest);
+        for (var attempt = 0; attempt < 5 && launched.Count == 0; attempt++) host.Hit(npc, AiSchedulerRules.Pc);
+        CollectionAssert.AreEqual(new[] { AiSchedulerRules.Pc }, launched, "no object hook: the shot goes at the hero, whose check the blocked line fails");
+
+        launched.Clear();
+        var (_, host2, npc2, _) = Open((_, target, _, _, _) => { launched.Add(target); return true; }, blockerRow: chest, objectTarget: _ => null);
+        for (var attempt = 0; attempt < 5 && launched.Count == 0; attempt++) host2.Hit(npc2, AiSchedulerRules.Pc);
+        CollectionAssert.AreEqual(new[] { AiSchedulerRules.Pc }, launched, "an object the session does not damage keeps the shot at the target");
     }
 }
