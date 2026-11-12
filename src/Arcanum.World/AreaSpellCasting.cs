@@ -109,6 +109,9 @@ public static class AreaSpellCasting
             SpellCastEventKind.OpenableFlagWritten when entry.Value == LockRules.LockedBit => (entry.Detail & 0x1) != 0 ? $"{Who()} is locked" : $"{Who()} is unlocked",
             SpellCastEventKind.OpenableFlagWritten when entry.Value == LockRules.MagicallyHeldBit => (entry.Detail & 0x1) != 0 ? $"{Who()} is held by magick" : $"{Who()} is no longer held by magick",
             SpellCastEventKind.OpenableFlagNotSaved => "the lock change was not saved",
+            // ARC-MAGIC-1146: the Recharge component's new charge count of an item (the original tells none; the lines are the viewer's); Trait64's writes are state, not text.
+            SpellCastEventKind.ItemRecharged => $"{Who()} is recharged to {entry.Value} charges",
+            SpellCastEventKind.ItemRechargeNotSaved => "the recharge was not saved",
             _ => null,
         };
     }

@@ -76,7 +76,9 @@ public sealed partial class GameSessionOwner
         {
             var named = candidates.SelectMany(run => run.Frames).Where(f => f.SpellRun is not null).Select(f => f.SpellRun!.Value).ToHashSet();
             var spells = _spellRuns.Runs.Where(r => SpellRunIsSaved(r) || SpellRunAwaitsBegin(r) && (named.Contains(r.Id) || begun.Contains(r.Id))).Select(r => r.Id).ToHashSet();
-            var kept = candidates.Where(run => run.Frames.All(f => f.SpellRun is not { } slot || _spellRuns[slot] is null || spells.Contains(slot))).ToList();
+            // ARC-MAGIC-1280: an overlay run whose eye candy is tied to a spell run that is cut (a run waiting for a host callback, one that waits for a BEGIN nothing names) is cut with it; a tag of a freed run is written as none.
+            var kept = candidates.Where(run => run.Frames.All(f => (f.SpellRun is not { } slot || _spellRuns[slot] is null || spells.Contains(slot))
+                && (f.EyeCandy is not { Tag: >= 0 } eye || _spellRuns[eye.Tag] is null || spells.Contains(eye.Tag)))).ToList();
             if (kept.Count == candidates.Count) return (spells, kept.Select(run => run.Handle.Slot).ToHashSet());
             candidates = kept;
         }
@@ -128,6 +130,9 @@ public sealed partial class GameSessionOwner
                 if (slot is < 0 or >= SpellRunTable.Slots) return GameSessionFailure.InvalidSnapshot;
                 named.Add(slot);
             }
+        // ARC-MAGIC-1280: an overlay's eye candy names a spell run that is held (the capture writes a freed one as no tag).
+        foreach (var frame in goals.Runs.SelectMany(run => run.Frames))
+            if (frame.EyeCandy is { Tag: >= 0 } eye && spells[eye.Tag] is null) return GameSessionFailure.InvalidSnapshot;
         // A missile's run waits for its BEGIN and is the flight's cast, and no casting goal before its release names that slot (MissileHoldsRun's test on the restored tables).
         foreach (var missile in flights.Missiles)
         {
