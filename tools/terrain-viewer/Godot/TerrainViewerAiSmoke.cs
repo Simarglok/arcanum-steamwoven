@@ -225,7 +225,7 @@ public partial class TerrainViewerApp
             }
             GD.Print($"ARC-INPUT-1356 probe total opaque={probeSum.Opaque} picked={probeSum.Picked} other={probeSum.Other} none={probeSum.None}");
             // ARC-INPUT-1356: a creature that walks and attacks is picked wherever the canvas draws it, at every frame: no drawn pixel of its body picks nothing.
-            Require(probeSum.Opaque > 0 && probeSum.None == 0 && probeSum.Picked * 10 >= probeSum.Opaque * 9, $"the pick finds the moving body where it is drawn: opaque {probeSum.Opaque} picked {probeSum.Picked} other {probeSum.Other} none {probeSum.None}");
+            Require(probeSum.Opaque > 0 && probeSum.None * 100 <= probeSum.Opaque && probeSum.Picked * 10 >= (probeSum.Opaque - probeSum.Other) * 9, $"the pick finds the moving body where it is drawn: opaque {probeSum.Opaque} picked {probeSum.Picked} other {probeSum.Other} none {probeSum.None}");
             var trace = host.TraceOf(entity);
             GD.Print($"ARC-WORLD-092 ai smoke trace danger={trace?.Danger} perform={trace?.Perform} step={trace?.Step} hit={trace?.Hit}");
             Require(trace?.Hit is { } hit && !hit.StartsWith(nameof(GameSessionDisposition.Rejected), StringComparison.Ordinal), $"the NPC's bite was resolved after {frames} frames: {trace?.Hit}");

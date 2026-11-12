@@ -76,7 +76,7 @@ public partial class TerrainViewerApp
             return $"at=({screen.X:0},{screen.Y:0}) pick={Name(AreaObjectAtScreen(screen, spared: SpellPickSpared()))} unspared={Name(AreaObjectAtScreen(screen))} cell={(cell is { } c ? c.X + "," + c.Y : "none")}"
                 + $" near=[{string.Join("; ", near.Take(4))}]";
         }
-        catch (Exception error) when (error is InvalidOperationException or KeyNotFoundException or ArgumentException)
+        catch (Exception error)
         {
             return "detail failed " + error.GetType().Name;
         }
