@@ -170,6 +170,17 @@ public partial class TerrainViewerApp
             Require(SchematicsOpen, "the PC's request opened the window");
             CloseSchematicsByPlayer();
 
+            // ARC-UI-1125 (SA40): a script's request replaces an open window (the inventory leaves through its End routine); a second request closes
+            // the window (the opener 0x56D130 toggles).
+            InventoryKey(Key.I);
+            Require(InventoryOpen && !SchematicsOpen, "the inventory is open for the replacement");
+            QueueScriptSchematics([new(pc, pc, AreaSchematicScriptStatus.Open)]);
+            TakeScriptSchematics();
+            Require(SchematicsOpen && !InventoryOpen && WindowPanelsMatchStack && StackText() == "Game>Schematic" && _schematicScriptOpen is null, "the request replaced the inventory: " + StackText());
+            QueueScriptSchematics([new(pc, pc, AreaSchematicScriptStatus.Open)]);
+            TakeScriptSchematics();
+            Require(!SchematicsOpen && WindowPanelsMatchStack && _schematicScriptOpen is null, "a second request closed the window (the opener toggles)");
+
             // ARC-TECHNOLOGY-006: an NPC crafter (synthetic: degree 1 in discipline 0, two parts in its own list on another map's seed)
             // through the production open path the dialog's `su` and action 129 use; its products go to its list, the hero's parts stay.
             var smithSeed = new SessionMapInventorySeed([new("smith", SessionHolderKind.Npc, false, false, [], ["s1", "s2"])],
