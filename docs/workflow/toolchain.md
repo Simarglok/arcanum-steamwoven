@@ -863,6 +863,17 @@ four locked packages (numpy, scipy, Pillow and the GPLv2+ potracer, wheel hashes
 python3 -B tools/hd_font/hd_font.py self-test    # task check: synthetic fonts drawn by the test, no game file; a failed install is a failed check
 ```
 
+## Controller test evidence summariser (ARC-GPAD-1376)
+
+[`tools/input/evidence_summary.py`](../../tools/input/evidence_summary.py): standard-library Python that reads the opt-in evidence files the
+viewer writes (format and recording: [controller schemes, evidence log](../input/controller-schemes.md#evidence-log-arc-gpad-1376-merged)).
+It runs no Godot and no `dotnet`, so it does not use the launch queue; it reads only the files named on the command line.
+
+```sh
+python3 -B tools/input/evidence_summary.py --self-test    # task check: a synthetic session, no game file
+python3 -B tools/input/evidence_summary.py evidence-*.jsonl [--json]
+```
+
 ## Function census
 
 ARC-RES-106, [`tools/research/exe_census.py`](../../tools/research/exe_census.py): lists the function starts of the pinned
