@@ -1,6 +1,6 @@
 # Sleep window runtime
 
-Status: **Implemented bounded component (World rules, viewer host); the hero's bed is built (ARC-WORLD-1162, slice 1 of E3-d: script, occupancy, kind-2 heal), the bed's drawing and the NPCs' beds and random encounter are not.** Work items ARC-WORLD-1160
+Status: **Implemented bounded component (World rules, viewer host); the hero's bed (ARC-WORLD-1162, slice 1 of E3-d: script, occupancy, kind-2 heal) and the NPCs' beds (slice 2: seat at the standpoint, wake, the latch) are built; the sleeper's hidden drawing, the bed's occupied frame and the random encounter are not.** Work items ARC-WORLD-1160
 (issue #1160, plan E3-a) and ARC-WORLD-1162 (issue #1162, E3-d, the hero's bed), 2026-11-12. The hero's rest: the key `S` and the game bar's Sleep button open the original's interface mode 6, a
 window of lengths; a press runs a chain of one-hour steps that jump the game clock, heal the hero and his followers and end by the chosen
 length. Universal: any map of the viewer's area mode with a session hero. No saved state is added (the original does not save the chain
@@ -68,13 +68,37 @@ its 29), script 1990 (32 lines with both ends, so the answer depends on state); 
 the hero may lie down). The bed prototype itself holds no use script; the scripts are set on the placed beds. The main world map (621 sector files, more than a
 snapshot holds) is **not** read by the census; the 80 maps are every other map of the catalogue. The smoke stage `bed` pins the cave's bed.
 
+## NPC beds (ARC-WORLD-1162 slice 2, ledger SWB16–SWB21)
+
+An NPC lies in a bed through the standpoint step, as the original's: the step ([`NpcRouteRules`](../../src/Arcanum.Simulation/Ai/NpcRouteRules.cs), forced at a wake-up and unforced in the routine) puts an NPC within its
+radius (1 tile, 4 for a wanderer) of the current standpoint **at** it; the AI host ([`AreaAiHostBeds`](../../src/Arcanum.World/AreaAiHostBeds.cs)) then does what 0x4ACDB0 does there:
+
+- **The latch (NPC flag 0x200)** is set once: while it is clear the step looks for a bed on the standpoint tile (0x4AD140: the finder tests neither the hour nor the NPC) and seats the NPC (0x45F2D0). The seat's answer is
+  not read, so an NPC whose bed is taken (by the hero, by another NPC) keeps the latch, stands there and is not tried again until it leaves its radius (the far branch clears the latch). The latch is host state and is
+  not saved; the first bed question of a host (below) settles the latch, the occupancy and the saved flags.
+- **A seated NPC** is the bed's occupant in the occupancy the hero's rest uses, so a bed an NPC sleeps in refuses the hero with message 10, and its critter flag 0x1000 is a session write (the saved `objectFlags`, no schema
+  change); the host's sleeping readers see it asleep (`AreaAiHost.Sleeping`: the danger update, the item search and the heal skip a sleeper; the AI gate only lets a sleeper past its hidden test, so a sleeping NPC still reaches the route steps, which is how it is woken). The NPC stays on its tile (the nudge belongs to the bed's drawing). A seated NPC answers 1 on every later step and
+  does not move.
+- **The wakers** (SWB18), each through the re-seat (0x4AD0B0: the bed at the night standpoint, then at the day standpoint; a sleeper that lies in neither is not woken, SWB17): the waypoint step of a sleeper with a list for the
+  period, the standpoint step of a sleeper farther than its radius from the current standpoint (the hour switch at 06:00 or 21:00: the NPC day test is hours 6 to 20, SWB20, and the step's 1-in-1000 roll at hours 6 and 21 spreads the
+  town's waking), the attack event's victim and a sleeping witness of an attack. The unseat clears the flag 0x1000 and the latch; the waking step answers 1 and moves nothing, the next step walks the NPC.
+- **After a load or a host change** the occupancy (shared, not saved) and the session's saved sleeping flags can disagree, so the first bed question of a host (a route step or a wake) settles them: an NPC of the host that holds a bed
+  without sleeping, or is dead or gone, is taken out; then every NPC the session saved asleep is seated again in the free bed of its nearer standpoint, all of them before any step seats a new one. A killed NPC leaves its bed at
+  once (a project choice: the original's handling of a dead occupant is not read). A sleeper that is saved asleep but whose bed was lost anyway (taken by the hero, say) is woken by its next re-seat instead of sleeping for ever;
+  the original cannot reach that state, its occupant field being saved.
+
+**What the installed data holds** ([`BedCensusRealDataTests`](../../tests/Arcanum.World.Tests/BedCensusRealDataTests.cs), numbers only): of the **2236** NPC rows of the 80 read maps with a readable route, **41** have their
+night standpoint on a placed bed's tile, **21** their day standpoint and **51** either, so the step seats them.
+
 ## Boundaries (NOT READY)
 
-- **Bed, what is left** (SWB15, SWB16): the sleeper's sleeping flag (critter flag 0x1000) and hidden drawing (object flag 0x100) are not written, the bed is
+- **Bed, what is left** (SWB15, SWB16): the sleeper's hidden drawing (object flag 0x100) is not written (a sleeping NPC is drawn standing on its tile), the hero gets no sleeping flag either, the bed is
   not drawn in its occupied frame (the art id's next frame: the builder reads no other frame of a bed, whose scenery flag 0x1 is set) and a sleeper on the bed's
   own tile is not moved to its neighbour; the hero is drawn as he is while his window is open (the screen fades to black at the first press). These are graphics
-  changes and wait for their own slice with the NPCs' beds. An occupied bed can only meet an NPC sleeper, who is not seated yet (SWB17 to SWB21, the NPC day), so
-  message 10 is reached only by the rule and its tests today.
+  changes and wait for their own slice (slice 3 of #1162).
+- **NPC beds, what is left** (SWB18d, SWB19–SWB21): an attack aimed at the bed (SC16: the occupant is taken out and becomes the target) does not wake its occupant; the near branch's wander start is not modelled (a seated
+  wanderer would start one in the same step); the latch is not saved; the attack resolver's and the turn-based round's sleeping tests (+hit chance, round skip) read the stored critter flag only, so a sleeping NPC the
+  step seated is skipped by the danger update, the item search and the heal but not by those two; NPCs of the main map's windows are seated only for the beds the window holds; an NPC a script moves or destroys while seated is not taken out (only a kill and the first bed question of a host do); an NPC whose map row already has the sleeping flag is never seated (it already counts as asleep, so its step is the sleeper branch).
 - **Random encounter** (SWB13): the encounter roll, which closes the window with five times the chance, belongs to the world journey (E2-c).
 - **The sleeper's maintained spells** end at the press in the original (UE6, issue #1161); here they do not.
 - **Followers of followers**, and followers the AI host does not run, are not healed or told of event 29.

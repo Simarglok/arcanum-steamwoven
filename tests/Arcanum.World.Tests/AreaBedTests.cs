@@ -49,6 +49,8 @@ public sealed class AreaBedTests
         Assert.IsTrue(occupancy.Seat(Key(1), "pc"));
         Assert.IsTrue(occupancy.Seat(Key(2), "npc:a"));
         Assert.AreEqual(2, occupancy.Count);
+        Assert.AreEqual(Key(2), occupancy.BedOf("npc:a"), "the bed a sleeper lies in");
+        Assert.IsNull(occupancy.BedOf("npc:b"));
         occupancy.Clear();
         Assert.AreEqual(0, occupancy.Count);
         Assert.IsNull(occupancy.Occupant(Key(1)));

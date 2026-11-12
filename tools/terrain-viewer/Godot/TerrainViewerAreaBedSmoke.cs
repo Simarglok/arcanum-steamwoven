@@ -28,6 +28,9 @@ public partial class TerrainViewerApp
         var beds = transfers.Beds.Select(key => (Key: key, Row: transfers.Object(key))).Select(bed => (bed.Key, bed.Row, Script: host.UseScriptOf(bed.Row))).ToArray();
         GD.Print($"ARC-WORLD-1162 bed census map={_readyMapName} beds={beds.Length} scripted={beds.Count(b => b.Script != 0)} scripts={string.Join(",", beds.Where(b => b.Script != 0).Select(b => b.Script).Distinct().Order())}");
         if (beds.Length == 0) { GD.Print("ARC-WORLD-1162 native-smoke bed NONE map=" + _readyMapName + " (no bed on the map)"); return; }
+        // ARC-WORLD-1162 slice 2: the AI host's scene gets the same beds, each with its world cell (an NPC at its standpoint looks for one there).
+        var placed = PlacedBeds();
+        Require(placed.Count == beds.Length && placed.All(p => beds.Any(b => b.Key == p.Key && b.Row.WorldX == p.Cell.X && b.Row.WorldY == p.Cell.Y)), $"the AI host's bed list is the map's beds with their cells: {placed.Count} of {beds.Length}");
         var unscripted = beds.Where(b => b.Script == 0).Select(b => ((AreaObjectKey, AreaObjectRecord, int)?)b).FirstOrDefault();
         var scripted = beds.Where(b => b.Script != 0).Select(b => ((AreaObjectKey, AreaObjectRecord, int)?)b).FirstOrDefault();
         long host0 = 90_000_000L;

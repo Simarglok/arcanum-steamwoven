@@ -52,6 +52,8 @@ public sealed record AreaAiScene
     /// <summary>ARC-DEV-137 (MIG13 S6): the ART of an NPC's animation (frames and rate) for the critter-state goals' timing; null (the provider, or its answer) when the header does not read or
     /// the viewer cannot read that animation (the stun's 23 is not read yet: the stun then ends at once, GT26).</summary>
     public Func<string, int, AiAnimationClip?>? AnimationClip { get; init; }
+    /// <summary>ARC-WORLD-1162 (SWB17–SWB21): the beds of the shown map and who lies in them, shared with the hero's rest; null: the map has none, so an NPC at its standpoint finds no bed.</summary>
+    public AreaAiBeds? Beds { get; init; }
     /// <summary>The hero's world cell now, or null without a hero on this map.</summary>
     public required Func<CellCoord?> HeroCell { get; init; }
     /// <summary>ARC-DEV-116 (MIG11 S5): whether the map list holds a map (the destination of an NPC's change of place, the original's map list lookup);
@@ -913,6 +915,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         var plan = HostilityRules.AttackEvent(this, attacker, victim, flags);
         Trace(victim).Event = $"{plan.Stop}";
+        // ARC-WORLD-1162 (SWB18c, HS13): a sleeping victim is woken (the re-seat) whatever the exits after it say.
+        if (plan.WakesVictim) WakeFromBed(victim);
         if (plan.Stop is AttackEventStop.Missing or AttackEventStop.VictimProtected or AttackEventStop.VictimDead or AttackEventStop.VictimGone
             or AttackEventStop.VictimDecoy or AttackEventStop.VictimWall or AttackEventStop.Self) return;
         // ARC-WORLD-115: the attacker's followers first, right after the early exits (0x4A9B80, side attacker, the victim the other).
@@ -1060,6 +1064,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         {
             if (witness == Pc || witness == attacker || witness == victim || !Walks(witness)) continue;
             var outcome = HostilityRules.Witness(this, witness, attacker, victim, loudness);
+            // ARC-WORLD-1162 (SWB18c, AW19): a sleeping witness is woken before any perception test.
+            if (outcome.Wakes) WakeFromBed(witness);
             switch (outcome.Response)
             {
                 case WitnessResponse.ReactToAttacker: React(witness, attacker); break;
@@ -1135,7 +1141,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             _notices.Add(new(AreaAiNoticeKind.Entered, npc, null) { Cell = pc });
     }
     public bool MapClearing => false;
-    public bool Sleeping(string npc) => Fields(npc)?.Critter is { } critter && (critter.Flags & SleepingFlag) != 0;
+    // ARC-WORLD-1162: the critter flag 0x1000 as the session left it (an NPC seated in a bed is written there) over the data's.
+    public bool Sleeping(string npc) => Fields(npc)?.Critter is { } critter && (_session.QueryObjectFlags(npc).Critter(unchecked((int)critter.Flags)) & unchecked((int)SleepingFlag)) != 0;
     // Object flags 0x102: not drawn or switched off in its map data, or (ARC-WORLD-114) switched off by a script (gone from the scene).
     public bool Hidden(string npc) => Fields(npc) is { } fields && (ObjectFlagsOf(npc, fields.Object.Flags) & (DontDraw | OffObject)) != 0 || Gone(npc);
 
@@ -2036,7 +2043,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// </summary>
     public bool NoticeKill(string victim, string? killer)
     {
-        if (victim == Pc || !TryNpc(victim, out _) || Find(victim) is null) return false;
+        if (victim == Pc || !TryNpc(victim, out _)) return false;
+        ReleaseBed(victim);
+        if (Find(victim) is null) return false;
         var plan = MoraleRules.KillNotification(this, victim, killer);
         var result = _session.ApplyKillNotification(_session.Version, new SessionKillNotificationRequest
         {
@@ -2876,7 +2885,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Id = id, Kind = HostilityKind.Npc,
             Destroyed = Gone(id), DontDraw = (ObjectFlagsOf(id, fields.Object.Flags) & DontDraw) != 0, ObjectInvisible = (ObjectFlagsOf(id, fields.Object.Flags) & ObjectInvisible) != 0,
             Invulnerable = (fields.Object.Flags & Invulnerable) != 0, NighInvulnerable = (critter.Flags2 & NighInvulnerable2) != 0,
-            Dead = status?.IsDead ?? true, Unconscious = status?.IsUnconscious ?? false, Asleep = (critter.Flags & SleepingFlag) != 0,
+            Dead = status?.IsDead ?? true, Unconscious = status?.IsUnconscious ?? false, Asleep = Sleeping(id),
             NonLethal = (critter.Flags & NonLethal) != 0, Undead = (critter.Flags & Undead) != 0, Animal = (critter.Flags & Animal) != 0,
             AnimalEnshrouded = (critter.Flags & AnimalEnshrouded) != 0, Monstrous = build.Monstrous,
             // The NO_FLEE the AI set (session bit, ARC-WORLD-086) is ORed into the critter's stored flag.

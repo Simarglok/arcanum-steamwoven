@@ -127,6 +127,12 @@ public partial class TerrainViewerApp
         return host;
     }
 
+    // ARC-WORLD-1162: the beds of the shown map with the world cell each stands on (map mode only: the cave's transitions hold none).
+    private IReadOnlyList<(AreaObjectKey Key, CellCoord Cell)> PlacedBeds() =>
+        _mapTransfers is not { } transfers ? []
+            : [.. transfers.Beds.Select(key => (Key: key, Row: transfers.Object(key))).Where(bed => bed.Row.WorldX is not null && bed.Row.WorldY is not null)
+                .Select(bed => (bed.Key, new CellCoord(checked((int)bed.Row.WorldX!.Value), checked((int)bed.Row.WorldY!.Value))))];
+
     /// <summary>The scene the shown window gives the AI host: its chart and evidence, the rows its map data holds (the companions and the NPCs the party leads
     /// left out) and the viewer's live providers. <paramref name="host"/> is the host the scene belongs to, for the line of fire's frame cache.</summary>
     private AreaAiScene BuildAiScene(GameSessionOwner session, AreaLoadResult area, AreaGridSession grid, AreaInventoryMap map, AreaCombatHost combat,
@@ -196,6 +202,8 @@ public partial class TerrainViewerApp
             // ARC-DEV-116 (MIG11 S5): the maps an NPC's change of place can name.
             MapListed = MapListedNow,
             Homecomings = HomecomingQueue(session, mapNumber),
+            // ARC-WORLD-1162 (SWB17–SWB21): the shown map's beds and who lies in them, the hero's rest's occupancy too.
+            Beds = new AreaAiBeds(_bedOccupancy, PlacedBeds),
         };
 
         static CellCoord World(Arcanum.Data.Traversal.AreaStepCell cell) => new(checked((int)cell.X), checked((int)cell.Y));
