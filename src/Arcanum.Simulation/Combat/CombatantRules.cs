@@ -76,8 +76,8 @@ public static class CombatantRules
     public static int NormalResistance(long sum, bool unclamped, IReadOnlyList<EffectModifier> effects)
     {
         ArgumentNullException.ThrowIfNull(effects);
-        if (Math.Abs(sum) > MaxValue) throw new ArgumentOutOfRangeException(nameof(sum));
-        var value = EffectModifiers.Apply(sum, effects);
+        // A sum beyond the bound the other resistance rules read is cut to it (a clamp, never a throw: the session lays it over facts a host built).
+        var value = EffectModifiers.Apply(Math.Clamp(sum, -MaxValue, MaxValue), effects);
         return unclamped ? (int)Math.Clamp(value, -AttackResolver.MaxResistance, AttackResolver.MaxResistance) : (int)Math.Clamp(value, 0, MaxResistance);
     }
 

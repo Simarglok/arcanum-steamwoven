@@ -123,7 +123,7 @@ public sealed partial class GameSessionOwner
             MaxHitPointEffects = EffectDomain.Modifiers(list, definitions, EffectSpecial.MaxHitPoints),
             MaxFatigueEffects = EffectDomain.Modifiers(list, definitions, EffectSpecial.MaxFatigue),
         };
-        // ARC-UI-1145 (0x43D6D0): the normal resistance a poison tick meets, the sum before the effects under the list's resistnormal changes, clamped as the resistance is.
+        // ARC-UI-1145 (the resistance function): the normal resistance a poison tick meets, the sum before the effects under the list's resistnormal changes, clamped as the resistance is.
         // Worked out from the base, never from the value the facts carry, so a list laid over facts twice gives the same (a host that gives no base keeps its value).
         return facts.NormalResistanceBase is { } baseResistance
             ? laid with { NormalResistance = CombatantRules.NormalResistance(baseResistance, facts.NormalResistanceUnclamped, EffectDomain.Resistances(list, definitions).Normal) }

@@ -390,6 +390,15 @@ public sealed class NpcEffectStateTests
     }
 
     [TestMethod]
+    public void A_base_beyond_the_resistance_bound_is_cut_and_never_throws()
+    {
+        using var owner = Create();
+        var wolf = SessionLifeTarget.Critter(Wolf, new LifeFacts { NormalResistance = 95, NormalResistanceBase = 1_500_000 }, new LifeState(0, 0, 550, LifeConditions.None, 0), []);
+        Ok(owner.AddNpcEffect(owner.Version, wolf, new SessionEffectDefinition(160, [Resist(0, -10)]), EffectCause.Spell), 1);
+        Assert.AreEqual(1, Tick(owner, wolf), "cut to 95 %: 3 - 2");
+    }
+
+    [TestMethod]
     public void Facts_without_a_base_keep_their_normal_resistance_under_a_list()
     {
         using var owner = Create();

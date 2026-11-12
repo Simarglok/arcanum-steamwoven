@@ -86,7 +86,7 @@ public sealed class AreaNpcSheetTests
     }
 
     /// <summary>ARC-UI-1145 (0x43D6D0, RE2): the lines read the NPC under the effect list the session holds for it, as the combat does: the resistance changes, the Magick line
-    /// among them, and a constitution change in the poison bonus. An entity the session knows no mobile NPC for has no list to read.</summary>
+    /// among them; the poison bonus keeps the sheet's own constitution (its Constitution row). An entity the session knows no mobile NPC for has no list to read.</summary>
     [TestMethod]
     public void The_resistance_lines_follow_the_session_effect_list_of_the_npc()
     {
@@ -98,10 +98,10 @@ public sealed class AreaNpcSheetTests
         CollectionAssert.AreEqual(new[] { 10, 20, 5, 20, 0 }, Lines());
         EffectChange Resist(int attribute, int value) => new(EffectAttributeKind.Resistance, attribute, EffectChangeOperator.Add, value);
         var target = SessionLifeTarget.Critter("oid:virgil", new(), default, [new(300, EffectCause.Spell)]);
-        var rule = new SessionEffectDefinition(150, [Resist(0, 30), Resist(3, 10), Resist(4, 25), new(EffectAttributeKind.Stat, 2, EffectChangeOperator.Add, 2)]);
+        var rule = new SessionEffectDefinition(150, [Resist(0, 30), Resist(3, 10), Resist(4, 25)]);
         Assert.AreEqual(GameSessionFailure.None, session.AddNpcEffect(session.Version, target, rule, EffectCause.Spell).Failure);
-        // Normal 10 + 30, magick 20 + 25, fire and electrical as stored, poison 5 x (10 - 4) + 10.
-        CollectionAssert.AreEqual(new[] { 40, 45, 5, 40, 0 }, Lines());
+        // Normal 10 + 30, magick 20 + 25, fire and electrical as stored, poison 5 x (8 - 4) + 10: the bonus reads the sheet's own constitution (8, as its Constitution row shows).
+        CollectionAssert.AreEqual(new[] { 40, 45, 5, 30, 0 }, Lines());
         Assert.AreEqual(GameSessionFailure.None, session.RemoveNpcEffect(session.Version, target, 150).Failure);
         CollectionAssert.AreEqual(new[] { 10, 20, 5, 20, 0 }, Lines(), "the list gone: the stored lines again");
     }

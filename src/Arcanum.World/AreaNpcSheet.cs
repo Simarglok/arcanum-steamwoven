@@ -61,12 +61,12 @@ public static class AreaNpcSheet
         // The stored resistances (normal, fire, electrical, poison, magic) and the constitution bonus, as 0x43D6D0 shows them; the worn armour of an NPC is not read (CHW24).
         var resist = fields.Object.Resistances;
         int Resist(int index) => index < resist.Count ? resist[index] : 0;
-        // ARC-UI-1145: under the NPC's effect list (the session's, else the map data's), as the combat reads it: the resistance changes and the constitution an effect moves.
-        // A critter the combat cannot build keeps the stored lines.
-        var stored4 = new DamageResistances(Resist(0), Resist(3), Resist(2), Resist(1));
+        // ARC-UI-1145: under the NPC's effect list as the combat reads it (the session's, else the map data's when the host gave the rules, GameSessionOwner.WithNpcEffects): the resistance
+        // changes. The poison bonus reads the sheet's own effective constitution, the one its Constitution row shows. A critter the combat cannot build keeps the stored lines.
+        var constitution = AutoLevelRules.EffectiveStat(sheet, modifiers, CharacterStat.Constitution);
         var (shown, magick) = SessionCritterCombat.From(entity, fields).Combat is { } built
-            ? session.WithNpcEffects(built).SheetResistances(session.QueryLife(built.Target).View?.Record.State ?? built.Loaded, Resist(4))
-            : (CombatantRules.Resistances(stored4, EquipmentResistances.None, AutoLevelRules.EffectiveStat(sheet, modifiers, CharacterStat.Constitution), sheet.Monstrous), Resist(4));
+            ? session.WithNpcEffects(built).SheetResistances(constitution, Resist(4))
+            : (CombatantRules.Resistances(new(Resist(0), Resist(3), Resist(2), Resist(1)), EquipmentResistances.None, constitution, sheet.Monstrous), Resist(4));
         AreaSheetValue Resistance(string label, int value) => new(label, Math.Clamp(value, 0, AreaCharacterSheet.MaxResistance));
         var resistances = new[]
         {

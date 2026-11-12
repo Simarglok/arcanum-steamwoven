@@ -185,12 +185,12 @@ public sealed class SessionCritterCombat
     public int SaveMagicResistance(int stored) => SpellResistanceRules.ResistanceUnderEffects(stored, _effectResistances.Magic, Monstrous);
 
     /// <summary>
-    /// ARC-UI-1145 (ledger CHW24): the five resistance lines of the NPC's character sheet (the resistance function as the sheet reads it): the stored resistances, the poison bonus of its effective constitution
+    /// ARC-UI-1145 (ledger CHW24): the five resistance lines of the NPC's character sheet (the resistance function as the sheet reads it): the stored resistances, the poison bonus of <paramref name="constitution"/> (the sheet's own effective constitution, so the lines agree with the Constitution row)
     /// and the changes of the effect list it was handed out with (<see cref="WithEffects"/>), clamped like the combat's resistances; the sheet reads no worn armour for an NPC. The Magick line is
     /// <paramref name="storedMagic"/> (the fifth stored resistance) under the <c>resistmagic</c> changes (the sheet shows them; the save reads the stored value, <see cref="SaveMagicResistance"/>).
     /// </summary>
-    public (DamageResistances Damage, int Magic) SheetResistances(LifeState state, int storedMagic) =>
-        (CombatantRules.Resistances(_storedResistances, EquipmentResistances.None, _stats.Query(StatContext(state)).Snapshot!.GetEffective(CharacterStat.Constitution), Monstrous, _effectResistances),
+    public (DamageResistances Damage, int Magic) SheetResistances(int constitution, int storedMagic) =>
+        (CombatantRules.Resistances(_storedResistances, EquipmentResistances.None, constitution, Monstrous, _effectResistances),
             CombatantRules.MagicResistance(storedMagic, 0, Monstrous, _effectResistances.Magic));
 
     /// <summary>
