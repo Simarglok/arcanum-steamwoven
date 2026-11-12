@@ -641,7 +641,7 @@ class ProcessStartTests(unittest.TestCase):
 
     def test_start_text_ignores_the_locale(self) -> None:
         self.assertEqual(run_queue._start_text(1794503239), "Thu Nov 12 17:07:19 2026")
-        self.assertEqual(run_queue._start_text(1794503239 - 10 * 86400 + 3600 * 7), "Mon Nov  2 00:07:19 2026")
+        self.assertEqual(run_queue._start_text(1794503239 - 10 * 86400 + 3600 * 7), "Tue Nov  3 00:07:19 2026")
 
     def test_fallback_asks_ps_and_caches(self) -> None:
         run_queue._START_CACHE.clear()
