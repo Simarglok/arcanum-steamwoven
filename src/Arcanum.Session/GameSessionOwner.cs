@@ -2500,14 +2500,36 @@ public sealed partial class GameSessionOwner : IDisposable
             TellCritterRunEnds(target, outcome, facts!, killRuns: true, demaintain: false);
         }
         // OL25: the kill notification unwaits the NPC, which removes its wait timer.
-        if (outcome.Events.HasFlag(LifeEvents.Died) && !target.IsHero && !deathStopped) CancelWaitTimers(target.Entity!);
+        var npcDied = outcome.Events.HasFlag(LifeEvents.Died) && !target.IsHero && !deathStopped;
+        if (npcDied) CancelWaitTimers(target.Entity!);
+        // ARC-AI-1134 (DY3, 0x45DA20 after the death time): the NPC's combat focus (0x11B) := the killer, whatever its danger state; the kill notification follows the commit below.
+        var killedBy = killer ?? damageStep?.Parties.Killer;
+        if (npcDied) FocusOnKiller(target.Entity!, killedBy);
         Revise();
+        if (npcDied && KillNotice is { } notice)
+        {
+            // The host applies its plan to the session (a new revision of its own). The death is committed: a host that throws anything counts as no notification, so the step's own tail (the dying goal, the callers' award) still runs.
+            try { notice(new(target.Entity!, map, killedBy)); }
+            catch (Exception) { }
+        }
         // ARC-DEV-137 (MIG13 S6): the NPC's critter-state goals the step starts (its map is the active one: the table holds this map's runs only).
         // ARC-DEV-187 (MIG13 S13a): the hero's stun starts on the table too (the other states of the hero stay the viewer's until S13b/S13c).
         // ARC-DEV-312 (GT34): the dying goal is started by the kill itself, so a stopped death starts none (the step's other events still do).
         var started = deathStopped ? outcome with { Events = outcome.Events & ~LifeEvents.Died } : outcome;
         if ((target.IsHero || map == _actor.Map.RuntimeMap) && started.Events != LifeEvents.None) StartCritterStates(target, started, facts!);
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, outcome, new(_identity, _revision)) { ItemEvents = itemEvents, DeathStopped = deathStopped };
+    }
+
+    // The kill's focus step (0x45DA20 → 0x406F20 on field 0x11B): the focus handle becomes the killer, none for a damage with no source. A record that would be new at the record budget is not written.
+    private void FocusOnKiller(string victim, string? killer)
+    {
+        SessionCombatant? focus = killer is null ? null
+            : killer == SessionSpellCaster.Hero ? SessionCombatant.Hero
+            : SessionValidation.Entity(killer) ? SessionCombatant.Critter(killer) : null;
+        var held = _danger.Get(victim);
+        if (held.Focus == focus) return;
+        if (_danger.Records.Count >= _limits.MaxDangerRecords && !_danger.Records.ContainsKey(victim)) return;
+        _danger.Put(held with { Focus = focus });
     }
 
     private static (string Kind, GameEventPayload Payload) TimerEvent(LifeTimer timer, SessionLifeTarget target, int map, long now,

@@ -1,4 +1,5 @@
 using Arcanum.Scripting.GlobalFlags;
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.SessionFixtures;
@@ -123,6 +124,84 @@ public sealed class DyingScriptTests
         owner.DyingScript = _ => throw new InvalidOperationException("host failure");
         var killed = owner.Kill(owner.Version, Npc());
         Assert.IsFalse(killed.DeathStopped);
+        Assert.AreEqual(owner.Version, killed.Version);
+        Assert.IsNotNull(owner.QueryLifeRecord("oid:wolf")!.Value.DeathTimeMs);
+    }
+    // ARC-AI-1134 (DY3, DY7): the kill's focus step and the host's kill notification after the death processing.
+    [TestMethod]
+    public void A_killed_npc_has_the_killer_as_combat_focus_whatever_its_state_and_a_killless_damage_clears_it()
+    {
+        using var owner = Seeded();
+        owner.ApplyDamage(owner.Version, Npc("oid:a"), Lethal, killer: SessionSpellCaster.Hero);
+        Assert.AreEqual(SessionCombatant.Hero, owner.QueryDanger("oid:a").Focus, "the hero killed it");
+        Assert.AreEqual(DangerState.None, owner.QueryDanger("oid:a").State, "the focus handle only; the state read is the AI's");
+        owner.ApplyDamage(owner.Version, Npc("oid:b"), Lethal, killer: "oid:orc");
+        Assert.AreEqual(SessionCombatant.Critter("oid:orc"), owner.QueryDanger("oid:b").Focus);
+        Assert.AreEqual(SessionCombatant.Critter("oid:src"), Focused(owner, "oid:c", "oid:src").Focus, "the damage parties name the killer");
+        Assert.IsNull(Focused(owner, "oid:d", null).Focus, "no source: the focus becomes none");
+        // A killer-less kill clears a focus the NPC had.
+        var set = owner.SetDangerState(owner.Version, new SessionDangerRequest { Entity = "oid:e", State = DangerState.CombatFocus, Target = SessionCombatant.Critter("oid:orc") });
+        Assert.AreEqual(GameSessionFailure.None, set.Failure);
+        Assert.AreEqual(SessionCombatant.Critter("oid:orc"), owner.QueryDanger("oid:e").Focus);
+        owner.ApplyDamage(owner.Version, Npc("oid:e"), Lethal);
+        Assert.IsNull(owner.QueryDanger("oid:e").Focus);
+    }
+
+    private static SessionDanger Focused(GameSessionOwner owner, string entity, string? killer)
+    {
+        owner.ApplyDamage(owner.Version, Npc(entity), Lethal, new SessionDamageParties(null, killer));
+        return owner.QueryDanger(entity);
+    }
+
+    [TestMethod]
+    public void The_kill_notice_follows_the_committed_death_and_the_host_may_write_the_session()
+    {
+        using var owner = Seeded();
+        var told = new List<SessionKillNoticeRequest>();
+        owner.KillNotice = request =>
+        {
+            told.Add(request);
+            Assert.IsNotNull(owner.QueryLifeRecord(request.Victim)!.Value.DeathTimeMs, "the death time is stamped before the notice");
+            Assert.AreEqual(SessionCombatant.Hero, owner.QueryDanger(request.Victim).Focus, "the focus is written before the notice");
+            var applied = owner.ApplyKillNotification(owner.Version, new SessionKillNotificationRequest
+            {
+                Victim = SessionCombatant.Critter(request.Victim), Plan = new KillNotificationPlan(new StopFleeingStep(false, true), ["oid:mate"]),
+            });
+            Assert.AreEqual(GameSessionFailure.None, applied.Failure, "the version the host sees is current");
+        };
+        var killed = owner.ApplyDamage(owner.Version, Npc(), Lethal, killer: SessionSpellCaster.Hero);
+        Assert.AreEqual(new SessionKillNoticeRequest("oid:wolf", owner.QueryActor().Map.RuntimeMap, SessionSpellCaster.Hero), told.Single());
+        Assert.AreEqual(owner.Version, killed.Version, "the result names the revision after the host's write");
+        Assert.IsTrue(owner.QueryDanger("oid:mate").Flags.HasFlag(DangerFlags.BackingOff), "the plan's back-off was written");
+    }
+
+    [TestMethod]
+    public void The_kill_notice_is_told_for_an_npc_death_only_and_not_after_skip_default()
+    {
+        using var owner = Seeded();
+        var told = 0;
+        owner.KillNotice = _ => told++;
+        owner.ApplyDamage(owner.Version, Npc(), new LifeDamage { HitPoints = 3 });
+        Assert.AreEqual(0, told, "a hit that does not kill");
+        owner.Kill(owner.Version, SessionLifeTarget.Hero);
+        Assert.AreEqual(0, told, "the hero's death has no notification");
+        owner.DyingScript = request => request.Victim != "oid:stopped";
+        owner.Kill(owner.Version, Npc("oid:stopped"));
+        Assert.AreEqual(0, told, "skip default stops the whole processing");
+        Assert.IsNull(owner.QueryDanger("oid:stopped").Focus, "no focus step either");
+        owner.Kill(owner.Version, Npc("oid:wolf"));
+        Assert.AreEqual(1, told);
+        owner.Kill(owner.Version, Npc("oid:wolf"));
+        Assert.AreEqual(1, told, "a dead NPC dies once");
+    }
+
+    [TestMethod]
+    public void A_kill_notice_host_that_throws_does_not_undo_the_death()
+    {
+        using var owner = Seeded();
+        owner.KillNotice = _ => throw new KeyNotFoundException("host failure");
+        var killed = owner.Kill(owner.Version, Npc());
+        Assert.AreEqual(GameSessionDisposition.Changed, killed.Disposition);
         Assert.AreEqual(owner.Version, killed.Version);
         Assert.IsNotNull(owner.QueryLifeRecord("oid:wolf")!.Value.DeathTimeMs);
     }
