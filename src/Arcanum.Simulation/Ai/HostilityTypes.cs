@@ -158,6 +158,8 @@ public enum AiRollPurpose
     StandpointHourRoll,
     /// <summary>ARC-AI-1315: the please-move goal's tile choice (0x424E00, node 1 of goal 68) starts its rotation at 0..8 (0x4CEF00; 8 tries every neighbour from rotation 0).</summary>
     PleaseMoveStart,
+    /// <summary>ARC-AI-1313 (0x425930, 0x425D60): the wander goal's tile offset, −radius..radius drawn twice (x, then y) around its tether.</summary>
+    WanderOffset,
 }
 
 /// <summary>The AI's random source: one inclusive range draw per call, the original's range draw (0x4CEF00); equal bounds

@@ -460,6 +460,7 @@ src/Arcanum.World/AreaAiHost.cs,SquareAround,pending,
 src/Arcanum.World/AreaAiHost.cs,StandardReaction,pending,
 src/Arcanum.World/AreaAiHost.cs,StartCast,pending,
 src/Arcanum.World/AreaAiHost.cs,StartPleaseMove,exempt,host
+src/Arcanum.World/AreaAiHost.cs,StartSpreadOut,exempt,host
 src/Arcanum.World/AreaAiHost.cs,StepClear,exempt,host
 src/Arcanum.World/AreaAiHost.cs,Struck,pending,
 src/Arcanum.World/AreaAiHost.cs,SubturnsEnded,pending,
@@ -603,6 +604,9 @@ tools/terrain-viewer/Core/AreaCharacterSheetArt.cs,RegionAt,pending,
 tools/terrain-viewer/Core/AreaCharacterSheetSpells.cs,HitAt,pending,
 tools/terrain-viewer/Core/AreaCursor.cs,Art,pending,
 tools/terrain-viewer/Core/AreaDialogBox.cs,Buttons,pending,
+tools/terrain-viewer/Core/AreaFateWindow.cs,Decide,exempt,reference
+tools/terrain-viewer/Core/AreaFateWindow.cs,Load,exempt,reference
+tools/terrain-viewer/Core/AreaFateWindow.cs,TextAt,exempt,reference
 tools/terrain-viewer/Core/AreaGameBar.cs,Exit,pending,
 tools/terrain-viewer/Core/AreaGameBar.cs,SkillButtonName,pending,
 tools/terrain-viewer/Core/AreaHoverDescriptions.cs,Dispatch,pending,
@@ -689,6 +693,10 @@ tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterCycle,exempt,referen
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterCycleSpeaker,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterPointerStill,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaContainerLoot.cs,CloseContainer,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,FateToggled,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,HandleFateKey,exempt,reference
+tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,RouteFateKey,exempt,reference
+tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,ToggleFate,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaHoverWindow.cs,DescribeObject,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaHoverWindow.cs,HoverCombatPanel,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaInventory.cs,ArmLockpick,pending,

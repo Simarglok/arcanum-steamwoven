@@ -1,3 +1,4 @@
+using Arcanum.Input;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.TerrainViewer.Core;
@@ -77,14 +78,33 @@ public partial class TerrainViewerApp
                 && place.X + place.Width / 2 == AreaMenuArtLayout.OptionsButtonX && place.Width > 0 && place.Height == 33).All(ok => ok),
                 "the page labels stand centred at (130, 221 + 40 i): " + string.Join(" ", places));
             Require(art.HoveredForSelfTest == -1, "no page label is lit while the focus is on the first control: " + art.HoveredForSelfTest);
-            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven"]), "Game page: " + string.Join("|", Controls()));
+            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven", "Evidence Log: Off", "Test Task: None"]), "Game page: " + string.Join("|", Controls()));
             // ARC-UI-061: the shown controls take the first slots: four in the first column, the fifth at the second's top (as drawn).
             await Frames(1);
-            Require(art.ControlPlacesForSelfTest.SequenceEqual(Enumerable.Range(0, 5).Select(AreaMenuArtLayout.OptionsSlot)),
+            Require(art.ControlPlacesForSelfTest.SequenceEqual(Enumerable.Range(0, 7).Select(AreaMenuArtLayout.OptionsSlot)),
                 "the Game page's controls stand in their art at the first slots: " + string.Join(" ", art.ControlPlacesForSelfTest));
             // ARC-UI-014: Original chosen in the main menu is the rule mode the new game begins in.
             panel.ChangeForSelfTest(4, 1);
             Require(_ruleMode == RuleMode.Original && Controls()[4] == "Rules: Original", "Original chosen before the game");
+            // ARC-GPAD-1376: the evidence log is off at the start, a session writes its closed lines to the device's own folder and ends cleanly.
+            Require(!EvidenceRecording && _evidenceTask == 0, "the evidence log starts off");
+            panel.ChangeForSelfTest(6, 1);
+            Require(!EvidenceRecording && Controls()[6] == "Test Task: None", "a task marker with the log off is refused: " + Controls()[6]);
+            panel.ChangeForSelfTest(5, 1);
+            Require(EvidenceRecording && Controls()[5] == "Evidence Log: On", "the Evidence Log line turned the log on");
+            panel.ChangeForSelfTest(6, 1);
+            Require(_evidenceTask == 1 && Controls()[6] == "Test Task: Task 1", "the Test Task line started task 1");
+            RecordEvidence(EvidenceCommand.Examine, EvidenceOutcome.WrongTarget);
+            panel.ChangeForSelfTest(5, 1);
+            Require(!EvidenceRecording && _evidenceTask == 0 && Controls()[5] == "Evidence Log: Off", "the line turned it off again");
+            var evidenceFiles = System.IO.Directory.GetFiles(System.IO.Path.Combine(ViewerAutomatedStorage.Folder(), "evidence"), "evidence-*.jsonl");
+            Require(evidenceFiles.Length == 1, "one evidence file in the isolated folder: " + evidenceFiles.Length);
+            var evidenceLines = System.IO.File.ReadAllLines(evidenceFiles[0]);
+            var evidenceEvents = evidenceLines.Skip(1).Select(EvidenceLogCodec.Parse).ToArray();
+            Require(evidenceLines[0] == EvidenceLogCodec.Header && evidenceEvents.All(e => e is not null)
+                && evidenceEvents.Select(e => e!.Value.Kind).SequenceEqual([EvidenceKind.SessionStart, EvidenceKind.TaskStart, EvidenceKind.Command, EvidenceKind.TaskEnd, EvidenceKind.SessionEnd])
+                && evidenceEvents[2]!.Value is { Command: EvidenceCommand.Examine, Outcome: EvidenceOutcome.WrongTarget, Task: 1, Scheme: EvidenceScheme.Original },
+                "the file holds the session's closed lines: " + string.Join(" | ", evidenceLines));
             // ARC-DEV-350: the HD pack problem box: the reason on screen, Continue closes it, Close game quits (the smoke takes the quit over).
             var quits = 0;
             _hdPackProblemQuitForSelfTest = () => quits++;
