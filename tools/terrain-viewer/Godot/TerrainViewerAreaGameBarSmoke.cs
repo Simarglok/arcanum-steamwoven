@@ -495,7 +495,7 @@ public partial class TerrainViewerApp
                 GD.Print($"ARC-UI-121 native {button} PASS first-draw=Down ({downSource}) held=Down settled=Hover frame={hoverFrame} ({hoverSource}) canceled=Idle ({idleSource})");
             }
 
-            await RunAreaFateSmokeAsync(panel, Frames, Move, Button, Key, Click);
+            await RunAreaFateSmokeAsync(panel, Frames, Move, Button, pressed => Key(pressed), Click);
 
             await RunAreaMessageLogSmokeAsync(panel);
 

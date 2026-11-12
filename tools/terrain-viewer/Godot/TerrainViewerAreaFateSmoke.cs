@@ -40,7 +40,8 @@ public partial class TerrainViewerApp
         CaptureFate("before");
         await click(AreaBarButton.FatePoints);
         await frames(2);
-        Require(FateOpen && FateViewForSelfTest is { ArtSet: true } view, "the Fate Points button opened the window: " + _gameBarNotice);
+        Require(FateOpen && FateViewForSelfTest is { ArtSet: true }, "the Fate Points button opened the window: " + _gameBarNotice);
+        var view = FateViewForSelfTest!;
         var rect = view.WindowRectForSelfTest;
         Require(Math.Abs(rect.Position.X - AreaGameBarPanel.ScreenLeft(GetViewport().GetVisibleRect().Size, panel.Factor)) < 1
             && Math.Abs(rect.Position.Y - AreaFateLayout.ScreenY * panel.Factor) < 1 && rect.Size.X > 0 && rect.Size.Y > 0, "the window stands at (0, 41) of the screen: " + rect);
