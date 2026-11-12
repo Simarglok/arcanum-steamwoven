@@ -628,7 +628,8 @@ attacking are the actions most refused tile scripts reach (ledger [TD1–TD3](..
 - **Hosts.** The viewer's tile and sector set (`AreaUseScriptHost.PlacedAdmission`, "S4-area-placed-dialog-actor") adds call-ex, destroy
   and stop attacking to the dialog action. A tile that an NPC steps on runs his own dialog point through call-ex as a heartbeat does
   (ARC-SCRIPT-047): Virgil on the altar tiles (1328) runs his dialog script 1324 from line 14, which asks for node 250, and the viewer
-  opens that talk. Destroy acts on an NPC of the shown map: it is kept as the map change `obj.destroyed` (1), and the view no longer draws
+  opens that talk. The talk is only a hint that the player consult the world map: all three replies end it with no action and the resumed line 15 returns, so no travel follows
+  (ledger [VA1–VA4](../research/ledger/scripts.md#virgils-altar-talk-is-a-hint-not-a-world-map-option-arc-script-1358), ARC-SCRIPT-1358). Destroy acts on an NPC of the shown map: it is kept as the map change `obj.destroyed` (1), and the view no longer draws
   or reaches the NPC (`AreaObjectTargets.Gone`, the object lists, the AI host); one destroyed already, in its map data or by a script,
   changes nothing. The PC, a follower of the PC (the party removal is not read) and an NPC whose destroy point holds a script (the
   destroy event is audit slice 4) leave the run unapplied. Stop attacking acts on the PC (each of its followers) or an NPC of the shown
