@@ -408,6 +408,7 @@ public sealed class AreaAiShotTests
         Run(host, npc);
         Assert.IsNull(host.RunOf(npc));
         Assert.IsFalse(session.QueryHolderItems(npc)!.Any(item => item.Entity == Entity(2)));
+        Assert.AreEqual($"pickup {Entity(2)}: not there", host.TraceOf(npc)?.Item, "the goal's end found nothing and charged nothing");
     }
 
     [TestMethod]

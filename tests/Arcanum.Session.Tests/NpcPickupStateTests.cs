@@ -135,4 +135,21 @@ public sealed class NpcPickupStateTests
         CollectionAssert.AreEqual(new[] { "quiver", "sword", "kit:2" }, Listed(restored));
         CollectionAssert.DoesNotContain(OnGround(restored), "sword");
     }
+
+    [TestMethod]
+    public void AnItemWithAComplexityThePcDroppedSurvivesASnapshotOfTheNpcsListWithNoComplexityOfItsOwn()
+    {
+        using var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
+        var gizmo = InventoryStateTests.Facts(SessionItemType.Weapon, 2905, 0, 7);
+        var seed = new SessionMapInventorySeed([new(Npc, SessionHolderKind.Npc, false, false, [], [])], [new("gizmo", gizmo, SwordCell)]);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, seed).Failure);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "gizmo", Accept).Disposition);
+        owner.PlaceHeroItem("gizmo", There);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItemByNpc(owner.Version, Npc, "gizmo", Accept).Disposition);
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        using var restored = Restore(Decode(text));
+        Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()), "canonical");
+        Assert.AreEqual(GameSessionFailure.None, restored.AttachMapInventory(Exterior, seed).Failure);
+        Assert.AreEqual(GameSessionDisposition.Changed, restored.TakeItemFromNpc(restored.Version, Npc, "gizmo", Accept).Disposition, "the hero can take it back");
+    }
 }

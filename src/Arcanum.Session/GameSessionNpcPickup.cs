@@ -36,6 +36,10 @@ public sealed partial class GameSessionOwner
         {
             if (placed.Map != _actor.Map) return RejectItem(GameSessionFailure.ItemNotAvailable);
             facts = _inventory.WithAmmo(item, InventoryDomain.MadeFacts(placed.Kind, _inventory.PlacedComplexity(placed)));
+            // The scripts of a placed item are its origin seed row's (as TakePlaced reads them); a kit or made item has none the session knows.
+            if (placed.Origin is { } origin && _inventory.Seeds.TryGetValue(origin, out var originSeed) && originSeed.Items.TryGetValue(item, out var listed) &&
+                (listed.Facts.HasScript(SessionScriptPoint.Get) || listed.Facts.HasScript(SessionScriptPoint.InsertItem)))
+                return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         }
         else
         {
@@ -58,6 +62,7 @@ public sealed partial class GameSessionOwner
             if (into is { } target)
             {
                 if ((long)target.Units + brought.Units > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
+                if (!_inventory.Ammo.ContainsKey(target.Entity) && _inventory.Ammo.Count >= _limits.MaxAmmoRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
                 if (!_durability.Records.ContainsKey(item) && _durability.Count >= _limits.MaxDurabilityRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
             }
             else if (!_inventory.Ammo.ContainsKey(item) && _inventory.Ammo.Count >= _limits.MaxAmmoRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
@@ -95,7 +100,9 @@ public sealed partial class GameSessionOwner
                 _inventory.SetWeight(item, facts.WeightFacts);
                 _inventory.Hero.SetGiven(new(item, _actor.Map));
             }
-            _inventory.AddToNpc(npc, new SessionMadeItem(item, facts.Kind, facts.Complexity));
+            // A given entry keeps no complexity of its own (a saved NPC list refuses one; its seed answers), a made or created item keeps its.
+            var given = placed is null || placed.Source is SessionPlacedSource.Kit or SessionPlacedSource.Pc;
+            _inventory.AddToNpc(npc, new SessionMadeItem(item, facts.Kind, given ? 0 : facts.Complexity));
             if (ammo is { } added) _inventory.Ammo[item] = added;
             MarkCheckWield(npc);
         }

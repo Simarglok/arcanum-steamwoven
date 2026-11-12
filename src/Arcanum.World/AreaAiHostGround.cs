@@ -25,8 +25,9 @@ public sealed partial class AreaAiHost
     private string? _searchNpc;
     private bool _groundHeld;
 
-    // The items an NPC's pickup goal is on its way to: Tile answers their cell (the item is no critter the host walks).
-    private readonly HashSet<string> _pickupItems = new(StringComparer.Ordinal);
+    // The items an NPC's pickup goal is on its way to, with the cell each lay on at the start: Tile answers it (the item is no critter the host walks) without a query of the map's inventory at every step.
+    // Several NPCs may be after one item; an entry goes when the item is taken or lies nowhere, and with a reset. A load in the middle of a walk loses it (the restored run ends as the object gone).
+    private readonly Dictionary<string, CellCoord> _pickupItems = new(StringComparer.Ordinal);
 
     private sealed class GroundHold(AreaAiHost host) : IDisposable
     {
@@ -121,11 +122,11 @@ public sealed partial class AreaAiHost
     /// interrupt). True when the run is in the table.</summary>
     public bool StartPickup(string npc, string item)
     {
-        if (!Walks(npc)) return false;
-        _pickupItems.Add(item);
+        if (!Walks(npc) || LyingCell(item) is not { } cell) return false;
+        var added = _pickupItems.TryAdd(item, cell);
         var current = RunOf(npc);
         if (Started(npc, current, AiExecutorRules.StartPickup(this, npc, item, current))) return true;
-        _pickupItems.Remove(item);
+        if (added) _pickupItems.Remove(item);
         return false;
     }
 
@@ -133,27 +134,31 @@ public sealed partial class AreaAiHost
     /// does not know (<see cref="InterfaceHoldsObject"/> answers false as well): always on.</summary>
     public bool NpcPickupsOn => true;
 
-    // The cell the pickup goal's item lies on: the shown map's loose item's, or the cell of the junk pile that holds it; null (the goal ends, "object gone") once it lies nowhere.
-    private CellCoord? PickupCell(string id)
+    private CellCoord? PickupCell(string id) => _pickupItems.TryGetValue(id, out var cell) ? cell : null;
+
+    // The cell the item lies on now: the shown map's loose item's, or the cell of the junk pile that holds it; null when it lies nowhere (one query of the map's inventory, so not for every step).
+    private CellCoord? LyingCell(string id)
     {
-        if (!_pickupItems.Contains(id)) return null;
         if (_session.QueryGroundItem(id) is { } lying && lying.Map.RuntimeMap == _scene.RuntimeMap) return lying.Cell;
-        if (_session.QueryJunkPiles().FirstOrDefault(pile => pile.Map.RuntimeMap == _scene.RuntimeMap && pile.Items.Any(item => item.Entity == id)) is { } pile) return pile.Cell;
-        _pickupItems.Remove(id);
-        return null;
+        return _session.QueryJunkPiles().FirstOrDefault(pile => pile.Map.RuntimeMap == _scene.RuntimeMap && pile.Items.Any(item => item.Entity == id))?.Cell;
     }
 
     /// <summary>
-    /// ARC-AI-1309 (goal 16 → 0x42A9B0 → 0x42AA70): the pickup. A target with object flags OFF or DESTROYED (0x13 &amp; 3) is not taken (a refusal of the session: an item that lies nowhere); an item whose holder is not a
-    /// junk pile is not taken either (the session takes an item of the ground or of a pile). In a round the actor's 1 action point is spent first (0x4B7CD0: none left ends its subturn and the pickup fails); then the item moves
+    /// ARC-AI-1309 (goal 16 → 0x42A9B0 → 0x42AA70): the pickup. A target with object flags OFF or DESTROYED (0x13 &amp; 3) is not taken and neither is an item whose holder is no junk pile (an item that lies nowhere: no action point is charged). In a round the actor's 1 action point is spent first (0x4B7CD0: none left ends its subturn and the pickup fails); then the item moves
     /// into the NPC's list (<see cref="GameSessionOwner.PickUpItemByNpc"/>, the insert check the carry weight of 0x466510) and a <see cref="AreaAiNoticeKind.PickUp"/> notice tells the viewer. NOT READY: the item's get and insert-item
     /// scripts (an item with one is refused), the item sound of a local picker (0x4F0BF0) and the network round's flag.
     /// </summary>
     [OriginalFunction(0x42AA70, OriginalFunctionScope.Partial)]
     public void PickUp(string id, string item)
     {
-        _pickupItems.Remove(item);
         if (!Walks(id)) return;
+        // 0x42A9B0 and 0x42AA70 refuse an item that is gone or held by something that is no junk pile before they charge the action point.
+        if (LyingCell(item) is null)
+        {
+            _pickupItems.Remove(item);
+            Trace(id).Item = $"pickup {item}: not there";
+            return;
+        }
         if (InRound && RoundActor == id)
         {
             if (ActionPoints(id) < 1) { EndSubturn(id); Trace(id).Item = $"pickup {item}: no action point left"; return; }
@@ -162,6 +167,7 @@ public sealed partial class AreaAiHost
         var view = GroundView();
         var result = _session.PickUpItemByNpc(_session.Version, id, item, moving => NpcInsertVerdict(id, view, moving));
         Trace(id).Item = $"pickup {item} {result.Disposition} {result.Failure}";
+        if (result.Disposition == GameSessionDisposition.Changed || LyingCell(item) is null) _pickupItems.Remove(item);
         if (result.Disposition == GameSessionDisposition.Changed) _notices.Add(new(AreaAiNoticeKind.PickUp, id, null) { Item = result.Item ?? item });
     }
 }
