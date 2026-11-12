@@ -19,9 +19,9 @@ public sealed partial class DialogConversation
 
     private sealed record TrainerTalk(ReplyPlan Reply, StepPlan? Target, DialogOperationSource Source);
 
-    private enum TrainerChoiceKind { Skill, Pay, Follow }
+    private enum TrainerChoiceKind { Skill, Pay, PayRumor, Follow }
 
-    private readonly record struct TrainerChoice(TrainerChoiceKind Kind, int Skill = 0, int Price = 0);
+    private readonly record struct TrainerChoice(TrainerChoiceKind Kind, int Skill = 0, int Price = 0, int Rumor = 0);
 
     private sealed record TrainerOption(string Text, DialogLineOrigin? Origin, TrainerChoice Choice);
 
@@ -210,8 +210,9 @@ public sealed partial class DialogConversation
             var response = new DialogResponseId(-(index + 2));
             var follow = option.Choice.Kind == TrainerChoiceKind.Follow;
             var reply = _talk!.Reply;
-            offers.Add(new DialogOption(index + 1, response, -1, DialogOptionTextKind.Generated, option.Text, new DialogGeneratedMarker('t'),
-                follow ? reply.Transition : DialogOptionTransition.TrainerStep,
+            var rumor = reply.Rumor is not null;
+            offers.Add(new DialogOption(index + 1, response, -1, DialogOptionTextKind.Generated, option.Text, new DialogGeneratedMarker(rumor ? 'r' : 't'),
+                follow ? reply.Transition : rumor ? DialogOptionTransition.RumorStep : DialogOptionTransition.TrainerStep,
                 follow && reply.Target is not null ? new DialogNodeId(reply.Target.Id) : null,
                 follow ? reply.ScriptLine : null,
                 new DialogOptionToken(_identity, Turn, _generation, response), null, option.Origin));
@@ -233,6 +234,9 @@ public sealed partial class DialogConversation
                 return PresentSkill(choice.Skill);
             case TrainerChoiceKind.Pay:
                 PayAndTrain(choice);
+                return Result();
+            case TrainerChoiceKind.PayRumor:
+                PayAndTell(choice);
                 return Result();
             default:
                 // The way out: the reply's own response (0x414810 case 0, 1 or 2 on the value the reply was built with), its action not run again.
@@ -257,21 +261,7 @@ public sealed partial class DialogConversation
     private void PayAndTrain(TrainerChoice choice)
     {
         var talk = _talk!;
-        int gold;
-        try
-        {
-            gold = _ports.Trainer!.PcGold(new DialogGoldQuery(_request.Participants.PlayerCharacter));
-        }
-        catch (Exception)
-        {
-            Fail(new DialogConversationFailure(DialogConversationFailureKind.QueryException, CurrentNode, talk.Source));
-            return;
-        }
-        if (gold < choice.Price)
-        {
-            PresentNotice(NoGoldGroup, classAnswer: false);
-            return;
-        }
+        if (!EnoughGold(choice.Price)) return;
         if ((long)_effects.Count + 2 > _options.MaxEffects)
         {
             Stop(new DialogConversationFrontier(DialogFrontierKind.EffectLimit, CurrentNode), null);
@@ -282,6 +272,24 @@ public sealed partial class DialogConversation
         var train = new SkillTrainingCommand(_request.Participants.PlayerCharacter, choice.Skill, TrainerTier);
         if (!RunTalkCommand(train, () => _ports.Skills!.Execute(train), talk.Source)) return;
         PresentNotice(DoneGroup, classAnswer: true);
+    }
+
+    /// <summary>The PC's own gold against the price (ledger DTR6): too little shows the notice of line 2000 (and answers false), a failed read fails the conversation.</summary>
+    private bool EnoughGold(int price)
+    {
+        int gold;
+        try
+        {
+            gold = (_ports.Purse ?? _ports.Trainer)!.PcGold(new DialogGoldQuery(_request.Participants.PlayerCharacter));
+        }
+        catch (Exception)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.QueryException, CurrentNode, _talk!.Source));
+            return false;
+        }
+        if (gold >= price) return true;
+        PresentNotice(NoGoldGroup, classAnswer: false);
+        return false;
     }
 
     private bool RunTalkCommand(DialogCommand command, Func<DialogCommandResult> run, DialogOperationSource source)
