@@ -138,6 +138,95 @@ public partial class TerrainViewerApp
                     $"{kind}: leaving takes the highlight and the window away");
                 seen.Add($"{kind}={row.PrototypeNumber}:{brighter}/{pairs.Length}");
             }
+            // ARC-UI-1117 (OH2, OH4): a hovered NPC gets the rings: both arts by the hero's combat mode, the colour of its reaction category, drawn
+            // additive (the pixels of their rectangles are not darker and some are brighter), animated at the art's rate; leaving takes them away.
+            var ringSeen = "none";
+            // The reaction colour needs the AI host, which an automated run leaves off: it is on for this pass (as the AI stages do) and given its frames to be built.
+            var aiBefore = _aiForSmoke;
+            _aiForSmoke = true;
+            try
+            {
+                for (var i = 0; i < 300 && _aiHost is null; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                List<Vector2> points = []; AreaDrawCommand? body = null;
+                foreach (var candidate in index.Bodies.Where(c => c.Identity is { } id && index.Row(id).Type == AreaHoverRingRules.NpcType && !string.IsNullOrEmpty(index.Name(id))
+                    && !AreaTakenByPc(c) && !canvas.AreaHiddenOf(c))
+                    // An NPC with a known reaction first, a living one before a corpse: its reaction colour is the one worth seeing.
+                    .OrderBy(c => HoverEntity(c.Identity!.Value) is { } who && _aiHost?.StandardReaction(who) is not null ? 0 : 1)
+                    .ThenBy(c => HoverLife(c.Identity!.Value) is { Life.Health: > 0 } ? 0 : 1).Take(6))
+                {
+                    HoverAtForSelfTest(null);
+                    var found = await PickPoints(candidate);
+                    if (found.Count > points.Count) { body = candidate; points = found; }
+                    if (points.Count >= 16) break;
+                }
+                if (body is not null)
+                {
+                    // The camera is on the last candidate framed: frame the chosen one again.
+                    points = await PickPoints(body);
+                    Require(points.Count > 0, "ring: the chosen NPC is picked again after framing it");
+                    var at = points[points.Count / 2]; var key = body.Identity!.Value;
+                    HoverAtForSelfTest(null);
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    Require(canvas.AreaRing is null && canvas.AreaRingDrawnForSelfTest is (null, null), "ring: none without a hover");
+                    using var before = await Frame();
+                    HoverAtForSelfTest(at);
+                    Require(HoverKeyForSelfTest == key, "ring: the NPC is the pick");
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    using var after = await Frame();
+                    var content = HoverRingContent();
+                    var arts = AreaHoverRingRules.Arts(AreaHoverRingRules.NpcType, HeroInCombatMode);
+                    Require(HoverRingArtsForSelfTest == arts, $"ring: the arts follow the combat mode: {HoverRingArtsForSelfTest} expected {arts}");
+                    if (content?.Art(arts.Under) is null || content.Art(arts.Over) is null)
+                    {
+                        // The folder does not read a ring art: no ring from it, said in the log, never a failure.
+                        ringSeen = $"unread-arts({content?.Detail})";
+                    }
+                    else
+                    {
+                        var entity = HoverEntity(key);
+                        var colour = AreaHoverRingRules.Colour(AreaHoverRingRules.NpcType, entity is null ? null : _aiHost?.StandardReaction(entity), content.Colours);
+                        Require(canvas.AreaRing is { } ring && ring.Target == key && ring.Colour == colour, $"ring: the colour is the reaction category's: {canvas.AreaRing?.Colour} expected {colour}");
+                        var drawn = canvas.AreaRingDrawnForSelfTest;
+                        Require(drawn.Under is not null && drawn.Over is not null, "ring: both rings are drawn for the hovered NPC (its body has a hotspot)");
+                        var under = drawn.Under!; var over = drawn.Over!;
+                        Require(under.Additive && under.Unlit && over.Additive && over.Unlit && under.Identity is null && over.Identity is null, "ring: additive, unlit, no object identity");
+                        Require(under.Visual.SourceIndex / 64 == arts.Under && over.Visual.SourceIndex / 64 == arts.Over, "ring: the frames are of the arts chosen");
+                        // Additive: no pixel of a ring's rectangle gets darker and some get brighter (not for a black tint, which adds nothing).
+                        var hud = _hud!.Rect; var top = _gameBarPanel!.StripRectForSelfTest(AreaBarStrip.Top); var bottom = _gameBarPanel.StripRectForSelfTest(AreaBarStrip.Bottom);
+                        var screenRect = (AreaDrawItem.RasterTransform(GetViewport()) * new Rect2(under.Destination.X, under.Destination.Y, under.Destination.Width, under.Destination.Height))
+                            .Intersection(GetViewport().GetVisibleRect());
+                        const float Step = 1.5f / 255;
+                        int darker = 0, brighter = 0, total = 0;
+                        for (var y = (int)screenRect.Position.Y; y < (int)screenRect.End.Y; y += 2)
+                        for (var x = (int)screenRect.Position.X; x < (int)screenRect.End.X; x += 2)
+                        {
+                            var p = new Vector2(x + .5f, y + .5f);
+                            if (hud.HasPoint(p) || top.HasPoint(p) || bottom.HasPoint(p)) continue;
+                            var b = before.GetPixel(x, y); var a = after.GetPixel(x, y); total++;
+                            if (a.R < b.R - Step || a.G < b.G - Step || a.B < b.B - Step) darker++;
+                            if (a.R > b.R + Step || a.G > b.G + Step || a.B > b.B + Step) brighter++;
+                        }
+                        // The NPC's own animated pixels share the rectangle, so a step of its idle animation between the two readbacks may darken a few (the ring itself adds only).
+                        Require(darker <= total / 25 && (brighter > 0 || colour == (0, 0, 0)), $"ring: of {total} pixels of the ring's rectangle {brighter} brighter and {darker} darker");
+                        // The rings step through their frames at the art's rate (an art of one frame stays).
+                        var frames = content.Art(arts.Under)!.Frames.Count; var first = canvas.AreaRing!.Under!.Key;
+                        var stepped = frames <= 1;
+                        for (var i = 0; i < 400 && !stepped; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); stepped = canvas.AreaRing?.Under?.Key != first; }
+                        Require(stepped, $"ring: the under ring stepped past frame {first.Frame} of {frames}");
+                        if (!string.IsNullOrWhiteSpace(capture)) Require(before.SavePng($"{capture}-critter-before.png") == Error.Ok && after.SavePng($"{capture}-critter-ring.png") == Error.Ok, "ring capture saved");
+                        var reaction = entity is null ? null : _aiHost?.StandardReaction(entity);
+                        ringSeen = $"{index.Row(key).PrototypeNumber}:arts={arts.Under}/{arts.Over}:reaction={reaction}:colour={colour.Item1},{colour.Item2},{colour.Item3}:brighter={brighter}/{total}:frames={frames}";
+                        GD.Print($"ARC-UI-1117 native-smoke hover-ring name='{index.Name(key)}' {ringSeen}");
+                    }
+                    HoverAtForSelfTest(null);
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    Require(canvas.AreaRing is null && canvas.AreaRingDrawnForSelfTest is (null, null), "ring: leaving the NPC takes both rings away");
+                }
+            }
+            finally
+            {
+                if (!aiBefore) { _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null; }
+            }
             // A window with no hoverable body of any kind (the generated wilderness has none) has nothing to observe: NONE, not a failure.
             if (seen.All(s => s.EndsWith("=none", StringComparison.Ordinal)) && !index.Bodies.Any(c => c.Identity is { } id && AreaHoverWindow.Highlighted(index.Row(id))
                 && !string.IsNullOrEmpty(index.Name(id)) && !AreaTakenByPc(c) && !canvas.AreaHiddenOf(c)))
@@ -146,7 +235,7 @@ public partial class TerrainViewerApp
             // A click-through body (OF_CLICK_THROUGH) is never the pick, so it is neither highlighted nor described (OH1).
             var through = area.Plan.Commands.FirstOrDefault(c => c.Identity is { } id && index.Contains(id) && AreaHoverIndex.ClickThrough(index.Row(id)));
             Require(through is null || index.Bodies.All(c => c.Identity != through.Identity), "click-through bodies are not pickable");
-            GD.Print($"ARC-UI-057 native-smoke hover-window PASS map={_readyMapName} {string.Join(" ", seen)} click-through={(through is null ? "none" : "skipped")}");
+            GD.Print($"ARC-UI-057 native-smoke hover-window PASS map={_readyMapName} {string.Join(" ", seen)} click-through={(through is null ? "none" : "skipped")} ring={ringSeen}");
         }
         finally
         {
