@@ -399,6 +399,14 @@ public sealed partial class GameSessionOwner
     public Func<SessionDyingRequest, bool>? DyingScript { get; set; }
 
     /// <summary>
+    /// ARC-AI-1134 (exe read 2026-11-12, ledger DY3, DY7): the host's kill notification (0x4AA1B0 inside the kill 0x45DA20) of an NPC whose death the life step processed (the dying script allowed it). The session has already
+    /// written the victim's combat focus (field 0x11B) := the killer and committed the step's revision; the host then runs <see cref="Arcanum.Simulation.Ai.MoraleRules.KillNotification"/> over its world and applies the plan
+    /// (<see cref="ApplyKillNotification"/>), and ends the victim's flee goals. The request names the NPC, the map its step ran on and the killer (<see cref="SessionSpellCaster.Hero"/> for the hero, none for a damage with no source).
+    /// A host that throws counts as no notification. None set: nobody is told. The hero's death has none (the kill's NPC branch only).
+    /// </summary>
+    public Action<SessionKillNoticeRequest>? KillNotice { get; set; }
+
+    /// <summary>
     /// ARC-DEV-301 (exe read 2026-11-08): the two endings of a critter's runs that the original's life paths call. The fatigue setter (0x45D5A0) takes a critter that was not unconscious to unconscious and demaintains it (0x457450: the
     /// runs it is the source of, but those of technology or with item triggers and no maintenance period, end by event); this is the same transition that fires its going unconscious (<see cref="Arcanum.Simulation.Magic.ItemSpellTriggerRules.LifeStep"/>), so a knock-out
     /// by damage that leaves the fatigue at zero, a payment or a drain counts alike. The kill (0x45DA20, after its dying script allowed it) tells the runs the critter is gone (0x459740, <see cref="SpellRunSystem.ObjectGone"/>): the runs it is the parent of end by event, those it is the source of lose the source and the active

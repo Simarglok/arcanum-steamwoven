@@ -2025,6 +2025,24 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return result.Failure == GameSessionFailure.None;
     }
 
+    /// <summary>
+    /// ARC-AI-1134 (ledger DY3, DY7): the kill notification (0x4AA1B0) of an NPC whose death the session processed (<see cref="GameSessionOwner.KillNotice"/>, after the combat focus := killer):
+    /// <see cref="MoraleRules.KillNotification"/> over this host's world (the victim stops fleeing; for a PC killer, the live NPCs of the victim's faction in the 7 × 7 square centred on the killer whose combat focus is the killer start backing off) applied in one
+    /// revision, then every run of the victim whose bottom or top goal is flee ends at level 6 (the stop-fleeing helper's interrupt, as <see cref="SpellStopFleeing"/>). False: the victim is not run here, or the world
+    /// no longer knows it, or the session refused the plan.
+    /// </summary>
+    public bool NoticeKill(string victim, string? killer)
+    {
+        if (victim == Pc || !TryNpc(victim, out _) || Find(victim) is null) return false;
+        var plan = MoraleRules.KillNotification(this, victim, killer);
+        var result = _session.ApplyKillNotification(_session.Version, new SessionKillNotificationRequest
+        {
+            Victim = SessionCombatant.Critter(victim), Plan = plan, VictimFacts = SetterFacts(victim),
+        });
+        InterruptRunsWhere(victim, GoalInterruptRules.MaxLevel, r => r.Bottom.Goal == GoalType.Flee || r.Frames[^1].Goal == GoalType.Flee);
+        return result.Failure == GameSessionFailure.None;
+    }
+
     // ---- the casting goals (ARC-WORLD-102) ----
 
     /// <summary>The casting goal's start (0x429B50 → 0x429BC0 → 0x42C850) through the cast host (<see cref="SessionSpellCaster.StartGoal"/>):

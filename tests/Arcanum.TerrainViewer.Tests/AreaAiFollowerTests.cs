@@ -863,6 +863,23 @@ public sealed class AreaAiFollowerTests
     }
 
     [TestMethod]
+    public void A_killed_npc_stops_fleeing_and_focuses_on_its_killer_through_the_kill_notice()
+    {
+        // ARC-AI-1134 (ledger DY3, DY7; 0x45DA20 → 0x4AA1B0, 0x4AF170): the session writes the combat focus := killer and tells the host, which runs the kill notification.
+        var scene = Open();
+        scene.Session.KillNotice = request => scene.Host.NoticeKill(request.Victim, request.Killer);
+        Assert.IsTrue(scene.Host.SpellFlee(scene.Enemy, Pc), "the enemy flees from the hero");
+        Assert.AreEqual(DangerState.Flee, scene.Session.QueryDanger(scene.Enemy).State);
+        var target = scene.Combat.Build(scene.Session, scene.Enemy).Combat?.Target ?? throw new AssertFailedException("the enemy has no combat build");
+        Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.Kill(scene.Session.Version, target, SessionSpellCaster.Hero).Disposition);
+        var danger = scene.Session.QueryDanger(scene.Enemy);
+        Assert.AreEqual(DangerState.None, danger.State, "the kill notification's stop fleeing asked the setter for none");
+        Assert.AreEqual(SessionCombatant.Hero, danger.Focus, "the dead NPC's combat focus is its killer");
+        Assert.IsFalse(scene.Host.NoticeKill(Pc, null), "the hero is no NPC of the kill's branch");
+        Assert.IsFalse(scene.Host.NoticeKill("oid:unknown", Pc), "an NPC this host does not run is left alone");
+    }
+
+    [TestMethod]
     public void The_reactions_setter_asks_for_no_alerted_sound_so_the_attack_goal_carries_none()
     {
         // ARC-RENDER-1126 (0x4A92D0, 0x4AABE0, 0x4296D0): only the danger update's setter call asks for the alerted sound (its pass record's bark slot, the host's UpdateDanger);

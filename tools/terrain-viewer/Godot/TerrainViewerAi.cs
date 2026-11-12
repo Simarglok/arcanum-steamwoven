@@ -112,6 +112,7 @@ public partial class TerrainViewerApp
         host.ProjectileEnds = ProjectileRunEnded;
         host.KnockbackEnds = KnockbackRunEnded;
         host.HeroEnds = HeroRunEnded;
+        session.KillNotice = request => { if (request.Map == mapNumber) host.NoticeKill(request.Victim, request.Killer); };
         // ARC-DEV-104 (MIG9 S4): a whole map opens its residency and sector cache once per map open; the arrival pre-cache folds the 3 × 3
         // sectors around the hero, whose NPCs get their first tick there. The delayed ticks below go only to NPCs without one.
         if (AreaResidency.Open(session, area, map, scene.HeroCell()) is { } opened)
@@ -488,7 +489,7 @@ public partial class TerrainViewerApp
     /// casting goal's magic run does not outlive it.</summary>
     private void RetireAiHost()
     {
-        if (_aiHost is { } host && ReferenceEquals(host.Session, _areaSession)) host.Retire();
+        if (_aiHost is { } host && ReferenceEquals(host.Session, _areaSession)) { host.Retire(); _areaSession!.KillNotice = null; }
         _aiHost = null; _aiHostArea = null;
         _heartbeatDialog = null;
         _npcTilePending.Clear();
