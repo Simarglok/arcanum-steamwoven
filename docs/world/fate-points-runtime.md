@@ -4,7 +4,7 @@ Status: **Implemented bounded component**, ARC-WORLD-054 (2026-10-21), task S7 o
 (the shared fate owner the skills, combat and magic lanes read). The hero's fate points and armed fates live in the game
 session; the pure rules are `FateRules` in [`Arcanum.Simulation.Character`](../../src/Arcanum.Simulation/Character/FateRules.cs),
 the session API is [`GameSessionFate.cs`](../../src/Arcanum.Session/GameSessionFate.cs). The hero's attack, the conversation start
-and the dialog action `fp` use it now; the skill check and magic take it through the session API. No fate window yet.
+and the dialog action `fp` use it now; the skill check and magic take it through the session API. The viewer's Fate Point window (ARC-UI-1112, [terrain viewer](../rendering/terrain-viewer.md#fate-point-window-arc-ui-1112)) arms and undoes the kinds through it.
 Snapshot schema 26. Requirements: [FR-CHAR-024](../requirements/characters-skills.md#fr-char-024) (fate points),
 [FR-MAGIC-005](../requirements/combat-magic-tech.md#fr-magic-005) (the two magic fates as inputs).
 
@@ -69,8 +69,9 @@ The hero's object gains `fatePoints` (0..100) and `armedFates` (the bits of kind
 
 ## Boundaries
 
-- No fate window (FT8: twelve buttons, press arms, release undoes, a refused press pops back; it opens only for a living PC). The
-  full heal of a dead hero is refused with nothing spent, which the original's window does not allow to happen.
+- The window is the viewer's (ARC-UI-1112, [ledger FW1–FW6](../research/ledger/ui-audio.md#fate-point-window-arc-ui-1112); FT8: twelve buttons, press
+  arms, release undoes, a refused press pops back; it opens only for a living PC). The full heal of a dead hero is refused with nothing
+  spent, which the original's window does not allow to happen.
 - Not modelled: the network messages of a multiplayer client (FT3, FT4, FT8), the window's refresh callback, the script command
   "grant one fate point" (the SCR dispatcher does not run it yet), NPC attacks on the hero, the magic uses and the skill uses
   themselves (their lanes).

@@ -58,6 +58,7 @@ public partial class TerrainViewerApp
         BindAreaBarter(arguments);
         BindAreaReading(arguments);
         BindAreaSleep(arguments);
+        BindAreaFate(arguments);
         BindAreaWorldMap(arguments);
         lap.Step("ambient");
         StartAreaAmbient(area);
