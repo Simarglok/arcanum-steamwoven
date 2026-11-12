@@ -32,7 +32,7 @@ public sealed partial class DialogConversation
 
     /// <summary>
     /// The numbers after the marker of a <c>t:</c> reply (the text the original's list reader gets): comma-separated numbers or
-    /// <c>a-b</c> ranges, at most 100, read like <c>atoi</c>; the whole reply is outside the subset when a number is no skill (0..15) or the menu
+    /// <c>a-b</c> ranges, at most 100, read like <c>atoi</c> (saturating where the CRT wraps: a number outside 0..15 is refused either way); the whole reply is outside the subset when a number is no skill (0..15) or the menu
     /// (the listed skills and the way out) would not fit the five options the original keeps (it writes past its arrays then).
     /// </summary>
     internal static int[]? ParseTrainerSkills(string text)
@@ -225,6 +225,8 @@ public sealed partial class DialogConversation
         var talk = _talk!;
         var index = -offer.ResponseId.Value - 2;
         var choice = _talkOptions[index].Choice;
+        // The token is consumed before the first effect, as in Select; the next screen (or the end) offers new ones.
+        _offers = Array.Empty<DialogOption>();
         switch (choice.Kind)
         {
             case TrainerChoiceKind.Skill:

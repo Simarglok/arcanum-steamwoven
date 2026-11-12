@@ -18,18 +18,21 @@ public sealed class DialogTrainerTests
     private sealed class Trainer(int gold) : IDialogTrainerPort
     {
         public int Gold { get; set; } = gold;
+        public bool ThrowOnGold { get; set; }
         public string? SkillName(int skill) => skill is >= 0 and <= 15 ? $"Skill{skill}" : null;
-        public int PcGold(DialogGoldQuery query) => Gold;
+        public int PcGold(DialogGoldQuery query) => ThrowOnGold ? throw new InvalidOperationException() : Gold;
     }
 
     private sealed class Pay(int gold) : IDialogGoldPort
     {
         public List<(long Pc, long Npc, int Amount)> Moved { get; } = [];
         public DialogCommandResult Result { get; set; } = DialogCommandResult.Applied;
+        public bool Throws { get; set; }
         public int Total(DialogGoldQuery query) => gold;
 
         public DialogCommandResult Execute(GoldCommand command)
         {
+            if (Throws) throw new InvalidOperationException();
             Moved.Add((command.PlayerCharacter.Value, command.Npc.Value, command.Amount));
             return Result;
         }
@@ -46,13 +49,13 @@ public sealed class DialogTrainerTests
         public bool WithTrainer { get; init; } = true;
         public bool WithGreeter { get; init; } = true;
 
-        public DialogConversation Start(string replies, int callerLine = 0) =>
+        public DialogConversation Start(string replies, int callerLine = 0, DialogConversationOptions? options = null) =>
             DialogConversation.Start(Read("{10}{Hello.}{}{}{}{}{}" + replies + "{20}{Next node.}{}{}{}{}{}"),
                 new DialogConversationRequest(new DialogNodeId(10),
                     new DialogParticipants(new DialogId(700), new DialogParticipantId(800), new DialogParticipantId(900)),
                     new DialogScriptLine(callerLine), new DialogPcFacts(DialogPcGender.Male, 8, false, 0), new DialogSpeakerNames("Ada", "Bram")),
                 new DialogConversationPorts(Ports, Ports, Owner(), World, Skills: Skills, Gold: Pay, Greeting: WithGreeter ? Greeter : null,
-                    Trainer: WithTrainer ? Trainer : null));
+                    Trainer: WithTrainer ? Trainer : null), options);
     }
 
     // Reply 11 is the trainer's; "response" 20 is the node after it.
@@ -264,6 +267,39 @@ public sealed class DialogTrainerTests
         Pick(stopped, 1);
         Assert.AreEqual(DialogConversationSelectStatus.AtFrontier, stopped.Select(stopped.Options[0].Token).Status);
         Assert.AreEqual(DialogFrontierKind.ReactionUnknown, stopped.Frontier!.Kind);
+    }
+
+    [TestMethod]
+    public void The_effect_budget_is_checked_before_the_payment_and_a_throwing_port_is_a_typed_failure()
+    {
+        var tight = new Rig();
+        tight.Skills.Levels[9] = 2;
+        var limited = tight.Start(TrainerReply(), options: new DialogConversationOptions { MaxEffects = 1 });
+        Pick(limited, 1);
+        Pick(limited, 1);
+        Assert.AreEqual(DialogConversationSelectStatus.AtFrontier, limited.Select(limited.Options[0].Token).Status);
+        Assert.AreEqual(DialogFrontierKind.EffectLimit, limited.Frontier!.Kind);
+        Assert.AreEqual(0, tight.Pay.Moved.Count + tight.Skills.Commands.Count, "nothing is paid when both effects do not fit");
+
+        var noGold = new Rig();
+        noGold.Skills.Levels[9] = 2;
+        noGold.Trainer.ThrowOnGold = true;
+        var query = noGold.Start(TrainerReply());
+        Pick(query, 1);
+        Pick(query, 1);
+        query.Select(query.Options[0].Token);
+        Assert.AreEqual(DialogConversationFailureKind.QueryException, query.Failure!.Kind);
+
+        var broken = new Rig();
+        broken.Skills.Levels[9] = 2;
+        broken.Pay.Throws = true;
+        var paying = broken.Start(TrainerReply());
+        Pick(paying, 1);
+        Pick(paying, 1);
+        paying.Select(paying.Options[0].Token);
+        Assert.AreEqual(DialogConversationFailureKind.CommandIndeterminate, paying.Failure!.Kind);
+        Assert.AreEqual(DialogCommandAttemptOutcome.Indeterminate, paying.Effects.Single().Outcome);
+        Assert.AreEqual(0, broken.Skills.Commands.Count, "no training after a payment that may not have happened");
     }
 
     [TestMethod]
