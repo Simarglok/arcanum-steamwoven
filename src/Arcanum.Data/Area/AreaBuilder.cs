@@ -323,8 +323,8 @@ public sealed partial class AreaDataOwner
                 (flags & SuppressingFlags(record.Type)) != 0 ? AreaDisposition.BodySuppressedBySerializedState : AreaDisposition.BodyEligibleConditionally;
             if (!x.HasValue || !y.HasValue) throw Fail(AreaErrorCode.UnknownLocation, AreaStage.Appearance, offset, ordinal);
             // No body its serialized state hides at T0 is resolved (destroyed 0x1, off 0x2 or
-            // don't-draw 0x100; every trap is don't-draw), whatever its type: consumers draw no
-            // such body. The original still draws a don't-draw object's overlays, so their
+            // don't-draw 0x100; every trap is don't-draw), whatever its type but an NPC stored off (see
+            // SuppressingFlags): consumers draw no such body. The original still draws a don't-draw object's overlays, so their
             // admission check below still applies unless the object is destroyed or off.
             var hidden = disposition == AreaDisposition.BodySuppressedBySerializedState;
             if (scope == AreaScope.Core)
@@ -405,7 +405,7 @@ public sealed partial class AreaDataOwner
     /// flips the flag when the story reaches it (the quest NPCs: the original's toggle state is a plain flag flip); the consumers hide it while the flag stands
     /// (the scene plan does not suppress it, the session's removed set does, <c>AreaObjectTargets.Gone</c>).
     /// </summary>
-    internal static uint SuppressingFlags(int type) => type == 16 ? 0x101u : 0x103u;
+    public static uint SuppressingFlags(int type) => type == 16 ? 0x101u : 0x103u;
 
     private static readonly (int Slot, uint Bit, int Size)[] OverlayLayers = [(5, 0x8000U, 7), (6, 0x8000U, 7), (7, 0x10000U, 4)];
     // ARC-DEV-383: the snapshot's copy of a field's sparse elements, made once per wire value of a build. A prototype's fields are the same

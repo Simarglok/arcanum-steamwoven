@@ -89,7 +89,7 @@ public sealed class AreaMapPlansRealDataTests
                 Assert.AreEqual(4096, cave.Reconciliation.CoreTerrain);
                 Assert.AreEqual(138, cave.Reconciliation.Statics);
                 Assert.AreEqual(39, cave.Reconciliation.Aggregate);
-                Assert.AreEqual(251, cave.Reconciliation.Visuals); // 195 + 56 frames of 4 animated scenery (ARC-RENDER-035); ARC-SCRIPT-1360: 195 bodies, the NPC stored off keeps its body
+                Assert.AreEqual(250, cave.Reconciliation.Visuals); // 194 + 56 frames of 4 animated scenery (ARC-RENDER-035)
             }
         }
         Assert.AreEqual(80, catalog.Maps.Count - 1);
