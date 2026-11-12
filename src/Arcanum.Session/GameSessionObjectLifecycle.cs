@@ -228,6 +228,8 @@ public sealed partial class GameSessionOwner
         _inventory.Identified.Remove(entity);
         // ARC-SCRIPT-1279: and the fields a script wrote on it.
         _inventory.ItemFields.Remove(entity);
+        // ARC-RES-1441: and the slot an arrangement gave it (the save refuses a slot of a deleted item).
+        _inventory.ForgetSlot(entity);
         // ARC-SCRIPT-042: its kept script slots go with it.
         foreach (var key in _inventory.ScriptSlots.Keys.Where(key => key.Entity == entity).ToArray()) _inventory.ScriptSlots.Remove(key);
         // ARC-WORLD-085: its weight facts go with it.

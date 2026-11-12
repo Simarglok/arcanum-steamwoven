@@ -110,4 +110,20 @@ public sealed class HolderSlotsSavedTests
         var damaged = GameSessionSnapshotCodec.TryDecode(older.Replace(",\"itemFields\":[]}", ",\"itemFields\":[],\"holderSlots\":[]}"));
         Assert.AreEqual((SnapshotDecodeFailure.UnknownField, "$.inventory.holderSlots"), (damaged.Failure, damaged.Path));
     }
+
+    [TestMethod]
+    public void A_slot_of_a_deleted_item_is_forgotten_so_the_save_still_loads_and_an_emptied_row_goes()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ArrangeHolderGrid(owner.Version, "shop").Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ArrangeHolderGrid(owner.Version, "chest").Disposition);
+        var gone = owner.DestroyItem(owner.Version, "tall", new ItemCondition(10, 0, 0, false));
+        Assert.AreEqual(GameSessionDisposition.Changed, gone.Disposition, gone.Failure.ToString());
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        Assert.IsFalse(text.Contains("\"item\":\"tall\"", StringComparison.Ordinal), "the deleted item keeps no slot");
+        StringAssert.Contains(text, "{\"holder\":\"shop\",\"slots\":[{\"item\":\"small\",\"slot\":1}]}");
+        using var restored = Reload(text);
+        Assert.AreEqual(GameSessionDisposition.Changed, restored.DestroyItem(restored.Version, "small", new ItemCondition(10, 0, 0, false)).Disposition);
+        Assert.IsFalse(GameSessionSnapshotCodec.Encode(restored.Capture()).Contains("\"holder\":\"shop\"", StringComparison.Ordinal), "a holder row without items is not kept");
+    }
 }

@@ -562,7 +562,10 @@ internal sealed class InventoryDomain
     internal void AddToNpc(string npc, SessionMadeItem item) { ForgetSlot(item.Entity); Lists.Add(npc, item, container: false); }
 
     /// <summary>ARC-RES-1410: an item that enters a list takes no slot the arrangement of an earlier list gave it.</summary>
-    internal void ForgetSlot(string entity) { foreach (var slots in HolderSlots.Values) slots.Remove(entity); }
+    internal void ForgetSlot(string entity)
+    {
+        foreach (var holder in HolderSlots.Where(pair => pair.Value.Remove(entity) && pair.Value.Count == 0).Select(pair => pair.Key).ToArray()) HolderSlots.Remove(holder);
+    }
 
     /// <summary>ARC-WORLD-090: an item at the end of a container's added list.</summary>
     internal void AddToContainer(string container, SessionMadeItem item) { ForgetSlot(item.Entity); Lists.Add(container, item, container: true); }
