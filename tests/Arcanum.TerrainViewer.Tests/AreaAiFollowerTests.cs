@@ -229,6 +229,32 @@ public sealed class AreaAiFollowerTests
         Assert.IsFalse(scene.Host.HostileToHero(scene.Enemy), "a dead NPC is not asked");
     }
 
+    // ARC-SCRIPT-1135 (CF4): the dialog so action's goal start: goal 69 toward the hero on a led follower, a duplicate and a not-led or foreign NPC start nothing.
+    [TestMethod]
+    public void The_spread_out_start_runs_goal_69_on_a_led_follower_once_and_nothing_for_others()
+    {
+        var scene = Open();
+        Assert.IsFalse(scene.Host.StartSpreadOut(scene.Enemy), "an NPC that is not a follower of this host");
+        Assert.IsFalse(scene.Host.StartSpreadOut("nobody"));
+        Assert.AreEqual(0, scene.Session.QueryGoals().RunsOf(scene.Companion).Length);
+
+        Assert.IsTrue(scene.Host.StartSpreadOut(scene.Companion), scene.Host.TraceOf(scene.Companion)?.Perform);
+        var run = scene.Session.QueryGoals().RunsOf(scene.Companion).Single();
+        Assert.AreEqual((GoalType.SpreadOut, Pc), (run.Bottom.Goal, run.Bottom.Target));
+        Assert.IsTrue(scene.Host.Holds(scene.Companion), "the goal run holds the companion's own walk");
+
+        Assert.IsFalse(scene.Host.StartSpreadOut(scene.Companion), "a second start is a duplicate");
+        Assert.AreEqual(1, scene.Session.QueryGoals().RunsOf(scene.Companion).Length);
+    }
+
+    [TestMethod]
+    public void The_spread_out_start_needs_a_leader_so_a_released_follower_gets_no_goal()
+    {
+        var scene = Open(free: true);
+        Assert.IsFalse(scene.Host.StartSpreadOut(scene.Companion));
+        Assert.AreEqual(0, scene.Session.QueryGoals().RunsOf(scene.Companion).Length);
+    }
+
     // The NPC's tick, fired through the session's event pass with the host as its world: an immediate tick due 1 ms ahead, the clock moved 10 ms.
     private static AiTickResult Fire(Scene scene, string entity)
     {
