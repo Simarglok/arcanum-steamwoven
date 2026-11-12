@@ -2811,12 +2811,12 @@ merchant's item pressed and released on the hero's grid is bought, a hero's item
 trades above (trade sound, messages on the quote line; PROJECT: a bought item goes to the hero's first free cells, a stack trades whole);
 a right release on an item moves it to the other side the same way (IW36); anything else goes back. A pointer resting on an item puts its quote on the quote line (PROJECT text `Buy NAME: N` / `Sell NAME: N` /
 `… no price (REASON)`; the original prints a generated phrase of the merchant's); the next quote replaces a trade message, as the
-original's hover rewrites its line. A left release in the round view closes the window. The `Diagnostic view` switch below the frame
+original's hover rewrites its line. A left release in the round view closes the window. ARC-UI-1120 (HK25, BW6): a pointer resting on an item first runs the item's examine script for the hero and draws its window while the bars show (the quote follows either way), and the cycle buttons 757 / 758 of the follower background switch the window to the previous or next follower ([barter runtime](../world/barter-runtime.md#follower-cycle-and-examine-arc-ui-1120)). The `Diagnostic view` switch below the frame
 shows the diagnostic window and back (the choice holds until it is switched again, as in the inventory window); a controller reaches
 only that switch in the original look (PROJECT: trades without a mouse go through the diagnostic window's buttons); since ARC-UI-069 the opening shop's docked window shows
 the original look too ([its section](#opening-shop-in-the-originals-look-arc-ui-069)). NOT READY: the gamble (box drawn in its off art; the check 0x579840 and the gamble 0x579B60, a held item released on it
 goes back), the hero's grid moves and its drop and use boxes inside the barter window (the item goes back), the count dialog, the
-generated quote phrases, the follower's weight lines and cycle buttons (757, 758), the merchant's doll view (337 `Barter_PD`) and both doll
+generated quote phrases, the follower's weight lines, the merchant's doll view (337 `Barter_PD`) and both doll
 toggles, the scroll bar's art, a follower's portrait as the image, the original fonts.
 
 **Not implemented in the diagnostic window:** grids, paperdoll and drag and drop, the count dialog, the quote lines, the gamble slot,

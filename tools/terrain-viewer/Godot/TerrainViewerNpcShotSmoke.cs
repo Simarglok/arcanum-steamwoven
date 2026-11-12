@@ -104,8 +104,10 @@ public partial class TerrainViewerApp
             if (first.Hit && _npcShotStrikesForSelfTest.Any(s => s.Shot == first.Shot && s.Struck == AiSchedulerRules.Pc))
                 Require(_npcShotStrikesForSelfTest.First(s => s.Shot == first.Shot && s.Struck == AiSchedulerRules.Pc).Damage is > 0 || lost > 0, "a hit shot that reached the hero damaged it");
             if (!first.Hit) Require(!_npcShotStrikesForSelfTest.Any(s => s.Shot == first.Shot && s.Struck == AiSchedulerRules.Pc && s.Damage is > 0), "a missed shot did not hurt the hero it was aimed at");
+            // ARC-COMBAT-1140: the second leg, an arrow of the same archer through an object of the map.
+            var objectLeg = NpcShotObjectLeg(session, runtime, entity, Frame);
             GD.Print("ARC-DEV-282 native-smoke npc-shot PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                RuntimeMap = runtime, Archer = shooter.Row.PrototypeNumber, Shots = _npcShotLaunchesForSelfTest.Count, Hit = first.Hit, Strike = end.Strike.ToString(), Struck = end.Struck ?? "none", HeroLost = lost,
+                RuntimeMap = runtime, Archer = shooter.Row.PrototypeNumber, Shots = _npcShotLaunchesForSelfTest.Count, Hit = first.Hit, Strike = end.Strike.ToString(), Struck = end.Struck ?? "none", HeroLost = lost, ObjectLeg = objectLeg,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
         finally
@@ -117,5 +119,65 @@ public partial class TerrainViewerApp
             _worldFocused = focused; RestoreWorldTestTime(testTime);
             PublishWorldSelection();
         }
+    }
+
+    // ARC-COMBAT-1140 (PF3, PF8, RH5): a missed arrow of the real archer flies on past its destination and strikes the first object that stops its way (an obstruction). A door, container or scenery of the map that stops the line of fire
+    // (the line map names it the blocker of the line from three cells before it to three beyond) is struck by the archer's session-decided miss, launched from the cell before it to the next cell (so the object lies beyond the destination):
+    // the strike goes through the AI host to the session as a forced hit and the object's damage or condition changes. The aimed-at-an-object case (RA4) is covered by the AI host's unit tests. NONE (printed, not a failure) when the map has no such object.
+    private string NpcShotObjectLeg(GameSessionOwner session, int runtime, string archer, Action frame)
+    {
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print("ARC-COMBAT-1140 npc-shot object leg FAIL: " + why);
+            throw new InvalidOperationException("AREA_NPC_SHOT_OBJECT_LEG_FAILED");
+        }
+        if (ObjectTargets() is not { } targets || _readyArea is not { } area || AreaLineOfFireNow() is not { } lineMap || _combatHost is null || AreaAiHostNow() is null)
+            return "NONE (no object targets, line map or AI host)";
+        var combat = _combatHost.Build(session, runtime, archer).Combat;
+        var worn = _combatHost.WornItems(session, runtime, archer);
+        if (combat is null || worn is null) return "NONE (the archer has no combat values)";
+        var candidates = area.Snapshot.Objects.Where(row => row.Scope == AreaScope.Core && row.WorldX is not null && row.WorldY is not null)
+            .Select(row => targets.Target(session, row.Key, AreaTrapped))
+            .Where(t => t is { Refusal: null, Object: { } o } && t.Kind is DamageableObjectKind.Portal or DamageableObjectKind.Container or DamageableObjectKind.Scenery
+                && !o.Baseline.Invulnerable && !o.Baseline.Busted && !o.Baseline.JunkPile)
+            .Select(t => (Target: t!, State: session.QueryObject(t!.Object!))).Where(c => c.State.HitPoints > 0).Take(600).ToArray();
+        (AreaObjectAttackTarget Target, SessionObjectState State)? chosen = null; CellCoord from = default, to = default;
+        foreach (var candidate in candidates)
+        {
+            var cell = new CellCoord(checked((int)candidate.Target.Row.WorldX!.Value), checked((int)candidate.Target.Row.WorldY!.Value));
+            foreach (var (dx, dy) in new[] { (1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1) })
+            {
+                var a = new CellCoord(cell.X - 3 * dx, cell.Y - 3 * dy); var b = new CellCoord(cell.X + 3 * dx, cell.Y + 3 * dy);
+                if (!lineMap.Contains(a) || !lineMap.Contains(b)) continue;
+                if (LineOfFireRules.Trace(a, 0, 0, b, lineMap, session.Rules.Combat).Blocker is not { } blocker || blocker.Key != candidate.Target.Row.Key) continue;
+                (chosen, from, to) = (candidate, a, new CellCoord(a.X + dx, a.Y + dy));
+                break;
+            }
+            if (chosen is not null) break;
+        }
+        if (chosen is not { } picked) return $"NONE (no door, container or scenery of {candidates.Length} stops a straight line of fire at its own cell)";
+        // A shot the session decided a miss (an object past the destination is struck by a missed shot only).
+        SessionAttackResult? decided = null;
+        for (var attempt = 0; attempt < 800 && !(decided?.Shot is { } maybe && session.QueryNpcShot(maybe) is { Hit: false }); attempt++)
+        {
+            foreach (var leaked in decided?.Shots ?? []) session.EndShot(leaked);
+            decided = session.AttackByNpc(session.Version, new SessionNpcAttack(combat) { Distance = 6, LineOfFire = new(0, false), AttackerWorn = worn, Flight = true });
+        }
+        Require(decided?.Shot is { } missed && session.QueryNpcShot(missed) is { Hit: false }, "the session decided a missed flying shot of the archer");
+        foreach (var extra in decided!.Shots.Skip(1)) session.EndShot(extra);
+        var shot = decided.Shot!.Value;
+        _npcShotStrikesForSelfTest.Clear(); _projectileEndsForSelfTest.Clear();
+        Require(AiLaunchShot(archer, AiSchedulerRules.Pc, shot, from, to), "the arrow launched toward the object's cell");
+        for (var f = 0; f < 3000 && (_projectiles.Count > 0 || session.QueryShotsInFlight().Contains(shot)); f++) frame();
+        Require(_projectiles.Count == 0 && !session.QueryShotsInFlight().Contains(shot), "the arrow's flight ended and the session holds no shot");
+        var after = session.QueryObject(picked.Target.Object!);
+        var strike = _npcShotStrikesForSelfTest.FirstOrDefault(x => x.Shot == shot.Id);
+        var end = _projectileEndsForSelfTest.FirstOrDefault(e => e.Shot.Id == shot.Id);
+        GD.Print($"ARC-COMBAT-1140 npc-shot object leg target={picked.Target.Entity} kind={picked.Target.Kind} from={from.X},{from.Y} to={to.X},{to.Y} strike={end.Strike} struck={end.Struck ?? "none"}"
+            + $" disposition={strike.Disposition} damage={strike.Damage} before={picked.State.Damage}/{picked.State.Condition} after={after.Damage}/{after.Condition} notice={_attackNotice}");
+        Require(strike.Struck == picked.Target.Entity && strike.Disposition != GameSessionDisposition.Rejected, "the archer's arrow struck the object through the session");
+        Require(after.Damage > picked.State.Damage || after.Condition != picked.State.Condition, "the arrow changed the object's damage or condition");
+        return $"{picked.Target.Kind} {picked.Target.Entity} damage {picked.State.Damage}->{after.Damage} {after.Condition}";
     }
 }

@@ -233,6 +233,51 @@ public partial class TerrainViewerApp
             }
             finally { WorldPointerForSelfTest(null); if (_interfaceWindows.IsOpen(InterfaceMode.Dialog)) CloseWindowMode(InterfaceMode.Dialog); }
 
+            // ARC-INPUT-1122 (0x54EB60, SA44): Home centres the game view on the hero on its release in the game view's mode, and does nothing in the dialog's
+            // mode (the dialog scrolls the view but is not one of the modes 0, 1, 2 and 18 whose handler reaches the Home branch).
+            try
+            {
+                await Frames();
+                _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
+                var centred = CameraAt();
+                var homeEdge = new Vector2(WorldViewport.X - 1, (float)Math.Floor(WorldViewport.Y / 2));
+                void ScrollAway()
+                {
+                    WorldPointerForSelfTest(homeEdge);
+                    for (var frame = 0; frame < 6; frame++) WorldObservation(() => ApplyWorldObservedFrame(.1, true, Idle(), [], "ARC-INPUT-1122 smoke: scroll away"));
+                    WorldPointerForSelfTest(null);
+                }
+                Require(OpenWindowMode(InterfaceMode.Dialog, () => { }, () => { }) && _interfaceWindows.ScrollsGameView && WorldModal, "the stack-only dialog stands for Home: " + State());
+                ScrollAway();
+                var away = CameraAt();
+                Require(away != centred, $"the view scrolled away under the dialog ({centred} -> {away}; {ScrollWhy()})");
+                _homeKeyLastTarget = null;
+                await Press(Key.Home);
+                Require(CameraAt() == away && _homeKeyLastTarget is null, $"Home does nothing in the dialog's mode ({away} -> {CameraAt()}, target {_homeKeyLastTarget})");
+                CloseWindowMode(InterfaceMode.Dialog);
+                Require(StackText() == "Game" && !WorldModal, "the dialog closed for Home: " + State());
+                // The press alone does nothing; the release centres (the original acts on the key's release).
+                InputWorld(new InputEventKey { Keycode = Key.Home, PhysicalKeycode = Key.Home, Pressed = true });
+                Require(CameraAt() == away, $"the Home press alone does not move the view ({away} -> {CameraAt()})");
+                InputWorld(new InputEventKey { Keycode = Key.Home, PhysicalKeycode = Key.Home, Pressed = false });
+                await Frames();
+                Require(CameraAt() == centred && _homeKeyLastTarget == HomeKeyTarget.Pc, $"Home centred the view on the hero ({away} -> {CameraAt()}, want {centred}, target {_homeKeyLastTarget})");
+                // Home with a modifier is the same key (the original tests the scan code only).
+                ScrollAway();
+                Require(CameraAt() != centred, "the view scrolled away again for the modifier step");
+                InputWorld(new InputEventKey { Keycode = Key.Home, PhysicalKeycode = Key.Home, Pressed = true, ShiftPressed = true });
+                InputWorld(new InputEventKey { Keycode = Key.Home, PhysicalKeycode = Key.Home, Pressed = false, ShiftPressed = true });
+                await Frames();
+                Require(CameraAt() == centred, $"Shift+Home centred the view ({CameraAt()}, want {centred})");
+                // Already centred and no round: nothing happens, the view stays (a hero the map's edge keeps off the view's centre is never "centred": the key repeats the centring).
+                _homeKeyLastTarget = null;
+                await Press(Key.Home);
+                var onHero = Math.Abs(centred.X - WorldAnchor.X) < .5 && Math.Abs(centred.Y - WorldAnchor.Y) < .5;
+                Require(CameraAt() == centred && _homeKeyLastTarget == (onHero ? HomeKeyTarget.Nothing : HomeKeyTarget.Pc), $"Home on a centred view with no round changes nothing (target {_homeKeyLastTarget}, on hero {onHero})");
+                steps.Add("Home centres the view on the hero on its release, not in the dialog's mode");
+            }
+            finally { WorldPointerForSelfTest(null); if (_interfaceWindows.IsOpen(InterfaceMode.Dialog)) CloseWindowMode(InterfaceMode.Dialog); }
+
             // ARC-DEV-201 (0x54CAF9): a right press on a bar pops the logbook, the sheet and the schematic window; a press over the window does not.
             var simulatedBars = _gameBarForSelfTest; _gameBarForSelfTest = true;
             try

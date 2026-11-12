@@ -84,6 +84,34 @@ public sealed class SavedFlightStateTests
         Assert.AreEqual(owner.QueryHeroLife()!.Status.HitPoints, restored.QueryHeroLife()!.Status.HitPoints);
     }
 
+    // ARC-COMBAT-1140: an NPC's arrow decided a hit on a door (the line of fire's blocker) is saved with the door as its target and strikes it after the load.
+    [TestMethod]
+    public void An_npc_arrow_aimed_at_an_object_is_saved_and_strikes_it_after_the_load()
+    {
+        using var owner = NpcShotFlightStateTests.Owner();
+        var archer = NpcShotFlightStateTests.Combat(NpcShotFlightStateTests.Archer, NpcShotFlightStateTests.BowFields());
+        var door = new SessionObjectTarget(Exterior, "sector:1:7", new SessionObjectBaseline
+        {
+            Kind = DamageableObjectKind.Portal, Points = 30, Material = ObjectMaterial.Cloth,
+            Openable = new SessionOpenableBaseline(Arcanum.Simulation.Locks.OpenableKind.Portal, 0, 0, 0),
+        });
+        var aimed = owner.AttackObjectByNpc(owner.Version, new(archer) { Target = door, Distance = 6, AttackerWorn = NpcShotFlightStateTests.Worn(), Flight = true });
+        var shot = aimed.Shot!.Value;
+        var facts = owner.QueryNpcShot(shot);
+        Assert.AreEqual((true, door.Entity), (facts!.Value.Hit, facts.Value.Target));
+        Fly(owner, shot, door.Entity, NpcShotFlightStateTests.Archer, critter: false);
+        var capture = owner.Capture();
+        Assert.AreEqual(door.Entity, capture.Flights.NpcArrows[0].Target);
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(capture)));
+        Assert.AreEqual(GameSessionFailure.None, restored.AttachMapInventory(Exterior, NpcShotFlightStateTests.Seed()).Failure);
+        Assert.AreEqual(facts, restored.QueryNpcShot(shot));
+        var strike = owner.LandNpcShotOnObject(owner.Version, shot, new(archer) { Target = door, AttackerWorn = NpcShotFlightStateTests.Worn() });
+        var again = restored.LandNpcShotOnObject(restored.Version, shot, new(archer) { Target = door, AttackerWorn = NpcShotFlightStateTests.Worn() });
+        Assert.AreEqual((GameSessionFailure.None, GameSessionFailure.None), (strike.Failure, again.Failure));
+        Assert.AreEqual(strike.Object!.Damage, again.Object!.Damage, "the strike lands the hit decided at the shot, with the same damage roll");
+        Assert.AreEqual(strike.Object.Damage, restored.QueryObject(door).Damage);
+    }
+
     [TestMethod]
     public void A_shot_without_its_projectile_and_a_projectile_without_its_run_are_not_saved()
     {

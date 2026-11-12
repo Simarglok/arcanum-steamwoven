@@ -63,12 +63,13 @@ public partial class TerrainViewerApp
 
     /// <summary>The floaters of the hero's attack on an object (a door, window, container, scenery, trap or item; a wall without a
     /// row), its lines over the object's cell.</summary>
-    private void FloatObjectAttack(SessionObjectAttackResult result, string target, AreaObjectRecord? row)
+    private void FloatObjectAttack(SessionObjectAttackResult result, string target, AreaObjectRecord? row, string? attacker = null)
     {
         // A portal's or scenery's entity names no inventory row: its cell comes from its map row.
         if (row is { WorldX: not null, WorldY: not null }) _floaterCells[target] = LiveWorldCell(row);
-        var hit = AreaCombatFloaters.Of(result, FloaterSide.Pc);
-        Float(hit, HeroFloater, result.Life is null ? target : HeroFloater);
+        // ARC-COMBAT-1140: an NPC's arrow on an object is that NPC's attack (its side colours the lines); the hero's otherwise.
+        var hit = AreaCombatFloaters.Of(result, attacker is null ? FloaterSide.Pc : FloaterSideOf(attacker));
+        Float(hit, attacker ?? HeroFloater, result.Life is null ? target : attacker ?? HeroFloater);
     }
 
     private void Float(CombatFloaterHit? hit, string attacker, string struck)

@@ -278,6 +278,23 @@ the session cannot regenerate keeps its list (`Unsupported`, no change). Refused
 host not ready or no seed for the actor's map, an object the seed or the host does not list as that kind of holder, a full budget and
 the revision. One revision. The viewer's caller is the [opening shop merchant](../rendering/terrain-viewer.md#opening-shop-merchant-arc-ui-038).
 
+## Follower cycle and examine (ARC-UI-1120)
+
+Requirements: [FR-ITEM-008](../requirements/items-economy.md#fr-item-008) (examination), [FR-UI-003](../requirements/ui-media-lifecycle.md#fr-ui-003)
+(window flow); ledger [HK25](../research/ledger/spell-runs.md#hotkey-bar-hover-descriptions-arc-ui-035) (examine in the barter window and at the
+dialog start), [BW6](../research/ledger/ui-audio.md#barter-window-art-arc-ui-064) (the cycle).
+
+- **Examine.** In the original look a pointer resting on an item (the hero's or the merchant's) runs the item's examine script with the hero as the
+  triggerer and, unless it answered skip default, draws the item window (`TerrainViewerApp.BarterPointerStill`, the same description as the inventory's
+  still pointer), and then makes the quote. The viewer runs it only with its interface on (an automated run without bars stays quiet); it hides its bars while the window is open, so the window is
+  drawn only when they show (a known gap), the script runs either way. A ware with no map row that the session did not make runs no script. The dialog start does the same for the speaker (`DescribeDialogSpeaker`).
+- **Cycle.** A follower's window while the hero leads two or more followers (the background 825) has the buttons 757 and 758
+  (`AreaBarterArtLayout.CycleHit`, `AreaInventoryGridArea.CycleRequested`); a release over the pressed one asks for the previous or next follower of
+  the hero's follower list (`AreaBarterCycle.Step`, wrapping, skipping the followers `BarterCycleSpeaker` refuses), closes the window and opens it again
+  on that follower through the pending open of the dialog's `b:` reply. Limits: the refusal test is the can-speak head, the critter flags 0x20000008, the
+  summoned spell flag and the viewer's present-speaker test (the tail of 0x4AD800 is not modelled); the pressed frame of the buttons is not drawn; a held item blocks the press (the original puts it back first); the close-and-reopen path has no automated test of its own (the smoke `barter` stage opens no follower window); a
+  follower on another map is not a speaker here and is skipped. The follower portraits' hover (HK26) is not built.
+
 ## Not modelled (NOT READY)
 
 - **Container loot window limits** (ARC-WORLD-101): a container with an unlock script does not open; a trapped one meets its trap
