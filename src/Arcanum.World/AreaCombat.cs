@@ -251,6 +251,14 @@ public sealed class AreaCombatHost : IAreaEventObjects
             && ItemFields(map, found) is { Item: not null } fields ? fields : null;
     }
 
+    /// <summary>ARC-AI-1309: the fields of an item lying on a map this host covers (a loose seed item, a placed one, a junk pile's: <see cref="ItemFields"/>), or null for a map the host does not cover or an item
+    /// without fields. The item search reads its item flags (NO_NPC_PICKUP, NO_DISPLAY) and its worth.</summary>
+    public CombatFields? GroundItemFields(int runtimeMap, SessionInventoryItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        return Held(runtimeMap, out var map) && ItemSource(map, item, out var fields) ? fields : null;
+    }
+
     /// <summary>ARC-WORLD-108: the NPC of a map this host covers that holds the item now (0x4612A0 for an NPC's item), or null.</summary>
     public string? NpcHolder(GameSessionOwner session, int runtimeMap, string item)
     {

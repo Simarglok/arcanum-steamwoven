@@ -31,12 +31,12 @@ public sealed class AreaAiShotTests
     private static AreaFieldValue Empty(int slot) => new(slot, AreaPresence.Empty, AreaValueOrigin.Instance, null, [], null);
 
     // A bow (type 5) wielded (location 1004): weight 15, normal damage 2..6, range 12, arrow ammunition (type 0), projectile art 0x20000.
-    private static AreaObjectRecord Item(int index, uint weaponFlags = 0) => new(Key(index), 0, 5, BowPrototype, "p", "p", "r", "s",
+    private static AreaObjectRecord Item(int index, uint weaponFlags = 0, uint itemFlags = 0, int weight = 15, int worth = 1, int location = 1004) => new(Key(index), 0, 5, BowPrototype, "p", "p", "r", "s",
         AreaScope.Core, null, null, null, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
         [
             Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 10), Field(27, 0), Field(28, 0), Field(29, 4),
             Array(30), Empty(31),
-            Field(36, 0), Field(38, 15), Field(39, 0), Field(40, 1), Field(41, 0), Field(42, 0x60000000), Field(43, 1004), Field(44, 0x60000000), Field(45, 0),
+            Field(36, itemFlags), Field(38, weight), Field(39, 0), Field(40, worth), Field(41, 0), Field(42, 0x60000000), Field(43, location), Field(44, 0x60000000), Field(45, 0),
             Field(46, 0), Field(49, 10000), Field(50, 10000), Field(51, 10000), Field(52, 10000), Field(53, 10000), Field(54, 0), Field(55, 0),
             Field(59, weaponFlags), Field(61, 0), Field(62, 0), Array(63, 2, 0, 0, 0, 0), Array(64, 6, 0, 0, 0, 0), Array(65, 0, 0, 0, 0, 0),
             Field(66, 10), Field(67, 0), Field(68, 12), Field(69, 0), Field(70, 0), Field(71, 0), Field(72, 0), Field(73, 1), Field(74, 0x20000),
@@ -90,29 +90,37 @@ public sealed class AreaAiShotTests
 
     private static Scene Open(Func<string, string, SessionShot, CellCoord, CellCoord, bool>? launch, bool bystander = false, AreaObjectRecord? blockerRow = null,
         Func<AreaObjectRecord, AreaObjectAttackTarget?>? objectTarget = null, Func<string, AreaObjectRecord, SessionShot, CellCoord, CellCoord, bool>? launchAtObject = null,
-        Action<string, AreaObjectRecord, AreaObjectAttackTarget?, SessionObjectAttackResult>? struck = null)
+        Action<string, AreaObjectRecord, AreaObjectAttackTarget?, SessionObjectAttackResult>? struck = null,
+        IReadOnlyList<(AreaObjectRecord Row, SessionSeedItem Seed)>? ground = null, string? junkPiles = null)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
         var created = GameSessionOwner.Create(new(ConversationSessionFixture.Clock, AreaStartingHero.NewGameFlags(identity, new OwnerEpoch(Guid.NewGuid()), null),
             new(new(1), HeroCell, NeighborDirection.XPlus), Hero: hero));
         var session = created.Owner ?? throw new AssertFailedException($"session {created.Failure}");
-        var rows = bystander ? new[] { Npc(0), Item(1), Npc(3, BystanderCell) } : new[] { Npc(0), Item(1) };
+        if (junkPiles is not null)
+        {
+            // ARC-AI-1309: a save whose junk piles hold the items lying on their cells (the piles a drop there would have made), as AreaInventoryHostTests builds one.
+            var snapshot = GameSessionSnapshotCodec.TryDecode(GameSessionSnapshotCodec.Encode(session.Capture()).Replace("\"junkPiles\":[]", "\"junkPiles\":" + junkPiles)).Snapshot!;
+            session.Dispose();
+            session = GameSessionOwner.Restore(snapshot, new(snapshot.Identity, snapshot.Clock.Profile, new OwnerEpoch(Guid.NewGuid()))).Owner!;
+        }
+        var rows = (bystander ? new[] { Npc(0), Item(1), Npc(3, BystanderCell) } : new[] { Npc(0), Item(1) }).Concat(ground?.Select(g => g.Row) ?? []).ToArray();
         var map = new AreaInventoryMap(1,
             new(bystander ? [new(Entity(0), SessionHolderKind.Npc, false, false, [], [Entity(1)]), new(Entity(3), SessionHolderKind.Npc, false, false, [], [])] : [new(Entity(0), SessionHolderKind.Npc, false, false, [], [Entity(1)])],
-                [new SessionSeedItem(Entity(1), new(BowKind, 15, 0, 1004, null, []), null)]),
+                [new SessionSeedItem(Entity(1), new(BowKind, 15, 0, 1004, null, []), null), .. ground?.Select(g => g.Seed) ?? []]),
             rows.ToDictionary(row => Entity(row.Key.SourceIndex)));
         var inventory = new AreaInventoryHost([map]);
         Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
         var combat = new AreaCombatHost(inventory, session: () => session);
         var terrain = new Dictionary<AreaStepCell, AreaStepTerrainEvidence>();
-        for (var x = 0; x < 32; x++) for (var y = 0; y < 32; y++)
+        for (var x = 0; x < 64; x++) for (var y = 0; y < 64; y++)
             terrain[new(x, y)] = new(new(x, y), 0, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, AreaStepTerrainSource.TileName, "TEST");
         var steps = new AreaStepSnapshot(new(AreaStepInputKind.Structural, "arc-data-019-whole-map-original-rules-v1", [], "d"), 1, [(0, 0)], terrain,
             new Dictionary<AreaStepCell, AreaStepObjectEvaluation[]>(), new Dictionary<AreaStepCell, AreaStepWallEdge[]>());
         var scene = new AreaAiScene
         {
-            RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = bystander ? [new(Entity(0), Npc(0), NpcCell), new(Entity(3), Npc(3, BystanderCell), BystanderCell)] : [new(Entity(0), Npc(0), NpcCell)], Combat = combat,
+            RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST") { MinimumCell = -64, MaximumCell = 127 }, Steps = steps, Npcs = bystander ? [new(Entity(0), Npc(0), NpcCell), new(Entity(3), Npc(3, BystanderCell), BystanderCell)] : [new(Entity(0), Npc(0), NpcCell)], Combat = combat,
             HeroCell = () => HeroCell, LaunchShot = launch,
             LineOfFire = blockerRow is not null ? () => new Line(blockerRow) : bystander ? () => new Line(Npc(3, BystanderCell)) : null,
             ObjectTarget = objectTarget, LaunchShotAtObject = launchAtObject, ObjectStruck = struck,
@@ -328,5 +336,98 @@ public sealed class AreaAiShotTests
         Assert.AreEqual(DangerFlags.None, session.QueryDanger(npc).Flags & (DangerFlags.LookForAmmo | DangerFlags.LookForWeapon | DangerFlags.LookForArmor));
         host.ReWield(npc, allSlots: true);
         Assert.IsTrue(host.TraceOf(npc)!.Item!.StartsWith("rewield all "), host.TraceOf(npc)?.Item);
+    }
+
+    // ARC-AI-1309: the item search's ground. A loose weapon is a bow-shaped row (type 5) with the item flags and worth the search reads (fields 36 and 40) lying at a cell of the seed.
+    private static (AreaObjectRecord Row, SessionSeedItem Seed) Loose(int index, CellCoord at, uint flags = 0, int worth = 1, SessionItemType type = SessionItemType.Weapon, int weight = 3)
+    {
+        return (Item(index, 0, flags, weight, worth, -1), new SessionSeedItem(Entity(index), new(BowKind with { Type = type, Prototype = BowPrototype + index }, weight, 0, -1, type == SessionItemType.Ammo ? 5 : null, []) { AmmoType = type == SessionItemType.Ammo ? 0 : null }, at));
+    }
+
+    private static readonly DangerFlags Looking = DangerFlags.LookForAmmo | DangerFlags.LookForWeapon | DangerFlags.LookForArmor;
+
+    [TestMethod]
+    public void The_hosts_ground_lists_the_loose_items_of_the_kind_in_the_square_with_their_distances_and_tests()
+    {
+        var (session, host, npc, _) = Open(null, ground: [Loose(2, new(13, 20)), Loose(3, new(11, 21)), Loose(4, new(40, 20)), Loose(5, new(12, 20), type: SessionItemType.Armor),
+            Loose(6, new(10, 22), flags: 0x80000), Loose(7, new(10, 23), worth: 0), Loose(8, new(9, 20), flags: 0x10)]);
+        var weapons = host.LooseItems(npc, AiGroundKind.Weapon, 10).ToDictionary(item => item.Id);
+        CollectionAssert.AreEquivalent(new[] { Entity(2), Entity(3), Entity(6), Entity(7), Entity(8) }, weapons.Keys.ToArray(), "the armour and the far item are not in the weapon query");
+        Assert.AreEqual((3L, 1L), (weapons[Entity(2)].Distance, weapons[Entity(3)].Distance));
+        Assert.IsTrue(weapons[Entity(6)].NoNpcPickup && weapons[Entity(7)].Worthless && weapons[Entity(8)].NoDisplay);
+        Assert.IsFalse(weapons[Entity(3)].NoDisplay || weapons[Entity(3)].NoNpcPickup || weapons[Entity(3)].Worthless || weapons[Entity(3)].CannotTake);
+        CollectionAssert.AreEqual(new[] { Entity(5) }, host.LooseItems(npc, AiGroundKind.Armor, 10).Select(item => item.Id).ToArray());
+        CollectionAssert.AreEquivalent(new[] { Entity(3), Entity(8) }, host.LooseItems(npc, AiGroundKind.Weapon, 1).Select(item => item.Id).ToArray(), "a square of half-size 1");
+        Assert.AreEqual(0, host.JunkPiles(npc, 10).Count);
+        Assert.IsNull(host.FirstInPile("junk:1", AiGroundKind.Weapon));
+    }
+
+    [TestMethod]
+    public void An_item_too_heavy_for_the_npc_is_one_it_cannot_take()
+    {
+        var (_, host, npc, _) = Open(null, ground: [Loose(2, new(11, 20), weight: 100000)]);
+        Assert.IsTrue(host.LooseItems(npc, AiGroundKind.Weapon, 10).Single().CannotTake);
+    }
+
+    [TestMethod]
+    public void The_marked_npc_walks_to_the_nearest_loose_weapon_picks_it_up_and_the_ground_loses_it()
+    {
+        var (session, host, npc, _) = Open(null, ground: [Loose(2, new(13, 20)), Loose(3, new(11, 21)), Loose(4, new(11, 20), flags: 0x80000)]);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetAiSupportBits(session.Version, npc, Looking).Disposition);
+        Assert.IsTrue(host.SearchItems(npc), host.TraceOf(npc)?.Item);
+        Assert.AreEqual(DangerFlags.LookForArmor, session.QueryDanger(npc).Flags & Looking, "the weapon and ammunition bits are cleared before their searches; the pickup ends the step and the armour bit stays");
+        Assert.AreEqual((Arcanum.Simulation.Goals.GoalType.PickupItem, Entity(3)), (host.RunOf(npc)!.Bottom.Goal, host.RunOf(npc)!.Bottom.Item), "the nearest one that is not NO_NPC_PICKUP");
+        var notices = Run(host, npc);
+        Assert.IsNull(host.RunOf(npc), host.TraceOf(npc)?.Item);
+        Assert.IsTrue(session.QueryHolderItems(npc)!.Any(item => item.Entity == Entity(3)), $"{host.TraceOf(npc)?.Item} reason={host.TraceOf(npc)?.Reason} step={host.TraceOf(npc)?.Step} perform={host.TraceOf(npc)?.Perform}");
+        var ground = session.QueryMapInventory(new SessionMapId(1))!.Ground.Select(g => g.Item.Entity).ToArray();
+        CollectionAssert.AreEquivalent(new[] { Entity(2), Entity(4) }, ground);
+        Assert.AreEqual(Entity(3), notices.Single(n => n.Kind == AreaAiNoticeKind.PickUp).Item);
+        Assert.IsTrue(session.QueryDanger(npc).Flags.HasFlag(DangerFlags.CheckWield), "the insert asks for a re-wield");
+    }
+
+    [TestMethod]
+    public void The_search_looks_for_the_kind_of_the_bit_that_is_set_and_an_empty_ground_starts_nothing()
+    {
+        var (session, host, npc, _) = Open(null, ground: [Loose(2, new(11, 20), type: SessionItemType.Armor)]);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetAiSupportBits(session.Version, npc, DangerFlags.LookForWeapon).Disposition);
+        Assert.IsFalse(host.SearchItems(npc), "no weapon lies there");
+        Assert.IsNull(host.RunOf(npc));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetAiSupportBits(session.Version, npc, DangerFlags.LookForArmor).Disposition);
+        Assert.IsTrue(host.SearchItems(npc));
+        Assert.AreEqual(Entity(2), host.RunOf(npc)!.Bottom.Item);
+    }
+
+    [TestMethod]
+    public void A_pickup_whose_item_was_taken_meanwhile_ends_without_a_move()
+    {
+        var (session, host, npc, _) = Open(null, ground: [Loose(2, new(13, 20))]);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetAiSupportBits(session.Version, npc, DangerFlags.LookForWeapon).Disposition);
+        Assert.IsTrue(host.SearchItems(npc));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.PickUpItem(session.Version, Entity(2), AreaInventoryHost.DiagnosticInsertCheck).Disposition);
+        Run(host, npc);
+        Assert.IsNull(host.RunOf(npc));
+        Assert.IsFalse(session.QueryHolderItems(npc)!.Any(item => item.Entity == Entity(2)));
+    }
+
+    [TestMethod]
+    public void The_search_takes_the_first_item_of_the_kind_of_a_junk_pile_when_no_loose_item_qualifies()
+    {
+        // A pile on (11, 20) holds a weapon, a pile on (12, 20) an item NO_NPC_PICKUP: the first pile's first weapon is taken.
+        var piles = "[{\"entity\":\"junk:1\",\"map\":1,\"x\":11,\"y\":20,\"items\":[{\"entity\":\"" + Entity(2) + "\",\"slot\":0,\"width\":1,\"height\":1}]},"
+            + "{\"entity\":\"junk:2\",\"map\":1,\"x\":12,\"y\":20,\"items\":[{\"entity\":\"" + Entity(3) + "\",\"slot\":0,\"width\":1,\"height\":1}]}]";
+        var (session, host, npc, _) = Open(null, ground: [Loose(2, new(11, 20)), Loose(3, new(12, 20), flags: 0x80000)], junkPiles: piles);
+        Assert.AreEqual(0, host.LooseItems(npc, AiGroundKind.Weapon, 10).Count, "an item in a pile is no loose item");
+        CollectionAssert.AreEqual(new[] { "junk:1", "junk:2" }, host.JunkPiles(npc, 10).ToArray());
+        Assert.AreEqual(Entity(2), host.FirstInPile("junk:1", AiGroundKind.Weapon) is { } found ? found.Id : null, "its distance is not read for a pile's item");
+        Assert.IsNull(host.FirstInPile("junk:1", AiGroundKind.Armor));
+        Assert.IsTrue(host.FirstInPile("junk:2", AiGroundKind.Weapon) is { NoNpcPickup: true });
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetAiSupportBits(session.Version, npc, DangerFlags.LookForWeapon).Disposition);
+        Assert.IsTrue(host.SearchItems(npc), host.TraceOf(npc)?.Item);
+        Assert.AreEqual(Entity(2), host.RunOf(npc)!.Bottom.Item);
+        var notices = Run(host, npc);
+        Assert.IsTrue(session.QueryHolderItems(npc)!.Any(item => item.Entity == Entity(2)), $"{host.TraceOf(npc)?.Item} reason={host.TraceOf(npc)?.Reason}");
+        Assert.AreEqual(Entity(2), notices.Single(n => n.Kind == AreaAiNoticeKind.PickUp).Item);
+        CollectionAssert.AreEqual(new[] { Entity(3) }, session.QueryJunkPiles().SelectMany(pile => pile.Items).Select(item => item.Entity).ToArray());
     }
 }
