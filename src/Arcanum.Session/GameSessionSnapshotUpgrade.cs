@@ -541,6 +541,13 @@ public static partial class GameSessionSnapshotCodec
                 foreach (var name in new[] { "critter2Set", "critter2Cleared", "blitSet", "blitCleared" }) AddField(row, $"$.spells.objectFlags[{i}]", name, 0);
             }
         },
+        // ARC-WORLD-1157 (schema 91): the generators section, the monster generators' counter table, the creatures they made and the slot mark of the critters they made. No older build ran a
+        // generator, so the step adds the empty section (a new game's table).
+        [90] = root =>
+        {
+            if (root.ContainsKey("generators")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.generators");
+            root.Add("generators", new JsonObject { ["slots"] = new JsonArray(), ["made"] = new JsonArray(), ["copies"] = new JsonArray() });
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from
