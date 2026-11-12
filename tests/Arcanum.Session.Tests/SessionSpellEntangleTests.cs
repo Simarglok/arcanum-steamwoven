@@ -248,4 +248,93 @@ public sealed class SessionSpellEntangleTests
         Cast(o, c, entangle);
         Assert.IsTrue(c.CritterHit(SessionSpellCaster.Hero));
     }
+
+    // ARC-MAGIC-045 (SFR3, ER4): a maintained-free spell that writes one spell flag at BEGIN and takes it off at END; <paramref name="provides"/> says whether its record names the flag in its
+    // set-flags word (what the run finder 0x459170 reads), so a run that writes the bit without providing it is a bit with no run to find.
+    private static SessionSpellRecord Flagged(int number, uint flag, bool provides) =>
+        SessionSpellRecords.Translate(Record(number: number, beginTargets: 0x4, info: SpellInfo.Friendly, components:
+            [Part(SpellAction.Begin, SpellComponentType.ObjFlag, new ObjectFlagData(SessionSpellCaster.SpellFlagsField, flag, true)),
+             Part(SpellAction.End, SpellComponentType.ObjFlag, new ObjectFlagData(SessionSpellCaster.SpellFlagsField, flag, false))])
+        with { Cost = 0, MaintainCost = 0, MinimumWillpower = 0, MaintainPeriod = 2, Range = 99, DurationSeconds = 30, DurationStat = -1, DurationTriggerCount = 0, ResistStat = -1, NoStack = 0,
+            DisallowedCasterSpellFlags = 0, DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0, CancelsSpellFlags = 0, SpellFlagsSet = provides ? flag : 0u,
+            Areas = [new(0x4, 0, 0, 0, -1), new(0, 0, 0, 0, -1), new(0x4, 0, 0, 0, -1), new(0, 0, 0, 0, -1), new(0, 0, 0, 0, -1)] });
+
+    private static IEnumerable<SpellCastEvent> HitEyeCandies(SessionSpellCaster caster, int from) => caster.Log.Skip(from).Where(e => e.Kind == SpellCastEventKind.EyeCandyAdded);
+
+    [TestMethod]
+    public void A_hit_on_a_shielded_critter_plays_the_run_spells_hit_eye_candy_and_changes_nothing_else()
+    {
+        // 0x459A30 (SFR3): the first active run whose record sets 0x400 and whose target is the critter: entry 6 × spell + 5, play flags 0, caused by the run.
+        const int shield = 30;
+        var record = Flagged(shield, SessionSpellCaster.ShieldedSpellFlag, provides: true);
+        var (owner, caster) = Setup(RuleMode.Steamwoven, record);
+        using var _ = owner;
+        Assert.IsFalse(caster.CritterHit(SessionSpellCaster.Hero), "no flag: nothing happens");
+        var run = Cast(owner, caster, record);
+        var hp = owner.QueryHeroLife()!.Status.HitPoints;
+        var before = caster.Log.Count;
+        Assert.IsFalse(caster.CritterHit(SessionSpellCaster.Hero), "the shield is no entangle: the hit ends nothing");
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.EyeCandyAdded, run, shield * 6 + 5, SessionSpellCaster.Hero, 0), HitEyeCandies(caster, before).Single());
+        Assert.AreEqual(1, caster.Log.Count - before, "no resisted, held or broken event");
+        Assert.AreEqual(hp, owner.QueryHeroLife()!.Status.HitPoints);
+        Assert.IsNotNull(owner.QuerySpellRuns()[run]);
+        // A second hit plays it again (every hit reaches the effect).
+        caster.CritterHit(SessionSpellCaster.Hero);
+        Assert.AreEqual(2, HitEyeCandies(caster, before).Count());
+        // The END clears the flag: no more eye candy.
+        caster.Act(new(SessionSpellRunActionKind.Interrupt, run));
+        before = caster.Log.Count;
+        caster.CritterHit(SessionSpellCaster.Hero);
+        Assert.AreEqual(0, HitEyeCandies(caster, before).Count());
+    }
+
+    [TestMethod]
+    public void A_shielded_bit_no_run_provides_plays_nothing()
+    {
+        // The original prints its assertion text and plays nothing when the run finder finds no run.
+        var record = Flagged(30, SessionSpellCaster.ShieldedSpellFlag, provides: false);
+        var (owner, caster) = Setup(RuleMode.Steamwoven, record);
+        using var _ = owner;
+        Cast(owner, caster, record);
+        var before = caster.Log.Count;
+        Assert.IsFalse(caster.CritterHit(SessionSpellCaster.Hero));
+        Assert.AreEqual(0, HitEyeCandies(caster, before).Count());
+    }
+
+    [TestMethod]
+    public void A_hit_on_a_critter_with_magnetic_inversion_plays_the_run_spells_entry_or_the_fixed_one_with_no_run()
+    {
+        const int spell = 182; const uint flag = SessionSpellCaster.MagneticInversionSpellFlag;
+        var provided = Flagged(spell, flag, provides: true);
+        var (owner, caster) = Setup(RuleMode.Steamwoven, provided);
+        using var _ = owner;
+        var run = Cast(owner, caster, provided);
+        var before = caster.Log.Count;
+        caster.CritterHit(SessionSpellCaster.Hero);
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.EyeCandyAdded, run, spell * 6 + 5, SessionSpellCaster.Hero, 0), HitEyeCandies(caster, before).Single());
+        // The bit with no providing run: the fixed entry 0x449, no run.
+        var bare = Flagged(spell, flag, provides: false);
+        var (o, c) = Setup(RuleMode.Steamwoven, bare);
+        using var __ = o;
+        Cast(o, c, bare);
+        before = c.Log.Count;
+        c.CritterHit(SessionSpellCaster.Hero);
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.EyeCandyAdded, -1, 0x449, SessionSpellCaster.Hero, 0), HitEyeCandies(c, before).Single());
+    }
+
+    [TestMethod]
+    public void A_shielded_and_entangled_critter_plays_the_shield_eye_candy_before_the_entangle_save()
+    {
+        var shield = Flagged(30, SessionSpellCaster.ShieldedSpellFlag, provides: true);
+        var entangle = Entangle(100);
+        var (owner, caster) = Setup(RuleMode.Steamwoven, shield, entangle);
+        using var _ = owner;
+        Cast(owner, caster, shield);
+        var held = Cast(owner, caster, entangle);
+        var before = caster.Log.Count;
+        Assert.IsTrue(caster.CritterHit(SessionSpellCaster.Hero));
+        var kinds = caster.Log.Skip(before).Select(e => e.Kind).ToList();
+        Assert.IsTrue(kinds.IndexOf(SpellCastEventKind.EyeCandyAdded) is var eye and >= 0 && eye < kinds.IndexOf(SpellCastEventKind.EntangleBroken), string.Join(",", kinds));
+        Assert.IsTrue(caster.Log.Any(e => e.Kind == SpellCastEventKind.EntangleBroken && e.Run == held));
+    }
 }

@@ -70,12 +70,22 @@ public sealed partial class SessionSpellCaster
         return true;
     }
 
+    private const int NoRun = -1;
+
+    /// <summary>The run finder (0x459170, ER6) as far as it is modelled: the first active run (table order) whose target is <paramref name="victim"/> and whose record sets every bit of <paramref name="flag"/>; the runs' object lists (+0x130, +0x134) are not modelled.</summary>
+    private SpellRun? RunProvidingFlag(string victim, int flag) =>
+        _owner.LiveSpellRuns().Runs.FirstOrDefault(r => (r.Flags & SpellRunFlags.Active) != 0 && r.Target?.Id == victim
+            && _records(r.Spell) is { } record && (unchecked((int)record.Data.SpellFlagsSet) & flag) == flag);
+
     /// <summary>
-    /// The entangled branch of the hit effect (0x459A30, called by every hit that reaches a PC or NPC: the attack end 0x4B6930 and the damage effect 0x433020), RS10: a critter whose
-    /// spell flags hold entangled looks for the first active run whose object it is and whose record sets that flag (0x459170); that run's save is asked again
+    /// The hit effect (0x459A30, called by every hit that reaches a PC or NPC: the attack end 0x4B6930 and the damage effect 0x433020). For each of the spell flags shielded (0x400), magnetic inversion
+    /// (0x400000) and entangled (0x1000000) the critter has now it looks for the first active run whose object it is and whose record sets that flag (the run finder 0x459170, ER6, SFR3).
+    /// <b>Shielded and magnetic inversion</b> (ARC-MAGIC-045): the run's spell plays its hit eye candy (entry 6 × spell + 5, no play flags, caused by the run) on the critter, an
+    /// <see cref="SpellCastEventKind.EyeCandyAdded"/> the host draws; no run found plays nothing for shielded (the original prints an assertion text), and for magnetic inversion the fixed entry
+    /// <see cref="MagneticInversionFixedEyeCandyEntry"/> with no run (-1). No state changes. <b>Entangled</b> (RS10): that run's save is asked again
     /// (<see cref="SpellResistanceRules.ReResist"/>, 0x459C10). A critter that resists again plays "resisted" (0x45A520) and the run ends by event (0x4571E0): the END clears the flag and takes the speed
     /// effect off. One that does not keeps the hold. The cached target type the save reads is the run processing's last (<see cref="MagicAnomalyProfile.ReResistReadsCachedTargetType"/>,
-    /// MG48) or the critter's own. The hit's other branches (the eye candy of the shield and reflection flags, 0x400 and 0x400000) are presentation and not modelled. Returns whether the
+    /// MG48) or the critter's own. The one prototype whose hit plays a fixed entry (0x4EB, a packet field not read yet) is not modelled. Returns whether the
     /// critter's entangle ended now.
     /// </summary>
     [OriginalFunction(0x459A30, OriginalFunctionScope.Partial)]
@@ -83,9 +93,19 @@ public sealed partial class SessionSpellCaster
     public bool CritterHit(string victim)
     {
         ArgumentNullException.ThrowIfNull(victim);
-        if ((CurrentFlags(victim, SessionObjectFlagField.Spell) & EntangledSpellFlag) == 0) return false;
-        var run = _owner.LiveSpellRuns().Runs.FirstOrDefault(r => (r.Flags & SpellRunFlags.Active) != 0 && r.Target?.Id == victim
-            && _records(r.Spell) is { } record && (unchecked((int)record.Data.SpellFlagsSet) & EntangledSpellFlag) != 0);
+        var flags = CurrentFlags(victim, SessionObjectFlagField.Spell);
+        if ((flags & (ShieldedSpellFlag | MagneticInversionSpellFlag | EntangledSpellFlag)) == 0) return false;
+        // Shielded first, then magnetic inversion (the order of 0x459A30): the eye candy goes to the host before the entangled branch's save.
+        if ((flags & ShieldedSpellFlag) != 0 && RunProvidingFlag(victim, ShieldedSpellFlag) is { } shield)
+            _log.Add(new(SpellCastEventKind.EyeCandyAdded, shield.Id, SpellEyeCandyRules.EntryIndex(shield.Spell, SpellEyeCandyRules.Hit), victim, 0));
+        if ((flags & MagneticInversionSpellFlag) != 0)
+        {
+            if (RunProvidingFlag(victim, MagneticInversionSpellFlag) is { } magnet)
+                _log.Add(new(SpellCastEventKind.EyeCandyAdded, magnet.Id, SpellEyeCandyRules.EntryIndex(magnet.Spell, SpellEyeCandyRules.Hit), victim, 0));
+            else _log.Add(new(SpellCastEventKind.EyeCandyAdded, NoRun, MagneticInversionFixedEyeCandyEntry, victim, 0));
+        }
+        if ((flags & EntangledSpellFlag) == 0) return false;
+        var run = RunProvidingFlag(victim, EntangledSpellFlag);
         if (run is null || RunObject(victim) is null) return false; // 0x459C8F: no object, the save holds before any die is rolled
         var target = ResistTarget(run.Spell, run.Parent?.Id, RunObject(victim));
         var cached = Profile.ReResistReadsCachedTargetType ? _cachedTargetKind ?? SpellTargetKind.Other : target.Kind;
