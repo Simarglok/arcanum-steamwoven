@@ -150,7 +150,9 @@ public partial class TerrainViewerApp
             _worldActor.Session is AreaGridSession session ? session.State.CommittedCell : (Arcanum.Simulation.Movement.CellCoord?)null,
             _inventoryHidden, _areaCompanions?.Companions.FirstOrDefault()?.Grid.State, _areaCompanions,
             (HeroInCombatMode, LeftAltHeld, Godot.Input.IsKeyPressed(Key.Alt), _areaSession?.Version.Revision, _areaSession?.Rules.Mode, _gameBarPanel?.Visible == true),
-            (_spellTargeting?.Spell, _spellTargeting?.Mask));
+            (_spellTargeting?.Spell, _spellTargeting?.Mask),
+            // ARC-INPUT-1356: a body that moves under the resting pointer is picked again where it is drawn now.
+            visible ? _canvas.AreaMovingDrawnStamp : 0);
         if (Equals(stamp, _hoverStamp)) return;
         _hoverStamp = stamp;
         // ARC-MAGIC-021: the open spell cursor names what its pick sees, through the objects it spares.
