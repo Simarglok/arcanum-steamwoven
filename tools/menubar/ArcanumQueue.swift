@@ -142,6 +142,128 @@ func clip(_ text: String, _ limit: Int) -> String {
     text.count > limit ? String(text.prefix(limit - 1)) + "…" : text
 }
 
+// MARK: - what the runs cost (ARC-DEV-1344: CPU and RAM of each running run's process tree)
+
+/// One `ps` snapshot per sample: a run's tree is the processes of its command's process group (the queue starts every command
+/// in a new session, so the group is the command's pid) plus their descendants. CPU is the change of the tree's accumulated CPU
+/// time between two samples, in percent of one core (so 240 is 2.4 cores busy); the first sample of a run has no CPU yet.
+final class Sampler {
+    struct Usage { var cpu: Double?; var rssKB: Int }
+    private let lock = NSLock()
+    private var latest: [Int32: Usage] = [:]
+    private var last: [Int32: (seconds: Double, at: Date)] = [:]
+    private var busy = false
+
+    func usage(of pid: Int32) -> Usage? {
+        lock.lock(); defer { lock.unlock() }
+        return latest[pid]
+    }
+
+    func sample(roots: [Int32]) {
+        lock.lock()
+        if busy { lock.unlock(); return }
+        busy = true
+        lock.unlock()
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self = self else { return }
+            let snapshot = Sampler.snapshot()
+            let now = Date()
+            var result: [Int32: Usage] = [:]
+            var seconds: [Int32: (seconds: Double, at: Date)] = [:]
+            self.lock.lock()
+            let before = self.last
+            self.lock.unlock()
+            for root in roots {
+                let members = Sampler.tree(root: root, snapshot: snapshot)
+                if members.isEmpty { continue }
+                let total = members.reduce(0.0) { $0 + $1.cpuSeconds }
+                let rss = members.reduce(0) { $0 + $1.rssKB }
+                var cpu: Double? = nil
+                if let old = before[root], now.timeIntervalSince(old.at) > 0.5, now.timeIntervalSince(old.at) < 20, total >= old.seconds {
+                    cpu = (total - old.seconds) / now.timeIntervalSince(old.at) * 100
+                }
+                result[root] = Usage(cpu: cpu, rssKB: rss)
+                seconds[root] = (total, now)
+            }
+            self.lock.lock()
+            self.latest = result
+            self.last = seconds
+            self.busy = false
+            self.lock.unlock()
+        }
+    }
+
+    struct Row { let pid: Int32; let ppid: Int32; let pgid: Int32; let rssKB: Int; let cpuSeconds: Double }
+
+    static func snapshot() -> [Row] {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.arguments = ["-axo", "pid=,ppid=,pgid=,rss=,time="]
+        process.environment = ["LC_ALL": "C"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return [] }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        var rows: [Row] = []
+        for line in String(decoding: data, as: UTF8.self).split(separator: "\n") {
+            let parts = line.split(separator: " ", omittingEmptySubsequences: true)
+            guard parts.count >= 5, let pid = Int32(parts[0]), let ppid = Int32(parts[1]), let pgid = Int32(parts[2]),
+                  let rss = Int(parts[3]) else { continue }
+            rows.append(Row(pid: pid, ppid: ppid, pgid: pgid, rssKB: rss, cpuSeconds: cpuSeconds(String(parts[4]))))
+        }
+        return rows
+    }
+
+    /// ps time: [[dd-]hh:]mm:ss[.xx]
+    static func cpuSeconds(_ text: String) -> Double {
+        var rest = Substring(text)
+        var days = 0.0
+        if let dash = rest.firstIndex(of: "-") {
+            days = Double(rest[rest.startIndex..<dash]) ?? 0
+            rest = rest[rest.index(after: dash)...]
+        }
+        var total = 0.0
+        for part in rest.split(separator: ":") { total = total * 60 + (Double(part) ?? 0) }
+        return days * 86400 + total
+    }
+
+    static func tree(root: Int32, snapshot: [Row]) -> [Row] {
+        var inTree = Set<Int32>(snapshot.filter { $0.pgid == root || $0.pid == root }.map { $0.pid })
+        var grew = true
+        while grew {  // descendants that left the group (a build server that started its own)
+            grew = false
+            for row in snapshot where !inTree.contains(row.pid) && inTree.contains(row.ppid) {
+                inTree.insert(row.pid)
+                grew = true
+            }
+        }
+        return snapshot.filter { inTree.contains($0.pid) }
+    }
+}
+
+func memory(_ kilobytes: Int) -> String {
+    kilobytes >= 1_000_000 ? String(format: "%.1f GB", Double(kilobytes) / 1_048_576) : String(format: "%d MB", kilobytes / 1024)
+}
+
+/// The whole Mac: the one-minute load average and the RAM in use (active, wired and compressed pages) of the installed RAM.
+func machineLine() -> String {
+    var averages = [Double](repeating: 0, count: 1)
+    let load = getloadavg(&averages, 1) == 1 ? String(format: "%.1f", averages[0]) : "?"
+    var stats = vm_statistics64()
+    var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64>.size / MemoryLayout<integer_t>.size)
+    let status = withUnsafeMutablePointer(to: &stats) {
+        $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count) }
+    }
+    var ram = ""
+    if status == KERN_SUCCESS {
+        let used = (UInt64(stats.active_count) + UInt64(stats.wire_count) + UInt64(stats.compressor_page_count)) * UInt64(vm_kernel_page_size)
+        ram = String(format: "  ·  RAM %.1f of %.0f GB", Double(used) / 1_073_741_824, Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824)
+    }
+    return "Mac: load \(load)  ·  \(ProcessInfo.processInfo.activeProcessorCount) cores" + ram
+}
+
 // MARK: - the app
 
 final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -154,6 +276,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var openMenu = false
     var menuIsOpen = false
     var signature = ""
+    let sampler = Sampler()
+    var sampledAt = Date.distantPast
+    var machineItem: NSMenuItem?
     var rows: [Int: (NSMenuItem, Job)] = [:]  // the run rows of the menu on screen, by ticket number
 
     init(queue: QueueFolder, idleMinutes: Double, openMenu: Bool) {
@@ -208,6 +333,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         var text = "#\(job.seq)  \(job.kind)\(lane)  \(label)"
         if let started = job.startedAt {
             text += "  ·  running \(age(now - started))"
+            if let pid = job.childPid, let usage = sampler.usage(of: pid) {
+                text += "  ·  " + (usage.cpu.map { String(format: "cpu %.0f%%  ", $0) } ?? "") + memory(usage.rssKB)
+            }
         } else {
             text += "  ·  waiting \(age(now - job.enqueuedAt))" + (position.map { " (\($0 + 1))" } ?? "")
         }
@@ -282,6 +410,10 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let now = Date().timeIntervalSince1970
         let running = jobs.filter { $0.startedAt != nil }
         let waiting = jobs.filter { $0.startedAt == nil }
+        if (menuIsOpen || force) && !running.isEmpty && Date().timeIntervalSince(sampledAt) >= 2 {
+            sampledAt = Date()
+            sampler.sample(roots: running.compactMap { $0.childPid })
+        }
 
         if let button = item.button {
             button.image = symbol(paused ? "pause.circle.fill" : (jobs.isEmpty ? "tray" : "tray.full.fill"))
@@ -303,11 +435,15 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         signature = jobs.map { "\($0.seq):\($0.startedAt != nil)" }.joined(separator: ",") + (paused ? "|paused" : "") + "|lanes=\(lanes.map(String.init) ?? "-")|load=\(guardLimit.map { String($0) } ?? "-")"
         if menuIsOpen && signature == before {
             for (seq, entry) in rows { entry.0.title = text(entry.1, position: positions[seq], now: now) }
+            machineItem?.title = machineLine()
             return
         }
         rows = [:]
         menu.removeAllItems()
         menu.addItem(header("Launch queue: \(running.count) running, \(waiting.count) waiting" + (paused ? "  —  PAUSED" : "")))
+        let machine = header(machineLine())
+        machineItem = machine
+        menu.addItem(machine)
         menu.addItem(.separator())
         if jobs.isEmpty {
             menu.addItem(header("No runs"))

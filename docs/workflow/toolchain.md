@@ -480,6 +480,10 @@ display and reads the queue's own files, so it works from whichever checkout sta
   running runs, then the waiting ones in queue order: number, kind and lane, label, how long it has run or waited, the checkout
   (the tooltip has the full command and pid). It reads the tickets the way the queue does (the flock the run holds plus a live
   process), every second, and never writes a ticket (it only probes their locks for an instant).
+- **Cost.** While the menu is open (every 2 s) the app takes one `ps` snapshot and adds to each running run the CPU (percent of
+  one core, from the change of the tree's accumulated CPU time, so it shows from the second sample on) and RAM (resident set)
+  of its command's process tree: the process group the queue started it in plus descendants that left it. The header line shows
+  the Mac's load average, cores and RAM in use (active, wired and compressed pages). Nothing is sampled while the menu is closed.
 - **Pause.** The menu's `Pause` item and `./arcanum queue --pause` / `--resume` set and clear one flag, the file `paused` in the queue
   folder. While it is set a waiter that would start waits instead (`ARCANUM_QUEUE queued ... waiting-for=resume paused`), and starts within the
   poll interval after the resume, in its place in the order; runs already running finish and a nested run still runs inside its
