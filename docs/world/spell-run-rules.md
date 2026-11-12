@@ -175,7 +175,7 @@ an action's or event's queued events do not fit; what the host's ports already d
 ## Not ready
 
 - No viewer caller: the casting UI (MT20a-2) starts runs and their BEGIN; Damage and Heal are ARC-MAGIC-012's ([spell damage and heal](spell-damage-heal.md), the host's `Apply` calls `SpellLifeComponents`), the other components MT13–MT18's; the maintain bar is MT20b's;
-  the endings' callers (fainting, rest, world-map travel, death) are MT11's; saved runs and events are MT9b's, done (ARC-DEV-210, ARC-DEV-289, ARC-MAGIC-058).
+  the endings' callers (fainting, rest, world-map travel, death) are MT11's and built, but for the summon's death ending (MT17); saved runs and events are MT9b's, done (ARC-DEV-210, ARC-DEV-289, ARC-MAGIC-058).
 - The other object (the invocation's +0xA0, copied to the run's block at +0xE8; the run's +0xA0 block is the target, ledger [DP3](../research/ledger/spell-runs.md#dispel-component-arc-magic-034)): since ARC-MAGIC-025 `SpellInvocation.Other` carries it
   and the run captures it; only the item executor sets it (the attacker global of an attack start and of attacks a location, ledger
   IC10), every other cast leaves it null.

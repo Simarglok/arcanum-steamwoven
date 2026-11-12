@@ -102,7 +102,7 @@ public partial class TerrainViewerApp
         Report("one-hour", 1);
 
         // ---- until healed (the ground window only): a step every 200 ms while hit-point damage is left; the wait window has no such button ----
-        var healedSteps = 0;
+        var healedSteps = 0; var spellEnded = -1;
         if (wait)
         {
             OpenSleepForSelfTest();
@@ -152,6 +152,25 @@ public partial class TerrainViewerApp
         Report("until-morning", morningSteps);
         Tick(host + AreaRestFade.DurationMs + 100);
 
+        // ---- ARC-MAGIC-1161 (0x57B710 -> 0x457450, ledger UE6): the press ends the sleeper's maintained spells; opening the window does not ----
+        if (SpellCasterNow() is not null && _spellRecords is { Length: > 0 } && StartMaintainedSpellForSmoke(session, SessionSpellCaster.Hero) is { } heroSpell)
+        {
+            Tick(host + AreaRestFade.DurationMs + 100);
+            OpenSleepForSelfTest();
+            Require(SleepOpenForSelfTest, "the window opens for the spell ending");
+            Tick(host + 10);
+            Require(session.QuerySpellRuns()[heroSpell.Run] is not null && session.QueryMaintainBar().SlotOf(heroSpell.Run) is not null, "the maintained spell still runs while the window is open (only the press ends it)");
+            SleepPressedForSelfTest(0);
+            for (var i = 0; i < 20 && session.QuerySpellRuns()[heroSpell.Run] is not null; i++) Tick(host + 10);
+            Require(session.QuerySpellRuns()[heroSpell.Run] is null && session.QueryMaintainBar().SlotOf(heroSpell.Run) is null,
+                $"the press ended the sleeper's maintained spell {heroSpell.Spell.Data.Number} (run {heroSpell.Run}: {session.QuerySpellRuns()[heroSpell.Run]?.Action.ToString() ?? "gone"})");
+            RunUntilClosed(100);
+            Tick(host + AreaRestFade.DurationMs + 100);
+            spellEnded = heroSpell.Spell.Data.Number;
+            GD.Print($"ARC-MAGIC-1161 native-smoke sleep-demaintain PASS spell={spellEnded} wait={wait}");
+        }
+        else GD.Print("ARC-MAGIC-1161 native-smoke sleep-demaintain NONE (no cast host or no maintainable spell on this map)");
+
         // ---- a replaced session closes the window and clears the cover ----
         OpenSleepForSelfTest();
         Tick(host + 10);
@@ -167,7 +186,7 @@ public partial class TerrainViewerApp
 
         GD.Print("ARC-WORLD-1160 native-smoke sleep PASS " + System.Text.Json.JsonSerializer.Serialize(new
         {
-            Map = _readyMapName, Wait = wait, Labels = labels, HeroDamageBefore = new { heroBefore.HitPointDamage, heroBefore.FatigueDamage }, UntilHealedSteps = healedSteps, UntilMorningSteps = morningSteps, GameText = SleepTexts().FromGame,
+            Map = _readyMapName, Wait = wait, Labels = labels, HeroDamageBefore = new { heroBefore.HitPointDamage, heroBefore.FatigueDamage }, UntilHealedSteps = healedSteps, UntilMorningSteps = morningSteps, SpellEnded = spellEnded, GameText = SleepTexts().FromGame,
         }));
 
         void Report(string what, int steps) => GD.Print($"ARC-WORLD-1160 sleep rest={what} steps={steps} hour={Hour()} hp-damage={HpDamage()} fatigue-damage={FatigueDamage()}");

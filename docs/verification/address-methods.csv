@@ -662,6 +662,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaSchematicArt.cs,SchematicSlotEntry,p
 tools/terrain-viewer/Godot/TerrainViewerAreaSheetArt.cs,SheetHoverEntry,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaSleep.cs,ApplyBedUse,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaSleep.cs,BedScriptAnswer,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerAreaSleep.cs,SleepPressed,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,AppendTownRoute,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,MarkTownMapByScenery,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,WorldMapTravelCheck,pending,
