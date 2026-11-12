@@ -81,23 +81,29 @@ public sealed class BodyDecayStateTests
         Assert.IsTrue(owner.QueryItemDecays().Count >= 2 || owner.QueryJunkPiles().Count > 0, "the dropped items decay as any drop");
     }
 
+    // ARC-WORLD-1299 (VP24, VPG4): the walk destroys exactly an item with spell flag 0x4000 or item flag 0x10; a no-drop item (0x20) lies down like any other.
     [TestMethod]
-    public void AMapNpcsSeedItemsLieOnTheGroundAndANotDroppableOneIsDestroyed()
+    public void AMapNpcsSeedItemsLieOnTheGroundExceptTheSummonedAndTheHiddenOnesAndANoDropItemIsNotLost()
     {
         using var owner = Create();
         var facts = InventoryStateTests.Facts(SessionItemType.Food, 3600);
         Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, new(
-            [new SessionSeedHolder("npc-1", SessionHolderKind.Npc, false, false, [], ["bread", "cursed"])],
-            [new SessionSeedItem("bread", facts, null), new SessionSeedItem("cursed", facts with { NoDrop = true }, null)])).Failure);
+            [new SessionSeedHolder("npc-1", SessionHolderKind.Npc, false, false, [], ["bread", "cursed", "ghost", "hidden", "both"])],
+            [new SessionSeedItem("bread", facts, null), new SessionSeedItem("cursed", facts with { NoDrop = true }, null),
+                new SessionSeedItem("ghost", facts with { Summoned = true }, null), new SessionSeedItem("hidden", facts with { NoDisplay = true }, null),
+                new SessionSeedItem("both", facts with { Summoned = true, NoDisplay = true, NoDrop = true }, null)])).Failure);
         owner.Kill(owner.Version, Target("npc-1"));
         Advance(owner, BloodPoolRules.CritterDecayDelayMs);
         var fired = owner.ProcessEvents(new World(Body)).BodyDecays.Single();
-        Assert.AreEqual((SessionBodyDecayOutcome.Removed, 1, 1), (fired.Outcome, fired.Dropped, fired.Destroyed));
+        Assert.AreEqual((SessionBodyDecayOutcome.Removed, 2, 3), (fired.Outcome, fired.Dropped, fired.Destroyed));
         Assert.AreEqual(1L, owner.QueryMapChange(Exterior, MapChangeKey.ForEntity("npc-1", GameSessionOwner.ObjectDestroyedProperty)), "a map NPC's destroy is the script destroy's map change");
-        var ground = owner.QueryMapInventory(Exterior)!.Ground.Single();
-        Assert.AreEqual(("bread", Body), (ground.Item.Entity, ground.Cell));
-        Assert.IsTrue(owner.IsItemDestroyed("cursed"));
-        Assert.AreEqual("bread", owner.QueryItemDecays().Single().Entity, "the dropped item decays");
+        foreach (var lying in new[] { "bread", "cursed" })
+            Assert.IsNotNull(owner.QueryMapChange(Exterior, MapChangeKey.ForEntity(lying, GameSessionOwner.ItemDroppedProperty)), lying + " lies on the ground (a no-drop item is dropped like any other)");
+        foreach (var gone in new[] { "ghost", "hidden", "both" })
+            Assert.IsNull(owner.QueryMapChange(Exterior, MapChangeKey.ForEntity(gone, GameSessionOwner.ItemDroppedProperty)), gone);
+        foreach (var gone in new[] { "ghost", "hidden", "both" }) Assert.IsTrue(owner.IsItemDestroyed(gone), gone);
+        Assert.IsFalse(owner.IsItemDestroyed("bread") || owner.IsItemDestroyed("cursed"));
+        CollectionAssert.AreEquivalent(new[] { "bread", "cursed" }, owner.QueryItemDecays().Select(decay => decay.Entity).ToArray(), "the dropped items decay");
     }
 
     [TestMethod]
@@ -170,21 +176,129 @@ public sealed class BodyDecayStateTests
         Assert.AreEqual(0, owner.QueryBodyDecays().Count);
     }
 
-    [TestMethod]
-    public void AnItemTheHeroGaveTheBodyIsDestroyedWithItAndTheSaveStillRestores()
+    private static GameSessionOwner HeroWithNpc(params SessionSeedItem[] ground)
     {
-        using var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
+        var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
         Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, new(
-            [new SessionSeedHolder("npc-1", SessionHolderKind.Npc, false, false, [], [])], [])).Failure);
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.GiveItemToNpc(owner.Version, "npc-1", "kit:2", _ => SessionInsertVerdict.Accepted).Disposition);
-        var made = MadeFor(owner, "npc-1");
+            [new SessionSeedHolder("npc-1", SessionHolderKind.Npc, false, false, [], [])], ground)).Failure);
+        return owner;
+    }
+
+    private static SessionBodyDecayFiring Decay(GameSessionOwner owner)
+    {
         owner.Kill(owner.Version, Target("npc-1"));
         Advance(owner, BloodPoolRules.CritterDecayDelayMs);
-        var fired = owner.ProcessEvents(new World(Body)).BodyDecays.Single();
-        Assert.AreEqual((SessionBodyDecayOutcome.Removed, 1, 1), (fired.Outcome, fired.Dropped, fired.Destroyed), "the made item lies down, the given kit item goes with the body");
-        Assert.IsTrue(owner.IsItemDestroyed("kit:2"));
-        CollectionAssert.AreEqual(new[] { made }, owner.QueryPlacedItems().Select(item => item.Entity).ToArray());
+        return owner.ProcessEvents(new World(Body)).BodyDecays.Single();
+    }
+
+    private static void RestoresTheSame(GameSessionOwner owner)
+    {
         using var back = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
-        CollectionAssert.AreEqual(new[] { made }, back.QueryPlacedItems().Select(item => item.Entity).ToArray());
+        CollectionAssert.AreEquivalent(owner.QueryPlacedItems().ToArray(), back.QueryPlacedItems().ToArray());
+    }
+
+    // ARC-WORLD-1299 (BD3's limit lifted): an item the hero gave the body is laid down as a placed kit or taken item, a made item as a created one, and the save restores.
+    [TestMethod]
+    public void AnItemTheHeroGaveTheBodyLiesOnTheGroundAndTheSaveRestores()
+    {
+        using var owner = HeroWithNpc(new SessionSeedItem("gem", InventoryStateTests.Facts(SessionItemType.Generic, 5600), new CellCoord(101, 200)));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "gem", _ => SessionInsertVerdict.Accepted).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.GiveItemToNpc(owner.Version, "npc-1", "kit:2", _ => SessionInsertVerdict.Accepted).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.GiveItemToNpc(owner.Version, "npc-1", "gem", _ => SessionInsertVerdict.Accepted).Disposition);
+        var made = MadeFor(owner, "npc-1");
+        var fired = Decay(owner);
+        Assert.AreEqual((SessionBodyDecayOutcome.Removed, 3, 0), (fired.Outcome, fired.Dropped, fired.Destroyed));
+        var placed = owner.QueryPlacedItems().OrderBy(item => item.Entity, StringComparer.Ordinal).ToArray();
+        CollectionAssert.AreEqual(new[] { ("gem", SessionPlacedSource.Pc), ("kit:2", SessionPlacedSource.Kit), (made, SessionPlacedSource.Created) },
+            placed.Select(item => (item.Entity, item.Source)).ToArray());
+        Assert.AreEqual(Exterior, placed.Single(item => item.Entity == "gem").Origin, "a taken item remembers its seed");
+        Assert.IsFalse(owner.IsItemDestroyed("kit:2") || owner.IsItemDestroyed("gem"));
+        Assert.AreEqual(0, owner.QueryNpcInventory("npc-1").Count, "nothing is left in the body's list");
+        RestoresTheSame(owner);
+    }
+
+    // A taken item with spell flag 0x4000 or item flag 0x10 in its origin seed is destroyed when its holder's body decays.
+    [TestMethod]
+    public void AGivenTakenItemWithTheSummonedOrNoDisplayFlagInItsSeedIsDestroyed()
+    {
+        var plain = InventoryStateTests.Facts(SessionItemType.Generic, 5600);
+        using var owner = HeroWithNpc(new SessionSeedItem("ghost", plain with { Summoned = true }, new CellCoord(101, 200)),
+            new SessionSeedItem("hidden", plain with { NoDisplay = true }, new CellCoord(101, 200)), new SessionSeedItem("kept", plain, new CellCoord(101, 200)));
+        foreach (var entity in new[] { "ghost", "hidden", "kept" })
+        {
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, entity, _ => SessionInsertVerdict.Accepted).Disposition, entity);
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.GiveItemToNpc(owner.Version, "npc-1", entity, _ => SessionInsertVerdict.Accepted).Disposition, entity);
+        }
+        var fired = Decay(owner);
+        Assert.AreEqual((SessionBodyDecayOutcome.Removed, 1, 2), (fired.Outcome, fired.Dropped, fired.Destroyed));
+        CollectionAssert.AreEqual(new[] { "kept" }, owner.QueryPlacedItems().Select(item => item.Entity).ToArray());
+        Assert.IsTrue(owner.IsItemDestroyed("ghost") && owner.IsItemDestroyed("hidden"));
+        RestoresTheSame(owner);
+    }
+
+    // The coins an NPC holds (a made gold pile with its record) lie on the ground as a coin pile the hero can pick up, as a hero's own gold drop; the save restores.
+    [TestMethod]
+    public void TheCoinsOfTheBodyLieOnTheGroundAsAPileThatMergesIntoTheHeroGold()
+    {
+        using var owner = HeroWithNpc();
+        var pileKind = new SessionItemKind(SessionItemType.Gold, 9056, 3200, 33200);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.GiveGoldToNpcFromNothing(owner.Version, "npc-1", 40, pileKind, _ => SessionInsertVerdict.Accepted).Disposition);
+        var gold = owner.QueryGold();
+        var fired = Decay(owner);
+        Assert.AreEqual((SessionBodyDecayOutcome.Removed, 1, 0), (fired.Outcome, fired.Dropped, fired.Destroyed));
+        var pile = owner.QueryPlacedItems().Single();
+        Assert.AreEqual((SessionItemType.Gold, SessionPlacedSource.Made, Exterior, Body), (pile.Kind.Type, pile.Source, pile.Map, pile.Cell));
+        RestoresTheSame(owner);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, pile.Entity, _ => SessionInsertVerdict.Accepted).Disposition);
+        Assert.AreEqual(gold + 40, owner.QueryGold());
+    }
+
+    // An ammunition stack the body holds (taken from the world and given) lies on the ground with its units, and the save restores it.
+    [TestMethod]
+    public void AnAmmunitionStackOfTheBodyLiesOnTheGroundWithItsUnits()
+    {
+        var arrows = new SessionItemFacts(new(SessionItemType.Ammo, 1500, 1500, 31500), 1, 0, 0, 20, []) { AmmoType = 0 };
+        using var owner = HeroWithNpc(new SessionSeedItem("arrows", arrows, new CellCoord(101, 200)));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "arrows", _ => SessionInsertVerdict.Accepted).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.GiveItemToNpc(owner.Version, "npc-1", "arrows", _ => SessionInsertVerdict.Accepted).Disposition);
+        var fired = Decay(owner);
+        Assert.AreEqual((SessionBodyDecayOutcome.Removed, 1, 0), (fired.Outcome, fired.Dropped, fired.Destroyed));
+        Assert.AreEqual("arrows", owner.QueryPlacedItems().Single().Entity);
+        Assert.AreEqual(20, owner.QueryAmmo("arrows")?.Units);
+        RestoresTheSame(owner);
+        var back = owner.PickUpItem(owner.Version, "arrows", _ => SessionInsertVerdict.Accepted);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (back.Disposition, back.Failure));
+    }
+
+    // The budgets come first: a body whose made items do not fit the created items' bound waits a minute and nothing is placed, destroyed or written.
+    [TestMethod]
+    public void ABodyWhoseItemsExceedTheCreatedItemsBoundWaitsAMinuteWithNothingChanged()
+    {
+        using var owner = Create(new GameSessionLimits(maxCreatedItems: 1));
+        var critter = Critter(owner);
+        MadeFor(owner, critter);
+        MadeFor(owner, critter);
+        owner.Kill(owner.Version, Target(critter));
+        Advance(owner, BloodPoolRules.CritterDecayDelayMs);
+        var fired = owner.ProcessEvents(new World(Body)).BodyDecays.Single();
+        Assert.AreEqual(SessionBodyDecayOutcome.Postponed, fired.Outcome);
+        Assert.AreEqual(0, owner.QueryPlacedItems().Count);
+        Assert.IsNotNull(owner.QueryCreatedObject(critter), "the body stays");
+        Assert.AreEqual(1, owner.QueryBodyDecays().Count, "the event is scheduled again");
+    }
+
+    // A session with no hero has no ground record for a given item or a coin pile: they go with the body (the documented limit); a made item still lies down.
+    [TestMethod]
+    public void WithoutAHeroTheCoinsOfTheBodyAreDestroyedWithItAndAMadeItemLiesDown()
+    {
+        using var owner = Create();
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, new([new SessionSeedHolder("npc-1", SessionHolderKind.Npc, false, false, [], [])], [])).Failure);
+        var pileKind = new SessionItemKind(SessionItemType.Gold, 9056, 3200, 33200);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.GiveGoldToNpcFromNothing(owner.Version, "npc-1", 40, pileKind, _ => SessionInsertVerdict.Accepted).Disposition);
+        var made = MadeFor(owner, "npc-1");
+        var fired = Decay(owner);
+        Assert.AreEqual((SessionBodyDecayOutcome.Removed, 1, 1), (fired.Outcome, fired.Dropped, fired.Destroyed));
+        CollectionAssert.AreEqual(new[] { made }, owner.QueryPlacedItems().Select(item => item.Entity).ToArray());
+        RestoresTheSame(owner);
     }
 }
