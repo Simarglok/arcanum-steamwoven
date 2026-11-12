@@ -21,7 +21,7 @@ public sealed class BedCensusRealDataTests
     /// <summary>ARC-WORLD-1162 (SWB21, same data): the NPC rows with a readable route (2236) whose night standpoint, whose day standpoint and whose either standpoint is the tile of a placed bed; the standpoint step seats such an NPC.</summary>
     private const int NpcRoutes = 2236, NpcNightOnBed = 41, NpcDayOnBed = 21, NpcEitherOnBed = 51;
     /// <summary>ARC-WORLD-1262 (same data): the main world map's census: the sector files read, placed beds (static and mobile), those with a use script, the distinct bed prototypes, the NPC rows with a readable route and those whose night, day, either standpoint is a bed's tile.</summary>
-    private const int MainSectorFiles = 621, MainPlacedBeds = 275, MainScripted = 32, MainBedPrototypes = 2, MainNpcRoutes = 1556, MainNightOnBed = 145, MainDayOnBed = 23, MainEitherOnBed = 150;
+    private const int MainSectorFiles = 621, MainPlacedBeds = 275, MainScripted = 32, MainBedPrototypes = 2, MainNpcRoutes = 1556, MainNightOnBed = 145, MainDayOnBed = 23, MainEitherOnBed = 150, MainSectorsWithBeds = 72, MainTemplateSectors = 3999379, MainTemplateFiles = 208;
 
     [TestMethod, TestCategory("RealData")]
     public void Every_placed_bed_of_the_installed_maps_is_counted_with_its_use_script()
@@ -120,7 +120,15 @@ public sealed class BedCensusRealDataTests
         }
         Console.WriteLine($"ARC-WORLD-1262 main map sectors-with-beds={census.PerSector.Count} template-sectors={census.TemplateSectors} beds-in-template-sectors={census.TemplateBeds}");
         Assert.AreEqual(0, census.Refused, "a sector file was refused: the census would be short");
-        Assert.AreEqual(0, census.TemplateBeds, "a terrain template holds a bed: the generated sectors are not counted in the placed beds");
+        // the template pass must have run, covered every sector without a file and found no bed (the docs say the generated sectors add none)
+        Assert.IsTrue(census.GridRead, "the main map's terrain grid was not read");
+        Assert.AreEqual((MainTemplateSectors, MainTemplateFiles, 0, 0), (census.TemplateSectors, census.TemplateFiles, census.TemplateBeds, census.TemplateUnreadable), "the terrain templates behind the generated sectors changed or hold a bed");
+        Assert.AreEqual(main.Properties.WidthTiles / 64 * (main.Properties.HeightTiles / 64), census.Sectors + census.TemplateSectors, "some sector is neither a file nor a template (a fill sector, say)");
+        // the docs' claims: all beds static (mobile aggregate holds none), the NPC rows live in the mobile aggregate only, which beds and scripts, in how many sectors
+        Assert.AreEqual((census.Beds, 0), (census.StaticBeds, census.StaticNpcs), "a mobile bed or a static NPC row: the census scope changed");
+        CollectionAssert.AreEqual(new[] { 4038, 4045 }, census.Prototypes.ToArray(), "the bed prototypes changed");
+        CollectionAssert.AreEqual(new Dictionary<int, int> { [1893] = 8, [1990] = 21, [2429] = 2, [2452] = 1 }.ToArray(), census.Scripts.ToArray(), "the use scripts of the beds changed");
+        Assert.AreEqual(MainSectorsWithBeds, census.PerSector.Count, "the number of sectors with beds changed");
         Assert.AreEqual((MainSectorFiles, MainPlacedBeds, MainScripted, MainBedPrototypes), (census.Sectors, census.Beds, census.Scripted, census.Prototypes.Count), "the main map's bed census changed");
         Assert.AreEqual((MainNpcRoutes, MainNightOnBed, MainDayOnBed, MainEitherOnBed), (census.NpcRoutes, census.NightOnBed, census.DayOnBed, census.EitherOnBed), "the main map's NPC standpoints on beds changed");
     }
@@ -128,7 +136,8 @@ public sealed class BedCensusRealDataTests
     /// <summary>What a census of one or more maps holds.</summary>
     private sealed class MapCensus
     {
-        public int Maps, Sectors, Beds, StaticBeds, Scripted, NpcRoutes, NightOnBed, DayOnBed, EitherOnBed, Refused, TemplateSectors, TemplateBeds;
+        public int Maps, Sectors, Beds, StaticBeds, Scripted, NpcRoutes, NightOnBed, DayOnBed, EitherOnBed, Refused, TemplateSectors, TemplateBeds, TemplateFiles, TemplateUnreadable, StaticNpcs;
+        public bool GridRead;
         public SortedSet<int> Prototypes { get; } = [];
         public SortedDictionary<int, int> Scripts { get; } = [];
         public SortedDictionary<string, (int Beds, int Scripted)> PerSector { get; } = new(StringComparer.Ordinal);
@@ -136,7 +145,7 @@ public sealed class BedCensusRealDataTests
         public void Add(MapCensus one)
         {
             Maps++; Sectors += one.Sectors; Beds += one.Beds; StaticBeds += one.StaticBeds; Scripted += one.Scripted; NpcRoutes += one.NpcRoutes; NightOnBed += one.NightOnBed; DayOnBed += one.DayOnBed;
-            EitherOnBed += one.EitherOnBed; Refused += one.Refused; TemplateSectors += one.TemplateSectors; TemplateBeds += one.TemplateBeds;
+            EitherOnBed += one.EitherOnBed; Refused += one.Refused; TemplateSectors += one.TemplateSectors; TemplateBeds += one.TemplateBeds; TemplateFiles += one.TemplateFiles; TemplateUnreadable += one.TemplateUnreadable; StaticNpcs += one.StaticNpcs;
             Prototypes.UnionWith(one.Prototypes);
             foreach (var pair in one.Scripts) Scripts[pair.Key] = Scripts.GetValueOrDefault(pair.Key) + pair.Value;
         }
@@ -180,6 +189,7 @@ public sealed class BedCensusRealDataTests
                 var read = catalog.ReadSector(map, coordinate);
                 if (read.Sector is not { } sector || sector.ObjectIssue is not null) { census.Refused++; continue; }
                 census.Sectors++;
+                census.StaticNpcs += sector.Objects.Count(o => o.Type == AreaNpcRouteReader.NpcType);
                 foreach (var item in sector.Objects)
                 {
                     if (!Bed(item) || Effective(item, LocationSlot) is not { Presence: WorldFieldPresence.Value, Number: { } packed }) continue;
@@ -190,6 +200,7 @@ public sealed class BedCensusRealDataTests
             // the sectors without a file are generated from a terrain template (ledger SS5): its beds are counted apart, once per template file, and per sector that uses it
             if (templates && catalog.ReadTerrain(map).Grid is { } grid)
             {
+                census.GridRead = true;
                 var perTemplate = new Dictionary<string, int>(StringComparer.Ordinal);
                 for (var y = 0; y < map.Properties.HeightTiles / 64; y++)
                     for (var x = 0; x < map.Properties.WidthTiles / 64; x++)
@@ -199,8 +210,9 @@ public sealed class BedCensusRealDataTests
                         census.TemplateSectors++;
                         if (!perTemplate.TryGetValue(source.Path!, out var count))
                             perTemplate[source.Path!] = count = catalog.ReadResolvedSector(map, source).Sector?.Objects.Count(Bed) ?? -1;
-                        if (count > 0) census.TemplateBeds += count;
+                        if (count < 0) census.TemplateUnreadable++; else census.TemplateBeds += count;
                     }
+                census.TemplateFiles = perTemplate.Count;
                 Console.WriteLine($"ARC-WORLD-1262 templates used={perTemplate.Count} with-beds={perTemplate.Values.Count(c => c != 0)}");
             }
             var mobiles = catalog.ReadMobiles(map);
