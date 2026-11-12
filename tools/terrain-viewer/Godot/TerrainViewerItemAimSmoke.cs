@@ -396,7 +396,7 @@ public partial class TerrainViewerApp
             if (!_messageLog.PaneMode && _inventoryHost.Map(CurrentAreaMap) is { } holderMap && holderMap.TryGetEntity(npc.Row.Key, out var holderEntity) && data.Kind(15100) is { } heldKind)
             {
                 var added = session.AddItemToNpc(session.Version, holderEntity, heldKind, AreaInventoryHost.DiagnosticInsertCheck);
-                Require(added.Disposition == GameSessionDisposition.Changed && added.Item is { } heldItem, $"the NPC was given a made item: {added.Disposition} {added.Failure}");
+                Require(added.Disposition == GameSessionDisposition.Changed && added.Item is not null, $"the NPC was given a made item: {added.Disposition} {added.Failure}");
                 var held = added.Item!;
                 Require(InventoryItemKind(session, held) is null && PlacedItemKind(session, held) is null && ItemMapRow(held) is null && session.QueryPrototypeItemKind(held) is not null, "an NPC's made item has neither a hero kind nor a map row, only the session's kind");
                 _messageLog.ClearHover(); LastIdentifyDescriptionForSelfTest = null;

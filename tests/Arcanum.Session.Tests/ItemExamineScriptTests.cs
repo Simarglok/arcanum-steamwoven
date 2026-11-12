@@ -156,5 +156,8 @@ public sealed class ItemExamineScriptTests
         var ran = owner.RunItemExamine(owner.Version, "kit:1", host);
         Assert.AreEqual((GameSessionDisposition.NoChange, GameSessionFailure.None, SessionScriptPoint.Examine), (ran.Disposition, ran.Failure, ran.DeclinedBy));
         Assert.AreEqual(1, ran.Messages.Count);
+        // Every item run reads the kit item's prototype slot, as a made item's, and an item whose prototype has no element has none.
+        Assert.AreEqual(new SessionItemScriptSlot("kit:1", SessionScriptPoint.Examine, ExamineScript, 3, 0), owner.QueryItemScriptSlot("kit:1", SessionScriptPoint.Examine));
+        Assert.IsNull(owner.QueryItemScriptSlot("kit:1", SessionScriptPoint.Use));
     }
 }

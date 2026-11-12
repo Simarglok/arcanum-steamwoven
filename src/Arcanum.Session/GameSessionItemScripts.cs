@@ -84,8 +84,8 @@ public sealed partial class GameSessionOwner
         return SessionValidation.Entity(entity) ? MadeKind(entity) : null;
     }
 
-    // The kind of an item made from a prototype (a made item or one of the starting kit, ARC-UI-1458: the original builds the kit's objects as
-    // copies of their prototypes too, so they own no row and read the prototype's script array) wherever the session holds it: the hero's
+    // The kind of an item made from a prototype (a made item or one of the starting kit, ARC-UI-1458: the original makes every object as a copy of its prototype (docs/architecture/original-object-model.md),
+    // so a kit item owns no row and reads its prototype's script array; the kit's creation itself was not read separately, F0) wherever the session holds it: the hero's
     // made items, the hero's kit, the ground, or an NPC's or container's list.
     private SessionItemKind? MadeKind(string entity)
     {
