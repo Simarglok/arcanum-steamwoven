@@ -42,20 +42,20 @@ public sealed record SessionItemEventResult(GameSessionFailure Failure, IReadOnl
 public sealed partial class GameSessionOwner
 {
     /// <summary>
-    /// ARC-MAGIC-023: fires damage step item events of the hero's attack on an NPC (0x4B4390, ledger IC2;
-    /// <see cref="ItemSpellTriggerRules.DamageStep"/>) through <paramref name="triggers"/>, in order. Each wrapper walks its parent's
-    /// worn items in slot order (<see cref="ItemSpellTriggerRules.WornCalls"/>): the NPC's are <paramref name="targetWorn"/> (as the
-    /// caller has them at this point of the step; none without the host's item data), the hero's <paramref name="heroWorn"/> (before
-    /// the attack's weapon wear). Nothing without a host.
+    /// ARC-MAGIC-023: fires damage step item events of an attack (0x4B4390, ledger IC2; <see cref="ItemSpellTriggerRules.DamageStep"/>)
+    /// through <paramref name="triggers"/>, in order. Each wrapper walks its parent's worn items in slot order
+    /// (<see cref="ItemSpellTriggerRules.WornCalls"/>): the victim's are <paramref name="targetWorn"/>, the attacker's
+    /// <paramref name="attackerWorn"/> (each as the caller has them at this point of the step; none without the host's item data).
+    /// The hero's attack is the attacker <see cref="SessionEventKinds.PlayerEntity"/>; ARC-MAGIC-1188: an NPC's is its entity, and the
+    /// victim may be the hero (the original's wrappers take any PC or NPC as the parent, IC1). Nothing without a host.
     /// </summary>
     private IReadOnlyList<SessionItemTriggerFiring> FireDamageStepItems(ISessionItemTriggers? triggers, IEnumerable<ItemTriggerStep> steps,
-        string target, IReadOnlyList<string> targetWorn, IReadOnlyList<string> heroWorn, string? weapon)
+        string target, IReadOnlyList<string> targetWorn, string attacker, IReadOnlyList<string> attackerWorn, string? weapon)
     {
         if (triggers is null) return [];
-        var hero = SessionEventKinds.PlayerEntity;
-        var events = steps.Select(step => new SessionItemEvent(step.Event, step.Parent == ItemTriggerParty.Target ? target : hero,
-            step.Other switch { ItemTriggerParty.Target => target, ItemTriggerParty.None => null, _ => hero }, step.Melee));
-        return WalkItemEvents(triggers, events, holder => holder == target ? targetWorn : heroWorn, weapon, null);
+        var events = steps.Select(step => new SessionItemEvent(step.Event, step.Parent == ItemTriggerParty.Target ? target : attacker,
+            step.Other switch { ItemTriggerParty.Target => target, ItemTriggerParty.None => null, _ => attacker }, step.Melee));
+        return WalkItemEvents(triggers, events, holder => holder == target ? targetWorn : attackerWorn, weapon, null);
     }
 
     /// <summary>
@@ -208,11 +208,12 @@ public sealed partial class GameSessionOwner
         step.Event is ItemTriggerEvent.ParentStunned or ItemTriggerEvent.TargetGoingUnconscious
         || step.Event == ItemTriggerEvent.ParentGoingUnconscious && (step.Other != ItemTriggerParty.None || outcome.Events.HasFlag(LifeEvents.KnockedOut));
 
-    /// <summary>The NPC's worn items without those this attack's critical drops or its wear's breaks took off (IC3).</summary>
-    private static string[] StillWorn(IReadOnlyList<string> worn, SessionAttackWearResult? wear, IReadOnlyList<SessionCriticalStep> criticals)
+    /// <summary>The worn items of <paramref name="side"/> (the victim by default) without those this attack's critical drops or its wear's breaks took off (IC3).</summary>
+    private static string[] StillWorn(IReadOnlyList<string> worn, SessionAttackWearResult? wear, IReadOnlyList<SessionCriticalStep> criticals,
+        DamageRecipient side = DamageRecipient.Target)
     {
-        var gone = criticals.Where(step => step is { Whose: DamageRecipient.Target, Outcome: SessionCriticalStepOutcome.Dropped }).Select(step => step.Entity)
-            .Concat(wear?.Steps.Where(step => step.Wearer == DamageRecipient.Target && (step.Item is { Break: not ItemBreakStep.None }
+        var gone = criticals.Where(step => step.Whose == side && step.Outcome == SessionCriticalStepOutcome.Dropped).Select(step => step.Entity)
+            .Concat(wear?.Steps.Where(step => step.Wearer == side && (step.Item is { Break: not ItemBreakStep.None }
                 || step is { Kind: SessionWearStepKind.WeaponDestroy, Skip: SessionWearSkip.None })).Select(step => step.Entity) ?? [])
             .ToHashSet();
         return [.. worn.Where(item => !gone.Contains(item))];

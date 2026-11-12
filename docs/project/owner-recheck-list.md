@@ -810,8 +810,23 @@ The hero's melee swings and shots now fire the combat events of the worn items (
 
 Known differences (documented, not bugs):
 
-- An NPC's own worn items still fire nothing when it attacks (no trigger host on the NPC attack path yet).
+- An NPC's own worn items fire when it attacks since ARC-MAGIC-1188 (below).
 - A chain of item spells answers once per item (owner decision 2026-10-28, MG46), where the original repeats until the target dies.
+
+## ARC-MAGIC-1188 — Item spells of an NPC's attack (2026-11-12)
+
+Worn items of an NPC that attacks now fire their combat events, as the hero's do (the same rule in the original executable, 0x4B4390 serves any attacker). The one installed case you can see: armour 8215 (record 87) answers a hit when worn by an NPC or by you. Compare in both games.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Let an NPC that wears armour 8215 (or other armour with a hit spell) be hit by a hostile NPC (a companion fighting an enemy). | The wearer's armour spell starts on each hit that lands, as for you wearing it; a miss starts nothing. | open |
+| 2 | Let an NPC that wields or wears a combat-event item (a weapon or armour with an "attacks"/"damages" spell) hit you or another NPC. | The item's spell starts on each hit that lands, aimed as the original's executor aims it; a missed swing starts nothing. | open |
+| 3 | Watch a bow or firearms shot of an NPC that wears such an item. | The events come when the arrow strikes, not when it leaves the bow. | open |
+
+Known differences (documented, not bugs):
+
+- A critical self-hit of the attacker (a critical miss that hurts the NPC itself) starts none of these events; its life events are the caller's and not built for NPCs yet.
+- The attacker's weapon that a thrown-item attack throws is not among its worn items when the events fire (the thrown item is the context weapon).
 
 ## ARC-MAGIC-045 — Shield hit eye candy and the draw of translucent, shrunk and hidden critters (2026-11-11)
 
