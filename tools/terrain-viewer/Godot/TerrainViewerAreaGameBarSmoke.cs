@@ -179,7 +179,7 @@ public partial class TerrainViewerApp
                 await Move(new Vector2(clockAt.X, panel.StripRectForSelfTest(AreaBarStrip.Top).End.Y + 40));
                 Require(_gameBar.Hovered is null && panel.HoverTextForSelfTest == "", "leaving the clock takes the entry away: '" + panel.HoverTextForSelfTest + "'");
                 ClockDateOrderForSelfTest = null;
-                // An hour of game time later the Clock event is due and the window refreshes once (a missed period is not replayed).
+                // The checks after this block run an hour of game time on. An hour of game time later the Clock event is due and the window refreshes once (a missed period is not replayed).
                 var clockRefreshes = _gameClock.Refreshes;
                 var clockJumped = clockSession.JumpClocks(clockSession.QueryClockSnapshot().Token, AreaClockLayout.RefreshMs + 1);
                 Require(clockJumped.Disposition == Arcanum.Simulation.Clock.ClockMutationDisposition.Changed, "an hour of game time passes");

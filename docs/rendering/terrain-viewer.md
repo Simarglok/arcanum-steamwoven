@@ -2606,13 +2606,13 @@ The top strip's clock window, as the 1.0.7.4 executable draws and answers it (le
   stays black.
 - **When it moves.** The window is drawn when the session begins and then an hour of game time after each refresh (the Clock event's
   period, counted from the last refresh and not on the hour; a late refresh happens once and a jump of many hours refreshes once). A
-  new session (a new game, a load, a quick load) starts the chain with a refresh. The chain runs under the session also while the bars
+  new session (a new game, a load, a quick load) starts the chain with a refresh (for a load this follows the interface being made again, an inference, GB10). The chain runs under the session also while the bars
   are hidden. The face is not saved.
 - **The click.** The window is an invisible silent push button (no press or release sound). Its release over it writes a hover entry of
   the [message log](#message-log-arc-ui-023) (never stored, shown only in the message mode and when no entry was stored in the last
   3 s): `<message 22>: hh:mm:ss   <message 23>: d/m/y` (the installed texts read "Current Time" and "Current Date"; the project's "Time"
   and "Date" stand in without the game's file), the date with no padding, in the order of the system's short date pattern (the
-  original asks the system's date order; month/day/year when it is unknown). Leaving the window takes the entry away; entering it
+  original asks the system's date order; month/day/year when it is unknown). Leaving the window takes the entry away (the original clears it only in the bottom strip's modes 0, 1, 2 and 8, GB11; the viewer always does); entering it
   writes nothing, and the clock has no name of its own. It opens no menu.
 - **Not modelled.** The original ignores every mouse event on another combatant's turn of a turn-based round, the clock's press
   too (GB12); the viewer gates none of the bar buttons so. A window made again with the offset it last drew stays blank in the

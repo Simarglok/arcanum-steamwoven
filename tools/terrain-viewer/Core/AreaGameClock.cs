@@ -56,7 +56,7 @@ public static class AreaClockLayout
     /// <summary>Every interface art number the clock draws.</summary>
     public static IReadOnlyList<int> ArtNumbers { get; } = [StripArt, .. Enumerable.Range(FirstMoonArt, MoonArtCount), NeedleArt];
 
-    /// <summary>Whole game seconds of a game time (0x45A840: milliseconds of the day over 1000 plus the days times 86,400).</summary>
+    /// <summary>Whole game seconds of a game time (the day's milliseconds over 1000 plus the days times 86,400).</summary>
     public static long Seconds(long gameMs) => gameMs / 1000;
 
     /// <summary>The moon art of the day's phase: the number of whole days since noon of day 0, modulo 28, mapped by the thresholds.</summary>
@@ -164,14 +164,14 @@ public sealed class AreaGameClock
 /// </summary>
 public static class AreaClockText
 {
-    /// <summary>The time as <c>%02d:%02d:%02d</c>: hour, minute and the game seconds of the minute (0x45AC20).</summary>
+    /// <summary>The time as <c>%02d:%02d:%02d</c>: hour, minute and the game seconds of the minute.</summary>
     public static string Time(long gameMs)
     {
         var seconds = AreaClockLayout.Seconds(gameMs);
         return $"{seconds / 3600 % 24:00}:{seconds / 60 % 60:00}:{seconds % 60:00}";
     }
 
-    /// <summary>The date as <c>%d/%d/%d</c> in <paramref name="order"/> (0x45AC70): day, month and year from the 30-day month and
+    /// <summary>The date as <c>%d/%d/%d</c> in <paramref name="order"/>: day, month and year from the 30-day month and
     /// 12-month year calendar of the clock, the year counted from <paramref name="startYear"/>.</summary>
     public static string Date(long gameMs, long startYear, AreaClockDateOrder order)
     {

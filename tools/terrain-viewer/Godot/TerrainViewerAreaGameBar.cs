@@ -112,8 +112,8 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-UI-1111 (GB11): the click on the clock writes its time and date as a hover entry of the message log: "Time: hh:mm:ss",
-    /// three spaces, "Date: d/m/y" in the system's date order. The original runs this whatever window is open, so the bars' own hiding
-    /// is the only guard here.</summary>
+    /// three spaces, "Date: d/m/y" in the system's date order. The original runs this whatever the bar mode, so the bars' own hiding
+    /// under the dialog and the other windows is the only guard here.</summary>
     private void ClockButton()
     {
         if (_areaSession is not { } session || _gameBarContent is not { } content) return;
