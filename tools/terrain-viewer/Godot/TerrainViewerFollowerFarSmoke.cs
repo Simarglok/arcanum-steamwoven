@@ -67,6 +67,30 @@ public partial class TerrainViewerApp
                         && host.Allowed(SessionSpellCaster.Hero, new(unchecked((uint)data.TravelAreas[a].Location.X), unchecked((uint)data.TravelAreas[a].Location.Y))))
                     .OrderBy(a => Arcanum.Simulation.Travel.WorldTravelGeometry.Distance(data.TravelAreas[a].Location, here)).Last();
                 Require(session.DiscoverArea(session.Version, target).Disposition != GameSessionDisposition.Rejected, "the target area was made known");
+                // ARC_AREA_TELEPORT_CAPTURE=PREFIX saves the ordinary W window (PREFIX-before.png: what the teleport window looked like before this task) and the teleport window (PREFIX-after.png) as readbacks of the viewport, for the owner's side-by-side look; nothing is committed.
+                var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_TELEPORT_CAPTURE");
+                // Real frames pass here with the stage's simulated focus off (a world frame while the map is open would fault its observation).
+                async Task Shot(string name)
+                {
+                    var simulated = _worldFocusSimulationForSelfTest; var focus = _worldFocused;
+                    _worldFocusSimulationForSelfTest = false; _worldFocused = false;
+                    try
+                    {
+                        for (var i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                        using var image = GetViewport().GetTexture().GetImage();
+                        Require(image.SavePng($"{capture}-{name}.png") == Error.Ok, "the capture is saved");
+                    }
+                    finally { _worldFocusSimulationForSelfTest = simulated; _worldFocused = focus; }
+                }
+                if (capture is { Length: > 0 })
+                {
+                    InventoryKey(Key.W);
+                    Require(WorldMapOpen && _teleportMode is null, "W opened the ordinary window for the capture: " + _worldMapStatus);
+                    await Shot("before");
+                    CloseWorldMapByPlayer();
+                    Require(!WorldMapOpen, "the ordinary window closed again");
+                }
                 var spot = new SpellLocation(checked((uint)cell.X), checked((uint)cell.Y));
                 var log = "";
                 for (var component = 0; component < 4; component++)
@@ -78,6 +102,7 @@ public partial class TerrainViewerApp
                 }
                 Require(log == $"{SpellCastEventKind.TeleportMap}:4" && WorldMapOpen && _teleportMode is { Spell: 4 }, $"the cast opened the world map in its teleport mode: [{log}] {_worldMapStatus}");
                 Require(!(_worldMapPanel?.TravelShownForSelfTest ?? true), "the teleport mode's window has no Travel button (WM62, TP6)");
+                if (capture is { Length: > 0 }) await Shot("after");
                 var fatigue = caster.CurrentFatigue(hero);
                 Require(TeleportPick(data.TravelAreas[target].Location) && !WorldMapOpen && _mapHandoff is not null, "the pick started the landing: " + _worldMapStatus);
                 Require(_teleportsForSelfTest.Any(e => e.StartsWith($"area {target} landing", StringComparison.Ordinal)), "the pick landed on the target area: " + string.Join(";", _teleportsForSelfTest));
