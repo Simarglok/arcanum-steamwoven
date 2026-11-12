@@ -315,6 +315,26 @@ public sealed partial class GameSessionOwner
         return InventoryGridRules.FindSlot(occupied, width, height) is var slot and >= 0 ? new InventoryGridItem(slot, width, height) : null;
     }
 
+    // ARC-WORLD-1133: the cells the hero's items waiting outside the grid (no cell: a hotkey entry released into a full grid, art that grew, a save from
+    // before) take at the next placement, SettleHeroGrid: in list order, each the first free place for its size, with the cells of freed (an assembly's
+    // components) counted free. A new product is appended to the list after them, so its room test counts these cells as taken.
+    private List<InventoryGridItem> WaitingItemCells(IReadOnlySet<string> freed)
+    {
+        var occupied = InventoryGridRules.Occupied(_inventory.Grid.Values.Where(item => !freed.Contains(item.Entity)).Select(item => item.Cells), SessionHeroGrid.Rows);
+        var cells = new List<InventoryGridItem>();
+        foreach (var entity in GridMembers())
+        {
+            if (_inventory.Grid.ContainsKey(entity) || freed.Contains(entity)) continue;
+            var (width, height) = GridSize(entity);
+            if (InventoryGridRules.FindSlot(occupied, width, height) is not (>= 0 and var slot)) continue;
+            cells.Add(new(slot, width, height));
+            for (var row = 0; row < height; row++)
+                for (var column = 0; column < width; column++)
+                    occupied[slot + row * SessionHeroGrid.Columns + column] = true;
+        }
+        return cells;
+    }
+
     private (int Slot, int Width, int Height) FreeGridSlot(string entity, string? leaving)
     {
         var occupied = InventoryGridRules.Occupied(_inventory.Grid.Values.Where(item => item.Entity != entity && item.Entity != leaving).Select(item => item.Cells),
