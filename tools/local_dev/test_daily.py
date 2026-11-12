@@ -182,6 +182,16 @@ class DailyTests(unittest.TestCase):
         self.assertEqual(self.run_daily(force=True), daily.PASS)
         self.assertEqual(len(self.names()), 7)
 
+    def test_an_order_dependent_group_is_parsed_and_does_not_fail_the_chain(self) -> None:
+        text = ("SMOKE summary\n  main          PASS exit=0\n  stages-main   ORDER exit=1\n"
+                "  order-dependent: stages-main (fails only after other stages of its process; each of ai passes alone)\n"
+                "SMOKE PASS 2 of 2 steps passed (1 order-dependent, each stage passes alone)\n")
+        result = daily.parse_smoke(text, 0)
+        self.assertEqual((result.passed, result.failed, result.failure), (["main"], [], None))
+        self.assertEqual(result.order_steps, ["stages-main"])
+        self.assertEqual(result.line(), "PASS (main) order-dependent (stages-main)")
+        self.assertEqual(len(result.order_dependent), 1)
+
     def test_a_passing_day_checks_smokes_and_packages_the_same_commit_in_a_removed_worktree(self) -> None:
         self.assertEqual(self.run_daily(), daily.PASS)
         self.assertEqual(self.names(), ["dotnet", "dat-probe", "oracle", "docs-check", "smoke", "package-mac", "package-win"])

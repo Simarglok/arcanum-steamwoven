@@ -229,7 +229,8 @@ STAGE_NEEDS: dict[str, StageNeeds] = {
     "indoor-fade": _needs(**_MAIN_ONLY, sector=TOWN, only_sector=True),
     "critter-fall": _needs(own=True),  # fails in a longer list ("ran over at least two cells"), passes alone
     "save-resume": _needs(), "cast-multi": _needs(map=RUINS, only_map=True), "grenade": _needs(map=CAVE),
-    "companion-click": _needs(), "npc-shot": _needs(sector=TOWN), "ai-react": _needs(), "placement-census": _needs(),
+    "companion-click": _needs(), "npc-shot": _needs(sector=TOWN), "ai-react": _needs(own=True),
+    "placement-census": _needs(),  # ai-react: its own process, it failed after the other AI stages and passed alone (2026-11-12)
     "inv-carry": _needs(debug=True, own=True),  # a dead body with an item; NONE at the Crash Site was seen
     "spell-end": _needs(), "hold-hero": _needs(), "movement": _needs(), "spirit-talk": _needs(),
     "created-scenery": _needs(portable=True), "created-critter": _needs(portable=True),
@@ -717,6 +718,7 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
         results.append((step.name, code))
         return code, logs[-1] if logs else None
 
+    order_dependent: dict[str, list[str]] = {}  # ARC-DEV-396: a failed group whose every unfinished stage passed alone
     done = 0
     for step in steps:
         code, log = run_step(step)
@@ -731,19 +733,26 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
             unfinished = stages_not_run(log, step.requires)[0]
             if unfinished:
                 say(f"  retrying {len(unfinished)} unfinished stage(s) one to a process: {', '.join(unfinished)}")
+            alone_failed = False
             for stage in unfinished:
                 retry_code, _ = run_step(step.again(stage))
                 if retry_code >= STOPPED:
                     code = retry_code
                     break
+                alone_failed = alone_failed or retry_code != 0
                 say(f"  {stage}: " + (f"passes alone, so it fails only after the other stages of {step.name}"
                                 if retry_code == 0 else f"fails alone too (exit {retry_code})"))
             if code >= STOPPED:
                 break
+            # a timeout is not a sign of order: the hung stage would pass alone only by luck (and the retry is not counted then)
+            if unfinished and not alone_failed and code != run_queue.TIMEOUT_EXIT:
+                order_dependent[step.name] = list(unfinished)
     width = max(len(name) for name, _ in results) if results else 0
     say("SMOKE summary")
     for name, code in results:
-        say(f"  {name:<{width}}  {'PASS' if code == 0 else 'FAIL'} exit={code}")
+        say(f"  {name:<{width}}  {'ORDER' if name in order_dependent else 'PASS' if code == 0 else 'FAIL'} exit={code}")
+    for name, stages in order_dependent.items():  # a warning, not a failure: every stage passed alone (owner decision 2026-11-12)
+        say(f"  order-dependent: {name} (fails only after other stages of its process; each of {', '.join(stages)} passes alone)")
     skipped = [step.name for step in steps[done:]]
     if skipped:
         say("  not run: " + ", ".join(skipped))
@@ -752,10 +761,12 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
         for record in timed:
             for line in smoke_history.table(record):
                 say(line)
-    failed = [name for name, code in results if code != 0]
+    failed = [name for name, code in results if code != 0 and name not in order_dependent]
+    only_known = [name for name in only_known if name not in order_dependent]
     if only_known:
         say("  only known failures on main (not this PR): " + ", ".join(only_known))
     say(f"SMOKE {'PASS' if not failed and not skipped else 'FAIL'} {len(results) - len(failed)} of {len(results) + len(skipped)} steps passed"
+        + (f" ({len(order_dependent)} order-dependent, each stage passes alone)" if order_dependent else "")
         + (f" ({len(only_known)} of the {len(failed)} failed with only known failures on main)" if only_known else ""))
     stopped = [code for _, code in results if code >= STOPPED]
     return stopped[0] if stopped else (1 if failed or skipped else 0)
