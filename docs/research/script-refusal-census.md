@@ -418,7 +418,7 @@ The census is a data answer; each slice keeps its own contract and checks.
   headline list; `destroy_item_named` (a126, 2 roots, 4 sites), the monster generator pair (a110
   and c46, 65 sites, 2 maps), `toggle_item_inventory_display` (a127, 16 roots, 21 sites), touch art
   (a123) and set written start (a94) are the neighbours the data adds.
-- **E5-c, story and time (#1165).** 80 roots, 156 sites, 11 maps; 39 roots (98 sites) alone, the
+- **E5-c, story and time (#1165; done, [SQ1–SQ14](ledger/scripts.md#story-and-time-commands-arc-script-1165-e5-c)).** 80 roots, 156 sites, 11 maps; 39 roots (98 sites) alone, the
   smallest of the three: `grant_one_fate_point` (a117, 14 roots, mostly dying scripts), blessing and
   curse (a25 to a28 and c8, c9: 8 to 14 roots each), `daytime` (c1, 19 roots) and the three clock actions
   (a97 and a105 are live, a96 and a98 only on unreached lines) are the bulk; global quest state (c7, 6

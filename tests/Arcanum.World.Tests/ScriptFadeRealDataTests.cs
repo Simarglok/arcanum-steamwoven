@@ -33,7 +33,7 @@ public sealed class ScriptFadeRealDataTests
             [2863] = [(2, 0, 0, 0), (5, 0, 0, 0)],
             [3061] = [(2, 0, 0, 0), (5, 0, 0, 0)],
         };
-        // First refusal of the widest set with the fade (S34): change script (99) in Kerghan's dialog, end-game slides (132) in the three scripts that end the game; the two small scripts are admitted whole.
+        // First refusal of the widest set with the fade (S35): change script (99) in Kerghan's dialog, end-game slides (132) in the three scripts that end the game; the two small scripts are admitted whole.
         var firstRefusal = new Dictionary<int, int?> { [1093] = null, [1105] = 99, [1109] = null, [2862] = 132, [2863] = 132, [3061] = 132 };
         foreach (var (number, lines) in expected)
         {
@@ -42,8 +42,8 @@ public sealed class ScriptFadeRealDataTests
                     && Enumerable.Range(0, 4).All(i => c.Kinds[i] == 3))
                 .Select(c => (Movie: c.Values[2], Track: c.Values[1], Seconds: c.Values[0], Flag: c.Values[3])).ToArray();
             CollectionAssert.AreEqual(lines, movies, $"script {number}");
-            var whole = ScrAdmission.Admit(program, ScrAdmissionSet.S34);
-            Assert.AreEqual(firstRefusal[number], whole.Refusal?.Type, $"script {number}: first refusal of S34 {whole.Refusal?.Code}");
+            var whole = ScrAdmission.Admit(program, ScrAdmissionSet.S35);
+            Assert.AreEqual(firstRefusal[number], whole.Refusal?.Type, $"script {number}: first refusal of S35 {whole.Refusal?.Code}");
         }
         // 1093 and 1109 only call back into the dialog script that called them (call script, 7): the use and dying sets admit them, the dialog set does not (a call from a dialog run is outside it).
         foreach (var number in new[] { 1093, 1109 })

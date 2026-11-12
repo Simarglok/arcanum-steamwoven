@@ -11,7 +11,7 @@ namespace Arcanum.Scripting.Tests.Scr;
 public sealed class ScrFadeTests
 {
     private const int Use = 1;
-    // The commands these programs use (S3: control flow, arithmetic, the single-object focus kinds) with fade; S34 itself also holds the commands that need the world.
+    // The commands these programs use (S3: control flow, arithmetic, the single-object focus kinds) with fade; S35 itself also holds the commands that need the world.
     private static readonly ScrAdmissionSet Set = new("fade", ScrAdmissionSet.S3.Conditions, ScrAdmissionSet.S3.Actions.Append(ScrCatalogue.Action.Fade),
         ScrAdmissionSet.S3.ValueKinds, ScrAdmissionSet.S3.FocusKinds);
 
@@ -49,10 +49,10 @@ public sealed class ScrFadeTests
     public void The_action_is_outside_the_old_sets()
     {
         var program = Program(Do(Fade(N(0), N(0), N(4), N(0))), Do(C(1)));
-        var refused = ScrAdmission.Admit(program, ScrAdmissionSet.S33);
+        var refused = ScrAdmission.Admit(program, ScrAdmissionSet.S34);
         Assert.AreEqual((ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.Fade), (refused.Refusal!.Code, refused.Refusal.Type));
-        Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S34).IsAdmitted);
+        Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S35).IsAdmitted);
         Assert.IsTrue(ScrAdmission.Admit(program, Set).IsAdmitted);
-        Assert.IsTrue(ScrAdmissionSet.S33.IsSubsetOf(ScrAdmissionSet.S34) && !ScrAdmissionSet.S34.IsSubsetOf(ScrAdmissionSet.S33));
+        Assert.IsTrue(ScrAdmissionSet.S34.IsSubsetOf(ScrAdmissionSet.S35) && !ScrAdmissionSet.S35.IsSubsetOf(ScrAdmissionSet.S34));
     }
 }

@@ -16,7 +16,7 @@ namespace Arcanum.World;
 /// point of the map's speakers is modelled; everything the viewer does not model answers "no" (no generator, no trap,
 /// alive and free, not jilted).
 /// </summary>
-public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrReactionQueries, IScrSpellQueries
+public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrReactionQueries, IScrSpellQueries, IScrStoryQueries
 {
     /// <summary>The PC as the scripts see it; the viewer has one.</summary>
     public const string PcCode = SessionEventKinds.PlayerEntity;
@@ -32,15 +32,15 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     /// <see cref="ScrAdmissionSet.S12"/> (ARC-SCRIPT-018) are left out: a call from a dialog-point run would need the runner's dialog
     /// gates (E6) for its callee, assign object could change the dialog's NPC, which the conversation host takes from the click,
     /// and get object type needs object queries this host does not answer. Plus the quest, area, rumor and reputation actions of
-    /// <see cref="ScrAdmissionSet.S13"/> (ARC-SCRIPT-019). ARC-SCRIPT-1241: plus fade (103) of <see cref="ScrAdmissionSet.S34"/>, which jumps the game clock and hands its movie to the viewer
+    /// <see cref="ScrAdmissionSet.S13"/> (ARC-SCRIPT-019). ARC-SCRIPT-1241: plus fade (103) of <see cref="ScrAdmissionSet.S35"/>, which jumps the game clock and hands its movie to the viewer
     /// (<see cref="TakeFades"/>; Kerghan's dialog script 1105 plays movies 2, 3 and 6).
     /// </summary>
-    public static ScrAdmissionSet Admission { get; } = new("S3-area-sound-calls-scheme-schematic-reading-story", ScrAdmissionSet.S3.Conditions,
+    public static ScrAdmissionSet Admission { get; } = new("S3-area-sound-calls-scheme-schematic-reading-story", ScrAdmissionSet.S3.Conditions.Concat(ScrAdmissionSet.StoryConditions),
         ScrAdmissionSet.S3.Actions
             .Concat([ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation, ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme,
                 ScrCatalogue.Action.CallScriptIn, ScrCatalogue.Action.RemoveScriptCall, ScrCatalogue.Action.SetAutoLevelScheme,
-                ScrCatalogue.Action.StartSchematicUi, ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque, ScrCatalogue.Action.Fade]),
+                ScrCatalogue.Action.StartSchematicUi, ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade]),
         ScrAdmissionSet.S3.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds), ScrAdmissionSet.S3.FocusKinds);
 
     /// <summary>ARC-SKILLS-009: <see cref="Admission"/> plus get skill (47) of <see cref="ScrAdmissionSet.S11"/>, the set a run uses while
@@ -332,6 +332,17 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public bool IsJilted(ScrObjectRef critter) => false;
     public bool IsPc(ScrObjectRef critter) => critter == Pc;
 
+    /// <summary>ARC-SCRIPT-1165 (E5-c): the effect rule of a blessing or curse number, which a dialog script's add blessing (25) or add curse (27) needs; see <see cref="AreaUseScriptHost.BlessingEffects"/>.</summary>
+    public Func<SessionBlessingKind, int, SessionEffectDefinition?>? BlessingEffects { get; set; }
+
+    // SQ1–SQ12 (ARC-SCRIPT-1165): the story and time questions, from the session.
+    public ScrGameTime? Time() => AreaScriptStoryQueries.Time(_session);
+    public int GlobalQuestState(int quest) => AreaScriptStoryQueries.GlobalQuestState(_session, quest);
+    public bool? RumorKnown(ScrObjectRef obj, int rumor) => AreaScriptStoryQueries.RumorKnown(_session, IsPc(obj), rumor);
+    public bool RumorQuelled(int rumor) => AreaScriptStoryQueries.RumorQuelled(_session, rumor);
+    public bool? HasBlessing(ScrObjectRef obj, int number, bool curse) => AreaScriptStoryQueries.HasBlessing(_session, IsPc(obj), number, curse);
+
+
     /// <summary>ARC-SKILLS-009 (SX1, SX2): the PC's effective level from the session hero (0 without one; the run's set then has no get
     /// skill); an NPC of this host's map whose map data the viewer reads: from the sheet the session saved for it, else that map data,
     /// with the map data's effects; 0 for any other object (an NPC whose map data is not read, a saved sheet included, or an object that
@@ -365,6 +376,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
             floats.Add(new(line.Speaker, printed.Text));
         }
         _floats.AddRange(floats);
+        // The effect rule of every blessing or curse the run adds is known before anything applies (a missing rule refuses the run whole).
+        if (!AreaScriptStory.BlessingRulesResolve(_session, effects, IsPc, BlessingEffects)) return false;
         foreach (var write in effects.GlobalFlags)
         {
             var flags = _session.Flags;
@@ -374,7 +387,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         // ARC-DEV-100: the global variables and the hero's variables and flags.
         if (!_session.ApplyScriptStores(effects)) return false;
         // ARC-SCRIPT-019: the story-state number and the quest, area, rumor and reputation requests, for the PC.
-        if (!AreaScriptStory.Apply(_session, effects, IsPc, _state.AddAward)) return false;
+        if (!AreaScriptStory.Apply(_session, effects, IsPc, _state.AddAward, BlessingEffects)) return false;
         // ARC-SCRIPT-040: scheme pairs are the session's request, in action order; one the session drops (sound locked, as the
         // original drops it) or refuses (a negative id, a project guard) changes nothing and stops nothing. Effect sounds wait
         // for the viewer. Like the flags, they stay applied when a later step is refused (the original applies as it goes).

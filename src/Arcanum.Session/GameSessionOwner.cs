@@ -768,6 +768,46 @@ public sealed partial class GameSessionOwner : IDisposable
         return Changed();
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-1165 (E5-c, ledger SQ7): the script action set quest global state (17, 0x4C51C0): the quest's game-wide state is final once Completed or Botched, and otherwise only those two values are stored (any other
+    /// request changes nothing, as the original returns Accepted). A quest number outside the quest range is refused (the original writes it unchecked). The PC's own record is not touched; a later
+    /// <see cref="SetQuestState(GameSessionVersion, int, SessionQuestState)"/> reads the new shared state (a PC then completes it as OtherCompleted, or botches it).
+    /// </summary>
+    [OriginalFunction(0x4C51C0, OriginalFunctionScope.Partial)]
+    public GameSessionMutationResult SetGlobalQuestState(GameSessionVersion expected, int quest, SessionQuestState state)
+    {
+        ThrowIfDisposed();
+        if (!SessionStoryLimits.IsQuest(quest)) return Reject(GameSessionFailure.InvalidQuest);
+        if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+        var current = _story.GlobalQuests.GetValueOrDefault(quest, SessionQuestState.Accepted);
+        if (current is SessionQuestState.Completed or SessionQuestState.Botched || state is not (SessionQuestState.Completed or SessionQuestState.Botched)) return NoChange();
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        _story.GlobalQuests[quest] = state;
+        return Changed();
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-1165 (E5-c, ledger SQ12): the script action set PC quest unbotched (119, 0x4C5070) for the PC: only a quest whose game-wide state is Botched changes (NoChange otherwise): the shared state goes back to
+    /// Accepted, and the PC's record loses its botched mark and is stamped with the current game time (a record that held nothing but the mark, state Unknown, is dropped, as an untouched quest is not listed). The
+    /// original also plays a sound and marks the logbook for the local PC; the host does that. A quest number outside the quest range is refused.
+    /// </summary>
+    [OriginalFunction(0x4C5070, OriginalFunctionScope.Partial)]
+    public GameSessionMutationResult UnbotchQuest(GameSessionVersion expected, int quest)
+    {
+        ThrowIfDisposed();
+        if (!SessionStoryLimits.IsQuest(quest)) return Reject(GameSessionFailure.InvalidQuest);
+        if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+        if (_story.GlobalQuests.GetValueOrDefault(quest, SessionQuestState.Accepted) != SessionQuestState.Botched) return NoChange();
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        _story.GlobalQuests.Remove(quest);
+        if (_story.Quests.TryGetValue(quest, out var record))
+        {
+            if (record.State == SessionQuestState.Unknown) _story.Quests.Remove(quest);
+            else _story.Quests[quest] = record with { Botched = false, TimestampMs = _clock.QueryClockSnapshot().GameTimestampMs };
+        }
+        return Changed();
+    }
+
     /// <summary>ARC-SCRIPT-019: the game's story-state number (get story state, 0x445090; ledger SS1), 0 at a new game.</summary>
     [OriginalFunction(0x445090, OriginalFunctionScope.Full)]
     public int QueryStoryState() { ThrowIfDisposed(); return _story.StoryState; }
@@ -1748,7 +1788,8 @@ public sealed partial class GameSessionOwner : IDisposable
 
     // Beyond each record's own range, the records must agree with the rules: no time after the saved clock, a PC
     // record Completed/OtherCompleted only under a shared Completed state, a botched one only under shared Botched,
-    // and any other PC record only while the shared state is Accepted. A shared state without a PC record is kept
+    // and an open PC record (Accepted, Unknown or one not completed) under any shared state, since a script can finish a quest game-wide
+    // before the PC record follows (ARC-SCRIPT-1165). A shared state without a PC record is kept
     // (the source's shared state is not owned by one PC).
     private static GameSessionFailure ImportStory(SessionStoryState saved, long clockMs, out Story story)
     {
@@ -1827,13 +1868,15 @@ public sealed partial class GameSessionOwner : IDisposable
         if (reputations != GameSessionFailure.None) return reputations;
         foreach (var quest in story.Quests.Values)
         {
+            // A quest the PC completed or botched has that shared state; one the PC holds in any other state may have a final shared state too (the script action
+            // set quest global state, ARC-SCRIPT-1165, writes it without the PC's record).
             var shared = quest.Effective switch
             {
                 SessionQuestState.Botched => SessionQuestState.Botched,
                 SessionQuestState.Completed or SessionQuestState.OtherCompleted => SessionQuestState.Completed,
-                _ => SessionQuestState.Accepted,
+                _ => (SessionQuestState?)null,
             };
-            if (story.GlobalQuests.GetValueOrDefault(quest.Quest, SessionQuestState.Accepted) != shared) return GameSessionFailure.InvalidQuestState;
+            if (shared is { } required && story.GlobalQuests.GetValueOrDefault(quest.Quest, SessionQuestState.Accepted) != required) return GameSessionFailure.InvalidQuestState;
         }
         return GameSessionFailure.None;
     }

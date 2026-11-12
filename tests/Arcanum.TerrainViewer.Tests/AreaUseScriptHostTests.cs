@@ -143,6 +143,21 @@ public sealed class AreaUseScriptHostTests
             Write("scr/00720story.scr", Program(Do(new(ScrCatalogue.Action.SetStoryState, N(5))), Do(new(ScrCatalogue.Action.SetPcQuestState, (Triggerer, 0), N(1016), N(2))),
                 Do(new(ScrCatalogue.Action.SetPcQuestState, (Attachee, 0), N(1017), N(2))), Do(new(ScrCatalogue.Action.MarkMapLocation, N(44), (Triggerer, 0))),
                 Do(new(ScrCatalogue.Action.SetRumor, N(1100), (Triggerer, 0))), Do(new(ScrCatalogue.Action.AddReputation, (Triggerer, 0), N(1005))), Do(Skip)));
+            // 780, 781 (ARC-SCRIPT-1165, E5-c): the story and time commands. 780 sets a global quest state and reads it back, tests daytime, stores the hours since startup, learns and quells a rumor and reads both back, grants a fate
+            // point, botches and unbotches a quest, and adds a blessing and a curse and reads one back; 781 only adds a blessing (the host's rule of the effect is the test's).
+            Write("scr/00780story.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalQuestState, N(1009), N(4))),
+                If(new(ScrCatalogue.Condition.GlobalQuestState, N(1009), N(4)), new(ScrCatalogue.Action.SetGlobalFlag, N(60)), new(0)),
+                If(new(ScrCatalogue.Condition.Daytime), new(ScrCatalogue.Action.SetGlobalFlag, N(61)), new(0)),
+                Do(new(ScrCatalogue.Action.GetHoursSinceStartup, (1, 6))),
+                Do(new(ScrCatalogue.Action.SetRumor, N(1100), (Triggerer, 0))), Do(new(ScrCatalogue.Action.QuellRumor, N(1100), (Triggerer, 0))),
+                If(new(ScrCatalogue.Condition.RumorKnown, (Triggerer, 0), N(1100)), new(ScrCatalogue.Action.SetGlobalFlag, N(62)), new(0)),
+                If(new(ScrCatalogue.Condition.RumorQuelled, N(1100)), new(ScrCatalogue.Action.SetGlobalFlag, N(63)), new(0)),
+                Do(new(ScrCatalogue.Action.GrantFatePoint, (Triggerer, 0))),
+                Do(new(ScrCatalogue.Action.SetPcQuestState, (Triggerer, 0), N(1013), N(6))), Do(new(ScrCatalogue.Action.SetPcQuestUnbotched, (Triggerer, 0), N(1013))),
+                Do(new(ScrCatalogue.Action.AddBlessing, N(52), (Triggerer, 0))), Do(new(ScrCatalogue.Action.AddCurse, N(53), (Triggerer, 0))),
+                If(new(ScrCatalogue.Condition.HasBlessing, (Triggerer, 0), N(52)), new(ScrCatalogue.Action.SetGlobalFlag, N(64)), new(0)),
+                If(new(ScrCatalogue.Condition.HasCurse, (Triggerer, 0), N(52)), new(ScrCatalogue.Action.SetGlobalFlag, N(65)), new(0)), Do(Skip)));
+            Write("scr/00781bless.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(66))), Do(new(ScrCatalogue.Action.AddBlessing, N(54), (Triggerer, 0))), Do(Skip)));
             // 730 (ARC-WORLD-081): the plant generator's core: next to every scenery named 1673 in the PC's vicinity, prototype 10061.
             Write("scr/00730plants.scr", Program(Do(new(ScrCatalogue.Action.AssignObject, (Attachee, 0), (Triggerer, 0))),
                 Do(new(ScrCatalogue.Action.LoopFor, (15, 0))),
@@ -813,6 +828,54 @@ public sealed class AreaUseScriptHostTests
             Assert.IsNotNull(session.QueryRumor(1100));
             Assert.IsTrue(session.HeroHasReputation(1005));
             Assert.AreEqual(5, host.StoryState());
+        });
+    }
+
+    // ARC-SCRIPT-1165 (E5-c, ledger SQ1–SQ12): the story and time commands change the session and read it back inside the run.
+    [TestMethod]
+    public void Story_and_time_commands_change_the_session_and_the_run_reads_the_changes_back()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var gate = Gate(780);
+            var host = Host(session, content, gate);
+            host.BlessingEffects = (kind, number) => new SessionEffectDefinition(number, []);
+            var fate = session.QueryHeroFate()!.Value.Points;
+            var clock = session.QueryClockSnapshot();
+            var ran = host.Run(gate, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.AreEqual(SessionQuestState.Completed, session.QueryGlobalQuest(1009));
+            Assert.IsTrue(host.GlobalFlag(60), "the run reads the global quest state it set");
+            Assert.AreEqual(clock.IsDay, host.GlobalFlag(61), "daytime is the session's clock");
+            Assert.AreEqual((int)(clock.DayIndex * 24 + clock.Hour), session.QueryGlobalVariable(6), "hours since startup");
+            Assert.IsNotNull(session.QueryRumor(1100));
+            Assert.IsTrue(session.QueryRumorQuelled(1100));
+            Assert.IsTrue(host.GlobalFlag(62) && host.GlobalFlag(63));
+            Assert.AreEqual(fate + 1, session.QueryHeroFate()!.Value.Points);
+            Assert.IsNull(session.QueryQuest(1013), "the botched mark was set and cleared again");
+            Assert.AreEqual(SessionQuestState.Accepted, session.QueryGlobalQuest(1013));
+            CollectionAssert.AreEqual(new[] { 52 }, session.QueryHeroBlessings(SessionBlessingKind.Blessing)!.Select(b => b.Number).ToArray());
+            CollectionAssert.AreEqual(new[] { 53 }, session.QueryHeroBlessings(SessionBlessingKind.Curse)!.Select(b => b.Number).ToArray());
+            Assert.IsTrue(host.GlobalFlag(64), "the blessing was held at once");
+            Assert.IsFalse(host.GlobalFlag(65), "the curse number was 53, not 52");
+            Assert.IsTrue(host.HasBlessing(host.Pc, 52, false) == true && host.HasBlessing(host.Pc, 52, true) == false);
+        });
+    }
+
+    // Without the effect rule of a blessing number the host cannot add it: the effects are rejected and the session's blessing list stays as it is.
+    [TestMethod]
+    public void A_blessing_without_the_hosts_effect_rule_is_refused()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var gate = Gate(781);
+            var host = Host(session, content, gate);
+            var ran = host.Run(gate, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, ran.Outcome, ran.Detail);
+            Assert.AreEqual(0, session.QueryHeroBlessings(SessionBlessingKind.Blessing)!.Count);
+            Assert.IsFalse(host.GlobalFlag(66), "the missing rule is found before anything applies, so the flag the script set before the blessing is not kept");
         });
     }
 

@@ -29,7 +29,7 @@ public enum ScrSource { Object, Tile, Sector }
 /// <summary>The attachment points (0..35) the dispatcher treats by name.</summary>
 public static class ScrPoint
 {
-    public const int Examine = 0, Destroy = 2, Use = 1, Dialog = 9, FirstHeartbeat = 10, Dying = 12, Heartbeat = 19, TakingDamage = 23, Bust = 30, DialogOverride = 31, Count = 36,
+    public const int Examine = 0, Destroy = 2, Use = 1, Dialog = 9, FirstHeartbeat = 10, Dying = 12, Heartbeat = 19, TakingDamage = 23, LeaderSleeping = 29, Bust = 30, DialogOverride = 31, Count = 36,
         // ARC-MAGIC-042 (TI4): the weapon's hit (7) and miss (8) points, run for a thrown item's strike or landing.
         Hit = 7, Miss = 8;
 }
@@ -261,6 +261,42 @@ public interface IScrSpellQueries
     bool? KnowsSpell(ScrObjectRef obj, int spell);
     /// <summary>The college the object mastered (0x4B1CB0, SB1): the PC's or NPC's stored college, −1 for none; −1 also for every object that is neither a PC nor an NPC.</summary>
     int? MasteredCollege(ScrObjectRef obj);
+}
+
+/// <summary>The game clock as the story commands read it (ledger SQ1, SQ5): the day index (0 on the first day) and the hour and minute of the day.</summary>
+public readonly record struct ScrGameTime(long DayIndex, int Hour, int Minute)
+{
+    /// <summary>Whether it is day (0x45ACF0): the hour is 6 to 17.</summary>
+    public bool IsDay => Hour is >= 6 and <= 17;
+
+    /// <summary>Get day since startup (0x45A8D0): the day index plus one.</summary>
+    [OriginalFunction(0x45A8D0, OriginalFunctionScope.Full)]
+    public long DaySinceStartup() => DayIndex + 1;
+
+    /// <summary>Get hours since startup (0x45A890): whole hours of the game's age, the day index times 24 plus the hour.</summary>
+    [OriginalFunction(0x45A890, OriginalFunctionScope.Full)]
+    public long HoursSinceStartup() => DayIndex * 24 + Hour;
+}
+
+/// <summary>
+/// ARC-SCRIPT-1165 (E5-c, ledger SQ1–SQ12): the story and time questions of set <see cref="ScrAdmissionSet.S34"/>: the daytime condition and the clock
+/// actions (<see cref="Time"/>), the global quest state, the PC's rumor knowledge and the game-wide quelled set, and the PC's blessings and curses. A host whose
+/// admission set holds one implements this interface; the interpreter asks only for what a clause names.
+/// </summary>
+public interface IScrStoryQueries
+{
+    /// <summary>The game clock, or null when the host holds none (the dispatch then ends with <see cref="ScrStop.NotModelled"/> and applies nothing).</summary>
+    ScrGameTime? Time();
+    /// <summary>The quest's game-wide state (0x4C51A0, 2 until a PC completes or botches it); 0 for a number the host's quest table does not hold.</summary>
+    int GlobalQuestState(int quest);
+    /// <summary>Whether the object is a PC that has learned the rumor (0x4C58D0); false for any other object and for a rumor number the host does not hold; null for an object the
+    /// host does not know (the run then stops as for an absent object).</summary>
+    bool? RumorKnown(ScrObjectRef obj, int rumor);
+    /// <summary>Whether the rumor is quelled (0x4C5650, game-wide); false for a rumor number the host does not hold.</summary>
+    bool RumorQuelled(int rumor);
+    /// <summary>Whether the object is a PC that holds the blessing (<paramref name="curse"/> false, 0x4C4280) or the curse (true, 0x4C3DD0) of this number; false for any other object;
+    /// null for an object the host does not know.</summary>
+    bool? HasBlessing(ScrObjectRef obj, int number, bool curse);
 }
 
 /// <summary>
@@ -608,16 +644,37 @@ public sealed class ScrPcOrder : IComparer<(ScrObjectRef Pc, int Index)>
         : x.Index.CompareTo(y.Index);
 }
 
-/// <summary>ARC-SCRIPT-019: which game state a state request changes (actions 16, 49, 50, 72, 73).</summary>
-public enum ScrStateKind { QuestState, KnownArea, Rumor, AddReputation, RemoveReputation }
+/// <summary>ARC-SCRIPT-019: which game state a state request changes (actions 16, 49, 50, 72, 73); ARC-SCRIPT-1165 (E5-c, ledger SQ1–SQ12) adds the story actions of set <see cref="ScrAdmissionSet.S34"/>.</summary>
+public enum ScrStateKind
+{
+    QuestState, KnownArea, Rumor, AddReputation, RemoveReputation,
+    /// <summary>Set quest global state (17): <see cref="ScrStateRequest.Number"/> the quest, <see cref="ScrStateRequest.Value"/> the state; no object (0x4C51C0).</summary>
+    GlobalQuestState,
+    /// <summary>Quell rumor (51): <see cref="ScrStateRequest.Number"/> the rumor, asked for the first object of operand 1 (0x4C5690, for the local player only).</summary>
+    QuellRumor,
+    /// <summary>Give quest experience (63): <see cref="ScrStateRequest.Number"/> the quest experience level of operand 1 (0x4C53C0, 0x45F110), asked for the first object of operand 0.</summary>
+    QuestExperience,
+    /// <summary>Grant one fate point (117): the first object of operand 0, a PC only (0x44A2B3).</summary>
+    FatePoint,
+    /// <summary>Set PC quest unbotched (119): <see cref="ScrStateRequest.Number"/> the quest, one request per object of operand 0 in list order (0x4C5070).</summary>
+    QuestUnbotched,
+    /// <summary>Add blessing (25): <see cref="ScrStateRequest.Number"/> the blessing, one request per object of operand 1 in list order (0x4C42F0).</summary>
+    AddBlessing,
+    /// <summary>Remove blessing (26): as <see cref="AddBlessing"/> for 0x4C4450.</summary>
+    RemoveBlessing,
+    /// <summary>Add curse (27): as <see cref="AddBlessing"/> for 0x4C3E40.</summary>
+    AddCurse,
+    /// <summary>Remove curse (28): as <see cref="AddBlessing"/> for 0x4C3FA0.</summary>
+    RemoveCurse,
+}
 
 /// <summary>
 /// ARC-SCRIPT-019: a change of the PC's story the run asks for (ledger SS2–SS5): set quest state (16: the quest number and the
 /// state, with the run's attachee as the quest's giver), mark a world-map area known (49), learn a rumor (50), add or remove a
-/// reputation (72, 73). <paramref name="Object"/> is the object it is asked for; the host applies it to a PC and ignores any
-/// other object, as the original's functions do.
+/// reputation (72, 73). <paramref name="Object"/> is the object it is asked for (null for a game-wide request, <see cref="ScrStateKind.GlobalQuestState"/>); the
+/// host applies it to a PC and ignores any other object, as the original's functions do.
 /// </summary>
-public sealed record ScrStateRequest(ScrStateKind Kind, ScrObjectRef Object, int Number, int Value = 0, ScrObjectRef? Giver = null);
+public sealed record ScrStateRequest(ScrStateKind Kind, ScrObjectRef? Object, int Number, int Value = 0, ScrObjectRef? Giver = null);
 
 /// <summary>
 /// Every change of one dispatch, for the caller to apply together: the slot writeback (or the trap object to destroy
@@ -743,7 +800,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S34"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S35"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -764,7 +821,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S34)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S34.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S35)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S35.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -789,6 +846,8 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with a spell condition (body spell, influenced by spell, knows spell, mastered college) needs a host that implements IScrSpellQueries.", nameof(Admission));
         if (host is not IScrAreaQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetArea))
             throw new ArgumentException("A set with get area needs a host that implements IScrAreaQueries.", nameof(Admission));
+        if (host is not IScrStoryQueries && (Admission.Conditions.Any(ScrAdmissionSet.StoryQueryConditions.Contains) || Admission.Actions.Any(ScrAdmissionSet.StoryQueryActions.Contains)))
+            throw new ArgumentException("A set with daytime, global quest state, a rumor, blessing or curse condition a clock action, set global quest state or unbotch needs a host that implements IScrStoryQueries.", nameof(Admission));
         if (host is not IScrStoreQueries && Admission.ValueKinds.Any(ScrAdmissionSet.StoreValueKinds.Contains))
             throw new ArgumentException("A set with a global variable, PC variable or PC flag operand needs a host that implements IScrStoreQueries.", nameof(Admission));
     }

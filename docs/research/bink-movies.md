@@ -195,19 +195,19 @@ to equal lengths and differ), so "FFmpeg plays these files" is now a run, not a 
 
 ## 7. Script action 103 in the engine (ARC-SCRIPT-1241, 2026-11-12)
 
-Action 103 is admitted (`ScrAdmissionSet.S34`, S33 plus fade) and the interpreter hands one `ScrFade(seconds, sound, movie, flag)` per action to the host. The dialog host and the use host
+Action 103 is admitted (`ScrAdmissionSet.S35`, S34 plus fade) and the interpreter hands one `ScrFade(seconds, sound, movie, flag)` per action to the host. The dialog host and the use host
 (use, tile, sector and dying scripts) apply it with `AreaScriptFades`: the game clock jumps by seconds × 1000 ms (32-bit, only above 0; TL26), then a non-zero movie number goes to the viewer with
 the sound operand as its audio track (above 0; else the default track), and with no movie a sound above 0 plays as an effect sound (dialog host). The viewer starts the movies one at a time
 through `PlayMovies` (`SyncScriptFades`). The screen's fade out and in is not drawn and the flag operand is carried, not used (the exe's fade-in event after the flag's seconds was not read further).
 The action is skipped in a network host game; the single-player host is never one.
 
-**The attachment walk (D, probe `--script-attachments` and a scan of every script for calls to the six).** Where the six scripts run and what blocks each (first refusal of S34 and of the host sets):
+**The attachment walk (D, probe `--script-attachments` and a scan of every script for calls to the six).** Where the six scripts run and what blocks each (first refusal of S35 and of the host sets):
 
 | Script | Movies (movie, track, seconds, flag) | Attached to | Blocked by |
 | --- | --- | --- | --- |
-| 1093 | 4, track 1, 0 s, flag 0 | not attached: called by 1092 (Kanhua's dialog on the Caladon-Panarrii temple map, catalogue 5058) through call script (7), and 1093 calls 1092 back at line 11 | admitted whole by S34; the dialog host leaves call script (7) out, and 1092 itself needs attack (36) |
+| 1093 | 4, track 1, 0 s, flag 0 | not attached: called by 1092 (Kanhua's dialog on the Caladon-Panarrii temple map, catalogue 5058) through call script (7), and 1093 calls 1092 back at line 11 | admitted whole by S35; the dialog host leaves call script (7) out, and 1092 itself needs attack (36) |
 | 1105 | 2, 3 (5 s each, flag 2) and 6 (10,800 s = 3 game hours, flag 2) | dialog point (9) of Kerghan, prototype 27387 and its map object on the Void, Kerghan's castle map (catalogue 5072); 107 lines | change script (99); the dialog host also refuses its loop for (18) |
-| 1109 | 4, default track, 0 s, flag 0 | not attached: called by 1108 (Nasrudin's dialog on the main map) through call script (7) | admitted whole by S34; the dialog host leaves call script (7) out |
+| 1109 | 4, default track, 0 s, flag 0 | not attached: called by 1108 (Nasrudin's dialog on the main map) through call script (7) | admitted whole by S35; the dialog host leaves call script (7) out |
 | 2862 | 3 and 5, 0 s, flag 0 | use point (1) of a type-14 object on the Vendigroth underground map (catalogue 5032) | end-game slides (132), play script eye candy (120) |
 | 2863 | 2 and 5 | dying point (12) of Kerghan, prototypes 27387 and 27389 | end-game slides (132), play script eye candy (120) |
 | 3061 | 2 and 5 | dying point (12) of Kerghan, prototype 27388 | end-game slides (132) |

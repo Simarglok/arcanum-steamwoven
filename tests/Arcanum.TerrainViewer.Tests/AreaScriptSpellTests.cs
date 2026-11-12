@@ -275,7 +275,7 @@ public sealed class AreaScriptSpellTests
         {
             foreach (var condition in ScrAdmissionSet.SpellQueryConditions) Assert.IsTrue(set.Conditions.Contains(condition), $"{set.Id}: condition {condition}");
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.GiveSpellMastery), $"{set.Id}: action 112");
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S31, ScrCatalogue.Action.Fade), set.Id); // ARC-SCRIPT-1241: and the fade of S34
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S35), set.Id);
         }
         // A dialog host without a query host cannot answer the questions: its own sets stay without them.
         Assert.IsFalse(AreaScriptHost.Admission.Conditions.Overlaps(ScrAdmissionSet.SpellQueryConditions));
