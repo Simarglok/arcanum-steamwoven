@@ -146,8 +146,8 @@ public sealed class SessionEventTests
         Damage(owner, Npc("virgil"), new LifeDamage { HitPoints = 5 });
         Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, Npc("oid:wolf")).Disposition);
         Damage(owner, Npc("oid:gone"), new LifeDamage { HitPoints = 1 });
-        // ARC-DEV-137: the wolf's death also started its dying goal, whose first step is a fourth event (goal.step, on the animation clock).
-        Assert.AreEqual(3, owner.QueryEvents().Count(e => e.Kind != SessionEventKinds.GoalStep));
+        // ARC-DEV-137: the wolf's death also started its dying goal, whose first step is another event (goal.step, on the animation clock); ARC-WORLD-1158: and queued its body's decay event.
+        Assert.AreEqual(4, owner.QueryEvents().Count(e => e.Kind != SessionEventKinds.GoalStep));
 
         var world = new World { Present = { [(79, "virgil")] = Wolf, [(79, "oid:wolf")] = Wolf } };
         Advance(owner, 3_600_000);
@@ -159,7 +159,8 @@ public sealed class SessionEventTests
             pass.Pass!.Outcomes.Select(o => o.Kind).ToArray());
         Assert.AreEqual("oid:gone", pass.Pass.Outcomes[2].Event.Payload.Entities[0].Code);
         Assert.AreEqual(revision, owner.Version.Revision);
-        Assert.AreEqual(0, owner.QueryEvents().Count(e => e.Kind != SessionEventKinds.GoalStep));
+        // ARC-WORLD-1158: only the dead wolf's body-decay event, a day on, is left.
+        Assert.AreEqual(SessionEventKinds.BodyDecay, owner.QueryEvents().Single(e => e.Kind != SessionEventKinds.GoalStep).Kind);
     }
 
     [TestMethod]
@@ -191,7 +192,7 @@ public sealed class SessionEventTests
             Damage(owner, Npc($"oid:n{i}"), new LifeDamage { HitPoints = 1, Fatigue = 1, Poison = 10 });
         Damage(owner, SessionLifeTarget.Hero, new LifeDamage { HitPoints = 1, Fatigue = 1, Poison = 10 });
         Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxScriptCalls - SessionEffectLimits.MaxTimedEffects - SessionEventKinds.MaxLockResets
-            - SessionEventKinds.MaxWaitTimers - SessionEventKinds.MaxObjectRespawns - SessionEventKinds.MaxSpellRunEvents - SessionEventKinds.MaxItemDecays
+            - SessionEventKinds.MaxWaitTimers - SessionEventKinds.MaxObjectRespawns - SessionEventKinds.MaxSpellRunEvents - SessionEventKinds.MaxItemDecays - SessionEventKinds.MaxBodyDecays
             - SessionEventKinds.MaxAiTicks - SessionEventKinds.MaxRestocks - SessionEventKinds.MaxTrapDevices - SessionEventKinds.MaxRealSteps - SessionEventKinds.MaxGoalSteps - 1, owner.QueryEvents().Count);
         // ARC-SCRIPT-010: the deferred SCR calls have their own share of the queue on top.
         for (var i = 0; i < SessionEventKinds.MaxScriptCalls; i++)
@@ -239,11 +240,11 @@ public sealed class SessionEventTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ScheduleRestock(owner.Version, "chest:0", true).Disposition);
         // ARC-MAGIC-010: the magic-tech events have a share too (not saved; empty here), and so do the real-time steps (MIG12 S8; not saved); so do the Item Decay events (ARC-WORLD-062) and the
         // hero's encumbrance timer (ARC-WORLD-087).
-        Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxSpellRunEvents - SessionEventKinds.MaxItemDecays - SessionEventKinds.MaxTrapDevices - SessionEventKinds.MaxRealSteps - SessionEventKinds.MaxGoalSteps - 1, owner.QueryEvents().Count);
+        Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxSpellRunEvents - SessionEventKinds.MaxItemDecays - SessionEventKinds.MaxBodyDecays - SessionEventKinds.MaxTrapDevices - SessionEventKinds.MaxRealSteps - SessionEventKinds.MaxGoalSteps - 1, owner.QueryEvents().Count);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, Npc("oid:n0"), new LifeDamage { HitPoints = 1 }).Disposition);
         // A save of a full queue restores.
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
-        Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxSpellRunEvents - SessionEventKinds.MaxItemDecays - SessionEventKinds.MaxTrapDevices - SessionEventKinds.MaxRealSteps - SessionEventKinds.MaxGoalSteps - 1, restored.QueryEvents().Count);
+        Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxSpellRunEvents - SessionEventKinds.MaxItemDecays - SessionEventKinds.MaxBodyDecays - SessionEventKinds.MaxTrapDevices - SessionEventKinds.MaxRealSteps - SessionEventKinds.MaxGoalSteps - 1, restored.QueryEvents().Count);
     }
 
     [TestMethod]
@@ -260,7 +261,7 @@ public sealed class SessionEventTests
         Changed(owner.PlaceActor(owner.Version, new(Cave, new(5, 5), Start.Facing)), owner, revision + 1);
         Damage(owner, Npc("oid:fox"), new LifeDamage { Fatigue = 5 });
         CollectionAssert.AreEqual(new[] { $"life.npc.fatigue@{T0 + 80_000}:79/oid:wolf", $"life.npc.fatigue@{T0 + 80_000}:80/oid:fox",
-            $"life.npc.resting@{T0 + 3_600_000}:79/oid:wolf" }, Pending(owner));
+            $"life.npc.resting@{T0 + 3_600_000}:79/oid:wolf", $"body.decay@{T0 + 86_400_000}:79/oid:wolf" }, Pending(owner));
 
         Advance(owner, 80_000);
         Pass(owner, world);
@@ -269,7 +270,7 @@ public sealed class SessionEventTests
         var exterior = Pass(owner, world);
         // The dead wolf's timer fires without a step and sets no next one (the source returns early for the dead).
         Assert.AreEqual(0, exterior.Life.Count);
-        CollectionAssert.AreEqual(new[] { $"life.npc.fatigue@{T0 + 160_000}:80/oid:fox", $"life.npc.resting@{T0 + 3_600_000}:79/oid:wolf" },
+        CollectionAssert.AreEqual(new[] { $"life.npc.fatigue@{T0 + 160_000}:80/oid:fox", $"life.npc.resting@{T0 + 3_600_000}:79/oid:wolf", $"body.decay@{T0 + 86_400_000}:79/oid:wolf" },
             Pending(owner));
     }
 

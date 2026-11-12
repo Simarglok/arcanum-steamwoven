@@ -854,3 +854,20 @@ Known differences (documented, not bugs):
 - The creature takes the hero's alignment as the original does, but of the moment the world first reads it: a loaded game reads the hero's then.
 - The original's weighted lists overrun their table on a draw of 100 (MG9); Steamwoven fixes it in both modes (technical bug rule).
 - Familiar (74): its own flags (`OSF_FAMILIAR`, `ONF_FAMILIAR`) and its hiding with the party on the world map are MA-1's and the world map's.
+
+## ARC-WORLD-1158 — Body decay of dead creatures (E2-b, 2026-11-12)
+
+The rules are in the [ledger BD1–BD7](../research/ledger/npc-ai.md#body-decay-built-arc-world-1158) (the executable's PO10). Compare in both games with a creature you kill and then leave lying: wait or sleep one game day (the game bar's wait, key S) near the body.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Kill a creature that carries an item or two (a map NPC, then a creature a generator made) and stay on the map. Pass 23 hours, look at the body; then pass another 2 hours. | The body lies there the first 23 hours and is gone a game day after the death (the Decay Dead Bodies event). | open |
+| 2 | Look at the spot after the body is gone. | The creature's items lie on its tile (in a junk pile when two or more) and disappear two game days later as any dropped item; an item the data marks "not droppable" is gone with the body. | open |
+| 3 | Kill a creature, leave the map for more than a day, come back. | The body is gone on return (the event runs late once its map is the shown one). | open |
+| 4 | Kill a creature of a generator and wait for its body to go. | The generator does not make a replacement because of the decay: only a generator whose live count the death released ticks again (PO7, PO11); the made-so-far count is never given back. | open |
+
+Known differences (documented, not bugs):
+
+- The hero's own death queues no decay event here (the game is over); the original queues one for a PC too.
+- The items of a dead follower that died away from its home map stay with the destroyed critter (a seed other than the body's map is not read).
+- Whether any installed creature carries the "no decay" critter flag (0x40 of critter flags 2) is read from the data when each creature is built: such a body is never removed, as in the original.

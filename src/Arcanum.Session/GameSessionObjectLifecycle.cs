@@ -173,6 +173,8 @@ public sealed partial class GameSessionOwner
                 _traitArt = _traitArt.Remove(entity);
                 // ARC-WORLD-1157 (PO7): the slot mark goes with the critter; a destroy releases nothing (the count of its slot stays).
                 _generators.DropCopy(entity);
+                // ARC-WORLD-1158 (0x45EC80): a pending Decay Dead Bodies event of the critter goes before its destroy.
+                CancelBodyDecay(entity);
                 return;
             case SessionObjectOrigin.Missile:
                 _missileObjects.Remove(entity);

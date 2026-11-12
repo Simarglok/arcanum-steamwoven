@@ -379,7 +379,7 @@ public sealed class LifeRulesTests
         Assert.ThrowsExactly<ArgumentException>(() => LifeRules.Evaluate(Hurt(), Plain with { HitPointPoints = LifeLimits.MaxPoolPoints + 1 }));
         Assert.ThrowsExactly<ArgumentException>(() => LifeRules.Evaluate(Hurt(), Plain with { Level = 52 }));
         Assert.ThrowsExactly<ArgumentException>(() => LifeRules.Evaluate(Hurt(), Plain with { PoisonedStrength = [7, 6] }));
-        Assert.ThrowsExactly<ArgumentException>(() => LifeRules.Evaluate(Hurt(), Plain with { Traits = (LifeTraits)512 }));
+        Assert.ThrowsExactly<ArgumentException>(() => LifeRules.Evaluate(Hurt(), Plain with { Traits = (LifeTraits)1024 }));
         Assert.ThrowsExactly<ArgumentException>(() => LifeRules.ApplyDamage(Hurt(), Plain, new LifeDamage { HitPoints = LifeLimits.MaxAmount + 1 }, None));
         Assert.ThrowsExactly<ArgumentException>(() => LifeRules.ApplyDamage(Hurt(), Plain, new LifeDamage { Effects = (CriticalHitEffects)(1 << 11) }, None));
         Assert.ThrowsExactly<ArgumentException>(() => LifeRules.Heal(Hurt(), Plain, new LifeHeal { HitPoints = -1 }));

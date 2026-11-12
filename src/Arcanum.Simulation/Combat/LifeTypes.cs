@@ -46,6 +46,8 @@ public enum LifeTraits
     Unrevivifiable = 1 << 7,
     /// <summary>Refuses resurrection.</summary>
     Unresurrectable = 1 << 8,
+    /// <summary>ARC-WORLD-1158: critter flag 2 "no decay" (0x40): a dead body of it is not removed (<see cref="BodyDecayRules"/>).</summary>
+    NoBodyDecay = 1 << 9,
 }
 
 /// <summary>Explicit bounds of the life rules (ARC-COMBAT-002).</summary>
