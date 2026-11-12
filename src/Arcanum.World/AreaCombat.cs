@@ -511,7 +511,8 @@ public sealed class AreaCombatHost : IAreaEventObjects
             var fields = Fields(worn.Entity) ?? (kinds.TryGetValue(worn.Entity, out var kind) ? _prototypes?.Invoke(kind.Prototype) : null);
             identified[worn.Slot] = session.QueryItemIdentified(worn.Entity) || fields?.Item is { } stored && (stored.Flags & IdentifiedItemFlag) != 0;
         }
-        return session.QueryHeroDollRatings(slot => identified.GetValueOrDefault(slot));
+        try { return session.QueryHeroDollRatings(slot => identified.GetValueOrDefault(slot)); }
+        catch (ArgumentException) { return null; }
     }
 
     /// <summary>ARC-DEV-075 (MIG2): <see cref="NpcItems(GameSessionOwner, int, string)"/> by identity: the items the NPC holds now, listed or

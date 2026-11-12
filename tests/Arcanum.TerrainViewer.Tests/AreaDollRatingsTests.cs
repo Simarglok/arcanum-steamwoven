@@ -96,7 +96,7 @@ public sealed class AreaDollRatingsTests
     [TestMethod]
     public void TheOwnWindowsRatingBoxesAreTheOriginalsTables()
     {
-        // IW25: 0x5CAEF8 and 0x5CAF08, 23 × 35 each; the damage rating's box ends left of the doll's boots, the armour rating's lies right of the shield slot.
+        // IW25: 0x5CAEF8 and 0x5CAF08, 23 × 35 each; the damage rating's box lies left of the doll's boots, the armour rating's right of them (both under the slot rectangles).
         Assert.AreEqual((80, 358, 23, 35), AreaInventoryArtLayout.DamageRatingBox);
         Assert.AreEqual((261, 358, 23, 35), AreaInventoryArtLayout.ArmourRatingBox);
     }
