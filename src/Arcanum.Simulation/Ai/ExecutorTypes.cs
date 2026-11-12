@@ -58,6 +58,8 @@ public enum AiExecutorReason
     SpreadOutAway,
     /// <summary>The run to a tile walks or reached its tile.</summary>
     RunToTile,
+    /// <summary>ARC-AI-1315: the please-move goal found no clear neighbouring tile (0x424E00 answered 0): the goal ends.</summary>
+    PleaseMoveNoTile,
     /// <summary>A path the goal needed was not found.</summary>
     NoPath,
     /// <summary>A step was blocked (a living critter near the path's end, a spotted trap, a step that cannot start).</summary>
@@ -356,6 +358,10 @@ public interface IAiGoalWorld : IItemUseWorld
     /// a newly spotted trap or, with <paramref name="flight"/>, any blocking tile (<see cref="AiStepBlock.Occupied"/>), or because the
     /// step cannot start (<see cref="AiStepBlock.CannotStart"/>).</summary>
     AiStepBlock StepBlocked(string id, CellCoord next, bool flight);
+    /// <summary>The blocked-step test of the please-move goal's tile choice (0x425760, ARC-AI-1315): the step from the object's tile to the neighbouring <paramref name="next"/>
+    /// is clear when the mover's flags, the tile test and the object traversal (a living critter on it blocks) let it through; no trap check and no random wait. The
+    /// default asks <see cref="StepBlocked"/> without flight.</summary>
+    bool StepClear(string id, CellCoord next) => StepBlocked(id, next, false) == AiStepBlock.Clear;
     /// <summary>
     /// ARC-DEV-209 (MIG14 S3, GT49): the walker's door test (node 7, 0x4272E0 → 0x440700): the session entity of the closed, idle door the step from the tile of <paramref name="id"/> to
     /// <paramref name="next"/> crosses, or null when it crosses none (an open door, a door with a run of its own, a step that crosses no portal). The default answers none, as a world with no doors.
@@ -502,6 +508,8 @@ public enum AiPerformKind
     Flee,
     /// <summary>SURRENDER: perform surrender ran.</summary>
     Surrender,
+    /// <summary>ARC-AI-1315: the please-move starter (0x4363E0) started goal 68 on a critter that shares a tile with another (the run is that critter's, not the performer's).</summary>
+    PleaseMove,
 }
 
 /// <summary>Why a starter refused to start its goal (none: it started, or kept or updated the run).</summary>
@@ -533,6 +541,8 @@ public enum AiStartRefusal
     PickupsOff,
     /// <summary>The magic domain started no casting run (the invocation check refused, or the cast was queued under a running one).</summary>
     NoRun,
+    /// <summary>ARC-AI-1315: the attacker's tile is shared with another living, not busy NPC (the finder 0x436720): one of them was asked to move (0x4363E0) and no attack starts.</summary>
+    TileSharer,
 }
 
 /// <summary>
@@ -607,8 +617,12 @@ public interface IAiPerformWorld : IAiGoalWorld
     /// <summary>Interrupts the object's runs at level 3 (0x424070, ledger GS13): the table's rule decides, the end nodes of the runs it ends run, and false when a run
     /// refuses it (its current goal has priority 4 or 5). ARC-DEV-135 (MIG13 S5): it was always true before.</summary>
     bool InterruptLowerAnimations(string id);
-    /// <summary>Asks the critters sharing the object's tile to step apart (0x4364D0).</summary>
-    void StepApart(string id);
+    /// <summary>The critters of both kinds standing on the object's tile, the object among them (the list of 0x436720 and 0x4364D0, 0x406DA0 with the critter mask),
+    /// in the tile's list order; each with its dead and busy-run test and its handle stand-in (<see cref="AiTileCritter"/>). ARC-AI-1315. The default sees none.</summary>
+    IReadOnlyList<AiTileCritter> TileCritters(string id) => [];
+    /// <summary>The please-move starter's last part (0x4363E0 after its choice, gate and busy test): goal 68 with <paramref name="awayFrom"/> as its object starts on
+    /// <paramref name="mover"/>, interrupting its runs at the goal's priority; true when the run started. ARC-AI-1315. The default starts nothing.</summary>
+    bool StartPleaseMove(string mover, string awayFrom) => false;
     /// <summary>Perform fleeing (the session's <c>PerformFleeing</c>).</summary>
     AiFleeing PerformFleeing(string npc);
     /// <summary>Perform surrender (<see cref="MoraleRules.SurrenderEnds"/> and the setter's NONE).</summary>

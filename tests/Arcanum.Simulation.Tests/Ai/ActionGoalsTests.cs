@@ -127,7 +127,6 @@ public sealed class ActionGoalsTests
         public bool NpcPickupsOn => PickupsOn;
         public bool BoomerangInFlight(string npc) => false;
         public bool InterruptLowerAnimations(string id) => !InterruptFails;
-        public void StepApart(string id) { }
         public AiFleeing PerformFleeing(string npc) => new(false, null);
         public void PerformSurrender(string npc) { }
     }

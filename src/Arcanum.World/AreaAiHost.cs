@@ -1318,23 +1318,25 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Started(npc, current, AiExecutorRules.StartAttack(this, npc, target, null, current));
     }
 
-    private void Started(string npc, GoalRun? current, AiPerformResult result)
+    // True when the run is in the table now (a started run the table took).
+    private bool Started(string npc, GoalRun? current, AiPerformResult result)
     {
         Trace(npc).Perform = $"{result.Kind}{(result.Refusal == AiStartRefusal.None ? "" : " " + result.Refusal)}{(result.Started ? " started" : "")}";
-        if (!result.Started || result.Run is not { } run || ReferenceEquals(current, run)) return;
+        if (!result.Started || result.Run is not { } run || ReferenceEquals(current, run)) return false;
         // ARC-DEV-135 (MIG13 S5): the proposed run starts in the session's table with its starter's own plan (GS12, GS13): the table interrupts the NPC's runs at the starter's
         // level by the rule (the executor's starters that interrupt in their own body, the attack, throw and follow, did so already, so what is left is the runs the rule kept, a
         // no-interrupt overlay among them, and the attack retarget's, which asks no port), refuses a duplicate and a refused interrupt, and the end nodes of every run the start
         // ended run here (the replaced run's among them). The first step comes 5 ms of animation time after the start (GS7), at the next pass (a start inside the AI tick's pass waits for it).
         var started = _session.StartGoal(new GoalStartRequest(npc, StarterPlan(run.Bottom.Goal), run.Bottom, run.Flags), _startPorts ??= new StartPorts(this));
         foreach (var end in started.Ended) EndNodes(end);
-        if (started.Started) { Trace(npc).Reason = AiExecutorReason.None; return; }
+        if (started.Started) { Trace(npc).Reason = AiExecutorReason.None; return true; }
         // A start the table refused (an interrupt a priority-4 or -5 goal refuses, a duplicate, no free slot, a full queue) leaves the NPC with the runs the rule kept: the proposed
         // run's end nodes free what its starter took (a cast's magic run).
         // Only the proposed run's end nodes run: the kept run's attack animation (a priority-4 goal's run can have one) is not the proposed run's.
         Trace(npc).Perform += $" not in the table: {started.Failure} {started.Outcome}";
         AiExecutorRules.EndRun(run, this);
         FreeUnbegunCasts(run, queuedOnly: false);
+        return false;
     }
 
     // The interrupt plan of the starter that builds a run with this bottom goal (GS12, GS13): level 3 for the walks, runs, follow, attack, throw and spread out (with the
@@ -2842,7 +2844,43 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool BoomerangInFlight(string npc) => false;
     // The starters' interrupt (0x424070 at level 3, GS13): the end nodes of the runs it ended run now, and a refusal (a run whose current goal has priority 4 or 5) refuses the start.
     public bool InterruptLowerAnimations(string id) => InterruptOwner(id, GoalInterruptRules.OrdinaryActions).Succeeded;
-    public void StepApart(string id) { }
+
+    /// <summary>
+    /// ARC-AI-1315 (VA4, VAG4): the critters on the object's tile for the tile-sharer finder and the step apart (0x436720, 0x4364D0): the hero, the shown map's NPCs and the
+    /// companions on it, dead ones included (<see cref="CrittersOn"/>), each with its life, its busy-run test (<see cref="GoalRunTable.BusyRun"/>) and a stand-in for the handle
+    /// order: the original compares run-time pool handles (OM1), so the order of this list (the hero, the map's NPCs in the scene's order, then the companions) stands for it.
+    /// </summary>
+    public IReadOnlyList<AiTileCritter> TileCritters(string id)
+    {
+        if (Tile(id) is not { } cell) return [];
+        var goals = _session.QueryGoals();
+        var order = 0L;
+        return CrittersOn(cell).Select(c => new AiTileCritter(c, c == Pc, !DeadCritter(c), goals.BusyRun(c) is not null, order++)).ToList();
+    }
+
+    /// <summary>
+    /// ARC-AI-1315: the please-move starter's start (0x4363E0 after its choice, gate and busy test): goal 68 on <paramref name="mover"/> with <paramref name="awayFrom"/> stored,
+    /// through the table's generic start (the interrupt at the goal's own priority, the first step 5 ms later).
+    /// </summary>
+    public bool StartPleaseMove(string mover, string awayFrom)
+    {
+        var run = new GoalRun(mover, default, new GoalFrame(GoalType.PleaseMove, awayFrom));
+        return Started(mover, RunOf(mover), new AiPerformResult(AiPerformKind.PleaseMove, run) { Started = true });
+    }
+
+    /// <summary>
+    /// ARC-AI-1315: the blocked-step test of goal 68's tile choice (0x425760): the step from the object's tile to the neighbouring <paramref name="next"/> is clear when no living
+    /// critter stands on it and the terrain, walls and objects let the step through (the route source's verdict, with the moved records and the other movers' cells as the planner
+    /// sees them). No trap check and no random wait, which the walker's own step test (<see cref="StepBlocked"/>) adds.
+    /// </summary>
+    public bool StepClear(string id, CellCoord next)
+    {
+        if (Tile(id) is not { } from || AiExecutorRules.Distance(from, next) != 1) return false;
+        if (LivingCritterOn(next, id)) return false;
+        var chart = ToChart(from);
+        var direction = RoutePlanner.Toward(chart, ToChart(next));
+        return new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(id, null), _scene.Passages).Assess(chart, direction) == RouteStepVerdict.Open;
+    }
 
     public AiFleeing PerformFleeing(string npc)
     {
