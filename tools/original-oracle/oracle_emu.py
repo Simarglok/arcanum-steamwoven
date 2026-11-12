@@ -84,6 +84,7 @@ class Emulator:
         self.stack = Range(STACK_BASE, STACK_BASE + STACK_SIZE)
         self.heap = Range(HEAP_BASE, HEAP_BASE + HEAP_SIZE)
         self.instructions = 0
+        self.edx = 0  # EDX after the last call: the high word of a 64-bit answer
 
     def write_heap(self, data: bytes, offset: int = 0) -> int:
         """Place world-model data on the oracle's own heap (not part of the image); returns its address."""
@@ -119,7 +120,7 @@ class Emulator:
 
     def call(self, function: int, arguments: Sequence[int], *, code: Iterable[Range], stubs: dict[int, Stub] | None = None,
              readable: Iterable[Range] = (), writable: Iterable[Range] = ()) -> int:
-        """Call `function` (cdecl) with 32-bit `arguments`; returns EAX as a signed 32-bit value. `readable` names the image
+        """Call `function` (cdecl) with 32-bit `arguments`; returns EAX as a signed 32-bit value (EDX is kept in `self.edx` for a 64-bit answer). `readable` names the image
         globals and heap data the function may read; `writable` the ones it may write (and read), its outputs in the world model;
         stack reads above its arguments fail too."""
         code = tuple(code)
@@ -216,4 +217,5 @@ class Emulator:
         for name, register in CALLEE_SAVED.items():
             if mu.reg_read(register) != saved[name]:
                 raise RunFailure("abi", f"callee-saved {name} not restored")
+        self.edx = mu.reg_read(UC_X86_REG_EDX)
         return to_signed(mu.reg_read(UC_X86_REG_EAX))
