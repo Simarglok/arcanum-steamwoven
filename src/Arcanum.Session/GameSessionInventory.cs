@@ -202,6 +202,12 @@ public readonly record struct SessionItemFieldWrites(int? WrittenStart, bool Dis
 /// <summary>One item's written fields in a save (the <c>inventory</c> section's <c>itemFields</c>, schema 94).</summary>
 public sealed record SessionItemFieldRecord(string Entity, SessionItemFieldWrites Writes);
 
+/// <summary>ARC-RES-1441: the slot (a cell of the holder's grid, 0..959) the arrangement at a window's open gave one item of a seed holder's list.</summary>
+public readonly record struct SessionHolderSlot(string Item, int Slot);
+
+/// <summary>ARC-RES-1441 (schema 95): the arranged slots of one seed holder (a container or an NPC of a map's seed) in a save, by item entity in ordinal order; never empty.</summary>
+public sealed record SessionHolderSlots(string Holder, IReadOnlyList<SessionHolderSlot> Slots);
+
 /// <summary>
 /// Saved inventory state: the PC's gold (ARC-WORLD-015: the hero's starting coins; 0 without a hero), the hero's starting
 /// kit in kit number order, the items the PC took from the world in the order they entered its list, (ARC-TECHNOLOGY-004) the
@@ -272,6 +278,13 @@ public sealed class SessionInventoryState
 
     /// <summary>ARC-SCRIPT-1279: how many items carry written fields at once (two full lists, many times over).</summary>
     public const int MaxItemFields = 16384;
+
+    /// <summary>ARC-RES-1441 (schema 95): the slots the arrangement at the open of a loot, steal or See Contents window gave the items of seed holders, by holder entity in ordinal order
+    /// (<c>InventoryDomain.HolderSlots</c>); no row is empty.</summary>
+    public IReadOnlyList<SessionHolderSlots> HolderSlots { get; init; } = [];
+
+    /// <summary>ARC-RES-1441: how many holders keep arranged slots at once (as many as the dressed NPCs may, many times over).</summary>
+    public const int MaxHolderSlots = 4096;
 
     /// <summary>ARC-WORLD-090: how many identified items a session keeps (two full lists, a merchant's and its container's, many times over).</summary>
     public const int MaxIdentified = 16384;
@@ -516,9 +529,9 @@ internal sealed class InventoryDomain
 
     /// <summary>ARC-RES-1410 (ledger XR16 (g), IW39): the slots the arrangement at the open of a loot, steal or See Contents window gave the items of a
     /// map holder's list (a container or an NPC of the map's seed), by holder entity and item entity (the arranged items only: the worn and quick-slot
-    /// items stay out of it). The original writes them into the items' inventory locations (0x4670A0); here the holder's list answers with them in place
-    /// of the map data's. Not saved (PROJECT, issue #1441): every open arranges the list again from scratch, so a restored session differs where no open follows
-    /// (the barter window draws the same list, and an arrangement that no longer fits writes nothing). An entry is dropped when its item enters a list
+    /// items stay out of it). The original writes them into the items' inventory locations (0x4670A0), which are saved; here the holder's list answers with
+    /// them in place of the map data's, and they are saved with the inventory section (ARC-RES-1441, schema 95), so a restored session draws the same
+    /// slots (the barter window, a list that no longer fits after an add). An entry is dropped when its item enters a list
     /// again (<see cref="ForgetSlot"/>). A junk pile the session made keeps its slots in its record instead.</summary>
     internal SortedDictionary<string, SortedDictionary<string, int>> HolderSlots { get; } = new(StringComparer.Ordinal);
 
@@ -649,7 +662,11 @@ internal sealed class InventoryDomain
         LastDiscardedMade, Grid.Values.OrderBy(item => item.Slot).ToArray(),
         Generated.OrderBy(row => row.Map.RuntimeMap).ThenBy(row => row.Entity, StringComparer.Ordinal).ToArray(),
         NpcWorn.Select(pair => new SessionNpcWear(pair.Key, Array.AsReadOnly(pair.Value.Select(worn => new SessionNpcWornItem(worn.Key, worn.Value)).ToArray()))).ToArray())
-        { ItemFields = ItemFields.Select(pair => new SessionItemFieldRecord(pair.Key, pair.Value)).ToArray() };
+        {
+            ItemFields = ItemFields.Select(pair => new SessionItemFieldRecord(pair.Key, pair.Value)).ToArray(),
+            HolderSlots = HolderSlots.Where(pair => pair.Value.Count > 0)
+                .Select(pair => new SessionHolderSlots(pair.Key, Array.AsReadOnly(pair.Value.Select(slot => new SessionHolderSlot(slot.Key, slot.Value)).ToArray()))).ToArray(),
+        };
 
     /// <summary>ARC-UI-019: the hero's items in its inventory grid, by entity (a worn item and one without room have none).</summary>
     internal Dictionary<string, SessionHeroGridItem> Grid { get; } = new(StringComparer.Ordinal);

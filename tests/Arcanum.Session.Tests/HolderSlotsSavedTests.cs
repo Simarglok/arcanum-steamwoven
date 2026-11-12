@@ -1,0 +1,113 @@
+using Arcanum.Simulation.Items;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using static Arcanum.Session.Tests.HeroStateTests;
+using static Arcanum.Session.Tests.SessionFixtures;
+
+namespace Arcanum.Session.Tests;
+
+// ARC-RES-1441 (schema 95): the slots the arrangement at a loot, steal or See Contents open gave the items of a seed holder (ARC-RES-1410, ledger XR16 (g)) are saved with the inventory section, so a restored
+// session draws the same slots. Entities, prototypes and sizes are invented.
+[TestClass]
+public sealed class HolderSlotsSavedTests
+{
+    private static SessionSeedItem Item(string entity, int prototype, int width, int height, int location) =>
+        new(entity, new SessionItemFacts(new(SessionItemType.Generic, prototype, 10, 20), 0, 0, location, null, []) { InventoryWidth = width, InventoryHeight = height }, null);
+
+    // A chest and a shop keeper, each with a list the map's data places in an order of its own.
+    private static SessionMapInventorySeed Seed() => new(
+        [new("chest", SessionHolderKind.Container, false, false, [], ["crate", "apple", "plank"]),
+         new("shop", SessionHolderKind.Npc, false, false, [], ["tall", "small"])],
+        [Item("crate", 5001, 2, 3, 50), Item("apple", 5002, 1, 1, 0), Item("plank", 5003, 10, 1, 33), Item("tall", 5004, 1, 3, 40), Item("small", 5005, 1, 1, 3)]);
+
+    private static GameSessionOwner Owner()
+    {
+        var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, Seed()).Failure);
+        return owner;
+    }
+
+    private static string Slots(GameSessionOwner owner, string holder) =>
+        string.Join(" ", owner.QueryMapInventory(Exterior)!.Holders.Single(h => h.Entity == holder).Items.Select(item => $"{item.Entity}@{item.Facts.InventoryLocation}"));
+
+    private static GameSessionOwner Reload(string text)
+    {
+        var restored = Restore(Decode(text));
+        Assert.AreEqual(GameSessionFailure.None, restored.AttachMapInventory(Exterior, Seed()).Failure);
+        return restored;
+    }
+
+    private static GameSessionFailure RestoreFailure(string text)
+    {
+        var decoded = GameSessionSnapshotCodec.TryDecode(text);
+        Assert.IsNotNull(decoded.Snapshot, text);
+        return GameSessionOwner.Restore(decoded.Snapshot!, RestoreOptions()).Failure;
+    }
+
+    [TestMethod]
+    public void The_arranged_slots_of_a_container_and_an_NPC_survive_a_save_and_a_load()
+    {
+        using var owner = Owner();
+        Assert.AreEqual("crate@50 apple@0 plank@33", Slots(owner, "chest"));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ArrangeHolderGrid(owner.Version, "chest").Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ArrangeHolderGrid(owner.Version, "shop").Disposition);
+        var arranged = (Slots(owner, "chest"), Slots(owner, "shop"));
+        Assert.AreEqual(("crate@0 apple@2 plank@30", "tall@0 small@1"), arranged);
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        StringAssert.Contains(text, "\"holderSlots\":[{\"holder\":\"chest\",\"slots\":[{\"item\":\"apple\",\"slot\":2},{\"item\":\"crate\",\"slot\":0},{\"item\":\"plank\",\"slot\":30}]}," +
+            "{\"holder\":\"shop\",\"slots\":[{\"item\":\"small\",\"slot\":1},{\"item\":\"tall\",\"slot\":0}]}]");
+        using var restored = Reload(text);
+        Assert.AreEqual(arranged, (Slots(restored, "chest"), Slots(restored, "shop")), "the restored session draws the arranged slots, not the map data's");
+        Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()), "the text is canonical");
+        // The next open of the restored session finds the list arranged already.
+        Assert.AreEqual(GameSessionDisposition.NoChange, restored.ArrangeHolderGrid(restored.Version, "chest").Disposition);
+    }
+
+    [TestMethod]
+    public void A_session_that_arranged_nothing_saves_an_empty_list()
+    {
+        using var owner = Owner();
+        StringAssert.Contains(GameSessionSnapshotCodec.Encode(owner.Capture()), ",\"itemFields\":[],\"holderSlots\":[]}");
+    }
+
+    [TestMethod]
+    public void A_damaged_record_is_refused()
+    {
+        using var owner = Owner();
+        owner.ArrangeHolderGrid(owner.Version, "chest");
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        const string Saved = "\"holderSlots\":[{\"holder\":\"chest\",\"slots\":[{\"item\":\"apple\",\"slot\":2},{\"item\":\"crate\",\"slot\":0},{\"item\":\"plank\",\"slot\":30}]}]";
+        StringAssert.Contains(text, Saved);
+        Assert.AreEqual(GameSessionFailure.None, RestoreFailure(text));
+        // Items out of order, a repeated item, a slot outside the grid, a holder row without items, an unknown field, holders out of order, a holder that is no entity: refused by the codec.
+        foreach (var damaged in new[]
+        {
+            Saved.Replace("{\"item\":\"apple\",\"slot\":2},{\"item\":\"crate\",\"slot\":0}", "{\"item\":\"crate\",\"slot\":0},{\"item\":\"apple\",\"slot\":2}"),
+            Saved.Replace("{\"item\":\"crate\",\"slot\":0}", "{\"item\":\"apple\",\"slot\":0}"),
+            Saved.Replace("\"slot\":30", "\"slot\":960"),
+            Saved.Replace("\"slot\":30", "\"slot\":-1"),
+            Saved.Replace("\"slots\":[{\"item\":\"apple\",\"slot\":2},{\"item\":\"crate\",\"slot\":0},{\"item\":\"plank\",\"slot\":30}]", "\"slots\":[]"),
+            Saved.Replace("\"holder\":\"chest\"", "\"holder\":\"chest\",\"extra\":1"),
+            Saved.Replace("]}]", "]},{\"holder\":\"chest\",\"slots\":[{\"item\":\"zed\",\"slot\":1}]}]"),
+            Saved.Replace("\"holder\":\"chest\"", "\"holder\":\"no way\""),
+        })
+        {
+            Assert.AreNotEqual(SnapshotDecodeFailure.None, GameSessionSnapshotCodec.TryDecode(text.Replace(Saved, damaged)).Failure, damaged);
+        }
+    }
+
+    [TestMethod]
+    public void The_ninety_four_to_ninety_five_step_gives_the_inventory_an_empty_list_and_refuses_a_save_that_has_one()
+    {
+        using var owner = Owner();
+        var current = GameSessionSnapshotCodec.Encode(owner.Capture());
+        var older = SnapshotUpgradeTests.Schema94(current);
+        StringAssert.Contains(older, "\"schemaVersion\":94,\"world\"");
+        Assert.IsFalse(older.Contains("holderSlots", StringComparison.Ordinal));
+        var upgraded = Decode(older);
+        Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, upgraded.SchemaVersion);
+        Assert.AreEqual(0, upgraded.Inventory.HolderSlots.Count);
+        Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(upgraded));
+        var damaged = GameSessionSnapshotCodec.TryDecode(older.Replace(",\"itemFields\":[]}", ",\"itemFields\":[],\"holderSlots\":[]}"));
+        Assert.AreEqual((SnapshotDecodeFailure.UnknownField, "$.inventory.holderSlots"), (damaged.Failure, damaged.Path));
+    }
+}
