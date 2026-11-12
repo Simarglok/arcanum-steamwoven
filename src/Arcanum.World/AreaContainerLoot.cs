@@ -151,7 +151,7 @@ public static class AreaContainerLoot
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(container);
         if (Facts(session, map, container) is not { } facts) return null;
-        var level = facts.Row.EffectiveFields.SingleOrDefault(f => f.Slot == LockLevelSlot && f.Presence == Arcanum.Data.Area.AreaPresence.Value)?.Number ?? 0;
+        var level = facts.Row.EffectiveFields.FirstOrDefault(f => f.Slot == LockLevelSlot && f.Presence == Arcanum.Data.Area.AreaPresence.Value)?.Number ?? 0;
         var difficulty = (int)Math.Clamp(level, -GameSessionOwner.MaxLockDifficulty, GameSessionOwner.MaxLockDifficulty);
         return session.PickLock(session.Version, new(facts.Openable, facts.Baseline, difficulty, light), lockpick, world);
     }

@@ -209,7 +209,7 @@ public partial class TerrainViewerApp
         if (ShownHeroRunsHost is { SkillRun.Bottom.Target: { } skillTarget } skills && (_areaDoors?.PortalOf(skillTarget) is not null || IsInventoryTarget(skillTarget)) && skills.EndSkill(why)) ended = true;
         if (_lockpickPending is not null) { _lockpickPending = null; ended = true; }
         _lockpickTrying = false;
-        if (ended) _portalNotice = "walk to the door cancelled: " + why;
+        if (ended) _portalNotice = "walk to the door or container cancelled: " + why;
     }
 
     // True when no hero skill run is left on the table (a replaced session counts as ended).

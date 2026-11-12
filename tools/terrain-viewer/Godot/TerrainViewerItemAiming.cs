@@ -159,7 +159,7 @@ public partial class TerrainViewerApp
             if (aim.Charged && aim.Spell is { } spell && SpellRecordsNow() is { } records && caster.Facts(SessionSpellCaster.Hero)?.Location is { } from && caster.Facts(target)?.Location is { } there)
                 inRange = Math.Max(Math.Abs((long)from.X - there.X), Math.Abs((long)from.Y - there.Y)) <= records[spell].Data.Range;
             // ARC-UI-1127 (E8-g, IA14): a healing kit aimed at another critter is the heal skill goal 33 of the original (range 1: walk next to the target, then heal); Steamwoven walks with goal 39 (the same approach and range, IA8) and heals at its last node.
-            var decision = AreaItemAiming.ApplyOnObject(aim.Charged, inRange, aim.Facts.NoRangedUse, healsAnother: aim.Facts.HealingKit && !aim.Charged && target != AiSchedulerRules.Pc);
+            var decision = AreaItemAiming.ApplyOnObject(aim.Charged, inRange, aim.Facts.NoRangedUse, healsAnother: aim.Facts.HealingKit && !aim.Charged && target != AiSchedulerRules.Pc && caster.LifeTarget(target) is not null);
             GD.Print($"ARC-DEV-365 aim-apply item={aim.Item} object={target} in-range={inRange} decision={decision}");
             if (decision == AreaItemAimObject.UseNow) { ItemAimNotice(ItemAimUse(aim.Item, aim.Facts, target, null)); return; }
             var request = HeroRequests.Apply(new UseItemRequest(aim.Item, target, ctrl, shift));
