@@ -197,6 +197,15 @@ public partial class TerrainViewerApp
         }
         var grid = (AreaGridSession)_worldActor.Session!;
         var here = grid.Chart.ToWorld(grid.State.CommittedCell);
+        // ARC-AI-1137 (GT122): a Shift talk click on a speaker five or more cells off walks nowhere and ends silently at once (the walk step answers 0 under the no-walk flag).
+        if (_conversationHost!.Speakers.Where(SpeakerPresent).FirstOrDefault(sp => AreaConversationHost.Distance(sp, here.X, here.Y, SpeakerCell) is >= 6 and <= 12) is { } farSpeaker)
+        {
+            var shiftStart = grid.State.CommittedCell;
+            require(TryAreaTalk(farSpeaker, shift: true), "the Shift talk click on a far speaker was taken");
+            for (var i = 0; i < 20; i++) { tick(); AreaSmokeFrame(); }
+            require(((AreaGridSession)_worldActor.Session!).State.CommittedCell == shiftStart && HeroRunsHost()?.TalkRun is null && Talking() is null && !HeroWalking, "the Shift talk walked nowhere, ended its run and opened no dialog");
+            GD.Print($"ARC-AI-1137 native-smoke shift-talk PASS speaker={farSpeaker.ScriptId}");
+        }
         GoalRun? talk = null;
         AreaSpeaker? chosen = null;
         foreach (var speaker in _conversationHost!.Speakers.Where(SpeakerPresent)

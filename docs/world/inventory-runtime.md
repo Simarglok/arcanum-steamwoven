@@ -941,6 +941,26 @@ weight and the room for it. With no ring the key stays an ordinary item. The ses
 - **Not modelled:** the key ring item (`ItemTypeUnsupported`), a key that stays loose while the PC holds no ring, the ring merge (0x466AA0),
   keys in NPC lists, the pick-pocket steal, assembly and a script's created items (still refused), and the followers' keys the lock check also reads.
 
+## No-drop items in transfers (ARC-WORLD-1283)
+
+The original's transfer from a holder (0x461CA0, ledger NT2, VP5) runs the recipient's transfer script, then the item's remove check (0x466DA0), then the insert
+check. The remove check refuses an item with the no-drop flag (item flag 0x20), a worn item with the flag too (the flag is tested first; the worn-slot check 0x465010
+answers 0), and shows item.mes 111 (100 + code 11, 0x4673F0) to the PC that is the old or the new parent. Steamwoven runs it in `Take` (loot of a body, a container
+and a junk pile, `TakeItemFromNpc` for a steal or a purchase, the dialog's negative `IN`) and in `GiveItemTo` (`GiveItemToNpc`, a sale, a plant, a container as recipient):
+
+- The refusal is `GameSessionFailure.ItemNotDroppable` with `InventoryMutationResult.PcMessage` 111 (`GameSessionOwner.NoDropMessage`), no revision, nothing changed, and no insert check
+  is asked. The viewer's windows and the barter status show `AreaInventoryHost.Refusal` ("the item cannot be dropped, so it cannot change hands"); a pick-pocket attempt whose
+  move is refused fails without being noticed (PP3) and its status line adds the same text.
+- The dialog's negative `IN -name` goes on as the original does after any transfer that did not end with the PC (0x415BA0 case 9): the item leaves the NPC (0x466E00 tests
+  no flag) and lies on the hero's tile; the result is `Changed`, carries `PcMessage` and no verdict, and the hero gets no pickup trigger.
+- The flag is the item's own: the origin seed row's, the worn record's, or, for an item with no seed row (a kit item, a made item), its prototype's through
+  `GameSessionOwner.AttachItemNoDrop` (not saved; the viewer attaches it with the prototype scripts, `AreaPrototypeItem.NoDrop`). Without a source such an item has no flag.
+- Limits: a worn no-drop item of a living NPC taken by a steal or the dialog's `IN -name` is still refused by the older worn-item limit (`WornItemUnsupported`; the
+  loot of a body unwields it and so reaches the check); an unworn kit or taken item whose origin seed is not attached reads its prototype's flag, not its instance's;
+  a worn item's flag is the worn record's. A dialog hand-over (`IN n >= 0`) of a no-drop item to an NPC takes the original's fallback after the refusal: the item is laid on
+  the cell of an NPC the PC leads, else destroyed (TK2, `SettleRefusedHandover`).
+- Ammunition or gold moved by units (0x4658E0, 0x464830) runs no remove check. The dialog's PC message has no on-screen surface yet.
+
 ## Next steps
 
 The AREA viewer is wired (ARC-UI-004), the hero's weight is checked (ARC-WORLD-085) and its level has its consequences
