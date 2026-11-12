@@ -289,6 +289,8 @@ public partial class TerrainCanvas
     /// <summary>ARC-DEV-335 smoke seams: the lighting with the hero's carried light of the last submission (null: none) and the hero's placement.</summary>
     internal AreaLocalLighting? AreaCarriedForSelfTest => _areaCarriedNow;
     internal ActorDiagnosticPlacementInput? AreaActorPlacementForSelfTest => _areaActorPlacement;
+    /// <summary>ARC-WORLD-1149: where the hero is drawn now, for the light a check reads at a cell (null: no area is shown).</summary>
+    internal ActorDiagnosticPlacementInput? AreaActorPlacementNow => _areaActorPlacement;
     private (StationaryLightLattice Lattice, AreaCarriedBinding Binding)? _areaCarriedLattice;
     /// <summary>ARC-DEV-335 (V7d, ledger LT12): the lighting with the critters' carried lights, made from the hero's placement at each
     /// submission (the hero's light moves with it); null draws no carried light. The terrain, the bodies and the actor take it from the next

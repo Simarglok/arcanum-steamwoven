@@ -22,7 +22,7 @@ This table is the **status of the requirements**. A requirement's description, t
 | --- | --- | --- | --- | --- | --- | --- |
 | <a id="world-and-transitions"></a>[World and transitions](coverage/world.md) | 0 | 16 | 0 | 0 | 0 | 16 |
 | <a id="objects-buildings-and-roofs"></a>[Objects, buildings and roofs](coverage/scene.md) | 4 | 12 | 0 | 0 | 0 | 16 |
-| <a id="lighting-and-time"></a>[Lighting and time](coverage/lighting-time.md) | 0 | 11 | 1 | 0 | 1 | 13 |
+| <a id="lighting-and-time"></a>[Lighting and time](coverage/lighting-time.md) | 0 | 12 | 0 | 0 | 1 | 13 |
 | <a id="character-and-skills"></a>[Character and skills](coverage/characters-skills.md) | 0 | 25 | 1 | 0 | 0 | 26 |
 | <a id="combat-magic-and-technology"></a>[Combat, magic and technology](coverage/combat-magic-tech.md) | 0 | 25 | 0 | 0 | 0 | 25 |
 | <a id="items-and-economy"></a>[Items and economy](coverage/items-economy.md) | 0 | 18 | 0 | 1 | 0 | 19 |
@@ -31,7 +31,7 @@ This table is the **status of the requirements**. A requirement's description, t
 | <a id="ui-media-and-lifecycle"></a>[UI, media and lifecycle](coverage/ui-media-lifecycle.md) | 0 | 15 | 1 | 0 | 0 | 16 |
 | <a id="data-compatibility-and-modern-goals"></a>[Data, compatibility and modern goals](coverage/content-product.md) | 0 | 13 | 1 | 0 | 1 | 15 |
 | <a id="network-play"></a>[Network play](coverage/network.md) | 0 | 0 | 0 | 8 | 0 | 8 |
-| **Total** | **4** | **168** | **5** | **11** | **3** | **191** |
+| **Total** | **4** | **169** | **4** | **11** | **3** | **191** |
 
 This is the number of requirements by status, not a percentage of game completeness: the requirements differ in size.
 
