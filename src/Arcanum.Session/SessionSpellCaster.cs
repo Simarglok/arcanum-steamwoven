@@ -21,6 +21,16 @@ public sealed record SpellCastCritter(SessionCritterCombat Combat, int StoredMag
     int CritterFlags2)
 {
     public SpellBook? Book { get; init; }
+
+    /// <summary>ARC-MAGIC-1295 (the TraitIdx component): the NPC's stored base stats (the source's 28) and resistances (5), the base values of its field 220 and field 31 with what the session wrote laid over them
+    /// (<see cref="SessionCritterIndexedWrites.Apply"/>), and its stored basic (12) and tech (4) skill values. Null when the host does not give them: the component is not ready.</summary>
+    public IReadOnlyList<int>? StoredStats { get; init; }
+
+    public IReadOnlyList<int>? StoredResistances { get; init; }
+
+    public IReadOnlyList<int>? StoredBasicSkills { get; init; }
+
+    public IReadOnlyList<int>? StoredTechSkills { get; init; }
 }
 
 /// <summary>
@@ -230,6 +240,13 @@ public enum SpellCastEventKind
     Trait64Written,
     /// <summary>ARC-MAGIC-1146: the session refused the Trait64 write on <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the spell goes on.</summary>
     Trait64NotSaved,
+    /// <summary>ARC-MAGIC-1295 (the TraitIdx component 0x452D80): an entry of the NPC <see cref="SpellCastEvent.Object"/>'s indexed field <see cref="SpellCastEvent.Value"/> (220 base stats, 31 resistances) was written; <see cref="SpellCastEvent.Detail"/> is the index.
+    /// The new value is the session's (<see cref="GameSessionOwner.QueryCritterIndexedWrites"/>).</summary>
+    TraitIndexWritten,
+    /// <summary>ARC-MAGIC-1295: the stat setter refused the lowering of base stat <see cref="SpellCastEvent.Detail"/> of <see cref="SpellCastEvent.Object"/> (a skill keyed on it needs the higher value, 0x4C6B50): nothing is written and the spell goes on.</summary>
+    TraitIndexRefused,
+    /// <summary>ARC-MAGIC-1295: the session refused the TraitIdx write on <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the spell goes on.</summary>
+    TraitIndexNotSaved,
 }
 
 /// <summary>
