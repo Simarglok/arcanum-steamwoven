@@ -130,8 +130,14 @@ public partial class TerrainViewerApp
         if (_eyeCandyHost is { } host && ReferenceEquals(host.Session, session)) return host;
         _eyeCandyHost?.LoseAll();
         _eyeCandyFacts.Clear();
-        return _eyeCandyHost = new(session, index => EyeCandyTable?.At(index), EyeCandyFactsOf, null, owner => _eyeCandies.Where(e => e.Object == owner && e.Shown).Select(e => e.Parts), FireBurnerFor(session), SavedOverlayLightSlots);
+        _eyeCandyHost = new(session, index => EyeCandyTable?.At(index), EyeCandyFactsOf, null, owner => _eyeCandies.Where(e => e.Object == owner && e.Shown).Select(e => e.Parts), FireBurnerFor(session), SavedOverlayLightSlots);
+        // ARC-MAGIC-1280: the overlay runs a load restored (a maintained Illuminate) are the new host's own from its first step: their lights take their slots again.
+        _eyeCandyHost.AdoptRestored();
+        return _eyeCandyHost;
     }
+
+    /// <summary>ARC-MAGIC-1280: the overlay runs of a loaded session are stepped before anything asked for its overlay host (built by the first play), so the goal-step router builds it when it meets one.</summary>
+    private AreaEyeCandyHost? RestoredEyeCandyHost() => _areaSession is not null ? EyeCandyHostNow() : null;
 
     /// <summary>ARC-MAGIC-1229: the overlay light slots of an owner's own record that hold a light (bit i for slot i): a lit eye candy takes another, and with all four taken its add refuses (IW2).</summary>
     private int SavedOverlayLightSlots(string owner) =>
@@ -185,10 +191,11 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>The cast eye candies and the overlay runs go (a map change, a replaced session); a hovering object keeps its offset.</summary>
-    private void ClearEyeCandy(string why)
+    private void ClearEyeCandy(string why, bool keepRestoredOverlays = false)
     {
         var overlays = ShownEyeCandyHost?.Shown().Count() ?? 0;
-        _eyeCandyHost?.LoseAll();
+        // ARC-MAGIC-1280: the cast host of a loaded session is built after its first goal step, which built the overlay host for the runs the load restored: those runs are the session's own, not a replaced session's.
+        if (!(keepRestoredOverlays && ShownEyeCandyHost is not null)) _eyeCandyHost?.LoseAll();
         if (_eyeCandies.Count == 0 && _eyeCandyBodies.Count == 0 && overlays == 0) return;
         GD.Print($"ARC-MAGIC-017 eye-candy-clear count={_eyeCandies.Count + overlays} why={why}");
         _eyeCandies.Clear(); _eyeCandyBodies = [];
@@ -202,6 +209,8 @@ public partial class TerrainViewerApp
         if (_eyeCandies.Count == 0 && !overlays) { if (_eyeCandyBodies.Count > 0) { _eyeCandyBodies = []; _canvas?.SetAreaMovingBodies(AreaMovingCommands()); } return; }
         if (!SpellMapActive) { ClearEyeCandy("the map changed"); return; }
         // A quick load replaced the session: its eye candy goes with it.
+        // ARC-MAGIC-1280: the overlay runs a load restored are drawn and ended through the loaded session's cast host: it is built now, when none of its own runs would have built it (the first build keeps them, SpellCasterNow).
+        if (overlays && (_spellCaster is null || !ReferenceEquals(_spellCaster.Owner, _areaSession)) && SpellCasterNow() is null) return;
         if (_spellCaster is null || !ReferenceEquals(_spellCaster.Owner, _areaSession)) { ClearEyeCandy("the session changed"); return; }
         _eyeCandies.RemoveAll(e => !e.Shown);
         SyncEyeCandyBodies();

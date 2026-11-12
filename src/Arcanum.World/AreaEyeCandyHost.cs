@@ -108,6 +108,19 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
         return shown;
     }
 
+    /// <summary>
+    /// ARC-MAGIC-1280 (saved-runs.md, the overlay runs): adopts the overlay runs a load restored. The host of a loaded session starts with a table that already holds eye candy runs; each lit one takes its first free overlay slot of its owner
+    /// again, in the table's slot order (the add did it in the live game: <see cref="Play"/>), so the four-slot rule of the add holds from the first frame after the load and a lit add on an owner whose four slots are taken refuses, instead of
+    /// waiting for the first <see cref="Lights"/> to count them. A run that finds no free slot (the owner's record holds more lights than a save made with it) shows no light, as <see cref="Lights"/> says. Returns how many runs took a slot.
+    /// </summary>
+    public int AdoptRestored()
+    {
+        var adopted = 0;
+        foreach (var run in _session.QueryGoals().Runs.Where(r => !r.Done && AiExecutorRules.IsEyeCandyGoal(r.Bottom.Goal)).OrderBy(r => r.Handle.Slot))
+            if (run.Frames.Any(f => f.EyeCandy is { } eye && _entry(eye.Entry) is { Light: not null }) && !_lightSlots.ContainsKey(run.Handle) && ReserveLight(run.Handle, run.Owner)) adopted++;
+        return adopted;
+    }
+
     /// <summary>Whether the owner has a free overlay light slot for a lit entry: its record's lights and the slots the live lit runs hold (begun or still waiting) count (the add looks for the first slot whose art is −1, IW2).</summary>
     public bool LightSlotFree(string owner) => AreaEyeCandyLights.FirstFree(UsedSlots(owner)) >= 0;
 
