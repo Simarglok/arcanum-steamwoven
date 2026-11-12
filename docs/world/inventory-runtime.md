@@ -74,7 +74,7 @@ Refusals, in order, after input (`InvalidItem`), version (`StaleVersion`) and se
   ARC-WORLD-123, [below](#key-items-arc-world-123), a key ring item and a key for a session without a hero stay refused; since ARC-WORLD-066 ammunition is admitted and merges into a held stack, [below](#ammunition-arc-world-066)), `WornItemUnsupported` (a parented item in slots 1000..1008, except the loot of a body, [below](#worn-items-of-a-looted-body-arc-dev-202)),
 `ItemScriptUnsupported` (an item `SAP_GET` for pickup, `SAP_REMOVE_ITEM` for loot and IN or `SAP_INSERT_ITEM` when the
 caller passes no script host; with a host they run, [item events](#item-events-arc-script-041); other attachments such as
-examine and use do not run on a transfer), `BudgetExceeded` (`GameSessionLimits.MaxPcItems`, at most 512), `RevisionExhausted`, then `InsertRefused`, and
+examine and use do not run on a transfer), `BudgetExceeded` (`GameSessionLimits.MaxPcItems`, at most 512), `RevisionExhausted`, then `InsertRefused` (not for the dialog's `IN`, ARC-WORLD-1131: its insert-check refusal lays the item on the PC's tile, [room of a take](#room-of-a-take-arc-dev-333)), and
 last the item's insert-item script (below).
 
 **Insert check.** The original's insert check (0x466510) depends on the created character (carry weight against its strength, the
@@ -207,7 +207,7 @@ while a book is in the hero's pack the discipline's expertise is higher by the h
 `IDialogInventoryPort` (Scripting) takes the conversation's `GiveItemCommand`. When a host passes it as the last
 `DialogConversationPorts` argument (`Inventory`), negative `IN` goes there instead of the world port, and `IN` needs only
 one of the two ports. `SessionDialogInventoryPort` runs `GiveItemToPc` on the session's current version with the host's
-NPC-to-entity map and insert check: a transfer and the no-match case are `Applied`, a refusal is `Rejected` (the
+NPC-to-entity map and insert check: a transfer, the no-match case and (ARC-WORLD-1131) an item the insert check refused, which lies on the PC's tile, are `Applied`, any other refusal is `Rejected` (the
 conversation then fails with `CommandRejected`), and `LastResult` keeps the session's answer. It must be rebuilt when
 the host replaces the owner, like the party port.
 
