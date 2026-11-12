@@ -82,6 +82,10 @@ public sealed class ExecutorRulesTests
             return new([.. steps], StoppedShort);
         }
 
+        // ARC-AI-1313: the light at a cell (full by default) for the dark wander.
+        public readonly Dictionary<CellCoord, int> Light = [];
+        public int CellLight(CellCoord cell) => Light.TryGetValue(cell, out var level) ? level : 255;
+
         public readonly HashSet<CellCoord> Stuck = [];
         // ARC-DEV-209 (GT49): doors on cells and the door ports the walkers' opener goals run over.
         public readonly Dictionary<CellCoord, string> DoorAt = [];

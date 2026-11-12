@@ -1,6 +1,7 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Traversal;
 using Arcanum.Session;
+using Arcanum.Simulation;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.ChangeOfPlace;
 using Arcanum.Simulation.Combat;
@@ -68,6 +69,8 @@ public sealed partial class AreaAiHost
         // ARC-WORLD-1162 (SWB21): the far branch of the standpoint step clears NPC flag 0x200 before it relocates or walks the NPC.
         if (!waypoints && step.Outcome is NpcRouteOutcome.Relocate or NpcRouteOutcome.RequestTeleport or NpcRouteOutcome.StartWalk) _arrived.Remove(npc);
         var bed = BedStep(npc, step, route: RouteOf(npc));
+        // ARC-AI-1313 (VAG2, 0x4ACDB0 near branch): after the bed look-up a wanderer starts its wander goal, even when a bed was just taken (VA19).
+        var wander = step.WanderGoal is { } wanderGoal && step.Standpoint is { } tether ? StartWander(npc, wanderGoal, tether) : null;
         switch (step.Outcome)
         {
             case NpcRouteOutcome.Relocate:
@@ -87,7 +90,30 @@ public sealed partial class AreaAiHost
         }
         if (written is not null) Trace(npc).Route += $" [teleport map {written}]";
         if (bed is not null) Trace(npc).Route += $" [bed: {bed}]";
+        if (wander is not null) Trace(npc).Route += $" [wander: {wander}]";
         return step.Answer;
+    }
+
+    /// <summary>
+    /// ARC-AI-1313 (VAG2, the wander starters 0x435E60 for goal 65 and 0x436040 for goal 66, F1): the standpoint step's wander start for an NPC within its radius of the standpoint. The starter takes the NPC only when it can act
+    /// (0x45D790), when in a round it is the current participant (the table's start gate, TL41), when its tether is a location and the radius above 0 (the literal 4), and when it has **no main run** (0x423300); a critter that
+    /// shares its tile with another living, not busy one is asked to move instead (0x436720, then the please-move starter 0x4363E0) and starts no wander: **not built here** (issue #1315 builds the please-move goal). Otherwise goal
+    /// <paramref name="goal"/> starts through the generic starter (0x44D4E0: interrupts the NPC's runs at the goal's priority 3) with the standpoint as the tether tile and the radius in the range slot. The text says what happened;
+    /// the step's own answer (1 for a wanderer) does not depend on it (0x4ACDB0 returns 1 after the call).
+    /// </summary>
+    [OriginalFunction(0x435E60, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x436040, OriginalFunctionScope.Partial)]
+    private string StartWander(string npc, GoalType goal, RouteLocation tether)
+    {
+        if (!_npcs.ContainsKey(npc)) return "not an NPC of this host";
+        if (tether.X > int.MaxValue || tether.Y > int.MaxValue) return $"tether {tether.X},{tether.Y} outside the cell range";
+        if (!Active(npc)) return "cannot act";
+        var request = new GoalStartRequest(npc, GoalStarters.Generic, new GoalFrame(goal, tile: new CellCoord((int)tether.X, (int)tether.Y), range: NpcRouteRules.WanderRadius));
+        if (!StartGatePasses(request)) return "refused by the round gate";
+        if (_session.QueryGoals().MainRunOf(npc) is not null) return "already runs a goal";
+        var started = _session.StartGoal(request, _startPorts ??= new StartPorts(this));
+        foreach (var end in started.Ended) EndNodes(end);
+        return started.Started ? $"started goal {(int)goal}" : $"not started: {started.Failure} {started.Outcome}";
     }
 
     // ARC-DEV-170 (B06, 0x4AD1B0 → 0x4341C0, GS30): the walk starter of the unforced steps. The movement gate first (the walk goal 7 has no other gate); an NPC that already has a walk run
@@ -110,6 +136,18 @@ public sealed partial class AreaAiHost
         var started = _session.StartGoal(request, _startPorts ??= new StartPorts(this));
         foreach (var end in started.Ended) EndNodes(end);
         return started.Started ? "started" : $"not started: {started.Failure} {started.Outcome}";
+    }
+
+    /// <summary>
+    /// ARC-AI-1313 (the smoke's order): the standpoint step's wander start (<see cref="StartWander"/>) for <paramref name="npc"/> tethered to <paramref name="tether"/>, as the step does for a wanderer at its standpoint; the dark wander
+    /// (goal 66) when <paramref name="dark"/>. The text says what happened ("started goal 65", or why not). A follower is the party's and is refused.
+    /// </summary>
+    public string OrderWander(string npc, CellCoord tether, bool dark = false)
+    {
+        if (!_npcs.ContainsKey(npc)) return "not an NPC of this host";
+        if (_followers.ContainsKey(npc)) return "a follower walks by the party's drive";
+        if (tether.X < 0 || tether.Y < 0) return "outside the cell range";
+        return StartWander(npc, dark ? GoalType.WanderSeekDarkness : GoalType.Wander, new RouteLocation((uint)tether.X, (uint)tether.Y));
     }
 
     /// <summary>

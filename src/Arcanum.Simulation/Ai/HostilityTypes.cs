@@ -148,6 +148,8 @@ public enum AiRollPurpose
     KnockbackBump,
     /// <summary>ARC-DEV-170 (B06): the unforced standpoint step at hour 6 or hour 21 goes on only on 1 of 1..1000 (0x4CEF00 at 0x4ACE49, WS7).</summary>
     StandpointHourRoll,
+    /// <summary>ARC-AI-1313 (0x425930, 0x425D60): the wander goal's tile offset, −radius..radius drawn twice (x, then y) around its tether.</summary>
+    WanderOffset,
 }
 
 /// <summary>The AI's random source: one inclusive range draw per call, the original's range draw (0x4CEF00); equal bounds

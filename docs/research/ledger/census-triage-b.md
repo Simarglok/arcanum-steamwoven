@@ -32,7 +32,7 @@ The census starts are a scan: a few starts cover more than one real function (0x
 
 Nothing is fixed here (V1 changes no behaviour). These are the readings with the largest gap to our code; each is a row below.
 
-- **Wanderers never wander.** The original starts goal 65 (wander) and goal 66 (wander in the dark) for NPCs with the wander flags standing at their standpoint (0x435E60, 0x436040, destination planners 0x425930 and 0x425D60). Ours marks that step `AtStandpoint` as not implemented, so such an NPC stands still.
+- **Wanderers never wander.** The original starts goal 65 (wander) and goal 66 (wander in the dark) for NPCs with the wander flags standing at their standpoint (0x435E60, 0x436040, destination planners 0x425930 and 0x425D60). Built by ARC-AI-1313 ([WG1–WG5](npc-ai.md#wander-goals-built-arc-ai-1313)); only the tile-sharer branch of the starters is open (#1315).
 - **Please move and step apart.** Goal 68 (a critter asked to step aside, 0x4363E0, 0x424E00, the tile-sharer finder 0x436720) has only a descriptor; the executor calls `StepApart`, which the AI host leaves empty (0x4364D0), so critters stacked on one cell never separate.
 - **Hit effects.** The blood eye candy of a hit (0x433020) and the weapon's own hit effect with its veto of the damage effect (0x4377C0) have no counterpart; the blood pool of a kill is covered.
 - **Goals nobody starts.** Use item on a tile (goal 41: 0x4355F0, 0x429040, 0x429160), the pick pocket goal 17 write node (0x42BE80) and the window jump goal with its animation (0x42C780, 0x42D7D0, 0x42D910, 0x42F000, 0x42F140) are not runs of ours; a window step is an ordinary walk step and the vault is drawn by the body-move code.

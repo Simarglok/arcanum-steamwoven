@@ -210,6 +210,8 @@ public partial class TerrainViewerApp
             Homecomings = HomecomingQueue(session, mapNumber),
             // ARC-WORLD-1162 (SWB17–SWB21): the shown map's beds and who lies in them, the hero's rest's occupancy too.
             Beds = new AreaAiBeds(_bedOccupancy, PlacedBeds),
+            // ARC-AI-1313: the dark wander compares the light of a candidate tile with the NPC's own (the light-aware checks' sampler).
+            CellLight = cell => AreaCellLightLevel(cell.X, cell.Y),
         };
 
         static CellCoord World(Arcanum.Data.Traversal.AreaStepCell cell) => new(checked((int)cell.X), checked((int)cell.Y));
