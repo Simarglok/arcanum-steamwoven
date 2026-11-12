@@ -109,6 +109,24 @@ public sealed class DialogCompanionPortTests
     }
 
     [TestMethod]
+    public void So_starts_the_goal_only_when_it_newly_sets_the_flag()
+    {
+        using var owner = Create();
+        var started = new List<string>();
+        var port = new SessionDialogCompanionPort(owner, Pc, participant => participant == Npc ? "virgil" : null, _ => null, started.Add);
+        Assert.AreEqual(DialogCommandResult.Applied, port.Execute(Do(DialogCompanionAction.SpreadOut)));
+        CollectionAssert.AreEqual(new[] { "virgil" }, started);
+        Assert.AreEqual(DialogCommandResult.Applied, port.Execute(Do(DialogCompanionAction.SpreadOut)));
+        Assert.AreEqual(1, started.Count, "already set: the flag is unchanged and no goal starts");
+        Assert.AreEqual(DialogCommandResult.Applied, port.Execute(Do(DialogCompanionAction.SpreadClear)));
+        Assert.AreEqual(1, started.Count, "sc starts nothing");
+        Assert.AreEqual(DialogCommandResult.Applied, port.Execute(Do(DialogCompanionAction.SpreadOut)));
+        Assert.AreEqual(2, started.Count, "set again after a clear");
+        Assert.AreEqual(DialogCommandResult.Rejected, port.Execute(Do(DialogCompanionAction.SpreadOut, Other)));
+        Assert.AreEqual(2, started.Count, "a rejected action starts nothing");
+    }
+
+    [TestMethod]
     public void An_unmapped_npc_and_another_pc_are_rejected_without_effect()
     {
         using var owner = Create();

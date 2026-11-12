@@ -408,6 +408,23 @@ public sealed class AreaAiRouteTests
         Assert.AreEqual(0, original.Host.PendingHomecomings.Count);
     }
 
+    // ARC-AI-1316 (VAG5, owner decision 2026-11-12, option B): a pending hero request is never replaced by an NPC's homecoming: Original refuses it, Steamwoven holds it back for a free slot.
+    // (The two-NPC rule, Original replaces and Steamwoven waits, is covered by A_former_follower_waits_for_the_slot... above.)
+    [TestMethod]
+    [DataRow(RuleMode.Original)]
+    [DataRow(RuleMode.Steamwoven)]
+    public void A_pending_hero_request_is_never_replaced_by_an_npcs_homecoming_in_either_setting(RuleMode rules)
+    {
+        var scene = Open(Npc(Day | Night, [(20, 20)], 0, (1, 1), (1, 1)), rules: rules, mapListed: map => map is Map or 9);
+        Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.EnsureTeleportMap(scene.Session.Version, scene.Npc, Home).Disposition);
+        Assert.IsTrue(scene.Session.RequestHeroChangeOfPlace(ChangeOfPlaceCaller.TeleportSpell, 9, new(1, 1), ChangeOfPlaceFlags.None, 0, _ => true).Accepted);
+        Assert.IsTrue(scene.Host.RunWaypoints(scene.Npc));
+        Assert.IsFalse(scene.Host.FlushHomecomings(), "the hero's pending request refuses the NPC's (or holds it back)");
+        Assert.IsTrue(scene.Session.QueryChangeOfPlace()!.IsPlayerCharacter, "the hero's request stays in the slot");
+        if (rules == RuleMode.Original) StringAssert.Contains(scene.Host.TraceOf(scene.Npc)!.Route, "RefusedLocalPlayerPending");
+        else Assert.AreEqual(1, scene.Host.PendingHomecomings.Count, "Steamwoven keeps the NPC's request for a free slot");
+    }
+
     [TestMethod]
     public void A_hidden_or_unreadable_npc_has_no_route_step()
     {
@@ -508,5 +525,74 @@ public sealed class AreaAiRouteTests
         scene.Host.RunRoutine(scene.Npc);
         Assert.IsNull(scene.Host.RunOf(scene.Npc));
         StringAssert.Contains(scene.Host.TraceOf(scene.Npc)!.Route, "NoStep", "the unforced step ran and answered 0 for the other map");
+    }
+
+    // ---- ARC-AI-1313 (VAG2, VA19): the wander start of the standpoint step ----
+
+    private const uint Wanders = NpcRouteFlags.Wanders, WandersInDark = NpcRouteFlags.WandersInDark;
+
+    [TestMethod]
+    public void A_wanderer_at_its_standpoint_starts_the_wander_goal_tethered_to_it_in_both_passes_and_a_plain_npc_starts_none()
+    {
+        foreach (var (flags, goal) in new[] { (Wanders, Arcanum.Simulation.Goals.GoalType.Wander), (WandersInDark, Arcanum.Simulation.Goals.GoalType.WanderSeekDarkness) })
+        {
+            var forced = Open(Npc(flags, [], 0, (10, 20), (10, 20)));
+            forced.Host.RunStandpoints(forced.Npc);
+            var run = forced.Host.RunOf(forced.Npc);
+            Assert.AreEqual(goal, run?.Bottom.Goal, forced.Host.TraceOf(forced.Npc)?.Route);
+            Assert.AreEqual(new CellCoord(10, 20), run!.Bottom.Tile, "the tether is the standpoint");
+            Assert.AreEqual(NpcRouteRules.WanderRadius, run.Bottom.Range);
+            StringAssert.Contains(forced.Host.TraceOf(forced.Npc)!.Route, $"[wander: started goal {(int)goal}]");
+
+            var unforced = Open(Npc(flags, [], 0, (10, 20), (10, 20)));
+            unforced.Host.RunRoutine(unforced.Npc);
+            Assert.AreEqual(goal, unforced.Host.RunOf(unforced.Npc)?.Bottom.Goal, unforced.Host.TraceOf(unforced.Npc)?.Route);
+        }
+        var plain = Open(Npc(0, [], 0, (10, 20), (10, 20)));
+        plain.Host.RunStandpoints(plain.Npc);
+        plain.Host.RunRoutine(plain.Npc);
+        Assert.IsNull(plain.Host.RunOf(plain.Npc), "no wander flag: no wander");
+    }
+
+    [TestMethod]
+    public void A_wanderer_that_already_runs_a_goal_is_given_no_second_one_and_a_far_wanderer_walks_to_its_standpoint_first()
+    {
+        var busy = Open(Npc(Wanders, [], 0, (10, 20), (10, 20)));
+        busy.Host.RunStandpoints(busy.Npc);
+        var first = busy.Host.RunOf(busy.Npc)!.Handle;
+        busy.Host.RunStandpoints(busy.Npc);
+        Assert.AreEqual(first, busy.Host.RunOf(busy.Npc)!.Handle, "the starter finds a main run (0x423300) and starts nothing");
+        StringAssert.Contains(busy.Host.TraceOf(busy.Npc)!.Route, "already runs a goal");
+        var far = Open(Npc(Wanders, [], 0, (20, 25), (20, 25)));
+        far.Host.RunRoutine(far.Npc);
+        Assert.AreEqual(Arcanum.Simulation.Goals.GoalType.MoveNearTile, far.Host.RunOf(far.Npc)?.Bottom.Goal, "outside its radius it walks to the standpoint (VA19)");
+    }
+
+    [TestMethod]
+    public void A_wanderer_moves_about_within_four_tiles_of_its_standpoint_over_many_passes()
+    {
+        var scene = Open(Npc(Wanders, [], 0, (10, 20), (10, 20)));
+        var seen = new HashSet<CellCoord>();
+        for (var pass = 0; pass < 12; pass++)
+        {
+            scene.Host.RunRoutine(scene.Npc);
+            Walk(scene, () => scene.Host.RunOf(scene.Npc) is null, limit: 400);
+            var at = Cell(scene);
+            seen.Add(at);
+            Assert.IsTrue(Math.Max(Math.Abs(at.X - 10), Math.Abs(at.Y - 20)) <= NpcRouteRules.WanderRadius, $"pass {pass}: {at} is within the radius: {scene.Host.TraceOf(scene.Npc)?.Route}");
+        }
+        Assert.IsTrue(seen.Count > 1 || seen.Single() != NpcCell, "the wanderer moved off its first tile at least once");
+        Assert.IsTrue(scene.Session.QueryNpcPlaces(new SessionMapId(Map)).Count > 0, "the session keeps the place the wanderer walked to");
+    }
+
+    [TestMethod]
+    public void A_wanderer_that_shares_its_tile_with_the_hero_alone_still_wanders_because_the_finder_looks_for_another_npc()
+    {
+        // 0x435E60 → 0x436720 (ARC-AI-1315's finder): a blocker must be another NPC (object type 16) that is living and not busy, so a hero on the tile does not stop the start.
+        // (The asked-to-move branch with two NPCs is the finder's and the please-move goal's own tests, ARC-AI-1315.)
+        var scene = Open(Npc(Wanders, [], 0, (10, 20), (10, 20)), hero: () => NpcCell);
+        scene.Host.RunStandpoints(scene.Npc);
+        StringAssert.Contains(scene.Host.TraceOf(scene.Npc)!.Route, "[wander: started goal 65]");
+        Assert.AreEqual(Arcanum.Simulation.Goals.GoalType.Wander, scene.Host.RunOf(scene.Npc)?.Bottom.Goal);
     }
 }

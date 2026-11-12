@@ -514,6 +514,14 @@ internal sealed class InventoryDomain
     /// nothing). For such an NPC an item is worn only in the slot its record names, whatever its map data's inventory location.</summary>
     internal SortedDictionary<string, SortedDictionary<EquipmentSlot, string>> NpcWorn { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>ARC-RES-1410 (ledger XR16 (g), IW39): the slots the arrangement at the open of a loot, steal or See Contents window gave the items of a
+    /// map holder's list (a container or an NPC of the map's seed), by holder entity and item entity (the arranged items only: the worn and quick-slot
+    /// items stay out of it). The original writes them into the items' inventory locations (0x4670A0); here the holder's list answers with them in place
+    /// of the map data's. Not saved (PROJECT, issue #1441): every open arranges the list again from scratch, so a restored session differs where no open follows
+    /// (the barter window draws the same list, and an arrangement that no longer fits writes nothing). An entry is dropped when its item enters a list
+    /// again (<see cref="ForgetSlot"/>). A junk pile the session made keeps its slots in its record instead.</summary>
+    internal SortedDictionary<string, SortedDictionary<string, int>> HolderSlots { get; } = new(StringComparer.Ordinal);
+
     /// <summary>ARC-WORLD-103: an item that leaves an NPC's list (to the hero, the ground, deletion) is worn no more; an item that comes
     /// back to the list later is not worn either.</summary>
     internal void Unwear(string entity)
@@ -538,10 +546,13 @@ internal sealed class InventoryDomain
     /// <summary>The made items added to an NPC, in order (empty when none).</summary>
     internal IReadOnlyList<SessionMadeItem> AddedTo(string npc) => Lists.Of(npc);
 
-    internal void AddToNpc(string npc, SessionMadeItem item) => Lists.Add(npc, item, container: false);
+    internal void AddToNpc(string npc, SessionMadeItem item) { ForgetSlot(item.Entity); Lists.Add(npc, item, container: false); }
+
+    /// <summary>ARC-RES-1410: an item that enters a list takes no slot the arrangement of an earlier list gave it.</summary>
+    internal void ForgetSlot(string entity) { foreach (var slots in HolderSlots.Values) slots.Remove(entity); }
 
     /// <summary>ARC-WORLD-090: an item at the end of a container's added list.</summary>
-    internal void AddToContainer(string container, SessionMadeItem item) => Lists.Add(container, item, container: true);
+    internal void AddToContainer(string container, SessionMadeItem item) { ForgetSlot(item.Entity); Lists.Add(container, item, container: true); }
 
     /// <summary>Removes an added made item from whichever NPC holds it; an emptied list is dropped.</summary>
     internal bool RemoveFromNpc(string entity)
@@ -713,8 +724,13 @@ internal sealed class InventoryDomain
     internal IEnumerable<SessionInventoryItem> Current(Seed seed, SessionSeedHolder holder, Func<string, CellCoord?> dropped, bool added = true)
     {
         // ARC-WORLD-103: an NPC the session dressed wears what its record names.
-        SessionInventoryItem Item(string entity, SessionItemFacts facts) =>
-            new(entity, holder.Kind == SessionHolderKind.Npc ? Worn(holder.Entity, entity, facts) : facts);
+        // ARC-RES-1410: an item the arrangement of the holder's list placed lies in the slot it gave.
+        var slots = HolderSlots.GetValueOrDefault(holder.Entity);
+        SessionInventoryItem Item(string entity, SessionItemFacts facts)
+        {
+            var shown = holder.Kind == SessionHolderKind.Npc ? Worn(holder.Entity, entity, facts) : facts;
+            return new(entity, !shown.Worn && slots is not null && slots.TryGetValue(entity, out var slot) ? shown with { InventoryLocation = slot } : shown);
+        }
         return holder.Items
             .Where(entity => !Taken.Contains(entity) && dropped(entity) is null).Select(entity => Item(entity, WithAmmo(entity, seed.Items[entity].Facts)))
             .Concat(added && (holder.Kind == SessionHolderKind.Npc) != Lists.IsContainer(holder.Entity)

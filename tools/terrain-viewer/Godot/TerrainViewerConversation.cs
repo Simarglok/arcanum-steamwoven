@@ -62,6 +62,8 @@ public partial class TerrainViewerApp
             // ARC-SCRIPT-1358: an l: reply ends the talk and opens the world map; only in map mode, where the bar's Map button has one.
             _conversationHost.WorldMapAvailable = () => WorldMapActive;
             _conversationHost.HeroAttack = entity => AreaAiHostNow() is { } ai && ai.OrderAttack(new Arcanum.Session.CompanionOrderAttack(Arcanum.Session.SessionCombatant.Hero, Arcanum.Session.SessionCombatant.Critter(entity), Arcanum.Simulation.Ai.Loudness.Normal, Arcanum.Simulation.Ai.AttackEventFlags.None));
+            // ARC-SCRIPT-1135: an so action that newly sets the spread-out flag starts goal 69 on the shown map's AI host (CF4).
+            _conversationHost.SpreadOutStart = entity => AreaAiHostNow() is { } spreadAi && spreadAi.StartSpreadOut(entity);
             // ARC-DEV-227: an nk action is a script's kill of the speaker (a death with no killer through the session's life domain) on the shown map.
             _conversationHost.KillNpc = entity => KillByScript(new Arcanum.Scripting.Scr.ScrObjectRef(CurrentAreaMap, entity));
             // ARC-DEV-193: the reply step's hostile check is asked of the same AI host (alive and kill-on-sight toward the hero).

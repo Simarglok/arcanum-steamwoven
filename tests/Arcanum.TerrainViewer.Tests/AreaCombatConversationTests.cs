@@ -68,8 +68,11 @@ public sealed class AreaCombatConversationTests
         Func<bool> available = () => true;
         f.Host.HeroAttack = sink;
         f.Host.HeroAttackAvailable = available;
+        // ARC-SCRIPT-1135: the spread-out start of the so action is kept the same way.
+        f.Host.SpreadOutStart = sink;
         var rebound = f.Host.Rebind(f.Session);
         Assert.AreSame(sink, rebound.HeroAttack);
         Assert.AreSame(available, rebound.HeroAttackAvailable);
+        Assert.AreSame(sink, rebound.SpreadOutStart);
     }
 }

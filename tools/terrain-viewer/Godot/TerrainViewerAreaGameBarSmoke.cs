@@ -424,11 +424,15 @@ public partial class TerrainViewerApp
                 Require(_spellPane?.Shown != true && !_gameBar.IsOn(AreaBarButton.Spells), "a second press hid it");
             }
             else Require(!_gameBar.IsOn(AreaBarButton.Spells) && _gameBarNotice is not null, "Spells refused off a cast map: " + _gameBarNotice);
+            // ARC-UI-1112: the Fate Point window opens in no other interface window (the inventory of the steps above is still open).
+            if (AnyWindowOpen) { CloseOtherInterfaceWindows(); await Frames(2); }
+            for (var wait = 0; wait < 600 && !FateArtReadyForSelfTest; wait++) await Frames(1);
+            Require(FateArtReadyForSelfTest, "the Fate Point window's art read: " + _fateContent?.Detail);
             var topStrip = panel.StripRectForSelfTest(AreaBarStrip.Top);
             var outsideTopButtons = topStrip.Position + new Vector2(720, 20) * panel.Factor;
             foreach (var (button, notice) in new (AreaBarButton, string?)[]
             {
-                (AreaBarButton.FatePoints, "fate points: the window is not built"),
+                (AreaBarButton.FatePoints, null), // ARC-UI-1112: the button toggles the Fate Point window (a notice only without a living hero)
                 (AreaBarButton.Sleep, null), // ARC-WORLD-1160: the button toggles the sleep window (a notice only without a session hero)
             })
             {
@@ -453,7 +457,9 @@ public partial class TerrainViewerApp
                 var soundsBefore = _gameBarSoundsForSelfTest.Count;
                 var previousNotice = _gameBarNotice;
                 var sleepWas = SleepOpen;
-                bool Acted(bool opened) => notice is not null ? _gameBarNotice == notice : SleepOpen == (opened ? !sleepWas : sleepWas);
+                var fateWas = FateOpen;
+                bool Acted(bool opened) => notice is not null ? _gameBarNotice == notice
+                    : button == AreaBarButton.FatePoints ? FateOpen == (opened ? !fateWas : fateWas) : SleepOpen == (opened ? !sleepWas : sleepWas);
                 SendButton(at, true);
                 Require(_gameBar.Held == button && _gameBarNotice == previousNotice, $"{button} press only holds the button");
                 SendButton(at, false);
@@ -490,6 +496,8 @@ public partial class TerrainViewerApp
                 }), $"{button} plays one press sound per press and one release sound per inside release");
                 GD.Print($"ARC-UI-121 native {button} PASS first-draw=Down ({downSource}) held=Down settled=Hover frame={hoverFrame} ({hoverSource}) canceled=Idle ({idleSource})");
             }
+
+            await RunAreaFateSmokeAsync(panel, Frames, Move, Button, pressed => Key(pressed), Click);
 
             await RunAreaMessageLogSmokeAsync(panel);
 

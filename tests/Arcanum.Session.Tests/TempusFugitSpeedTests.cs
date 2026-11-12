@@ -233,6 +233,20 @@ public sealed class TempusFugitSpeedTests
         Assert.IsFalse(Holds(owner, Bear), "the spell ended while it waited: nothing to copy");
     }
 
+    // ARC-AI-1312 (VA15, VAG1): the kill notification's forced unwait of a waiting companion is a join too, so the leader's flag is copied again.
+    [TestMethod]
+    public void The_death_of_a_waiting_companion_joins_it_again_and_copies_the_leaders_flag()
+    {
+        using var owner = Owner();
+        Hold(owner, Hero);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Bear).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Bear).Disposition);
+        Assert.IsFalse(Holds(owner, Bear));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, SessionLifeTarget.Critter(Bear, new LifeFacts(), LifeState.Unharmed)).Disposition);
+        Assert.AreEqual(CompanionStanding.Following, owner.QueryCompanion(Bear).Standing);
+        Assert.IsTrue(Holds(owner, Bear));
+    }
+
     [TestMethod]
     public void A_join_of_a_critter_that_has_a_leader_clears_before_it_copies_so_a_stale_flag_goes()
     {

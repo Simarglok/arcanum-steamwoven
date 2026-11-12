@@ -252,6 +252,7 @@ public sealed class AreaConversationHost
         host.Scripts.QueryHost = Scripts.QueryHost;
         host.GoldKindSource = GoldKindSource;
         host.HeroAttack = HeroAttack;
+        host.SpreadOutStart = SpreadOutStart;
         host.HeroAttackAvailable = HeroAttackAvailable;
         host.NpcHostile = NpcHostile;
         host.KillNpc = KillNpc;
@@ -645,7 +646,8 @@ public sealed class AreaConversationHost
         var entity = AreaConversationState.EntityId(speaker.Row);
         return new SessionDialogCompanionPort(_session, AreaConversationState.PcParticipant,
             participant => participant == npc ? entity : null,
-            participant => participant == npc && FactsOf(speaker) is { } facts ? AreaCompanionRoster.WaitFacts(facts, _session.QueryHeroPartySide()) : null);
+            participant => participant == npc && FactsOf(speaker) is { } facts ? AreaCompanionRoster.WaitFacts(facts, _session.QueryHeroPartySide()) : null,
+            entity => SpreadOutStart?.Invoke(entity));
     }
 
     /// <summary>The session party port for a roster speaker when the party is wired; facts are read at each call.</summary>
@@ -675,6 +677,10 @@ public sealed class AreaConversationHost
     /// <summary>ARC-DEV-190: whether <see cref="HeroAttack"/> can run now (the viewer: the AI host exists); read when a talk starts. False: the <c>co</c> action
     /// stays unadmitted for that talk, so it is never offered and then refused. Null: always available.</summary>
     public Func<bool>? HeroAttackAvailable { get; set; }
+
+    /// <summary>ARC-SCRIPT-1135 (CF4): the spread-out goal's start for the NPC with the given entity (<see cref="AreaAiHost.StartSpreadOut"/>), run when an <c>so</c> action newly set the flag;
+    /// null: only the flag is set (no AI host).</summary>
+    public Func<string, bool>? SpreadOutStart { get; set; }
 
     /// <summary>ARC-DEV-193: whether the NPC with the given entity is alive and kill-on-sight toward the hero now (<see cref="AreaAiHost.HostileToHero"/>);
     /// read by the reply step after an action string (HR1–HR3). Offered with <see cref="HeroAttackAvailable"/> (the AI host exists); without it the

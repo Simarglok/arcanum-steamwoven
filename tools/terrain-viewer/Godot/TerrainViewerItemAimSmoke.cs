@@ -259,7 +259,122 @@ public partial class TerrainViewerApp
             sheet = _sheetNpc!.View.Name;
             GD.Print($"ARC-UI-1127 item-aim identify sheet entity={patientNpc.Id} name={sheet} level={_sheetNpc.View.Level}");
             EndSheet();
-            GD.Print("ARC-DEV-365 native-smoke item-aim PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Tile = tileGoal, Npc = npc.Id, Notice = _itemAimLast, Heal = healed, Pick = picked, Sheet = sheet }));
+            // 9. ARC-RES-1327 (E8-g, ledger XR3, XR16): the Identify answer for a container opens the inventory window in mode 4 with no lock test. A locked container of the map is preferred (its items show anyway);
+            //    the window moves nothing (a press on the hero's grid or the container's grid lifts nothing), has no Take all, and its close closes no lid.
+            var contents = "NONE";
+            if (_inventoryHost.Map(CurrentAreaMap) is { } contentsMap && _readyArea is { } contentsArea && _spellCastMap is { } castMap)
+            {
+                var contentsId = new SessionMapId(CurrentAreaMap);
+                var boxes = contentsArea.Snapshot.Objects.Where(row => row.Scope == AreaScope.Core && row.Type == 2 && contentsMap.TryGetEntity(row.Key, out _))
+                    .Select(row => _inventoryHost.Target(session, CurrentAreaMap, row.Key)).OfType<AreaInventoryTarget>().Where(t => t.Kind == AreaInventoryTargetKind.Container
+                        && castMap.IdOf(t.Row.Key) is not null && Arcanum.Data.Combat.CombatFieldReader.ReadBreakable(t.Row).Fields is not null
+                        && (contentsMap.RestockSeed(t.Entity).ContainerFlags & Arcanum.Simulation.Items.RestockRules.GeneratedOnceFlag) == 0).ToArray();
+                bool Locked(AreaInventoryTarget t) => session.AttemptOpen(new(contentsId, t.Entity), AreaObjectTargets.ContainerBaseline(t.Row, Arcanum.Data.Combat.CombatFieldReader.ReadBreakable(t.Row).Fields!), false) == OpenAttempt.Locked;
+                var box = boxes.FirstOrDefault(Locked) ?? boxes.FirstOrDefault();
+                if (box is null) GD.Print($"{ItemAimCode} item-aim contents step NONE (no container without flag 0x200 on map {_readyMapName})");
+                else
+                {
+                    var frameBefore = session.QueryOpenable(new(contentsId, box.Entity), AreaObjectTargets.ContainerBaseline(box.Row, Arcanum.Data.Combat.CombatFieldReader.ReadBreakable(box.Row).Fields!)).Frame;
+                    var heldBefore = session.QueryPcInventory().Count;
+                    if (InventoryOpen) EndInventory();
+                    PostSpellLog(null, [new SpellCastEvent(SpellCastEventKind.IdentifyContainer, 0, SpellTargetObject.Container, castMap.IdOf(box.Row.Key)!)]);
+                    for (var i = 0; i < 1200 && !ContentsWindow; i++) { Frame(); TakeDialogNpcSheet(); }
+                    Require(ContentsWindow && ContentsHolderForSelfTest == box.Entity && LastIdentifyContentsForSelfTest is { Opened: true }, $"the Identify answer opened the container's window in mode 4: {_inventoryStatus}");
+                    var view = _inventoryPanel!.ViewForSelfTest!;
+                    Require(WindowOpen(InterfaceMode.Loot) && view is { Contents: true, HolderContainer: true } && view.Holder == box.Entity, "the window is the loot window's frame in contents mode");
+                    Require(AreaEvents.LootWindowShowsContainer, "the open container holds the items' decay (ID6)");
+                    var contentsGrid = _inventoryPanel.GridAreaForSelfTest;
+                    Require(contentsGrid.Mode == AreaInventoryMode.Contents && !AreaLootArtLayout.TakeAllShown(contentsGrid.Mode), "mode 4 has no Take all button");
+                    Require(!_inventoryPanel.TakeAllForSelfTest.Visible, "the diagnostic window hides Take all too");
+                    var pressed = 0;
+                    if (view.LootGrid.Count > 0)
+                    {
+                        var rect = AreaLootArtLayout.FullRect(view.LootGrid[0], 0);
+                        contentsGrid.PressAt(new(rect.X + rect.Width / 2f, rect.Y + rect.Height / 2f)); pressed++;
+                        Require(contentsGrid.Held is null, "a press on the container's item lifts nothing");
+                        contentsGrid.ReleaseAt(AreaInventoryGridArea.CellCentre(0));
+                    }
+                    if (view.Grid.Count > 0)
+                    {
+                        contentsGrid.PressAt(AreaInventoryGridArea.CellCentre(view.Grid[0].Slot)); pressed++;
+                        Require(contentsGrid.Held is null, "a press on the hero's item lifts nothing either");
+                        contentsGrid.ReleaseAt(AreaInventoryGridArea.CellCentre(view.Grid[0].Slot));
+                    }
+                    for (var i = 0; i < 4; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    Require(session.QueryPcInventory().Count == heldBefore && ContentsWindow, "nothing moved");
+                    var shown = view.LootGrid.Count;
+                    EndInventory();
+                    Require(!InventoryOpen && ContentsHolderForSelfTest is null && !AreaEvents.LootWindowShowsContainer, "closed, the window holds nothing");
+                    Require(session.QueryOpenable(new(contentsId, box.Entity), AreaObjectTargets.ContainerBaseline(box.Row, Arcanum.Data.Combat.CombatFieldReader.ReadBreakable(box.Row).Fields!)).Frame == frameBefore, "its open and close changed no lid");
+                    contents = $"{(Locked(box) ? "locked" : "unlocked")} items={shown} pressed={pressed}";
+                    GD.Print($"ARC-RES-1327 item-aim contents entity={box.Entity} {contents}");
+                }
+            }
+            // 10. ARC-RES-1327 (E8-g, ledger XR4): the Identify answer for an item draws the item window of the hover window (0x57CCF0), after Divine Magick's mark has made it identified.
+            var description = "NONE";
+            // The hero is given a device (the smoke's own item) that Divine Magick's mark then identifies; the Identify answer for it draws the item window.
+            string? carriedItem = null;
+            if (!_messageLog.PaneMode)
+            {
+                var given = TechSmokeGive(data, 15100);
+                var mark = session.MarkItemIdentified(session.Version, given);
+                Require(mark.Disposition != GameSessionDisposition.Rejected && session.QueryItemIdentified(given), $"the item is marked identified: {mark.Disposition} {mark.Failure}");
+                carriedItem = given;
+            }
+            else GD.Print($"{ItemAimCode} item-aim description step NONE (the message window is in a pane mode)");
+            if (carriedItem is { } carried)
+            {
+                PostSpellLog(null, [new SpellCastEvent(SpellCastEventKind.IdentifyItem, 0, 5, carried)]);
+                for (var i = 0; i < 20 && LastIdentifyDescriptionForSelfTest is null; i++) { Frame(); TakeDialogNpcSheet(); }
+                Require(LastIdentifyDescriptionForSelfTest is { Shown: true } drawn && drawn.Item == carried, $"the item window is drawn for the identified item ({LastIdentifyDescriptionForSelfTest})");
+                Require(ItemWindowTextsForSelfTest >= 1, "the item window has its name");
+                description = $"{carried} texts={ItemWindowTextsForSelfTest}";
+                GD.Print($"ARC-RES-1327 item-aim description item={carried} texts={ItemWindowTextsForSelfTest}");
+            }
+            // 11. ARC-UI-1411 (E8-g, ledger XR4): the Identify answer for an item the hero does not hold (one lying on the map or held by an NPC: its map row) draws the item window too (the wrapper 0x57CCF0 describes any object).
+            var groundDescription = "NONE";
+            if (!_messageLog.PaneMode && _inventoryHost.Map(CurrentAreaMap) is { } groundMap && _readyArea is { } groundArea && _spellCastMap is { } groundCast)
+            {
+                var candidates = groundArea.Snapshot.Objects.Where(row => row.Type is >= 5 and <= 14 && groundMap.TryGetEntity(row.Key, out var e) && InventoryItemKind(session, e) is null
+                    && groundCast.IdOf(row.Key) is not null).Take(12).ToArray();
+                foreach (var row in candidates)
+                {
+                    groundMap.TryGetEntity(row.Key, out var groundItem);
+                    _messageLog.ClearHover(); LastIdentifyDescriptionForSelfTest = null;
+                    PostSpellLog(null, [new SpellCastEvent(SpellCastEventKind.IdentifyItem, 0, row.Type, groundCast.IdOf(row.Key)!)]);
+                    for (var i = 0; i < 20 && LastIdentifyDescriptionForSelfTest is null; i++) { Frame(); TakeDialogNpcSheet(); }
+                    if (LastIdentifyDescriptionForSelfTest is not { Shown: true }) continue;
+                    Require(ItemWindowTextsForSelfTest >= 1, "the item window of a map item has its name");
+                    groundDescription = $"{groundItem} type={row.Type} texts={ItemWindowTextsForSelfTest}";
+                    GD.Print($"ARC-UI-1411 item-aim ground description item={groundItem} type={row.Type} texts={ItemWindowTextsForSelfTest}");
+                    break;
+                }
+                if (groundDescription == "NONE")
+                {
+                    Require(candidates.Length == 0, $"no map item of {candidates.Length} candidates was described on map {_readyMapName}");
+                    GD.Print($"{ItemAimCode} item-aim ground description step NONE (no map item row on map {_readyMapName})");
+                }
+            }
+            // 12. ARC-UI-1411 (ledger XR4): the Identify answer for a portal or scenery draws the object's hover window (its image and name), with no pointer on it.
+            var objectWindows = new List<string>();
+            if (!_messageLog.PaneMode && _hoverIndex is { } objectIndex && _readyArea is { } objectArea && _spellCastMap is { } objectCast)
+            {
+                var named = objectArea.Snapshot.Objects.Where(row => row.Type is 1 or 3 && objectIndex.Contains(row.Key) && !string.IsNullOrEmpty(objectIndex.Name(row.Key)) && objectCast.IdOf(row.Key) is not null)
+                    .GroupBy(row => row.Type).Select(group => group.First()).ToArray();
+                foreach (var row in named)
+                {
+                    _messageLog.ClearHover(); LastIdentifyObjectForSelfTest = null;
+                    PostSpellLog(null, [new SpellCastEvent(SpellCastEventKind.IdentifyItem, 0, row.Type, objectCast.IdOf(row.Key)!)]);
+                    for (var i = 0; i < 20 && LastIdentifyObjectForSelfTest is null; i++) { Frame(); TakeDialogNpcSheet(); }
+                    if (LastIdentifyObjectForSelfTest is not { Shown: true } drawnObject || drawnObject.Key != row.Key) { objectWindows.Add($"type{row.Type}=skipped"); continue; }
+                    Require(_messageLog.Shown is { Kind: AreaMessageKind.Object } shownObject && shownObject.Title.Length > 0, $"the object window of type {row.Type} has its name");
+                    objectWindows.Add($"type{row.Type}={_messageLog.Shown!.Title}");
+                    GD.Print($"ARC-UI-1411 item-aim object window type={row.Type} name={_messageLog.Shown.Title}");
+                }
+                Require(named.Length == 0 || objectWindows.Any(window => !window.EndsWith("=skipped", StringComparison.Ordinal)), $"no portal or scenery window was drawn: {string.Join(' ', objectWindows)}");
+                if (named.Length == 0) GD.Print($"{ItemAimCode} item-aim object window step NONE (no named portal or scenery on map {_readyMapName})");
+            }
+            GD.Print("ARC-DEV-365 native-smoke item-aim PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Tile = tileGoal, Npc = npc.Id, Notice = _itemAimLast, Heal = healed, Pick = picked, Sheet = sheet, Contents = contents, Description = description, GroundDescription = groundDescription, ObjectWindow = objectWindows.Count == 0 ? "NONE" : string.Join(" ", objectWindows) }));
         }
         finally
         {

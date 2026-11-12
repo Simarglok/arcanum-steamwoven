@@ -21,20 +21,87 @@ public partial class TerrainViewerApp
     private string? _sheetNpcStatus;
     // ARC-UI-1127: the critter an Identify cast named (session, the cast host's id, its map row) waits here until nothing else owns input.
     private (GameSessionOwner Session, string Entity, AreaObjectRecord Row)? _identifySheetPending;
+    // ARC-RES-1327 (E8-g, ledger XR3, XR4): the container an Identify cast named waits for its inventory window in mode 4 (See Contents), the item for its description window.
+    private (GameSessionOwner Session, AreaInventoryTarget Target)? _identifyContainerPending;
+    private (GameSessionOwner Session, string Item)? _identifyItemPending;
+    /// <summary>The last Identify container window's entity and whether it opened, for the smoke.</summary>
+    internal (string Entity, bool Opened)? LastIdentifyContentsForSelfTest { get; private set; }
+    // ARC-UI-1411 (ledger XR4): the portal or scenery an Identify cast named waits for its object window (the hover window's, 0x57CCF0).
+    private (GameSessionOwner Session, AreaObjectKey Key)? _identifyObjectPending;
+    /// <summary>The last Identify portal or scenery window's object type and whether the object window was drawn for it, for the smoke.</summary>
+    internal (AreaObjectKey Key, bool Shown)? LastIdentifyObjectForSelfTest { get; private set; }
+    /// <summary>The last Identify item description's item and whether the item window was drawn for it, for the smoke.</summary>
+    internal (string Item, bool Shown)? LastIdentifyDescriptionForSelfTest { get; private set; }
+
     /// <summary>The last Identify sheet's entity and whether it opened, for the smoke.</summary>
     internal (string Entity, bool Opened)? LastIdentifySheetForSelfTest { get; private set; }
 
     /// <summary>A cast host log entry of an Identify on an NPC (ledger XR2): the read-only sheet is queued for it (the hero as the target has its own C sheet and keeps the message line).</summary>
     private void TakeIdentifyEvent(SpellCastEvent entry)
     {
+        if (entry.Kind == SpellCastEventKind.IdentifyContainer && entry.Object is { } container && _areaSession is { } containerSession)
+        {
+            // ARC-RES-1327 (XR3): the container's own row names its inventory target (the open is the window's mode 4, with no lock test).
+            if (_spellCastMap?.Row(container) is not { } containerRow || _inventoryHost?.Target(containerSession, CurrentAreaMap, containerRow.Key) is not { Kind: AreaInventoryTargetKind.Container } target)
+            { GD.Print($"ARC-RES-1327 identify container={container} is no standing container of the shown map"); return; }
+            GD.Print($"ARC-RES-1327 identify contents queued entity={container}");
+            _identifyContainerPending = (containerSession, target);
+            return;
+        }
+        if (entry.Kind == SpellCastEventKind.IdentifyItem && entry.Value is Arcanum.Data.Combat.CombatFieldReader.PortalType or Arcanum.Data.Combat.CombatFieldReader.SceneryType
+            && entry.Object is { } named && _areaSession is { } objectSession)
+        {
+            // ARC-UI-1411 (XR4): a portal or scenery goes to the hover window's object window by its map row.
+            if (_spellCastMap?.Row(named) is not { } namedRow) { GD.Print($"ARC-UI-1411 identify object={named} has no map row here"); return; }
+            GD.Print($"ARC-UI-1411 identify object window queued object={named}");
+            _identifyObjectPending = (objectSession, namedRow.Key);
+            return;
+        }
+        if (entry.Kind == SpellCastEventKind.IdentifyItem && entry.Value is >= 5 and <= 14 && entry.Object is { } item && _areaSession is { } itemSession)
+        {
+            // ARC-RES-1327 (XR4): an item (types 5..14) goes to the item window of the hover window (0x57CCF0); Divine Magick has marked it identified before this entry.
+            GD.Print($"ARC-RES-1327 identify description queued item={item}");
+            _identifyItemPending = (itemSession, item);
+            return;
+        }
         if (entry.Kind != SpellCastEventKind.IdentifyCritter || entry.Object is not { } id || id == SessionSpellCaster.Hero || _areaSession is null) return;
         if (_spellCastMap?.Row(id) is not { } row) { GD.Print($"ARC-UI-1127 identify critter={id} has no map row here"); return; }
         GD.Print($"ARC-UI-1127 identify sheet queued entity={id}");
         _identifySheetPending = (_areaSession, id, row);
     }
 
+    private void TakeIdentifyWindows()
+    {
+        if (_identifyItemPending is { } described)
+        {
+            _identifyItemPending = null;
+            if (ReferenceEquals(described.Session, _areaSession) && SheetActive)
+            {
+                DescribeItem(described.Session, described.Item);
+                LastIdentifyDescriptionForSelfTest = (described.Item, _messageLog.Shown is { Kind: AreaMessageKind.Item });
+            }
+        }
+        if (_identifyObjectPending is { } named)
+        {
+            _identifyObjectPending = null;
+            if (ReferenceEquals(named.Session, _areaSession) && SheetActive)
+            {
+                var drawn = DescribeObject(named.Key, _gameBarPanel, pointer: false);
+                GD.Print($"ARC-UI-1411 identify object window object={named.Key} drawn={drawn}");
+                LastIdentifyObjectForSelfTest = (named.Key, drawn && _messageLog.Shown is { Kind: AreaMessageKind.Object });
+            }
+        }
+        if (_identifyContainerPending is not { } contents) return;
+        if (!ReferenceEquals(contents.Session, _areaSession) || !SheetActive) { _identifyContainerPending = null; return; }
+        if (WorldModal || SheetOpen) return;
+        _identifyContainerPending = null;
+        OpenContainerContents(contents.Target);
+        LastIdentifyContentsForSelfTest = (contents.Target.Entity, ContentsWindow);
+    }
+
     private void TakeIdentifySheet()
     {
+        TakeIdentifyWindows();
         if (_identifySheetPending is not { } pending) return;
         if (!ReferenceEquals(pending.Session, _areaSession) || !SheetActive) { _identifySheetPending = null; return; }
         if (WorldModal || SheetOpen) return;

@@ -541,6 +541,8 @@ public partial class TerrainCanvas
     {
         _area = null; _areaFrames = null; _areaActorPlacement = null; _areaIndex = null; _areaFlat = Array.Empty<AreaDrawCommand>(); _areaAmbient = null; _areaWallFades = null; _areaHidden = null; _areaMoving = null; _areaMovingKeys = new HashSet<AreaObjectKey?>(); _areaAbsent = null; _areaRoofs = null; _areaCoveredTiles = null; _areaCovered = null; DisposeAreaLattice(); DisposeAreaCarried(); _areaCarriedNow = null; _areaCarriedBinding = null;
         _areaView = null; _areaUpright = null; _areaActive = 0;
+        // ARC-RENDER-1355: the hover ring's frames live in the repository of the scene just cleared; the viewer sets the ring again from the next scene's own repository.
+        _areaRing = null;
         foreach (var item in _areaItems) { item.FrameTexture = null; RemoveChild(item); item.Free(); }
         _areaItems.Clear(); AreaVisibleCount = 0; AreaVisibleCommands = Array.Empty<AreaDrawCommand>(); AreaVisibleCovers = AreaVisibleCovers.None;
         _areaMappings.Clear(); // after the items stopped sampling the rows

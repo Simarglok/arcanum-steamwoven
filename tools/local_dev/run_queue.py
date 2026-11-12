@@ -16,19 +16,21 @@ While lanes still use the retired `lockf /tmp/arcanum-godot-window.lock` rule, a
 """
 from __future__ import annotations
 
+import ctypes
 import errno
 import fcntl
 import json
 import math
 import os
 from pathlib import Path
+import re
 import signal
 import subprocess
 import sys
 import time
 from typing import Any, Callable, Sequence
 
-from . import config, run_log, start_check
+from . import config, menubar, run_log, start_check
 
 SCHEMA = "arcanum-run-queue-v1"
 KINDS = ("window", "headless", "export", "dotnet", "quick")
@@ -87,6 +89,72 @@ def say(message: str) -> None:
     print(f"ARCANUM_QUEUE {message}", file=sys.stderr, flush=True)
 
 
+# ARC-DEV-1344: the pause is a ticket nobody can read. A locked ticket file a wrapper cannot read (another version's format)
+# counts as a running export, which blocks everything (tickets() below, and the same rule since ARC-DEV-033), so the pause
+# is one such file held by a small `lockf` process: every wrapper of every checkout, old ones too, waits behind it, and the
+# runs already running finish. Resume removes the file; the holder notices within a second and ends, and a crash of the
+# holder (or a reboot) frees the lock, so a pause never outlives the machine's processes.
+PAUSE_NAME = "t-pause.json"
+PAUSE_SCHEMA = "arcanum-run-queue-pause-v1"  # not SCHEMA: that is what makes the ticket unreadable to the queue
+LOCKF = "/usr/bin/lockf"
+HOLDER_SCRIPT = 'while [ -e "$0" ] || [ -e "$1" ]; do sleep 1; done'  # $0 the file being made, $1 its final name (a rename keeps one)
+
+
+def pause_file() -> Path:
+    return folder() / PAUSE_NAME
+
+
+def holder_command(hidden: Path, final: Path) -> list[str]:
+    return [LOCKF, "-k", str(hidden), "/bin/sh", "-c", HOLDER_SCRIPT, str(hidden), str(final)]
+
+
+def pause_state() -> dict[str, Any] | None:
+    """The pause ticket's content ({"since": epoch seconds, "by": who}) while the queue is paused, else None. A pause
+    file nobody holds is stale (the queue removes it like any dead ticket), so it does not pause."""
+    path = pause_file()
+    if not _locked(path):
+        return None
+    try:
+        value = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def set_paused(on: bool, by: str = "cli") -> bool:
+    """Pause or resume; True when the state changed. While paused no waiting run starts (running runs finish, nested runs
+    are not queued): a waiter checks the queue every POLL_SECONDS, so a resume starts the next run within that. Raises
+    OSError when the holder cannot be started."""
+    base = _open_folder()
+    path = base / PAUSE_NAME
+    if not on:
+        was = pause_state() is not None
+        path.unlink(missing_ok=True)  # also a stale file nobody holds
+        return was
+    if pause_state() is not None:
+        return False
+    hidden = base / f".pause-{os.getpid()}"  # visible to the queue only once it is locked, like any ticket
+    hidden.write_text(json.dumps({"schema": PAUSE_SCHEMA, "since": time.time(), "by": by}))
+    os.chmod(hidden, 0o600)
+    holder = subprocess.Popen(holder_command(hidden, path), start_new_session=True, stdin=subprocess.DEVNULL,
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+    try:
+        deadline = time.monotonic() + 5.0
+        while not _locked(hidden):
+            if holder.poll() is not None or time.monotonic() > deadline:
+                raise OSError("the pause could not be held (is /usr/bin/lockf there?)")
+            time.sleep(0.02)
+        os.replace(hidden, path)
+    except BaseException:  # never leave a holder looping on a file nobody will name (it ends when the file is gone)
+        hidden.unlink(missing_ok=True)
+        if holder.poll() is None:
+            holder.kill()
+            holder.wait()
+        raise
+    holder.returncode = 0  # it outlives this process on purpose: no "still running" warning when the Popen object goes
+    return True
+
+
 def _open_folder() -> Path:
     path = folder()
     path.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -117,16 +185,71 @@ def _read_json(path: Path) -> dict[str, Any] | None:
 
 
 _START_CACHE: dict[int, tuple[float, str | None]] = {}
-UNKNOWN = "?"  # ps could not answer: never read as "gone"
+UNKNOWN = "?"  # the start time could not be read: never read as "gone"
 # The same start-time text in every lane, whatever the caller's locale or time zone.
 _PS_ENVIRONMENT = {"LC_ALL": "C", "TZ": "UTC", "PATH": "/bin:/usr/bin"}
+PS_CACHE_SECONDS = 30.0  # the spawning fallback is cached longer: a start time never changes while the pid lives
+PROC_PIDTBSDINFO = 3  # proc_pidinfo flavor of struct proc_bsdinfo (sys/proc_info.h)
+
+
+class _ProcBsdInfo(ctypes.Structure):
+    """struct proc_bsdinfo of macOS (sys/proc_info.h, 136 bytes); only the start time is read."""
+    _fields_ = [("pbi_flags", ctypes.c_uint32), ("pbi_status", ctypes.c_uint32), ("pbi_xstatus", ctypes.c_uint32),
+                ("pbi_pid", ctypes.c_uint32), ("pbi_ppid", ctypes.c_uint32), ("pbi_uid", ctypes.c_uint32),
+                ("pbi_gid", ctypes.c_uint32), ("pbi_ruid", ctypes.c_uint32), ("pbi_rgid", ctypes.c_uint32),
+                ("pbi_svuid", ctypes.c_uint32), ("pbi_svgid", ctypes.c_uint32), ("rfu_1", ctypes.c_uint32),
+                ("pbi_comm", ctypes.c_char * 16), ("pbi_name", ctypes.c_char * 32), ("pbi_nfiles", ctypes.c_uint32),
+                ("pbi_pgid", ctypes.c_uint32), ("pbi_pjobc", ctypes.c_uint32), ("e_tdev", ctypes.c_uint32),
+                ("e_tpgid", ctypes.c_uint32), ("pbi_nice", ctypes.c_int32), ("pbi_start_tvsec", ctypes.c_uint64),
+                ("pbi_start_tvusec", ctypes.c_uint64)]
+
+
+def _load_libproc() -> Any:
+    """The macOS libproc with proc_pidinfo typed, or None where it is not there (the ps fallback then answers)."""
+    if sys.platform != "darwin" or ctypes.sizeof(_ProcBsdInfo) != 136:
+        return None
+    try:
+        lib = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+        lib.proc_pidinfo.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_int]
+        lib.proc_pidinfo.restype = ctypes.c_int
+    except (OSError, AttributeError):
+        return None
+    return lib
+
+
+_LIBPROC = _load_libproc()
+
+
+_DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def _start_text(seconds: int) -> str:
+    """The text `ps -o lstart=` prints in the C locale and UTC (`Thu Nov 12 17:07:19 2026`, day padded by a space)."""
+    moment = time.gmtime(seconds)  # fixed English names: strftime would follow a locale the importing process set
+    return (f"{_DAYS[moment.tm_wday]} {_MONTHS[moment.tm_mon - 1]} {moment.tm_mday:2d} "
+            f"{moment.tm_hour:02d}:{moment.tm_min:02d}:{moment.tm_sec:02d} {moment.tm_year}")
+
+
+def _process_start_libproc(pid: int) -> str | None:
+    """The start time through proc_pidinfo, no process spawned: None when the pid is gone, UNKNOWN when the kernel
+    would not tell (another user's process)."""
+    info = _ProcBsdInfo()
+    ctypes.set_errno(0)
+    size = _LIBPROC.proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, ctypes.byref(info), ctypes.sizeof(info))
+    if size == ctypes.sizeof(info) and info.pbi_pid == pid and info.pbi_start_tvsec:
+        return _start_text(int(info.pbi_start_tvsec))
+    return None if ctypes.get_errno() == errno.ESRCH else UNKNOWN
 
 
 def _process_start(pid: int) -> str | None:
-    """The process's start time (`ps -o lstart` in the C locale and UTC), cached for 5 s; None when ps says it is
-    gone, UNKNOWN when ps failed."""
+    """The process's start time as `ps -o lstart` prints it in the C locale and UTC; None when the process is gone,
+    UNKNOWN when it could not be read. ARC-DEV-1401: read through libproc, so the queue spawns no process; only where
+    libproc is missing does `ps` answer, cached for PS_CACHE_SECONDS."""
+    if _LIBPROC is not None:
+        return _process_start_libproc(pid)
     cached = _START_CACHE.get(pid)
-    if cached and time.monotonic() - cached[0] < 5:
+    if cached and time.monotonic() - cached[0] < PS_CACHE_SECONDS:
         return cached[1]
     try:
         completed = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True, timeout=5,
@@ -135,6 +258,8 @@ def _process_start(pid: int) -> str | None:
         return UNKNOWN
     value = completed.stdout.strip() or (None if completed.returncode == 1 else UNKNOWN)
     if value is not UNKNOWN:
+        if len(_START_CACHE) > 256:
+            _START_CACHE.clear()
         _START_CACHE[pid] = (time.monotonic(), value)
     return value
 
@@ -215,7 +340,7 @@ def tickets(prune: bool = True) -> list[tuple[Path, dict[str, Any]]]:
                 seq = path.stem[2:]
                 result.append((path, {"schema": SCHEMA, "seq": int(seq) if seq.isascii() and seq.isdigit() else 0,
                                       "kind": "export", "label": "unreadable ticket", "startedAt": now, "enqueuedAt": now,
-                                      "priority": FRONT}))
+                                      "priority": FRONT, **({"paused": True} if path.name == PAUSE_NAME else {})}))
             elif prune:
                 _unlink(path)
         elif _live(path, ticket) and not (prune and _expired(ticket, now)):
@@ -463,9 +588,45 @@ def blocker(mine: dict[str, Any], live: Sequence[dict[str, Any]]) -> dict[str, A
     return None
 
 
+TASK_CODE = re.compile(r"ARC-[A-Z]+-[0-9]+")
+
+
+def checkout_branch(checkout: str | None) -> str | None:
+    """The branch a checkout (a worktree too: its `.git` is a file naming its git folder) has now, from its HEAD file; None when
+    detached or unreadable. No process is run."""
+    if not checkout:
+        return None
+    try:
+        dot = Path(checkout) / ".git"
+        git_dir = dot
+        if dot.is_file():
+            text = dot.read_text().strip()
+            if not text.startswith("gitdir:"):
+                return None
+            git_dir = Path(checkout) / text[len("gitdir:"):].strip()  # an absolute path replaces the checkout's
+        head = (git_dir / "HEAD").read_text().strip()
+    except (OSError, ValueError):  # unreadable, binary (UnicodeDecodeError) or a NUL in the path
+        return None
+    return head[len("ref: refs/heads/"):] if head.startswith("ref: refs/heads/") else None
+
+
+def task_code(ticket: dict[str, Any]) -> str | None:
+    """The task code (ARC-<TYPE>-<issue>) a run belongs to: in its label, else in the branch its checkout has now (a
+    ticket of any wrapper version carries a label and a checkout, so none needs a new field)."""
+    found = TASK_CODE.search(str(ticket.get("label") or ""))
+    if found:
+        return found.group()
+    found = TASK_CODE.search(checkout_branch(checkout_of(ticket)) or "")
+    return found.group() if found else None
+
+
 def _describe(ticket: dict[str, Any]) -> str:
+    if ticket.get("paused"):
+        return "queue PAUSED (./arcanum queue --resume)"
     lane = lane_of(ticket)
-    return f"#{ticket['seq']} {ticket['kind']}{'/' + lane if lane else ''} {Path(ticket.get('cwd', '?')).name} \"{ticket.get('label', '')}\""
+    code = task_code(ticket)
+    return (f"#{ticket['seq']} {ticket['kind']}{'/' + lane if lane else ''} {Path(ticket.get('cwd', '?')).name}"
+            f"{' ' + code if code else ''} \"{ticket.get('label', '')}\"")
 
 
 def _write(fd: int, ticket: dict[str, Any]) -> None:
@@ -529,7 +690,8 @@ def _enqueue(kind: str, label: str, command: Sequence[str], priority: int, timeo
 
 def _peers(live: Sequence[dict[str, Any]], own_seq: int) -> int:
     """The other runs of Godot (any lane, quick runs too) that are running now."""
-    return sum(1 for item in live if item["seq"] != own_seq and item.get("startedAt") and item["kind"] in HOLD_KINDS)
+    return sum(1 for item in live if item["seq"] != own_seq and item.get("startedAt") and item["kind"] in HOLD_KINDS
+               and not item.get("paused"))
 
 
 def _load() -> float | None:
@@ -711,6 +873,7 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
             hold()
         return code
     fd, path, ticket = _enqueue(kind, label, command, priority, minutes, seconds)
+    menubar.ensure_running()  # (never raises) ARC-DEV-1344: the menu-bar view of the queue starts with the first run it shows
     log = None
     reason: list[str] = []
     if quiet:
@@ -956,17 +1119,24 @@ def status(history: int = 0) -> list[str]:
     with _QueueLock():
         live = [item for _, item in tickets()]
     now = time.time()
-    if not live:
-        return ["queue empty"]
+    pause = next((ticket for ticket in live if ticket.get("paused")), None)
+    live = [ticket for ticket in live if not ticket.get("paused")]  # the pause is a ticket for the queue, not a run to list
     result = []
+    if pause is not None:
+        state = pause_state() or {}
+        since = state.get("since")
+        result.append("PAUSED: no waiting run starts" + (f" (for {_age(now - since)})" if isinstance(since, (int, float)) else "")
+                      + "; running runs finish; ./arcanum queue --resume")
+    if not live:
+        return [*result, "queue empty"]
     for ticket in live:
         if ticket.get("startedAt"):
             result.append(f"running {_describe(ticket)} for {_age(now - ticket['startedAt'])} pid={ticket.get('childPid')}")
     for ticket in live:
         if not ticket.get("startedAt"):
-            waiting_for = blocker(ticket, live)
-            result.append(f"waiting {_describe(ticket)} for {_age(now - ticket['enqueuedAt'])}"
-                          + (f" behind #{waiting_for['seq']}" if waiting_for else " (starting)"))
+            waiting_for = blocker(ticket, [*live, *([pause] if pause is not None else [])])
+            behind = "" if waiting_for is None else " (paused)" if waiting_for.get("paused") else f" behind #{waiting_for['seq']}"
+            result.append(f"waiting {_describe(ticket)} for {_age(now - ticket['enqueuedAt'])}" + (behind or " (starting)"))
     return result
 
 

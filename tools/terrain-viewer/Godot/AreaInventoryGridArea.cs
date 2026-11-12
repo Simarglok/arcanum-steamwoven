@@ -95,7 +95,7 @@ public partial class AreaInventoryGridArea : Control
     /// <summary>ARC-UI-060: the window's interface mode (IW26): the own window, or a holder's loot or steal window; ARC-UI-064: the barter
     /// window in the barter panel.</summary>
     internal AreaInventoryMode Mode => _barter is not null ? AreaInventoryMode.Barter
-        : _view is { Holder: not null } view ? view.Steal ? AreaInventoryMode.Steal : AreaInventoryMode.Loot : AreaInventoryMode.Own;
+        : _view is { Holder: not null } view ? view.Contents ? AreaInventoryMode.Contents : view.Steal ? AreaInventoryMode.Steal : AreaInventoryMode.Loot : AreaInventoryMode.Own;
 
     /// <summary>ARC-UI-060: the mode the original look draws: the loot or barter frame's while it is drawn, else the own window's.</summary>
     internal AreaInventoryMode LookMode => LootLook || BarterLook ? Mode : AreaInventoryMode.Own;
@@ -303,6 +303,9 @@ public partial class AreaInventoryGridArea : Control
     {
         _arrangeDown = false; _cycleDown = null;
         if (Held is not null || _view is null) return;
+        // ARC-RES-1327 (ledger XR16): the See Contents window (mode 4) is not served by the left press of modes 0 to 3 (0x573850 skips it for modes 4, 5 and 6): nothing is picked, not even by a
+        // spell or an item cursor, and no toggle or Take all is pressed. The arrange button is the button system's (a press on it is served above all).
+        if (Mode == AreaInventoryMode.Contents && !ArrangeAt(frame)) { QueueRedraw(); return; }
         if (TargetPicking)
         {
             // The own window's grid and doll only: the loot, steal and barter looks name their items by their own layouts (not ready for a target).
@@ -676,7 +679,8 @@ public partial class AreaInventoryGridArea : Control
                 HorizontalAlignment.Left, box.Size.X, size, AreaInventoryArtLook.TextColour);
         }
         var over = Held is null ? null : barter is not null ? BarterHit(_pointer / _scale).Icon : LootHit(_pointer / _scale).Icon;
-        foreach (var icon in new[] { AreaInventoryIcon.Use, AreaInventoryIcon.Drop })
+        // ARC-RES-1327 (XR16): the open turns the drop and use boxes off in modes 4, 5 and 6 (0x5727B0), so the See Contents window draws neither.
+        foreach (var icon in Mode == AreaInventoryMode.Contents ? Array.Empty<AreaInventoryIcon>() : new[] { AreaInventoryIcon.Use, AreaInventoryIcon.Drop })
         {
             var (x, y) = AreaInventoryArtLayout.Box(icon);
             Art(barter is not null ? AreaBarterArtLayout.BoxArt(icon, Held, over == icon) : AreaLootArtLayout.BoxArt(icon, Held, over == icon), x, y);

@@ -2,11 +2,12 @@ namespace Arcanum.World;
 
 /// <summary>
 /// ARC-UI-060: the inventory window's interface mode, the open's third argument (0x5727B0, ledger IW26, IW33): the player's own window
-/// (mode 0; modes 5 and 6 draw as it), barter (mode 1), loot (mode 2; mode 4, not traced, draws as it) and steal (mode 3, the loot
-/// window's frame). The viewer opens the own, loot and steal windows in the inventory panel; the barter window is its own panel, whose
-/// original look (ARC-UI-064) draws the same frame in mode 1.
+/// (mode 0; modes 5 and 6 draw as it), barter (mode 1), loot (mode 2) and steal (mode 3, the loot window's frame). The viewer opens the
+/// own, loot and steal windows in the inventory panel; the barter window is its own panel, whose original look (ARC-UI-064) draws the same
+/// frame in mode 1. ARC-RES-1327: <see cref="Contents"/> is mode 4, the container window See Contents opens: the loot window's frame and
+/// image with nothing to move (no press, release or Take all picks anything, ledger XR16) and no drop or use box (0x5727B0 turns them off).
 /// </summary>
-public enum AreaInventoryMode { Own, Barter, Loot, Steal }
+public enum AreaInventoryMode { Own, Barter, Loot, Steal, Contents }
 
 /// <summary>ARC-UI-060: what a left release in the round view does (0x574559..0x5745F8, ledger IW34, IW18).</summary>
 public enum AreaRoundViewRelease

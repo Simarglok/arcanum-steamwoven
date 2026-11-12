@@ -337,15 +337,17 @@ carries out the activations with the session and the cast host.
 4. **The activation** (0x54FCF0, `PcCanActivate`, `PlanItem`, `PlanItemSpell`, `SpellActivates` for 0x57C080; HK1, HK3, HK4).
    Nothing for a dead or unconscious hero. A spell is activated as a press of the spell pane is (SU1–SU3). An item-and-spell entry
    activates the spell with the item as its source when the item is the wielded weapon; any other item is first wielded into the weapon
-   slot (which empties the entry, HK6). A skill-bar button: prowling toggles the concealment (ST1); repair opens the inventory window,
+   slot (which empties the entry, HK6). A skill-bar button (`ActivateSkillButton`, also the skill pane's press, [ARC-UI-1113](#the-skill-pane-in-the-bottom-strip-arc-ui-1113)):
+   prowling toggles the concealment (ST1); pick pocket arms the pick pocket cursor ([ARC-SKILLS-010](pick-pocket-runtime.md), needs the map's AI host);
+   disarm traps arms the disarm cursor ([ARC-SKILLS-1156](trap-state-runtime.md)); repair opens the inventory window,
    whose Repair buttons stand in for the item cursor (RP4). An item entry acts on another item of its prototype first (0x462930,
    `QueryHotkeySameKind`), except a written item that keeps its text: it is used when it can be used and is not thrown, else a weapon or
    armour is worn into its slot (0x550000; the entry's own item, the occupant goes back to the pack), ammunition and gold do nothing and
    any other item is held on the cursor.
 
 The bar's art and its drag and drop are [ARC-UI-027](#the-hotkey-bars-art-and-drag-arc-ui-027); the viewer keeps stand-in keys:
-`Ctrl`+`1`..`0` puts the latest recent action on that entry (the way to put a skill-bar button on the bar while the viewer draws no skill
-bar; the original drags from the bars, not from the recent-action buttons, HK13), `Ctrl`+`Shift`+`1`..`0` empties it, a key `1`..`0` while the inventory window holds an item drops it on the entry, the
+`Ctrl`+`1`..`0` puts the latest recent action on that entry (a stand-in; the original drags from the bars, not from the recent-action buttons, HK13, and since ARC-UI-1113 a right drag
+from the skill pane's button puts a skill-bar button on the bar), `Ctrl`+`Shift`+`1`..`0` empties it, a key `1`..`0` while the inventory window holds an item drops it on the entry, the
 palette's Prowl action is the skill bar's prowling button, and the status line lists the entries. The cast smoke checks the latest recent
 action after its pane presses, `Ctrl`+`1`, the keys `1` and `A` (each opens the spell's cursor), `Ctrl`+`Shift`+`1` and an empty key, and
 the weapon's spell on entry 1 opening the weapon's cursor; marker `ARC-UI-022 native-smoke hotkeys PASS`.
@@ -373,7 +375,7 @@ The bar is drawn on the bottom strip of the [interface bars](../rendering/terrai
    dragged entry is emptied and anything else ends with no change; ARC-UI-087: an item entry's item stays on the game cursor then (HK15, 0x573630),
    thrown from there by a left press in the game view ([terrain viewer](../rendering/terrain-viewer.md#inventory-throw-from-the-game-cursor-arc-ui-063)). A left release goes on with the drag. While an entry is dragged its key skips it and the stand-in keys leave it alone.
 
-The viewer draws no skill bar, so a skill-bar button reaches the bar through `Ctrl`+`1`..`0` only. The cast smoke checks the bar after the
+A skill-bar button reaches the bar by a right drag from the skill pane (ARC-UI-1113) or through `Ctrl`+`1`..`0`. The cast smoke checks the bar after the
 hotkey keys: the slot art, a right drag of the pane's spell onto slot 2 and its icon, its key 3 skipping it while it is dragged and a drop on its own slot, a click on slot 2 opening the spell's cursor, a drag
 from slot 2 to slot 6 and one off the bar, an item entry's name and count, and the latest recent action's button (icon, click, sounds);
 marker `ARC-UI-027 native-smoke hotkey-bar PASS`.
@@ -499,6 +501,37 @@ which buttons show, `AreaSpellBarView` draws it and `TerrainViewerSpellBar.cs` w
    rank in; a click on the spell's college selects it (drawn down, 3000 and 3001) and shows its spells with their icons; entering the
    spell's icon names it; a click on it activates it and makes it the latest recent action; the pointer above the strip hides the pane
    (marker `ARC-UI-053 native-smoke spell-pane PASS`). The drag onto slot 2 starts from the strip's icon.
+
+## The skill pane in the bottom strip (ARC-UI-1113)
+
+While the interface bars show, the skill pane (`K` or the Skills button) is the original's bar mode 2 in the bottom strip's message window
+(ledger [SKP1–SKP7](../research/ledger/spell-runs.md#skill-pane-arc-ui-1113)); `SkillPaneRules` (Presentation) holds the layout,
+`AreaSkillBarView` draws it and `TerrainViewerSkillBar.cs` wires it (the key `K` through `RouteSkillKey`).
+
+1. **Look** (SKP1, SKP2). The mode's background art 274 at (196, 492), like the spell pane's, and the skill bar's four buttons on one row
+   at y 514, x 288, 351, 414 and 477, each with the hotkey bar's skill icon (art 279 prowling, 280 pick pocket, 282 disarm traps, 278
+   repair; their frames are the bar's push button frames: down while held over the button, lit under the pointer). A hover's name is
+   written over the background in the mode's text area (208, 567, 387 × 18). A button whose art does not read is not shown.
+2. **Presses** (SKP3, SKP4). Each button plays 3000 on the press and 3001 on the release over it. The release makes the skill-bar button the
+   latest recent action (the hotkey bar's `A` key and recent-action buttons) and then runs the press the hotkey bar's skill entries run
+   (`TerrainViewerApp.ActivateSkillButton`): prowling toggles the hero's concealment, pick pocket and disarm traps arm the skill cursor
+   (interface mode 2, each replacing the other; the next left press on an NPC or a trapped object runs the skill), repair opens the
+   inventory window. A hero who is dead or unconscious does nothing (the recent action is still recorded, as in the original).
+3. **Drag** (SKP7). A right press on a button starts the hotkey drag of a skill-bar entry; a release over a slot of the hotkey bar puts it there.
+4. **Names** (SKP5). The pointer entering a button writes its name (`skill_ui.mes` 100 + button) in the mode's text area; leaving keeps it.
+5. **Key and window** (SKP6). `K`, acting on its release (over the windows the bars stay over, as the button does), toggles the Skills button without its sound; the weapon's spells pane (mode 8) goes with the spell pane; a press on a pane button does nothing while another combatant acts in a turn-based round (GB12); Spells goes up when Skills comes
+   down and the other way round (the M key and the Spells button take the window from the skill pane). As with the spell pane, the pane
+   shows only while it holds the message window: the pointer above the strip gives the window to the log, a move back over the strip
+   gives it back (ML8); the toggle stays down meanwhile.
+6. **Not built.** The buttons' lit art the original sets from game events (0x556A90); the follower who acts instead of the hero for
+   pick pocket or disarm traps (0x57A620, E8-e5); no walk to the target before the skill runs (the original's press builds the invocation at once).
+7. **Smoke.** Inside the hotkey-bar smoke (cast stage): `K` shows the pane in the strip (Skills down, Spells up) with its background and the
+   four buttons' arts; entering each button names it; a click on each plays 3000 and 3001, becomes the latest recent action and runs the
+   button's press (prowling toggles concealment, pick pocket and disarm traps arm their cursor or say why not, repair opens the inventory);
+   a right drag from disarm traps puts it on slot 5; the Spells pane takes the window back; the pointer above the strip gives it to the log
+   (marker `ARC-UI-1113 native-smoke skill-pane PASS`). The `disarm` stage checks the pick pocket button arms the pick pocket cursor over
+   an AI host. `ARC_AREA_SKILLPANE_CAPTURE=PREFIX` saves the strip before and after as `PREFIX-before.png`, `-after.png` and `-hover.png` for a
+   graphics report (never committed).
 
 ## Endings of a critter's runs (ARC-DEV-301)
 
@@ -772,7 +805,7 @@ executable reads [XR1–XR5](../research/ledger/spell-runs.md#magic-audit-execut
   (the wrappers 0x4EE4C0, 0x4EE430, 0x4EE3A0 test the local player; a single-player game does no more), so an NPC caster's Identify has no effect and is no "not ready" line. For the hero the host logs one
   answer by the target's object type: `IdentifyCritter` (a PC or NPC: the original opens the read-only NPC sheet, XR2), `IdentifyContainer` (the container's inventory in window mode 4 with no lock, jam or
   magically-held test, XR3), `IdentifyItem` (any other type: the item description, the true one when the item is identified, XR4). The viewer shows each as a line in the message log
-  (`AreaSpellCasting.Line`); since ARC-UI-1127 (E8-g) `IdentifyCritter` for an NPC also opens its read-only character sheet (`TakeIdentifyEvent`, queued until nothing else owns input, the same sheet as the dialog's "show your abilities", [ARC-UI-088](../rendering/terrain-viewer.md)); the hero as the target keeps the line (its sheet is the C key). The container's inventory window and the item description window, and what a press in mode 4 may move (not read), are E8's still.
+  (`AreaSpellCasting.Line`); since ARC-UI-1127 (E8-g) `IdentifyCritter` for an NPC also opens its read-only character sheet (`TakeIdentifyEvent`, queued until nothing else owns input, the same sheet as the dialog's "show your abilities", [ARC-UI-088](../rendering/terrain-viewer.md)); the hero as the target keeps the line (its sheet is the C key). Since ARC-RES-1327 (E8-g, ledger [XR16](../research/ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)) `IdentifyContainer` opens the container's inventory window in mode 4 and `IdentifyItem` for an item (types 5 to 14) draws the item window of the hover window, both once nothing else owns input (see below).
 - **Divine Magick's identified flag (0x454A10, XR4, XR5).** Spell 9 (area `Tgt_Obj_Inven`) sets `OIF_IDENTIFIED` (`obj_f_item_flags` 0x57, bit 0x1) on its item before its Identify. In the original it is
   a plain write: no side effect for item flags, no reference count, and nothing in the run reads it back. The session keeps it as the **identification mark** that a barter window already sets
   (`GameSessionOwner.MarkItemIdentified`, `QueryItemIdentified`, saved in the inventory section: no schema step), so every reader of that mark (the name, the item window's lines, the worth in a barter, the
@@ -781,6 +814,13 @@ executable reads [XR1–XR5](../research/ledger/spell-runs.md#magic-audit-execut
 - **Census (MA-0).** Records 6 and 7 leave the not-ready list on both census targets; record 9 keeps its `ObjFlag` on the census's critter targets (its target is an item).
 
 **Not ready.** The container's inventory window (mode 4) and the item description window (E8); the multiplayer packets (kinds 7, 8, 10); an inventory item of a loot, steal or barter window as a target ([below](#an-inventory-item-as-a-spell-target-arc-magic-1128)).
+
+### The container and item windows of Identify (ARC-RES-1327)
+
+Issue #1327 (E8-g), on the executable reads [XR3, XR4 and XR16](../research/ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357). Code: `AreaContainerLoot.Contents`, `AreaInventoryMode.Contents`, `AreaInventoryView.Contents`, `TerrainViewerAreaContainerLoot.cs` (`OpenContainerContents`, `CloseContainer`), `TerrainViewerAreaNpcSheet.cs` (`TakeIdentifyEvent`, `TakeIdentifyWindows`), `TerrainViewerHotkeyHover.cs` (`DescribeItem`), `TerrainViewerAreaHoverWindow.cs` (`DescribeObject`, ARC-UI-1411); tests `AreaContainerLootTests`, `AreaLootArtTests`, `AreaInventoryArtTests`; the item-aim smoke stage (steps 9 to 12; steps 11 and 12 are ARC-UI-1411).
+
+- **See Contents (`IdentifyContainer`, window mode 4).** The viewer queues the container (the cast host's id names its map row, which names its inventory target) and opens the window once nothing else owns input (`WorldModal`, an open sheet). The open runs **no test**: no open attempt (a locked, jammed or magically held container shows its items), no use or unlock script, no frame write and no sound; a container with flag 0x200 the session has not generated is generated first (`GenerateContainerOnce`; a restock host that is not ready refuses the open, as the loot open does). The window is the loot window's frame on interface mode 10 with `AreaInventoryView.Contents`: the other party's items are drawn and described on hover, but a press, a release or a right release lifts or moves nothing in it (the hero's own grid included), it has no Take all button and no drop or use box, the diagnostic window disables its action buttons, and the arrange button, the round view's close and Esc work. The open holds the items' decay (ID6), schedules the container's restock (RK2) and the close counts as a loot and runs the junk-pile check without closing the lid (LW3). A junk pile the session made and a container of another map are not targets (no map row here): the viewer logs it and shows no window.
+- **The item description (`IdentifyItem`, types 5 to 14).** The viewer queues the item and then runs the hover window's description for it (`DescribeItem`: the examine script first, then the item window in the message window, its name in a pane's text area in a pane mode): the true description when the item is identified (`QueryItemIdentified`: Divine Magick has marked it before its Identify, XR4), else the unknown one. The item must be one the viewer resolves: a hero item, one in the open window's grid or doll or the barter panel, and (ARC-UI-1411) an item with a map row (one lying on the map or held by an NPC or container; its row gives the description; a made item the hero dropped has no row and is not drawn). The original's wrapper describes any object, so a **portal or scenery** an Identify names (`IdentifyItem` with type 1 or 3) draws the object's hover window too (ARC-UI-1411: `DescribeObject`, the same builder as the pointer's window: examine script first, then the image and name, the fourth line, the town-map mark of a scenery; with no pointer on the object the window stays until the message window shows something else, as the item description does; a pane mode shows the name only). An Identify on another object type (a trap, a projectile) keeps the log line. The open of the window does not write the container's arrangement the original's open does (ledger XR16 (g), issue #1410).
 
 ### An inventory item as a spell target (ARC-MAGIC-1128)
 
@@ -854,7 +894,7 @@ The session keeps the NPC flags (`obj_f_npc_flags`, field 0x118) a spell or the 
   the sounds (sound 0, the drop's item sound, SN31), the item use and the cursor hold of an item entry, the pick-pocket and disarm-traps
   buttons, the stunned or paralysed test (critter flags 0x20, 0x40) and the conditions 0x566EF0 and 0x541680 (ARC-UI-022).
 - The spell pane (ARC-UI-053): the selected college in the save, the weapon button at (161, 443) and the weapon's pane (bar mode 8:
-  background 564, five slots at y 542) on the strip, the skills pane (bar mode 2), the compact interface's pane, a spell's icon beyond
+  background 564, five slots at y 542) on the strip, the compact interface's pane, a spell's icon beyond
   spell 79.
 - The hotkey bar (ARC-UI-027, ARC-UI-032, ARC-UI-035): a spell's icon beyond spell 79 (the item window's lines after the name are built
   since ARC-UI-108, [OH12–OH18](../research/ledger/ui-audio.md#hovered-object-arc-ui-057)), the turn-based action-point preview
