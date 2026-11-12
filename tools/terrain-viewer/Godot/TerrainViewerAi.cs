@@ -304,8 +304,8 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-SCRIPT-047: opens the conversation a heartbeat script asked for (the NPC's talk with the PC, 1100) after the event
     /// pump that ran the tick. The run is applied already (the heartbeat removed itself), so a talk that cannot open yet (a conversation
-    /// or a window is open, the hero is under attack) stays pending and opens once it can: a project choice, the original's behaviour in
-    /// those states is not read (audit U5). One for another map than the shown one, or left when the AI host retires, is dropped.</summary>
+    /// or a panel outside the stack is open, the hero is under attack) stays pending and opens once it can: a project choice, the original's
+    /// behaviour in those states is not read (audit U5). An open window does not hold it (ARC-UI-1125: the dialog opener pops the top mode). One for another map than the shown one, or left when the AI host retires, is dropped.</summary>
     private void OpenHeartbeatConversation()
     {
         if (_heartbeatDialog is not { } talk) return;
@@ -315,7 +315,8 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-SCRIPT-047 heartbeat-talk dropped: the NPC {talk.Npc?.Code} is not on the shown map");
             return;
         }
-        if (ConversationOpen || WorldModal || !LeaveCombatModeForDialog()) return;
+        // ARC-UI-1125: an open window does not hold it any more (the dialog opener replaces it); the panels outside the stack and a dialog still do.
+        if (ConversationOpen || ProgrammaticOpenBlocked || !LeaveCombatModeForDialog()) return;
         _heartbeatDialog = null;
         BeginScriptedConversation(talk);
     }

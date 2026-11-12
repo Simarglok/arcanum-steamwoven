@@ -126,4 +126,59 @@ public sealed class HolderSlotsSavedTests
         Assert.AreEqual(GameSessionDisposition.Changed, restored.DestroyItem(restored.Version, "small", new ItemCondition(10, 0, 0, false)).Disposition);
         Assert.IsFalse(GameSessionSnapshotCodec.Encode(restored.Capture()).Contains("\"holder\":\"shop\"", StringComparison.Ordinal), "a holder row without items is not kept");
     }
+
+    // ARC-RES-1466: a restored save may hold a slot that lies in a container's grid but not in an NPC's; the seed names the holder's kind, so the attach refuses it.
+    [TestMethod]
+    public void A_saved_slot_outside_the_grid_of_the_holders_kind_is_refused_when_the_seed_is_attached()
+    {
+        using var owner = Owner();
+        owner.ArrangeHolderGrid(owner.Version, "chest");
+        owner.ArrangeHolderGrid(owner.Version, "shop");
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        const string Shop = "{\"item\":\"small\",\"slot\":1},{\"item\":\"tall\",\"slot\":0}";
+        const string Chest = "{\"item\":\"plank\",\"slot\":30}";
+        StringAssert.Contains(text, Shop);
+        StringAssert.Contains(text, Chest);
+        GameSessionFailure Attach(string changed)
+        {
+            using var restored = Restore(Decode(changed));
+            return restored.AttachMapInventory(Exterior, Seed()).Failure;
+        }
+        Assert.AreEqual(GameSessionFailure.None, Attach(text));
+        // The last cell of each grid is fine, the next one is outside it.
+        Assert.AreEqual(GameSessionFailure.None, Attach(text.Replace(Shop, Shop.Replace("\"slot\":1", "\"slot\":119"))));
+        Assert.AreEqual(GameSessionFailure.None, Attach(text.Replace(Chest, Chest.Replace("\"slot\":30", "\"slot\":959"))));
+        Assert.AreEqual(GameSessionFailure.InventoryMismatch, Attach(text.Replace(Shop, Shop.Replace("\"slot\":1", "\"slot\":120"))));
+        Assert.AreEqual(GameSessionFailure.InventoryMismatch, Attach(text.Replace(Shop, Shop.Replace("\"slot\":1", "\"slot\":959"))));
+        // A slot saved for a holder the attached seed does not list is not checked (the seed names no kind for it).
+        using var damaged = Restore(Decode(text.Replace(Shop, Shop.Replace("\"slot\":1", "\"slot\":120"))));
+        var chestOnly = new SessionMapInventorySeed([Seed().Holders[0]], Seed().Items.Take(3).ToArray());
+        Assert.AreEqual(GameSessionFailure.None, damaged.AttachMapInventory(Exterior, chestOnly).Failure);
+        var before = Slots(damaged, "chest");
+        var holderCount = damaged.QueryMapInventory(Exterior)!.Holders.Count;
+        // A refused attach changes nothing: the earlier seed stays.
+        var refused = damaged.AttachMapInventory(Exterior, Seed());
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InventoryMismatch), (refused.Disposition, refused.Failure));
+        Assert.AreEqual((before, holderCount), (Slots(damaged, "chest"), damaged.QueryMapInventory(Exterior)!.Holders.Count));
+    }
+
+    // ARC-RES-1466: a created critter is an NPC holder of the seed the session adds itself, so its saved slots are checked as an NPC's.
+    [TestMethod]
+    public void A_saved_slot_outside_the_grid_of_a_created_critter_is_refused_when_the_seed_is_attached()
+    {
+        using var owner = Owner();
+        var made = owner.CreateObject(owner.Version, SessionCreatedKind.Critter, 17087, Exterior, new(100, 200)).Object!;
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, Seed()).Failure);
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        const string Empty = "\"holderSlots\":[]";
+        StringAssert.Contains(text, Empty);
+        string Row(int slot) => $"\"holderSlots\":[{{\"holder\":\"{made.Entity}\",\"slots\":[{{\"item\":\"made:1\",\"slot\":{slot}}}]}}]";
+        GameSessionFailure Attach(int slot)
+        {
+            using var restored = Restore(Decode(text.Replace(Empty, Row(slot))));
+            return restored.AttachMapInventory(Exterior, Seed()).Failure;
+        }
+        Assert.AreEqual(GameSessionFailure.None, Attach(119));
+        Assert.AreEqual(GameSessionFailure.InventoryMismatch, Attach(120));
+    }
 }
