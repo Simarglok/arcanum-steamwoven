@@ -265,9 +265,8 @@ without decay, and is picked up and wielded again; at most 12 throws until one h
 heroes barely train throwing, and the session's tests strike with one).
 
 Not ready: a flagged weapon without a projectile art (the original flies the item's own art, PF2; every installed one has an art, so
-the viewer throws only with one), a throw at a tile without a target object (the target-less landing, its hit script and item event), the inventory's
-throw of other items (their scale arc, PF11, is the viewer's since ARC-UI-063), the throw script (none installed), NPC throws (no AI), the struck object's alert
-and the item event 0x800000 at the landing (PF10); a missed throw's scatter is in since
+the viewer throws only with one), the inventory's
+throw of other items (their scale arc, PF11, is the viewer's since ARC-UI-063), the throw script (none installed), NPC throws (no AI), the struck object's alert; a missed throw's scatter is in since
 [ARC-COMBAT-018](#second-projectile-and-scatter-arc-combat-018), boomerangs since [ARC-COMBAT-019](#boomerangs-arc-combat-019).
 
 ## Second projectile and scatter (ARC-COMBAT-018)
@@ -296,8 +295,10 @@ restored: each shot flies as two projectiles on one line, both strike a hit's ta
 heroes have a bow level of 4 and no unspent points, below expert's 9, so that check reports NONE and the two projectiles rest on
 the session's tests.
 
-Not ready: the hit script and item event of a scattered throw's end (PS5, as PF9 and PF10), and what the original's flight does
-when a scatter walks back onto the thrower's own tile (not read; Steamwoven lands the item there at once).
+Since ARC-DEV-140 the end of a scattered throw fires the thrown item's attacks-a-location event on the landing tile (PS5, PF10), so a missed grenade
+explodes where it falls; since ARC-COMBAT-1223 its item script runs at point 7 (the destination's hit point, ledger PS5), not 8 (PF9's range end). A scatter
+back onto the thrower's own tile is the one miss that fires no event: the projectile already stands on its destination, the flight goal pops at its node 3 (0x424D90, GT53)
+and ends without a context, and the item lies on that tile unexploded (Steamwoven lands it there at once, as the original). Not ready: the critical weapon's script 34 at that end.
 
 ## Boomerangs (ARC-COMBAT-019)
 
