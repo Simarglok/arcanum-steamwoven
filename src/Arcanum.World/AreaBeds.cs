@@ -53,6 +53,13 @@ public sealed class AreaBedOccupancy
     /// <summary>The occupant of <paramref name="bed"/> (its critter's entity), or null when it is empty.</summary>
     public string? Occupant(AreaObjectKey bed) => _occupants.GetValueOrDefault(bed);
 
+    /// <summary>The bed <paramref name="sleeper"/> lies in, or null when it lies in none (a sleeper holds at most one bed: <see cref="Seat"/> is asked for one bed per sleeper by every caller).</summary>
+    public AreaObjectKey? BedOf(string sleeper)
+    {
+        foreach (var pair in _occupants) if (pair.Value == sleeper) return pair.Key;
+        return null;
+    }
+
     /// <summary>The seat: false (nothing changed) when the bed is occupied, by anyone, the sleeper included; true once <paramref name="sleeper"/> lies in it.</summary>
     [OriginalFunction(0x45F2D0, OriginalFunctionScope.Partial)]
     public bool Seat(AreaObjectKey bed, string sleeper)

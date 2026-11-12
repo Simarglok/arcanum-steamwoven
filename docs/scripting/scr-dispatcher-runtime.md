@@ -768,6 +768,21 @@ every entry of its sector). Ledger [UF1–UF4](../research/ledger/scripts.md#tow
 - **Tests.** `ScrStoryTimeTests` (the interpreter), `StoryStateTests` (the session's two new writes and the snapshot rule), `AreaUseScriptHostTests` (the viewer host over a real
   session), `AreaStoryScriptAdmissionTests` (the sets and, with `DAT_ROOT`, the 96 installed scripts: S34 admits 52 whole).
 
+## NPC state commands (ARC-SCRIPT-1163, set S36)
+
+`ScrAdmissionSet.S36` is S35 plus nine actions (`NpcStateActions`); the interpreter runs at most S36. Ledger [NS1–NS8](../research/ledger/scripts.md#npc-state-commands-arc-script-1163-e5-a); plan slice E5-a.
+
+- **Disband (22)**, **set and adjust reaction (30, 31)**, the **standpoints (45, 46; extended 140, 141 with a map)** and **change art number (59)** hand one `ScrObjectStateRequest` each to the caller in action order
+  (`Disband`, `SetReaction`, `AdjustReaction`, `SetDayStandpoint`, `SetNightStandpoint`, `ChangeArtNumber`; the extended standpoints carry the catalogue map in `Map`; the standpoint's second word already has the original's
+  sign extension OR-ed in). A disband also removes the leader as the run sees it, so its later following tests read false.
+- **Change script (99)** changes the slot of an attachment point of any object: the run's own attachee and point set the run's own result (as change this script), any other slot keeps its flags and counters, takes the number and is
+  kept in `ScrEffects.SlotWrites` and in the run's slot overlay (a later call-ex reads it). A point beyond 35 ends the dispatch (`CallExPoint`).
+- **The host.** `AreaUseScriptHost` holds eight of them in its use, placed, heartbeat and dying sets (`NpcStateHostActions`, all but change art number): disband is the session's forced leave, the reactions go to `AreaScriptWorld.ScriptReaction`
+  (the viewer wires `AreaAiHost.ScriptReaction`), the standpoints are the session's saved object fields (`SessionNpcStandpoint`) that the AI host's route facts prefer to the row's, the extended map is written by
+  `GameSessionOwner.SetTeleportMap`. Change art number is held by S36 only: no host applies it (limits in NS7).
+- **Tests.** `ScrNpcStateTests` (the interpreter), `AreaNpcStateScriptTests` (the host over a real session), `AreaAiRouteTests` and `AreaAiHostScriptWalkTests` (the AI host's side), `TeleportMapStateTests` (the session's fields and
+  their snapshot), `AreaNpcStateScriptAdmissionTests` (the sets and, with `DAT_ROOT`, the 270 installed scripts: S36 admits 208 whole).
+
 ## Checks
 
 - `tests/Arcanum.Scripting.Tests/Scr/ScrDispatcherTests.cs`: every step of the

@@ -22,8 +22,8 @@ namespace Arcanum.World;
 /// former follower whose teleport map is another map than the shown one is sent home: the step's request goes through the session's change of place
 /// (<see cref="SendHome"/>, caller <see cref="ChangeOfPlaceCaller.NpcWaypoint"/>, flags 0), which the viewer pings once per frame.
 /// ARC-DEV-170 (B06, ledger WS14): the unforced pass is <see cref="RunRoutine"/>, the routine of a leaderless NPC: the same two steps, unforced, start the walk goal 7 to the waypoint or standpoint (<see cref="StartRouteWalk"/>).
-/// Left out (NOT READY, each named in the ledger): the bed lookup, the sleep and the wander of the standpoint step, a sleeper's bed re-seat,
-/// the original's stored NPC flag 0x200, and the saved waypoint
+/// ARC-WORLD-1162 (ledger SWB17–SWB21): the near branch's bed lookup and seat, the NPC flag 0x200 latch and a sleeper's re-seat are <see cref="AreaAiHostBeds"/>.
+/// Left out (NOT READY, each named in the ledger): the wander of the standpoint step, the saved latch, and the saved waypoint
 /// index: the saved schema holds none (S6 may add it), so the index lives here for the host's life and a rebuilt host recovers it from the saved place
 /// when the NPC stands exactly on one of its waypoints (<see cref="RouteIndexOf"/>).
 /// </summary>
@@ -65,6 +65,9 @@ public sealed partial class AreaAiHost
         // 0x45F6D0 (WS3): the teleport map is written with the open map while it is 0, also when the step then ends.
         var written = step.TeleportMapSet is { } open ? WriteTeleportMap(npc, open) : null;
         var what = waypoints ? "waypoint" : "standpoint";
+        // ARC-WORLD-1162 (SWB21): the far branch of the standpoint step clears NPC flag 0x200 before it relocates or walks the NPC.
+        if (!waypoints && step.Outcome is NpcRouteOutcome.Relocate or NpcRouteOutcome.RequestTeleport or NpcRouteOutcome.StartWalk) _arrived.Remove(npc);
+        var bed = BedStep(npc, step, route: RouteOf(npc));
         switch (step.Outcome)
         {
             case NpcRouteOutcome.Relocate:
@@ -83,6 +86,7 @@ public sealed partial class AreaAiHost
                 break;
         }
         if (written is not null) Trace(npc).Route += $" [teleport map {written}]";
+        if (bed is not null) Trace(npc).Route += $" [bed: {bed}]";
         return step.Answer;
     }
 
@@ -319,7 +323,14 @@ public sealed partial class AreaAiHost
         // ARC-DEV-116 (FM10): the teleport map is the session's; the row's own (field 243 of the stored object, 0 in every row of the installed maps) is the baseline.
         return new(Sleeping(npc), Hidden(npc), Leader(npc) is not null, _session.QueryClockSnapshot().Hour, route.NpcFlags, _session.QueryTeleportMap(npc) ?? route.TeleportMap, _scene.RuntimeMap,
             new((uint)cell.X, (uint)cell.Y), [.. route.Waypoints.Select(w => new RouteLocation(w.X, w.Y))], RouteIndex(npc, route),
-            new(route.StandpointDay.X, route.StandpointDay.Y), new(route.StandpointNight.X, route.StandpointNight.Y));
+            // ARC-SCRIPT-1163 (NS3): a script's set standpoint is the session's (the field is saved with the object), over the row's.
+            Standpoint(npc, route, day: true), Standpoint(npc, route, day: false));
+    }
+
+    private RouteLocation Standpoint(string npc, AreaNpcRoute route, bool day)
+    {
+        var stand = AreaUseScriptHost.Standpoint(_session, _scene.RuntimeMap, npc, day) ?? (day ? route.StandpointDay : route.StandpointNight);
+        return new(stand.X, stand.Y);
     }
 
     // The original's relocation (0x424070 at priority 4, then 0x43E770 with no offset): the run ends and the NPC stands on the target. A mover that

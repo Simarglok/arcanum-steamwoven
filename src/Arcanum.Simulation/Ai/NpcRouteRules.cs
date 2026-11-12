@@ -43,10 +43,10 @@ public enum NpcRouteOutcome
     /// <summary>The waypoint list's stored index lies outside the list: the original reads the sparse array's answer for an absent element, which is
     /// not read here, so the step does nothing and answers 0 (NOT READY; real data has no such row).</summary>
     IndexOutsideList,
-    /// <summary>A sleeping NPC: the original's bed re-seat (0x4AD0B0) runs and the step answers 1; not implemented here, so nothing moves.</summary>
+    /// <summary>A sleeping NPC: the step answers 1 and moves nothing. <see cref="NpcRouteStep.Reseat"/> says the original's bed re-seat (0x4AD0B0) ran (the host wakes the sleeper that lies in a bed at one of its standpoints, ARC-WORLD-1162).</summary>
     Sleeping,
-    /// <summary>A standpoint step with the NPC already within its radius: the original sets NPC flag 0x200, looks for a bed at the standpoint and
-    /// starts a wander (0x435E60 or 0x436040) for a wanderer; not implemented here, so nothing moves.</summary>
+    /// <summary>A standpoint step with the NPC already within its radius: the original sets NPC flag 0x200, looks for a bed at the standpoint (<see cref="NpcRouteStep.Standpoint"/>, the host's part, ARC-WORLD-1162) and
+    /// starts a wander (0x435E60 or 0x436040) for a wanderer (not implemented here); nothing moves.</summary>
     AtStandpoint,
     /// <summary>The NPC's teleport map is the open map: its animations are interrupted (priority 4) and it is relocated onto <see cref="NpcRouteStep.Target"/>.</summary>
     Relocate,
@@ -66,7 +66,9 @@ public enum NpcRouteOutcome
 /// <param name="NewWaypointIndex">The index the step stored in field 0x120 (null when it did not write one).</param>
 /// <param name="TeleportMapSet">The value the step wrote into field 243 (the open map, while the field was 0); null when it did not write.</param>
 /// <param name="Mode">A <see cref="NpcRouteOutcome.StartWalk"/>'s mode: 3 for a waypoint, 1 for a standpoint (0 for every other outcome).</param>
-public sealed record NpcRouteStep(NpcRouteOutcome Outcome, bool Answer, RouteLocation? Target, int TeleportMap, int? NewWaypointIndex, int? TeleportMapSet, int Mode = 0);
+/// <param name="Reseat">ARC-WORLD-1162 (SWB17, SWB18): the step took a sleeping NPC over through the bed re-seat (0x4AD0B0): a waypoint step of a sleeper, or a standpoint step of a sleeper farther than its radius from the current standpoint. The host wakes it when it lies in a bed at one of its standpoints.</param>
+/// <param name="Standpoint">ARC-WORLD-1162 (SWB21): the current standpoint of an <see cref="NpcRouteOutcome.AtStandpoint"/> step (null for every other outcome): the tile the bed is looked for on.</param>
+public sealed record NpcRouteStep(NpcRouteOutcome Outcome, bool Answer, RouteLocation? Target, int TeleportMap, int? NewWaypointIndex, int? TeleportMapSet, int Mode = 0, bool Reseat = false, RouteLocation? Standpoint = null);
 
 /// <summary>
 /// ARC-DEV-117 (MIG9 S4b, RL17, ledger WS1–WS12): the waypoint and standpoint steps of a sector fold's first tick, as the original runs them
@@ -115,7 +117,7 @@ public static class NpcRouteRules
         var teleportMap = facts.TeleportMap == 0 ? facts.OpenMap : facts.TeleportMap;
         var flag = IsDay(facts.Hour) ? NpcRouteFlags.WaypointsDay : NpcRouteFlags.WaypointsNight;
         if ((facts.NpcFlags & flag) == 0) return Done(NpcRouteOutcome.NoStep, false, teleportMap, set);
-        if (facts.Sleeping) return Done(NpcRouteOutcome.Sleeping, true, teleportMap, set);
+        if (facts.Sleeping) return Reseated(teleportMap, set);
         var index = facts.WaypointIndex;
         if (index < 0 || index >= count) return Done(NpcRouteOutcome.IndexOutsideList, false, teleportMap, set);
         int? newIndex = null;
@@ -148,8 +150,9 @@ public static class NpcRouteRules
         var stand = IsDay(facts.Hour) ? facts.StandpointDay : facts.StandpointNight;
         var radius = (facts.NpcFlags & (NpcRouteFlags.Wanders | NpcRouteFlags.WandersInDark)) != 0 ? WandererStandpointRadius : StandpointRadius;
         if (Distance(facts.Location, stand) <= radius)
-            return new(facts.Sleeping ? NpcRouteOutcome.Sleeping : NpcRouteOutcome.AtStandpoint, facts.Sleeping || (facts.NpcFlags & (NpcRouteFlags.Wanders | NpcRouteFlags.WandersInDark)) != 0, null, teleportMap, null, set);
-        if (facts.Sleeping) return Done(NpcRouteOutcome.Sleeping, true, teleportMap, set);
+            return new(facts.Sleeping ? NpcRouteOutcome.Sleeping : NpcRouteOutcome.AtStandpoint, facts.Sleeping || (facts.NpcFlags & (NpcRouteFlags.Wanders | NpcRouteFlags.WandersInDark)) != 0, null, teleportMap, null, set,
+                Standpoint: facts.Sleeping ? null : stand);
+        if (facts.Sleeping) return Reseated(teleportMap, set);
         return Place(facts, stand, teleportMap, null, set);
     }
 
@@ -179,7 +182,7 @@ public static class NpcRouteRules
         if (teleportMap != facts.OpenMap) return Done(NpcRouteOutcome.NoStep, false, teleportMap, set);
         var flag = IsDay(facts.Hour) ? NpcRouteFlags.WaypointsDay : NpcRouteFlags.WaypointsNight;
         if ((facts.NpcFlags & flag) == 0) return Done(NpcRouteOutcome.NoStep, false, teleportMap, set);
-        if (facts.Sleeping) return Done(NpcRouteOutcome.Sleeping, true, teleportMap, set);
+        if (facts.Sleeping) return Reseated(teleportMap, set);
         var index = facts.WaypointIndex;
         if (index < 0 || index >= count) return Done(NpcRouteOutcome.IndexOutsideList, false, teleportMap, set);
         int? newIndex = null;
@@ -212,8 +215,8 @@ public static class NpcRouteRules
         var wanders = (facts.NpcFlags & (NpcRouteFlags.Wanders | NpcRouteFlags.WandersInDark)) != 0;
         var radius = wanders ? WandererStandpointRadius : StandpointRadius;
         if (Distance(facts.Location, stand) <= radius)
-            return new(facts.Sleeping ? NpcRouteOutcome.Sleeping : NpcRouteOutcome.AtStandpoint, facts.Sleeping || wanders, null, teleportMap, null, set);
-        if (facts.Sleeping) return Done(NpcRouteOutcome.Sleeping, true, teleportMap, set);
+            return new(facts.Sleeping ? NpcRouteOutcome.Sleeping : NpcRouteOutcome.AtStandpoint, facts.Sleeping || wanders, null, teleportMap, null, set, Standpoint: facts.Sleeping ? null : stand);
+        if (facts.Sleeping) return Reseated(teleportMap, set);
         return new(NpcRouteOutcome.StartWalk, true, stand, teleportMap, null, set, StandpointWalkMode);
     }
 
@@ -222,6 +225,9 @@ public static class NpcRouteRules
         teleportMap == facts.OpenMap
             ? new(NpcRouteOutcome.Relocate, true, target, teleportMap, newIndex, set)
             : new(NpcRouteOutcome.RequestTeleport, true, target, teleportMap, newIndex, set);
+
+    // A sleeper taken over by the step's bed re-seat (0x4AD0B0): the answer is 1 whether the re-seat found its bed or not.
+    private static NpcRouteStep Reseated(int teleportMap, int? set) => new(NpcRouteOutcome.Sleeping, true, null, teleportMap, null, set, Reseat: true);
 
     private static NpcRouteStep Done(NpcRouteOutcome outcome, bool answer, int teleportMap, int? set = null) => new(outcome, answer, null, teleportMap, null, set);
 

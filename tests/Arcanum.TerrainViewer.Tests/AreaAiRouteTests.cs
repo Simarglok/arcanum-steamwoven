@@ -64,7 +64,7 @@ public sealed class AreaAiRouteTests
 
     // ARC-DEV-116: with companion the NPC is a companion of the shown map (a free one unless led), run as the host runs followers.
     internal static Scene Open(AreaObjectRecord row, Func<CellCoord?>? hero = null, RuleMode rules = RuleMode.Steamwoven, bool companion = false, bool led = false,
-        Func<int, bool>? mapListed = null, IAreaHeroPush? heroPush = null)
+        Func<int, bool>? mapListed = null, IAreaHeroPush? heroPush = null, AreaAiBeds? beds = null)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var heroDefinition = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -90,7 +90,7 @@ public sealed class AreaAiRouteTests
         var scene = new AreaAiScene
         {
             RuntimeMap = Map, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = companion ? [] : [new(Entity(0), row, NpcCell)], Combat = combat,
-            HeroCell = hero ?? (() => HeroCell), MapListed = mapListed, Homecomings = [], HeroPush = heroPush,
+            HeroCell = hero ?? (() => HeroCell), MapListed = mapListed, Homecomings = [], HeroPush = heroPush, Beds = beds,
             Companions = companion ? () => [(Entity(0), Key(0), walks.Cells[Entity(0)])] : null,
             Followers = companion ? walks : null,
         };
@@ -115,6 +115,18 @@ public sealed class AreaAiRouteTests
         Assert.AreEqual((scene.Npc, new CellCoord(20, 25)), (place.Entity, place.World));
         Assert.IsNull(scene.Host.RunOf(scene.Npc));
         Assert.AreEqual(new CellCoord(20, 25), scene.Rebuild().Tile(scene.Npc), "a host built again stands the NPC on the recorded place");
+    }
+
+    [TestMethod]
+    public void A_standpoint_a_script_wrote_is_the_one_the_standpoint_step_uses()
+    {
+        // ARC-SCRIPT-1163 (NS3): the session's day and night standpoints (object fields 0x121, 0x122) win over the row's, whichever period the clock is in.
+        var scene = Open(Npc(0, [], 0, (1, 1), (1, 1)));
+        var packed = SessionNpcStandpoint.Pack(20, 25);
+        Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.SetMapChange(scene.Session.Version, new SessionMapId(Map), SessionNpcStandpoint.Key(scene.Npc, day: true), packed).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.SetMapChange(scene.Session.Version, new SessionMapId(Map), SessionNpcStandpoint.Key(scene.Npc, day: false), packed).Disposition);
+        scene.Host.RunStandpoints(scene.Npc);
+        Assert.AreEqual(new CellCoord(20, 25), Cell(scene), scene.Host.TraceOf(scene.Npc)?.Route);
     }
 
     [TestMethod]
