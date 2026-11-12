@@ -19,7 +19,7 @@ public enum AreaOption
     Module, Difficulty, ViolenceFilter, DefaultCombatMode, AutoAttack, AutoSwitchWeapons, AlwaysRun, FollowerSkills,
     Brightness, TextDuration, Floats, FloatSpeed, CombatTaunts,
     Effects, Voice, Music,
-    Rules, EvidenceLog, TestTask, PadScheme, TouchScheme, PromptStyle,
+    Rules, EvidenceLog, TestTask, ControlScheme, PromptStyle,
 }
 
 /// <param name="Max">The original's highest value (a slider's 10 unless its record says otherwise, a list's last message number; a
@@ -78,9 +78,9 @@ public static class AreaOptionTable
     /// <summary>The test task control's values: none, then the test script's tasks 1 to 8 (ARC-GPAD-1376).</summary>
     public const string TestTasks = "project:test tasks";
     public const int TestTaskCount = 8;
-    /// <summary>ARC-GPAD-1374: the controller scheme controls' values (project lists, no game file): <see cref="Arcanum.Input.PadScheme"/>,
-    /// <see cref="Arcanum.Input.TouchScheme"/> and <see cref="Arcanum.Input.PromptStyle"/> in their order.</summary>
-    public const string PadSchemes = "project:pad scheme", TouchSchemes = "project:touch scheme", PromptStyles = "project:prompt style";
+    /// <summary>ARC-GPAD-1374, ARC-GPAD-1463: the controller scheme controls' values (project lists, no game file): <see cref="ControlChoice"/> (the Game
+    /// page's one Controls line) and <see cref="Arcanum.Input.PromptStyle"/> (the Video page's) in their order.</summary>
+    public const string ControlSchemes = "project:control scheme", PromptStyles = "project:prompt style";
 
     /// <summary>Every control of the original's table (0x5CCD78, three pages of eight slots; OP2).</summary>
     public static IReadOnlyList<AreaOptionControl> All { get; } = Array.AsReadOnly(new AreaOptionControl[]
@@ -108,11 +108,11 @@ public static class AreaOptionTable
         new(AreaOption.EvidenceLog, AreaOptionsPage.Game, 9, AreaOptionKind.List, 1, 1, OffOnProject, "evidence log", 0, null, Project: true),
         // The marker of the test script's task (concept §5): the log's task start and end lines, so the summariser can time it.
         new(AreaOption.TestTask, AreaOptionsPage.Game, 10, AreaOptionKind.List, TestTaskCount, TestTaskCount, TestTasks, "test task", 0, null, Project: true),
-        // ARC-GPAD-1374 (concept docs/input/controller-schemes.md §0.1, owner decision 2026-11-12): the controller scheme lines (on the Video page: the Game page's eight slots are full with Rules and the evidence log's two lines), as the removed HD
-        // lines were: a project list each, switching at run time, saved with the game settings. The original mouse and keyboard are not a value.
-        new(AreaOption.PadScheme, AreaOptionsPage.Video, 5, AreaOptionKind.List, 2, 2, PadSchemes, "pad scheme", (int)PadScheme.Off, null, Project: true),
-        new(AreaOption.TouchScheme, AreaOptionsPage.Video, 6, AreaOptionKind.List, 1, 1, TouchSchemes, "touch scheme", (int)TouchScheme.Off, null, Project: true),
-        new(AreaOption.PromptStyle, AreaOptionsPage.Video, 7, AreaOptionKind.List, 4, 4, PromptStyles, "prompt style", (int)Arcanum.Input.PromptStyle.Auto, null, Project: true),
+        // ARC-GPAD-1463 (concept docs/input/controller-schemes.md §0.1, owner request 2026-11-12): one Controls line, the original or one of the three
+        // experimental schemes, switching at run time and saved with the game settings; it takes the Game page's eighth slot. The original mouse and
+        // keyboard are live in every value. ARC-GPAD-1374: the prompt style (the glyph family override) is the Video page's.
+        new(AreaOption.ControlScheme, AreaOptionsPage.Game, 11, AreaOptionKind.List, 3, 3, ControlSchemes, "control scheme", (int)ControlChoice.Original, null, Project: true),
+        new(AreaOption.PromptStyle, AreaOptionsPage.Video, 5, AreaOptionKind.List, 4, 4, PromptStyles, "prompt style", (int)Arcanum.Input.PromptStyle.Auto, null, Project: true),
         // ARC-UI-146: the HD graphics, HD interface and HD pack lines (ARC-UI-089, ARC-UI-095, ARC-DEV-350) moved to the launcher screen (ARC-UI-143).
     });
 
@@ -148,8 +148,7 @@ public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAt
         AreaOption.Rules => (int)Rules,
         AreaOption.EvidenceLog => EvidenceLog ? 1 : 0,
         AreaOption.TestTask => TestTask,
-        AreaOption.PadScheme => (int)Schemes.Pad,
-        AreaOption.TouchScheme => (int)Schemes.Touch,
+        AreaOption.ControlScheme => (int)Schemes.Choice,
         AreaOption.PromptStyle => (int)Schemes.Prompts,
         AreaOption.Floats => Floats,
         AreaOption.FloatSpeed => FloatSpeed,
@@ -318,15 +317,14 @@ public sealed class AreaOptionsTexts
     private static readonly IReadOnlyDictionary<AreaOption, string> ProjectControlLabels = new Dictionary<AreaOption, string>
     {
         [AreaOption.Rules] = "Rules", [AreaOption.EvidenceLog] = "Evidence Log", [AreaOption.TestTask] = "Test Task",
-        [AreaOption.PadScheme] = "Pad scheme", [AreaOption.TouchScheme] = "Touch", [AreaOption.PromptStyle] = "Prompt style",
+        [AreaOption.ControlScheme] = "Controls", [AreaOption.PromptStyle] = "Prompt style",
     };
     private static readonly IReadOnlyDictionary<string, string[]> ProjectControlValues = new Dictionary<string, string[]>(StringComparer.Ordinal)
     {
         [AreaOptionTable.RuleModes] = ["Steamwoven", "Original"],
         [AreaOptionTable.OffOnProject] = ["Off", "On"],
         [AreaOptionTable.TestTasks] = ["None", "Task 1", "Task 2", "Task 3", "Task 4", "Task 5", "Task 6", "Task 7", "Task 8"],
-        [AreaOptionTable.PadSchemes] = ["Off", "A Direct", "B Pointer"],
-        [AreaOptionTable.TouchSchemes] = ["Off", "C Touch+pad"],
+        [AreaOptionTable.ControlSchemes] = ["Original", "A Direct", "B Pointer", "C Touch+pad"],
         [AreaOptionTable.PromptStyles] = ["Auto", "Xbox", "PlayStation", "Nintendo", "Steam Deck"],
     };
     private readonly Func<string, int, string?> _original;

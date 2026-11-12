@@ -57,6 +57,8 @@ public static class PromptStrip
         _ => "Keyboard and mouse"
     };
 
+    private const string OriginalText = "original controls (Options > Controls)";
+
     public static string PadSchemeName(PadScheme scheme) => scheme switch { PadScheme.Direct => "A Direct", PadScheme.Pointer => "B Pointer", _ => "Off" };
 
     public static string TouchSchemeName(TouchScheme scheme) => scheme switch { TouchScheme.TouchPad => "C Touch+pad", _ => "Off" };
@@ -75,14 +77,16 @@ public static class PromptStrip
             case ActiveDevice.Pad:
             {
                 var name = FamilyName(family == GlyphFamily.KeyboardMouse ? GlyphFamily.Xbox : family) + " pad";
-                if (settings.Pad == PadScheme.Off) return name + " - pad scheme Off (Options > Pad scheme)";
+                // Scheme C plays on the pad too (it walks and presses hotkeys with it), so the pad's line names it.
+                var scheme = settings.Pad != PadScheme.Off ? PadSchemeName(settings.Pad) : settings.Touch == TouchScheme.TouchPad ? TouchSchemeName(settings.Touch) : null;
+                if (scheme is null) return name + " - " + OriginalText;
                 var parts = padBindings.Entries.Where(entry => entry.Context == context && (entry.Button != ControllerButtons.None || entry.Trigger != PromptTrigger.None))
                     .Select(entry => PadInputLabel(family == GlyphFamily.KeyboardMouse ? GlyphFamily.Xbox : family, entry) + " " + entry.Text).ToArray();
-                return parts.Length == 0 ? name + " - " + PadSchemeName(settings.Pad) : string.Join(" | ", parts);
+                return parts.Length == 0 ? name + " - " + scheme : string.Join(" | ", parts);
             }
             case ActiveDevice.Touch:
             {
-                if (settings.Touch == TouchScheme.Off) return "Touch - touch scheme Off (Options > Touch)";
+                if (settings.Touch == TouchScheme.Off) return "Touch - " + OriginalText;
                 var parts = touchBindings.Entries.Where(entry => entry.Context == context && entry.Touch is { Length: > 0 }).Select(entry => entry.Touch + " " + entry.Text).ToArray();
                 return parts.Length == 0 ? "Touch - " + TouchSchemeName(settings.Touch) : string.Join(" | ", parts);
             }
