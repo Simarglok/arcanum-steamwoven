@@ -4,20 +4,20 @@ using Arcanum.Simulation.Magic;
 
 namespace Arcanum.Session;
 
-/// <summary>The flag fields a spell's ObjFlag component writes on a critter (ARC-DEV-302): the spell flags (field 20, <c>obj_f_spell_flags</c>, 0x14) and the critter
+/// <summary>The flag fields a spell's ObjFlag component writes on a critter (ARC-DEV-302). ARC-MAGIC-1142 (schema 93): the NPC flags (field 0x118, <c>obj_f_npc_flags</c>) a charm and the attack event write. The spell flags (field 20, <c>obj_f_spell_flags</c>, 0x14) and the critter
 /// flags (field 218, <c>obj_f_critter_flags</c>, 0xDA). ARC-MAGIC-047 (MA-8, schema 90): the second critter flags (field 219, <c>obj_f_critter_flags2</c>, 0xDB) and the blit flags (field 9,
 /// <c>obj_f_blit_flags</c>) the Trait component writes for the elemental bodies and the Dispel reads for the perma-polymorph bit. ARC-DEV-358 (MA-1, schema 88): the object flags (field 19, <c>obj_f_flags</c>, 0x13), which the side effects of the spell flags
 /// (invisible, shrunk, water walking, stoned) and the don't-draw flag write.</summary>
-public enum SessionObjectFlagField { Spell, Critter, Object, Critter2, Blit }
+public enum SessionObjectFlagField { Spell, Critter, Object, Critter2, Blit, Npc }
 
 /// <summary>
 /// ARC-DEV-302 (magic plan MT13 with the flag part of P1): what the session wrote on one critter's flag fields, as a change over the value its map data and prototype store. A bit of
 /// <see cref="SpellSet"/> is on whatever the data says, a bit of <see cref="SpellCleared"/> is off; the same for the critter flags. A bit is in at most one of each pair.
 /// </summary>
 public readonly record struct SessionObjectFlags(int SpellSet, int SpellCleared, int CritterSet, int CritterCleared, int ObjectSet = 0, int ObjectCleared = 0,
-    int Critter2Set = 0, int Critter2Cleared = 0, int BlitSet = 0, int BlitCleared = 0)
+    int Critter2Set = 0, int Critter2Cleared = 0, int BlitSet = 0, int BlitCleared = 0, int NpcSet = 0, int NpcCleared = 0)
 {
-    public bool IsEmpty => (SpellSet | SpellCleared | CritterSet | CritterCleared | ObjectSet | ObjectCleared | Critter2Set | Critter2Cleared | BlitSet | BlitCleared) == 0;
+    public bool IsEmpty => (SpellSet | SpellCleared | CritterSet | CritterCleared | ObjectSet | ObjectCleared | Critter2Set | Critter2Cleared | BlitSet | BlitCleared | NpcSet | NpcCleared) == 0;
 
     /// <summary>The spell flags now, over the value the data stores.</summary>
     public int Spell(int stored) => (stored & ~SpellCleared) | SpellSet;
@@ -34,9 +34,12 @@ public readonly record struct SessionObjectFlags(int SpellSet, int SpellCleared,
     /// <summary>ARC-MAGIC-047: the blit flags (<c>obj_f_blit_flags</c>) now, over the value the data stores (the data's blit flags are not read: callers pass 0).</summary>
     public int Blit(int stored) => (stored & ~BlitCleared) | BlitSet;
 
+    /// <summary>ARC-MAGIC-1142 (schema 93): the NPC flags (<c>obj_f_npc_flags</c>, field 0x118) now, over the value the data stores (the kill-on-sight override a charm adds, the attack event's clear).</summary>
+    public int Npc(int stored) => (stored & ~NpcCleared) | NpcSet;
+
     /// <summary>Whether the change is well formed: no bit both set and cleared in one field.</summary>
     public bool IsValid => (SpellSet & SpellCleared) == 0 && (CritterSet & CritterCleared) == 0 && (ObjectSet & ObjectCleared) == 0
-        && (Critter2Set & Critter2Cleared) == 0 && (BlitSet & BlitCleared) == 0;
+        && (Critter2Set & Critter2Cleared) == 0 && (BlitSet & BlitCleared) == 0 && (NpcSet & NpcCleared) == 0;
 
     /// <summary>ARC-MAGIC-047 (MG10, the plain write 0x406D40 of a whole word): the field now is exactly <paramref name="value"/>, whatever the data and earlier writes held: every bit of it is set or cleared.</summary>
     public SessionObjectFlags Assign(SessionObjectFlagField field, int value) => field switch
@@ -45,6 +48,7 @@ public readonly record struct SessionObjectFlags(int SpellSet, int SpellCleared,
         SessionObjectFlagField.Object => this with { ObjectSet = value, ObjectCleared = ~value },
         SessionObjectFlagField.Critter2 => this with { Critter2Set = value, Critter2Cleared = ~value },
         SessionObjectFlagField.Blit => this with { BlitSet = value, BlitCleared = ~value },
+        SessionObjectFlagField.Npc => this with { NpcSet = value, NpcCleared = ~value },
         _ => this with { CritterSet = value, CritterCleared = ~value },
     };
 
@@ -61,6 +65,7 @@ public readonly record struct SessionObjectFlags(int SpellSet, int SpellCleared,
             SessionObjectFlagField.Object => this with { ObjectSet = (ObjectSet & ~mask) | set, ObjectCleared = (ObjectCleared & ~mask) | cleared },
             SessionObjectFlagField.Critter2 => this with { Critter2Set = (Critter2Set & ~mask) | set, Critter2Cleared = (Critter2Cleared & ~mask) | cleared },
             SessionObjectFlagField.Blit => this with { BlitSet = (BlitSet & ~mask) | set, BlitCleared = (BlitCleared & ~mask) | cleared },
+            SessionObjectFlagField.Npc => this with { NpcSet = (NpcSet & ~mask) | set, NpcCleared = (NpcCleared & ~mask) | cleared },
             _ => this with { CritterSet = (CritterSet & ~mask) | set, CritterCleared = (CritterCleared & ~mask) | cleared },
         };
     }

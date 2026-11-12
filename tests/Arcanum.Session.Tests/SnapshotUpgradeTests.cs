@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":93,\"world\"";
+    private const string Current = "\"schemaVersion\":94,\"world\"";
+    private const string Current93 = "\"schemaVersion\":93,\"world\"";
     private const string Current92 = "\"schemaVersion\":92,\"world\"";
     private const string Current91 = "\"schemaVersion\":91,\"world\"";
     private const string Current90 = "\"schemaVersion\":90,\"world\"";
@@ -229,13 +230,23 @@ public sealed class SnapshotUpgradeTests
         return text.Replace(",\"objectList\":[]", "").Replace(Current92, Current91);
     }
 
-    // ARC-SCRIPT-1279: the schema 92 text of a schema 93 one whose items carry no written field: the inventory section loses its empty list of item fields at its end. A text with a written field has no older literal: no build
-    // before wrote one.
+    // ARC-MAGIC-1142: the schema 92 text of a schema 93 one with no NPC flags change on any written-flags row: each row loses its two zero words at its end. A text whose rows carry such a change has no
+    // older literal: no build before wrote one.
     internal static string Schema92(string text)
+    {
+        text = Schema93(text);
+        StringAssert.Contains(text, Current93);
+        Assert.IsFalse(System.Text.RegularExpressions.Regex.IsMatch(text, "\"npc(Set|Cleared)\":[1-9-]"), "a row with an NPC flags change has no schema 92 text");
+        return text.Replace(",\"npcSet\":0,\"npcCleared\":0}", "}").Replace(Current93, Current92);
+    }
+
+    // ARC-SCRIPT-1279: the schema 93 text of a schema 94 one whose items carry no written field: the inventory section loses its empty list of item fields at its end. A text with a written field has no older literal: no build
+    // before wrote one.
+    internal static string Schema93(string text)
     {
         StringAssert.Contains(text, Current);
         Assert.AreEqual(1, text.Split(NoItemFields).Length - 1, "the inventory section ends with an empty list of item fields");
-        return text.Replace(NoItemFields, "").Replace(Current, Current92);
+        return text.Replace(NoItemFields, "").Replace(Current, Current93);
     }
 
     internal const string NoItemFields = ",\"itemFields\":[]";
@@ -647,6 +658,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":94,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":95,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

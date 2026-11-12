@@ -193,7 +193,7 @@ public readonly record struct SessionItemFieldWrites(int? WrittenStart, bool Dis
     public bool IsEmpty => WrittenStart is null && !DisplayFlipped;
 }
 
-/// <summary>One item's written fields in a save (the <c>inventory</c> section's <c>itemFields</c>, schema 93).</summary>
+/// <summary>One item's written fields in a save (the <c>inventory</c> section's <c>itemFields</c>, schema 94).</summary>
 public sealed record SessionItemFieldRecord(string Entity, SessionItemFieldWrites Writes);
 
 /// <summary>
@@ -261,7 +261,7 @@ public sealed class SessionInventoryState
     /// in ordinal order; for such an NPC they replace the inventory locations of its map data.</summary>
     public IReadOnlyList<SessionNpcWear> NpcWorn { get; }
 
-    /// <summary>ARC-SCRIPT-1279 (schema 93): the item fields scripts wrote (written start, inventory display bit), by entity in ordinal order; no row is empty.</summary>
+    /// <summary>ARC-SCRIPT-1279 (schema 94): the item fields scripts wrote (written start, inventory display bit), by entity in ordinal order; no row is empty.</summary>
     public IReadOnlyList<SessionItemFieldRecord> ItemFields { get; init; } = [];
 
     /// <summary>ARC-SCRIPT-1279: how many items carry written fields at once (two full lists, many times over).</summary>

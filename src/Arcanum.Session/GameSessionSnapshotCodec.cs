@@ -84,7 +84,7 @@ public static partial class GameSessionSnapshotCodec
     // were inventory fields until schema 61 moved them to the objects section (ARC-DEV-091).
     private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights",
         "identified", "lastDiscardedMade", "grid", "generated", "npcWorn", "itemFields"];
-    // ARC-SCRIPT-1279 (schema 93): the item fields scripts wrote.
+    // ARC-SCRIPT-1279 (schema 94): the item fields scripts wrote.
     private static readonly string[] ItemFieldFields = ["entity", "writtenStart", "displayFlipped"];
     private static readonly string[] ObjectsFields = ["junkPiles", "bloodPools", "lastJunkNumber", "lastPoolNumber", "state", "links", "created", "lastCreatedNumber"];
     private static readonly string[] CreatedObjectFields = ["entity", "kind", "prototype", "map", "x", "y", "offsetX", "offsetY", "createdMs", "spellFlags", "summoner", "run"];
@@ -615,7 +615,7 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteEndObject();
             }
             w.WriteEndArray();
-            // ARC-SCRIPT-1279 (schema 93): the item fields scripts wrote, by entity in ordinal order.
+            // ARC-SCRIPT-1279 (schema 94): the item fields scripts wrote, by entity in ordinal order.
             w.WriteStartArray("itemFields");
             foreach (var row in snapshot.Inventory.ItemFields)
             {
