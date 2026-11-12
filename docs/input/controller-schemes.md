@@ -219,7 +219,7 @@ the focus-layer and window slices.
 The Godot-free parts of §0 live in `src/Arcanum.Input` and are tested in `tests/Arcanum.TerrainViewer.Tests`:
 
 - `ControlSchemeSettings` and its codec (§0.1): `Pad` Off/Direct/Pointer, `Touch` Off/TouchPad, `Prompts`
-  Auto/Xbox/PlayStation/Nintendo/SteamDeck; defaults are Off/Off/Auto; `OriginalActive` is always true, so no
+  Auto/Xbox/PlayStation/Nintendo/SteamDeck; defaults are Off/Off/Auto; the lines live in the game's Options window (owner decision 2026-11-12, as the removed HD lines did: one `AreaOption` per line, saved in the game settings; [#1374](https://github.com/Simarglok/arcanum-steamwoven/issues/1374)); `OriginalActive` is always true, so no
   value of the record can switch the original controls off. A corrupt, oversized or foreign-version text gives the
   defaults; an unknown value of one field gives that field's default and keeps the others. The host owns storage.
 - `ActiveDeviceTracker` (§0.2): "last meaningful input wins" over `DeviceSignal`s with the host's own time. Pad:
