@@ -51,7 +51,7 @@ public partial class TerrainViewerApp
         if (_canvas is null) return;
         // A new map (or a reloaded one) decides again even for an equal key.
         if (!ReferenceEquals(_ringArea, _readyArea)) { _ringArea = _readyArea; _ringTarget = null; }
-        if (_hoverKey is not { } key || _readyArea is null || _readyMode != TerrainViewerMode.Area || _areaSession is null
+        if (HoveredKeyNow is not { } key || _readyArea is null || _readyMode != TerrainViewerMode.Area || _areaSession is null
             || _hoverIndex is not { } index || !index.Contains(key) || !AreaHoverRingRules.Applies(index.Row(key).Type)
             || _areaSession.QueryHero() is null)
         {
