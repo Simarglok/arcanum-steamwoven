@@ -417,7 +417,7 @@ before it. It replaces the earlier
     ./arcanum run --kind window|headless|export|dotnet|quick [--estimate SEC] [--timeout MIN] [--label TEXT] [--expect REGEX] [--start-within SEC] [--verbose] -- COMMAND [ARGS...]
     ./arcanum queue                 # the runs holding a place, then the waiters in order
     ./arcanum queue --history N     # the last N finished runs: waited, ran, exit
-    ./arcanum queue --pause         # no waiting run starts (running ones finish) until --resume (ARC-DEV-1344)
+    ./arcanum queue --pause         # no waiting run starts (running ones finish), for every checkout, until --resume (ARC-DEV-1344)
     ./arcanum queue --resume
     ./arcanum queue --app           # start the menu-bar view of the queue now (a queued run starts it by itself)
 
@@ -484,12 +484,17 @@ display and reads the queue's own files, so it works from whichever checkout sta
   one core, from the change of the tree's accumulated CPU time, so it shows from the second sample on) and RAM (resident set)
   of its command's process tree: the process group the queue started it in plus descendants that left it. The header line shows
   the Mac's load average, cores and RAM in use (active, wired and compressed pages). Nothing is sampled while the menu is closed.
-- **Pause.** The menu's `Pause` item and `./arcanum queue --pause` / `--resume` set and clear one flag, the file `paused` in the queue
-  folder. While it is set a waiter that would start waits instead (`ARCANUM_QUEUE queued ... waiting-for=resume paused`), and starts within the
-  poll interval after the resume, in its place in the order; runs already running finish and a nested run still runs inside its
-  parent's place; every kind waits, the owner's viewer launches and package builds too. `./arcanum queue` prints `PAUSED` and
-  `waiting ... (paused)`. A checkout that has not merged ARC-DEV-1344 ignores the flag: merge main before relying on it. The pause
-  stays until resumed, also across a restart of the app; the app never clears it by itself, so a forgotten pause holds every waiting run (they say so on stderr; the icon shows the pause).
+- **Pause.** The menu's `Pause` item and `./arcanum queue --pause` / `--resume` set and clear one thing: the file `t-pause.json` in the
+  queue folder, an *unreadable ticket* held by a small `/usr/bin/lockf` process. The queue has always counted a locked ticket it
+  cannot read (another version's format) as a running export, which blocks everything, so **every wrapper of every checkout, old
+  ones too, waits behind the pause** (checked with the code from before this change); no merge of main is needed for it to hold. Runs
+  already running finish and a nested run still runs inside its parent's place; every kind waits, the owner's viewer launches and
+  package builds too. A waiter says `waiting-for=queue PAUSED (./arcanum queue --resume)` (old wrappers: `waiting-for=#0 export ...
+  "unreadable ticket"`), `./arcanum queue` prints `PAUSED` and `waiting ... (paused)`, and the first run waiting starts within the poll
+  interval after the resume, in its place in the order. Resume removes the file and the holder ends within a second; the holder is
+  independent of the app and the shell that started it, but it dies with the machine's processes (a reboot, a kill of the holder),
+  which ends the pause, so a pause never outlives them. It has no limit: a forgotten pause holds every waiting run (they say so on
+  stderr; the icon shows the pause).
 - **Limits.** The menu's `Godot runs at once` and `Load guard` submenus set the owner's caps of
   [ARC-DEV-1353](#godot-lanes-arc-dev-400) (`./arcanum queue --set-lanes N|default`, `--set-max-load X|off`): they write the same
   `settings.json` of the queue folder (`shortLanes`, `maxLoad`), under the queue lock and atomically, so the CLI, the app and every

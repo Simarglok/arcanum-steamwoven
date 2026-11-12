@@ -630,6 +630,10 @@ class QueueRunTests(unittest.TestCase):
         with run_queue._QueueLock():
             return [item for _, item in run_queue.tickets(prune=False)]
 
+    def runs(self) -> list[dict]:
+        """The live tickets of runs: the pause (a ticket the queue counts as a running export) is not one."""
+        return [item for item in self.live() if not item.get("paused")]
+
     def wrapper(self, kind: str, name: str, command: list[str], *, timeout: str | None = None,
                 environment: dict | None = None, estimate: float | None = None, cwd: Path | None = None) -> subprocess.Popen:
         before = len(self.live())
@@ -894,11 +898,11 @@ class QueueRunTests(unittest.TestCase):
         self.assertFalse(run_queue.set_paused(True, "test"))  # already set
         self.assertEqual(run_queue.pause_state()["by"], "test")
         process = self.queued("dotnet", "a", 0.1)
-        self.until(lambda: len(self.live()) == 1)
+        self.until(lambda: len(self.runs()) == 1)
         time.sleep(1.5)  # several polls: it neither starts nor leaves
         self.assertIsNone(process.poll())
         self.assertFalse(self.log.exists())
-        self.assertIsNone(self.live()[0]["startedAt"])
+        self.assertIsNone(self.runs()[0]["startedAt"])
         lines = run_queue.status()
         self.assertTrue(lines[0].startswith("PAUSED") and "--resume" in lines[0], lines)
         self.assertTrue(lines[1].startswith("waiting #") and lines[1].endswith("(paused)"), lines)
@@ -913,7 +917,7 @@ class QueueRunTests(unittest.TestCase):
         self.until(lambda: self.log.exists())
         run_queue.set_paused(True, "test")
         self.queued("window", "b", 0.1)
-        self.until(lambda: any(item.get("startedAt") is None for item in self.live()))
+        self.until(lambda: any(item.get("startedAt") is None for item in self.runs()))
         self.until(lambda: "end a" in self.log.read_text())
         time.sleep(1.5)  # a gap far over the poll: b still waits for the resume
         self.assertNotIn("start b", self.log.read_text())
@@ -922,10 +926,36 @@ class QueueRunTests(unittest.TestCase):
         found = self.events()
         self.assertGreaterEqual(found["start b"], found["end a"])
 
+    def test_the_pause_is_a_held_ticket_no_wrapper_can_read(self) -> None:
+        # the contract that makes the pause bind wrappers of every version (ARC-DEV-033 counts a held unreadable ticket as a
+        # running export): the file is not a ticket of this schema, it is locked, and the queue lists it as a running export
+        run_queue.set_paused(True, "test")
+        try:
+            path = run_queue.pause_file()
+            self.assertIsNone(run_queue._read_json(path))
+            self.assertTrue(run_queue._locked(path))
+            with run_queue._QueueLock():
+                live = [item for _, item in run_queue.tickets(prune=True)]
+            self.assertEqual([(item["kind"], item.get("paused")) for item in live], [("export", True)])
+            self.assertIn("PAUSED", run_queue._describe(live[0]))
+            other = {"seq": 7, "kind": "quick", "enqueuedAt": time.time(), "estimateSeconds": 15}
+            self.assertEqual(run_queue.blocker(other, [*live, other])["paused"], True)
+        finally:
+            run_queue.set_paused(False)
+        self.assertFalse(run_queue.pause_file().exists())
+
+    def test_a_pause_nobody_holds_is_stale_and_does_not_pause(self) -> None:
+        run_queue._open_folder()
+        run_queue.pause_file().write_text('{"schema": "x"}')
+        self.assertIsNone(run_queue.pause_state())
+        with run_queue._QueueLock():
+            self.assertEqual(run_queue.tickets(prune=True), [])
+        self.assertFalse(run_queue.pause_file().exists())  # pruned like any dead ticket
+
     def test_a_nested_run_is_not_held_by_the_pause(self) -> None:
         inner = f"sleep 1.5; {sys.executable} -B {ARCANUM} run --kind window -- {sys.executable} -c pass"
         process = self.wrapper("window", "outer", ["sh", "-c", inner])
-        self.until(lambda: len(self.live()) == 1 and self.live()[0].get("startedAt"))
+        self.until(lambda: len(self.runs()) == 1 and self.runs()[0].get("startedAt"))
         run_queue.set_paused(True, "test")
         try:
             self.assertEqual(process.wait(30), 0)  # a run holding a place keeps working: its nested run is not queued

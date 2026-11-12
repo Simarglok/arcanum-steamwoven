@@ -87,32 +87,42 @@ def say(message: str) -> None:
     print(f"ARCANUM_QUEUE {message}", file=sys.stderr, flush=True)
 
 
-PAUSE_NAME = "paused"  # ARC-DEV-1344: the pause flag, a file in the queue folder (set by `queue --pause` or the menu-bar app)
+# ARC-DEV-1344: the pause is a ticket nobody can read. A locked ticket file a wrapper cannot read (another version's format)
+# counts as a running export, which blocks everything (tickets() below, and the same rule since ARC-DEV-033), so the pause
+# is one such file held by a small `lockf` process: every wrapper of every checkout, old ones too, waits behind it, and the
+# runs already running finish. Resume removes the file; the holder notices within a second and ends, and a crash of the
+# holder (or a reboot) frees the lock, so a pause never outlives the machine's processes.
+PAUSE_NAME = "t-pause.json"
+PAUSE_SCHEMA = "arcanum-run-queue-pause-v1"  # not SCHEMA: that is what makes the ticket unreadable to the queue
+LOCKF = "/usr/bin/lockf"
+HOLDER_SCRIPT = 'while [ -e "$0" ] || [ -e "$1" ]; do sleep 1; done'  # $0 the file being made, $1 its final name (a rename keeps one)
 
 
-def pause_flag() -> Path:
+def pause_file() -> Path:
     return folder() / PAUSE_NAME
 
 
+def holder_command(hidden: Path, final: Path) -> list[str]:
+    return [LOCKF, "-k", str(hidden), "/bin/sh", "-c", HOLDER_SCRIPT, str(hidden), str(final)]
+
+
 def pause_state() -> dict[str, Any] | None:
-    """The pause flag's content ({"since": epoch seconds, "by": who}) when the queue is paused, else None. A flag file
-    that cannot be read as that still pauses (an unreadable flag is a flag): {} then."""
-    try:
-        text = pause_flag().read_text()
-    except FileNotFoundError:
+    """The pause ticket's content ({"since": epoch seconds, "by": who}) while the queue is paused, else None. A pause
+    file nobody holds is stale (the queue removes it like any dead ticket), so it does not pause."""
+    path = pause_file()
+    if not _locked(path):
         return None
-    except OSError:
-        return {}
     try:
-        value = json.loads(text)
-    except ValueError:
+        value = json.loads(path.read_text())
+    except (OSError, ValueError):
         return {}
     return value if isinstance(value, dict) else {}
 
 
 def set_paused(on: bool, by: str = "cli") -> bool:
-    """Set or clear the pause flag; True when the state changed. While it is set no waiting run starts (running runs finish,
-    nested runs are not queued): a waiter checks it every POLL_SECONDS, so a resume starts the next run within that."""
+    """Pause or resume; True when the state changed. While paused no waiting run starts (running runs finish, nested runs
+    are not queued): a waiter checks the queue every POLL_SECONDS, so a resume starts the next run within that. Raises
+    OSError when the holder cannot be started."""
     base = _open_folder()
     path = base / PAUSE_NAME
     if not on:
@@ -123,10 +133,21 @@ def set_paused(on: bool, by: str = "cli") -> bool:
         return True
     if pause_state() is not None:
         return False
-    hidden = base / f".pause-{os.getpid()}"
-    hidden.write_text(json.dumps({"since": time.time(), "by": by}))
+    hidden = base / f".pause-{os.getpid()}"  # visible to the queue only once it is locked, like any ticket
+    hidden.write_text(json.dumps({"schema": PAUSE_SCHEMA, "since": time.time(), "by": by}))
     os.chmod(hidden, 0o600)
+    holder = subprocess.Popen(holder_command(hidden, path), start_new_session=True, stdin=subprocess.DEVNULL,
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+    deadline = time.monotonic() + 5.0
+    while not _locked(hidden):
+        if holder.poll() is not None or time.monotonic() > deadline:
+            holder.kill()
+            holder.wait()
+            hidden.unlink(missing_ok=True)
+            raise OSError("the pause could not be held (is /usr/bin/lockf there?)")
+        time.sleep(0.02)
     os.replace(hidden, path)
+    holder.returncode = 0  # it outlives this process on purpose: no "still running" warning when the Popen object goes
     return True
 
 
@@ -258,7 +279,7 @@ def tickets(prune: bool = True) -> list[tuple[Path, dict[str, Any]]]:
                 seq = path.stem[2:]
                 result.append((path, {"schema": SCHEMA, "seq": int(seq) if seq.isascii() and seq.isdigit() else 0,
                                       "kind": "export", "label": "unreadable ticket", "startedAt": now, "enqueuedAt": now,
-                                      "priority": FRONT}))
+                                      "priority": FRONT, **({"paused": True} if path.name == PAUSE_NAME else {})}))
             elif prune:
                 _unlink(path)
         elif _live(path, ticket) and not (prune and _expired(ticket, now)):
@@ -507,6 +528,8 @@ def blocker(mine: dict[str, Any], live: Sequence[dict[str, Any]]) -> dict[str, A
 
 
 def _describe(ticket: dict[str, Any]) -> str:
+    if ticket.get("paused"):
+        return "queue PAUSED (./arcanum queue --resume)"
     lane = lane_of(ticket)
     return f"#{ticket['seq']} {ticket['kind']}{'/' + lane if lane else ''} {Path(ticket.get('cwd', '?')).name} \"{ticket.get('label', '')}\""
 
@@ -603,8 +626,7 @@ def _wait_turn(fd: int, ticket: dict[str, Any], sleep: Callable[[float], None]) 
             if waiting_for is None and ticket["kind"] in GODOT_KINDS:
                 limit = too_loaded(sum(1 for item in live if item["seq"] != ticket["seq"] and item.get("startedAt")
                                        and item["kind"] in GODOT_KINDS))
-            held = pause_state() is not None  # ARC-DEV-1344: a paused queue starts nothing (it only ever looks at waiters)
-            if waiting_for is None and limit is None and not held:
+            if waiting_for is None and limit is None:
                 ticket["startedAt"] = time.time()
                 if ticket["kind"] in HOLD_KINDS:  # ARC-DEV-400: the conditions it starts under, for the lane accounting
                     ticket["peers"] = _peers(live, ticket["seq"])
@@ -613,16 +635,13 @@ def _wait_turn(fd: int, ticket: dict[str, Any], sleep: Callable[[float], None]) 
                 return
         order = order_of(live)
         position = sum(1 for item in live if not item.get("startedAt") and order(item) < order(ticket))
-        state = (waiting_for["seq"] if waiting_for else ("load", limit) if limit is not None else None, position, held)
+        state = (waiting_for["seq"] if waiting_for else ("load", limit), position)
         if state != last:
-            suffix = " paused (./arcanum queue --resume)" if held else ""
-            if waiting_for is not None:
-                say(f"queued ticket={ticket['seq']} kind={ticket['kind']} ahead={position} waiting-for={_describe(waiting_for)}{suffix}")
-            elif limit is not None:  # ARC-DEV-1353: its turn has come, but the machine is busier than the owner's guard
+            if waiting_for is None:  # ARC-DEV-1353: its turn has come, but the machine is busier than the owner's guard
                 say(f"queued ticket={ticket['seq']} kind={ticket['kind']} ahead={position} waiting-for=load below {limit:g} "
-                    f"(now {_load()}; ./arcanum queue --set-max-load off removes the guard){suffix}")
-            else:  # ARC-DEV-1344: its turn has come, but the queue is paused
-                say(f"queued ticket={ticket['seq']} kind={ticket['kind']} ahead={position} waiting-for=resume{suffix.replace(' paused', '', 1)}")
+                    f"(now {_load()}; ./arcanum queue --set-max-load off removes the guard)")
+            else:
+                say(f"queued ticket={ticket['seq']} kind={ticket['kind']} ahead={position} waiting-for={_describe(waiting_for)}")
             last = state
         sleep(POLL_SECONDS)
 
@@ -1004,10 +1023,12 @@ def status(history: int = 0) -> list[str]:
     with _QueueLock():
         live = [item for _, item in tickets()]
     now = time.time()
-    paused = pause_state()
+    pause = next((ticket for ticket in live if ticket.get("paused")), None)
+    live = [ticket for ticket in live if not ticket.get("paused")]  # the pause is a ticket for the queue, not a run to list
     result = []
-    if paused is not None:
-        since = paused.get("since")
+    if pause is not None:
+        state = pause_state() or {}
+        since = state.get("since")
         result.append("PAUSED: no waiting run starts" + (f" (for {_age(now - since)})" if isinstance(since, (int, float)) else "")
                       + "; running runs finish; ./arcanum queue --resume")
     if not live:
@@ -1017,9 +1038,9 @@ def status(history: int = 0) -> list[str]:
             result.append(f"running {_describe(ticket)} for {_age(now - ticket['startedAt'])} pid={ticket.get('childPid')}")
     for ticket in live:
         if not ticket.get("startedAt"):
-            waiting_for = blocker(ticket, live)
-            result.append(f"waiting {_describe(ticket)} for {_age(now - ticket['enqueuedAt'])}"
-                          + (f" behind #{waiting_for['seq']}" if waiting_for else " (paused)" if paused is not None else " (starting)"))
+            waiting_for = blocker(ticket, [*live, *([pause] if pause is not None else [])])
+            behind = "" if waiting_for is None else " (paused)" if waiting_for.get("paused") else f" behind #{waiting_for['seq']}"
+            result.append(f"waiting {_describe(ticket)} for {_age(now - ticket['enqueuedAt'])}" + (behind or " (starting)"))
     return result
 
 
