@@ -747,6 +747,7 @@ tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,OpenItemAiming,pending,
 tools/terrain-viewer/Godot/TerrainViewerMaintainBar.cs,MaintainSlotEntered,pending,
 tools/terrain-viewer/Godot/TerrainViewerMaintainBar.cs,StopMaintainSlot,pending,
 tools/terrain-viewer/Godot/TerrainViewerMaintainBar.cs,SyncMaintainClosing,pending,
+tools/terrain-viewer/Godot/TerrainViewerPortraitHover.cs,FollowerPortraitHoverLeft,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,BoomerangReturned,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,CrossTile,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,EndOnTile,pending,

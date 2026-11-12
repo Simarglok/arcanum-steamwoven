@@ -20,6 +20,7 @@ are this project's own.
 | C | Character sheet |
 | L | Logbook |
 | T | Technological schematics |
+| S | Sleep or wait window (the bar's Sleep button too) |
 | M | Spell pane, shown or hidden (on the key's release, while the hero can cast) |
 | W | World map; in the [debug mode](alpha-build.md#7-debug-mode) it also lists every area with **Teleport** |
 | Num Lock | Run by default on or off (the original's Num Lock lock; on a keyboard that has the key) |
@@ -101,7 +102,7 @@ are this project's own.
 | Shift held while the packaged game starts | Opens the launcher (debug mode, settings) |
 
 **Not there yet.** These original keys do nothing yet (the diagnostic panel, when shown, names them
-`Reserved: … (NOT IMPLEMENTED)`): F (fate points), S (sleep or wait), K (skills pane), O (options; Escape opens them),
+`Reserved: … (NOT IMPLEMENTED)`): F (fate points), K (skills pane), O (options; Escape opens them),
 V (version), Home (centre on the hero), Enter (message), F10 (compact interface), F12 (screenshot). Attacking a follower
 (left Alt + click in combat mode) is refused as not ready yet. `,` `.` `/` pressed alone also show the reserved notice;
 held during an attack click they aim as listed under *Combat*.
