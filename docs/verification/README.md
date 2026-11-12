@@ -129,6 +129,35 @@ V1 of the [function audit plan](../research/function-audit-plan.md#5-recommendat
 
 **Groups G and I (wave 3).** The slices above took the census rows of an address band. The Ghidra text export of ARC-DEV-377 and ARC-DEV-379 lists 6,717 functions with a C file and 139 thunks where the census lists 5,815, so wave 3 gives a state to the 1,042 export functions that are not census starts: **group G** is every such function in 0x470000-0x49FFFF (the census has no row of 0x47 and 0x48 and 30 of 0x49: the giant prototype fill switch, split into case blocks) and every other such function in 0x400000-0x4FFFFF; **group I** is every such function in 0x500000-0x59FFFF. The 44 census starts that have no C file (43 thunks, one inside another function) are a finding of the ledger section, not a group. The reading was docs-only, so its record is the [CSV](triage/groups-g-i.csv) (state, class, callers and pointer holders per address) and the ledger section; the 1,011 not relevant functions stay there and have no registry row. ARC-DEV-389 then gave the 31 functions with a rule state their registry rows (18 `not implemented`, 13 `full` or `partial` with an `[OriginalFunction]` mark); `FunctionRegistryTests` keeps the CSV, the registry and the marks equal.
 
+## Address-named methods
+
+ARC-DEV-1106 (V4 of the [function audit plan](../research/function-audit-plan.md#5-recommendation)). A method that names an
+executable function in its XML `<summary>` but carries no `OriginalFunction` mark is invisible to the mark and row tests above, so
+the root test `FunctionRegistryTests.EveryAddressNamedMethodIsMarkedExemptOrPending` finds those methods and requires each to be in
+one of three states:
+
+| State | Where it is written | Meaning |
+| --- | --- | --- |
+| **marked** | `[OriginalFunction(address, scope)]` on the method, with its registry row | the method implements the function; the tests above check the pairing |
+| **exempt** | a row with `state` `exempt` in [`address-methods.csv`](address-methods.csv) and a class: `host` (the method only calls a marked rule or hosts it; one method per address, the mark stays on the rule) or `reference` (the summary cites the address as evidence or context and the method implements none of that function) | the missing mark is deliberate |
+| **pending** | a row with `state` `pending` and no class | a known gap: nobody has yet read the method against the function; the V1 and V2 slices turn it into marked or exempt |
+
+How the test reads the code: it reads the tracked `.cs` files under `src/`, `tools/` and `experiments/`, takes each method (a
+declaration with a return type, a parameter list and a body that follows the doc comment and its attributes; types, constructors,
+properties, fields and interface or abstract declarations are left out) and looks in its `<summary>` for `0x` and six hex digits
+that are a function start in [`census.csv`](census.csv) (an address that is not a census start, such as a mid-function label or a
+global, does not count). A member name with overloads, or the same name in two types of one file, is one row and counts as marked only when every one is. Plain `//` comments and preprocessor lines between the doc comment and the declaration are skipped; an attribute may share the declaration's line. It fails when
+
+- an unmarked method naming a census function has no row (mark it and add its registry row, or add an `exempt` row with its class);
+- a row names a member that is marked now, no longer names a census function in its summary or no longer exists (remove the row);
+- the file is malformed (header `file,member,state,class`, rows sorted by file and member, one row per member, an existing file);
+- the number of `pending` rows is not exactly `PendingCeiling` in the test. The constant only goes down, with the row that closes: a new method is marked or
+  exempt, never pending. The first run (2026-11-12, 744 rows) recorded every unmarked method as pending, because telling a host
+  from an unread implementation needs a reading of the function; V1 and V2 close the rows, and the PR that turns a row into marked
+  or exempt removes or edits it and lowers the ceiling.
+
+A new `.cs` file is read from the moment it is tracked (`git add`), like the mark scan above.
+
 ## Rule-mode switches
 
 Every boolean switch of a profile composed in `GameRules` needs a row with a ledger ID (letters and a number) in the
