@@ -57,6 +57,17 @@ public sealed class AreaWorldMapArtTests
     }
 
     [TestMethod]
+    public void The_travel_button_is_hidden_in_the_map_view_of_a_teleportation_cast()
+    {
+        // ARC-MAGIC-1147 (WM62, TP6): 813 is shown in the town map and in the walkable map view, not in the continent view, and never in the scripted open of Teleportation (walkable flag cleared).
+        Assert.IsTrue(AreaWorldMapArtLayout.TravelShown(true, false, AreaWorldMapKind.Map));
+        Assert.IsFalse(AreaWorldMapArtLayout.TravelShown(false, false, AreaWorldMapKind.Map), "off the start map the view is not walkable");
+        Assert.IsFalse(AreaWorldMapArtLayout.TravelShown(true, true, AreaWorldMapKind.Map), "the teleport mode has no journey");
+        Assert.IsFalse(AreaWorldMapArtLayout.TravelShown(true, false, AreaWorldMapKind.Continent));
+        Assert.IsTrue(AreaWorldMapArtLayout.TravelShown(false, false, AreaWorldMapKind.Town), "the town map shows it on any map");
+    }
+
+    [TestMethod]
     public void Centring_clamps_to_the_scroll_maximum_where_the_original_shows_blank_fill()
     {
         var max = AreaWorldMapArtLayout.MaxOffset();

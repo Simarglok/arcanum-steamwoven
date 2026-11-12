@@ -69,6 +69,12 @@ public static class AreaWorldMapArtLayout
         _ => throw new ArgumentOutOfRangeException(nameof(button)),
     };
 
+    /// <summary>
+    /// ARC-MAGIC-1147 (WM62, TP6, TP8): whether the Travel button (art 813) is shown. The executable shows it in the town map and in the walkable map view; the world map of a
+    /// Teleportation cast (the scripted open) clears the walkable flag 0x66D880 and the town number 0x66D874, so its map view never shows it and its town map is unreachable.
+    /// </summary>
+    public static bool TravelShown(bool onStartMap, bool teleportMode, AreaWorldMapKind kind) => kind == AreaWorldMapKind.Town || (onStartMap && !teleportMode && kind == AreaWorldMapKind.Map);
+
     /// <summary>The cover's top-left in the window (WM42: the executable's (294, 382) of the screen); its bottom edge is the view's.</summary>
     public static readonly (int X, int Y) CoverAt = (294, 341);
 
