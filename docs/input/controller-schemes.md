@@ -200,7 +200,7 @@ All work items are GitHub issues under the epic [#1371](https://github.com/Simar
 | Piece | Issues |
 | --- | --- |
 | This document and coverage rows | [#1372](https://github.com/Simarglok/arcanum-steamwoven/issues/1372) |
-| Foundation §0: core, viewer wiring, pause and accessibility, evidence log | [#1373](https://github.com/Simarglok/arcanum-steamwoven/issues/1373), [#1374](https://github.com/Simarglok/arcanum-steamwoven/issues/1374), [#1375](https://github.com/Simarglok/arcanum-steamwoven/issues/1375), [#1376](https://github.com/Simarglok/arcanum-steamwoven/issues/1376) |
+| Foundation §0: core, viewer wiring (done), pause and accessibility, evidence log | [#1373](https://github.com/Simarglok/arcanum-steamwoven/issues/1373), [#1374](https://github.com/Simarglok/arcanum-steamwoven/issues/1374), [#1375](https://github.com/Simarglok/arcanum-steamwoven/issues/1375), [#1376](https://github.com/Simarglok/arcanum-steamwoven/issues/1376) |
 | UI scale on 1280×800 | [#1377](https://github.com/Simarglok/arcanum-steamwoven/issues/1377) |
 | Focus layer; radials | [#1378](https://github.com/Simarglok/arcanum-steamwoven/issues/1378), [#1379](https://github.com/Simarglok/arcanum-steamwoven/issues/1379) |
 | Scheme B Pointer | [#1380](https://github.com/Simarglok/arcanum-steamwoven/issues/1380), [#1381](https://github.com/Simarglok/arcanum-steamwoven/issues/1381) |
@@ -237,9 +237,33 @@ The Godot-free parts of §0 live in `src/Arcanum.Input` and are tested in `tests
   on a Deck host (`SteamDeck` environment variable, read by the host) an Xbox-looking pad is the Deck. This is a
   heuristic and needs a check on a real Deck. Labels are text per physical position (Nintendo's bottom button is B).
 
-Still open in the foundation: the viewer wiring and storage ([#1374](https://github.com/Simarglok/arcanum-steamwoven/issues/1374)),
-hold/toggle, pause rules and stick settings ([#1375](https://github.com/Simarglok/arcanum-steamwoven/issues/1375)), the evidence log
-([#1376](https://github.com/Simarglok/arcanum-steamwoven/issues/1376)).
+## Foundation in the viewer (ARC-GPAD-1374, merged parts)
+
+The viewer hosts the core (`tools/terrain-viewer/Godot/TerrainViewerControllers.cs`, the Godot-free `ControllerFoundation` and
+`PromptStrip` in `src/Arcanum.Input`):
+
+- **Scheme selector.** Three project lines at the end of the Game page of the Options window, in the main menu and in play, the
+  pattern of the removed HD lines: `Pad scheme` (Off, A Direct, B Pointer), `Touch` (Off, C Touch+pad) and `Prompt style` (Auto, Xbox,
+  PlayStation, Nintendo, Steam Deck). One `AreaOption` each (`AreaGameOptions.cs`), saved with the game settings as the lines
+  `pad scheme`, `touch scheme` and `prompt style` of the one settings file (`ViewerSettingsConfig`; a missing or unknown word is that
+  line's default, Off, Off, Auto), applied at once with no restart; the original mouse and keyboard are not a value. The Game page now
+  holds all eight slots of the original's art.
+- **Device in hand.** Every input event of any pad (its device id, never assumed 0), the mouse, the keyboard and the touch screen
+  goes to the `ActiveDeviceTracker` from `_Input` (`ObserveControllerInput`); `_Process` applies a change after the 250 ms
+  hysteresis. The foundation holds no window or focus state, so a change of device or of a line resets no open window (checked in the
+  options self-test and the options smoke). The glyph family is resolved each time from the name and GUID of the pad of the latest pad
+  signal (`Input.GetJoyName/GetJoyGuid`), the `SteamDeck` environment variable and the Prompt style line.
+- **Prompt strip.** One line at the bottom of the screen (layer 90, ignores the mouse), empty while the mouse or keyboard is the active
+  device, so the original is unchanged (KM-01; no keyboard or mouse glyph is ever in a pad or touch line). With a pad in hand it names the
+  pad family and the scheme ("PlayStation pad - A Direct", "Xbox pad - pad scheme Off (Options > Pad scheme)"); with touch the same
+  ("Touch - C Touch+pad"). Once a scheme has prompts (`PromptBindings.ForPad/ForTouch`, none built yet: a prompt must never name an input
+  that does nothing) the line lists them per context (`Modal` is the bottom line of every window, `Target` the near-target prompt) with the
+  glyphs of the pad's family, rebound by the user's remaps (`PromptBindings.Remapped`, by prompt id).
+- **Open, filed as issues:** the near-target prompt next to a highlighted world target needs the scheme's target highlight (with
+  [#1380](https://github.com/Simarglok/arcanum-steamwoven/issues/1380) and [#1382](https://github.com/Simarglok/arcanum-steamwoven/issues/1382));
+  the rest of the foundation: hold/toggle, pause rules and stick settings ([#1375](https://github.com/Simarglok/arcanum-steamwoven/issues/1375)),
+  the evidence log ([#1376](https://github.com/Simarglok/arcanum-steamwoven/issues/1376)). The strip on a real Deck and with a real pad
+  of each family is checked by a person (human gate of #1374).
 
 ## 5. Test protocol (human test)
 

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Arcanum.Data.Content;
 using Arcanum.Data.Messages;
+using Arcanum.Input;
 using Arcanum.Presentation.Hud;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
@@ -18,7 +19,7 @@ public enum AreaOption
     Module, Difficulty, ViolenceFilter, DefaultCombatMode, AutoAttack, AutoSwitchWeapons, AlwaysRun, FollowerSkills,
     Brightness, TextDuration, Floats, FloatSpeed, CombatTaunts,
     Effects, Voice, Music,
-    Rules,
+    Rules, PadScheme, TouchScheme, PromptStyle,
 }
 
 /// <param name="Max">The original's highest value (a slider's 10 unless its record says otherwise, a list's last message number; a
@@ -72,6 +73,9 @@ public static class AreaOptionTable
     public const string FloatLevels = "mes/OptionsFloats.mes";
     /// <summary>The rule mode control's values (a project list, no game file): <see cref="RuleMode"/> in its order.</summary>
     public const string RuleModes = "project:rule modes";
+    /// <summary>ARC-GPAD-1374: the controller scheme controls' values (project lists, no game file): <see cref="Arcanum.Input.PadScheme"/>,
+    /// <see cref="Arcanum.Input.TouchScheme"/> and <see cref="Arcanum.Input.PromptStyle"/> in their order.</summary>
+    public const string PadSchemes = "project:pad scheme", TouchSchemes = "project:touch scheme", PromptStyles = "project:prompt style";
 
     /// <summary>Every control of the original's table (0x5CCD78, three pages of eight slots; OP2).</summary>
     public static IReadOnlyList<AreaOptionControl> All { get; } = Array.AsReadOnly(new AreaOptionControl[]
@@ -95,6 +99,11 @@ public static class AreaOptionTable
         new(AreaOption.Music, AreaOptionsPage.Sound, 2, AreaOptionKind.Slider, 10, 10, null, "music volume", 5, null),
         // ARC-UI-014: the rule mode (owner decision D8: the settings menu may switch it in play), after the original's eight Game slots.
         new(AreaOption.Rules, AreaOptionsPage.Game, 8, AreaOptionKind.List, 1, 1, RuleModes, "rules", (int)RuleMode.Steamwoven, null, Project: true),
+        // ARC-GPAD-1374 (concept docs/input/controller-schemes.md §0.1, owner decision 2026-11-12): the controller scheme lines, as the removed HD
+        // lines were: a project list each, switching at run time, saved with the game settings. The original mouse and keyboard are not a value.
+        new(AreaOption.PadScheme, AreaOptionsPage.Game, 9, AreaOptionKind.List, 2, 2, PadSchemes, "pad scheme", (int)PadScheme.Off, null, Project: true),
+        new(AreaOption.TouchScheme, AreaOptionsPage.Game, 10, AreaOptionKind.List, 1, 1, TouchSchemes, "touch scheme", (int)TouchScheme.Off, null, Project: true),
+        new(AreaOption.PromptStyle, AreaOptionsPage.Game, 11, AreaOptionKind.List, 4, 4, PromptStyles, "prompt style", (int)Arcanum.Input.PromptStyle.Auto, null, Project: true),
         // ARC-UI-146: the HD graphics, HD interface and HD pack lines (ARC-UI-089, ARC-UI-095, ARC-DEV-350) moved to the launcher screen (ARC-UI-143).
     });
 
@@ -111,8 +120,12 @@ public static class AreaOptionTable
 /// <paramref name="Rules"/> is the rule mode the session plays by (ARC-UI-014), <paramref name="Floats"/> and <paramref name="FloatSpeed"/>
 /// the floating text's level and speed (ARC-UI-021).</summary>
 public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAttack, bool AlwaysRun, int Effects, int Voice, int Music,
-    RuleMode Rules = RuleMode.Steamwoven, int Floats = FloaterRules.DefaultLevel, int FloatSpeed = FloaterRules.DefaultSpeed)
+    RuleMode Rules = RuleMode.Steamwoven, int Floats = FloaterRules.DefaultLevel, int FloatSpeed = FloaterRules.DefaultSpeed,
+    ControlSchemeSettings? Controls = null)
 {
+    /// <summary>ARC-GPAD-1374: the controller scheme choice the three lines show (the defaults when the host passes none).</summary>
+    public ControlSchemeSettings Schemes => Controls ?? ControlSchemeSettings.Default;
+
     /// <summary>A shown control's value; null for a hidden one.</summary>
     public int? Value(AreaOption option) => option switch
     {
@@ -124,6 +137,9 @@ public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAt
         AreaOption.Voice => Voice,
         AreaOption.Music => Music,
         AreaOption.Rules => (int)Rules,
+        AreaOption.PadScheme => (int)Schemes.Pad,
+        AreaOption.TouchScheme => (int)Schemes.Touch,
+        AreaOption.PromptStyle => (int)Schemes.Prompts,
         AreaOption.Floats => Floats,
         AreaOption.FloatSpeed => FloatSpeed,
         _ => null,
@@ -166,6 +182,15 @@ public sealed record AreaGameSettings
 
     /// <summary>ARC-DEV-350: the folder the player chose for <see cref="HdPackSourceMode.Custom"/> (a pack or a folder of packs); null until chosen.</summary>
     public string? HdPackPath { get; init; }
+
+    /// <summary>ARC-GPAD-1374: the experimental controller scheme choice (concept §0.1): the pad scheme, the touch scheme and the prompt glyph
+    /// family; all default to Off/Off/Auto. The original mouse and keyboard stay live whatever they hold.</summary>
+    public PadScheme Pad { get; init; }
+    public TouchScheme Touch { get; init; }
+    public PromptStyle Prompts { get; init; }
+
+    /// <summary>The three as the foundation core's record (a value outside its enum reads as its default there).</summary>
+    public ControlSchemeSettings Controls => new ControlSchemeSettings(ControlSchemeSettings.CurrentVersion, Pad, Touch, Prompts).Validated();
 
     /// <summary>The "text floaters" level (<see cref="FloaterRules.Never"/>, messages, numbers).</summary>
     public int Floats
@@ -279,10 +304,16 @@ public sealed class AreaOptionsTexts
         [AreaOptionTable.FloatLevels] = ["Never", "Minimal", "Verbose"],
     };
     // ARC-UI-014: the project controls' texts, never looked up in the game's files.
-    private static readonly IReadOnlyDictionary<AreaOption, string> ProjectControlLabels = new Dictionary<AreaOption, string> { [AreaOption.Rules] = "Rules" };
+    private static readonly IReadOnlyDictionary<AreaOption, string> ProjectControlLabels = new Dictionary<AreaOption, string>
+    {
+        [AreaOption.Rules] = "Rules", [AreaOption.PadScheme] = "Pad scheme", [AreaOption.TouchScheme] = "Touch", [AreaOption.PromptStyle] = "Prompt style",
+    };
     private static readonly IReadOnlyDictionary<string, string[]> ProjectControlValues = new Dictionary<string, string[]>(StringComparer.Ordinal)
     {
         [AreaOptionTable.RuleModes] = ["Steamwoven", "Original"],
+        [AreaOptionTable.PadSchemes] = ["Off", "A Direct", "B Pointer"],
+        [AreaOptionTable.TouchSchemes] = ["Off", "C Touch+pad"],
+        [AreaOptionTable.PromptStyles] = ["Auto", "Xbox", "PlayStation", "Nintendo", "Steam Deck"],
     };
     private readonly Func<string, int, string?> _original;
 

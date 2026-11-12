@@ -77,14 +77,44 @@ public partial class TerrainViewerApp
                 && place.X + place.Width / 2 == AreaMenuArtLayout.OptionsButtonX && place.Width > 0 && place.Height == 33).All(ok => ok),
                 "the page labels stand centred at (130, 221 + 40 i): " + string.Join(" ", places));
             Require(art.HoveredForSelfTest == -1, "no page label is lit while the focus is on the first control: " + art.HoveredForSelfTest);
-            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven"]), "Game page: " + string.Join("|", Controls()));
-            // ARC-UI-061: the shown controls take the first slots: four in the first column, the fifth at the second's top (as drawn).
+            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven", "Pad scheme: Off", "Touch: Off", "Prompt style: Auto"]), "Game page: " + string.Join("|", Controls()));
+            // ARC-UI-061: the shown controls take the first slots: four in the first column, the fifth to eighth at the second's (as drawn; ARC-GPAD-1374 filled the page).
             await Frames(1);
-            Require(art.ControlPlacesForSelfTest.SequenceEqual(Enumerable.Range(0, 5).Select(AreaMenuArtLayout.OptionsSlot)),
+            Require(art.ControlPlacesForSelfTest.SequenceEqual(Enumerable.Range(0, 8).Select(AreaMenuArtLayout.OptionsSlot)),
                 "the Game page's controls stand in their art at the first slots: " + string.Join(" ", art.ControlPlacesForSelfTest));
             // ARC-UI-014: Original chosen in the main menu is the rule mode the new game begins in.
             panel.ChangeForSelfTest(4, 1);
             Require(_ruleMode == RuleMode.Original && Controls()[4] == "Rules: Original", "Original chosen before the game");
+            // ARC-GPAD-1374: the controller scheme lines change at run time, no restart, and are saved at once in the smoke's own settings file; the
+            // prompt strip shows nothing while the mouse is the device in hand and names the pad when one is used.
+            panel.ChangeForSelfTest(5, 1); panel.ChangeForSelfTest(6, 1); panel.ChangeForSelfTest(7, 1); panel.ChangeForSelfTest(7, 1);
+            Require(Controls().Skip(5).SequenceEqual(["Pad scheme: A Direct", "Touch: C Touch+pad", "Prompt style: PlayStation"]) && _gameSettings is { Pad: Arcanum.Input.PadScheme.Direct, Touch: Arcanum.Input.TouchScheme.TouchPad, Prompts: Arcanum.Input.PromptStyle.PlayStation },
+                "the scheme lines changed at once: " + string.Join("|", Controls().Skip(5)));
+            Require(_gameSettingsStore is { Persistent: true } && _gameSettingsStore.Load() is { Pad: Arcanum.Input.PadScheme.Direct, Touch: Arcanum.Input.TouchScheme.TouchPad, Prompts: Arcanum.Input.PromptStyle.PlayStation },
+                "the scheme lines are saved in the settings file");
+            Require(PromptStripForSelfTest.Length == 0 && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Options, "the mouse shows no strip and no window was reset");
+            // A pad in hand (device 7, a DualSense: never device 0): after the hysteresis the strip names it with its family, over the open window.
+            var clock = 1000.0;
+            _controllerClockForSelfTest = () => clock;
+            _padIdentityForSelfTest = _ => new Arcanum.Input.PadIdentity("DualSense Wireless Controller", "030000004c050000e60c000000000000");
+            ObserveControllerInput(new InputEventJoypadButton { Device = 7, ButtonIndex = JoyButton.A, Pressed = true });
+            clock += .3; await Frames(2);
+            Require(PromptStripForSelfTest == "PlayStation pad - A Direct" && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Options,
+                "a pad in hand shows its family over the open window: " + PromptStripForSelfTest);
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_OPTIONS_CAPTURE") is { Length: > 0 } padCapture)
+            {
+                using var image = GetViewport().GetTexture().GetImage();
+                var path = System.IO.Path.ChangeExtension(padCapture, null) + "-pad" + System.IO.Path.GetExtension(padCapture);
+                Require(image.SavePng(path) == Error.Ok, "the pad strip's capture saved to " + path);
+            }
+            ObserveControllerInput(new InputEventKey { Keycode = Godot.Key.A, PhysicalKeycode = Godot.Key.A, Pressed = true });
+            clock += .3; await Frames(2);
+            Require(PromptStripForSelfTest.Length == 0, "a key takes the strip away: " + PromptStripForSelfTest);
+            _controllerClockForSelfTest = null; _padIdentityForSelfTest = null;
+            panel.ChangeForSelfTest(5, 1); panel.ChangeForSelfTest(6, 1); panel.ChangeForSelfTest(7, 1);
+            Require(_gameSettings is { Pad: Arcanum.Input.PadScheme.Pointer, Touch: Arcanum.Input.TouchScheme.Off, Prompts: Arcanum.Input.PromptStyle.Nintendo }, "the lines wrap or move on: " + string.Join("|", Controls().Skip(5)));
+            panel.ChangeForSelfTest(5, 1); panel.ChangeForSelfTest(7, 1); panel.ChangeForSelfTest(7, 1);
+            Require(_gameSettings is { Pad: Arcanum.Input.PadScheme.Off, Prompts: Arcanum.Input.PromptStyle.Auto }, "back to Off and Auto: " + string.Join("|", Controls().Skip(5)));
             // ARC-DEV-350: the HD pack problem box: the reason on screen, Continue closes it, Close game quits (the smoke takes the quit over).
             var quits = 0;
             _hdPackProblemQuitForSelfTest = () => quits++;
@@ -196,6 +226,7 @@ public partial class TerrainViewerApp
             if (_mainMenu is not null) EndMainMenu("smoke end");
             if (_audioVolumes != before._audioVolumes) PaletteVolumeChanged(Arcanum.Presentation.Audio.AudioChannel.Music, before._audioVolumes.Music);
             (_gameSettings, _turnBasedSetting, _alwaysRunOption, _ruleMode) = (before._gameSettings, before._turnBasedSetting, before._alwaysRunOption, before._ruleMode);
+            ConfigureControllers(); _controllerClockForSelfTest = null; _padIdentityForSelfTest = null;
             if (_areaSession is { } current) ApplySessionSettings(current);
             _saveLibraryForSelfTest = null; _quickKeys.Reset();
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
