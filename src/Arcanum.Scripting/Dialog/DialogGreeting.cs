@@ -311,14 +311,16 @@ internal static class DialogGreeting
     /// </summary>
     [OriginalFunction(0x416C10, OriginalFunctionScope.Partial)]
     [OriginalFunction(0x419190, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x418460, OriginalFunctionScope.Partial)]
     public static GreetingOutcome? Phrase(char? letter, bool pcDumb, DialogGreetingFacts facts, DialogGreetingSources sources, IDialogGreetingPort port,
-        DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes)
+        DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes, int storyState = 0)
     {
         var context = new Context(facts, sources, port, names, encoding, maxTextBytes);
         return letter switch
         {
             null or 'e' => PcLine(context, pcDumb, 400, 499),
             'a' => PcClassLine(context, pcDumb, 1000),
+            'c' => PcLine(context, pcDumb, StoryPcLine + storyState, StoryPcLine + storyState),
             'b' => facts.NpcLedByPc ? PcLine(context, pcDumb, 1600, 1699) : PcLine(context, pcDumb, 300, 399),
             'f' => PcLine(context, pcDumb, 800, 899),
             'h' => PcLine(context, pcDumb, 700, 799),
@@ -360,6 +362,31 @@ internal static class DialogGreeting
     }
 
     private const int RumorStride = 20;
+
+    /// <summary>The PC's line of a <c>c:</c> reply is the single line this number plus the story state (0x418460).</summary>
+    public const int StoryPcLine = 1700;
+
+    /// <summary>The story line's message is the NPC's race plus this many per story state (0x41A440).</summary>
+    public const int StoryStateStride = 100;
+
+    /// <summary>
+    /// ARC-SCRIPT-1321 (ledger STY1–STY3): the NPC's story line (0x41A440): the NPC's own override record 10000 + the story state when it has one,
+    /// else the entry numbered the NPC's race (stat 27) + 100 × the story state of the story file by the NPC's gender then the PC's, fetched by number
+    /// (no draw) and name-substituted. An entry or file the module lacks reads like a missing generated line (the missing-line text, or an empty line without the file).
+    /// </summary>
+    [OriginalFunction(0x41A440, OriginalFunctionScope.Partial)]
+    public static GreetingOutcome StoryTale(int storyState, DialogGreetingFacts facts, DialogGreetingSources sources, IDialogGreetingPort port,
+        DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes)
+    {
+        var context = new Context(facts, sources, port, names, encoding, maxTextBytes);
+        if (OverrideLine(context, 10000 + storyState) is { } overridden) return overridden;
+        var number = facts.NpcRace + StoryStateStride * storyState;
+        var file = GeneratedDialogFiles.StoryLineFile(facts.NpcMale, facts.PcMale);
+        if (sources.Files.File(file) is null) return new(GreetingOutcomeKind.Line, Origin: new(DialogLineOriginKind.Empty, number, file));
+        var line = sources.Files.Line(file, number);
+        if (line.Message is null) return new(GreetingOutcomeKind.Line, MissingLine(number, file), new(DialogLineOriginKind.MissingLine, number, file));
+        return Text(context, line.Message.Bytes.ToArray(), new(DialogLineOriginKind.Generated, number, file), substitute: true);
+    }
 
     /// <summary>ARC-SCRIPT-1150: a PC line of the range <paramref name="first"/>..<paramref name="last"/> (the trainer talk's answers).</summary>
     public static GreetingOutcome PcRange(int first, int last, bool pcDumb, DialogGreetingFacts facts, DialogGreetingSources sources,

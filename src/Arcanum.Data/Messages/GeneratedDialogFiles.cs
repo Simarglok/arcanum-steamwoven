@@ -94,6 +94,10 @@ public sealed class GeneratedDialogFiles
         return first + pair;
     }
 
+    /// <summary>ARC-SCRIPT-1321: the story file (<c>gd_sto_*</c>, read by the story line) by the NPC's (speaker's) and the PC's (listener's) gender, in the order m2m, m2f, f2f, f2m.</summary>
+    public static GeneratedDialogFile StoryLineFile(bool npcMale, bool pcMale) =>
+        GeneratedDialogFile.StoryMaleToMale + (npcMale ? (pcMale ? 0 : 1) : (pcMale ? 3 : 2));
+
     /// <summary>
     /// ARC-SCRIPT-043: the file a PC line reads (the Player-option generators 0x4182D0 and 0x418390): the plain PC files
     /// (<c>gd_pc2*</c>) or, for <paramref name="classLines"/>, the class files (<c>gd_cls_pc2*</c>), by the NPC's gender (the
