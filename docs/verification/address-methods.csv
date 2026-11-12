@@ -136,6 +136,7 @@ src/Arcanum.Session/GameSessionNpcTransfer.cs,GiveItemToNpc,pending,
 src/Arcanum.Session/GameSessionNpcTransfer.cs,MoveGoldBetweenNpcs,pending,
 src/Arcanum.Session/GameSessionNpcTransfer.cs,TakeAmmoFromNpc,pending,
 src/Arcanum.Session/GameSessionNpcTransfer.cs,TakeItemFromNpc,pending,
+src/Arcanum.Session/GameSessionNpcWear.cs,RewieldNpc,exempt,host
 src/Arcanum.Session/GameSessionNpcWear.cs,WieldNpcBest,pending,
 src/Arcanum.Session/GameSessionObjectFlags.cs,Assign,pending,
 src/Arcanum.Session/GameSessionObjectFlags.cs,AssignObjectFlag,pending,
@@ -410,6 +411,7 @@ src/Arcanum.World/AreaAiHost.cs,LineOfFireBlocker,pending,
 src/Arcanum.World/AreaAiHost.cs,LineOfFireStruck,pending,
 src/Arcanum.World/AreaAiHost.cs,List,pending,
 src/Arcanum.World/AreaAiHost.cs,MoveToLeader,pending,
+src/Arcanum.World/AreaAiHost.cs,NeedsAmmunition,exempt,host
 src/Arcanum.World/AreaAiHost.cs,NoticeKill,exempt,host
 src/Arcanum.World/AreaAiHost.cs,ObserveLeaves,pending,
 src/Arcanum.World/AreaAiHost.cs,ObserveRound,pending,
@@ -417,6 +419,7 @@ src/Arcanum.World/AreaAiHost.cs,Perform,pending,
 src/Arcanum.World/AreaAiHost.cs,PerformAttack,pending,
 src/Arcanum.World/AreaAiHost.cs,PerformSkill,pending,
 src/Arcanum.World/AreaAiHost.cs,PickPocketAttempt,pending,
+src/Arcanum.World/AreaAiHost.cs,ReWield,exempt,host
 src/Arcanum.World/AreaAiHost.cs,ReleaseCast,pending,
 src/Arcanum.World/AreaAiHost.cs,RunRoutine,pending,
 src/Arcanum.World/AreaAiHost.cs,RunUseScript,pending,
@@ -424,6 +427,7 @@ src/Arcanum.World/AreaAiHost.cs,RunsOf,pending,
 src/Arcanum.World/AreaAiHost.cs,ScheduleTicks,pending,
 src/Arcanum.World/AreaAiHost.cs,ScriptAttack,pending,
 src/Arcanum.World/AreaAiHost.cs,ScriptReaction,exempt,host
+src/Arcanum.World/AreaAiHost.cs,SearchItems,exempt,host
 src/Arcanum.World/AreaAiHost.cs,SeeToward,pending,
 src/Arcanum.World/AreaAiHost.cs,ShownWeapon,pending,
 src/Arcanum.World/AreaAiHost.cs,SneakExcess,pending,
