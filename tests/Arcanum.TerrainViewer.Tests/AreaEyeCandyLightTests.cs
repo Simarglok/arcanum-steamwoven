@@ -21,10 +21,11 @@ public sealed class AreaEyeCandyLightTests
 
     private sealed class Fixture : IDisposable
     {
-        public GameSessionOwner Session { get; } = ConversationSessionFixture.Create();
+        public GameSessionOwner Session { get; }
         public AreaEyeCandyHost Host { get; }
         public FrameStep Step { get; }
         public Dictionary<string, int> Saved = [];
+        public bool SlotsUnknown;
         public Dictionary<int, SpellEyeCandyEntry> Entries = new()
         {
             // Illuminate's entry: loops, light art 1 in (226, 60, 236).
@@ -35,10 +36,11 @@ public sealed class AreaEyeCandyLightTests
             [23] = new(0x2300, Fore | SpellEyeCandyFlags.Forever, -1, 4, (1, 2, 3), 0),
         };
 
-        public Fixture()
+        public Fixture(GameSessionOwner? session = null)
         {
+            Session = session ?? ConversationSessionFixture.CreateWithHero();
             Host = new AreaEyeCandyHost(Session, i => Entries.GetValueOrDefault(i), (art, parts) => new EyeCandyFacts(4, 2, 100, 0, true, true), (low, high) => low,
-                savedLightSlots: owner => Saved.GetValueOrDefault(owner));
+                savedLightSlots: owner => SlotsUnknown ? -1 : Saved.GetValueOrDefault(owner));
             Step = new FrameStep(Session, AreaAiTestSteps.NoAi) { GoalSteps = new AreaGoalStepRouter(() => null, new AreaAiGoalSteps(() => null), null, null, null, null, () => Host) };
         }
 
@@ -153,6 +155,56 @@ public sealed class AreaEyeCandyLightTests
         Assert.IsFalse(g.Host.Play(Npc, 23, 0, 2), "the first add already holds the last slot (IW2)");
         g.Run(60);
         Assert.AreEqual(3, g.Host.Lights().Single().Slot);
+    }
+
+    // ARC-MAGIC-1280: the overlay runs of a game that was saved and loaded are the new host's own: the maintained glow returns with no second cast, in a slot of its own, and the four-slot rule of the add holds.
+    [TestMethod]
+    public void A_loaded_game_shows_the_lights_of_its_restored_runs_again_and_keeps_the_four_slot_rule()
+    {
+        using var before = new Fixture();
+        Assert.IsTrue(before.Host.Play(Hero, 20, 0, -1));
+        Assert.IsTrue(before.Host.Play(Npc, 20, 0, -1));
+        Assert.IsTrue(before.Host.Play(Npc, 23, 0, -1));
+        before.Run(60);
+        Assert.AreEqual(3, before.Host.Lights().Count());
+        using var session = ConversationSessionFixture.SaveAndLoad(before.Session);
+        Assert.AreEqual(3, session.QueryGoals().Runs.Count(r => !r.Done), "the three overlay runs are in the loaded table");
+        using var after = new Fixture(session);
+        after.Saved[Npc] = 0b0100; // the owner's own record holds slot 2
+        Assert.AreEqual(3, after.Host.AdoptRestored(), "the three lit runs take their slots again");
+        after.Run(60); // the restored runs step on at their saved due time
+        var lights = after.Host.Lights().ToArray();
+        Assert.AreEqual(3, lights.Length, "the glow of each run is back with no second cast");
+        var hero = lights.Single(l => l.Owner == Hero);
+        Assert.AreEqual((1, (226, 60, 236)), (hero.ArtNumber, hero.Color));
+        var npc = lights.Where(l => l.Owner == Npc).ToArray();
+        CollectionAssert.AreEquivalent(new[] { 0, 1 }, npc.Select(l => l.Slot).ToArray(), "slot 2 is the record's");
+        Assert.IsTrue(after.Host.LightSlotFree(Npc), "slot 3 is free");
+        Assert.IsTrue(after.Host.Play(Npc, 20, 0, -1), "a lit add takes slot 3");
+        Assert.IsFalse(after.Host.Play(Npc, 20, 0, -1), "and the fifth light is refused, as in a game that never saved");
+        // The maintained spell's END after the load takes the restored light off: the Remove finds the run by its tag.
+        Assert.AreEqual(2, after.Host.Remove(Npc, 20, -1, false), "the restored run and the new one are removed (the END's Remove)");
+        Assert.AreEqual(1, after.Host.Remove(Hero, 20, -1, false), "the hero's restored run is removable too");
+        after.Run(200);
+        Assert.AreEqual(1, after.Host.Lights().Count(), "only the NPC's unlit-by-Remove entry 23 light is left");
+    }
+
+    // ARC-MAGIC-1280: the overlay host of a loaded session is built before the viewer knows the owners' own light slots (its cast host comes later): no slot is claimed then, and the record's lights are never shared.
+    [TestMethod]
+    public void A_restored_run_claims_no_slot_until_the_owners_own_slots_are_known()
+    {
+        using var before = new Fixture();
+        Assert.IsTrue(before.Host.Play(Npc, 20, 0, -1));
+        before.Run(60);
+        using var session = ConversationSessionFixture.SaveAndLoad(before.Session);
+        using var after = new Fixture(session);
+        after.SlotsUnknown = true;
+        after.Saved[Npc] = 0b0001; // the record holds slot 0
+        Assert.AreEqual(0, after.Host.AdoptRestored(), "nothing is claimed while the slots are unknown");
+        Assert.AreEqual(0, after.Host.Lights().Count(), "and no light is answered yet");
+        after.SlotsUnknown = false;
+        Assert.AreEqual(1, after.Host.AdoptRestored());
+        Assert.AreEqual(1, after.Host.Lights().Single().Slot, "slot 0 is the record's");
     }
 
     [TestMethod]
