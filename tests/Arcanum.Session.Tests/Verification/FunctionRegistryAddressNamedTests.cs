@@ -18,7 +18,7 @@ public sealed partial class FunctionRegistryTests
     private static readonly string[] AddressMethodClasses = ["host", "reference"];
 
     /// <summary>Number of <c>pending</c> rows in the file; lower it when a row is closed, never raise it (a new address-naming method is marked or exempt).</summary>
-    private const int PendingCeiling = 739;
+    private const int PendingCeiling = 744;
 
     /// <summary>A method (or, for overloads, the member name in one file) whose summary names a census function.</summary>
     private sealed record AddressMethod(string File, string Member, bool Marked, int Line, IReadOnlyList<uint> Addresses);
@@ -58,6 +58,14 @@ public sealed partial class FunctionRegistryTests
         Assert.AreEqual("Pair", Scan("/// <summary>0x4B7080</summary>\ninternal static (int A, int B) Pair(int x) => (x, x);\n").Single().Member);
         Assert.AreEqual("Pick", Scan("/// <summary>0x4B7080</summary>\npublic static T Pick<T>(T a) => a;\n").Single().Member);
         Assert.AreEqual("Bare", Scan("/// <summary>0x4B7080</summary>\nint Bare(int x) => x;\n").Single().Member);
+
+        // A plain comment or a preprocessor line between the doc comment and the declaration, and an attribute on the declaration's own line.
+        Assert.AreEqual("Roll", Scan("/// <summary>0x4B7080</summary>\n// note\n#pragma warning disable\npublic int Roll() => 1;\n").Single().Member);
+        Assert.AreEqual(4, Scan("/// <summary>0x4B7080</summary>\n// note\n[Obsolete]\npublic int Roll() => 1;\n").Single().Line);
+        Assert.IsFalse(Scan("/// <summary>0x4B7080</summary>\n[Obsolete] public int Roll() => 1;\n").Single().Marked);
+        Assert.IsTrue(Scan("/// <summary>0x4B7080</summary>\n[OriginalFunction(0x4B7080, OriginalFunctionScope.Full)] public int Roll() => 1;\n").Single().Marked);
+        Assert.AreEqual("Roll", Scan("/// <summary>0x4B7080</summary>\n[A][B(new int[1])] public int Roll(int[] x) => 1;\n").Single().Member);
+        Assert.AreEqual(0, Scan("/// <summary>0x4B7080</summary>\n[Obsolete] public sealed record Roll(int X);\n").Count);
 
         // An interface member and an abstract declaration have no body; a signature over several lines does.
         Assert.AreEqual(0, Scan("/// <summary>0x4B7080</summary>\nbool Roll(int x);\n").Count);
@@ -100,7 +108,7 @@ public sealed partial class FunctionRegistryTests
             + string.Join("; ", stale.Take(20).Select(k => $"{k.File} {k.Member}")));
 
         var pending = rows.Values.Count(r => r.State == "pending");
-        Assert.IsTrue(pending <= PendingCeiling, $"{pending} pending rows, the ceiling is {PendingCeiling}: a new address-naming method is marked or exempt, never pending");
+        Assert.AreEqual(PendingCeiling, pending, $"{pending} pending rows, {nameof(PendingCeiling)} is {PendingCeiling}: a new address-naming method is marked or exempt, never pending, and a closed row lowers the constant");
     }
 
     private sealed record AddressMethodRow(string File, string Member, string State, string Class);
@@ -150,17 +158,36 @@ public sealed partial class FunctionRegistryTests
             var doc = string.Join('\n', lines[i..j]);
             var attributes = new List<string>();
             var k = j;
-            while (k < lines.Length && lines[k].TrimStart().StartsWith('['))
+            var declarationText = "";
+            // Between the doc comment and the declaration: attributes (also over several lines), plain comments and preprocessor lines.
+            while (k < lines.Length)
             {
+                var trimmed = lines[k].TrimStart();
+                if (trimmed.StartsWith("//", StringComparison.Ordinal) || trimmed.StartsWith('#')) { k++; continue; }
+                if (!trimmed.StartsWith('[')) break;
                 var attribute = new System.Text.StringBuilder();
                 var depth = 0;
+                var rest = "";
                 do
                 {
-                    attribute.Append(lines[k]).Append('\n');
-                    depth += lines[k].Count(c => c == '[') - lines[k].Count(c => c == ']');
+                    var line = lines[k];
+                    attribute.Append(line).Append('\n');
+                    for (var c = 0; c < line.Length; c++)
+                    {
+                        if (line[c] == '[') depth++;
+                        else if (line[c] == ']' && --depth == 0)
+                        {
+                            var tail = line[(c + 1)..].TrimStart();
+                            if (tail.StartsWith('[')) continue; // another attribute follows on the line
+                            rest = tail;
+                            break;
+                        }
+                    }
                     k++;
                 } while (depth > 0 && k < lines.Length);
                 attributes.Add(attribute.ToString());
+                // An attribute and the declaration on one line: the declaration is what follows the last attribute.
+                if (rest.Length > 0 && !rest.StartsWith("//", StringComparison.Ordinal)) { declarationText = rest; k--; break; }
             }
             i = j;
             if (k >= lines.Length) break;
@@ -169,18 +196,18 @@ public sealed partial class FunctionRegistryTests
             var addresses = SummaryAddress().Matches(summary.Groups[1].Value)
                 .Select(m => Convert.ToUInt32(m.Groups[1].Value, 16)).Where(census.Contains).Distinct().ToList();
             if (addresses.Count == 0) continue;
-            var declaration = MethodDeclaration().Match(lines[k]);
-            if (!declaration.Success || TypeKeyword().IsMatch(declaration.Groups["type"].Value) || ModifiersOnly().IsMatch(declaration.Groups["type"].Value) || !HasBody(lines, k)) continue;
+            var declaration = MethodDeclaration().Match(declarationText.Length > 0 ? declarationText : lines[k]);
+            if (!declaration.Success || TypeKeyword().IsMatch(declaration.Groups["type"].Value) || ModifiersOnly().IsMatch(declaration.Groups["type"].Value) || !HasBody(lines, k, declarationText)) continue;
             found.Add(new AddressMethod(file, declaration.Groups["name"].Value, attributes.Any(a => a.Contains("OriginalFunction", StringComparison.Ordinal)), k + 1, addresses));
         }
         return found;
     }
 
-    /// <summary>True when the declaration at <paramref name="start"/> has a body (a block or an expression): an interface member or an abstract
+    /// <summary>True when the declaration at <paramref name="start"/> (or in <paramref name="firstLine"/>, when an attribute shares its line) has a body (a block or an expression): an interface member or an abstract
     /// or extern declaration ends in a semicolon and cannot carry a mark. The signature may span several lines.</summary>
-    private static bool HasBody(string[] lines, int start)
+    private static bool HasBody(string[] lines, int start, string firstLine)
     {
-        var text = string.Join('\n', lines[start..Math.Min(lines.Length, start + 12)]);
+        var text = string.Join('\n', lines[(firstLine.Length > 0 ? start + 1 : start)..Math.Min(lines.Length, start + 12)].Prepend(firstLine.Length > 0 ? firstLine : ""));
         var end = text.IndexOfAny(['{', ';']);
         var arrow = text.IndexOf("=>", StringComparison.Ordinal);
         return arrow >= 0 && (end < 0 || arrow < end) || end >= 0 && text[end] == '{';

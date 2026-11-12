@@ -146,13 +146,13 @@ How the test reads the code: it reads the tracked `.cs` files under `src/`, `too
 declaration with a return type, a parameter list and a body that follows the doc comment and its attributes; types, constructors,
 properties, fields and interface or abstract declarations are left out) and looks in its `<summary>` for `0x` and six hex digits
 that are a function start in [`census.csv`](census.csv) (an address that is not a census start, such as a mid-function label or a
-global, does not count). A member name with overloads is one row and counts as marked only when every overload is. It fails when
+global, does not count). A member name with overloads, or the same name in two types of one file, is one row and counts as marked only when every one is. Plain `//` comments and preprocessor lines between the doc comment and the declaration are skipped; an attribute may share the declaration's line. It fails when
 
 - an unmarked method naming a census function has no row (mark it and add its registry row, or add an `exempt` row with its class);
 - a row names a member that is marked now, no longer names a census function in its summary or no longer exists (remove the row);
 - the file is malformed (header `file,member,state,class`, rows sorted by file and member, one row per member, an existing file);
-- the number of `pending` rows is above `PendingCeiling` in the test. The ceiling only goes down: a new method is marked or
-  exempt, never pending. The first run (2026-11-12, 739 rows) recorded every unmarked method as pending, because telling a host
+- the number of `pending` rows is not exactly `PendingCeiling` in the test. The constant only goes down, with the row that closes: a new method is marked or
+  exempt, never pending. The first run (2026-11-12, 744 rows) recorded every unmarked method as pending, because telling a host
   from an unread implementation needs a reading of the function; V1 and V2 close the rows, and the PR that turns a row into marked
   or exempt removes or edits it and lowers the ceiling.
 
