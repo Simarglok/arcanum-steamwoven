@@ -3,6 +3,8 @@ using Arcanum.Simulation;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Reaction;
@@ -46,6 +48,12 @@ public interface ISpellCastMap : ISpellTargetWorld
     /// <summary>ARC-MAGIC-037 (MA-6): a portal's or container's lock facts for the ObjFlag component's lock fields and the Dispel component's held bit, or null when the object is none
     /// (or the host has no lock domain): the session's object, its T0 baseline and its lock level.</summary>
     SpellOpenable? Openable(string id) => null;
+
+    /// <summary>ARC-MAGIC-1232 (DW2, XR15): the items a critter wears now, by wear slot, with their baselines, as the damage step's weapon block reads them (the target's slot 1004 item): null when the host has none, so nothing is dropped.</summary>
+    IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? WornBySlot(string entity) => null;
+
+    /// <summary>ARC-MAGIC-1232: the shown map's drop map for placing a dropped item (0x461A90's placement); null lands the item on its holder's cell without a draw.</summary>
+    IDropMap? DropMap => null;
 }
 
 /// <summary>ARC-MAGIC-037 (MA-6): a portal or container a spell reaches: its session identity, its T0 lock baseline (the session's state is read over it) and its lock level (portal field 47, container field 57),
@@ -209,6 +217,11 @@ public enum SpellCastEventKind
     NestedCast,
     /// <summary>ARC-MAGIC-049: this many nested casts were dropped unstarted (<see cref="SessionSpellCaster.MaxNestedCastsPerStart"/> in one start, a technical bound: the original spreads a chain over frames).</summary>
     NestedCastsDropped,
+    /// <summary>ARC-MAGIC-1232 (DW2, XR15): a Damage component's step with the weapon-drop flag (0x2000, Disarm) ran the target's weapon block on <see cref="SpellCastEvent.Object"/>: the value is the
+    /// <see cref="SessionCriticalStepOutcome"/> (<see cref="SessionCriticalStepOutcome.Dropped"/> when the weapon now lies on the ground or among the hero's placed items). The step itself is in <see cref="SessionSpellDamageStep.Criticals"/>.</summary>
+    WeaponDropped,
+    /// <summary>ARC-MAGIC-1232: the session refused the weapon block's drop on <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the damage stands.</summary>
+    WeaponDropNotSaved,
 }
 
 /// <summary>
@@ -407,15 +420,21 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
 
     public bool IsLocalPlayer(SpellRunObject? who) => who?.Id == Hero;
 
-    public IReadOnlyList<SpellRunTarget> Collect(SpellRun run)
+    public IReadOnlyList<SpellRunTarget> Collect(SpellRun run) => CollectRun(run).Targets;
+
+    /// <summary>ARC-MAGIC-1234 (TA14): the action's targets and the object list an area with the list bit built into the run's empty one (the gathered objects, newest first).</summary>
+    public SpellRunCollected CollectRun(SpellRun run)
     {
         ArgumentNullException.ThrowIfNull(run);
         // 0x4510F0 sets the flag at 0x5E75A8 for each pass (0 unless the PC's armed fate was used), after the target list is set up; the run system asks the fate right after this call.
         _spellAtMaximum = false;
-        if (_records(run.Spell) is not { } record || (int)run.Action >= record.Areas.Length) return [];
+        if (_records(run.Spell) is not { } record || (int)run.Action >= record.Areas.Length) return new([], null);
         var context = Context(run, record.Areas[(int)run.Action]);
-        return SpellTargetRules.Collect(context, _map, Profile).Entries.Select(e => new SpellRunTarget(e.Object is { } o ? RunObject(o.Id) ?? new(o.Id, o.Type) : null, e.Tile))
-            .ToArray();
+        var collection = SpellTargetRules.Collect(context, _map, Profile);
+        var targets = collection.Entries.Select(e => new SpellRunTarget(e.Object is { } o ? RunObject(o.Id) ?? new(o.Id, o.Type) : null, e.Tile)).ToArray();
+        // A stored list that holds objects is never rebuilt, whether or not they are still on the map.
+        var built = run.ObjectList.Count > 0 ? null : collection.BuiltRunList?.Select(o => RunObject(o.Id) ?? new SpellRunObject(o.Id, o.Type)).ToArray();
+        return new(targets, built);
     }
 
     public bool UseSpellAtMaximum(SpellRunObject pc) => _spellAtMaximum =
@@ -1203,11 +1222,13 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
 
     private void ApplyDamage(SpellRun run, SpellDamageComponent data, SpellRunObject target)
     {
-        var result = SpellLifeComponents.Damage(data, run, target, this, Rolls, Profile);
+        // ARC-DEV-261 (GT198, DH1): the victim's taking-damage script comes first for each damaged object, with the run's parent as the attacker; a veto cancels that victim's damage step only.
+        // ARC-COMBAT-1141 (GT211): the component asks it while it builds the steps (the acid's worn items and the wearer, each as a target), so a vetoed item's step also leaves the chain's amounts alone.
+        var result = SpellLifeComponents.Damage(data, run, target, this, Rolls, Profile, TakingDamage is { } asks ? id => asks(id, run.Parent?.Id) : null);
         foreach (var step in result.Steps)
         {
-            // ARC-DEV-261 (GT198, DH1): the victim's taking-damage script comes first for each damaged object, with the run's parent as the attacker; a veto cancels that victim's damage step only.
-            if (TakingDamage is { } asks && !asks(step.Object, run.Parent?.Id)) { _log.Add(new(SpellCastEventKind.DamageVetoed, run.Id, 0, step.Object)); continue; }
+            if (step.Vetoed) { _log.Add(new(SpellCastEventKind.DamageVetoed, run.Id, 0, step.Object)); continue; }
+            var damage = step.Damage;
             if (step.Life is { } life && LifeTarget(step.Object) is { } who)
             {
                 // DH1: the run's parent is the attacker, its other object (else its parent) the damage source.
@@ -1217,7 +1238,9 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
                 if (applied.Outcome is { } outcome)
                 {
                     _log.Add(new(SpellCastEventKind.Damaged, run.Id, outcome.HitPointDamage, step.Object));
-                    QueueDamageStep(step.Object, step.Damage, outcome, run.Parent?.Id);
+                    // ARC-MAGIC-1232 (DW2, XR15): the damage step's weapon block follows the life step (a dead critter takes no step).
+                    var criticals = damage.HitEffects.HasFlag(CriticalHitEffects.DropWeapon) && !outcome.Events.HasFlag(LifeEvents.AlreadyDead) ? DropWeapon(run, step.Object, who) : [];
+                    QueueDamageStep(step.Object, damage, outcome, run.Parent?.Id, criticals);
                     // ARC-DEV-295 (XP9, XP10): the same damage function pays the pool share and the kill award, with the source as the killer.
                     RecordDamageExperience(step.Object, outcome, maxHitPoints, source, run.Id, applied.DeathStopped);
                 }
@@ -1225,9 +1248,11 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
                 var chain = ChainOf(run);
                 _itemEvents.AddRange(chain is null ? applied.ItemEvents : applied.ItemEvents.Select(e => e with { Chain = chain }));
                 Struck(step.Object, applied);
+                // ARC-MAGIC-1143 (RH1, RH3): the Damage component's tail (0x4518D0, 0x451AE2) runs the damage effect, so an entangled victim that took the damage asks its save again; a dead victim took nothing.
+                if (applied.Outcome is { Changed: true }) SpellDamageHit(step.Object, step.Damage);
             }
-            else if (step.Life is null && step.Damage.Prevented == DamagePrevention.None && _map.DamageObject(step.Object, step.Damage))
-                _log.Add(new(SpellCastEventKind.Damaged, run.Id, step.Damage.HitPointDamage, step.Object));
+            else if (step.Life is null && damage.Prevented == DamagePrevention.None && _map.DamageObject(step.Object, damage))
+                _log.Add(new(SpellCastEventKind.Damaged, run.Id, damage.HitPointDamage, step.Object));
         }
     }
 
@@ -1250,7 +1275,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         var source = run.Source is { } s ? _map.Object(s.Id) : null;
         var origin = source?.Location ?? run.StartLocation;
         return new(area, self, source, origin, Target: run.Target is { } t ? _map.Object(t.Id) : null, TargetTile: run.TargetTile,
-            Other: run.Other is { } o ? _map.Object(o.Id) : null, Summoned: LastSummoned, SummonedList: SummonedOf(run));
+            Other: run.Other is { } o ? _map.Object(o.Id) : null, Summoned: LastSummoned, SummonedList: SummonedOf(run),
+            RunList: run.ObjectList.Items.Select(o => _map.Object(o.Id)).OfType<SpellTargetObject>().ToArray());
     }
 
     /// <summary>The session's life target of a critter (the hero, or an NPC of the map), or null.</summary>

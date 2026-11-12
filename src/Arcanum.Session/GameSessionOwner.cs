@@ -1097,7 +1097,7 @@ public sealed partial class GameSessionOwner : IDisposable
     {
         ThrowIfDisposed();
         return _inventory.Seeds.TryGetValue(map, out var seed)
-            ? _inventory.View(map, seed, KilledNpc, holder => SpillCell(map, seed, holder), item => DroppedCell(map, seed, item)) : null;
+            ? _inventory.View(map, seed, KilledNpc, holder => SpillCell(map, seed, holder), item => DroppedCell(map, seed, item), item => MovedCell(map, item)) : null;
     }
 
     /// <summary>Detached copy of the items the PC took from the world, in the order they entered its list. The hero's
@@ -1346,7 +1346,25 @@ public sealed partial class GameSessionOwner : IDisposable
     public SessionLifeResult Kill(GameSessionVersion expected, SessionLifeTarget target, string? killer = null)
     {
         ThrowIfDisposed();
-        return Life(expected, target, true, (state, facts, _) => LifeRules.Kill(state, facts), killer: killer);
+        // ARC-COMBAT-1141 (GT210): the kill's damage step asks the victim's taking-damage script first, with no attacker; skip default leaves only the pin at 32000, no death.
+        var goes = TakingDamageGoesOn(target, ref expected);
+        return Life(expected, target, true, (state, facts, _) => goes ? LifeRules.Kill(state, facts) : LifeRules.KillVetoed(state, facts), killer: killer);
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1141 (GT198, GT210): asks the host's taking-damage script (<see cref="TakingDamageScript"/>) of an NPC target with no attacker, before the life step is computed: true when the damage goes on (no host, the hero, an
+    /// entity-less target, run default, or a host that threw). A script that moved the session leaves a caller's current version current (<paramref name="expected"/> follows it), as the host's own writes are no stale call.
+    /// </summary>
+    private bool TakingDamageGoesOn(SessionLifeTarget target, ref GameSessionVersion expected, int map = 0)
+    {
+        if (TakingDamageScript is not { } ask || target.IsHero || target.Entity is not { } entity) return true;
+        // A call the life step will refuse (a stale version, a target it cannot resolve) runs no script: nothing is applied, so nothing is asked.
+        if (!IsCurrent(expected) || Resolve(target, out _, out _, out _) != GameSessionFailure.None) return true;
+        bool goes;
+        try { goes = ask(new(entity, map > 0 ? map : _actor.Map.RuntimeMap, null)); }
+        catch (Exception error) when (error is InvalidOperationException or ArgumentException or OverflowException) { goes = true; }
+        expected = Version;
+        return goes;
     }
 
     /// <summary>One healing (<see cref="LifeRules.Heal"/>), resurrection included; amounts are 0..1,000,000. A raise asks
@@ -1388,7 +1406,8 @@ public sealed partial class GameSessionOwner : IDisposable
     public SessionLifeResult PoisonDamageTick(GameSessionVersion expected, SessionLifeTarget target)
     {
         ThrowIfDisposed();
-        return Life(expected, target, true, (state, facts, _) => LifeRules.PoisonDamage(state, facts));
+        var goes = TakingDamageGoesOn(target, ref expected);
+        return Life(expected, target, true, (state, facts, _) => goes ? LifeRules.PoisonDamage(state, facts) : LifeRules.PoisonDamageVetoed(state, facts));
     }
 
     /// <summary>The 120-second poison recovery tick (<see cref="LifeRules.PoisonRecoveryTick"/>).</summary>
@@ -1634,7 +1653,11 @@ public sealed partial class GameSessionOwner : IDisposable
                 break;
             case LifeTimer.PoisonDamage:
                 if (state.PoisonLevel == 0) return GameEventHandlerOutcome.Completed;
-                result = Life(Version, target, true, (s, f, _) => LifeRules.PoisonDamage(s, f), (_, _) => [LifeTimer.PoisonDamage], map);
+                // ARC-COMBAT-1141 (GT210, GT211): the tick's damage step asks the victim's taking-damage script first, with no attacker; a veto writes nothing and the tick goes on.
+                // A dead victim is not asked (the tick stays the silent rules call it was; whether 0x4B1170 gates on death before the apply is unread).
+                var poisonVersion = Version;
+                var goes = dead || TakingDamageGoesOn(target, ref poisonVersion, map);
+                result = Life(poisonVersion, target, true, (s, f, _) => goes ? LifeRules.PoisonDamage(s, f) : LifeRules.PoisonDamageVetoed(s, f), (_, _) => [LifeTimer.PoisonDamage], map);
                 break;
             case LifeTimer.PoisonRecovery:
                 if (state.PoisonLevel == 0) return GameEventHandlerOutcome.Completed;

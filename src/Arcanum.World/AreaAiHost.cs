@@ -926,7 +926,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var plan = HostilityRules.AttackEvent(this, attacker, victim, flags);
         Trace(victim).Event = $"{plan.Stop}";
         // ARC-WORLD-1162 (SWB18c, HS13): a sleeping victim is woken (the re-seat) whatever the exits after it say.
-        if (plan.WakesVictim) WakeFromBed(victim);
+        // The facts of a seated sleeper say it is not drawn, so the plan above stopped at VictimGone: once the wake took the flag away the event is asked again, as the original's later tests read the cleared flags.
+        if (plan.WakesVictim && WakeFromBed(victim)) { plan = HostilityRules.AttackEvent(this, attacker, victim, flags); Trace(victim).Event = $"{plan.Stop}"; }
         if (plan.Stop is AttackEventStop.Missing or AttackEventStop.VictimProtected or AttackEventStop.VictimDead or AttackEventStop.VictimGone
             or AttackEventStop.VictimDecoy or AttackEventStop.VictimWall or AttackEventStop.Self) return;
         // ARC-WORLD-115: the attacker's followers first, right after the early exits (0x4A9B80, side attacker, the victim the other).

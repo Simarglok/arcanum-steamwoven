@@ -198,7 +198,7 @@ public sealed partial class GameSessionOwner
     private IReadOnlyList<string> LooseAt(SessionMapId map, CellCoord cell)
     {
         IEnumerable<SessionGroundItem> ground = _inventory.Seeds.TryGetValue(map, out var seed)
-            ? _inventory.WithPiled(map, seed, KilledNpc, holder => SpillCell(map, seed, holder), item => DroppedCell(map, seed, item)).Ground
+            ? _inventory.WithPiled(map, seed, KilledNpc, holder => SpillCell(map, seed, holder), item => DroppedCell(map, seed, item), item => MovedCell(map, item)).Ground
             : _inventory.Placed.Where(item => item.Map == map).Select(item => new SessionGroundItem(new(item.Entity, InventoryDomain.MadeFacts(item.Kind)), item.Cell));
         // ARC-COMBAT-017: a thrown item in flight is hidden (object flag 0x2), which the tile's object list skips.
         return ground.Where(item => item.Cell == cell && _inventory.Objects.PileOf(item.Item.Entity) is null && !ItemInFlight(item.Item.Entity))

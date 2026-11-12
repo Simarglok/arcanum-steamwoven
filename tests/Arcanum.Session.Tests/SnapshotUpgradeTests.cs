@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":91,\"world\"";
+    private const string Current = "\"schemaVersion\":92,\"world\"";
+    private const string Current91 = "\"schemaVersion\":91,\"world\"";
     private const string Current90 = "\"schemaVersion\":90,\"world\"";
     private const string Current89 = "\"schemaVersion\":89,\"world\"";
     private const string Current88 = "\"schemaVersion\":88,\"world\"";
@@ -211,9 +212,19 @@ public sealed class SnapshotUpgradeTests
     // before ran a generator.
     internal static string Schema90(string text)
     {
-        StringAssert.Contains(text, Current);
+        text = Schema91(text);
+        StringAssert.Contains(text, Current91);
         Assert.AreEqual(1, text.Split(NoGenerators).Length - 1, "the generators section is a new game's (no slot, no made count, no copy)");
-        return text.Replace(NoGenerators, "").Replace(Current, Current90);
+        return text.Replace(NoGenerators, "").Replace(Current91, Current90);
+    }
+
+    // ARC-MAGIC-1234: the schema 91 text of a schema 92 one whose runs hold no object list: each run row loses its empty list at its end. A text whose run holds objects has no older literal: no build stored
+    // a run's list.
+    internal static string Schema91(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.IsFalse(System.Text.RegularExpressions.Regex.IsMatch(text, "\"objectList\":\\[[^\\]]"), "a run with an object list has no schema 91 text");
+        return text.Replace(",\"objectList\":[]", "").Replace(Current, Current91);
     }
 
     // ARC-DEV-348: the schema 86 text of a schema 87 one with no NPC effect list: the effects section loses its empty list of NPC lists at its end. A text with a list has no older
@@ -623,6 +634,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":92,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":93,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

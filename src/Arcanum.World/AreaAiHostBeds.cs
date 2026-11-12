@@ -59,14 +59,37 @@ public sealed partial class AreaAiHost
             beds.Occupancy.Unseat(bed, npc);
             return "sleeping flag refused";
         }
-        return "seated";
+        return "seated" + NudgeOffBed(npc, beds, bed);
     }
 
-    // The sleeping flag of the session (critter flag 0x1000) over the data's; the write that gives back the data's value leaves no change behind.
+    // SWB15, SWB16: the sleeper's flags, both session writes over the data's: the sleeping critter flag 0x1000 and the object flag 0x100 (not drawn: the bed's occupied frame shows it). A write that gives back the data's
+    // value leaves no change behind. The two are one change here: either both are written or neither.
     private bool WriteSleeping(string npc, bool on)
     {
-        var data = Fields(npc)?.Critter is { } critter && (critter.Flags & SleepingFlag) != 0;
-        return _session.WriteObjectFlag(_session.Version, npc, SessionObjectFlagField.Critter, unchecked((int)SleepingFlag), on, data).Failure == GameSessionFailure.None;
+        var data = Fields(npc);
+        var sleeping = data?.Critter is { } critter && (critter.Flags & SleepingFlag) != 0;
+        var hidden = data is { } fields && (fields.Object.Flags & DontDraw) != 0;
+        var before = Sleeping(npc);
+        if (_session.WriteObjectFlag(_session.Version, npc, SessionObjectFlagField.Critter, unchecked((int)SleepingFlag), on, sleeping).Failure != GameSessionFailure.None) return false;
+        if (_session.WriteObjectFlag(_session.Version, npc, SessionObjectFlagField.Object, unchecked((int)DontDraw), on, hidden).Failure == GameSessionFailure.None) return true;
+        // The second write failed: the first goes back to what the flag said before (not simply the opposite).
+        _session.WriteObjectFlag(_session.Version, npc, SessionObjectFlagField.Critter, unchecked((int)SleepingFlag), before, sleeping);
+        return false;
+    }
+
+    // SWB15 (0x43E770 at the end of 0x45F2D0): a sleeper on the bed's own tile is moved to the neighbour tile in direction 4 (x + 1, y + 1) when that tile exists, with no animation and no offset.
+    // Nothing else is tested (the tile may be blocked), as in the original; the move notifies like any placement.
+    private string NudgeOffBed(string npc, AreaAiBeds beds, AreaObjectKey bed)
+    {
+        if (Tile(npc) is not { } at || !beds.Placed().Any(p => p.Key == bed && p.Cell == at)) return "";
+        var to = Arcanum.Simulation.Navigation.RoutePlanner.Neighbor(at, NeighborDirection.XPlusYPlus);
+        // Like every placement here the target must be a tile the shown map holds and the hero is not on (the original tests nothing but that the tile exists).
+        if (!PlaceHeld(to)) return ", no tile to move to";
+        if (!_npcs.TryGetValue(npc, out var row)) return "";
+        Movers.Restore(npc, row.Row.Key, row.Origin, to, Movers.FacingOf(npc, NeighborDirection.XPlus));
+        RecordPlace(npc);
+        NoteEntered(npc, to);
+        return $", moved {at.X},{at.Y} -> {to.X},{to.Y}";
     }
 
     // A sleeper whose critter flag the session saved (a load) but whose bed holds nobody (the occupant is not saved): the bed of its standpoint takes it again, as the original's occupant field would hold it.
@@ -74,7 +97,12 @@ public sealed partial class AreaAiHost
     {
         if (beds.Occupancy.BedOf(npc) is not null || (_session.QueryObjectFlags(npc).CritterSet & unchecked((int)SleepingFlag)) == 0) return null;
         foreach (var stand in NearestFirst(npc, route))
-            if (BedAt(beds, new(stand.X, stand.Y)) is { } bed && beds.Occupancy.Occupant(bed) is null && beds.Occupancy.Seat(bed, npc)) return "seated again";
+            if (BedAt(beds, new(stand.X, stand.Y)) is { } bed && beds.Occupancy.Occupant(bed) is null && beds.Occupancy.Seat(bed, npc))
+            {
+                // A save of slice 2 kept the sleeping flag only: the don't-draw flag is written again with it.
+                WriteSleeping(npc, true);
+                return "seated again";
+            }
         return null;
     }
 
@@ -130,11 +158,12 @@ public sealed partial class AreaAiHost
     }
 
     // SWB18 (c): the attack event's victim and a sleeping witness are woken through the re-seat (0x4AD0B0): a sleeper that lies in a bed at one of its standpoints leaves it, any other stays asleep.
-    private void WakeFromBed(string npc)
+    private bool WakeFromBed(string npc)
     {
-        if (_scene.Beds is not { } beds || RouteOf(npc) is not { } route || !Sleeping(npc)) return;
+        if (_scene.Beds is not { } beds || RouteOf(npc) is not { } route || !Sleeping(npc)) return false;
         ReconcileBeds(beds);
         var text = Reseat(npc, beds, route);
         Trace(npc).Route = $"woken by an attack: {text}";
+        return !Sleeping(npc);
     }
 }
