@@ -45,6 +45,7 @@ src/Arcanum.Session/GameSessionAssembly.cs,QueryHeroAssembly,pending,
 src/Arcanum.Session/GameSessionAttack.cs,AttackCritter,pending,
 src/Arcanum.Session/GameSessionAttack.cs,AttackValues,pending,
 src/Arcanum.Session/GameSessionAttack.cs,CriticalAndWearSteps,pending,
+src/Arcanum.Session/GameSessionAttack.cs,DollValues,exempt,host
 src/Arcanum.Session/GameSessionAttack.cs,FirearmsLevel,pending,
 src/Arcanum.Session/GameSessionAttack.cs,LandShot,pending,
 src/Arcanum.Session/GameSessionAttack.cs,QueryHeroAttackChance,pending,

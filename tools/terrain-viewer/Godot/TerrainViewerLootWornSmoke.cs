@@ -61,6 +61,12 @@ public partial class TerrainViewerApp
             Require(grid.BodyDoll && grid.Held is null, "the doll button shows the doll view");
             var shown = panel.ViewForSelfTest!.BodyDoll.Where(slot => slot.Entity is not null).ToArray();
             Require(shown.Length > 0 && worn.Intersect(shown.Select(slot => slot.Entity!)).Any(), "the doll holds the body's worn items");
+            // ARC-UI-1121 (B30, IW29, IW41–IW43): the doll view prints the body's damage and armour ratings and fills a too heavy weapon's slot; both come from the combat host.
+            var ratings = panel.ViewForSelfTest!.BodyRatings;
+            Require(ratings is not null, $"the doll view has the body's ratings ({body.Entity}: the combat host did not read them)");
+            Require(ratings!.Damage >= 0 && ratings.Armour >= 0, $"the ratings are not negative (damage {ratings.Damage}, armour {ratings.Armour})");
+            GD.Print($"ARC-UI-1121 loot-worn doll ratings body={body.Entity} damage={ratings.Damage} armour={ratings.Armour} weaponTooHeavy={ratings.WeaponTooHeavy} " +
+                $"weaponWorn={shown.Any(slot => slot.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon)}");
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_LOOT_DOLL_CAPTURE") is { Length: > 0 } capture)
             {
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
