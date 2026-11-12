@@ -508,6 +508,7 @@ src/Arcanum.World/AreaSceneryHost.cs,Restart,pending,
 src/Arcanum.World/AreaSceneryHost.cs,TakeSoundBegins,exempt,host
 src/Arcanum.World/AreaScriptHost.cs,ReactionOf,pending,
 src/Arcanum.World/AreaScriptSpells.cs,GiveMastery,pending,
+src/Arcanum.World/AreaScriptStoryQueries.cs,RumorKnown,exempt,host
 src/Arcanum.World/AreaShopMerchant.cs,Start,pending,
 src/Arcanum.World/AreaSpellCastMap.cs,Direction,pending,
 src/Arcanum.World/AreaSpellCastMap.cs,TileBlocked,pending,
