@@ -141,7 +141,7 @@ other state than the original becomes an issue.
 | --- | --- | --- | --- |
 | Items 1 (ARC-RES-1104) | 83 ranked, 17 read: 6 from F1 to F2, reasons made exact, gaps #1283 (no-drop on transfers), #1284 (NPC re-wield flag) and #1288 (NPC look-for bits after a drop) | [`triage/v2-items.csv`](triage/v2-items.csv) | [partial-rows-by-risk](../research/ledger/items.md#partial-rows-by-risk-arc-res-1104) |
 | Items 2 (ARC-RES-1104) | the other 66 read: 20 from F1 to F2, reasons made exact, gaps #1299 (body decay's destroyed items), #1300 (restock delay, owner decision), #1301 (a broken generate-once container) and #1306 (items sold into a broken container) | [`triage/v2-items.csv`](triage/v2-items.csv) (slice 2) | [partial-rows-by-risk-items-slice-2](../research/ledger/items.md#partial-rows-by-risk-items-slice-2-arc-res-1104) |
-| AI 1 (ARC-RES-1104) | 92 ranked, the 21 scored 6 read: 11 from F1 to F2, reasons made exact, gaps #1312 (a waiting companion's death), #1313 (wander goals), #1314 (waypoint index not saved), #1315 (please move before an attack) and #1316 (one change-of-place slot, owner decision) | [`triage/v2-ai.csv`](triage/v2-ai.csv) | [partial-rows-by-risk-ai-slice-1](../research/ledger/npc-ai.md#partial-rows-by-risk-ai-slice-1-arc-res-1104) |
+| AI 1 (ARC-RES-1104) | 92 ranked, the 21 scored 6 read: 11 from F1 to F2, reasons made exact, gaps #1312 (a waiting companion's death), #1313 (wander goals), #1314 (route state not saved), #1315 (please move before an attack), #1316 (one change-of-place slot, owner decision) and #1317 (destroyed critters in the enemy list) | [`triage/v2-ai.csv`](triage/v2-ai.csv) | [partial-rows-by-risk-ai-slice-1](../research/ledger/npc-ai.md#partial-rows-by-risk-ai-slice-1-arc-res-1104) |
 
 ## Address-named methods
 
