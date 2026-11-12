@@ -779,9 +779,19 @@ on the pick of ARC-UI-005.
   is drawn a second time over itself (0x43C690): after every body and before the roofs, its frame additive, the source tinted
   by the constant colour (200, 200, 200), unlit, without its alpha modes and its wall fade (`TerrainCanvas.AreaHighlight`,
   rule `AreaHoverWindow.Highlighted`). The item brightens by about 78 % of its own colour. A wall, a projectile, a critter or a
-  trap gets no second draw. NOT READY: the critters' coloured rings under and over them (arts 467 and 468 in the reaction
-  category's colour, 555 in combat mode), the detect-invisible exception, the wading object's two-part draw (the same blit
+  trap gets no second draw (their rings: next item). NOT READY: the detect-invisible exception, the wading object's two-part draw (the same blit
   for both parts, so no visible difference).
+- **Rings (ARC-UI-1117, ledger [OH21](../research/ledger/ui-audio.md#hovered-object-arc-ui-057)).** A hovered critter or trap (types 15–17) with a hero in the
+  session gets two rings: art 467 `hoverunder` under every body (after the terrain, before the flat and upright bodies) and art 468 `hoverover` over every
+  body (before the roofs), both additive and tinted by the ring colour (`TerrainCanvasArea.AreaRing`, rules in `AreaHoverRingRules`, the frames read from
+  `art\interface` through `interface.mes`). The colour is white; an NPC's is its reaction category's row of `rules\reaction_colors.mes` (seven rows read at
+  start, the category of the AI host's standard reaction; Neutral reads yellow in the installed data). While the hero is in combat mode an NPC's two arts are 555
+  `hoverattack` (a PC or a trap keeps 467 and 468). Arts and colour are decided when the pointer enters the creature (a combat toggle under the pointer changes them at the next hover, as the
+  original's setter does nothing for the same handle). The ring is the frame placed at the body's anchor plus the frame's delta less its centre (15 pixels lower
+  for a wading body) and follows a moving body; each ring steps to the next frame of its art every 1000 / fps ms of art 467 or 468 (the periods the original fixes at start; 15 frames at installed data). Deviations:
+  the frame stamps start at the hover; an NPC with no reaction (no AI host: an automated run leaves it off, or no combat values) is white; HD does not apply
+  (the interface art stays Legacy); a body with no hotspot (a seam moved it without placing it from its frame) shows no ring; a missing art or colour file
+  degrades to no ring or white and is said once in the log (`ARC-UI-1117 hover-ring`).
 - **Window.** With the interface bars drawn the object is described in the message window (0x553BE0) and the floating
   tooltip is not shown: an item by its item window (its type icon and its name in its colour, as the hotkey bar's,
   ARC-UI-035, and since ARC-UI-108 the item window's lines, see the next item); a portal (`Door_Icon` 436 or `IconWindow` 786 by its art), a container (by its description) and scenery (437)
@@ -820,7 +830,7 @@ on the pick of ARC-UI-005.
   the original's behaviour, not a Steamwoven bug (OH8).
 
 Checks: `AreaHoverWindowTests` (the dispatch by type, the highlighted types and flags, the images, the window's layout and
-its show and leave), `AreaHoverCritterTests` (ARC-UI-109: the second line's parts and order, the sneak states, the alignment bands and image, the dead line), `AreaCombatPanelLayoutTests` and `AttackChanceTests` (Simulation) and `AttackChanceStateTests` (Session) (ARC-UI-124: the icon table, the two layouts, the chance's terms, the cancel share, the zero cases), `AreaHoverConditionTests` (ARC-UI-107: the hit-point text, which types show hit points and a lock line, the
+its show and leave), `AreaHoverRingTests` (ARC-UI-1117: which types, the arts by combat mode, the colour by category and its table's reading, the placement and wading shift, the frame clock, the files' reading), `AreaHoverCritterTests` (ARC-UI-109: the second line's parts and order, the sneak states, the alignment bands and image, the dead line), `AreaCombatPanelLayoutTests` and `AttackChanceTests` (Simulation) and `AttackChanceStateTests` (Session) (ARC-UI-124: the icon table, the two layouts, the chance's terms, the cancel share, the zero cases), `AreaHoverConditionTests` (ARC-UI-107: the hit-point text, which types show hit points and a lock line, the
 lock message order, the fourth line's rectangle, red colour and right edge, the condition read from a session after damage and
 lock writes), `AreaItemWindowLinesTests` (ARC-UI-108: every line of the item window over invented items, the draw's rectangles, fonts and colours), `AreaItemWindowWrapTests` (ARC-UI-1115: a long line broken at its rectangle's width and cut by its height, no wide layout or cut of characters, the right-aligned long text, the bounds check), `AreaMessageLogTests`; the native smoke stage `hover` (`./arcanum smoke pr --stages hover --hero
 human-male`, marker `ARC-UI-057 native-smoke hover-window PASS`: with the bars drawn it looks for an item, a container, a
@@ -831,7 +841,7 @@ wilderness, prints `ARC-UI-057 native-smoke hover-window NONE` instead of failin
 (an animated scenery shows the frame its animation shows now, not its index command's; still bodies are tried first) drawn additive, none of its picked pixels
 gets darker and some get brighter, the window shows the expected kind, image and name without the tooltip, and since ARC-UI-107 the
 fourth line the session's facts give (a container's lock line and the `current/maximum` hit points, none for an invulnerable
-scenery; the line `ARC-UI-107 native-smoke hover-window fourth-line` prints each), leaving takes both away;
+scenery; the line `ARC-UI-107 native-smoke hover-window fourth-line` prints each), leaving takes both away; since ARC-UI-1117 the same stage hovers an NPC (the AI on for that pass) and checks the rings: arts by combat mode, the colour of its reaction category, additive pixels in the ring's rectangle, a frame step, removal on leaving; `ARC-UI-1117 native-smoke hover-ring` prints it;
 `ARC_AREA_HOVER_WINDOW_CAPTURE` saves readbacks) and the stage `life` (`ARC-UI-057 native-smoke hover-window critter PASS`: a
 follower's and another NPC's window with their name, image or portrait and bars; since ARC-UI-124 `ARC-UI-124 native-smoke hover combat-panel PASS`: in combat mode the other NPC's window shows the bullseye and the chance, out of it the image; `./arcanum smoke pr --stages life --map "bates mansion lev 2" --hero human-male`). Not verified: the exact pixel of the
 original's 16-bit additive blit (its pixel loop is not read), a portal's window on screen (the start map has none).
@@ -965,6 +975,36 @@ the window shows for a follower without a portrait (the art by race or flags is 
 portrait (it is not session state, and the PC is not a hover target), the rule that gives an NPC sharing the PC's
 portrait another one (0x4CEB80, it needs the PC's), the hovered panel's art for anyone else, and the original's hide
 toggle. Original visual parity NOT VERIFIED.
+
+### Combat action points and turn order (ARC-UI-1114)
+
+Slice 2 of the [combat HUD plan](../research/combat-hud.md#slices) (FR-COMBAT-011, FR-COMBAT-003, FR-UI-005), in `area` with plain Godot
+controls (no original interface art), read in the 1.0.7.4 executable ([ledger CH2–CH6 and CH14](../research/ledger/ui-audio.md#combat-hud-arc-ui-017)).
+The rules are `ActionPointRules` and `TurnOrderRules` in `Arcanum.Presentation.Hud`, the cost preview is `AreaActionPointPreview` in
+`Arcanum.World`; the view is `AreaCombatHud` and its host `TerrainViewerAreaCombatHud.cs`. Shown only while a turn-based round runs (a combat
+mode with a round), with a hero, while no window the bars do not reach is open.
+
+- **Lamps** (CH2). A panel of 20 lamps in four groups of five at the original's place just above the interface bar (the lamp panel at 222, 412 of the
+  800 × 600 screen, scaled with the bars; the lamp art and exact lamp places are not drawn, plain rectangles stand for them). On the hero's subturn they
+  light from the left in three shares: the points left after the previewed action (green), the action's cost (orange) and the part of it the points do not
+  cover (red), the colours of the original's hidden-interface bar (CH3); more than 20 show what fits, no points light nothing. On another participant's
+  subturn three green lights run along the lamps, seven apart, one step every 100 ms (CH5); the lights' clock runs only while another participant acts and starts again with each round, as the original's.
+- **Pending cost** (CH4, CH14). The lamps preview the last action-point check's cost. In a round the action under the pointer previews its cost
+  (`AreaActionPointPreview.Cost`: walk 2 a step or 1 for an always-running hero, use or loot 2 plus the approach, pick up 1 plus the walk, attack with the weapon's
+  cost plus the approach for a weapon that reaches one cell or less, cast 4); an action that runs no check (a talk, no route, nothing under the pointer) leaves it as
+  it was. The hero's own charges (a step, an attack, a pickup, a use) store their cost too, and a charge does not clear it. Each subturn start, the end of the round and a new session
+  reset it (the original's subturn start runs the check with 0). The approach is counted in straight-line cells, the original asks its pathfinder for the path (a limit; the charge of each step stays exact).
+- **Turn order** (CH6; a Steamwoven addition approved by the owner on 2026-10-28). A list at the top right under the interface strip (the follower portraits stand at the left edge): `Round N`, then the
+  participants in round order, the one whose subturn it is marked with `>` (the hero as `Hero`, an NPC by the name the hover gives it). More than 8 participants
+  show 8 from the current one on and `+N more`. It hides behind any open window. The list is shown in the Steamwoven rule mode and hidden in Original
+  (`InterfaceRuleProfile.TurnOrderListHidden`, [rule modes](../world/rule-modes.md)); the lamps show in both.
+- **Not done.** The 25-point bar of the hidden-interface layout (the viewer has no hide toggle), the lamp arts and positions, the end-turn button on the lamp panel,
+  the item and skill cursors' previews, the Alt variants of the original's preview (attack check on a portal, container or party member), a throw's own cost in the preview (it shows the attack's), the hero's name in the list, a created critter's name in the list (it shows its entity id), the lamps for a negative point count (the original lights the shortfall, the viewer nothing; points are never negative in a round). Visual parity NOT VERIFIED.
+
+Checks: `CombatHudTests` (shares, the three cases of the 20-lamp cap, the cue, the list window), `AreaActionPointPreviewTests`, `RuleModeTests`; the native smoke
+stage `turn-based` reads the HUD in a real round on `Arcanum1-024-fixed`: three running lights and a marked NPC on the NPC's subturn, the hero's points as lamps and
+the marked hero on its own, the walk preview's 2 shown as the cost, the same cost kept after the step, the attack preview equal to the weapon's cost, and the HUD gone
+with the round (`ARC_AREA_HUD_CAPTURE=<ignored path prefix>` saves the readbacks the graphics composite is made from).
 
 ### Floating text (ARC-UI-021)
 
@@ -1836,6 +1876,14 @@ hero's excludes its innate race, background, class and gender causes, which the 
 experience stored in the map file against the session's level (a follower the session levelled after the file was written shows an inflated figure); the
 spell hover texts read the hero's spell book; without the player's game folder the plain fallback panel draws its + and − inert; a stored primary stat above the
 racial range shows clamped.
+
+**Identify sheet, heal another critter and lockpicks on containers (ARC-UI-1127, slice E8-g of [the plan](../project/missing-systems-plan.md)).** (1) The cast host's `IdentifyCritter` event for an NPC
+(Read Aura, spell 7, ledger XR2) opens the same read-only NPC sheet as the dialog's c-e reply (`TakeIdentifyEvent` and `TakeIdentifySheet` in `Godot/TerrainViewerAreaNpcSheet.cs`; the NPC's map row comes from the
+cast host's id; the sheet waits until no modal window owns input, and a hero as the target keeps its message line). (2) A healing kit with the target flag aimed with the item cursor at another critter walks
+next to it (goal 39, range 1) and the session's heal runs on it (`HealCritter`, [Heal](../world/heal-runtime.md#viewer)). (3) Armed lockpicks on a standing container start the skill goal 33 with the loot
+target string, and the pick is the session's on the container's lock (`TerrainViewerAreaContainerPick.cs`, [Pick locks](../world/pick-locks-runtime.md#containers-in-the-viewer-arc-ui-1127)). Smoke: stage `item-aim`
+(steps 6 to 8, run on the town sector). NOT READY: the container window of See Contents and the item description window (their interaction is not read), the question window for a junk pile's and a container's
+stacks, poison sources.
 
 **Not yet in the original's look:** the auto-level schemes tab (a NOT READY note); the age line (the session has no age); the race icons as portrait fallback; a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) keeps the diagnostic
 look. Without a game folder (the synthetic self-tests) or when an art does not read, the whole sheet is the diagnostic panel above.

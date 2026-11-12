@@ -606,7 +606,12 @@ public sealed class AreaConversationHost
                 // blocked (ARC-DEV-229). ARC-DEV-230: np queues a newspaper issue in the session's queue, or sets the speaker's origin.
                 _session.QueryHero() is null ? null : new WindowPort(this),
                 new NewspaperPort(_session),
-                new OriginPort(this)));
+                new OriginPort(this),
+                // ARC-SCRIPT-1150: the t: reply's skill menu names the skills from skill.mes and reads the hero's own gold; it needs the hero and the texts.
+                _session.QueryHero() is null || _greetingTexts?.Skills is null ? null
+                    : new SessionDialogTrainerPort(_session, AreaConversationState.PcParticipant, skill => _greetingTexts.SkillName(skill)),
+                // ARC-SCRIPT-1304: the paid r: rumor reads the hero's own gold.
+                _session.QueryHero() is null ? null : new SessionDialogPursePort(_session, AreaConversationState.PcParticipant)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }

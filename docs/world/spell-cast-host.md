@@ -772,7 +772,7 @@ executable reads [XR1–XR5](../research/ledger/spell-runs.md#magic-audit-execut
   (the wrappers 0x4EE4C0, 0x4EE430, 0x4EE3A0 test the local player; a single-player game does no more), so an NPC caster's Identify has no effect and is no "not ready" line. For the hero the host logs one
   answer by the target's object type: `IdentifyCritter` (a PC or NPC: the original opens the read-only NPC sheet, XR2), `IdentifyContainer` (the container's inventory in window mode 4 with no lock, jam or
   magically-held test, XR3), `IdentifyItem` (any other type: the item description, the true one when the item is identified, XR4). The viewer shows each as a line in the message log
-  (`AreaSpellCasting.Line`); the windows, and what a press in mode 4 may move (not read), are E8's, which reads the same events.
+  (`AreaSpellCasting.Line`); since ARC-UI-1127 (E8-g) `IdentifyCritter` for an NPC also opens its read-only character sheet (`TakeIdentifyEvent`, queued until nothing else owns input, the same sheet as the dialog's "show your abilities", [ARC-UI-088](../rendering/terrain-viewer.md)); the hero as the target keeps the line (its sheet is the C key). The container's inventory window and the item description window, and what a press in mode 4 may move (not read), are E8's still.
 - **Divine Magick's identified flag (0x454A10, XR4, XR5).** Spell 9 (area `Tgt_Obj_Inven`) sets `OIF_IDENTIFIED` (`obj_f_item_flags` 0x57, bit 0x1) on its item before its Identify. In the original it is
   a plain write: no side effect for item flags, no reference count, and nothing in the run reads it back. The session keeps it as the **identification mark** that a barter window already sets
   (`GameSessionOwner.MarkItemIdentified`, `QueryItemIdentified`, saved in the inventory section: no schema step), so every reader of that mark (the name, the item window's lines, the worth in a barter, the
@@ -780,7 +780,7 @@ executable reads [XR1–XR5](../research/ledger/spell-runs.md#magic-audit-execut
   new or an existing mark. A clear of the flag, another item-flag bit, another field and a target that is no item stay "not ready" (no installed record has them).
 - **Census (MA-0).** Records 6 and 7 leave the not-ready list on both census targets; record 9 keeps its `ObjFlag` on the census's critter targets (its target is an item).
 
-**Not ready.** The three windows (E8); the multiplayer packets (kinds 7, 8, 10); an inventory item of a loot, steal or barter window as a target ([below](#an-inventory-item-as-a-spell-target-arc-magic-1128)).
+**Not ready.** The container's inventory window (mode 4) and the item description window (E8); the multiplayer packets (kinds 7, 8, 10); an inventory item of a loot, steal or barter window as a target ([below](#an-inventory-item-as-a-spell-target-arc-magic-1128)).
 
 ### An inventory item as a spell target (ARC-MAGIC-1128)
 

@@ -165,6 +165,14 @@ history held about 500 runs of such copies of one template).
   observation from being refused as late (`RestoreWorldTestTime`, ARC-WORLD-025). `summon-wall` and `summon-undead` read the hero's hit points before
   and after the burn and failed once in the long list (`25 -> 30`, not reproduced alone or in shorter chains); it now checks the
   hit-point damage the hero carries, which the wall's burn would raise (ARC-DEV-405).
+- **Synthetic frame clock (ARC-DEV-1251).** `./arcanum smoke self-test` failed now and then with `GRID_OBSERVATION_NONMONOTONIC` in the
+  hover and inventory stages, only on a busy machine. The cause: a synthetic frame (`WorldFrameForSelfTest`) was stamped at the actor
+  session's time plus a tenth of a second, and that session time is a wall-clock stamp taken when the session was made; before the first
+  frame the world still reads the wall clock, so `OpenHoverGate`'s pad selection (a quarantine) was observed at the later wall time, and
+  when the setup took more than 0.1 s between the two, the first frame was older than the queue's newest observation. The frame's time
+  is now `SelfTestFrameClock.Next`: a step after the test time, or after `GridInputQueue.Newest` when that is later. `OpenHoverGate`
+  waits 150 ms in a self-test so the order shows on every run, not only under load. A new self-test stage that observes before its first
+  synthetic frame needs nothing more.
 - **Stage boundary reset (ARC-DEV-408, ARC-DEV-1187).** A stage that passes alone and fails after others had a second cause besides the test
   time: what the earlier stages left in the shared session. `TerrainViewerSmokeStageSet` calls `SmokeStageBoundary`
   (`TerrainViewerSmokeStageReset.cs`) at every change of stage in the viewer. The first call with a hero and a session saves a baseline into a
@@ -216,7 +224,7 @@ history held about 500 runs of such copies of one template).
   configuration, the stages are grouped into the fewest processes (one per configuration, in order of first appearance;
   the step is named `stages-main`, `stages-wild`, `stages-town`, `stages-shrine`, `stages-crash-site-cave` ... when there
   are several, `stages` when there is one), a *portable* stage (`map`, `resources`, `report`, `knockdown`, `inv-arrange`,
-  `created-*`, `summon-*`, `item-aim`, `disarm`) rides in a process that already exists on its map (else it gets one), and the stages that end a game, move
+  `created-*`, `summon-*`, `disarm`) rides in a process that already exists on its map (else it gets one), and the stages that end a game, move
   the window, leave state behind or run long (the menu family, `walk`, `census`, `container-click`, `perf`,
   `dead-window`, `critter-fall`, `tech-craft`, `tech-products`, `debug-travel`, `follower-far`, `teleport-follow`, `inv-carry`) each get a process of
   their own (`stages-main-walk`). `--map`, `--sector` and `--main-menu` pin that dimension for every stage; a pinned

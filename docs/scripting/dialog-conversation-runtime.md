@@ -104,8 +104,8 @@ picking it runs the reply's action, then a `ReactionCommand` of −10 (`DialogCo
 port, then reads the effective reaction; at most 20 (`InsultEndsAtOrBelow`) the talk ends as `Ended(Insulted)` with no SCR
 continuation (the NPC's generated reply is not loaded), above 20 its transition follows (0x4191E0). Without a world port, or
 with an action ending in `JO`/`UW`/`FL`/`ET` (the original then skips the insult, read for FL), it is offered blocked. `b h l p` (exact) and
-`c r t z` (prefix) are offered blocked as
-`UnsupportedInteraction`; `d q u x` have state-dependent visibility and make the step a
+`c z` (prefix) are offered blocked as
+`UnsupportedInteraction`, and so is a prefix `t` without the [trainer ports](#trainer-reply-arc-script-1150) and a prefix `r` without the [rumor ports](#rumor-reply-arc-script-1304); with them `t:` is the trainer reply and `r:` the rumor reply; `d q u x` have state-dependent visibility and make the step a
 frontier. NPC `g:` (prefix) is the original's greeting when the conversation has a greeting port (ARC-WORLD-058,
 [dialog greeting](dialog-greeting.md)), else a frontier; `m:`/`r:` (prefix) and exact `i:` are frontiers. Other text is literal.
 
@@ -485,9 +485,76 @@ A PC line (0x4182D0) reads `gd_pc2m` or `gd_pc2f` by the NPC's gender, a PC clas
 a dumb PC (its intelligence as the reply gates read it at most 4, the original's 0x45FC00) reads their dumb variants, the class
 offset still applied. Without the port, or when its facts are unknown, the text stays empty and the reply works as before; a refused
 roll, a port exception or an undecodable phrase fails the conversation (`InvalidQueryResult`, `QueryException`, `InvalidText`). The
-phrase changes only the text: the transitions and blocks above stay. Not built: the phrases of the prefix markers (`c d q r t u x z`;
-`d r t x` append the reply's text after a phrase), the healer menu behind `h:` (ARC-SCRIPT-044) and the NPC's generated line after
+phrase changes only the text: the transitions and blocks above stay. The `t:` phrase (PC lines 500..599) is built (ARC-SCRIPT-1150); its argument is
+stored after the phrase, not appended to it (ledger DTR1). The `r:` phrase (the PC's class line 2000) is built too (ARC-SCRIPT-1304, ledger RMR1). Not built: the phrases of the prefix markers (`c d q u x z`;
+`d x` keep the reply's text after a phrase, `c` reads one line), the healer menu behind `h:` (ARC-SCRIPT-044) and the NPC's generated line after
 an insult (group 1000).
+
+## Trainer reply (ARC-SCRIPT-1150)
+
+With the optional `IDialogTrainerPort` (`DialogConversationPorts.Trainer`: the skill names and the hero's own gold), the world port (the price's
+reaction), the skill port (the training) and the gold port (the payment), a Player reply whose text starts with `t:` (either case) is the original's
+**trainer reply** ([ledger DTR1–DTR9](../research/ledger/social.md#trainer-reply-arc-script-1150)). It is offered as `Generated` (marker `t`, the
+phrase PC line 500..599 through the greeting port) with the transition `DialogOptionTransition.Trainer`; the numbers after the marker (comma-separated,
+`a-b` ranges, read like the original's list reader 0x417F90, `DialogConversation.ParseTrainerSkills`) are the skills it teaches: 0..11 basic, 12..15 tech.
+A reply with a number that is no skill, with more numbers than four (five options hold the skills and the way out), with a dialog transfer or window
+action (`JO`, `UW`, `FL`, `ET`, `SU`, ...) or without one of the ports stays blocked (`UnsupportedInteraction`) as before.
+
+Picking it runs the reply's action (the hostile check too), then opens the **talk** without leaving the node: `NpcLine` and `Options` are replaced
+screen by screen (`Turn` and `CurrentNode` stay; `RefreshOptions` rebuilds a screen with the texts it showed, `Close` ends the dialog):
+
+| Screen | NPC line | Options |
+| --- | --- | --- |
+| Menu (0x418CA0) | class line 3000 | one per listed skill (its `skill.mes` name; `TrainerStep`), then the way out: PC line 800..899 with the reply's own transition |
+| Already trained (0x418C40) | class line 4000 | PC line 600..699, the reply's own transition |
+| Cannot be taught | class line 5000 | as above; the setter refuses the first tier below effective level 1 (ledger SR1), asked through `IDialogSkillPort.Level` without a write |
+| Price (0x418A40) | class line 1000 with its `%d` = 100 on the reaction scale (0x4C1150: 200 below reaction 0, 200 − 2r below 50, else 120 − 2r/5, r at most 100; a price of 1 is 2) | PC line 1..99 (pay) and 100..199 (the reply's own transition) |
+| No gold (0x418B30) | class line 2000 when the hero's own gold (`IDialogTrainerPort.PcGold`, not the followers') is below the price | as the first notice |
+| Trained (0x418F30) | class line 6000 after the hero paid the NPC (`GoldCommand` of −price through the gold port) and the first tier was set (`SkillTrainingCommand` tier 1 through the skill port) | the PC class line 1000 (+ 50 × the NPC's social class), the reply's own transition |
+
+"The reply's own transition" is the reply's response decoded as for any reply: a positive value continues at that node (the reply's action is not run
+again), zero ends the dialog at the caller's next line, a negative value ends it at that SCR line. The lines come from the greeting port's generated-dialog
+files like the greeting's (the class group + 50 × the NPC's social class, the dumb files, the override line 9999 + group / 1000); without the port, or when
+it does not know the facts, a line is empty and the talk works. The talk reads the same `Phrase` roll as a Player phrase for PC lines and the `Line` roll
+for NPC lines. Receipts: the payment and the training are effects of the turn (a refusal fails the conversation with `CommandRejected`; the budget of
+two effects is checked before the payment). The Educator update after a training (ledger SR11) and the debug prefix are not built.
+
+Session seam: `SessionDialogTrainerPort` over `GameSessionOwner.QueryGold` (the hero's own stack only) with the host's skill names; a PC other than the
+session's or a session without a hero throws on a read (a query failure). The AREA host builds it when the session has a hero and the module's
+`mes\skill.mes` loaded with the greeting texts (`AreaGreetingTexts.Skills`, decoded with the hover text profile); otherwise the reply stays blocked.
+Tests: `DialogTrainerTests` (synthetic), `DialogTrainerPortTests`, and the opt-in `DialogTrainerRealDataTests` (`DAT_ROOT`: all 315 installed `t:` replies
+in 58 files are admitted, the files hold groups 1000..6000 and the PC ranges).
+
+## Rumor reply (ARC-SCRIPT-1304)
+
+With the rumor port (`DialogConversationPorts.Rumors`, the known and quelled rumors) and the greeting port (the lines, the rumor texts and the draw), and
+for a price also the world port (the reaction), the gold port (the payment) and a purse (`DialogConversationPorts.Purse`, or the trainer port, which answers
+the same own-gold read), a Player reply whose text starts with `r:` (either case) is the original's **rumor reply**
+([ledger RMR1–RMR9](../research/ledger/social.md#rumor-reply-arc-script-1304)). It is offered as `Generated` (marker `r`, the phrase the PC's class line
+2000 through the greeting port) with the transition `DialogOptionTransition.Rumor`; the text after the marker reads as `$price,list`
+(`DialogConversation.ParseRumorReply`: the price after the first `$`, the rumors of the list after the next comma, comma-separated numbers or `a-b`
+ranges as in the trainer's list; parentheses and spaces around the numbers do not matter, the installed replies use them). A reply without a `$` or the
+comma, with a rumor outside 1000..2999 (the session's rumors), with a dialog transfer or window action in the same reply, or without one of the ports
+stays blocked (`UnsupportedInteraction`) as before. A free reply (price below 1) needs no money port.
+
+Picking it runs the reply's action (the hostile check too), then the talk, in the screens of the [trainer's talk](#trainer-reply-arc-script-1150)
+(`TrainerStep` becomes `RumorStep` for the price's yes):
+
+| Step | What happens |
+| --- | --- |
+| Draw (0x418FC0) | The listed rumors that are not quelled (`IDialogRumorPort.IsQuelled`) and not known by the PC (`IsKnown`) stay, in order and with repeats; one is drawn by the `Rumor` roll of the greeting port (`0..count−1`; a single candidate draws nothing). A roll the port refuses or answers out of range fails the conversation (`InvalidQueryResult`), a throwing port is a `QueryException` |
+| Nothing left | the NPC's class line 7000 and the PC line 600..699, the reply's own transition; nothing is paid or written |
+| Price below 1 | the tale at once |
+| Price | the price screen of the trainer's talk with the reply's price on the reaction scale; no leaves by the reply's own transition; yes, with enough own gold, pays the NPC (`GoldCommand` of −price) and tells; too little gold is the class line 2000 and changes nothing |
+| Tale (0x4190E0) | the NPC's line is the rumor's text (`DialogGreeting.RumorTale`: the rumor file of the NPC's and the PC's gender, message 20 × number + social class + 1, else 20 × number + 1, else empty; the names substituted; origin `DialogLineOriginKind.Rumor`, no voice); the rumor is written to the PC's logbook (`RumorLogCommand`, a known rumor stays); the only answer is the PC class line 1000 with the reply's own transition |
+
+Receipts: the payment and the logbook write are effects of the turn (a refusal fails the conversation with `CommandRejected`; the budget of two effects is
+checked before the payment, one before a free write). The rumor files come with the greeting sources (`DialogGreetingSources.RumorLines`, the four files of
+`RumorSpeechTexts` in the original's order); without them the text is empty and the rumor is still learned (the original reads an absent message as empty).
+The seams: `SessionDialogPursePort` (the hero's own gold, as the trainer port reads it), the AREA host's rumor state (`AreaConversationState`) and
+`AreaGreetingTexts.RumorLines` (loaded with the greeting texts; a file that is absent or unusable leaves its rumors without a text, the count is in `Detail`).
+An NPC node whose text starts with `r:` stays a frontier (slice G1). Tests: `DialogRumorTests` (synthetic), `DialogTrainerPortTests` (the purse), and the
+opt-in `DialogRumorRealDataTests` (`DAT_ROOT`: all 239 installed `r:` replies in 32 files are admitted; an installed rumor talk runs to the logbook).
 
 ## Barter reply (ARC-UI-050)
 

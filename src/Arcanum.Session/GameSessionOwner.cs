@@ -975,6 +975,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (delay is { } d && !WaitTimerFits(d, entity)) return Reject(GameSessionFailure.EventBudgetExceeded);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         _party.Put(current with { Standing = CompanionStanding.Waiting, Forced = false }, false);
+        // ARC-MAGIC-1190 (TF3): the wait (0x4AA7A0) leaves the leader through 0x45DFC0 and takes it back after, so the waiter loses the Tempus Fugit flag.
+        ClearTempusFugitOnLeave(entity);
         if (delay is { } wait) ScheduleWaitTimer(entity, wait, charisma);
         return Changed();
     }
@@ -1003,6 +1005,7 @@ public sealed partial class GameSessionOwner : IDisposable
         // ARC-SKILLS-008 (ST2): a follower that leaves is no longer concealed.
         _combat.Concealed.Remove(entity);
         ClearNoAttackOnLeave(entity);
+        ClearTempusFugitOnLeave(entity);
         if (current.Standing == CompanionStanding.Waiting) CancelWaitTimers(entity);
         return Changed();
     }
@@ -1933,8 +1936,15 @@ public sealed partial class GameSessionOwner : IDisposable
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, consent, new(_identity, _revision));
         if (!_party.Records.ContainsKey(current.Entity) && _party.Records.Count >= _limits.MaxCompanions)
             return RejectParty(GameSessionFailure.BudgetExceeded, consent);
+        // ARC-MAGIC-1190 (XR7, TF3): the join (0x45DE90) first leaves an existing leader (0x45DFC0: the flag is cleared) and then copies the leader's Tempus Fugit flag; the copy needs room in the
+        // written-flags bound, so a full bound refuses before anything changes (a clear only edits an entry that exists).
+        var copyTempus = JoinCopiesTempusFugit(current.Entity);
+        if (copyTempus && !_objectFlags.ContainsKey(current.Entity) && _objectFlags.Count >= MaxObjectFlagCritters)
+            return RejectParty(GameSessionFailure.BudgetExceeded, consent);
         if (_revision == long.MaxValue) return RejectParty(GameSessionFailure.RevisionExhausted, consent);
         _party.Put(next, true);
+        if (current.Standing != CompanionStanding.Free) ClearTempusFugitOnLeave(current.Entity);
+        if (copyTempus) WriteTempusFugitOnJoin(current.Entity);
         if (current.Standing == CompanionStanding.Waiting) CancelWaitTimers(current.Entity);
         // ARC-SKILLS-008 (ST2): a new follower takes its leader's concealment.
         if (_combat.HeroConcealed) _combat.Concealed.Add(current.Entity); else _combat.Concealed.Remove(current.Entity);
@@ -2090,6 +2100,10 @@ public sealed partial class GameSessionOwner : IDisposable
         var origin = seedMap ?? _actor.Map;
         var parented = holder is not null;
         var facts = item.Facts;
+        // ARC-WORLD-1283 (NT2, VP5, VPG2): a transfer from a holder (0x461CA0) runs the item's remove check (0x466DA0) after the recipient's transfer script and before
+        // the insert check: the no-drop flag refuses it (worn or not), with message 111 for the PC. Only the dialog's negative IN goes on, to the PC's feet.
+        var noDrop = parented && HolderItemNoDrop(seed, item);
+        if (noDrop && scripts is null && !toFeet) return NoDropRefusal();
         // ARC-WORLD-123: a key item goes onto the key ring the hero holds (the insertion's last step, 0x466A00, ledger KY2); no other key is modelled.
         var folds = facts.Kind.Type == SessionItemType.Key && HeroHoldsKeyRing;
         if (!folds && !InventoryDomain.Admitted(facts.Kind.Type)) return RejectItem(GameSessionFailure.ItemTypeUnsupported);
@@ -2154,27 +2168,30 @@ public sealed partial class GameSessionOwner : IDisposable
             if (runs.Failure != GameSessionFailure.None) return RejectItem(runs.Failure) with { Scripts = runs.Runs };
             if (gate?.Outcome == ScrOutcome.SkipDefault) return Declined(gatePoint, runs);
         }
+        if (noDrop && !toFeet) return NoDropRefusal(runs?.Runs);
         // ARC-WORLD-069: the Technophobia refusal between the host's weight and room answers (0x466510).
         // ARC-WORLD-085: the weight is the session's for an item it can weigh (its seed facts or the row it keeps).
         // ARC-WORLD-123: a key going onto the ring the hero holds skips the weight and the room (slot 0, 0x466510); the background still applies.
         // ARC-DEV-333 (B48): and the room: a take needs a free grid place for the item (code 2, WE4) unless the ammunition joins a held stack; a refused item stays where it was.
-        var verdict = folds ? HeroInsertVerdict(SessionInsertVerdict.Accepted, facts.Complexity)
+        // ARC-WORLD-1283: a dialog IN -name whose item the remove check refused never reaches the insert check (0x461CA0 returns first): the item is laid at the PC's feet.
+        var verdict = noDrop ? SessionInsertVerdict.Accepted : folds ? HeroInsertVerdict(SessionInsertVerdict.Accepted, facts.Complexity)
             : HeroInsertVerdict(insertCheck(item), facts.Complexity, Incoming(item.Entity, facts), room: HeroTakeRoom(item.Entity, into is not null));
+        SessionInsertVerdict? shown = noDrop ? null : verdict;
         ThrowIfDisposed();
-        if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { Scripts = runs?.Runs ?? [] };
+        if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, shown) with { Scripts = runs?.Runs ?? [] };
         // Any answer but Accepted refuses, an undefined one included. Session policy: a refused transfer changes nothing, so a
         // gate script's writes are dropped with it (the original keeps them; census: no installed item or PC carries such a script).
-        var refused = verdict != SessionInsertVerdict.Accepted;
+        var refused = noDrop || verdict != SessionInsertVerdict.Accepted;
         if (refused && !toFeet) return RejectItem(GameSessionFailure.InsertRefused, verdict) with { Scripts = runs?.Runs ?? [] };
         if (refused)
         {
             // ARC-WORLD-1131 (0x415BA0 case 9, n < 0): the transfer did not end with the PC, so the item is taken out of the NPC's list (0x466E00, its remove-item script)
             // and laid on the PC's tile (0x466E50: a junk pile or a new one, then the decay timer). The insertion never happened: no ring, no stack merge, no insert-item script.
-            if (!DropCellFits(_actor.Cell)) return RejectItem(GameSessionFailure.DropTileUnfit, verdict) with { Scripts = runs?.Runs ?? [] };
+            if (!DropCellFits(_actor.Cell)) return RejectItem(GameSessionFailure.DropTileUnfit, shown) with { Scripts = runs?.Runs ?? [] };
             (folds, into) = (false, null);
-            if (_inventory.Held >= _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded, verdict) with { Scripts = runs?.Runs ?? [] };
+            if (_inventory.Held >= _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded, shown) with { Scripts = runs?.Runs ?? [] };
             if (ammo is not null && !_inventory.Ammo.ContainsKey(item.Entity) && _inventory.Ammo.Count >= _limits.MaxAmmoRecords)
-                return RejectItem(GameSessionFailure.BudgetExceeded, verdict) with { Scripts = runs?.Runs ?? [] };
+                return RejectItem(GameSessionFailure.BudgetExceeded, shown) with { Scripts = runs?.Runs ?? [] };
         }
 
         ScrRunResult? insertRun = null;
@@ -2189,9 +2206,9 @@ public sealed partial class GameSessionOwner : IDisposable
             if (runs.Failure == GameSessionFailure.None && !refused && facts.HasScript(SessionScriptPoint.InsertItem))
                 insertRun = runs.Run(SessionScriptPoint.InsertItem, item.Entity, SessionEventKinds.PlayerEntity, null);
             ThrowIfDisposed();
-            if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { InsertScript = insertRun, Scripts = runs.Runs };
+            if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, shown) with { InsertScript = insertRun, Scripts = runs.Runs };
             runs.Prepare();
-            if (runs.Failure != GameSessionFailure.None) return RejectItem(runs.Failure, verdict) with { InsertScript = insertRun, Scripts = runs.Runs };
+            if (runs.Failure != GameSessionFailure.None) return RejectItem(runs.Failure, shown) with { InsertScript = insertRun, Scripts = runs.Runs };
         }
         if (folds)
         {
@@ -2222,8 +2239,8 @@ public sealed partial class GameSessionOwner : IDisposable
         runs?.Commit();
         if (refused) PlaceHeroItem(item.Entity, _actor.Cell);
         else Revise();
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, verdict, new(_identity, _revision))
-            { InsertScript = insertRun, Scripts = runs?.Runs ?? [], Messages = runs?.Messages ?? [] };
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, shown, new(_identity, _revision))
+            { InsertScript = insertRun, Scripts = runs?.Runs ?? [], Messages = runs?.Messages ?? [], PcMessage = noDrop ? NoDropMessage : null };
     }
 
     /// <summary>ARC-MAGIC-022: the pickup executor (0x4CBAA0, IU10) through <paramref name="triggers"/> for an item that entered the hero's
@@ -2232,7 +2249,7 @@ public sealed partial class GameSessionOwner : IDisposable
     {
         // ARC-WORLD-1131: an item the insert check refused was laid on the ground, not inserted: no pickup.
         if (triggers is null || result.Disposition != GameSessionDisposition.Changed || result.Item is not { } item || _durability.Destroyed.Contains(item) ||
-            result.Verdict is not null and not SessionInsertVerdict.Accepted)
+            result.Verdict is not null and not SessionInsertVerdict.Accepted || result.PcMessage is not null)
             return result;
         return result with { ItemSpells = [triggers.Fire(Arcanum.Simulation.Magic.ItemSpellTriggerRules.Pickup, item, SessionSpellCaster.Hero)], Version = Version };
     }

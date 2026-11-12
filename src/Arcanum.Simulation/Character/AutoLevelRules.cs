@@ -212,14 +212,20 @@ public static class AutoLevelRules
     /// followers, magick-tech aptitude) from the sheet's effective primary and point stats (<see cref="EffectiveStat"/>), then the effects'
     /// changes of that stat (the sheet of an NPC that has no stat object, ARC-UI-088). The sector's aptitude adjustment is 0.
     /// </summary>
-    public static int DerivedStat(AdvancementSheet sheet, AdvancementModifiers modifiers, CharacterStat stat)
+    public static int DerivedStat(AdvancementSheet sheet, AdvancementModifiers modifiers, CharacterStat stat, int speedShift = 0)
     {
         ArgumentNullException.ThrowIfNull(sheet);
         ArgumentNullException.ThrowIfNull(modifiers);
         if (!CharacterStatRules.IsDerived(stat)) throw new ArgumentOutOfRangeException(nameof(stat));
         var work = new Work(sheet, modifiers, DefaultSpellWillpower);
+        // ARC-MAGIC-1190 (TF2): the speed change of Tempus Fugit goes in before the effects, as the stat getter (0x4B0490) does; the stat range clamps a shifted speed.
+        var shift = stat == CharacterStat.Speed ? speedShift : 0;
         var value = CharacterStatRules.DerivedBase(stat, input => work.Effective(input), new CharacterStatContext(0));
-        return EffectModifiers.Apply(value, modifiers.Stats.Where(m => m.Stat == stat).Select(m => new EffectModifier(m.Operator, m.Value)).ToArray());
+        if (shift != 0) value += shift;
+        var applied = EffectModifiers.Apply(value, modifiers.Stats.Where(m => m.Stat == stat).Select(m => new EffectModifier(m.Operator, m.Value)).ToArray());
+        if (shift == 0) return applied;
+        var range = CharacterStatRules.Range(sheet.Race, stat);
+        return Math.Clamp(applied, range.Minimum, range.Maximum);
     }
 
     /// <summary>A basic skill's level (see <see cref="Work.BasicLevel"/>).</summary>

@@ -976,6 +976,7 @@ public partial class TerrainViewerApp
             TakeTeleportEvent(entry);
             TakeHoldEvent(entry);
             TakeTraitEvent(entry);
+            TakeIdentifyEvent(entry);
             if (AreaSpellCasting.Line(entry, texts, SpellObjectName) is { } line) lines.Add(line);
         }
         // ARC-MAGIC-045: a run wrote or took off an object flag (invisible, translucent, shrunk, don't-draw): the bodies are styled again without waiting for the next selection.

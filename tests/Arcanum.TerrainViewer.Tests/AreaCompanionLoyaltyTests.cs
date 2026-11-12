@@ -104,6 +104,39 @@ public sealed class AreaCompanionLoyaltyTests
         Assert.AreEqual(0, group.Loyalty(session, pc.State, SimulationTime.At(150), Facts).Count);
     }
 
+    // ARC-MAGIC-1189 (ledger TT10, SP2): a companion's own follow walk asks the group's trap check before each step, with its entity and the world cell of the tile.
+    [TestMethod]
+    public void A_companions_own_walk_refuses_a_step_onto_a_tile_where_it_spots_a_trap()
+    {
+        var f = Load();
+        using var session = ConversationSessionFixture.Create();
+        var group = AreaCompanionGroup.Create([f.Template], f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0));
+        var companion = group.Companions.Single();
+        var step = default(AdmissionKey) with { From = new(5, 1), To = new(6, 1) };
+        Assert.IsNull(companion.Grid.StepCharge!(step, Arcanum.World.MovementGait.Walk), "no check without the hook: the step is charged nothing");
+        var asked = new List<(string Entity, CellCoord Cell)>();
+        var spots = false;
+        group.StepTrap = (entity, cell) => { asked.Add((entity, cell)); return spots; };
+        Assert.IsNull(companion.Grid.StepCharge(step, Arcanum.World.MovementGait.Walk), "a trap not spotted: the step goes");
+        spots = true;
+        Assert.AreEqual(AreaCompanionGroup.TrapSpottedReason, companion.Grid.StepCharge(step, Arcanum.World.MovementGait.Walk), "a spotted trap refuses the step");
+        var world = AreaChart.Exterior.ToWorld(new CellCoord(6, 1));
+        Assert.AreEqual(2, asked.Count);
+        Assert.IsTrue(asked.All(a => a.Entity == companion.Entity && a.Cell == new CellCoord((int)world.X, (int)world.Y)), "the companion's entity and the tile's world cell");
+        // A companion the AI host holds takes the host's steps, whose walk check rolled already: its own gate asks nothing.
+        group.HeldByAi = _ => true;
+        asked.Clear();
+        Assert.IsNull(companion.Grid.StepCharge(step, Arcanum.World.MovementGait.Walk));
+        Assert.AreEqual(0, asked.Count);
+        group.HeldByAi = null;
+        // A grid built again (a turn in place, a jump) keeps the check.
+        var before = companion.Grid;
+        var at = companion.Grid.State.CommittedCell;
+        group.FaceTo(companion.Entity, new CellCoord(at.X, at.Y + 1));
+        Assert.AreNotSame(before, companion.Grid, "the turn built the grid again");
+        Assert.AreEqual(AreaCompanionGroup.TrapSpottedReason, companion.Grid.StepCharge!(step, Arcanum.World.MovementGait.Walk), "the rebuilt grid keeps the trap gate");
+    }
+
     [TestMethod]
     public void An_approach_starts_the_follow_goal_and_it_lives_after_arrival()
     {
