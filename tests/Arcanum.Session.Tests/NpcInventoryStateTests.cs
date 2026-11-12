@@ -112,6 +112,20 @@ public sealed class NpcInventoryStateTests
     }
 
     [TestMethod]
+    public void A_refused_negative_in_lays_an_added_item_on_the_pc_tile()
+    {
+        // ARC-WORLD-1131: the transfer that the insert check refuses ends with the item on the PC's tile (0x415BA0), not with the NPC and not in the made list.
+        using var owner = Attached();
+        var given = Added(owner, "virgil", Gear with { Name = 8888 });
+        var refused = owner.GiveItemToPc(owner.Version, "virgil", 8888, _ => SessionInsertVerdict.TooHeavy);
+        Assert.AreEqual((GameSessionDisposition.Changed, given, (SessionInsertVerdict?)SessionInsertVerdict.TooHeavy), (refused.Disposition, refused.Item, refused.Verdict));
+        Assert.AreEqual(0, owner.QueryNpcInventory("virgil").Count);
+        Assert.AreEqual(0, owner.QueryMadeItems().Count);
+        var lies = owner.QueryPlacedItems().Single();
+        Assert.AreEqual((given, SessionPlacedSource.Made), (lies.Entity, lies.Source));
+    }
+
+    [TestMethod]
     public void A_party_record_is_known_without_a_seed()
     {
         using var owner = Create();
@@ -136,9 +150,6 @@ public sealed class NpcInventoryStateTests
         // A living NPC's added item is not loot; the dialog's negative IN gives it by its name class.
         var given = Added(owner, "virgil", Gear with { Name = 8888 });
         Assert.AreEqual(GameSessionFailure.HolderNotLootable, owner.LootItem(owner.Version, "virgil", given, Accept).Failure);
-        var refused = owner.GiveItemToPc(owner.Version, "virgil", 8888, _ => SessionInsertVerdict.TooHeavy);
-        Assert.AreEqual(GameSessionFailure.InsertRefused, refused.Failure);
-        Assert.AreEqual(1, owner.QueryNpcInventory("virgil").Count, "a refusal leaves it with the NPC");
         var moved = owner.GiveItemToPc(owner.Version, "virgil", 8888, Accept);
         Assert.AreEqual((GameSessionDisposition.Changed, given), (moved.Disposition, moved.Item));
         CollectionAssert.AreEqual(new[] { made, given }, owner.QueryMadeItems().Select(item => item.Entity).ToArray());
