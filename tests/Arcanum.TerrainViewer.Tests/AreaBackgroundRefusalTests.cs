@@ -34,4 +34,14 @@ public sealed class AreaBackgroundRefusalTests
             AreaSchematics.OnGroundText(Done(SessionInsertVerdict.TechnologyRefused, "made:1", "made:2")));
         Assert.AreEqual(" — the NPC cannot take it: the product lies on the ground", AreaSchematics.OnGroundText(Done(SessionInsertVerdict.NoRoom, "made:1"), npc: true));
     }
+
+    // ARC-WORLD-1283: the remove check's refusal (the no-drop flag, item.mes 111) has its own text in the transfer windows and the barter status.
+    [TestMethod]
+    public void The_no_drop_refusal_has_its_own_text()
+    {
+        Assert.AreEqual("the item cannot be dropped, so it cannot change hands", AreaInventoryHost.Refusal(GameSessionFailure.ItemNotDroppable));
+        var refused = new InventoryMutationResult(GameSessionDisposition.Rejected, GameSessionFailure.ItemNotDroppable, null, null, default) { PcMessage = GameSessionOwner.NoDropMessage };
+        Assert.AreEqual("the item cannot be dropped, so it cannot change hands", AreaInventoryHost.NotMoved(refused));
+        Assert.AreEqual(111, refused.PcMessage);
+    }
 }

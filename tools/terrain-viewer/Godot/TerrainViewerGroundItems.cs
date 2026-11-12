@@ -78,8 +78,12 @@ public partial class TerrainViewerApp
     /// carries or restores one (the attachment is not state and is not saved), so a made item reads its prototype's array until its first write
     /// whether or not a script has created an item yet. The source reads the prototype when asked (opened on first use, kept), so a session
     /// without the module's content answers none, which is the older behaviour.</summary>
-    private void AttachAreaPrototypeScripts(GameSessionOwner session) =>
+    private void AttachAreaPrototypeScripts(GameSessionOwner session)
+    {
         session.AttachItemScripts(prototype => PrototypeItems()?.Item(prototype)?.Scripts);
+        // ARC-WORLD-1283: and their no-drop flag, which the remove check of a transfer reads on a kit or made item.
+        session.AttachItemNoDrop(prototype => PrototypeItems()?.Item(prototype)?.NoDrop == true);
+    }
 
     /// <summary>
     /// The shown map's bodies drawn from extra art, recomputed when the session or the map changes: a scenery or trap the session

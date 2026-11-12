@@ -149,7 +149,7 @@ public partial class TerrainViewerApp
         EndSheet(); _sheetStatus = null;
         EndLogbook(); _logbookStatus = null;
         EndSchematics(); _schematicsStatus = null; _schematicScriptOpen = null;
-        EndBarter(); _barterStatus = null; _barterPending = null; _npcSheetPending = null;
+        EndBarter(); _barterStatus = null; _barterPending = null; _npcSheetPending = null; _identifySheetPending = null;
         EndReading(); _readingStatus = null; _readingScriptOpen = null;
         _restDark = false; _restFade.Reset(); EndSleep(); _sleepStatus = null; _sleepPanel?.SetFade(0);
         EndWorldMap(); _worldMapStatus = null;

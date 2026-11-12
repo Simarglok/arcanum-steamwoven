@@ -259,6 +259,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="menu-window-art-arc-ui-058"></a>[Menu window art (ARC-UI-058)](ledger/ui-audio.md#menu-window-art-arc-ui-058) | [Interface windows and audio](ledger/ui-audio.md) | MW1–MW29 |
 | <a id="generated-player-phrases-arc-script-043"></a>[Generated Player phrases (ARC-SCRIPT-043)](ledger/social.md#generated-player-phrases-arc-script-043) | [Reaction, reputation and companions](ledger/social.md) | GP1–GP7 |
 | <a id="trainer-reply-arc-script-1150"></a>[Trainer reply (ARC-SCRIPT-1150)](ledger/social.md#trainer-reply-arc-script-1150) | [Reaction, reputation and companions](ledger/social.md) | DTR1–DTR9 |
+| <a id="rumor-reply-arc-script-1304"></a>[Rumor reply (ARC-SCRIPT-1304)](ledger/social.md#rumor-reply-arc-script-1304) | [Reaction, reputation and companions](ledger/social.md) | RMR1–RMR9 |
 | <a id="unchosen-pre-made-heroes-arc-world-114"></a>[Unchosen pre-made heroes (ARC-WORLD-114)](ledger/scripts.md#unchosen-pre-made-heroes-arc-world-114) | [Scripts and events](ledger/scripts.md) | PM1–PM3 |
 | <a id="script-triggers-arc-script-047"></a>[Script triggers (ARC-SCRIPT-047)](ledger/scripts.md#script-triggers-arc-script-047) | [Scripts and events](ledger/scripts.md) | TG1–TG8 |
 | <a id="heartbeat-world-questions-arc-script-049"></a>[Heartbeat world questions (ARC-SCRIPT-049)](ledger/scripts.md#heartbeat-world-questions-arc-script-049) | [Scripts and events](ledger/scripts.md) | HW1–HW4 |
