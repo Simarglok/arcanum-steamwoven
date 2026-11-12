@@ -1,7 +1,7 @@
 namespace Arcanum.World;
 
 /// <summary>
-/// One message-log entry. A level-up entry keeps its three lines as composed (title, level line, points or scheme line; <paramref
+/// One message-log entry. A poison-absorbed entry (ARC-SCRIPT-1118) keeps its title in <paramref name="Title"/> and its number line in <paramref name="Line"/>. A level-up entry keeps its three lines as composed (title, level line, points or scheme line; <paramref
 /// name="Scheme"/> when the last one is the scheme text, which gets two lines); a text entry (message, plain, hover) keeps its whole text
 /// in <paramref name="Title"/>, split at its first line break when drawn (ML4). ARC-UI-035: a skill hint keeps its name and description
 /// (<paramref name="Title"/>, <paramref name="Detail"/>) and its right-hand number line in <see cref="Value"/>; a spell hint its name,
@@ -36,11 +36,13 @@ public sealed record AreaMessageEntry(AreaMessageKind Kind, string Title, string
     public AreaItemLines? ItemLines { get; init; }
 
     public static AreaMessageEntry Text(AreaMessageKind kind, string text) =>
-        kind is AreaMessageKind.LevelUp or AreaMessageKind.SkillHint or AreaMessageKind.SpellHint or AreaMessageKind.Item or AreaMessageKind.Object
-            ? throw new ArgumentException("a level-up entry, a hint and an item or object window have lines", nameof(kind)) : new(kind, text ?? throw new ArgumentNullException(nameof(text)));
+        kind is AreaMessageKind.LevelUp or AreaMessageKind.PoisonAbsorbed or AreaMessageKind.SkillHint or AreaMessageKind.SpellHint or AreaMessageKind.Item or AreaMessageKind.Object
+            ? throw new ArgumentException("a level-up entry, a poison notice, a hint and an item or object window have lines", nameof(kind)) : new(kind, text ?? throw new ArgumentNullException(nameof(text)));
 
-    /// <summary>Hover texts and hints are shown, never stored (the original's types 6–12, ML2), and so is the item window.</summary>
-    public bool Stored => Kind is AreaMessageKind.LevelUp or AreaMessageKind.Message or AreaMessageKind.Plain;
+    /// <summary>Hover texts and hints are shown, never stored (the original's types 6–12, ML2), and so is the item window; the types 0 to 5 are
+    /// (ML1).</summary>
+    public bool Stored => Kind is AreaMessageKind.LevelUp or AreaMessageKind.PoisonAbsorbed or AreaMessageKind.Curse or AreaMessageKind.Blessing
+        or AreaMessageKind.Message or AreaMessageKind.Plain;
 }
 
 /// <summary>

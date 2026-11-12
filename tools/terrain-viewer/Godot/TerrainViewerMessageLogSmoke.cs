@@ -107,6 +107,37 @@ public partial class TerrainViewerApp
         await Frames(1);
         var texted = new[] { levelEntry.Title, levelEntry.Line, levelEntry.Detail }.Count(text => text.Length > 0);
         Require(texted >= 2 && view.DrawnTextsForSelfTest == texted && view.IconShownForSelfTest, $"the level-up entry drew {view.DrawnTextsForSelfTest} of {texted} texts");
+        // ARC-SCRIPT-1118 (PW2, PY1-PY4): the print line types 1, 2, 3 and 12 through the production script-line path: each stored one with its icon, its
+        // drawn texts (the poison notice two, a curse and a blessing the title only) and its sound; the type 12 text not stored and drawn after the quiet time.
+        // ARC_UI_MSGLOG_CAPTURE saves each drawing to the caller's ignored path.
+        var scriptCapture = System.Environment.GetEnvironmentVariable("ARC_UI_MSGLOG_CAPTURE");
+        void ScriptShot(string name)
+        {
+            if (string.IsNullOrWhiteSpace(scriptCapture)) return;
+            using var image = GetViewport().GetTexture().GetImage();
+            Require(image.SavePng($"{scriptCapture}-{name}.png") == Error.Ok, "capture saved");
+        }
+        var scriptCount = _messageLog.Count; var scriptPlayed = _interfaceSoundsPlayed;
+        ScriptShot("before");
+        foreach (var (type, name, drawn) in new[] { (1, "type1", 2), (2, "type2", 1), (3, "type3", 1) })
+        {
+            var scripted = AreaScriptMessages.Entries([new(type, "Scripted " + type)], texts).Single();
+            PostMessage(scripted, "smoke script line");
+            await Frames(2);
+            Require(view.IconShownForSelfTest && view.DrawnTextsForSelfTest == drawn && !view.WideForSelfTest && _messageLog.Shown == scripted,
+                $"script print line type {type} drew {view.DrawnTextsForSelfTest} of {drawn} texts with its icon");
+            ScriptShot(name);
+        }
+        Require(_messageLog.Count == Math.Min(AreaMessageLog.Capacity, scriptCount + 3) && (_audio is null || _interfaceSoundsPlayed == scriptPlayed + 3),
+            $"the three script entries were stored and played their sounds ({_messageLog.Count}, {_interfaceSoundsPlayed - scriptPlayed})");
+        _messageClockShiftForSelfTest += AreaMessageLog.QuietMilliseconds + 1;
+        var scriptHover = AreaScriptMessages.Entries([new(12, "Scripted hover")], texts).Single();
+        var storedBefore = _messageLog.Count;
+        PostMessage(scriptHover, "smoke script line");
+        await Frames(2);
+        Require(_messageLog.Count == storedBefore && _messageLog.Shown == scriptHover && view.IconShownForSelfTest && view.DrawnTextsForSelfTest == 1,
+            "a type 12 text is drawn after the quiet time and not stored");
+        ScriptShot("type12");
         var stored = _messageLog.Count;
         ClearLevelMessages();
         Require(view.ShownTextForSelfTest == "", "the smoke's entries are cleared");
