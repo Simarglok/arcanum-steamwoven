@@ -76,6 +76,38 @@ public partial class TerrainViewerApp
         return true;
     }
 
+    /// <summary>ARC-UI-1125: a panel outside the stack that owns the input (the palette, the save list, the main menu, the death cover, a movie, the bug
+    /// report). The window openers of the original know none of them (they are no modes), so a programmatic open waits for these as it always did; it
+    /// does not wait for a window.</summary>
+    private bool ProgrammaticOpenBlocked => PaletteOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering || MovieCovering || BugReportOpen || WorldMapTravelling;
+
+    /// <summary>ARC-UI-1125: a journey runs on the open world map. Closing the map would land the hero and start a map transfer (the player's cancel), so
+    /// a programmatic open waits for the journey as it did.</summary>
+    private bool WorldMapTravelling => WorldMapOpen && _worldMap is { Travelling: true };
+
+    /// <summary>
+    /// ARC-UI-1125 (MIG16 tail; the window openers 0x56BC00, 0x56D130 and 0x567460 with 0x553320, read in the executable, SA40): an opener pops the
+    /// stack and pushes its own mode whoever calls it, so a script's reading or schematic window, the dialog a script, the hero's talk goal or an
+    /// NPC's heartbeat asks for opens at once over an open window and the window leaves through its leave case, as it does for the player's key.
+    /// The viewer ran the window's End routine (its sounds, its session close) and then opens the new one. Returns true when the way is clear: no
+    /// window is open or the open ones left. False (and logged) when the opener refuses for the hero's state (SA52: the opener returns before it pops,
+    /// so the window stays), when a dialog is open (the dialog opener refuses at once while the PC's mode is 3, 0x567460; the other openers wait for
+    /// a dialog's end here as they did, a dialog ends by the player's choice) or when a window would not leave.
+    /// </summary>
+    private bool ClearWindowsForProgrammaticOpen(InterfaceMode mode, string who)
+    {
+        if (!AnyWindowOpen && !FateOpen) return true;
+        if (ConversationOpen) return false;
+        if (WindowRefusedForHero(mode))
+        {
+            GD.Print($"ARC-UI-1125 {who} refused for the hero; the open window stays (stack {StackText()})");
+            return false;
+        }
+        GD.Print($"ARC-UI-1125 {who} replaces the open window (stack {StackText()})");
+        CloseOtherInterfaceWindows();
+        return !AnyWindowOpen;
+    }
+
     /// <summary>Closes the window through the stack: the leave step runs the hide given at the open.</summary>
     private void CloseWindowMode(InterfaceMode mode)
     {
