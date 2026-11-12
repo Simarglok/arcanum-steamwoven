@@ -26,6 +26,10 @@ public partial class TerrainViewerApp
     private (GameSessionOwner Session, string Item)? _identifyItemPending;
     /// <summary>The last Identify container window's entity and whether it opened, for the smoke.</summary>
     internal (string Entity, bool Opened)? LastIdentifyContentsForSelfTest { get; private set; }
+    // ARC-UI-1411 (ledger XR4): the portal or scenery an Identify cast named waits for its object window (the hover window's, 0x57CCF0).
+    private (GameSessionOwner Session, AreaObjectKey Key)? _identifyObjectPending;
+    /// <summary>The last Identify portal or scenery window's object type and whether the object window was drawn for it, for the smoke.</summary>
+    internal (AreaObjectKey Key, bool Shown)? LastIdentifyObjectForSelfTest { get; private set; }
     /// <summary>The last Identify item description's item and whether the item window was drawn for it, for the smoke.</summary>
     internal (string Item, bool Shown)? LastIdentifyDescriptionForSelfTest { get; private set; }
 
@@ -42,6 +46,15 @@ public partial class TerrainViewerApp
             { GD.Print($"ARC-RES-1327 identify container={container} is no standing container of the shown map"); return; }
             GD.Print($"ARC-RES-1327 identify contents queued entity={container}");
             _identifyContainerPending = (containerSession, target);
+            return;
+        }
+        if (entry.Kind == SpellCastEventKind.IdentifyItem && entry.Value is Arcanum.Data.Combat.CombatFieldReader.PortalType or Arcanum.Data.Combat.CombatFieldReader.SceneryType
+            && entry.Object is { } named && _areaSession is { } objectSession)
+        {
+            // ARC-UI-1411 (XR4): a portal or scenery goes to the hover window's object window by its map row.
+            if (_spellCastMap?.Row(named) is not { } namedRow) { GD.Print($"ARC-UI-1411 identify object={named} has no map row here"); return; }
+            GD.Print($"ARC-UI-1411 identify object window queued object={named}");
+            _identifyObjectPending = (objectSession, namedRow.Key);
             return;
         }
         if (entry.Kind == SpellCastEventKind.IdentifyItem && entry.Value is >= 5 and <= 14 && entry.Object is { } item && _areaSession is { } itemSession)
@@ -66,6 +79,16 @@ public partial class TerrainViewerApp
             {
                 DescribeItem(described.Session, described.Item);
                 LastIdentifyDescriptionForSelfTest = (described.Item, _messageLog.Shown is { Kind: AreaMessageKind.Item });
+            }
+        }
+        if (_identifyObjectPending is { } named)
+        {
+            _identifyObjectPending = null;
+            if (ReferenceEquals(named.Session, _areaSession) && SheetActive)
+            {
+                var drawn = DescribeObject(named.Key, _gameBarPanel, pointer: false);
+                GD.Print($"ARC-UI-1411 identify object window object={named.Key} drawn={drawn}");
+                LastIdentifyObjectForSelfTest = (named.Key, drawn && _messageLog.Shown is { Kind: AreaMessageKind.Object });
             }
         }
         if (_identifyContainerPending is not { } contents) return;
