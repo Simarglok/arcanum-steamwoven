@@ -110,6 +110,10 @@ public partial class TerrainViewerApp
                 portraitTalk = ConversationOpen && _conversationSpeaker?.Row.Key == companion.Key;
                 Fact("left click on his portrait opens no menu", !menuShown, menuShown ? "menu" : "none");
                 Fact("left click on his portrait talks to him", portraitTalk, portraitTalk ? "talk" : $"none ({_conversationNotice})");
+                // ARC-UI-1281 (HK26, 0x567400): with the dialog active the portrait's hover describes nothing.
+                var hoversBefore = PortraitHoversForSelfTest;
+                FollowerPortraitHovered(follower);
+                Fact("a portrait hover with the dialog active runs nothing", ConversationOpen && PortraitHoversForSelfTest == hoversBefore, $"{PortraitHoversForSelfTest - hoversBefore} run(s)");
             }
             if (ConversationOpen) CloseConversation();
             portraits.CloseMenu();
@@ -154,6 +158,10 @@ public partial class TerrainViewerApp
             await ClickPortraitAsync(MouseButton.Right);
             await ReleaseAtAsync(portraits.MenuItemCentreForSelfTest(FollowerMenuItem.Inventory), MouseButton.Left);
             Fact("a left click on an unmodelled menu item closes the menu", !portraits.MenuShown, portraits.MenuShown ? "menu" : "closed");
+            portraits.CloseMenu();
+
+            // 7. ARC-UI-1281 (HK26): the pointer entering his portrait runs his examine and describes him; leaving clears; no menu and no dialog.
+            foreach (var (name, original, seen) in await ObservePortraitHoverAsync(follower)) Fact(name, original, seen);
             portraits.CloseMenu();
 
             var summary = string.Join("; ", facts);
