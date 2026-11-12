@@ -571,7 +571,7 @@ path request the item drop uses and walks **at most eight tiles** of the route, 
 
 Read in the original executable (ledger [TP1–TP5](../research/ledger/spell-runs.md#teleport-types-and-the-anti-teleport-test-arc-magic-038), contract [teleport types](../world/spell-cast-host.md#teleport-types-and-the-anti-teleport-test-arc-magic-038)): in a single-player game Teleportation (spell 4,
 Conveyance college) moves nothing by itself. It opens the **world map in a teleport mode**; you click a known area, and the hero lands there. Places where teleporting is refused come from the data file `Rules\AntiTeleport.mes` (2 round regions and 5 whole maps in the installed game). Both rule modes behave the same.
-Use a hero who knows Teleportation, with enough fatigue (the spell's fatigue cost is charged only when an area is picked). Known differences, not to be re-reported: in the teleport mode the town map, the compass and the waypoint journey are not offered; the refusal message (the original's message 640) is shown as an
+Use a hero who knows Teleportation, with enough fatigue (the spell's fatigue cost is charged only when an area is picked). Known differences, not to be re-reported: the original's teleport mode offers no town map and no route points either (ARC-MAGIC-1147, ledger TP6–TP7; see the added steps below); the refusal message (the original's message 640) is shown as an
 English label, not the game's text; the view is not re-centred; an NPC cast of the area portal (technology 218) or of a random move does not carry the creature; a multiplayer host is not built.
 
 | # | Step | Expected (from the original executable and data) | Status |
@@ -584,6 +584,8 @@ English label, not the game's text; the view is not re-centred; an NPC cast of t
 | 6 | Open the teleport map and pick an area that lies inside one of the ban regions. | The pick is refused with a message and the map stays open; nothing is paid. Pick another area to leave. | open |
 | 7 | Use the technology device that teleports to the area (record 218) on the main map, and in a map that is not the main one. | On the main map the hero is sent to the area's location with a blank screen and no wait orders; elsewhere to the main map at the location of the area that map belongs to. | open |
 | 8 | Walk with Spatial Distortion (spell 3) over a tile that has a script, starting from a tile next to it. | The script runs **before** the caster is put on the last tile: a message from it names the caster's old tile; the last tile's script runs once more afterwards. | open |
+| 9 | (ARC-MAGIC-1147) In the teleport map, look for the Travel button, press the town-map button and the `Z` key, and click the map while a companion travels with you. | No Travel button is shown; there is no town map (not even from a town, where `W` would open it); a click picks a discovered area or does nothing, it never adds a route point; the compass arrows scroll and the continent view works as usual. | open |
+| 10 | (ARC-MAGIC-1147) Join a companion, cast Teleportation and pick a far discovered area. | The companion arrives with you and stands next to you at the destination, whatever distance it was from you before the cast; a companion you had released earlier on a foreign map is not carried (it goes home). | open |
 
 
 ## ARC-RES-121 — Function audit wave 3, groups G and I (2026-11-11)

@@ -363,6 +363,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && only?.Contains("debug-travel") == true) await RunAreaDebugTravelSmokeAsync();
                         // ARC-DEV-170 (B05): only when named (with --debug-mode and --hero), a joined speaker, the window moved to a far area and a quick load there (SM01).
                         if (_readyMapName is not null && only?.Contains("follower-far") == true) await RunAreaFollowerFarSmokeAsync();
+                        // ARC-MAGIC-1147 (MT16, TP6-TP9): only when named (with --hero), the same companion carried by a Teleportation cast's pick on the world map.
+                        if (_readyMapName is not null && only?.Contains("teleport-follow") == true) await RunAreaFollowerFarSmokeAsync(viaSpell: true);
                         // ARC-DEV-305 (B01, B36): only when named (with --debug-mode and --hero), what the hero took and made survives the window move and a quick load (SM02).
                         if (_readyMapName is not null && only?.Contains("inv-carry") == true) await RunAreaInvCarrySmokeAsync();
                         // ARC-RENDER-027: only when named, every map of the catalogue in turn (last: it leaves the last map shown).
