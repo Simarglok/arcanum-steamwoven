@@ -127,6 +127,13 @@ public partial class TerrainViewerApp
             Require(!ReadingOpen && !WorldModal && _readingSounds.Last() == BookCloseSound, "the player's close closed it (3009)");
             Require(GetViewport().GuiGetFocusOwner() is null, "closing releases the GUI focus");
             Require(owner.QueryHeroKit().Any(k => k.Entity == bookEntity), "reading kept the book");
+            // ARC-UI-1428: a header line of a font under 9 px at the screen factor (Garmond8, art 482) takes the text-only factor (8 x 2 = 16 px), Zurich20 stays 20,
+            // an unknown font takes 16, and the panel's other texts carry explicit sizes.
+            _readingPanel!.Render(new AreaReadingView(WrittenSubtype.Newspaper, 487, ["Masthead", "Small line", "Other"], "", "", 0, 1, null, null, [485, 482, 999]), "synthetic");
+            var readingFactor = AreaGameBarPanel.ScreenFactor(_readingPanel.GetViewport().GetVisibleRect().Size);
+            Require(_readingPanel.HeaderForSelfTest == "Masthead  ·  Small line  ·  Other"
+                && _readingPanel.HeaderSizesForSelfTest.SequenceEqual([AreaReadingText.HeaderLinePx(485, readingFactor), AreaReadingText.HeaderLinePx(482, readingFactor), AreaReadingText.HeaderLinePx(999, readingFactor)])
+                && (readingFactor != 1 || _readingPanel.HeaderSizesForSelfTest.SequenceEqual([20, 16, 16])), "masthead sizes: " + string.Join(",", _readingPanel.HeaderSizesForSelfTest));
 
             // Script action 114 (a plaque, PC viewer) waits while the palette owns input, then opens; a controller cancel closes it.
             var pc = new ScrObjectRef(actor.Map.RuntimeMap, AreaScriptHost.PcCode);
