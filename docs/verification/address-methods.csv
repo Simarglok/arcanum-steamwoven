@@ -444,6 +444,7 @@ src/Arcanum.World/AreaBarter.cs,Deals,pending,
 src/Arcanum.World/AreaBarter.cs,HeroCanTrade,pending,
 src/Arcanum.World/AreaBarter.cs,Open,pending,
 src/Arcanum.World/AreaBeds.cs,IsBedArt,exempt,reference
+src/Arcanum.World/AreaBeds.cs,OccupiedFrame,exempt,host
 src/Arcanum.World/AreaCharacterSheetTexts.cs,DerivedName,pending,
 src/Arcanum.World/AreaCombat.cs,NpcHolder,pending,
 src/Arcanum.World/AreaCombatRound.cs,Step,pending,
@@ -728,6 +729,7 @@ tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,LaunchProjectile,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,ProjectileGoalEnded,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,Strike,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,TurnBack,pending,
+tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,AddOccupiedBeds,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSoundCallers.cs,NoteGaitFrame,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSoundCallers.cs,PlayDroppedItemSound,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSoundCallers.cs,PlayNpcAttackBark,exempt,host
