@@ -1227,6 +1227,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
                 var chain = ChainOf(run);
                 _itemEvents.AddRange(chain is null ? applied.ItemEvents : applied.ItemEvents.Select(e => e with { Chain = chain }));
                 Struck(step.Object, applied);
+                // ARC-MAGIC-1143 (RH1, RH3): the Damage component's tail (0x4518D0, 0x451AE2) runs the damage effect, so an entangled victim that took the damage asks its save again; a dead victim took nothing.
+                if (applied.Outcome is { Changed: true }) SpellDamageHit(step.Object, step.Damage);
             }
             else if (step.Life is null && damage.Prevented == DamagePrevention.None && _map.DamageObject(step.Object, damage))
                 _log.Add(new(SpellCastEventKind.Damaged, run.Id, damage.HitPointDamage, step.Object));

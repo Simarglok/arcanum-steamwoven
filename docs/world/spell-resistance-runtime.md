@@ -98,7 +98,7 @@ resistance effects count in the save and the predictor ([rules](durable-effects-
 entangled critter (the host: [`CritterHit`](spell-cast-host.md#effect-component-and-the-entangle-re-resistance-arc-dev-303)). It writes no margin and answers whether the hold stays: no BEGIN test, a technology record or an unresistable
 run holds, the disintegrate and fate steps and the d100 are the resistance's, the save part reads the **cached** target type (the original's stale global, MG48:
 `MagicAnomalyProfile.ReResistReadsCachedTargetType`) and a made save resists whatever the record. Tests:
-[`SpellReResistanceTests`](../../tests/Arcanum.Simulation.Tests/Magic/SpellReResistanceTests.cs), [`SessionSpellEntangleTests`](../../tests/Arcanum.Session.Tests/SessionSpellEntangleTests.cs).
+[`SpellReResistanceTests`](../../tests/Arcanum.Simulation.Tests/Magic/SpellReResistanceTests.cs), [`SessionSpellEntangleTests`](../../tests/Arcanum.Session.Tests/SessionSpellEntangleTests.cs). ARC-MAGIC-1143: the repeat is also asked after a spell's own damage and a native trap's damage (not after a burn), [cast host](spell-cast-host.md#effect-component-and-the-entangle-re-resistance-arc-dev-303), ledger [RH1–RH5](../research/ledger/magic.md#re-resistance-on-damage-that-is-not-a-weapon-hit-arc-magic-1143).
 
 ## Not ready
 
