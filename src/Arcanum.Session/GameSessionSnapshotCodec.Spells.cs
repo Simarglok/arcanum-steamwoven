@@ -7,11 +7,12 @@ public static partial class GameSessionSnapshotCodec
 {
     // ARC-DEV-210 (schema 73): the settled spell runs, the maintain bar and the last charged cost.
     // ARC-DEV-302 (schema 83): the flags the spell components wrote on critters.
+    // ARC-MAGIC-1234 (schema 92): each run's object list (the original's +0x130).
     private static readonly string[] SpellsFields = ["runs", "bar", "lastCost", "objectFlags", "traitArt"];
     private static readonly string[] TraitArtFields = ["entity", "species", "palette"];
     private static readonly string[] ObjectFlagFields = ["entity", "spellSet", "spellCleared", "critterSet", "critterCleared", "objectSet", "objectCleared", "critter2Set", "critter2Cleared", "blitSet", "blitCleared"];
     private static readonly string[] SpellRunFields =
-        ["id", "spell", "action", "source", "parent", "start", "target", "targetTile", "other", "flags", "triggers", "margin", "triggerCount", "setSpellFlags"];
+        ["id", "spell", "action", "source", "parent", "start", "target", "targetTile", "other", "flags", "triggers", "margin", "triggerCount", "setSpellFlags", "objectList"];
     private static readonly string[] SpellObjectFields = ["id", "type", "aptitude"];
     private static readonly string[] MaintainSlotFields = ["run", "state"];
     private const int SpellRunFlagMask = (int)(SpellRunFlags.Active | SpellRunFlags.Free | SpellRunFlags.Processed | SpellRunFlags.Reflected | SpellRunFlags.Unresistable | SpellRunFlags.ForcedEnd | SpellRunFlags.FinalEnd);
@@ -37,6 +38,9 @@ public static partial class GameSessionSnapshotCodec
             w.WriteNumber("margin", run.Margin);
             w.WriteNumber("triggerCount", run.TriggerCount);
             w.WriteNumber("setSpellFlags", run.SetSpellFlags);
+            w.WriteStartArray("objectList");
+            foreach (var listed in run.ObjectList.Items) WriteSpellObject(w, listed);
+            w.WriteEndArray();
             w.WriteEndObject();
         }
         w.WriteEndArray();
@@ -91,6 +95,15 @@ public static partial class GameSessionSnapshotCodec
         w.WriteEndObject();
     }
 
+    private static void WriteSpellObject(Utf8JsonWriter w, SpellRunObject value)
+    {
+        w.WriteStartObject();
+        w.WriteString("id", value.Id);
+        w.WriteNumber("type", value.Type);
+        w.WriteNumber("aptitude", value.Aptitude);
+        w.WriteEndObject();
+    }
+
     private static void WriteSpellLocation(Utf8JsonWriter w, string name, SpellLocation location)
     {
         w.WriteStartArray(name);
@@ -122,7 +135,7 @@ public static partial class GameSessionSnapshotCodec
                 SpellLocationOf(r["targetTile"], at + ".targetTile"), SpellObjectOf(r["other"], at + ".other"),
                 (SpellRunFlags)FlagBits(r["flags"], at + ".flags", SpellRunFlagMask), Int(r["triggers"], at + ".triggers", int.MinValue, int.MaxValue),
                 Int(r["margin"], at + ".margin", int.MinValue, int.MaxValue), Int(r["triggerCount"], at + ".triggerCount", int.MinValue, int.MaxValue))
-            { SetSpellFlags = Int(r["setSpellFlags"], at + ".setSpellFlags", int.MinValue, int.MaxValue) };
+            { SetSpellFlags = Int(r["setSpellFlags"], at + ".setSpellFlags", int.MinValue, int.MaxValue), ObjectList = SpellObjectList(r["objectList"], at + ".objectList") };
         }
         var barRows = Array(f["bar"], p + ".bar", MaintainBarRules.Slots);
         if (barRows.Length != MaintainBarRules.Slots) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, p + ".bar");
@@ -162,6 +175,16 @@ public static partial class GameSessionSnapshotCodec
             traitArt[i] = new(entity, new(Int(o["species"], at + ".species", 0, SessionTraitArt.SpeciesLimit - 1), Int(o["palette"], at + ".palette", 0, SessionTraitArt.PaletteLimit - 1)));
         }
         return new(runs, bar, Int(f["lastCost"], p + ".lastCost", 0, int.MaxValue)) { ObjectFlags = objectFlags, TraitArt = traitArt };
+    }
+
+    // The list's order is the original's (newest node first); its length is the run table's own bound (a run's list never holds more objects than a target list: 256).
+    private static SpellRunObjectList SpellObjectList(JsonElement element, string p)
+    {
+        var rows = Array(element, p, SpellTargetRules.Capacity);
+        if (rows.Length == 0) return SpellRunObjectList.Empty;
+        var items = new SpellRunObject[rows.Length];
+        for (var i = 0; i < rows.Length; i++) items[i] = SpellObjectOf(rows[i], $"{p}[{i}]") ?? throw new DecodeException(SnapshotDecodeFailure.WrongType, $"{p}[{i}]");
+        return new(items);
     }
 
     private static SpellRunObject? SpellObjectOf(JsonElement element, string p)

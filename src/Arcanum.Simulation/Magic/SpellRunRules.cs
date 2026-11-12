@@ -37,6 +37,29 @@ public sealed record SpellRun(int Id, int Spell, SpellRunAction Action, SpellRun
     /// <summary>The spell flags the run's components set (+0x138, MT12–MT18); the anti-magic shell (0x800) among them lets the
     /// run go on although its source is shelled (MT9a-2).</summary>
     public int SetSpellFlags { get; init; }
+
+    /// <summary>ARC-MAGIC-1234 (TA1, TA14): the run's object list (+0x130, the context's run list): empty until an action with the list bit (<c>Tgt_List</c>) gathers while it is empty, which stores the gathered objects
+    /// (newest gathered first); every later action with the bit then targets the stored objects and gathers nothing. The summoned list (+0x134) is the host's, not stored here.</summary>
+    public SpellRunObjectList ObjectList { get; init; } = SpellRunObjectList.Empty;
+}
+
+/// <summary>The objects of a run's object list in the original's order (the head is the newest node); equal by contents, so a saved and restored run equals the live one.</summary>
+public sealed record SpellRunObjectList(IReadOnlyList<SpellRunObject> Items)
+{
+    public static SpellRunObjectList Empty { get; } = new(Array.Empty<SpellRunObject>());
+
+    public int Count => Items.Count;
+
+    public bool Holds(string id) => Items.Any(o => o.Id == id);
+
+    public bool Equals(SpellRunObjectList? other) => other is not null && Items.SequenceEqual(other.Items);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        foreach (var item in Items) hash.Add(item);
+        return hash.ToHashCode();
+    }
 }
 
 /// <summary>

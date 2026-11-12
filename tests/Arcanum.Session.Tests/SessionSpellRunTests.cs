@@ -49,6 +49,9 @@ public sealed partial class SessionSpellRunTests
         public GameSessionOwner? Bar { get; set; }
         public bool IsLocalPlayer(SpellRunObject? who) => Bar is not null && who?.Id == Hero.Id;
         public IReadOnlyList<SpellRunTarget> Collect(SpellRun run) => [new(run.Target, run.TargetTile)];
+        /// <summary>ARC-MAGIC-1234: the run object list the next collection builds (the original's list bit with an empty stored list); null builds none.</summary>
+        public List<SpellRunObject>? Built { get; set; }
+        public SpellRunCollected CollectRun(SpellRun run) => new(Collect(run), Built);
         public bool UseSpellAtMaximum(SpellRunObject pc) => false;
         public SpellComponentGate Gate(SpellRun run, int component, SpellRunTarget target) => new(true, target);
         public SpellComponentOutcome Apply(SpellRun run, int component, SpellRunTarget target)

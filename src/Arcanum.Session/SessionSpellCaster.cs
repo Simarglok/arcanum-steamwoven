@@ -407,15 +407,21 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
 
     public bool IsLocalPlayer(SpellRunObject? who) => who?.Id == Hero;
 
-    public IReadOnlyList<SpellRunTarget> Collect(SpellRun run)
+    public IReadOnlyList<SpellRunTarget> Collect(SpellRun run) => CollectRun(run).Targets;
+
+    /// <summary>ARC-MAGIC-1234 (TA14): the action's targets and the object list an area with the list bit built into the run's empty one (the gathered objects, newest first).</summary>
+    public SpellRunCollected CollectRun(SpellRun run)
     {
         ArgumentNullException.ThrowIfNull(run);
         // 0x4510F0 sets the flag at 0x5E75A8 for each pass (0 unless the PC's armed fate was used), after the target list is set up; the run system asks the fate right after this call.
         _spellAtMaximum = false;
-        if (_records(run.Spell) is not { } record || (int)run.Action >= record.Areas.Length) return [];
+        if (_records(run.Spell) is not { } record || (int)run.Action >= record.Areas.Length) return new([], null);
         var context = Context(run, record.Areas[(int)run.Action]);
-        return SpellTargetRules.Collect(context, _map, Profile).Entries.Select(e => new SpellRunTarget(e.Object is { } o ? RunObject(o.Id) ?? new(o.Id, o.Type) : null, e.Tile))
-            .ToArray();
+        var collection = SpellTargetRules.Collect(context, _map, Profile);
+        var targets = collection.Entries.Select(e => new SpellRunTarget(e.Object is { } o ? RunObject(o.Id) ?? new(o.Id, o.Type) : null, e.Tile)).ToArray();
+        // A stored list that holds objects is never rebuilt, whether or not they are still on the map.
+        var built = run.ObjectList.Count > 0 ? null : collection.BuiltRunList?.Select(o => RunObject(o.Id) ?? new SpellRunObject(o.Id, o.Type)).ToArray();
+        return new(targets, built);
     }
 
     public bool UseSpellAtMaximum(SpellRunObject pc) => _spellAtMaximum =
@@ -1250,7 +1256,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         var source = run.Source is { } s ? _map.Object(s.Id) : null;
         var origin = source?.Location ?? run.StartLocation;
         return new(area, self, source, origin, Target: run.Target is { } t ? _map.Object(t.Id) : null, TargetTile: run.TargetTile,
-            Other: run.Other is { } o ? _map.Object(o.Id) : null, Summoned: LastSummoned, SummonedList: SummonedOf(run));
+            Other: run.Other is { } o ? _map.Object(o.Id) : null, Summoned: LastSummoned, SummonedList: SummonedOf(run),
+            RunList: run.ObjectList.Items.Select(o => _map.Object(o.Id)).OfType<SpellTargetObject>().ToArray());
     }
 
     /// <summary>The session's life target of a critter (the hero, or an NPC of the map), or null.</summary>
