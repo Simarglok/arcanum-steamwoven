@@ -39,9 +39,9 @@ needed for correctness (part of the same decision).
 Sessions compact their context at 500k tokens: `autoCompactWindow` is 500000
 (ARC-DEV-058, owner decision 2026-10-29). `.claude/settings.json` holds it as a
 local, untracked and ignored file of each checkout (ARC-DEV-1342, owner
-decision 2026-11-12); a new checkout or worktree creates it by hand. Keep the handoff record
-current in the thread's checklist, together with the branch, changed files and
-checks run, so a compaction keeps it.
+decision 2026-11-12); a new checkout or worktree creates it by hand. Keep the
+handoff record current in the thread's checklist, together with the branch,
+changed files and checks run, so a compaction keeps it.
 
 Why: a session carried across codes re-reads every earlier task's history on
 each step. The token audit of 2026-10-21 found lane sessions living 3.5 to 5
