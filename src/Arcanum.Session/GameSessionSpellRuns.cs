@@ -399,6 +399,15 @@ public sealed partial class GameSessionOwner
     public Func<SessionDyingRequest, bool>? DyingScript { get; set; }
 
     /// <summary>
+    /// ARC-COMBAT-1141 (GT198, GT210–GT212): the host's taking-damage script (attachment point 0x17) of an NPC whose damage the session applies from its own life calls that no hit path asks for: the script kill
+    /// <see cref="GameSessionOwner.Kill"/> (0x45D900) and the poison damage tick (0x4B1170, <see cref="GameSessionOwner.PoisonDamageTick"/> and its event), both with no attacker. It is asked at the start of the damage apply, before the
+    /// life step is computed; true is run default (the step goes on), false skip default: a vetoed kill takes no hit points and starts no death, and still pins the hit-point damage at 32000
+    /// (<see cref="LifeRules.KillVetoed"/>), a vetoed poison tick writes nothing and the tick goes on. The hero has no script here and is never asked; a host that throws counts as run default. None set: no question. The host runs before
+    /// the life step: it may write the session (a version it moved is followed), but must not apply the same victim's life.
+    /// </summary>
+    public Func<SessionTakingDamageRequest, bool>? TakingDamageScript { get; set; }
+
+    /// <summary>
     /// ARC-AI-1134 (exe read 2026-11-12, ledger DY3, DY7): the host's kill notification (0x4AA1B0 inside the kill 0x45DA20) of an NPC whose death the life step processed (the dying script allowed it). The session has already
     /// written the victim's combat focus (field 0x11B) := the killer and committed the step's revision; the host then runs <see cref="Arcanum.Simulation.Ai.MoraleRules.KillNotification"/> over its world and applies the plan
     /// (<see cref="ApplyKillNotification"/>), and ends the victim's flee goals. The request names the NPC, the map its step ran on and the killer (<see cref="SessionSpellCaster.Hero"/> for the hero, none for a damage with no source).

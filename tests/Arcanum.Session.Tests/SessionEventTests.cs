@@ -76,6 +76,36 @@ public sealed class SessionEventTests
     }
 
     [TestMethod]
+    public void AVetoedPoisonTickEventWritesNothingAndRescheduleItselfAndADeadVictimIsNotAsked()
+    {
+        // ARC-COMBAT-1141 (GT210, GT211): the tick's damage step asks the victim's taking-damage script first, with no attacker and the timer's map; a veto leaves the record alone and the poison goes on.
+        using var owner = Session(hero: false);
+        var world = new World { Present = { [(79, "oid:wolf")] = Wolf } };
+        Damage(owner, Npc("oid:wolf"), new LifeDamage { Poison = 300 });
+        var asked = new List<SessionTakingDamageRequest>();
+        var allow = false;
+        owner.TakingDamageScript = request => { asked.Add(request); return allow; };
+        Advance(owner, 15_000);
+        Pass(owner, world);
+        Assert.AreEqual(new SessionTakingDamageRequest("oid:wolf", 79, null), asked.Single());
+        Assert.AreEqual((0, 300), (owner.QueryLifeRecord("oid:wolf")!.Value.State.HitPointDamage, owner.QueryLifeRecord("oid:wolf")!.Value.State.PoisonLevel), "nothing written");
+        Assert.IsTrue(Pending(owner).Contains($"life.npc.poison-damage@{T0 + 30_000}:79/oid:wolf"), "the tick goes on");
+
+        allow = true;
+        Advance(owner, 15_000);
+        Pass(owner, world);
+        Assert.AreEqual(2, asked.Count);
+        Assert.AreEqual(2, owner.QueryLifeRecord("oid:wolf")!.Value.State.HitPointDamage, "run default: level 300 deals 2");
+
+        // A dead victim keeps its timer but its script is not asked.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, Npc("oid:wolf")).Disposition);
+        var askedBefore = asked.Count;
+        Advance(owner, 15_000);
+        Pass(owner, world);
+        Assert.AreEqual(askedBefore, asked.Count, "no ask for a corpse");
+    }
+
+    [TestMethod]
     public void PoisonTicksDamageAndRecoverWithOneTimerOfEachKind()
     {
         using var owner = Session(hero: false);
