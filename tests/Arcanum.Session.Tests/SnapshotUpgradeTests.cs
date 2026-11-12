@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":91,\"world\"";
+    private const string Current = "\"schemaVersion\":92,\"world\"";
+    private const string Current91 = "\"schemaVersion\":91,\"world\"";
     private const string Current90 = "\"schemaVersion\":90,\"world\"";
     private const string Current89 = "\"schemaVersion\":89,\"world\"";
     private const string Current88 = "\"schemaVersion\":88,\"world\"";
@@ -207,13 +208,22 @@ public sealed class SnapshotUpgradeTests
         return text.Replace(",\"critter2Set\":0,\"critter2Cleared\":0,\"blitSet\":0,\"blitCleared\":0}", "}").Replace(Current90, Current89);
     }
 
+    // ARC-WORLD-1159: the schema 91 text of a schema 92 one with no encounter use: the text loses the empty encounters section. A text with a used row has no older literal: no build before rolled an encounter.
+    internal static string Schema91(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.AreEqual(1, text.Split(NoEncounters).Length - 1, "the encounters section is a new game's (no row used)");
+        return text.Replace(NoEncounters, "").Replace(Current, Current91);
+    }
+
     // ARC-WORLD-1157: the schema 90 text of a schema 91 one with no generator state: the text loses the empty generators section. A text with a used slot, a count made or a copy has no older literal: no build
     // before ran a generator.
     internal static string Schema90(string text)
     {
-        StringAssert.Contains(text, Current);
+        text = Schema91(text);
+        StringAssert.Contains(text, Current91);
         Assert.AreEqual(1, text.Split(NoGenerators).Length - 1, "the generators section is a new game's (no slot, no made count, no copy)");
-        return text.Replace(NoGenerators, "").Replace(Current, Current90);
+        return text.Replace(NoGenerators, "").Replace(Current91, Current90);
     }
 
     // ARC-DEV-348: the schema 86 text of a schema 87 one with no NPC effect list: the effects section loses its empty list of NPC lists at its end. A text with a list has no older
@@ -623,6 +633,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":92,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":93,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

@@ -139,7 +139,7 @@ public sealed class NewspaperStateTests
         var upgraded = GameSessionSnapshotCodec.TryDecode(older);
         Assert.AreEqual(SnapshotDecodeFailure.None, upgraded.Failure, upgraded.Path);
         Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(upgraded.Snapshot!));
-        var twice = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.WithoutCritterEffects(current).Replace(SnapshotUpgradeTests.NoCreated, "}").Replace(NoHeroKeys, "").Replace(NoTownMapCells, "").Replace("\"schemaVersion\":91,\"world\"", "\"schemaVersion\":73,\"world\""));
+        var twice = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.WithoutCritterEffects(current).Replace(NoEncounters, "").Replace(SnapshotUpgradeTests.NoCreated, "}").Replace(NoHeroKeys, "").Replace(NoTownMapCells, "").Replace("\"schemaVersion\":92,\"world\"", "\"schemaVersion\":73,\"world\""));
         Assert.AreEqual((SnapshotDecodeFailure.UnknownField, "$.newspaper"), (twice.Failure, twice.Path));
         // A schema 73 save of the oldest readable chain reaches the same state.
         var chain = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.Schema72(current));

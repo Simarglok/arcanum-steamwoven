@@ -327,4 +327,31 @@ public sealed class AreaWorldMapTests
         // The area's own sector may be the shown one.
         Assert.AreEqual(2, AreaStartMapAreas.AreaAt(data, [Shown(30, 35, 4)], new(30 * 64 + 1, 35 * 64 + 1)));
     }
+
+    [TestMethod]
+    public void A_location_is_in_a_town_map_sector_by_the_shown_sectors_then_the_area_tables()
+    {
+        var baseData = Data();
+        var townMaps = new Dictionary<TravelSector, int> { [new(10, 10)] = 9, [new(30, 35)] = 0 };
+        var data = new AreaWorldMapData("start", 1, WorldAreaTable.Create(["0, 0, 0, 0 /Unknown/none"]), baseData.Sectors, Width, baseData.PictureSize, baseData.Picture, townMaps);
+        var shown = new[] { Shown(11, 10, 9), Shown(12, 10, null), Shown(13, 10, 3, present: false) };
+        Assert.IsTrue(AreaStartMapAreas.InTownMapSector(data, shown, new(11 * 64 + 5, 10 * 64 + 5)), "a shown sector with a town map");
+        Assert.IsFalse(AreaStartMapAreas.InTownMapSector(data, shown, new(12 * 64 + 5, 10 * 64 + 5)), "a shown sector without the section");
+        Assert.IsFalse(AreaStartMapAreas.InTownMapSector(data, shown, new(13 * 64 + 5, 10 * 64 + 5)), "a sector with no file");
+        Assert.IsTrue(AreaStartMapAreas.InTownMapSector(data, [], new(10 * 64 + 5, 10 * 64 + 5)), "an area's own sector from the area table");
+        Assert.IsFalse(AreaStartMapAreas.InTownMapSector(data, [], new(30 * 64 + 5, 35 * 64 + 5)));
+        Assert.IsFalse(AreaStartMapAreas.InTownMapSector(data, [], new(40 * 64, 40 * 64)), "any other sector reads as none");
+    }
+
+    [TestMethod]
+    public void The_world_map_data_holds_the_encounter_tables_and_the_terrain_word_of_a_sector()
+    {
+        var data = Data();
+        Assert.AreEqual(Arcanum.Simulation.Travel.EncounterTablesStatus.Disabled, data.Encounters.Status, "no tables given: the encounters are off");
+        var tables = Arcanum.Simulation.Travel.EncounterTables.Parse([(10000, "0, 0, 1, 5%"), (20000, "0, 0, 1, Easy"), (30000, "0, 0, 1, 0"), (49999, "0")]);
+        var withTables = new AreaWorldMapData("start", 1, data.Areas, data.Sectors, Width, data.PictureSize, data.Picture, encounters: tables);
+        Assert.AreSame(tables, withTables.Encounters);
+        Assert.AreEqual(Arcanum.Data.Maps.TerrainWord.OutsideGrid, data.Sectors.TerrainWordAt(-1, 0));
+        Assert.AreEqual(Arcanum.Data.Maps.TerrainWord.OutsideGrid, data.Sectors.TerrainWordAt(Width, 0));
+    }
 }

@@ -8,6 +8,7 @@ using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Items;
+using Arcanum.Simulation.Travel;
 using Arcanum.Simulation.Party;
 using Arcanum.Simulation.Randomness;
 using Arcanum.Simulation.Reputation;
@@ -203,6 +204,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportGenerators(snapshot.Generators, snapshot.Objects, out var generators);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportEncounters(snapshot.Encounters, out var encounterUses);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportResidency(snapshot.Residency, snapshot.Actor.Map, snapshot.Clock.GameTimestampMs, out var pendingHistory);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportDurability(snapshot.Durability, limits, out var durability);
@@ -290,6 +293,7 @@ public sealed partial class GameSessionOwner : IDisposable
         { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _danger = danger, _durability = durability, _foundSchematics = found,
           _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty, _hotkeys = hotkeys, _recentActions = recentActions, _scripts = scripts, _pendingHistory = pendingHistory,
           _spellRuns = spellTable, _maintainBar = maintainBar, _spellLastCost = snapshot.Spells.LastCost, _objectFlags = objectFlags, _traitArt = traitArt, _newspaper = snapshot.Newspaper, _generators = generators };
+        foreach (var use in encounterUses) owner._encounterUses[use.Key] = use.Value;
         owner._danger.Here = () => owner._actor.Map;
         // ARC-DEV-208 (MIG14 S2): the saved runs and their steps (a run's step is re-created at its due time).
         owner.RestoreFlights(snapshot.Flights);
@@ -1484,6 +1488,8 @@ public sealed partial class GameSessionOwner : IDisposable
         _passRespawns = respawns;
         _passSpellRuns = spellRuns;
         _passWorld = world;
+        // ARC-WORLD-1159: a host with the encounter tables starts the Random Encounters chain with its first pass.
+        ArmRandomEncounter(world);
         // ARC-DEV-104: a pass that threw leaves no fold ticks behind for this one.
         _passFoldTicks = null;
         _passFirings = firings;
@@ -1742,7 +1748,7 @@ public sealed partial class GameSessionOwner : IDisposable
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision, _frame.RealMs, _frame.AnimationMs),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
             _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(_combat.SubturnStarts), CaptureCombatMode(), CaptureConcealment(), _danger.CaptureBits(), CaptureEvents(), _lighting, _sound.Capture(),
-            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()).WithLinks(_danger.CaptureLinks()), _scripts.Capture(_hero), CaptureResidency(), CaptureGoals(), CaptureSpells(), CaptureNewspaper(), CaptureFlights(), CaptureGenerators());
+            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()).WithLinks(_danger.CaptureLinks()), _scripts.Capture(_hero), CaptureResidency(), CaptureGoals(), CaptureSpells(), CaptureNewspaper(), CaptureFlights(), CaptureGenerators(), CaptureEncounters());
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
@@ -2821,6 +2827,15 @@ public sealed partial class GameSessionOwner : IDisposable
                 converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
                 continue;
             }
+            if (pending.Kind == SessionEventKinds.RandomEncounter)
+            {
+                // A Random Encounters event (ARC-WORLD-1159): global, set no later than the saved clock, whole game minutes before its deadline, 300 to 700 of them (0x559640).
+                var delay = pending.DeadlineMs - pending.Values[0];
+                if (!pending.Entities.IsEmpty || pending.Values[0] < 0 || pending.Values[0] > clockMs || delay % EncounterRules.MinuteMs != 0 ||
+                    delay / EncounterRules.MinuteMs is < EncounterRules.MinDelayMinutes or > EncounterRules.MaxDelayMinutes) return GameSessionFailure.InvalidEvents;
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, 0, new(pending.Entities, pending.Values)));
+                continue;
+            }
             if (pending.Kind == SessionEventKinds.SpellRun)
             {
                 // ARC-DEV-210: [game ms it was set at, run slot, code]; global, so no entity; the run is in the saved table and the deadline is not before its setting.
@@ -2847,6 +2862,7 @@ public sealed partial class GameSessionOwner : IDisposable
             converted.Count(e => e.Kind == SessionEventKinds.ObjectRespawn) > SessionEventKinds.MaxObjectRespawns ||
             converted.Count(e => e.Kind == SessionEventKinds.ItemDecay) > SessionEventKinds.MaxItemDecays ||
             converted.Count(e => e.Kind == SessionEventKinds.BodyDecay) > SessionEventKinds.MaxBodyDecays ||
+            converted.Count(e => e.Kind == SessionEventKinds.RandomEncounter) > SessionEventKinds.MaxRandomEncounters ||
             converted.Count(e => e.Kind == SessionEventKinds.Restock) > SessionEventKinds.MaxRestocks ||
             converted.Count(e => e.Kind == SessionEventKinds.TrapDevice) > SessionEventKinds.MaxTrapDevices ||
             converted.Count(e => e.Kind == SessionEventKinds.SpellRun) > SessionEventKinds.MaxSpellRunEvents) return GameSessionFailure.EventBudgetExceeded;

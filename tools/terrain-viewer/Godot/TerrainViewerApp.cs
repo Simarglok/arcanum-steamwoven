@@ -280,6 +280,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("body-styles") == true) await RunAreaBodyStylesStageAsync();
                                 // ARC-DEV-371 (E1-c3): only when named, the installed tile script 1629 creates critters next to the hero (--hero, a map window with the inventory): flagged, hosted by the AI host, notified, destroyed.
                                 if (only?.Contains("script-critters") == true) await RunAreaScriptCrittersStageAsync();
+                                // ARC-WORLD-1159 (E2-c): only when named, the world journey's random encounters on the start map (--hero, the wilderness sector): a forced roll makes critters on the ring spots, closes an open rest window and an open world map (which then refuses to open for 4 s), and ends a journey in a landing where the marker stood.
+                                if (only?.Contains("encounters") == true) await RunAreaEncountersSmokeAsync();
                                 // ARC-DEV-352 (E1-b): only when named, Fireflash's flash on an empty tile and none on an occupied one; Wall of Fire's pieces, their burn and their END (--hero, a map window).
                                 if (only?.Contains("summon-flash") == true) await RunAreaSummonSmokeAsync(SummonFlashSpell);
                                 if (only?.Contains("summon-wall") == true) await RunAreaSummonSmokeAsync(SummonWallSpell);

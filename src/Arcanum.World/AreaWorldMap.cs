@@ -17,7 +17,8 @@ public enum AreaWorldMapDataStatus { Ready, ModuleOutsideGameRoot, MountFailed, 
 public sealed class AreaWorldMapData
 {
     public AreaWorldMapData(string startMap, int startRuntime, WorldAreaTable areas, WorldTravelSectors sectors, long width, int pictureSize, byte[] picture,
-        IReadOnlyDictionary<TravelSector, int>? areaTownMaps = null, AntiTeleportZones? antiTeleport = null, IReadOnlyDictionary<int, int>? mapAreas = null)
+        IReadOnlyDictionary<TravelSector, int>? areaTownMaps = null, AntiTeleportZones? antiTeleport = null, IReadOnlyDictionary<int, int>? mapAreas = null,
+        EncounterTables? encounters = null)
     {
         ArgumentNullException.ThrowIfNull(startMap);
         ArgumentNullException.ThrowIfNull(areas);
@@ -29,7 +30,11 @@ public sealed class AreaWorldMapData
         AreaTownMaps = areaTownMaps ?? new Dictionary<TravelSector, int>();
         AntiTeleport = antiTeleport;
         MapAreas = mapAreas ?? new Dictionary<int, int>();
+        Encounters = encounters ?? EncounterTables.Disabled("none given");
     }
+
+    /// <summary>ARC-WORLD-1159 (E2-c, ledger PO13): the random encounter tables of <c>rules/wmap_rnd.mes</c> (the content stack's winner); Disabled when the file is missing or the original's loader would refuse it.</summary>
+    public EncounterTables Encounters { get; }
 
     /// <summary>ARC-MAGIC-038 (ledger TP1): the anti-teleport module (<c>Rules\AntiTeleport.mes</c>, 0x4BD9E0); null when the module has no such file (the original then allows every teleport).</summary>
     public AntiTeleportZones? AntiTeleport { get; }
@@ -317,8 +322,20 @@ public sealed class AreaWorldMap
         // A missing file switches the module off; one the grammar does not admit is refused and read as off too (project policy: the detail names it).
         var antiTeleport = AntiTeleportTable.Open(stack).Table is { } zones
             ? new AntiTeleportZones(zones.Regions.Select(r => new AntiTeleportZone(new(r.X, r.Y), r.Radius)).ToArray(), zones.DisabledMaps) : null;
-        return new(AreaWorldMapDataStatus.Ready, new(map.Name, entry.Runtime, area, sectors, width, size, picture, townMaps, antiTeleport, mapAreas),
+        return new(AreaWorldMapDataStatus.Ready, new(map.Name, entry.Runtime, area, sectors, width, size, picture, townMaps, antiTeleport, mapAreas, ReadEncounterTables(stack)),
             $"map {map.Name}, {width} sectors, areas {area.Areas.Count}");
+    }
+
+    /// <summary>ARC-WORLD-1159: the module's <c>rules/wmap_rnd.mes</c> as the content stack's winner (the module's patch archive over its main one); a missing or refused file leaves the encounters off, as the original's loader does.</summary>
+    internal static EncounterTables ReadEncounterTables(ContentStack stack)
+    {
+        const string path = "rules/wmap_rnd.mes";
+        if (ContentPhase.Candidate(stack, path, ContentLoadPhase.ModuleLoaded) is not { } candidate) return EncounterTables.Disabled(path + " missing");
+        var read = stack.Read(candidate);
+        if (read.Status != ContentReadStatus.Read) return EncounterTables.Disabled($"{path} {read.Status}");
+        var parsed = Arcanum.Data.Messages.MesFile.Parse(read.Bytes, new());
+        if (parsed.Status != Arcanum.Data.Messages.MesParseStatus.Parsed) return EncounterTables.Disabled($"{path} {parsed.Status} line {parsed.Line}");
+        return EncounterTables.Parse(parsed.File!.Messages.Select(m => (m.Number, System.Text.Encoding.Latin1.GetString(m.Bytes.Span))).ToArray());
     }
 
     /// <summary>ARC-DEV-178 (ledger GA3): the town map word of the sector each area's location lies in. The metadata and sound section's first

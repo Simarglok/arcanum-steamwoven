@@ -548,6 +548,12 @@ public static partial class GameSessionSnapshotCodec
             if (root.ContainsKey("generators")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.generators");
             root.Add("generators", new JsonObject { ["slots"] = new JsonArray(), ["made"] = new JsonArray(), ["copies"] = new JsonArray() });
         },
+        // ARC-WORLD-1159 (schema 92): the encounters section, the use counts of the world-map random encounter rows. No older build rolled an encounter, so the step adds the empty section.
+        [91] = root =>
+        {
+            if (root.ContainsKey("encounters")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.encounters");
+            root.Add("encounters", new JsonObject { ["uses"] = new JsonArray() });
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

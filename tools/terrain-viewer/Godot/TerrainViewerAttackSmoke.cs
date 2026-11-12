@@ -264,7 +264,8 @@ public partial class TerrainViewerApp
             var wearable = wornSlot is null ? null : _inventoryHost!.Wearable(loaded, item!, _areaKitWear);
             var grid = (AreaGridSession)_worldActor.Session!;
             var heroAt = grid.Chart.ToWorld(grid.State.CommittedCell);
-            var aim = new CellCoord(checked((int)heroAt.X) + 2, checked((int)heroAt.Y));
+            // Two cells west: a throw's landing scatters by a cell, and an east landing one cell from the hero is on a cell his pickup walk is refused (ARC-WORLD-1159: one more draw of the session's stream shifted the scatter there).
+            var aim = new CellCoord(checked((int)heroAt.X) - 2, checked((int)heroAt.Y));
             require(ThrowGameCursorItem(aim), $"the throw started ({HeldThrowNoticeForSelfTest})");
             bool Throwing(GameSessionOwner owner) => owner.QueryGoals().RunsOf(AreaHeroRunsHost.Hero).Any(r => r.Top is { Goal: Arcanum.Simulation.Goals.GoalType.ThrowItem, Node: 2 });
             for (var i = 0; i < 200 && !Throwing(loaded) && HeroRunsHost() is { ThrowRun: not null }; i++) Frame();

@@ -100,5 +100,6 @@ or water needs waypoints. Every planned journey lands on its area under both set
 ## Limits (NOT READY)
 
 - **Viewer.** The diagnostic world map of ARC-UI-048 is the only host. It draws no original map art and has no town maps.
-- **Not modelled.** Random encounters (the encounter module, F0), the script-blocked list's writers, town maps,
+- **Random encounters** are built (ARC-WORLD-1159, [random encounters](random-encounters-runtime.md)): a Random Encounters event rolls during a journey at the marker and ends it in a landing there.
+- **Not modelled.** The script-blocked list's writers, town maps,
   notes and the original's world-map interface. Travel music and hiding the party are the host's.

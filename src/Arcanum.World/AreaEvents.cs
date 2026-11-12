@@ -3,6 +3,7 @@ using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Travel;
 using Arcanum.Simulation;
 
 namespace Arcanum.World;
@@ -17,7 +18,7 @@ namespace Arcanum.World;
 /// diagnostic NPC facts, and the hero's or the diagnostic PC's facts); without a conversation host it has none. ARC-WORLD-096: a
 /// restock event runs through the viewer's restock host (<see cref="AreaRestockHost"/>); without one it waits a minute.
 /// </summary>
-public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, ISessionAiWorld, ISessionRestockWorld, ISessionBodyWorld
+public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, ISessionAiWorld, ISessionRestockWorld, ISessionBodyWorld, ISessionEncounterWorld
 {
     private readonly Func<IAreaEventObjects?> _combat;
     private readonly Func<AreaConversationHost?> _talk;
@@ -32,11 +33,13 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
     /// <param name="ai">ARC-WORLD-092: the shown map's AI host, which an AI tick of the pass runs through; null or a null answer: no AI
     /// runs (every NPC counts as gone and its sector as not loaded, so its tick schedules no next one).</param>
     /// <param name="round">ARC-WORLD-092: the turn-based round's world of the shown map, for the AI's subturn ends; null: none.</param>
+    /// <param name="encounter">ARC-WORLD-1159: the viewer's encounter host; null or a null answer: no encounter roll.</param>
     /// <param name="restock">ARC-WORLD-096: the restock host of the pass's session; null or a null answer: a restock event waits.</param>
     public AreaEventWorld(Func<IAreaEventObjects?> combat, Func<AreaConversationHost?> talk, Action<SessionScriptCall>? prepareCall = null,
         Func<bool>? lootShowsContainer = null, Func<ISessionAiWorld?>? ai = null, Func<ISessionCombatWorld?>? round = null,
-        Func<AreaRestockHost?>? restock = null)
+        Func<AreaRestockHost?>? restock = null, Func<AreaEncounterHost?>? encounter = null)
     {
+        _encounter = encounter;
         _restock = restock;
         _ai = ai;
         _round = round;
@@ -45,6 +48,13 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
         _prepareCall = prepareCall;
         _lootShowsContainer = lootShowsContainer;
     }
+
+    // ---- ARC-WORLD-1159: the Random Encounters event's host, forwarded to the viewer's encounter host ----
+
+    private readonly Func<AreaEncounterHost?>? _encounter;
+    /// <summary>The tables of the module's encounter chart; null without a host (no event is armed, no roll happens).</summary>
+    public EncounterTables? EncounterTables => _encounter?.Invoke()?.EncounterTables;
+    public SessionEncounterSite? EncounterSite() => _encounter?.Invoke()?.EncounterSite();
 
     public bool LootWindowShowsContainer => _lootShowsContainer?.Invoke() == true;
 

@@ -220,7 +220,7 @@ public static class SessionEventKinds
     /// can always set its timers, the deferred calls, the timed effects' ENDs, the Lock events, the wait timers, the respawns, the
     /// magic-tech events, the Item Decay events, the AI ticks, (ARC-WORLD-094) the restock events, the real-time steps and (ARC-DEV-132) one goal step per slot.</summary>
     public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 4 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects
-        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxBodyDecays + MaxAiTicks + MaxRestocks + MaxTrapDevices + MaxRealSteps + MaxGoalSteps;
+        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxBodyDecays + MaxRandomEncounters + MaxAiTicks + MaxRestocks + MaxTrapDevices + MaxRealSteps + MaxGoalSteps;
 
     /// <summary>
     /// The original's AI event (kind 10, game time, never saved by the original; ARC-WORLD-084, ledger CL7, CL8): one NPC's AI tick
@@ -263,6 +263,14 @@ public static class SessionEventKinds
     /// Added without a new registry version, as the other kinds before it: a build without the kind refuses a save holding one.
     /// </summary>
     public const string BodyDecay = "body.decay";
+
+    /// <summary>
+    /// The original's Random Encounters event (kind 34, game time, saved; ARC-WORLD-1159, ledger PO17, TL29): the world journey's roll. It re-arms itself first, 300 to 700 game minutes on, then acts only on the outdoor map with the hero in
+    /// no named area. Global, one in a running chain (the pending one stays when another is added). No entities; value: the game time it was scheduled at. Armed by the first event pass of a host that has the tables.
+    /// </summary>
+    public const string RandomEncounter = "encounter.random";
+    /// <summary>Pending Random Encounters events a session holds: one (a chain).</summary>
+    public const int MaxRandomEncounters = 1;
     /// <summary>Pending Decay Dead Bodies events a session holds: one per NPC life record.</summary>
     public const int MaxBodyDecays = GameSessionLimits.PolicyMaxLifeRecords;
     /// <summary>
@@ -366,6 +374,8 @@ public static class SessionEventKinds
                 new ItemDecayHandler(owner), Validate: DecayPayload),
             new(BodyDecay, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Replace, GameEventScopeRule.EntityMap, 1, 2, 1, 0,
                 new BodyDecayHandler(owner), Validate: BodyDecayPayload),
+            new(RandomEncounter, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.KeepExisting, GameEventScopeRule.Global, 0, 1, 0, 0,
+                new RandomEncounterHandler(owner), Validate: payload => payload.Values[0] >= 0),
             new(Restock, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Replace, GameEventScopeRule.EntityMap, 1, 2, 1, 0,
                 new RestockHandler(owner), Validate: RestockPayload),
             new(TrapDevice, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.EntityMap, 1, 6, 0, 0,
@@ -529,6 +539,12 @@ internal sealed class BodyDecayHandler(SessionEventSink sink) : IGameEventHandle
 {
     public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
         sink.Owner?.FireBodyDecay(firing) ?? GameEventHandlerOutcome.Refused;
+}
+
+internal sealed class RandomEncounterHandler(SessionEventSink sink) : IGameEventHandler
+{
+    public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
+        sink.Owner?.FireRandomEncounter(firing) ?? GameEventHandlerOutcome.Refused;
 }
 
 internal sealed class RestockHandler(SessionEventSink sink) : IGameEventHandler
