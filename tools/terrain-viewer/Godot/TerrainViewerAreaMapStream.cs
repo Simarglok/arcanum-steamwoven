@@ -168,7 +168,8 @@ public partial class TerrainViewerApp
         {
             // ARC-DEV-119 (MIG9 S5c): the session goes on across the window move, so the map's AI host does too (it is bound to the new window below).
             _aiKeepAcrossWindowMove = true;
-            try { RecordAreaCompanions("window move"); ClearPublishedScene(); _arguments = arrived; PublishReadyResult(arrived, result); }
+            var swap = System.Diagnostics.Stopwatch.StartNew();
+            try { RecordAreaCompanions("window move"); ClearPublishedScene(); _arguments = arrived; PublishReadyResult(arrived, result); _cursorReapply = _cursorShown is not null; GD.Print($"ARC-UI-056 window swap on the main thread {swap.ElapsedMilliseconds} ms shown={_cursorShown is not null} shape={Godot.Input.GetCurrentCursorShape()}"); }
             catch (Exception exception) { refused = exception; }
             finally { _aiKeepAcrossWindowMove = false; }
         });
@@ -268,6 +269,7 @@ public partial class TerrainViewerApp
                 AreaSmokePlace(new AreaMapRuntime(_readyArea!.Snapshot, start.Snapshot, start.Chart), start.State.CommittedCell);
             }
             _mapStreamLog.Clear();
+            var releasesAtStart = _cursorReleases; var reappliesAtStart = CursorReappliesForSelfTest; var cursorArtReady = _cursorShown is not null;
             if (observeAi)
             {
                 CalmNpcsForSmoke(carried!, carried!.QueryMapInventory(new(CurrentAreaMap))?.Holders.Where(h => h.Kind == SessionHolderKind.Npc).Select(h => h.Entity) ?? []);
@@ -356,6 +358,13 @@ public partial class TerrainViewerApp
                 Require(carried is null || ReferenceEquals(session, carried), "SESSION_NOT_CARRIED");
             }
             Require(_mapStreamLog.Count >= StreamSmokeMoves, "MOVES");
+            GD.Print($"ARC-UI-056 stream cursor releases={_cursorReleases - releasesAtStart} reapplies={CursorReappliesForSelfTest - reappliesAtStart} shown={_cursorShown is not null}");
+            // ARC-UI-056 (#1357): the cursor art stays set across every window move (never released), and is handed over again after each swap.
+            if (cursorArtReady)
+            {
+                Require(_cursorReleases == releasesAtStart, $"CURSOR_RELEASED {_cursorReleases - releasesAtStart}");
+                Require(_cursorShown is not null && CursorReappliesForSelfTest - reappliesAtStart >= _mapStreamLog.Count, $"CURSOR_NOT_REAPPLIED {CursorReappliesForSelfTest - reappliesAtStart}/{_mapStreamLog.Count}");
+            }
             Require(_mapStreamLog[0].Walking, "FIRST_MOVE_NOT_MID_WALK");
             Require(carried is null || ReferenceEquals(_areaSession, carried), "SESSION_NOT_CARRIED");
             if (observeAi)

@@ -27,6 +27,10 @@ public partial class TerrainViewerApp
     private string? _cursorHeldShown;
     private (string Item, int Art, int Frame, AreaCursorContent Content, ImageTexture? Texture, Vector2 Hot)? _heldCursorImage;
 
+    private int _cursorReleases;
+    private bool _cursorReapply;
+    internal int CursorReappliesForSelfTest { get; private set; }
+    internal int CursorReleasesForSelfTest => _cursorReleases;
     internal int CursorArtForSelfTest => _cursorArt;
     internal (int Art, int Frame)? CursorShownForSelfTest => _cursorShown;
     internal Godot.Input.CursorShape CursorShapeSetForSelfTest => _cursorShapeSet;
@@ -67,8 +71,12 @@ public partial class TerrainViewerApp
     {
         if (_exiting || _readyMode != TerrainViewerMode.Area || CursorContent() is not { Ready: true } content)
         {
+            // ARC-UI-056 (#1357): a map window that is loading or being swapped in keeps the cursor art; only a scene that ended releases it.
+            if (!_exiting && _cursorShown is not null && MapStreamInFlight) return;
             if (_cursorShown is not null)
             {
+                _cursorReleases++;
+                GD.Print($"ARC-UI-056 cursor released exiting={_exiting} mode={_readyMode} ready={CursorContent()?.Ready}");
                 _cursorShown = null; _cursorHeldShown = null;
                 Godot.Input.SetCustomMouseCursor(null);
                 SetCursorShape(_hoverCursor);
@@ -87,7 +95,9 @@ public partial class TerrainViewerApp
         var frame = AreaCursorArt.Frame((long)(now - Math.Min(_cursorSince, now)), load.Frames.Count, load.FramesPerSecond);
         // ARC-UI-063: an item held on the game cursor is the cursor's image (CU7).
         var held = HeldCursorImage(art, frame, content, load.Frames[frame]);
-        if (_cursorShown == (art, frame) && _cursorHeldShown == held?.Item && ReferenceEquals(_cursorTexturesOf, content)) return;
+        // After a window swap the art is handed to Godot again, whatever the display server did with the scene's controls meanwhile.
+        var reapply = _cursorReapply; _cursorReapply = false;
+        if (!reapply && _cursorShown == (art, frame) && _cursorHeldShown == held?.Item && ReferenceEquals(_cursorTexturesOf, content)) return;
         if (!ReferenceEquals(_cursorTexturesOf, content)) { _cursorTextures.Clear(); _cursorTexturesOf = content; }
         if (!_cursorTextures.TryGetValue(art, out var textures))
             _cursorTextures[art] = textures = load.Frames
@@ -99,6 +109,7 @@ public partial class TerrainViewerApp
         if (_cursorShown is null) SetCursorShape(Godot.Input.CursorShape.Arrow);
         if (_cursorHeldShown != held?.Item) GD.Print($"ARC-UI-063 cursor held={held?.Item ?? "none"} art={art}");
         _cursorShown = (art, frame); _cursorHeldShown = held?.Item;
+        if (reapply) CursorReappliesForSelfTest++;
     }
 
     /// <summary>ARC-UI-063: the item held on the game cursor composed with the cursor art's frame (<see cref="AreaHeldCursor.Compose"/>);
