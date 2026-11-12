@@ -112,6 +112,22 @@ public sealed class AreaCombatFloatersTests
     }
 
     [TestMethod]
+    public void A_disarm_step_floats_message_19_when_its_weapon_block_ran_on_an_item()
+    {
+        // ARC-MAGIC-1232 (DW2): a spell's weapon block floats "weapon dropped" (combat.mes 19) as an attack's critical drop does: for a drop the original tried on a weapon that was there, whatever it did.
+        var damage = new AttackDamage(DamageRecipient.Target, DamageByType.Zero, DamageByType.Zero, 0, 0, 0, DamageMultiplier.None, false,
+            CriticalHitEffects.DropWeapon, default, false, DamagePrevention.None);
+        SessionCriticalStep Drop(SessionCriticalStepOutcome outcome) => new(SessionCriticalStepKind.DropWeapon, DamageRecipient.Target, EquipmentSlot.Weapon, "sword", outcome, null);
+        SessionSpellDamageStep Step(params SessionCriticalStep[] criticals) => new("oid:rat", damage, Life(LifeEvents.None), "hero") { Criticals = criticals };
+        Assert.IsTrue(AreaCombatFloaters.Of(Step(Drop(SessionCriticalStepOutcome.Dropped)), FloaterSide.Other)!.WeaponDropped);
+        Assert.IsTrue(AreaCombatFloaters.Of(Step(Drop(SessionCriticalStepOutcome.Refused)), FloaterSide.Other)!.WeaponDropped, "a refused drop still floats it");
+        Assert.IsFalse(AreaCombatFloaters.Of(Step(Drop(SessionCriticalStepOutcome.NoItem)), FloaterSide.Other)!.WeaponDropped, "no weapon, no message");
+        Assert.IsFalse(AreaCombatFloaters.Of(Step(), FloaterSide.Other)!.WeaponDropped);
+        var lines = CombatFloaters.Of(AreaCombatFloaters.Of(Step(Drop(SessionCriticalStepOutcome.Dropped)), FloaterSide.Other)!, 2, AreaCombatTexts.Project("test").Text);
+        Assert.IsTrue(lines.Any(line => line.Text == AreaCombatTexts.Project("test").Text(19)), "message 19 floats");
+    }
+
+    [TestMethod]
     public void Misses_dodges_self_hits_and_the_dead()
     {
         Assert.IsTrue(AreaCombatFloaters.Of(Result(Resolution(AttackOutcome.Miss, cause: AttackMissCause.Dodged), null), FloaterSide.Pc, FloaterSide.Other)!.Dodged);
