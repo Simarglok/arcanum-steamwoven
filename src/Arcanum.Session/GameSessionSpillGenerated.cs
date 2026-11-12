@@ -25,7 +25,8 @@ public sealed partial class GameSessionOwner
     // a container that needs none or whose generation the session cannot run, which then spills as before.
     private BreakGeneration? PlanBreakGeneration(SessionObjectTarget target)
     {
-        var world = PassWorldAs<ISessionRestockWorld>() ?? GenerateOnceWorld?.Invoke();
+        // The pass's world when it can answer, else the host's own.
+        var world = PassWorldAs<ISessionRestockWorld>() is { RestockReady: true } passed ? passed : GenerateOnceWorld?.Invoke();
         if (world is not { RestockReady: true } || !_inventory.Seeds.TryGetValue(target.Map, out var seed) ||
             !seed.Holders.TryGetValue(target.Entity, out var row) || row.Kind != SessionHolderKind.Container ||
             world.RestockFacts(target.Map, target.Entity) is not { Kind: RestockHolderKind.Container } found) return null;
@@ -41,19 +42,23 @@ public sealed partial class GameSessionOwner
     // recorded limit, the ground's own), and beyond the bound of created ground items the item is destroyed too.
     private void SpillGeneratedGoods(SessionObjectTarget target, InventoryDomain.Seed seed, SessionSeedHolder holder, BreakGeneration generation)
     {
+        // The generation runs after the break is written, so the container already counts as spilled: an ammunition line then makes its own stack
+        // instead of merging into one (the spill destroys every ammunition stack anyway).
         Regenerate(generation.World, target.Map, generation.Plan);
         var list = _inventory.Current(seed, holder, entity => DroppedCell(target.Map, seed, entity), added: false)
-            .Select(item => (item.Entity, Made: false))
-            .Concat(_inventory.AddedTo(target.Entity).Select(made => (made.Entity, Made: true))).Reverse().ToArray();
-        var later = list.Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
-        foreach (var (entity, isMade) in list)
+            .Select(item => (item.Entity, Made: false, Destroy: false))
+            .Concat(_inventory.AddedTo(target.Entity).Select(made => (made.Entity, Made: true, Destroy: SessionMadeItem.Number(made.Entity) is null ||
+                !InventoryDomain.KitAdmitted(made.Kind.Type) || _inventory.Piles.ContainsKey(made.Entity) || _inventory.Ammo.ContainsKey(made.Entity) ||
+                _inventory.Hero.IsGiven(made.Entity)))).Reverse().ToArray();
+        // Each placement sees the items still to come as not yet dropped (not the ones that will be destroyed).
+        var later = list.Where(item => !item.Destroy).Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
+        foreach (var (entity, isMade, destroy) in list)
         {
             later.Remove(entity);
             if (isMade)
             {
                 var made = _inventory.AddedTo(target.Entity).First(listed => listed.Entity == entity);
-                if (SessionMadeItem.Number(entity) is null || !InventoryDomain.KitAdmitted(made.Kind.Type) || _inventory.Piles.ContainsKey(entity) ||
-                    _inventory.Ammo.ContainsKey(entity) || _inventory.Hero.IsGiven(entity) || _inventory.Created >= _limits.MaxCreatedItems)
+                if (destroy || _inventory.Created >= _limits.MaxCreatedItems)
                 {
                     Discard(entity);
                     continue;
