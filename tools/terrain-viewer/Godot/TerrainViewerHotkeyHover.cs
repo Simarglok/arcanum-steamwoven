@@ -78,7 +78,7 @@ public partial class TerrainViewerApp
     /// is described as well as the hero's own, an open window's and the barter panel's.</summary>
     private void DescribeItem(GameSessionOwner session, string item)
     {
-        var kind = InventoryItemKind(session, item);
+        var kind = InventoryItemKind(session, item) ?? PlacedItemKind(session, item);
         if (kind is null && ItemMapRow(item) is null) return;
         if (!ItemExamineAllows(session, item, out var row)) return;
         var catalog = _hoverNames?.Catalog;
@@ -89,6 +89,11 @@ public partial class TerrainViewerApp
             : _messageLog.ShowItem(AreaHoverDescriptions.ItemWindow(described));
         if (shown) _gameBarPanel?.MessageLog.Render();
     }
+
+    /// <summary>ARC-UI-1451: the kind of an item the hero dropped or threw that lies on the map, from the session's placed items (a made item
+    /// has no map row; a kit item has none either). Null for any other item.</summary>
+    private static SessionItemKind? PlacedItemKind(GameSessionOwner session, string item) =>
+        session.QueryPlacedItems().FirstOrDefault(placed => placed.Entity == item)?.Kind;
 
     /// <summary>The map row of an item any held map lists (an item lying on the map, one an NPC or container holds, one the hero took); null for none.</summary>
     private AreaObjectRecord? ItemMapRow(string item)
