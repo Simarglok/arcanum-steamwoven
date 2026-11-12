@@ -138,23 +138,42 @@ struct QueueFolder {
         let text = "{\"schema\": \"arcanum-run-queue-pause-v1\", \"by\": \"menubar\", \"since\": \(Date().timeIntervalSince1970)}"
         guard (try? text.write(to: hidden, atomically: false, encoding: .utf8)) != nil else { return false }
         chmod(hidden.path, 0o600)
-        let holder = Process()
-        holder.executableURL = URL(fileURLWithPath: "/usr/bin/lockf")
-        holder.arguments = ["-k", hidden.path, "/bin/sh", "-c", "while [ -e \"$0\" ] || [ -e \"$1\" ]; do sleep 1; done",
-                            hidden.path, pauseURL.path]
-        holder.standardInput = FileHandle.nullDevice
-        holder.standardOutput = FileHandle.nullDevice
-        holder.standardError = FileHandle.nullDevice
-        guard (try? holder.run()) != nil else { try? FileManager.default.removeItem(at: hidden); return false }
+        // its own session, so closing a terminal or killing this process group does not end the pause
+        let script = "while [ -e \"$0\" ] || [ -e \"$1\" ]; do sleep 1; done"
+        guard let pid = spawnDetached("/usr/bin/lockf", ["lockf", "-k", hidden.path, "/bin/sh", "-c", script, hidden.path, pauseURL.path]) else {
+            try? FileManager.default.removeItem(at: hidden)
+            return false
+        }
         for _ in 0..<100 where !lockedByOthers(hidden.path) { usleep(50_000) }  // up to 5 s for the holder to take the lock
         guard lockedByOthers(hidden.path) else {
-            holder.terminate()
+            kill(pid, SIGTERM)
             try? FileManager.default.removeItem(at: hidden)
             return false
         }
         rename(hidden.path, pauseURL.path)
         return true
     }
+}
+
+/// Start a process in a new session with no stdio (posix_spawn with POSIX_SPAWN_SETSID); its pid, or nil.
+func spawnDetached(_ path: String, _ arguments: [String]) -> pid_t? {
+    var attributes: posix_spawnattr_t? = nil
+    var actions: posix_spawn_file_actions_t? = nil
+    posix_spawnattr_init(&attributes)
+    posix_spawn_file_actions_init(&actions)
+    defer {
+        posix_spawnattr_destroy(&attributes)
+        posix_spawn_file_actions_destroy(&actions)
+    }
+    posix_spawnattr_setflags(&attributes, Int16(0x0400))  // POSIX_SPAWN_SETSID
+    for descriptor in [0, 1, 2] as [Int32] {
+        posix_spawn_file_actions_addopen(&actions, descriptor, "/dev/null", descriptor == 0 ? O_RDONLY : O_WRONLY, 0)
+    }
+    var argv: [UnsafeMutablePointer<CChar>?] = arguments.map { strdup($0) } + [nil]
+    defer { for pointer in argv { free(pointer) } }
+    var pid: pid_t = 0
+    let status = posix_spawn(&pid, path, &actions, &attributes, &argv, environ)
+    return status == 0 ? pid : nil
 }
 
 let defaultShortLanes = 2  // run_queue.DEFAULT_SHORT_LANES

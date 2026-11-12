@@ -126,11 +126,9 @@ def set_paused(on: bool, by: str = "cli") -> bool:
     base = _open_folder()
     path = base / PAUSE_NAME
     if not on:
-        try:
-            path.unlink()
-        except FileNotFoundError:
-            return False
-        return True
+        was = pause_state() is not None
+        path.unlink(missing_ok=True)  # also a stale file nobody holds
+        return was
     if pause_state() is not None:
         return False
     hidden = base / f".pause-{os.getpid()}"  # visible to the queue only once it is locked, like any ticket
@@ -138,15 +136,19 @@ def set_paused(on: bool, by: str = "cli") -> bool:
     os.chmod(hidden, 0o600)
     holder = subprocess.Popen(holder_command(hidden, path), start_new_session=True, stdin=subprocess.DEVNULL,
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
-    deadline = time.monotonic() + 5.0
-    while not _locked(hidden):
-        if holder.poll() is not None or time.monotonic() > deadline:
+    try:
+        deadline = time.monotonic() + 5.0
+        while not _locked(hidden):
+            if holder.poll() is not None or time.monotonic() > deadline:
+                raise OSError("the pause could not be held (is /usr/bin/lockf there?)")
+            time.sleep(0.02)
+        os.replace(hidden, path)
+    except BaseException:  # never leave a holder looping on a file nobody will name (it ends when the file is gone)
+        hidden.unlink(missing_ok=True)
+        if holder.poll() is None:
             holder.kill()
             holder.wait()
-            hidden.unlink(missing_ok=True)
-            raise OSError("the pause could not be held (is /usr/bin/lockf there?)")
-        time.sleep(0.02)
-    os.replace(hidden, path)
+        raise
     holder.returncode = 0  # it outlives this process on purpose: no "still running" warning when the Popen object goes
     return True
 
@@ -595,7 +597,8 @@ def _enqueue(kind: str, label: str, command: Sequence[str], priority: int, timeo
 
 def _peers(live: Sequence[dict[str, Any]], own_seq: int) -> int:
     """The other runs of Godot (any lane, quick runs too) that are running now."""
-    return sum(1 for item in live if item["seq"] != own_seq and item.get("startedAt") and item["kind"] in HOLD_KINDS)
+    return sum(1 for item in live if item["seq"] != own_seq and item.get("startedAt") and item["kind"] in HOLD_KINDS
+               and not item.get("paused"))
 
 
 def _load() -> float | None:

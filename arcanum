@@ -268,7 +268,11 @@ def max_load_value(text: str) -> str:
 
 def queue(args: argparse.Namespace) -> int:
     if args.pause or args.resume:  # ARC-DEV-1344: the same flag the menu-bar app sets
-        changed = run_queue.set_paused(args.pause)
+        try:
+            changed = run_queue.set_paused(args.pause)
+        except OSError as error:
+            print(f"arcanum queue: {error}", file=sys.stderr)
+            return 1
         print(("paused" if args.pause else "resumed") if changed else ("already paused" if args.pause else "was not paused"))
     if args.app:  # ARC-DEV-1344: start the menu-bar app now (builds it first when needed), (the build is foreground)
         target, why = menubar.build()
