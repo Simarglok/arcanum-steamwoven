@@ -48,8 +48,11 @@ public sealed class BackgroundStateTests
     {
         using var owner = Hero(SessionBackgrounds.Technophobia);
         var given = owner.GiveItemToPc(owner.Version, "corpse", 5, Accept);
-        Assert.AreEqual((GameSessionFailure.InsertRefused, (SessionInsertVerdict?)SessionInsertVerdict.TechnologyRefused, 0L),
+        // ARC-WORLD-1131: the refused insert lays the item on the PC's tile (0x415BA0) instead of failing the IN; it is not in the PC's list.
+        Assert.AreEqual((GameSessionFailure.None, (SessionInsertVerdict?)SessionInsertVerdict.TechnologyRefused, 1L),
             (given.Failure, given.Verdict, owner.Version.Revision), "negative IN");
+        Assert.AreEqual(given.Item, owner.QueryPlacedItems().Single().Entity);
+        Assert.AreEqual(0, owner.QueryPcInventory().Count);
         using var neutral = CreateWith(HalfElf() with { Background = SessionBackgrounds.Technophobia });
         Assert.AreEqual(GameSessionDisposition.Changed, neutral.AttachMapInventory(Exterior, new([],
             [new("stone", new(new(SessionItemType.Generic, 5603, 7, 8), 1, 0, 0, null, []), new CellCoord(103, 200))])).Disposition);

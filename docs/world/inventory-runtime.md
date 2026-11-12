@@ -60,7 +60,7 @@ of the PC's list. `InventoryMutationResult` names the moved item and the insert 
 | --- | --- | --- |
 | `PickUpItem(item)` | left click → `AG_PICKUP_ITEM` → the item transfer (0x4617F0) of an unparented item: item `SAP_GET`, insert check, the object pickup (0x4417A0), the item insert (0x466640; item `SAP_INSERT_ITEM`) | an item on the ground of the actor's map |
 | `LootItem(holder, item)` | click on a dead critter opens it as a container (target `SAP_USE` checked first); a moved item runs the parented transfer: PC `SAP_TRANSFER`, insert check, the item removal (0x466E00; item `SAP_REMOVE_ITEM`, unequip when worn), the item insert (0x466640) | an item still listed by an NPC the seed marks dead, or one the session killed (ARC-COMBAT-005, [hero attack](hero-attack-runtime.md)); since ARC-WORLD-101 an item in the current list of a container of the seed that has not spilled (its seed items, the items a barter or a regeneration put into it); the host admits the open first ([container loot window](barter-runtime.md#container-loot-window-arc-world-101)); since ARC-DEV-202 a body's worn item (slots 1000..1008, a dressed body's record over its map data) is looted too: the removal unwields it ([worn items of a looted body](#worn-items-of-a-looted-body-arc-dev-202)) |
-| `GiveItemToPc(npc, name)` | `DIALOG_ACTION_IN` with a negative value: first item in the NPC's list with that name class, else in its substitute inventory; parented transfer to the PC; dropped at the PC's location when the PC did not get it | the NPC's current list; no match and no substitute is NoChange, as in the source |
+| `GiveItemToPc(npc, name)` | `DIALOG_ACTION_IN` with a negative value: first item in the NPC's list with that name class, else in its substitute inventory; parented transfer to the PC; dropped at the PC's location when the PC did not get it (ARC-WORLD-1131: modelled for an insert-check refusal, [room of a take](#room-of-a-take-arc-dev-333)) | the NPC's current list; no match and no substitute is NoChange, as in the source |
 
 Refusals, in order, after input (`InvalidItem`), version (`StaleVersion`) and seed (`InventoryUnavailable`) checks:
 
@@ -84,8 +84,8 @@ host's, and since ARC-DEV-333 (B48) the room of an item entering the hero's list
 `NoRoom`; any other value refuses). It runs only after every other refusal. If the host calls back into the owner from it and anything the transfer read
 changed (revision, actor map, the attached seed, the item already taken), the transfer is `StaleVersion` with no effect.
 A refusal changes nothing: for pickup and
-loot that is the source behaviour; for IN the source would drop the item at the PC's location (into a junk pile when
-items lie there), which is not modelled, so IN is refused instead.
+loot that is the source behaviour; for IN the source drops the item at the PC's location (into a junk pile when
+items lie there), and since ARC-WORLD-1131 so does the session ([room of a take](#room-of-a-take-arc-dev-333)).
 
 Not modelled, on purpose: the PC's `SAP_TRANSFER` attachment without a script host (with one it runs, [item
 events](#item-events-arc-script-041)), reach and the walk to an item, the
@@ -402,9 +402,14 @@ joins a held stack of its prototype and a key that folds onto the ring need no p
 items that fit in list order and leaves the rest in the body, named in its message ("no free room in the grid"). The refusal's text in the original
 is a message of the item message file chosen by the code (WE10); the viewer keeps its own wording. Not covered: the hero's gold pile that takes
 a cell of its own when the first coin arrives (a pile that finds no cell still waits outside the grid). A script's create object makes ground
-items only (ARC-WORLD-081), so it never enters the hero's list. Recorded limits (NOT READY): the dialog's `IN` (`GiveItemToPc`) skips the
-room test, because the original drops a refused item at the PC's feet (not modelled) and a refusal would fail the whole conversation, so such an item
-waits outside the grid as before; an assembly that frees cells counts them free for its products even when an item already waiting outside the grid
+items only (ARC-WORLD-081), so it never enters the hero's list. The dialog's `IN` (`GiveItemToPc`, ARC-WORLD-1131) runs the same test, but its refusal is not a failure: the original's negative `IN` (0x415BA0, case 9)
+transfers the item to the PC, and when the PC is not its holder afterwards takes it out of the NPC's list (0x466E00) and places it at the PC's location
+(0x466E50: a junk pile on the tile or a new one, then the decay timer). The session does this for every refusal of the insert check (no room, too heavy,
+Technophobia): the result is `Changed` with the refusing verdict (`InventoryMutationResult.Verdict`), the item joins the hero's placed items on the shown map's
+tile of the actor (`QueryPlacedItems`, source as the item came: pc, made), one revision, no insert-item script, no ring or stack merge, no pickup
+trigger; an NPC of another map (a carried companion) keeps its list's origin on the placed item. The dialog port answers Applied and the conversation goes on. A tile the ground cannot hold
+(`DropTileUnfit`) or a full list budget refuses the IN with no effect. Not covered: a transfer script's skip default (the original drops the item in that case too; the session still
+answers `Declined`). Recorded limits (NOT READY): an assembly that frees cells counts them free for its products even when an item already waiting outside the grid
 would take them first at the next placement; the first gold pile (a hero with no coins) needs no place.
 
 ## Junk piles (ARC-WORLD-063)
