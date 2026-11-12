@@ -179,6 +179,7 @@ public partial class TerrainViewerApp
         var check = AreaUseRule.Check(transfers.Map, bed, new(row.WorldX!.Value, row.WorldY!.Value), actor);
         GD.Print($"ARC-WORLD-1162 bed use outcome={check.Outcome} distance={check.Distance}");
         if (check.Outcome != AreaUseOutcome.Accepted) { _areaUseStatus = check.Outcome == AreaUseOutcome.TooFar ? $"too far: {check.Distance} cells (use range {AreaUseRule.UseRange})" : $"bed use refused: {check.Outcome} {check.Reason}"; RefreshAreaStatus(); return; }
+        StopWorldRoute("ROUTE_REPLACED_BY_USE");
         OpenSleep(bed);
     }
 

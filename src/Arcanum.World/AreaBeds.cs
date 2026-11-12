@@ -73,6 +73,6 @@ public sealed class AreaBedOccupancy
         return true;
     }
 
-    /// <summary>Empties every bed (the shown map, the session or the game changed).</summary>
+    /// <summary>Empties every bed (for a host that replaces its map or session; the viewer empties the hero's bed when his window closes, which every such change does).</summary>
     public void Clear() => _occupants.Clear();
 }

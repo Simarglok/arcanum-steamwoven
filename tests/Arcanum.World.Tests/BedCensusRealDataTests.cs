@@ -19,7 +19,7 @@ public sealed class BedCensusRealDataTests
     private const int PlacedBeds = 191, PlacedBedsWithScript = 19, MapsRead = 80, BedPrototypes = 1;
 
     [TestMethod, TestCategory("RealData")]
-    public void Every_bed_prototype_and_every_placed_bed_of_the_installed_maps_is_counted_with_its_use_script()
+    public void Every_placed_bed_of_the_installed_maps_is_counted_with_its_use_script()
     {
         var root = Environment.GetEnvironmentVariable("DAT_ROOT");
         if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("DAT_ROOT is required.");

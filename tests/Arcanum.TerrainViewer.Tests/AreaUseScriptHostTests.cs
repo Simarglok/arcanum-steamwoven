@@ -176,6 +176,9 @@ public sealed class AreaUseScriptHostTests
                 BinaryPrimitives.WriteUInt32LittleEndian(trap.AsSpan(48), flags);
                 Write($"scr/00{number}trap.scr", trap);
             }
+            // 790 and 791 (ARC-WORLD-1162): a bed's script that ends skip default, and one that ends run default.
+            Write("scr/00790bedskip.scr", Program(Do(Skip)));
+            Write("scr/00791bedrun.scr", Program(Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
         }
@@ -209,6 +212,22 @@ public sealed class AreaUseScriptHostTests
                 MapChangeKey.ForEntity(Entity(0), AreaUseScriptHost.ScriptProperty), 0).Disposition);
             Assert.AreEqual(false, host.IsTrap(Gate(709)));
             Assert.IsNull(Host(session, null, Gate(709)).IsTrap(Gate(709)), "no script content");
+        });
+    }
+
+    [TestMethod]
+    public void A_beds_use_script_answers_the_rest_hook_one_refuses_and_a_bed_with_no_script_is_one()
+    {
+        // ARC-WORLD-1162 (SWB5, 0x57B180 over 0x441980): the answer 1 (run default, and no script on the point) refuses the hero; skip default goes on; a run the host cannot apply decides nothing.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            AreaBedScriptRun Bed(AreaObjectRecord row) => Host(session, content, row).RunBed(row, session.Rules.Scripts);
+            var none = Bed(Row(3, 3, 0, 3003));
+            Assert.AreEqual(AreaBedAnswer.RunDefault, none.Answer, "a bed with no script on the point: the entry point's run default, so the hero is refused");
+            Assert.AreEqual(AreaBedAnswer.SkipDefault, Bed(Row(4, 3, 790, 3004)).Answer, "a script that ends skip default lets him lie down");
+            Assert.AreEqual(AreaBedAnswer.RunDefault, Bed(Row(5, 3, 791, 3005)).Answer, "a script that ends run default refuses him");
+            Assert.AreEqual(AreaBedAnswer.NotModelled, Bed(Gate(760)).Answer, "a script that teleports from a bed is not applied and answers nothing");
         });
     }
 

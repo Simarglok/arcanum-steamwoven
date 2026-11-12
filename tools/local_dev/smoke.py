@@ -232,7 +232,8 @@ STAGE_NEEDS: dict[str, StageNeeds] = {
     "companion-click": _needs(), "npc-shot": _needs(sector=TOWN), "ai-react": _needs(own=True),
     "placement-census": _needs(),  # ai-react: its own process, it failed after the other AI stages and passed alone (2026-11-12)
     "inv-carry": _needs(debug=True, own=True),  # a dead body with an item; NONE at the Crash Site was seen
-    "spell-end": _needs(), "hold-hero": _needs(), "spell-effects": _needs(), "movement": _needs(), "spirit-talk": _needs(), "sleep": _needs(sector=WILD, own=True), "bed": _needs(map=CAVE, only_map=True, own=True),  # the cave's beds (a bed with no script, the scripted one); moves the clock; it opens the sleep window  # moves the clock by days; the wilderness sector has no town map (the sleep window, not the wait window)
+    "spell-end": _needs(), "hold-hero": _needs(), "spell-effects": _needs(), "movement": _needs(), "spirit-talk": _needs(), "sleep": _needs(sector=WILD, own=True),  # moves the clock by days; the wilderness sector has no town map (the sleep window, not the wait window)
+    "bed": _needs(map=CAVE, only_map=True, own=True),  # the cave's one scripted bed: the sleep window through it, kind-2 heal; moves the clock
     "created-scenery": _needs(portable=True), "created-critter": _needs(portable=True),
     "script-critters": _needs(**_MAIN_ONLY), "worn-light": _needs(), "critter-light": _needs(map=LIGHT_MAP),
     "summon-flash": _needs(portable=True), "summon-wall": _needs(portable=True), "summon-undead": _needs(portable=True),

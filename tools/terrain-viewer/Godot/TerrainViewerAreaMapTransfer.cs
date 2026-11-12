@@ -172,7 +172,7 @@ public partial class TerrainViewerApp
             || (_mapTransfers.Site(hit) is null && _mapTransfers.ScriptedSite(hit) is null && !_mapTransfers.IsBed(hit))) return false;
         CancelTalkApproach("a use click replaced it"); CancelInventoryApproach("a use click replaced it");
         // An exit map mode cannot take is refused at once, without walking there (a scripted use's script names its exit).
-        if (_mapTransfers.Site(hit) is { } site && _mapTransfers.Refusal(site) is { } refusal)
+        if (!_mapTransfers.IsBed(hit) && _mapTransfers.Site(hit) is { } site && _mapTransfers.Refusal(site) is { } refusal)
         {
             CancelAreaUseApproach("a refused use click replaced it");
             _areaUseStatus = $"use refused: {AreaUseOutcome.DestinationUnavailable} {refusal}"; RefreshAreaStatus();
