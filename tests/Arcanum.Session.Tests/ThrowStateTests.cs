@@ -271,6 +271,21 @@ public sealed class ThrowStateTests
         Assert.Fail("no hit");
     }
 
+    // ARC-COMBAT-1223 (PS5, PF10; 0x4B2870): a missed throw has no target, and its end on the scattered tile fires the thrown item's attacks-a-location event there, not once it struck.
+    [TestMethod]
+    public void AMissedThrowStillAsksItsItemEventAtTheScatteredTile()
+    {
+        using var owner = Owner();
+        var rat = Rat();
+        var miss = ThrowUntil(owner, rat, hit: false);
+        var scattered = miss.Scatter!.Value;
+        var events = owner.QueryShotEndItemEvents(miss.Shot!.Value, scattered);
+        Assert.AreEqual(1, events.Count, "the miss's end fires the item's location event");
+        Assert.AreEqual(("kit:1", SessionEventKinds.PlayerEntity), (events[0].Item, events[0].Parent));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.LandThrownItem(owner.Version, miss.Shot.Value, scattered).Disposition);
+        Assert.AreEqual(0, owner.QueryShotEndItemEvents(miss.Shot.Value, scattered).Count, "landed: the shot is gone");
+    }
+
     // A miss at a critter next to the hero may scatter back onto the hero's own cell (the tiles are capped at the distance 1).
     [TestMethod]
     public void AScatterAtANeighbourMayLandOnTheHerosOwnCell()
