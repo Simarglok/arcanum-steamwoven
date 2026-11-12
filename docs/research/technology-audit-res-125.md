@@ -18,8 +18,8 @@ Requirements (reference only, no coverage row changes): [FR-ITEM-011](../require
    183 (PART: creature Summon with AIRedirect, E1-e) and 222 (PART: ObjFlag, the permanent polymorph). Record 184 (its Use component runs in the use-script host, ARC-MAGIC-048) is RUNS since ARC-MAGIC-061: the census wires the Use seam the viewer wires, with a stub that answers that a script ran, like its social and teleport hosts (the real host answers false for the hero and for an object with no use script; the answer is only logged, so readiness does not depend on it).
    Over the 65 records an installed item carries: **64 RUNS, 1 PART, 0 INERT**.
 3. **RUNS is a host verdict, not a behaviour check.** The census says every component of a record is taken; it does not say the flag it writes has a reader (section 4).
-4. **What is left is short:** the viewer draw of hidden, shrunk and translucent critters and the shielded hit eye candy (E4-a2), creature Summon with AIRedirect (E1-e) and the AI's summoning (E1-f),
-   the rest of the Trait polymorph (MA-8), and the smoke gaps of section 5. E1-e, E1-f, E4-a2 and MA-8 are shared with the magic queue ([magic audit](magic-audit-res-103.md)); they are listed once, here.
+4. **What is left is short:** creature Summon with AIRedirect (E1-e) and the AI's summoning (E1-f),
+   the rest of the Trait polymorph (MA-8), and the smoke gaps of section 5. E1-e, E1-f and MA-8 are shared with the magic queue ([magic audit](magic-audit-res-103.md)); they are listed once, here.
 
 ## 4. Readers of the flags the technology records write
 
@@ -33,8 +33,8 @@ A flag counts as read when a symbol outside the data tables uses it; behaviour a
 | Magnetic inversion (182, 187) | yes (attack rules, equipment choice, skill check) | |
 | Enshroud (167) | yes (AI host, hostility rules) | |
 | **Drunk (172, 181)** | **no, and none in the original** | no code of the executable and no installed record reads the bit ([SFR2](ledger/spell-runs.md#readers-of-the-drunk-and-shielded-spell-flags-arc-res-126)); nothing to build |
-| **Shielded (209)** | **no** (the `shielded` in `HostilityRules` is the accidental-hit test, not the spell bit) | the only reader is the hit effect 0x459A30, a hit eye candy (SFR3); record 83 lists it in `Disallowed_TSF:`, which the session reads (SFR4) |
-| Don't-draw (178, 183, 200, 217) | written; `AreaAiHost` and traps read it | the viewer draw does not (MA-1 limit) |
+| **Shielded (209)** | **no** (the `shielded` in `HostilityRules` is the accidental-hit test, not the spell bit) | the only reader is the hit effect 0x459A30, a hit eye candy (SFR3; built by ARC-MAGIC-045); record 83 lists it in `Disallowed_TSF:`, which the session reads (SFR4) |
+| Don't-draw (178, 183, 200, 217) | written; `AreaAiHost` and traps read it | the viewer draw reads it since ARC-MAGIC-045 (`AreaBodyStyleRules`; with translucent, shrunk and invisible) |
 | Permanent polymorph (222) | PART: the Trait art is built (ARC-MAGIC-040, -047, -052), the ObjFlag part is not | MA-8 |
 
 ## 5. Smoke and test gaps
@@ -61,7 +61,7 @@ E1-b, E1-c and E1-d (Summon of scenery, created critters, NPC effect list).
 
 | Label | Content | Records / products | Size | Needs | Lane |
 | --- | --- | --- | --- | --- | --- |
-| **E4-a2** shielded hit eye candy and don't-draw draw | The hit effect 0x459A30 plays the run's hit eye candy for shielded (and magnetic inversion) at a hit on a PC or NPC (the entangled branch is built); drunk has none. Plus the viewer's draw of hidden, shrunk and translucent critters and of don't-draw objects | 172, 181, 209, 178, 183, 200, 217 | M | none | spell-cast and viewer |
+| **E4-a2** shielded hit eye candy and don't-draw draw (**done**, ARC-MAGIC-045, [ledger HE1–HE4, OD1–OD6](ledger/spell-runs.md#object-draw-flags-and-the-hit-eye-candy-arc-magic-045)) | The hit effect 0x459A30 plays the run's hit eye candy for shielded (and magnetic inversion) at a hit on a PC or NPC (the entangled branch is built); drunk has none. Plus the viewer's draw of hidden, shrunk and translucent critters and of don't-draw objects | 172, 181, 209, 178, 183, 200, 217 | M | none | spell-cast and viewer |
 | **MA-8** polymorph remainder (E4-f) | Trait: the ObjFlag part of the permanent polymorph; drop what the new art cannot wield, restore | 222 (and the Body spells of the magic queue) | M | none | render and equipment |
 | **E1-e** creature Summon with AIRedirect | Prototype or list pick, summoned flags, faction; AIRedirect (E4-b remainder) | 183 and 11 summon spells | L | none | Summon file |
 | **E1-f** AI summoning | Magic queue's last slice; touches no technology record | n/a | M | E1-e | AI host |

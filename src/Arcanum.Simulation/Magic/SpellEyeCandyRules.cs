@@ -5,7 +5,7 @@ namespace Arcanum.Simulation.Magic;
 /// (0x452017) all index from 6 · spell.</summary>
 public static class SpellEyeCandyRules
 {
-    public const int PerSpell = 6, Cast = 0, Projectile = 1, Destination = 2, SecondaryDestination = 3, SecondaryCast = 4;
+    public const int PerSpell = 6, Cast = 0, Projectile = 1, Destination = 2, SecondaryDestination = 3, SecondaryCast = 4, Hit = 5;
 
     public static int EntryIndex(int spell, int number) => checked(spell * PerSpell + number);
 
