@@ -32,7 +32,7 @@ Every B-id not in the tables above is closed. A code in brackets was a part of t
   B21 ARC-DEV-309, ARC-DEV-312 (the refusal is the original's rule, gate flag 2365); B22 ARC-DEV-205; B23 ARC-DEV-157,
   ARC-DEV-299 (stage `container-click`; the 8 roofed house containers are the original's rule, ARC-DEV-330); B24 ARC-DEV-304,
   ARC-DEV-324; B25 ARC-DEV-206, ARC-DEV-298, ARC-DEV-328, ARC-DEV-351, ARC-DEV-371 (created critters; the residual is above); B26 ARC-DEV-178.
-- **Interface, messages, fonts:** B27 ARC-DEV-156; B28 ARC-DEV-156; B29 ARC-UI-071; B30 ARC-UI-072, ARC-UI-1121 (the doll's two values and the weapon fill; the hero's own window's: #1267; the sort button is B54);
+- **Interface, messages, fonts:** B27 ARC-DEV-156; B28 ARC-DEV-156; B29 ARC-UI-071; B30 ARC-UI-072, ARC-UI-1121 (the doll's two values and the weapon fill), ARC-UI-1267 (the same in the hero's own window; the sort button is B54);
   B31 ARC-DEV-306; B32 ARC-DEV-306 (ARC-DEV-316, ARC-DEV-336, ARC-DEV-354); B33 ARC-DEV-280 (ARC-DEV-263, stage
   `companion-click`); B34 and B35 ARC-DEV-168.
 - **Hosts:** B36 ARC-DEV-305 (ARC-DEV-315); B37 ARC-UI-107; B38 ARC-DEV-296; B39 ARC-DEV-295; B40 ARC-DEV-161; B41 ARC-DEV-306

@@ -321,7 +321,9 @@ public partial class TerrainViewerApp
         // ARC-SKILLS-010: the window on the NPC whose pocket the hero picks is in steal mode.
         // ARC-UI-1121 (B30, IW29): the body's doll view prints the damage and armour ratings the combat host reads for it and fills a too heavy weapon's slot.
         with { Steal = holder is not null && holder == _pickPocketVictim,
-               BodyRatings = holder is not null && _combatHost is { } combat && combat.Covers(CurrentAreaMap) ? combat.DollRatings(_areaSession!, holder) : null };
+               BodyRatings = holder is not null && _combatHost is { } combat && combat.Covers(CurrentAreaMap) ? combat.DollRatings(_areaSession!, holder) : null,
+               // ARC-UI-1267 (IW25): the hero's own window prints its damage and armour ratings and fills a too heavy weapon's slot.
+               HeroRatings = holder is null ? _combatHost?.HeroDollRatings(_areaSession!) : null };
 
     /// <summary>ARC-SKILLS-005: the hero uses a healing item on itself (the inventory use passes the user as the target, as the
     /// original's inventory window does). ARC-UI-025: the item use (0x462CC0) reaches it as the heal skill with the item and has charged

@@ -494,6 +494,27 @@ public sealed class AreaCombatHost : IAreaEventObjects
         catch (ArgumentException) { return null; }
     }
 
+    /// <summary>
+    /// ARC-UI-1267 (B30, ledger IW25, IW41, IW43): the numbers and the overlay the hero's own window prints under its doll (<see cref="GameSessionOwner.QueryHeroDollRatings"/>, from
+    /// the hero's session values). A worn item counts as identified when the session marks it, or its stored item flags (its object row, else its prototype by the kind the
+    /// session holds it as: a starting kit, taken or made item) carry the identified flag; null without a hero.
+    /// </summary>
+    public SessionDollRatings? HeroDollRatings(GameSessionOwner session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        const uint IdentifiedItemFlag = 0x1;
+        var kinds = session.QueryHeroKit().Select(item => (item.Entity, item.Kind)).Concat(session.QueryPcInventory().Select(item => (item.Entity, item.Kind)))
+            .Concat(session.QueryMadeItems().Select(item => (item.Entity, item.Kind))).GroupBy(pair => pair.Entity, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First().Kind, StringComparer.Ordinal);
+        var identified = new Dictionary<Arcanum.Simulation.Equipment.EquipmentSlot, bool>();
+        foreach (var worn in session.QueryEquipment().Worn)
+        {
+            var fields = Fields(worn.Entity) ?? (kinds.TryGetValue(worn.Entity, out var kind) ? _prototypes?.Invoke(kind.Prototype) : null);
+            identified[worn.Slot] = session.QueryItemIdentified(worn.Entity) || fields?.Item is { } stored && (stored.Flags & IdentifiedItemFlag) != 0;
+        }
+        try { return session.QueryHeroDollRatings(slot => identified.GetValueOrDefault(slot)); }
+        catch (ArgumentException) { return null; }
+    }
+
     /// <summary>ARC-DEV-075 (MIG2): <see cref="NpcItems(GameSessionOwner, int, string)"/> by identity: the items the NPC holds now, listed or
     /// worn, whichever map it stands on (its holder entry is the home map's).</summary>
     public IReadOnlyList<(string Entity, CombatFields Fields)> NpcItems(GameSessionOwner session, string entity)
