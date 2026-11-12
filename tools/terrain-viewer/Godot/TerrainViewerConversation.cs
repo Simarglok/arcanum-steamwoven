@@ -59,6 +59,8 @@ public partial class TerrainViewerApp
             _conversationHost.GoldKindSource = () => { AdoptBarterData(); return _barterData?.Data?.GoldKind(); };
             // ARC-DEV-190: a co action is the hero's attack event on the speaker, run by the shown map's AI host (none without AI: the action stays unadmitted).
             _conversationHost.HeroAttackAvailable = () => AreaAiHostNow() is not null;
+            // ARC-SCRIPT-1358: an l: reply ends the talk and opens the world map; only in map mode, where the bar's Map button has one.
+            _conversationHost.WorldMapAvailable = () => WorldMapActive;
             _conversationHost.HeroAttack = entity => AreaAiHostNow() is { } ai && ai.OrderAttack(new Arcanum.Session.CompanionOrderAttack(Arcanum.Session.SessionCombatant.Hero, Arcanum.Session.SessionCombatant.Critter(entity), Arcanum.Simulation.Ai.Loudness.Normal, Arcanum.Simulation.Ai.AttackEventFlags.None));
             // ARC-DEV-227: an nk action is a script's kill of the speaker (a death with no killer through the session's life domain) on the shown map.
             _conversationHost.KillNpc = entity => KillByScript(new Arcanum.Scripting.Scr.ScrObjectRef(CurrentAreaMap, entity));
@@ -426,6 +428,9 @@ public partial class TerrainViewerApp
         // ARC-UI-050: b: ended the talk; the barter window opens with the speaker as merchant and the talk does not resume (BT7).
         if (conversation?.End is { Kind: DialogEndKind.BarterWindow } && talkHost?.TakeBarterMerchant() is { } merchant && _areaSession is not null)
             QueueDialogBarter(talkHost, merchant);
+        // ARC-SCRIPT-1358: l: ended the talk; the world map opens as for the bar's Map button and the talk does not resume (ledger VA5).
+        if (conversation?.End is { Kind: DialogEndKind.WorldMapWindow } && talkHost?.TakeWorldMapRequest() == true && _areaSession is not null)
+            QueueDialogWorldMap();
         // ARC-UI-088: c-e ended the talk; the NPC's character sheet opens and the talk does not resume (WN2).
         if (conversation?.End is { Kind: DialogEndKind.NpcSheetWindow } && talkHost?.TakeNpcSheetSpeaker() is { } sheetSpeaker && _areaSession is not null)
             QueueDialogNpcSheet(talkHost, sheetSpeaker);

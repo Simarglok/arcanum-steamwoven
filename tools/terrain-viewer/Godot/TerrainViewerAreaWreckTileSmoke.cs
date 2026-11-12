@@ -95,11 +95,28 @@ public partial class TerrainViewerApp
                 $"the DLG of script {dialogScript} with Virgil: {_voiceStart?.Status} {_voiceStart?.Detail}");
             var node = _conversationPanel!.Conversation?.CurrentNode.Value;
             RequireConversationArtFonts(Require);
+            // ARC-SCRIPT-1358 (ledger VA1-VA5): at the altar Virgil's node 250 offers its `l:` reply as the world map reply: it is not blocked, and picking it ends the
+            // talk for the world map (no script line resumed), which opens through the Map button's own function (refusals of the open apply, so only the request is required).
+            var worldMapOpened = false; string? worldMapStatus = null;
+            if (place == "altar")
+            {
+                var options = _conversationPanel.Conversation!.Options.ToList();
+                var reply = options.FindIndex(o => o.Transition == Arcanum.Scripting.Dialog.DialogOptionTransition.WorldMap);
+                Require(reply >= 0 && options[reply].Block is null && !_conversationPanel.ButtonsForSelfTest[reply].Disabled, $"the world map reply is offered at node {node} ({options.Count} replies)");
+                _conversationPanel.Choose(options[reply].Number);
+                for (var wait = 0; wait < 10 && ConversationOpen; wait++) AreaSmokeFrame();
+                Require(!ConversationOpen, "the world map reply closed the talk");
+                Require(_conversationNotice is null || !_conversationNotice.Contains("script", StringComparison.OrdinalIgnoreCase), "no script continues after it: " + _conversationNotice);
+                for (var wait = 0; wait < 10 && _dialogWorldMapPending is not null; wait++) { AreaSmokeFrame(); TakeDialogWorldMap(); }
+                Require(_dialogWorldMapPending is null, "the queued world map request was taken");
+                worldMapOpened = WorldMapOpen; worldMapStatus = _worldMapStatus;
+                if (WorldMapOpen) CloseWorldMapByPlayer();
+            }
             for (var close = 0; close < 8 && ConversationOpen; close++) _conversationPanel.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             Require(!ConversationOpen, "his conversation closed");
             GD.Print(passLine + " " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName, Tile = wreck, Virgil = from, Pc = map.Chart.ToWorld(line.Value.Pc), Frames = frames, Node = node,
-                Script = dialogScript, Parity = "NOT_VERIFIED" }));
+                Script = dialogScript, WorldMapOpened = worldMapOpened, WorldMapStatus = worldMapStatus, Parity = "NOT_VERIFIED" }));
         }
         finally
         {

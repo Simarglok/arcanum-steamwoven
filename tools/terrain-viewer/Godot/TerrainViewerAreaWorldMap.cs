@@ -45,6 +45,27 @@ public partial class TerrainViewerApp
     private bool WorldMapOpen => WindowOpen(InterfaceMode.WorldMap);
     private bool WorldMapActive => _areaSession is not null && _readyMode == TerrainViewerMode.Area && _readyMapName is not null;
 
+    // ARC-SCRIPT-1358: the session whose talk ended with an l: reply; the map opens once the dialog window has left the stack.
+    private Arcanum.Session.GameSessionOwner? _dialogWorldMapPending;
+
+    /// <summary>An <c>l:</c> reply ended the conversation (<see cref="Arcanum.Scripting.Dialog.DialogEndKind.WorldMapWindow"/>): the world map opens as
+    /// for the bar's Map button (the same refusals, <see cref="OpenWorldMap"/>) once the dialog has closed.</summary>
+    private void QueueDialogWorldMap()
+    {
+        GD.Print("ARC-SCRIPT-1358 dialog world map requested");
+        _dialogWorldMapPending = _areaSession;
+    }
+
+    private void TakeDialogWorldMap()
+    {
+        if (_dialogWorldMapPending is not { } session) return;
+        if (!ReferenceEquals(session, _areaSession) || !WorldMapActive) { _dialogWorldMapPending = null; return; }
+        if (AnyWindowOpen) return;
+        _dialogWorldMapPending = null;
+        OpenWorldMap();
+        GD.Print($"ARC-SCRIPT-1358 dialog world map open={WorldMapOpen} status={_worldMapStatus}");
+    }
+
     /// <summary>Starts loading the world-map data for this module once; a reload or a map transfer reuses them.</summary>
     private void BindAreaWorldMap(TerrainViewerArguments arguments)
     {
@@ -456,6 +477,7 @@ public partial class TerrainViewerApp
     /// <see cref="WorldJourney.StepRealMs"/> of real time, behind the Esc menu), not a delta loop of this frame.</summary>
     private void SyncAreaWorldMap()
     {
+        TakeDialogWorldMap();
         RevealWalkedTownMapCell();
         if (!WorldMapOpen) { AdoptWorldMapData(); return; }
         if (!WorldMapActive || _worldMap is null || !ReferenceEquals(_worldMap.Session, _areaSession)) { EndWorldMap(); return; }
