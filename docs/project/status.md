@@ -113,6 +113,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Schematic window | [Technology](status/technology.md) | ARC-TECHNOLOGY-005, ARC-RES-062, ARC-TECHNOLOGY-006 |
 | Powered shield | [Technology](status/technology.md) | ARC-MAGIC-041, ARC-RES-112 |
 | Reading window | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-049, ARC-SCRIPT-020, ARC-TECHNOLOGY-009 |
+| Sleep and wait window | [Viewer, rendering, HD and input](status/viewer.md) | ARC-WORLD-1160 |
 | NPC inventory changes | [Items and inventory](status/items.md) | ARC-WORLD-055, ARC-TECHNOLOGY-006 |
 | Ammunition | [Items and inventory](status/items.md) | ARC-WORLD-066, ARC-TECHNOLOGY-009, ARC-TECHNOLOGY-007 |
 | NPC gold and transfers | [Items and inventory](status/items.md) | ARC-WORLD-071 |
@@ -201,6 +202,7 @@ One line per subject; the full row (canonical result, what remains) is in its ar
 | Script and dialog content | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-011, ARC-SCRIPT-012, ARC-DATA-022 |
 | SCR set auto-level scheme | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-016, ARC-TECHNOLOGY-005, ARC-UI-049 |
 | SCR story state and story actions | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-019 |
+| SCR story and time commands | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-1165 |
 | SCR object variables and calls | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-018 |
 | SCR teleports and guards | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-014, ARC-SCRIPT-015, ARC-UI-049 |
 | SCR deferred calls | [Dialog and scripting](status/scripting.md) | ARC-SCRIPT-010, ARC-WORLD-039 |
@@ -250,7 +252,7 @@ Not built or only stubbed (each has an epic in the plan):
 - Monster generators, respawn, critter body decay and random encounters on the world map (E2).
 - Sleep and rest windows, the NPC hourly day (beds, walking between day and night standpoints) and the HUD clock (E3).
 - 6 of the 25 spell component types have no handler (AIRedirect, EnvFlag, Interrupt, Recharge, TraitIdx, Trait64; 19 run), item recharge, the viewer draw of hidden, shrunk and translucent critters, the permanent polymorph's ObjFlag part (technology record 222), Tempus Fugit and the raise script hook (E4; [technology audit](../research/technology-audit-res-125.md)).
-- 81 of 142 script actions and 20 of 53 conditions are admitted by the widest admission set (`ScrAdmissionSet.S33`; survey of the missing systems plan); dialogue markers `c r t z` and positive `IN` (E5).
+- 94 of 142 script actions and 26 of 53 conditions are admitted by the widest admission set (`ScrAdmissionSet.S34`; the survey of the missing systems plan found 81 and 20 under S33, E5-c added 13 and 6); dialogue markers `c r t z` and positive `IN` (E5).
 - The native trap script 30002, the follower who disarms instead of the hero, the skill pane's disarm button (#1113) and the hero's step onto a placed trap marker (E6; the placing of devices is built, ARC-WORLD-124, -125; the hero's spot trap roll is built, ARC-MAGIC-057; the disarm action from the hotkey bar is built, ARC-SKILLS-1156).
 - Movies, credits, intro and endings (E7).
 - Fate window and Fate Points, skill pane, action-point readout, companions screen, gambling, identify window, several sound callers and the hidden options (E8).
