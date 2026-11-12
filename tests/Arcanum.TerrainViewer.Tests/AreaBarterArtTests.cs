@@ -132,4 +132,46 @@ public sealed class AreaBarterArtTests
         Assert.AreEqual(string.Empty, AreaBarterArtLayout.Quote(view, null));
         Assert.AreEqual(string.Empty, AreaBarterArtLayout.Quote(view with { Merchant = merchant with { Follower = true } }, "own:1"), "a follower has no quote");
     }
+
+    [TestMethod]
+    public void TheCycleButtonsExistOnTheFollowerBackgroundOnly()
+    {
+        Assert.IsTrue(AreaBarterArtLayout.CycleShown(AreaBarterArtLayout.Background(follower: true, pcFollowers: 2)));
+        Assert.IsFalse(AreaBarterArtLayout.CycleShown(AreaBarterArtLayout.Background(follower: true, pcFollowers: 1)), "a single follower has no one to cycle to");
+        Assert.IsFalse(AreaBarterArtLayout.CycleShown(AreaBarterArtLayout.Background(follower: false, pcFollowers: 3)), "a merchant has none");
+        Assert.AreEqual((757, 758), (AreaBarterArtLayout.CycleLeftArt, AreaBarterArtLayout.CycleRightArt));
+        CollectionAssert.Contains(AreaInventoryArtContent.Numbers.ToArray(), 757);
+        CollectionAssert.Contains(AreaInventoryArtContent.Numbers.ToArray(), 758);
+        CollectionAssert.DoesNotContain(AreaBarterArtLayout.ArtNumbers.ToArray(), 757, "the buttons are drawn when they read and are no reason for the diagnostic window");
+    }
+
+    [TestMethod]
+    public void TheCycleHitTestUsesTheButtonsArt()
+    {
+        (int, int) art = (23, 23);
+        Assert.AreEqual(0, AreaBarterArtLayout.CycleHit(155, 55, art, art), "the left button's corner");
+        Assert.AreEqual(0, AreaBarterArtLayout.CycleHit(177.9f, 77.9f, art, art));
+        Assert.IsNull(AreaBarterArtLayout.CycleHit(178, 55, art, art), "right of the left button");
+        Assert.AreEqual(1, AreaBarterArtLayout.CycleHit(253, 55, art, art), "the right button's corner");
+        Assert.AreEqual(1, AreaBarterArtLayout.CycleHit(275.5f, 77.5f, art, art));
+        Assert.IsNull(AreaBarterArtLayout.CycleHit(252.9f, 55, art, art));
+        Assert.IsNull(AreaBarterArtLayout.CycleHit(155, 54.9f, art, art));
+        Assert.IsNull(AreaBarterArtLayout.CycleHit(155, 55, (0, 0), (0, 0)), "an art that did not read has no hit area");
+    }
+
+    [TestMethod]
+    public void TheCycleStepsTheFollowerListAndWraps()
+    {
+        string[] list = ["a", "b", "c"];
+        Assert.AreEqual("b", AreaBarterCycle.Step(list, "a", next: true, _ => true));
+        Assert.AreEqual("a", AreaBarterCycle.Step(list, "c", next: true, _ => true), "past the last wraps to the first");
+        Assert.AreEqual("c", AreaBarterCycle.Step(list, "a", next: false, _ => true), "before the first wraps to the last");
+        Assert.AreEqual("a", AreaBarterCycle.Step(list, "b", next: false, _ => true));
+        Assert.AreEqual("c", AreaBarterCycle.Step(list, "a", next: true, candidate => candidate != "b"), "a refused follower is skipped");
+        Assert.AreEqual("b", AreaBarterCycle.Step(list, "a", next: false, candidate => candidate != "c"), "backwards skips too, wrapping");
+        Assert.IsNull(AreaBarterCycle.Step(list, "a", next: true, _ => false), "none acceptable: the window stays");
+        Assert.IsNull(AreaBarterCycle.Step(["a"], "a", next: true, _ => true), "a single follower stays");
+        Assert.IsNull(AreaBarterCycle.Step(list, "x", next: true, _ => true), "a follower not in the list does not move the window");
+        Assert.IsNull(AreaBarterCycle.Step([], "a", next: false, _ => true));
+    }
 }

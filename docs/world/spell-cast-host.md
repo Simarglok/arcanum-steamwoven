@@ -419,8 +419,11 @@ The pointer entering a slot or a recent-action button shows its entry's descript
    (`AreaUseScriptHost.RunExamine`), and an answer of skip default leaves no description; the same step opens the world hover's description
    of every object, so a scenery or critter with an examine script is described only when it lets the default run. The script's printed
    lines go to the message window. ARC-SCRIPT-1119: an item the session made (`made:n`, no map row) runs its examine script too, from its prototype's point 0 (or the slot a run kept on the item) as a session item run (`GameSessionOwner.RunItemExamine`, `SessionItemScripts.Admission`, one revision when the run changed anything, a refused run applies nothing and the item is described as before); the world hover does not reach it (a made item on the ground has no row to point at). A run the viewer cannot apply (refused by the
-   admission, a teleport it asks for) describes as before; a conversation it asks for is not started (a made item's run that asks for one is refused, so the item is described as before). The barter and dialog windows and the
-   floating tooltip of the viewer without the interface bars (the original has none) do not run it.
+   admission, a teleport it asks for) describes as before; a conversation it asks for is not started (a made item's run that asks for one is refused, so the item is described as before). ARC-UI-1120 (HK25, HK26): the barter window's still pointer on an item runs it first, with the hero as the triggerer, and then makes the quote
+   (the window's handler is the inventory's, 0x573C74; the description is drawn only while the bars show, which the viewer hides under the window, so in practice the script runs and the item window is a known gap; the viewer runs it only with its interface on),
+   and the dialog start runs the speaker's examine script and redraws its window as the world hover does (0x567460), once, with the interface on. The
+   floating tooltip of the viewer without the interface bars (the original has none) does not run it, and the follower portraits' hover (0x56A9D0,
+   HK26) is not built.
 5. **Inventory** (HK23). In the inventory window, the pointer resting 35 ms on another item of the doll or the grid (nothing held) draws
    that item's window the same way; resting on no item keeps the last description.
 6. **Smoke.** The hotkey-bar smoke enters slot 2 (a spell: its hint with the college's icon), a skill entry (its hint; in the spells mode
