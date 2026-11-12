@@ -31,7 +31,7 @@ public readonly record struct ViewerAudioResult(ViewerAudioStatus Status, Viewer
 }
 
 /// <summary>
-/// ARC-UI-040: the viewer's sound output (docs/audio/viewer-audio.md). It owns three engine buses under Master, named after
+/// ARC-UI-040: the viewer's sound output (docs/audio/viewer-audio.md). It owns three engine buses under Master (plus 24 panning buses beneath them, all built at start), named after
 /// the original's channels, and up to <see cref="MaxVoices"/> stream players. A sound is an admitted payload
 /// (<see cref="SoundCatalog.OpenPayload"/>) decoded by the engine (WAV PCM, MP3) at a 0–127 volume on a channel; the volume
 /// arithmetic is <see cref="AudioVolumeRules"/>. Engine thread only. It never touches game state: a failure is a status.
@@ -65,10 +65,10 @@ public sealed class ViewerAudioBackend : IDisposable
             foreach (var channel in Enum.GetValues<AudioChannel>())
             {
                 var name = BusName(channel);
-                if (AudioServer.GetBusIndex(name) >= 0) continue;
-                AddBus(name, "Master");
+                if (AudioServer.GetBusIndex(name) < 0) AddBus(name, "Master");
                 for (var step = -PanSteps; step <= PanSteps; step++)
-                    if (step != 0) AddBus(PanBusName(channel, step), name, new AudioEffectPanner { Pan = (float)step / PanSteps });
+                    if (step != 0 && AudioServer.GetBusIndex(PanBusName(channel, step)) < 0)
+                        AddBus(PanBusName(channel, step), name, new AudioEffectPanner { Pan = (float)step / PanSteps });
             }
         }
         finally { AudioServer.Unlock(); }
