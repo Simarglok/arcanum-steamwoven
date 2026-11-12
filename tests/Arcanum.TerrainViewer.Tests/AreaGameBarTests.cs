@@ -23,7 +23,8 @@ public sealed class AreaGameBarTests
             var (x, y, w, h) = AreaGameBarLayout.StripRect(spec.Strip);
             Assert.IsTrue(spec.X >= x && spec.X < x + w && spec.Y >= y && spec.Y < y + h, $"{spec.Button} lies in its strip");
         }
-        CollectionAssert.AreEquivalent(new[] { 185, 184, 472, 473, 470, 471, 187, 169, 186, 193, 137, 18, 17, 19, 20 }, AreaGameBarLayout.ArtNumbers.ToArray());
+        CollectionAssert.AreEquivalent(new[] { 185, 184, 472, 473, 470, 471, 187, 169, 186, 193, 137, 18, 17, 19, 20, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216 },
+            AreaGameBarLayout.ArtNumbers.ToArray(), "the clock's ten arts are read with the bars (ARC-UI-1111)");
     }
 
     [TestMethod]
@@ -142,6 +143,11 @@ public sealed class AreaGameBarTests
         Assert.IsTrue(content.ArtReady, content.Detail);
         Assert.AreEqual(AreaGameBarTexts.Count, content.Texts.GameCount, content.Texts.Detail);
         Assert.AreEqual("Character Editor", content.Texts.Text(1005));
+        // ARC-UI-1111 (GB8): the clock's arts are read with the sizes the layout assumes (the day strip and the moon pieces).
+        Assert.AreEqual((AreaClockLayout.StripWidth, 29), (content.Art[207].Frames[0].Width, content.Art[207].Frames[0].Height));
+        for (var art = AreaClockLayout.FirstMoonArt; art < AreaClockLayout.FirstMoonArt + AreaClockLayout.MoonArtCount; art++)
+            Assert.AreEqual((AreaClockLayout.MoonWidth, 29), (content.Art[art].Frames[0].Width, content.Art[art].Frames[0].Height), $"moon art {art}");
+        Assert.AreEqual((5, 29), (content.Art[AreaClockLayout.NeedleArt].Frames[0].Width, content.Art[AreaClockLayout.NeedleArt].Frames[0].Height));
         Assert.AreEqual((800, 41), (content.Art[185].Frames[0].Width, content.Art[185].Frames[0].Height));
         Assert.AreEqual((800, 159), (content.Art[184].Frames[0].Width, content.Art[184].Frames[0].Height));
         foreach (var number in new[] { 169, 186, 187, 193, 470, 471, 472, 473 }) Assert.AreEqual(3, content.Art[number].Frames.Count, $"{number} has idle, down and hover frames");
