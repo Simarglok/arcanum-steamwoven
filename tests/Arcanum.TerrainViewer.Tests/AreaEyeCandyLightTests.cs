@@ -25,6 +25,7 @@ public sealed class AreaEyeCandyLightTests
         public AreaEyeCandyHost Host { get; }
         public FrameStep Step { get; }
         public Dictionary<string, int> Saved = [];
+        public bool SlotsUnknown;
         public Dictionary<int, SpellEyeCandyEntry> Entries = new()
         {
             // Illuminate's entry: loops, light art 1 in (226, 60, 236).
@@ -39,7 +40,7 @@ public sealed class AreaEyeCandyLightTests
         {
             Session = session ?? ConversationSessionFixture.CreateWithHero();
             Host = new AreaEyeCandyHost(Session, i => Entries.GetValueOrDefault(i), (art, parts) => new EyeCandyFacts(4, 2, 100, 0, true, true), (low, high) => low,
-                savedLightSlots: owner => Saved.GetValueOrDefault(owner));
+                savedLightSlots: owner => SlotsUnknown ? -1 : Saved.GetValueOrDefault(owner));
             Step = new FrameStep(Session, AreaAiTestSteps.NoAi) { GoalSteps = new AreaGoalStepRouter(() => null, new AreaAiGoalSteps(() => null), null, null, null, null, () => Host) };
         }
 
@@ -186,6 +187,24 @@ public sealed class AreaEyeCandyLightTests
         Assert.AreEqual(1, after.Host.Remove(Hero, 20, -1, false), "the hero's restored run is removable too");
         after.Run(200);
         Assert.AreEqual(1, after.Host.Lights().Count(), "only the NPC's unlit-by-Remove entry 23 light is left");
+    }
+
+    // ARC-MAGIC-1280: the overlay host of a loaded session is built before the viewer knows the owners' own light slots (its cast host comes later): no slot is claimed then, and the record's lights are never shared.
+    [TestMethod]
+    public void A_restored_run_claims_no_slot_until_the_owners_own_slots_are_known()
+    {
+        using var before = new Fixture();
+        Assert.IsTrue(before.Host.Play(Npc, 20, 0, -1));
+        before.Run(60);
+        using var session = ConversationSessionFixture.SaveAndLoad(before.Session);
+        using var after = new Fixture(session);
+        after.SlotsUnknown = true;
+        after.Saved[Npc] = 0b0001; // the record holds slot 0
+        Assert.AreEqual(0, after.Host.AdoptRestored(), "nothing is claimed while the slots are unknown");
+        Assert.AreEqual(0, after.Host.Lights().Count(), "and no light is answered yet");
+        after.SlotsUnknown = false;
+        Assert.AreEqual(1, after.Host.AdoptRestored());
+        Assert.AreEqual(1, after.Host.Lights().Single().Slot, "slot 0 is the record's");
     }
 
     [TestMethod]

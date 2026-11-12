@@ -29,7 +29,7 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     private readonly Func<int, int, int> _random;
     private readonly Func<string, IEnumerable<EyeCandyParts>>? _otherParts;
     private readonly AreaFireBurner? _fire;
-    // ARC-MAGIC-1229: the overlay light slots of an owner that hold a saved light (bit i for slot i), and the slot each shown light run took.
+    // ARC-MAGIC-1229: the overlay light slots of an owner that hold a saved light (bit i for slot i; ARC-MAGIC-1280: negative while the viewer does not know them yet, a loaded session before its cast host is built), and the slot each shown light run took.
     private readonly Func<string, int> _savedLightSlots;
     private readonly Dictionary<GoalHandle, (string Owner, int Slot)> _lightSlots = [];
     private readonly Dictionary<string, int> _hover = new(StringComparer.Ordinal);
@@ -122,23 +122,27 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     }
 
     /// <summary>Whether the owner has a free overlay light slot for a lit entry: its record's lights and the slots the live lit runs hold (begun or still waiting) count (the add looks for the first slot whose art is −1, IW2).</summary>
-    public bool LightSlotFree(string owner) => AreaEyeCandyLights.FirstFree(UsedSlots(owner)) >= 0;
+    public bool LightSlotFree(string owner) => UsedSlots(owner) is not { } used || AreaEyeCandyLights.FirstFree(used) >= 0;
 
     // The add's slot (0x4CCF70): the first free of the owner's, held for the run from its add until it is gone (the stack flag's queued frame shares the run it was put under).
     private bool ReserveLight(GoalHandle handle, string owner)
     {
         if (_lightSlots.ContainsKey(handle)) return true;
-        var slot = AreaEyeCandyLights.FirstFree(UsedSlots(owner));
+        // ARC-MAGIC-1280: a run of a loaded session waits (no light yet) until the owner's own slots are known: claiming one earlier could share a slot with a light of the record.
+        if (UsedSlots(owner) is not { } used) return false;
+        var slot = AreaEyeCandyLights.FirstFree(used);
         if (slot < 0) return false;
         _lightSlots[handle] = (owner, slot);
         return true;
     }
 
     // The slots an owner's record and the live lit runs (begun or not) hold; the slots of runs that are gone are given back here.
-    private int UsedSlots(string owner)
+    private int? UsedSlots(string owner)
     {
         foreach (var gone in _lightSlots.Keys.Where(h => !_session.QueryGoals().TryGet(h, out var run) || run.Done).ToArray()) _lightSlots.Remove(gone);
-        return _savedLightSlots(owner) | AreaEyeCandyLights.Mask(_lightSlots.Values.Where(v => v.Owner == owner).Select(v => v.Slot));
+        var saved = _savedLightSlots(owner);
+        if (saved < 0) return null;
+        return saved | AreaEyeCandyLights.Mask(_lightSlots.Values.Where(v => v.Owner == owner).Select(v => v.Slot));
     }
 
     /// <summary>The overlay runs of an owner (eye candy and hover).</summary>

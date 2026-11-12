@@ -118,6 +118,8 @@ public partial class TerrainViewerApp
     // ARC-DEV-143: the log entries already taken (by reference); a replaced cast host's entries can be flushed twice and an add must not start two runs from one entry.
     private readonly HashSet<SpellCastEvent> _eyeCandyTaken = new(ReferenceEqualityComparer.Instance);
     private AreaEyeCandyHost? _eyeCandyHost;
+    // ARC-MAGIC-1280: the host whose restored lit runs took their slots (once its cast host was the session's).
+    private AreaEyeCandyHost? _eyeCandyAdopted;
     private readonly Dictionary<(uint Art, EyeCandyParts Parts), EyeCandyFacts?> _eyeCandyFacts = [];
 
     /// <summary>The overlay host as far as it belongs to the shown session; null when there is none or when it still belongs to a replaced session (a quick load, a carried session: its session is disposed, so reading its goals throws). Read-only users go through this; <see cref="EyeCandyHostNow"/> replaces the stale host.</summary>
@@ -141,6 +143,8 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-MAGIC-1229: the overlay light slots of an owner's own record that hold a light (bit i for slot i): a lit eye candy takes another, and with all four taken its add refuses (IW2).</summary>
     private int SavedOverlayLightSlots(string owner) =>
+        // ARC-MAGIC-1280: the cast map is the loaded session's only once its cast host is built (the goal-step router builds the overlay host first): until then the answer is not known (-1), and the host waits.
+        _spellCaster is null || !ReferenceEquals(_spellCaster.Owner, _areaSession) ? -1 :
         _spellCastMap?.Row(owner) is { } row && _readyArea?.Lighting?.Local is { } local ? local.OverlaySlotMask(row.Key) : 0;
 
     /// <summary>The ART facts of an entry's parts for the goals' nodes (the header reads, cached): the timing part's frames and action frame, the background that animates beside a foreground, the pace; null when the art does not read or its rate is 0.</summary>
@@ -213,6 +217,8 @@ public partial class TerrainViewerApp
         if (overlays && (_spellCaster is null || !ReferenceEquals(_spellCaster.Owner, _areaSession)) && SpellCasterNow() is null) return;
         if (_spellCaster is null || !ReferenceEquals(_spellCaster.Owner, _areaSession)) { ClearEyeCandy("the session changed"); return; }
         _eyeCandies.RemoveAll(e => !e.Shown);
+        // ARC-MAGIC-1280: the cast host is the loaded session's now: the restored lit runs take their overlay slots, in table order.
+        if (ShownEyeCandyHost is { } adopting && !ReferenceEquals(_eyeCandyAdopted, adopting)) { adopting.AdoptRestored(); _eyeCandyAdopted = adopting; }
         SyncEyeCandyBodies();
     }
 
