@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x4CFCD0",
+  "name": "sector-direction",
+  "method": "Arcanum.Simulation.Travel.WorldTravelGeometry.Direction",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 4,
+  "mutantsCaught": 4,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "6f3b0932e4c4cb5f44d79cff379703d2a81be14b8b4ec5b2f07f5e38c846ed44",
+  "configuration": "Debug"
+}

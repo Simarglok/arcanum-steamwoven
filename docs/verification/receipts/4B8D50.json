@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x4B8D50",
+  "name": "tile-direction",
+  "method": "Arcanum.Simulation.Combat.LineOfFireRules.Rotation",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 4,
+  "mutantsCaught": 4,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "fb3e076fd8b1b99c5a8b2948529e639286a9527e8c0aefb1900da1f53dd95f77",
+  "configuration": "Debug"
+}

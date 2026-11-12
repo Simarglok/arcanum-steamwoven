@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x4B96F0",
+  "name": "location-distance",
+  "method": "Arcanum.Simulation.Travel.WorldTravelGeometry.Distance",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 3,
+  "mutantsCaught": 3,
+  "differences": 0,
+  "otherMode": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "7071adace2bc458f0f37f0963278e3f7e61ebedd39d63ee96a8fc692aafa4080",
+  "configuration": "Debug"
+}
