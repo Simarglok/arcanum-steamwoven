@@ -8,7 +8,7 @@ using static Arcanum.Session.Tests.SessionFixtures;
 namespace Arcanum.Session.Tests;
 
 /// <summary>
-/// ARC-MAGIC-1146 (ledger FW1–FW3; exe read 0x45ED70, 0x45ECE0): the Combat-Focus Wipe event queued at an NPC's death. Ten game minutes on it clears the dead NPC's focus once the focus is 30 or more tiles away (the larger of the two
+/// ARC-MAGIC-1146 (ledger RM7; exe read 0x45ED70, 0x45ECE0): the Combat-Focus Wipe event queued at an NPC's death. Ten game minutes on it clears the dead NPC's focus once the focus is 30 or more tiles away (the larger of the two
 /// coordinate differences) and queues itself again while it is nearer; a revived critter or one with no focus ends it. Also the cancel of the body decay (0x45EC80) a revival makes. Invented numbers only.
 /// </summary>
 [TestClass]
@@ -48,7 +48,14 @@ public sealed class FocusWipeStateTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, Target(critter), SessionSpellCaster.Hero).Disposition);
         CollectionAssert.AreEqual(new[] { (critter, Exterior, now + 600_000) }, owner.QueryFocusWipes().ToArray());
         Assert.AreEqual(SessionCombatant.Hero, owner.QueryDanger(critter).Focus, "the death wrote the killer as the focus");
-        // A critter that does not die queues none, and the hero's death queues none.
+        // A critter that is hurt but lives queues none.
+        var hurt = Critter(owner);
+        owner.ApplyDamage(owner.Version, Target(hurt), new LifeDamage { HitPoints = 1 });
+        Assert.AreEqual(1, owner.QueryFocusWipes().Count);
+        // A death the dying script stops (skip default) leaves the processing undone, the wipe included.
+        var stopped = Critter(owner);
+        owner.DyingScript = _ => false;
+        owner.Kill(owner.Version, Target(stopped), SessionSpellCaster.Hero);
         Assert.AreEqual(1, owner.QueryFocusWipes().Count);
     }
 
@@ -152,5 +159,28 @@ public sealed class FocusWipeStateTests
         Assert.AreEqual(1, owner.QueryBodyDecays().Count);
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.Heal(owner.Version, Target(critter), new LifeHeal { Resurrect = true, Full = true }, () => false).Disposition);
         Assert.AreEqual(1, owner.QueryBodyDecays().Count);
+    }
+
+    [TestMethod]
+    public void TheKindsOwnShareBoundsTheQueueAndAWorldThatCannotPlaceTheNpcAsksAgain()
+    {
+        using var owner = Create();
+        var now = owner.QueryClockSnapshot().GameTimestampMs;
+        for (var i = 0; i < SessionEventKinds.MaxFocusWipes; i++) Assert.IsTrue(owner.ScheduleFocusWipe($"oid:n{i}", Exterior.RuntimeMap, now), $"{i}");
+        Assert.IsFalse(owner.ScheduleFocusWipe("oid:over", Exterior.RuntimeMap, now), "the kind's share is full");
+        Assert.AreEqual(SessionEventKinds.MaxFocusWipes, owner.QueryFocusWipes().Count);
+    }
+
+    [TestMethod]
+    public void AnNpcTheWorldCannotPlaceKeepsItsEventAndItsFocus()
+    {
+        using var owner = Create();
+        var critter = Critter(owner);
+        owner.Kill(owner.Version, Target(critter), SessionSpellCaster.Hero);
+        Advance(owner, 600_000);
+        var now = owner.QueryClockSnapshot().GameTimestampMs;
+        owner.ProcessEvents(new World(new()));
+        Assert.AreEqual(SessionCombatant.Hero, owner.QueryDanger(critter).Focus);
+        CollectionAssert.AreEqual(new[] { (critter, Exterior, now + 600_000) }, owner.QueryFocusWipes().ToArray());
     }
 }

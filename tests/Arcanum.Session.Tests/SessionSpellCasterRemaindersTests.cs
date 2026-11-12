@@ -9,7 +9,7 @@ using static Arcanum.Session.Tests.SessionSpellRecordsTests;
 
 namespace Arcanum.Session.Tests;
 
-// ARC-MAGIC-1146 (ledger FW, CR rows; exe read 0x452F10, 0x454920, 0x452E40, 0x459290, 0x4593F0): the EnvFlag stub, the Recharge component, Trait64 and the spell stop on an object through the cast host. The half-elf fixture's kit:2 is a held item
+// ARC-MAGIC-1146 (ledger RM1–RM8; exe read 0x452F10, 0x454920, 0x452E40, 0x459290, 0x4593F0): the EnvFlag stub, the Recharge component, Trait64 and the spell stop on an object through the cast host. The half-elf fixture's kit:2 is a held item
 // (a coat of object type 5 here). Records, ids and numbers are invented.
 [TestClass]
 public sealed class SessionSpellCasterRemaindersTests
@@ -140,7 +140,7 @@ public sealed class SessionSpellCasterRemaindersTests
         Assert.AreEqual(SpellComponentOutcome.None, cast.Apply(Run(RechargeNumber), 0, At("kit:77", 5)));
         Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.ItemRechargeNotSaved, 1, (int)GameSessionFailure.ItemNotAvailable, "kit:77"), cast.Log.Single());
         Assert.AreEqual(version, owner.Version);
-        Assert.AreEqual(0, caster.Log.Count);
+        Assert.AreEqual(1, cast.Log.Count, "the refusal is the only line");
     }
 
     [TestMethod]
@@ -157,6 +157,7 @@ public sealed class SessionSpellCasterRemaindersTests
         var written = owner.Version;
         caster.Apply(Run(TeleportTileNumber), 0, At(Rat, SpellTargetObject.Npc));
         Assert.AreEqual(written, owner.Version);
+        Assert.AreEqual(2, caster.Log.Count(e => e.Kind == SpellCastEventKind.Trait64Written), "the unchanged write is told too");
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
         Assert.AreEqual((8u, 5u), restored.QueryTeleportTile(Rat));
         Assert.AreEqual(owner.QueryTeleportMap(Rat), restored.QueryTeleportMap(Rat));

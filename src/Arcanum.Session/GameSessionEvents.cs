@@ -218,7 +218,7 @@ public static class SessionEventKinds
 
     /// <summary>Pending events a session holds: four timers for each NPC life record and four for the hero (ARC-WORLD-087: its encumbrance timer), so a life step
     /// can always set its timers, the deferred calls, the timed effects' ENDs, the Lock events, the wait timers, the respawns, the
-    /// magic-tech events, the Item Decay events, the AI ticks, (ARC-WORLD-094) the restock events, the real-time steps and (ARC-DEV-132) one goal step per slot.</summary>
+    /// magic-tech events, the Item Decay events, the Decay Dead Bodies and Combat-Focus Wipe events (ARC-MAGIC-1146), the AI ticks, (ARC-WORLD-094) the restock events, the real-time steps and (ARC-DEV-132) one goal step per slot.</summary>
     public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 4 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects
         + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxBodyDecays + MaxFocusWipes + MaxAiTicks + MaxRestocks + MaxTrapDevices + MaxRealSteps + MaxGoalSteps;
 
@@ -266,7 +266,7 @@ public static class SessionEventKinds
     /// <summary>Pending Decay Dead Bodies events a session holds: one per NPC life record.</summary>
     public const int MaxBodyDecays = GameSessionLimits.PolicyMaxLifeRecords;
     /// <summary>
-    /// The original's Combat-Focus Wipe event (kind 26, saved, game time; ARC-MAGIC-1146, ledger FW1–FW3, 0x45ED70, handler 0x45ECE0): ten game minutes after an NPC's death its combat focus (the killer, object field 0x11B) is cleared once the killer is
+    /// The original's Combat-Focus Wipe event (kind 26, saved, game time; ARC-MAGIC-1146, ledger RM7, 0x45ED70, handler 0x45ECE0): ten game minutes after an NPC's death its combat focus (the killer, object field 0x11B) is cleared once the killer is
     /// 30 or more tiles away, and while the killer is nearer the event queues itself again. Scoped to the NPC's map; several may name one NPC (a revived critter that dies again queues another, as the original's queue allows). Entity: the NPC;
     /// values: the game time it was scheduled at and its delay (<see cref="FocusWipeDelayMs"/>). Added without a new registry version, as the kinds before it.
     /// </summary>

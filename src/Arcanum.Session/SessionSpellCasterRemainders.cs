@@ -6,10 +6,10 @@ using Arcanum.Simulation.Movement;
 namespace Arcanum.Session;
 
 /// <summary>
-/// ARC-MAGIC-1146 (the leftovers of the 0x44–0x45 triage, ARC-RES-108, ledger FW and CR rows): the component executors the table 0x5B0BA8 still had no handler for, and the spell stop on an object.
+/// ARC-MAGIC-1146 (the leftovers of the 0x44–0x45 triage, ARC-RES-108, ledger RM1–RM8): the component executors the table 0x5B0BA8 still had no handler for, and the spell stop on an object.
 /// <list type="bullet">
 /// <item><b>EnvFlag</b> (type 10, 0x452F10): the original's entry only writes a log line, so the component does nothing; the table takes it with no effect and no "not ready" line.</item>
-/// <item><b>Recharge</b> (type 18, 0x452800 → 0x454920): for an item target (object type 5..14) adds the component's amount to the item's spell charges (field 0x69), not above <c>Max:</c> (9999) and only while they are below it;
+/// <item><b>Recharge</b> (type 17, 0x452800 → 0x454920): for an item target (object type 5..14) adds the component's amount to the item's spell charges (field 0x69), not above <c>Max:</c> (9999) and only while they are below it;
 /// answers 1 for an item and does nothing to any other object (a tile does nothing either). The session keeps the charges as it keeps the ones a payment spends (<see cref="GameSessionOwner.RechargeItemCharges"/>, no schema step).</item>
 /// <item><b>Trait64</b> (type 23, 0x452E40): with the source <c>Target_Tile</c> the component writes the target's 64-bit field (<c>Teleport_Tile</c>, 242) with the run's target tile and field 243 (the teleport map) with the current map; with
 /// <c>Caster_Obj</c> or <c>Caster_Owner_Obj</c> (the original reads the same run field for both) it writes the run's parent handle into the field (<c>obj_f_critter_fleeing_from</c>, 230). Modelled for an NPC of the session
@@ -56,6 +56,8 @@ public sealed partial class SessionSpellCaster
         if (component.Trait64 is not { } data) return null;
         // No current target object: the original's writes go to the null handle (which it would not survive); the component does nothing here, as the other field writers do.
         if (target.Object is not { } obj) return SpellComponentOutcome.None;
+        // A parent that is no critter (a trap's or scenery's spell) is not kept as a creature link by the session: not ready.
+        if (data.Source is 1 or 2 && run.Parent is { IsCritter: false }) return null;
         if (obj.Type != SpellObjectFacts.NpcType || !obj.Id.StartsWith(ObjectStateVocabulary.EntityPrefix, StringComparison.Ordinal)) return null;
         if (data.Source == 0 && data.Field == TeleportTileField)
         {
