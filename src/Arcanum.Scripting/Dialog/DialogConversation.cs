@@ -8,7 +8,7 @@ namespace Arcanum.Scripting.Dialog;
 /// eligible replies, selection, reply action, then continue, exit to SCR or stop at a typed frontier.
 /// Synchronous and not thread-safe; the host serializes calls and every externally mutated owner.
 /// </summary>
-public sealed class DialogConversation
+public sealed partial class DialogConversation
 {
     private const int LowIntelligence = 4;
     // The skill port's bounds and the expert-teacher gate (the source's training minimum of an expert, 0x4C69C0).
@@ -108,6 +108,11 @@ public sealed class DialogConversation
             return new(DialogConversationSelectStatus.WrongPhase);
         }
         _generation++;
+        if (_talk is not null)
+        {
+            EmitTalkOptions();
+            return Result();
+        }
         BuildOffers(_step!);
         return Result();
     }
@@ -123,6 +128,10 @@ public sealed class DialogConversation
         if (offer is null)
         {
             return new(DialogConversationSelectStatus.NotOffered);
+        }
+        if (_talk is not null)
+        {
+            return SelectTalk(offer);
         }
         if (offer.Block is not null)
         {
@@ -207,6 +216,9 @@ public sealed class DialogConversation
                 return Result();
             case DialogOptionTransition.ItemRepair:
                 Finish(new DialogConversationEnd(DialogEndKind.ItemRepairWindow, null));
+                return Result();
+            case DialogOptionTransition.Trainer:
+                OpenTalk(plan!);
                 return Result();
             case DialogOptionTransition.Barter:
                 if (OpenBarter(plan!.Reply.Barter!.Value))
@@ -414,7 +426,7 @@ public sealed class DialogConversation
                 reply.TextKind,
                 text,
                 reply.Marker,
-                reply.Transition,
+                reply.Trainer is null ? reply.Transition : DialogOptionTransition.Trainer,
                 reply.Target is null ? null : new DialogNodeId(reply.Target.Id),
                 reply.ScriptLine,
                 new DialogOptionToken(_identity, Turn, _generation, response),
@@ -1278,6 +1290,7 @@ public sealed class DialogConversation
         End = end;
         Phase = DialogConversationPhase.Ended;
         _offers = Array.Empty<DialogOption>();
+        _talk = null;
     }
 
     private void Stop(DialogConversationFrontier? frontier, DialogConversationFailure? failure)
@@ -1425,6 +1438,7 @@ public sealed class DialogConversation
         DialogOptionBlock? block = null;
         DialogOperationSource? insult = null;
         DialogOperationSource? barter = null;
+        int[]? trainer = null;
         var found = DialogText.Marker(text, out var exact);
         if (found is { Letter: 'd' or 'q' or 'u' or 'x' })
         {
@@ -1459,6 +1473,16 @@ public sealed class DialogConversation
             text = string.Empty;
             barter = new DialogOperationSource(new DialogNodeId(record.Id), record.SerializedIndex, DlgFieldKind.Text,
                 record.Text.PayloadOffset, 0, 2, 0);
+        }
+        else if (found is { Letter: 't' } && TrainerAvailable && ParseTrainerSkills(text) is { } skills)
+        {
+            // ARC-SCRIPT-1150 (ledger DTR1): the original's trainer reply (the prefix "t:", either case, 0x416C10): a generated phrase (PC lines
+            // 500..599) whose pick runs the reply's action and then opens the skill menu of the numbers after the marker (state 5, 0x414810).
+            kind = DialogOptionTextKind.Generated;
+            marker = found;
+            text = string.Empty;
+            phrase = true;
+            trainer = skills;
         }
         else if (found is { Letter: 'b' or 'h' or 'l' or 'p' } && exact || found is { Letter: 'c' or 'r' or 't' or 'z' })
         {
@@ -1556,6 +1580,11 @@ public sealed class DialogConversation
                 block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedInteraction, transfer.Source);
             }
         }
+        if (block is null && trainer is not null && (transfer is not null || action?.Any(OpensWindow) == true))
+        {
+            // A dialog transfer or a window in the same reply moves the dialog itself: outside this subset, as for b:.
+            block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedInteraction, transfer?.Source ?? action!.First(OpensWindow).Source);
+        }
         if (block is null && transfer is not null)
         {
             // JO/UW/FL/ET override the response: the source skips the response transition after them.
@@ -1612,7 +1641,7 @@ public sealed class DialogConversation
             }
         }
         return new ReplyPlan(record, gender.Value, record.IqValue!.Value, condition, kind, text, marker, transition, target, line, action, block,
-            block is null ? insult : null, block is null ? barter : null, phrase);
+            block is null ? insult : null, block is null ? barter : null, phrase, block is null ? trainer : null);
     }
 
     private static bool CheckTokens(string text, DialogNodeId node, DialogResponseId? response, out DialogConversationFrontier? frontier, out DialogConversationFailure? failure)
@@ -1766,7 +1795,8 @@ public sealed class DialogConversation
         DialogOptionBlock? Block,
         DialogOperationSource? Insult,
         DialogOperationSource? Barter = null,
-        bool Phrase = false);
+        bool Phrase = false,
+        int[]? Trainer = null);
 
     private sealed record OfferPlan(ReplyPlan Reply, StepPlan? Target);
 }

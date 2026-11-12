@@ -12,6 +12,8 @@ public sealed class GridInputQueue
     private IGridSession? _owner;
     private SimulationTime? _newest;
     public SimulationTime? CompleteFrontier { get; private set; }
+    /// <summary>The newest observation time seen so far (null before the first); a later observation must not be older.</summary>
+    public SimulationTime? Newest => _newest;
     /// <summary>Whether any observed material input still waits, including inputs after the complete frontier.</summary>
     public bool HasPending => _pending.Count > 0;
     public void Observe(IGridSession session, SimulationTime time, ActorIntent intent)

@@ -44,6 +44,7 @@ public partial class TerrainCanvas
     private IReadOnlySet<AreaObjectKey>? _areaCovered;
     // ARC-UI-057: the hovered object drawn a second time over itself (0x43C690), or null.
     private AreaObjectKey? _areaHighlight;
+    private AreaHoverRingDraw? _areaRing;
     private AreaScenePlan? _area;
     private IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame>? _areaFrames;
     private ActorDiagnosticPlacementInput? _areaActorPlacement;
@@ -87,7 +88,7 @@ public partial class TerrainCanvas
     public int AreaCulledCount => (_area?.Commands.Count ?? 0) - AreaVisibleCount;
     public IReadOnlyList<AreaDrawCommand> AreaVisibleCommands { get; private set; } = Array.Empty<AreaDrawCommand>();
     private (Rect2 View, Transform2D Transform, ActorDiagnosticDrawCommand Actor,
-        ActorDiagnosticPlacementInput Placement, bool ActorVisible, bool BodiesVisible, bool Chunks, int Moving, AreaObjectKey? Highlight)? _areaView;
+        ActorDiagnosticPlacementInput Placement, bool ActorVisible, bool BodiesVisible, bool Chunks, int Moving, AreaObjectKey? Highlight, AreaHoverRingDraw? Ring)? _areaView;
 
     /// <summary>ARC-UI-057 (ledger OH2, OH3): the hovered portal, container, scenery or item, drawn once more after the bodies and before the
     /// roofs, additive with the constant colour (200, 200, 200) and unlit, without its alpha modes (0x43C690 masks them off); null none.</summary>
@@ -106,6 +107,22 @@ public partial class TerrainCanvas
     internal static readonly Color AreaHighlightColour = Color.Color8(AreaHoverWindow.HighlightLevel, AreaHoverWindow.HighlightLevel, AreaHoverWindow.HighlightLevel);
     /// <summary>The highlight command drawn by the current submission (smoke seam), or null.</summary>
     internal AreaDrawCommand? AreaHighlightDrawnForSelfTest { get; private set; }
+
+    /// <summary>ARC-UI-1117 (ledger OH2, OH4): the rings of the hovered critter or trap, drawn under every body (after the terrain) and over every
+    /// body (before the roofs), additive and tinted by the ring colour; null none. The frames must be in the frame repository the area was published with.</summary>
+    internal AreaHoverRingDraw? AreaRing
+    {
+        get => _areaRing;
+        set
+        {
+            if (_areaRing == value) return;
+            _areaRing = value;
+            try { UpdateAreaVisible(); }
+            catch (Exception error) { AreaFailure?.Invoke(error); }
+        }
+    }
+    /// <summary>The ring commands drawn by the current submission (smoke seam), or null for a ring not drawn.</summary>
+    internal (AreaDrawCommand? Under, AreaDrawCommand? Over) AreaRingDrawnForSelfTest { get; private set; }
 
     public void PublishArea(AreaLoadResult area, ActorDiagnosticScenePlan actor, ActorDiagnosticPlacementInput placement, TerrainTextureCache textures)
         => PublishArea(area.Plan, area.Frames, actor, placement, textures);
@@ -369,7 +386,7 @@ public partial class TerrainCanvas
     {
         if (!IsInsideTree() || _area is null || _areaFrames is null || _textures is null || _actorPlan is null || _areaActorPlacement is null) return;
         var view = GetViewport().GetVisibleRect(); var inverse = GetViewport().GetCanvasTransform().AffineInverse();
-        var state = (view, GetViewport().GetCanvasTransform(), _actorPlan.Current, _areaActorPlacement, _showActor, _showStatics, AreaTerrainChunksEnabled, _areaMovingStamp, _areaHighlight);
+        var state = (view, GetViewport().GetCanvasTransform(), _actorPlan.Current, _areaActorPlacement, _showActor, _showStatics, AreaTerrainChunksEnabled, _areaMovingStamp, _areaHighlight, _areaRing);
         // Pending HD frames that became ready rebind the same view (ARC-RENDER-014).
         if (_areaView == state && !HdRefreshDue()) { TrimAreaPool(); return; }
         using var lap = _areaPerfView && PerfProbe.Enabled ? PerfProbe.Lap("canvas.view") : null;
@@ -429,10 +446,19 @@ public partial class TerrainCanvas
         var highlight = _areaHighlight is { } lit && visible.LastOrDefault(command => command.Identity == lit) is { } body
             ? body with { Additive = true, Alpha = 255, Multiply = false, WadeRows = 0, Unlit = true } : null;
         AreaHighlightDrawnForSelfTest = highlight;
-        draw = draw.Take(terrainCount).Concat(masks).Concat(draw.Skip(terrainCount)).Concat(highlight is null ? Array.Empty<AreaDrawCommand>() : new[] { highlight })
+        // ARC-UI-1117 (OH4): the hovered critter's rings, the under one after the terrain (blit order 99,999,999) and the over one after every body (0x7FFFFFFF).
+        var ringBody = _areaRing is { } ring && visible.LastOrDefault(command => command.Identity == ring.Target) is { } target ? target : null;
+        var ringUnder = ringBody is not null && _areaRing!.Under is { } underFrame ? AreaHoverRingRules.Command(ringBody, underFrame) : null;
+        var ringOver = ringBody is not null && _areaRing!.Over is { } overFrame ? AreaHoverRingRules.Command(ringBody, overFrame) : null;
+        AreaRingDrawnForSelfTest = (ringUnder, ringOver);
+        draw = draw.Take(terrainCount).Concat(masks).Concat(ringUnder is null ? Array.Empty<AreaDrawCommand>() : new[] { ringUnder }).Concat(draw.Skip(terrainCount))
+            .Concat(highlight is null ? Array.Empty<AreaDrawCommand>() : new[] { highlight }).Concat(ringOver is null ? Array.Empty<AreaDrawCommand>() : new[] { ringOver })
             .Concat(roofs.Select(roof => roof.Command)).ToArray();
         var maskStart = terrainCount; var maskEnd = terrainCount + masks.Length; var roofStart = draw.Length - roofs.Length;
-        var highlightIndex = highlight is null ? -1 : roofStart - 1;
+        var ringOverIndex = ringOver is null ? -1 : roofStart - 1;
+        var highlightIndex = highlight is null ? -1 : roofStart - 1 - (ringOver is null ? 0 : 1);
+        var ringUnderIndex = ringUnder is null ? -1 : maskEnd;
+        var ringTint = _areaRing is { } tint ? Color.Color8(tint.Colour.R, tint.Colour.G, tint.Colour.B) : Colors.White;
         AreaVisibleRoofFrames = masks.Concat(roofs.Select(roof => roof.Command)).Select(command => command.Frame).ToHashSet();
         // A roof faded out at all four corners leaves the pixels beneath it as they are.
         AreaVisibleCovers = new(Array.AsReadOnly(masks), Array.AsReadOnly(roofs.Where(roof => roof.Corners != Vector4.Zero).Select(roof => roof.Command).ToArray()));
@@ -474,6 +500,7 @@ public partial class TerrainCanvas
             if (mask) (item.Ambient, item.AmbientRight, item.Lattice, item.Carried) = (Colors.Black, Colors.Black, null, null);
             else if (roof) { var outdoor = AreaRoofLight(); (item.Ambient, item.AmbientRight, item.Lattice, item.Carried) = (outdoor, outdoor, null, null); }
             else if (index == highlightIndex) (item.Ambient, item.AmbientRight, item.Lattice, item.Carried) = (AreaHighlightColour, AreaHighlightColour, null, null);
+            else if (index == ringUnderIndex || index == ringOverIndex) (item.Ambient, item.AmbientRight, item.Lattice, item.Carried) = (ringTint, ringTint, null, null);
             else (item.Ambient, item.AmbientRight, item.Lattice, item.Carried) = AreaItemLight(command, isActor);
             item.RoofCorners = roof ? roofs[index - roofStart].Corners : null;
             // The source drops every alpha mode for an additive (or sub/mul) object, and a constant-alpha body

@@ -54,7 +54,7 @@ earlier ones, not migrated ([game session](game-session-runtime.md#snapshot-sche
 
 ## Not ready
 
-- The skill page and point buying are ARC-UI-009 and ARC-WORLD-052 ([viewer](../rendering/terrain-viewer.md#skills-page-arc-ui-009)); no trainers (S16); the dialog gates and `tr` are ARC-SKILLS-004 ([skill gates](../scripting/dialog-conversation-runtime.md#skill-gates-arc-skills-004)); the shared skill check is S3.
+- The skill page and point buying are ARC-UI-009 and ARC-WORLD-052 ([viewer](../rendering/terrain-viewer.md#skills-page-arc-ui-009)); trainers: the dialog's `t:` reply sells the first tier for gold (ARC-SCRIPT-1150, [trainer reply](../scripting/dialog-conversation-runtime.md#trainer-reply-arc-script-1150)), the Educator update stays open (S16); the dialog gates and `tr` are ARC-SKILLS-004 ([skill gates](../scripting/dialog-conversation-runtime.md#skill-gates-arc-skills-004)); the shared skill check is S3.
 - The leader check (HK1) and the wait timer (HK2) have no runtime, so the persuasion training reaches only the follow check.
 - A levelled follower defends with its sheet read without effects (its current stat effects and poison do not change its
   dodge); the map path reads poison.

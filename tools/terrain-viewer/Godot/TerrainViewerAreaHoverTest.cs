@@ -175,6 +175,9 @@ public partial class TerrainViewerApp
 
     private void OpenHoverGate(Arcanum.Data.Traversal.AreaStepSnapshot steps)
     {
+        // ARC-DEV-1251: the setup's wall-clock time moves on after the actor session is made (a slow or busy machine takes over a tenth of a second);
+        // the pad selection's quarantine reads that clock, so the frames below must not be stamped before it. A pause here makes the self-test show it every run.
+        if (SelfTestBootstrap) OS.DelayMsec(150);
         SelectSimulatedPadForSelfTest();
         var level = StickLevel(default);
         for (var i = 0; i < 3; i++) WorldFrameForSelfTest(new(-1, default), new[] { level }, .1);

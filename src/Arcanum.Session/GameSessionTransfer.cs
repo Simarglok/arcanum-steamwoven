@@ -113,6 +113,7 @@ public sealed partial class GameSessionOwner
         foreach (var (entity, delay, charisma) in plan.Waits)
         {
             _party.Put(_party.Get(entity) with { Standing = CompanionStanding.Waiting, Forced = false }, false);
+            ClearTempusFugitOnLeave(entity);
             if (delay is { } wait) ScheduleWaitTimer(entity, wait, charisma);
         }
         foreach (var record in plan.Cleared) _danger.Put(record);
