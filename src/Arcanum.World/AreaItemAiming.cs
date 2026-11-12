@@ -80,8 +80,8 @@ public static class AreaItemAiming
     /// <c>OIF_NO_RANGED_USE</c> the use runs at once; out of range, or with the flag, goal 39 walks next to the target first. An item with neither charges nor the magical flag uses at once, unless the flag asks for the walk.
     /// </summary>
     [OriginalFunction(0x571CB0, OriginalFunctionScope.Partial)]
-    public static AreaItemAimObject ApplyOnObject(bool chargedOrMagical, bool inRange, bool noRangedUse) =>
-        noRangedUse || chargedOrMagical && !inRange ? AreaItemAimObject.WalkThenUse : AreaItemAimObject.UseNow;
+    public static AreaItemAimObject ApplyOnObject(bool chargedOrMagical, bool inRange, bool noRangedUse, bool healsAnother = false) =>
+        noRangedUse || chargedOrMagical && !inRange || healsAnother ? AreaItemAimObject.WalkThenUse : AreaItemAimObject.UseNow;
 
     /// <summary>The apply on a tile (0x571FD3..0x57203B, IA9; the same function 0x571CB0 as <see cref="ApplyOnObject"/>, which carries its mark): a charged or magical item uses at once, a trap device starts goal 41, anything else is thrown (goal 37).</summary>
     public static AreaItemAimTile ApplyOnTile(bool chargedOrMagical, bool trapDevice) =>
