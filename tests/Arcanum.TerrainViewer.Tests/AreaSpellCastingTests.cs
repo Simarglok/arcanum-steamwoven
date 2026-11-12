@@ -49,6 +49,15 @@ public sealed class AreaSpellCastingTests
     }
 
     [TestMethod]
+    public void The_recharge_of_an_item_tells_its_new_charge_count_and_trait64_tells_nothing()
+    {
+        // ARC-MAGIC-1146: the Recharge component's answer is a line of the viewer's own; Trait64 writes state only.
+        Assert.AreEqual("Rat kit:2 is recharged to 8 charges", AreaSpellCasting.Line(new(SpellCastEventKind.ItemRecharged, 1, 8, "kit:2", 5), null, Name));
+        Assert.AreEqual("the recharge was not saved", AreaSpellCasting.Line(new(SpellCastEventKind.ItemRechargeNotSaved, 1, 3, "kit:2"), null, Name));
+        Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.Trait64Written, 1, 242, "r1", 0), null, Name));
+    }
+
+    [TestMethod]
     public void The_lock_flags_a_spell_wrote_on_a_portal_or_container_tell_a_line_of_the_viewers_own()
     {
         // ARC-MAGIC-037 (MA-6): the locked bit (0x1) and the magically held bit (0x4); the detail bit 0x1 is on. Any other lock bit, a guard alert and a refused gate tell nothing themselves.
