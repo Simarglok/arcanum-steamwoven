@@ -413,6 +413,53 @@ public partial class TerrainViewerApp
             EndInventory();
             TechProductsRequire(session.QueryEquipment().Worn.Any(w => w.Entity == armour) && session.QueryEquipment().Worn.All(w => w.Slot != EquipmentSlot.Weapon), $"the weapon is off and the armour is on again: {_inventoryStatus}");
 
+            // ARC-COMBAT-1223 (ledger PS5, PF10; 0x4B2870): a throw that MISSES its NPC flies on to its scattered tile and its end there fires the item's attacks-a-location event, so the grenade explodes
+            // where it lands. The one exception is a scatter back onto the hero's own tile: the flight's line has no step (0x4201C0), the goal fails and ends without an item event (GT53), and the grenade
+            // just lies there. The darkness penalty (ARC-WORLD-1149) makes the throws miss. The leg runs after the cell weapon's swings, which read the session's random sequence.
+            _cellLightForSelfTest = 0;
+            int missedFlown = 0, missedLying = 0, missedThrows = 0;
+            for (; missedThrows < 12 && missedFlown == 0; missedThrows++)
+            {
+                session.Heal(session.Version, life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+                session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000 });
+                AreaSmokePlace(map, map.Chart.ToChart(new(throwFrom!.Value.X, throwFrom.Value.Y)));
+                // (the clock must move on for the next observation; the scaling by 20 above would overflow the int after the third throw)
+                _areaSmokeTime += 5000; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+                PublishWorldSelection();
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                var missGrenade = TechSmokeCraft(data, TechDisciplineExplosives, grenadeRecord).Made[0];
+                SyncAreaInventory();
+                TechProductsRequire(HoldItemOnGameCursor(missGrenade, "smoke") is null && GameCursorItemForSelfTest == missGrenade, $"the miss leg's grenade is on the game cursor ({HeldThrowNoticeForSelfTest})");
+                _projectileEndsForSelfTest.Clear(); _thrownLandingsForSelfTest.Clear(); _shotEndItemEventsForSelfTest.Clear(); _lastHeldThrowForSelfTest = null;
+                var unlaunchedBefore = _projectilesUnlaunchedForSelfTest;
+                var missLog = SpellCasterNow()!.Log.Count;
+                TechProductsRequire(ThrowGameCursorItem(aimedAt), $"the miss leg's throw started ({HeldThrowNoticeForSelfTest})");
+                for (var frames = 0; frames < 1500 && _lastHeldThrowForSelfTest is null && HeroRunsHost() is { ThrowRun: not null }; frames++) Frame();
+                TechProductsRequire(_lastHeldThrowForSelfTest is { Disposition: GameSessionDisposition.Changed }, $"the miss leg's grenade was thrown ({_lastHeldThrowForSelfTest?.Disposition} {_lastHeldThrowForSelfTest?.Failure})");
+                for (var frames = 0; frames < 1500 && (_projectiles.Count > 0 || HeroRunsHost() is { ThrowRun: not null }); frames++) Frame();
+                TechProductsRequire(_projectiles.Count == 0, "the miss leg's flight ended");
+                for (var frames = 0; frames < 400 && SpellCasterNow()!.Log.Count == missLog && _shotEndItemEventsForSelfTest.Count == 0; frames++) Frame();
+                for (var frames = 0; frames < 200; frames++) Frame();
+                var outcome = _lastHeldThrowForSelfTest?.Attack?.Resolution?.Outcome;
+                var missEvents = _shotEndItemEventsForSelfTest.ToArray();
+                var lyingStill = session.QueryPlacedItems().Any(p => p.Entity == missGrenade);
+                var noStep = _projectilesUnlaunchedForSelfTest != unlaunchedBefore;
+                GD.Print($"{TechProductsCode} tech-products grenade-miss throw={missedThrows} outcome={outcome?.ToString() ?? "-"} events={missEvents.Length} started={string.Join(",", missEvents.Select(e => e.Started))} noStep={noStep} lying={lyingStill} destroyed={session.IsItemDestroyed(missGrenade)}");
+                if (outcome is not { } decided || decided is AttackOutcome.Hit or AttackOutcome.CriticalHit) continue;
+                if (noStep)
+                {
+                    TechProductsRequire(missEvents.Length == 0 && lyingStill && !session.IsItemDestroyed(missGrenade), "a scatter back onto the hero's own tile: no item event, the grenade lies there");
+                    missedLying++;
+                    continue;
+                }
+                TechProductsRequire(missEvents.Any(e => e.Started > 0), $"the missed grenade's item event started a spell run at its landing tile (events {missEvents.Length})");
+                TechProductsRequire(!lyingStill && session.IsItemDestroyed(missGrenade), "the missed grenade exploded and is gone");
+                missedFlown++;
+            }
+            _cellLightForSelfTest = null;
+            TechProductsRequire(missedFlown > 0, $"a missed grenade exploded where it landed within {missedThrows} throws (lying {missedLying})");
+            GD.Print($"{TechProductsCode} tech-products grenade-miss PASS exploded={missedFlown} lying={missedLying} throws={missedThrows}");
+
             // 8. F7 and F8: the same effects and items after the load.
             string[] State(GameSessionOwner s) => [.. s.QueryHeroEffects()!.Effects.Select(e => "effect=" + e.Number).OrderBy(l => l, StringComparer.Ordinal), .. TechSmokeHeldLines(s), "npc-items=" + string.Join("+", s.QueryNpcInventory(npcId).Select(i => i.Entity).OrderBy(e => e, StringComparer.Ordinal)), "cells=" + s.QueryHeroAmmo().Where(a => a.AmmoType == 2).Sum(a => a.Units), .. s.QueryEquipment().Worn.Select(w => $"worn={w.Slot}:{w.Entity}"),
                 .. Enumerable.Range(0, 8).Select(d => "degree" + d + "=" + TechSmokeDegree(s, d))];

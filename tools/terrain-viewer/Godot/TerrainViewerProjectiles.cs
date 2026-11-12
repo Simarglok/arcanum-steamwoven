@@ -548,7 +548,8 @@ public partial class TerrainViewerApp
     {
         var events = fireEnd ? ShotEndEvents(projectile) : [];
         _projectileHost?.Finish(projectile);
-        if (land) EndOnTile(projectile, fireEnd ? Arcanum.Scripting.Scr.ScrPoint.Miss : null);
+        // ARC-COMBAT-1223 (PS5, PF9; 0x4B2870): the end at the destination (a shot without a target, a boomerang flying back) runs the weapon's hit script (point 7), the range end its miss script (point 8).
+        if (land) EndOnTile(projectile, !fireEnd ? null : kind == ProjectileStrikeKind.DestinationEnd ? Arcanum.Scripting.Scr.ScrPoint.Hit : Arcanum.Scripting.Scr.ScrPoint.Miss);
         else projectile.Owner.EndShot(projectile.Shot);
         Ended(projectile, kind, struck, why);
         if (kind == ProjectileStrikeKind.RangeEnd) { _attackNotice = "the shot flew past"; RefreshAreaStatus(); }

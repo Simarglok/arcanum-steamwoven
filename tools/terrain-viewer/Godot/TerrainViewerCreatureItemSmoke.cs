@@ -106,7 +106,7 @@ public partial class TerrainViewerApp
                 return (item, run!);
             }
 
-            // The pet: thrown at a tile of its own (no creature there), so it is a flight that ended at its destination (the miss point).
+            // The pet: thrown at a tile of its own (no creature there), so it is a flight that ended at its destination (the hit point 7, ARC-COMBAT-1223; the range end runs the miss point 8).
             var petTile = new CellCoord(standAt.X + Math.Sign(npcAt.X - standAt.X) * 2, standAt.Y + Math.Sign(npcAt.Y - standAt.Y) * 2);
             var thrownPet = Throw(pet, petTile, "pet");
             var petRun = thrownPet.Run;

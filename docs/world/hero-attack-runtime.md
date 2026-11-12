@@ -296,8 +296,10 @@ restored: each shot flies as two projectiles on one line, both strike a hit's ta
 heroes have a bow level of 4 and no unspent points, below expert's 9, so that check reports NONE and the two projectiles rest on
 the session's tests.
 
-Not ready: the hit script and item event of a scattered throw's end (PS5, as PF9 and PF10), and what the original's flight does
-when a scatter walks back onto the thrower's own tile (not read; Steamwoven lands the item there at once).
+Since ARC-DEV-140 the end of a scattered throw fires the thrown item's attacks-a-location event on the landing tile (PS5, PF10), so a missed grenade
+explodes where it falls; since ARC-COMBAT-1223 its item script runs at point 7 (the destination's hit point, ledger PS5), not 8 (PF9's range end). A scatter
+back onto the thrower's own tile is the one miss that fires no event: the line has no step, the flight goal fails and ends without a context, and the item
+lies on that tile unexploded (read: 0x4201C0, 0x4269D0, 0x42CAC0; Steamwoven lands it there at once, as the original). Not ready: the critical weapon's script 34 at that end.
 
 ## Boomerangs (ARC-COMBAT-019)
 
