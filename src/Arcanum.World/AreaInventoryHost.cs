@@ -201,27 +201,51 @@ public sealed class AreaInventoryHost
     /// identity through the resolver from the map the session names as their origin: a window of the main map other than the shown one is read around
     /// the object's stored cell (<see cref="AreaMobileCells"/>), any other map whole. A fresh run (or a load into another window or map) has no rows
     /// handed over, so an item the hero took in another window of the main map had no row at all: no name ("[unknown object]"), no facts, no use.
-    /// An item whose row still does not read stays without one, and the log says how many (NOT READY: it is asked again by the next host, one window read
-    /// each time). The viewer calls it once the session it adopts is the running one on this host (a new host after <see cref="Attach"/>, or a load
+    /// An item whose row still does not read stays without one, and the log says how many (ARC-DEV-1151: the next host of a map change is told and does not ask
+    /// again, <see cref="UnreadCarried"/>; a load the host keeps passes <paramref name="retryUnread"/> and asks again). The viewer calls it once the session it adopts is the running one on this host (a new host after <see cref="Attach"/>, or a load
     /// this host keeps), not from <see cref="Attach"/>: a load to another map attaches its session to the host it is about to drop first, which would
     /// read the same windows for nothing, and the record source's callbacks read the running session. Returns how many rows were read and how many not.
     /// </summary>
-    public (int Read, int Missing) ReadCarriedRows(GameSessionOwner session)
+    public (int Read, int Missing) ReadCarriedRows(GameSessionOwner session, bool retryUnread = false)
     {
         ArgumentNullException.ThrowIfNull(session);
-        int read = 0, missing = 0;
+        if (retryUnread) _unread.Clear();
+        int read = 0, missing = 0, skipped = 0;
         foreach (var (entity, origin) in Carried(session))
         {
             if (RowOf(entity) is not null || session.IsItemDestroyed(entity)) continue;
+            // ARC-DEV-1151: a row an earlier host already failed to read from this origin is not asked again at a map change (see UnreadCarried).
+            if (_unread.Contains((entity, origin))) { skipped++; continue; }
             if (_resolver.Resolve(entity, origin).Record is { } found)
             {
                 _held[entity] = new(found.Row, found.Map.Seed.Items.FirstOrDefault(item => item.Entity == entity) is { } listed ? listed.Facts.Weight : null);
                 read++;
             }
-            else missing++;
+            else { _unread.Add((entity, origin)); missing++; }
         }
-        if (read + missing > 0) Console.WriteLine($"ARC-DEV-354 carried-rows read={read} missing={missing}");
+        if (read + missing + skipped > 0) Console.WriteLine($"ARC-DEV-354 carried-rows read={read} missing={missing}" + (skipped > 0 ? $" known-unread={skipped}" : string.Empty));
         return (read, missing);
+    }
+
+    // ARC-DEV-1151: the carried items (with the origin map asked) whose row did not read, kept with the host and handed to the next host at a map change.
+    private readonly HashSet<(string Entity, int Origin)> _unread = [];
+
+    /// <summary>
+    /// ARC-DEV-1151 (the RowOn remainder of ARC-DEV-354): the carried items whose row this host asked for and did not get, with the origin map asked, still
+    /// carried and still without a row. Handed to the next host by <see cref="RetainUnread"/> at a map change, so one window read a map change for such an
+    /// item (the unreadable row asked again by every host) stops; a fresh run or a load (the state is new) asks once again.
+    /// </summary>
+    public IReadOnlyCollection<(string Entity, int Origin)> UnreadCarried(GameSessionOwner session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return Carried(session).Where(carried => _unread.Contains(carried) && RowOf(carried.Entity) is null && !session.IsItemDestroyed(carried.Entity)).Distinct().ToList();
+    }
+
+    /// <summary>ARC-DEV-1151: the unread carried items of the host this one replaces (<see cref="UnreadCarried"/>), not asked again by <see cref="ReadCarriedRows"/>.</summary>
+    public void RetainUnread(IEnumerable<(string Entity, int Origin)> unread)
+    {
+        ArgumentNullException.ThrowIfNull(unread);
+        foreach (var item in unread) _unread.Add(item);
     }
 
     /// <summary>ARC-DEV-072: a map the resolver read on demand has no seed in the session until it is first asked about (a given map's is

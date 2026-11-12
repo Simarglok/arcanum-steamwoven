@@ -119,6 +119,8 @@ public sealed class ActorDiagnosticProfile
     public string Provenance => Id switch
     {
         ActorDiagnosticProfileId.HumanFixed => "mapping-only type2/body0 female fixed underwear0 single-layer",
+        // ARC-MAGIC-1219 (L6): a hero's monster body (class 12) names its species and palette; the human fields do not apply to it.
+        ActorDiagnosticProfileId.HeroBody when (Idle.Selector >> 28) == 12 => $"hero monster body species{(Idle.Selector >> 23) & 31} palette{(Idle.Selector >> 4) & 3} single-layer",
         ActorDiagnosticProfileId.HeroBody => $"hero body type2/body{(Idle.Selector >> 24) & 7} {(((Idle.Selector >> 27) & 1) != 0 ? "male" : "female")} armour{(Idle.Selector >> 20) & 15} palette{(Idle.Selector >> 4) & 3} single-layer",
         _ => "direct module ordinal643 single-layer monster",
     };

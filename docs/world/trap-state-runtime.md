@@ -5,7 +5,7 @@ Status: **Implemented** (Godot-free rules and session owner), slices 1 to 3 of t
 native trap scripts are applied since ARC-WORLD-107 ([Effects](#effects-arc-world-107)); the
 AREA viewer's PC meets traps on a use, before each step and on a step since ARC-WORLD-110
 ([Viewer](#viewer-arc-world-110)). The spot trap roll is made since ARC-MAGIC-057 ([ledger SP1–SP2](../research/ledger/technology.md#spot-trap-roll-arc-magic-057));
-the disarm roll and action (skills plan S10, E6-a), the shot of
+the disarm roll and action are made since ARC-SKILLS-1156 ([Disarm](#disarm-arc-skills-1156)); the shot of
 script 30002, the drawing of a spotted trap object, the attack's trap trigger in the viewer,
 NPC and companion steps and the trap devices (ARC-TECHNOLOGY-011/012) are later slices. The rules
 follow the retail 1.0.7.4 executable as read in
@@ -161,8 +161,9 @@ is `AreaUseScriptHost.EntityId`, as for the object damage domain.
   The walk check rolls for each unknown trap object on the next tile (the first one spotted ends the
   walk) and a use or a step rolls once more for the trap it meets, as the original's separate
   attempts do (SP2); a failed roll leaves the trap unknown and the use or step goes on, so the trap
-  fires. The light at the trap is full (as the lock pick's): the darkness term of an untrained hero
-  is not applied. A hero-less session rolls nothing (the trap stays unknown).
+  fires. The light at the trap is the light at its cell (ARC-WORLD-1149, as the lock pick's): the darkness term of an untrained hero
+  applies. A hero-less session rolls nothing (the trap stays unknown).
+- **Disarm.** See [Disarm](#disarm-arc-skills-1156).
 - **Effects.** A fired native run goes to `SessionSpellCaster.ApplyTrapEffect` with the cast
   map's id of the trapped object and the hero as the triggerer. Without a cast host no trap
   is met at all (a use goes on as before and the dispatcher stops at a native trap script; a
@@ -171,10 +172,20 @@ is `AreaUseScriptHost.EntityId`, as for the object damage domain.
   damage effect are not shown; the status line names the outcome and the
   `mes\trap.mes` line number.
 
+## Disarm (ARC-SKILLS-1156)
+
+The hero's disarm traps press (E6-a second half; ledger [SP3](../research/ledger/technology.md#spot-trap-roll-arc-magic-057), TT5, TT6):
+
+- **Session.** `GameSessionOwner.RollHeroDisarmTrap` takes the trap's difficulty (object field 308 = 0x134, read for a trap object only, and bounded by `MaxTrapDifficulty`) and the light at the trap. A trap that is gone or that the hero does not know is NoChange with nothing charged or rolled. In a round the press pays 4 action points first (`UseSkillCost`, 0x4B7CD0; its own revision; another's subturn or too few points refuse it as `DisarmOutOfTurn`), then the shared check, `TrapRules.DisarmCase` (a failed master that did not fail critically rolls once more; a pass of that roll has no critical) and `DisarmTrap`. The rolls, the hero's fate point and the disarm are one revision; a removal the session cannot write takes the rolls and the fate point back and refuses. Success removes the trap, an expert's critical success also yields the device prototype, a critical failure sets the trap off.
+- **Device.** `GameSessionOwner.CreateItemForHero` creates the device as a made item of the hero's pack, or on the hero's tile when the hero cannot take it (weight, Technophobia, no grid room, the host's check): one revision. `AreaUseScriptHost.GiveHeroPrototypeItem` gives it its prototype's weight and scripts.
+- **Viewer.** `AreaTraps.Disarm` is the host's press on a row (the trap object's difficulty, the light at the row, the sprung trap's effect through the cast host, the device). The hotkey bar's Disarm traps entry arms the skill cursor (interface mode 2, as the pick pocket's, `TerrainViewerAreaDisarm.cs`); a left press on a known trap (a chest, door or scenery under the pixel, else a known trap object on the pressed tile) runs the press, an unknown trap is no target, a right press, a window or another cursor cancels it. The outcome is on the status line. Smoke stage `disarm`.
+- **Limits.** The press's 4 action points are not refunded when the roll then fails to run or the removal cannot be written (a full change budget, an exhausted generator); a critical failure on a trap with an ordinary (non-native) script runs that script as a use with the hero as the triggerer. A pack at its item limit leaves the device on the hero's tile.
+- **Not modelled.** The follower who acts instead of the hero (0x57A620), the reach of the press (the original's skill-bar press builds the invocation at once; no walk is read for it), the interface hooks' messages, a PC-placed script trap marker as the target, the skill pane's own disarm button (#1113).
+
 ## Not modelled here
 
-- The disarm traps roll and action (E6-a, read as SP3), the spot modifier of the item at inventory
-  location 1005 (SP2), the light at the trap for the spot roll, and the NPCs' and companions' own
+- The follower who disarms instead of the hero (SP3, 0x57A620), the spot modifier of the item at inventory
+  location 1005 (SP2), and the NPCs' and companions' own
   spot attempts.
 - The 30002 trap in the viewer (with its shot), an ordinary trap script on a step, and the
   route cost of a known trap (DC8) on the PC's route (the drop map's route has it), the
@@ -193,6 +204,7 @@ is `AreaUseScriptHost.EntityId`, as for the object damage domain.
 - `tests/Arcanum.Session.Tests/TrapStateTests.cs`: baseline, spot marks, use, step, attack
   and ordinary script triggers, disarm outcomes on trapped and trap objects, a trap armed
   again after a removal, a full change budget, snapshot round trip and refusals.
+- ARC-SKILLS-1156: `TrapRulesTests` (`DisarmCase`), `TrapStateTests` (the press: unknown or gone trap, one revision, the master's third roll, the trap object's difficulty, the device, a refused removal taking the rolls back, the round's charge; the created device) and `AreaTrapsTests` (the host's press, the difficulty field, the known targets).
 - `tests/Arcanum.Simulation.Tests/Traps/TrapEffectRulesTests.cs`: the decoding, the shooter
   search, the damage source and the amount draw.
 - `tests/Arcanum.TerrainViewer.Tests/AreaTrapsTests.cs`: a row's baseline, a native trap on a

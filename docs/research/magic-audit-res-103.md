@@ -18,7 +18,7 @@ Requirements (reference only): [FR-MAGIC-006](../requirements/combat-magic-tech.
 - **Done slices:** MA-0 the spell census (ARC-DEV-356), MA-R the executable reads (ARC-DEV-357, ledger XR1-XR15), MA-1, MA-2, MA-3 Dispel (ARC-MAGIC-034, -039), MA-4 social and AI flags (ARC-MAGIC-035), MA-5 Movement (ARC-MAGIC-036, -038), MA-6 locks and holds (ARC-MAGIC-037),
   MA-7 Identify (ARC-MAGIC-032), MA-8 Trait and the body spells (ARC-MAGIC-040, -046, -047, -052), MA-9 Tempus Fugit (ARC-MAGIC-056). The control components that belong to the technology records and items (NoOp, Terminate, branches, Use, nested Cast) are ARC-MAGIC-044, -048 and -049.
 - **Open:** E1-e creature Summon (14, 19, 24, 29, 53, 57, 68, 71-74), E1-f AI summoning, E6 trap spotting (spell 8), MA-10 the raise script hook (58, 64), the hero and companion push of Unseen Force (2), and the windows of Identify (E8) ([slices](#slices), [open spells](#open-spells)).
-- **Only three spells are named by a smoke stage** (51, 56 and, by its data filter, 55); the others are covered by unit tests of their components and by the census. "Runs" is a code-path claim, not parity (parity stays with the [ledger](original-verification-ledger.md)).
+- **Only seven spells are named by a smoke stage** (51, 56 and, by its data filter, 55; since ARC-DEV-1148 30, 46, 76 and 77 by the stage `spell-effects`); the others are covered by unit tests of their components and by the census. "Runs" is a code-path claim, not parity (parity stays with the [ledger](original-verification-ledger.md)).
 - **Decisions for the owner** were six; the owner decided all of them on 2026-11-11 (D1 a, D2 a, D3 b, D4 a, D5 a, D6 c) ([decisions](#decisions-for-the-owner)).
 
 ## Method and limits
@@ -44,7 +44,7 @@ Every other college spell has a code path for every component of its record (the
 
 | Spell | What is missing | Slice |
 | --- | --- | --- |
-| 2 Unseen Force | Hero and companions as targets are not pushed (knockback runs of the hero); loose objects unverified | knockback lane |
+| 2 Unseen Force | The original also pushes ground items of weight below 5 ([UO1–UO6](ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)) and the viewer's host does not (an item body, the saved mobile state and the item's hit points are open) | knockback lane |
 | 6, 7, 9 See Contents, Read Aura, Divine Magick | The answer is a text line; the windows (container inventory in mode 4, the NPC sheet, the item description) and picking an inventory item as a target are E8's | E8 |
 | 8 Sense Hidden | Trap spotting for the detecting-traps flag works and the hero's spot roll exists (ARC-MAGIC-057); effect 157 (spot-trap skill): the hero's skill level reads the written effect's skill change since the skills lane, so the roll should see it, not run in the viewer | owner recheck |
 | 14, 19, 24, 29 Elemental summons; 53 Succour Beast; 57 Summon Undead; 68 Phantasmal Fiend; 71-74 Orcish Champion, Guardian Ogre, Hellgate, Familiar | Creature Summon (prototype or list pick, flags on the summoned, run ends when it dies) | E1-e |
@@ -52,8 +52,8 @@ Every other college spell has a code path for every component of its record (the
 | 47 Shrink, 34 Disintegrate, 69 Invisibility, 63 Sanctuary | The flags are written; the viewer's draw of shrunk, hidden, translucent critters is not built | render |
 | 48 Flesh to Stone | Stone render side effect; the stone-to-flesh pair on a portal holding the stoned spell flag | - |
 | 58 Create Undead, 64 Resurrect | The raise script hook; the combat and life rules read the data's undead bit, not the written one | MA-10 |
-| 65 Illuminate | Whether the glow lights the scene is unverified | - |
-| 76, 77 Congeal Time, Hasten | Speed reaches the turn-based action points and the real-time attack pause, not walking (the original does not either, XR); no per-spell smoke | - |
+| 65 Illuminate | The original lights the scene: a live object light on the target while the spell runs ([IW1–IW6](ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)); not built (no light is built on an object, the viewer draws saved object lights only) | lighting lane |
+| 76, 77 Congeal Time, Hasten | Speed reaches the turn-based action points and the real-time attack pause, not walking (the original does not either, XR); stage `spell-effects` (ARC-DEV-1148) casts both: BEGIN adds the effect and moves the speed (77 up, 76 down); **found there: the END of 76 leaves its effect on the NPC** (its END area names the run's object list, which no host fills), so Congeal Time never wears off | [#1234](https://github.com/Simarglok/arcanum-steamwoven/issues/1234) |
 | 79 Tempus Fugit | Built (MA-9, ARC-MAGIC-056): +10 speed to its holders and -10 to every other critter while any critter holds it (the original: while the player holds it, XR6); the follower flag writes of XR7 are not built | - |
 
 ## Work order
@@ -67,7 +67,7 @@ Order: E1-e before E1-f (one writer in the Summon and AI files); E6, MA-9 and MA
 | Slice | Content | Unlocks (spells) | Size | Needs | Lane and files | FR |
 | --- | --- | --- | --- | --- | --- | --- |
 | **E1-e** Summon of critters | Prototype or list pick, summoned flags, palette, faction (MG8), run ends when the summon dies, summoned follower; the familiar hidden with the party on the world map (XR14 (b), decided by the owner: [Decisions](#decisions-for-the-owner)) | 14, 19, 24, 29, 53, 57, 68, 71, 72, 73, 74 | L | E1-c (done), MA-4 (done) | Summon partial file | FR-MAGIC-008 |
-| **E6** Trap spotting (spot roll; the E6-a row of the missing-systems plan) | The spot roll and the detecting-traps flag (spell 8's second flag); **spot half done, ARC-MAGIC-057** (the disarm action stays E6-a's) | 8 | M | MA-1 (done) | traps | FR-ITEM-016 |
+| **E6** Trap spotting (spot roll; the E6-a row of the missing-systems plan) | The spot roll and the detecting-traps flag (spell 8's second flag); **spot half done, ARC-MAGIC-057; disarm half done, ARC-SKILLS-1156** | 8 | M | MA-1 (done) | traps | FR-ITEM-016 |
 | **MA-9** Tempus Fugit | Implement what MA-R read (XR6); the XR14 (a) fix decided by the owner ([Decisions](#decisions-for-the-owner)) | 79 | S-M | MA-R, MA-1 (done) | done: ARC-MAGIC-056, session and stat files | FR-MAGIC-007 |
 | **MA-10** Raise script hook | The resurrect script (point 0x12) through the SCR dispatcher | edge of 58, 64 | S | the SCR dispatcher (E5) | scripts | FR-MAGIC-007 |
 | **E1-f** AI summoning and AI parity | The AI's summon list and one pass of `ai-cast` over every AI priority of the 80 (an NPC casting a spell must act like the hero's cast) | 60 spells carry an AI priority | M | E1-e | AI host | FR-AI-002 |
@@ -96,7 +96,7 @@ Found: the run's object block at +0xA0 is its **target**, not its other object (
 
 Done ([contract](../world/durable-effects-runtime.md#consumers-of-resistance-and-stat-changes-arc-magic-027), ledger [RE1-RE3](ledger/magic.md#effect-consumers-arc-magic-027)): the effective resistance (0x43D6D0) puts effects after the armour and the poison bonus and before the clamp to 0..95; the hero's effects and every NPC's list feed attacks, spell damage and poison; an NPC's speed and strength reach its combat values, attack pause and the round's action points.
 The original's magic save does not read the effects (RE2); the owner decided D6 (c): Resist Magick (40) works in both modes, done by ARC-MAGIC-033 ([RS11-RS13](ledger/magic.md#resist-magick-in-the-magic-save-arc-magic-033)), also in the AI's predictor.
-Left: an NPC's life facts (maximum hit points, poison tick) ignore effect-changed strength, constitution and resistance; the character sheet's resistance lines show no effect changes; the hero's innate (race, gender) effects have no resistance changes; no smoke stage names 30, 46, 76 or 77.
+Left: an NPC's life facts (maximum hit points, poison tick) ignore effect-changed strength, constitution and resistance; the character sheet's resistance lines show no effect changes; the hero's innate (race, gender) effects have no resistance changes; the stage `spell-effects` (ARC-DEV-1148) names 30, 46, 76 and 77 (BEGIN adds the effects and moves the stats; a forced END takes them off for 30, 46 and 77 and, a known gap, not for 76).
 
 ## Identify (MA-7, ARC-MAGIC-032)
 
@@ -124,7 +124,7 @@ Left: the guard alert's witnesses (0x4AEE50); Flesh to Stone's pair for a portal
 
 Done in four slices ([host contract](../world/spell-cast-host.md#trait-component-arc-magic-040), ledger [TR1-TR6](ledger/spell-runs.md#trait-component-arc-magic-040)): the session keeps the species and palette a Trait chose per critter (schema 89, `-1` restores; no reference count, as the original) (ARC-MAGIC-040); the viewer draws a hosted NPC's monster body and moves the hero's worn items (ARC-MAGIC-046);
 critter flags 2 and blit flags are the session's with MG10's switch and the Dispel undo (ARC-MAGIC-047, schema 90); the hero's own monster body is drawn (ARC-MAGIC-052). The original takes **every** worn item off, not only what the new art cannot wield; an art builder range violation (species 32 or more, palette 4 or more) exits the original and is "not ready" here.
-Left: the dropped leftover of a refused take-off; an NPC's worn items (not tracked by the session); the redraw of a map NPC whose data body is a perma-polymorph; a polymorphed hero's low attack and throw; the drowning damage of the water-walking clear (OB2); the multiplayer packet. Options, data findings and a recommendation for each limit: [ARC-RES-145](trait-polymorph-remainder-res-145.md).
+Left: the dropped leftover of a refused take-off; an NPC's worn items (not tracked by the session); the redraw of a map NPC whose data body is a perma-polymorph (no such NPC in the installed maps: 0 of 3,792 critters, ARC-MAGIC-1220); a polymorphed hero's low attack and throw; the drowning damage of the water-walking clear (OB2); the multiplayer packet. Options, data findings and a recommendation for each limit: [ARC-RES-145](trait-polymorph-remainder-res-145.md).
 
 ## Tempus Fugit (MA-9, ARC-MAGIC-056)
 
@@ -155,7 +155,7 @@ The 60 records outside the colleges (80..139, used by monsters and items) share 
 
 ## Not read, not verified
 
-- Whether the weapon-drop damage flag of Disarm (0) drops the weapon in a run (the original does, with a zero amount: [XR15](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)), whether Unseen Force (2) pushes non-critter objects, whether Illuminate (65) lights the scene and whether the maintained damage of the clouds (11, 27) hits the same targets as the BEGIN: none run per spell.
+- Whether the maintained damage of the clouds (11, 27) hits the same targets as the BEGIN: not run per spell. Read by ARC-RES-1109 ([ledger](ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)): Disarm's weapon drop is not built for a spell (DW2; the original drops, XR15), Unseen Force (2) pushes ground items in the original and not in the viewer (UO5, UO6), Illuminate (65) lights the scene in the original and not in the viewer (IW5, IW6).
 - Left open by the executable reads (ledger XR1-XR15): what inventory mode 4 lets the player move, what happens on arrival to a summoned follower the travel hide left shown, whether a familiar's death reaches the follower removal.
 - The AI's use of each spell was not audited beyond the priorities in the records (60 of the 80 have one); a component that is not ready is not ready for NPCs either.
 - Records 80..139 and the technology records (140..222) are outside the per-spell view.

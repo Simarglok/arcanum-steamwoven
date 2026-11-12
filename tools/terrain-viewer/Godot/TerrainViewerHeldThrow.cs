@@ -393,7 +393,7 @@ public partial class TerrainViewerApp
             var cell = NpcCell(aimed.Row);
             request = request with
             {
-                Struck = aimed.Combat, StruckCell = cell, StruckWorn = _combatHost.WornItems(owner, aimed.Entity),
+                Struck = aimed.Combat, StruckCell = cell, StruckLight = AreaRowLightLevel(aimed.Row), StruckWorn = _combatHost.WornItems(owner, aimed.Entity),
                 LineOfFire = ShotLine(TraceLineOfFire(from, aimed.Row), aimed.Row),
             };
         }

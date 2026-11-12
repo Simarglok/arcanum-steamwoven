@@ -44,7 +44,7 @@ Every B-id not in the tables above is closed. A code in brackets was a part of t
   ARC-DEV-333 (stage `loot-room`); B49 ARC-DEV-334; B50 ARC-DEV-335 (hero), ARC-DEV-353 (companions and NPCs); B51
   ARC-DEV-336 (ARC-DEV-354, fresh load); B52 ARC-DEV-337; B53 ARC-DEV-338 (stage `tile-ghost`); B54 ARC-DEV-339 (stage
   `inv-arrange`).
-- **Third report (B55):** B55 (Wall of Fire look and piece count) ARC-MAGIC-054 (a created scenery takes its prototype's blit flags: additive 0x10), ARC-MAGIC-055 (the cast map's tile-blocked test is the terrain verdict); the retail game makes 5 pieces (owner, 2026-11-12), so the count was right and the 3 pieces came from Arcanum CE; [note](wall-of-fire-look-magic-054.md).
+- **Third report (B55):** B55 (Wall of Fire look and piece count) ARC-MAGIC-054 (a created scenery takes its prototype's blit flags: additive 0x10), ARC-MAGIC-055 (the cast map's tile-blocked test is the terrain verdict); the retail game makes 5 pieces (owner, 2026-11-12), so the count was right and the 3 pieces came from a community build of the game; [note](wall-of-fire-look-magic-054.md).
 
 ## Triage work lists and stage ids
 

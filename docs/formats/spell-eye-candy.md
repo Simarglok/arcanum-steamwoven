@@ -55,7 +55,7 @@ nothing, as in the original.
 | --- | --- | --- |
 | A blend name or flag the tables lack, and a light colour without `(`, end the process. | The whole file is refused with a typed status (`UnknownName`, `UnknownFlag`, `MissingParenthesis`), and so is a line with a byte above 0x7F (the original's white-space test misreads one); the casts then play without eye candy. | both |
 | A sound taken from the group is dropped when its file does not exist (0x41A940). | Kept. | — (not ready: no spell sounds) |
-| `Light:` is turned into a light art id (0x504690). | The light number is kept. | — (not ready: no spell lights) |
+| `Light:` is turned into a light art id (0x504690); a lit entry puts a live light on its target (an overlay light slot, 0x43EE10, [IW2–IW5](../research/ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)). | The light number is kept. | — (not ready: no spell lights) |
 
 ## Not ready
 

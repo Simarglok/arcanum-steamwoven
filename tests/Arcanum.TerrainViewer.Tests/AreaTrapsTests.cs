@@ -23,13 +23,14 @@ public sealed class AreaTrapsTests
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
 
     // A row with a use slot (point 1: local flags, counters, script) and object flags on (x, 20).
-    private static AreaObjectRecord Row(int index, int type, int script, uint counters = 0, long x = 0, uint objectFlags = 0)
+    private static AreaObjectRecord Row(int index, int type, int script, uint counters = 0, long x = 0, uint objectFlags = 0, long? difficulty = null)
     {
         var fields = new List<AreaFieldValue>
         {
             new(31, AreaPresence.Array, AreaValueOrigin.Instance, null, [new AreaSparseElement(ScrPoint.Use, [0, counters, script])], null),
             new(18, AreaPresence.Value, AreaValueOrigin.Instance, objectFlags, [], null),
         };
+        if (difficulty is { } hard) fields.Add(new(37, AreaPresence.Value, AreaValueOrigin.Instance, hard, [], null));
         return new(Key(index), 0, type, 0, "p", "p", "r", "s", AreaScope.Core, null, x == 0 ? 10 + index : x, 20,
             Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], fields, true, true, true);
     }
@@ -82,10 +83,13 @@ public sealed class AreaTrapsTests
     }
 
     private static (AreaUseScriptHost Host, AreaTraps Traps) Hosts(GameSessionOwner session, ScriptContent content, Func<AreaTrapEffects?> effects,
-        HashSet<AreaObjectKey>? gone, params AreaObjectRecord[] shown)
+        HashSet<AreaObjectKey>? gone, params AreaObjectRecord[] shown) => Hosts(session, content, effects, gone, null, shown);
+
+    private static (AreaUseScriptHost Host, AreaTraps Traps) Hosts(GameSessionOwner session, ScriptContent content, Func<AreaTrapEffects?> effects,
+        HashSet<AreaObjectKey>? gone, Func<AreaObjectRecord, int>? light, params AreaObjectRecord[] shown)
     {
         var host = new AreaUseScriptHost(session, 1, shown, [], content);
-        var traps = new AreaTraps(session, host, shown, row => gone?.Contains(row.Key) == true, effects);
+        var traps = new AreaTraps(session, host, shown, row => gone?.Contains(row.Key) == true, effects, light);
         host.Traps = traps.Use;
         return (host, traps);
     }
@@ -270,6 +274,29 @@ public sealed class AreaTrapsTests
         });
     }
 
+    // ARC-WORLD-1149 (FR-LIGHT-011): the spot roll reads the light at the trap object's cell from the host's delegate; a level outside 0..255 refuses the roll.
+    [TestMethod]
+    public void The_spot_roll_asks_for_the_light_at_the_trap_and_refuses_a_level_outside_the_range()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var effects = new Effects();
+            var plate = Row(1, TrapObject, 30001, x: 200, objectFlags: TrapRules.DontDrawFlag);
+            var asked = new List<AreaObjectRecord>();
+            var level = 128;
+            var (_, traps) = Hosts(session, content, () => effects.Side, null, row => { asked.Add(row); return level; }, plate);
+            Assert.AreEqual(1, traps.WalkCheck(Cell(plate)).Rolls);
+            Assert.AreSame(plate, asked.Single(), "one roll asked for the light at its trap");
+            level = 300;
+            var other = Row(2, TrapObject, 30001, x: 201, objectFlags: TrapRules.DontDrawFlag);
+            var (_, refusing) = Hosts(session, content, () => effects.Side, null, row => level, other);
+            var draws = session.QueryRandom().Draws;
+            Assert.AreEqual(0, refusing.WalkCheck(Cell(other)).Rolls, "a light outside 0..255 refuses the roll");
+            Assert.AreEqual(draws, session.QueryRandom().Draws, "a refused roll draws nothing");
+        });
+    }
+
     // ARC-MAGIC-057 (ledger SP1): without the detect flag a hero's walk check and use make the spot trap roll; the outcome depends on the seed and
     // the hero's skill, so the test follows the counts and the state, never the odds.
     [TestMethod]
@@ -389,6 +416,68 @@ public sealed class AreaTrapsTests
             Assert.IsTrue(spotted is { Outcome: SessionTrapOutcome.Spotted, EndsWalk: true }, spotted.Describe());
             Assert.AreEqual(0, effects.Calls.Count);
             Assert.IsTrue(traps.Step(Cell(trap)) is { Outcome: SessionTrapOutcome.Fired }, "a known trap fires on the next step");
+        });
+    }
+
+    // ARC-SKILLS-1156 (ledger SP3): the host's disarm press. The outcome depends on the seed and the hero's skill, so the test follows the state, never the odds.
+    [TestMethod]
+    public void The_trap_objects_difficulty_is_field_308_slot_37_and_only_a_trap_object_has_one()
+    {
+        Assert.AreEqual(40, AreaTraps.TrapDifficulty(Row(1, TrapObject, 30001, difficulty: 40)));
+        Assert.AreEqual(0, AreaTraps.TrapDifficulty(Row(2, TrapObject, 30001)), "no field: none");
+        Assert.AreEqual(0, AreaTraps.TrapDifficulty(Row(3, Scenery, 30001, difficulty: 40)), "a trapped scenery has no trap difficulty (SP3)");
+    }
+
+    [TestMethod]
+    public void Only_a_known_trap_is_a_disarm_target_and_the_known_trap_objects_of_a_tile_are_listed()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var effects = new Effects();
+            var plate = Row(1, TrapObject, 30001, x: 200, objectFlags: TrapRules.DontDrawFlag);
+            var chest = Row(2, Scenery, 30001, x: 300);
+            var plain = Row(3, Scenery, 700, x: 301);
+            var (host, traps) = Hosts(session, content, () => effects.Side, null, plate, chest, plain);
+            Assert.IsFalse(traps.KnownTrap(plate) || traps.KnownTrap(chest) || traps.KnownTrap(plain), "nothing is spotted yet");
+            Assert.AreEqual(0, traps.KnownTrapObjectsOn(Cell(plate)).Count);
+            Assert.AreEqual(GameSessionDisposition.Changed, session.MarkTrapSpotted(session.Version, AreaUseScriptHost.Trapped(plate), host.TrapBaseline(plate)!.Value, TrapObserver.Player).Disposition);
+            Assert.AreEqual(GameSessionDisposition.Changed, session.MarkTrapSpotted(session.Version, AreaUseScriptHost.Trapped(chest), host.TrapBaseline(chest)!.Value, TrapObserver.Player).Disposition);
+            Assert.IsTrue(traps.KnownTrap(plate) && traps.KnownTrap(chest));
+            Assert.IsFalse(traps.KnownTrap(plain), "no trap on it");
+            Assert.AreSame(plate, traps.KnownTrapObjectsOn(Cell(plate)).Single());
+        });
+    }
+
+    [TestMethod]
+    public void A_disarm_press_rolls_once_for_a_known_trap_and_nothing_for_an_unknown_one_or_without_a_cast_host()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var effects = new Effects();
+            var chest = Row(1, Scenery, 30001, x: 300);
+            var available = true;
+            var (host, traps) = Hosts(session, content, () => available ? effects.Side : null, null, chest);
+            var insert = new SessionInsertCheck(_ => SessionInsertVerdict.Accepted);
+            var draws = session.QueryRandom().Draws;
+            Assert.IsNull(traps.Disarm(chest, null, insert), "an unknown trap is no target");
+            Assert.AreEqual(draws, session.QueryRandom().Draws, "nothing is drawn");
+            Assert.AreEqual(GameSessionDisposition.Changed, session.MarkTrapSpotted(session.Version, AreaUseScriptHost.Trapped(chest), host.TrapBaseline(chest)!.Value, TrapObserver.Player).Disposition);
+            available = false;
+            Assert.IsNull(traps.Disarm(chest, null, insert), "without a cast host a sprung trap could not take effect");
+            available = true;
+            var revision = session.Version.Revision;
+            var disarm = traps.Disarm(chest, null, insert)!;
+            Assert.AreEqual(GameSessionDisposition.Changed, disarm.Roll.Disposition);
+            Assert.AreEqual(revision + 1, session.Version.Revision, "one revision");
+            Assert.IsTrue(session.QueryRandom().Draws >= draws + 2, "the check's draws");
+            var state = host.TrapState(chest)!.Value;
+            Assert.AreEqual(disarm.Outcome is TrapDisarm.Removed or TrapDisarm.RemovedWithDevice || disarm.Outcome == TrapDisarm.Sprung && state.Removed, state.Removed);
+            if (disarm.Outcome == TrapDisarm.Sprung) Assert.AreEqual(1, effects.Calls.Count, "a sprung native trap takes effect through the cast host");
+            else Assert.AreEqual(0, effects.Calls.Count);
+            StringAssert.Contains(disarm.Describe(), disarm.Outcome switch { TrapDisarm.Removed => "disarmed", TrapDisarm.RemovedWithDevice => "disarmed", TrapDisarm.Failed => "failed", _ => "goes off" });
+            Assert.IsNull(new AreaUseScriptHost(session, 1, [], [], null).GiveHeroPrototypeItem(6047, insert), "no item data: no device");
         });
     }
 }

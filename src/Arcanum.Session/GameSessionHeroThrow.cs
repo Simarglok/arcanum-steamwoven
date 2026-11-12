@@ -31,6 +31,8 @@ public sealed record SessionHeroThrow(string Item, SessionGridMoveItem Facts, Ce
     public SessionLineOfFire? LineOfFire { get; init; }
     public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? HeroWorn { get; init; }
     public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? StruckWorn { get; init; }
+    /// <summary>ARC-WORLD-1149: the light level 0..255 (255: full light) at the struck critter's cell (as <see cref="SessionAttack.TargetLight"/>); null: full light.</summary>
+    public int? StruckLight { get; init; }
     public Arcanum.Simulation.Items.IDropMap? DropMap { get; init; }
     public ISessionItemTriggers? ItemTriggers { get; init; }
 }
@@ -221,6 +223,7 @@ public sealed partial class GameSessionOwner
                 HeroWorn = request.HeroWorn,
                 TargetWorn = request.StruckWorn,
                 TargetCell = request.StruckCell,
+                TargetLight = request.StruckLight,
                 DropMap = request.DropMap,
                 ItemTriggers = triggers,
             };

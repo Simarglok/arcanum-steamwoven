@@ -233,7 +233,8 @@ public partial class TerrainViewerApp
         var lockpick = _inventoryHost?.Lockpick(session, item, _areaKitLockpicks);
         if (lockpick is null) { _portalNotice = $"{PortalName(portal)}: the lockpicks are gone"; RefreshAreaStatus(); return; }
         ResumeLoadedRound();
-        var result = _areaPortals!.Pick(session, portal, lockpick, world: CombatWorldOrNull());
+        // ARC-WORLD-1149 (FR-LIGHT-011): the pick's darkness term reads the light at the portal's cell (0x4C8430, 0x4DCE10).
+        var result = _areaPortals!.Pick(session, portal, lockpick, light: AreaCellLightLevel(portal.Cell.X, portal.Cell.Y), world: CombatWorldOrNull());
         _portalNotice = result.Disposition == Arcanum.Session.GameSessionDisposition.Rejected ? $"{PortalName(portal)}: pick refused ({result.Failure})"
             : $"{PortalName(portal)}: {result.Outcome!.Value.Result switch
             {

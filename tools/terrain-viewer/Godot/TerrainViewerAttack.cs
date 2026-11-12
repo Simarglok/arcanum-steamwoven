@@ -857,6 +857,8 @@ public partial class TerrainViewerApp
             // ARC-COMBAT-009: a critical drops the NPC's items where it stands (ARC-WORLD-092: where the AI walked it).
             TargetCell = struck.Row.WorldX is not null && struck.Row.WorldY is not null && LiveWorldCell(struck.Row) is var (x, y)
                 ? new(checked((int)x), checked((int)y)) : null,
+            // ARC-WORLD-1149 (FR-LIGHT-011): the light at the target's cell, for the check's darkness penalty (0x4C8430, 0x4DCE10).
+            TargetLight = AreaRowLightLevel(struck.Row),
             // ARC-COMBAT-010: the original's draws choose the cell a dropped item lands on, over the shown map.
             DropMap = AreaDropMapNow(),
             // ARC-MAGIC-060: the damage step's item events (ledger IC1-IC6): the hero's worn items fire on its hit (a cell weapon's Target_Hit, 0x4CBE70), the struck NPC's on being hit.
