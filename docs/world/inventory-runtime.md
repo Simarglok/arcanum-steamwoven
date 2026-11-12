@@ -409,8 +409,10 @@ Technophobia): the result is `Changed` with the refusing verdict (`InventoryMuta
 tile of the actor (`QueryPlacedItems`, source as the item came: pc, made), one revision, no insert-item script, no ring or stack merge, no pickup
 trigger; an NPC of another map (a carried companion) keeps its list's origin on the placed item. The dialog port answers Applied and the conversation goes on. A tile the ground cannot hold
 (`DropTileUnfit`) or a full list budget refuses the IN with no effect. Not covered: a transfer script's skip default (the original drops the item in that case too; the session still
-answers `Declined`). Recorded limits (NOT READY): an assembly that frees cells counts them free for its products even when an item already waiting outside the grid
-would take them first at the next placement.
+answers `Declined`). An assembly's room test (ARC-WORLD-1133) lets the hero's items that wait outside the grid (the session's own state: the original keeps every listed
+item in a cell) take the cells its components free first, in list order and by their size (`WaitingItemCells`, the same search as the next placement),
+before it places the products, so a product that would only have fitted in a cell such an item takes lies on the crafter's tile like a refused unit.
+An NPC crafter has no grid and is not affected.
 
 **First gold pile (ARC-WORLD-1132).** The hero's gold is an item of its list (ledger [HG1](../research/ledger/ui-audio.md#hero-gold-pile-in-the-grid-arc-ui-090)), so
 coins that reach a hero with no pile come as a new pile object that the transfer (0x464830) creates on the receiver's tile (0x464970) and moves in through the
