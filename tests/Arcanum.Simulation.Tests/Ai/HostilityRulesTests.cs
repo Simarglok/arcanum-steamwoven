@@ -417,6 +417,34 @@ public sealed class HostilityRulesTests
     }
 
     [TestMethod]
+    public void TheEnemyListPickPurgesDestroyedEntriesAndRollsOverTheRest()
+    {
+        // ARC-AI-1317 (VAG6): [A, destroyed B, C]: the original purges first and rolls its start over two entries, not three.
+        var world = Basic();
+        world.Add("bear", HostilityKind.Npc, 2);
+        world.Add("fox", HostilityKind.Npc, 4);
+        world.Squares["wolf"] = [];
+        world.Edit("pc", c => c with { Dead = true });
+        world.Dangers["wolf"] = new(DangerState.CombatFocus, "pc", "pc", null, ["fox", "ghost", "bear"]);
+        var rolls = new Rolls(1);
+        var plan = HostilityRules.DangerUpdate(world, "wolf", rolls, Steamwoven);
+        Assert.AreEqual((DangerUpdatePath.EnemyList, "bear", true), (plan.Path, plan.Target, plan.PurgesEnemies));
+        Assert.AreEqual((AiRollPurpose.EnemyListStart, 0, 1), rolls.Asked.Single(), "the roll's bound is the purged count");
+
+        // A destroyed (not missing) critter goes too; a list with nothing stale is left alone.
+        world.Edit("bear", c => c with { Destroyed = true });
+        var destroyed = HostilityRules.DangerUpdate(world, "wolf", new Rolls(), Steamwoven);
+        Assert.AreEqual(("fox", true), (destroyed.Target, destroyed.PurgesEnemies));
+        world.Dangers["wolf"] = new(DangerState.CombatFocus, "pc", "pc", null, ["fox"]);
+        Assert.IsFalse(HostilityRules.DangerUpdate(world, "wolf", new Rolls(), Steamwoven).PurgesEnemies);
+
+        // Only stale entries: the pick finds nothing, the purge is still written and the NPC calms down.
+        world.Dangers["wolf"] = new(DangerState.CombatFocus, "pc", "pc", null, ["ghost"]);
+        var calm = HostilityRules.DangerUpdate(world, "wolf", new Rolls(), Steamwoven);
+        Assert.AreEqual((DangerUpdatePath.CalmDown, true), (calm.Path, calm.PurgesEnemies));
+    }
+
+    [TestMethod]
     public void TheDangerUpdateTakesFocusThenScanThenHitByThenTheEnemyList()
     {
         var world = Basic();

@@ -42,7 +42,7 @@ stop attacking and the attack event's writes are session operations there.
   The network rule 0 does not apply (single player, CL3).
 - **Enemy list**: `SkipsEnemy` (0x4AF930) skips an entry whose PC leader (itself for a PC) is the
   owner's, or one already listed; `RemoveEnemy` (0x4AF9D0) removes every equal entry, the last entry
-  filling the hole, so the order is not kept.
+  filling the hole, so the order is not kept. `PurgeEnemies` (ARC-AI-1317) is its null-handle form that the pick runs first: entries whose object no longer exists are dropped in the same scan order (session `PurgeDangerEnemies`, called by the AI host after the danger update's plan).
 
 ## Session (`GameSessionOwner`)
 
@@ -58,6 +58,7 @@ one revision or a typed refusal (`InvalidDangerTarget`, `InvalidDangerFacts`, `S
 | `UnlockDangerTarget` | unlock 0x4AFC70 | Clears the lock. |
 | `AddDangerEnemy`, `AddDangerEnemyTeam` | add 0x4AF930, team 0x4AF8C0 | The PC leader of an NPC is the hero when it follows or waits for it; the hero's team is the hero and then its follower array in order, any other head alone. |
 | `RemoveDangerEnemy` | remove 0x4AF9D0 | As `RemoveEnemy`. |
+| `PurgeDangerEnemies` | remove 0x4AF9D0, null handle (the pick 0x4AFA90 calls it first) | Drops the entries the host's existence test refuses, in the remove's order; one revision, NoChange when none. |
 | `SetDangerHitBy` | field 0x11C | Who-hit-me-last (the attack event and peace of slice I4 write it). |
 | `AllowAttacking` | 0x4AA580 | `NoAttack` cleared for an NPC led by the hero, or for every NPC of the hero's follower array. |
 | `QueryDanger`, `QueryDangerRecords` | | A record (baseline when none) and the detached domain. |
