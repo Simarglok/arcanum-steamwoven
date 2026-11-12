@@ -460,6 +460,7 @@ src/Arcanum.World/AreaAiHost.cs,SquareAround,pending,
 src/Arcanum.World/AreaAiHost.cs,StandardReaction,pending,
 src/Arcanum.World/AreaAiHost.cs,StartCast,pending,
 src/Arcanum.World/AreaAiHost.cs,StartPleaseMove,exempt,host
+src/Arcanum.World/AreaAiHost.cs,StartSpreadOut,exempt,host
 src/Arcanum.World/AreaAiHost.cs,StepClear,exempt,host
 src/Arcanum.World/AreaAiHost.cs,Struck,pending,
 src/Arcanum.World/AreaAiHost.cs,SubturnsEnded,pending,
