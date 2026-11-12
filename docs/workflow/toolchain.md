@@ -528,6 +528,16 @@ waiting against about 3 hours with a heavy lane and two short lanes. The owner a
   lanes. The variable is read by each wrapper, and every wrapper counts the short places from its own value, so keep it the same
   in every lane's shell: set it in the shell profile to roll back for all of them
   (a single wrapper that sets it only serialises its own runs); a ticket from a wrapper from before the lanes is also read as `single`.
+- **Owner's caps (ARC-DEV-1353).** The variable above is per wrapper; one setting for every thread lives in the queue folder
+  (`settings.json`, read by every wrapper at every poll, never created by a read). `./arcanum queue --set-lanes N` stores
+  the number of short lanes (0 to 8; `0` is one Godot run at a time, `1` is one short plus the one heavy lane, so two at
+  once, `default` removes the setting); a wrapper's own `ARCANUM_QUEUE_LANES` still wins in that wrapper. `./arcanum queue
+  --set-max-load X` (`off` removes it) is a load guard: a Godot or `quick` run whose turn has come does not start while another
+  Godot run is running and the one-minute load average is above X, and prints `waiting-for=load below X`; a lone run always
+  starts, so nothing waits for ever. `./arcanum queue` prints the caps in force on its last line. The caps hold for every
+  checkout that has this code; a checkout from before ARC-DEV-1353 ignores the file until it merges `origin/main`. The caps
+  count Godot lanes only: `dotnet` runs (2 places) and `quick` runs (2 places) come on top, so a machine under strain
+  takes `--set-lanes 0` or `1` and a guard around 12 to 16.
 - **Same environment.** The lanes need no change to a command: every lane's smoke still has its own settings and saves
   per process (the system pointer is gated, ARC-DEV-060). `lockf` users keep excluding the queue ([above](#launch-queue-arc-dev-033)); the queue's runs hold that lock shared, so with
   overlapping lane runs a `lockf` user may wait for as long as the lanes stay busy (a retired rule).

@@ -168,7 +168,7 @@ F1. Every direct branch and the jump table read (0x414DE0, 31 entries) stay insi
 | GP6 | reply list rebuild (0x414E60, flag argument; 0x4CEEE0, 0x4CEED0) | A first build reseeds the random generator with the current time (`time(0)`, 0x4CEEE0) and keeps that seed in the dialog record; a rebuild with the flag set reseeds it with the kept seed (0x4CEED0), so the rebuilt options show the same phrases. | Original; here a rebuild in the same turn keeps the phrases already shown (only a reply that became eligible since draws), and the session's generator is never reseeded (its labelled rolls stay reproducible; the original's generator is not the session's, RG8) |
 | GP7 | the `h:` reply (0x414810 case 11 → 0x419830) | The healer menu: the NPC's class line 14000, then by the NPC's heal skill (0x4B1AB0, skill 12) generated options of state 12 (PC lines 1100–1199) and 13 (1200–1299), spell options (0x419AC0) for spells 60, 61, 62 and 64, the skill service of 0x419A00 (skill 10) when allowed (0x4AE570), and "forget it" (800–899) with the reply's own response. | Not implemented (ARC-SCRIPT-044); the option stays blocked |
 
-Not read here: 0x4C2690 (GP4), the value 0x445090 returns (`c:`), and the conditions and actions of the questions node behind
+Not read here: 0x4C2690 (GP4) and the conditions and actions of the questions node behind
 Virgil's `K:` (`ss`, `ar`, `ia`, `ce`; ARC-SCRIPT-045).
 
 ## Trainer reply (ARC-SCRIPT-1150)
@@ -195,7 +195,8 @@ leaving the NPC node.
 
 Not read here: the price helper's reaction input beyond BT2 (0x4C0CC0, R1), the Educator update (0x4C2950, SR11), the network message branch of
 0x418B30 and of 0x4C6170 (multiplayer), the debug-prefix branch of 0x416C10 (the debug flag 0x5D1A0C). The other prefix markers of GP1 (`c`, `r`, `z`,
-and the state-dependent `d`, `q`, `u`, `x`) are later slices of ARC-SCRIPT-1150.
+and the state-dependent `d`, `q`, `u`, `x`) are later slices of ARC-SCRIPT-1150 (`c` and `r` are built: [STY1–STY4](#story-reply-arc-script-1321),
+[RMR1–RMR9](#rumor-reply-arc-script-1304)).
 
 ## Rumor reply (ARC-SCRIPT-1304)
 
@@ -221,6 +222,25 @@ the NPC node, and the price screen, the payment and the notices are shared.
 
 Not read here: the network message branches of 0x4C57E0 and 0x418B30 (multiplayer), the debug-prefix branch of 0x416C10 (the debug flag 0x5D1A0C), the
 unchecked 1000-byte buffer of the tale (a longer text overruns it; the installed texts are short), the behaviour for a rumor number outside 1000..2999.
+
+## Story reply (ARC-SCRIPT-1321)
+
+Source: the [conversation runtime](../../scripting/dialog-conversation-runtime.md#story-reply-arc-script-1321) and the installed dialogs (212 Player replies in 41 files start with `c:`, every one exactly that marker with no further text; each of the four `gd_sto_*` files holds 275 entries, the
+25 story states 0..24 of the 11 races 0..10, numbered race + 100 × state, which fixes the numbering of STY3; counts only, never text). Question: what does the original do when the Player reply `c:` is picked, and which value of 0x445090 does it use? Read statically on 2026-11-12 by one
+reader (the implementing session, method step 6, with the exports in `research-private`: the decompiled C of 0x416C10, 0x414810, 0x41A3E0, 0x41A440, 0x418460,
+0x4182D0, 0x418390, 0x418870, 0x418250, 0x416B00, 0x445090, 0x4B0490); a second reader (the independent review) checks every row against the decompiled C. The value
+0x445090 returns is the game's story state (the global 0x5E2FA4, [SS1](scripts.md)); the reply is the original's "tell me the news" line. It overlays the dialog state
+like the trainer's and the rumor talk ([DTR1–DTR9](#trainer-reply-arc-script-1150), [RMR1–RMR9](#rumor-reply-arc-script-1304)).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| STY1 | option builder (0x416C10 → 0x418460) | A Player reply whose first two characters are `c:` (case-insensitive, a prefix; the rest of the text is not read, the installed replies have none) becomes an option whose text is the single PC line numbered 1700 + the story state (0x4182D0 over a range of one entry: `gd_pc2m` or `gd_pc2f` by the NPC's gender, the dumb files for a dumb PC, the GP2 pick with the name substitution of 0x416B00). The option keeps state 0x18 and the reply's raw response as its value (decoded later by 0x417590). The reply's own condition and action run as for any reply. This closes GP1's open value. | Original |
+| STY2 | state 0x18 (0x414810 → 0x41A3E0) | The NPC's line is built by 0x41A440 (STY3); the only option is the PC's class line 1000 (0x418390: 1000 + 50 × the NPC's social class, the GP2 pick) with the reply's own response (0x417590), one option in all (the option count is set to 1 and a per-option word at +0x182C is cleared). The line is built after the reply's action has run, so the story state is the one the action left; the PC's phrase was built before it. | Original |
+| STY3 | story line (0x41A440, 0x418870) | First the NPC's own override dialog (the dialog of its script at SAP key 31): the record numbered 10000 + the story state, its male-PC text, or its alternate text for a PC that is not male (the same lookup as the class groups of [DTR9](#trainer-reply-arc-script-1150), copied raw, the line's voice set from it). Without such a record: the story file by the NPC's gender then the PC's (`gd_sto_m2m`, `m2f`, `f2f`, `f2m`, handles 28..31, ledger GD1), the message numbered the NPC's race (stat 27) + 100 × the story state, fetched by number (no count and no draw), then the name substitution; the line has no voice (field 0x458 is −1). | Original |
+| STY4 | triage correction (0x41A440) | The triage of 0x40..0x41 (ARC-RES-117) wrote "25 per story state plus the PC's race stat" and called the marker `m:`: the C reads the NPC's race and 100 per state, and the marker is `c:` (0x416C10 compares two characters against the byte at 0x5A0AF4). | Original (corrects the triage) |
+
+Not read here: the file's missing entry (the generated-line fetch 0x4D43A0 then shows the static missing-line text, as for every generated line, rule GD-A1), the
+network branches, the debug-prefix branch of 0x416C10 (the debug flag 0x5D1A0C).
 
 ## Followers across maps (ARC-RES-076)
 

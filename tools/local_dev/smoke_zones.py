@@ -86,7 +86,7 @@ TRIGGERS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("tools/research/", _NONE, "research probes"), ("tools/hd_pack/", _NONE, "HD pack tool"),
     ("tools/hd-interface-import/", _NONE, "HD import tool"), ("tools/hd_font/", _NONE, "font tool"),
     ("tools/original-oracle/", _NONE, "oracle"), ("tools/terrain-inspect/", _NONE, "inspect tool"),
-    ("tools/local_dev/*", _NONE, "launcher tooling"), (".claude/", _NONE, "assistant settings"), ("*.uid", _NONE, "Godot ids"),
+    ("tools/local_dev/*", _NONE, "launcher tooling"), ("*.uid", _NONE, "Godot ids"),
     (_V + "tools/", _NONE, "viewer export and validation scripts"),
     ("src/Arcanum.Godot/", _NONE, "the HD review viewer (its own project, no smoke)"),
     # the runner itself: one zone proves it still runs
