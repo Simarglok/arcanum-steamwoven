@@ -687,7 +687,8 @@ internal sealed class InventoryDomain
         // ARC-MAGIC-1230: a pushed item of the map's data lies on the cell the push left it on (the session's record), wherever its data puts it.
         seed.Source.Items.Where(item => item.Cell is not null && !Taken.Contains(item.Entity))
             .Select(item => new SessionGroundItem(new(item.Entity, WithAmmo(item.Entity, item.Facts)), moved?.Invoke(item.Entity) ?? item.Cell!.Value))
-            // ARC-WORLD-090: the items a barter window sold into a container stay out of its spill (not modelled).
+            // ARC-WORLD-1306: the items a barter window sold into a container leave its list at the break and lie on the ground as placed items
+            // (Placed below); only a save made before that fix can still hold some in a spilled container's list, and they stay hidden.
             .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Container).SelectMany(holder =>
                 spilled(holder.Entity) is { } cell ? Current(seed, holder, dropped, added: false).Select(item => new SessionGroundItem(item, moved?.Invoke(item.Entity) ?? cell)) : []))
             .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Npc).SelectMany(holder => holder.Items
