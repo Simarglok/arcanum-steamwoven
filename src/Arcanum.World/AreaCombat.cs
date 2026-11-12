@@ -577,7 +577,10 @@ public sealed class AreaCombatHost : IAreaEventObjects
         if (!RowFields(map, entity, out var fields) || fields is null) return new(SessionCritterCombatFailure.NotAnNpc, null);
         if (Worn(session, map.RuntimeMap, entity) is not { } worn) return new(SessionCritterCombatFailure.InvalidWornItem, null);
         if (!ReferenceEquals(_buildSession, session)) { _wornBuilds.Clear(); _buildSession = session; }
-        var key = string.Join('|', worn.Select(item => $"{(int)item.Slot}:{item.Entity}:{item.Fields.Object.Prototype}"));
+        // ARC-MAGIC-1295: the base stats and resistances a spell wrote into the NPC lie over its stored fields (and name the cached build).
+        var written = session.QueryCritterIndexedWrites(entity);
+        fields = written.Apply(fields);
+        var key = string.Join('|', worn.Select(item => $"{(int)item.Slot}:{item.Entity}:{item.Fields.Object.Prototype}")) + (written.IsEmpty ? "" : "#" + written.Signature);
         if (_wornBuilds.TryGetValue((map.RuntimeMap, entity), out var cached) && cached.Worn == key) return cached.Build;
         var build = SessionCritterCombat.FromWorn(entity, fields, worn.Select(item => KeyValuePair.Create(item.Slot, item.Fields)));
         _wornBuilds[(map.RuntimeMap, entity)] = (key, build);
