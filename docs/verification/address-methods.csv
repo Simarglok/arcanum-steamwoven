@@ -61,9 +61,12 @@ src/Arcanum.Session/GameSessionChangeOfPlace.cs,CarrySpellRuns,pending,
 src/Arcanum.Session/GameSessionChangeOfPlace.cs,ProcessChangeOfPlace,pending,
 src/Arcanum.Session/GameSessionChangeOfPlace.cs,RequestHeroChangeOfPlace,pending,
 src/Arcanum.Session/GameSessionChangeOfPlaceMovers.cs,EmptySectorCache,pending,
+src/Arcanum.Session/GameSessionCheckWield.cs,MarkCheckWield,exempt,reference
+src/Arcanum.Session/GameSessionCheckWield.cs,NpcHolderOfItem,exempt,reference
 src/Arcanum.Session/GameSessionCombatMode.cs,QueryCanExitCombatMode,pending,
 src/Arcanum.Session/GameSessionCreatedObjects.cs,CreateCritterNear,pending,
 src/Arcanum.Session/GameSessionDanger.cs,AddDangerEnemy,pending,
+src/Arcanum.Session/GameSessionDanger.cs,PurgeDangerEnemies,exempt,host
 src/Arcanum.Session/GameSessionEncumbrance.cs,FireEncumbranceDrain,pending,
 src/Arcanum.Session/GameSessionEncumbrance.cs,RecalculateEncumbrance,pending,
 src/Arcanum.Session/GameSessionEquipBest.cs,CheckHeroWear,pending,
@@ -248,6 +251,7 @@ src/Arcanum.Session/SessionSpellCasterTrapDevices.cs,UseTrapDevice,pending,
 src/Arcanum.Session/SessionSpellCasterTraps.cs,ApplyTrapEffect,pending,
 src/Arcanum.Simulation/Ai/AwarenessRules.cs,SoundStepCost,pending,
 src/Arcanum.Simulation/Ai/AwarenessRules.cs,WithProwlerLine,pending,
+src/Arcanum.Simulation/Ai/DangerRules.cs,PurgeEnemies,exempt,reference
 src/Arcanum.Simulation/Ai/ExecutorActionGoals.cs,EndRun,pending,
 src/Arcanum.Simulation/Ai/ExecutorCritterGoals.cs,DyingFrame,pending,
 src/Arcanum.Simulation/Ai/ExecutorCritterGoals.cs,GetUpFrame,pending,
