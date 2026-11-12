@@ -543,16 +543,15 @@ public sealed partial class GameSessionOwner
     private bool _tempusAnyHolds;
 
     // ARC-MAGIC-1190 (XR7, TF3): the join tail of 0x45DE90 copies the leader's Tempus Fugit flag by a plain write (no run, no count): a critter that joins a leader holding it holds it from then on.
-    // The leader is the hero (a follower of another leader is #1142's). A joiner that already holds it, or an entity the written flags do not cover (not a mobile object), needs no write.
+    // The leader is the hero (a follower of another leader is #1142's). An entity the written flags do not cover (not a mobile object) needs no write.
     private bool JoinCopiesTempusFugit(string follower) => ObjectFlagEntity(follower)
-        && (_objectFlags.GetValueOrDefault(SessionSpellCaster.Hero).Spell(0) & TempusFugitSpell) != 0
-        && (_objectFlags.GetValueOrDefault(follower).Spell(0) & TempusFugitSpell) == 0;
+        && (_objectFlags.GetValueOrDefault(SessionSpellCaster.Hero).Spell(0) & TempusFugitSpell) != 0;
 
     private void WriteTempusFugitOnJoin(string follower) =>
         _objectFlags = _objectFlags.SetItem(follower, _objectFlags.GetValueOrDefault(follower).With(SessionObjectFlagField.Spell, TempusFugitSpell, true));
 
-    // ARC-MAGIC-1190 (XR7, TF3): every leave (0x45E040 through 0x459EA0, before the entry leaves the follower array) clears the leaver's Tempus Fugit flag, whatever the leader holds. A wait is no leave
-    // (the waiter keeps its leader). Only a flag the session wrote is cleared: a bit that only the NPC's map data stores is not seen here (TF3).
+    // ARC-MAGIC-1190 (XR7, TF3): every leave (0x45E040 through 0x459EA0, before the entry leaves the follower array) clears the leaver's Tempus Fugit flag, whatever the leader holds. A wait is a leave too
+    // (0x4AA7A0 calls 0x45DFC0 and restores the leader after), and so is the first half of every join of a critter that has a leader. Only a flag the session wrote is cleared: a bit that only the NPC's map data stores is not seen here (TF3).
     // The clear is a write over the data, so it leaves a cleared bit behind. The caller's revision covers it.
     private void ClearTempusFugitOnLeave(string follower)
     {

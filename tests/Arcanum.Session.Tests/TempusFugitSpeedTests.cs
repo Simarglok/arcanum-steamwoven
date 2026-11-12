@@ -215,22 +215,39 @@ public sealed class TempusFugitSpeedTests
     }
 
     [TestMethod]
-    public void A_wait_is_no_leave_the_waiter_keeps_the_flag_and_an_unwait_is_a_join()
+    public void A_wait_is_a_leave_the_waiter_loses_the_flag_and_an_unwait_is_a_join_that_copies_again()
     {
         using var owner = Owner();
         Hold(owner, Hero);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Bear).Disposition);
+        Assert.IsTrue(Holds(owner, Bear));
+        // The wait (0x4AA7A0) leaves the leader through 0x45DFC0 and takes it back after: the waiter loses the flag although the hero still holds it.
         Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Bear).Disposition);
-        Assert.IsTrue(Holds(owner, Bear), "the waiter keeps its leader and its flag (the original's wait is no removal)");
-        // The spell ends while it waits: the waiter is outside the party array, so it keeps the stale flag (the original does the same); the unwait joins and copies nothing now.
-        Hold(owner, Hero, false);
+        Assert.IsFalse(Holds(owner, Bear));
+        // The unwait is a join: with the hero holding it the flag comes back; without, the waiter stays without.
         Assert.AreEqual(GameSessionDisposition.Changed, owner.UnwaitParty(owner.Version, Bear, PartyStateTests.Facts(), force: true).Disposition);
         Assert.IsTrue(Holds(owner, Bear));
-        // Waiting while the hero holds it again, a waiter that never had it gains it when it is brought back.
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Wolf).Disposition);
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Wolf).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Bear).Disposition);
+        Hold(owner, Hero, false);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.UnwaitParty(owner.Version, Bear, PartyStateTests.Facts(), force: true).Disposition);
+        Assert.IsFalse(Holds(owner, Bear), "the spell ended while it waited: nothing to copy");
+    }
+
+    [TestMethod]
+    public void A_join_of_a_critter_that_has_a_leader_clears_before_it_copies_so_a_stale_flag_goes()
+    {
+        using var owner = Owner();
         Hold(owner, Hero);
-        Assert.IsFalse(Holds(owner, Wolf));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Bear).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Wolf).Disposition);
+        // The hero's spell ends (a follower in the array loses it by the spell's END; here the stale flag is written by hand), then Bear is appended again behind Wolf.
+        Hold(owner, Hero, false);
+        Assert.IsTrue(Holds(owner, Bear));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Bear).Disposition);
+        Assert.IsFalse(Holds(owner, Bear), "the re-join left the old leader first and copied nothing");
+        // With the hero holding it the re-join keeps the flag (cleared, then copied).
+        Hold(owner, Hero);
+        Hold(owner, Bear);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Wolf).Disposition);
         Assert.IsTrue(Holds(owner, Wolf));
     }

@@ -808,13 +808,13 @@ Rules: [contract](../world/character-stats-runtime.md#tempus-fugit-speed-arc-mag
 | 1 | Cast Tempus Fugit (spell 79) on the hero. Open the character sheet (speed line) and the inventory window. | The hero's speed is 10 higher while the spell is maintained, and back to the old value when it ends. | open |
 | 2 | Cast it, then fight a creature in turn-based mode, and compare the action points of the hero and of the creature with and without the spell. | The hero has 10 more action points; every other creature has 10 fewer (at least the game's minimum of 5). | open |
 | 3 | Cast it and fight in real time; compare the pause between attacks of the hero and of the creature with and without the spell. | The hero attacks faster, the creature slower. Walking speed does not change. | open |
-| 4 | Have a companion with the hero when casting. | The companion is in the spell's area and gains the same +10 as the hero; a companion that joins after the cast gains it at once (XR7, ARC-MAGIC-1190); one that leaves the party loses it at once. | open |
+| 4 | Have a companion with the hero when casting. | The companion is in the spell's area and gains the same +10 as the hero; a companion that joins after the cast gains it at once (XR7, ARC-MAGIC-1190); one that leaves the party or is told to wait loses it at once (and gets it back at the unwait while the spell is held). | open |
 | 5 | With the spell active, open a companion's character sheet (talk to it, the sheet action). | The speed line shows the shift: 10 more than without the spell for a companion in the spell, 10 less for an NPC outside it (never below 1). | open |
 
 Known differences (documented, not bugs):
 
 - An NPC that casts Tempus Fugit (record 79 carries a flee priority for the AI) changes speeds even when the player does not hold the spell: the owner decided on 2026-11-11 that the original's player-only test is a bug of the game, fixed in both modes. In the original such a cast does nothing to anyone's speed.
-- The familiar half of the leave (the leader's familiar flag, XR10) is not built here (E1-e); a companion waiting when the spell ends keeps the flag as the original's waiter does.
+- The familiar half of the leave (the leader's familiar flag, XR10) is not built here (E1-e).
 
 ## ARC-MAGIC-060 — Item spells on the hero's hit, the cell weapon (PR #1184, 2026-11-12)
 
