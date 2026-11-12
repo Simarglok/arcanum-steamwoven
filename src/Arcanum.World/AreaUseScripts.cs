@@ -1349,7 +1349,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             }
             if (request.Change is ScrObjectStateChange.SetDayStandpoint or ScrObjectStateChange.SetNightStandpoint)
             {
-                // NS3: an NPC (type 16) of the shown map takes the location as its standpoint (a value back at its map data's clears the record); any other object is left as it is. The extended actions also write the teleport map.
+                // NS3: an NPC (type 16) of the shown map takes the location as its standpoint (the record is kept even when it equals the row's); any other object is left as it is. The extended actions also write the teleport map.
                 if (!ShownNpc(request.Object)) continue;
                 var day = request.Change == ScrObjectStateChange.SetDayStandpoint;
                 var packed = SessionNpcStandpoint.Pack(unchecked((uint)request.Value), unchecked((uint)request.Value2));
@@ -1540,7 +1540,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
                 if (_world?.ScriptReaction is null) return "a reaction change needs the AI host";
                 continue;
             }
-            if (request.Change is ScrObjectStateChange.SetDayStandpoint or ScrObjectStateChange.SetNightStandpoint) continue;
+            if (request.Change is ScrObjectStateChange.SetDayStandpoint or ScrObjectStateChange.SetNightStandpoint)
+            {
+                // The extended actions' teleport map is the catalogue map less 4,999; the session holds maps from 1 (the original stores any value), so a lower one is left unapplied before anything applies.
+                if (ShownNpc(request.Object) && request.Map is { } catalogueMap && unchecked(catalogueMap - 4999) < 1)
+                    return $"set standpoint of {request.Object.Code} names the map {catalogueMap}, which the session cannot keep as a teleport map";
+                continue;
+            }
             if (request.Change == ScrObjectStateChange.ChangeArtNumber) return "change art number is not modelled (no per-object art overlay)";
             // ARC-SCRIPT-049 (HW4): set faction changes an NPC and leaves any other object as it is; an NPC of another map is not kept.
             if (request.Change == ScrObjectStateChange.SetFaction)

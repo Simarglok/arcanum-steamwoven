@@ -14,7 +14,7 @@ public sealed class ScrNpcStateTests
     private const int Script = 2820;
     // A set the FakeHost can run (the full S36 needs every query interface): the control flow of S1, the following test and the nine actions.
     private static readonly ScrAdmissionSet Narrow = new("test-npc-state", ScrAdmissionSet.S1.Conditions.Append(ScrCatalogue.Condition.FollowingPc),
-        ScrAdmissionSet.S1.Actions.Concat(ScrAdmissionSet.NpcStateActions), ScrAdmissionSet.S1.ValueKinds, [ScrFocusKind.Triggerer, ScrFocusKind.Attachee, ScrFocusKind.Player], counterIndexWraps: true);
+        ScrAdmissionSet.S1.Actions.Concat(ScrAdmissionSet.NpcStateActions).Append(ScrCatalogue.Action.CallScriptEx).Append(ScrCatalogue.Action.SetLocalFlag), ScrAdmissionSet.S1.ValueKinds, [ScrFocusKind.Triggerer, ScrFocusKind.Attachee, ScrFocusKind.Player], counterIndexWraps: true);
     private static readonly ScrRunOptions Options = new() { Admission = Narrow };
 
     private static ScrRunResult Run(ScrProgram program, FakeHost? host = null, int point = ScrPoint.Heartbeat)
@@ -122,6 +122,21 @@ public sealed class ScrNpcStateTests
             Do(C(ScrCatalogue.Action.ChangeScript, (AttacheeKind, 0), N(ScrPoint.Dialog), N(2000))),
             Do(C(ScrCatalogue.Action.ReturnSkipDefault))), host);
         CollectionAssert.AreEqual(new[] { new ScrWriteback(ScrSource.Object, Npc, ScrPoint.Dialog, new ScrSlot(2000, 0x5, 0x30)) }, run.Effects.SlotWrites.ToArray());
+    }
+
+    [TestMethod]
+    public void Change_script_of_a_call_ex_callees_own_slot_is_kept_with_the_callees_flags()
+    {
+        // NS4 (review): the exe tests the event's object and point at any depth, so the callee's change of its own slot is its pending result, which call-ex writes back with the flags the callee set.
+        var host = new FakeHost();
+        host.Attach(Npc, ScrPoint.Dialog, 2821, Program(
+            Do(C(ScrCatalogue.Action.SetLocalFlag, N(2))),
+            Do(C(ScrCatalogue.Action.ChangeScript, (AttacheeKind, 0), N(ScrPoint.Dialog), N(1200))),
+            Do(C(ScrCatalogue.Action.ReturnSkipDefault))));
+        var run = Run(Program(
+            Do(C(ScrCatalogue.Action.CallScriptEx, (AttacheeKind, 0), N(ScrPoint.Dialog), N(0), (TriggererKind, 0))),
+            Do(C(ScrCatalogue.Action.ReturnSkipDefault))), host);
+        CollectionAssert.AreEqual(new[] { new ScrWriteback(ScrSource.Object, Npc, ScrPoint.Dialog, new ScrSlot(1200, 1u << 2, 0)) }, run.Effects.SlotWrites.ToArray());
     }
 
     [TestMethod]

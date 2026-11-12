@@ -127,7 +127,7 @@ public sealed class AreaAiHostScriptWalkTests
         StringAssert.Contains(host.ScriptReaction("npc:nobody", 5, set: false), "not an NPC");
         StringAssert.Contains(host.ScriptReaction("pc", 5, set: true), "not an NPC");
         var answer = host.ScriptReaction(f.A, 5, set: false);
-        Assert.IsTrue(answer.StartsWith("adjust reaction 5 ") || answer == "no reaction facts", answer);
+        Assert.AreEqual("adjust reaction 5 Changed None", answer, "the session took the change");
     }
 
     [TestMethod]

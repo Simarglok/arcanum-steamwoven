@@ -73,6 +73,7 @@ public sealed class AreaNpcStateScriptTests
                 Do(new(ScrCatalogue.Action.SetNightStandpointEx, (Attachee, -1), N(-3), N(7), N(5012))), Do(Run)));
             Write("scr/00823own.scr", Program(Do(new(ScrCatalogue.Action.ChangeScript, (Attachee, -1), N(ScrPoint.Heartbeat), N(820))), Do(Run)));
             Write("scr/00824dialog.scr", Program(Do(new(ScrCatalogue.Action.ChangeScript, (Attachee, -1), N(ScrPoint.Dialog), N(1200))), Do(Run)));
+            Write("scr/00826lowmap.scr", Program(Do(new(ScrCatalogue.Action.SetDayStandpointEx, (Attachee, -1), N(10), N(20), N(0))), Do(Run)));
             Write("scr/00825art.scr", Program(Do(new(ScrCatalogue.Action.ChangeArtNumber, (Attachee, -1), N(4))), Do(Run)));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
@@ -135,6 +136,18 @@ public sealed class AreaNpcStateScriptTests
             Assert.AreEqual(new AreaRouteLocation(480, 521), AreaUseScriptHost.Standpoint(session, 1, entity, day: true));
             Assert.AreEqual(new AreaRouteLocation(unchecked((uint)-3), uint.MaxValue), AreaUseScriptHost.Standpoint(session, 1, entity, day: false));
             Assert.AreEqual(13, session.QueryTeleportMap(entity));
+        });
+    }
+
+    [TestMethod]
+    public void An_extended_standpoint_with_a_map_the_session_cannot_keep_is_refused_before_anything_applies()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = Row(1, 826);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, null, npc).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            Assert.IsNull(AreaUseScriptHost.Standpoint(session, 1, AreaUseScriptHost.EntityId(npc), day: true), "the standpoint was not written either");
         });
     }
 

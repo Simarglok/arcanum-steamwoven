@@ -624,14 +624,14 @@ internal sealed class ScrInterpreter
             case ScrCatalogue.Action.ChangeScript:
             {
                 // NS4 (0x447220 case 99): the first object of operand 0, the attachment point of operand 1 and the script number of operand 2. The slot of the point keeps its local flags and counters and takes the number;
-                // for the run's own attachee and point the number is the run's own change (the original writes its pending result), so it takes effect when the run ends as change this script does; any other slot is
-                // written as call-ex's are. An object with no slot at the point gets a new one (project choice: flags and counters 0; the original starts from an unread stack buffer). A point outside 0..35 ends the dispatch
+                // for the run's own attachee and point (at any call depth: the exe tests the event's object and point only) the number is the run's own change (the original writes its pending result), so it takes effect when the run ends as change this script does
+                // (a call-ex callee's result is written back to the object by call-ex; a called script's is dropped, as its stack copy is in the original); any other slot is written as call-ex's are. An object with no slot at the point gets a new one (project choice: flags and counters 0; the original starts from an unread stack buffer). A point outside 0..35 ends the dispatch
                 // (the original indexes past the object's script array); an absent object changes nothing (a project choice).
                 var point = Get(a, 1);
                 var number = Get(a, 2);
                 if (OptionalObject(a, 0) is not { } obj) return (Step.Next, 0);
                 if (point is < 0 or >= ScrPoint.Count) throw new CallRefusedStop(null, _number, ScrStop.CallExPoint);
-                if (_depth == 0 && _roles.Attachee == obj && point == _point) { _changedNumber = number; return (Step.Next, 0); }
+                if (_roles.Attachee == obj && point == _point) { _changedNumber = number; return (Step.Next, 0); }
                 var held = _shared.Slots.TryGetValue((obj, point), out var written) ? written : _host.Slot(obj, point) ?? new ScrSlot(0, 0, 0);
                 var stored = held with { Script = number };
                 _shared.Slots[(obj, point)] = stored;
