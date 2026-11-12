@@ -50,7 +50,7 @@ Since 2026-11-11 a slice merges without waiting for the owner's in-game comparis
 | Dialog markers `c r t z` (trainers and special replies), `r:`, positive `IN` | **Stub** (`UnsupportedInteraction` blocks) | `DialogConversation.cs:1459-1466` | Trainers read (E5-d, formerly S16 of the skills plan) | E5 |
 | Spot-trap roll, disarm action, trap script 30002, the hero's step onto a placed marker | **Partial:** traps on maps fire and hurt; placed trap devices are built (E6-b ARC-WORLD-124: timer bombs 15154 and 15193; ARC-WORLD-125: script traps 15100 and 15120 on a portal, a container or a cell; stage `item-aim`); the spot roll logs "not ready", disarm has no viewer action, a device used on a target the rules refuse says "NOT READY" | `TerrainViewerTraps.cs`, `TerrainViewerAreaItemUse.cs` | Read ([ARC-TECHNOLOGY-010](../research/technology-evidence.md), TP1–TP8) | E6 |
 | Movies (Bink), credits, intro, script-queued slides, endings | **Stub / absent** (menu buttons are "Unavailable"; only the death slide exists) | `AreaMainMenu.cs`, `AreaHeroDeath.cs`; no Bink code | Slide table read | E7 |
-| Fate window and Fate Points button; Skill pane; combat action-point readout | **Stub / absent** ("not built" notices) | `TerrainViewerAreaGameBar.cs:127-129` | UI ledger partly | E8 |
+| Fate window and Fate Points button; Skill pane; ~~combat action-point readout~~ (built, ARC-UI-1114) | **Stub / absent** ("not built" notices) | `TerrainViewerAreaGameBar.cs:127-129` | UI ledger partly | E8 |
 | Companions screen and follower menu | **Absent** | survey | Not read | E8 |
 | Gambling (FR-ITEM-019), identify window, heal another critter | **Stub / absent** | survey | Gambling read (S14) | E8 |
 | Misc sound callers (scenery loops, busting, NPC footsteps, item drop, non-death AI barks) | **Absent** (hero footsteps, pickups, doors, chests, attack and death barks are wired) | no caller of the misc, fidget and drop cue kinds | Sound ledger | E8 |
@@ -209,7 +209,7 @@ FR-ITEM-008, FR-MEDIA-003, FR-COMBAT-002, FR-COMBAT-003.
 | E8-a | Fate window and the Fate Points button (rules and the grant exist) | S–M | — |
 | E8-b | Skill pane of the game bar; PickPocket and DisarmTraps hotkeys | S | E6-a for disarm |
 | E8-c | Companions screen and follower menu; barter follower switch | M | Mac read |
-| E8-d | Combat action-point readout and the turn-order list (owner decision 2026-10-28) | M | — (UI-124 runs beside) |
+| E8-d | **Done (ARC-UI-1114, #1114).** Combat action-point readout and the turn-order list (owner decision 2026-10-28) | M | — (UI-124 runs beside) |
 | E8-e | Options windows hidden today: violence filter, brightness, auto-switch weapons, follower skills, combat taunts, autosave timer | M | Mac read for each |
 | E8-f | **Done (ARC-RENDER-1126, #1126).** Sound callers: scenery loops, busting, AI barks, NPC footsteps, item drop | S–M | — |
 | E8-g | Identify window, heal another critter, lockpicks on chests (viewer wiring; the session takes containers), junk-pile partial take, poison sources | M | — |

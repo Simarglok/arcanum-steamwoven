@@ -1,3 +1,4 @@
+using Arcanum.Data.Area;
 using Arcanum.Presentation.Hud;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;

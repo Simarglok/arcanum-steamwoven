@@ -53,6 +53,7 @@ public partial class AreaCombatHud : CanvasLayer
             _panel.AddChild(_lamps[i]);
         }
         _list = new PanelContainer { Name = "TurnOrder", MouseFilter = Control.MouseFilterEnum.Ignore };
+        _list.AddThemeStyleboxOverride("panel", new StyleBoxFlat { BgColor = new Color(0f, 0f, 0f, .68f), ContentMarginLeft = 6, ContentMarginRight = 8, ContentMarginTop = 4, ContentMarginBottom = 4 });
         _rows = new VBoxContainer { Name = "Rows", MouseFilter = Control.MouseFilterEnum.Ignore };
         _list.AddChild(_rows);
         AddChild(_list);
