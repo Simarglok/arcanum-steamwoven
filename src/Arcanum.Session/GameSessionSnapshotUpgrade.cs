@@ -576,6 +576,8 @@ public static partial class GameSessionSnapshotCodec
         },
         // ARC-SCRIPT-1279 (schema 94): the inventory section gains the item fields scripts wrote (written start, inventory display bit). No older build kept any, so the step adds the empty list. The inventory section the older schema carried must be there and an object.
         [93] = root => AddField(Section(root, "inventory"), "$.inventory", "itemFields", new JsonArray()),
+        // ARC-RES-1441 (schema 95): the inventory section gains the arranged slots of seed holders. No older build saved any (an arrangement was transient), so the step adds the empty list. The inventory section the older schema carried must be there and an object.
+        [94] = root => AddField(Section(root, "inventory"), "$.inventory", "holderSlots", new JsonArray()),
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from
