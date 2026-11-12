@@ -148,6 +148,8 @@ public enum AiRollPurpose
     KnockbackBump,
     /// <summary>ARC-DEV-170 (B06): the unforced standpoint step at hour 6 or hour 21 goes on only on 1 of 1..1000 (0x4CEF00 at 0x4ACE49, WS7).</summary>
     StandpointHourRoll,
+    /// <summary>ARC-AI-1315: the please-move goal's tile choice (0x424E00, node 1 of goal 68) starts its rotation at 0..8 (0x4CEF00; 8 tries every neighbour from rotation 0).</summary>
+    PleaseMoveStart,
 }
 
 /// <summary>The AI's random source: one inclusive range draw per call, the original's range draw (0x4CEF00); equal bounds
