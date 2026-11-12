@@ -248,7 +248,7 @@ STAGE_NEEDS: dict[str, StageNeeds] = {
     "summon-flash": _needs(portable=True), "summon-wall": _needs(portable=True), "summon-undead": _needs(portable=True),
     "tech-craft": _needs(map=CAVE, only_map=True, own=True),  # needs the cave's bullets; F8 replaces the session
     "tech-products": _needs(map=CAVE, only_map=True, own=True),  # a living NPC of the cave for the poison; F8 replaces the session
-    "item-aim": _needs(portable=True), "disarm": _needs(), "creature-item": _needs(), "movies": _needs(), "trait-body": _needs(), "body-styles": _needs(),
+    "item-aim": _needs(sector=TOWN), "disarm": _needs(), "creature-item": _needs(), "movies": _needs(), "trait-body": _needs(), "body-styles": _needs(),
     "perf": _needs(**_MAIN_ONLY, sector=TOWN, only_sector=True, own=True),  # needs a map exit in the window
 }
 # The stages that run from the main menu (--main-menu, which starts without a hero).
