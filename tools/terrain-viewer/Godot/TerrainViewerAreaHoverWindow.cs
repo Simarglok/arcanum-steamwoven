@@ -42,26 +42,38 @@ public partial class TerrainViewerApp
         }
         _hoverWindowKey = key;
         LeaveHoverWindow();
-        if (key is not { } hit || _hoverIndex is not { } index || !index.Contains(hit)) return;
+        if (key is not { } hit) return;
+        DescribeObject(hit, panel, pointer: true);
+    }
+
+    /// <summary>
+    /// The object window of <paramref name="hit"/> (0x57CCF0 → 0x553BE0). <paramref name="panel"/> is null when the viewer draws no bars (the window is then only held in the message log); <paramref name="pointer"/> is the pointer entering the object (the bars' panel is then set): the window is
+    /// remembered for the redraws and goes when the pointer leaves. ARC-UI-1411 (ledger XR4): an Identify that names a portal or scenery draws the same
+    /// window with no pointer on the object: it stays until the message window shows something else (as the item description of Identify does); a
+    /// critter's portrait and bars belong to the pointer's window only. Returns whether the window was drawn.
+    /// </summary>
+    private bool DescribeObject(AreaObjectKey hit, AreaGameBarPanel? panel, bool pointer)
+    {
+        if (_hoverIndex is not { } index || !index.Contains(hit)) return false;
         var row = index.Row(hit);
         // ARC-DEV-326 (B18, OH1): the pointer entering an object describes it for the hero (0x57CCF0 → 0x57CD60), whose first step is the object's
         // examine script; one that answers skip default leaves the window without a description (the highlight stays: it is drawn after, 0x43C270).
         // ARC-UI-1281: a follower the pointer rests on by his portrait was examined when it entered (once); the answer is kept for the redraws.
-        if (!(key == _portraitHoverKey && _portraitAllows is { } examined ? examined : ExamineAllows(row))) return;
+        if (!(pointer && hit == _portraitHoverKey && _portraitAllows is { } examined ? examined : ExamineAllows(row))) return false;
         var kind = AreaHoverWindow.Kind(row.Type);
         var name = index.Name(hit);
-        if (kind == AreaHoverWindowKind.None || string.IsNullOrEmpty(name)) return;
+        if (kind == AreaHoverWindowKind.None || string.IsNullOrEmpty(name)) return false;
         if (_messageLog.PaneMode)
         {
             // 0x553BE0 in another bar mode: only the name, in the pane's text area (HK21).
-            if (_messageLog.ShowPaneName(MessagePaneMode, name, item: kind == AreaHoverWindowKind.Item)) panel.MessageLog.Render();
-            return;
+            if (_messageLog.ShowPaneName(MessagePaneMode, name, item: kind == AreaHoverWindowKind.Item)) panel?.MessageLog.Render();
+            return true;
         }
         if (kind == AreaHoverWindowKind.Trap)
         {
             // 0x553BE0 posts a trap's name as a hover text (type 6: shown only after the quiet time, ML2).
             PostMessage(AreaMessageEntry.Text(AreaMessageKind.Hover, name), "hover");
-            return;
+            return true;
         }
         Texture2D? portrait = null;
         AreaMessageEntry? entry;
@@ -98,15 +110,17 @@ public partial class TerrainViewerApp
         }
         // WM127: the scenery window ends by marking the town map when the scenery's flag asks for it.
         if (kind == AreaHoverWindowKind.Scenery) MarkTownMapByScenery(row, name);
-        if (entry is null || !_messageLog.ShowItem(entry)) return;
+        if (entry is null || !_messageLog.ShowItem(entry)) return false;
+        if (!pointer) { panel?.ShowHoverPortrait(null); panel?.MessageLog.Render(); return true; }
         _hoverWindowEntry = entry;
-        panel.ShowHoverPortrait(portrait);
+        panel!.ShowHoverPortrait(portrait);
         if (kind == AreaHoverWindowKind.Critter && !_hoverWindowDead && HoverLife(hit) is { } life)
         {
             if (_hoverWindowBars is null || !IsInstanceValid(_hoverWindowBars)) { _hoverWindowBars = new AreaWindowLifeBars(); panel.AddPart(AreaBarStrip.Bottom, _hoverWindowBars); }
             _hoverWindowBars.Show(life);
         }
         panel.MessageLog.Render();
+        return true;
     }
 
     /// <summary>Per frame: the portrait and the bars belong to the object window and go when the window shows something else (a new entry,

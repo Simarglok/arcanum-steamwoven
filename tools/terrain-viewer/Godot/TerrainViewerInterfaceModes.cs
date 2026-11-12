@@ -68,9 +68,11 @@ public partial class TerrainViewerApp
         if (opened != AreaWindowOpen.Opened)
         {
             GD.Print($"ARC-DEV-109 {mode} not opened: {opened} (stack {StackText()})");
+            RecordEvidence(EvidenceCommand.OpenWindow, EvidenceOutcome.Refused);
             return false;
         }
         GD.Print($"ARC-DEV-109 interface mode {mode} opened (stack {StackText()})");
+        RecordEvidence(EvidenceCommand.OpenWindow);
         return true;
     }
 
@@ -78,7 +80,11 @@ public partial class TerrainViewerApp
     private void CloseWindowMode(InterfaceMode mode)
     {
         if (!_interfaceWindows.Close(mode)) GD.Print($"ARC-DEV-109 {mode} not closed (stack {StackText()})");
-        else GD.Print($"ARC-DEV-109 interface mode {mode} closed (stack {StackText()})");
+        else
+        {
+            GD.Print($"ARC-DEV-109 interface mode {mode} closed (stack {StackText()})");
+            RecordEvidence(EvidenceCommand.CloseWindow);
+        }
     }
 
     /// <summary>ARC-DEV-110: the armed pick pocket is the skill target mode (2) on the stack: the stack is the flag.</summary>
@@ -110,9 +116,11 @@ public partial class TerrainViewerApp
         if (opened != AreaTargetOpen.Opened)
         {
             GD.Print($"ARC-DEV-110 {mode} not opened: {opened} (stack {StackText()})");
+            RecordEvidence(EvidenceCommand.Target, EvidenceOutcome.Refused);
             return false;
         }
         GD.Print($"ARC-DEV-110 interface mode {mode} opened (stack {StackText()})");
+        RecordEvidence(EvidenceCommand.Target);
         return true;
     }
 
@@ -124,9 +132,11 @@ public partial class TerrainViewerApp
         if (opened != AreaTargetOpen.Opened)
         {
             GD.Print($"ARC-DEV-110 {mode} not opened: {opened} (stack {StackText()})");
+            RecordEvidence(EvidenceCommand.Target, EvidenceOutcome.Refused);
             return false;
         }
         GD.Print($"ARC-DEV-110 interface mode {mode} opened (stack {StackText()})");
+        RecordEvidence(EvidenceCommand.Target);
         return true;
     }
 

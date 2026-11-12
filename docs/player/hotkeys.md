@@ -21,6 +21,7 @@ are this project's own.
 | L | Logbook |
 | T | Technological schematics |
 | S | Sleep or wait window (the bar's Sleep button too) |
+| F | Fate Point window (the bar's Fate Points button too): twelve buttons, one for each fate; a press arms the fate (one point) and a second press takes it back; Space or F closes it |
 | M | Spell pane, shown or hidden (on the key's release, while the hero can cast) |
 | K | Skill pane (Prowling, Pick Pocket, Disarm Traps, Repair), shown or hidden in the bottom bar's message window (on the key's release; the same as the Skills button; needs the interface bars) |
 | W | World map; in the [debug mode](alpha-build.md#7-debug-mode) it also lists every area with **Teleport** |
@@ -104,7 +105,7 @@ are this project's own.
 | Shift held while the packaged game starts | Opens the launcher (debug mode, settings) |
 
 **Not there yet.** These original keys do nothing yet (the diagnostic panel, when shown, names them
-`Reserved: … (NOT IMPLEMENTED)`): F (fate points), O (options; Escape opens them),
+`Reserved: … (NOT IMPLEMENTED)`): O (options; Escape opens them),
 V (version), Home (centre on the hero), Enter (message), F10 (compact interface), F12 (screenshot). Attacking a follower
 (left Alt + click in combat mode) is refused as not ready yet. `,` `.` `/` pressed alone also show the reserved notice;
 held during an attack click they aim as listed under *Combat*.

@@ -29,10 +29,14 @@ public sealed class AreaGameOptionsTests
     public void The_table_is_the_originals_three_pages_with_their_settings_and_defaults()
     {
         Assert.AreEqual(16, AreaOptionTable.All.Count(c => !c.Project), "the original's 16 controls");
-        CollectionAssert.AreEqual(new int?[] { 100, 101, 102, 103, 104, 105, 106, 107, null, null, null, null }, AreaOptionTable.Page(AreaOptionsPage.Game).Select(c => c.LabelMessage).ToArray(), "OP2, then the rule mode and the three controller scheme lines (ARC-GPAD-1374; the HD lines are the launcher screen's since ARC-UI-146)");
-        CollectionAssert.AreEqual(new int?[] { 200, 201, 202, 203, 204 }, AreaOptionTable.Page(AreaOptionsPage.Video).Select(c => c.LabelMessage).ToArray());
+        CollectionAssert.AreEqual(new int?[] { 100, 101, 102, 103, 104, 105, 106, 107, null, null, null }, AreaOptionTable.Page(AreaOptionsPage.Game).Select(c => c.LabelMessage).ToArray(), "OP2, then the rule mode and the evidence log's two lines (the HD lines are the launcher screen's since ARC-UI-146)");
+        CollectionAssert.AreEqual(new int?[] { 200, 201, 202, 203, 204, null, null, null }, AreaOptionTable.Page(AreaOptionsPage.Video).Select(c => c.LabelMessage).ToArray());
         CollectionAssert.AreEqual(new int?[] { 300, 301, 302 }, AreaOptionTable.Page(AreaOptionsPage.Sound).Select(c => c.LabelMessage).ToArray());
-        CollectionAssert.AreEqual(new[] { AreaOption.Rules, AreaOption.PadScheme, AreaOption.TouchScheme, AreaOption.PromptStyle }, AreaOptionTable.All.Where(c => c.Project).Select(c => c.Option).ToArray(), "the project's controls");
+        CollectionAssert.AreEqual(new[] { AreaOption.Rules, AreaOption.EvidenceLog, AreaOption.TestTask, AreaOption.PadScheme, AreaOption.TouchScheme, AreaOption.PromptStyle }, AreaOptionTable.All.Where(c => c.Project).Select(c => c.Option).ToArray(), "the project controls");
+        Assert.AreEqual(0, AreaOptionTable.Of(AreaOption.EvidenceLog).Default, "ARC-GPAD-1376: the evidence log is off by default");
+        Assert.AreEqual(0, AreaOptionTable.Of(AreaOption.TestTask).Default);
+        Assert.AreEqual(AreaOptionTable.TestTaskCount, AreaOptionTable.Of(AreaOption.TestTask).Limit);
+        Assert.IsFalse(Values.Value(AreaOption.EvidenceLog) == 1);
         for (var i = 0; i < AreaOptionTable.All.Count; i++) Assert.AreEqual((AreaOption)i, AreaOptionTable.All[i].Option, "the table is indexed by the option");
         var defaults = AreaOptionTable.All.ToDictionary(c => c.Setting, c => c.Default);
         Assert.AreEqual(1, defaults["difficulty"]);
@@ -49,7 +53,7 @@ public sealed class AreaGameOptionsTests
         CollectionAssert.AreEqual(new[]
             {
                 AreaOption.Difficulty, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AlwaysRun, AreaOption.Floats, AreaOption.FloatSpeed,
-                AreaOption.Effects, AreaOption.Voice, AreaOption.Music, AreaOption.Rules, AreaOption.PadScheme, AreaOption.TouchScheme, AreaOption.PromptStyle,
+                AreaOption.Effects, AreaOption.Voice, AreaOption.Music, AreaOption.Rules, AreaOption.EvidenceLog, AreaOption.TestTask, AreaOption.PadScheme, AreaOption.TouchScheme, AreaOption.PromptStyle,
             },
             AreaOptionTable.All.Where(c => c.Shown).Select(c => c.Option).ToArray(), "only the controls with a function are shown");
         Assert.IsTrue(AreaOptionTable.Offered(AreaOptionsPage.Video), "ARC-UI-021: the floating text's two controls");
@@ -84,8 +88,7 @@ public sealed class AreaGameOptionsTests
         CollectionAssert.AreEqual(new[] { 4000, 4001, 4002, 4003 }, main.Buttons.Select(b => b.Message).ToArray(), "OP1 window 6 buttons");
         CollectionAssert.AreEqual(new[] { "Game", "Video", "Sound", "Done" }, Labels(main));
         Assert.AreEqual(AreaOptionsPage.Game, main.Page);
-        CollectionAssert.AreEqual(new[] { AreaOption.Difficulty, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AlwaysRun, AreaOption.Rules,
-                AreaOption.PadScheme, AreaOption.TouchScheme, AreaOption.PromptStyle },
+        CollectionAssert.AreEqual(new[] { AreaOption.Difficulty, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AlwaysRun, AreaOption.Rules, AreaOption.EvidenceLog, AreaOption.TestTask },
             main.Controls.Select(c => c.Option).ToArray());
         CollectionAssert.AreEqual(new[]
         {
@@ -106,7 +109,7 @@ public sealed class AreaGameOptionsTests
         var menu = Options();
         menu.Type('v');
         Assert.AreEqual(AreaOptionsPage.Video, menu.Page, "ARC-UI-021: the Video page");
-        CollectionAssert.AreEqual(new[] { AreaOption.Floats, AreaOption.FloatSpeed }, menu.Controls.Select(c => c.Option).ToArray());
+        CollectionAssert.AreEqual(new[] { AreaOption.Floats, AreaOption.FloatSpeed, AreaOption.PadScheme, AreaOption.TouchScheme, AreaOption.PromptStyle }, menu.Controls.Select(c => c.Option).ToArray());
         CollectionAssert.AreEqual(new[]
         {
             "Brightness: " + AreaOptionTable.NoBrightness, "Text Duration: " + AreaOptionTable.NoTextDuration, "Combat Taunts: " + AreaOptionTable.NoTaunts,
@@ -155,7 +158,7 @@ public sealed class AreaGameOptionsTests
         var menu = Options();
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Difficulty, Value: 2), menu.Confirm());
         menu.Move(-1);
-        Assert.AreEqual(11, menu.OptionsFocus, "8 controls and 4 buttons, wrapping");
+        Assert.AreEqual(10, menu.OptionsFocus, "7 controls and 4 buttons, wrapping");
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Confirm(), "Done");
         Assert.AreEqual(AreaMenuWindow.Main, menu.Window);
     }
@@ -165,7 +168,7 @@ public sealed class AreaGameOptionsTests
     {
         // ARC-UI-146: HD graphics, HD interface and HD pack are the launcher screen's lines (ARC-UI-143); the saved settings are the same.
         var menu = Options(AreaMenuWindow.InPlay);
-        Assert.AreEqual(8, menu.Controls.Count, "the Game page ends with Rules and the three controller scheme lines (ARC-GPAD-1374)");
+        Assert.AreEqual(7, menu.Controls.Count, "the Game page ends with Rules, the evidence log and its task marker");
         Assert.AreEqual(HdPackSourceMode.Auto, AreaGameSettings.Defaults.HdPackSource);
         Assert.IsNull(AreaGameSettings.Defaults.HdPackPath);
         Assert.IsFalse(AreaGameSettings.Defaults.HdInterface);
@@ -178,7 +181,7 @@ public sealed class AreaGameOptionsTests
     {
         var menu = Options(AreaMenuWindow.InPlay);
         var rules = AreaOptionTable.Of(AreaOption.Rules);
-        Assert.AreEqual(4, menu.Controls.ToList().IndexOf(rules), "the Game page's last line");
+        Assert.AreEqual(4, menu.Controls.ToList().IndexOf(rules), "the Game page's first project line");
         Assert.AreEqual((int)RuleMode.Steamwoven, Values.Value(AreaOption.Rules));
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Rules, Value: (int)RuleMode.Original), menu.Change(4, 1));
         menu.SetOptions(Values with { Rules = RuleMode.Original });
@@ -197,7 +200,7 @@ public sealed class AreaGameOptionsTests
     [TestMethod]
     public void No_page_shows_more_controls_than_the_art_has_slots()
     {
-        // AreaMenuArtLayout.OptionsSlot throws for a ninth: the Game page is full with the three controller scheme lines (ARC-GPAD-1374).
+        // AreaMenuArtLayout.OptionsSlot throws for a ninth: the Game page is full (Rules, the evidence log's two lines) and the Video page holds the three controller scheme lines (ARC-GPAD-1374).
         var capacity = AreaMenuArtLayout.OptionsSlotColumns.Count * AreaMenuArtLayout.OptionsSlotRows.Count;
         foreach (var page in Enum.GetValues<AreaOptionsPage>())
             Assert.IsTrue(AreaOptionTable.Page(page).Count(control => control.Shown) <= capacity, page + " has more shown controls than slots");
@@ -207,10 +210,11 @@ public sealed class AreaGameOptionsTests
     public void The_controller_scheme_lines_are_project_lists_after_the_rule_mode()
     {
         var menu = Options(AreaMenuWindow.InPlay);
+        menu.Type('v'); // the Video page: the Game page's eight slots are full
         var pad = AreaOptionTable.Of(AreaOption.PadScheme);
         var touch = AreaOptionTable.Of(AreaOption.TouchScheme);
         var prompts = AreaOptionTable.Of(AreaOption.PromptStyle);
-        CollectionAssert.AreEqual(new[] { pad, touch, prompts }, menu.Controls.Skip(5).ToArray(), "slots 5 to 7 of the Game page");
+        CollectionAssert.AreEqual(new[] { pad, touch, prompts }, menu.Controls.Skip(2).ToArray(), "slots 2 to 4 of the Video page, after the floats");
         foreach (var control in new[] { pad, touch, prompts })
         {
             Assert.IsTrue(control.Project && control.Shown && control.Kind == AreaOptionKind.List && control.LabelMessage is null, control.Option + " is a shown project list");
@@ -231,10 +235,29 @@ public sealed class AreaGameOptionsTests
         Assert.AreEqual((0, 0, 0), (Values.Value(AreaOption.PadScheme), Values.Value(AreaOption.TouchScheme), Values.Value(AreaOption.PromptStyle)));
         var chosen = Values with { Controls = new ControlSchemeSettings(Pad: PadScheme.Pointer, Touch: TouchScheme.TouchPad, Prompts: PromptStyle.SteamDeck) };
         Assert.AreEqual((2, 1, 4), (chosen.Value(AreaOption.PadScheme), chosen.Value(AreaOption.TouchScheme), chosen.Value(AreaOption.PromptStyle)));
-        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.PadScheme, Value: 1), menu.Change(5, 1));
-        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.PadScheme, Value: 2), menu.Change(5, -1), "the list wraps back to its last value");
-        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.TouchScheme, Value: 1), menu.Change(6, 1));
-        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.PromptStyle, Value: 1), menu.Change(7, 1));
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.PadScheme, Value: 1), menu.Change(2, 1));
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.PadScheme, Value: 2), menu.Change(2, -1), "the list wraps back to its last value");
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.TouchScheme, Value: 1), menu.Change(3, 1));
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.PromptStyle, Value: 1), menu.Change(4, 1));
+    }
+
+    [TestMethod]
+    public void The_evidence_log_lines_are_off_and_none_by_default_and_use_the_projects_texts()
+    {
+        var menu = Options(AreaMenuWindow.InPlay);
+        var log = AreaOptionTable.Of(AreaOption.EvidenceLog);
+        var task = AreaOptionTable.Of(AreaOption.TestTask);
+        Assert.AreEqual(5, menu.Controls.ToList().IndexOf(log));
+        Assert.AreEqual(6, menu.Controls.ToList().IndexOf(task));
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.EvidenceLog, Value: 1), menu.Change(5, 1), "On is one step from the default Off");
+        var game = AreaOptionsTexts.From((_, _) => "game text", "test");
+        Assert.AreEqual("Evidence Log", game.Label(log));
+        Assert.AreEqual("Off", game.Value(log, 0));
+        Assert.AreEqual("On", game.Value(log, 1));
+        Assert.AreEqual("Test Task", game.Label(task));
+        Assert.AreEqual("None", game.Value(task, 0));
+        Assert.AreEqual("Task 8", game.Value(task, AreaOptionTable.TestTaskCount));
+        Assert.AreEqual("[9]", game.Value(task, AreaOptionTable.TestTaskCount + 1));
     }
 
     [TestMethod]

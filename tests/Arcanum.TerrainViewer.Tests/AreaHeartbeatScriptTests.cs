@@ -132,6 +132,12 @@ public sealed class AreaHeartbeatScriptTests
             // ARC-DEV-244: 800 has the player cast spell 9 (48) at its attachee.
             Write("scr/00800pccast.scr", Program(Do(new(ScrCatalogue.Action.CastSpell, (Player, 0), N(9), (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00797caston.scr", Program(Do(new(ScrCatalogue.Action.CastUnresistableSpellOn, N(8), (Player, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-SCRIPT-1360: 806 has the shape of 2787, the heartbeat of the NPC in the first building: PC quest 1158 unknown: run the default; else switch the attachee on (toggle state) and remove the script.
+            Write("scr/00806quest.scr", Program(
+                If(new(ScrCatalogue.Condition.PcQuestState, (Player, 0), N(1158), N(0)), new(ScrCatalogue.Action.Goto, N(3)), new(ScrCatalogue.Action.DoNothing)),
+                Do(new(ScrCatalogue.Action.ToggleState, (Attachee, -1))),
+                Do(new(ScrCatalogue.Action.RemoveThisScript)),
+                Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // ARC-SCRIPT-1359: 805 is script 1717's shape (the Crash Site's Molochean agent): with global flag 2323 set it sets its day and night standpoints to a literal tile, reads where it stands into two
             // variables (get location) and runs to the tile of those variables; without the flag it runs the default at once.
             Write("scr/00805agent.scr", Program(
@@ -238,11 +244,12 @@ public sealed class AreaHeartbeatScriptTests
                 obj => { kills.Add(obj); return true; }, _ => false)).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, cannot.Outcome, cannot.Detail);
             Assert.AreEqual(0, kills.Count);
-            // Switching on an NPC its map data has off.
+            // ARC-SCRIPT-1360: switching on an NPC its map data has off is applied (the flag flips over the data's, the toggle key is not used).
             var off = Row(2, 16, 782, objectFlags: 0x2);
             var on = Host(session, content, null, off).RunHeartbeat(off, ScrPoint.Heartbeat, session.Rules.Scripts);
-            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, on.Outcome, on.Detail);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, on.Outcome, on.Detail);
             Assert.IsFalse(AreaUseScriptHost.SwitchedOff(session, 1, Entity(2)));
+            Assert.IsFalse(AreaUseScriptHost.NpcOff(session, 1, Entity(2), 0x2));
             // A script outside the heartbeat set, and a row that is no NPC.
             var talker = Row(3, 16, 783);
             Assert.AreEqual(AreaScriptedUseOutcome.Refused, Host(session, content, null, talker).RunHeartbeat(talker, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
@@ -250,7 +257,7 @@ public sealed class AreaHeartbeatScriptTests
             Assert.AreEqual(AreaScriptedUseOutcome.Refused, Host(session, content, null, scenery).RunHeartbeat(scenery, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
             Assert.Throws<ArgumentOutOfRangeException>(() => Host(session, content, null, npc).RunHeartbeat(npc, ScrPoint.Use, session.Rules.Scripts));
             Assert.AreEqual(0, new AreaObjectTargets(1, [npc, off, talker], new Dictionary<AreaObjectKey, (string, SessionOpenableBaseline)>(), null).Gone(session).Count,
-                "nothing was switched off");
+                "nothing is off now: the NPC stored off was switched on");
         });
     }
 
@@ -668,6 +675,68 @@ public sealed class AreaHeartbeatScriptTests
         });
     }
 
+    // ---- ARC-SCRIPT-1360: an NPC the map data stores off, switched on by its heartbeat ----
+
+    private const uint StoredOff = 0x4032, StoredOn = 0x4030;
+
+    [TestMethod]
+    public void A_quest_npc_the_data_stores_off_stays_off_until_its_quest_starts_then_its_heartbeat_switches_it_on()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = Row(1, 16, 806, StoredOff);
+            var host = Host(session, content, null, npc);
+            var targets = new AreaObjectTargets(1, [npc], new Dictionary<AreaObjectKey, (string, SessionOpenableBaseline)>(), null);
+            Assert.IsTrue(AreaUseScriptHost.NpcOff(session, 1, Entity(1), StoredOff));
+            CollectionAssert.AreEqual(new[] { npc.Key }, targets.Gone(session).ToArray(), "an NPC stored off is gone from the scene");
+            Assert.AreEqual(true, host.IsSwitchedOff(Ref(1)));
+
+            // Quest 1158 unknown: the heartbeat answers "run the default" and changes nothing.
+            var idle = host.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, idle.Outcome, idle.Detail);
+            Assert.AreEqual(ScrOutcome.RunDefault, idle.Run!.Outcome);
+            Assert.IsTrue(AreaUseScriptHost.NpcOff(session, 1, Entity(1), StoredOff));
+            Assert.AreEqual(806, host.Slot(Ref(1), ScrPoint.Heartbeat)!.Value.Script);
+
+            // Quest 1158 accepted: the heartbeat flips the flag, removes itself and the NPC is on the scene.
+            Assert.AreEqual(GameSessionDisposition.Changed, session.SetQuestState(session.Version, 1158, SessionQuestState.Accepted).Disposition);
+            var ran = host.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.AreEqual(ScrOutcome.RunDefault, ran.Run!.Outcome);
+            Assert.IsFalse(AreaUseScriptHost.NpcOff(session, 1, Entity(1), StoredOff));
+            Assert.AreEqual(0, targets.Gone(session).Count);
+            Assert.AreEqual(false, host.IsSwitchedOff(Ref(1)));
+            Assert.AreEqual(0, session.QueryObjectFlags(Entity(1)).Object((int)StoredOff) & 0x2, "the session holds the cleared bit over the data's");
+            Assert.AreEqual(0, host.Slot(Ref(1), ScrPoint.Heartbeat)!.Value.Script, "the heartbeat removed itself");
+            Assert.IsNull(host.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Run?.Script, "once only");
+            Assert.IsFalse(AreaUseScriptHost.NpcOff(session, 1, Entity(1), StoredOff), "still on");
+        });
+    }
+
+    [TestMethod]
+    public void A_toggle_state_flips_the_data_off_bit_each_time_and_leaves_an_npc_stored_on_to_the_toggle_key()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var off = Row(1, 16, 782, StoredOff);
+            var on = Row(2, 16, 782, StoredOn);
+            var host = Host(session, content, null, off, on);
+            host.RunHeartbeat(off, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.IsFalse(AreaUseScriptHost.NpcOff(session, 1, Entity(1), StoredOff), "switched on");
+            Assert.IsFalse(AreaUseScriptHost.SwitchedOff(session, 1, Entity(1)), "the toggle key is not used for an NPC stored off");
+            host.RunHeartbeat(off, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.IsTrue(AreaUseScriptHost.NpcOff(session, 1, Entity(1), StoredOff), "switched off again");
+            Assert.AreEqual(0, session.QueryAllObjectFlags().Count, "the change over the data's is dropped when the data's value is back");
+            host.RunHeartbeat(on, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.IsTrue(AreaUseScriptHost.NpcOff(session, 1, Entity(2), StoredOn));
+            Assert.IsTrue(AreaUseScriptHost.SwitchedOff(session, 1, Entity(2)), "an NPC stored on keeps the toggle key");
+            host.RunHeartbeat(on, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.IsFalse(AreaUseScriptHost.NpcOff(session, 1, Entity(2), StoredOn));
+        });
+    }
+
     // ---- opt-in: the installed Crash Site ----
 
     [TestMethod, TestCategory("RealData")]
@@ -732,6 +801,46 @@ public sealed class AreaHeartbeatScriptTests
         Assert.AreEqual(1324, host.Slot(entity, ScrPoint.Dialog)!.Value.Script);
         Assert.AreEqual(AreaConversationStartStatus.Started, AreaScriptHost.LoadDialog(content, 1324, 1, session.Rules.Data).Status);
         Assert.IsNull(host.RunHeartbeat(virgil, ScrPoint.Heartbeat, session.Rules.Scripts).Dialog, "once only");
+    }
+    // ARC-SCRIPT-1360: the NPC of the first building (prototype 17156, dialog 2786, dying 2788, heartbeat 2787) stands in its map data switched off, with his body resolved, and
+    // the heartbeat switches him on once the PC's quest 1158 has started (the owner's report of 2026-11-12: the quest is accepted, the house is empty).
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_first_buildings_npc_is_stored_off_and_its_heartbeat_switches_him_on_when_quest_1158_starts()
+    {
+        if (Environment.GetEnvironmentVariable("DAT_ROOT") is not { Length: > 0 } root) { Assert.Inconclusive("DAT_ROOT is required for the opt-in heartbeat check; this is not a synthetic pass."); return; }
+        using var content = ConversationSessionFixture.Scripts(root);
+        var result = AreaLoadOperation.Execute(5, TerrainViewerArguments.Parse(["--mode", "crash-site-area", "--module", Path.Combine(root, "modules", "Arcanum.dat"),
+            "--resource", Path.Combine(root, "arcanum2.dat"), "--source-id", "map-test", "--actor-resource", Path.Combine(root, "arcanum1.dat"),
+            "--game-root", root, "--area-map", "Arcanum1-024-fixed", "--area-map-sector", "1451,1302"]), default);
+        var area = result.Area!;
+        var snapshot = area.Snapshot;
+        var npc = snapshot.Objects.Single(r => r.Type == 16 && r.PrototypeNumber == 17156);
+        Assert.AreEqual((92894L, 83341L), (npc.WorldX, npc.WorldY));
+        Assert.AreEqual(2787, AreaUseScriptHost.LoadedSlot(npc, ScrPoint.Heartbeat)!.Value.Script);
+        var flags = (uint)npc.EffectiveFields.Single(f => f.Slot == 18).Number!.Value;
+        Assert.AreEqual(0x2u, flags & 0x103u, "stored off, drawn once on");
+        Assert.AreEqual(Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, npc.Disposition);
+        Assert.IsTrue(snapshot.Visuals.Any(v => v.Key.Object == npc.Key), "its body is resolved");
+        Assert.IsTrue(area.Plan.Commands.Any(c => c.Identity == npc.Key), "the scene plan holds its body");
+
+        // The heartbeat is admitted whole by the heartbeat set.
+        var program = content.Script(2787).Program!;
+        Assert.IsTrue(ScrAdmission.Admit(program, AreaUseScriptHost.HeartbeatAdmission).IsAdmitted, "2787 is admitted: " + ScrAdmission.Admit(program, AreaUseScriptHost.HeartbeatAdmission).Refusal);
+
+        using var session = ConversationSessionFixture.Create(snapshot.RuntimeMap);
+        var host = new AreaUseScriptHost(session, snapshot.RuntimeMap, snapshot.Objects, [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null));
+        var targets = new AreaObjectTargets(snapshot.RuntimeMap, snapshot.Objects, new Dictionary<AreaObjectKey, (string, SessionOpenableBaseline)>(), null);
+        var entity = AreaUseScriptHost.EntityId(npc);
+        Assert.IsTrue(targets.Gone(session).Contains(npc.Key), "hidden while the quest is unknown");
+        var idle = host.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
+        Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, idle.Outcome, idle.Detail);
+        Assert.IsTrue(targets.Gone(session).Contains(npc.Key), "the heartbeat of an unknown quest changes nothing");
+
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetQuestState(session.Version, 1158, SessionQuestState.Accepted).Disposition);
+        var ran = host.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
+        Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+        Assert.IsFalse(targets.Gone(session).Contains(npc.Key), "on the scene once the quest is accepted");
+        Assert.IsFalse(AreaUseScriptHost.NpcOff(session, snapshot.RuntimeMap, entity, flags));
     }
 
     // ARC-SCRIPT-1359: the Crash Site's Molochean agent (heartbeat 1717): with global flag 2323 set its whole heartbeat is admitted (set day and night standpoint, get location, run to) and starts the goal 74 run.

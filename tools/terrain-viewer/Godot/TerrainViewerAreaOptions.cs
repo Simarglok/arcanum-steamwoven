@@ -39,7 +39,8 @@ public partial class TerrainViewerApp
 
     /// <summary>The values the options window shows: the host's settings as they are now.</summary>
     private AreaGameOptions CurrentGameOptions() => new(_gameSettings.Difficulty, _turnBasedSetting ? 1 : 0, _gameSettings.AutoAttack, _alwaysRunOption,
-        _audioVolumes.Effects, _audioVolumes.Voice, _audioVolumes.Music, _ruleMode, _gameSettings.Floats, _gameSettings.FloatSpeed, _gameSettings.Controls);
+        _audioVolumes.Effects, _audioVolumes.Voice, _audioVolumes.Music, _ruleMode, _gameSettings.Floats, _gameSettings.FloatSpeed,
+        EvidenceRecording, EvidenceRecording ? _evidenceTask : 0, _gameSettings.Controls);
 
     /// <summary>The options texts, read once a run (the game's files, or the project's with the reason).</summary>
     private AreaOptionsTexts OptionsTexts()
@@ -100,6 +101,9 @@ public partial class TerrainViewerApp
                 SaveLauncherRules();
                 if (_areaSession is { } ruled) ApplySessionSettings(ruled);
                 break;
+            // ARC-GPAD-1376: the controller test's evidence log and its task marker; this run only, never saved.
+            case AreaOption.EvidenceLog: refused = value is 0 or 1 ? SetEvidenceLog(value == 1) : "out of range"; break;
+            case AreaOption.TestTask: refused = SetEvidenceTask(value); break;
             // ARC-GPAD-1374: the controller scheme lines, switched at run time with no restart and saved at once; the original mouse and keyboard stay live.
             case AreaOption.PadScheme:
                 if (!Enum.IsDefined((Arcanum.Input.PadScheme)value)) { refused = "no such pad scheme"; break; }

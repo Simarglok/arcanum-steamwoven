@@ -71,6 +71,20 @@ public partial class TerrainViewerApp
         var listed = _inventoryPanel!.ViewForSelfTest!.Loot.Select(line => line.Entity).ToArray();
         Require(listed.Length == session.QueryMapInventory(mapId)!.Holders.Single(h => h.Entity == crate.Entity).Items.Count, "the window lists its current goods");
         Require(AreaEvents.LootWindowShowsContainer, "the open container holds the items' decay");
+        // ARC-RES-1410 (ledger XR16 (g)): the open lays the container's grid out again (0x5727B0 -> 0x4670A0), so the window draws the arrangement of the session's list.
+        var arrangedAtOpen = 0;
+        void RequireArranged(string when)
+        {
+            var items = session.QueryMapInventory(mapId)!.Holders.Single(h => h.Entity == crate.Entity).Items;
+            var list = items.Select(item => { var (width, height) = session.QueryItemCells(item.Entity); return new Arcanum.Simulation.Items.InventoryArrangeItem(item.Entity, item.Facts.InventoryLocation, width, height); }).ToArray();
+            // A list the original cannot lay out (an item beyond the grid) writes nothing, so there is nothing to compare.
+            if (Arcanum.Simulation.Items.InventoryArrangeRules.Arrange(list, Arcanum.Simulation.Items.InventoryGridRules.ContainerRows, Arcanum.Simulation.Items.InventoryArrangeLayout.Horizontal) is not { } placed) return;
+            var shown = _inventoryPanel!.ViewForSelfTest!.LootGrid.ToDictionary(item => item.Entity, item => item.Location);
+            Require(placed.All(p => shown.TryGetValue(p.Key, out var slot) && slot == p.Slot), $"{when}: the window draws the arranged grid ({string.Join(" ", placed.Select(p => $"{p.Key}@{p.Slot}"))} vs {string.Join(" ", shown.Select(p => $"{p.Key}@{p.Value}"))})");
+            arrangedAtOpen += placed.Count;
+        }
+        RequireArranged("first open");
+        Require(arrangedAtOpen > 0, "the first open had a list the original can lay out");
         var current = session.QueryMapInventory(mapId)!.Holders.Single(h => h.Entity == crate.Entity).Items;
         var takeable = listed.FirstOrDefault(entity => current.Any(item => item.Entity == entity && item.Facts.Kind.Type is not SessionItemType.Gold
             and not SessionItemType.Ammo and not SessionItemType.Key and not SessionItemType.KeyRing && !item.Facts.Worn && item.Facts.ScriptPoints.Count == 0));
@@ -96,6 +110,7 @@ public partial class TerrainViewerApp
         Require(!InventoryOpen && !AreaEvents.LootWindowShowsContainer, "closed, the window holds nothing");
         OpenContainer(crate);
         Require(_lastContainerOpen is { Outcome: AreaContainerOpenOutcome.Opened, Generation: null }, "a second open generates nothing");
+        RequireArranged("second open after the takes");
         EndInventory();
 
         string lockedResult = "NONE";
@@ -108,7 +123,7 @@ public partial class TerrainViewerApp
         GD.Print("ARC-WORLD-101 native-smoke container PASS " + System.Text.Json.JsonSerializer.Serialize(new
         {
             Map = _readyMapName, Containers = containers.Length, Crate = crate.Entity, Before = before, done!.Outcome, done.Removed, done.Coins, Created = done.Created.Count,
-            done.Refused, done.Skipped, Listed = listed.Length, Taken = takeable, Gold = session.QueryGold() - gold, Opening = open.Opening, Locked = lockedResult,
+            done.Refused, done.Skipped, Listed = listed.Length, Arranged = arrangedAtOpen, Taken = takeable, Gold = session.QueryGold() - gold, Opening = open.Opening, Locked = lockedResult,
             UseScript = open.UseScript is { } ran ? $"{ran.Outcome}/{ran.Run?.Outcome}" : "none",
             Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)",
         }));

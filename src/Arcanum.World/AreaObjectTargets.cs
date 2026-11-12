@@ -33,13 +33,14 @@ public sealed record AreaObjectAttackTarget(string Entity, AreaObjectRecord Row,
 /// </summary>
 public sealed class AreaObjectTargets
 {
-    private const int TypeFlagsSlot = 36, KeySlot = 38;
+    private const int TypeFlagsSlot = 36, KeySlot = 38, ObjectFlagsSlot = 18;
     private readonly SessionMapId _map;
     private readonly IReadOnlyDictionary<AreaObjectKey, (string Entity, SessionOpenableBaseline Baseline)> _portals;
     private readonly AreaInventoryMap? _inventory;
     private readonly Dictionary<AreaObjectKey, (AreaObjectRecord Row, string Entity, DamageableObjectKind Kind)> _objects = [];
     // ARC-WORLD-114: the NPC rows by key, with their session entity, which a script can switch off.
-    private readonly Dictionary<AreaObjectKey, string> _npcs = [];
+    // ARC-SCRIPT-1360: with the map data's object flags, since a toggle state switches an NPC the data stores off on.
+    private readonly Dictionary<AreaObjectKey, (string Entity, long Flags)> _npcs = [];
 
     /// <summary>The targets of a shown map from its snapshot, its drawn portals and its inventory map (null without a seed).</summary>
     public static AreaObjectTargets From(AreaSnapshot snapshot, AreaPortals portals, AreaInventoryMap? inventory)
@@ -62,7 +63,7 @@ public sealed class AreaObjectTargets
         if (runtimeMap < 1) return;
         foreach (var row in rows)
         {
-            if (row.Type == CombatFieldReader.NpcType && row.WorldX is not null && row.WorldY is not null) _npcs.TryAdd(row.Key, AreaUseScriptHost.EntityId(row));
+            if (row.Type == CombatFieldReader.NpcType && row.WorldX is not null && row.WorldY is not null) _npcs.TryAdd(row.Key, (AreaUseScriptHost.EntityId(row), row.EffectiveFields.FirstOrDefault(f => f.Slot == ObjectFlagsSlot) is { Presence: AreaPresence.Value, Number: { } flags } ? flags : 0));
             DamageableObjectKind? kind = row.Type switch
             {
                 CombatFieldReader.PortalType => DamageableObjectKind.Portal,
@@ -146,8 +147,8 @@ public sealed class AreaObjectTargets
         if (_gone is { } known && known.Version == version) return known.Keys;
         var keys = _objects.Where(pair => session.QueryObjectCondition(_map, pair.Value.Entity, pair.Value.Kind) is SessionObjectCondition.Destroyed
             or SessionObjectCondition.Off).Select(pair => pair.Key)
-            .Concat(_npcs.Where(pair => AreaUseScriptHost.SwitchedOff(session, _map.RuntimeMap, pair.Value)
-                || AreaUseScriptHost.Destroyed(session, _map.RuntimeMap, pair.Value)).Select(pair => pair.Key)).ToHashSet();
+            .Concat(_npcs.Where(pair => AreaUseScriptHost.NpcOff(session, _map.RuntimeMap, pair.Value.Entity, pair.Value.Flags)
+                || AreaUseScriptHost.Destroyed(session, _map.RuntimeMap, pair.Value.Entity)).Select(pair => pair.Key)).ToHashSet();
         // An unchanged set keeps its reference, so overlays cached on it stay valid across unrelated revisions.
         IReadOnlySet<AreaObjectKey> result = _gone is { } previous && previous.Keys.SetEquals(keys) ? previous.Keys : keys;
         _gone = (version, result);

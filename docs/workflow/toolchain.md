@@ -213,7 +213,7 @@ history held about 500 runs of such copies of one template).
   given, and says so (`SMOKE hero human-male (auto): ...`); with
   `--main-menu` (no hero) it is refused. A menu stage (`menu`, `scene`, `options`, `bar`, `death`, `perf-menu`) needs no
   `--main-menu`: it gets its own menu process. The stages the viewer runs only without `map` (`barter`, `menu`, `scene`, `options`, `plants`, `bar`,
-  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-tile`, `tile-ghost`, `container-click`, `fire-order`, `indoor-fade`, `npc-shot`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `please-move`, `placement-census`, `spell-end`, `hold-hero`, `spell-effects`, `movement`, `spirit-talk`, `sleep`, `bed`, `created-scenery`, `worn-light`, `critter-light`, `eye-light`, `summon-flash`, `summon-wall`, `summon-undead`, `tech-craft`, `tech-products`, `item-aim`, `disarm`, `perf`, `perf-menu`) get a run of their
+  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-tile`, `npc-wander`, `tile-ghost`, `container-click`, `fire-order`, `indoor-fade`, `npc-shot`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `please-move`, `placement-census`, `spell-end`, `hold-hero`, `spell-effects`, `movement`, `spirit-talk`, `sleep`, `bed`, `created-scenery`, `worn-light`, `critter-light`, `eye-light`, `summon-flash`, `summon-wall`, `summon-undead`, `tech-craft`, `tech-products`, `item-aim`, `disarm`, `perf`, `perf-menu`) get a run of their
   own (step `stages-alone`, or `map-alone`) when `map` is in the list too. `tech-craft` (ARC-DEV-362, technology audit slice T-a) needs the bullets the map's bodies hold, so it runs on the cave: `./arcanum smoke map "crash site cave" --stages tech-craft` (on a map with no bullets of the crafted gun's type it fails with that message; its steps are the helpers of `TerrainViewerTechCraftHarness.cs`). `bed` (ARC-WORLD-1162) runs on the cave (`./arcanum smoke map "crash site cave" --stages bed --hero human-male`): the cave's beds counted by script, a bed with no script refuses (message 8), an occupied one (10), the scripted bed seats the hero and a one-hour rest in it heals twice the ground's, the close empties the bed. `tech-products` (ARC-MAGIC-051, technology audit slice T-s) is `tech-craft`'s sibling on the same cave (`./arcanum smoke map "crash site cave" --stages tech-products`): it buys Therapeutics degrees 1 and 2 and Chemistry degree 1, assembles their first records, eats the two stat potions (the hero's effect list grows, record 158 adds +2 strength), uses the poison on a living NPC through the item cursor, reads the module's found schematic documents of those two disciplines through the inventory's Read button (each registers and is destroyed, a second copy of a known one is kept) and assembles the first found record the hero's expertise reaches from the window's Found tab, buys intelligence and Electric degrees up to 6, assembles the power cells (Chemistry degree 2), the powered shield (Electric degree 3: worn, its 15 s deferred call takes one cell and schedules the next) and the maintained armour (degree 6, record 168: a cell a tick), has the cave NPC assemble a learned record from its own list into its own list through the window queued the way the dialog's `su` queues it (the stage gives that NPC a Herbology degree and intelligence 8: the cave's NPCs have no degree, so this shows the window and session path for a crafter, not a real crafter), throws an assembled Explosives degree-1 grenade (record 219) at the cave NPC (a flight that lands off the tile is aimed again, up to three grenades; the item event starts the run and a cave NPC is damaged or resists), and F7/F8 keep effects, items, worn items, cells and the NPC's list (same harness helpers; it needs a living NPC in the cave). `item-aim` (ARC-DEV-365, technology audit slice T-g) opens the item cursor with a script trap device from the use icon and presses a tile (goal 41) and an NPC (goal 39); it needs a hero and a map with a living NPC. `disarm` (ARC-SKILLS-1156, E6-a second half) arms the hotkey bar's Disarm traps entry (skill cursor, interface mode 2), presses a container the stage makes trapped (the native script 30001 written as a map change) with the trap unknown (nothing rolled) and known (a fated press removes it); it needs a hero and a map with a container drawn in its window (NONE without one, or when the content's script 30001 is no trap script). A run whose stages include `debug-travel`, `follower-far` or `inv-carry`
   starts the viewer with `--debug-mode` (the stage needs the debug mode, ARC-DEV-050; ARC-WORLD-120).
 - **Stage configurations and grouping (ARC-DEV-391).** A viewer process fixes its map, start sector, hero, main menu and
@@ -301,7 +301,7 @@ history held about 500 runs of such copies of one template).
   that fixes the failure.
 - **Targets of the combat stages (ARC-DEV-089).** The stages that fight an NPC (`attack` in `map`, `cast`, `turn-based`, `ai`) do not take the
   map's weakest NPC blindly: they take the first one (weakest first, at most 24 tried) the hero can stand next to and, with the hero placed there,
-  see (`AreaSmokeFightableStartAsync`: a roof-covered or walled-in NPC is skipped), and print `NO-TARGET` when none is, which the battery tolerates (so a regression that hides every target shows only in a `--stages` run, which reports the stage as not run; a limit). A stage
+  see (`AreaSmokeFightableStartAsync`: a roof-covered or walled-in NPC is skipped; a stage that also places the hero next to the NPC, `turn-based`, needs a pickable pixel from that adjacent cell too, ARC-UI-1425), and print `NO-TARGET` when none is, which the battery tolerates (so a regression that hides every target shows only in a `--stages` run, which reports the stage as not run; a limit). A stage
   whose content is the Crash Site's (`wreck`, `altar`: Virgil's home and a script tile) prints `NONE` in any other window, not a failure; asked for with
   `--stages` on such a window the runner reports it as not run. `ai-follower` takes the first speaker of the map that can heal with the skill and fight (not undead, mechanical, invulnerable or nigh-invulnerable: the original's heal skill check and danger setter refuse those, ARC-DEV-129) and prints `NO-FOLLOWER` when there is none (the unlit mine `bessietoonesmine-fixed` has only an undead, invulnerable speaker), which a `--stages` run reports as not run. The AI stages put the hero's life back at their end, a dead hero resurrected, so a stage after them never starts with a dead hero. The viewer's `HoverPointAsync` scans only the screen rectangle of the body (its T0 command and the moving command drawn for it).
 - **The Crash Site smoke** is the viewer's pinned Crash Site exterior regression (`--mode area` without
@@ -477,6 +477,12 @@ changed source is built again by the next start (about 30 s the first time, in t
 Python helper because it needs nothing installed (system Python has no `rumps`/PyObjC), has no interpreter running for the
 display and reads the queue's own files, so it works from whichever checkout started it and when that checkout is gone.
 
+- **Task code.** Every run row (the menu's and `./arcanum queue`'s) shows the task code `ARC-<TYPE>-<issue>` it belongs to: the one in its
+  label, else the one in the branch its checkout has now, read from the checkout's `HEAD` file (a worktree's `.git` file names its git
+  folder), so a run of any wrapper version shows it and nothing is added to the ticket; a branch with no code (`claude/project-thread-...`)
+  shows none.
+- **Layout.** What stays the same is on top (Pause, `Godot runs at once`, `Load guard`, Quit); below it what changes: the counts, the
+  Mac's load and RAM, then the running and the waiting runs.
 - **Shows.** The icon says what the queue holds (`tray`, `tray.full` with `running·waiting`, `pause.circle` while paused). The menu lists the
   running runs, then the waiting ones in queue order: number, kind and lane, label, how long it has run or waited, the checkout
   (the tooltip has the full command and pid). It reads the tickets the way the queue does (the flock the run holds plus a live
@@ -866,6 +872,17 @@ four locked packages (numpy, scipy, Pillow and the GPLv2+ potracer, wheel hashes
 
 ```sh
 python3 -B tools/hd_font/hd_font.py self-test    # task check: synthetic fonts drawn by the test, no game file; a failed install is a failed check
+```
+
+## Controller test evidence summariser (ARC-GPAD-1376)
+
+[`tools/input/evidence_summary.py`](../../tools/input/evidence_summary.py): standard-library Python that reads the opt-in evidence files the
+viewer writes (format and recording: [controller schemes, evidence log](../input/controller-schemes.md#evidence-log-arc-gpad-1376-merged)).
+It runs no Godot and no `dotnet`, so it does not use the launch queue; it reads only the files named on the command line.
+
+```sh
+python3 -B tools/input/evidence_summary.py --self-test    # task check: a synthetic session, no game file
+python3 -B tools/input/evidence_summary.py evidence-*.jsonl [--json]
 ```
 
 ## Function census

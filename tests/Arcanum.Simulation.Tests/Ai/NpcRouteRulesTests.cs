@@ -1,4 +1,5 @@
 using Arcanum.Simulation.Ai;
+using Arcanum.Simulation.Goals;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.Simulation.Tests.Ai;
@@ -163,6 +164,29 @@ public sealed class NpcRouteRulesTests
         Assert.AreEqual(NpcRouteOutcome.AtStandpoint, dark.Outcome);
         Assert.IsTrue(dark.Answer, "WANDERS_IN_DARK also starts a wander and answers 1");
         Assert.AreEqual(NpcRouteOutcome.Relocate, NpcRouteRules.ForcedStandpoint(Facts(Noon, NpcRouteFlags.Wanders, at: new(55, 60))).Outcome);
+        // ARC-AI-1313 (VAG2): the near branch names the wander goal the host starts, tethered to the standpoint.
+        Assert.AreEqual(GoalType.Wander, wander.WanderGoal);
+        Assert.AreEqual(GoalType.WanderSeekDarkness, dark.WanderGoal);
+        Assert.AreEqual(new RouteLocation(50, 60), wander.Standpoint);
+        Assert.IsNull(near.WanderGoal, "a plain NPC starts no wander");
+    }
+
+    [TestMethod]
+    public void The_wander_goal_follows_the_flags_in_the_originals_order_and_a_sleeper_starts_none()
+    {
+        Assert.AreEqual(GoalType.Wander, NpcRouteRules.WanderGoalOf(NpcRouteFlags.Wanders));
+        Assert.AreEqual(GoalType.WanderSeekDarkness, NpcRouteRules.WanderGoalOf(NpcRouteFlags.WandersInDark));
+        Assert.AreEqual(GoalType.Wander, NpcRouteRules.WanderGoalOf(NpcRouteFlags.Wanders | NpcRouteFlags.WandersInDark), "0x1000 is tested first");
+        Assert.IsNull(NpcRouteRules.WanderGoalOf(NpcRouteFlags.WaypointsDay));
+        // The forced and the unforced pass agree: a wanderer asleep at its standpoint starts nothing, a waker at the standpoint of either hour starts its wander.
+        var sleeper = NpcRouteRules.ForcedStandpoint(Facts(Noon, NpcRouteFlags.Wanders, at: new(54, 56), sleeping: true));
+        Assert.IsNull(sleeper.WanderGoal);
+        Assert.IsNull(NpcRouteRules.UnforcedStandpoint(Facts(Noon, NpcRouteFlags.Wanders, at: new(54, 56), sleeping: true), () => true).WanderGoal);
+        var night = NpcRouteRules.UnforcedStandpoint(Facts(Midnight, NpcRouteFlags.WandersInDark, at: new(72, 82)), () => true);
+        Assert.AreEqual(GoalType.WanderSeekDarkness, night.WanderGoal);
+        Assert.AreEqual(new RouteLocation(70, 80), night.Standpoint, "the night standpoint is the tether at night");
+        var far = NpcRouteRules.UnforcedStandpoint(Facts(Noon, NpcRouteFlags.Wanders, at: new(80, 90)), () => true);
+        Assert.IsNull(far.WanderGoal, "a wanderer outside its radius walks to the standpoint first");
     }
 
     [TestMethod]

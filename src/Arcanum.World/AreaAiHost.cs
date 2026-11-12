@@ -52,6 +52,8 @@ public sealed record AreaAiScene
     /// <summary>ARC-DEV-137 (MIG13 S6): the ART of an NPC's animation (frames and rate) for the critter-state goals' timing; null (the provider, or its answer) when the header does not read or
     /// the viewer cannot read that animation (the stun's 23 is not read yet: the stun then ends at once, GT26).</summary>
     public Func<string, int, AiAnimationClip?>? AnimationClip { get; init; }
+    /// <summary>ARC-AI-1313 (0x4D9240 at the dark wander's node 0x425D60): the light level 0..255 at a world cell, as the viewer's lighting answers it for a light-aware check; null: full light everywhere, so the dark wander accepts every tile.</summary>
+    public Func<CellCoord, int>? CellLight { get; init; }
     /// <summary>ARC-WORLD-1162 (SWB17–SWB21): the beds of the shown map and who lies in them, shared with the hero's rest; null: the map has none, so an NPC at its standpoint finds no bed.</summary>
     public AreaAiBeds? Beds { get; init; }
     /// <summary>The hero's world cell now, or null without a hero on this map.</summary>
@@ -1589,6 +1591,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     public AiPath? PlanPath(string id, AiPathRequest request) => PlanPath(id, request, touch: true);
 
+    /// <summary>ARC-AI-1313: the light level at a world cell for the dark wander (<see cref="AreaAiScene.CellLight"/>; full light without one).</summary>
+    public int CellLight(CellCoord cell) => _scene.CellLight?.Invoke(cell) ?? AttackRules.MaxLightLevel;
+
     // A facts question (AttackFacts) plans without touching: a touch can load a sector and run its fold, which a question must not do.
     private AiPath? PlanPath(string id, AiPathRequest request, bool touch)
     {
@@ -2885,6 +2890,18 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         var run = new GoalRun(mover, default, new GoalFrame(GoalType.PleaseMove, awayFrom));
         return Started(mover, RunOf(mover), new AiPerformResult(AiPerformKind.PleaseMove, run) { Started = true });
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-1135 (CF4): the dialog <c>so</c> action's goal start (0x436960 right after the flag, ledger OL8/CF4): the spread-out goal (69) on the follower <paramref name="npc"/> toward the hero, through the
+    /// executor's starter (gate with cost 0) and the table's own start (level 3, a duplicate refused). The answer of the starter is never seen by the action. False: not a follower this host runs, one the hero
+    /// does not lead (no leader: the original's null-leader case is not followed), or a start the gate or the table refused (the text is in the NPC's trace).
+    /// </summary>
+    public bool StartSpreadOut(string npc)
+    {
+        ArgumentNullException.ThrowIfNull(npc);
+        if (!_followers.ContainsKey(npc) || !_session.QueryCompanion(npc).LedByPc) return false;
+        return Started(npc, RunOf(npc), AiExecutorRules.StartSpreadOut(this, npc, Pc));
     }
 
     /// <summary>

@@ -242,12 +242,11 @@ The Godot-free parts of §0 live in `src/Arcanum.Input` and are tested in `tests
 The viewer hosts the core (`tools/terrain-viewer/Godot/TerrainViewerControllers.cs`, the Godot-free `ControllerFoundation` and
 `PromptStrip` in `src/Arcanum.Input`):
 
-- **Scheme selector.** Three project lines at the end of the Game page of the Options window, in the main menu and in play, the
-  pattern of the removed HD lines: `Pad scheme` (Off, A Direct, B Pointer), `Touch` (Off, C Touch+pad) and `Prompt style` (Auto, Xbox,
+- **Scheme selector.** Three project lines at the end of the **Video** page of the Options window (the Game page's eight slots are full with Rules and the
+  evidence log's two lines), in the main menu and in play, the pattern of the removed HD lines: `Pad scheme` (Off, A Direct, B Pointer), `Touch` (Off, C Touch+pad) and `Prompt style` (Auto, Xbox,
   PlayStation, Nintendo, Steam Deck). One `AreaOption` each (`AreaGameOptions.cs`), saved with the game settings as the lines
   `pad scheme`, `touch scheme` and `prompt style` of the one settings file (`ViewerSettingsConfig`; a missing or unknown word is that
-  line's default, Off, Off, Auto), applied at once with no restart; the original mouse and keyboard are not a value. The Game page now
-  holds all eight slots of the original's art.
+  line's default, Off, Off, Auto), applied at once with no restart; the original mouse and keyboard are not a value. The Video page now holds five.
 - **Device in hand.** Every input event of any pad (its device id, never assumed 0), the mouse, the keyboard and the touch screen
   goes to the `ActiveDeviceTracker` from `_Input` (`ObserveControllerInput`); `_Process` applies a change after the 250 ms
   hysteresis. The foundation holds no window or focus state, so a change of device or of a line resets no open window (checked in the
@@ -264,6 +263,36 @@ The viewer hosts the core (`tools/terrain-viewer/Godot/TerrainViewerControllers.
   the rest of the foundation: hold/toggle, pause rules and stick settings ([#1375](https://github.com/Simarglok/arcanum-steamwoven/issues/1375)),
   the evidence log ([#1376](https://github.com/Simarglok/arcanum-steamwoven/issues/1376)). The strip on a real Deck and with a real pad
   of each family is checked by a person (human gate of #1374).
+  The evidence log's scheme and device fields follow the foundation (`TerrainViewerEvidence.cs`): the device in hand, and its scheme (a pad
+  plays by the Pad line, touch by the Touch line, Off on either and the mouse and keyboard are `original`).
+
+## Evidence log (ARC-GPAD-1376, merged)
+
+The metrics source of the human test (§0.8, §5). Off at every start and never saved; the owner turns it on for a test session
+in the game's Options window (Game page, **Evidence Log** line) and sets the **Test Task** line (None, Task 1 to 8 of §5) before each
+task, so the log carries the task's start and end. While on, the viewer writes one file per session, `evidence-yyyyMMdd-HHmmss.jsonl`
+(UTC in the name only), under `user://evidence/` of the device (the isolated folder in an automated run, `EVIDENCE_LOG_TEST_DIR` for
+tests). Nothing is sent anywhere; the owner copies the file by hand (on the ROG Xbox Ally X and the Mac the folder is the game's
+data folder, shown at start as `user=` in the run log).
+
+- **Format** (`src/Arcanum.Input/EvidenceLog.cs`): a header line `{"format":"arcanum-evidence-v1"}`, then one JSON object per line
+  with the keys `t` (milliseconds since the session start; no date or clock time), `k` kind (session-start, session-end, task-start,
+  task-end, command, pause-on, pause-off), `c` semantic command (a closed list: walk, examine, attack, open-window, quick-save and
+  so on, `none` for other kinds), `s` scheme (original, direct, pointer, touch-pad), `d` device (keyboard-mouse, pad, touch), `o`
+  outcome (ok, cancelled, refused, wrong-target) and `n` task number (0 to 99). Every value is a token of a closed set or a number, so
+  no path, name, item, save or text can be written (a test formats every combination and checks the characters); the reader refuses a
+  line with another key or token. A session is bounded to 100 000 lines; a full or failing disk stops the session instead of
+  throwing into the game.
+- **Recording** (`EvidenceRecorder`): `RecordEvidence(command, outcome)` in the viewer is the one call a control layer makes. Wired
+  today: window opens (refused ones as `refused`) and closes through the interface stack, target-mode opens, quick save and quick
+  load; the command is logged when it is issued, so a save or load the game then refuses still reads `ok`, and a window a script opens (a dialog, sleep) is logged like one the player opened, so the input count is an upper bound until the scheme slices record the player's own commands. The scheme and device fields follow the controller foundation ([#1374](https://github.com/Simarglok/arcanum-steamwoven/issues/1374)): the schemes' own slices call `RecordEvidence`
+  for their commands, cancels (`cancelled`) and wrong-target corrections (`wrong-target`), and the pause rules
+  ([#1375](https://github.com/Simarglok/arcanum-steamwoven/issues/1375)) write `pause-on` and `pause-off`.
+- **Summariser** (`tools/input/evidence_summary.py`, `--self-test` on a synthetic session): `python3 -B tools/input/evidence_summary.py FILE... [--json]`
+  prints, per file and per task, the task time, inputs, wrong targets, cancels, refused actions and pauses, then the session totals. A
+  line that does not match the format is counted as rejected and never echoed.
+
+Still open in the foundation: hold/toggle, pause rules and stick settings ([#1375](https://github.com/Simarglok/arcanum-steamwoven/issues/1375)).
 
 ## 5. Test protocol (human test)
 

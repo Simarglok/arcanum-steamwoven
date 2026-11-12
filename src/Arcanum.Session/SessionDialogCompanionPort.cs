@@ -8,6 +8,8 @@ namespace Arcanum.Session;
 /// (<see cref="GameSessionOwner.LeaveParty"/> with <c>Force</c>, the source's flag 1) and spread-out flag (<see cref="GameSessionOwner.SetSpreadOut"/>). Waiting while already waiting, leaving
 /// while not in the party and a flag already in the asked state change nothing and are Applied, as in the source. Waiting while not in the party is Rejected: the original sets the
 /// wait flag on an NPC with no leader, a state the session cannot hold. Every other refusal of the session (a version change, a full budget, no room for the wait timer) is Rejected and fails the conversation.
+/// ARC-SCRIPT-1135 (CF4): an <c>SO</c> that newly sets the flag then starts the spread-out goal (69) through <paramref name="spreadOutStarted"/>, the starter 0x436960 the original calls right after
+/// the bit (the host's AI table; without it nothing starts, as before); a flag already set starts nothing, and the starter's answer is never seen by the action.
 /// A participant the host cannot map or a PC other than <paramref name="playerCharacter"/> throws on a query and is Rejected for an action. The session is read at each call; the port must be
 /// rebuilt when the host replaces the owner.
 /// </summary>
@@ -15,11 +17,13 @@ namespace Arcanum.Session;
 /// <param name="playerCharacter">The one PC the port answers for.</param>
 /// <param name="entityOf">The session entity of a dialog NPC, or null for one the host does not map.</param>
 /// <param name="waitFacts">The wait timer facts of an NPC (its wait index and the leader's side), or null for one with none: then no timer is scheduled.</param>
+/// <param name="spreadOutStarted">Called with the entity after an <c>SO</c> newly set its flag (the host starts goal 69); null: nothing starts.</param>
 public sealed class SessionDialogCompanionPort(
     GameSessionOwner session,
     DialogParticipantId playerCharacter,
     Func<DialogParticipantId, string?> entityOf,
-    Func<DialogParticipantId, PartyWaitFacts?> waitFacts) : IDialogCompanionPort
+    Func<DialogParticipantId, PartyWaitFacts?> waitFacts,
+    Action<string>? spreadOutStarted = null) : IDialogCompanionPort
 {
     private readonly GameSessionOwner _session = session ?? throw new ArgumentNullException(nameof(session));
     private readonly Func<DialogParticipantId, string?> _entityOf = entityOf ?? throw new ArgumentNullException(nameof(entityOf));
@@ -46,6 +50,7 @@ public sealed class SessionDialogCompanionPort(
             _ => throw new ArgumentOutOfRangeException(nameof(command)),
         };
         LastResult = result;
+        if (command.Action == DialogCompanionAction.SpreadOut && result.Disposition == GameSessionDisposition.Changed) spreadOutStarted?.Invoke(entity);
         return result.Disposition == GameSessionDisposition.Rejected ? DialogCommandResult.Rejected : DialogCommandResult.Applied;
     }
 

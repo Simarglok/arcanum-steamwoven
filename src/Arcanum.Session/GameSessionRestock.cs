@@ -443,6 +443,7 @@ public sealed partial class GameSessionOwner
         if (SessionMadeItem.Number(entity) is not { } number) return;
         _durability.Destroyed.Remove(entity);
         _inventory.Taken.Remove(entity);
+        _inventory.ForgetSlot(entity);
         _inventory.LastDiscardedMade = Math.Max(_inventory.LastDiscardedMade, number);
     }
 }
