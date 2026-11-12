@@ -1,6 +1,7 @@
 # Trait / Polymorph remainder (MA-8): options for the open limits
 
 Status: **Research with options and a recommendation**, work item ARC-RES-145 (2026-11-12). Nothing is implemented here; each recommended fix is a
+Owner answers of 2026-11-12 are in section 6; the two reads they asked for (the palette-absent draw, the GrandFix files) are in PR5 and section 5.
 later task. Read on 2026-11-12 in the 1.0.7.4 executable (`VERSION:1.0.7.4`) from the Ghidra export (F1, one reader; no emulator, no patching) and
 in the player's installed archives (`arcanum1.dat` to `arcanum3.dat`, the module archive and its patch). No original bytes, decompiled text, art or
 GrandFix files are in git; addresses and behaviour are prose.
@@ -24,7 +25,7 @@ The six limits the MA-8 report named are not six independent gaps. Two findings 
 | --- | --- | --- | --- | --- | --- |
 | L1 | Low attack and throw not loaded | The low attack of a monster is the attack (the original's repair), except the fire elemental's own file; the throw has no consumer (no weapon can be worn in a monster body) | Load the fire elemental's low attack; leave the throw out | XS | no |
 | L2 | Weapon part of the body's art id always 0 | The original keeps 0 out of combat mode and 1 in it; with 0 **no species has an attack file**, so the attack plays the stand pose today | Weapon part follows combat mode (1 in it) and the original's repair for walk and stand | S | no |
-| L3 | Air elemental (28) has no ART, the hero keeps its own body | Missing weapon-0 stand and run are repaired by the original; palette 1 is absent from the three elemental ART sets (air, fire, water); fire needs a higher resource cap | Apply the repair, take palette 0 when the requested palette is absent, raise the monster cap; read the palette-absent path of the original first | S–M | one question (palette) |
+| L3 | Air elemental (28) has no ART, the hero keeps its own body | Missing weapon-0 stand and run are repaired by the original; palette 1 is absent from the three elemental ART sets (air, fire, water); fire needs a higher resource cap | Apply the repair, take palette 0 when the requested palette is absent (the original does, PR5), raise the monster cap | S–M | no (D3 answered) |
 | L4 | Redraw of a map NPC whose data holds the perma-polymorph | No installed NPC prototype holds the bit (0 of 510); map instances were not scanned | Census of the map instances first; build only if one exists | XS, then S | yes: build or not |
 | L5 | Body read error remembered for the run | Same rule as the human bodies; after L2 and L3 no installed spell leaves a body that cannot read | Forget the failure at the next Trait apply | XS | no |
 | L6 | Distorted provenance text (cosmetic) | `Provenance` decodes a monster art id with the human fields | Name the monster body in it | XS | no |
@@ -40,7 +41,7 @@ the Trait component, so it offers no fix to adopt and no data to compare for the
 | PR2 | Weapon part and shield part of any critter art (0x465020 → 0x504100, 0x504180, 0x4B3D50) | The refresh asks the combat-mode test (0x4B3D50: type PC or NPC and the combat bit of the critter flags). Out of combat mode the weapon part is 0 and the shield 0. In it the weapon part is the use-art subtype of the item in slot 1004 (1 when the slot is empty, 1 again after a logged error when the item's art has no subtype), the shield 1 for an armour item in slot 1005. The two setters accept art classes **2 (critter), 12 (monster) and 13 (unique NPC)**, so a monster body gets its weapon part by the same refresh. The function returns the new art id (it does not store it; its callers do). The refresh runs after every wield and unwield of slots 1004 to 1006 (0x4677B0, 0x467CB0) and in the animation and art refresh 0x4B3F80 (called, not read line by line: F0 for its other branches). | Original |
 | PR3 | Monster art names (N1, MA2, MA3) | `art/monster/<name>/<name><armour><X or S><weapon letter><animation letter>.art`; an armour of 0 is `uw`; the weapon letter is `a` for part 0, `b` for part 1; the animation letter is `a` plus the animation (stand `a`, walk `b`, run `g`, fall `h`, get up `i`, vault `n`, throw `o`, attack `u`, low attack `v`, `x` the 23rd). Animations 6 to 19 clear the weapon, the walk clears the shield, animation 23 sets weapon 1. | Original (already in the area loader) |
 | PR4 | Missing-art repair (MA1, 0x41DA40) on a monster | The table at 0x5A106C has 19 entries, each one bit of the species' mask (`art/missing.dat`, current in the installed data; the weapon is compared only for animation 21), set when the entry's file does not exist. **Walk with weapon 1** is missing for 30 of the 32 species, so a walk in combat mode becomes the walk with weapon 0; the lizard man (12) and the phantom knight (13) have their own weapon-1 walk (`bb`) and keep it. **Run** missing becomes the walk. **Stand with weapon 0** missing becomes the stand with weapon 1. **Low attack (21) with weapon 1** missing becomes the attack (20). Further entries send stealth walk (3) to the walk, 23 to the stand and 17, 18, 19 and 24 to the fall (7). No entry covers the throw (14). | Original |
-| PR5 | ART loader palette test (0x51B710) | When a frame set is loaded for one palette and the file's presence word for that palette is 0, the loader answers error 0x10 and loads nothing (0x10 is also its answer to an open, read or header failure, so a caller cannot tell the cases apart). The test of a cached art (0x502E00) answers 0x10 when the palette's frames are not loaded. What the draw does with 0x10 for a monster (the base palette, or the bad-art file, MA5) is **not read**: the callers 0x5006E0, 0x51B170, 0x43F090, 0x43F130 and the art-id search 0x41E200 (which for a monster walks the palettes upward from the next one, then the next species) are open. | Open (F0): first step of the slice for L3 |
+| PR5 | Frame lookup of a palette the art does not hold (0x502E50, the blit 0x5059F0; the loader 0x51B710, the test 0x502E00) | The art cache loads every palette the file holds when it first caches an art (0x51B170); a load of one palette whose presence word is 0 answers error 0x10 (0x10 is also the answer to an open, read or header failure). **The pixel lookup and the blit both test the palette's table: when it is absent they read palette 0's table instead.** So an art id that asks for a palette the file lacks is drawn with palette 0, no placeholder. The art-id search 0x41E200 (for a monster it tries the next palette, then the next species) is an iterator, not a draw fallback, and is not part of this. | Original (F1, answers D3) |
 
 ## 3. What the installed data holds
 
@@ -72,7 +73,10 @@ instances (the objects of the maps) were not scanned; a GrandFix install replace
 - **Finding.** The profile has a low-attack slot used when the hero hits a short, shrunk, falling or lying target, and a throw slot used for a returning weapon. The monster loader never fills them. For
   the low attack the original's own answer is the attack (PR4) for 31 species, so an empty slot **is** correct there; only the fire elemental has a file of its own. The throw is used by a boomerang, and the
   equipment rules refuse to wear any item in a monster body, so the slot has no consumer.
-- **A (recommended).** Load the fire elemental's low attack (weapon 1) in the monster read; leave the throw out. XS, a unit test on the name and the real-data run.
+- **What the throw is (owner question D2).** Animation 14 is the pose of a thrown weapon that comes back: the hero plays it when it attacks with a weapon carrying the returning-weapon flag (a boomerang);
+  `WeaponArtRules.Animation` (0x42B9C0) picks it from that flag, and the human body loads its ART (`HumanThrowSelector`) for it. It is not the grenade or bottle throw, and not a spell. In a monster body the hero cannot wield
+  anything (Trait takes every worn item off and the equipment rules refuse to wear one), so it can never play the throw; the question is only whether to load an ART nothing will draw.
+- **A (recommended, owner D2: asked for the explanation).** Load the fire elemental's low attack (weapon 1) in the monster read; leave the throw out. XS, a unit test on the name and the real-data run.
 - **B.** Also load the throw for the five species that have it. Nothing draws it; adds decode time and memory for no visible result.
 - **C.** Emulate the original's bad-art draw for a throw of the other 27 species. Not worth it: it cannot happen without a wielded weapon.
 
@@ -90,13 +94,12 @@ instances (the objects of the maps) were not scanned; a GrandFix install replace
 ### L3. Air elemental (and fire and water)
 
 - **Finding.** Three separate causes: (a) the air elemental lacks the weapon-0 stand and the run, which the original's repair covers (PR4); (b) the elemental body spells ask for palette 1 and the ARTs hold palette 0 only
-  (PR5 says the loader of the original treats the absent palette as an error; what the draw then shows is not read); (c) the fire elemental's frames pass the loader's caps.
-- **A (recommended).** In this order: read the draw's reaction to 0x10 (PR5) to settle the palette (a day of reading, F1); then apply the repair in the monster loader (the stand with weapon 1, the run replaced by the walk, with the
-  gait stride of the walk), take palette 0 when the requested palette is absent **if** the reading shows the original draws the base palette, and raise the monster read's caps after measuring the fire elemental. S–M.
-- **B.** Palette fallback to 0 without the reading (the decoder's present-slot policy, the same one the whole-map loader uses for NPC art). Same result if the original falls back; a divergence the owner would
-  see if it draws the bad-art file. Saves the reading, costs the certainty.
+  (PR5: the original draws palette 0 for a palette the file lacks); (c) the fire elemental's frames pass the loader's caps.
+- **A (recommended, owner D3).** Apply the repair in the monster loader (the stand with weapon 1, the run replaced by the walk with the gait stride of the walk), take palette 0 when the requested palette is absent (PR5: what the
+  original draws, and what the decoder's present-slot policy already does for whole-map NPC art), and raise the monster read's caps after measuring the fire elemental. S–M.
+- **B.** Fall back to palette 0 only in the loader and leave the repair out. Leaves the air elemental refused. Not recommended.
 - **C.** Keep refusing (hero keeps its own body, logged). The spells then look broken for three of five bodies. Not recommended.
-- **Owner's question:** if the reading shows the original draws something other than palette 0 for an absent palette (for example the bad-art placeholder), do we copy it (D9) or keep the clean elemental? Default: copy the original; no switch unless it is an executable bug (D8).
+- **Owner's question (answered).** D3: the original's draw was read first (PR5) and is copied: palette 0.
 
 ### L4. Redraw of a map NPC whose data is a perma-polymorph
 
@@ -141,10 +144,19 @@ dialogues; Mini Fix GG2 adds a mage weapon, a lure, a new arrows schematic and v
 | L4 perma-polymorph data | Replaces NPC prototypes with those of the English version; no polymorph flag change documented | Prototype stats differ from the installed original's where it replaced them |
 | L5, L6 | Not applicable (viewer code) | n/a |
 
-**What this review could not do.** The installer is a file host download of unknown origin; I did not download or open it, so the claim "GrandFix touches no monster ART" rests on its published
-change lists (one readme page came back with damaged Cyrillic text, read from the 2007 forum post and the workshop page instead). If the owner wants file-level proof, the check is a read-only
-comparison of an installed GrandFix copy's archives and `data/proto` against the original, kept outside git; needs the owner's permission to download. The Unofficial Arcanum Patch is a separate project and was
-not part of this review; a forum post says it restores cut animations, unconfirmed for the air elemental.
+**File-level comparison (owner D5, 2026-11-12).** The owner allowed a download. The installer `GrandFix1.3_MiniFixGG2.exe` (6,084,200 bytes, NSIS) came from the link of the 2020 forum post; it was unpacked with 7-Zip
+without running anything (1,469 files, 13 MB) and compared with the installed original, all outside git. Result:
+
+| Part | GrandFix 1.3 | Against the original |
+| --- | --- | --- |
+| Monster ARTs | None: its archives (`arcanum4.dat`, `arcanum5.dat`, the module patches) hold no `art/monster` file and no `monster.mes` | No change to any monster ART, species table or palette |
+| Spell records | `SpellList.mes` in both its archives: 7 records changed and 7 added (none a Trait record); the 14 Trait records (Polymorph, the five body spells, the technology records) are identical, including the species and palette 1 of the body spells | No change to the Trait data |
+| Monster prototypes (`rules/monster.txt`) | 5 of 162 entries changed: the demon's level, scale, stats and resistances; the L'anamelach's nigh-invulnerable flag; the automaton renamed Charged Automaton (palette 1, level 50, new stats and script); the Lord's Slave concealed flag; one internal name. The summoned elementals (air, fire, water, earth) are not among them | Data differs from the original; no art-id change for the elementals |
+| Prebuilt `data/proto` | 1,427 files (4 more than the installed 1,423) with localized names; of the critter prototypes 3 have another art id (an orc and an earth-elemental prototype and the automaton) and 34 other stats; no perma-polymorph bit in any | Differs from the installed built files; not used by Steamwoven (it builds its own, ARC-RES-085) |
+| `Arcanum.exe` | 2,007,040 bytes; in `.text` it differs from the installed one in 9 bytes (three bytes of startup checks near 0x40107D to 0x401393 and four bytes near 0x4A6642 to 0x4A691B) and one data byte (0x5B5248, 0x33 to 0x7F: the level cap, the "LevelHack"); none in Trait (0x452B00 to 0x452CD0), the art builder (0x503CD0), the weapon refresh (0x465020) or the missing-art repair | Differs from the original only by the level-cap and startup patches |
+
+So GrandFix gives no fix, no art and no data to adopt for L1 to L6, and the "touches no monster ART" claim of the change lists holds at file level. The Unofficial Arcanum Patch is a separate project and was not part
+of this review; a forum post says it restores cut animations, unconfirmed for the air elemental.
 
 **Consequences for D9.** GrandFix is not a source of original behaviour, and its data replacements are not to be adopted: Steamwoven reads the player's own installation, so a GrandFix install shows its own
 prototype numbers, and any difference between that install and the original (stats of summoned elementals, NPC prototypes) is the player's data, not our rule. The fixes recommended above come from the
@@ -152,17 +164,17 @@ original's executable and archives, and need nothing from GrandFix.
 
 ## 6. Decisions for the owner
 
-| # | Decision | Recommended | Alternative | Effect of the alternative |
-| --- | --- | --- | --- | --- |
-| D1 | Weapon part follows combat mode for the monster body (L2) | Yes, as the original (PR2) | Keep part 0 | The attack stays a stand pose |
-| D2 | Load the throw for the five species that have it (L1) | No | Yes | Memory and decode time, no visible result |
-| D3 | Palette of the elemental bodies when the requested palette is absent (L3) | Read the original's draw first, then copy it | Palette 0 now | Possible divergence if the original shows a placeholder |
-| D4 | Redraw of a map NPC with a perma-polymorph in data (L4) | Census first, build only if a consumer exists | Build now / cancel | Unmeasured work / a possible hole |
-| D5 | GrandFix file-level comparison | Not needed for these limits | Allow a download and a local read-only diff | A day; confirms the change lists, proves no monster ART change |
+| # | Decision | Recommended | Owner answer (2026-11-12) |
+| --- | --- | --- | --- |
+| D1 | Weapon part follows combat mode for the monster body (L2) | Yes, as the original (PR2) | **Yes, as the original** |
+| D2 | Load the throw for the five species that have it (L1) | No (nothing can draw it, see L1) | Asked what the throw is; explained in L1, decision open |
+| D3 | Palette of the elemental bodies when the requested palette is absent (L3) | Read the original's draw first, then copy it | **Read first, then copy**: read (PR5), the original draws palette 0 |
+| D4 | Redraw of a map NPC with a perma-polymorph in data (L4) | Census first, build only if a consumer exists | **Census of the map instances first, build only if one exists** |
+| D5 | GrandFix file-level comparison | Not needed for these limits | **Allowed**: done (section 5), no change found |
 
 ## 7. Proposed tasks (codes from the coordinator)
 
-1. **Monster body: weapon part, repair, palette** (L2, L1 fire low attack, L6, L5; L3 after its reading): the F1 reading of PR5, the loader changes, the `trait-body` smoke with a combat-mode attack and an elemental
+1. **Monster body: weapon part, repair, palette** (L2, L1 fire low attack, L6, L5, L3): the loader changes, the `trait-body` smoke with a combat-mode attack and an elemental
    spell (Body of Air, Fire, Water), tests on the names and the repair, a real-data test over the 32 species. Requirement rows: FR-MAGIC-007 coverage note; graphics rule: one labelled composite (before: stand pose attack, after: attack; elementals before and after).
 2. **Census of perma-polymorph NPCs in map data** (L4): a scratch scan, a result line in the ledger; the redraw only if the owner decides after seeing it.
 3. **Corrections to the existing docs** (folded into task 1's PR): the host contract and the visual contract say species 28 lacks "the stand or walk ART" and that a monster has no armed pose; both are replaced by
@@ -171,7 +183,8 @@ original's executable and archives, and need nothing from GrandFix.
 ## 8. Evidence and limits
 
 - Read in the executable (F1, one reader; 0x41DA40, the table at 0x5A106C and the contents of `art/missing.dat` were re-read by the independent review, which decoded the masks per species): 0x452B00 with its call arguments, 0x503CD0, 0x5040D0, 0x502880, 0x503E20, 0x465020, 0x504100, 0x504180, 0x4B3D50, 0x5044F0, 0x0043EB30, 0x51B710 (the palette test),
-  0x502E00 and the class-12 branch of 0x41E200. Not read: the callers of 0x502E00 and 0x51B710, 0x4B3F80's other branches, what the draw does for an absent palette (PR5).
+  0x502E00, 0x502E50, 0x5059F0 (the palette-absent lookup, read on 2026-11-12) and the class-12 branch of 0x41E200. Not read: 0x4B3F80's other branches.
 - Measured on the installed data: the file listing of all archives for the monster folders; `monster.mes` (species names); `SpellList.mes` Trait records (species and palette); the ART headers of six species;
   `HeroBodyArt.LoadMonster` over 32 species and 4 palettes; 510 critter prototypes. All with scratch programs outside the repository; no output is committed.
 - Not measured: the objects of the maps (L4), the fire elemental's frame sizes (L3), the original's gait timing for a run replaced by the walk (it follows the gait rate, HB2, and the stride of the file used).
+- GrandFix files (section 5): a read-only unpack outside git, a byte comparison of the executables (headers and import tables left out), a list comparison of its archives against the installed ones, the prototype comparison through `CombatFieldReader`. Nothing was run, nothing is committed.
