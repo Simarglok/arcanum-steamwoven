@@ -28,10 +28,18 @@ public sealed class AudioBackend : IDisposable
         this.parent = parent; Policy = new(limits);
         Driver = AudioServer.GetDriverName(); Device = AudioServer.OutputDevice;
         originalMasterVolume = AudioServer.GetBusVolumeDb(0); originalMasterMute = AudioServer.IsBusMute(0);
-        for (int i = 1; i <= 4; i++)
+        // ARC-DEV-1431: the engine's AddBus, SetBusName and SetBusSend take no audio driver lock (RemoveBus and SetBusCount do), so
+        // a bus added while the audio thread mixes races its bus list and name map (same race as ARC-BUG-1396). Build all buses
+        // here, once, under the lock.
+        AudioServer.Lock();
+        try
         {
-            AudioServer.AddBus(i); AudioServer.SetBusName(i, ((AudioBus)i).ToString()); AudioServer.SetBusSend(i, "Master");
+            for (int i = 1; i <= 4; i++)
+            {
+                AudioServer.AddBus(i); AudioServer.SetBusName(i, ((AudioBus)i).ToString()); AudioServer.SetBusSend(i, "Master");
+            }
         }
+        finally { AudioServer.Unlock(); }
         leased = true; ApplyLevels();
     }
     public static AudioResult Create(Node parent, AudioLimits limits, out AudioBackend? backend)

@@ -256,6 +256,7 @@ public sealed class AreaConversationHost
         host.HeroAttackAvailable = HeroAttackAvailable;
         host.NpcHostile = NpcHostile;
         host.KillNpc = KillNpc;
+        host.WorldMapAvailable = WorldMapAvailable;
         return host;
     }
 
@@ -612,7 +613,9 @@ public sealed class AreaConversationHost
                 _session.QueryHero() is null || _greetingTexts?.Skills is null ? null
                     : new SessionDialogTrainerPort(_session, AreaConversationState.PcParticipant, skill => _greetingTexts.SkillName(skill)),
                 // ARC-SCRIPT-1304: the paid r: rumor reads the hero's own gold.
-                _session.QueryHero() is null ? null : new SessionDialogPursePort(_session, AreaConversationState.PcParticipant)));
+                _session.QueryHero() is null ? null : new SessionDialogPursePort(_session, AreaConversationState.PcParticipant),
+                // ARC-SCRIPT-1358: an l: reply asks for the world map once the talk ended; the viewer says whether it has one (map mode) and opens it.
+                WorldMapAvailable?.Invoke() == true ? new WorldMapPort(this) : null));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }
@@ -776,6 +779,33 @@ public sealed class AreaConversationHost
             if (command.PlayerCharacter != AreaConversationState.PcParticipant || host.SpeakerEntity(command.Npc) is not { } entity || host.HeroAttack is not { } attack)
                 return DialogCommandResult.Rejected;
             return attack(entity) ? DialogCommandResult.Applied : DialogCommandResult.Rejected;
+        }
+    }
+
+    /// <summary>ARC-SCRIPT-1358: whether the viewer can open the world map after a talk (map mode); read when a talk starts. Null or false: an <c>l:</c>
+    /// reply stays blocked as an unsupported interaction.</summary>
+    public Func<bool>? WorldMapAvailable { get; set; }
+
+    /// <summary>ARC-SCRIPT-1358: set when an <c>l:</c> reply asked for the world map (the port applied it); the viewer opens the map with the bar's own
+    /// rules after the conversation ended with <see cref="DialogEndKind.WorldMapWindow"/>.</summary>
+    public bool WorldMapRequested { get; private set; }
+
+    /// <summary>Takes the world map request of the last <c>l:</c> reply, once.</summary>
+    public bool TakeWorldMapRequest()
+    {
+        var requested = WorldMapRequested;
+        WorldMapRequested = false;
+        return requested;
+    }
+
+    // l: (ledger VA5): the original's dialog state 6 opens the world map for the local PC only (0x567E30 tests the handle against the local PC, 0x40D9F0).
+    private sealed class WorldMapPort(AreaConversationHost host) : IDialogWorldMapPort
+    {
+        public DialogCommandResult Execute(OpenWorldMapCommand command)
+        {
+            if (command.PlayerCharacter != AreaConversationState.PcParticipant) return DialogCommandResult.Rejected;
+            host.WorldMapRequested = true;
+            return DialogCommandResult.Applied;
         }
     }
 
