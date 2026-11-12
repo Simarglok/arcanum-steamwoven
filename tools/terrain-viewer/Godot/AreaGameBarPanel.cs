@@ -22,12 +22,23 @@ public partial class AreaGameBarPanel : CanvasLayer
     // ARC-UI-024: the hovered critter's portrait and name in the message window (PA6).
     private TextureRect _hoverImage = null!;
     private float _sideLeft, _sideRight;
+    // ARC-UI-1111: the clock window of the top strip (GB8) and the face the host last gave it.
+    private AreaClockView _clock = null!;
+    private AreaClockFace? _clockFace;
 
     /// <summary>A pointer event on the bars changed something: the host plays the sounds and runs the button's function.</summary>
     public event Action<AreaBarEffect>? Effect;
     /// <summary>The pointer moved while the bars are shown: its place on the original's 800×600 screen (ARC-UI-023: the hover name is
     /// written again on each move, and a move over the bottom strip gives the message window back to a pane, ML2/ML8).</summary>
     public event Action<Vector2>? PointerMoved;
+
+    /// <summary>ARC-UI-1111: the clock window's last draw: its slices, whether the needle was drawn and the moon art in use.</summary>
+    internal (IReadOnlyList<AreaClockSlice> Slices, bool Needle, int? MoonArt) ClockForSelfTest => (_clock.SlicesForSelfTest, _clock.NeedleForSelfTest, _clock.MoonArtForSelfTest);
+    /// <summary>The clock window's centre on the screen (its hit area), for the self-test.</summary>
+    internal Vector2 ClockCentreForSelfTest => _clock.GetGlobalRect().GetCenter();
+    internal Rect2 ClockRectForSelfTest => _clock.GetGlobalRect();
+    /// <summary>Hides the clock window to see the strip's art under it (the graphics report's "before"); a hidden window takes no pointer.</summary>
+    internal bool ClockShownForSelfTest { get => _clock.Visible; set => _clock.Visible = value; }
 
     /// <summary>The message window of the bottom strip (ARC-UI-023).</summary>
     public AreaMessageLogView MessageLog => _messageLog;
@@ -137,6 +148,12 @@ public partial class AreaGameBarPanel : CanvasLayer
             _buttons[button] = rect;
             _strips[spec.Strip].AddChild(rect);
         }
+        // ARC-UI-1111: the clock window, with the invisible button over it (GB9): it follows the same pointer rules, silently.
+        _clock = new AreaClockView();
+        _clock.MouseEntered += () => Raise(_bar.Enter(AreaBarButton.Clock));
+        _clock.MouseExited += () => Raise(_bar.Exit(AreaBarButton.Clock));
+        _clock.GuiInput += input => ButtonInput(AreaBarButton.Clock, _clock, input);
+        _strips[AreaBarStrip.Top].AddChild(_clock);
         var (ix, iy) = AreaGameBarLayout.HoverImage;
         _hoverImage = new TextureRect
         {
@@ -190,7 +207,17 @@ public partial class AreaGameBarPanel : CanvasLayer
         PointerMoved?.Invoke(strip.GetGlobalTransform().AffineInverse() * motion.Position + new Vector2(0, AreaGameBarLayout.BottomTop));
     }
 
-    private void ButtonInput(AreaBarButton button, TextureRect rect, InputEvent input)
+    /// <summary>ARC-UI-1111: the sky the clock window shows (null: black), drawn from the clock arts the panel was given.</summary>
+    public void SetClock(AreaClockFace? face)
+    {
+        _clockFace = face;
+        RenderClock();
+    }
+
+    private void RenderClock() =>
+        _clock.Set(_clockFace, ArtFrame(AreaClockLayout.StripArt), _clockFace is { } face ? ArtFrame(face.MoonArt) : null, ArtFrame(AreaClockLayout.NeedleArt));
+
+    private void ButtonInput(AreaBarButton button, Control rect, InputEvent input)
     {
         if (input is not InputEventMouseButton { ButtonIndex: MouseButton.Left } click) return;
         rect.AcceptEvent();
@@ -275,6 +302,7 @@ public partial class AreaGameBarPanel : CanvasLayer
             rect.Size = frames[frame].GetSize();
             rect.SetMeta(FrameMeta, frame);
         }
+        RenderClock();
         _messageLog.Render();
     }
 

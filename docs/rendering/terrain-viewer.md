@@ -2575,7 +2575,7 @@ diagnostic HUD moves below the top strip and the follower portraits and spell pa
 the light button are the [hotkey bar](../world/spell-cast-host.md#the-hotkey-bars-art-and-drag-arc-ui-027) (icons, counts, clicks and the
 right-button drag). Since ARC-MAGIC-026 the top strip's five slots are the
 [maintain bar](../world/spell-cast-host.md#the-maintain-bar-arc-magic-026): they show the hero's maintained spells and a click on one
-ends its spell. The top strip's clock is drawn as the art shows it and does nothing yet. Automated
+ends its spell. Since ARC-UI-1111 the top strip's clock is the original's ([clock](#clock-and-date-arc-ui-1111)). Automated
 runs draw no bars unless their smoke asks.
 
 Tests `AreaGameBarTests` (layout, frames, button states and sounds, texts, interface art names; with `DAT_ROOT` the
@@ -2585,11 +2585,44 @@ installed art and texts read). Native smoke on the original data, map mode on th
 name and lit frame, its down frame with 3000, the release with 3001 opening the sheet, Inventory switching from the sheet,
 Logbook and Schematics opening and closing their windows, the logbook lying between the strips and taking a press inside
 it, Map opening the world map with the bars hidden and back with no hover, Combat in and out of combat mode, Spells showing and hiding
-the pane, Fate Points refused, a press on the strip's clock not reaching the world, every sound started). Not done: the
+the pane, Fate Points refused, a press on the strip's clock not reaching the world, every sound started, and the
+[clock](#clock-and-date-arc-ui-1111)). Not done: the
 hot-key bar (later slices; the vials since ARC-UI-020, the message log since ARC-UI-023, the vials' art, the follower frames
 and the hovered portrait since [ARC-UI-024](#panel-art-arc-ui-024)), the skill pane, fate and sleep windows, the town map, the
 buttons' lit art the original sets from game events (0x556A90), the toggle to the compact interface (the viewer shows the
 compact panel whenever its bars are not drawn).
+
+### Clock and date (ARC-UI-1111)
+
+The top strip's clock window, as the 1.0.7.4 executable draws and answers it (ledger
+[GB8–GB12](../research/ledger/ui-audio.md#interface-bars-arc-ui-018)); `AreaGameClock.cs` (Core, Godot-free: `AreaClockLayout`,
+`AreaGameClock`, `AreaClockText`) and `AreaClockView` on the bar panel.
+
+- **The window.** 128 × 30 at (648, 5) of the top strip, black behind a sky of 512 pixels that repeats the day strip
+  (interface art 207) and the day's moon piece (208–215), scrolled so that its centre column is the game time (one pass a game day,
+  the sun in the middle at noon), and the 5 pixel needle (216) at (708, 6). The moon piece is chosen by the day's phase (28
+  phases, the day turning at noon, GB9). The arts are read from the player's game with the bars' other art; without them the window
+  stays black.
+- **When it moves.** The window is drawn when the session begins and then an hour of game time after each refresh (the Clock event's
+  period, counted from the last refresh and not on the hour; a late refresh happens once and a jump of many hours refreshes once). A
+  new session (a new game, a load, a quick load) starts the chain with a refresh (for a load this follows the interface being made again, an inference, GB10). The chain runs under the session also while the bars
+  are hidden. The face is not saved.
+- **The click.** The window is an invisible silent push button (no press or release sound). Its release over it writes a hover entry of
+  the [message log](#message-log-arc-ui-023) (never stored, shown only in the message mode and when no entry was stored in the last
+  3 s): `<message 22>: hh:mm:ss   <message 23>: d/m/y` (the installed texts read "Current Time" and "Current Date"; the project's "Time"
+  and "Date" stand in without the game's file), the date with no padding, in the order of the system's short date pattern (the
+  original asks the system's date order; month/day/year when it is unknown). Leaving the window takes the entry away (the original clears it only in the bottom strip's modes 0, 1, 2 and 8, GB11; the viewer always does); entering it
+  writes nothing, and the clock has no name of its own. It opens no menu.
+- **Not modelled.** The original ignores every mouse event on another combatant's turn of a turn-based round, the clock's press
+  too (GB12); the viewer gates none of the bar buttons so. A window made again with the offset it last drew stays blank in the
+  original (GB8); the viewer redraws. The viewer's compact panel (shown while the bars are not drawn) has no clock; whether the original's compact interface keeps one was not read.
+
+Tests `AreaGameClockTests` (layout, moon phases, offsets over a day, slices, the refresh chain, the silent button, the text and date
+orders; with `DAT_ROOT` the arts' sizes in `AreaGameBarTests`). Native smoke, part of `ARC_AREA_MAP_SMOKE_ONLY=bar` (prints
+`ARC-UI-1111 clock smoke`): the window draws its slices and the needle at the right place and size and is not dark, the pointer over
+it writes no name, a press writes nothing and the release writes the line with the game's two labels and the day/month/year order,
+no sound plays, leaving it clears the entry, and an hour of game time later the window refreshes once. `ARC_AREA_BAR_CAPTURE=PREFIX`
+also saves the strip with and without the window and at three later hours for a graphics report (local files, never committed).
 
 ### Message log (ARC-UI-023)
 

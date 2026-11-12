@@ -1,3 +1,4 @@
+using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
@@ -12,6 +13,46 @@ public partial class TerrainViewerApp
     // window button is hovered (its name and hover frame), pressed (down frame, 3000) and released (3001), opening its window, and a
     // second press closes it; Inventory over the open sheet switches to it. Combat and Spells toggle the hero's combat mode and the
     // spell pane, Fate Points says it is not built, and a press on the strip between buttons never reaches the world.
+    // ARC-UI-1111: with ARC_AREA_BAR_CAPTURE=PREFIX saves the top strip as PREFIX-clock-before.png (the clock window hidden: the strip's art as
+    // it was) and PREFIX-clock-after.png (ignored local files, original-derived, for the graphics report; never committed).
+    private async Task CaptureClockAsync(AreaGameBarPanel panel, Func<int, Task> frames)
+    {
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_BAR_CAPTURE") is not { Length: > 0 } capture) return;
+        var strip = panel.StripRectForSelfTest(AreaBarStrip.Top);
+        foreach (var (shown, name) in new[] { (false, "before"), (true, "after") })
+        {
+            panel.ClockShownForSelfTest = shown;
+            await frames(3);
+            var path = System.IO.Path.GetFullPath(capture) + $"-clock-{name}.png";
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+            using var image = GetViewport().GetTexture().GetImage();
+            using var top = image?.GetRegion(new Rect2I((int)strip.Position.X, (int)strip.Position.Y, (int)strip.Size.X, (int)strip.Size.Y));
+            if (top is null || top.SavePng(path) != Error.Ok) throw new InvalidOperationException("ARC-UI-1111 clock capture not saved: " + path);
+            GD.Print($"ARC-UI-1111 clock capture {name} {top.GetWidth()}x{top.GetHeight()}");
+        }
+        panel.ClockShownForSelfTest = true;
+        await frames(2);
+    }
+
+    // ARC-UI-1111: with ARC_AREA_BAR_CAPTURE also saves the top strip at three later game hours (PREFIX-clock-at-HHMM.png) for the report's
+    // variants; the clock refreshes at each jump. Runs after the checks, so a game hour jump here changes nothing they read.
+    private async Task CaptureClockTimesAsync(AreaGameBarPanel panel, GameSessionOwner session, Func<int, Task> frames)
+    {
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_BAR_CAPTURE") is not { Length: > 0 } capture) return;
+        var strip = panel.StripRectForSelfTest(AreaBarStrip.Top);
+        foreach (var hours in new[] { 5, 8, 7 })
+        {
+            session.JumpClocks(session.QueryClockSnapshot().Token, hours * AreaClockLayout.RefreshMs);
+            await frames(3);
+            var stamp = AreaClockText.Time(session.QueryClockSnapshot().GameTimestampMs)[..5].Replace(":", "");
+            var path = System.IO.Path.GetFullPath(capture) + $"-clock-at-{stamp}.png";
+            using var image = GetViewport().GetTexture().GetImage();
+            using var top = image?.GetRegion(new Rect2I((int)strip.Position.X, (int)strip.Position.Y, (int)strip.Size.X, (int)strip.Size.Y));
+            if (top is null || top.SavePng(path) != Error.Ok) throw new InvalidOperationException("ARC-UI-1111 clock capture not saved: " + path);
+            GD.Print($"ARC-UI-1111 clock capture at {stamp} face={_gameClock.Face}");
+        }
+    }
+
     private async Task RunAreaGameBarSmokeAsync()
     {
         static void Require(bool value, string why) { if (!value) { GD.Print("ARC-UI-018 bar smoke FAIL " + why); throw new InvalidOperationException("ARC-UI-018 bar smoke: " + why); } }
@@ -87,6 +128,66 @@ public partial class TerrainViewerApp
             }
             await CaptureHudAsync(verifyGenerated ? "generated" : verifyHd ? "hd" : "legacy", Frames);
             GD.Print($"ARC-UI-018 bar smoke bars factor={panel.Factor} top={panel.StripRectForSelfTest(AreaBarStrip.Top)} bottom={panel.StripRectForSelfTest(AreaBarStrip.Bottom)}");
+
+            // ARC-UI-1111 (GB8-GB11): the clock window draws the game's sky and the needle, the click on it writes the time and the date as a
+            // hover entry (silently), leaving it clears the entry, and the window refreshes an hour of game time after its last refresh.
+            {
+                var clockSession = _areaSession!;
+                var (clockSlices, clockNeedle, clockMoonArt) = panel.ClockForSelfTest;
+                var clockFace = _gameClock.Face;
+                Require(clockFace is not null && clockSlices.Count is >= 1 and <= 3 && clockSlices.Sum(slice => slice.Width) == AreaClockLayout.WindowWidth && clockNeedle && clockMoonArt == clockFace.Value.MoonArt,
+                    $"the clock window draws {clockSlices.Count} sky slices and the needle: face {clockFace}");
+                var clockRect = panel.ClockRectForSelfTest;
+                Require(Math.Abs(clockRect.Size.X - AreaClockLayout.WindowWidth * panel.Factor) < 0.5f && Math.Abs(clockRect.Size.Y - AreaClockLayout.WindowHeight * panel.Factor) < 0.5f
+                    && Math.Abs(clockRect.Position.X - (panel.StripRectForSelfTest(AreaBarStrip.Top).Position.X + AreaClockLayout.WindowX * panel.Factor)) < 0.5f,
+                    $"the clock window stands at (648, 5) of the strip, 128 x 30: {clockRect}");
+                await CaptureClockAsync(panel, Frames);
+                // The pixels: the sky is not left black. The window is read back from the viewport after a frame.
+                await Frames(2);
+                using (var clockShot = GetViewport().GetTexture().GetImage())
+                {
+                    Require(clockShot is not null, "the viewport can be read back");
+                    var clockLit = 0; var clockTotal = 0;
+                    for (var y = (int)clockRect.Position.Y; y < (int)clockRect.End.Y; y++)
+                        for (var x = (int)clockRect.Position.X; x < (int)clockRect.End.X; x++)
+                        {
+                            clockTotal++;
+                            var pixel = clockShot!.GetPixel(x, y);
+                            if (pixel.R + pixel.G + pixel.B > 0.06f) clockLit++;
+                        }
+                    Require(clockLit > clockTotal / 8, $"the clock window shows the sky: {clockLit} of {clockTotal} pixels are not dark");
+                }
+                _messageClockShiftForSelfTest += AreaMessageLog.QuietMilliseconds + 1;
+                ClockDateOrderForSelfTest = AreaClockDateOrder.DayMonthYear;
+                _gameBarSoundsForSelfTest.Clear();
+                var clockAt = panel.ClockCentreForSelfTest;
+                await Move(clockAt);
+                Require(_gameBar.Hovered == AreaBarButton.Clock && panel.HoverTextForSelfTest == "", "the pointer over the clock writes no name");
+                var clockBefore = clockSession.QueryClockSnapshot();
+                await Button(clockAt, true);
+                Require(_gameBar.Held == AreaBarButton.Clock && ClockLineForSelfTest is null, "a press on the clock writes nothing yet");
+                await Button(clockAt, false);
+                var clockAfter = clockSession.QueryClockSnapshot();
+                var clockTexts = _gameBarContent!.Texts;
+                var clockLines = Enumerable.Range((int)(clockBefore.GameTimestampMs / 1000), (int)(clockAfter.GameTimestampMs / 1000 - clockBefore.GameTimestampMs / 1000) + 1)
+                    .Select(second => AreaClockText.Line(clockTexts.Text(AreaClockLayout.TimeMessage), clockTexts.Text(AreaClockLayout.DateMessage), second * 1000L,
+                        clockAfter.ProfileBinding.StartYear, AreaClockDateOrder.DayMonthYear)).ToList();
+                Require(ClockLineForSelfTest is { } clockLine && clockLines.Contains(clockLine), $"the click wrote the time and date: '{ClockLineForSelfTest}' (expected one of {clockLines.Count} lines such as '{clockLines[0]}')");
+                Require(panel.HoverTextForSelfTest == ClockLineForSelfTest, $"the message window shows it: '{panel.HoverTextForSelfTest}'");
+                Require(_gameBarSoundsForSelfTest.Count == 0, "the clock button is silent: " + Sounds());
+                GD.Print($"ARC-UI-1111 clock smoke line='{ClockLineForSelfTest}' face={clockFace} slices={string.Join(",", clockSlices.Select(slice => $"{slice.Piece}@{slice.SourceX}+{slice.Width}"))}");
+                await Move(new Vector2(clockAt.X, panel.StripRectForSelfTest(AreaBarStrip.Top).End.Y + 40));
+                Require(_gameBar.Hovered is null && panel.HoverTextForSelfTest == "", "leaving the clock takes the entry away: '" + panel.HoverTextForSelfTest + "'");
+                ClockDateOrderForSelfTest = null;
+                // The checks after this block run an hour of game time on. An hour of game time later the Clock event is due and the window refreshes once (a missed period is not replayed).
+                var clockRefreshes = _gameClock.Refreshes;
+                var clockJumped = clockSession.JumpClocks(clockSession.QueryClockSnapshot().Token, AreaClockLayout.RefreshMs + 1);
+                Require(clockJumped.Disposition == Arcanum.Simulation.Clock.ClockMutationDisposition.Changed, "an hour of game time passes");
+                await Frames(2);
+                Require(_gameClock.Refreshes == clockRefreshes + 1 && _gameClock.Face!.Value.RefreshedAtMs >= clockFace!.Value.RefreshedAtMs + AreaClockLayout.RefreshMs
+                    && panel.ClockForSelfTest.MoonArt == _gameClock.Face.Value.MoonArt, $"the clock refreshed once after an hour: refreshes {_gameClock.Refreshes} (was {clockRefreshes}), face {_gameClock.Face}");
+                await CaptureClockTimesAsync(panel, clockSession, Frames);
+            }
 
             // Hover, press and release one button, watching its frames and sounds. ARC-UI-023: the name is a hover entry of the message
             // log, drawn only 3 s after the last stored entry (the new game may have posted one).

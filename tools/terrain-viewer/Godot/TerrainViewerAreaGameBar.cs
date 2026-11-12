@@ -1,3 +1,4 @@
+using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
@@ -23,6 +24,12 @@ public partial class TerrainViewerApp
     private readonly List<(int Id, bool Started)> _gameBarSoundsForSelfTest = [];
     // ARC-UI-023: whether a pane (spells, the weapon's spells, skills) held the message window at the last frame.
     private bool _messagePaneShown;
+    // ARC-UI-1111: the clock window's refresh chain (GB10) follows the area session; the date order is the system's (GB11).
+    private AreaGameClock _gameClock = new();
+    private GameSessionOwner? _gameClockSession;
+    private readonly AreaClockDateOrder _clockDateOrder = AreaClockText.OrderOf(System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.ShortDatePattern);
+    internal AreaClockDateOrder? ClockDateOrderForSelfTest { get; set; }
+    internal string? ClockLineForSelfTest { get; private set; }
 
     /// <summary>ARC-UI-1120: the interface is on (the original's toggle 0x64C67C clear, 0x5578C0): the bars play with a session, whatever window is open over
     /// them. The dialog start's description is made only then (0x567460); the viewer asks the same of the barter window's still pointer (PROJECT).</summary>
@@ -36,6 +43,8 @@ public partial class TerrainViewerApp
     {
         // ARC-MAGIC-026: a drop of the maintain bar's open count ends the closed slots' spells whether the bars show or not.
         SyncMaintainClosing();
+        // ARC-UI-1111: the clock's chain runs under the session whether the bars show or not (the original's interface stays made).
+        SyncGameClock();
         if (!GameBarActive)
         {
             if (_gameBarPanel is { Visible: true } hidden)
@@ -60,6 +69,9 @@ public partial class TerrainViewerApp
             _gameBarContent = SelfTestBootstrap || module is null ? AreaGameBarContent.Empty("self-test: no game folder") : AreaGameBarContent.Load(module);
             GD.Print($"ARC-UI-018 bars art ready={_gameBarContent.ArtReady} texts fromGame={_gameBarContent.Texts.FromGame} {_gameBarContent.Detail}");
             _gameBarPanel.Bind(GameBarTextures(_gameBarContent), _gameBar, _messageLog);
+            // The window's sky pieces have the widths the art says (the original reads them from arts 207 and 208 at the interface init).
+            _gameClock = new(ClockArtWidth(_gameBarContent, AreaClockLayout.StripArt, AreaClockLayout.StripWidth), ClockArtWidth(_gameBarContent, AreaClockLayout.FirstMoonArt, AreaClockLayout.MoonWidth));
+            _gameClockSession = null; SyncGameClock();
         }
         // ARC-DEV-156: the message window's texts in the original's font art (read once a module, null without a game folder).
         _gameBarPanel.MessageLog.SetFonts(TextFonts());
@@ -80,10 +92,36 @@ public partial class TerrainViewerApp
             _gameBarPanel.MessageLog.Render();
         }
         _gameBarPanel.Visible = true;
+        _gameBarPanel.SetClock(_gameClock.Face);
         _hud?.SetTopInset(AreaGameBarPanel.TopInset);
         SyncHotkeyBar();
         SyncMaintainBar();
         SyncSpellBar();
+    }
+
+    private static int ClockArtWidth(AreaGameBarContent content, int art, int fallback) =>
+        content.Art.TryGetValue(art, out var load) && load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0 ? load.Frames[0].Width : fallback;
+
+    /// <summary>ARC-UI-1111 (GB10): refreshes the clock window when the session's game time reaches the next Clock event. A new session
+    /// (a new game or a load) starts the chain with a refresh, as the original's interface made again does.</summary>
+    private void SyncGameClock()
+    {
+        if (_areaSession is not { } session) { _gameClockSession = null; _gameClock.Reset(); return; }
+        if (!ReferenceEquals(session, _gameClockSession)) { _gameClockSession = session; _gameClock.Reset(); }
+        _gameClock.Tick(session.QueryClockSnapshot().GameTimestampMs);
+    }
+
+    /// <summary>ARC-UI-1111 (GB11): the click on the clock writes its time and date as a hover entry of the message log: "Time: hh:mm:ss",
+    /// three spaces, "Date: d/m/y" in the system's date order. The original runs this whatever the bar mode, so the bars' own hiding
+    /// under the dialog and the other windows is the only guard here.</summary>
+    private void ClockButton()
+    {
+        if (_areaSession is not { } session || _gameBarContent is not { } content) return;
+        var snapshot = session.QueryClockSnapshot();
+        var line = AreaClockText.Line(content.Texts.Text(AreaClockLayout.TimeMessage), content.Texts.Text(AreaClockLayout.DateMessage),
+            snapshot.GameTimestampMs, snapshot.ProfileBinding.StartYear, ClockDateOrderForSelfTest ?? _clockDateOrder);
+        ClockLineForSelfTest = line;
+        PostMessage(AreaMessageEntry.Text(AreaMessageKind.Hover, line), "clock");
     }
 
     // ARC-UI-089: frames with an HD key draw their HD redraw while the HD profile is on (InterfaceHd).
@@ -130,6 +168,7 @@ public partial class TerrainViewerApp
                 if (_gameBar.IsOn(AreaBarButton.Skills)) { _spellPane?.HidePane(); _gameBarNotice = "skills: the skill pane is not built"; }
                 break;
             case AreaBarButton.FatePoints: _gameBarNotice = "fate points: the window is not built"; break;
+            case AreaBarButton.Clock: ClockButton(); break;
             case AreaBarButton.Sleep:
                 // ARC-WORLD-1160: the bar button runs the same opener as the key S (its own decision answers a dead or unconscious hero).
                 if (!SleepActive) _gameBarNotice = "sleep: not available here";
