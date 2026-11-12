@@ -341,6 +341,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && only?.Contains("grenade") == true) await RunAreaGrenadeSmokeAsync();
                         // ARC-MAGIC-042 (T-m1): only when named (with --hero), a creature item thrown from the pack becomes a critter that follows the hero, or one that attacks everyone around it.
                         if (_readyMapName is not null && only?.Contains("creature-item") == true) await RunAreaCreatureItemSmokeAsync();
+                        // ARC-RENDER-1170: only when named (with --hero, and ffmpeg installed), the movie player on two generated test movies: the screen, the frozen clocks, the key skip, the failures that must not hang.
+                        if (_readyMapName is not null && only?.Contains("movies") == true) await RunAreaMoviesSmokeAsync();
                         // ARC-DEV-282: only when named (with --hero), an NPC archer of the map shoots the hero: the arrow flies as a projectile and strikes through the AI host.
                         if (_readyMapName is not null && only?.Contains("npc-shot") == true) await RunAreaNpcShotSmokeAsync();
                         // ARC-UI-048: after the stream, as the landing loads the start map around another place.
@@ -1094,6 +1096,7 @@ public partial class TerrainViewerApp : Node
         {
             // ARC-DEV-204 (B16): the change-of-place screen moves on the frame's real time, a map load's too; a hero change that waited
             // for the black screen runs now.
+            TickMovies(delta * 1000);
             TickTransitionScreen(delta * 1000);
             try { TickAreaClock(); TickLightAnimation(); TickCarriedLight(); DrainTraitEquipment(); SyncHeroBody(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaWorldMap(); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncInterfaceHd(); TickWindowArtWarm(); SyncGameBar(); RefreshHeroGauges(); TickFloaters(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)

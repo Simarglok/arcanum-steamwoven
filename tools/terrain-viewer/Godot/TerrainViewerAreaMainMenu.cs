@@ -125,6 +125,7 @@ public partial class TerrainViewerApp
         // ARC-DEV-111: the menu opens over a window that stays open under it; its layer is the last child's, so it draws on top.
         if (_mainMenuPanel.GetParent() == this) MoveChild(_mainMenuPanel, GetChildCount() - 1);
         _mainMenu = new AreaMainMenu(texts, root == AreaMenuWindow.Main && !early ? NewGameRefusal() : null, root, reopened);
+        _mainMenu.IntroRefusal = MovieRefusal();
         _mainMenuStatus = null;
         GD.Print($"ARC-UI-011 main menu open window={root} reopened={reopened} newGame={_mainMenu.NewGameRefusal ?? "ready"}");
         // ARC-UI-139: the main menu's soundtrack (the shop map's sector pair, ARC-DEV-332) plays through the scheme player without a session or a
@@ -360,11 +361,16 @@ public partial class TerrainViewerApp
                 if (LoadGame(SaveLibrary.Slot(latest.Name), "Last save ", MainMenuTables(), AreaLoadMessageRoute.Result)) { EndMainMenu("last save " + latest.Name); return; }
                 _mainMenu.Notice = _quickSaveStatus;
                 break;
-            case AreaMenuCommandKind.StartNewGame:
-                if (StartNewGame(command.Hero) is { } refused) _mainMenu.Notice = refused;
-                else if (_mainMenu is not null) { EndMainMenu("new game as " + AreaStartingHero.Premade[command.Hero].Name); return; }
-                else return; // the start scene loads first (ARC-UI-012)
+            case AreaMenuCommandKind.ViewIntro:
+                // ARC-RENDER-1170 (0x5445F0): movies 1 and 7, then the window shows again; the menu stands under the movies.
+                if (PlayMovies([1, 7], 0, () => { RenderMainMenu(); RefreshAreaStatus(); }, "view intro")) { _mainMenuPanel!.CloseView(); return; }
+                _mainMenu.Notice = AreaMainMenu.NoIntro;
                 break;
+            case AreaMenuCommandKind.StartNewGame:
+                // ARC-RENDER-1170: the new game's movies (1 and 7) play before the start, which then runs as ever.
+                if (PlayMovies([1, 7], 0, () => ContinueMainMenuStart(command), "new game")) { _mainMenuPanel!.CloseView(); return; }
+                ContinueMainMenuStart(command);
+                return;
             case AreaMenuCommandKind.OpenNewCharacter:
                 // ARC-UI-030: the original makes the PC when the window opens (0x5446F0); a start that does not read keeps window 11.
                 var generic = MainMenuNewCharacter();
@@ -405,11 +411,9 @@ public partial class TerrainViewerApp
                 else _mainMenu.Notice = "the opening shop cannot open: " + kitRefused;
                 break;
             case AreaMenuCommandKind.StartNewCharacter:
-                var made = _mainMenu.Creation!;
-                if (StartNewGame(-1, creation: made) is { } madeRefused) _mainMenu.Notice = madeRefused;
-                else if (_mainMenu is not null) { EndMainMenu("new game as " + CreationName(made)); return; }
-                else return; // the start scene loads first (ARC-UI-012)
-                break;
+                if (PlayMovies([1, 7], 0, () => ContinueMainMenuStart(command), "new game")) { _mainMenuPanel!.CloseView(); return; }
+                ContinueMainMenuStart(command);
+                return;
             case AreaMenuCommandKind.SaveGame:
                 // ARC-UI-012: the save window opens over the waiting in-play menu once the game is drawn without it (the preview).
                 _mainMenuPanel!.CloseView(); QuarantineWorld();
@@ -433,6 +437,24 @@ public partial class TerrainViewerApp
                 GetTree().Quit(0);
                 return;
         }
+        RenderMainMenu();
+        RefreshAreaStatus();
+    }
+
+    /// <summary>The start of a new game the menu command asks for, after the movies of its request played (or at once when they cannot).
+    /// The same steps as the menu's own: a refusal shows on the window, a start closes the menu, a start scene that loads first returns.</summary>
+    private void ContinueMainMenuStart(AreaMenuCommand command)
+    {
+        if (_mainMenu is not { } menu) return;
+        var made = command.Kind == AreaMenuCommandKind.StartNewCharacter ? menu.Creation : null;
+        var refused = made is not null ? StartNewGame(-1, creation: made) : StartNewGame(command.Hero);
+        if (refused is not null) menu.Notice = refused;
+        else if (_mainMenu is not null)
+        {
+            EndMainMenu("new game as " + (made is not null ? CreationName(made) : AreaStartingHero.Premade[command.Hero].Name));
+            return;
+        }
+        else return; // the start scene loads first (ARC-UI-012)
         RenderMainMenu();
         RefreshAreaStatus();
     }
