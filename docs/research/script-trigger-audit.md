@@ -149,7 +149,7 @@ carry their task code; the open ones are 5, 6, 7, 10, 11, 12, 13 and the rest of
 | 6 | Crime and KOS | will KOS (22, 0x4AE179), bust (30), caught thief (33) and the guard's catching thief (11 at 0x4AEFCD) | 124 attachments |
 | 7 | Use-set commands | get hit points (107), set lock state (53), change art (59), computed goto, focus 8 in use scripts | 246 refused use attachments |
 | 8 | Tile-script command groups | **Done in three groups**: ARC-SCRIPT-052 (S20, ledger TD1–TD3: call-ex, destroy, stop attacking), ARC-DEV-157 (S22, ledger GS1–GS4, bugs B20 and B23: get stat for the PC, vicinity loops) and ARC-DEV-298 (float line in the tile set; stage `tile-ghost`). Open: the remaining first refusals by group (action 32, action 22, change art 59, sector is blocked 45, condition 51, damage 60, play script eye candy 120, action 112, set day standpoint 45, monster generator disabled 46; 1779 stops at a computed goto) | tile scripts |
-| 9 | Examine, new sector, resurrect | **Examine done** by ARC-DEV-326 (ledger HK24). Open: point 27 for followers (0x4F24A3, Virgil's 1568) and 18 (0x4B5A46) | 11 attachments |
+| 9 | Examine, new sector, resurrect | **Examine done** by ARC-DEV-326 (ledger HK24; made items ARC-SCRIPT-1119). Open: point 27 for followers (0x4F24A3, Virgil's 1568) and 18 (0x4B5A46) | 11 attachments |
 | 10 | Turn-based heartbeat | the subturn heartbeat 0x4B704A (point 19) in the round host | heartbeats in combat |
 | 11 | List conditions and vicinity order | conditions over focus kinds 8, 9, 15 (SG6, U2) and the list order (U1) | scripts that test "anyone near" |
 | 12 | Item-script commands | toggle state (56) and loop for (18) at insert item, call script in (54) at wield on | 35 item attachments |
