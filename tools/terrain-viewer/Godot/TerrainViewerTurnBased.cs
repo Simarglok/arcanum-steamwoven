@@ -193,6 +193,7 @@ public partial class TerrainViewerApp
         // the first one entered, so the location is written for the step's own start cell (the original charges when the step starts, 0x430FC0).
         WriteHeroLocation(grid, key.From);
         var cost = AreaTurnBased.StepCost(gait, HeroFatigue() ?? 0);
+        if (session.QueryCombatRound() is { } noted) NotePendingSubturn(noted);
         _apPending = cost; // CH4: the check stores its cost as the pending one
         var charge = AreaTurnBased.ChargeHero(session, cost, AreaCombatWorldNow(), out var events);
         _chargeLog.Add(("step", cost, charge));
@@ -211,6 +212,7 @@ public partial class TerrainViewerApp
     {
         if (!InTurnBasedRound || _combatHost is null || _worldActor.Session is not AreaGridSession) return true;
         var session = _areaSession!;
+        if (session.QueryCombatRound() is { } noted) NotePendingSubturn(noted);
         _apPending = cost; // CH4: the check stores its cost as the pending one
         var charge = AreaTurnBased.ChargeHero(session, cost, AreaCombatWorldNow(), out var events);
         _chargeLog.Add((what, cost, charge));

@@ -11,7 +11,7 @@ public sealed record AreaCombatHudView(ActionPointLamp[] Lamps, bool HeroTurn, i
 /// <summary>
 /// ARC-UI-1114 (slice 2 of docs/research/combat-hud.md; ledger CH1–CH6, plain Godot controls, no original interface art): the
 /// action-point lamps just above the interface bar at the original's place (the panel at 222, 412 of the 800 × 600 screen, scaled
-/// with the bars) and the turn-order list under the top strip. A lit lamp is green for the points left after the previewed action,
+/// with the bars) and the turn-order list under the top strip at the right. A lit lamp is green for the points left after the previewed action,
 /// orange for its cost and red for the part the points do not cover (the colours of the original's hidden-interface bar, CH3); the
 /// running lights of another participant's subturn are green. The list marks the participant whose subturn it is with <c>&gt;</c>.
 /// </summary>
@@ -30,6 +30,7 @@ public partial class AreaCombatHud : CanvasLayer
     private AreaGameBarPanel? _bars;
     private bool _inBars;
     private AreaCombatHudView? _view;
+    private string? _rowsKey;
 
     internal ActionPointLamp[]? LampsForSelfTest => _view?.Lamps;
     internal bool ListShownForSelfTest => _list.Visible;
@@ -82,13 +83,19 @@ public partial class AreaCombatHud : CanvasLayer
                 ActionPointLamp.Shortfall => ShortfallColor,
                 _ => OffColor,
             };
-        foreach (var child in _rows.GetChildren()) { _rows.RemoveChild(child); child.QueueFree(); }
         _list.Visible = view.Rows is not null;
-        if (view.Rows is { } rows)
+        // The rows are rebuilt only when their text changes (the running lights redraw the lamps every 100 ms).
+        var key = view.Rows is { } texts ? $"{view.Round}|{view.Hidden}|" + string.Join("\n", texts.Select(r => (r.Current ? ">" : " ") + r.Name)) : null;
+        if (key != _rowsKey)
         {
-            AddRow($"Round {view.Round}", false);
-            foreach (var (name, current) in rows) AddRow((current ? "> " : "  ") + name, current);
-            if (view.Hidden > 0) AddRow($"  +{view.Hidden} more", false);
+            _rowsKey = key;
+            foreach (var child in _rows.GetChildren()) { _rows.RemoveChild(child); child.QueueFree(); }
+            if (view.Rows is { } rows)
+            {
+                AddRow($"Round {view.Round}", false);
+                foreach (var (name, current) in rows) AddRow((current ? "> " : "  ") + name, current);
+                if (view.Hidden > 0) AddRow($"  +{view.Hidden} more", false);
+            }
         }
         Show();
         Place();
@@ -118,8 +125,8 @@ public partial class AreaCombatHud : CanvasLayer
             _lamps[i].Position = new(LampInset + ActionPointRules.LampX(i, GroupGap), LampTop);
             _lamps[i].Size = new(LampSize, LampSize);
         }
-        // The list under the top strip at the left, unscaled (its text is a normal label).
-        _list.Position = new(8, AreaGameBarPanel.TopInset + 8);
+        // The list under the top strip at the right (the follower portraits stand at the left edge), unscaled (its text is a normal label).
         _list.ResetSize();
+        _list.Position = new(Math.Max(0, size.X - _list.GetCombinedMinimumSize().X - 8), AreaGameBarPanel.TopInset + 8);
     }
 }

@@ -43,10 +43,11 @@ public sealed class AreaActionPointPreviewTests
     }
 
     [TestMethod]
-    public void A_cast_costs_four_and_an_action_that_runs_no_check_previews_nothing()
+    public void A_cast_costs_four_even_without_a_valid_target_and_an_action_that_runs_no_check_previews_nothing()
     {
         Assert.AreEqual(4, AreaActionPointPreview.Cost(AreaHoverAction.Cast, 0, 3, 1, false));
-        foreach (var none in new[] { AreaHoverAction.None, AreaHoverAction.NoRoute, AreaHoverAction.Talk, AreaHoverAction.WalkToTalk, AreaHoverAction.CastNoTarget })
+        Assert.AreEqual(4, AreaActionPointPreview.Cost(AreaHoverAction.CastNoTarget, 0, 3, 1, false), "the spell cursor's check runs for any object under it");
+        foreach (var none in new[] { AreaHoverAction.None, AreaHoverAction.NoRoute, AreaHoverAction.Talk, AreaHoverAction.WalkToTalk })
             Assert.IsNull(AreaActionPointPreview.Cost(none, 2, 3, 1, false), none.ToString());
     }
 

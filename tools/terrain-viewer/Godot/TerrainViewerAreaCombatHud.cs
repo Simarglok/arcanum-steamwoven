@@ -19,10 +19,23 @@ public partial class TerrainViewerApp
     // The pending cost (the last action-point check's) and the session it belongs to; a new session or the end of a round resets it.
     private int _apPending;
     private WeakReference<GameSessionOwner>? _apPendingSession;
-    private (GameSessionOwner? Session, int Turn, int Current, int Points, int Participants, int Pending, int Cue, bool Shown, bool InBars, bool List)? _combatHudStamp;
-    private ulong _cueStartMs;
+    // The subturns the session had started when the pending cost was last kept: a subturn start runs the check with cost 0 (CH4, 0x4B75D0).
+    private long _apSeenSubturns = -1;
+    private (GameSessionOwner? Session, int Turn, int Current, int Points, int Participants, int Pending, int Cue, bool Shown, bool InBars, string? List)? _combatHudStamp;
+    // The running lights' clock: it advances only while another participant acts and starts at 0 with the round (CH5).
+    private long _cueMs;
+    private ulong _cueTick;
     // Automated runs draw the HUD only when their smoke asks (or the interface bars are drawn), as the gauges (ARC-UI-020).
     private bool _combatHudForSelfTest;
+
+    /// <summary>A subturn start clears the pending cost (the original's subturn start runs the action-point check with 0, CH4); called before any
+    /// read or write of the pending cost of <paramref name="round"/>.</summary>
+    private void NotePendingSubturn(SessionCombatRound round)
+    {
+        if (round.SubturnStarts == _apSeenSubturns) return;
+        _apSeenSubturns = round.SubturnStarts;
+        _apPending = 0;
+    }
 
     /// <summary>Per frame: the HUD while a round runs, else hidden. Cheap when nothing it reads has changed.</summary>
     private void RefreshCombatHud()
@@ -30,24 +43,24 @@ public partial class TerrainViewerApp
         var session = _areaSession;
         var round = InTurnBasedRound ? session?.QueryCombatRound() : null;
         var sameSession = session is not null && _apPendingSession is { } remembered && remembered.TryGetTarget(out var known) && ReferenceEquals(known, session);
+        var now = Time.GetTicksMsec();
         if (round is null || !sameSession)
         {
-            // CH4: only a load resets the pending cost in the original; the end of a round and a replaced session start a round afresh.
-            _apPending = 0;
+            // CH4: the end of a round and a replaced session start afresh (the original's load resets the pending cost, its build the lights).
+            _apPending = 0; _apSeenSubturns = -1; _cueMs = 0; _cueTick = now;
             _apPendingSession = session is null ? null : new(session);
-            _cueStartMs = Time.GetTicksMsec();
         }
+        if (round is not null) NotePendingSubturn(round);
         var inBars = _gameBarPanel is { Visible: true };
         var shown = round is not null && _readyArea is not null && session!.QueryHero() is not null && _readyMode == TerrainViewerMode.Area
             && (inBars || !WorldModal) && (!ViewerAutomatedStorage.Automated || _combatHudForSelfTest || _gameBarForSelfTest);
         var heroTurn = round?.Actor.IsHero == true;
-        var cue = shown && !heroTurn ? ActionPointRules.CueIndex((long)(Time.GetTicksMsec() - _cueStartMs)) : 0;
-        var list = shown && !session!.Rules.Interface.TurnOrderListHidden;
-        var stamp = (session, round?.Turn ?? 0, round?.Current ?? 0, round?.ActionPoints ?? 0, round?.Participants.Count ?? 0, _apPending, cue, shown, inBars, list);
-        if (_combatHudStamp == stamp) return;
-        _combatHudStamp = stamp;
-        if (!shown) { _combatHud?.Show(null, null); return; }
-        if (_combatHud is null) { _combatHud = new AreaCombatHud(); AddChild(_combatHud); }
+        // The lights step only on another participant's subturn; a frame's step is capped so a stalled frame does not skip round the lamps.
+        if (shown && !heroTurn) _cueMs += (long)Math.Min(now - _cueTick, 250);
+        _cueTick = now;
+        var cue = shown && !heroTurn ? ActionPointRules.CueIndex(_cueMs) : 0;
+        // The list is a Steamwoven addition and sits over the world: it hides behind any window (the lamps stay with the bars).
+        var list = shown && !WorldModal && !session!.Rules.Interface.TurnOrderListHidden;
         IReadOnlyList<(string, bool)>? rows = null; var hidden = 0;
         if (list)
         {
@@ -55,6 +68,12 @@ public partial class TerrainViewerApp
             rows = window.Rows.Select(r => (ParticipantName(round.Participants[r.Index]), r.Current)).ToArray();
             hidden = window.Hidden;
         }
+        var listKey = rows is null ? null : string.Join("\n", rows.Select(r => (r.Item2 ? ">" : " ") + r.Item1)) + "\n+" + hidden;
+        var stamp = (session, round?.Turn ?? 0, round?.Current ?? 0, round?.ActionPoints ?? 0, round?.Participants.Count ?? 0, _apPending, cue, shown, inBars, listKey);
+        if (_combatHudStamp == stamp) return;
+        _combatHudStamp = stamp;
+        if (!shown) { _combatHud?.Show(null, null); return; }
+        if (_combatHud is null) { _combatHud = new AreaCombatHud(); AddChild(_combatHud); }
         // CH4: the hero's subturn shows its points (A) against the pending cost (P); another participant's shows the running lights.
         var lamps = heroTurn ? ActionPointRules.Lamps(round!.ActionPoints, _apPending) : ActionPointRules.CueLampStates(cue);
         _combatHud.Show(new AreaCombatHudView(lamps, heroTurn, round!.Turn, rows, hidden), inBars ? _gameBarPanel : null);
@@ -76,10 +95,12 @@ public partial class TerrainViewerApp
     /// </summary>
     private void PreviewHoverCost(AreaHoverAction action, AreaObjectKey? key, Vector2? screen)
     {
-        if (!InTurnBasedRound || _areaSession is not { } session || session.QueryCombatRound() is not { Actor.IsHero: true }
+        if (!InTurnBasedRound || _areaSession is not { } session || session.QueryCombatRound() is not { Actor.IsHero: true } round
             || _worldActor.Session is not AreaGridSession grid) return;
+        NotePendingSubturn(round);
         var distance = 0;
-        if (key is { } hit && _hoverIndex is { } index && index.Contains(hit) && index.Row(hit) is { WorldX: not null, WorldY: not null } row)
+        // A walk goes to the picked cell, even when the pointer is over an object that offers no action of its own.
+        if (action != AreaHoverAction.Walk && key is { } hit && _hoverIndex is { } index && index.Contains(hit) && index.Row(hit) is { WorldX: not null, WorldY: not null } row)
         {
             var actor = grid.Chart.ToWorld(grid.State.CommittedCell);
             distance = (int)Math.Min(Chebyshev(row, (actor.X, actor.Y)), TurnBasedRules.MaxPathSteps);

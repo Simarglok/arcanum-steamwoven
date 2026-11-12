@@ -223,12 +223,23 @@ public partial class TerrainViewerApp
             HoverIndex();
             var stepAhead = Enum.GetValues<NeighborDirection>().Select(d => (Direction: d, Cell: RoutePlanner.Neighbor(((AreaGridSession)_worldActor.Session!).State.CommittedCell, d)))
                 .First(n => new AreaRouteSource(map.Steps, map.Chart).Assess(((AreaGridSession)_worldActor.Session!).State.CommittedCell, n.Direction) == RouteStepVerdict.Open && n.Cell != targetCell).Cell;
-            PreviewHoverCost(AreaHoverAction.Walk, null, Screen(stepAhead));
+            // The pointer over the cell goes through the viewer's own hover (the hook of ShowAreaHover), not a direct call.
+            HoverAtForSelfTest(Screen(stepAhead));
+            Require(_hoverAction == AreaHoverAction.Walk, $"ARC-UI-1114: the hover over the next cell is a walk: {_hoverAction}");
             Require(_apPending == TurnBasedRules.WalkStepCost, $"ARC-UI-1114: the walk preview stored {_apPending}");
             var preview = HudLamps();
-            Require(preview.SequenceEqual(ActionPointRules.Lamps(grant, TurnBasedRules.WalkStepCost)) && preview.Count(l => l == ActionPointLamp.Cost) == Math.Min(2, ActionPointRules.LampCount - Math.Min(grant - 2, ActionPointRules.LampCount)),
-                "ARC-UI-1114: lamps preview the walk's cost: " + string.Join(",", preview));
+            // Worked by hand: grant points, cost 2 → grant − 2 green lamps, then 2 orange, the rest off (the 20-lamp cap aside).
+            var greenLamps = Math.Min(grant - 2, ActionPointRules.LampCount); var orangeLamps = Math.Min(2, ActionPointRules.LampCount - greenLamps);
+            Require(preview.Take(greenLamps).All(l => l == ActionPointLamp.Left) && preview.Skip(greenLamps).Take(orangeLamps).All(l => l == ActionPointLamp.Cost)
+                && preview.Skip(greenLamps + orangeLamps).All(l => l == ActionPointLamp.Off), "ARC-UI-1114: lamps preview the walk's cost: " + string.Join(",", preview));
+            // The drawn lamps, not only the computed ones: green first, then orange, inside the window.
+            Require(_combatHud!.LampColorForSelfTest(0) == new Color(0f, 1f, 0f) && (orangeLamps == 0 || _combatHud.LampColorForSelfTest(greenLamps) == new Color(1f, .5f, 0f)),
+                "ARC-UI-1114: the drawn lamps' colours");
+            var panelRect = _combatHud.PlacementForSelfTest.Panel;
+            Require(new Rect2(Vector2.Zero, GetViewport().GetVisibleRect().Size).Encloses(panelRect) && _combatHud.LampRectForSelfTest(0).Size.X > 0, $"ARC-UI-1114: the lamp panel is inside the window: {panelRect}");
             await HudShot("hero-preview");
+            HoverReleaseForSelfTest(); // the pointer leaves: the pending cost stays (an action that runs no check leaves it, CH4)
+            Require(_apPending == TurnBasedRules.WalkStepCost, $"ARC-UI-1114: the pending cost stays after the pointer leaves: {_apPending}");
             // The "before" frame: the same scene without the HUD, as it was drawn before this change.
             _combatHudForSelfTest = false; RefreshCombatHud();
             await HudShot("before");
@@ -243,14 +254,20 @@ public partial class TerrainViewerApp
             Require(((AreaGridSession)_worldActor.Session!).State.CommittedCell == step, "the hero walked one cell");
             Require(HeroTurn() && Round().ActionPoints == grant - TurnBasedRules.WalkStepCost, $"the step cost 2: {grant} -> {Round().ActionPoints}");
             // CH4: the charge stores its cost too and does not clear it: the lamps show the points left against the same cost.
-            Require(_apPending == TurnBasedRules.WalkStepCost && HudLamps().SequenceEqual(ActionPointRules.Lamps(grant - TurnBasedRules.WalkStepCost, TurnBasedRules.WalkStepCost)),
-                $"ARC-UI-1114: the lamps after the step: pending {_apPending}, " + string.Join(",", HudLamps()));
+            var afterStep = HudLamps(); var leftLamps = Math.Min(grant - 2 * TurnBasedRules.WalkStepCost, ActionPointRules.LampCount);
+            Require(_apPending == TurnBasedRules.WalkStepCost && afterStep.Count(l => l == ActionPointLamp.Left) == leftLamps
+                && afterStep.Count(l => l == ActionPointLamp.Cost) == Math.Min(2, ActionPointRules.LampCount - leftLamps),
+                $"ARC-UI-1114: the lamps after the step: pending {_apPending}, " + string.Join(",", afterStep));
 
             // E ends the subturn; round 2 one game second later, the grant again.
             Tap(Key.E);
             FramesUntil(HeroTurn, 20);
             Require(Round().Turn == 2 && HeroTurn() && Round().ActionPoints == grant, $"E passed the turn: round {Round().Turn}, AP {Round().ActionPoints}");
             Require(session.QueryClockSnapshot().GameTimestampMs == clock + TurnBasedRules.RoundGameTimeMs, "one game second per round");
+            // CH4: a subturn start runs the check with cost 0, so the new subturn shows all its points and no cost.
+            var fresh = HudLamps();
+            Require(_apPending == 0 && fresh.Count(l => l == ActionPointLamp.Cost) == 0 && fresh.Count(l => l == ActionPointLamp.Left) == Math.Min(grant, ActionPointRules.LampCount),
+                $"ARC-UI-1114: the new subturn cleared the pending cost: {_apPending}, " + string.Join(",", fresh));
 
             // Next to the NPC a click attacks it; the start charges the attack's cost.
             var adjacent = Near(1);
@@ -262,8 +279,8 @@ public partial class TerrainViewerApp
             var point = await HoverPointAsync(this, commands[target.Row.Key]) ?? throw new InvalidOperationException("ARC-COMBAT-020 smoke: NPC not visible");
             var cost = TurnBasedRules.AttackCost(session.QueryHeroAttack()!.WeaponSpeed);
             // ARC-UI-1114: the attack preview next to the NPC is the attack's cost alone (CH4, 0x4B78D0: no approach at one cell).
-            PreviewHoverCost(AreaHoverAction.Attack, target.Row.Key, null);
-            Require(_apPending == cost, $"ARC-UI-1114: the attack preview stored {_apPending}, expected {cost}");
+            HoverAtForSelfTest(point);
+            Require(_hoverAction == AreaHoverAction.Attack && _apPending == cost, $"ARC-UI-1114: the attack preview stored {_apPending} for {_hoverAction}, expected {cost}");
             _worldTestTime = SimulationTime.At(_areaSmokeTime, 10);
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point });
             FramesUntil(() => _attack is null, 400);

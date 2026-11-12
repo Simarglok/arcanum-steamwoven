@@ -4,7 +4,7 @@ using Arcanum.Simulation.Combat;
 namespace Arcanum.World;
 
 /// <summary>
-/// ARC-UI-1114 (ledger CH4 and CH13): the action-point cost the combat interface previews for the action under the pointer. In a
+/// ARC-UI-1114 (ledger CH4 and CH14): the action-point cost the combat interface previews for the action under the pointer. In a
 /// turn-based round the original's hover handler (0x557370) runs the action-point check of the action the cursor would start,
 /// which stores its cost as the pending one the lamps show: moving to a tile (0x4B7830), using an object (0x4B79A0), picking an
 /// item up (0x4B7A20), attacking a critter (0x4B78D0), casting (0x4B7AA0). The viewer's hover actions stand for the original's
@@ -15,7 +15,7 @@ public static class AreaActionPointPreview
 {
     /// <summary>
     /// The cost the action under the pointer previews, or null when it runs no action-point check (nothing under the pointer, no
-    /// route, a talk, a spell cursor with nothing to cast at).
+    /// route, a talk).
     /// </summary>
     /// <param name="action">The viewer's hover action.</param>
     /// <param name="distance">The cells between the hero and the target (Chebyshev), at least 0.</param>
@@ -39,7 +39,8 @@ public static class AreaActionPointPreview
             AreaHoverAction.PickUp or AreaHoverAction.WalkToPickUp => TurnBasedRules.PickUpActionCost(distance == 0, distance, alwaysRun),
             AreaHoverAction.Attack or AreaHoverAction.WalkToAttack =>
                 TurnBasedRules.AttackActionCost(attackCost, weaponRange <= 1, distance, adjacentSteps, alwaysRun),
-            AreaHoverAction.Cast => TurnBasedRules.CastSpellCost,
+            // The spell cursor's check (0x4B7AA0) runs for whatever is under it, whether the spell's area passes it or not.
+            AreaHoverAction.Cast or AreaHoverAction.CastNoTarget => TurnBasedRules.CastSpellCost,
             _ => null,
         };
     }
