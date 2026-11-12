@@ -22,7 +22,8 @@ public partial class TerrainViewerApp
     {
         var end = components.Where(c => c.Action == SpellRunAction.End).OrderBy(c => c.Index).ToArray();
         var order = end.Where(c => c.Trait is not null).Concat(end.Where(c => c.Trait is null)).Select((c, index) => (c.Index, New: index)).ToDictionary(x => x.Index, x => x.New);
-        return components.Select(c => c.Action == SpellRunAction.End ? c with { Index = order[c.Index] } : c).OrderBy(c => c.Action).ThenBy(c => c.Index).ToImmutableArray();
+        // Only the END components are renumbered, in place: the array's own order (which the other actions' lists read) is kept.
+        return components.Select(c => c.Action == SpellRunAction.End ? c with { Index = order[c.Index] } : c).ToImmutableArray();
     }
 
     private async Task RunAreaTraitBodyStageAsync()
@@ -188,15 +189,15 @@ public partial class TerrainViewerApp
             var records = SpellRecordsNow()!;
             var seen = new HashSet<int>();
             foreach (var spell in new[] { 13, 18, 23, 28 })
-            foreach (var reversed in new[] { false, true })
+            foreach (var traitFirst in new[] { false, true })
             {
                 var original = records[spell];
-                if (reversed) records[spell] = original with { Components = TraitFirstEndOrder(original.Components) };
+                if (traitFirst) records[spell] = original with { Components = TraitFirstEndOrder(original.Components) };
                 try
                 {
                     var wornBefore = session.QueryEquipment().Worn.Count;
                     var endOrder = string.Join(",", records[spell].Components.Where(c => c.Action == SpellRunAction.End).OrderBy(c => c.Index).Select(c => c.Type));
-                    Require(endOrder.StartsWith("Trait") == traitFirst, $"spell {spell}: the END order under test is {(traitFirst ? "the Trait first" : "the data's, the flag before the Trait")}: {endOrder}");
+                    Require(records[spell].Components.Where(c => c.Action == SpellRunAction.End).OrderBy(c => c.Index).First().Trait is not null == traitFirst, $"spell {spell}: the END order under test is {(traitFirst ? "the Trait first" : "the data's, the flag before the Trait")}: {endOrder}");
                     var run = Cast(spell, SessionSpellCaster.Hero);
                     await Until(() => session.QueryTraitArt(SessionSpellCaster.Hero) is not null, $"the BEGIN of spell {spell} put a body on the hero");
                     var body = session.QueryTraitArt(SessionSpellCaster.Hero)!.Value;
@@ -214,7 +215,7 @@ public partial class TerrainViewerApp
                     Require(_readyActor is { } calmFrame && calmFrame.TextureKey.Selector >> 28 == 12 && _cache.TryGet(calmFrame.TextureKey, out _), "the drawn frame is the elemental's and uploaded");
 
                     // Combat mode: the weapon part 1, the attack ART of its own (a stand-in would play the stand pose), the fire elemental's low attack.
-                    ToggleCombatMode();
+                    if (!HeroInCombatMode) ToggleCombatMode();
                     await Until(() => HeroInCombatMode && WantedHeroBody() is { Weapon: 1 } armedBody && _heroBodies.TryGetValue(armedBody, out var armedLoad) && ReferenceEquals(armedLoad.Profile, _worldActor.Profile) && ReferenceEquals(_readyActorPlan?.Profile, _worldActor.Profile),
                         $"spell {spell}: combat mode draws the weapon part 1 body ({_heroBodyStatus}; {_combatModeNotice})");
                     var armed = _worldActor.Profile; var load = _heroBodies[WantedHeroBody()];
@@ -225,19 +226,19 @@ public partial class TerrainViewerApp
                     var stand = load.Textures[load.Plan(placement with { Action = ActorDiagnosticAction.Idle, Frame = 0 }).Current.TextureKey];
                     var strike = load.Textures[load.Plan(placement with { Action = ActorDiagnosticAction.Attack, Frame = armed.Attack.ActionFrame }).Current.TextureKey];
                     Require(!stand.Rgba.AsSpan().SequenceEqual(strike.Rgba), $"spell {spell}: the attack frame differs from the stand pose");
-                    GD.Print($"ARC-MAGIC-1219 trait-body spell={spell} species={body.Species} palette-asked={body.Palette} palette-read={expectedPalette} end-order={(reversed ? "trait-first: " : "data: ")}{endOrder} "
+                    GD.Print($"ARC-MAGIC-1219 trait-body spell={spell} species={body.Species} palette-asked={body.Palette} palette-read={expectedPalette} end-order={(traitFirst ? "trait-first: " : "data: ")}{endOrder} "
                         + $"calm idle=0x{calm.Idle.Selector:X8} walk=0x{calm.Walk.Selector:X8} armed idle=0x{armed.Idle.Selector:X8} attack=0x{armed.Attack.Selector:X8} low={(armed.LowAttack is null ? "none" : "own")} keys={load.Textures.Count}");
-                    ToggleCombatMode();
+                    if (HeroInCombatMode) ToggleCombatMode();
                     await Until(() => !HeroInCombatMode && WantedHeroBody() is { Weapon: 0 } calmBody && _heroBodies.TryGetValue(calmBody, out var calmLoad) && ReferenceEquals(calmLoad.Profile, _worldActor.Profile), $"spell {spell}: leaving combat mode draws the weapon part 0 body");
 
-                    // The END (the data's order, or reversed): the hero's own body, no trait record, the items chosen again.
+                    // The END (the data's order, or traitFirst): the hero's own body, no trait record, the items chosen again.
                     SpellCasterNow()!.Act(new(SessionSpellRunActionKind.ForceEnd, run));
                     FlushSpellLog(null);
                     await Until(() => session.QueryTraitArt(SessionSpellCaster.Hero) is null && !WantedHeroBody().IsMonster && _worldActor.Profile.Idle.Selector >> 28 != 12,
-                        $"spell {spell}: the END gave the hero its own body back ({(reversed ? "trait-first" : "data")} order)");
-                    if (wornBefore > 0) await Until(() => session.QueryEquipment().Worn.Count > 0, $"spell {spell}: the best items were chosen again ({(reversed ? "trait-first" : "data")} order; {_traitEquipmentResult})");
+                        $"spell {spell}: the END gave the hero its own body back ({(traitFirst ? "trait-first" : "data")} order)");
+                    if (wornBefore > 0) await Until(() => session.QueryEquipment().Worn.Count > 0, $"spell {spell}: the best items were chosen again ({(traitFirst ? "trait-first" : "data")} order; {_traitEquipmentResult})");
                 }
-                finally { records[spell] = original; }
+                finally { records[spell] = original; if (HeroInCombatMode) ToggleCombatMode(); }
             }
             Require(seen.SetEquals([3, 26, 27, 28]), $"the four body spells made the four elementals (saw {string.Join(",", seen.Order())})");
             GD.Print("ARC-MAGIC-046 native-smoke trait-body PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = area.Snapshot.RuntimeMap, Species = art.Species }));

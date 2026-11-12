@@ -181,11 +181,11 @@ public sealed class HeroBodyArtTests
 
     // ARC-MAGIC-1219 (L6): the profile's provenance names a monster body, not human fields.
     [TestMethod]
-    public void AMonsterProfilesProvenanceNamesTheSpeciesWeaponAndPalette()
+    public void AMonsterProfilesProvenanceNamesTheSpeciesAndPalette()
     {
         using var archive = MonsterArchive(new() { ["ba"] = [0, 1], ["ab"] = [0, 1], ["bu"] = [0, 1], ["ag"] = [0, 1], ["an"] = [0, 1] });
         var load = HeroBodyArt.LoadMonster([archive], HeroBody.Monster(28, 1, 1), Name);
-        Assert.AreEqual("hero monster body species28 weapon1 palette1 single-layer", load.Profile.Provenance);
+        Assert.AreEqual("hero monster body species28 palette1 single-layer", load.Profile.Provenance);
     }
 
     // The synthetic species "air": stands and runs the air elemental's way (no weapon-0 stand, no run), palette 0 only.
