@@ -1,6 +1,8 @@
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Items;
+using Arcanum.Simulation.Locks;
+using Arcanum.Simulation.Movement;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.InventoryStateTests;
 using static Arcanum.Session.Tests.SessionFixtures;
@@ -287,6 +289,83 @@ public sealed class GeneratedOnceStateTests
         CollectionAssert.Contains(owner.QueryPcInventory().Select(item => item.Entity).ToArray(), "ring");
         // The plain chest of the same seed is lootable too, though empty.
         Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.LootItem(owner.Version, "chest", "ring", _ => SessionInsertVerdict.Accepted).Failure);
+    }
+
+    // ARC-WORLD-1301 (VPG6): the break of a container with flag 0x200 never generated regenerates it first (0x463730 → 0x463E20, RK13, OD9).
+    private static readonly CellCoord CrateCell = new(120, 210);
+
+    private static SessionObjectTarget CrateTarget(string entity = "crate") => new(Exterior, entity, new SessionObjectBaseline
+    {
+        Kind = DamageableObjectKind.Container, Points = 6, Material = ObjectMaterial.Cloth, Cell = CrateCell,
+        Openable = new SessionOpenableBaseline(OpenableKind.Container, 0, 0, 0),
+    });
+
+    // Loose ground items and the items of junk piles (an item in a pile is not in Ground), with the cell each lies on.
+    private static (SessionInventoryItem Item, CellCoord Cell)[] Lying(GameSessionOwner owner) => owner.QueryMapInventory(Exterior) is { } view
+        ? [.. view.Ground.Select(ground => (ground.Item, ground.Cell)), .. view.JunkPiles.SelectMany(pile => pile.Items.Select(item => (item, pile.Cell)))] : [];
+
+    private static string[] OnTheGround(GameSessionOwner owner) => Lying(owner).Select(lying => lying.Item.Entity).ToArray();
+
+    [TestMethod]
+    public void A_broken_container_with_flag_0x200_generates_first_and_spills_the_goods_with_the_kept_items()
+    {
+        using var owner = Owner();
+        owner.GenerateOnceWorld = () => new World();
+        var revision = owner.Version.Revision;
+        var broke = owner.DamageObject(owner.Version, CrateTarget(), 100);
+        Assert.AreEqual((GameSessionDisposition.Changed, ObjectBreak.ContainerSpilled), (broke.Disposition, broke.Hit!.Break));
+        Assert.AreEqual(revision + 2, owner.Version.Revision, "the generation and the break");
+        Assert.IsTrue(owner.QueryContainerGenerated(Exterior, "crate"), "recorded as generated");
+        Assert.IsTrue(owner.IsItemDestroyed("gold-a") && owner.IsItemDestroyed("axe"), "the clear deletes all but the persistent ring (RK5)");
+        var loot = RestockRules.GenerateOnce(CrateSet, HeroSeed());
+        var goods = loot.BasicPrototypes.Select(number => 2300 + number).ToArray();
+        Assert.IsTrue(goods.Length > 0, "the invented seed must draw lines");
+        var ground = Lying(owner).Where(lying => lying.Item.Facts.Kind.Name is { } name && goods.Contains(name) || lying.Item.Entity == "ring").ToArray();
+        Assert.AreEqual(goods.Length + 1, ground.Length, "the kept ring and every generated item lie on the ground");
+        Assert.IsTrue(ground.All(lying => lying.Cell == CrateCell));
+        // The drop walks the list last first (the goods in reverse, then the ring): from the second item on they gather into a pile.
+        var piled = owner.QueryMapInventory(Exterior)!.JunkPiles.Single().Items.Select(item => item.Entity).ToArray();
+        Assert.AreEqual("ring", piled[^1]);
+        Assert.AreEqual(goods.Length + 1, owner.QueryItemDecays().Count(decay => decay.Entity == "ring" || SessionMadeItem.Number(decay.Entity) is not null), "each spilled item decays");
+        Assert.AreEqual(0, Items(owner, "crate").Length, "a spilled container lists nothing");
+        // A second break finds nothing to do.
+        Assert.AreEqual(GameSessionFailure.ObjectUnavailable, owner.DamageObject(owner.Version, CrateTarget(), 1).Failure);
+    }
+
+    [TestMethod]
+    public void A_broken_container_already_generated_or_without_the_flag_spills_as_before()
+    {
+        using var generated = Owner();
+        var world = new World();
+        generated.GenerateOnceWorld = () => world;
+        var opened = generated.GenerateContainerOnce(generated.Version, "crate", world).Regeneration!;
+        var revision = generated.Version.Revision;
+        Assert.AreEqual(ObjectBreak.ContainerSpilled, generated.DamageObject(generated.Version, CrateTarget(), 100).Hit!.Break);
+        Assert.AreEqual(revision + 1, generated.Version.Revision, "the break alone: nothing is generated twice");
+        // The whole list spills (ARC-WORLD-1306): the kept ring and the goods made at the open, but not the destroyed seed items.
+        var lying = OnTheGround(generated);
+        CollectionAssert.IsSubsetOf(opened.Created.ToArray(), lying);
+        CollectionAssert.Contains(lying, "ring");
+        CollectionAssert.DoesNotContain(lying, "axe");
+        // A container without flag 0x200 is not generated: its stored items spill and none are destroyed.
+        using var plain = Owner();
+        plain.GenerateOnceWorld = () => new World();
+        Assert.AreEqual(ObjectBreak.ContainerSpilled, plain.DamageObject(plain.Version, CrateTarget("chest"), 100).Hit!.Break);
+        Assert.IsFalse(plain.QueryContainerGenerated(Exterior, "chest"));
+        Assert.IsFalse(plain.IsItemDestroyed("axe"));
+    }
+
+    [TestMethod]
+    public void Without_the_hosts_seed_facts_a_broken_container_spills_the_stored_items_and_stays_ungenerated()
+    {
+        foreach (var world in new World?[] { null, new World { Once = null }, new World { Ready = false }, new World { Sets = { [CrateSource] = new(SessionRestockSetStatus.Unsupported, null) } } })
+        {
+            using var owner = Owner();
+            if (world is not null) owner.GenerateOnceWorld = () => world;
+            Assert.AreEqual(ObjectBreak.ContainerSpilled, owner.DamageObject(owner.Version, CrateTarget(), 100).Hit!.Break);
+            CollectionAssert.AreEquivalent(new[] { "gold-a", "axe", "ring" }, OnTheGround(owner));
+            Assert.IsFalse(owner.QueryContainerGenerated(Exterior, "crate"));
+        }
     }
 
     private static SessionEventPassResult Fire(GameSessionOwner owner, ISessionEventWorld world)
