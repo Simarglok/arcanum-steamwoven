@@ -61,6 +61,23 @@ public sealed class ItemMoveStateTests
     }
 
     [TestMethod]
+    public void APushBackOntoTheDataCellRemovesTheRecordAndATakenItemKeepsNoGround()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.MoveGroundItem(owner.Version, Apple, There).Disposition);
+        Assert.AreEqual(1, owner.QueryMovedItems().Count);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.MoveGroundItem(owner.Version, Apple, AppleCell).Disposition);
+        Assert.AreEqual(0, owner.QueryMovedItems().Count, "no inert record");
+        Assert.AreEqual(AppleCell, owner.QueryGroundItem(Apple)!.Cell);
+        // Pushed, taken and dropped again: the placed record's cell rules, the old record is inert.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.MoveGroundItem(owner.Version, Apple, There).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, Apple, Accept).Disposition);
+        owner.PlaceHeroItem(Apple, Further);
+        Assert.AreEqual(Further, owner.QueryGroundItem(Apple)!.Cell);
+        Assert.AreEqual(Further, owner.QueryMapInventory(Exterior)!.Ground.Single(g => g.Item.Entity == Apple).Cell);
+    }
+
+    [TestMethod]
     public void ThePushedCellIsSavedAndRestored()
     {
         using var owner = Owner();

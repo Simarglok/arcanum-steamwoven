@@ -217,7 +217,8 @@ public sealed class AreaSpellCastMap : ISpellCastMap
                     weights[ground.Item.Entity] = _session.QueryItemWeight(ground.Item.Entity)?.Weight ?? ground.Item.Facts.Weight;
             _weightsAt = known = (_session.Version.Revision, weights);
         }
-        return known.Weights.GetValueOrDefault(id);
+        // An item the ground view does not list (in a junk pile, a pushed carried row) weighs what the session keeps for it, else 0.
+        return known.Weights.TryGetValue(id, out var weight) ? weight : _session.QueryItemWeight(id)?.Weight ?? 0;
     }
 
     [OriginalFunction(0x440B40, OriginalFunctionScope.Partial)]
@@ -263,7 +264,9 @@ public sealed class AreaSpellCastMap : ISpellCastMap
             foreach (var id in ids)
                 if (moved.Count == 0 || !moved.TryGetValue(id, out var live) || live.X == x && live.Y == y) yield return id;
         foreach (var (id, live) in moved)
-            if (live.X == x && live.Y == y && _rows.TryGetValue(id, out var row) && (row.WorldX != x || row.WorldY != y)) yield return id;
+            // A carried row (flag 0x1000: an NPC's dropped item, a broken container's) has no map cell, so it joins the area queries as little after a push as before it.
+            if (live.X == x && live.Y == y && _rows.TryGetValue(id, out var row) && (row.WorldX != x || row.WorldY != y)
+                && (Flags(row, ObjectFlagsSlot) & SpellTargetObject.Inventory) == 0) yield return id;
     }
 
     private void AddPlaced(List<SpellTargetObject> found, IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?> placed, int typeMask,

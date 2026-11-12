@@ -92,6 +92,9 @@ public sealed partial class GameSessionOwner
             Revise();
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
         }
-        return ApplyChanges(Version, null, [new(lying.Map, SessionItemMove.Key(entity), ItemDroppedValue(cell))]);
+        // A push back onto the cell the item's data puts it on removes the record (no inert record counts against the budgets).
+        var home = _inventory.Seeds.TryGetValue(lying.Map, out var seed) && seed.Items.TryGetValue(entity, out var row)
+            ? row.Cell ?? SpilledCell(lying.Map, seed, entity) ?? DroppedCell(lying.Map, seed, entity) : null;
+        return ApplyChanges(Version, null, [new(lying.Map, SessionItemMove.Key(entity), home == cell ? null : ItemDroppedValue(cell))]);
     }
 }
