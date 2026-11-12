@@ -79,11 +79,22 @@ public partial class TerrainViewerApp
                 return order.MaxBy(c => c.Order).Id;
             }
             string Stayer(string mover) => mover == first.Entity ? second.Entity : first.Entity;
-            (int Frames, string Where) Separate(string mover, string stay)
+            // The goal's run until it ends; the tile the mover stood on while it ran is where the goal put it (the NPC's own routine walks it home afterwards, which is no part of the goal).
+            (int Frames, string Where, CellCoord? Landed) Separate(string mover, string stay)
             {
-                var frames = 0;
-                for (; frames < 1500 && (host.RunOf(mover) is not null || host.Tile(mover) == host.Tile(stay)); frames++) Frames(1);
-                return (frames, $"{mover} at {host.Tile(mover)?.X},{host.Tile(mover)?.Y}, {stay} at {host.Tile(stay)?.X},{host.Tile(stay)?.Y}");
+                var frames = 0; CellCoord? landed = null;
+                for (; frames < 1500 && host.RunOf(mover) is { Bottom.Goal: GoalType.PleaseMove }; frames++)
+                {
+                    landed = host.Tile(mover);
+                    Frames(1);
+                }
+                return (frames, $"{mover} landed {landed?.X},{landed?.Y}, {stay} at {host.Tile(stay)?.X},{host.Tile(stay)?.Y}", landed);
+            }
+            // Idle again: the walk home the routine gave the moved NPC has ended.
+            void Settle()
+            {
+                for (var frame = 0; frame < 3000 && (host.RunOf(first.Entity) is not null || host.RunOf(second.Entity) is not null); frame++) Frames(1);
+                Require(host.RunOf(first.Entity) is null && host.RunOf(second.Entity) is null, "both settle to no run");
             }
 
             // (1) The attack starter meets the finder.
@@ -97,21 +108,22 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-AI-1315 please-move finder attacker={first.Entity} mover={mover} run={started?.Bottom.Goal} away={started?.Bottom.Target} trace={host.TraceOf(first.Entity)?.Perform}");
             Require(started is { Bottom.Goal: GoalType.PleaseMove } && started.Bottom.Target == stayer, $"{mover} got goal 68 away from {stayer}: {started?.Bottom.Goal}");
             Require(host.RunOf(stayer) is null, $"{stayer} started nothing (no attack from the shared tile): {host.RunOf(stayer)?.Bottom.Goal}");
-            var (frames, where) = Separate(mover, stayer);
-            Require(host.RunOf(mover) is null && host.Tile(mover) != host.Tile(stayer), $"{mover} left the shared tile after {frames} frames: {where}");
+            var (frames, where, landed) = Separate(mover, stayer);
+            Require(landed is { } l1 && l1 != shared, $"{mover} left the shared tile after {frames} frames: {where}");
             Require(host.Tile(stayer) == shared, $"{stayer} stayed on {shared.X},{shared.Y}: {where}");
-            Require(AiDistance(host.Tile(mover)!.Value, shared) == 1, $"{mover} stepped to a neighbouring tile: {where}");
+            Require(AiDistance(landed!.Value, shared) == 1, $"{mover} stepped to a neighbouring tile: {where}");
             var finderFrames = frames; var finderWhere = where;
 
             // (2) The step apart, which a refused attack start ends in.
+            Settle();
             StackOnFirst();
             mover = Mover();
             stayer = Stayer(mover);
             Require(host.RunOf(first.Entity) is null && host.RunOf(second.Entity) is null, "both are idle again");
             var asked = AiTileSharerRules.StepApart(host, first.Entity);
             Require(asked == 1 && host.RunOf(mover) is { Bottom.Goal: GoalType.PleaseMove }, $"the step apart asked {asked} critter(s); {mover}: {host.RunOf(mover)?.Bottom.Goal}");
-            (frames, where) = Separate(mover, stayer);
-            Require(host.RunOf(mover) is null && host.Tile(mover) != host.Tile(stayer) && AiDistance(host.Tile(mover)!.Value, host.Tile(stayer)!.Value) == 1, $"the step apart separated them after {frames} frames: {where}");
+            (frames, where, landed) = Separate(mover, stayer);
+            Require(landed is { } l2 && AiDistance(l2, host.Tile(stayer)!.Value) == 1, $"the step apart separated them after {frames} frames: {where}");
             GD.Print("ARC-AI-1315 native-smoke please-move PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, First = first.Entity, Second = second.Entity, Mover = mover, FinderFrames = finderFrames, FinderWhere = finderWhere, StepApartFrames = frames, StepApartWhere = where }));
         }
         finally
