@@ -133,6 +133,8 @@ public sealed class AreaUseScriptHostTests
             // 775 (ARC-DEV-298, bug B20): a tile script that floats its DLG line 1 over the PC, as the ghost of Brego's callee (2789) floats the ghost's.
             Write("scr/00775float.scr", Program(Do(new(ScrCatalogue.Action.FloatLine, N(1), (Triggerer, 0))), Do(new(ScrCatalogue.Action.SetGlobalFlag, N(48))), Do(Skip)));
             Write("dlg/00775float.dlg", Encoding.Latin1.GetBytes("{1}{Help me.}{}{}{}{}{}"));
+            // 776 (ARC-SCRIPT-1241): a use script that fades for 12 seconds into movie 3 (track 0, the screen back at once) and sets a flag, as the Vendigroth underground's 2862 plays its movies.
+            Write("scr/00776fade.scr", Program(Do(new(ScrCatalogue.Action.Fade, N(12), N(0), N(3), N(0))), Do(new(ScrCatalogue.Action.SetGlobalFlag, N(49))), Do(Skip)));
             // 721, 722 (ARC-SCRIPT-020): an item's use script that sets a flag and runs default, and one that skips default.
             Write("scr/00721use.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(31))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00722stop.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(32))), Do(Skip)));
@@ -174,6 +176,9 @@ public sealed class AreaUseScriptHostTests
                 BinaryPrimitives.WriteUInt32LittleEndian(trap.AsSpan(48), flags);
                 Write($"scr/00{number}trap.scr", trap);
             }
+            // 790 and 791 (ARC-WORLD-1162): a bed's script that ends skip default, and one that ends run default.
+            Write("scr/00790bedskip.scr", Program(Do(Skip)));
+            Write("scr/00791bedrun.scr", Program(Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
         }
@@ -207,6 +212,22 @@ public sealed class AreaUseScriptHostTests
                 MapChangeKey.ForEntity(Entity(0), AreaUseScriptHost.ScriptProperty), 0).Disposition);
             Assert.AreEqual(false, host.IsTrap(Gate(709)));
             Assert.IsNull(Host(session, null, Gate(709)).IsTrap(Gate(709)), "no script content");
+        });
+    }
+
+    [TestMethod]
+    public void A_beds_use_script_answers_the_rest_hook_one_refuses_and_a_bed_with_no_script_is_one()
+    {
+        // ARC-WORLD-1162 (SWB5, 0x57B180 over 0x441980): the answer 1 (run default, and no script on the point) refuses the hero; skip default goes on; a run the host cannot apply decides nothing.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            AreaBedScriptRun Bed(AreaObjectRecord row) => Host(session, content, row).RunBed(row, session.Rules.Scripts);
+            var none = Bed(Row(3, 3, 0, 3003));
+            Assert.AreEqual(AreaBedAnswer.RunDefault, none.Answer, "a bed with no script on the point: the entry point's run default, so the hero is refused");
+            Assert.AreEqual(AreaBedAnswer.SkipDefault, Bed(Row(4, 3, 790, 3004)).Answer, "a script that ends skip default lets him lie down");
+            Assert.AreEqual(AreaBedAnswer.RunDefault, Bed(Row(5, 3, 791, 3005)).Answer, "a script that ends run default refuses him");
+            Assert.AreEqual(AreaBedAnswer.NotModelled, Bed(Gate(760)).Answer, "a script that teleports from a bed is not applied and answers nothing");
         });
     }
 
@@ -525,6 +546,28 @@ public sealed class AreaUseScriptHostTests
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, skipped.Outcome, skipped.Detail);
             CollectionAssert.AreEqual(new[] { 9 }, session.QueryRevealedTownMaps().ToArray());
             Assert.IsTrue(host.GlobalFlag(47), "the run's other effects apply");
+        });
+    }
+
+    // ARC-SCRIPT-1241 (MV5): a use script's fade jumps the game clock and hands its movie to the viewer; the run's other effects apply.
+    [TestMethod]
+    public void A_use_scripts_fade_jumps_the_game_clock_and_hands_its_movie_to_the_viewer()
+    {
+        Assert.IsTrue(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.Fade));
+        Assert.IsTrue(AreaUseScriptHost.PlacedAdmission.Actions.Contains(ScrCatalogue.Action.Fade) && AreaUseScriptHost.DyingAdmission.Actions.Contains(ScrCatalogue.Action.Fade), "tile, sector and dying scripts");
+        Assert.IsFalse(AreaUseScriptHost.HeartbeatAdmission.Actions.Contains(ScrCatalogue.Action.Fade), "a heartbeat never fades");
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var host = Host(session, content, Gate(776));
+            var before = session.QueryClockSnapshot().GameTimestampMs;
+            var ran = host.Run(Gate(776), session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            CollectionAssert.AreEqual(new[] { new ScrFade(12, 0, 3, 0) }, ran.Run!.Effects.Fades.ToArray());
+            Assert.AreEqual(before + 12_000, session.QueryClockSnapshot().GameTimestampMs);
+            CollectionAssert.AreEqual(new[] { new AreaScriptFade(12_000, 3, 0, 0, 0) }, host.TakeFades().ToArray());
+            Assert.AreEqual(0, host.TakeFades().Count, "taken once");
+            Assert.IsTrue(host.GlobalFlag(49), "the run's other effects apply");
         });
     }
 

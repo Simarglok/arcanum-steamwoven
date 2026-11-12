@@ -69,7 +69,16 @@ public sealed partial class GameSessionOwner
         if (emptied ? !_durability.Records.ContainsKey(pile.Entity) && _durability.Count >= _limits.MaxDurabilityRecords
             : !_inventory.Piles.ContainsKey(pile.Entity) && _inventory.Piles.Count >= _limits.MaxGoldRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
-        _inventory.Gold += count;
+        // ARC-WORLD-1132: a hero with no gold pile and no free grid place for one gets no coins, the new pile stays on the ground.
+        GoldGround? ground = null;
+        if (HeroGoldNeedsGround())
+        {
+            var failure = PlanGoldGround(pile.Facts?.Kind ?? SessionHeroGrid.GoldKind, out var planned, !emptied && !_inventory.Piles.ContainsKey(pile.Entity) ? 1 : 0);
+            if (failure != GameSessionFailure.None) return RejectItem(failure);
+            ground = planned;
+        }
+        if (ground is { } onGround) LeaveGoldOnGround(onGround, count);
+        else _inventory.Gold += count;
         if (emptied) DestroyObject(pile.Entity);
         else _inventory.Piles[pile.Entity] = pile.Quantity - count;
         Revise();
@@ -79,8 +88,9 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// The hero gets <paramref name="count"/> coins from nothing (0x464830 with no source object, the dialog's <c>$$ n</c> with n &gt; 0,
     /// ARC-DEV-179, ledger GM1): the source's call credits the destination whether or not a source exists, and the hero's gold grows with no
-    /// insert check when the hero already holds a gold stack (a hero without one gets a new gold object moved in through the insert path, 0x4617F0,
-    /// whose check is not modelled here: gold weighs nothing). Refused before any effect: a negative count (<see cref="GameSessionFailure.InvalidItem"/>), the version, no hero to hold
+    /// insert check when the hero already holds a gold stack; a hero without one gets a new gold object moved in through the insert path (0x4617F0), whose
+    /// room test (ARC-WORLD-1132) leaves the pile on the hero's tile (<see cref="InventoryMutationResult.Item"/> names it) when the grid has no place for it, the
+    /// call still succeeding (gold weighs nothing, so only the room is checked). Refused before any effect: a negative count (<see cref="GameSessionFailure.InvalidItem"/>), the version, no hero to hold
     /// gold (<see cref="GameSessionFailure.GoldUnavailable"/>), a sum past 32 bits (<see cref="GameSessionFailure.BudgetExceeded"/>), the
     /// revision. A count of 0 changes nothing. One revision.
     /// </summary>
@@ -93,6 +103,15 @@ public sealed partial class GameSessionOwner
         if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
         if ((long)_inventory.Gold + count > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        // ARC-WORLD-1132: no pile and no free grid place for one: the new pile lies on the hero's tile (a plain created object) and the call succeeds.
+        if (HeroGoldNeedsGround())
+        {
+            var failure = PlanGoldGround(SessionHeroGrid.GoldKind, out var ground);
+            if (failure != GameSessionFailure.None) return RejectItem(failure);
+            var left = LeaveGoldOnGround(ground, count);
+            Revise();
+            return new(GameSessionDisposition.Changed, GameSessionFailure.None, left, null, Version);
+        }
         _inventory.Gold += count;
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, null, Version);

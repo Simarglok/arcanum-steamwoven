@@ -124,6 +124,9 @@ public sealed record LifeFacts
     public LifeTraits Traits { get; init; }
     public ImmutableArray<EffectModifier> MaxHitPointEffects { get; init; } = ImmutableArray<EffectModifier>.Empty;
     public ImmutableArray<EffectModifier> MaxFatigueEffects { get; init; } = ImmutableArray<EffectModifier>.Empty;
+    /// <summary>The critter's race, whose stat ranges cut a stat an effect changes (ARC-WORLD-1144: the session re-reads an NPC's strength, constitution and willpower under its effect list; the life
+    /// formulas themselves do not read it). Human for a critter whose host does not say.</summary>
+    public CharacterRace Race { get; init; } = CharacterRace.Human;
 }
 
 /// <summary>

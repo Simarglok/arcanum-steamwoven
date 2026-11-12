@@ -19,7 +19,7 @@ public sealed class AreaStoryScriptAdmissionTests
         {
             foreach (var condition in ScrAdmissionSet.StoryConditions) Assert.IsTrue(set.Conditions.Contains(condition), $"{set.Id}: condition {condition}");
             foreach (var action in ScrAdmissionSet.StoryActions) Assert.IsTrue(set.Actions.Contains(action), $"{set.Id}: action {action}");
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S34), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S35), set.Id); // ARC-SCRIPT-1241: S35 is S34 plus the fade, which the use and dialog sets hold
         }
     }
 

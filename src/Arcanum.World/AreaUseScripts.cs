@@ -61,6 +61,13 @@ public sealed record AreaScriptCreation(int Prototype, ScrObjectRef Near, Invent
 /// nothing of the run is applied).</summary>
 public enum AreaScriptedUseOutcome { Teleport, NoTeleport, Refused, EffectsRejected, ContentUnavailable, TeleportRefused }
 
+/// <summary>ARC-WORLD-1162 (SWB5): the answer of a bed's use script to the rest hook: <see cref="RunDefault"/> is the answer 1 (the run-default end and an object with no script on the point), which refuses the hero;
+/// <see cref="SkipDefault"/> any other answer, which goes on to the seat; <see cref="NotModelled"/> a run the host could not apply (a script it refuses or cannot read, a teleport from a bed), which decides nothing.</summary>
+public enum AreaBedAnswer { RunDefault, SkipDefault, NotModelled }
+
+/// <summary>A bed's use run: the answer and the run it came from (its printed lines, dialog and detail).</summary>
+public sealed record AreaBedScriptRun(AreaBedAnswer Answer, AreaScriptedUse Use);
+
 /// <summary>A scripted use: the outcome, the first teleport of the player the run asked for, the printed lines the viewer
 /// shows, the dispatcher's result and a detail (identifiers and statuses only).</summary>
 public sealed record AreaScriptedUse(AreaScriptedUseOutcome Outcome, ScrTeleport? Teleport, IReadOnlyList<string> Lines, ScrRunResult? Run, string Detail)
@@ -141,6 +148,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// in the session (<see cref="AreaScriptStory"/>); the wreck's sector script 3036 and one use script carry it (the census counts two scripts).
     /// ARC-MAGIC-030 (MT21b, ledger SC1–SC6): plus the spell conditions body spell (14), influenced by spell (35), knows spell (48) and mastered spell college (49) of
     /// <see cref="ScrAdmissionSet.S31"/>, which this host answers (<see cref="IScrSpellQueries"/>), and give spell mastery in college (112), which it writes through the session.
+    /// ARC-SCRIPT-1241: plus fade (103) of <see cref="ScrAdmissionSet.S35"/>, which jumps the game clock and hands its movie to the viewer (<see cref="TakeFades"/>); the use script 2862 of the Vendigroth
+    /// underground and the dying scripts 2863 and 3061 of Kerghan carry it, and the placed and dying sets are built on this one.
     /// </summary>
     public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading-objects-story-world", ScrAdmissionSet.S4.Conditions.Concat(ScrAdmissionSet.SpellQueryConditions).Concat(ScrAdmissionSet.StoryConditions),
         ScrAdmissionSet.S4.Actions.Where(a => a is not ScrCatalogue.Action.Dialog)
@@ -149,7 +158,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
                 ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation,
                 ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.CreateObject, ScrCatalogue.Action.GetStat,
-                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, .. ScrAdmissionSet.StoryActions]),
+                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade]),
         ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]),
         counterIndexWraps: true);
@@ -224,6 +233,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
 
     private readonly List<ScrReadingRequest> _readings = [];
     private readonly List<AreaScriptFloat> _floats = [];
+    private readonly List<AreaScriptFade> _fades = [];
+
+    /// <summary>ARC-SCRIPT-1241: the fades (103) of the runs applied since the last call that ask for a movie, in order, for the viewer to play (their clock jumps are done; a sound-only fade plays
+    /// nothing here, as no effect sound does for a use click).</summary>
+    public IReadOnlyList<AreaScriptFade> TakeFades()
+    {
+        var fades = _fades.ToArray();
+        _fades.Clear();
+        return fades;
+    }
 
     /// <summary>ARC-DEV-298: the float lines (23) of the runs applied since the last call, in order, each with its text, for the viewer to float over its speaker
     /// (the talk host's <see cref="AreaScriptHost.TakeFloats"/> for a tile script).</summary>
@@ -712,6 +731,20 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     }
 
     /// <summary>
+    /// ARC-WORLD-1162 (0x57B180, SWB5): the bed's use script on attachment point 1, run with the hero as triggerer exactly as a use is (<see cref="Run"/>: the trap meeting first, then the script with its effects applied), and
+    /// its answer in the hook's terms. A trap that ended the call answers 0 (the entry point's trap branch), so the hero goes on to the seat; a script that ended <i>run default</i>, and a bed with no script on the
+    /// point (the entry point's answer for it, SA10), answer 1, which refuses the hero. A run the host does not model (a refused script, a teleport from a bed, a conversation) is <see cref="AreaBedAnswer.NotModelled"/>.
+    /// </summary>
+    public AreaBedScriptRun RunBed(AreaObjectRecord row, ScrRuleProfile rules)
+    {
+        var used = Run(row, rules, _ => "a teleport from a bed's script is not modelled");
+        if (used.Trap is { Cancels: true }) return new(AreaBedAnswer.SkipDefault, used);
+        // A conversation the script asks for is the viewer's to start (the rest hook then pops the interface stack it stands on), which is not modelled: no answer is taken from such a run.
+        if (used.Outcome != AreaScriptedUseOutcome.NoTeleport || used.Run is not { } run || used.Dialog is not null) return new(AreaBedAnswer.NotModelled, used);
+        return new(run.Outcome == ScrOutcome.RunDefault ? AreaBedAnswer.RunDefault : AreaBedAnswer.SkipDefault, used);
+    }
+
+    /// <summary>
     /// ARC-WORLD-110: the trap meeting of a use (<see cref="AreaTraps.Use"/>), asked by <see cref="Run"/> before the use script: null
     /// lets the use go on as before (the object carries no trap, or no trap host is set).
     /// </summary>
@@ -1178,6 +1211,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         // ARC-UI-049: a reading action shows its document to the PC only; it changes no session state.
         foreach (var request in effects.Readings)
             if (IsPc(request.Viewer)) _readings.Add(request);
+        // ARC-SCRIPT-1241 (MV5): each fade's clock jump, then its movie for the viewer; the later steps stop when the clock refuses.
+        var asked = new List<AreaScriptFade>();
+        var fadesApplied = AreaScriptFades.Apply(_session, effects, asked);
+        _fades.AddRange(asked.Where(fade => fade.Movie != 0));   // the fades before a refused jump keep their movie, as their clock jumps stay
+        if (!fadesApplied) return false;
         // ARC-WORLD-081: each create object adds its item to the ground next to its object (Creatable checked them); under Steamwoven a patch
         // at the limit takes no more (no change).
         // An item a script creates has its prototype's weight (not saved, so attached before the creations).

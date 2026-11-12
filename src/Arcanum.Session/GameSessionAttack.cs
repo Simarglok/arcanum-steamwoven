@@ -294,6 +294,7 @@ public sealed class SessionCritterCombat
             PoisonRecovery = Effective(plain, CharacterStat.PoisonRecovery),
             NormalResistance = resistances.Normal,
             Traits = traits,
+            Race = race,
         };
         if (!LifeRules.IsValid(facts) || !LifeRules.IsValid(loaded)) return Fail(SessionCritterCombatFailure.InvalidLife);
         var experience = new SessionNpcExperience(entity, npc.ExperienceWorth, npc.ExperiencePool);

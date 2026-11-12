@@ -99,7 +99,7 @@ public static class ScrCatalogue
         public const int DoNothing = 0, ReturnSkipDefault = 1, ReturnRunDefault = 2, Goto = 3, Dialog = 4, RemoveThisScript = 5, ChangeThisScript = 6, CallScript = 7,
             SetLocalFlag = 8, ClearLocalFlag = 9, Assign = 10, Add = 11, Subtract = 12, Multiply = 13, Divide = 14, PrintLine = 24,
             LoopFor = 18, LoopEnd = 19, LoopBreak = 20, GetStoryState = 42, SetStoryState = 43, Teleport = 44,
-            CallScriptIn = 54, CallScriptAt = 55, CallScriptEx = 81, PlaySound = 82, PlaySoundOn = 83, PlaySoundScheme = 87, SetGlobalFlag = 100, ClearGlobalFlag = 101, FadeAndTeleport = 102,
+            CallScriptIn = 54, CallScriptAt = 55, CallScriptEx = 81, PlaySound = 82, PlaySoundOn = 83, PlaySoundScheme = 87, SetGlobalFlag = 100, ClearGlobalFlag = 101, FadeAndTeleport = 102, Fade = 103,
             RemoveScriptCall = 125, UseAmmoUnits = 135, StartSchematicUi = 129, SetAutoLevelScheme = 139, ShowBook = 64, ShowPicture = 65, ShowPlaque = 114,
             GetSkill = 47, UseItemWithSkill = 79, AssignObject = 15, GetObjectType = 34,
             SetPcQuestState = 16, MarkMapLocation = 49, SetRumor = 50, AddReputation = 72, RemoveReputation = 73,
