@@ -117,6 +117,31 @@ public sealed class AreaAiBedTests
     }
 
     [TestMethod]
+    public void A_latch_the_session_holds_keeps_a_rebuilt_host_from_looking_up_a_bed_again()
+    {
+        // ARC-AI-1314 (VA19, VAG3): the latch is NPC flag 0x200 of the object, saved with it. The bed is taken when the NPC arrives; after the occupant has left and the host is built again, the NPC at its standpoint is not seated.
+        var occupancy = new AreaBedOccupancy();
+        Assert.IsTrue(occupancy.Seat(BedKey, "someone else"));
+        var scene = Open(occupancy);
+        JumpToHour(scene, 3);
+        scene.Host.RunStandpoints(scene.Npc);
+        StringAssert.Contains(Route(scene), "bed taken by someone else");
+        Assert.AreEqual(true, scene.Session.QueryStandpointLatch(scene.Npc), "set at the standpoint before the bed look-up, kept when the seat fails");
+        Assert.IsTrue(occupancy.Unseat(BedKey, "someone else"));
+        var rebuilt = scene.Rebuild();
+        Assert.IsTrue(rebuilt.Arrived.Contains(scene.Npc));
+        rebuilt.RunStandpoints(scene.Npc);
+        Assert.IsNull(occupancy.Occupant(BedKey), "the latch is set: no look-up, no seat");
+        Assert.IsFalse(rebuilt.Sleeping(scene.Npc));
+        // Without the latch (an older save) the same step looks up the bed and seats the NPC.
+        var older = Open(new AreaBedOccupancy());
+        JumpToHour(older, 3);
+        Assert.IsNull(older.Session.QueryStandpointLatch(older.Npc));
+        older.Rebuild().RunStandpoints(older.Npc);
+        Assert.IsTrue(older.Session.QueryObjectFlags(older.Npc).CritterSet != 0, "seated");
+    }
+
+    [TestMethod]
     public void The_far_branch_clears_the_latch_before_it_moves_the_npc()
     {
         var occupancy = new AreaBedOccupancy();
