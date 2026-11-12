@@ -81,9 +81,26 @@ public sealed class AreaCharacterSheetTests
         Assert.AreEqual("Alignment -25 | magick aptitude 0, tech aptitude 0", lines[2]);
         Assert.AreEqual($"Hit points {life.HitPoints}/{life.MaxHitPoints} | fatigue {life.Fatigue}/{life.MaxFatigue}", lines[3]);
         Assert.AreEqual("Strength 8 | Constitution 8 | Dexterity 9 | Beauty 8", lines[4]);
-        Assert.AreEqual("Resistances normal 0%, magick 0%, fire 0%, poison 20%, electrical 0% (worn armour and constitution only; effect changes NOT modelled)", lines[^1]);
+        Assert.AreEqual("Resistances normal 0%, magick 0%, fire 0%, poison 20%, electrical 0% (worn armour, constitution and effect changes)", lines[^1]);
         using var good = Start(Definition(alignment: 255));
         Assert.AreEqual(25, Sheet(good).Alignment);
+    }
+
+    /// <summary>ARC-UI-1145 (0x43D6D0): the resistance lines are the worn armour and the constitution bonus under the durable effects' resistance changes (the doll's armour rating reads the same),
+    /// the Magick line included (the save still reads the stored value, ARC-MAGIC-033).</summary>
+    [TestMethod]
+    public void Resistance_effects_and_a_constitution_effect_move_the_resistance_lines()
+    {
+        using var session = Start(Definition(), Rules());
+        EffectChange Resist(int attribute, int value) => new(EffectAttributeKind.Resistance, attribute, EffectChangeOperator.Add, value);
+        Assert.AreEqual(GameSessionFailure.None, session.AddHeroEffect(session.Version, new(130, [Resist(0, 30), Resist(3, 10), Resist(4, 25), Resist(2, -5)]), EffectCause.Spell).Failure);
+        Assert.AreEqual(GameSessionFailure.None, session.AddHeroEffect(session.Version, Effect(131, 2, 2), EffectCause.Item).Failure);
+        var view = Sheet(session);
+        // Constitution 8 + 2 gives the poison bonus 5 x (10 - 4) = 30, the effect adds 10; the electrical change cannot go below 0.
+        CollectionAssert.AreEqual(new[] { 30, 25, 0, 40, 0 }, view.Resistances.Select(value => value.Value).ToArray());
+        Assert.AreEqual("Resistances normal 30%, magick 25%, fire 0%, poison 40%, electrical 0% (worn armour, constitution and effect changes)", AreaCharacterSheet.Lines(view)[^1]);
+        Assert.AreEqual(GameSessionFailure.None, session.RemoveHeroEffect(session.Version, 130).Failure);
+        CollectionAssert.AreEqual(new[] { 0, 0, 0, 30, 0 }, Sheet(session).Resistances.Select(value => value.Value).ToArray(), "the resistance effect gone, the constitution bonus stays");
     }
 
     [TestMethod]

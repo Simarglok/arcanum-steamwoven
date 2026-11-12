@@ -89,13 +89,14 @@ public static class AreaCharacterSheet
         var primary = PrimaryOrder.Select(stat => new AreaSheetValue(Label(stat), stats.GetEffective(stat), Mark(stats, stat))).ToArray();
         var secondary = SecondaryOrder.Select(stat => new AreaSheetValue(Label(stat), stats.GetEffective(stat))).ToArray();
         var worn = session.QueryHeroEquipmentCombat()!.Resistances;
-        // object_get_resistance (0x43D6D0, ledger EQ8): the constitution bonus to poison counts only when positive.
-        var poisonBonus = Math.Max(0, 5 * (stats.GetEffective(CharacterStat.Constitution) - 4));
+        // object_get_resistance (0x43D6D0, ledger EQ8): the worn armour and the constitution bonus to poison (only when positive) under the durable effects' resistance changes
+        // (ARC-UI-1145, the same function the hero's doll rating and attacks read), then clamped.
+        var shown = session.QueryHeroSheetResistances(worn, stats.GetEffective(CharacterStat.Constitution));
         AreaSheetValue Resistance(string label, int value) => new(label, Math.Clamp(value, 0, MaxResistance));
         var resistances = new[]
         {
-            Resistance("Normal", worn.Normal), Resistance("Magick", worn.Magic), Resistance("Fire", worn.Fire),
-            Resistance("Poison", worn.Poison + poisonBonus), Resistance("Electrical", worn.Electrical),
+            Resistance("Normal", shown.Damage.Normal), Resistance("Magick", shown.Magic), Resistance("Fire", shown.Damage.Fire),
+            Resistance("Poison", shown.Damage.Poison), Resistance("Electrical", shown.Damage.Electrical),
         };
         return new(AreaSheetRefusal.None, new(AreaStartingHero.Name(hero), hero.Race, hero.Gender, experience.Level, experience.Experience,
             experience.ToNextLevel, experience.UnspentPoints, hero.Alignment / 10, Math.Max(0, aptitude), Math.Max(0, -aptitude),
@@ -138,7 +139,7 @@ public static class AreaCharacterSheet
             string.Join(" | ", view.Secondary.Take(4).Select(Value)),
             string.Join(" | ", view.Secondary.Skip(4).Select(Value)),
             "Resistances " + string.Join(", ", view.Resistances.Select(r => $"{r.Label.ToLowerInvariant()} {r.Value}%"))
-                + " (worn armour and constitution only; effect changes NOT modelled)",
+                + " (worn armour, constitution and effect changes)",
         ];
     }
 
