@@ -600,6 +600,55 @@ class BuildServerTests(unittest.TestCase):
         self.assertIn("not shut down", run_queue.shutdown_build_servers(self.environment, [], 7, broken))
 
 
+class ProcessStartTests(unittest.TestCase):
+    """ARC-DEV-1401: the process start time of a ticket is read without spawning `ps`."""
+
+    def ps_start(self, pid: int) -> str:
+        return subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True,
+                              env=run_queue._PS_ENVIRONMENT).stdout.strip()
+
+    @unittest.skipUnless(sys.platform == "darwin", "libproc is macOS only")
+    def test_libproc_text_equals_ps(self) -> None:
+        self.assertIsNotNone(run_queue._LIBPROC)
+        self.assertEqual(run_queue._process_start(os.getpid()), self.ps_start(os.getpid()))
+        child = subprocess.Popen(["sleep", "30"])
+        try:
+            self.assertEqual(run_queue._process_start(child.pid), self.ps_start(child.pid))
+        finally:
+            child.kill()
+            child.wait()
+
+    @unittest.skipUnless(sys.platform == "darwin", "libproc is macOS only")
+    def test_no_process_is_spawned(self) -> None:
+        with patch.object(subprocess, "run", side_effect=AssertionError("spawned")), \
+                patch.object(subprocess, "Popen", side_effect=AssertionError("spawned")):
+            start = run_queue._process_start(os.getpid())
+            self.assertRegex(start, r"^\w{3} \w{3} [ \d]\d \d\d:\d\d:\d\d \d{4}$")
+            self.assertTrue(run_queue._alive(os.getpid(), start))
+            self.assertFalse(run_queue._alive(os.getpid(), "Mon Jan  1 00:00:00 2001"))  # a reused pid
+            self.assertTrue(run_queue._alive(os.getpid(), run_queue.UNKNOWN))
+
+    @unittest.skipUnless(sys.platform == "darwin", "libproc is macOS only")
+    def test_gone_process_is_none(self) -> None:
+        child = subprocess.Popen(["true"])
+        child.wait()
+        self.assertIsNone(run_queue._process_start(child.pid))
+        self.assertFalse(run_queue._alive(child.pid, "Thu Nov 12 17:07:19 2026"))
+
+    @unittest.skipUnless(sys.platform == "darwin", "libproc is macOS only")
+    def test_another_users_process_is_unknown_not_gone(self) -> None:
+        self.assertEqual(run_queue._process_start(1), run_queue.UNKNOWN)  # launchd: root's, the kernel refuses
+
+    def test_fallback_asks_ps_and_caches(self) -> None:
+        run_queue._START_CACHE.clear()
+        answer = subprocess.CompletedProcess([], 0, stdout="Thu Nov 12 17:07:19 2026\n", stderr="")
+        with patch.object(run_queue, "_LIBPROC", None), patch.object(subprocess, "run", return_value=answer) as run:
+            self.assertEqual(run_queue._process_start(424242), "Thu Nov 12 17:07:19 2026")
+            self.assertEqual(run_queue._process_start(424242), "Thu Nov 12 17:07:19 2026")
+        self.assertEqual(run.call_count, 1)
+        run_queue._START_CACHE.clear()
+
+
 class QueueRunTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()

@@ -451,7 +451,8 @@ before it. It replaces the earlier
   whose wrapper was killed keeps its place until its command ends or runs out of time. The kernel drops the lock of a dead process, and a
   lock held only by a leftover descendant (a build server that inherited it) does not count, so a crashed run never
   blocks the queue. Process start times are compared in the C locale and UTC, so lanes with different locales agree;
-  when `ps` cannot answer, the run counts as alive. Never delete ticket files by hand; `history.jsonl` there records every run.
+  the start time is read through macOS libproc (`proc_pidinfo`), so a waiter spawns no process while it polls (ARC-DEV-1401;
+  `ps`, cached 30 s, answers only where libproc is missing); when the time cannot be read, the run counts as alive. Never delete ticket files by hand; `history.jsonl` there records every run.
 - **Nesting.** A queued command that calls `./arcanum run` again (or `./arcanum area|world|map`) runs inside its
   parent's place when that place covers it: an export covers every kind, a `window` or `headless` run covers Godot,
   `quick` and `dotnet` runs, a `quick` run covers `quick` runs, a `dotnet` run covers `dotnet` runs. Any other nesting (an export inside a Godot run, a Godot
