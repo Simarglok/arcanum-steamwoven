@@ -33,7 +33,7 @@ public static class DollRatings
     /// 0x4C62E0 or 0x4C69F0 without a target). The ranges are those the attack uses (<see cref="AttackRules.WeaponDamageRange"/>, 0x465F70 with the
     /// magic adjustments). Integer division truncates toward zero as the original's.
     /// </summary>
-    [OriginalFunction(0x464630, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x464630, OriginalFunctionScope.Partial)]
     public static int Damage(CombatWeapon weapon, int damageBonus, CombatSkill skill, int skillEffectiveness)
     {
         ArgumentNullException.ThrowIfNull(weapon);
@@ -53,7 +53,7 @@ public static class DollRatings
     /// (normal, fire, electrical, poison, magic), the division first as in the original. The armour class and resistances are the displayed
     /// forms: unidentified magickal armour gives no magic adjustment (0x465BA0 and 0x43D6D0 with their identified-only argument).
     /// </summary>
-    [OriginalFunction(0x464700, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x464700, OriginalFunctionScope.Partial)]
     public static int Armour(int armorClass, int normal, int fire, int electrical, int poison, int magic)
     {
         long total = (long)ArmorClassWeight * armorClass, weights = ArmorClassWeight;
@@ -66,7 +66,7 @@ public static class DollRatings
         return (int)(total / (weights + DivisorOffset)) * 2;
     }
 
-    /// <summary>Whether the weapon in the weapon slot is too heavy for its wielder, the test that fills its slot on the doll (0x576520, 0x577D0C):
-    /// its minimum strength for the wielder (<see cref="EquipmentRules.MinimumStrength"/>, 0x465E90) exceeds the wielder's effective strength.</summary>
+    /// <summary>Whether the weapon in the weapon slot is too heavy for its wielder, the test that fills its slot on the doll view's redraw:
+    /// its minimum strength for the wielder (<see cref="EquipmentRules.MinimumStrength"/>) exceeds the wielder's effective strength.</summary>
     public static bool TooHeavy(int minimumStrength, int strength) => minimumStrength > strength;
 }
