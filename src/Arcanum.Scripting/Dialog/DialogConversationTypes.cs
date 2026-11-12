@@ -53,6 +53,8 @@ public sealed record DialogConversationRequest(
 /// <paramref name="Stats"/> (ARC-DEV-192) admits the PC stat conditions <c>ch</c>, <c>pe</c>, <c>le</c>, <c>al</c>, <c>ma</c>, <c>ta</c> and <c>na</c>; without it they stay
 /// unadmitted (<see cref="DialogFailureKind.UnsupportedOperation"/>).
 /// <paramref name="Greeting"/> (ARC-WORLD-058) resolves an NPC <c>g:</c> greeting; without it the node is a static frontier.
+/// <paramref name="Trainer"/> (ARC-SCRIPT-1150) admits the <c>t:</c> trainer reply; it also needs the <paramref name="World"/>, <paramref name="Skills"/>
+/// and <paramref name="Gold"/> ports (the price, the training and the payment); without any of them the reply stays blocked.
 /// </summary>
 public sealed record DialogConversationPorts(
     IDialogStateQueryPort LocalFlags,
@@ -88,7 +90,8 @@ public sealed record DialogConversationPorts(
     IDialogKillPort? Kill = null,
     IDialogWindowPort? Windows = null,
     IDialogNewspaperPort? Newspaper = null,
-    IDialogOriginPort? Origins = null);
+    IDialogOriginPort? Origins = null,
+    IDialogTrainerPort? Trainer = null);
 
 public enum DialogReactionMode
 {
@@ -465,6 +468,19 @@ public interface IDialogSkillPort
     DialogCommandResult Execute(SkillTrainingCommand command);
 }
 
+/// <summary>
+/// Trainer seam (ARC-SCRIPT-1150, ledger DTR1–DTR9): what the <c>t:</c> reply's skill talk reads of the host. <see cref="SkillName"/> is the
+/// skill's name as the original shows it (<c>mes\skill.mes</c> message 0..15, 0x4C62B0 and 0x4C69A0), or null for a skill without a name;
+/// <see cref="PcGold"/> is the PC's own gold (0x464780: the PC's stack only, not its followers'). The payment goes through the
+/// <see cref="IDialogGoldPort"/>, the training through the <see cref="IDialogSkillPort"/>, the price through the world port's reaction. Calls are
+/// synchronous and serialized by the host; a thrown exception fails the conversation.
+/// </summary>
+public interface IDialogTrainerPort
+{
+    string? SkillName(int skill);
+    int PcGold(DialogGoldQuery query);
+}
+
 /// <summary>Result of JO and UW.</summary>
 public enum DialogJoinResult
 {
@@ -643,6 +659,12 @@ public enum DialogOptionTransition
     /// <summary>ARC-UI-050: a Player <c>b:</c> reply with a barter port: the reply's action runs, its response value is not followed,
     /// and the dialog ends for the barter window (<see cref="DialogEndKind.BarterWindow"/>).</summary>
     Barter,
+    /// <summary>ARC-SCRIPT-1150: a Player <c>t:</c> reply with a trainer port: the reply's action runs, then the NPC's skill menu replaces the NPC line
+    /// and the replies (state 5, ledger DTR1); its own transition (<see cref="DialogOption.Target"/>, <see cref="DialogOption.ScriptLine"/>) is followed
+    /// when the player leaves the menu or the training talk.</summary>
+    Trainer,
+    /// <summary>ARC-SCRIPT-1150: an option of the trainer's talk (a skill of the menu, the price's yes) that stays inside it.</summary>
+    TrainerStep,
     /// <summary>Generated interaction (barter, training, …) this runtime does not perform.</summary>
     Unsupported,
 }
