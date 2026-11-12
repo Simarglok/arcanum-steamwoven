@@ -432,6 +432,7 @@ src/Arcanum.World/AreaAiHost.cs,UpdateDanger,pending,
 src/Arcanum.World/AreaAiHost.cs,UseItemAtOnce,pending,
 src/Arcanum.World/AreaAiHost.cs,UseItemMagic,pending,
 src/Arcanum.World/AreaAiHost.cs,UsedItem,pending,
+src/Arcanum.World/AreaAiHostGenerators.cs,Spawn,exempt,host
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateAlongPath,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateToRandomTile,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,ScriptProne,pending,
