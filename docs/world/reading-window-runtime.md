@@ -108,8 +108,12 @@ only for a player viewer (no dead check). Action 94 (set a written item's first 
   Close button close it (PROJECT keys: the original's window takes no key and closes by its frame hotspot or a mode change); a book's
   Previous and Next, Left/Right or Page Up/Down turn two pages. Sounds: open 3008, a book's page 3010, close 3009 by the player
   (a teardown is silent).
+- **Handheld text rule (ARC-UI-1428, [handheld UI scale](../input/handheld-ui-scale.md#reading-windows-the-text-only-factor-arc-ui-1428-issue-1428)):**
+  every text of the panel has an explicit size (none under 9 px); the header lines (a telegram's form in Courier10, a newspaper's masthead in its
+  fonts) are one label each at their original font's size with the text-only whole factor for a font under 9 px (Garmond8 → 16 px, Garmond6 → 12 px:
+  `AreaReadingText.HeaderLinePx`, `AreaUiScale.TextOnlyFactor`; `AreaReadingView.HeaderFonts`). Tests `AreaReadingTextTests`, `AreaUiScaleTests`.
 - **Diagnostic layout (PROJECT, NOT_VERIFIED for parity):** a plain panel instead of the original's background, frame and page art
-  and its fonts; the header line names the kind and the arts; a newspaper's masthead is one line and three filler messages follow the
+  and its fonts; the header line names the kind and the arts; a newspaper's masthead is one centred label per entry and three filler messages follow the
   body (the original fills its columns); a picture names its art instead of drawing it; a book pages by 700 characters instead of
   the original's pixel height, keeping two pages a spread and the turn of two.
 

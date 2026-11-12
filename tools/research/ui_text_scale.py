@@ -37,6 +37,12 @@ MINIMUM_PX, PREFERRED_PX = 9, 12
 DEFAULT_SIZES = ((1280, 800), (1920, 1080))
 
 
+def text_only_factor(size: int, factor: int) -> int:
+    """Mirror of `AreaUiScale.TextOnlyFactor`: the smallest whole multiplier that brings `size * factor` to the minimum (1 when it is there or unknown)."""
+    shown = size * max(1, factor)
+    return 1 if size <= 0 or shown >= MINIMUM_PX else -(-MINIMUM_PX // shown)
+
+
 def screen_factor(width: float, height: float) -> int:
     """Mirror of `AreaUiScale.ScreenFactor` (tools/terrain-viewer/Core/AreaUiScale.cs)."""
     return max(1, math.floor(min(width / SCREEN[0], height / SCREEN[1])))
@@ -47,6 +53,7 @@ class Window:
     name: str
     fonts: tuple[int, ...]       # interface ART numbers of the fonts the window draws
     source: str                  # the file whose constants name them (checked to mention every number)
+    text_factor: bool = False    # a font under the minimum may take the text-only whole factor (ARC-UI-1428, the reading windows)
 
 
 WINDOWS = (
@@ -62,11 +69,17 @@ WINDOWS = (
     Window("dialog box", (229,), "tools/terrain-viewer/Core/AreaDialogBox.cs"),
     Window("schematic window", (371, 229, 370, 300), "src/Arcanum.World/AreaSchematicWindowLayout.cs"),
     Window("world map", (840,), "tools/terrain-viewer/Core/AreaWorldMapArt.cs"),
+    # ARC-UI-1428: the reading windows (telegram 480, note 497, newspaper masthead 485/484/482 (815 alternate) and text 483/492/490, book and plaque
+    # markup 478/479/28/37/171/229, Garmond6 481 for any markup that names it); the viewer draws them with its fallback font at these
+    # sizes, a line under 9 px at the screen factor takes the text-only factor (`AreaReadingText.HeaderLinePx`).
+    Window("reading windows (telegram, newspaper, note, book, plaque)",
+           (480, 481, 482, 483, 484, 485, 815, 492, 497, 490, 478, 479, 28, 37, 171, 229),
+           "tools/terrain-viewer/Core/AreaReadingText.cs", text_factor=True),
 )
 
 # A line carrying this marker is not text a player reads (the save list's transparent keyboard field keeps size 1).
 HIDDEN_MARKER = "ui-text-scale: hidden"
-FONT_SIZE = re.compile(r'AddThemeFontSizeOverride\(\s*"font_size"\s*,\s*([^)]*?)\s*\)')
+FONT_SIZE = re.compile(r'AddThemeFontSizeOverride\(\s*"(?:normal_)?font_size"\s*,\s*([^)]*?)\s*\)')
 FONT_CONSTANT = re.compile(r'\b(?:private\s+|public\s+|internal\s+)?const\s+int\s+([^;]*(?:Font|FontSize)[^;]*);')
 
 
@@ -129,7 +142,7 @@ def scan_label_sizes(root: Path = ROOT) -> tuple[list[tuple[str, int, int]], lis
                 continue
             for match in FONT_SIZE.finditer(line):
                 argument = match.group(1).strip()
-                value = MINIMUM_PX if "AreaUiScale.MinimumTextPx" in argument else resolve_size(argument, constants)
+                value = MINIMUM_PX if "AreaUiScale.MinimumTextPx" in argument or "AreaReadingText.HeaderLinePx(" in argument else resolve_size(argument, constants)
                 if value is None:
                     unresolved.append(f"{relative}:{index} font size '{argument}' is not resolvable")
                 else:
@@ -171,11 +184,15 @@ def report(sizes, facts: dict[int, FontFact], labels, minimum: int = MINIMUM_PX,
                 fact = facts[number]
                 size = fact.nominal if fact.nominal is not None else fact.line
                 shown = size * factor
-                ok = shown >= minimum
-                verdict = "PASS" if ok and shown >= PREFERRED_PX else "pass (below 12 px)" if ok else "FAIL"
+                text = text_only_factor(size, factor) if window.text_factor and fact.nominal is not None and shown < minimum else 1
+                ok = shown * text >= minimum
+                if text > 1:
+                    verdict = f"pass (text x{text} = {shown * text} px)"
+                else:
+                    verdict = "PASS" if ok and shown >= PREFERRED_PX else "pass (below 12 px)" if ok else "FAIL"
                 if not ok:
                     failures.append(f"{width}x{height}: {window.name}: {fact.file} is {shown} px")
-                lines.append(f"   {window.name:<42} {number:>3} {fact.file:<30} {shown:>4} {fact.line * factor:>4} {fact.capital * factor:>4}  {verdict}")
+                lines.append(f"   {window.name[:42]:<42} {number:>3} {fact.file:<30} {shown:>4} {fact.line * factor:>4} {fact.capital * factor:>4}  {verdict}")
         failures.extend(f"{width}x{height}: {message}" for message in unresolved)
         for file, line, value in labels:
             shown = value * factor
@@ -216,6 +233,14 @@ def self_test() -> int:
     assert any("a.cs:5" in failure for failure in failures)
     _, failures = report([(640, 480)], {n: FontFact(n, "SyntheticFont.ART", 12, 12, 9) for window in WINDOWS for n in window.fonts}, [])
     assert any("does not fit" in failure for failure in failures)
+    assert text_only_factor(8, 1) == 2 and text_only_factor(6, 1) == 2 and text_only_factor(9, 1) == 1 and text_only_factor(8, 2) == 1 and text_only_factor(0, 1) == 1
+    reading = {n: FontFact(n, "SyntheticFont.ART", 12, 12, 9) for window in WINDOWS for n in window.fonts}
+    reading[482] = FontFact(482, "Garmond8Font.ART", 8, 10, 7)
+    reading[481] = FontFact(481, "Garmond6Font.ART", 6, 7, 5)
+    lines, failures = report([(1280, 800), (1920, 1080)], reading, [])
+    assert not failures and any("text x2 = 16 px" in line for line in lines) and any("text x2 = 12 px" in line for line in lines), failures
+    # a window without the text factor still fails on the same font
+    assert any(window.text_factor for window in WINDOWS) and not all(window.text_factor for window in WINDOWS)
     scan, unresolved = scan_label_sizes()
     assert scan and not unresolved, unresolved
     assert all(len(item) == 3 for item in scan)
