@@ -132,6 +132,17 @@ public sealed class WaitFlagStateTests
     }
 
     [TestMethod]
+    public void A_follower_that_carries_the_flag_loses_it_when_it_joins_again_because_the_join_leaves_its_leader_first()
+    {
+        using var owner = Flagged();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.JoinParty(owner.Version, Npc, PartyStateTests.Facts(), false).Disposition);
+        Assert.IsTrue(owner.QueryCompanion(Npc).WaitFlag);
+        // The PC leads it now: 0x45DE90 calls the leave 0x45DFC0, which runs the forced unwait that clears the bit.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Npc).Disposition);
+        Assert.AreEqual(new SessionCompanion(Npc, CompanionStanding.Following, true, false, false), owner.QueryCompanion(Npc));
+    }
+
+    [TestMethod]
     public void The_unwait_of_a_free_npc_with_the_flag_and_its_leave_do_nothing_without_a_leader()
     {
         using var owner = Flagged();
@@ -198,7 +209,7 @@ public sealed class WaitFlagStateTests
         var waitingWithFlag = text.Replace("\"standing\":\"Free\",\"spreadOut\":false,\"jilted\":false,\"loyalty\":0,\"waitFlag\":true", "\"standing\":\"Waiting\",\"spreadOut\":false,\"jilted\":false,\"loyalty\":0,\"waitFlag\":true");
         Assert.AreNotEqual(text, waitingWithFlag);
         var decoded = GameSessionSnapshotCodec.TryDecode(waitingWithFlag);
-        Assert.AreEqual((SnapshotDecodeFailure.OutOfRange, "$.party.others[0].jilted"), (decoded.Failure, decoded.Path));
+        Assert.AreEqual((SnapshotDecodeFailure.OutOfRange, "$.party.others[0].waitFlag"), (decoded.Failure, decoded.Path));
         // The restore refuses the same record built by hand.
         var saved = owner.Capture();
         var party = new SessionPartyState([], [new(Npc, CompanionStanding.Waiting, false, false, false, CompanionLoyalty.None, true)]);

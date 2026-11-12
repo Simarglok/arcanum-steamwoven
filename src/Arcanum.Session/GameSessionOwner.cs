@@ -1549,7 +1549,7 @@ public sealed partial class GameSessionOwner : IDisposable
                     // ARC-MAGIC-041: an item the hero holds is an object a deferred call may name (the powered shield's attachee): the host's map
                     // rows do not list the hero's kit and made items.
                     : world is ISessionScriptWorld scripts ? scripts.ObjectExists(new(entity.Map), entity.Code) || HeroHeld().Any(item => item.Entity == entity.Code)
-                    : LockObjectExists(entity) || RespawnObjectExists(entity) || _party.Get(entity.Code).Standing == CompanionStanding.Waiting)));
+                    : LockObjectExists(entity) || RespawnObjectExists(entity) || _party.Get(entity.Code).HoldsWaitTimer)));
         }
         finally
         {
@@ -1949,8 +1949,9 @@ public sealed partial class GameSessionOwner : IDisposable
     // removed (OL25: join leaves first, and unwait cancels it).
     private PartyMutationResult Append(SessionCompanion current, bool forced, FollowConsent? consent, bool clearWait = false)
     {
-        // ARC-SCRIPT-1136 (CF9): the join (0x45DE90) neither tests nor clears the WAIT bit, so a free NPC that carries the flag joins with it; only an unwait clears it.
-        var next = current with { Standing = CompanionStanding.Following, Forced = forced, Jilted = false, WaitFlag = !clearWait && current.WaitFlag };
+        // ARC-SCRIPT-1136 (CF9): the join (0x45DE90) neither tests nor clears the WAIT bit itself, so a free NPC that carries the flag joins with it. An NPC that already has the PC as leader is left first
+        // (0x45DFC0 runs the forced unwait 0x4AA8C0), which clears the bit: a follower or waiting NPC joining again loses it.
+        var next = current with { Standing = CompanionStanding.Following, Forced = forced, Jilted = false, WaitFlag = !clearWait && current.Standing == CompanionStanding.Free && current.WaitFlag };
         var order = _party.Order;
         if (next == current && order.Count > 0 && order[^1] == current.Entity)
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, consent, new(_identity, _revision));
@@ -1976,7 +1977,7 @@ public sealed partial class GameSessionOwner : IDisposable
     // ARC-AI-1312 (VA15, VAG1, OL25, C11; 0x4AA1B0 calls 0x4AA8C0 with force 1 on the victim): an NPC with a leader and AI_WAIT_HERE loses the flag, its "NPC Wait Here" events go and
     // it joins its leader again (0x45DE90): re-appended at the end of the follower array, FORCED_FOLLOWER set, JILTED cleared, the leader's Tempus Fugit flag copied and the leader's
     // concealment taken, as every join does. The forced unwait runs no follow check that could refuse (the death cannot be refused), and the death's commit cannot fail, so a Tempus Fugit
-    // copy that would overflow the written-flags bound is left out (the join's own check refuses the whole join there). A free NPC and a follower are unchanged (no timer is pending for them).
+    // copy that would overflow the written-flags bound is left out (the join's own check refuses the whole join there). A follower that carries the wait flag (ARC-SCRIPT-1136) is unwaited the same way; a free NPC (also one with the flag, whose timer goes) and a follower without it are unchanged.
     // The caller's revision covers the writes.
     private void ForceUnwaitOnDeath(string entity)
     {

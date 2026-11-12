@@ -1812,7 +1812,8 @@ public static partial class GameSessionSnapshotCodec
             var record = new SessionCompanion(entity, standing, false, Bool(item["spreadOut"], path + ".spreadOut"),
                 Bool(item["jilted"], path + ".jilted"), Loyalty(item["loyalty"], path + ".loyalty"), Bool(item["waitFlag"], path + ".waitFlag"));
             // Jilted only while free, the wait flag never with a waiting standing (that is the bit itself), and a free NPC without a flag is not listed.
-            if ((standing == CompanionStanding.Waiting && (record.Jilted || record.WaitFlag)) || record.IsBaseline)
+            if (standing == CompanionStanding.Waiting && record.WaitFlag) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".waitFlag");
+            if ((standing == CompanionStanding.Waiting && record.Jilted) || record.IsBaseline)
                 throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".jilted");
             others[i] = record;
         }
