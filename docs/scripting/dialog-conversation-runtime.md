@@ -556,6 +556,27 @@ The seams: `SessionDialogPursePort` (the hero's own gold, as the trainer port re
 An NPC node whose text starts with `r:` stays a frontier (slice G1). Tests: `DialogRumorTests` (synthetic), `DialogTrainerPortTests` (the purse), and the
 opt-in `DialogRumorRealDataTests` (`DAT_ROOT`: all 239 installed `r:` replies in 32 files are admitted; an installed rumor talk runs to the logbook).
 
+## Story reply (ARC-SCRIPT-1321)
+
+With the story port (`DialogConversationPorts.Story`, the same `IDialogStoryPort` the `SS` code reads) and the greeting port (the lines and files), a Player reply whose
+text starts with `c:` (either case; the rest of the text is not read) is the original's **story reply**
+([ledger STY1–STY4](../research/ledger/social.md#story-reply-arc-script-1321)). It is offered as `Generated` (marker `c`) with the transition
+`DialogOptionTransition.Story`; its phrase is the single PC line numbered 1700 + the story state (`DialogGreeting.Phrase` with the state, built when the options are
+built). A reply with a dialog transfer or window action in the same reply, or without one of the two ports, stays blocked (`UnsupportedInteraction`) as before. The AREA
+host's conversation passes both ports, so the viewer offers the reply.
+
+Picking it runs the reply's action (the hostile check too), then, in the screen of the [trainer's talk](#trainer-reply-arc-script-1150):
+
+| Step | What happens |
+| --- | --- |
+| Story state | read again after the action, so the line is the state the action left (the phrase was built before it); a throwing port is `QueryException`, a state outside 0..1,000,000 (the session never holds one) is `InvalidQueryResult` |
+| Line (0x41A440) | `DialogGreeting.StoryTale`: the NPC's own override record 10000 + the state (male-PC text, alternate text for a PC that is not male); else the story file by the NPC's gender then the PC's (`GeneratedDialogFiles.StoryLineFile`: m2m, m2f, f2f, f2m), the entry numbered the NPC's race + 100 × the state, fetched by number (no draw), the names substituted; an entry the file lacks reads as the missing-line text (origin `MissingLine`), a file the module lacks as an empty line |
+| Answer | the PC's class line 1000 is the only option, offered with the reply's own transition (`Direct`, `ScriptLine` or the return to the script); the action does not run again |
+
+Receipts: the action's effects are recorded as for any reply; the story talk writes nothing. A rebuild keeps the screen and a stale token is `NotOffered`, as for the other
+talks. Tests: `DialogStoryLineTests` (synthetic) and the opt-in `DialogStoryLineRealDataTests` (`DAT_ROOT`: all 212 installed `c:` replies in 41 files are admitted; an
+installed story talk tells an installed line).
+
 ## Barter reply (ARC-UI-050)
 
 With the optional `IDialogBarterPort` (`DialogConversationPorts.Barter`) a Player reply whose text is exactly `b:` (the generated barter
