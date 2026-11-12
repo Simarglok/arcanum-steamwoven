@@ -779,9 +779,19 @@ on the pick of ARC-UI-005.
   is drawn a second time over itself (0x43C690): after every body and before the roofs, its frame additive, the source tinted
   by the constant colour (200, 200, 200), unlit, without its alpha modes and its wall fade (`TerrainCanvas.AreaHighlight`,
   rule `AreaHoverWindow.Highlighted`). The item brightens by about 78 % of its own colour. A wall, a projectile, a critter or a
-  trap gets no second draw. NOT READY: the critters' coloured rings under and over them (arts 467 and 468 in the reaction
-  category's colour, 555 in combat mode), the detect-invisible exception, the wading object's two-part draw (the same blit
+  trap gets no second draw (their rings: next item). NOT READY: the detect-invisible exception, the wading object's two-part draw (the same blit
   for both parts, so no visible difference).
+- **Rings (ARC-UI-1117, ledger [OH21](../research/ledger/ui-audio.md#hovered-object-arc-ui-057)).** A hovered critter or trap (types 15–17) with a hero in the
+  session gets two rings: art 467 `hoverunder` under every body (after the terrain, before the flat and upright bodies) and art 468 `hoverover` over every
+  body (before the roofs), both additive and tinted by the ring colour (`TerrainCanvasArea.AreaRing`, rules in `AreaHoverRingRules`, the frames read from
+  `art\interface` through `interface.mes`). The colour is white; an NPC's is its reaction category's row of `rules\reaction_colors.mes` (seven rows read at
+  start, the category of the AI host's standard reaction; Neutral reads yellow in the installed data). While the hero is in combat mode an NPC's two arts are 555
+  `hoverattack` (a PC or a trap keeps 467 and 468). Arts and colour are decided when the pointer enters the creature (a combat toggle under the pointer changes them at the next hover, as the
+  original's setter does nothing for the same handle). The ring is the frame placed at the body's anchor plus the frame's delta less its centre (15 pixels lower
+  for a wading body) and follows a moving body; each ring steps to the next frame of its art every 1000 / fps ms of art 467 or 468 (the periods the original fixes at start; 15 frames at installed data). Deviations:
+  the frame stamps start at the hover; an NPC with no reaction (no AI host: an automated run leaves it off, or no combat values) is white; HD does not apply
+  (the interface art stays Legacy); a body with no hotspot (a seam moved it without placing it from its frame) shows no ring; a missing art or colour file
+  degrades to no ring or white and is said once in the log (`ARC-UI-1117 hover-ring`).
 - **Window.** With the interface bars drawn the object is described in the message window (0x553BE0) and the floating
   tooltip is not shown: an item by its item window (its type icon and its name in its colour, as the hotkey bar's,
   ARC-UI-035, and since ARC-UI-108 the item window's lines, see the next item); a portal (`Door_Icon` 436 or `IconWindow` 786 by its art), a container (by its description) and scenery (437)
@@ -820,7 +830,7 @@ on the pick of ARC-UI-005.
   the original's behaviour, not a Steamwoven bug (OH8).
 
 Checks: `AreaHoverWindowTests` (the dispatch by type, the highlighted types and flags, the images, the window's layout and
-its show and leave), `AreaHoverCritterTests` (ARC-UI-109: the second line's parts and order, the sneak states, the alignment bands and image, the dead line), `AreaCombatPanelLayoutTests` and `AttackChanceTests` (Simulation) and `AttackChanceStateTests` (Session) (ARC-UI-124: the icon table, the two layouts, the chance's terms, the cancel share, the zero cases), `AreaHoverConditionTests` (ARC-UI-107: the hit-point text, which types show hit points and a lock line, the
+its show and leave), `AreaHoverRingTests` (ARC-UI-1117: which types, the arts by combat mode, the colour by category and its table's reading, the placement and wading shift, the frame clock, the files' reading), `AreaHoverCritterTests` (ARC-UI-109: the second line's parts and order, the sneak states, the alignment bands and image, the dead line), `AreaCombatPanelLayoutTests` and `AttackChanceTests` (Simulation) and `AttackChanceStateTests` (Session) (ARC-UI-124: the icon table, the two layouts, the chance's terms, the cancel share, the zero cases), `AreaHoverConditionTests` (ARC-UI-107: the hit-point text, which types show hit points and a lock line, the
 lock message order, the fourth line's rectangle, red colour and right edge, the condition read from a session after damage and
 lock writes), `AreaItemWindowLinesTests` (ARC-UI-108: every line of the item window over invented items, the draw's rectangles, fonts and colours), `AreaItemWindowWrapTests` (ARC-UI-1115: a long line broken at its rectangle's width and cut by its height, no wide layout or cut of characters, the right-aligned long text, the bounds check), `AreaMessageLogTests`; the native smoke stage `hover` (`./arcanum smoke pr --stages hover --hero
 human-male`, marker `ARC-UI-057 native-smoke hover-window PASS`: with the bars drawn it looks for an item, a container, a
@@ -831,7 +841,7 @@ wilderness, prints `ARC-UI-057 native-smoke hover-window NONE` instead of failin
 (an animated scenery shows the frame its animation shows now, not its index command's; still bodies are tried first) drawn additive, none of its picked pixels
 gets darker and some get brighter, the window shows the expected kind, image and name without the tooltip, and since ARC-UI-107 the
 fourth line the session's facts give (a container's lock line and the `current/maximum` hit points, none for an invulnerable
-scenery; the line `ARC-UI-107 native-smoke hover-window fourth-line` prints each), leaving takes both away;
+scenery; the line `ARC-UI-107 native-smoke hover-window fourth-line` prints each), leaving takes both away; since ARC-UI-1117 the same stage hovers an NPC (the AI on for that pass) and checks the rings: arts by combat mode, the colour of its reaction category, additive pixels in the ring's rectangle, a frame step, removal on leaving; `ARC-UI-1117 native-smoke hover-ring` prints it;
 `ARC_AREA_HOVER_WINDOW_CAPTURE` saves readbacks) and the stage `life` (`ARC-UI-057 native-smoke hover-window critter PASS`: a
 follower's and another NPC's window with their name, image or portrait and bars; since ARC-UI-124 `ARC-UI-124 native-smoke hover combat-panel PASS`: in combat mode the other NPC's window shows the bullseye and the chance, out of it the image; `./arcanum smoke pr --stages life --map "bates mansion lev 2" --hero human-male`). Not verified: the exact pixel of the
 original's 16-bit additive blit (its pixel loop is not read), a portal's window on screen (the start map has none).

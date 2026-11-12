@@ -582,6 +582,8 @@ tools/terrain-viewer/Core/AreaHoverDescriptions.cs,ItemWindow,pending,
 tools/terrain-viewer/Core/AreaHoverDescriptions.cs,PaneName,pending,
 tools/terrain-viewer/Core/AreaHoverDescriptions.cs,SkillHint,pending,
 tools/terrain-viewer/Core/AreaHoverDescriptions.cs,SpellHint,pending,
+tools/terrain-viewer/Core/AreaHoverRing.cs,Colour,exempt,reference
+tools/terrain-viewer/Core/AreaHoverRing.cs,ParseColours,exempt,reference
 tools/terrain-viewer/Core/AreaHoverWindow.cs,AlignmentBand,pending,
 tools/terrain-viewer/Core/AreaHoverWindow.cs,AlignmentImage,pending,
 tools/terrain-viewer/Core/AreaHoverWindow.cs,CritterWindow,pending,
