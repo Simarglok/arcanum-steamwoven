@@ -658,8 +658,9 @@ public sealed class GameSessionSnapshot
     /// Schema 89 adds the monster bodies of the Trait component (Polymorph, the body spells) to the spells section (<see cref="SessionSpellState.TraitArt"/>, ARC-MAGIC-040).
     /// Schema 90 adds the second critter flags and the blit flags change to each critter's written flags (<see cref="SessionObjectFlags.Critter2Set"/>, <see cref="SessionObjectFlags.BlitSet"/>, ARC-MAGIC-047).
     /// Schema 91 adds the <see cref="Generators"/> section: the monster generators' counter table, the creatures they made so far and the slot mark of each critter they made (ARC-WORLD-1157).
-    /// Schemas 1..55 are refused, not migrated; schemas 56 to 90 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 91;
+    /// Schema 92 adds each spell run's object list to the spells section (<see cref="SpellRun.ObjectList"/>, the original's run list +0x130, ARC-MAGIC-1234).
+    /// Schemas 1..55 are refused, not migrated; schemas 56 to 91 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 92;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
