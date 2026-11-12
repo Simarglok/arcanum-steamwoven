@@ -43,7 +43,7 @@ public static class LauncherSettingsFile
     }
 
     /// <summary>ARC-UI-014: the player's "reset settings" of the launcher: the defaults replace the launcher line, one of another schema or
-    /// a file that cannot be read included (the only write that does), and keep none of its keys. The other settings of the file stay.</summary>
+    /// a file that cannot be read included (the only write that does), and keep none of its keys. The other settings of the file stay, unless the file cannot be read at all: then the file is replaced, holding the launcher line alone.</summary>
     public static LauncherSettingsSaveStatus Reset(string path)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);

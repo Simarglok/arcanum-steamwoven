@@ -144,7 +144,10 @@ public static class ViewerSettingsMigration
         if (legacy.Game is { } game && AreaGameSettingsCodec.Deserialize(game) is { } settings) changes.AddRange(ViewerSettingsConfig.GameChanges(settings));
         if (legacy.Audio is { } audio && AudioVolumesCodec.Deserialize(audio) is { } volumes) changes.AddRange(ViewerSettingsConfig.AudioChanges(volumes));
         if (legacy.AlwaysRun?.Trim() is ("on" or "off") and var run) changes.AddRange(ViewerSettingsConfig.AlwaysRunChanges(run == "on"));
-        if (legacy.VisualProfile is { } profile) changes.AddRange(ViewerSettingsConfig.VisualProfileChanges(VisualProfileCodec.DeserializeOrLegacy(profile)));
+        // The old file's text is exactly the codec's text of one profile; anything else (an unknown value, damage) is skipped, not turned into Legacy.
+        if (legacy.VisualProfile?.Trim() is { } profile)
+            foreach (var known in new[] { VisualProfile.Legacy, VisualProfile.Hd })
+                if (VisualProfileCodec.Serialize(known) == profile) changes.AddRange(ViewerSettingsConfig.VisualProfileChanges(known));
         if (legacy.Launcher is { } launcher && LauncherLine(launcher) is { } line) changes.Add(new(LauncherSettingsFile.Line, line));
         return changes;
     }

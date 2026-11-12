@@ -155,7 +155,7 @@ public sealed class ViewerSettingsConfigTests
     {
         Assert.AreEqual(0, ViewerSettingsMigration.Import(new LegacySettingsTexts(null, null, null, null, null)).Count);
         Assert.IsFalse(new LegacySettingsTexts(null, null, null, null, null).Any);
-        var broken = new LegacySettingsTexts("{}", "not json", "maybe", null, "garbage");
+        var broken = new LegacySettingsTexts("{}", "not json", "maybe", "{\"schema\":1,\"profile\":\"Ultra\"}", "garbage");
         Assert.IsTrue(broken.Any);
         Assert.AreEqual(0, ViewerSettingsMigration.Import(broken).Count, "an invalid file keeps its settings at their defaults");
 

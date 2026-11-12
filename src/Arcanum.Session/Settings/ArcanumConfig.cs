@@ -3,7 +3,7 @@ using System.Text;
 namespace Arcanum.Session.Settings;
 
 /// <summary>How a settings file read: absent (<see cref="Missing"/>), read (<see cref="Read"/>, the usable lines),
-/// not a settings text (<see cref="Invalid"/>: not UTF-8 or longer than <see cref="ArcanumConfig.MaxFileBytes"/>; the next write
+/// not a settings text (<see cref="Invalid"/>: longer than <see cref="ArcanumConfig.MaxFileBytes"/>; the next write
 /// replaces it) or a file that exists but cannot be read (<see cref="Unreadable"/>, never overwritten by an ordinary write).</summary>
 public enum ArcanumConfigReadStatus { Missing, Read, Invalid, Unreadable }
 
@@ -36,7 +36,7 @@ public sealed record ArcanumConfigRead(ArcanumConfigReadStatus Status, IReadOnly
 
 /// <summary>
 /// ARC-UI-1130: the one settings file (<c>arcanum.cfg</c>), in the original's format. The original's store
-/// (OP8, <c>docs/research/ledger/ui-audio.md</c>; load 0x438B50, set 0x438DF0, save 0x438C20) reads a text file line by line, cuts each
+/// (OP8, OP9, <c>docs/research/ledger/ui-audio.md</c>; load 0x438B50, set 0x438DF0, save 0x438C20) reads a text file line by line, cuts each
 /// line at its first <c>=</c>, trims both parts, ignores a line whose name or value is empty or that has no <c>=</c>, matches names
 /// ignoring case, and writes every entry back as <c>name=value</c> lines, a line each. This class reads and writes the same
 /// shape, and adds what the player's own file needs (PROJECT, none of it from the original): lines and files have limits, a write goes to a temporary
@@ -44,6 +44,7 @@ public sealed record ArcanumConfigRead(ArcanumConfigReadStatus Status, IReadOnly
 /// newer one, is kept in its place; a line that is not a usable pair is dropped, as the original's rewrite drops it), and a new line goes
 /// to the end of the file (the original puts a new entry first). The file is the project's own: the original's <c>arcanum.cfg</c> in the
 /// player's installation is never read or written.
+/// <para>Two game instances that save different groups at the same moment can lose one group's change (a read, change and write without a lock); the settings are for one running game at a time.</para>
 /// <para>The host picks the path (Godot's <c>user://</c> for a player, a test path, or none for an automated run). Reading and writing never
 /// throw for the file's state; a caller error (an invalid name or value) throws.</para>
 /// </summary>
@@ -58,7 +59,8 @@ public static class ArcanumConfig
     public const int MaxFileBytes = 1024 * 1024;
     public const int MaxEntries = 512;
 
-    private static readonly UTF8Encoding StrictUtf8 = new(false, throwOnInvalidBytes: true);
+    // A byte that is not UTF-8 becomes U+FFFD, and a line holding one is dropped alone (Parse): one bad byte never costs the other lines.
+    private static readonly UTF8Encoding LenientUtf8 = new(false, throwOnInvalidBytes: false);
 
     /// <summary>A name the file can hold: 1 to <see cref="MaxNameChars"/> printable ASCII characters, no <c>=</c>, no leading or trailing space.</summary>
     public static bool ValidName(string? name)
@@ -74,10 +76,12 @@ public static class ArcanumConfig
         ArgumentNullException.ThrowIfNull(text);
         var entries = new List<ArcanumConfigEntry>();
         var dropped = 0;
+        if (text.StartsWith('\uFEFF')) text = text[1..];
         foreach (var raw in text.Split('\n'))
         {
             var line = raw.TrimEnd('\r');
             if (line.Length == 0) continue;
+            if (line.Contains('\uFFFD', StringComparison.Ordinal)) { dropped++; continue; }
             var split = line.IndexOf('=', StringComparison.Ordinal);
             if (split < 0) { dropped++; continue; }
             var name = line[..split].Trim();
@@ -108,9 +112,8 @@ public static class ArcanumConfig
             var file = new FileInfo(path);
             if (!file.Exists) return ArcanumConfigRead.Empty(ArcanumConfigReadStatus.Missing);
             if (file.Length > MaxFileBytes) return ArcanumConfigRead.Empty(ArcanumConfigReadStatus.Invalid);
-            return Parse(StrictUtf8.GetString(File.ReadAllBytes(path)));
+            return Parse(LenientUtf8.GetString(File.ReadAllBytes(path)));
         }
-        catch (DecoderFallbackException) { return ArcanumConfigRead.Empty(ArcanumConfigReadStatus.Invalid); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException or NotSupportedException or ArgumentException)
         {
             return ArcanumConfigRead.Empty(ArcanumConfigReadStatus.Unreadable);
@@ -146,6 +149,17 @@ public static class ArcanumConfig
         return Write(path, Format(entries));
     }
 
+    /// <summary>A write that was cut off by a crash leaves its temporary file; one older than an hour is removed before the next write.</summary>
+    private static void DeleteStaleTemporaries(string full)
+    {
+        try
+        {
+            foreach (var stale in Directory.EnumerateFiles(Path.GetDirectoryName(full)!, Path.GetFileName(full) + ".*.tmp"))
+                if (File.GetLastWriteTimeUtc(stale) < DateTime.UtcNow.AddHours(-1)) File.Delete(stale);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+    }
+
     private static ArcanumConfigSaveStatus Write(string path, string text)
     {
         string? temporary = null;
@@ -155,6 +169,7 @@ public static class ArcanumConfig
             if (bytes.Length > MaxFileBytes) return ArcanumConfigSaveStatus.Failed;
             var full = Path.GetFullPath(path);
             Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+            DeleteStaleTemporaries(full);
             temporary = $"{full}.{Guid.NewGuid():N}.tmp";
             using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write))
             {

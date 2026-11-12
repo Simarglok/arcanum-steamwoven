@@ -8,7 +8,7 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 // ARC-DEV-046: a start without command-line inputs (a player's build) reads the game folder from the launcher settings
-// (user://launcher_v1.json), or detects one at the fixed GOG candidates when none is stored or the stored one is no longer a game
+// (the `launcher` line of user://arcanum.cfg), or detects one at the fixed GOG candidates when none is stored or the stored one is no longer a game
 // folder (for this start only), adds the identity of a stored folder that had none, and opens map mode on the main map with the main
 // menu, as ./arcanum area does. The developer launcher always passes its inputs, so its runs never come here.
 // ARC-UI-014: the launcher screen shows first on the first run, when the stored folder is gone, when the installation changed, with

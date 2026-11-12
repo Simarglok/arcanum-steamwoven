@@ -4,7 +4,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.Session.Tests;
 
-/// <summary>ARC-UI-1130: the one settings file (<c>arcanum.cfg</c>) in the original's <c>name=value</c> shape (OP8, load 0x438B50,
+/// <summary>ARC-UI-1130: the one settings file (<c>arcanum.cfg</c>) in the original's <c>name=value</c> shape (OP8, OP9, load 0x438B50,
 /// set 0x438DF0, save 0x438C20), on synthetic text.</summary>
 [TestClass]
 public sealed class ArcanumConfigTests
@@ -103,15 +103,42 @@ public sealed class ArcanumConfigTests
     }
 
     [TestMethod]
+    public void One_bad_byte_or_a_byte_order_mark_costs_no_other_line()
+    {
+        var path = Path.Combine(_root, ArcanumConfig.FileName);
+        var bytes = new List<byte>(Encoding.UTF8.GetPreamble());
+        bytes.AddRange("launcher={\"schema\":2}\nbroken=caf".Select(c => (byte)c));
+        bytes.AddRange([0xE9, (byte)'\n']); // a CP1252 e acute
+        bytes.AddRange("music volume=3\n".Select(c => (byte)c));
+        File.WriteAllBytes(path, [.. bytes]);
+        var read = ArcanumConfig.Read(path);
+        Assert.AreEqual(ArcanumConfigReadStatus.Read, read.Status);
+        CollectionAssert.AreEqual(new[] { "launcher", "music volume" }, Names(read), "the BOM is not part of the first name, the bad line alone is dropped");
+        Assert.AreEqual(1, read.Dropped);
+        Assert.AreEqual(ArcanumConfigSaveStatus.Saved, ArcanumConfig.Save(path, [new("music volume", "4")]));
+        Assert.AreEqual("launcher={\"schema\":2}\nmusic volume=4\n", File.ReadAllText(path), "a save keeps the newer launcher object");
+    }
+
+    [TestMethod]
+    public void A_temporary_file_a_crash_left_is_removed_by_the_next_write()
+    {
+        var path = Path.Combine(_root, ArcanumConfig.FileName);
+        var stale = path + ".0123.tmp"; var fresh = path + ".4567.tmp";
+        File.WriteAllText(stale, "x"); File.WriteAllText(fresh, "x");
+        File.SetLastWriteTimeUtc(stale, DateTime.UtcNow.AddHours(-2));
+        Assert.AreEqual(ArcanumConfigSaveStatus.Saved, ArcanumConfig.Save(path, [new("a", "1")]));
+        Assert.IsFalse(File.Exists(stale));
+        Assert.IsTrue(File.Exists(fresh), "a recent one may be another write's");
+    }
+
+    [TestMethod]
     public void A_file_that_is_not_a_settings_text_is_replaced_and_an_unreadable_one_is_not()
     {
         var path = Path.Combine(_root, ArcanumConfig.FileName);
-        File.WriteAllBytes(path, [(byte)'a', (byte)'=', 0xFF]);
-        Assert.AreEqual(ArcanumConfigReadStatus.Invalid, ArcanumConfig.Read(path).Status, "not UTF-8");
-        Assert.AreEqual(ArcanumConfigSaveStatus.Saved, ArcanumConfig.Save(path, [new("a", "1")]), "an invalid file is replaced");
-        Assert.AreEqual("a=1\n", File.ReadAllText(path));
         File.WriteAllText(path, new string(' ', ArcanumConfig.MaxFileBytes + 1), Encoding.ASCII);
         Assert.AreEqual(ArcanumConfigReadStatus.Invalid, ArcanumConfig.Read(path).Status, "too large");
+        Assert.AreEqual(ArcanumConfigSaveStatus.Saved, ArcanumConfig.Save(path, [new("a", "1")]), "an invalid file is replaced");
+        Assert.AreEqual("a=1\n", File.ReadAllText(path));
 
         Directory.CreateDirectory(Path.Combine(_root, "dir.cfg"));
         Assert.AreEqual(ArcanumConfigSaveStatus.Failed, ArcanumConfig.Save(Path.Combine(_root, "dir.cfg"), [new("a", "1")]), "a folder is not replaced");

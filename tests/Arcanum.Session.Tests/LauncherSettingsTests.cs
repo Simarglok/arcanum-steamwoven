@@ -163,8 +163,8 @@ public sealed class LauncherSettingsTests
         Assert.AreEqual(LauncherSettingsSaveStatus.RefusedOtherSchema, LauncherSettingsFile.Save(path, Full));
         Assert.AreEqual("launcher={\"schema\":2,\"gameRoot\":\"/x\"}\nmusic volume=3\n", File.ReadAllText(path));
 
-        File.WriteAllBytes(path, [(byte)'l', 0xFF, (byte)'=']);
-        Assert.AreEqual(LauncherSettingsReadStatus.Invalid, LauncherSettingsFile.Load(path).Status, "not UTF-8");
+        File.WriteAllBytes(path, [(byte)'l', 0xFF, (byte)'=', (byte)'1']);
+        Assert.AreEqual(LauncherSettingsReadStatus.Missing, LauncherSettingsFile.Load(path).Status, "a line with a bad byte is dropped alone");
         File.WriteAllText(path, new string(' ', ArcanumConfig.MaxFileBytes + 1), Encoding.ASCII);
         Assert.AreEqual(LauncherSettingsReadStatus.Invalid, LauncherSettingsFile.Load(path).Status, "too large");
         Assert.AreEqual(LauncherSettingsSaveStatus.Saved, LauncherSettingsFile.Save(path, Full), "an invalid file is replaced");

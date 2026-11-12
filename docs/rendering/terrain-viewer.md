@@ -3110,6 +3110,11 @@ in the same folder and a rename; a line that is not a usable pair is dropped by 
 missing line, or a value outside its range, reads as that setting's default and no other setting changes. Settings stay saved at once, not
 at exit (the original writes at exit; owner decision, FR-LIFECYCLE-004). The file is the project's own: the original's `arcanum.cfg` in the
 installation is never read or written, and the file never holds saves or game state.
+A byte-order mark is ignored and a line with a byte that is not UTF-8 is dropped alone, so one bad byte never costs another line; a file
+longer than 1 MiB is replaced by the next write, and a file that exists but cannot be read is never replaced by an ordinary write (only
+the launcher's Reset replaces it, holding the launcher line alone). A write that was cut off leaves a temporary file, removed by a later write
+once it is an hour old. The settings are for one running game: two instances saving different groups at the same moment can lose one change
+(no lock). A folder path the file cannot hold (white space at an end, a control character) is refused by the launcher's Custom choice.
 
 The first ordinary start after this change moves the settings of the files the viewer kept before (`game_settings_v1.json`,
 `audio_volumes_v1.json`, `always_run_v1.json`, `visual_profile_v1.json`, `launcher_v1.json`, in `user://`) into `arcanum.cfg`, once, only

@@ -97,7 +97,7 @@ public partial class TerrainViewerApp
     {
         // Cancelled, the launcher closed meanwhile, or Play is under way (the rows are off then): the setting stays as it is.
         if (folder.Length == 0 || _launcher is not { Busy: false }) return;
-        if (folder.Length > AreaGameSettingsCodec.MaxPath || !System.IO.Directory.Exists(folder)) { LauncherHdProblem("that folder cannot be used"); return; }
+        if (folder.Length > AreaGameSettingsCodec.MaxPath || !Arcanum.Session.Settings.ArcanumConfig.ValidValue(folder) || !System.IO.Directory.Exists(folder)) { LauncherHdProblem("that folder cannot be used"); return; }
         SaveGameSettings(_gameSettings with { HdPackSource = HdPackSourceMode.Custom, HdPackPath = folder });
         _launcherHdPackNote = HdPackSourceText();
         LauncherHdProblem(GameSettingsProblem());
