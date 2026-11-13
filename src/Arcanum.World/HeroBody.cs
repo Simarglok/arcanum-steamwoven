@@ -133,15 +133,15 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
     /// body, 0x503EA0, for 1 or 2).</summary>
     public int GaitRateBonus => Body is 1 or 2 ? 4 : 0;
 
+    /// <summary>ARC-COMBAT-1741: the stunned animation (goal 57).</summary>
+    public const uint StunnedAnimation = 23;
+
     /// <summary>
     /// The fixed human's art selector with this body, gender, armour part and palette, the same animation, and the weapon and shield the
     /// file of that animation shows (ARC-RENDER-037, MA2): the stand both, the walk the weapon only, the attacks (20, 21) both (the
     /// human's bare hands when the body shows no weapon: out of combat mode nothing attacks), the animations 6..19 (run, fall, get up,
     /// vault, and since ARC-RENDER-039 the throw, 14) neither.
     /// </summary>
-    /// <summary>ARC-COMBAT-1741: the stunned animation (goal 57).</summary>
-    public const uint StunnedAnimation = 23;
-
     public uint Selector(uint humanSelector)
     {
         var animation = (humanSelector >> 6) & 31;

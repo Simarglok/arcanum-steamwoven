@@ -369,12 +369,12 @@ public partial class TerrainViewerApp
         if (cleared.Disposition == GameSessionDisposition.Changed) GD.Print("ARC-DEV-187 hero stun ended by its goal");
     }
 
-    // ARC-COMBAT-009: the original keeps a critter stunned while its stun animation (goal 57) runs; the viewer plays none, so it ends
-    // the stun at once, as the session's contract has it for an animation that could not start (the duration is NOT READY).
+    // ARC-COMBAT-009: the original keeps a critter stunned while its stun animation (goal 57) runs. ARC-COMBAT-1741: the viewer plays it where the body's art has it; this fallback ends the stun at once
+    // for a stun with no run (no AI host or hero host, or the start refused), as the session's contract has it for an animation that could not start.
     private static void EndStun(GameSessionOwner owner, SessionLifeTarget target, string who)
     {
         var cleared = owner.ClearStun(owner.Version, target);
-        GD.Print($"ARC-COMBAT-009 stun-ended who={who} disposition={cleared.Disposition} (no stun animation in the viewer)");
+        GD.Print($"ARC-COMBAT-009 stun-ended who={who} disposition={cleared.Disposition} (no stun run to play the animation)");
     }
 
     /// <summary>
