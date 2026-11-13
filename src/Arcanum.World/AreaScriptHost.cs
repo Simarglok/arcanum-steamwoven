@@ -55,7 +55,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     /// wields an item named, has a reputation), obj is dead (22) and obj is switched off (27) of <see cref="ScrAdmissionSet.S18"/>, random (37) of
     /// <see cref="ScrAdmissionSet.S15"/>, float line (23) and get area (84) of <see cref="ScrAdmissionSet.S19"/>, and (ARC-DEV-178, B19) get reaction
     /// (29) of <see cref="ScrAdmissionSet.S23"/>. ARC-MAGIC-030 (MT21b): plus the spell conditions body spell (14), influenced by spell (35), knows spell (48) and mastered spell college (49)
-    /// and give spell mastery in college (112) of <see cref="ScrAdmissionSet.S31"/>, which the use host answers and this host writes.
+    /// and give spell mastery in college (112) of <see cref="ScrAdmissionSet.S31"/>, which the use host answers and this host writes. ARC-SCRIPT-1563 (GT194–GT196): plus damage (60), apply unresistable damage (138) and heal hit points (75) of
+    /// <see cref="ScrAdmissionSet.S30"/>, which <see cref="Apply"/> hands to the use host's session path (a talk's poison script 1059, a deferred call's poison chain).
     /// </summary>
     public static ScrAdmissionSet TalkAdmission { get; } = WithQueries("S3-area-talk-queries", Admission);
 
@@ -64,7 +65,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
 
     private static ScrAdmissionSet WithQueries(string id, ScrAdmissionSet set) => new(id,
         set.Conditions.Concat(ScrAdmissionSet.ObjectQueryConditions).Concat(ScrAdmissionSet.ObjectStateQueryConditions).Concat(ScrAdmissionSet.SpellQueryConditions),
-        set.Actions.Concat([ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea, ScrCatalogue.Action.GetReaction, ScrCatalogue.Action.GiveSpellMastery]), set.ValueKinds, set.FocusKinds);
+        set.Actions.Concat([ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea, ScrCatalogue.Action.GetReaction, ScrCatalogue.Action.GiveSpellMastery,
+            ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.HealHitPoints]), set.ValueKinds, set.FocusKinds);
 
     /// <summary>The set a run of this host uses: <see cref="SkillAdmission"/> with a session hero, else <see cref="Admission"/>; ARC-SCRIPT-050:
     /// with the query commands of <see cref="TalkAdmission"/> while <see cref="QueryHost"/> gives a use host of this host's map.</summary>
@@ -364,6 +366,10 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         ArgumentNullException.ThrowIfNull(effects);
         // The viewer's set admits no use item with skill; a trap object is not modelled.
         if (effects.DestroyTrapObject is not null || effects.SkillUses.Count > 0) return false;
+        // ARC-SCRIPT-1563: a script's damage and heal go through the shown map's use host (the talk set holds them only while it answers); one it cannot apply refuses the run whole, before anything applies.
+        foreach (var request in effects.ObjectStates)
+            if (request.Change is ScrObjectStateChange.Damage or ScrObjectStateChange.DamageUnresistable && Queries is not { CanApplyScriptDamage: true }
+                || request.Change == ScrObjectStateChange.HealHitPoints && Queries is not { CanApplyScriptHeal: true }) return false;
         // ARC-SCRIPT-050 (FL2, FL4): each float line's text, read before anything applies. A DLG that is missing or unreadable floats nothing,
         // as the original's load fails; a line the NPC-line step would do more for (an action field, generated text) is not modelled and
         // leaves the run unapplied.
@@ -426,8 +432,12 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         }
         // ARC-MAGIC-030 (SC5): each give spell mastery request in action order, for the PC or an NPC of this map whose advancement the viewer reads; any other object is ignored (the
         // original does nothing for an object that is not a PC or NPC). The spell-book rule decides; a session that cannot take the change stops the later steps.
+        // ARC-SCRIPT-1563 (GT194–GT196): a script's damage and heal apply here too, in the action order of the requests: the use host's session path (victim, amount, type, unresistable; the victim's taking-damage script is asked, GT198).
+        // The dialog opens after this (X11: the dialog action ends the run), so a talk's damage lands before the window.
         foreach (var request in effects.ObjectStates)
         {
+            if (request.Change is ScrObjectStateChange.Damage or ScrObjectStateChange.DamageUnresistable) { Queries!.ApplyScriptDamage(request); LastDamage = Queries.LastDamage; continue; }
+            if (request.Change == ScrObjectStateChange.HealHitPoints) { Queries!.ApplyScriptHeal(request); LastHeal = Queries.LastHeal; continue; }
             if (request.Change != ScrObjectStateChange.GiveSpellMastery) continue;
             if (request.Object == Pc) { if (!AreaScriptSpells.GiveMastery(_session, null, request.Value)) return false; }
             else if (request.Object.Map == _map.RuntimeMap && _npcAdvancement?.Invoke(request.Object.Code) is { } npc && !AreaScriptSpells.GiveMastery(_session, npc, request.Value)) return false;
@@ -463,6 +473,12 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         ]);
         return result.Disposition != GameSessionDisposition.Rejected;
     }
+
+    /// <summary>ARC-SCRIPT-1563: what the viewer answered to the last script damage a run of this host applied (test and smoke seam; null before any).</summary>
+    public string? LastDamage { get; private set; }
+
+    /// <summary>ARC-SCRIPT-1563: what the viewer answered to the last script heal a run of this host applied (test and smoke seam; null before any).</summary>
+    public string? LastHeal { get; private set; }
 
     /// <summary>ARC-SCRIPT-016: whether a refused scheme change stops the later steps of <see cref="Apply"/>: the session could not
     /// take it (the record budget, the revision, a stale version); a number outside 0..199 or a missing hero does not.</summary>
