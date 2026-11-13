@@ -1943,7 +1943,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     // ARC-SCRIPT-1735 (E5-a tail, ledger NS5, NS9): change art number (59) writes an object's art id (field 1). The plan of one request: what the run must refuse (an object the viewer cannot draw with another art), no change (the PC and the critter
-    // classes, a destroyed object, an id no ART file names, an id equal to the current one), or the art id to keep. Scenery of a loaded map only; the rest is refused so the run is left unapplied before anything applies.
+    // classes, a destroyed object, an id no ART file names, an id equal to the current one), or the art id to keep. Scenery of a loaded map and items with a loaded row (ARC-SCRIPT-1779); the rest is refused so the run is left unapplied before anything applies.
     private const int ArtSlot = 0;
 
     private readonly record struct ArtChange(string? Refusal, uint? Art, uint Baseline);
@@ -1960,9 +1960,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (row.Type == NpcType)
             // A critter class (2 critter, 12 monster) answers the id 0: nothing changes. A unique NPC's art (13) takes a number, but the viewer draws an NPC from its body, not from one art id: not modelled.
             return ObjectArtNumber.IsCritterClass(baseline) ? default : new($"change art number of {obj.Code} is not modelled (an NPC of art class {ObjectArtNumber.Class(baseline)})", null, baseline);
-        if (row.Type != SceneryType) return new($"change art number of {obj.Code} is not modelled (only scenery takes a new art, not an object of type {row.Type})", null, baseline);
+        // ARC-SCRIPT-1779 (AN10): an item (types 5..14) takes the number in its own range (0x502830) and keeps the ground art as object field 1; its inventory art (field 0x5D) and its paper-doll art are other fields the action does not write.
+        var isItem = row.Type is >= FirstItemType and <= LastItemType;
+        if (row.Type != SceneryType && !isItem) return new($"change art number of {obj.Code} is not modelled (only scenery and items take a new art, not an object of type {row.Type})", null, baseline);
+        if (isItem && _session.IsItemDestroyed(obj.Code)) return default;
         var current = _session.QueryObjectArt(new SessionMapId(obj.Map), obj.Code) ?? baseline;
-        if (ObjectArtNumber.Class(current) != 4)
+        if (ObjectArtNumber.Class(current) != (isItem ? 6 : 4))
             return new($"change art number of {obj.Code} is not modelled (art class {ObjectArtNumber.Class(current)})", null, baseline);
         var next = ObjectArtNumber.Changed(current, number, out _);
         if (_world?.ArtExists is not { } exists) return new($"change art number of {obj.Code} needs the module's art index", null, baseline);
