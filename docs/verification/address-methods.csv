@@ -489,6 +489,7 @@ src/Arcanum.World/AreaAiHost.cs,TileCritters,exempt,host
 src/Arcanum.World/AreaAiHost.cs,TrapMetByUse,exempt,host
 src/Arcanum.World/AreaAiHost.cs,TrapMetOn,exempt,host
 src/Arcanum.World/AreaAiHost.cs,TrapSpottedOn,exempt,host
+src/Arcanum.World/AreaAiHost.cs,Unconceal,exempt,host
 src/Arcanum.World/AreaAiHost.cs,Unwield,pending,
 src/Arcanum.World/AreaAiHost.cs,UpdateDanger,pending,
 src/Arcanum.World/AreaAiHost.cs,UseItemAtOnce,pending,
