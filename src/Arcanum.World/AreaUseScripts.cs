@@ -1147,10 +1147,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// ARC-SCRIPT-020: an item's use script (point 1, item use 0x462CC0; ledger IU rows) with the PC as the user and no target, before
     /// the use goes on: the run's outcome decides (run default lets the use go on, skip default stops it). The item is a row of a
     /// loaded map's inventory (<see cref="AreaInventoryMap"/>), named by its origin map and entity; its use slot is kept as map
-    /// changes there. A teleport is not modelled from an item's use and leaves the run unapplied. ARC-SCRIPT-1481 (IU2): with <paramref name="targetIsPc"/> the PC is the use's target too (the extra object: a right click and the use icon with Shift
-    /// target the hero, the food use script 30282 heals its extra object).
+    /// changes there. A teleport is not modelled from an item's use and leaves the run unapplied. ARC-SCRIPT-1481 (IU2): with a <paramref name="target"/> entity (the PC's, or an NPC of the shown map) that object is the use's target too (the extra object: a right click and the use icon with Shift
+    /// target the hero, the item cursor a critter; the food use script 30282 heals its extra object).
     /// </summary>
-    public AreaScriptedUse RunItemUse(int originMap, string entity, ScrRuleProfile rules, bool targetIsPc = false)
+    public AreaScriptedUse RunItemUse(int originMap, string entity, ScrRuleProfile rules, string? target = null)
     {
         ArgumentNullException.ThrowIfNull(entity); ArgumentNullException.ThrowIfNull(rules);
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
@@ -1160,7 +1160,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             if (Row(item) is null) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the item is not a row of a loaded map");
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, Pc, targetIsPc ? Pc : null), this, new() { Rules = rules, Admission = Admission });
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, Pc, target is null ? null : target == AreaScriptHost.PcCode ? Pc : new ScrObjectRef(_shownMap, target)), this, new() { Rules = rules, Admission = Admission });
             return Finish(run, _ => "a teleport from an item's use is not modelled", writeback => WriteObjectSlot(writeback, item));
         }
         finally { _itemUse = null; }
@@ -1522,6 +1522,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         // runs changed, as map changes.
         foreach (var stored in effects.SlotWrites)
             if (stored.Attachee is not { } owner || !WriteObjectSlot(stored, owner)) return false;
+        // ARC-SCRIPT-1481: the item in use that the run destroyed keeps no slot (a counter raised after the destroy would be an orphan map change).
+        if (_itemUse is { } gone && _session.IsItemDestroyed(gone.Code)) return true;
         return effects.Writeback is not { } writeback || writeSlot(writeback);
     }
 
@@ -1700,7 +1702,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             if (request.Change == ScrObjectStateChange.Destroy)
             {
                 // ARC-SCRIPT-1481 (VT6): the item whose use script runs destroys itself (the food use script 30282 ends by it): the PC's food or scroll leaves its list through the session.
-                if (_itemUse is { } used && used.Equals(request.Object)) continue;
+                if (_itemUse is { } used && used.Equals(request.Object))
+                {
+                    if (_session.IsItemDestroyed(used.Code)) continue;
+                    if (_session.UsedItemDestructionRefusal(used.Code) is { } why) return $"destroy of the item in use {used.Code} is refused by the session ({why})";
+                    continue;
+                }
                 if (request.Object.Map != _shownMap || IsPc(request.Object) || Row(request.Object) is not { Type: NpcType } npc)
                     return $"destroy of {request.Object.Code} is not modelled (only an NPC of the shown map)";
                 // TD2: one destroyed in its map data, or by an earlier run, is left as it is.

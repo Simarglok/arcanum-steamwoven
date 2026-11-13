@@ -374,15 +374,23 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         if (!SessionValidation.Entity(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);
         if (!IsCurrent(expected)) return new(GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion, Version);
-        if (HeldKind(entity) is not { } kind || _equipment.SlotOf(entity) is not null)
-            return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable, Version);
-        if (kind.Type is not (SessionItemType.Food or SessionItemType.Scroll)) return new(GameSessionDisposition.Rejected, GameSessionFailure.InventoryMismatch, Version);
-        if (NewDurabilityRecord(entity, destroyed: true) && _durability.Count >= _limits.MaxDurabilityRecords)
-            return new(GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded, Version);
+        if (UsedItemDestructionRefusal(entity) is { } refusal) return new(GameSessionDisposition.Rejected, refusal, Version);
         if (_revision == long.MaxValue) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
         DestroyObject(entity);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
+    }
+
+    /// <summary>ARC-SCRIPT-1481: why <see cref="DestroyUsedItem"/> would refuse the item (not held or worn: <see cref="GameSessionFailure.ItemNotAvailable"/>; not food or a scroll: <see cref="GameSessionFailure.InventoryMismatch"/>;
+    /// full durability budget: <see cref="GameSessionFailure.BudgetExceeded"/>), or null when it would destroy it; changes nothing. A use script run checks it before it applies any effect.</summary>
+    public GameSessionFailure? UsedItemDestructionRefusal(string entity)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(entity)) return GameSessionFailure.InvalidItem;
+        if (HeldKind(entity) is not { } kind || _equipment.SlotOf(entity) is not null) return GameSessionFailure.ItemNotAvailable;
+        if (kind.Type is not (SessionItemType.Food or SessionItemType.Scroll)) return GameSessionFailure.InventoryMismatch;
+        if (NewDurabilityRecord(entity, destroyed: true) && _durability.Count >= _limits.MaxDurabilityRecords) return GameSessionFailure.BudgetExceeded;
+        return null;
     }
 
     /// <summary>

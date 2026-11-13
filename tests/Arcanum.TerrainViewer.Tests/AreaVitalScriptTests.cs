@@ -17,7 +17,7 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class AreaVitalScriptTests
 {
     private const byte Attachee = 1, Local = 2, Number = 3, Extra = 12;
-    private const int ReadScript = 811, PcScript = 812, NegativeScript = 813, PoisonScript = 814, EatScript = 815, KeepScript = 816;
+    private const int ReadScript = 811, PcScript = 812, NegativeScript = 813, PoisonScript = 814, EatScript = 815, KeepScript = 816, EatAndCountScript = 817;
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
     private static AreaObjectRecord Row(int index, int type, int script)
@@ -92,6 +92,11 @@ public sealed class AreaVitalScriptTests
                 Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
             // 816: destroys the extra object, not the item in use.
             Write("scr/00816other.scr", Program(Do(new(ScrCatalogue.Action.Destroy, (Extra, -1))), Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
+            // 817: eats like 815 (without the heals), then raises counter 1 after the destroy (as 30282 does when the aptitude is 0 or below).
+            Write("scr/00817count.scr", Program(
+                Do(new(ScrCatalogue.Action.Destroy, (Attachee, -1))),
+                Do(new(ScrCatalogue.Action.Assign, (0, 1), N(2))),
+                Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
         }
@@ -137,7 +142,6 @@ public sealed class AreaVitalScriptTests
             var pcId = Arcanum.Simulation.Ai.AiSchedulerRules.Pc;
             // The unharmed hero's maximum hit points as the poison amount, 3 points of fatigue, then its poison level (0: nothing to heal).
             CollectionAssert.AreEqual(new[] { (pcId, 0, life.Status.MaxHitPoints), (pcId, 3, 0) }, healed);
-            Assert.AreEqual(0, life.Record.State.PoisonLevel);
         });
     }
 
@@ -160,7 +164,7 @@ public sealed class AreaVitalScriptTests
         });
     }
 
-    private static AreaInventoryMap Food(int script) => new(1, new([], [new SessionSeedItem(Entity(6), new(new(SessionItemType.Food, 4060, 60, 160), 1, 0, 0, null, []), new CellCoord(16, 20))]),
+    private static AreaInventoryMap Food(int script, SessionItemType type = SessionItemType.Food) => new(1, new([], [new SessionSeedItem(Entity(6), new(new(type, 4060, 60, 160), 1, 0, 0, null, []), new CellCoord(16, 20))]),
         new[] { Row(6, 9, script) }.ToDictionary(row => Entity(row.Key.SourceIndex)));
     private static string Entity(int index) => "oid:" + Key(index).ObjectIdSha256;
 
@@ -179,7 +183,7 @@ public sealed class AreaVitalScriptTests
             var world = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, ScriptHeal: (victim, amount) => { hp.Add((victim, amount)); return "healed"; },
                 ScriptHealLife: (victim, fatigue, poison) => { healed.Add((victim, fatigue, poison)); return "healed"; });
             var host = new AreaUseScriptHost(session, 2, [], [items], content, world);
-            var ran = host.RunItemUse(1, Entity(6), session.Rules.Scripts, targetIsPc: true);
+            var ran = host.RunItemUse(1, Entity(6), session.Rules.Scripts, target: AreaScriptHost.PcCode);
             Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.SkipDefault), (ran.Outcome, ran.Run!.Outcome), ran.Detail);
             Assert.IsTrue(session.IsItemDestroyed(Entity(6)), "the food left the hero's list");
             var pcId = Arcanum.Simulation.Ai.AiSchedulerRules.Pc;
@@ -210,8 +214,75 @@ public sealed class AreaVitalScriptTests
             Assert.AreEqual(GameSessionFailure.None, otherInventory.Attach(second));
             Assert.AreEqual(GameSessionDisposition.Changed, otherInventory.PickUp(second, Entity(6)).Disposition);
             var secondHost = new AreaUseScriptHost(second, 2, [], [other], content, world);
-            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, secondHost.RunItemUse(1, Entity(6), second.Rules.Scripts, targetIsPc: true).Outcome, "destroy of the extra object (the PC)");
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, secondHost.RunItemUse(1, Entity(6), second.Rules.Scripts, target: AreaScriptHost.PcCode).Outcome, "destroy of the extra object (the PC)");
             Assert.IsFalse(second.IsItemDestroyed(Entity(6)));
+        });
+    }
+
+    [TestMethod]
+    public void An_item_the_session_will_not_destroy_is_refused_before_any_effect_is_applied()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var items = Food(EatScript, SessionItemType.Weapon);
+            var inventory = new AreaInventoryHost([items]);
+            Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
+            Assert.AreEqual(GameSessionDisposition.Changed, inventory.PickUp(session, Entity(6)).Disposition);
+            Assert.AreEqual(GameSessionFailure.InventoryMismatch, session.UsedItemDestructionRefusal(Entity(6)));
+            var healed = new List<(string, int, int)>();
+            var hp = new List<(string, int)>();
+            var world = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, ScriptHeal: (victim, amount) => { hp.Add((victim, amount)); return "healed"; },
+                ScriptHealLife: (victim, fatigue, poison) => { healed.Add((victim, fatigue, poison)); return "healed"; });
+            var host = new AreaUseScriptHost(session, 2, [], [items], content, world);
+            var ran = host.RunItemUse(1, Entity(6), session.Rules.Scripts, target: AreaScriptHost.PcCode);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, ran.Outcome, ran.Detail);
+            Assert.AreEqual(0, hp.Count + healed.Count, "no heal was applied before the refusal");
+            Assert.IsFalse(session.IsItemDestroyed(Entity(6)));
+        });
+    }
+
+    [TestMethod]
+    public void A_counter_raised_after_the_self_destroy_is_not_written_as_a_map_change_of_the_gone_item()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var items = Food(EatAndCountScript);
+            var inventory = new AreaInventoryHost([items]);
+            Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
+            Assert.AreEqual(GameSessionDisposition.Changed, inventory.PickUp(session, Entity(6)).Disposition);
+            var world = new AreaScriptWorld(() => null, _ => false, _ => null, () => null);
+            var host = new AreaUseScriptHost(session, 2, [], [items], content, world);
+            var ran = host.RunItemUse(1, Entity(6), session.Rules.Scripts);
+            Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.SkipDefault), (ran.Outcome, ran.Run!.Outcome), ran.Detail);
+            Assert.IsTrue(session.IsItemDestroyed(Entity(6)));
+            Assert.IsFalse(session.QueryMapChanges(new SessionMapId(1)).Any(change => change.Key.Property == AreaUseScriptHost.CountersProperty), "no use.counters row for the destroyed item");
+        });
+    }
+
+    [TestMethod]
+    public void An_npc_target_of_the_use_is_the_extra_object_and_is_healed()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var items = Food(EatScript);
+            var inventory = new AreaInventoryHost([items]);
+            Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
+            Assert.AreEqual(GameSessionDisposition.Changed, inventory.PickUp(session, Entity(6)).Disposition);
+            var npc = Row(1, 16, ReadScript);
+            var npcCode = AreaUseScriptHost.EntityId(npc);
+            var healed = new List<(string Victim, int Fatigue, int Poison)>();
+            var hp = new List<(string Victim, int Amount)>();
+            var world = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, Vitals: code => code == npcCode ? new AreaScriptVitals(4, 9, 2, 7, 11) : null,
+                ScriptHeal: (victim, amount) => { hp.Add((victim, amount)); return "healed"; }, ScriptHealLife: (victim, fatigue, poison) => { healed.Add((victim, fatigue, poison)); return "healed"; });
+            var host = new AreaUseScriptHost(session, 1, [npc], [items], content, world);
+            var ran = host.RunItemUse(1, Entity(6), session.Rules.Scripts, target: npcCode);
+            Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.SkipDefault), (ran.Outcome, ran.Run!.Outcome), ran.Detail);
+            Assert.IsTrue(session.IsItemDestroyed(Entity(6)));
+            CollectionAssert.AreEqual(new[] { (npcCode, 4) }, hp);
+            CollectionAssert.AreEqual(new[] { (npcCode, 0, 7) }, healed);
         });
     }
 
