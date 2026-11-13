@@ -129,10 +129,14 @@ STAGE_PASS = {
     "route-barrel": "ARC-DEV-247 native-smoke route-barrel PASS", "critter-fall": "ARC-DEV-248 native-smoke critter-fall PASS", "save-resume": "ARC-DEV-325 native-smoke save-resume PASS", "cast-multi": "ARC-DEV-250 native-smoke cast-multi PASS", "companion-click": "ARC-DEV-263 native-smoke companion-click PASS", "grenade": "ARC-DEV-249 native-smoke grenade PASS", "please-move": "ARC-AI-1315 native-smoke please-move PASS", "ai-react": "ARC-DEV-264 native-smoke ai-react PASS", "npc-shot": "ARC-DEV-282 native-smoke npc-shot PASS", "placement-census": "ARC-DEV-308 native-smoke placement-census PASS", "inv-carry": "ARC-DEV-305 native-smoke inv-carry PASS", "spell-end": "ARC-DEV-301 native-smoke spell-end PASS", "hold-hero": "ARC-DEV-304 native-smoke hold-hero PASS", "spirit-talk": "ARC-DEV-304 native-smoke spirit-talk PASS", "sleep": "ARC-WORLD-1160 native-smoke sleep PASS", "bed": "ARC-WORLD-1162 native-smoke bed PASS", "spell-effects": "ARC-DEV-1148 native-smoke spell-effects PASS", "created-scenery": "ARC-DEV-347 native-smoke created-scenery PASS", "created-critter": "ARC-DEV-370 native-smoke created-critter PASS", "script-critters": "ARC-DEV-371 native-smoke script-critters PASS", "encounters": "ARC-WORLD-1159 native-smoke encounters PASS", "worn-light": "ARC-DEV-335 native-smoke worn-light PASS", "critter-light": "ARC-DEV-353 native-smoke critter-light PASS", "eye-light": "ARC-MAGIC-1229 native-smoke eye-light PASS", "summon-flash": "ARC-DEV-352 native-smoke summon-flash PASS", "summon-wall": "ARC-DEV-352 native-smoke summon-wall PASS", "summon-undead": "ARC-MAGIC-053 native-smoke summon-undead PASS", "tech-craft": "ARC-DEV-362 native-smoke tech-craft PASS", "tech-products": "ARC-MAGIC-051 native-smoke tech-products PASS", "item-aim": "ARC-DEV-365 native-smoke item-aim PASS", "disarm": "ARC-SKILLS-1156 native-smoke disarm PASS",
     "perf": "ARC-DEV-367 native-smoke perf PASS", "movies": "ARC-RENDER-1170 native-smoke movies PASS", "movement": "ARC-MAGIC-036 native-smoke movement PASS", "creature-item": "ARC-MAGIC-042 native-smoke creature-item PASS", "trait-body": "ARC-MAGIC-046 native-smoke trait-body PASS", "weapon-art": "ARC-RENDER-1544 native-smoke weapon-art PASS", "body-styles": "ARC-MAGIC-045 native-smoke body-styles PASS", "perf-menu": "ARC-DEV-367 native-smoke perf-menu PASS",
 }
+# ARC-DEV-1556: a stage whose own PASS line is not the whole check: the lines that must also be in the log. `transfer` runs the
+# visitor-fight sub-check after its own PASS line; with a hero (HERO_STAGES) the Crash Site start and the town both print its PASS
+# (a NONE or NO-TARGET line there means the fight did not run), so the stage counts as run only with both.
+STAGE_ALSO_PASS = {"transfer": ("ARC-DEV-065 native-smoke visitor-fight PASS",)}
 BATTERY_STAGES = ("map", "resources")
 # The stages a hero must play: without a session hero the viewer skips them (the AI stages silently). The map battery
 # plays the hero's stages too (cast, turn-based, ranged, container, junk ...). `transfer` is one (ARC-DEV-1547): its visitor-fight
-# sub-check prints NONE without a hero while the stage's own PASS line still comes, so only a hero runs it whole.
+# sub-check prints NONE without a hero while the stage's own PASS line still comes, so only a hero runs it whole; STAGE_ALSO_PASS makes the runner require its PASS line (ARC-DEV-1556).
 HERO_STAGES = frozenset({"map", "cast", "turn-based", "knockdown", "ranged", "container", "junk", "hover", "barter", "life",
                          "floaters", "ai", "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "loot-worn", "inv-arrange", "loot-room", "dead-window", "inv-ui", "transfer", "follower-home", "follower-far", "teleport-follow", "npc-resident", "saved-runs", "npc-door", "npc-tile", "please-move", "npc-wander", "tile-ghost", "container-click", "door-close", "fire-order", "indoor-fade", "route-barrel", "critter-fall", "save-resume", "cast-multi", "grenade", "companion-click", "npc-shot", "ai-react", "placement-census", "inv-carry", "worldmap", "spell-end", "hold-hero", "spell-effects", "movement", "creature-item", "movies", "spirit-talk", "sleep", "bed", "created-scenery", "created-critter", "script-critters", "encounters", "worn-light", "critter-light", "eye-light", "summon-flash", "summon-wall", "summon-undead", "tech-craft", "tech-products", "item-aim", "disarm", "trait-body", "weapon-art", "body-styles", "perf"})
 AUTO_HERO = "human-male"  # the full chain's hero on the main map; a map of the chain gets its own (elven ruins: elf-female)
@@ -141,7 +145,7 @@ AUTO_HERO = "human-male"  # the full chain's hero on the main map; a map of the 
 ALONE_STAGES = frozenset({"barter", "menu", "scene", "options", "plants", "bar", "life", "floaters", "death", "ai",
                           "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "loot-worn", "inv-arrange", "loot-room", "wreck", "altar", "inv-ui", "npc-resident", "saved-runs", "npc-door", "npc-tile", "please-move", "npc-wander", "tile-ghost", "container-click", "fire-order", "indoor-fade", "critter-fall", "save-resume", "cast-multi", "companion-click", "ai-react", "placement-census", "spell-end", "hold-hero", "spell-effects", "movement", "spirit-talk", "sleep", "bed", "created-scenery", "created-critter", "script-critters", "encounters", "worn-light", "critter-light", "eye-light", "summon-flash", "summon-wall", "summon-undead", "tech-craft", "tech-products", "item-aim", "disarm", "trait-body", "weapon-art", "body-styles", "perf", "perf-menu"})
 BATTERY_ALSO = frozenset({"cast", "turn-based", "knockdown", "ranged", "container", "junk", "hover", "report", "door-close"})
-SKIP_LINE = re.compile(r"native-smoke .* (NONE|SKIP|NO-EXIT|SAME-MAP-ONLY)\b")
+SKIP_LINE = re.compile(r"native-smoke .* (NONE|SKIP|NO-EXIT|NO-TARGET|SAME-MAP-ONLY)\b")
 
 # ARC-DEV-391: the configuration each stage runs in. A viewer process fixes its map, start sector, hero, main menu and debug
 # mode at launch, so only stages with the same configuration can share a process. The table (read by `--stages` to group the
@@ -240,7 +244,8 @@ STAGE_NEEDS: dict[str, StageNeeds] = {
     "indoor-fade": _needs(**_MAIN_ONLY, sector=TOWN, only_sector=True),
     "critter-fall": _needs(own=True),  # fails in a longer list ("ran over at least two cells"), passes alone
     "save-resume": _needs(), "cast-multi": _needs(map=RUINS, only_map=True), "grenade": _needs(map=CAVE),
-    "companion-click": _needs(), "npc-shot": _needs(sector=TOWN), "ai-react": _needs(own=True), "please-move": _needs(),
+    # ai-react: a bystander the witness rule sends fleeing (a human near the hit, ARC-DEV-1577) exists in the town, not at the Crash Site (the animals protect one another: NONE); elven ruins and the cave: the spell did not land (2026-11-13)
+    "companion-click": _needs(), "npc-shot": _needs(sector=TOWN), "ai-react": _needs(**_MAIN_ONLY, sector=TOWN, only_sector=True, own=True), "please-move": _needs(),
     "placement-census": _needs(),  # passes after the other AI stages (ARC-DEV-1187: baseline loads at the stage boundaries, a companion is no NPC row)
     "inv-carry": _needs(debug=True, own=True),  # a dead body with an item; NONE at the Crash Site was seen
     "spell-end": _needs(), "hold-hero": _needs(), "spell-effects": _needs(), "movement": _needs(), "spirit-talk": _needs(), "sleep": _needs(sector=WILD, own=True),  # moves the clock by days; the wilderness sector has no town map (the sleep window, not the wait window)
@@ -621,14 +626,14 @@ def shown(command: Sequence[str]) -> str:
 
 
 def stages_not_run(log: Path | None, stages: Sequence[str]) -> tuple[list[str], list[str]]:
-    """The requested stages whose PASS line the log lacks, and up to three NONE/SKIP lines of the log (the viewer's
+    """The requested stages whose PASS line (or an also-required line, STAGE_ALSO_PASS) the log lacks, and up to three NONE/SKIP lines of the log (the viewer's
     reasons), those with a missing stage's task code first."""
     try:
         text = log.read_text(encoding="utf-8", errors="replace") if log is not None else ""
     except OSError:
         text = ""
-    missing = [stage for stage in stages if STAGE_PASS[stage] not in text]
-    codes = tuple(STAGE_PASS[stage].split()[0] + " " for stage in missing)
+    missing = [stage for stage in stages if any(line not in text for line in (STAGE_PASS[stage], *STAGE_ALSO_PASS.get(stage, ())))]
+    codes = tuple(line.split()[0] + " " for stage in missing for line in (STAGE_PASS[stage], *STAGE_ALSO_PASS.get(stage, ())))
     skips = [line.strip()[:200] for line in text.splitlines() if missing and SKIP_LINE.search(line)]
     return missing, sorted(skips, key=lambda line: not line.startswith(codes))[:3]
 

@@ -1444,6 +1444,17 @@ public sealed partial class GameSessionOwner : IDisposable
         return Life(expected, target, true, (state, facts, _) => LifeRules.PoisonRecoveryTick(state, facts));
     }
 
+    /// <summary>
+    /// ARC-MAGIC-1508 (the stat setter's poison case, ledger RM3b): the poison level of the target is <paramref name="level"/> (<see cref="LifeRules.SetPoison"/>: clamped to 0..1000, 0 for an effective
+    /// constitution of 20 or more). The poison level is the stored stat 24 of the original, and the session keeps it in the life state alone (the stored array's entry is only what the map data loads the NPC with): this
+    /// write is the setter. A level that becomes positive sets the poison damage and recovery timers as every life write does (the original's poison event schedule; the session sets them on a change, see the event queue document).
+    /// </summary>
+    public SessionLifeResult SetPoisonLevel(GameSessionVersion expected, SessionLifeTarget target, long level)
+    {
+        ThrowIfDisposed();
+        return Life(expected, target, true, (state, facts, _) => LifeRules.SetPoison(state, facts, level));
+    }
+
     /// <summary>The stun animation ended or could not start (<see cref="LifeRules.ClearStun"/>).</summary>
     public SessionLifeResult ClearStun(GameSessionVersion expected, SessionLifeTarget target)
     {
@@ -2739,7 +2750,7 @@ public sealed partial class GameSessionOwner : IDisposable
     }
 
     private static readonly string[] NpcKinds = [SessionEventKinds.NpcFatigue, SessionEventKinds.NpcPoisonDamage,
-        SessionEventKinds.NpcPoisonRecovery, SessionEventKinds.NpcResting];
+        SessionEventKinds.NpcPoisonRecovery, SessionEventKinds.NpcResting, SessionEventKinds.NpcEncumbrance];
 
     // The maps other than this one where the NPC has pending timers (none while the one-map rule holds); its wait timer
     // (ARC-WORLD-045) counts too.
@@ -2850,6 +2861,17 @@ public sealed partial class GameSessionOwner : IDisposable
                     !Enumerable.Range(0, CarryRules.Levels).Any(level => CarryRules.DrainIntervalMs(level) == pending.DeadlineMs - pending.Values[0]))
                     return GameSessionFailure.InvalidEvents;
                 converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, 0, new(pending.Entities, pending.Values)));
+                continue;
+            }
+            if (pending.Kind == SessionEventKinds.NpcEncumbrance)
+            {
+                // An NPC's encumbrance timer (ARC-MAGIC-1568): one NPC with a life record, set no later than the saved clock, one of the drain intervals before its deadline, one per NPC
+                // (the queue's key check), on the one map of the NPC's timers. The level it finds is read when it fires.
+                if (pending.Entities.Length != 1 || pending.Entities[0].Map < 1 || !life.Critters.ContainsKey(pending.Entities[0].Code) || pending.Values[0] < 0 || pending.Values[0] > clockMs ||
+                    !Enumerable.Range(0, CarryRules.Levels).Any(level => CarryRules.DrainIntervalMs(level) == pending.DeadlineMs - pending.Values[0]) ||
+                    (!maps.TryAdd(pending.Entities[0].Code, pending.Entities[0].Map) && maps[pending.Entities[0].Code] != pending.Entities[0].Map))
+                    return GameSessionFailure.InvalidEvents;
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
                 continue;
             }
             if (pending.Kind == SessionEventKinds.LockReset)

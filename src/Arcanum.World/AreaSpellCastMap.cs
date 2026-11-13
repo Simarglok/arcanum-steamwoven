@@ -145,6 +145,20 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         return _keys.GetValueOrDefault(key);
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-1576: the cast id of the object a script names by <paramref name="entity"/>. A row with a session entity or a sector static is named alike by the script host and here; a mobile row with no session
+    /// entity (scenery, a mobile portal or trap) is <c>oid:</c> and its digest in the script host but <c>row:Mobile:N</c> here, so the row is found by the script host's name. Any other entity passes through.
+    /// </summary>
+    public string CastIdOfScriptEntity(string entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        SyncVisitors();
+        if (_rows.ContainsKey(entity)) return entity;
+        foreach (var (id, row) in _rows)
+            if (AreaUseScriptHost.EntityId(row) == entity) return id;
+        return entity;
+    }
+
     /// <summary>ARC-MAGIC-015: the map row behind a cast's object id, or null (the hero, or no such row).</summary>
     public AreaObjectRecord? Row(string id)
     {

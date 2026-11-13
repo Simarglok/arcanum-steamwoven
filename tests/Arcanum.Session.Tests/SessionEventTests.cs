@@ -219,13 +219,13 @@ public sealed class SessionEventTests
     {
         using var owner = Session();
         // PolicyMaxLifeRecords NPC records with four timers each, then the hero's three: exactly the session's queue size without the
-        // hero's encumbrance timer (ARC-WORLD-087).
+        // hero's encumbrance timer (ARC-WORLD-087) and the NPCs' (ARC-MAGIC-1568: a fifth room per record, which a life step does not use).
         for (var i = 0; i < GameSessionLimits.PolicyMaxLifeRecords; i++)
             Damage(owner, Npc($"oid:n{i}"), new LifeDamage { HitPoints = 1, Fatigue = 1, Poison = 10 });
         Damage(owner, SessionLifeTarget.Hero, new LifeDamage { HitPoints = 1, Fatigue = 1, Poison = 10 });
         Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxScriptCalls - SessionEffectLimits.MaxTimedEffects - SessionEventKinds.MaxLockResets
             - SessionEventKinds.MaxWaitTimers - SessionEventKinds.MaxObjectRespawns - SessionEventKinds.MaxSpellRunEvents - SessionEventKinds.MaxItemDecays - SessionEventKinds.MaxBodyDecays - SessionEventKinds.MaxRandomEncounters - SessionEventKinds.MaxFocusWipes
-            - SessionEventKinds.MaxAiTicks - SessionEventKinds.MaxRestocks - SessionEventKinds.MaxTrapDevices - SessionEventKinds.MaxRealSteps - SessionEventKinds.MaxGoalSteps - 1, owner.QueryEvents().Count);
+            - SessionEventKinds.MaxAiTicks - SessionEventKinds.MaxRestocks - SessionEventKinds.MaxTrapDevices - SessionEventKinds.MaxRealSteps - SessionEventKinds.MaxGoalSteps - 1 - GameSessionLimits.PolicyMaxLifeRecords, owner.QueryEvents().Count);
         // ARC-SCRIPT-010: the deferred SCR calls have their own share of the queue on top.
         for (var i = 0; i < SessionEventKinds.MaxScriptCalls; i++)
             Assert.AreEqual(GameSessionDisposition.Changed, owner.ScheduleScriptCall(owner.Version, new(i + 1, 0, null, null), 1000).Disposition);
@@ -271,12 +271,12 @@ public sealed class SessionEventTests
         Assert.AreEqual(GameSessionFailure.EventBudgetExceeded, owner.ScheduleRestock(owner.Version, "chest:x", true).Failure);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ScheduleRestock(owner.Version, "chest:0", true).Disposition);
         // ARC-MAGIC-010: the magic-tech events have a share too (not saved; empty here), and so do the real-time steps (MIG12 S8; not saved); so do the Item Decay events (ARC-WORLD-062) and the
-        // hero's encumbrance timer (ARC-WORLD-087).
-        Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxSpellRunEvents - SessionEventKinds.MaxItemDecays - SessionEventKinds.MaxBodyDecays - SessionEventKinds.MaxRandomEncounters - SessionEventKinds.MaxFocusWipes - SessionEventKinds.MaxTrapDevices - SessionEventKinds.MaxRealSteps - SessionEventKinds.MaxGoalSteps - 1, owner.QueryEvents().Count);
+        // hero's encumbrance timer (ARC-WORLD-087; the NPCs' fifth timer each, ARC-MAGIC-1568, is no life step's).
+        Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxSpellRunEvents - SessionEventKinds.MaxItemDecays - SessionEventKinds.MaxBodyDecays - SessionEventKinds.MaxRandomEncounters - SessionEventKinds.MaxFocusWipes - SessionEventKinds.MaxTrapDevices - SessionEventKinds.MaxRealSteps - SessionEventKinds.MaxGoalSteps - 1 - GameSessionLimits.PolicyMaxLifeRecords, owner.QueryEvents().Count);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, Npc("oid:n0"), new LifeDamage { HitPoints = 1 }).Disposition);
         // A save of a full queue restores.
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
-        Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxSpellRunEvents - SessionEventKinds.MaxItemDecays - SessionEventKinds.MaxBodyDecays - SessionEventKinds.MaxRandomEncounters - SessionEventKinds.MaxFocusWipes - SessionEventKinds.MaxTrapDevices - SessionEventKinds.MaxRealSteps - SessionEventKinds.MaxGoalSteps - 1, restored.QueryEvents().Count);
+        Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxSpellRunEvents - SessionEventKinds.MaxItemDecays - SessionEventKinds.MaxBodyDecays - SessionEventKinds.MaxRandomEncounters - SessionEventKinds.MaxFocusWipes - SessionEventKinds.MaxTrapDevices - SessionEventKinds.MaxRealSteps - SessionEventKinds.MaxGoalSteps - 1 - GameSessionLimits.PolicyMaxLifeRecords, restored.QueryEvents().Count);
     }
 
     [TestMethod]

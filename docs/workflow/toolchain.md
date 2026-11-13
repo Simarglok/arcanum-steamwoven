@@ -205,7 +205,7 @@ history held about 500 runs of such copies of one template).
   the viewer's sources by the tests), the whole map battery (`full`, `map` without `--stages`) that of `map` and
   `resources`; a stage the viewer skipped (silently, as the AI stages without a hero, or with a `NONE`/`SKIP` line)
   makes the step `FAIL exit=3` with `FAIL exit=3 stages not run: ...` and up to three of the log's `NONE`/`SKIP`
-  lines (the missing stages' own first). The battery's other stages may report `NONE` where the map lacks what they
+  lines (the missing stages' own first). A stage whose own `PASS` line is not the whole check also needs the lines of `STAGE_ALSO_PASS` (ARC-DEV-1556): `transfer` needs the visitor-fight `PASS` after its own, so a `NONE` or `NO-TARGET` fight line fails it. The battery's other stages may report `NONE` where the map lacks what they
   need (a whole map has no window to stream), so it vouches only for those two. Before
   anything runs: a stage that needs a hero (`map` and the whole battery, `cast`, `turn-based`, `knockdown`, `ranged`,
   `container`, `junk`, `hover`, `barter`, `life`, `floaters`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `transfer`, `follower-home` and the rest of `HERO_STAGES` in `tools/local_dev/smoke.py`) gets
@@ -303,7 +303,7 @@ history held about 500 runs of such copies of one template).
   map's weakest NPC blindly: they take the first one (weakest first, at most 24 tried) the hero can stand next to and, with the hero placed there,
   see (`AreaSmokeFightableStartAsync`: a roof-covered or walled-in NPC is skipped; a stage that also places the hero next to the NPC, `turn-based`, needs a pickable pixel from that adjacent cell too, ARC-UI-1425), and print `NO-TARGET` when none is, which the battery tolerates (so a regression that hides every target shows only in a `--stages` run, which reports the stage as not run; a limit). A stage
   whose content is the Crash Site's (`wreck`, `altar`: Virgil's home and a script tile) prints `NONE` in any other window, not a failure; asked for with
-  `--stages` on such a window the runner reports it as not run. `ai-follower` takes the first speaker of the map that can heal with the skill and fight (not undead, mechanical, invulnerable or nigh-invulnerable: the original's heal skill check and danger setter refuse those, ARC-DEV-129) and prints `NO-FOLLOWER` when there is none (the unlit mine `bessietoonesmine-fixed` has only an undead, invulnerable speaker), which a `--stages` run reports as not run. The AI stages put the hero's life back at their end, a dead hero resurrected, so a stage after them never starts with a dead hero. The viewer's `HoverPointAsync` scans only the screen rectangle of the body (its T0 command and the moving command drawn for it).
+  `--stages` on such a window the runner reports it as not run. `ai-follower` takes the first speaker of the map that can heal with the skill and fight (not undead, mechanical, invulnerable or nigh-invulnerable: the original's heal skill check and danger setter refuse those, ARC-DEV-129) and prints `NO-FOLLOWER` when there is none (the unlit mine `bessietoonesmine-fixed` has only an undead, invulnerable speaker), which a `--stages` run reports as not run. Its last part (ARC-AI-1622) force-joins the first living NPC without a dialog script that has combat values (what Dominate Will does) and requires it to be a group companion the AI host runs that walks up to the hero; it prints `ARC-AI-1622 native-smoke ai-led-npc NONE` when the map has no such NPC. The AI stages put the hero's life back at their end, a dead hero resurrected, so a stage after them never starts with a dead hero. The viewer's `HoverPointAsync` scans only the screen rectangle of the body (its T0 command and the moving command drawn for it).
 - **The Crash Site smoke** is the viewer's pinned Crash Site exterior regression (`--mode area` without
   `--area-map`, with the ARC-WORLD-009 cave input, so it also goes into the cave and back), with `--hero dwarf-male`;
   it needs the pinned Crash Site inputs that `./arcanum setup` recorded.
@@ -775,6 +775,14 @@ on each later step, so `./arcanum run` keeps the command's output out of it by d
 
 Tests: `python3 -B -m unittest tools.local_dev.test_run_log` (error lines, summary, kept logs, quiet and `--verbose`
 wrapper runs).
+
+## All launcher tests in one command (ARC-DEV-1565)
+
+`python3 -B -m unittest discover -s tools/local_dev -t . -p 'test_*.py'` from the repository root runs every
+`tools/local_dev` test in one process (about 3 minutes on a quiet Mac; the whole tree is not part of the root checks, run it when a
+launcher change touches several modules). `-t .` names the modules `tools.local_dev.test_*`, which the modules'
+imports need; the per-module commands above stay the quick way to run one. The stopped-waiter and third-dotnet-place tests of `test_run_queue` hold their runs until released instead of
+timing them, so a loaded Mac cannot fail them.
 
 ## Root solution synthetic checks
 
