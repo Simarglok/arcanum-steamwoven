@@ -124,6 +124,8 @@ public sealed class HeroBodyArtTests
         Assert.AreEqual("art/critter/HMM/HMMUWXAg.art", shielded.ArtPath(shielded.Selector(human.Run!.Selector)));
         Assert.AreEqual("art/critter/HMM/HMMUWXAn.art", shielded.ArtPath(shielded.Selector(human.Vault!.Selector)));
         Assert.AreEqual("art/critter/HMM/HMMUWXAh.art", shielded.ArtPath(shielded.Selector(ActorDiagnosticProfile.HumanFallDownSelector)));
+        // ARC-COMBAT-1741 (N1): the stunned animation 23 names the unarmed weapon letter and no shield whatever the body wields.
+        Assert.AreEqual("art/critter/HMM/HMMUWXBx.art", shielded.ArtPath(shielded.Selector(ActorDiagnosticProfile.HumanStunnedSelector)));
         // Animations outside 6..19 (stealth walk 3 here) keep both (MA2).
         Assert.AreEqual("art/critter/HMM/HMMUWSCd.art", shielded.ArtPath(shielded.Selector(0x200000C0u)));
         Assert.AreEqual(shielded.BodyBits, shielded.Selector(human.Idle.Selector) & 0x0FF00030u);

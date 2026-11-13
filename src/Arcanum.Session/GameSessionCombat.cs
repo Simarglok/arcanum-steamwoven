@@ -614,7 +614,13 @@ public sealed partial class GameSessionOwner
     private bool Skipped(CombatPlan plan, SessionCombatant participant)
     {
         // The hero is never hidden from drawing, so only its activity counts.
-        if (participant.IsHero) return !HeroStatus(plan).IsActive;
+        if (participant.IsHero)
+        {
+            // ARC-COMBAT-1741: a hero that cannot act is skipped like an NPC and its stun countdown (0x427000, GT27) loses its turn's 3 (a no-op unless the hero's first run is the stun).
+            var heroActive = HeroStatus(plan).IsActive;
+            if (!heroActive) plan.SkippedNpcs.Add(Arcanum.Simulation.Ai.AiSchedulerRules.Pc);
+            return !heroActive;
+        }
         if (Facts(plan, participant.Entity!) is not { } facts) return true;
         var active = LifeRules.Evaluate(NpcState(participant.Entity!, facts), facts.Life).IsActive;
         var skipped = TurnBasedRules.IsSkipped(active, facts.Hidden, facts.Sleeping);

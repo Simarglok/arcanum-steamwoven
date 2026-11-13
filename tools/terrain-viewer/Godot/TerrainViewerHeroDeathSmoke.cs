@@ -97,7 +97,11 @@ public partial class TerrainViewerApp
             await Frames(2);
             Require(_heroDeath.Stage == AreaDeathStage.Watching, "a living hero starts nothing");
             Require(game.Kill(game.Version, SessionLifeTarget.Hero).Disposition == GameSessionDisposition.Changed, "kill the hero");
-            await Until(() => _heroDeath.Stage == AreaDeathStage.Waiting, 2, "the death waits");
+            // ARC-COMBAT-1741: the 5 s count from the end of the dying animation (the dying goal 31 plays the hero's fall); the death does not wait before it.
+            // The smoke runs no world frames: the animation clock and the hero's fall are moved by hand while the dying goal plays.
+            var dyingMs = await Until(() => { _areaAmbient?.AdvanceMilliseconds(50, AmbientSector()); ProcessHeroKnockdown(); return _heroDeath.Stage == AreaDeathStage.Waiting; }, 30, "the death waits (after the dying animation)");
+            Require(_heroDeathHost is not { HeroDying: true } && !(ShownHeroRunsHost?.DownRun is { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.Dying }), $"the death waits only once the dying goal is over ({dyingMs} ms of dying)");
+            GD.Print($"ARC-COMBAT-1741 hero dying animation lasted {dyingMs} ms before the death's 5 s began");
             var waited = await Until(() => _heroDeath.Stage != AreaDeathStage.Waiting, 8, "the death came");
             Require(waited >= AreaHeroDeath.DeathDelay - 200 && _heroDeath.Stage == AreaDeathStage.FadeOut && WorldModal, $"after 5 s the screen fades to black ({waited} ms)");
             // ARC-DEV-126 (MIG12 S7, TL25): the cover and its slide show are frozen frames, not a pause: the production tick at literal stamps observes none,
@@ -140,7 +144,7 @@ public partial class TerrainViewerApp
             // Under Original the death resets without asking (PD8), a save there or not; Escape ends the show.
             Require(loaded.SelectRules(RuleMode.Original) == GameSessionDisposition.Changed, "Original selected");
             Require(loaded.Kill(loaded.Version, SessionLifeTarget.Hero).Disposition == GameSessionDisposition.Changed, "kill the loaded hero");
-            await Until(() => _heroDeath.Stage == AreaDeathStage.Slide, 14, "the second death's slide");
+            await Until(() => { _areaAmbient?.AdvanceMilliseconds(50, AmbientSector()); ProcessHeroKnockdown(); return _heroDeath.Stage == AreaDeathStage.Slide; }, 20, "the second death's slide (after its dying animation)");
             InputWorld(new InputEventKey { Keycode = Godot.Key.Escape, PhysicalKeycode = Godot.Key.Escape, Pressed = true });
             InputWorld(new InputEventKey { Keycode = Godot.Key.Escape, PhysicalKeycode = Godot.Key.Escape, Pressed = false });
             game = loaded;
