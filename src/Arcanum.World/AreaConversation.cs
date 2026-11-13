@@ -889,16 +889,31 @@ public sealed class AreaConversationHost
         return speaker;
     }
 
-    // c-e (ledger WN1, WN2): the sheet of the dialog's NPC opens for the local PC (mode 2); only the NPC sheet is a window the viewer builds.
+    /// <summary>ARC-UI-1731: the item service the last <c>ii</c> or <c>ri</c> reply asked for (the window kind, the speaker's entity and speaker index), set
+    /// when the port applied it; the host opens the identify or repair window with it after the conversation ended with
+    /// <see cref="DialogEndKind.ItemIdentifyWindow"/> or <see cref="DialogEndKind.ItemRepairWindow"/>.</summary>
+    public (DialogWindowKind Window, string Entity, int Speaker)? ItemServiceRequest { get; private set; }
+
+    /// <summary>Takes the item service the last <c>ii</c> or <c>ri</c> reply asked for, once.</summary>
+    public (DialogWindowKind Window, string Entity, int Speaker)? TakeItemServiceRequest()
+    {
+        var request = ItemServiceRequest;
+        ItemServiceRequest = null;
+        return request;
+    }
+
+    // c-e, ii, ri (ledger WN1, WN2, IS1): the sheet of the dialog's NPC opens for the local PC (mode 2), or the item identify (mode 5) or item repair (mode 6) window.
     private sealed class WindowPort(AreaConversationHost host) : IDialogWindowPort
     {
-        public bool Offers(DialogWindowKind kind) => kind == DialogWindowKind.NpcSheet;
+        public bool Offers(DialogWindowKind kind) => kind is DialogWindowKind.NpcSheet or DialogWindowKind.ItemIdentify or DialogWindowKind.ItemRepair;
 
         public DialogCommandResult Execute(OpenWindowCommand command)
         {
-            if (command.Window != DialogWindowKind.NpcSheet || command.PlayerCharacter != AreaConversationState.PcParticipant
-                || host.SpeakerEntity(command.Npc) is not { } entity) return DialogCommandResult.Rejected;
-            host.NpcSheetSpeaker = (entity, (int)(command.Npc.Value - 1000));
+            if (command.PlayerCharacter != AreaConversationState.PcParticipant || host.SpeakerEntity(command.Npc) is not { } entity) return DialogCommandResult.Rejected;
+            var speaker = (int)(command.Npc.Value - 1000);
+            // The last window action of a reply decides the window (WN1), so a window an earlier action of the same reply asked for is dropped.
+            if (command.Window == DialogWindowKind.NpcSheet) { host.NpcSheetSpeaker = (entity, speaker); host.ItemServiceRequest = null; }
+            else { host.ItemServiceRequest = (command.Window, entity, speaker); host.NpcSheetSpeaker = null; }
             return DialogCommandResult.Applied;
         }
     }

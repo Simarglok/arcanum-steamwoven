@@ -131,6 +131,26 @@ public static class TradeRules
     }
 
     /// <summary>
+    /// ARC-UI-1731: the price of one unit that the PC would get for selling it with the sale check switched off (the unchecked flag of the
+    /// price function, as the repair quote calls it), before the damage scaling: the worth W, from a merchant multiplier m above 100
+    /// <c>W × (100 + trunc(3 × (100 − m) / 8)) / 100</c>, then <c>× (trunc(H / 2) + 50) / 100</c> with the PC's haggle effectiveness H. The
+    /// caller scales it by the item's damage (<see cref="ItemDurabilityRules.RepairQuote"/>). Coins are 0.
+    /// </summary>
+    /// <remarks>Executable: the unchecked branch of 0x461F80 (registered as <see cref="Price"/>), called by the repair quote 0x578760.</remarks>
+    public static int UncheckedSalePrice(TradeItem item, TradeParties parties)
+    {
+        Check(item, parties);
+        if (item.Gold) return 0;
+        unchecked
+        {
+            var price = item.Worth;
+            if (parties.Multiplier > 100) price = price * (100 + 3 * (100 - parties.Multiplier) / 8) / 100;
+            price = price * (parties.Haggle / 2 + 50) / 100;
+            return Math.Clamp(price, 0, ItemDurabilityLimits.MaxPrice);
+        }
+    }
+
+    /// <summary>
     /// The reaction scale of a buy price (0x4C1150): a reaction above 100 counts as 100; the factor is 200 below 0, <c>200 − 2r</c>
     /// below 50, else <c>120 − trunc(2r / 5)</c> (100 at 50, 80 at 100); the result is <c>price × factor / 100</c> in 32 bits.
     /// </summary>

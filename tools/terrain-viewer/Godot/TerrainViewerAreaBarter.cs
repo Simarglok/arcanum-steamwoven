@@ -85,23 +85,34 @@ public partial class TerrainViewerApp
 
     private void OpenBarter(AreaConversationHost host, string entity, int speaker)
     {
+        var (barter, refusal) = BarterModel(host, entity, speaker, substitute: true, "ARC-UI-050 barter");
+        if (barter is null) { _barterStatus = refusal; RefreshAreaStatus(); return; }
+        OpenBarterWindow(barter);
+    }
+
+    /// <summary>The barter model of a speaker over the area session (the window's, and ARC-UI-1731 the item identify and repair windows' item
+    /// facts); null with the reason when the open is refused. With <paramref name="substitute"/> the merchant's substitute container is found
+    /// (ARC-WORLD-090, BT4), which only the barter window shows.</summary>
+    private (AreaBarter? Barter, string? Refusal) BarterModel(AreaConversationHost host, string entity, int speaker, bool substitute, string tag)
+    {
         var session = _areaSession!;
-        string Refuse(string why) { _barterStatus = why; GD.Print($"ARC-UI-050 barter refused: {why}"); RefreshAreaStatus(); return why; }
-        if (!AreaBarter.HeroCanTrade(session)) { Refuse("no living hero"); return; }
-        if (_barterData is not { Data: { } data }) { Refuse($"no barter data ({_barterData?.Status}: {_barterData?.Detail})"); return; }
-        if (speaker < 0 || speaker >= host.Speakers.Count || CombatFieldReader.Read(host.Speakers[speaker].Row).Fields is not { } fields) { Refuse("no data of the merchant"); return; }
+        (AreaBarter?, string?) Refuse(string why) { GD.Print($"{tag} refused: {why}"); return (null, why); }
+        if (!AreaBarter.HeroCanTrade(session)) return Refuse("no living hero");
+        if (_barterData is not { Data: { } data }) return Refuse($"no barter data ({_barterData?.Status}: {_barterData?.Detail})");
+        if (speaker < 0 || speaker >= host.Speakers.Count || CombatFieldReader.Read(host.Speakers[speaker].Row).Fields is not { } fields) return Refuse("no data of the merchant");
         // ARC-DEV-297 (NR2): the window's name is the examine rule for the PC (0x441B60 at the open): the merchant's own description once it remembers the hero.
         var name = AreaHoverIndex.Text(host.Speakers[speaker].Row, _hoverNames?.Catalog, WindowRecognition(host.Speakers[speaker].Row)) ?? "merchant";
-        if (AreaBarterMerchant.From(entity, name, fields, data, session.QueryCompanion(entity).LedByPc) is not { } merchant) { Refuse("the speaker is not an NPC"); return; }
+        if (AreaBarterMerchant.From(entity, name, fields, data, session.QueryCompanion(entity).LedByPc) is not { } merchant) return Refuse("the speaker is not an NPC");
         var inventory = _inventoryHost ?? new AreaInventoryHost([]);
         // ARC-WORLD-090: the substitute container of a merchant without a leader within 20 tiles of where it talked (BT4).
         var talker = host.Speakers[speaker];
-        merchant = merchant.WithSubstitute(inventory.Maps.FirstOrDefault(map => map.TryGetRow(entity, out _))?.Substitute(entity),
-            new(checked((int)talker.WorldX), checked((int)talker.WorldY)), data);
+        if (substitute)
+            merchant = merchant.WithSubstitute(inventory.Maps.FirstOrDefault(map => map.TryGetRow(entity, out _))?.Substitute(entity),
+                new(checked((int)talker.WorldX), checked((int)talker.WorldY)), data);
         var state = host.State;
-        OpenBarterWindow(new AreaBarter(session, inventory, data, merchant, () => state.Reaction(speaker),
+        return (new AreaBarter(session, inventory, data, merchant, () => state.Reaction(speaker),
             delta => session.AdjustReaction(session.Version, entity, state.NpcFacts(), state.PcFactsFor(speaker), delta).Disposition == GameSessionDisposition.Changed,
-            (item, kind) => inventory.Maps.Any(map => map.TryGetRow(item, out _)) ? inventory.Name(item, _hoverNames?.Catalog) : AreaInventoryHost.KindName(kind, _hoverNames?.Catalog)));
+            (item, kind) => inventory.Maps.Any(map => map.TryGetRow(item, out _)) ? inventory.Name(item, _hoverNames?.Catalog) : AreaInventoryHost.KindName(kind, _hoverNames?.Catalog)), null);
     }
 
     /// <summary>Shows the window over the area session for <paramref name="barter"/> (the dialog path above, or a self-test's model), after

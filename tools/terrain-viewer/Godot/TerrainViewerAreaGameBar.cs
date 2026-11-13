@@ -38,7 +38,7 @@ public partial class TerrainViewerApp
     private bool InterfaceBarsOn => _areaSession is not null && _readyMode == TerrainViewerMode.Area && (!ViewerAutomatedStorage.Automated || _gameBarForSelfTest);
 
     private bool GameBarActive => InterfaceBarsOn
-        && !MainMenuOpen && !ConversationOpen && !BarterOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen && !WorldMapOpen;
+        && !MainMenuOpen && !ConversationOpen && !BarterOpen && !ItemServiceOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen && !WorldMapOpen;
 
     /// <summary>Per frame: shows the bars while an area session plays (reading their art once a run) and follows the spell pane.</summary>
     private void SyncGameBar()
@@ -221,6 +221,7 @@ public partial class TerrainViewerApp
         if (SchematicsOpen) CloseSchematicsByPlayer();
         if (WorldMapOpen) CloseWorldMapByPlayer();
         if (BarterOpen) CloseBarterByPlayer();
+        if (ItemServiceOpen) EndItemService();
         if (ReadingOpen) CloseReadingByPlayer();
         if (SleepOpen) EndSleep();
         // ARC-UI-1112: the original's interface close paths close the Fate Point window with the others (0x541710, 0x541D40, 0x542200).

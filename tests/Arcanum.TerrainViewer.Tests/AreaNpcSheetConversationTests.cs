@@ -35,4 +35,33 @@ public sealed class AreaNpcSheetConversationTests
         Assert.AreNotEqual(DialogOptionTransition.NpcSheet, talk.Options[0].Transition, "a session with no hero has no local PC window to open");
         Assert.IsNull(f.Host.NpcSheetSpeaker);
     }
+
+    // ARC-UI-1731: ii and ri (ledger WN1, IS1) end the talk the same way and name the window kind with the speaker.
+    private static string ServiceDialog(string action) => "{1}{What can you do?}{}{}{}{}{}" + "{2}{Do it.}{}{1}{}{0}{" + action + "}";
+
+    [TestMethod]
+    [DataRow("i" + "i", DialogWindowKind.ItemIdentify, DialogEndKind.ItemIdentifyWindow, DialogOptionTransition.ItemIdentify)]
+    [DataRow("r" + "i", DialogWindowKind.ItemRepair, DialogEndKind.ItemRepairWindow, DialogOptionTransition.ItemRepair)]
+    public void The_item_service_actions_end_the_talk_and_name_the_window_once(string action, DialogWindowKind window, DialogEndKind end, DialogOptionTransition transition)
+    {
+        using var f = AreaReactionConversationTests.Fixture.Create(ServiceDialog(action), hero: true);
+        var talk = f.Host.Begin(f.Speaker).Conversation!;
+        Assert.IsNull(f.Host.ItemServiceRequest);
+        Assert.AreEqual(transition, talk.Options[0].Transition);
+        Assert.AreEqual(DialogConversationSelectStatus.Ended, talk.Select(talk.Options[0].Token).Status);
+        Assert.AreEqual(end, talk.End!.Kind);
+        Assert.AreEqual((window, f.Entity, f.Speaker.Index), f.Host.TakeItemServiceRequest());
+        Assert.IsNull(f.Host.TakeItemServiceRequest(), "taken once");
+        Assert.IsNull(f.Host.NpcSheetSpeaker);
+        Assert.IsTrue(f.Host.EndReaction());
+    }
+
+    [TestMethod]
+    public void Without_a_hero_the_session_offers_no_item_service_window()
+    {
+        using var f = AreaReactionConversationTests.Fixture.Create(ServiceDialog("r" + "i"));
+        var talk = f.Host.Begin(f.Speaker).Conversation!;
+        Assert.AreNotEqual(DialogOptionTransition.ItemRepair, talk.Options[0].Transition);
+        Assert.IsNull(f.Host.ItemServiceRequest);
+    }
 }
