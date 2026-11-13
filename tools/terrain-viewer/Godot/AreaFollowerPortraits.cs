@@ -186,7 +186,8 @@ public partial class AreaFollowerPortraits : CanvasLayer
     /// <summary>ARC-UI-1817: device pixels per Legacy pixel of this panel and its menu (what the generated frames are painted at): the scale of the panel's root, the canvas transform's
     /// and the viewport's stretch.</summary>
     internal float DeviceScale() =>
-        _root is not null && GodotObject.IsInstanceValid(_root) && _root.IsInsideTree() ? _root.GetGlobalTransformWithCanvas().Scale.X * GetViewport().GetStretchTransform().Scale.X : _root?.Scale.X ?? 1;
+        _root is null || !GodotObject.IsInstanceValid(_root) ? 1f
+            : _root.IsInsideTree() ? _root.GetGlobalTransformWithCanvas().Scale.X * GetViewport().GetStretchTransform().Scale.X : _root.Scale.X;
 
     /// <summary>ARC-UI-1817: the interface texture of an art number the panel was bound with (null without it), for the native smoke.</summary>
     internal HdInterfaceTexture? TextureForSelfTest(int art) => _art.GetValueOrDefault(art) as HdInterfaceTexture;

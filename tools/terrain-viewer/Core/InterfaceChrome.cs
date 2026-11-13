@@ -63,7 +63,7 @@ public sealed record ChromeRuling(int X, int Y, int Width, int Height, int Step,
 /// the centre of this rectangle is the one.</summary>
 public sealed record ChromeBare(int X, int Y, int Width, int Height) : ChromePart;
 
-/// <summary>ARC-UI-1817: the coloured marks of a picture on the generated ground under it (the follower panel's arrow buttons: a red or green triangle and two bronze rivets on an iron plate). In the
+/// <summary>ARC-UI-1817: the coloured marks of a picture on the generated ground under it (the follower panel's arrow buttons: a red or green triangle on an iron plate). In the
 /// rectangle every Legacy pixel whose colour is far from grey (the spread of its three channels is at least 24) keeps its own colour, so the marks keep their shape and their dither, and the grey
 /// grain of the Legacy plate does not carry over. A pixel is kept whole (no one-unit halo): a picture with anti-aliased edges would need one.</summary>
 public sealed record ChromeMarks(int X, int Y, int Width, int Height) : ChromePart;
