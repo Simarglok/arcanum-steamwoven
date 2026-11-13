@@ -69,7 +69,7 @@ public sealed class DialogQuestReplyTests
         var world = new World { Reaction = DialogReactionReadResult.Of(5) };
         Assert.AreEqual("T65", Run(5, reaction: 5, intelligence: 4, world: world).Options.Single().Text, "Intelligence below 5: group 16");
         Assert.AreEqual(0, world.Reads, "a dull PC never asks for the reaction");
-        Assert.AreEqual("T40", Run(0, reaction: 5, intelligence: 5).Options.Single().Text.Replace("T50", "T40"), "Intelligence 5 is not dull (reaction 5 reads group 9)");
+        Assert.AreEqual("T50", Run(0, reaction: 5, intelligence: 5).Options.Single().Text, "Intelligence 5 is not dull (reaction 5 reads group 9)");
     }
 
     [TestMethod]

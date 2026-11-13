@@ -48,8 +48,13 @@ public sealed class DialogQuestReplyRealDataTests
                             new DialogScriptLine(0), new DialogPcFacts(DialogPcGender.Male, intelligence, false, 0), new DialogSpeakerNames("Ada", "Bram")),
                         new DialogConversationPorts(new DialogConversationTests.Ports(), new DialogConversationTests.Ports(), DialogConversationTests.Owner(),
                             new DialogConversationTests.World { Reaction = DialogReactionReadResult.Of(reaction) }, Quests: new DialogQuestTests.Quests(quests), QuestReplies: table));
-                    if (attempt.Phase != DialogConversationPhase.AwaitingSelection) continue;
-                    foreach (var q in qs.Where(r => r.SerializedIndex > npc.SerializedIndex))
+                    if (attempt.Phase != DialogConversationPhase.AwaitingSelection)
+                    {
+                        // A step that stops must not stop for a q: reply (a frontier for another reason, such as a port this check lacks, is fine).
+                        if (attempt.Frontier is { Kind: DialogFrontierKind.UnsupportedGeneratedText, Response: { } stopped }) Assert.IsFalse(qs.Any(r => new DialogResponseId(r.Id) == stopped), $"{key} node {npc.Id}: a q: reply stops the step");
+                        continue;
+                    }
+                    foreach (var q in qs.Where(r => InGroup(document, npc, r)))
                     {
                         var option = attempt.Options.FirstOrDefault(o => o.ResponseId == new DialogResponseId(q.Id));
                         if (option is null) { dropped++; continue; }
@@ -88,6 +93,14 @@ public sealed class DialogQuestReplyRealDataTests
         Assert.AreEqual(5, replies, "the installed q: replies");
         Assert.IsTrue(offered > 0, "an installed node offers its q: reply");
         Assert.IsTrue(picked > 0, "a picked q: reply runs on");
+    }
+
+    // The Player records that follow the NPC record up to the next NPC record are its group.
+    private static bool InGroup(DlgDocument document, DlgRecord npc, DlgRecord reply)
+    {
+        for (var i = npc.SerializedIndex + 1; i < document.Records.Count && document.Records[i].Role != DlgRecordRole.Npc; i++)
+            if (document.Records[i].Id == reply.Id) return true;
+        return false;
     }
 
     private static IEnumerable<(int State, int Reaction, int Intelligence)> Cases()

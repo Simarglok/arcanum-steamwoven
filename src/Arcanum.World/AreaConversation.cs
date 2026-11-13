@@ -617,7 +617,7 @@ public sealed class AreaConversationHost
                 _session.QueryHero() is null ? null : new SessionDialogPursePort(_session, AreaConversationState.PcParticipant),
                 // ARC-SCRIPT-1358: an l: reply asks for the world map once the talk ended; the viewer says whether it has one (map mode) and opens it.
                 WorldMapAvailable?.Invoke() == true ? new WorldMapPort(this) : null,
-                // ARC-SCRIPT-1532: a q: reply picks its record from the module's quest rules table; without the table it stays blocked.
+                // ARC-SCRIPT-1532: a q: reply picks its record from the module's quest rules table; without the table the reply stays a frontier.
                 _greetingTexts?.QuestReplies is { } questReplies ? new QuestReplyPort(questReplies) : null));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };

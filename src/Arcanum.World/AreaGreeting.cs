@@ -48,7 +48,7 @@ public sealed record AreaGreetingTexts(AreaGreetingTextsStatus Status, Generated
         var skills = SkillTexts.Load(stack);
         // ARC-SCRIPT-1304: the four rumor files of the r: reply's tale; a file that is absent or unusable leaves its rumors without a text.
         var rumors = RumorSpeechTexts.Load(stack);
-        // ARC-SCRIPT-1532: the module's quest rules table of the q: reply (read at module load, as the quest experience levels are); a table that is absent or unusable only leaves the q: reply blocked.
+        // ARC-SCRIPT-1532: the module's quest rules table of the q: reply (read at module load, as the quest experience levels are); a table that is absent or unusable only leaves the q: reply a frontier.
         var questFile = AreaStartingHero.Table(stack, AreaStartingHero.QuestLevelsPath, ContentLoadPhase.ModuleLoaded, required: false, out _);
         var questReplies = questFile is null ? null : QuestReplyTable.Read(questFile).Table;
         return new(AreaGreetingTextsStatus.Ready, files.Files, reputations.Table.Greetings,
