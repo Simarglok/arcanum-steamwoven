@@ -425,7 +425,8 @@ public sealed partial class DialogConversation
                 continue;
             }
             eligible++;
-            if (reply.Directions is { } directions)
+            // A reply the PC has nothing to ask for is left out whatever its action holds (0x416C10 returns before the states are built).
+            if (reply.DirectionsFilter is { } directions)
             {
                 var hidden = DirectionsHidden(directions);
                 if (hidden is null)
@@ -1805,7 +1806,7 @@ public sealed partial class DialogConversation
         }
         return new ReplyPlan(record, gender.Value, record.IqValue!.Value, condition, kind, text, marker, transition, target, line, action, block,
             block is null ? insult : null, block is null ? barter : null, block is null ? worldMap : null, phrase, block is null ? trainer : null, block is null ? rumor : null, block is null && story,
-            block is null ? directions : null);
+            block is null ? directions : null, directions);
     }
 
     private static bool CheckTokens(string text, DialogNodeId node, DialogResponseId? response, out DialogConversationFrontier? frontier, out DialogConversationFailure? failure)
@@ -1964,7 +1965,8 @@ public sealed partial class DialogConversation
         int[]? Trainer = null,
         RumorOffer? Rumor = null,
         bool Story = false,
-        DirectionsOffer? Directions = null);
+        DirectionsOffer? Directions = null,
+        DirectionsOffer? DirectionsFilter = null);
 
     private sealed record OfferPlan(ReplyPlan Reply, StepPlan? Target);
 }

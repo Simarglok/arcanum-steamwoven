@@ -37,7 +37,7 @@ public sealed class AreaDialogDirectionsTests
         Assert.AreEqual(new DialogBearing(5, 1000), port.Bearing(npc, 1), "the area is toward +x");
         Assert.AreEqual(new DialogBearing(3, 6336), port.Bearing(npc, 2), "toward +y");
         Assert.AreEqual(new DialogBearing(5, 0), port.Bearing(npc, 3), "the same place: rotation 5");
-        Assert.AreEqual(new DialogBearing(0, 5000), port.Bearing(npc, 4), "toward -x -y");
+        Assert.IsNull(port.Bearing(npc, 4), "a negative location has no answer (the original's coordinates are unsigned 32-bit)");
         Assert.IsNull(port.Bearing(npc, 5), "outside the table");
         Assert.IsNull(port.Bearing(AreaConversationState.Npc(3), 1), "another speaker");
 

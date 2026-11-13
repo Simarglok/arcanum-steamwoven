@@ -11,8 +11,8 @@ namespace Arcanum.World;
 /// ARC-SCRIPT-1533 (ledger DIR3): the directions seam of one AREA speaker. <see cref="AreaName"/> is the name the module's area table (<c>mes\gamearea.mes</c>,
 /// <see cref="WorldAreaTable"/>) holds for the area (0x4CAE90); <see cref="Bearing"/> is the direction (0x4B8D50) and Chebyshev distance (0x4B96F0) from the speaker's
 /// location (where <paramref name="at"/> says it stands now, else its T0 cell) toward the area's location in the table (0x4CAED0). The original compares the two locations
-/// as they are, whichever map the speaker stands on; so does this. A number outside the table, a speaker other than this one, or a location outside the
-/// 32-bit range the original's coordinates hold has no answer.
+/// as they are, whichever map the speaker stands on; so does this. A number outside the table, a speaker other than this one, or a location outside 0..2^31 − 1 (the original's coordinates are
+/// unsigned 32-bit; no installed area or object has one outside it) has no answer.
 /// </summary>
 public sealed class AreaDialogDirections(WorldAreaTable areas, AreaSpeaker speaker, Func<AreaSpeaker, (long X, long Y)>? at) : IDialogDirectionsPort
 {
@@ -33,5 +33,5 @@ public sealed class AreaDialogDirections(WorldAreaTable areas, AreaSpeaker speak
         return new DialogBearing(rotation, WorldTravelGeometry.Distance(new TravelLocation(x, y), new TravelLocation(target.X, target.Y)));
     }
 
-    private static bool Fits(long value) => value is >= int.MinValue and <= int.MaxValue;
+    private static bool Fits(long value) => value is >= 0 and <= int.MaxValue;
 }

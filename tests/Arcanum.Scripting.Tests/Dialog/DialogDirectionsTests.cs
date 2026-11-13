@@ -292,6 +292,19 @@ public sealed class DialogDirectionsTests
     }
 
     [TestMethod]
+    public void A_blocked_reply_is_left_out_too_while_the_pc_knows_every_area_and_a_free_x_way_needs_its_one_effect()
+    {
+        Assert.AreEqual(DialogOptionTextKind.Fallback, new Rig(known: [1]).Start(Reply("d:$0,1", action: "FL 20")).Options.Single().TextKind,
+            "the exe leaves a reply out whatever its action holds");
+        var tight = new Rig();
+        var limited = tight.Start(Reply("x:$0,1"), options: new DialogConversationOptions { MaxEffects = 0 });
+        Pick(limited, 1);
+        Assert.AreEqual(DialogConversationSelectStatus.AtFrontier, limited.Select(limited.Options[0].Token).Status);
+        Assert.AreEqual(DialogFrontierKind.EffectLimit, limited.Frontier!.Kind);
+        Assert.AreEqual(0, tight.World.Commands.Count);
+    }
+
+    [TestMethod]
     public void A_dialog_transfer_in_the_same_reply_blocks_it()
     {
         var blocked = new Rig().Start(Reply("d:$0,1", action: "FL 20")).Options.Single();

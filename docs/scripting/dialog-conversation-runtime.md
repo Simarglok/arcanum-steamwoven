@@ -585,7 +585,7 @@ Player reply whose text starts with `d:` or `x:` (either case; `d:$price,areas`)
 A reply with a price also needs the `World`, `Gold` and purse ports (the price on the reaction scale, the payment), `x:` the `World` port (the area marking); without them, or with an area outside
 1..4095, no `$` or no comma after it, it stays a frontier (`UnsupportedGeneratedText`) as before. It is offered as `Generated` (marker `d` or `x`, PC lines 1300..1399 or 1400..1499, the arguments
 not shown) with the transition `Directions`, **unless the PC knows every area of its list** (`IDialogAreaPort`), when it is left out; a left-out reply still takes a slot of the five. A dialog
-transfer or window action in the same reply keeps it blocked (`UnsupportedInteraction`). Picking it runs the reply's action, then the talk, in the screens of the [trainer's talk](#trainer-reply-arc-script-1150)
+transfer or window action in the same reply keeps it blocked (`UnsupportedInteraction`), and a blocked reply is left out the same way. Picking it runs the reply's action, then the talk, in the screens of the [trainer's talk](#trainer-reply-arc-script-1150)
 (`TrainerTalk`; the options are `DirectionsStep`, the reply's own response is followed on leaving):
 
 | Screen | NPC line | Options |
@@ -596,7 +596,7 @@ transfer or window action in the same reply keeps it blocked (`UnsupportedIntera
 
 The way is built before the payment, so a failed line never follows a spent price; the effect budget covers the payment and the marking together. A refused or throwing port, an area the port cannot
 name, a bearing outside the eight directions fail the talk (`InvalidQueryResult`, `QueryException`). The viewer's host (`AreaDialogDirections`) names the areas from `mes\gamearea.mes` (`WorldAreaTable`,
-loaded with the greeting texts) and measures from the speaker's location (a following companion's live cell, else its T0 cell) with `LineOfFireRules.Rotation` and `WorldTravelGeometry.Distance`.
+loaded with the greeting texts) and measures from the speaker's location (a following companion's live cell, else its T0 cell: another NPC the AI host has moved is measured from where the map data puts it, a limit of the talk range too, [#1601](https://github.com/Simarglok/arcanum-steamwoven/issues/1601)) with `LineOfFireRules.Rotation` and `WorldTravelGeometry.Distance`.
 Tests: `DialogDirectionsTests` (synthetic), `AreaDialogDirectionsTests` (the host's seam) and the opt-in `DialogDirectionsRealDataTests` (`DAT_ROOT`: the two installed `d:` replies are admitted and run
 to their way; no installed `x:`).
 
