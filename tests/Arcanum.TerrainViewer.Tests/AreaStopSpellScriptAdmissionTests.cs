@@ -11,12 +11,12 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class AreaStopSpellScriptAdmissionTests
 {
     [TestMethod]
-    public void The_placed_heartbeat_and_dying_sets_hold_the_spell_stop_and_stay_inside_S42()
+    public void The_placed_heartbeat_and_dying_sets_hold_the_spell_stop_and_stay_inside_S43()
     {
         foreach (var set in new[] { AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission })
         {
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.StopSpellOnObject), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S42), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S43), set.Id);
         }
         // The use click's set holds the cast actions no more than this one, and the dialog host has no spell run to stop.
         Assert.IsFalse(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.StopSpellOnObject));
@@ -47,8 +47,8 @@ public sealed class AreaStopSpellScriptAdmissionTests
         }
         Console.WriteLine($"installed scripts with a spell stop {string.Join(",", carriers)}; admitted whole: " + string.Join(", ", counts.Select(c => $"{c.Key} {c.Value}")));
         Assert.AreEqual(0, counts["S40"], "S40 refuses every one of them by construction");
-        // Four installed scripts carry the action (1054, 2789, 2792, 3022; the census reaches one of them by a live run); S42 admits 3 whole (the fourth holds a command of another slice), the placed and dying sets 1 each, the heartbeat set none and the use set none.
+        // Four installed scripts carry the action (1054, 2789, 2792, 3022; the census reaches one of them by a live run); S42 admits 3 whole (the fourth holds a command of another slice), the placed set 1 and the dying set 1 (2 since ARC-SCRIPT-1481 widened the shared set), the heartbeat set none and the use set none.
         CollectionAssert.AreEqual(new[] { 1054, 2789, 2792, 3022 }, carriers);
-        Assert.AreEqual((0, 3, 0, 1, 0, 1), (counts["S40"], counts["S42"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
+        Assert.AreEqual((0, 3, 0, 1, 0, 2), (counts["S40"], counts["S42"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
     }
 }

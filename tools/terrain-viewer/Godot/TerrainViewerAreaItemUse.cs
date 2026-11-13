@@ -159,8 +159,10 @@ public partial class TerrainViewerApp
         public bool RunUseScript(string user, string item, string? target)
         {
             if (!facts.UseScript) return true;
-            if (app.ItemUseScript(item, reading: false) is not { } stopped) return true;
+            if (app.ItemUseScript(item, reading: false, target: target) is not { } stopped) return true;
             Message = stopped;
+            // ARC-SCRIPT-1481: a use script that ate the item itself (the food script 30282 destroys it and heals) used it, though its answer stops the original's tail.
+            if (app._areaSession!.IsItemDestroyed(item)) Message = "used: its use script used the item up";
             // A script the viewer could not run did not stop the use: nothing more happens.
             if (stopped.StartsWith("not used", StringComparison.Ordinal)) Aborted = true;
             return false;

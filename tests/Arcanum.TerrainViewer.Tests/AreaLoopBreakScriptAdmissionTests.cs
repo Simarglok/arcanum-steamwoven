@@ -11,13 +11,13 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class AreaLoopBreakScriptAdmissionTests
 {
     [TestMethod]
-    public void The_use_placed_heartbeat_and_dying_sets_hold_loop_break_and_stay_inside_S42()
+    public void The_use_placed_heartbeat_and_dying_sets_hold_loop_break_and_stay_inside_S43()
     {
         foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission })
         {
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.LoopBreak), set.Id);
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.LoopFor) && set.Actions.Contains(ScrCatalogue.Action.LoopEnd), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S42), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S43), set.Id);
         }
         // The dialog host runs no loops: its sets stay without the break.
         foreach (var set in new[] { AreaScriptHost.Admission, AreaScriptHost.SkillAdmission, AreaScriptHost.TalkAdmission, AreaScriptHost.SkillTalkAdmission })

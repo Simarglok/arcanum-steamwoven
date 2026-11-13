@@ -1092,6 +1092,17 @@ design (the chance is 5 per cent of each firing, one firing per 300 to 700 game 
 | 5 | Meet a second group in the same encounter (a table row with two creature kinds). | The first creature of the second kind is missing (the original destroys it, a quirk kept). | open |
 | 6 | Try the same in a town sector and while standing in a named area. | No encounter happens there. | open |
 
+## ARC-SCRIPT-1481 — food that heals and cures poison (2026-11-13)
+
+The food use script 30282 (the generic magic potion on 729 food items, most of them in the main map's chests and on its NPCs) runs when the hero eats the item ([VT1–VT8](../research/ledger/scripts.md#vitals-commands-and-the-food-use-script-arc-script-1481)). Use a food item that holds a potion in the hero's own inventory window (right click).
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Hurt the hero (a fight or a trap), then take a food item that the original calls a healing potion from a chest or an NPC and right-click it in the inventory. | The item is eaten (it leaves the list), hit points (or fatigue, or poison, by the potion) rise by the potion's amount scaled by the hero's magick or tech aptitude, and the use costs 4 action points in a round. | open |
+| 2 | Do the same with a hero at full health (and no poison). | Nothing happens and the potion stays: the script skips the default before it destroys the item. | open |
+| 3 | Poison the hero (a poison trap or a spider bite) and eat a cure-poison potion. | The poison level falls by the potion's amount (to 0 at least) and the poison damage ticks stop when it reaches 0. | open |
+| 4 | Eat a magick potion with a technological hero (a dwarf with a high tech aptitude). | The item is gone and nothing heals (the potion fizzles with its own effect), as the original's script does. | open |
+
 ## ARC-UI-1363 — The sleep and wait window in the original's look (2026-11-13)
 
 The window is drawn from the build 0x57B4F0 ([sleep window](../world/sleep-window-runtime.md#the-windows-look-arc-ui-1363-ledger-sz13-swb6-swb7), ledger SZ13, SWB6, SWB7): art 565 at (573, 42), a button of art 293 and a line of `sleepUI.mes` for each length. Compare it in both games, from the key `S` and from the bar's Sleep button (in the wilderness and in a town-map sector with the wait marker).

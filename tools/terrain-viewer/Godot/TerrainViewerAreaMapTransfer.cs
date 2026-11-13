@@ -290,7 +290,10 @@ public partial class TerrainViewerApp
             // ARC-SCRIPT-1164 (E5-b): a script's set lock state, toggle open or closed and obj is open read the shown map's portals and containers.
             Openable: ScriptOpenable,
             // ARC-SCRIPT-1294 (RM6): a script's stop spell on object interrupts the first run of the spell that holds the object, in the cast host.
-            ScriptStopSpell: (obj, spell) => AreaAiHostNow()?.ScriptStopSpell(obj, spell) ?? "no AI host");
+            ScriptStopSpell: (obj, spell) => AreaAiHostNow()?.ScriptStopSpell(obj, spell) ?? "no AI host",
+            // ARC-SCRIPT-1481: get hit points, get fatigue points and get stat 24 of an NPC read the session's life; heal fatigue (the hero's) and heal poison go through its life step.
+            Vitals: ScriptVitals, ScriptHealLife: HealLifeByScript);
+
         var inventory = _inventoryHost;
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, inventory?.Maps ?? [], content, world)
         {

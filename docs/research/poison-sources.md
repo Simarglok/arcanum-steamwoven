@@ -53,7 +53,7 @@ sector objects the probe does not tally for items), scripts by attachment (an ob
 The ways **out** of poison (not sources, listed so nothing is missed): the heal applier through spells (58, 61 Halt Poison,
 152 Cure Poison, 156 Cure All, 194 and three unused records) and the Herbology and other potions, the NPC AI's cure-poison
 list (spells 61, 152, 156), the fate window's full heal, a stat-24 write by `heal_poison`, and the recovery tick. All are
-built except **`heal_poison`**: the food use script **30282** (`get_hit_points`, `get_fatigue_points`, `get_stat` of stat 24,
+built (since ARC-SCRIPT-1481, issue #1481, also **`heal_poison`**; the text below is the finding before it): the food use script **30282** (`get_hit_points`, `get_fatigue_points`, `get_stat` of stat 24,
 heals and `heal_poison`) stands on **729 food items on 27 maps** and is refused whole (actions 107, 108 and 128 are in no
 admission set). That is the one gap of the cure side; it is the largest single refusal of the module
 ([script-refusal-census](script-refusal-census.md)).

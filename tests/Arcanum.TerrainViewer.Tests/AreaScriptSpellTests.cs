@@ -275,7 +275,7 @@ public sealed class AreaScriptSpellTests
         {
             foreach (var condition in ScrAdmissionSet.SpellQueryConditions) Assert.IsTrue(set.Conditions.Contains(condition), $"{set.Id}: condition {condition}");
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.GiveSpellMastery), $"{set.Id}: action 112");
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S42), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S43), set.Id);
         }
         // A dialog host without a query host cannot answer the questions: its own sets stay without them.
         Assert.IsFalse(AreaScriptHost.Admission.Conditions.Overlaps(ScrAdmissionSet.SpellQueryConditions));
@@ -314,7 +314,7 @@ public sealed class AreaScriptSpellTests
         }
         Console.WriteLine($"installed scripts with a spell command {withSpell}; admitted whole: " + string.Join(", ", counts.Select(c => $"{c.Key} {c.Value}")));
         Console.WriteLine("first refusal under the talk set: " + string.Join(", ", blockers.Select(b => $"{b.Key} x{b.Value}")));
-        // Ledger SC9: 46 installed scripts use one of the five commands; the sets admit few of them whole.
-        Assert.AreEqual((46, 1, 3, 1, 1), (withSpell, counts["use"], counts["placed"], counts["heartbeat"], counts["talk"]));
+        // Ledger SC9: 46 installed scripts use one of the five commands; the sets admit few of them whole. ARC-SCRIPT-1481: the placed set admits one more (the use set gained the heal, destroy and vitals commands).
+        Assert.AreEqual((46, 1, 4, 1, 1), (withSpell, counts["use"], counts["placed"], counts["heartbeat"], counts["talk"]));
     }
 }
