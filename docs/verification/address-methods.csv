@@ -133,6 +133,7 @@ src/Arcanum.Session/GameSessionJunkPiles.cs,CloseMapJunkPile,pending,
 src/Arcanum.Session/GameSessionJunkPiles.cs,DissolveJunkPile,pending,
 src/Arcanum.Session/GameSessionKillLog.cs,RecordHeroInjuries,pending,
 src/Arcanum.Session/GameSessionKillLog.cs,RecordKillLog,pending,
+src/Arcanum.Session/GameSessionLeaders.cs,ForceJoinLeader,exempt,reference
 src/Arcanum.Session/GameSessionLocks.cs,WriteOpenableFlag,pending,
 src/Arcanum.Session/GameSessionLoyalty.cs,CheckFollowerAfterHit,exempt,host
 src/Arcanum.Session/GameSessionMissiles.cs,CreateMissile,pending,
@@ -465,6 +466,7 @@ src/Arcanum.World/AreaAiHost.cs,InterruptForHold,pending,
 src/Arcanum.World/AreaAiHost.cs,ItemHolder,pending,
 src/Arcanum.World/AreaAiHost.cs,Jump,pending,
 src/Arcanum.World/AreaAiHost.cs,LaunchCast,pending,
+src/Arcanum.World/AreaAiHost.cs,Leader,exempt,host
 src/Arcanum.World/AreaAiHost.cs,LineOfFire,pending,
 src/Arcanum.World/AreaAiHost.cs,LineOfFireBlocker,pending,
 src/Arcanum.World/AreaAiHost.cs,LineOfFireStruck,pending,
@@ -474,6 +476,7 @@ src/Arcanum.World/AreaAiHost.cs,NeedsAmmunition,exempt,host
 src/Arcanum.World/AreaAiHost.cs,NoticeKill,exempt,host
 src/Arcanum.World/AreaAiHost.cs,ObserveLeaves,pending,
 src/Arcanum.World/AreaAiHost.cs,ObserveRound,pending,
+src/Arcanum.World/AreaAiHost.cs,PcLeader,exempt,host
 src/Arcanum.World/AreaAiHost.cs,Perform,pending,
 src/Arcanum.World/AreaAiHost.cs,PerformAttack,pending,
 src/Arcanum.World/AreaAiHost.cs,PerformSkill,pending,
