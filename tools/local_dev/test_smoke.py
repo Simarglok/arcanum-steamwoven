@@ -371,6 +371,8 @@ class PlanTests(unittest.TestCase):
         self.assertEqual((self.arg(scene, "--area-map"), "--main-menu" in scene.command), (smoke.SCENE_MAP, True))
         self.assertEqual(self.arg(self.plan("pr", "--stages", "plants", "--no-build")[0], "--area-map-sector"), smoke.WILD)
         self.assertEqual(self.arg(self.plan("pr", "--stages", "door-close", "--no-build")[0], "--area-map-sector"), smoke.TOWN)
+        # ARC-DEV-1577: ai-react needs a bystander the witness rule sends fleeing (the town has one, the Crash Site start none)
+        self.assertEqual(self.arg(self.plan("pr", "--stages", "ai-react", "--no-build")[0], "--area-map-sector"), smoke.TOWN)
 
     def test_a_pinned_map_or_sector_holds_for_every_stage_that_accepts_it(self) -> None:
         steps = self.plan("pr", "--stages", "cast,report,junk", "--map", smoke.RUINS, "--no-build")
