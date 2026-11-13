@@ -110,4 +110,14 @@ public sealed class HolderInsertPlaceStateTests
         owner.TakeItemFromNpc(owner.Version, Npc, "kit:1", Accept);
         Assert.AreEqual(0, owner.Capture().Inventory.HolderSlots.Count, "the save keeps no slot of an item that is no longer in the list");
     }
+
+    [TestMethod]
+    public void AnItemThatFindsNoFreePlaceStaysWithoutOne()
+    {
+        // The host's check says yes although the grid is full (a script's insert): no place is written, the item keeps none (-1).
+        var (owner, _) = Open(Enumerable.Range(0, 10).Select(i => new SessionSeedItem("fill" + i, Sized(SessionItemType.Generic, 7001, 1, 1, 110 + i), null)).ToArray());
+        using var _o = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItemByNpc(owner.Version, Npc, "loose0", Accept).Disposition);
+        Assert.AreEqual(0, owner.Capture().Inventory.HolderSlots.Count);
+    }
 }
