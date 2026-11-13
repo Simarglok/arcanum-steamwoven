@@ -2649,9 +2649,33 @@ it, Map opening the world map with the bars hidden and back with no hover, Comba
 the pane, Fate Points opening and closing its window (and, in the same smoke, the [Fate Point window](#fate-point-window-arc-ui-1112)'s own checks), a press on the strip's clock not reaching the world, every sound started, and the
 [clock](#clock-and-date-arc-ui-1111)). Not done: the
 hot-key bar (later slices; the vials since ARC-UI-020, the message log since ARC-UI-023, the vials' art, the follower frames
-and the hovered portrait since [ARC-UI-024](#panel-art-arc-ui-024); the skill pane since ARC-UI-1113), the town map, the
-buttons' lit art the original sets from game events (0x556A90), the toggle to the compact interface (the viewer shows the
+and the hovered portrait since [ARC-UI-024](#panel-art-arc-ui-024); the skill pane since ARC-UI-1113; the buttons' lit art since
+[ARC-UI-1364](#bar-buttons-lit-by-game-events-arc-ui-1364)), the town map, the toggle to the compact interface (the viewer shows the
 compact panel whenever its bars are not drawn).
+
+### Bar buttons lit by game events (ARC-UI-1364)
+
+The top strip's Character, Logbook, Inventory and Map buttons take their lit art from game events, and the Map button's face follows the hero's
+sector, as the 1.0.7.4 executable's light callbacks do (0x556A90, 0x556B70; ledger [GB15–GB17](../research/ledger/ui-audio.md#interface-bars-arc-ui-018)).
+`AreaBarLights` (Godot-free, `AreaGameBar.Lights`) keeps the original's five art words and map mode; the viewer applies the events to it each frame
+(`TerrainViewerBarLights.cs`, before the bars show or hide, so a hidden strip keeps its state):
+
+| Button | Lit art | Lit by | Put out by |
+| --- | --- | --- | --- |
+| Character | 561 `Char_ON` | a level-up of the hero (the level-up hook, as the message is posted) | the character sheet open |
+| Logbook | 560 | a change in the hero's quests, blessings, curses or reputations | the logbook open |
+| Inventory | 559 | an object entering or leaving the hero's held list (not an ammunition merge, not a move inside the list) | the inventory or barter window open |
+| Map | 195 (world face; the town face 558 is lit by no single player event) | a newly known world-map area | the map window open |
+
+A light is not stored while the button's own window is open. The session answers `QueryHeroInterfaceStamp` (three process-local stamps over the logbook,
+held list and known areas) and the viewer lights on a difference after each revision, because the session's writes are many and spread; a quest request not above the quest's state changes nothing in the session and
+lights nothing, where the original's write lights (known difference, issue [#1554](https://github.com/Simarglok/arcanum-steamwoven/issues/1554)). A light that waits (a world map light while the town face shows) is drawn when the face changes, as the original's redraw does. A new session (a new game or a load) takes its first stamps as the baseline and clears the lights; a map transfer keeps the session, so it keeps the lights too. The character sheet of an NPC or a companion is not the hero's and puts nothing out.
+The Map button shows art 193 (the town face) in a sector with a town map and art 194 (the world map, the owner's "blue globe") in any other, the
+original's rule at sector entry (0x564F60: the sector's town map number, 0 for none); the sector is read per frame, which gives the same face.
+**The original blocks nothing by this mode:** the world map gate never reads it (ledger GB17), so no entry is gated here either. `ARC_AREA_MAP_SMOKE_ONLY=bar`
+ends with `ARC-UI-1364 native-smoke bar-lights PASS` (a level-up, a quest, a taken object and a newly known area each light their button with the lit art
+on the button; the window opens put them out; a light with its window open is not stored). **Not done:** the lit state is not in the save (the original
+writes it, 0x54A1A0; a load starts idle: issue [#1542](https://github.com/Simarglok/arcanum-steamwoven/issues/1542)); the reputation and blessing events of other players (no network).
 
 ### Clock and date (ARC-UI-1111)
 

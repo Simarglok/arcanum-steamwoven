@@ -59,8 +59,9 @@ public static class AreaGameBarLayout
     public static int StripArt(AreaBarStrip strip) => strip == AreaBarStrip.Top ? TopArt : BottomArt;
 
     /// <summary>The buttons (GB2): bottom strip Skills, Spells, Combat, Schematics; top strip Logbook, Character, Inventory, Map, Fate
-    /// Points and Sleep. The map button shows the town map art (193) the original starts with (its world map art 194 is set by a game
-    /// callback, not ready).</summary>
+    /// Points and Sleep. The art here is the one each button is made with; the Character, Logbook, Inventory and Map buttons' art follows
+    /// the game's light callbacks (<see cref="AreaBarLights"/>, ARC-UI-1364: the Map button starts with the town map art 193 and takes
+    /// the world map art 194 while the hero's sector has no town map).</summary>
     public static readonly IReadOnlyList<AreaBarButtonSpec> Buttons =
     [
         new(AreaBarButton.Skills, AreaBarStrip.Bottom, 693, 456, 472, AreaBarButtonKind.Toggle, 1001),
@@ -82,9 +83,10 @@ public static class AreaGameBarLayout
 
     public static AreaBarButtonSpec Spec(AreaBarButton button) => button == AreaBarButton.Clock ? ClockSpec : Buttons.First(spec => spec.Button == button);
 
-    /// <summary>Every interface art number the bars draw (the clock's, ARC-UI-1111, among them).</summary>
+    /// <summary>Every interface art number the bars draw (the clock's, ARC-UI-1111, and the lights' idle and lit arts, ARC-UI-1364, among them).</summary>
     public static IReadOnlyList<int> ArtNumbers { get; } =
-        [TopArt, BottomArt, .. Buttons.Select(spec => spec.Art).Distinct(), HealthVialArt, PoisonedVialArt, FatigueVialArt, EmptyVialArt, .. AreaClockLayout.ArtNumbers, .. AreaExperienceStripLayout.ArtNumbers];
+        [.. new[] { TopArt, BottomArt }.Concat(Buttons.Select(spec => spec.Art)).Concat([HealthVialArt, PoisonedVialArt, FatigueVialArt, EmptyVialArt])
+            .Concat(AreaBarLights.ArtNumbers).Concat(AreaClockLayout.ArtNumbers).Concat(AreaExperienceStripLayout.ArtNumbers).Distinct()];
 
     /// <summary>The frame a button draws (GB4): idle frame 0; down advances one frame and hovered two, each step wrapping to frame 0
     /// past the art's last frame (so a two-frame art shows frame 0 when hovered, a one-frame art always frame 0).</summary>
@@ -118,6 +120,10 @@ public sealed record AreaBarEffect(IReadOnlyList<int> Sounds, AreaBarButton? Act
 public sealed class AreaGameBar
 {
     private readonly HashSet<AreaBarButton> _on = [];
+
+    /// <summary>ARC-UI-1364: the lit state of the Character, Logbook, Map and Inventory buttons and the Map button's face (GB15); kept by
+    /// the host, which applies the game's events to it. <see cref="Reset"/> leaves it alone: it forgets the pointer only.</summary>
+    public AreaBarLights Lights { get; } = new();
 
     /// <summary>The button the pointer is over; null none.</summary>
     public AreaBarButton? Hovered { get; private set; }

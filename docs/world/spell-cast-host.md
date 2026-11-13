@@ -523,7 +523,7 @@ While the interface bars show, the skill pane (`K` or the Skills button) is the 
    down and the other way round (the M key and the Spells button take the window from the skill pane). As with the spell pane, the pane
    shows only while it holds the message window: the pointer above the strip gives the window to the log, a move back over the strip
    gives it back (ML8); the toggle stays down meanwhile.
-6. **Not built.** The buttons' lit art the original sets from game events (0x556A90); the follower who acts instead of the hero for
+6. **Not built.** The follower who acts instead of the hero for
    pick pocket or disarm traps (0x57A620, E8-e5); no walk to the target before the skill runs (the original's press builds the invocation at once).
 7. **Smoke.** Inside the hotkey-bar smoke (cast stage): `K` shows the pane in the strip (Skills down, Spells up) with its background and the
    four buttons' arts; entering each button names it; a click on each plays 3000 and 3001, becomes the latest recent action and runs the

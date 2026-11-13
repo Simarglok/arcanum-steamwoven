@@ -118,6 +118,9 @@ public partial class TerrainViewerApp
             Require(_gameBarPanel is { Visible: true } && _gameBarContent is { ArtReady: true } content && content.Texts.GameCount == AreaGameBarTexts.Count,
                 "the bars show with the game's art and texts: " + _gameBarContent?.Detail);
             var panel = _gameBarPanel!;
+            // ARC-UI-1364: a new game lights nothing (what the session starts with is the baseline, not an event).
+            Require(new[] { AreaLightSlot.Character, AreaLightSlot.Logbook, AreaLightSlot.Inventory, AreaLightSlot.WorldMap }.All(slot => !_gameBar.Lights.IsLit(slot)),
+                "a new game starts with every button idle");
             if (verifyHd)
             {
                 Require(_canvas?.HdSource?.Pack is not null, "HD verification needs ARC_HD_PACK");
@@ -592,6 +595,8 @@ public partial class TerrainViewerApp
             await Button(clock, true); await Button(clock, false);
             Require(ReferenceEquals(before, _worldRouteClick), "the world took no press from the strip: " + _worldRouteClick);
             Require(_gameBarSoundsForSelfTest.All(sound => sound.Started), "every bar sound started: " + Sounds());
+            // ARC-UI-1364: last, as its level-up and quest writes change the hero and the message window.
+            await RunAreaBarLightsSmokeAsync(panel, Frames, Click);
             GD.Print($"ARC-UI-018 native-smoke bar PASS sounds={Sounds()}");
         }
         finally
