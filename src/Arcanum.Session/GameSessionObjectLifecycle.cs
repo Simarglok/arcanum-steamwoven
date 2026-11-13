@@ -143,6 +143,8 @@ public sealed partial class GameSessionOwner
     /// </summary>
     internal void DestroyObject(string entity, bool windowShowsContainer = false)
     {
+        // ARC-WORLD-1840, ARC-MAGIC-1841: whatever the object, the critters it led lose their leader (a mind control's parent need not be a critter); a critter also leaves its own leader.
+        DisbandNpcLinks(entity);
         switch (ObjectOriginOf(entity))
         {
             case SessionObjectOrigin.JunkPile:
@@ -172,8 +174,6 @@ public sealed partial class GameSessionOwner
                     ClearNoAttackOnLeave(entity);
                     if (following.WaitBit) CancelWaitTimers(entity);
                 }
-                // ARC-WORLD-1840: it leaves its NPC leader, and the followers it led lose their leader.
-                DisbandNpcLinks(entity);
                 // ARC-DEV-371: the flags written on it (the encounter flag every script-made critter carries) go with it, so a long run of created critters does not fill the written-flags bound; its other state records stay (E1-c1).
                 _objectFlags = _objectFlags.Remove(entity);
                 // ARC-MAGIC-040: the monster body a Trait component put on it goes too (the same bound).
