@@ -51,6 +51,20 @@ public sealed class ObjectArtStateTests
     }
 
     [TestMethod]
+    public void A_mobile_items_art_record_is_cleared_by_the_baseline_from_any_map_it_stands_on()
+    {
+        // ARC-SCRIPT-1779 (AN10): an item is a mobile object; its record travels with it, so the run that returns it to the data's art may name the map the item stands on now.
+        using var owner = Create();
+        const string Item = "oid:item:lamp";
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetObjectArt(owner.Version, Exterior, Item, 0x6040_0040, baseline: 0x6020_0040).Disposition);
+        Assert.AreEqual(0x6040_0040u, owner.QueryObjectArt(Cave, Item), "found by identity from the map it stands on now");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetObjectArt(owner.Version, Cave, Item, 0x6020_0040, baseline: 0x6020_0040).Disposition);
+        Assert.IsNull(owner.QueryObjectArt(Exterior, Item));
+        Assert.IsNull(owner.QueryObjectArt(Cave, Item));
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.SetObjectArt(owner.Version, Cave, Item, 0x6020_0040, baseline: 0x6020_0040).Disposition);
+    }
+
+    [TestMethod]
     public void A_save_without_the_field_loads_as_it_was_and_a_refused_write_changes_nothing()
     {
         using var plain = Create();

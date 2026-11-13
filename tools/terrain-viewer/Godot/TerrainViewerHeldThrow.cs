@@ -464,6 +464,8 @@ public partial class TerrainViewerApp
             if (missile is { } m && m != Arcanum.Data.Combat.CombatWeaponFields.NoMissileArt) return (unchecked((uint)m), false);
         }
         if (item == SessionHeroGrid.GoldEntity) return (PrototypeItems()?.Item(AreaBarterData.GoldPrototype)?.Art, true); // ARC-UI-094: the coins fly as the gold prototype's art
+        // ARC-SCRIPT-1779: the ground art a script's change art number wrote for the item is its art in flight.
+        if (_areaSession?.QueryObjectArt(new SessionMapId(CurrentAreaMap), item) is { } written) return (written, true);
         foreach (var map in _inventoryHost?.Maps ?? [])
             if (map.TryGetRow(item, out var row) && Number(row, CurrentArtSlot) is { } own) return (own, true);
         // ARC-DEV-315: an item the session made has no row: its prototype's current art.
