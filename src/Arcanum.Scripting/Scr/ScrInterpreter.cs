@@ -236,7 +236,7 @@ internal sealed class ScrInterpreter
         ScrCatalogue.Condition.IsInvulnerable => ListHolds(c, obj => CritterStates.IsInvulnerable(obj) ?? throw new MissingObjectStop(line)),
         ScrCatalogue.Condition.IsUndead => ListHolds(c, obj => CritterStates.IsUndead(obj) ?? throw new MissingObjectStop(line)),
         ScrCatalogue.Condition.IsProwling => ListHolds(c, obj => CritterStates.IsProwling(obj) ?? throw new MissingObjectStop(line)),
-        // CS12–CS14 (ARC-SCRIPT-1771; 0x4451B0 cases 11, 19 and 34): bad associates and monster of type follow the list rule (the type is read once, 0x44BA70); within range takes the first object of operand 0 and three values, and is true when the tile distance
+        // CS12–CS14 (ARC-SCRIPT-1771; 0x4451B0 cases 11, 19 and 34): bad associates and monster of type follow the list rule (the type is read once for the whole list; the original reads the list first, 0x44B4E0, then the value, 0x44BA70, which differs only if reading the value could stop the run); within range takes the first object of operand 0 and three values, and is true when the tile distance
         // of its location and the point (x operand 2, y operand 3) is at most the range of operand 1.
         ScrCatalogue.Condition.BadAssociates => ListHolds(c, obj => CritterStates.HasBadAssociates(obj) ?? throw new MissingObjectStop(line)),
         ScrCatalogue.Condition.MonsterOfType => MonsterOfTypeHolds(c, line),

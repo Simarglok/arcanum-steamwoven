@@ -269,7 +269,7 @@ public interface IScrCritterStateQueries
     /// </summary>
     bool? HasBadAssociates(ScrObjectRef obj);
 
-    /// <summary>Obj is monster of type (c19, ARC-SCRIPT-1771, case 19, ledger CS13): the art id stored in object field 0x18 is a monster art (type 0xC, the top four bits) whose monster number (bits 23..27, 0x503F20) equals the number; false for any other art.</summary>
+    /// <summary>Obj is monster of type (c19, ARC-SCRIPT-1771, case 19, ledger CS13): the art id stored in object field 0x18 is a monster art (type 0xC, the top four bits) whose monster number (bits 23..27, 0x503F20) equals the number; false for any other art; null for an object the host does not know or whose art field it cannot read.</summary>
     bool? IsMonsterOfType(ScrObjectRef obj, int type);
 }
 

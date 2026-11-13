@@ -6,8 +6,8 @@ using static Arcanum.Scripting.Tests.Scr.ScrTestPrograms;
 namespace Arcanum.Scripting.Tests.Scr;
 
 /// <summary>
-/// ARC-SCRIPT-1771 (ledger CS12–CS14): obj has bad associates (11), obj is monster of type (19) and obj is within range (34) of the set S54 (0x4451B0 cases 11, 19 and 34). The first two follow the list rule of the other object tests (monster of type reads
-/// its number once, before the list); within range takes the first object of operand 0 and three values and holds when the tile distance (0x4B96F0) of the object and the point is at most the range. Programs, objects and answers are invented.
+/// ARC-SCRIPT-1771 (ledger CS12–CS16): obj has bad associates (11), obj is monster of type (19) and obj is within range (34) of the set S54 (0x4451B0 cases 11, 19 and 34). The first two follow the list rule of the other object tests (monster of type reads
+/// its number once for the whole list); within range takes the first object of operand 0 and three values and holds when the tile distance (0x4B96F0) of the object and the point is at most the range. Programs, objects and answers are invented.
 /// </summary>
 [TestClass]
 public sealed class ScrCritterTailTests

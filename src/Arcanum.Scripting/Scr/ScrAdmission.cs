@@ -447,14 +447,14 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S53 { get; } = new("S53", S52.Conditions.Concat(CritterStateConditions), S52.Actions, S52.ValueKinds, S52.FocusKinds, counterIndexWraps: true);
 
-    /// <summary>The conditions the set <see cref="S54"/> adds to <see cref="S53"/> (ARC-SCRIPT-1771, ledger CS12–CS14): obj has bad associates (11), obj is monster of type (19) and obj is within range (34).</summary>
+    /// <summary>The conditions the set <see cref="S54"/> adds to <see cref="S53"/> (ARC-SCRIPT-1771, ledger CS12–CS16): obj has bad associates (11), obj is monster of type (19) and obj is within range (34).</summary>
     public static IReadOnlyList<int> CritterTailConditions { get; } = [ScrCatalogue.Condition.BadAssociates, ScrCatalogue.Condition.MonsterOfType, ScrCatalogue.Condition.WithinRange];
 
     /// <summary>The conditions of <see cref="CritterTailConditions"/> a host answers through <see cref="IScrCritterStateQueries"/> (obj is within range reads only the object's location, through <see cref="IScrWorldQueries"/>).</summary>
     public static IReadOnlySet<int> CritterTailQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.BadAssociates, ScrCatalogue.Condition.MonsterOfType };
 
     /// <summary>
-    /// The critter-state tail set (ARC-SCRIPT-1771, ledger CS12–CS14; the script census group CRQ, ARC-RES-1101): <see cref="S53"/> plus obj has bad associates (11, exe 0x4451B0 case 11 → 0x45F460), obj is monster of type (19, case 19: the art id of object field 0x18) and
+    /// The critter-state tail set (ARC-SCRIPT-1771, ledger CS12–CS16; the script census group CRQ, ARC-RES-1101): <see cref="S53"/> plus obj has bad associates (11, exe 0x4451B0 case 11 → 0x45F460), obj is monster of type (19, case 19: the art id of object field 0x18) and
     /// obj is within range (34, case 34 → 0x4B96F0).
     /// </summary>
     public static ScrAdmissionSet S54 { get; } = new("S54", S53.Conditions.Concat(CritterTailConditions), S53.Actions, S53.ValueKinds, S53.FocusKinds, counterIndexWraps: true);
