@@ -130,4 +130,45 @@ public sealed class SessionSpellCasterRaiseTests
         CollectionAssert.AreEqual(new[] { (Npc, (string?)null) }, asked);
         Assert.IsTrue(Dead(owner, target));
     }
+
+    // ARC-MAGIC-1838 (RZ3): a refused raise (the script) tells the player message 605 and plays the resisted effect (entry 387, no run) on the target; an allowed one tells nothing.
+    [TestMethod]
+    public void A_refused_raise_shows_message_605_and_plays_the_resisted_effect_on_the_target()
+    {
+        var (owner, caster, target) = Session(Spell(SpellDamageFlags.Raise | SpellDamageFlags.Full), dead: true);
+        using var _ = owner;
+        caster.RaiseScript = (_, _) => false;
+        var start = caster.Log.Count;
+        Heal(caster);
+        Assert.IsTrue(Dead(owner, target));
+        CollectionAssert.AreEqual(new[]
+        {
+            new SpellCastEvent(SpellCastEventKind.Message, 0, SessionSpellCaster.RaiseRefusedMessage),
+            new SpellCastEvent(SpellCastEventKind.EyeCandyAdded, -1, SessionSpellCaster.RaiseRefusedEyeCandyEntry, Npc, 0),
+        }, caster.Log.Skip(start).ToArray());
+        Assert.AreEqual((605, 387), (SessionSpellCaster.RaiseRefusedMessage, SessionSpellCaster.RaiseRefusedEyeCandyEntry));
+    }
+
+    [TestMethod]
+    public void An_allowed_raise_tells_nothing_of_a_refusal()
+    {
+        var (owner, caster, target) = Session(Spell(SpellDamageFlags.Raise | SpellDamageFlags.Full), dead: true);
+        using var _ = owner;
+        caster.RaiseScript = (_, _) => true;
+        var start = caster.Log.Count;
+        Heal(caster);
+        Assert.IsFalse(Dead(owner, target));
+        Assert.IsFalse(caster.Log.Skip(start).Any(e => e.Kind is SpellCastEventKind.Message or SpellCastEventKind.EyeCandyAdded), "no message and no effect");
+    }
+
+    [TestMethod]
+    public void A_heal_that_asks_no_raise_tells_nothing_of_a_refusal()
+    {
+        // A plain heal of a dead target is not a raise (AlreadyDead): no refusal feedback.
+        var (owner, caster, _) = Session(Spell(SpellDamageFlags.Full), dead: true);
+        using var _o = owner;
+        var start = caster.Log.Count;
+        Heal(caster);
+        Assert.IsFalse(caster.Log.Skip(start).Any(e => e.Kind is SpellCastEventKind.Message or SpellCastEventKind.EyeCandyAdded));
+    }
 }
