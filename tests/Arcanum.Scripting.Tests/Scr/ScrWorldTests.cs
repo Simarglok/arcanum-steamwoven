@@ -235,4 +235,120 @@ public sealed class ScrWorldTests
         Assert.IsTrue(region.IsAdmitted);
         CollectionAssert.AreEqual(new[] { 0, 2, 3, 4 }, region.Admitted!.Region.ToArray());
     }
+
+    // S15 and the loop break of S40 (ARC-SCRIPT-1166, PG15): the set the synthetic programs run under.
+    private static readonly ScrAdmissionSet WithBreak = new("S15-loop-break", ScrAdmissionSet.S15.Conditions, ScrAdmissionSet.S15.Actions.Append(ScrCatalogue.Action.LoopBreak),
+        ScrAdmissionSet.S15.ValueKinds, ScrAdmissionSet.S15.FocusKinds, counterIndexWraps: true);
+
+    private static ScrRunResult RunBreak(ScrProgram program, int number)
+    {
+        var host = Host();
+        host.Inner.Scripts[number] = ScrScriptLookup.Of(program);
+        return ScrDispatcher.RunSector(new(new(number, 0, 0), Pc), host, new() { Admission = WithBreak });
+    }
+
+    [TestMethod]
+    public void A_loop_break_ends_the_loop_and_goes_on_after_the_first_loop_end_and_the_looped_object_stays()
+    {
+        // Line 2 creates next to the first object; line 3 breaks (a "true" condition with the break); the loop end of line 4 is never reached, the run
+        // goes on at line 5, where the looped object is still the first one (Tree).
+        var program = Program(
+            Do(C(ScrCatalogue.Action.AssignObject, (Attachee, -1), (Triggerer, 0))),
+            Do(C(ScrCatalogue.Action.LoopFor, (Scenery, 0))),
+            Do(C(ScrCatalogue.Action.CreateObject, N(1), (Looped, 0))),
+            Do(C(ScrCatalogue.Action.LoopBreak)),
+            Do(C(ScrCatalogue.Action.LoopEnd)),
+            Do(C(ScrCatalogue.Action.CreateObject, N(2), (Looped, 0))),
+            Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        var run = RunBreak(program, 11);
+        Assert.AreEqual(ScrStop.ReturnRunDefault, run.Stop);
+        CollectionAssert.AreEqual(new[] { new ScrCreateRequest(1, Tree), new(2, Tree) }, run.Effects.Creations.ToArray());
+        CollectionAssert.AreEqual(new[] { 0, 1, 2, 3, 5, 6 }, run.Trace.Select(t => t.Line).ToArray());
+    }
+
+    [TestMethod]
+    public void A_conditional_break_leaves_the_loop_only_when_it_holds_and_a_break_without_a_loop_does_nothing()
+    {
+        // The break fires at the marker (the second object): Tree is visited, Mark is visited and breaks, Rock is never visited.
+        var program = Program(
+            Do(C(ScrCatalogue.Action.AssignObject, (Attachee, -1), (Triggerer, 0))),
+            Do(C(ScrCatalogue.Action.LoopBreak)),
+            Do(C(ScrCatalogue.Action.LoopFor, (Scenery, 0))),
+            Do(C(ScrCatalogue.Action.CreateObject, N(1), (Looped, 0))),
+            L(C(ScrCatalogue.Condition.IsNamed, (Looped, 0), N(Marker)), C(ScrCatalogue.Action.LoopBreak), C(0)),
+            Do(C(ScrCatalogue.Action.LoopEnd)),
+            Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        var host = Host();
+        host.Inner.Scripts[12] = ScrScriptLookup.Of(program);
+        var run = ScrDispatcher.RunSector(new(new(12, 0, 0), Pc), host, new() { Admission = WithBreak });
+        CollectionAssert.AreEqual(new[] { new ScrCreateRequest(1, Tree), new(1, Mark) }, run.Effects.Creations.ToArray());
+        // Line 1 (a break before any loop) went on with line 2; the loop's break jumped past line 5 to line 6.
+        CollectionAssert.AreEqual(new[] { 0, 1, 2, 3, 4, 5, 3, 4, 6 }, run.Trace.Select(t => t.Line).Take(9).ToArray());
+    }
+
+    [TestMethod]
+    public void A_loop_break_finds_the_first_loop_end_after_the_loop_for_not_its_own()
+    {
+        // PG11's scan: the first line whose condition is "true" and whose true action is loop end, so a break in a nested-looking structure
+        // goes after the first loop end of the script below the loop for (line 5 here), and a loop end behind another condition is passed over.
+        var program = Program(
+            Do(C(ScrCatalogue.Action.AssignObject, (Attachee, -1), (Triggerer, 0))),
+            Do(C(ScrCatalogue.Action.LoopFor, (Scenery, 0))),
+            Do(C(ScrCatalogue.Action.LoopBreak)),
+            L(C(ScrCatalogue.Condition.LocalFlag, N(0)), C(ScrCatalogue.Action.LoopEnd), C(ScrCatalogue.Action.LoopEnd)),
+            Do(C(ScrCatalogue.Action.CreateObject, N(3), (Looped, 0))),
+            Do(C(ScrCatalogue.Action.LoopEnd)),
+            Do(C(ScrCatalogue.Action.CreateObject, N(4), (Looped, 0))),
+            Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        var run = RunBreak(program, 13);
+        CollectionAssert.AreEqual(new[] { 0, 1, 2, 6, 7 }, run.Trace.Select(t => t.Line).ToArray());
+        CollectionAssert.AreEqual(new[] { new ScrCreateRequest(4, Tree) }, run.Effects.Creations.ToArray());
+    }
+
+    [TestMethod]
+    public void A_loop_break_after_a_finished_loop_does_nothing_and_a_new_loop_can_start()
+    {
+        // The first loop runs through all three objects; the break after it finds no running loop and goes on; the second loop then runs again from the first object.
+        var program = Program(
+            Do(C(ScrCatalogue.Action.AssignObject, (Attachee, -1), (Triggerer, 0))),
+            Do(C(ScrCatalogue.Action.LoopFor, (Scenery, 0))),
+            Do(C(ScrCatalogue.Action.LoopEnd)),
+            Do(C(ScrCatalogue.Action.LoopBreak)),
+            Do(C(ScrCatalogue.Action.LoopFor, (Scenery, 0))),
+            Do(C(ScrCatalogue.Action.CreateObject, N(5), (Looped, 0))),
+            Do(C(ScrCatalogue.Action.LoopBreak)),
+            Do(C(ScrCatalogue.Action.LoopEnd)),
+            Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        var run = RunBreak(program, 14);
+        CollectionAssert.AreEqual(new[] { new ScrCreateRequest(5, Tree) }, run.Effects.Creations.ToArray());
+        CollectionAssert.AreEqual(new[] { 0, 1, 2, 2, 2, 3, 4, 5, 6, 8 }, run.Trace.Select(t => t.Line).ToArray());
+    }
+
+    [TestMethod]
+    public void A_region_admission_follows_a_loop_break_to_the_line_after_every_loop_end_a_loop_for_finds()
+    {
+        // Like a loop end, a break is admitted as going on with the next line or after the loop end of any loop for of the script (the region over-approximates
+        // the run's loop): line 2's loop for is not reached on its own, yet the break of line 0 reaches line 5, the line after its loop end.
+        var program = Program(
+            Do(C(ScrCatalogue.Action.LoopBreak)),
+            Do(C(ScrCatalogue.Action.Goto, N(3))),
+            Do(C(ScrCatalogue.Action.LoopFor, (Scenery, 0))),
+            Do(C(ScrCatalogue.Action.ReturnRunDefault)),
+            Do(C(ScrCatalogue.Action.LoopEnd)),
+            Do(C(ScrCatalogue.Action.ReturnSkipDefault)));
+        var region = ScrAdmission.AdmitFrom(program, WithBreak, 0);
+        Assert.IsTrue(region.IsAdmitted);
+        CollectionAssert.AreEqual(new[] { 0, 1, 3, 5 }, region.Admitted!.Region.ToArray());
+        Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.AdmitFrom(program, ScrAdmissionSet.S15, 0).Refusal!.Code);
+    }
+
+    [TestMethod]
+    public void S40_adds_only_loop_break_over_S38()
+    {
+        CollectionAssert.AreEquivalent(new[] { ScrCatalogue.Action.LoopBreak }, ScrAdmissionSet.S40.Actions.Except(ScrAdmissionSet.S38.Actions).ToArray());
+        Assert.IsTrue(ScrAdmissionSet.S40.Conditions.SetEquals(ScrAdmissionSet.S38.Conditions) && ScrAdmissionSet.S38.IsSubsetOf(ScrAdmissionSet.S40));
+        var program = Program(Do(C(ScrCatalogue.Action.LoopFor, (Scenery, 0))), Do(C(ScrCatalogue.Action.LoopBreak)), Do(C(ScrCatalogue.Action.LoopEnd)));
+        Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S40).IsAdmitted);
+        Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(program, ScrAdmissionSet.S38).Refusal!.Code);
+    }
 }
