@@ -169,12 +169,12 @@ adds 92 MB once (content the earlier stages had not made) and the following relo
 reloads and bound their mean growth.
 
 ARC-RENDER-1538 (#1538) found the cause of that alternation: the measurement, not the heap. The stage read `GC.GetTotalMemory(false)` after its
-collections, and that is the runtime's approximate sum of the space each generation has allocated in its GC regions (about 4 MB each on .NET 8),
-not the objects the collection kept. On the town sector after the map battery, with six more reloads (2026-11-14, launch queue run logs on the
+collections, and that is the runtime's approximate sum of the space each generation has allocated, not the objects the collection kept. On the town sector after the map battery, with six more reloads (2026-11-14, launch queue run logs on the
 owner's Mac): heap snapshots (`dotnet-gcdump`, a scratch tool outside git) after each reload held 463.6 MB of objects within about 10 KB, and the
 collection's own figure (`GCMemoryInfo` heap size less its free space) stayed at 464.9 MB within about 30 KB, while `GetTotalMemory` read 490
-to 508 MB. The gap moved in steps of about 4 MB (25.0 or 29.0 MB) from one sample to the next, a frame apart, while no thread allocated (the
-process's allocated-byte count grew by about 2 KB across each sample). A caching or pooled buffer was ruled out too: no buffer of 1 MB or more went
+to 508 MB. The gap moved in steps of about 4 MB (25.0 or 29.0 MB; a GC region is about 4 MB on .NET 8, but which space the sum counted was not
+traced) from one sample to the next, a frame apart, while no thread allocated (the process's allocated-byte count grew by about 2 KB
+across each sample). A caching or pooled buffer was ruled out too: no buffer of 1 MB or more went
 through the shared array pool over those reloads, and the 16 MiB cap of the index mappings bounds GPU row textures, not managed memory. On the Crash
 Site start (no battery before the stage) the two figures agree within about 1 MB. The stage now samples the collection's own figure, which stays flat between
 reloads, and makes one repeated reload again, as before ARC-BUG-1501.

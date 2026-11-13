@@ -133,20 +133,21 @@ public partial class TerrainViewerApp
 
         // ARC-RENDER-025: the last collection of each sample compacts the large-object heap. Before, on a 64-sector map whose
         // large-object heap held 96 to 208 MB of free space, samples differed from the live bytes by up to tens of megabytes
-        // from run to run; compacted, they equal the live bytes to within about 10 KB (observed, not a runtime guarantee).
+        // from run to run; compacted, they came within about 10 KB of the live bytes there (observed with GC.GetTotalMemory, not a runtime guarantee).
         // ARC-RENDER-1538: the sample is what that blocking collection left, its heap size less its free space (GCMemoryInfo),
-        // not GC.GetTotalMemory: the runtime's approximate sum counts space by GC region (about 4 MB each on .NET 8), and on the
-        // town sector after the map battery it read 25 to 44 MB above the live bytes, in steps of about 4 MB that changed from one
-        // sample to the next while no thread allocated; that was the 16 MB alternation between reloads (#1538).
+        // not GC.GetTotalMemory, the runtime's approximate sum of the space each generation has allocated: on the town sector after
+        // the map battery it read 25 to 44 MB above the live bytes, in steps of about 4 MB (a GC region's size on .NET 8; which
+        // space it counted was not traced) that changed from one sample to the next while no thread allocated; that was the
+        // 16 MB alternation between reloads (#1538).
         static long Managed()
         {
             GC.Collect(); GC.WaitForPendingFinalizers();
             System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
-            var before = GC.CollectionCount(2);
+            var prior = GC.GetGCMemoryInfo(GCKind.FullBlocking).Index;
             GC.Collect();
             var collected = GC.GetGCMemoryInfo(GCKind.FullBlocking);
-            // The info must be this sample's own collection: a blocking full one counted after `before`.
-            Require(GC.CollectionCount(2) > before && collected.Generation == 2 && collected.Index > 0, "MANAGED_SAMPLE");
+            // The info must be of a blocking full collection made after `prior`: this sample's own (or, as good, another thread's).
+            Require(collected.Index > prior && collected.Generation == 2, "MANAGED_SAMPLE");
             return collected.HeapSizeBytes - collected.FragmentedBytes;
         }
         static long Resident() { using var process = System.Diagnostics.Process.GetCurrentProcess(); process.Refresh(); return process.WorkingSet64; }
