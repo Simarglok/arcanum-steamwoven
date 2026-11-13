@@ -13,7 +13,7 @@ public sealed record AreaPortal(AreaObjectKey Key, string Entity, AreaStepCell C
     /// <summary>ARC-SKILLS-006: the lock's difficulty (portal field 47, the record's slot 37), bounded to the session's range.</summary>
     public int LockDifficulty { get; init; }
 
-    /// <summary>ARC-SCRIPT-1778 (ledger AN16): the art id a script's change art number wrote (frame 0, the frame bits of the id are not kept: the session's frame is the open state); null while the portal has the art its map data gives.
+    /// <summary>ARC-SCRIPT-1778 (ledger AN18): the art id a script's change art number wrote (frame 0, the frame bits of the id are not kept: the session's frame is the open state); null while the portal has the art its map data gives.
     /// <see cref="Art"/>, <see cref="FramesPerSecond"/> and <see cref="Frames"/> are then those of that art.</summary>
     public uint? ArtId { get; init; }
 
@@ -67,7 +67,7 @@ public sealed class AreaPortals
     public AreaPortal? ByEntity(string entity) => entity is not null && _byEntity.TryGetValue(entity, out var key) ? _portals[key] : null;
 
     /// <summary>
-    /// ARC-SCRIPT-1778 (ledger AN16): gives the portal the art a script's change art number wrote: <paramref name="artId"/> (null: the art its map data gives, which returns the original entry), with
+    /// ARC-SCRIPT-1778 (ledger AN18): gives the portal the art a script's change art number wrote: <paramref name="artId"/> (null: the art its map data gives, which returns the original entry), with
     /// the facts of that art read by the caller (<paramref name="art"/>: door or window, rotation and frame count; <paramref name="framesPerSecond"/>; <paramref name="frames"/>: every frame of its group, in frame order).
     /// What reads the portal afterwards (the open steps, the passage rule, the draw, a script's toggle) reads the new art's frame count. False when the portal is not of this map or already has this art.
     /// </summary>

@@ -327,7 +327,7 @@ public sealed class AreaNpcStateScriptTests
     [TestMethod]
     public void Change_art_number_gives_a_door_and_a_container_the_new_art_closed_with_their_lock_fields_kept()
     {
-        // AN16: the open state of a door or window and of a container is the frame of its art id; the action writes the new id with frame 0, so the object is closed after it, and its lock fields are not touched.
+        // AN18: the open state of a door or window and of a container is the frame of its art id; the action writes the new id with frame 0, so the object is closed after it, and its lock fields are not touched.
         WithContent(content =>
         {
             using var session = ConversationSessionFixture.Create();

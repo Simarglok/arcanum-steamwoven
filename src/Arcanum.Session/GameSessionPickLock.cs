@@ -116,10 +116,9 @@ public sealed partial class GameSessionOwner
     private ItemCondition? LockpickCondition(SessionLockpick? lockpick) =>
         lockpick is null ? null : QueryItemCondition(lockpick.Entity, lockpick.Condition)!.Value;
 
-    // The check, the outcome and the lock write of a pick on the request of its user (the hero's or an NPC's, which carries no fate and no local-PC term).
-    private SessionPickLockResult PickLockStep(SessionPickLockTarget target, SessionLockpick? lockpick, SkillCheckRequest request)
-    {
-        request = request with
+    // The lock's terms of a pick-locks request (the lockpicks' bonus, the lock's difficulty, the light at it): the check's and the best-follower chooser's score share them.
+    private static SkillCheckRequest WithLockFacts(SkillCheckRequest request, SessionPickLockTarget target, SessionLockpick? lockpick) =>
+        request with
         {
             Difficulty = request.Difficulty with
             {
@@ -129,6 +128,11 @@ public sealed partial class GameSessionOwner
                 Light = target.Light,
             },
         };
+
+    // The check, the outcome and the lock write of a pick on the request of its user (the hero's or an NPC's, which carries no fate and no local-PC term).
+    private SessionPickLockResult PickLockStep(SessionPickLockTarget target, SessionLockpick? lockpick, SkillCheckRequest request)
+    {
+        request = WithLockFacts(request, target, lockpick);
         var rolls = new SkillRolls(new SeededRandom(_random.Seed, _random.Draws));
         SkillCheckResult check;
         try { check = SkillCheckRules.Run(request, rolls, _rules.Combat.InvocationModifierCountedTwice); }

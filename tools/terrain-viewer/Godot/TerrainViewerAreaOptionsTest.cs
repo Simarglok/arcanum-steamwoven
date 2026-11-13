@@ -81,9 +81,9 @@ public partial class TerrainViewerApp
                 "Options opened the options window at the Game page: " + _mainMenuPanel?.HeaderForSelfTest);
             var panel = _mainMenuPanel!;
             Require(panel.ButtonsForSelfTest.SequenceEqual(["Game  (G)", "Video  (V)", "Sound  (S)", "Done  (D)"]), "page buttons: " + string.Join("|", panel.ButtonsForSelfTest));
-            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Violence Filter: Off", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven"]),
+            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Violence Filter: Off", "Default Combat Mode: Real Time", "Auto Attack: On", "Auto Switch Weapons: Off", "Always Run: Off", "Follower Skills: On", "Rules: Steamwoven"]),
                 "Game page: " + string.Join("|", Controls()));
-            Require(!panel.NoteForSelfTest.Contains("Video: ", StringComparison.Ordinal) && !panel.NoteForSelfTest.Contains("Violence Filter: ", StringComparison.Ordinal) && panel.NoteForSelfTest.Contains("Auto Switch Weapons: ", StringComparison.Ordinal),
+            Require(!panel.NoteForSelfTest.Contains("Video: ", StringComparison.Ordinal) && !panel.NoteForSelfTest.Contains("Violence Filter: ", StringComparison.Ordinal) && panel.NoteForSelfTest.Contains("Default Combat Mode: ", StringComparison.Ordinal),
                 "hidden controls are named: " + panel.NoteForSelfTest);
 
             // Each arrow applies at once: the difficulty on the session, the turn-based setting, auto attack, Always Run.
@@ -103,16 +103,16 @@ public partial class TerrainViewerApp
             panel.ChangeForSelfTest(2, 1);
             Require(!_turnBasedSetting && !_gameSettings.TurnBased, "fast turn-based is skipped: back to real time");
             panel.ChangeForSelfTest(3, -1);
-            panel.ChangeForSelfTest(4, 1);
-            Require(!_gameSettings.AutoAttack && _alwaysRunOption && Controls()[3] == "Auto Attack: Off" && Controls()[4] == "Always Run: On", "auto attack off, Always Run on");
+            panel.ChangeForSelfTest(5, 1);
+            Require(!_gameSettings.AutoAttack && _alwaysRunOption && Controls()[3] == "Auto Attack: Off" && Controls()[5] == "Always Run: On", "auto attack off, Always Run on");
             // ARC-UI-014: the rule mode switches the session in play, both ways.
-            panel.ChangeForSelfTest(5, 1);
-            Require(_ruleMode == RuleMode.Original && _areaSession!.Rules.Mode == RuleMode.Original && Controls()[5] == "Rules: Original", "Original on the session");
-            panel.ChangeForSelfTest(5, 1);
-            Require(_ruleMode == RuleMode.Steamwoven && _areaSession!.Rules.Mode == RuleMode.Steamwoven && Controls()[5] == "Rules: Steamwoven", "the list wrapped to Steamwoven");
+            panel.ChangeForSelfTest(7, 1);
+            Require(_ruleMode == RuleMode.Original && _areaSession!.Rules.Mode == RuleMode.Original && Controls()[7] == "Rules: Original", "Original on the session");
+            panel.ChangeForSelfTest(7, 1);
+            Require(_ruleMode == RuleMode.Steamwoven && _areaSession!.Rules.Mode == RuleMode.Steamwoven && Controls()[7] == "Rules: Steamwoven", "the list wrapped to Steamwoven");
 
             // ARC-UI-146: the HD lines (HD graphics, HD interface, HD pack) are no longer in this window: the Game page ends with Rules (ARC-UI-1737: the Controls line and the evidence log's two lines are the Video page's).
-            Require(Controls().Length == 6 && !Controls().Any(line => line.StartsWith("HD ", StringComparison.Ordinal)), "no HD line: " + string.Join("|", Controls()));
+            Require(Controls().Length == 8 && !Controls().Any(line => line.StartsWith("HD ", StringComparison.Ordinal)), "no HD line: " + string.Join("|", Controls()));
 
             // ARC-UI-021: the Video page's floating text level and speed apply at once.
             Letter('v');

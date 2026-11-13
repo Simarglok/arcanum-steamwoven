@@ -137,7 +137,7 @@ public partial class TerrainViewerApp
                 if (Frame(aid, "object-art") is not { } frame) continue;
                 bodies[key] = AreaScenePlan.Repose(command, row, visual, frame.Key, frame.Frame.Width, frame.Frame.Height, frame.Visual.HotX, frame.Visual.HotY);
             }
-        // ARC-SCRIPT-1778 (ledger AN16, LW2, LK13): a container off its T0 art or frame is drawn from its current art and frame (the open lid, a script's new art).
+        // ARC-SCRIPT-1778 (ledger AN18, LW2, LK13): a container off its T0 art or frame is drawn from its current art and frame (the open lid, a script's new art).
         foreach (var (containerKey, containerBody) in ContainerArtBodies(area, session, overlay.Bodies, overlay.Visuals, Frame)) bodies[containerKey] = containerBody;
         // A busted scenery or trap: its destroyed ART where its T0 body stood.
         if (ObjectTargets() is { } targets)

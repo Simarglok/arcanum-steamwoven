@@ -77,7 +77,7 @@ fields for it, although `HealWithItem` accepts one the hero holds. The window re
 
 ## Boundaries
 
-- Not modelled: the use and destroy scripts (refused), the best-follower substitution and its line, the dialog skill service
+- Not modelled: the use and destroy scripts (refused), the best-follower substitution for heal (the original hands over only the lockpick use and Disarm Traps, OH4), the dialog skill service
   (SK8), the AI's heal decision, the heal skill goal 33 for the hero (the heal of another critter walks with goal 39), the animation goal's walk and its
   range checks, the network messages.
 - The cure removes a scar from the session's scar count; other injury effects of cause 7 on an NPC are not session state.
