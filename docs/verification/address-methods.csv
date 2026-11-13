@@ -303,6 +303,7 @@ src/Arcanum.Simulation/Ai/ExecutorTypes.cs,RunsOf,pending,
 src/Arcanum.Simulation/Ai/ExecutorTypes.cs,ShownAnimation,pending,
 src/Arcanum.Simulation/Ai/ExecutorTypes.cs,StartPleaseMove,exempt,host
 src/Arcanum.Simulation/Ai/ExecutorTypes.cs,StepClear,exempt,host
+src/Arcanum.Simulation/Ai/ExecutorTypes.cs,StepMeetsTrap,exempt,host
 src/Arcanum.Simulation/Ai/ExecutorTypes.cs,TileCritters,exempt,host
 src/Arcanum.Simulation/Ai/ExecutorTypes.cs,Unconscious,pending,
 src/Arcanum.Simulation/Ai/FollowerRules.cs,NearDeathOfHit,pending,
@@ -475,6 +476,8 @@ src/Arcanum.World/AreaAiHost.cs,Support,pending,
 src/Arcanum.World/AreaAiHost.cs,TellFollowers,pending,
 src/Arcanum.World/AreaAiHost.cs,ThrowableWeapon,pending,
 src/Arcanum.World/AreaAiHost.cs,TileCritters,exempt,host
+src/Arcanum.World/AreaAiHost.cs,TrapMetByUse,exempt,host
+src/Arcanum.World/AreaAiHost.cs,TrapMetOn,exempt,host
 src/Arcanum.World/AreaAiHost.cs,TrapSpottedOn,exempt,host
 src/Arcanum.World/AreaAiHost.cs,Unwield,pending,
 src/Arcanum.World/AreaAiHost.cs,UpdateDanger,pending,
@@ -571,7 +574,9 @@ src/Arcanum.World/AreaSpellTeleport.cs,MapAreaLocation,pending,
 src/Arcanum.World/AreaSpellTeleport.cs,Portal,pending,
 src/Arcanum.World/AreaTraps.cs,Attack,pending,
 src/Arcanum.World/AreaTraps.cs,Step,pending,
+src/Arcanum.World/AreaTraps.cs,StepNpc,exempt,host
 src/Arcanum.World/AreaTraps.cs,Use,pending,
+src/Arcanum.World/AreaTraps.cs,UseNpc,exempt,host
 src/Arcanum.World/AreaTraps.cs,WalkCheck,pending,
 src/Arcanum.World/AreaTraps.cs,WalkCheckNpc,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,AreaOf,pending,
@@ -725,6 +730,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaPanelArt.cs,HoverPortrait,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,ArmPickPocketFromBar,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,HeroFaceSkill,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,HeroDoorUse,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,OpenerDoorTrap,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaQuickSave.cs,RouteQuickSaveOverWindow,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaReading.cs,ItemUseScript,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaReading.cs,ReadItem,pending,
