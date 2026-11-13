@@ -58,7 +58,7 @@ public sealed partial class GameSessionOwner
     /// <remarks>
     /// ARC-MAGIC-1628 (the rewield 0x465530 the setter runs after storing magick points (22) or tech points (23)): it walks the wear slots 1000 to 1008 and for each worn item recalculates the wearer's light (0x467E80) and runs the item's
     /// script points 25 (wield off) and 24 (wield on) with the wearer as the initiator. True when no worn item of the hero has either point: the runs then do nothing (a run of a point with no script returns at once) and the hero's light is
-    /// derived from the wear (<see cref="QueryHeroLight"/>), not stored. False with a worn wield script, which the session cannot run from a spell, and without a hero.
+    /// derived from the wear (<see cref="QueryHeroLight"/>), not stored. False with a worn wield script (ARC-MAGIC-1744: <see cref="PlanHeroRewield"/> runs them, so this answers only whether there is anything to run) and without a hero.
     /// </remarks>
     public bool HeroRewieldReady()
     {
@@ -93,7 +93,7 @@ public sealed partial class GameSessionOwner
     /// <remarks>
     /// ARC-MAGIC-1510 (0x4B0980 for the PC, after the setter's clamp and guards): the hero's base stat <paramref name="index"/> (<see cref="HeroHoldsStat"/>) is <paramref name="value"/>. Strength changes the encumbrance level as
     /// every revision compares it (<c>SettleEncumbrance</c>, 0x45F820); alignment arms the followers' re-check as a script's change does (OL17, <see cref="ChangeHeroAlignment"/>); the callbacks after the write are the interface's. The caller
-    /// has kept the value within the stat's range, and for magick and tech points has checked <see cref="HeroRewieldReady"/>. Experience (18) is always refused here (<see cref="GameSessionFailure.InvalidChangeKey"/>): it runs the level recalculation, so use <see cref="WriteHeroExperienceStat"/>. Refused, in order: no hero (<see cref="GameSessionFailure.InvalidHero"/>), a number the hero does not hold or a value outside its
+    /// has kept the value within the stat's range, and for magick and tech points has planned the rewield's runs over the new value (<see cref="PlanHeroRewield"/>, applied after this write by <c>CommitRewield</c>, ARC-MAGIC-1744). Experience (18) is always refused here (<see cref="GameSessionFailure.InvalidChangeKey"/>): it runs the level recalculation, so use <see cref="WriteHeroExperienceStat"/>. Refused, in order: no hero (<see cref="GameSessionFailure.InvalidHero"/>), a number the hero does not hold or a value outside its
     /// range (<see cref="GameSessionFailure.InvalidChangeKey"/>), the version, the revision. The same value is <see cref="GameSessionDisposition.NoChange"/>.
     /// </remarks>
     public GameSessionMutationResult WriteHeroStat(GameSessionVersion expected, int index, int value)
