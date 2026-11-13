@@ -457,6 +457,7 @@ public sealed class SessionSpellCasterTraitIndexTests
         var viewed = new SessionSpellCaster(other, n => records.GetValueOrDefault(n), new Map(other, RatFields()), new Events());
         Assert.IsNull(viewed.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo, "a view without the NPC");
         Assert.IsTrue(other.QueryCritterIndexedWrites(Rat).IsEmpty);
+    }
 
     // ARC-MAGIC-1506 (ledger RM3b; exe read 0x4B0980 case 0, 0x45F790, 0x45F820, 0x461410): strength reads the encumbrance level before the store and recalculates after it. The rat's list weighs what its seed items weigh;
     // a strength of 3 carries 1500 (500 a point), so the levels step at 15 / 30 / 45 / 60 / 75 / 90 % of it.
