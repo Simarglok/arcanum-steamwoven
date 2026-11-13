@@ -39,7 +39,8 @@ namespace Arcanum.World;
 /// without it a run with a reaction action is left unapplied. ARC-SCRIPT-1164 (E5-b, WO3, WO4): <see cref="Openable"/> answers a portal's or container's lock identity, T0 baseline and ART facts on the shown map
 /// (<see cref="AreaScriptOpenable"/>; null for an object that is neither or not shown), for set lock state (53), toggle open or closed (88) and obj is open (36); without it those runs are left unapplied and the condition stops the run.
 /// ARC-SCRIPT-1294 (RM6): <see cref="ScriptStopSpell"/> (object entity, spell) interrupts the first active run of the spell that holds the object (the cast host's <see cref="Arcanum.Session.SessionSpellCaster.StopSpellOnObject"/>) and answers what happened;
-/// without it a run with a stop spell is left unapplied.
+/// without it a run with a stop spell is left unapplied. ARC-SCRIPT-1620 (TI6): <see cref="ScriptAttack"/> (attacker entity, victim entity) raises the attack event of a script's attack (36, 0x447D2F) in the AI host (flags 2, loudness 1) and answers the stop of its plan;
+/// without it a run with an attack is left unapplied.
 /// ARC-SCRIPT-1562 (WE2, CP7, CP8): <see cref="Aptitude"/> answers an NPC of the shown map's effective magick-tech aptitude (the hero's is the session's) for the magick-tech adjustments (91, 80) of a combat-point script; without it those runs stop at an NPC.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
@@ -51,7 +52,7 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Func<string, bool>? ScriptDamageAsk = null, Func<int, bool>? Critter = null, Func<string, AreaObjectRecord?>? CreatedRow = null,
     Action<string>? CritterMade = null, Func<string, int, bool, string>? ScriptReaction = null, Func<ScrObjectRef, AreaScriptOpenable?>? Openable = null,
     Func<string, int, string>? ScriptStopSpell = null, Func<string, AreaScriptVitals?>? Vitals = null, Func<string, int, int, string>? ScriptHealLife = null,
-    Func<string, int?>? Aptitude = null);
+    Func<string, string, string>? ScriptAttack = null, Func<string, int?>? Aptitude = null);
 
 /// <summary>ARC-SCRIPT-1481 (VT1–VT3): the vitals of an NPC of the shown map for get hit points (107), get fatigue points (108) and get stat of the poison level (24): the current and maximum hit points and fatigue and the poison level,
 /// as the session's life status gives them (<see cref="AreaScriptWorld.Vitals"/>).</summary>
@@ -176,6 +177,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <see cref="ScrAdmissionSet.S31"/>, which this host answers (<see cref="IScrSpellQueries"/>), and give spell mastery in college (112), which it writes through the session.
     /// ARC-SCRIPT-1241: plus fade (103) of <see cref="ScrAdmissionSet.S35"/>, which jumps the game clock and hands its movie to the viewer (<see cref="TakeFades"/>); the use script 2862 of the Vendigroth
     /// underground and the dying scripts 2863 and 3061 of Kerghan carry it, and the placed and dying sets are built on this one.
+    /// ARC-SCRIPT-1620 (TI6): plus attack (36, 0x447D2F), which raises the attack event of the first object of operand 1 on each object of operand 0 through the AI host (<see cref="AreaScriptWorld.ScriptAttack"/>); 79 installed scripts use it (111 clauses), and the heartbeat set admits it too.
     /// </summary>
     public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading-objects-story-world", ScrAdmissionSet.S4.Conditions.Concat(ScrAdmissionSet.SpellQueryConditions).Concat(ScrAdmissionSet.StoryConditions).Concat(ScrAdmissionSet.WorldObjectConditions),
         ScrAdmissionSet.S4.Actions.Where(a => a is not ScrCatalogue.Action.Dialog)
@@ -184,7 +186,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation,
                 ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak, ScrCatalogue.Action.CreateObject, ScrCatalogue.Action.GetStat,
-                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, .. ItemUseVitalActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
+                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, .. ItemUseVitalActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
         ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]),
         counterIndexWraps: true);
@@ -241,7 +243,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
             ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.GetLocation, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
-            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. StopSpellActions, .. DamageActions]),
+            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. StopSpellActions, .. DamageActions]),
         ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]));
 
@@ -1525,6 +1527,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 continue;
             }
             if (request.Change is ScrObjectStateChange.Damage or ScrObjectStateChange.DamageUnresistable) { ApplyScriptDamage(request); continue; }
+            if (request.Change == ScrObjectStateChange.Attack) { ApplyScriptAttack(request); continue; }
             if (request.Change == ScrObjectStateChange.GiveSpellMastery)
             {
                 // SC5: the PC, or an NPC of the shown map (ObjectStateRefusal checked its sheet); any other object does nothing in the original. The spell-book rule decides, the run goes on.
@@ -1759,6 +1762,34 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-SCRIPT-1163 (NS2): what the AI host answered for the last reaction change a run applied (null: none yet).</summary>
     public string? LastReaction { get; private set; }
 
+    /// <summary>ARC-SCRIPT-1620 (TI6): what the AI host answered to the last script attack a run applied (the stop of the attack event's plan; smoke and test seam; null before any or when nothing was raised).</summary>
+    public string? LastAttack { get; private set; }
+
+    /// <summary>ARC-SCRIPT-1620: whether the world gives the script attack (<see cref="ApplyScriptAttack"/>) this host applies; the dialog host asks before it applies anything, so a run it cannot finish is refused whole.</summary>
+    public bool CanApplyScriptAttack => _world?.ScriptAttack is not null;
+
+    /// <summary>
+    /// ARC-SCRIPT-1620 (TI6, VB2-2 gap d): why one attack (36) request of a run cannot be applied here, null when it can. The attacker (<see cref="ScrObjectStateRequest.Other"/>) must be the PC or an NPC of the shown map: the AI host's event
+    /// describes the PC and its NPCs only, and an object attacker (a trap, scenery) makes an NPC victim fight the object (the setter 0x4AABE0, COMBAT_FOCUS), which waits for the trap shot (#1619); an attacker of no loaded row or another map is not modelled either.
+    /// </summary>
+    public string? AttackRefusal(ScrObjectStateRequest request)
+    {
+        if (request.Other is not { } attacker) return "attack has no attacker";
+        if (IsPc(attacker) || ShownNpc(attacker)) return null;
+        var what = attacker.Map != _shownMap ? "an object of another map" : Row(attacker) is null ? "an object of no loaded row" : "a non-critter object";
+        return $"attack by {attacker.Code} is not modelled ({what} as the attacker; only the PC or an NPC of the shown map, an object attacker waits for #1619)";
+    }
+
+    /// <summary>
+    /// One attack (36) request of a run, applied (<see cref="AttackRefusal"/> said it can be): the attack event (0x4A9650, flags 2, loudness 1) of the attacker on the victim in the AI host. A victim that is neither the PC nor an NPC of the shown map is left as it is
+    /// (the host holds no such object: the event's early exit); the answer is the stop of the event's plan. Shared by the dialog host (<see cref="AreaScriptHost.Apply"/>).
+    /// </summary>
+    public void ApplyScriptAttack(ScrObjectStateRequest request)
+    {
+        LastAttack = null;
+        if (request.Other is { } attacker && (IsPc(request.Object) || ShownNpc(request.Object))) LastAttack = _world!.ScriptAttack!(attacker.Code, request.Object.Code);
+    }
+
     /// <summary>ARC-SCRIPT-1563: whether the world gives the script damage (<see cref="ApplyScriptDamage"/>) this host applies; the dialog host asks before it applies anything, so a run it cannot finish is refused whole.</summary>
     public bool CanApplyScriptDamage => _world?.ScriptDamage is not null;
 
@@ -1883,6 +1914,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             if (request.Change == ScrObjectStateChange.HealHitPoints)
             {
                 if (_world?.ScriptHeal is null) return "heal hit points needs the viewer's session";
+                continue;
+            }
+            // ARC-SCRIPT-1620 (TI6, VB2-2 gap d): the attacker (the first object of operand 1) is the PC or an NPC of the shown map, the critters the AI host holds; any other object (a trap, scenery, an item, another map's critter) as the attacker would
+            // make an NPC victim fight an object (0x4AABE0), which waits for the trap shot (#1619). The victim needs no test: the event's own early exits leave an object the host does not hold as it is.
+            if (request.Change == ScrObjectStateChange.Attack)
+            {
+                if (_world?.ScriptAttack is null) return "attack needs the AI host";
+                if (AttackRefusal(request) is { } why) return why;
                 continue;
             }
             // ARC-MAGIC-030 (SC5): give spell mastery acts on the PC and on an NPC of the shown map whose sheet its map data gives; a PC or NPC row of another map, or an object of no loaded

@@ -293,6 +293,14 @@ public partial class TerrainViewerApp
             ScriptStopSpell: (obj, spell) => AreaAiHostNow()?.ScriptStopSpell(obj, spell) ?? "no AI host",
             // ARC-SCRIPT-1481: get hit points, get fatigue points and get stat 24 of an NPC read the session's life; heal fatigue (the hero's) and heal poison go through its life step.
             Vitals: ScriptVitals, ScriptHealLife: HealLifeByScript,
+            // ARC-SCRIPT-1620 (TI6): a script's attack (36) raises the attack event of the attacker on the victim in the AI host, no fan-out (flags 2).
+            ScriptAttack: (attacker, victim) =>
+            {
+                if (AreaAiHostNow() is not { } ai) return "no AI host";
+                // A critter this run created is synced first (the host holds the attacker only then), as the thrown item's attack does.
+                SyncCreatedCritters(owner, ai);
+                return $"{ai.ScriptAttack(attacker, victim)}";
+            },
             // ARC-SCRIPT-1562: the magick-tech adjustments (91, 80) of a combat-point script read an NPC's effective aptitude from the session's life.
             Aptitude: ScriptAptitude);
 
