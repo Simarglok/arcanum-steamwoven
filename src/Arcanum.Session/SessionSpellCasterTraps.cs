@@ -1,5 +1,7 @@
+using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Magic;
+using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Traps;
 
 namespace Arcanum.Session;
@@ -32,7 +34,17 @@ public enum SessionTrapHit
     /// <summary>A shot (30002) found no shooter: nothing happens to the victim, no spell either. A shot with a shooter reports the damage step's own result
     /// (<see cref="Damaged"/>, <see cref="Prevented"/>, <see cref="NotApplied"/>, <see cref="Vetoed"/>) with <see cref="SessionTrapVictim.Shooter"/> set.</summary>
     NoShooter,
+    /// <summary>ARC-TECHNOLOGY-1635 (TT15): the shot's missile is in flight; the strike (the attack event, then the damage) comes where it meets the victim (<see cref="SessionSpellCaster.StrikeTrapShot"/>) or never,
+    /// when the victim left the line (<see cref="SessionTrapVictim.Shooter"/> is set, the amount drawn is <see cref="SessionTrapVictim.Amount"/>).</summary>
+    InFlight,
+    /// <summary>ARC-TECHNOLOGY-1635 (TT15, 0x4F5270 kind 3): the hero's armed critical-miss fate turned the shot's hit into a miss: the shot's critical-miss procedure ran (0x4B6410) and the missile popped on its own
+    /// tile, so nothing struck; the fate is used up.</summary>
+    Missed,
 }
+
+/// <summary>ARC-TECHNOLOGY-1635 (TT15, 0x4B24F0): a trap's shot leaving its shooter object, as <see cref="SessionSpellCaster.LaunchTrapShot"/> is told: the session's shot (<see cref="GameSessionOwner.QueryTrapShot"/>), the
+/// shooter object and the victim (the cast map's ids), the shooter's tile and the victim's tile, the missile's destination.</summary>
+public sealed record SessionTrapShotLaunch(SessionShot Shot, string Shooter, string Victim, CellCoord From, CellCoord Destination);
 
 /// <summary>One victim's effect: the drawn amount, the damage step (null without one), the hit points the session took, the shooter
 /// of a shot, and the spell cast at the victim (<see cref="SpellCastAttemptOutcome.Nothing"/> when none was cast or the spell is
@@ -49,6 +61,13 @@ public sealed record SessionTrapEffectResult(TrapEffect? Effect, string? Killer,
 
 public sealed partial class SessionSpellCaster
 {
+    /// <summary>
+    /// ARC-TECHNOLOGY-1635 (TT15): the host's projectile launch for a trap's shot (the dispatcher's ranged path: one projectile of the default art from the shooter's tile to the victim's location, which carries the
+    /// amount). True when the host launched it: the strike then comes where the missile meets the victim (<see cref="StrikeTrapShot"/>) and the shot ends at the host's call (<see cref="GameSessionOwner.EndShot"/>). False,
+    /// or no launch hook, and the shot strikes at once, as it did before the flight was drawn.
+    /// </summary>
+    public Func<SessionTrapShotLaunch, bool>? LaunchTrapShot { get; set; }
+
     /// <summary>
     /// ARC-WORLD-107: the effect of a native trap script the session fired (0x4BCDC0 for each victim of 0x4BCB70, ledger TT8,
     /// TT11–TT14). The victims are every PC and NPC of the map in the run's square around the trapped object (the map's square
@@ -124,8 +143,7 @@ public sealed partial class SessionSpellCaster
     /// returns, before the missile arrives. Where the projectile reaches the victim's tile (0x4B2870) a new context is built (attacker the shooter, target the struck object, hit location 0, the amount back in the normal slot, flag
     /// 0x300 kept, the damage source the shooter and not the trap's player: a PC-placed trap's kill credit is lost in the shot): the projectile's end raises the attack event (0x4B2690 → 0x4A9650,
     /// <see cref="AiNotice"/> with the shooter object as the attacker and the victim: an NPC victim goes to COMBAT_FOCUS on the object), then the hit runs (0x4B2F60: the victim's taking-damage script,
-    /// the damage step, the damage effect, the experience of a kill) and the attack end (0x4B6930, the hit effect of a PC or NPC victim). PROJECT (docs/world/trap-state-runtime.md): the missile is not drawn or flown
-    /// yet, so the strike follows the dispatcher at once (the spell, then the event, then the damage); a victim that would leave the missile's line meanwhile is not modelled.
+    /// the damage step, the damage effect, the experience of a kill) and the attack end (0x4B6930, the hit effect of a PC or NPC victim). ARC-TECHNOLOGY-1635: with a host that flies the missile (<see cref="LaunchTrapShot"/>) the strike is <see cref="StrikeTrapShot"/>, where the missile meets the victim; without one the strike follows the dispatcher at once (the spell, then the event, then the damage).
     /// </summary>
     private SessionTrapVictim TrapShot(TrapEffect effect, SessionTrapFiring firing, string victim)
     {
@@ -135,9 +153,47 @@ public sealed partial class SessionSpellCaster
         var amount = TrapEffectRules.Amount(effect, _owner.CombatRolls);
         _owner.CombatRolls.Roll(CombatRollPurpose.HitLocation, 1, 100);
         _owner.CombatRolls.Roll(CombatRollPurpose.TechnologyFailure, 1, 100);
+        // ARC-TECHNOLOGY-1635 (0x4B3170 after the hit is decided, TT15): a PC victim's armed critical-miss fate (0x4F5270 kind 3, used up) turns the hit into a critical miss; the shot's critical-miss procedure (0x4B6410: no
+        // weapon, the shooter no critter, so its one d100 and no effect, 0x4B5F40 refuses a non-critter) makes the shooter the target, and the ranged path flies the missile to the shooter's own tile: it pops there at once, so
+        // the victim is not struck, no event goes out and no damage comes. The trap's spell is cast as the dispatcher returns all the same.
+        var missed = victim == Hero && _owner.HeroFateArmed(FateKind.CriticalMiss) && _owner.UseHeroFate(_owner.Version, FateKind.CriticalMiss).Disposition == GameSessionDisposition.Changed;
+        if (missed) _owner.CombatRolls.Roll(CombatRollPurpose.CriticalSelfHit, 1, 100);
         // The spell is cast when the dispatcher returns (0x4BD06E), before the missile reaches the victim.
         var (spell, run) = effect.CastsSpell ? CastWithoutCaster(effect.Spell, victim) : (SpellCastAttemptOutcome.Nothing, null);
-        // The projectile's end: the attack event of the shooter object (0x4B2690), then the hit.
+        if (missed) return new(victim, SessionTrapHit.Missed, amount, null, 0, shooter, spell, run);
+        // ARC-TECHNOLOGY-1635 (0x4B24F0): the missile leaves the shooter's tile for the victim's location, with the amount in its field 0x4F; the event and the damage come where it meets the victim.
+        if (LaunchTrapShot is { } launcher && _map.Object(shooter)?.Location is { } from && _map.Object(victim)?.Location is { } to && _owner.BeginTrapShot(shooter, victim, amount) is { } shot)
+        {
+            if (launcher(new(shot, shooter, victim, new(checked((int)from.X), checked((int)from.Y)), new(checked((int)to.X), checked((int)to.Y)))))
+                return new(victim, SessionTrapHit.InFlight, amount, null, 0, shooter, spell, run);
+            _owner.EndShot(shot);
+        }
+        // No flight: the projectile's end follows the dispatcher at once.
+        var (hit, step, hitPoints) = ShotStrike(effect, shooter, victim, amount);
+        return new(victim, hit, amount, step, hitPoints, shooter, spell, run);
+    }
+
+    /// <summary>
+    /// ARC-TECHNOLOGY-1635 (TT15, 0x4B2870 → 0x4B2690 → 0x4B2F60): the strike of a trap's shot in flight (<see cref="GameSessionOwner.QueryTrapShot"/>) on <paramref name="struck"/>, the object the missile met: the victim it
+    /// was shot at (where it stands on the line), or another critter it met when it flew past (a stray strike). The shot ends with the strike. Null for a shot not in flight. The strike is as the shot without a flight:
+    /// the attack event of the shooter object goes out (<see cref="AiNotice"/>), the victim's taking-damage script is asked, the damage step takes the amount in the normal slot, and the hit effect of a PC or NPC victim
+    /// runs. The context names the shooter as the damage source, so the player credit of a PC-placed trap is lost (TT15). The result's <see cref="SessionTrapVictim.Spell"/> is nothing: the spell went with the shot.
+    /// </summary>
+    public SessionTrapVictim? StrikeTrapShot(SessionShot shot, string struck)
+    {
+        ArgumentNullException.ThrowIfNull(struck);
+        if (_owner.QueryTrapShot(shot) is not { } facts) return null;
+        _owner.EndShot(shot);
+        var effect = TrapEffectRules.Of(TrapShotScript, 0) ?? throw new InvalidOperationException("TRAP_SHOT_SCRIPT");
+        var (hit, step, hitPoints) = ShotStrike(effect, facts.Shooter, struck, facts.Amount);
+        return new(struck, hit, facts.Amount, step, hitPoints, facts.Shooter, SpellCastAttemptOutcome.Nothing, null);
+    }
+
+    private const int TrapShotScript = 30002;
+
+    // The projectile's end (0x4B2690): the attack event of the shooter object, then the hit (0x4B2F60) and the attack end (0x4B6930).
+    private (SessionTrapHit Hit, AttackDamage? Step, int HitPoints) ShotStrike(TrapEffect effect, string shooter, string victim, int amount)
+    {
         AiNotice?.Invoke(shooter, victim);
         var (hit, step, hitPoints) = TrapDamage(effect, amount, victim, shooter, killer: null, hitEffectFirst: false);
         // 0x4B6930 runs after the hit whatever the damage step did: for a PC or NPC victim the damage effect (a positive amount) or the critter hit (none) asks an entangled victim's save again. A veto and an invulnerable
@@ -152,7 +208,7 @@ public sealed partial class SessionSpellCaster
             };
             if (positive) DamageEffect(victim); else CritterHit(victim);
         }
-        return new(victim, hit, amount, step, hitPoints, shooter, spell, run);
+        return (hit, step, hitPoints);
     }
 
     private (SessionTrapHit Hit, int HitPoints) ApplyTrapDamage(string victim, AttackTargetKind kind, AttackDamage step, string trap, string? killer, bool hitEffectFirst)

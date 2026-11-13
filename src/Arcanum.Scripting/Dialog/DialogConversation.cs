@@ -229,6 +229,9 @@ public sealed partial class DialogConversation
             case DialogOptionTransition.Directions:
                 OpenDirections(plan!);
                 return Result();
+            case DialogOptionTransition.Newspaper:
+                OpenNewspaper(plan!);
+                return Result();
             case DialogOptionTransition.Barter:
                 if (OpenBarter(plan!.Reply.Barter!.Value))
                 {
@@ -486,7 +489,7 @@ public sealed partial class DialogConversation
                 text,
                 reply.Marker,
                 reply.Trainer is not null ? DialogOptionTransition.Trainer : reply.Rumor is not null ? DialogOptionTransition.Rumor : reply.Story ? DialogOptionTransition.Story
-                    : reply.Directions is not null ? DialogOptionTransition.Directions : reply.Transition,
+                    : reply.Directions is not null ? DialogOptionTransition.Directions : reply.Newspaper ? DialogOptionTransition.Newspaper : reply.Transition,
                 reply.Target is null ? null : new DialogNodeId(reply.Target.Id),
                 reply.ScriptLine,
                 new DialogOptionToken(_identity, Turn, _generation, response),
@@ -1579,6 +1582,7 @@ public sealed partial class DialogConversation
         int[]? trainer = null;
         RumorOffer? rumor = null;
         var story = false;
+        var newspaper = false;
         DirectionsOffer? directions = null;
         var found = DialogText.Marker(text, out var exact);
         if (found is { Letter: 'd' or 'x' })
@@ -1675,6 +1679,16 @@ public sealed partial class DialogConversation
             text = string.Empty;
             phrase = true;
             story = true;
+        }
+        else if (found is { Letter: 'p' } && exact && NewspaperAvailable)
+        {
+            // ARC-UI-1739 (ledger NP1): the original's newspaper reply (exactly "p:", either case, 0x416C10): a generated phrase (PC lines 1900..1999) whose pick runs the reply's action and then
+            // opens the vendor's greeting (state 0x19, 0x414810); the reply's response is followed when the player leaves the talk.
+            kind = DialogOptionTextKind.Generated;
+            marker = found;
+            text = string.Empty;
+            phrase = true;
+            newspaper = true;
         }
         else if (found is { Letter: 'b' or 'h' or 'l' or 'p' } && exact || found is { Letter: 'c' or 'r' or 't' or 'z' })
         {
@@ -1776,7 +1790,7 @@ public sealed partial class DialogConversation
                 block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedInteraction, transfer.Source);
             }
         }
-        if (block is null && (trainer is not null || rumor is not null || story || directions is not null) && (transfer is not null || action?.Any(OpensWindow) == true))
+        if (block is null && (trainer is not null || rumor is not null || story || newspaper || directions is not null) && (transfer is not null || action?.Any(OpensWindow) == true))
         {
             // A dialog transfer or a window in the same reply moves the dialog itself: outside this subset, as for b:.
             block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedInteraction, transfer?.Source ?? action!.First(OpensWindow).Source);
@@ -1844,7 +1858,7 @@ public sealed partial class DialogConversation
         }
         return new ReplyPlan(record, gender.Value, gate.IqValue!.Value, condition, kind, text, marker, transition, target, line, action, block,
             block is null ? insult : null, block is null ? barter : null, block is null ? worldMap : null, phrase, block is null ? trainer : null, block is null ? rumor : null, block is null && story,
-            Directions: block is null ? directions : null, DirectionsFilter: directions);
+            Directions: block is null ? directions : null, DirectionsFilter: directions, Newspaper: block is null && newspaper);
     }
 
     private static bool CheckTokens(string text, DialogNodeId node, DialogResponseId? response, out DialogConversationFrontier? frontier, out DialogConversationFailure? failure)
@@ -2005,7 +2019,8 @@ public sealed partial class DialogConversation
         bool Story = false,
         int? QuestReply = null,
         DirectionsOffer? Directions = null,
-        DirectionsOffer? DirectionsFilter = null);
+        DirectionsOffer? DirectionsFilter = null,
+        bool Newspaper = false);
 
     private sealed record OfferPlan(ReplyPlan Reply, StepPlan? Target);
 }

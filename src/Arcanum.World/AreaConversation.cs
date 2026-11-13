@@ -258,6 +258,7 @@ public sealed class AreaConversationHost
         host.HeroAttackAvailable = HeroAttackAvailable;
         host.NpcHostile = NpcHostile;
         host.KillNpc = KillNpc;
+        host.GiveHeroItem = GiveHeroItem;
         host.WorldMapAvailable = WorldMapAvailable;
         host.SpeakerCell = SpeakerCell;
         return host;
@@ -650,7 +651,9 @@ public sealed class AreaConversationHost
                 // ARC-SCRIPT-1532: a q: reply picks its record from the module's quest rules table; without the table the reply stays a frontier.
                 QuestReplies: _greetingTexts?.QuestReplies is { } questReplies ? new QuestReplyPort(questReplies) : null,
                 // ARC-SCRIPT-1533: the d: and x: replies read the area names and locations of the module's area table and where the speaker stands.
-                Directions: _greetingTexts?.Areas is { } areaTable ? new AreaDialogDirections(areaTable, speaker, SpeakerCell) : null));
+                Directions: _greetingTexts?.Areas is { } areaTable ? new AreaDialogDirections(areaTable, speaker, SpeakerCell) : null,
+                // ARC-UI-1739: the p: reply reads the session's issue queue and the newspaper file's headlines, and gives the printed issue through the viewer's item maker.
+                NewspaperStand: _greetingTexts?.Written is { } written && GiveHeroItem is not null && _session.QueryHero() is not null ? new NewspaperStandPort(this, written) : null));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }
@@ -778,6 +781,37 @@ public sealed class AreaConversationHost
         public DialogCommandResult Execute(QueueNewspaperCommand command) =>
             session.QueueNewspaper(session.Version, command.Issue, command.Front).Disposition == GameSessionDisposition.Rejected ? DialogCommandResult.Rejected : DialogCommandResult.Applied;
     }
+
+    /// <summary>
+    /// ARC-UI-1739 (ledger NP6): the newspaper item (prototype <see cref="NewspaperPrototype"/>, the executable's basic number 14064; 0x4BF210) of the original's vendor made in the hero's pack with the issue as its written start line (the field 0xCB, 0x406D40); the
+    /// vendor's reads are the session's queue (0x4BF200) and the headlines of the newspaper file (0x56CCA0). Rejected when the viewer cannot make the item or the session refuses the start line.
+    /// </summary>
+    private sealed class NewspaperStandPort(AreaConversationHost host, Arcanum.Data.Written.WrittenTexts texts) : IDialogNewspaperStandPort
+    {
+        public DialogNewspaperIssues Issues()
+        {
+            var queue = host._session.QueryNewspaper();
+            return new(queue.HeadIssue, queue.Entries.Take(SessionNewspaperState.Head).Where(word => word != -1).ToArray());
+        }
+
+        public string Headline(int issue) => texts.Headline(issue, host._session.Rules.Written);
+
+        [OriginalFunction(0x4BF210, OriginalFunctionScope.Partial)]
+        public DialogCommandResult Execute(GiveNewspaperCommand command)
+        {
+            if (command.PlayerCharacter != AreaConversationState.PcParticipant || host.GiveHeroItem is not { } give || give(NewspaperPrototype) is not { Item: { } item } made ||
+                made.Disposition == GameSessionDisposition.Rejected)
+                return DialogCommandResult.Rejected;
+            // The made item is the hero's (or lies on the hero's tile when the pack had no room): its written start line is the issue, which the reading window reads.
+            return host._session.SetItemWrittenStart(host._session.Version, item, command.Issue).Disposition == GameSessionDisposition.Rejected ? DialogCommandResult.Rejected : DialogCommandResult.Applied;
+        }
+    }
+
+    /// <summary>ARC-UI-1739: the newspaper prototype the vendor gives, as a script's create-object number (the executable's basic 14064, 0x36F0 of 0x4BF210).</summary>
+    public const int NewspaperPrototype = 14064;
+
+    /// <summary>ARC-UI-1739: the viewer's maker of a new item of a script's prototype number in the hero's pack (<c>AreaUseScripts.GiveHeroPrototypeItem</c> with the inventory's insert check); null: the <c>p:</c> reply stays blocked.</summary>
+    public Func<int, InventoryMutationResult?>? GiveHeroItem { get; set; }
 
     // or (ledger NQ6): the speaker's origin is the session's set origin (npc.origin on the speaker's map), cleared when it equals the map data's; the live talk's reputation scope follows.
     private sealed class OriginPort(AreaConversationHost host) : IDialogOriginPort
@@ -1275,6 +1309,7 @@ public static class AreaConversationText
             TakeItemCommand take => $"IN item name {take.ItemName} PC -> NPC",
             CounterWriteCommand counter => $"LC {counter.Index} = {counter.Value}",
             KillNpcCommand => "NK NPC killed",
+            GiveNewspaperCommand give => $"p: newspaper issue {give.Issue} given",
             CompanionCommand companion => companion.Action switch { DialogCompanionAction.Wait => "WA NPC waits", DialogCompanionAction.Leave => "LV NPC leaves the party", DialogCompanionAction.SpreadOut => "SO spread out", _ => "SC spread out cleared" },
             MarkAreaCommand area => $"MM area {area.Area} known",
             AlignmentCommand alignment => alignment.Mode == DialogReactionMode.Target ? $"AL set {alignment.Value}" : $"AL adjust {alignment.Value:+0;-0;+0}",

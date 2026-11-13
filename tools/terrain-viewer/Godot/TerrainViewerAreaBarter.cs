@@ -282,13 +282,40 @@ public partial class TerrainViewerApp
     {
         var speaker = host.Speakers.FirstOrDefault(candidate => AreaConversationState.EntityId(candidate.Row) == entity);
         if (speaker is null || !SpeakerPresent(speaker)) return null;
-        var fields = _combatHost?.Fields(entity);
-        var written = session.QueryObjectFlags(entity);
-        var critter = unchecked((uint)written.Critter(unchecked((int)(fields?.Critter?.Flags ?? 0))));
-        var spell = unchecked((uint)written.Spell(unchecked((int)(fields?.Object.SpellFlags ?? 0))));
+        var (critter, spell) = FollowerFlagWords(session, entity);
         var head = CanSpeakRules.Head(new CanSpeakFacts(StunnedParalysedOrMute: (critter & 0x2060) != 0, Asleep: (critter & 0x1000) != 0, Stoned: (spell & 0x10000) != 0,
             Dead: SpeakerDead(speaker), SpokenWithDead: (spell & unchecked((uint)SessionSpellCaster.SpokenWithDeadSpellFlag)) != 0));
         return head is { } answer && answer != CanSpeakRules.Free || (critter & 0x20000008) != 0 || (spell & 0x4000) != 0 ? null : speaker;
+    }
+
+    /// <summary>The critter flags and the spell flags of a follower now: the session's writes over the stored fields.</summary>
+    private (uint Critter, uint Spell) FollowerFlagWords(GameSessionOwner session, string entity)
+    {
+        var fields = _combatHost?.Fields(entity);
+        var written = session.QueryObjectFlags(entity);
+        return (unchecked((uint)written.Critter(unchecked((int)(fields?.Critter?.Flags ?? 0)))),
+            unchecked((uint)written.Spell(unchecked((int)(fields?.Object.SpellFlags ?? 0)))));
+    }
+
+    /// <summary>ARC-UI-1736 (FP8, FP11): what a follower's order menu draws greyed: Wait for a mind-controlled follower (spell flag 0x8000000), Inventory when the
+    /// can-open test (0x575080, <see cref="BarterCycleSpeaker"/>) fails.</summary>
+    private (bool MindControlled, bool CanOpenInventory) FollowerMenuFacts(string entity)
+    {
+        if (_areaSession is not { } session || _conversationHost is not { } host) return (false, false);
+        AdmitCompanionSpeakers();
+        var (_, spell) = FollowerFlagWords(session, entity);
+        return ((spell & AreaFollowerPanelRules.MindControlledSpellFlag) != 0, BarterCycleSpeaker(host, session, entity) is not null);
+    }
+
+    /// <summary>ARC-UI-1736 (FP11, 0x56AB09–0x56AB67): the menu's Inventory row opens the follower's barter-style inventory (BW1, mode 1) when the can-open test
+    /// passes; the window opens through the pending open the dialog's <c>b:</c> reply uses.</summary>
+    private void OpenFollowerInventory(string entity)
+    {
+        if (_areaSession is not { } session || _conversationHost is not { } host || !BarterActive) return;
+        AdmitCompanionSpeakers();
+        if (BarterCycleSpeaker(host, session, entity) is not { } speaker) { _companionNotice = "inventory: the follower cannot be opened now"; RefreshReadyStatus(); return; }
+        GD.Print($"ARC-UI-1736 follower inventory entity={entity}");
+        _barterPending = (session, host, entity, speaker.Index);
     }
 
     /// <summary>ARC-DEV-339 (B54): the arrange button of the barter window (IW30) lays the hero's items out as the own window's does; the
