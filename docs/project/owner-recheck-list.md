@@ -1286,7 +1286,7 @@ start a game with a hero who has technology degrees and open the schematics wind
 
 | # | Step | Expected | Status |
 | --- | --- | --- | --- |
-| 1 | Open the schematics window in a 1280 × 800 window. | The window is wood with a ruled cream page, a brass-rimmed picture frame for the record, two boxes for the components, a dark channel with the assemble button and its two lamps; the two gears with the mortarboard and the scroll, the round view of the hero and the record's picture are the originals'. | open |
+| 1 | Open the schematics window in a 1280 × 800 window. | The window is wood with a ruled cream page, a brass-rimmed picture frame for the record, two boxes for the components, a dark channel with the assemble button and its two lamps in brass rims; the two gears with the mortarboard and the scroll, the round view of the hero and the record's picture are the originals'. | open |
 | 2 | Click each of the eight discipline tabs and move over them. | The paper bookmarks (their own outlines and glyphs) stick out of the page's right edge; the shown tab is the pressed one; the page and the record change as before. | open |
 | 3 | Press the learned and found buttons and the assemble button; hold each down. | Each is a brass-rimmed round button that sinks while held; texts, sounds and the assembling are as before. | open |
 | 4 | Pick a discipline with several pages and turn them with the two arrows (the arrow hides on the first and last page). | The arrows are drawn on the page under them (no box of another colour); the ruling goes on beneath them. | open |

@@ -140,7 +140,7 @@ public static class InterfaceChromeRecipes
     // 201..706 across, 13..379 down, ruled every 32 units from x 227 and y 22), the round view's square hole (the lens art 231 draws its ring over it), the record's picture hole (a brass rim), the two component
     // slots' boxes (sunk, filled with paper under the found or missing tint), the channel of the assemble button with the sockets of its two lamps, the two list buttons' sockets, and eight tab slots
     // that take no rim (a tab is a bookmark that sticks out of the page's edge). The two gears with a mortarboard and a scroll (the learned and found buttons' labels) stay pictures. The tabs
-    // (27 x 40) are their ground (the wood, the page's last units) and the paper bookmark of their own Legacy frame; a page button is the sheet under it and the arrow.
+    // (27 x 40) are their ground (the wood and the paper's first units) and the paper bookmark of their own Legacy frame; a page button is the sheet under it and the arrow.
     private const int PageX = 201, PageY = 13, PageWidth = 506, PageHeight = 367, RuleStep = 32, RuleX = 227, RuleY = 22;
 
     private static ChromeRuling PageRuling(int x, int y, int width, int height) =>
