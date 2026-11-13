@@ -99,12 +99,11 @@ public static class CreatedObjectRows
     }
 
     /// <summary>
-    /// ARC-WORLD-1526 (ledger GS5, PO4, VB4-9): the row of a critter that is a COPY of the object <paramref name="template"/> (a monster generator's copy: 0x4EF920 → 0x43CC30 → 0x4421A0 copies the whole object with
-    /// 0x406010, all its instance fields, scripts, name, stats, flags and held items, where <see cref="Critter"/> reads the prototype only). The copy's fields are the template's: the direct fields stay direct (the instance's own over its
-    /// prototype's), the effective fields are the template's effective ones. What the original then writes on the copy is the unmarking of the generator (0x4BA720: NPC flag 0x80000 and the object flags 0x400002 cleared, 0x4EFDD0
-    /// and 0x4EFEE0), its location (0x4421A0 → 0x43E770), both standpoints (fields 0x121 and 0x122, only for a critter) and OF_DYNAMIC (0x442260, bit 0x2000 of the object flags); the NPC flag 0x2 that
-    /// <see cref="Critter"/>'s create path (OM13) writes is NOT written: a copy has the flags of its template. The template's held items are not part of the row (the caller copies them, an open part of GS5);
-    /// the restock facts (inventory source, field 0xEF) are the template's. A template that is not a critter's row is refused with <see cref="CreatedRowFailure.NotACritter"/>.
+    /// ARC-WORLD-1526 (ledger GS5, PO4, VB4-9): the row of a critter that is a COPY of the object <paramref name="template"/> (a monster generator's copy: the original duplicates the whole object, all its instance fields, scripts,
+    /// name, stats, flags and held items, where <see cref="Critter"/> reads the prototype only). The copy's fields are the template's: the direct fields stay direct (the instance's own over its prototype's), the effective fields are
+    /// the template's effective ones. What the original then writes on the copy is the unmarking of the generator (NPC flag 0x80000, and with it the object flags 0x400002, cleared), its location, both standpoints (fields 0x121 and 0x122,
+    /// only for a critter) and OF_DYNAMIC (bit 0x2000 of the object flags); the NPC flag 0x2 that <see cref="Critter"/>'s create path (OM13) writes is NOT written: a copy has the flags of its template. The template's held items are
+    /// not part of the row (an open part of GS5); the restock facts (inventory source, field 0xEF) are the template's. A template that is not a critter's row is refused with <see cref="CreatedRowFailure.NotACritter"/>.
     /// </summary>
     public static CreatedObjectRowResult CritterFrom(AreaObjectRecord template, string entity, int runtimeMap, int cellX, int cellY)
     {
@@ -121,7 +120,7 @@ public static class CreatedObjectRows
         long Base(int slot) => effective.TryGetValue(slot, out var held) && held.Presence == AreaPresence.Value ? held.Number ?? 0 : 0;
         void Own(int slot, long number) => direct[slot] = effective[slot] = new AreaFieldValue(slot, AreaPresence.Value, AreaValueOrigin.Instance, number, [], null);
         Own(LocationSlot, location);
-        // 0x4BA720 unmarks only an NPC that carries the generator bit (it returns 0 and touches nothing otherwise): the object flags 0x400002 go with the bit.
+        // the generator unmark (ledger VB4-9) touches only an NPC that carries the generator bit (it returns 0 and touches nothing otherwise): the object flags 0x400002 go with the bit.
         var marked = (Base(NpcFlagsSlot) & GeneratorNpcFlag) != 0;
         Own(FlagsSlot, (marked ? Base(FlagsSlot) & ~GeneratorObjectFlags : Base(FlagsSlot)) | DynamicFlag);
         Own(NpcFlagsSlot, Base(NpcFlagsSlot) & ~GeneratorNpcFlag);
