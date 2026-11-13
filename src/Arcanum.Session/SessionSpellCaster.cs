@@ -83,6 +83,9 @@ public sealed record SpellCastEvent(SpellCastEventKind Kind, int Run, int Value 
 {
     /// <summary>ARC-MAGIC-1745 (<see cref="SpellCastEventKind.ItemScriptLine"/>): the printed line's text, which the viewer's message window posts by the entry type <see cref="Value"/>.</summary>
     public string? Text { get; init; }
+
+    /// <summary>ARC-MAGIC-1830 (<see cref="SpellCastEventKind.ItemScriptEyeCandy"/>): the eye candy request an item event script of an NPC's rewield made, as the script ran it (the viewer plays it as any script's eye candy).</summary>
+    public Arcanum.Scripting.Scr.ScrEyeCandy? EyeCandy { get; init; }
 }
 
 /// <summary>How a casting goal's start went (<see cref="SessionSpellCaster.StartGoal"/>): it started, or it ends because the parent's
@@ -260,6 +263,9 @@ public enum SpellCastEventKind
     /// <summary>ARC-MAGIC-1745 (the TraitIdx component 0x452D80, the rewield 0x465530 that magick and tech points run): a line an item event script of the NPC <see cref="SpellCastEvent.Object"/> printed. <see cref="SpellCastEvent.Value"/> is the print action's entry type (the message window's kind),
     /// <see cref="SpellCastEvent.Detail"/> the script number and <see cref="SpellCastEvent.Text"/> the line; the viewer posts it to the message window as any script's printed line (the world's script message entries).</summary>
     ItemScriptLine,
+    /// <summary>ARC-MAGIC-1830 (the same rewield, hero or NPC): an eye candy request an item event script of the object <see cref="SpellCastEvent.Object"/> made, in order after the printed lines; <see cref="SpellCastEvent.EyeCandy"/> carries it (the object it names, the entry
+    /// and the kind) and <see cref="SpellCastEvent.Value"/> the entry number. The viewer plays it as any script's eye candy.</summary>
+    ItemScriptEyeCandy,
 }
 
 /// <summary>
