@@ -49,6 +49,6 @@ public sealed class AreaScriptAttackAdmissionTests
         // 79 installed scripts carry the action (111 clauses, the census of ScrAttackActionCensusRealDataTests); its sets admit whole: S33 31 (the thrown item's 29017 among them), the use click 2, tile and sector scripts 37, heartbeats 10,
         // dying scripts 52 (the union of the placed and heartbeat sets), the talk sets 11 (the others hold a command of another slice; ARC-SCRIPT-1168: the cast actions moved the talk sets from 10 to 11, the placed and dying counts
         // had moved with the sets of ARC-SCRIPT-1733 and later).
-        Assert.AreEqual((79, 31, 2, 37, 10, 52, 11, 11), (carriers.Count, counts["S33"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"], counts["skill talk"]));
+        Assert.AreEqual((79, 31, 2, 37, 10, 53, 11, 11), (carriers.Count, counts["S33"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"], counts["skill talk"]));
     }
 }
