@@ -464,10 +464,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (IsPc(owner) && _session.QueryWornPowerRatio(item.Code) is { } worn) return worn;
         if (ComplexityOf(item) is not { } complexity || CritterAptitude(owner) is not { } holder) return null;
         // ARC-SCRIPT-1662 (WE2, CP8; exe 0x4614A0, 0x461540): an owner that is neither the PC nor an NPC (a container, scenery, an item) has its complexity as the item's power, so the ratio is 100 whatever the complexity (0 reads 100 as well).
-        if (!holder.Critter) return 100;
-        if (holder.Aptitude is not { } aptitude) return null;
         var limits = Arcanum.Simulation.Equipment.EquipmentLimits.MaxMagnitude;
         if (complexity < -limits || complexity > limits) return null;
+        if (!holder.Critter) return 100;
+        if (holder.Aptitude is not { } aptitude) return null;
         return Arcanum.Simulation.Equipment.EquipmentRules.EffectivePowerRatio(complexity, Math.Clamp(aptitude, Arcanum.Simulation.Equipment.EquipmentLimits.MinAptitude, Arcanum.Simulation.Equipment.EquipmentLimits.MaxAptitude));
     }
 
