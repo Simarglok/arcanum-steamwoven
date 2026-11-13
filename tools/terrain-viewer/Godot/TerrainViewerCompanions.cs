@@ -294,6 +294,8 @@ public partial class TerrainViewerApp
             GD.Print(AreaCompanionLoyalty.Log(companion, result));
             // ARC-AI-1677 (0x4AC380 → 0x413A90): a follower that left by the loyalty step floats the refusal line of its reason when it can speak (the same speaker as the hit's leave).
             if (result.Step is { Kind: LoyaltyStepKind.Left } left) _aiHost?.SayLoyaltyLeave(companion.Entity, left);
+            // ARC-AI-1685 (0x4AC380 → 0x414290): a follower that stayed with a leader-check warning floats the warning line (5200-5499) when it can speak.
+            else if (result.Step is { Warning: not LeaderWarning.None } warned) _aiHost?.SayLoyaltyWarning(companion.Entity, warned);
             if (result.Step is { } step && AreaCompanionLoyalty.Shown(step) is { } shown) _companionNotice = $"companion script {companion.Speaker.ScriptId}: {shown}";
             else if (result.Disposition == GameSessionDisposition.Rejected) _companionNotice = $"companion script {companion.Speaker.ScriptId}: loyalty step refused ({result.Failure})";
         }
