@@ -317,6 +317,7 @@ src/Arcanum.Simulation/Character/AutoLevelRules.cs,SkillCap,pending,
 src/Arcanum.Simulation/Character/AutoLevelRules.cs,SpellMinimumLevel,pending,
 src/Arcanum.Simulation/Character/CharacterPointRules.cs,Guard,pending,
 src/Arcanum.Simulation/Character/CharacterStatRules.cs,MageBackgroundAdjustment,pending,
+src/Arcanum.Simulation/Character/CharacterStatRules.cs,StoredRange,exempt,reference
 src/Arcanum.Simulation/Character/CharacterStatRules.cs,TempusFugitShift,pending,
 src/Arcanum.Simulation/Character/ExperienceRules.cs,WaitingStepReach,pending,
 src/Arcanum.Simulation/Character/TechDegreeRules.cs,Lower,pending,
@@ -738,6 +739,7 @@ tools/terrain-viewer/Godot/TerrainViewerAttack.cs,InAttackReach,pending,
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,TraceLineOfFire,pending,
 tools/terrain-viewer/Godot/TerrainViewerAudioCues.cs,PlayDyingBark,pending,
 tools/terrain-viewer/Godot/TerrainViewerBloodPools.cs,LeaveBloodPoolsForNewDeaths,pending,
+tools/terrain-viewer/Godot/TerrainViewerBodyMoves.cs,ArmedWalk,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerBodyStyles.cs,SyncAreaBodyStyles,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerBodyStylesSmoke.cs,RunAreaBodyStylesStageAsync,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCombatMode.cs,WorldRightRelease,pending,

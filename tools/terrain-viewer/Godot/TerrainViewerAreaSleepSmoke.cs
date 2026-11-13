@@ -9,7 +9,7 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     // ARC-WORLD-1160 (E3-a) native observation (stage "sleep", only when named, with --hero, on a map with no town map at the start): the sleep window on the real data. The hero is wounded first. The open decision
-    // opens the ground window (eight buttons, texts from sleepUI.mes when it reads); a press hides the buttons and fades the screen out; the first step comes 50 ms of host time later and jumps the clock by exactly an hour; the
+    // opens the ground window (eight buttons, texts from sleepUI.mes when it reads); a press keeps the buttons and fades the screen out (a second press restarts the chain, the fade goes on); the first step comes 50 ms of host time later and jumps the clock by exactly an hour; the
     // one-hour rest ends there and the screen fades back in. Until healed goes on step by step (200 ms apart) while the hero has hit-point damage and stops when it is gone; until morning stops at the hour 7 after the
     // number of steps the clock's hour says; the key toggles the window (a second open closes it); a refused open (the dead hero) leaves nothing. ARC_AREA_SLEEP_CAPTURE names a folder for screenshots of the window
     // (open, after the press with the fade half way) for the graphics report. The clock and the hero's damage stay where the rests leave them (the stage runs in its own process).
@@ -61,6 +61,9 @@ public partial class TerrainViewerApp
 
         Tick(host);
         Require(!SleepOpenForSelfTest, "no sleep window before the key");
+        // ARC-UI-1363: the window's art reads in the background; the window is drawn in the original's look once it has.
+        for (var i = 0; i < 1200 && !SleepArtReadyForSelfTest; i++) await Frames(1);
+        Require(SleepArtReadyForSelfTest, "the window's art (565, 293, font 229) read from the game folder");
         await Shot("before");
         var heroBefore = session.QueryHeroLife()!.Record.State;
 
@@ -76,6 +79,23 @@ public partial class TerrainViewerApp
         var labels = Enumerable.Range(0, buttons).Select(i => SleepPanelForSelfTest!.ButtonTextForSelfTest(i)).ToArray();
         GD.Print($"ARC-WORLD-1160 sleep labels game-text={SleepTexts().FromGame} {string.Join(" | ", labels)}");
         Require(labels.All(label => label.Length > 0 && !label.StartsWith('[')), "every button has a label");
+        // ARC-UI-1363 (SZ13, SWB6, SWB7): the window is the original's art 565 at (573, 42) of the 800 x 600 screen, with a button of art 293 and a line for each length.
+        {
+            Require(SleepPanelForSelfTest!.OriginalLook, "the window is drawn in the original's look (art 565), not as the plain panel");
+            var view = SleepPanelForSelfTest.ViewForSelfTest;
+            var size = GetViewport().GetVisibleRect().Size;
+            var factor = AreaGameBarPanel.ScreenFactor(size);
+            var rect = view.WindowRectForSelfTest;
+            var windowAt = new Vector2(AreaGameBarPanel.ScreenLeft(size, factor) + AreaSleepLayout.ScreenX * factor, AreaSleepLayout.ScreenY * factor);
+            Require(rect.Position.IsEqualApprox(windowAt) && rect.Size.X > 0 && rect.Size.Y > 0, $"the window stands at the original's place: {rect.Position} expected {windowAt}, size {rect.Size}");
+            Require(view.RowCount == buttons, "every row has its line and a button");
+            // A pointer over a button lights it (frame two steps on, GB4) and the others stay idle.
+            view.HoverForSelfTest(1);
+            var lit = AreaGameBarLayout.Frame(AreaBarButtonLook.Hovered, view.ButtonFramesForSelfTest);
+            Require(view.FrameForSelfTest(1) == lit && view.FrameForSelfTest(2) == 0, $"the pointer lights its button (frame {view.FrameForSelfTest(1)}, expected {lit})");
+            GD.Print($"ARC-UI-1363 sleep window rect={rect} factor={factor} buttons={buttons} button-frames={view.ButtonFramesForSelfTest}");
+            view.Buttons.Reset();
+        }
         await Shot("open");
         // A second open (the key S) closes it, a third opens it again.
         OpenSleepForSelfTest();
@@ -87,8 +107,16 @@ public partial class TerrainViewerApp
         var timeBefore = Now(); var hpBefore = HpDamage(); var fatigueBefore = FatigueDamage();
         Tick(host + 1_000);
         var pressedAt = host;
-        SleepPressedForSelfTest(0);
-        Require(RestForSelfTest is { Pressed: true, Code: 1 } && !SleepPanelForSelfTest!.ButtonsShown, "the press hides the buttons and takes the code of one hour");
+        // ARC-UI-1363: the press is a click on the first button of the original-look window (the pointer moves on, presses and releases there: sounds 3000 then 3001).
+        var sounds = SleepPanelForSelfTest!.ViewForSelfTest.SoundsForSelfTest;
+        sounds.Clear();
+        if (SleepPanelForSelfTest.OriginalLook)
+        {
+            SleepPanelForSelfTest.ViewForSelfTest.ClickForSelfTest(0);
+            Require(sounds.SequenceEqual([AreaGameBarLayout.PressSound, AreaGameBarLayout.ReleaseSound]), "the click played the press and the release sounds: " + string.Join(",", sounds));
+        }
+        else SleepPressedForSelfTest(0);
+        Require(RestForSelfTest is { Pressed: true, Code: 1 } && SleepOpenForSelfTest && SleepPanelForSelfTest!.IsOpen, "the press takes the code of one hour and the window stays (SWB8: the handler hides nothing; the second press below clicks a button again)");
         Tick(pressedAt + 49);
         Require(Now() == timeBefore && RestLogForSelfTest.Count == 0, "no step before 50 ms");
         Tick(pressedAt + AreaRestRun.FirstStepMs);
@@ -108,7 +136,7 @@ public partial class TerrainViewerApp
             OpenSleepForSelfTest();
             Tick(host + 10);
             SleepPressedForSelfTest(7);
-            Require(RestForSelfTest is { Pressed: false } && SleepPanelForSelfTest!.ButtonsShown, "the wait window has no eighth button: a press on it does nothing");
+            Require(RestForSelfTest is { Pressed: false }, "the wait window has no eighth button: a press on it does nothing");
             OpenSleepForSelfTest();
             Require(!SleepOpenForSelfTest, "the key closes it");
             Tick(host + AreaRestFade.DurationMs + 100);
@@ -172,6 +200,33 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-MAGIC-1161 native-smoke sleep-demaintain PASS spell={spellEnded} wait={wait}");
         }
         else GD.Print("ARC-MAGIC-1161 native-smoke sleep-demaintain NONE (no cast host or no maintainable spell on this map)");
+
+        // ---- issue #1511 (SWB8, 0x57B710 hides nothing): a second press during the rest restarts the chain with the new length; the fade does not restart ----
+        OpenSleepForSelfTest();
+        Tick(host + 10);
+        SleepPressedForSelfTest(4);
+        Require(SleepOpenForSelfTest && _restDark && RestForSelfTest is { Code: 24 } && RestPressesForSelfTest == 1, "a 24-hour rest is under way and the screen is dark");
+        var firstPressAt = host;
+        Tick(host + 50);
+        Tick(host + 150);
+        var stepsBefore = RestLogForSelfTest.Count;
+        Require(stepsBefore == 1 && RestForSelfTest is { Code: 23, Pending: true }, $"one hour of the 24 ran, the next step waits ({string.Join(" | ", RestLogForSelfTest)})");
+        Tick(host + 20);
+        // The press is a click on a button of the still-drawn window (the plain panel's button: the press itself).
+        if (SleepPanelForSelfTest!.OriginalLook) SleepPanelForSelfTest.ViewForSelfTest.ClickForSelfTest(1); else SleepPressedForSelfTest(1);
+        Require(RestPressesForSelfTest == 2 && RestForSelfTest is { Pressed: true, Code: 2, Pending: true } && RestForSelfTest.DueMs == host + AreaRestRun.FirstStepMs, $"a second press restarts the chain: code 2, a first step 50 ms later (code {RestForSelfTest?.Code}, due {RestForSelfTest?.DueMs}, host {host})");
+        Require(SleepOpenForSelfTest && _restDark && _sleepPanel!.ViewForSelfTest.RowCount == buttons, "the window and its buttons stay");
+        Tick(host + 49);
+        Require(RestLogForSelfTest.Count == stepsBefore, "no step before the new first step is due");
+        var fadeSteps = (int)((host - firstPressAt) * AreaRestFade.Steps / AreaRestFade.DurationMs);
+        Require(fadeSteps > 0 && Math.Abs(_sleepPanel.FadeForSelfTest - fadeSteps / (double)AreaRestFade.Steps) < 1e-9, $"the fade goes on from the first press ({_sleepPanel.FadeForSelfTest}, expected step {fadeSteps} of {AreaRestFade.Steps}): the second press did not restart it");
+        var restartedAt = host;
+        Tick(restartedAt + 1);
+        Require(RestLogForSelfTest.Count == stepsBefore + 1 && RestForSelfTest is { Code: 1 }, "the first step of the new chain ran 50 ms after the second press");
+        Tick(host + AreaRestRun.StepGapMs);
+        Require(!SleepOpenForSelfTest && RestLogForSelfTest.Count == stepsBefore + 2, "the 2-hour chain ended after two hours and the window closed");
+        GD.Print($"ARC-UI-1511 sleep second press restarted the chain presses=2 steps={RestLogForSelfTest.Count}");
+        Tick(host + AreaRestFade.DurationMs + 100);
 
         // ---- a replaced session closes the window and clears the cover ----
         OpenSleepForSelfTest();
