@@ -21,7 +21,7 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaDeferredItemDamageTests
 {
-    private const int Poison = 796, Healer = 797, Hero = 0;
+    private const int Poison = 796, Healer = 797, Fatigue = 798, Hero = 0;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
     // 796: the ratio of the attachee for the triggerer scales 40 into local 0, unresistable poison damage (type 1) of that amount to the triggerer, an eye candy, then the call again in 10 s with the same roles.
@@ -34,6 +34,13 @@ public sealed class AreaDeferredItemDamageTests
 
     // 797: damage 60 (resistable, normal) 7 to the triggerer, then heal hit points 3.
     private static byte[] HealerProgram() => Program((60, [(0, Hero), (3, 7), (3, 0)]), (75, [(0, Hero), (3, 3)]), (1, []));
+
+    // 798 (ARC-SCRIPT-1586): get fatigue points of the triggerer into locals 0 (current) and 1 (maximum), unresistable poison damage of the current points, then the call again in 10 s.
+    private static byte[] FatigueProgram() => Program(
+        (108, [(0, Hero), (2, 0), (2, 1)]),
+        (138, [(0, Hero), (2, 0), (3, 1)]),
+        (54, [(3, Fatigue), (3, 0), (0, Hero), (1, 0), (3, 10)]),
+        (1, []));
 
     private static SessionMapInventorySeed Seed() => new([],
     [
@@ -60,6 +67,7 @@ public sealed class AreaDeferredItemDamageTests
             Directory.CreateDirectory(Path.Combine(root.FullName, "scr"));
             File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00796poison.scr"), PoisonProgram());
             File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00797healer.scr"), HealerProgram());
+            File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00798fatigue.scr"), FatigueProgram());
             using var content = AreaContentRoot.OpenScripts(Path.Combine(root.FullName, "modules", "Syn.dat")).Content!;
             using var source = new AreaOwnerFixture(motionBodies: true);
             var snapshot = source.Owner.LoadStrict();
@@ -100,6 +108,32 @@ public sealed class AreaDeferredItemDamageTests
             Assert.AreEqual("damaged", host.Scripts.LastDamage);
             var next = session.QueryScriptCalls().Single();
             Assert.AreEqual((call, session.QueryClockSnapshot().GameTimestampMs + 10 * 8000L), (next.Call, next.DeadlineMs));
+        });
+    }
+
+    // ARC-SCRIPT-1586 (VT2): a deferred run reads the hero's fatigue points (108) and goes on to its damage and its next call; without the use host the hero is still answered from the session.
+    [TestMethod]
+    public void A_deferred_script_reads_the_heros_fatigue_points_and_goes_on_to_its_damage_and_its_next_call()
+    {
+        With(UseHost.WithDamage, complexity: 0, (host, session, pc, ring, hits) =>
+        {
+            var life = session.QueryHeroLife()!;
+            var fatigue = life.Status.Fatigue;
+            Assert.IsTrue(fatigue > 0);
+            Assert.AreEqual((fatigue, life.Status.MaxFatigue), host.Scripts.FatiguePoints(new(pc.Map.RuntimeMap, pc.Entity)));
+            Assert.AreEqual((life.Status.HitPoints, life.Status.MaxHitPoints), host.Scripts.HitPoints(new(pc.Map.RuntimeMap, pc.Entity)));
+            Assert.IsNull(host.Scripts.FatiguePoints(new(pc.Map.RuntimeMap, "oid:npc")), "an object the use host does not know is not modelled");
+            var call = new SessionScriptCall(Fatigue, 0, pc, ring);
+            Assert.IsTrue(host.RunCall(call, out var detail), detail);
+            CollectionAssert.AreEqual(new[] { (Arcanum.Simulation.Ai.AiSchedulerRules.Pc, fatigue, 1, true) }, hits.Damage);
+            Assert.AreEqual(call, session.QueryScriptCalls().Single().Call);
+        });
+        With(UseHost.None, complexity: 0, (host, session, pc, _, _) =>
+        {
+            var life = session.QueryHeroLife()!;
+            Assert.AreEqual((life.Status.Fatigue, life.Status.MaxFatigue), host.Scripts.FatiguePoints(new(pc.Map.RuntimeMap, pc.Entity)));
+            Assert.IsNull(host.Scripts.FatiguePoints(new(pc.Map.RuntimeMap, "oid:npc")));
+            Assert.IsTrue(host.Scripts.CallAdmissionFor(null).Actions.Contains(ScrCatalogue.Action.GetFatiguePoints));
         });
     }
 
@@ -174,7 +208,7 @@ public sealed class AreaDeferredItemDamageTests
     }
 
     // ARC-SCRIPT-1482 (opt-in, DAT_ROOT): the six callers of the installed wield-on poisoning items (five attached at point 24) are admitted by the item-event set from line 0 (they only schedule the poison with call script in), and the
-    // six deferred poison scripts are admitted by the deferred-call set with the use host (random draw and damage), except the four that read get fatigue points (108, 2677 2679 2681 2682), the one action issue #1481 builds.
+    // six deferred poison scripts are admitted by the deferred-call set with the use host (random draw, damage and, since ARC-SCRIPT-1586, get fatigue points: 2677 2679 2681 2682).
     [TestMethod, TestCategory("RealData")]
     public void The_installed_wield_on_poison_scripts_are_admitted_by_the_sets_that_run_them()
     {
@@ -187,13 +221,9 @@ public sealed class AreaDeferredItemDamageTests
         {
             // With the shown map's use host the set holds the random draw (37) and the damage actions the scripts use.
             var withDraw = host.Scripts.CallAdmissionFor(null);
-            foreach (var script in new[] { 2664, 2678 })
+            // ARC-SCRIPT-1586: the four that read get fatigue points (108) are admitted too since the set holds the vitals questions.
+            foreach (var script in new[] { 2664, 2678, 2677, 2679, 2681, 2682 })
                 Assert.IsTrue(ScrAdmission.AdmitFrom(content.Script(script).Program!, withDraw, 0).IsAdmitted, $"poison {script}");
-            foreach (var script in new[] { 2677, 2679, 2681, 2682 })
-            {
-                var refusal = ScrAdmission.AdmitFrom(content.Script(script).Program!, withDraw, 0).Refusal;
-                Assert.AreEqual(108, refusal?.Type, $"poison {script} stops at get fatigue points only");
-            }
         });
     }
 
