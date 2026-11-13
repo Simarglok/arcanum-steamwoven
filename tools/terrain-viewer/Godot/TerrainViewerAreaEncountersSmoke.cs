@@ -44,7 +44,7 @@ public partial class TerrainViewerApp
         Require(tables.Status == EncounterTablesStatus.Loaded, "the synthetic tables read: " + tables.Detail);
         var aiBefore = _aiForSmoke; var encounterHostBefore = _encounterHost; var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         // As the world-map stage has it: an automated run has no window focus, so the keys of the windows would be ignored.
-        _aiForSmoke = true; _worldFocusSimulationForSelfTest = true; _worldFocused = true;
+        _aiForSmoke = true; _worldFocusSimulationForSelfTest = true; _worldFocused = true; _encountersForSmoke = true;
         async Task Pass(int frames = 1)
         {
             for (var i = 0; i < frames; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); TickAreaClock((long)Time.GetTicksMsec()); ProcessAreaAi(); SyncAreaInventory(); }
@@ -190,7 +190,7 @@ public partial class TerrainViewerApp
         {
             if (WorldMapOpen) EndWorldMap();
             if (SleepOpenForSelfTest) EndSleep();
-            _encounterHost = encounterHostBefore; _aiForSmoke = aiBefore; _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
+            _encounterHost = encounterHostBefore; _aiForSmoke = aiBefore; _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused; _encountersForSmoke = false;
         }
     }
 }

@@ -24,6 +24,8 @@ public partial class TerrainViewerApp
     /// <summary>The encounter host of the pass world: the tables of the loaded world-map data; null until it is loaded (no event is armed before).</summary>
     private AreaEncounterHost? EncounterHostNow()
     {
+        // A native smoke run has no encounters but its own stage's: a roll would close the windows and end the journeys other stages observe, and the chain's draws would move the seeded stream they count on.
+        if (_nativeSmoke && !_encountersForSmoke) return null;
         if (_worldMapData is not { Data: { } data }) return null;
         if (_encounterHost is not { } held || !ReferenceEquals(held.Data, data)) _encounterHost = held = (data, new AreaEncounterHost(data.Encounters, EncounterSiteNow));
         return held.Host;
@@ -75,6 +77,8 @@ public partial class TerrainViewerApp
         }
     }
 
+    // The stage "encounters" turns the encounters on in a native smoke run (they are off for every other stage).
+    private bool _encountersForSmoke;
     private SessionEncounterNotice? _lastEncounterNotice;
     private int _encountersFired;
     internal long WorldMapLockedUntilForSelfTest => _worldMapLockedUntilHostMs;
