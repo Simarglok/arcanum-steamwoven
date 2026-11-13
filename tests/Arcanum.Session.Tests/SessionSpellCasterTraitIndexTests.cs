@@ -640,7 +640,7 @@ public sealed class SessionSpellCasterTraitIndexTests
     }
 
     [TestMethod]
-    public void The_heros_strength_write_changes_its_encumbrance_through_the_revision_as_every_strength_change_does()
+    public void The_heros_strength_is_stored_and_the_write_goes_through_the_revision_that_settles_encumbrance()
     {
         var (owner, caster) = HeroSession(SkilledHero());
         using var _ = owner;
@@ -724,6 +724,18 @@ public sealed class SessionSpellCasterTraitIndexTests
         Assert.AreEqual(2, owner.QueryHero()!.Level);
         Assert.AreEqual(2, caster.Log.Count(e => e.Kind == SpellCastEventKind.ComponentNotReady && e.Value == (int)SpellComponentType.TraitIdx));
         Assert.AreEqual(version.Revision, owner.Version.Revision);
+    }
+
+    [TestMethod]
+    public void A_heros_experience_that_reaches_no_level_is_stored_alone()
+    {
+        var records = new Dictionary<int, SessionSpellRecord>(Records) { [650] = Spell(650, StatField, 18, 100) };
+        var (owner, caster) = HeroSession(SkilledHero(), experience: true, records: records);
+        using var _ = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(caster, 650));
+        var hero = owner.QueryHero()!;
+        Assert.AreEqual((1, 100, 5), (hero.Level, hero.Experience, hero.UnspentPoints), "level 1 needs 1010 experience for level 2");
+        Assert.IsFalse(NotReady(caster));
     }
 
     [TestMethod]
