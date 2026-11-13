@@ -13,6 +13,10 @@ namespace Arcanum.World;
 /// </summary>
 public sealed record AreaTrapEffects(Func<AreaObjectRecord, NativeTrapRun, int, int, SessionTrapEffectResult> Apply, int PlayerSpellFlags)
 {
+    /// <summary>ARC-TECHNOLOGY-1619 (TT12, TT15): whether the host lists the shooter candidates of a 30002 shot around the triggerer (<see cref="SessionTrapFiring.Shooters"/>, <see cref="AreaTrapShooters"/>) and so can apply the shot; without it a
+    /// shot trap is not met (no trap is consumed without its effect).</summary>
+    public bool ListsShooters { get; init; }
+
     /// <summary>ARC-DEV-260: the same effect with no triggerer (<see cref="Apply"/> has the hero): a trap set off by a ranged attack or by damage with
     /// no attacker (ledger OD4). Null while the host cannot (such a trap is then not met).</summary>
     public Func<AreaObjectRecord, NativeTrapRun, int, int, SessionTrapEffectResult>? ApplyWithoutTriggerer { get; init; }
@@ -118,7 +122,7 @@ public sealed record AreaTrapWalk(AreaObjectRecord? Spotted, GameSessionMutation
 /// (<see cref="AreaTrapEffects"/>). The spot attempt of an unknown trap spots without a roll when the player's spell flags hold
 /// 0x100 (TT3), else by the hero's spot trap roll (ARC-MAGIC-057, ledger SP1: the shared check, the master's second roll, no spot of a
 /// magical trap below expert; its failure leaves the trap unknown and the use or the step goes on). No trap is consumed without
-/// its effect: without a cast host (<paramref name="effects"/> answering null), for a 30002 shot (its shooter search is a later slice)
+/// its effect: without a cast host (<paramref name="effects"/> answering null), for a 30002 shot while the host lists no shooters (<see cref="AreaTrapEffects.ListsShooters"/>)
 /// and for an ordinary trap script on a step (the step's dispatch with the trap as attachee and extra object is a later slice) the trap
 /// is not met at all, so a use goes on as before (the dispatcher stops at a native trap script) and a step meets nothing. Only the PC
 /// meets traps here.
@@ -269,7 +273,7 @@ public sealed class AreaTraps
         if (!state.Trapped) return null;
         var native = TrapRules.NativeRun(state.Script, baseline.HeaderFlags);
         var effects = _effects();
-        if (native is not null && (effects is null || TrapEffectRules.Of(state.Script, baseline.Counters) is { Kind: TrapEffectKind.Shot })) return null;
+        if (native is not null && (effects is null || IsShot(state, baseline) && !effects.ListsShooters)) return null;
         var apply = byHero ? effects?.Apply : effects?.ApplyWithoutTriggerer;
         if (native is not null && apply is null) return null;
         var result = _session.TriggerTrap(_session.Version, trapped, baseline, byHero ? TrapObserver.Player : TrapObserver.NotCritter, SessionTrapCause.Attack, false);
@@ -299,8 +303,8 @@ public sealed class AreaTraps
         if (_gone(row) || _host.TrapBaseline(row) is not { } baseline) return false;
         var trapped = AreaUseScriptHost.Trapped(row);
         var state = _session.QueryTrap(trapped, baseline);
-        // The 30002 shot is not met here, so it is no target either (Disarm refuses it).
-        return state.Trapped && _session.TrapKnownTo(trapped, baseline, TrapObserver.Player) && !IsShot(state, baseline);
+        // The 30002 shot is not met here without a host that lists its shooters, so it is no target either (Disarm refuses it).
+        return state.Trapped && _session.TrapKnownTo(trapped, baseline, TrapObserver.Player) && (!IsShot(state, baseline) || _effects()?.ListsShooters == true);
     }
 
     private static bool IsShot(SessionTrapState state, SessionTrapBaseline baseline) =>
@@ -320,8 +324,8 @@ public sealed class AreaTraps
         ArgumentNullException.ThrowIfNull(insert);
         if (_effects() is not { } effects || !KnownTrap(row) || _host.TrapBaseline(row) is not { } baseline) return null;
         var state = _session.QueryTrap(AreaUseScriptHost.Trapped(row), baseline);
-        // A native trap the host cannot make take effect (the 30002 shot, no cast host) is not met, so it is not set off by a failure either.
-        if (IsShot(state, baseline)) return null;
+        // A native trap the host cannot make take effect (the 30002 shot without a shooter list, no cast host) is not met, so it is not set off by a failure either.
+        if (IsShot(state, baseline) && !effects.ListsShooters) return null;
         var roll = _session.RollHeroDisarmTrap(_session.Version, AreaUseScriptHost.Trapped(row), baseline, TrapDifficulty(row), LightAt(row), combat);
         SessionTrapEffectResult? effect = null;
         if (roll.Disarm is { Outcome: TrapDisarm.Sprung, Run: { Effect: not NativeTrapEffect.None } run } sprung)
@@ -349,7 +353,7 @@ public sealed class AreaTraps
         var state = _session.QueryTrap(trapped, baseline);
         if (!state.Trapped) return null;
         var native = TrapRules.NativeRun(state.Script, baseline.HeaderFlags);
-        if (native is null && cause == SessionTrapCause.Step || TrapEffectRules.Of(state.Script, baseline.Counters) is { Kind: TrapEffectKind.Shot }) return null;
+        if (native is null && cause == SessionTrapCause.Step || IsShot(state, baseline) && !effects.ListsShooters) return null;
         // The spot attempt (E2, TT3): the player's detect-traps flag spots without a roll, else the triggerer's own spot trap roll (SP1, SP2).
         var gate = _session.TrapSpotGate(trapped, baseline, observer, effects.PlayerSpellFlags);
         var moverFlags = walker is null ? effects.PlayerSpellFlags : effects.SpellFlagsOf?.Invoke(walker.Entity) ?? 0;
