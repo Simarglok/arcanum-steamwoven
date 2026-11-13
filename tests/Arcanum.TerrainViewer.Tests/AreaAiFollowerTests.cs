@@ -1010,6 +1010,50 @@ public sealed class AreaAiFollowerTests
         Assert.IsNull(scene.Host.TraceOf(scene.Companion)?.FollowerHit);
         Assert.IsNotNull(scene.Host.TraceOf(scene.Companion)?.Event, "the hit reached the host's attack event");
     }
+
+    // ARC-AI-1517 (0x4A9650 → 0x45EE30, VBG6): the attack event unconceals the victim's PC group whoever attacks.
+    [TestMethod]
+    public void An_npcs_hit_on_the_sneaking_hero_ends_the_heros_and_its_followers_concealment()
+    {
+        var scene = Open();
+        Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.ToggleHeroConcealment(scene.Session.Version).Disposition);
+        Assert.IsTrue(scene.Session.IsConcealed(SessionCombatant.Hero) && scene.Session.IsConcealed(SessionCombatant.Critter(scene.Companion)));
+        scene.Host.SpellAttacked(scene.Enemy, Pc);
+        Assert.IsFalse(scene.Session.IsConcealed(SessionCombatant.Hero), "the hero stops prowling");
+        Assert.IsFalse(scene.Session.IsConcealed(SessionCombatant.Critter(scene.Companion)), "and so does its follower");
+        Assert.AreEqual(0, scene.Session.QueryConcealment().Npcs.Count);
+    }
+
+    [TestMethod]
+    public void An_npcs_hit_on_a_sneaking_follower_ends_the_whole_groups_concealment()
+    {
+        var scene = Open();
+        scene.Session.ToggleHeroConcealment(scene.Session.Version);
+        scene.Host.SpellAttacked(scene.Enemy, scene.Companion);
+        Assert.IsFalse(scene.Session.IsConcealed(SessionCombatant.Hero), "the victim's PC leader stops prowling");
+        Assert.IsFalse(scene.Session.IsConcealed(SessionCombatant.Critter(scene.Companion)));
+    }
+
+    [TestMethod]
+    public void The_script_attack_action_ends_the_concealment_too_in_one_revision()
+    {
+        var scene = Open();
+        scene.Session.ToggleHeroConcealment(scene.Session.Version);
+        var revision = scene.Session.Version.Revision;
+        scene.Host.ScriptAttack(scene.Enemy, Pc);
+        Assert.IsFalse(scene.Session.IsConcealed(SessionCombatant.Hero));
+        Assert.IsFalse(scene.Session.IsConcealed(SessionCombatant.Critter(scene.Companion)));
+        Assert.AreEqual(revision + 1, scene.Session.Version.Revision, "the concealment ended in one revision of its own (a PC victim writes nothing else)");
+    }
+
+    [TestMethod]
+    public void A_hit_on_a_hero_that_is_not_sneaking_leaves_the_concealment_state_empty()
+    {
+        var scene = Open();
+        scene.Host.SpellAttacked(scene.Enemy, Pc);
+        Assert.AreEqual((false, 0), (scene.Session.QueryConcealment().Hero, scene.Session.QueryConcealment().Npcs.Count));
+    }
+
     // ARC-AI-1516 (EX14, 0x4A9650 step 12): the hero's stray missile on a non-follower NPC is an accidental event: its reaction toward the hero drops by 10 in place of the deliberate hit's lowering
     // to AI parameter 10, and the event is not the follower branch (the free former follower stands for the NPC no one leads).
     [TestMethod]
