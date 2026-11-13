@@ -67,6 +67,9 @@ public interface ISpellCastMap : ISpellTargetWorld
 
     /// <summary>ARC-MAGIC-1232: the shown map's drop map for placing a dropped item (0x461A90's placement); null lands the item on its holder's cell without a draw.</summary>
     IDropMap? DropMap => null;
+
+    /// <summary>ARC-SCRIPT-1576: the cast id of the object a script names by <paramref name="entity"/> (the script host's entity: a session entity, <c>sector:S:N</c> for a sector object, <c>oid:</c> and the object id digest for a mobile row); the entity itself when the host has no other id for it.</summary>
+    string CastIdOfScriptEntity(string entity) => entity;
 }
 
 /// <summary>ARC-MAGIC-037 (MA-6): a portal or container a spell reaches: its session identity, its T0 lock baseline (the session's state is read over it) and its lock level (portal field 47, container field 57),
