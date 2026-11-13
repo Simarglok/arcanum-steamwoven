@@ -191,6 +191,36 @@ public sealed class StealthStateTests
     }
 
     [TestMethod]
+    public void TheUnconcealGoalsEndNodeLeavesAFollowerOfASneakingHeroConcealed()
+    {
+        // ARC-AI-1653 (0x42AFB0 → 0x45EE30): unless its leader is concealed.
+        using var owner = Owner();
+        owner.ToggleHeroConcealment(owner.Version);
+        var revision = owner.Version.Revision;
+        var kept = owner.EndNpcConcealmentForUnconceal(owner.Version, Pal);
+        Assert.AreEqual((GameSessionDisposition.NoChange, revision), (kept.Disposition, owner.Version.Revision), "the sneaking hero leads it: nothing changes");
+        Assert.IsTrue(owner.IsConcealed(SessionCombatant.Critter(Pal)));
+    }
+
+    [TestMethod]
+    public void TheUnconcealEndNodeEndsAnNpcConcealmentWhoseLeaderIsNotConcealedAndRefusesAStaleVersionAndABadId()
+    {
+        using var owner = Owner();
+        // A waiting NPC keeps its leader and its own flag while the hero's toggle passes it by: concealed under a calm hero.
+        owner.ToggleHeroConcealment(owner.Version);
+        var stale = owner.Version;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Pal).Disposition);
+        Assert.IsTrue(owner.IsConcealed(SessionCombatant.Critter(Pal)), "waiting keeps the flag it had");
+        owner.ToggleHeroConcealment(owner.Version);
+        Assert.IsTrue(owner.IsConcealed(SessionCombatant.Critter(Pal)), "the hero's toggle leaves a waiting NPC's own state");
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.EndNpcConcealmentForUnconceal(stale, Pal).Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, owner.EndNpcConcealmentForUnconceal(owner.Version, "").Failure);
+        var revision = owner.Version.Revision;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.EndNpcConcealmentForUnconceal(owner.Version, Pal).Disposition);
+        Assert.AreEqual((false, false, revision + 1), (owner.IsConcealed(SessionCombatant.Critter(Pal)), owner.IsConcealed(SessionCombatant.Hero), owner.Version.Revision));
+    }
+
+    [TestMethod]
     public void TheToggleIsRefusedWithoutALivingHero()
     {
         using var heroless = GameSessionOwner.Create(Descriptor()).Owner!;

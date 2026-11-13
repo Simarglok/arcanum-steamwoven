@@ -60,7 +60,7 @@ public partial class TerrainViewerApp
             _areaPortals = AreaPortals.From(area.Snapshot, area.Plan);
             _areaPortalsStamp = stamp; _portalBodies = []; _lockpickPending = null; _lockpickTrying = false;
             if (_areaDoors is not null) { _retiredDoors = _areaDoors; _retiredDoorsAge = 0; }
-            _areaDoors = new(session, _areaPortals, DoorCritterCells, PlayDoorSound) { HeroUse = HeroDoorUse, HeroTrap = HeroDoorTrap, HeroNotice = HeroDoorNotice, OpenerTrap = OpenerDoorTrap };
+            _areaDoors = new(session, _areaPortals, DoorCritterCells, PlayDoorSound) { HeroUse = HeroDoorUse, HeroScript = HeroDoorScript, HeroNotice = HeroDoorNotice, OpenerScript = OpenerDoorScript };
             DisarmLockpicks();
             GD.Print($"ARC-WORLD-051 portals bound map={_readyMapName} portals={_areaPortals.All.Count} multi-frame={_areaPortals.All.Count(p => p.Frames.Count > 1)}");
         }
@@ -165,22 +165,40 @@ public partial class TerrainViewerApp
     /// <summary>Goal 67's node asked for the pick: it is made at the next safe point.</summary>
     internal void HeroPickLockAsked(string target, string item) => _lockpickPending = (target, item);
 
-    /// <summary>ARC-WORLD-1469 (TT7): the use node of goal 12 for an NPC or a companion opener (0x428A10 → 0x441980): the door's trap meets the opener, who is its triggerer; true when the use stops and the opener's run ends.</summary>
-    private bool OpenerDoorTrap(string opener, AreaPortal portal)
+    /// <summary>ARC-WORLD-1469, ARC-WORLD-1668 (TT18, TT7): the use node of goal 12 for an NPC or a companion opener (0x428A10 → 0x441980, the opener the triggerer and the extra object): the door's trap meets the opener first (it is the trap's triggerer),
+    /// then the door's own use script runs (<see cref="DoorUseScriptStops"/>); true when the use stops and the opener's run ends.</summary>
+    private bool OpenerDoorScript(string opener, AreaPortal portal)
     {
         if (_aiHost is not { } host || _readyArea is not { } area) return false;
         var row = area.Snapshot.Objects.FirstOrDefault(o => o.Key == portal.Key);
-        return row is not null && host.TrapMetByUse(opener, row);
+        return row is not null && (host.TrapMetByUse(opener, row) || DoorUseScriptStops(area, row, new(CompanionHomeMap(opener) ?? CurrentAreaMap, opener)));
     }
 
-    /// <summary>ARC-WORLD-1581 (TT18, TT7): the use node of goal 12 for the hero runs the door's use script (0x428A10 → 0x441980, the hero the triggerer; the viewer asks it after the 2 action points of <see cref="HeroDoorUse"/>, the node's own order for a door is not read): the door's trap meets the hero as a trapped container's does
-    /// (<see cref="AreaTraps.Use"/>); true when the use stops (spotted now, a native run went off, a refused meeting) and the hero's run ends with the door shut.</summary>
-    private bool HeroDoorTrap(AreaPortal portal)
+    /// <summary>ARC-WORLD-1581, ARC-WORLD-1668 (TT18, TT7): the use node of goal 12 for the hero runs the door's use script (0x428A10 → 0x441980, the hero the triggerer and the extra object; the viewer asks it after the 2 action points of <see cref="HeroDoorUse"/>, which the node charges first): the door's trap meets the hero as a trapped container's does
+    /// (<see cref="AreaTraps.Use"/>), then the door's own use script runs (<see cref="DoorUseScriptStops"/>); true when the use stops (spotted now, a native run went off, a refused meeting, a script that skips the default) and the hero's run ends with the door shut.</summary>
+    private bool HeroDoorScript(AreaPortal portal)
     {
-        if (_readyArea is not { } area || AreaTrapsNow() is not { } traps || area.Snapshot.Objects.FirstOrDefault(o => o.Key == portal.Key) is not { } row || traps.Use(row) is not { } met) return false;
-        GD.Print($"ARC-WORLD-1581 hero-door-trap entity={portal.Entity} outcome={met.Outcome} cancels={met.Cancels}");
-        NoteTrapMeeting(met);
-        return met.Cancels;
+        if (_readyArea is not { } area || area.Snapshot.Objects.FirstOrDefault(o => o.Key == portal.Key) is not { } row) return false;
+        if (AreaTrapsNow() is { } traps && traps.Use(row) is { } met)
+        {
+            GD.Print($"ARC-WORLD-1581 hero-door-trap entity={portal.Entity} outcome={met.Outcome} cancels={met.Cancels}");
+            NoteTrapMeeting(met);
+            if (met.Cancels) return true;
+        }
+        return UseScriptHost(area.Snapshot) is { } host && DoorUseScriptStops(area, row, host.Pc);
+    }
+
+    /// <summary>ARC-WORLD-1668 (TT18): the door's use script (point 1) through the object entry point (<see cref="AreaUseScriptHost.RunUseScript"/>: the opener as the triggerer and the extra object; the trap meeting was asked before), its effects applied as a
+    /// use's are (awards, floats, creations, the printed lines to the message window); a teleport from a door's script is refused (the run is then not applied and the use goes on). True when the answer is "skip default" (<see cref="AreaUseScriptHost.UseStops"/>).</summary>
+    private bool DoorUseScriptStops(AreaLoadResult area, AreaObjectRecord row, Arcanum.Scripting.Scr.ScrObjectRef opener)
+    {
+        if (_areaSession is not { } session || UseScriptHost(area.Snapshot) is not { } host) return false;
+        var ran = Awarded(host, host.RunUseScript(AreaUseScriptHost.EntityId(row), opener, opener, session.Rules.Scripts));
+        if (ran.Run is null && ran.Outcome == AreaScriptedUseOutcome.NoTeleport) return false;
+        var stops = AreaUseScriptHost.UseStops(ran);
+        GD.Print($"ARC-WORLD-1668 door-use-script entity={AreaUseScriptHost.EntityId(row)} opener={opener.Code} outcome={ran.Outcome} run={ran.Run?.Outcome.ToString() ?? "-"} stops={stops} detail={ran.Detail}");
+        foreach (var entry in ScriptLineEntries(ran.Printed)) PostMessage(entry, "door script line");
+        return stops;
     }
 
     /// <summary>ARC-DEV-176: the use node of goal 12 for the hero (0x428A10): the open that got through the attempt costs 2 action points in a turn-based round (ledger CT3, GT40); false ends the run (nothing is charged for a refused open).</summary>

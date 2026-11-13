@@ -196,6 +196,45 @@ public sealed class AreaTrapsTests
         });
     }
 
+    // ARC-WORLD-1668 (TT18, 0x428A10 -> 0x441980): after the trap meeting the door's own use script runs with the opener as the triggerer and the extra object; "skip default" stops the use, run default, no script and a trap that is gone do not.
+    [TestMethod]
+    public void A_doors_own_use_script_stops_the_use_only_when_it_skips_the_default_and_an_ordinary_trap_script_runs_after_its_meeting()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var effects = new Effects();
+            var skipping = Row(1, 1, 700);      // a plain use script that skips the default
+            var ordinaryTrap = Row(2, 1, 709);  // an ordinary trap script (0x1) that runs default
+            var plainDoor = Row(3, 1, 0);
+            var (host, traps) = Hosts(session, content, () => effects.Side, null, skipping, ordinaryTrap, plainDoor);
+            var pc = host.Pc;
+            var skipped = host.RunUseScript(AreaUseScriptHost.EntityId(skipping), pc, pc, session.Rules.Scripts);
+            Assert.IsTrue(AreaUseScriptHost.UseStops(skipped), skipped.Detail);
+            // The meeting comes first (an ordinary trap script is a fired meeting without a native run: it does not cancel), then the script runs its default.
+            var met = traps.Use(ordinaryTrap)!;
+            Assert.IsTrue(met is { Outcome: SessionTrapOutcome.Fired, Cancels: false, Result.Run: null }, met.Describe());
+            var ran = host.RunUseScript(AreaUseScriptHost.EntityId(ordinaryTrap), pc, pc, session.Rules.Scripts);
+            Assert.IsTrue(ran is { Outcome: AreaScriptedUseOutcome.NoTeleport, Run.Outcome: ScrOutcome.RunDefault }, ran.Detail);
+            Assert.IsFalse(AreaUseScriptHost.UseStops(ran), "run default lets the door open");
+            // An NPC opener is the triggerer and the extra object as well.
+            var npc = new ScrObjectRef(1, "oid:thug");
+            Assert.IsTrue(AreaUseScriptHost.UseStops(host.RunUseScript(AreaUseScriptHost.EntityId(skipping), npc, npc, session.Rules.Scripts)), "the same answer for an NPC opener");
+            // No script on the door: nothing runs and nothing stops the use.
+            var none = host.RunUseScript(AreaUseScriptHost.EntityId(plainDoor), pc, pc, session.Rules.Scripts);
+            Assert.IsNull(none.Run);
+            Assert.IsFalse(AreaUseScriptHost.UseStops(none));
+            // A native trap script the trap code left unmet (no cast host) is the dispatcher's trap stop, no answer of a script: the use goes on.
+            var native = Row(4, 1, 30001);
+            var (unmetHost, _) = Hosts(session, content, () => null, null, native);
+            var unmet = unmetHost.RunUseScript(AreaUseScriptHost.EntityId(native), pc, pc, session.Rules.Scripts);
+            Assert.AreEqual(ScrStop.TrapScript, unmet.Run?.Stop, unmet.Detail);
+            Assert.IsFalse(AreaUseScriptHost.UseStops(unmet), "an unmet native trap does not keep the door shut");
+            // A run the host did not apply (an object that is no row of the map) stops nothing.
+            Assert.IsFalse(AreaUseScriptHost.UseStops(host.RunUseScript("oid:nobody", pc, pc, session.Rules.Scripts)));
+        });
+    }
+
     [TestMethod]
     public void A_removed_trap_leaves_the_use_slot_empty()
     {

@@ -145,7 +145,8 @@ public sealed class AreaAiShotTests
         Func<AreaObjectRecord, AreaObjectAttackTarget?>? objectTarget = null, Func<string, AreaObjectRecord, SessionShot, CellCoord, CellCoord, bool>? launchAtObject = null,
         Action<string, AreaObjectRecord, AreaObjectAttackTarget?, SessionObjectAttackResult>? struck = null,
         IReadOnlyList<(AreaObjectRecord Row, SessionSeedItem Seed)>? ground = null, string? junkPiles = null, long bowUseArt = 0x60000000, long faction = 0, bool bystanderOnLine = true,
-        bool npcHome2 = false, int bowWeight = 15, Func<bool>? lootWindowOpen = null, ISessionItemScriptHost? itemScripts = null, (int Index, CellCoord At, IReadOnlyList<(AreaObjectRecord Row, SessionSeedItem Seed)> Items)? mapPile = null)
+        bool npcHome2 = false, int bowWeight = 15, Func<bool>? lootWindowOpen = null, ISessionItemScriptHost? itemScripts = null, (int Index, CellCoord At, IReadOnlyList<(AreaObjectRecord Row, SessionSeedItem Seed)> Items)? mapPile = null,
+        int[]? slabRows = null)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -160,17 +161,22 @@ public sealed class AreaAiShotTests
             session = GameSessionOwner.Restore(snapshot, new(snapshot.Identity, snapshot.Clock.Profile, new OwnerEpoch(Guid.NewGuid()))).Owner!;
         }
         var rows = (bystander ? new[] { Npc(0, null, faction), Item(1, useArt: bowUseArt), Npc(3, BystanderCell, faction) } : new[] { Npc(0), Item(1, useArt: bowUseArt) }).Concat(ground?.Select(g => g.Row) ?? [])
+            .Concat(Enumerable.Range(0, slabRows?.Length ?? 0).Select(i => Item(20 + i, weight: 1, location: 0)))
             .Concat(mapPile is { } piled ? [PileRow(piled.Index, piled.At), .. piled.Items.Select(i => i.Row)] : []).ToArray();
         // ARC-AI-1486: npcHome2 lists the NPC and its bow on map 2's seed only, as a companion carried from another map is (its home map's seed; the shown map's view does not list it).
-        var npcHolder = new SessionSeedHolder(Entity(0), SessionHolderKind.Npc, false, false, [], [Entity(1)]);
+        // ARC-AI-1654: slabRows fills the NPC's 10 x 12 grid from the top with slabs, each ten cells wide and as many rows tall as its entry (weight 1, so only the room can refuse).
+        var slabs = new List<SessionSeedItem>();
+        for (int i = 0, row = 0; slabRows is not null && i < slabRows.Length; row += slabRows[i], i++)
+            slabs.Add(new(Entity(20 + i), new(BowKind with { Prototype = 9000 + i }, 1, 0, row * 10, null, []) { InventoryWidth = 10, InventoryHeight = slabRows[i] }, null));
+        var npcHolder = new SessionSeedHolder(Entity(0), SessionHolderKind.Npc, false, false, [], [Entity(1), .. slabs.Select(slab => slab.Entity)]);
         var bow = new SessionSeedItem(Entity(1), new(BowKind, bowWeight, 0, 1004, null, []), null);
         SessionSeedHolder[] shownHolders = npcHome2 ? [] : bystander ? [npcHolder, new(Entity(3), SessionHolderKind.Npc, false, false, [], [])] : [npcHolder];
         // ARC-AI-1486: a junk pile of the map's data: a container row of prototype 3043 whose seed holder lists the items.
         if (mapPile is { } pileSeed) shownHolders = [.. shownHolders, new(Entity(pileSeed.Index), SessionHolderKind.Container, false, false, [], [.. pileSeed.Items.Select(i => i.Seed.Entity)])];
         var map = new AreaInventoryMap(1,
-            new(shownHolders, [.. npcHome2 ? [] : new[] { bow }, .. ground?.Select(g => g.Seed) ?? [], .. mapPile?.Items.Select(i => i.Seed) ?? []]),
-            rows.Where(row => !npcHome2 || row.Key.SourceIndex > 1).ToDictionary(row => Entity(row.Key.SourceIndex)));
-        var home2 = new AreaInventoryMap(2, new([npcHolder], [bow]), rows.Where(row => row.Key.SourceIndex <= 1).ToDictionary(row => Entity(row.Key.SourceIndex)));
+            new(shownHolders, [.. npcHome2 ? [] : new[] { bow }, .. npcHome2 ? [] : slabs, .. ground?.Select(g => g.Seed) ?? [], .. mapPile?.Items.Select(i => i.Seed) ?? []]),
+            rows.Where(row => !npcHome2 || row.Key.SourceIndex is > 1 and < 20).ToDictionary(row => Entity(row.Key.SourceIndex)));
+        var home2 = new AreaInventoryMap(2, new([npcHolder], [bow, .. slabs]), rows.Where(row => row.Key.SourceIndex <= 1 || row.Key.SourceIndex >= 20 && row.Key.SourceIndex < 30).ToDictionary(row => Entity(row.Key.SourceIndex)));
         var inventory = new AreaInventoryHost(npcHome2 ? [map, home2] : [map]);
         Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
         var combat = new AreaCombatHost(inventory, session: () => session);
@@ -504,6 +510,28 @@ public sealed class AreaAiShotTests
     {
         var (_, host, npc, _) = Open(null, ground: [Loose(2, new(11, 20), weight: 100000)]);
         Assert.IsTrue(host.LooseItems(npc, AiGroundKind.Weapon, 10).Single().CannotTake);
+    }
+
+    // ARC-AI-1654 (the room test of 0x466510, 0x4664C0): an NPC whose 10 x 12 grid has no free place for the item's size cannot take it, whatever the weight; a stack it joins needs none.
+    [TestMethod]
+    public void An_item_that_finds_no_room_in_the_npcs_grid_is_one_it_cannot_take()
+    {
+        var (_, full, fullNpc, _) = Open(null, ground: [Loose(2, new(11, 20), weight: 1)], slabRows: [4, 4, 4]);
+        Assert.IsTrue(full.LooseItems(fullNpc, AiGroundKind.Weapon, 10).Single().CannotTake, "twelve rows taken: no place for a 1 x 1 weapon");
+        var (_, spare, spareNpc, _) = Open(null, ground: [Loose(2, new(11, 20), weight: 1)], slabRows: [4, 4, 3]);
+        Assert.IsFalse(spare.LooseItems(spareNpc, AiGroundKind.Weapon, 10).Single().CannotTake, "a row of ten cells is left");
+        var (_, carried, carriedNpc, _) = Open(null, ground: [Loose(2, new(11, 20), weight: 1)], slabRows: [4, 4, 4], npcHome2: true);
+        Assert.IsTrue(carried.LooseItems(carriedNpc, AiGroundKind.Weapon, 10).Single().CannotTake, "a companion's list on its home map's seed is as full");
+    }
+
+    [TestMethod]
+    public void An_npc_with_a_full_grid_does_not_start_or_finish_a_pickup_it_has_no_room_for()
+    {
+        var (session, host, npc, _) = Open(null, ground: [Loose(2, new(11, 20), weight: 1)], slabRows: [4, 4, 4]);
+        Assert.IsTrue(host.LooseItems(npc, AiGroundKind.Weapon, 10).Single().CannotTake);
+        host.PickUp(npc, Entity(2));
+        Assert.IsFalse(session.QueryHolderItems(npc)!.Any(item => item.Entity == Entity(2)), "the refused pickup leaves the item on the ground");
+        Assert.IsNotNull(session.QueryGroundItem(Entity(2)));
     }
 
     // ARC-AI-1486: a companion carried from another map lists on its home map's seed, which the shown map's view does not show; its carried weight still counts (0x466510 totals the holder's own list).

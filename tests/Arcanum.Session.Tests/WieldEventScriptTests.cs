@@ -17,20 +17,20 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class WieldEventScriptTests
 {
-    private const byte Counter = 0, Triggerer = 0, Attachee = 1, Local = 2, Number = 3;
+    internal const byte Counter = 0, Triggerer = 0, Attachee = 1, Local = 2, Number = 3;
     private const int WieldOn = 700, WieldOff = 701, Record = 702, Charm = 50;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
     private static readonly SessionWearArtCheck Drawn = (_, _) => true;
     // A charm: strength +1 (stat 0).
     private static readonly SessionEffectDefinition CharmEffect = new(Charm, [new(EffectAttributeKind.Stat, 0, EffectChangeOperator.Add, 1)]);
 
-    private sealed record Clause(int Type, (byte Kind, int Value)[] Operands);
-    private static Clause C(int type, params (byte, int)[] operands) => new(type, operands);
-    private static (Clause, Clause, Clause) Do(Clause action) => (C(0), action, C(0));
-    private static (Clause, Clause, Clause) If(Clause condition, Clause action) => (condition, action, C(0));
-    private static (byte, int) N(int value) => (Number, value);
+    internal sealed record Clause(int Type, (byte Kind, int Value)[] Operands);
+    internal static Clause C(int type, params (byte, int)[] operands) => new(type, operands);
+    internal static (Clause, Clause, Clause) Do(Clause action) => (C(0), action, C(0));
+    internal static (Clause, Clause, Clause) If(Clause condition, Clause action) => (condition, action, C(0));
+    internal static (byte, int) N(int value) => (Number, value);
 
-    private static ScrProgram Program(params (Clause Condition, Clause OnTrue, Clause OnFalse)[] lines)
+    internal static ScrProgram Program(params (Clause Condition, Clause OnTrue, Clause OnFalse)[] lines)
     {
         var bytes = new byte[64 + lines.Length * 132];
         BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(52), lines.Length);
@@ -47,7 +47,7 @@ public sealed class WieldEventScriptTests
 
     // The installed shape (census): wield on scales 10 by the power ratio into counter 0 and adds the charm that many times; from line 6,
     // the part wield off reaches through call-ex, it removes it counter 0 times.
-    private static readonly ScrProgram Scaled = Program(
+    internal static readonly ScrProgram Scaled = Program(
         Do(C(ScrCatalogue.Action.MagickTechAdjustment, N(10), (Attachee, 0), (Triggerer, 0), (Counter, 0))),
         Do(C(ScrCatalogue.Action.Assign, (Local, 0), (Counter, 0))),
         If(C(ScrCatalogue.Condition.Equal, (Local, 0), N(0)), C(ScrCatalogue.Action.ReturnRunDefault)),
@@ -59,7 +59,7 @@ public sealed class WieldEventScriptTests
         Do(C(ScrCatalogue.Action.RemoveEffect, (Triggerer, 0), N(Charm))),
         Do(C(ScrCatalogue.Action.Subtract, (Local, 0), (Local, 0), N(1))),
         Do(C(ScrCatalogue.Action.Goto, N(7))));
-    private static readonly ScrProgram CallOff = Program(Do(C(ScrCatalogue.Action.CallScriptEx, (Attachee, 0), N(24), N(6), (Triggerer, 0))),
+    internal static readonly ScrProgram CallOff = Program(Do(C(ScrCatalogue.Action.CallScriptEx, (Attachee, 0), N(24), N(6), (Triggerer, 0))),
         Do(C(ScrCatalogue.Action.ReturnRunDefault)));
     private static readonly ScrProgram Plain = Program(Do(C(ScrCatalogue.Action.ReturnRunDefault)));
 

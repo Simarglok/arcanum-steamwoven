@@ -55,7 +55,7 @@ public static partial class AiExecutorRules
     private static GoalFrame WithPlaying(GoalFrame goal, bool playing) =>
         goal with { Flags = playing ? goal.Flags | GoalFrameFlags.Playing : goal.Flags & ~GoalFrameFlags.Playing };
 
-    private static int StandingAnimation(IAiGoalWorld world, string owner) => world.Mover(owner).Concealed && !world.Mover(owner).Pc ? ConcealedAnimation : 0;
+    private static int StandingAnimation(IAiGoalWorld world, string owner) => world.Mover(owner) is { Prowling: true, Pc: false } ? ConcealedAnimation : 0;
 
     // The animation step of the three animated goals (0x42E070 for the stun, 0x42CC80, 0x42D6F0 for dying): one frame more each call, the delay stored by the start between them; at the last
     // frame the playing flag is cleared and the step answers "done". A stoned object refuses, and so does a critter with flag 0x40 outside the lying animations (17..19), with the playing flag

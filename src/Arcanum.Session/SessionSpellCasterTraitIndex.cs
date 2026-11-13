@@ -18,7 +18,7 @@ namespace Arcanum.Session;
 /// maximum, <see cref="CharacterStatRules.Range"/>; for the others <see cref="CharacterStatRules.StoredRange"/>); a lowering is refused, and nothing written, when a skill keyed on the stat needs the higher value (0x4C6B50,
 /// <see cref="SkillRules.CheckBaseChange"/>, read with the effective stat the lower base gives, the NPC's effect list laid over it) and, for intelligence, when a known spell rank (0x4B1B90) or a tech degree (0x4B02B0)
 /// needs the higher value, for willpower when a known spell rank does (0x4B1C00). Ready for an NPC: the primary stats dexterity, constitution, beauty, intelligence, perception, willpower and charisma, and the stats the
-/// setter stores after the clamp alone for an NPC (ARC-MAGIC-1507 adds magick and tech points, 22 and 23, whose rewield <see cref="RewieldReady"/> accepts when no worn item has a wield script): level (17), experience (18, the level-up 0x4A69C0 is a PC's), alignment (19, the followers' re-check is a PC's), fate points (20), unspent points (21) and 25; the
+/// setter stores after the clamp alone for an NPC (ARC-MAGIC-1507 adds magick and tech points, 22 and 23, whose rewield runs the worn items' wield scripts through <see cref="ItemScripts"/>, ARC-MAGIC-1644): level (17), experience (18, the level-up 0x4A69C0 is a PC's), alignment (19, the followers' re-check is a PC's), fate points (20), unspent points (21) and 25; the
 /// callbacks after the write (0x460860, 0x4601C0) are the user interface's. <b>Strength</b> (ARC-MAGIC-1506, case 0 of the setter) reads the encumbrance level before the store (0x45F790: the total weight of the NPC's list, 0x461410, and its carry weight, stat 8, which the new strength gives:
 /// <see cref="GameSessionOwner.QueryNpcCarry"/>) and, when the level changed, runs the recalculation 0x45F820 after it (<see cref="GameSessionOwner.RecalculateNpcEncumbrance"/>: every entry of effect 158 leaves the NPC's list, then one
 /// entry a level is added with the item cause, eight at the heaviest). A new level from 4 up also schedules the NPC's encumbrance fatigue timer (ARC-MAGIC-1568, <see cref="SessionEventKinds.NpcEncumbrance"/>: 0x45E820 mode 1, one per NPC; it gives an NPC without a life record the record of its loaded state). Ready for an NPC the map's inventory seed lists; not ready when the NPC is no holder of it, when effect 158 has no rule to add, when that timer cannot be scheduled
@@ -29,7 +29,8 @@ namespace Arcanum.Session;
 /// ARC-MAGIC-1510: an NPC whose stats the follower's advancement record holds reads and writes its sheet (<see cref="GameSessionOwner.WriteNpcAdvancementStat"/>), and the hero is written in its state (<c>TraitIndexHero</c>).
 /// ARC-MAGIC-1628: a record follower's gender is the stored field and the innate effect as for any NPC (the sheet holds none), its race the sheet's (not ready when the new race's ranges leave the sheet invalid); the hero's poison is its life state's level,
 /// its magick and tech points are stored when no worn item has a wield script (<see cref="GameSessionOwner.HeroRewieldReady"/>), and its experience runs the level recalculation (0x4A69C0) after the store, queueing the award for the host as an
-/// award does (<see cref="TakeExperienceAwards"/>); the level has no case and is stored alone. Not ready for the hero: a resistance and stat 25 (it stores none), gender and race.</item>
+/// award does (<see cref="TakeExperienceAwards"/>); the level has no case and is stored alone. ARC-MAGIC-1658: the hero's resistance (its stored array, schema 99), stat 25 (its stored age) and gender and race (the innate effects swapped, the character owner built again, <see cref="GameSessionOwner.WriteHeroInnate"/>) run; not ready for the hero:
+/// an age the session has not read (a save of schema 98 or before), a race of 11 and a swap the session refuses (<see cref="GameSessionOwner.HeroInnateReady"/>).</item>
 /// </list>
 /// </summary>
 public sealed partial class SessionSpellCaster
@@ -68,12 +69,21 @@ public sealed partial class SessionSpellCaster
         var advanced = _owner.QueryNpcAdvancement(obj.Id);
         var recorded = advanced is not null && GameSessionOwner.SheetHoldsStat(data.Index) ? advanced.Sheet : null;
         if (recorded is not null) stats = SheetOver(stats, recorded);
-        // Magick and tech points run the rewield (0x465530) after the store: with a worn item that carries a wield script the session cannot run it for an NPC, so nothing is written.
-        if (data.Index is 22 or 23 && !RewieldReady(obj.Id, map)) return null;
         if (stats[27] is < 0 or > 10) return null;
         if (CharacterStatRules.StoredRange((CharacterRace)stats[27], data.Index) is not { } range) return null;
         var current = stats[data.Index];
         var next = Math.Clamp(unchecked(current + data.Value), range.Minimum, range.Maximum);
+        // Magick and tech points run the rewield (0x465530) after the store (ARC-MAGIC-1644, RM3c): the runs of the worn items' wield scripts are planned here over the stats with the new value laid in, and applied after the write.
+        // Not ready (nothing written) when the NPC is not listed or a run cannot be applied.
+        GameSessionOwner.ItemScriptRuns? rewield = null;
+        if (data.Index is 22 or 23)
+        {
+            var laid = stats.ToArray();
+            laid[data.Index] = next;
+            var planned = _owner.PlanNpcRewield(map, critter.Combat.Target, obj.Id, laid, ItemScripts?.Invoke());
+            if (planned.Failure != GameSessionFailure.None) return null;
+            rewield = planned.Runs;
+        }
         // Only the primary stats have skills keyed on them, and spells and degrees ask for intelligence and willpower alone.
         if (next < current && data.Index <= 7)
         {
@@ -126,6 +136,7 @@ public sealed partial class SessionSpellCaster
         }
         var written = recorded is not null ? _owner.WriteNpcAdvancementStat(_owner.Version, map, obj.Id, data.Index, next) : _owner.WriteCritterStat(_owner.Version, map, obj.Id, data.Index, next);
         var outcome = Report(run, obj.Id, data, written);
+        if (rewield is not null && written.Disposition != GameSessionDisposition.Rejected) _owner.CommitNpcRewield(rewield);
         if (innate is not null && written.Disposition != GameSessionDisposition.Rejected && _owner.AddNpcInnate(critter.Combat.Target, innate, data.Index == 26) is { Disposition: GameSessionDisposition.Rejected } added)
             _log.Add(new(SpellCastEventKind.TraitIndexNotSaved, run.Id, (int)added.Failure, obj.Id));
         if (encumbrance is not null && written.Disposition != GameSessionDisposition.Rejected && _owner.RecalculateNpcEncumbrance(critter.Combat.Target, map, encumbrance, level) is { Disposition: GameSessionDisposition.Rejected } failed)
@@ -164,15 +175,21 @@ public sealed partial class SessionSpellCaster
     /// to the stored one, clamps it, asks the same guards for a lowering (with the hero's skills, college ranks and tech degrees), stores it and leaves the callbacks to the interface. Strength moves the encumbrance level as every revision compares it
     /// (0x45F820); alignment arms the followers' re-check (OL17). A derived stat (8 to 16) is read and not written. ARC-MAGIC-1628: poison is the life state's level (<see cref="PoisonStat"/>); magick and tech points run the rewield
     /// 0x465530 (<see cref="GameSessionOwner.HeroRewieldReady"/>); experience is stored and then recalculated (0x4A69C0, <see cref="GameSessionOwner.WriteHeroExperienceStat"/>) and its award waits in <see cref="TakeExperienceAwards"/> for the
-    /// host's level-up messages and followers' step, as an award's does; the level has no case in the setter and is stored alone. <b>Not ready</b>: a resistance and stat 25 (the hero stores none: a saved field is needed), gender and race (the
-    /// race and gender effects of the hero's character owner), a worn wield script for the points, and experience without the experience table.
+    /// host's level-up messages and followers' step, as an award's does; the level has no case in the setter and is stored alone. ARC-MAGIC-1658: a resistance (the hero's stored array, saved since schema 99), stat 25 (its stored age) and gender and race (the removal, store and add of the innate effects: the character owner is built again) run too.
+    /// <b>Not ready</b>: a worn wield script for the points, experience without the experience table, an age the session has not read (a save of schema 98 or before), a race of 11, and an innate swap the session refuses (<see cref="GameSessionOwner.HeroInnateReady"/>).
     /// </remarks>
     private SpellComponentOutcome? TraitIndexHero(SpellRun run, TraitIndexData data)
     {
-        if (_owner.QueryHero() is not { } hero || data.Field != StatIndexField || data.Index is < 0 or >= SessionCritterIndexedWrites.StatCount) return null;
+        if (_owner.QueryHero() is not { } hero) return null;
+        // ARC-MAGIC-1658: the stored resistance array (field 31), the indexed write 0x407340 as an NPC's: the sum, unclamped.
+        if (data.Field == ResistanceIndexField)
+            return _owner.QueryHeroStoredResistance(data.Index) is { } stored ? Report(run, Hero, data, _owner.WriteHeroResistance(_owner.Version, data.Index, unchecked(stored + data.Value))) : null;
+        if (data.Field != StatIndexField || data.Index is < 0 or >= SessionCritterIndexedWrites.StatCount) return null;
         if (data.Index is >= 8 and <= 16) return SpellComponentOutcome.None;
         // ARC-MAGIC-1628: poison is the life state's level, the hero's as the NPC's (the setter's case 0x18).
         if (data.Index == 24) return PoisonStat(run, Hero, data, SessionLifeTarget.Hero);
+        // ARC-MAGIC-1658: age (stat 25, no case in the setter: a clamp to 20..1000 and a store) and the gender and race cases (the removal of the old innate effect, the store, the add of the new one).
+        if (data.Index is 25 or 26 or 27) return TraitIndexHeroInnate(run, data, hero);
         if (_owner.QueryHeroStoredStat(data.Index) is not { } current || CharacterStatRules.StoredRange(hero.Race, data.Index) is not { } range) return null;
         // Magick and tech points run the rewield (0x465530) after the store: with a worn item that carries a wield script the session cannot run it, so nothing is written.
         if (data.Index is 22 or 23 && !_owner.HeroRewieldReady()) return null;
@@ -203,15 +220,17 @@ public sealed partial class SessionSpellCaster
         return Report(run, Hero, data, _owner.WriteHeroStat(_owner.Version, data.Index, next));
     }
 
-    /// <summary>
-    /// ARC-MAGIC-1507 (ledger RM3b): the rewield 0x465530 the setter runs after storing magick points (22) or tech points (23) walks the wear slots 1000 to 1008; for each worn item it recalculates the wearer's light (0x467E80)
-    /// and runs the item's script points 25 (wield off) and 24 (wield on) with the wearer as the initiator. Ready when the session knows the NPC's list (the holder of its map's inventory view, a dressed NPC's wear record laid
-    /// over the map data) and no worn item has script point 24 or 25: the runs then do nothing (a script run of a point with no script returns at once), and the light is not written here: the host derives the recalculated carried light from the worn items and the NPC's aptitude for an NPC the session wrote magick or tech points of (ARC-MAGIC-1561, <c>AreaRestockHost.NpcLight</c>, ledger RM3d;
-    /// exact for an NPC wearing no light item, which 0x467E80 leaves alone). With a worn wield script (run for the hero alone, #1644), or an NPC the session does not list, it is not ready.
-    /// </summary>
-    private bool RewieldReady(string npc, SessionMapId map) =>
-        _owner.QueryMapInventory(map)?.Holders.FirstOrDefault(holder => holder.Entity == npc && holder.Kind == SessionHolderKind.Npc) is { } listed &&
-        !listed.Items.Any(item => item.Facts.Worn && (item.Facts.HasScript(SessionScriptPoint.WieldOn) || item.Facts.HasScript(SessionScriptPoint.WieldOff)));
+    // ARC-MAGIC-1658: the hero's stat 25 (stored age), 26 (gender) and 27 (race). Not ready: an age the session has not read (a save of an older schema), a race of 11 (the table's last, a race the character rules do not have) and what
+    // the hero's innate swap refuses (GameSessionOwner.HeroInnateReady: no rule attached for the effect to add, a stat the new race's ranges do not admit, a durable effect with the number of the new innate one).
+    private SpellComponentOutcome? TraitIndexHeroInnate(SpellRun run, TraitIndexData data, SessionHeroState hero)
+    {
+        var current = data.Index switch { 25 => _owner.QueryHeroStoredAge(), 26 => _owner.QueryHeroStoredGender(), _ => _owner.QueryHeroStoredRace() };
+        if (current is not { } value || CharacterStatRules.StoredRange(hero.Race, data.Index) is not { } range) return null;
+        var next = Math.Clamp(unchecked(value + data.Value), range.Minimum, range.Maximum);
+        if (data.Index == 25) return Report(run, Hero, data, _owner.WriteHeroAge(_owner.Version, next));
+        if (data.Index == 27 && next > (int)CharacterRace.Orc || !_owner.HeroInnateReady(data.Index == 26, next)) return null;
+        return Report(run, Hero, data, _owner.WriteHeroInnate(_owner.Version, data.Index == 26, next));
+    }
 
     /// <summary>
     /// ARC-MAGIC-1508 (ledger RM3b, the setter's poison case; the addresses are in RM3b): stat 24 is the poison level, which the original stores in the stat array and the session keeps in the NPC's life state (the map data's entry is only what it loads

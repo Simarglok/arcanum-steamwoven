@@ -364,10 +364,21 @@ public partial class TerrainViewerApp
         var lookup = resolver.Resolve(companion.Entity, home.RuntimeMap);
         Require(lookup.Status == Arcanum.World.RecordStatus.Found, $"a fresh resolver finds its record on map {home.RuntimeMap}: {lookup.Status} {lookup.Detail}");
         var reads = _homes.Reads.Select(read => new { read.Map, Window = read.CoreSectors is not null }).ToArray();
+        // ARC-AI-1646: an NPC of the home map without a dialog that the hero leads (a Dominate Will target) has its body read from the home map too: the real read is asked for the
+        // map's NPC holders (the rows the directory knows) as led, and builds a script-0 body, with its frames, for those whose follow facts read.
+        var homeHeld = _homes.Held(home.RuntimeMap, stored);
+        var speakerEntities = homeHeld?.Templates.Select(t => t.Entity).ToHashSet(StringComparer.Ordinal) ?? [];
+        var ledCandidates = homeHeld?.Rows.Seed.Holders.Where(h => h.Kind == SessionHolderKind.Npc).Select(h => h.Entity)
+            .Where(e => !speakerEntities.Contains(e)).Take(60).ToHashSet(StringComparer.Ordinal) ?? [];
+        var ledRead = new AreaMapHomes(arguments, MapCompanionFacts).Read(home.RuntimeMap, stored, ledCandidates, default);
+        var ledBodies = ledRead.Read?.Templates.Where(t => t.Speaker.ScriptId == 0 && ledCandidates.Contains(t.Entity)).ToArray() ?? [];
+        Require(ledRead.Read is not null, $"the home map reads with led NPCs asked for: {ledRead.Detail}");
+        Require(ledBodies.Length == 0 || ledBodies.All(t => ledRead.Read!.FramesOf(t).Count > 0), "the led NPC bodies come with their frames");
+        GD.Print($"ARC-AI-1646 visitor-body led-npc candidates={ledCandidates.Count} bodies={ledBodies.Length} read-detail={ledRead.Detail}");
         // The production wiring (the inventory host's resolver shares this directory) is put back for the stages that follow.
         _homes = production; BindAreaCompanions();
         GD.Print("ARC-DEV-079 native-smoke visitor-body PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             Map = CurrentAreaMap, Home = home.RuntimeMap, Stored = $"{stored!.Value.X},{stored.Value.Y}", Script = again.Speaker.ScriptId, Frames = frames,
-            Reads = reads, Ms = System.Environment.TickCount64 - started }));
+            Reads = reads, LedCandidates = ledCandidates.Count, LedBodies = ledBodies.Length, Ms = System.Environment.TickCount64 - started }));
     }
 }

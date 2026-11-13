@@ -958,7 +958,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// ARC-MAGIC-042 (T-m1, TI6): the script action attack (36, 0x447D2F): the attack event (0x4A9650) of <paramref name="attacker"/> on <paramref name="victim"/> with flags 2 (no fan-out: the attacker's and the victim's followers
     /// are not told, a PC victim does not respond and no noise is raised) and loudness 1. The victim's own reaction follows as for any attack event: an NPC victim turns, records who hit it and reacts, a PC victim only loses its concealment. A side
     /// this host does not hold ends at the event's own early exits (<see cref="AttackEventStop.Missing"/>), and an attack on itself at <see cref="AttackEventStop.Self"/>. The attacker is the host's NPC (a created critter must be synced
-    /// first, <see cref="SyncCreated"/>); returns the stop of the event's plan.
+    /// first, <see cref="SyncCreated"/>) or companion, or (ARC-SCRIPT-1679, 0x447D2F gives the event no type test) an object the scene describes (<see cref="AreaAiScene.ObjectFacts"/>: a trap, scenery, portal or container, which makes an NPC victim fight it,
+    /// <see cref="AttackEventStop.ObjectAttacker"/>; a scene without the <c>ObjectFacts</c> hook, or an id it does not describe, such as an item, ends at <see cref="AttackEventStop.Missing"/>); returns the stop of the event's plan.
     /// </summary>
     public AttackEventStop ScriptAttack(string attacker, string victim)
     {
@@ -1012,11 +1013,11 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// reaction by AI parameter 9 (<see cref="GameSessionOwner.ReactToPcHit"/>, ARC-WORLD-021's profile: added in the Original setting, taken in Steamwoven; an accidental one
     /// changes nothing); then the follow check runs with the follower limit ignored (<see cref="GameSessionOwner.CheckFollowerAfterHit"/>, 0x4AD950): a refusal makes the
     /// follower leave and sets NPC flag 0x20 (JILTED) and it says the refusal line of its reason (ARC-AI-1585: through <see cref="FollowerSpeaks"/>; the range is also traced), and a follower that stays (the check passed, or the leave was refused) says the accidental-attack line (lines 2300-2399) one time in three
-    /// (0x413DF0, through <see cref="FollowerSpeaks"/>) when it is active (0x4AD800 is not read yet: the active test 0x45D790 stands for it). The leave is seen by
+    /// (0x413DF0, through <see cref="FollowerSpeaks"/>) when it is active (0x45D790; the can-speak test 0x4AD800 with flag 1 is the speaker's: its tail skips the combat focus and the interrupt, <see cref="Arcanum.Simulation.Reaction.CanSpeakRules.Tail"/>). The leave is seen by
     /// <see cref="ObserveLeaves"/> at the next look. Without the check's facts (the scene gives none) only the reaction changes.
     /// </summary>
     [OriginalFunction(0x413DF0, OriginalFunctionScope.Partial)]
-    private void HitFollower(string victim, bool deliberate)
+    internal void HitFollower(string victim, bool deliberate)
     {
         var changed = false;
         if (deliberate && ReactionFacts(victim) is { } facts && Row(victim) is { } row)
@@ -1068,6 +1069,20 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public Action<string, LoyaltyLines>? FollowerSpeaks { get; set; }
 
     private void Speak(string follower, LoyaltyLines lines) => FollowerSpeaks?.Invoke(follower, lines);
+
+    /// <summary>
+    /// ARC-AI-1677: a follower that left by the loyalty step (<see cref="GameSessionOwner.RunLoyaltyStep"/>, not by the hero's hit) sets JILTED and, when it is active and a line
+    /// callback exists, says the refusal line of its reason (the same line as the hit's leave) through <see cref="FollowerSpeaks"/>. Returns the line range asked, or null when the step did not leave, the
+    /// follower is not active or nobody listens. The can-speak test with flag 1 (its head and the viewer's float, <see cref="Arcanum.Simulation.Reaction.CanSpeakRules.Tail"/> for the rest) is the speaker's.
+    /// </summary>
+    /// <remarks>The leave branch of 0x4AC380 (its registry row names the step rule): JILTED, the active test 0x45D790, then 0x413A90.</remarks>
+    public LoyaltyLines? SayLoyaltyLeave(string follower, LoyaltyStepResult step)
+    {
+        ArgumentNullException.ThrowIfNull(follower);
+        if (step.RefusalLines is not { } lines || FollowerSpeaks is null || !Active(follower)) return null;
+        Speak(follower, lines);
+        return lines;
+    }
 
     /// <summary>
     /// ARC-AI-1527 (0x4B6B90 → 0x4AE9E0, the end of one attack): the combat taunt of the PC's followers. <see cref="FollowerRules.TauntKindOf"/> asks the kind of the attack's facts; then
@@ -1726,8 +1741,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public AiMoverFacts Mover(string id)
     {
         var status = Status(id);
+        // ARC-AI-1653 (0x426E80): the goals' unconceal test reads the shown art (animation 5, the crouch), not the flag; the end nodes' standing art reads the flag (0x45EDE0).
         return new(Pc: id == Pc, KnockedDown: id != Pc && status is { IsDead: false, IsUnconscious: false } && ShownAnimation(id) == DyingAnimationRules.FallDown,
-            Concealed: false, Fatigue: status?.Fatigue ?? 0, MaxFatigue: status?.MaxFatigue ?? 0, CannotTurn: !Active(id),
+            Concealed: id != Pc && ShownAnimation(id) == AiExecutorRules.ConcealedAnimation, Prowling: id != Pc && _session.IsConcealed(SessionCombatant.Critter(id)), Fatigue: status?.Fatigue ?? 0, MaxFatigue: status?.MaxFatigue ?? 0, CannotTurn: !Active(id),
             SpreadOut: id != Pc && _session.QueryCompanion(id).SpreadOut);
     }
 
@@ -2049,7 +2065,41 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     public int GetUp(string id) => 1;
-    public int Unconceal(string id) => 1;
+
+    /// <summary>
+    /// ARC-AI-1653 (goal 54, collapsed to its end node 0x42AFB0 as the get-up is): the NPC stands up (its art goes back to animation 0) and, unless its leader is concealed,
+    /// the session ends its concealment (<see cref="GameSessionOwner.EndNpcConcealmentForUnconceal"/>), so a follower of a sneaking hero only stands up and
+    /// crouches again when its next goal ends, as the original's does. The run's animation time is not modelled (1 ms, as the get-up).
+    /// </summary>
+    public int Unconceal(string id)
+    {
+        if (id == Pc) return 1;
+        ShowArt(id, 0, 0);
+        _session.EndNpcConcealmentForUnconceal(_session.Version, id);
+        return 1;
+    }
+
+    // ARC-AI-1653 (0x45EE90): setting the flag shows the crouch art and clearing it the standing one, at the moment of the change. The session owns the flag, so the host sees the change here
+    // (the flag as it last saw it), before it reads the art; a follower that stood up with the flag still set (leader concealed) keeps standing until a goal's end node crouches it again.
+    private readonly HashSet<string> _crouchFlag = [];
+
+    private void SyncCrouch(string id)
+    {
+        if (id == Pc) return;
+        var flagged = _session.IsConcealed(SessionCombatant.Critter(id));
+        if (flagged == _crouchFlag.Contains(id)) return;
+        if (flagged)
+        {
+            _crouchFlag.Add(id);
+            if (Status(id) is { IsDead: false, IsUnconscious: false } && !_arts.ContainsKey(id))
+                _arts[id] = (AiExecutorRules.ConcealedAnimation, Math.Max((Clip(id, AiExecutorRules.ConcealedAnimation)?.Frames ?? 1) - 1, 0));
+        }
+        else
+        {
+            _crouchFlag.Remove(id);
+            if (_arts.TryGetValue(id, out var art) && art.Animation == AiExecutorRules.ConcealedAnimation) _arts.Remove(id);
+        }
+    }
 
     // ---- the critter states (ARC-DEV-137, MIG13 S6: goals 57, 62, 63 and 31) ----
 
@@ -2075,10 +2125,16 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public AiAnimationClip? Clip(string id, int animation) => _scene.AnimationClip?.Invoke(id, animation);
 
     // An NPC with no art written lies in its fall when it is unconscious or dead (a body first seen), except a dead one whose dying goal is on the table: it was killed standing and the goal sets the art.
-    public int ShownAnimation(string id) => _arts.TryGetValue(id, out var art) ? art.Animation
+    public int ShownAnimation(string id) => SyncedArt(id) is { } art ? art.Animation
         : Status(id) switch { { IsDead: true } => DyingRunning(id) ? 0 : DyingAnimationRules.FallDown, { IsUnconscious: true } => DyingAnimationRules.FallDown, _ => 0 };
 
-    public int ShownFrame(string id) => _arts.TryGetValue(id, out var art) ? art.Frame : ShownAnimation(id) == 0 ? 0 : Math.Max((Clip(id, ShownAnimation(id))?.Frames ?? 1) - 1, 0);
+    public int ShownFrame(string id) => SyncedArt(id) is { } art ? art.Frame : ShownAnimation(id) == 0 ? 0 : Math.Max((Clip(id, ShownAnimation(id))?.Frames ?? 1) - 1, 0);
+
+    private (int Animation, int Frame)? SyncedArt(string id)
+    {
+        SyncCrouch(id);
+        return _arts.TryGetValue(id, out var art) ? art : null;
+    }
 
     public void ShowArt(string id, int animation, int frame)
     {

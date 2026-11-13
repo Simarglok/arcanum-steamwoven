@@ -139,6 +139,8 @@ public partial class TerrainViewerApp
         _spellCaster.CastCombat = castCombat;
         // ARC-DEV-254: a script's damage asks the victim's taking-damage script (point 0x17) first.
         _spellCaster.TakingDamage = TakingDamageGoesOn;
+        // ARC-AI-1680: a spell's, trap's or burn's damage step asks a follower's near-death line (0x4AEAB0) as it lands, as the damage step 0x4B4390 does.
+        _spellCaster.DamageStepApplied = AskNearDeathOfCastStep;
         // ARC-MAGIC-048 (E4-c): the Use component has its target run its own use script (the target is the triggerer too).
         _spellCaster.UseObject = UseScriptOfCast;
         // ARC-DEV-281 (B08): an aggressive spell tells the AI of its target that the caster attacked it (the attack event), before the damage lands.
@@ -155,6 +157,8 @@ public partial class TerrainViewerApp
             try { return _areaEffectRules?.Invoke(number) is { } rule ? SessionEffectDefinition.FromRule(rule) : null; }
             catch (ArgumentException) { return null; }
         };
+        // ARC-MAGIC-1644: the TraitIdx rewield (magick and tech points) runs the wield scripts of the NPC's worn items through the inventory host's item script host.
+        _spellCaster.ItemScripts = () => _inventoryHost?.ItemScripts(owner);
         // ARC-DEV-352 (E1-b): the Summon component creates on this map from the module's prototypes; the eye candies' callbacks call the runs back.
         WireSummon(_spellCaster);
         _spellCastMap = map; _spellCasterStamp = stamp; _spellLogSeen = 0;

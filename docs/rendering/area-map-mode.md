@@ -738,7 +738,7 @@ the executable as read in
 Native smoke `door-close` (`ARC-DEV-138 native-smoke door-close PASS`, SM10; in the map battery after the portal stage and alone with `--stages door-close`):
 a use opens the first closed door the player can open that keeps no flag 0x100, frame by frame; a second later it still waits to close; five seconds of Esc menu change
 nothing; after it the door closes by itself at the original's interval (two waits of 1.5 s plus the closing steps after its last open frame, the pause excluded).
-The frame clock is driven with literal host stamps.
+The frame clock is driven with literal host stamps. Its last part (ARC-WORLD-1668, ledger TT18) makes the closed door trapped (the native script 30001 with counters 0, written as the session's map changes and restored after) and requires that the hero's use meets the trap on the use node, which leaves the door shut with no run, and that the next use with the trap gone opens it (`ARC-WORLD-1668 door-trap met`; `NONE` for that part without a trap host, a cast host or the script).
 
 Native smoke `npc-door` (`ARC-DEV-209 native-smoke npc-door PASS`, named only, hero, AI on, `--sector 1409,1314`): a free NPC is brought next to a closed openable door and ordered across it; the stage requires the opener goals (11 or 12) on its stack, a run of the door itself, the door open or opening when the NPC enters its cell, the NPC arriving on the far side and the door ending open. The quest NPC of the first building stands in the map data with the object flag off (ARC-SCRIPT-1360), so the stage first switches on the NPCs near the first doors as a script's toggle state does (ARC-BUG-1503).
 

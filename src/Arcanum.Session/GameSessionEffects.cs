@@ -520,14 +520,26 @@ public sealed partial class GameSessionOwner
     /// with its other changes in one revision): the steps, the rules of every number they and the list use, the hero's life state after
     /// them and its timers.</summary>
     private sealed record PreparedEffects(EffectStep[] Steps, Dictionary<int, SessionEffectDefinition> Definitions, LifeState State, bool LifeChanged,
-        (string Kind, GameEventPayload Payload)[] Timers, long Now);
+        (string Kind, GameEventPayload Payload)[] Timers, long Now)
+    {
+        /// <summary>ARC-MAGIC-1658: when the trial went through changes of the hero's race or gender (<c>stages</c> of <see cref="PrepareEffects"/>), the character owner it ended with, with the durable entries applied, and their ids.</summary>
+        internal HeroDomain? Staged { get; init; }
+        internal List<AppliedEffectId?>? StagedIds { get; init; }
+    }
 
     // The trial: the steps on a character owner built from the hero, each moving the damage by the change of a maximum (the effect add
     // 0x4E9F70 and the internal removal 0x4EA520; damage never goes below 0), then the life facts and the event budget for the timers and
     // extraEvents more. Nothing is written.
-    private GameSessionFailure PrepareEffects(EffectStep[] steps, Dictionary<int, SessionEffectDefinition> definitions, int extraEvents, out PreparedEffects? prepared)
+    private GameSessionFailure PrepareEffects(EffectStep[] steps, Dictionary<int, SessionEffectDefinition> definitions, int extraEvents, out PreparedEffects? prepared) =>
+        PrepareEffects(steps, definitions, extraEvents, [], out prepared);
+
+    // ARC-MAGIC-1658: stages are hero states the trial passes through before the steps (the removal and the add of the race and gender setters, each moving the damage as an effect's does): the character owner is built again from each
+    // with the durable entries applied to it again. A state the character rules refuse, or an entry its owner refuses, is InvalidHero or InvalidEffect.
+    private GameSessionFailure PrepareEffects(EffectStep[] steps, Dictionary<int, SessionEffectDefinition> definitions, int extraEvents, IReadOnlyList<SessionHeroState> stages, out PreparedEffects? prepared)
     {
         prepared = null;
+        // The staged owner and the steps would both be applied to it again by ApplyEffects: the stages stand alone.
+        if (stages.Count > 0 && steps.Length > 0) return GameSessionFailure.InvalidEffect;
         var trial = TrialHero();
         var entries = new List<SessionEffect>(_effects.Entries);
         var ids = new List<AppliedEffectId?>();
@@ -536,6 +548,22 @@ public sealed partial class GameSessionOwner
         var state = before.State;
         var facts = TrialFacts(trial, entries, definitions, state);
         if (facts is null) return GameSessionFailure.InvalidEffect;
+        foreach (var stage in stages)
+        {
+            if (HeroDomain.BuildFrom(stage) is not { } staged) return GameSessionFailure.InvalidHero;
+            trial = staged;
+            ids = [];
+            try { foreach (var entry in entries) ids.Add(ApplyStats(trial.Stats, entry, definitions)); }
+            catch (InvalidOperationException) { return GameSessionFailure.InvalidEffect; }
+            var after = TrialFacts(trial, entries, definitions, state);
+            if (after is null) return GameSessionFailure.InvalidEffect;
+            state = state with
+            {
+                HitPointDamage = Shift(state.HitPointDamage, LifeRules.MaxHitPoints(after, state.PoisonLevel) - (long)LifeRules.MaxHitPoints(facts, state.PoisonLevel)),
+                FatigueDamage = Shift(state.FatigueDamage, LifeRules.MaxFatigue(after) - (long)LifeRules.MaxFatigue(facts)),
+            };
+            facts = after;
+        }
         foreach (var step in steps)
         {
             if (step.Add is { } entry)
@@ -566,7 +594,7 @@ public sealed partial class GameSessionOwner
         if (events > 0 && (_events.Count > _events.Limits.MaxPending - events || _events.NextSequence > long.MaxValue - events ||
             now > long.MaxValue - Math.Max(SessionEffectLimits.MaxDurationMs, SessionEventKinds.RestingDelayMs)))
             return GameSessionFailure.EventBudgetExceeded;
-        prepared = new(steps, definitions, state, state != before.State, timers, now);
+        prepared = new(steps, definitions, state, state != before.State, timers, now) { Staged = stages.Count > 0 ? trial : null, StagedIds = stages.Count > 0 ? ids : null };
         return GameSessionFailure.None;
 
         static int Shift(int damage, long change) => (int)Math.Clamp(damage + change, 0, LifeLimits.MaxDamage);
@@ -578,6 +606,13 @@ public sealed partial class GameSessionOwner
     {
         var hero = _hero!;
         var before = _life.Hero!.Value;
+        // ARC-MAGIC-1658: the character owner the trial ended with (the new race and gender with the durable entries applied) replaces the live one; the entries' ids are its own.
+        if (prepared.Staged is { } staged)
+        {
+            hero.Replace(staged);
+            _effects.Applied.Clear();
+            _effects.Applied.AddRange(prepared.StagedIds!);
+        }
         foreach (var step in prepared.Steps)
         {
             if (step.Add is { } entry)

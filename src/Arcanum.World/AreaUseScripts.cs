@@ -128,7 +128,7 @@ public readonly record struct AreaPrintedLine(int Type, string Text);
 /// The PC's reputations are the session's (ARC-WORLD-044); no other object has one. Everything else the viewer does not model
 /// answers "no", as for the dialog and item hosts.
 /// </summary>
-public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries, IScrStoryQueries, IScrVitalQueries, IScrItemQueries, IScrMagickTechQueries, IScrCritterQueries
+public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries, IScrStoryQueries, IScrVitalQueries, IScrItemQueries, IScrMagickTechQueries, IScrCritterQueries, IScrStatAdjustQueries
 {
     /// <summary>Map-change keys of an object's use slot.</summary>
     public const string LocalFlagsProperty = "use.lf", CountersProperty = "use.counters", ScriptProperty = "use.script";
@@ -457,14 +457,17 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     public (int Current, int Maximum)? FatiguePoints(ScrObjectRef obj) => Vitals(obj) is { } v ? (v.Fatigue, v.MaxFatigue) : null;
 
     /// <summary>ARC-SCRIPT-1481 (VT4, ledger WE2, EQ9): the item's power ratio for the PC or NPC that holds it, <see cref="Arcanum.Simulation.Equipment.EquipmentRules.EffectivePowerRatio"/> of its complexity and the owner's aptitude (stat 16, clamped to the
-    /// aptitude range); null for any other owner (not modelled) or an item the host does not know. ARC-SCRIPT-1562: a hero's worn item is read as the session has it (<see cref="GameSessionOwner.QueryWornPowerRatio"/>, the helper of the deferred item calls; a made item has no row), the
+    /// aptitude range); 100 for an owner the host holds a row for that is neither (ARC-SCRIPT-1662); null for an owner it has no row for, an NPC whose aptitude is not known, or an item the host does not know. ARC-SCRIPT-1562: a hero's worn item is read as the session has it (<see cref="GameSessionOwner.QueryWornPowerRatio"/>, the helper of the deferred item calls; a made item has no row), the
     /// rest of the items by their row; an NPC of the shown map has its aptitude from the world (<see cref="AreaScriptWorld.Aptitude"/>).</summary>
     public int? PowerRatio(ScrObjectRef item, ScrObjectRef owner)
     {
         if (IsPc(owner) && _session.QueryWornPowerRatio(item.Code) is { } worn) return worn;
-        if (ComplexityOf(item) is not { } complexity || CritterAptitude(owner) is not { Critter: true, Aptitude: { } aptitude }) return null;
+        if (ComplexityOf(item) is not { } complexity || CritterAptitude(owner) is not { } holder) return null;
+        // ARC-SCRIPT-1662 (WE2, CP8; exe 0x4614A0, 0x461540): an owner that is neither the PC nor an NPC (a container, scenery, an item) has its complexity as the item's power, so the ratio is 100 whatever the complexity (0 reads 100 as well).
         var limits = Arcanum.Simulation.Equipment.EquipmentLimits.MaxMagnitude;
         if (complexity < -limits || complexity > limits) return null;
+        if (!holder.Critter) return 100;
+        if (holder.Aptitude is not { } aptitude) return null;
         return Arcanum.Simulation.Equipment.EquipmentRules.EffectivePowerRatio(complexity, Math.Clamp(aptitude, Arcanum.Simulation.Equipment.EquipmentLimits.MinAptitude, Arcanum.Simulation.Equipment.EquipmentLimits.MaxAptitude));
     }
 
@@ -498,6 +501,24 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         return Arcanum.Data.Combat.CombatFieldReader.Read(row).Fields?.Critter is { } critter
             ? (unchecked((uint)_session.QueryObjectFlags(obj.Code).Critter(unchecked((int)critter.Flags))) & AnimalCritterFlag) != 0 : null;
     }
+
+    /// <summary>
+    /// ARC-SCRIPT-1661 (CP11): whether the object is a PC or an NPC with the combat-mode bit (critter flags 0xDA bit 0x40000) as the session has it (<see cref="GameSessionOwner.QueryCombatMode"/>: the hero's, or the NPC's by entity); false for any other object type; null for an object
+    /// this host has no row for.
+    /// </summary>
+    /// <remarks>Exe read 2026-11-13: condition 31 at 0x4451B0 case 0x1f, the test 0x4B3D50.</remarks>
+    public bool? IsInCombat(ScrObjectRef obj)
+    {
+        if (IsPc(obj)) return _session.QueryHero() is not null && _session.QueryCombatMode(SessionCombatant.Hero);
+        if (Row(obj) is not { } row) return null;
+        return row.Type == NpcType && _session.QueryCombatMode(SessionCombatant.Critter(obj.Code));
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-1661 (CP12): this host adjusts the hero's alignment (stat 19) only, which the session stores as a base stat; an NPC's alignment, which the world keeps in its combat values and the session does not write, and every other stat stop the dispatch as not modelled.
+    /// </summary>
+    /// <remarks>Exe read 2026-11-13: action 137 at 0x447220 case 0x89, base stat 0x4B0740, stat setter 0x4B0980 with the range tables 0x5B5194 and 0x5B5204.</remarks>
+    public bool CanAdjustStat(ScrObjectRef obj, int stat) => stat == AreaScriptStory.AlignmentStat && IsPc(obj) && _session.QueryHero() is not null;
 
     // ARC-SCRIPT-1562: what a critter-or-not object gives a magick-tech adjustment: Critter false for a row of the shown map that is neither the PC nor an NPC (no aptitude is read), else the aptitude (the PC's of the session, an NPC's of the world; null when not known).
     // Null for an object this host has no row for.
@@ -1010,10 +1031,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-SCRIPT-1483 (script trigger audit slice 5, ledger CP1–CP5): the set a combat-point script (hit 7, critter hits 26, critical hit 34) runs under: the placed set (<see cref="PlacedAdmission"/>), whose damage and cast actions deal the
-    /// installed poison weapons' damage and the college poison spell. ARC-SCRIPT-1562 (CP7): plus the commands of <see cref="ScrAdmissionSet.S51"/> the poison weapon scripts 30032, 30076 and 30199 and the hunting weapon 28007 use: the magick-tech adjustments (91, 80), play script eye candy (120) and obj is animal (37). A script outside it is refused and the hit goes on as without one.
+    /// installed poison weapons' damage and the college poison spell. ARC-SCRIPT-1562 (CP7): plus the commands of <see cref="ScrAdmissionSet.S51"/> the poison weapon scripts 30032, 30076 and 30199 and the hunting weapon 28007 use: the magick-tech adjustments (91, 80), play script eye candy (120) and obj is animal (37). ARC-SCRIPT-1661 (CP11, CP12): plus the commands of <see cref="ScrAdmissionSet.S52"/> the area weapon scripts 30064 and 30074 and the alignment weapon 30252 use: obj is in combat (31, <see cref="IsInCombat"/>) and adjust stat (137, the hero's alignment only, <see cref="CanAdjustStat"/>). A script outside it is refused and the hit goes on as without one.
     /// </summary>
-    public static ScrAdmissionSet CombatPointAdmission { get; } = new("S4-area-combat-point", PlacedAdmission.Conditions.Append(ScrCatalogue.Condition.IsAnimal),
-        PlacedAdmission.Actions.Concat([ScrCatalogue.Action.GetMagickTechAdjustment, ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy]),
+    public static ScrAdmissionSet CombatPointAdmission { get; } = new("S4-area-combat-point", PlacedAdmission.Conditions.Concat([ScrCatalogue.Condition.IsAnimal, ScrCatalogue.Condition.IsInCombat]),
+        PlacedAdmission.Actions.Concat([ScrCatalogue.Action.GetMagickTechAdjustment, ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.AdjustStat]),
         PlacedAdmission.ValueKinds, PlacedAdmission.FocusKinds, counterIndexWraps: true);
 
     /// <summary>
@@ -1266,6 +1287,19 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             return Finish(run, _ => "a teleport from a use component's script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _clicked = previous; }
+    }
+
+    /// <summary>
+    /// ARC-WORLD-1668 (ledger TT18, 0x428A10 → 0x441980 point 1): whether the use script a door's use node ran (<see cref="RunUseScript"/>, the opener as the triggerer and the extra object) stops the use: the dispatcher's answer 0, "skip default",
+    /// which includes a script that runs past its last line. A run that was not applied (refused by the admission, effects the viewer cannot apply, an unreadable or changed file, a requested teleport), an object with no use script and a native trap script the trap code left unmet stop nothing:
+    /// the use goes on (the original's node returns 1 for no attachment: 0x441980 answers 1).
+    /// </summary>
+    public static bool UseStops(AreaScriptedUse ran)
+    {
+        ArgumentNullException.ThrowIfNull(ran);
+        // The dispatcher's stop at a native trap script (30000..30007) is no answer of a script: the trap code runs those, and a trap whose meeting could not be made here (no cast host, a critter the host cannot apply
+        // it for) was left unmet, so the use goes on as before and the door opens (a divergence: the original fires and, for a self-removing trap, consumes it).
+        return ran.Outcome is AreaScriptedUseOutcome.NoTeleport && ran.Run is { } run && run.Outcome == ScrOutcome.SkipDefault && run.Stop != ScrStop.TrapScript;
     }
 
     /// <summary>ARC-DEV-326: whether an examine run (<see cref="RunExamine"/>) leaves the object without a description: the dispatcher's
@@ -1769,26 +1803,33 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     public bool CanApplyScriptAttack => _world?.ScriptAttack is not null;
 
     /// <summary>
-    /// ARC-SCRIPT-1620 (TI6, VB2-2 gap d): why one attack (36) request of a run cannot be applied here, null when it can. The attacker (<see cref="ScrObjectStateRequest.Other"/>) must be the PC or an NPC of the shown map: the AI host's event
-    /// describes the PC and its NPCs only, and an object attacker (a trap, scenery) makes an NPC victim fight the object (the setter 0x4AABE0, COMBAT_FOCUS), which waits for the trap shot (#1619); an attacker of no loaded row or another map is not modelled either.
+    /// ARC-SCRIPT-1620 (TI6, VB2-2 gap d), ARC-SCRIPT-1679: why one attack (36) request of a run cannot be applied here, null when it can. The attacker (<see cref="ScrObjectStateRequest.Other"/>) is an object the AI host holds: the PC; an NPC standing on
+    /// the shown map, a carried follower named by its home map included (the original keeps one object wherever it stands, FM1, so it is told apart by <see cref="AreaScriptWorld.CritterCell"/> and not by the map of its record); or an object of the shown map
+    /// that is no critter and no item (a wall, portal, container, scenery or trap object: 0x447D2F gives 0x4A9650 no type test of either side, and an NPC victim of such an attacker is asked into COMBAT_FOCUS on it, 0x4AABE0, through the AI host's object facts,
+    /// #1619; a victim of another kind does nothing more). Not modelled: an item as the attacker (the AI host describes no item), an object of no loaded row, and an object of another map that no companion stands for.
     /// </summary>
     public string? AttackRefusal(ScrObjectStateRequest request)
     {
         if (request.Other is not { } attacker) return "attack has no attacker";
-        if (IsPc(attacker) || ShownNpc(attacker)) return null;
-        var what = attacker.Map != _shownMap ? "an object of another map" : Row(attacker) is null ? "an object of no loaded row" : "a non-critter object";
-        return $"attack by {attacker.Code} is not modelled ({what} as the attacker; only the PC or an NPC of the shown map, an object attacker waits for #1619)";
+        if (IsPc(attacker) || StandsHere(attacker)) return null;
+        var row = attacker.Map == _shownMap ? Row(attacker) : null;
+        if (row is { } && row.Type is not (PcType or NpcType) && row.Type is < FirstItemType or > LastItemType) return null;
+        var what = attacker.Map != _shownMap ? "an object of another map that no companion stands for" : row is null ? "an object of no loaded row" : row.Type is >= FirstItemType and <= LastItemType ? "an item" : "an NPC row that is not standing here";
+        return $"attack by {attacker.Code} is not modelled ({what} as the attacker; only the PC, an NPC standing on the shown map or an object of it that is no item)";
     }
 
     /// <summary>
-    /// One attack (36) request of a run, applied (<see cref="AttackRefusal"/> said it can be): the attack event (0x4A9650, flags 2, loudness 1) of the attacker on the victim in the AI host. A victim that is neither the PC nor an NPC of the shown map is left as it is
-    /// (the host holds no such object: the event's early exit); the answer is the stop of the event's plan. Shared by the dialog host (<see cref="AreaScriptHost.Apply"/>).
+    /// One attack (36) request of a run, applied (<see cref="AttackRefusal"/> said it can be): the attack event (0x4A9650, flags 2, loudness 1) of the attacker on the victim in the AI host. A victim that is neither the PC nor an NPC standing here (a carried
+    /// follower counts by identity, <see cref="StandsHere"/>) is left as it is (the host holds no such object: the event's early exit); the answer is the stop of the event's plan. Shared by the dialog host (<see cref="AreaScriptHost.Apply"/>).
     /// </summary>
     public void ApplyScriptAttack(ScrObjectStateRequest request)
     {
         LastAttack = null;
-        if (request.Other is { } attacker && (IsPc(request.Object) || ShownNpc(request.Object))) LastAttack = _world!.ScriptAttack!(attacker.Code, request.Object.Code);
+        if (request.Other is { } attacker && (IsPc(request.Object) || StandsHere(request.Object))) LastAttack = _world!.ScriptAttack!(attacker.Code, request.Object.Code);
     }
+
+    // ARC-SCRIPT-1679 (FM1): an NPC standing on the shown map, told by identity: a row of the shown map, or the row of a carried follower named by its home map whose live cell the viewer gives here (the tile script's test of the same).
+    private bool StandsHere(ScrObjectRef obj) => ShownNpc(obj) || obj.Map != _shownMap && !IsPc(obj) && Row(obj) is { Type: NpcType } && _world?.CritterCell?.Invoke(obj) is not null;
 
     /// <summary>ARC-SCRIPT-1563: whether the world gives the script damage (<see cref="ApplyScriptDamage"/>) this host applies; the dialog host asks before it applies anything, so a run it cannot finish is refused whole.</summary>
     public bool CanApplyScriptDamage => _world?.ScriptDamage is not null;
@@ -1916,8 +1957,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (_world?.ScriptHeal is null) return "heal hit points needs the viewer's session";
                 continue;
             }
-            // ARC-SCRIPT-1620 (TI6, VB2-2 gap d): the attacker (the first object of operand 1) is the PC or an NPC of the shown map, the critters the AI host holds; any other object (a trap, scenery, an item, another map's critter) as the attacker would
-            // make an NPC victim fight an object (0x4AABE0), which waits for the trap shot (#1619). The victim needs no test: the event's own early exits leave an object the host does not hold as it is.
+            // ARC-SCRIPT-1620 (TI6, VB2-2 gap d), ARC-SCRIPT-1679: the attacker (the first object of operand 1) is the PC, an NPC standing here (a carried follower by identity) or an object of the shown map that is no item (the AI host's object facts, #1619);
+            // an item or an object it does not hold is refused whole. The victim needs no test: the event's own early exits leave an object the host does not hold as it is.
             if (request.Change == ScrObjectStateChange.Attack)
             {
                 if (_world?.ScriptAttack is null) return "attack needs the AI host";

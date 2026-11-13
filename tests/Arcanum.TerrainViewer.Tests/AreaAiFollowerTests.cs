@@ -1385,4 +1385,159 @@ public sealed class AreaAiFollowerTests
         CollectionAssert.AreEqual(new[] { (companion, new LoyaltyLines(4900, 4999)) }, said, $"{host.TraceOf(companion)?.Event}");
         StringAssert.Contains(host.TraceOf(companion)!.Event, "Complain Good");
     }
+
+    // ARC-AI-1677 (AC2, 0x413A90): the refusal range of each reason the hit's follow check can give. The check ignores the follower limit and refuses facts that name another leader, so
+    // the reasons "already grouped", "limit reached" and "not allowed" cannot come out of a hit (below); the range table itself is held by CompanionLoyaltyRulesTests.
+    public static IEnumerable<object[]> HitRefusalReasons()
+    {
+        yield return [FollowConsent.TooGood, -200, 1, 100, 1600];
+        yield return [FollowConsent.TooBad, 200, 1, 100, 1700];
+        yield return [FollowConsent.Dislike, 0, 1, 40, 1800];
+        yield return [FollowConsent.LowLevel, 0, 50, 100, 2900];
+    }
+
+    [TestMethod]
+    [DynamicData(nameof(HitRefusalReasons))]
+    public void A_hit_follower_refused_for_each_reachable_reason_says_the_refusal_line_range_of_that_reason(FollowConsent reason, int npcAlignment, int npcLevel, int reaction, int first)
+    {
+        var facts = Consent(reaction) with { NpcAlignment = npcAlignment, NpcLevel = npcLevel };
+        var scene = Open(joinFacts: Consent(100), followFacts: entity => facts, table: Parameter9(5));
+        var said = Listen(scene);
+        scene.Host.HeroAttacked(scene.Companion);
+        AssertLeft(scene, left: true);
+        CollectionAssert.AreEqual(new[] { (scene.Companion, new LoyaltyLines(first, first + 99)) }, said);
+        StringAssert.Contains(scene.Host.TraceOf(scene.Companion)!.FollowerHit!, $"left jilted, refusal lines {first}-{first + 99} ({reason})");
+    }
+
+    [TestMethod]
+    public void The_reasons_a_hit_cannot_give_leave_the_follower_in_place_and_say_no_refusal_line()
+    {
+        // Facts that name another leader are refused by the session (the check's own input), so there is no "already grouped" refusal from a hit.
+        var other = Open(joinFacts: Consent(100), followFacts: entity => Consent(100) with { OtherLeaderCharisma = 30 }, table: Parameter9(5));
+        var otherSaid = Listen(other);
+        other.Host.HeroAttacked(other.Companion);
+        AssertLeft(other, left: false);
+        StringAssert.Contains(other.Host.TraceOf(other.Companion)!.FollowerHit!, "check refused (InvalidConsentFacts)");
+        Assert.AreEqual(0, otherSaid.Count);
+        // The follower limit is ignored (0x4AD950's flag 1): a full party or a leader that may lead none refuses nothing.
+        var full = Open(joinFacts: Consent(100), followFacts: entity => Consent(100) with { MaxFollowers = 0 }, table: Parameter9(5));
+        var fullSaid = Listen(full);
+        for (var hit = 0; hit < 30; hit++) full.Host.HeroStrayAttacked(full.Companion);
+        AssertLeft(full, left: false);
+        Assert.IsTrue(fullSaid.Count > 0, "30 stray hits at one in three say something");
+        Assert.IsTrue(fullSaid.All(line => line.Lines == new LoyaltyLines(2300, 2399)), "only the accidental line, never a refusal");
+    }
+
+    // ARC-AI-1677 (AC1): the draws of one line. The host rolls one in three (1..3) only for a follower that stays (0x4CEF00, before the active test) and then asks the speaker, whose pick is the next draw
+    // (0x418780: the viewer's DialogFollowerComment, label dialog.greeting.line); a leave draws nothing before the pick. The session's sequence is seeded: the next roll is arranged by reading ahead
+    // (RestoreRandom), so the test knows which of the three the host's roll will be. The speaker here makes the pick's draw itself, as the viewer's does.
+    private static void ArrangeNextRoll(GameSessionOwner session, int min, int max, Func<int, bool> wanted)
+    {
+        var state = session.QueryRandom();
+        for (var skip = 0; skip < 500; skip++)
+        {
+            var at = state with { Draws = state.Draws + skip };
+            Assert.IsTrue(session.RestoreRandom(at));
+            if (!wanted(session.Roll("probe.next", min, max).Roll!.Value)) continue;
+            Assert.IsTrue(session.RestoreRandom(at));
+            return;
+        }
+        Assert.Fail("no draw of the wanted value within 500 draws");
+    }
+
+    private static List<(long Draws, LoyaltyLines Lines, long AfterPick)> RecordDraws(Scene scene)
+    {
+        var calls = new List<(long, LoyaltyLines, long)>();
+        scene.Host.FollowerSpeaks = (_, lines) =>
+        {
+            var at = scene.Session.QueryRandom().Draws;
+            scene.Session.Roll("dialog.greeting.line", 0, 99);
+            calls.Add((at, lines, scene.Session.QueryRandom().Draws));
+        };
+        return calls;
+    }
+
+    [TestMethod]
+    public void A_follower_that_stays_draws_the_one_in_three_roll_first_and_the_line_pick_after_it()
+    {
+        var scene = OpenFollowerHit(reaction: 100);
+        var calls = RecordDraws(scene);
+        ArrangeNextRoll(scene.Session, 1, 3, roll => roll == 1);
+        var before = scene.Session.QueryRandom().Draws;
+        scene.Host.HitFollower(scene.Companion, deliberate: false);
+        CollectionAssert.AreEqual(new[] { (before + 1, new LoyaltyLines(2300, 2399), before + 2) }, calls, "the roll (1 of 1..3) is one draw, the speaker's pick the next");
+        Assert.AreEqual(before + 2, scene.Session.QueryRandom().Draws);
+
+        ArrangeNextRoll(scene.Session, 1, 3, roll => roll != 1);
+        calls.Clear();
+        before = scene.Session.QueryRandom().Draws;
+        scene.Host.HitFollower(scene.Companion, deliberate: false);
+        Assert.AreEqual(0, calls.Count, "a roll of 2 or 3 says nothing");
+        Assert.AreEqual(before + 1, scene.Session.QueryRandom().Draws, "the roll alone is drawn: no pick");
+    }
+
+    [TestMethod]
+    public void An_inactive_follower_that_stays_draws_the_roll_but_no_pick()
+    {
+        var scene = OpenFollowerHit(reaction: 100);
+        var calls = RecordDraws(scene);
+        scene.Session.WriteObjectFlag(scene.Session.Version, scene.Companion, SessionObjectFlagField.Critter, SessionSpellCaster.ParalysedCritterFlag, true);
+        ArrangeNextRoll(scene.Session, 1, 3, roll => roll == 1);
+        var before = scene.Session.QueryRandom().Draws;
+        scene.Host.HitFollower(scene.Companion, deliberate: false);
+        Assert.AreEqual(0, calls.Count);
+        Assert.AreEqual(before + 1, scene.Session.QueryRandom().Draws, "the roll comes before the active test (0x4A9650), so it is drawn");
+    }
+
+    [TestMethod]
+    public void A_follower_that_leaves_draws_nothing_before_the_line_pick()
+    {
+        var scene = OpenFollowerHit(reaction: 40);
+        var calls = RecordDraws(scene);
+        var before = scene.Session.QueryRandom().Draws;
+        scene.Host.HitFollower(scene.Companion, deliberate: false);
+        AssertLeft(scene, left: true);
+        CollectionAssert.AreEqual(new[] { (before, new LoyaltyLines(1800, 1899), before + 1) }, calls, "no roll: the pick is the first draw");
+    }
+
+    // ARC-AI-1677 (AC3, 0x4AC380): the loyalty step's own leave (not the hero's hit) says the refusal line of its reason after JILTED is set, when the follower is active.
+    private static (LoyaltyStepResult Step, Scene Scene, List<(string Speaker, LoyaltyLines Lines)> Said) LoyaltyLeave(int reaction, Action<Scene>? arrange = null)
+    {
+        var scene = OpenFollowerHit(reaction);
+        var said = Listen(scene);
+        arrange?.Invoke(scene);
+        var result = scene.Session.RunLoyaltyStep(scene.Session.Version, scene.Companion, Consent(reaction), actionGoalRunning: false);
+        return (result.Step!.Value, scene, said);
+    }
+
+    [TestMethod]
+    public void A_follower_that_leaves_by_the_loyalty_step_says_the_refusal_line_of_its_reason()
+    {
+        var (step, scene, said) = LoyaltyLeave(reaction: 40);
+        Assert.AreEqual(LoyaltyStepKind.Left, step.Kind);
+        AssertLeft(scene, left: true);
+        Assert.AreEqual(new LoyaltyLines(1800, 1899), scene.Host.SayLoyaltyLeave(scene.Companion, step));
+        CollectionAssert.AreEqual(new[] { (scene.Companion, new LoyaltyLines(1800, 1899)) }, said);
+    }
+
+    [TestMethod]
+    public void A_paralysed_follower_that_leaves_by_the_loyalty_step_says_nothing()
+    {
+        var (step, scene, said) = LoyaltyLeave(reaction: 40, arrange: scene =>
+            scene.Session.WriteObjectFlag(scene.Session.Version, scene.Companion, SessionObjectFlagField.Critter, SessionSpellCaster.ParalysedCritterFlag, true));
+        Assert.AreEqual(LoyaltyStepKind.Left, step.Kind);
+        Assert.IsNull(scene.Host.SayLoyaltyLeave(scene.Companion, step));
+        Assert.AreEqual(0, said.Count);
+    }
+
+    [TestMethod]
+    public void A_loyalty_step_that_does_not_leave_says_no_refusal_line()
+    {
+        var scene = OpenFollowerHit(reaction: 100);
+        var said = Listen(scene);
+        var step = scene.Session.RunLoyaltyStep(scene.Session.Version, scene.Companion, Consent(100), actionGoalRunning: false).Step!.Value;
+        Assert.AreNotEqual(LoyaltyStepKind.Left, step.Kind);
+        Assert.IsNull(scene.Host.SayLoyaltyLeave(scene.Companion, step));
+        Assert.AreEqual(0, said.Count);
+    }
 }

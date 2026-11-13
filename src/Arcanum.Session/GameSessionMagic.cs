@@ -13,13 +13,13 @@ public sealed partial class GameSessionOwner
     public ISpellRollSource SpellRolls { get { ThrowIfDisposed(); return new SessionSpellRolls(this); } }
 
     /// <summary>
-    /// ARC-MAGIC-033 (D6c): the magic resistance a spell's save reads for the hero: the hero stores none, so the durable effects' <c>resistmagic</c> changes over 0 (Resist Magick on the
+    /// ARC-MAGIC-033 (D6c): the magic resistance a spell's save reads for the hero: the hero's stored magic resistance (zero unless a TraitIdx write set it, ARC-MAGIC-1658) under the durable effects' <c>resistmagic</c> changes (Resist Magick on the
     /// hero works), cut as a PC's resistance is (<see cref="SpellResistanceRules.ResistanceUnderEffects"/>). 0 with no hero or no such change.
     /// </summary>
     public int HeroSaveMagicResistance()
     {
         ThrowIfDisposed();
-        return _hero is null ? 0 : SpellResistanceRules.ResistanceUnderEffects(0, EffectDomain.Resistances(_effects.Entries, _effects.Definitions).Magic, false);
+        return _hero is null ? 0 : SpellResistanceRules.ResistanceUnderEffects(HeroStoredResistances().Magic, EffectDomain.Resistances(_effects.Entries, _effects.Definitions).Magic, false);
     }
 
     /// <summary>

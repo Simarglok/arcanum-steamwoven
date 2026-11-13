@@ -30,7 +30,7 @@ public sealed partial class GameSessionOwner
     /// line it prints is in <see cref="InventoryMutationResult.Messages"/> (the original posts it to the message window whoever picks the item up). The runs are under <see cref="SessionItemScripts.Admission"/>; a run the session cannot apply
     /// (a script outside the set, an effect or an object other than the hero's and the move's items, a line that differs by gender, whose NPC's gender is not read) refuses the pickup before any effect
     /// (<see cref="GameSessionFailure.ItemScriptUnsupported"/> or the run's own failure), the way the hero's pickup refuses it. The script host answers for the shown map's rows, so an item whose script row is another map's seed row is refused.
-    /// NOT READY: the room test of the NPC's grid (#1654), the item's pickup spell executor (0x4CBAA0, not run for an NPC) and the item sound of a local picker. A made item (<c>made:n</c>) shows the session no script point, so none is run for it, as in the hero's pickup.
+    /// The room test of the NPC's grid is the host's verdict (ARC-AI-1654, <see cref="QueryHolderRoom"/>). NOT READY: the item's pickup spell executor (0x4CBAA0, not run for an NPC) and the item sound of a local picker. A made item (<c>made:n</c>) shows the session no script point, so none is run for it, as in the hero's pickup.
     /// </summary>
     public InventoryMutationResult PickUpItemByNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck, SessionObjectTarget? mapPile = null, ISessionItemScriptHost? scripts = null)
     {
