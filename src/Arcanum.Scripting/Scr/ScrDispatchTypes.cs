@@ -265,6 +265,22 @@ public interface IScrCritterStateQueries
 }
 
 /// <summary>
+/// ARC-SCRIPT-1772 (ledger CQ1–CQ3): the getters of <see cref="ScrAdmissionSet.CritterFieldActions"/>. The original answers each from the object's own field when the object is an NPC (type 0x10) and 0 for every other object type (0x45D010 social class field 0x128,
+/// 0x45D290 origin field 0x123, 0x45D080 faction field 0x124). A host whose admission set holds one of them implements this interface. An answer is null when the host does not know the object (the dispatch ends not modelled, nothing applied).
+/// </summary>
+public interface IScrCritterFieldQueries
+{
+    /// <summary>Get social class (38): the NPC's social class (field 0x128), 0 for any other object type.</summary>
+    int? SocialClassOf(ScrObjectRef obj);
+
+    /// <summary>Get origin (39): the NPC's origin (field 0x123) as it is now (a dialog action's set origin over the map data's), 0 for any other object type.</summary>
+    int? OriginOf(ScrObjectRef obj);
+
+    /// <summary>Get faction (89): the NPC's faction (field 0x124) as it is now (a script's set faction over the map data's), 0 for any other object type.</summary>
+    int? FactionOf(ScrObjectRef obj);
+}
+
+/// <summary>
 /// ARC-SCRIPT-1661 (ledger CP12): the question of adjust stat (action 137, 0x447220 case 0x89), which the alignment weapon script 30252 runs at the wielder. A host whose admission set holds action 137 implements this interface.
 /// </summary>
 public interface IScrStatAdjustQueries
@@ -522,6 +538,10 @@ public enum ScrObjectStateChange
     DestroyItemNamed,
     /// <summary>ARC-SCRIPT-1164 (E5-b, ledger WO8): toggle item inventory display (127) of <see cref="ScrObjectStateRequest.Object"/> (the first object of operand 0, an item of type 5..14): bit 0x10 of its item flags (field 0x57) is flipped.</summary>
     ToggleItemInventoryDisplay,
+    /// <summary>ARC-SCRIPT-1772 (ledger CQ4, exe 0x447220 case 0x39): toggle invulnerability (57) of each object of its operand in list order: object flag 0x400000 (field 0x13) is set when clear and cleared when set, by the plain flag write (0x4EFF50, 0x4EFEE0 over 0x43D0E0, 0x43D280).</summary>
+    ToggleInvulnerability,
+    /// <summary>ARC-SCRIPT-1772 (ledger CQ5, case 0x5C): rename (92) of <see cref="ScrObjectStateRequest.Object"/>, the first object of operand 0: its name number (field 0x16, the class the name conditions compare, not display text) becomes <see cref="ScrObjectStateRequest.Value"/> as read, with no type test.</summary>
+    Rename,
 }
 
 /// <summary>ARC-SCRIPT-1164 (E5-b): which game state a <see cref="ScrWorldRequest"/> changes.</summary>
@@ -966,7 +986,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S53"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S54"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -987,7 +1007,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S53)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S53.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S54)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S54.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -1008,6 +1028,8 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with the animal condition needs a host that implements IScrCritterQueries.", nameof(Admission));
         if (host is not IScrCritterStateQueries && Admission.Conditions.Any(ScrAdmissionSet.CritterStateConditions.Contains))
             throw new ArgumentException("A set with a critter-state condition needs a host that implements IScrCritterStateQueries.", nameof(Admission));
+        if (host is not IScrCritterFieldQueries && Admission.Actions.Any(ScrAdmissionSet.CritterFieldActions.Contains))
+            throw new ArgumentException("A set with a critter getter (social class, origin, faction) needs a host that implements IScrCritterFieldQueries.", nameof(Admission));
         if (host is not IScrStatAdjustQueries && Admission.Actions.Contains(ScrCatalogue.Action.AdjustStat))
             throw new ArgumentException("A set with adjust stat needs a host that implements IScrStatAdjustQueries.", nameof(Admission));
         if (host is not IScrMagickTechQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetMagickTechAdjustment))
