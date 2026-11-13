@@ -952,6 +952,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             or AttackEventStop.VictimDecoy or AttackEventStop.VictimWall or AttackEventStop.Self) return;
         // ARC-WORLD-115: the attacker's followers first, right after the early exits (0x4A9B80, side attacker, the victim the other).
         if (plan.TellsAttackerFollowers) TellFollowers(attacker, victim, FollowerSide.Attacker);
+        // ARC-AI-1517 (HS14, VBG6, 0x4A9650 → 0x45EE30): the victim's PC leader (or the victim), when concealed, and all its followers stop prowling, whoever attacks:
+        // the hero and the followers in its follower list when the victim is the hero or a follower of it (a victim of no PC group holds no concealment here).
+        if (plan.LosesConcealment is not null) _session.EndConcealmentForAttackEvent(_session.Version, Combatant(victim)!);
         // ARC-MAGIC-1142 (HS14, 0x4A9650 at 0x4A983D): the NPC victim loses the kill-on-sight override (NPC flag 0x800) before the PC victim's response, whoever it was given by (a charm, the data).
         if (plan.ClearsKosOverride) ClearKosOverride(victim);
         // A PC victim responds (0x4A9AD0): first the dialog-end callback (0x5F848C → 0x5678D0(PC, 0), GT140: an attack on the PC ends the PC's dialog, whoever the partner is), then it enters combat mode (its call of 0x4B3F50).
