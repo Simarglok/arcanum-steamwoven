@@ -25,7 +25,7 @@ namespace Arcanum.Session;
 /// (the event queue or the life record budget is full) or the old and new level are not both readable; nothing is written then. The level message is the local PC's and the animation speed
 /// (0x436FA0) the host's. <b>Poison</b> (stat 24, ARC-MAGIC-1508) is the life state's level (<see cref="PoisonStat"/>). <b>Gender and race</b> (ARC-MAGIC-1509, cases 2 and 3 of the setter) remove the first entry of the gender (9) or race (0) cause from the NPC's effect list before the store (0x4EA2E0) and add the innate effect after it
 /// (0x4E9F70: race 0x40 + race with the race cause, gender 0 effect 0x14A with the gender cause), from the rules the host attached (<see cref="GameSessionOwner.AttachInnateEffects"/>; without the rule of the effect to add nothing is written);
-/// the race a store reaches (11, the table's last, a race the character rules do not have) is not ready.
+/// the race a store reaches (11, the table's last, a race the character rules do not have) is not ready by decision (ARC-MAGIC-1631, ledger RM3b: the setter would store it and add effect 75, but every race-keyed table of the original has eleven rows and race 11 reads past their ends).
 /// ARC-MAGIC-1510: an NPC whose stats the follower's advancement record holds reads and writes its sheet (<see cref="GameSessionOwner.WriteNpcAdvancementStat"/>), and the hero is written in its state (<c>TraitIndexHero</c>).
 /// ARC-MAGIC-1628: a record follower's gender is the stored field and the innate effect as for any NPC (the sheet holds none), its race the sheet's (not ready when the new race's ranges leave the sheet invalid); the hero's poison is its life state's level,
 /// its magick and tech points are stored when no worn item has a wield script (<see cref="GameSessionOwner.HeroRewieldReady"/>), and its experience runs the level recalculation (0x4A69C0) after the store, queueing the award for the host as an
@@ -115,7 +115,7 @@ public sealed partial class SessionSpellCaster
         }
         // ARC-MAGIC-1509 (cases 2 and 3 of the setter, 0x4B0E74): gender and race remove the first innate entry of their cause before the store (0x4EA2E0) and add the new innate effect after it (0x4E9F70: race
         // 0x40 + race with the race cause; gender 0 effect 0x14A with the gender cause, gender 1 adds nothing). The rule of the effect to add is the host's: without it, nothing is written. A race beyond the character
-        // rules' ten (11, the table's last) is not ready: the consumers of an NPC's stored fields read none for it.
+        // rules' ten (11, the table's last) is not ready by decision (ARC-MAGIC-1631, ledger RM3b): the setter would store it and add effect 75, but the original's race-keyed tables (reaction 0x5B684C, ...) have eleven rows and are read past their ends for it.
         SessionEffectDefinition? innate = null;
         var swaps = data.Index is 26 or 27;
         if (swaps)

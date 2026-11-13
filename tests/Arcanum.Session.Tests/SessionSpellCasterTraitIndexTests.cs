@@ -434,6 +434,22 @@ public sealed partial class SessionSpellCasterTraitIndexTests
         Assert.AreEqual(0, Held(owner, target).Length);
     }
 
+    // ARC-MAGIC-1631 (ledger RM3b): the setter stores race 11 (clamp maximum 11) and adds effect 75, but every race-keyed table of the original has eleven rows, so an NPC of race 11 would read past them
+    // (the reaction table 0x5B684C: row 11 is text and pointers): the component stays not ready and the store that only reaches 11 by an addend leaves the race, its effect and the version as they were.
+    [TestMethod]
+    public void An_orc_pushed_to_the_races_eleventh_slot_by_one_is_not_ready_and_keeps_its_race_and_race_effect()
+    {
+        var (owner, caster, target) = Innate(race: 10);
+        using var _o = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, DwarfEffect, EffectCause.Race).Disposition);
+        var version = owner.Version;
+        Assert.IsNull(caster.Apply(Run(RaceDwarf), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        Assert.IsTrue(NotReady(caster));
+        Assert.AreEqual(version, owner.Version);
+        Assert.IsFalse(owner.QueryCritterIndexedWrites(Rat).Stats.ContainsKey(27), "nothing stored: the race stays the map's 10");
+        CollectionAssert.AreEqual(new[] { (65, EffectCause.Race) }, Held(owner, target));
+    }
+
     [TestMethod]
     public void The_innate_rules_the_host_attaches_are_checked()
     {
