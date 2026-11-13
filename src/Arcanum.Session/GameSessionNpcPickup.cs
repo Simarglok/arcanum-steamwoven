@@ -1,3 +1,5 @@
+using Arcanum.Simulation.Combat;
+
 namespace Arcanum.Session;
 
 /// <summary>
@@ -16,9 +18,14 @@ public sealed partial class GameSessionOwner
     /// in flight or destroyed (<see cref="GameSessionFailure.ItemNotAvailable"/>), gold or keys (<see cref="GameSessionFailure.ItemTypeUnsupported"/>: the lists do not admit them), an item with a get or insert-item
     /// script, which the session does not run for an NPC (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), a full list, store or ammunition budget or a sum past 32 bits
     /// (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision, the host's verdict (<see cref="GameSessionFailure.InsertRefused"/>; a call back into the owner from it is
-    /// <see cref="GameSessionFailure.StaleVersion"/>). NOT READY: the get and insert-item scripts of the item, and the item sound of a local picker.
+    /// <see cref="GameSessionFailure.StaleVersion"/>). ARC-AI-1486: <paramref name="mapPile"/> names a standing junk pile of the map's data (a container holder of the actor's map's seed, <see cref="SessionObjectBaseline.JunkPile"/>)
+    /// the item lies in, a seed item of its list that is still there (<see cref="GameSessionFailure.InvalidObject"/> for a target that is no junk pile, <see cref="GameSessionFailure.UnknownHolder"/> for a container the seed
+    /// does not have, <see cref="GameSessionFailure.ItemNotAvailable"/> for an item that is not in its list or a pile that is gone); the item then leaves that list like a loose seed item leaves the ground. A junk pile the item
+    /// leaves, the session's or the map's, is checked as the removal does (0x467860 at 0x467C26, JP5): left with one item or none it dissolves at once (the last item is dropped again with a new decay event); the host has
+    /// tested that no container's loot window is open (the goal's end 0x42AA70 reads the switch), so the check is never held back here. A pile of the map's data goes as a map change, which takes a revision of its own.
+    /// NOT READY: the get and insert-item scripts of the item (#1655), the room test of the NPC's grid (#1654) and the item sound of a local picker.
     /// </summary>
-    public InventoryMutationResult PickUpItemByNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck)
+    public InventoryMutationResult PickUpItemByNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck, SessionObjectTarget? mapPile = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -27,6 +34,17 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         if (!KnownNpc(npc)) return RejectItem(GameSessionFailure.UnknownHolder);
         if (_durability.Destroyed.Contains(item) || ItemInFlight(item)) return RejectItem(GameSessionFailure.ItemNotAvailable);
+        // ARC-AI-1486: an item of a junk pile of the map's data (a standing container of prototype 3043 the host names by its target) leaves that container's list; its seed holder is read here.
+        SessionSeedHolder? mapPileHolder = null;
+        if (mapPile is not null)
+        {
+            if (!ValidObject(mapPile) || mapPile.Baseline.Kind != DamageableObjectKind.Container || !mapPile.Baseline.JunkPile) return RejectItem(GameSessionFailure.InvalidObject);
+            if (mapPile.Map != _actor.Map || !_inventory.Seeds.TryGetValue(mapPile.Map, out var pileSeed) || !pileSeed.Holders.TryGetValue(mapPile.Entity, out mapPileHolder) ||
+                mapPileHolder.Kind != SessionHolderKind.Container)
+                return RejectItem(GameSessionFailure.UnknownHolder);
+            if (ObjectState(mapPile).Condition != SessionObjectCondition.Whole || !mapPileHolder.Items.Contains(item, StringComparer.Ordinal) || _inventory.Taken.Contains(item) || Dropped(item))
+                return RejectItem(GameSessionFailure.ItemNotAvailable);
+        }
         var pile = _inventory.Objects.PileOf(item);
         if (pile is not null && pile.Map != _actor.Map) return RejectItem(GameSessionFailure.ItemNotAvailable);
         // What lies there: the hero's or a script's placed item, or a seed item that is loose and not taken.
@@ -44,7 +62,7 @@ public sealed partial class GameSessionOwner
         else
         {
             if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
-            if (!seed.Items.TryGetValue(item, out var row) || _inventory.Taken.Contains(item) || LooseCell(_actor.Map, seed, item) is null)
+            if (!seed.Items.TryGetValue(item, out var row) || _inventory.Taken.Contains(item) || mapPile is null && LooseCell(_actor.Map, seed, item) is null)
                 return RejectItem(GameSessionFailure.ItemNotAvailable);
             facts = _inventory.WithAmmo(item, row.Facts);
             if (pile is not null && LooseCell(_actor.Map, seed, item) != pile.Cell) return RejectItem(GameSessionFailure.ItemNotAvailable);
@@ -75,7 +93,7 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         // The callback changed nothing the move rests on: the revision, the attached seeds, the shown map, the item's place.
         if (_revision != revision || _inventory.SeedGeneration != seeds || _actor.Map != map || _inventory.PlacedItem(item) != placed ||
-            !ReferenceEquals(_inventory.Objects.PileOf(item), pile) || !KnownNpc(npc) || _durability.Destroyed.Contains(item))
+            !ReferenceEquals(_inventory.Objects.PileOf(item), pile) || !KnownNpc(npc) || _durability.Destroyed.Contains(item) || _inventory.Taken.Contains(item) && placed is null)
             return RejectItem(GameSessionFailure.StaleVersion, verdict);
         if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict);
         if (into is { } stack)
@@ -108,7 +126,12 @@ public sealed partial class GameSessionOwner
         }
         if (pile is not null) _inventory.Objects.LeaveItem(item);
         CancelDecay(item);
+        // ARC-AI-1486 (JP5, 0x467860 at 0x467C26): the removal checks a container it took an item from while no container's loot window is open (the switch 0x5E8800 above 0, which the goal's end 0x42AA70 tested before it
+        // got here): a pile left with one item or none dissolves at once (the last item is dropped again with a decay two days on). A pile the session made goes in this revision; one of the map's data is a map change that
+        // takes a revision of its own.
+        if (pile is not null && _inventory.Objects.Pile(pile.Entity) is { } left) DissolveJunkPile(left);
         Revise();
+        if (mapPile is not null && mapPileHolder is not null && _inventory.Seeds.TryGetValue(mapPile.Map, out var standing)) DissolveMapJunkPile(Version, mapPile, standing, mapPileHolder);
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, into?.Entity ?? item, verdict, Version);
     }
 }

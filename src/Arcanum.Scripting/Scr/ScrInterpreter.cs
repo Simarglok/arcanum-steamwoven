@@ -219,6 +219,8 @@ internal sealed class ScrInterpreter
         ScrCatalogue.Condition.PcQuestState => ScrGuards.Holds(c.Type, Object(c, 0, line), Get(c, 1), Get(c, 2), Queries),
         ScrCatalogue.Condition.HasItemNamed or ScrCatalogue.Condition.IsNamed or ScrCatalogue.Condition.IsWieldingItem or ScrCatalogue.Condition.HasReputation
             => ScrGuards.Holds(c.Type, Object(c, 0, line), Get(c, 1), 0, Queries),
+        // CP9 (0x4451B0 case 0x25): the objects of the operand that are NPCs with the animal critter flag; the list rule of the other object tests.
+        ScrCatalogue.Condition.IsAnimal => ListHolds(c, obj => Critters.IsAnimal(obj) ?? throw new MissingObjectStop(line)),
         // WE5: the identified count over the operand's objects; none identified is false and, for one object, all is true. An absent
         // object names none, so the condition fails (the set's focus kinds name at most one object).
         ScrCatalogue.Condition.Identified => Objects(c, 0).Count(obj => Items.IsIdentified(obj) ?? throw new MissingObjectStop(line)) > 0,
@@ -527,6 +529,16 @@ internal sealed class ScrInterpreter
                 var item = Object(a, 1, line); var owner = Object(a, 2, line);
                 var ratio = Items.PowerRatio(item, owner) ?? throw new MissingObjectStop(line);
                 Set(a, 3, unchecked(ratio * value + 50) / 100, line);
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.GetMagickTechAdjustment:
+            {
+                // CP7 (0x44933F): the value, the item, the attacker and the target, then (100 − the cancel chance 0x461620) × value / 100 into operand 4, with the original's 32-bit wrap of the product and its division, which truncates toward
+                // zero. An absent object or one the host does not know stops the run (the original reads a null handle's fields).
+                var value = Get(a, 0);
+                var item = Object(a, 1, line); var attacker = Object(a, 2, line); var target = Object(a, 3, line);
+                var percent = MagickTech.MagickCancelPercent(item, attacker, target) ?? throw new MissingObjectStop(line);
+                Set(a, 4, unchecked((100 - percent) * value) / 100, line);
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.PlayScriptEyeCandy:
@@ -1319,6 +1331,12 @@ internal sealed class ScrInterpreter
 
     private IScrVitalQueries Vitals => _host as IScrVitalQueries
         ?? throw new InvalidOperationException("SCR_VITAL_QUERIES_REQUIRED: the admission set holds get hit points or get fatigue points and the host cannot answer it.");
+
+    private IScrCritterQueries Critters => _host as IScrCritterQueries
+        ?? throw new InvalidOperationException("SCR_CRITTER_QUERIES_REQUIRED: the admission set holds the animal condition and the host cannot answer it.");
+
+    private IScrMagickTechQueries MagickTech => _host as IScrMagickTechQueries
+        ?? throw new InvalidOperationException("SCR_MAGICK_TECH_QUERIES_REQUIRED: the admission set holds get magick-tech adjustment and the host cannot answer it.");
 
     private IScrItemQueries Items => _host as IScrItemQueries
         ?? throw new InvalidOperationException("SCR_ITEM_QUERIES_REQUIRED: the admission set holds an item question the host cannot answer.");

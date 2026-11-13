@@ -260,6 +260,46 @@ public sealed class AreaCombatHost : IAreaEventObjects
         return Held(runtimeMap, out var map) && ItemSource(map, item, out var fields) ? fields : null;
     }
 
+    /// <summary>ARC-AI-1486: the junk piles of the map's data that still stand on a map this host covers, with the cell of each and the target the session names it by (<see cref="AreaContainerLoot.MapJunkPile"/>),
+    /// in the order of the map's seed; only the piles whose cell <paramref name="near"/> admits are read.</summary>
+    public IReadOnlyList<(string Entity, CellCoord Cell, SessionObjectTarget Target)> MapJunkPiles(GameSessionOwner session, int runtimeMap, Func<CellCoord, bool> near)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(near);
+        if (!Held(runtimeMap, out var map)) return [];
+        var piles = new List<(string, CellCoord, SessionObjectTarget)>();
+        foreach (var holder in map.Seed.Holders)
+        {
+            if (holder.Kind != SessionHolderKind.Container || !map.TryGetRow(holder.Entity, out var row) || row is not { WorldX: { } x, WorldY: { } y } ||
+                x is < int.MinValue or > int.MaxValue || y is < int.MinValue or > int.MaxValue || !near(new((int)x, (int)y))) continue;
+            if (AreaContainerLoot.MapJunkPile(session, map, holder.Entity) is { } found) piles.Add((holder.Entity, found.Cell, found.Target));
+        }
+        return piles;
+    }
+
+    /// <summary>ARC-AI-1486: the named container as a standing junk pile of the map's data on a map this host covers, with the items its seed lists in it (the barter's added items are not a seed's), or null.</summary>
+    public (Arcanum.Simulation.Movement.CellCoord Cell, IReadOnlyList<string> SeedItems)? MapJunkPileNamed(GameSessionOwner session, int runtimeMap, string container)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(container);
+        if (!Held(runtimeMap, out var map) || map.Seed.Holders.FirstOrDefault(holder => holder.Entity == container && holder.Kind == SessionHolderKind.Container) is not { } found) return null;
+        return AreaContainerLoot.MapJunkPile(session, map, container) is { } pile ? (pile.Cell, found.Items) : null;
+    }
+
+    /// <summary>ARC-AI-1486: the standing junk pile of the map's data on a map this host covers whose seed lists <paramref name="item"/> in it (the session's current list tells whether the item is still there), or null.</summary>
+    public (string Entity, CellCoord Cell, SessionObjectTarget Target)? MapJunkPileHolding(GameSessionOwner session, int runtimeMap, string item)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(item);
+        if (!Held(runtimeMap, out var map)) return null;
+        foreach (var holder in map.Seed.Holders)
+        {
+            if (holder.Kind != SessionHolderKind.Container || !holder.Items.Contains(item, StringComparer.Ordinal) || AreaContainerLoot.MapJunkPile(session, map, holder.Entity) is not { } found) continue;
+            return session.QueryHolderItems(holder.Entity)?.Any(listed => listed.Entity == item) == true ? (holder.Entity, found.Cell, found.Target) : null;
+        }
+        return null;
+    }
+
     /// <summary>ARC-WORLD-108: the NPC of a map this host covers that holds the item now (0x4612A0 for an NPC's item), or null.</summary>
     public string? NpcHolder(GameSessionOwner session, int runtimeMap, string item)
     {
