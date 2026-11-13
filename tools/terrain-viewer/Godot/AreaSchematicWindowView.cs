@@ -93,6 +93,31 @@ public partial class AreaSchematicWindowView : Control
     {
         _art = art ?? throw new ArgumentNullException(nameof(art));
         _fonts = fonts ?? throw new ArgumentNullException(nameof(fonts));
+        Unwatch();
+        // ARC-UI-1199: the generated interface paints the window's frames at this window's own device scale (the control's scale, the canvas transform's and the viewport's stretch),
+        // and the view redraws when a worker's finished frame replaces the one it drew (it draws the textures in its own _Draw).
+        _onTextureChanged ??= () => { if (GodotObject.IsInstanceValid(this)) QueueRedraw(); };
+        foreach (var texture in art.Values.SelectMany(frames => frames))
+        {
+            if (texture is not HdInterfaceTexture hd) continue;
+            hd.ScaleSource = DeviceScale;
+            if (_watched.Add(hd)) hd.Changed += _onTextureChanged;
+        }
+    }
+
+    // ARC-UI-1199: the frames this view drew with its own device scale, and the scale the last draw asked for.
+    private readonly HashSet<HdInterfaceTexture> _watched = [];
+    private Action? _onTextureChanged;
+    private float _drawnScale;
+
+    /// <summary>ARC-UI-1199: device pixels per Legacy pixel of this window (what the generated frames are painted at).</summary>
+    internal float DeviceScale() =>
+        GodotObject.IsInstanceValid(this) && IsInsideTree() ? GetGlobalTransformWithCanvas().Scale.X * GetViewport().GetStretchTransform().Scale.X : Scale.X;
+
+    private void Unwatch()
+    {
+        if (_onTextureChanged is { } handler) foreach (var texture in _watched) texture.Changed -= handler;
+        _watched.Clear();
     }
 
     /// <summary>Texts the window needs that the view does not carry: the hover texts of the list tabs and the assemble button (schematic_text.mes 3..5)
@@ -129,6 +154,8 @@ public partial class AreaSchematicWindowView : Control
             InterfaceHd.Enabled && InterfaceHd.Pack is not null);
         Scale = new Vector2(scale, scale);
         Position = position;
+        // ARC-UI-1199: a new device scale (the window or the stretch changed) asks the textures for frames at it.
+        if (IsInsideTree() && _view is not null && MathF.Abs(DeviceScale() - _drawnScale) > 0.001f) QueueRedraw();
     }
 
     private Texture2D? Art(int number, int frame = 0) => AreaCharacterArtDraw.Art(_art, number, frame);
@@ -201,6 +228,7 @@ public partial class AreaSchematicWindowView : Control
     public override void _Draw()
     {
         if (_fonts is not { } fonts || _view is not { } view) return;
+        _drawnScale = DeviceScale();
         DrawWindow();
         for (var discipline = 0; discipline < AreaSchematicWindowLayout.Disciplines; discipline++)
             DrawArt(AreaSchematicWindowLayout.DisciplineArt(discipline), AreaSchematicWindowLayout.DisciplineTab(discipline),
