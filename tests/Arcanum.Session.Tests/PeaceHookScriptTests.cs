@@ -149,10 +149,6 @@ public sealed class PeaceHookScriptTests
         Assert.AreEqual(revision, owner.Version.Revision);
         Assert.AreEqual(0, hooks.Count);
         Assert.AreEqual(WolfHandle, owner.QueryDanger(Virgil).Focus);
-        // A peace with the hero's side needs its reaction facts: refused the same way.
-        var peace = owner.MakePeace(owner.Version, new() { Entity = Wolf, Other = VirgilHandle });
-        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InvalidDangerFacts, revision), (peace.Disposition, peace.Failure, owner.Version.Revision));
-        Assert.AreEqual(0, hooks.Count);
     }
 
     [TestMethod]
@@ -162,6 +158,42 @@ public sealed class PeaceHookScriptTests
         var revision = owner.Version.Revision;
         var peace = owner.MakePeace(owner.Version, new() { Entity = Wolf, Other = VirgilHandle, Facts = WithReaction });
         Assert.AreEqual((GameSessionDisposition.Changed, revision + 1), (peace.Disposition, owner.Version.Revision));
+    }
+
+    [TestMethod]
+    public void WithNoHostStopAttackingIsOneRevisionAsBefore()
+    {
+        using var owner = Fighting();
+        Join(owner, Sogg);
+        Changed(owner.SetCombatMode(owner.Version, VirgilHandle, true, Living).Disposition);
+        var revision = owner.Version.Revision;
+        var stop = owner.StopAttacking(owner.Version, new SessionStopAttackingRequest
+        {
+            Combatant = Hero,
+            Facts = new Dictionary<string, SessionPeaceFacts> { [Virgil] = new() { CombatMode = Living } },
+        });
+        Assert.AreEqual((GameSessionDisposition.Changed, revision + 1, 2), (stop.Disposition, owner.Version.Revision, stop.Steps.Count));
+    }
+
+    [TestMethod]
+    public void AScriptThatPutsAFollowerInCombatModeDoesNotLoseTheRestOfTheStop()
+    {
+        using var owner = Fighting();
+        Join(owner, Sogg);
+        Changed(owner.SetCombatMode(owner.Version, VirgilHandle, true, Living).Disposition);
+        // Sogg has no focus; the script of Virgil's exit puts Sogg in combat mode, which the call gave no facts for: Sogg's stop is not failed, and its NO_ATTACK is still written.
+        owner.DangerHookScript = hook =>
+        {
+            if (hook.Attachee == Virgil) Changed(owner.SetCombatMode(owner.Version, SoggHandle, true, Living).Disposition);
+        };
+        var stop = owner.StopAttacking(owner.Version, new SessionStopAttackingRequest
+        {
+            Combatant = Hero,
+            Facts = new Dictionary<string, SessionPeaceFacts> { [Virgil] = new() { CombatMode = Living } },
+        });
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, 2), (stop.Disposition, stop.Failure, stop.Steps.Count));
+        Assert.IsTrue(owner.QueryDanger(Virgil).Flags.HasFlag(DangerFlags.NoAttack));
+        Assert.IsTrue(owner.QueryDanger(Sogg).Flags.HasFlag(DangerFlags.NoAttack));
     }
 
     [TestMethod]

@@ -189,7 +189,8 @@ public sealed partial class GameSessionOwner
         return PlanPeace(plan, npc, focus, facts, (rest, step) =>
         {
             var failure = rest.LeaveCombatMode(npc, facts.CombatMode, out var left);
-            return failure != GameSessionFailure.None ? failure : Close(rest, step with { Interrupted = true, LeftCombatMode = left });
+            if (failure != GameSessionFailure.None && !rest.Continued) return failure;
+            return Close(rest, step with { Interrupted = true, LeftCombatMode = left });
         });
     }
 

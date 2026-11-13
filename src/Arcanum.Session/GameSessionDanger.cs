@@ -420,8 +420,12 @@ public sealed partial class GameSessionOwner
         // plan (the live state, the script's own writes included) once this one is committed and its script has run.
         private Func<DangerPlan, GameSessionFailure>? _then;
 
-        // True for the dry run (<see cref="Preview"/>): the rest runs at once on the same plan and nothing is committed.
+        // True for the dry run (<see cref="PreviewDanger"/>): the rest runs at once on the same plan and nothing is committed.
         internal bool Inline { get; init; }
+
+        // True for the plan of a cut call's rest: it runs after a script that may have moved the state the dry run saw, so a step that needs facts the caller could not give for that new state is skipped, not failed
+        // (the original has no failure path there and finishes the call).
+        internal bool Continued { get; init; }
 
         // How many hooks the plan holds, so that a caller can tell whether a setter call queued one.
         internal int HookCount => _hooks.Count;
@@ -438,13 +442,13 @@ public sealed partial class GameSessionOwner
         internal GameSessionFailure Check() =>
             Commit(new SessionDangerResult(GameSessionDisposition.NoChange, GameSessionFailure.None, owner.Version), (r, _, _) => r, owner.RejectDanger, apply: false).Failure;
 
-        // The rest of a cut plan, on a fresh plan over the state the script left. The dry run checked the facts and budgets of the whole call, so a failure here (a script that moved the state) leaves the rest undone
-        // and does not reject the call, whose first part is committed; like the entering call's late rules.
+        // The rest of a cut plan, on a fresh plan over the state the script left. The dry run checked the facts and budgets of the whole call, so a failure of the rest's commit (a budget a script moved) leaves
+        // the rest undone and does not reject the call, whose first part is committed, like the entering call's late rules; the steps the call reports are then those planned.
         private void RunThen()
         {
             if (_then is not { } rest) return;
             _then = null;
-            var next = new DangerPlan(owner);
+            var next = new DangerPlan(owner) { Continued = true };
             if (rest(next) != GameSessionFailure.None) return;
             next.Commit(new SessionDangerResult(GameSessionDisposition.NoChange, GameSessionFailure.None, owner.Version),
                 (r, disposition, version) => r with { Disposition = disposition, Version = version }, owner.RejectDanger);
@@ -676,6 +680,7 @@ public sealed partial class GameSessionOwner
             var leaving = _leavesCombatMode.Where(owner._combat.Critters.Contains).ToArray();
             if (changed.Length == 0 && leaving.Length == 0 && writes.Length == 0 && armed.Length == 0)
             {
+                // A cut plan always changed something (its setter call moved the state bits), so no hook is lost here; the rest of a plan that changed nothing still runs.
                 if (apply) RunThen();
                 return with(result, GameSessionDisposition.NoChange, owner.Version);
             }
@@ -700,6 +705,7 @@ public sealed partial class GameSessionOwner
             // ARC-WORLD-045 (OL17): a reaction drop of a follower arms its leader check in the same revision.
             foreach (var arm in armed) owner._party.Put(arm, false);
             owner.Revise();
+            // The rest runs even when a host hook throws something that is not swallowed (RunHooks has run every hook by then, and the original goes on after a script); that error is raised after the rest.
             try { RunHooks(); }
             finally { RunThen(); }
             return with(result, GameSessionDisposition.Changed, owner.Version);
