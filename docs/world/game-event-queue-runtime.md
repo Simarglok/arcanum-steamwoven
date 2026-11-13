@@ -195,7 +195,7 @@ again with the interval of the level then: the level is read from the NPC's list
 stored strength (`ISessionNpcStatsWorld.StoredStats`, the viewer's combat host with the written entries laid over). A pass world that
 cannot give the stats (or an NPC the seed does not list) schedules no next one: the timer ends after one drain, the difference from the
 original (the hero's level is the session's own). ARC-MAGIC-1651: such an end is reported, not silent: `SessionEventPassResult.NpcEncumbranceEnds`
-lists it with its reason (`SessionNpcEncumbranceEndReason`: the pass world gives no stats, the world has no combat row for the NPC, the level is unreadable
+(session level: the viewer's frame step does not forward it to its report yet) lists it with its reason (`SessionNpcEncumbranceEndReason`: the pass world gives no stats, the world has no combat row for the NPC, the level is unreadable
 because the seed does not list the NPC or its list or stats do not fit, or the next timer could not be scheduled); a chain that ends because the level fell
 below 4 is the rule and is not listed. The viewer's side is tested: the combat host's `StoredStats` (the written entries over the row), `AreaEventWorld.StoredStats`
 (forwarded from the shown map's combat host by identity; the map argument is not used, as `CritterFacts`' is not, while events fire on the shown map) and a created
