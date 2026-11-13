@@ -10,9 +10,9 @@ import tempfile
 import unittest
 import zlib
 from unittest.mock import patch
-from . import gamepad_export_gates as gates
-from . import gamepad_matrix_authority as authority
-from . import gamepad_export_locks as locks
+from tools.local_dev import gamepad_export_gates as gates
+from tools.local_dev import gamepad_matrix_authority as authority
+from tools.local_dev import gamepad_export_locks as locks
 import subprocess
 import sys
 
