@@ -127,6 +127,8 @@ public partial class TerrainViewerApp
                 OpenInventory();
                 Require(_inventoryPanel is { ArtMode: true }, "the own window shows the original's look");
                 await WindowArtSmokeAsync("inventory", _inventoryPanel!.GridAreaForSelfTest, [AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.DollArt, AreaInventoryHole.InventoryArt]);
+                // ARC-UI-1196: and the logbook (the opt-in bar smoke does not reach it: issue #1759).
+                await LogbookArtSmokeAsync();
             }
             GD.Print($"ARC-DEV-333 loot-room body={body.Entity} plain={plain.Length} frameRows={height} predicted={predicted} moved={movedFirst.Length} left={leftFirst.Length} later={leftLast.Length} pc={before}->{pcAfterFirst}");
         }

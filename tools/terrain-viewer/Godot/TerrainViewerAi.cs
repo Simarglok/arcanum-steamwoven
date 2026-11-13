@@ -136,9 +136,12 @@ public partial class TerrainViewerApp
                 .Select(bed => (bed.Key, new CellCoord(checked((int)bed.Row.WorldX!.Value), checked((int)bed.Row.WorldY!.Value))))];
 
     // ARC-AI-1655: the lines an NPC's pickup made the item's scripts print, as the message window posts any script's printed line.
-    private void PostNpcPickupLines(AreaAiNotice notice)
+    private void PostNpcPickupLines(AreaAiNotice notice) => PostScriptLines(notice.Messages);
+
+    // ARC-AI-1655, ARC-MAGIC-1745: printed lines of item scripts an NPC's move ran (pickup, wield, rewield, regeneration's best-items wield), posted as any script's printed line.
+    private void PostScriptLines(IEnumerable<SessionScriptMessage> lines)
     {
-        foreach (var entry in AreaScriptMessages.Entries(notice.Messages.Select(message => new AreaPrintedLine(message.Kind, message.Text)))) PostMessage(entry, "script line");
+        foreach (var entry in AreaScriptMessages.Entries(lines.Select(message => new AreaPrintedLine(message.Kind, message.Text)))) PostMessage(entry, "script line");
     }
 
     /// <summary>The scene the shown window gives the AI host: its chart and evidence, the rows its map data holds (the companions and the NPCs the party leads
@@ -827,6 +830,8 @@ public partial class TerrainViewerApp
                     // ARC-RENDER-1485: the gate's re-wield (or a pickup's CHECK_WIELD) changed what the NPC wears: its body shows the new weapon and shield (0x465020), so it is drawn again.
                     GD.Print($"ARC-RENDER-1485 ai-rewield npc={notice.Npc} shown={host.ShownWeapon(notice.Npc)}");
                     RewieldedNpcs(host).Add(notice.Npc);
+                    // ARC-MAGIC-1684: a line a moved item's wield or insert script printed goes to the message window.
+                    PostNpcPickupLines(notice);
                     redraw = true;
                     break;
                 case AreaAiNoticeKind.Skill:
@@ -927,6 +932,8 @@ public partial class TerrainViewerApp
         var life = hero ? owner.QueryHeroLife() : _combatHost?.Build(owner, notice.Target!).Combat is { } combat ? owner.QueryLife(combat.Target).View : null;
         _aiNotice = $"{AiName(notice.Npc)} attacks {(hero ? "the hero" : AiName(notice.Target!))}: "
             + AreaCombatHost.Describe(result, life?.Status.HitPoints, life?.Status.MaxHitPoints);
+        // ARC-COMBAT-1738 (0x4B4390 → 0x4B83E0): a hero whose weapon the strike took (dropped, destroyed or broken by a critical) wields the best weapon it still holds, before anything reads its equipment.
+        if (hero) HeroWeaponLostToStrike(result, EntityRow(notice.Npc), false);
         FloatCritterAttack(result, notice.Npc, hero ? HeroFloater : notice.Target!);
         // ARC-AI-1527 (0x4AEAB0): a follower of the PC an NPC's hit brought below a fifth of its hit points says its near-death line.
         FollowerAttackComments(result, notice.Npc, hero ? HeroFloater : notice.Target!);

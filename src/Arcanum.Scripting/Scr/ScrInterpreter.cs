@@ -236,6 +236,11 @@ internal sealed class ScrInterpreter
         ScrCatalogue.Condition.IsInvulnerable => ListHolds(c, obj => CritterStates.IsInvulnerable(obj) ?? throw new MissingObjectStop(line)),
         ScrCatalogue.Condition.IsUndead => ListHolds(c, obj => CritterStates.IsUndead(obj) ?? throw new MissingObjectStop(line)),
         ScrCatalogue.Condition.IsProwling => ListHolds(c, obj => CritterStates.IsProwling(obj) ?? throw new MissingObjectStop(line)),
+        // CS12–CS14 (ARC-SCRIPT-1771; 0x4451B0 cases 11, 19 and 34): bad associates and monster of type follow the list rule (the type is read once for the whole list; the original reads the list first, 0x44B4E0, then the value, 0x44BA70, which differs only if reading the value could stop the run); within range takes the first object of operand 0 and three values, and is true when the tile distance
+        // of its location and the point (x operand 2, y operand 3) is at most the range of operand 1.
+        ScrCatalogue.Condition.BadAssociates => ListHolds(c, obj => CritterStates.HasBadAssociates(obj) ?? throw new MissingObjectStop(line)),
+        ScrCatalogue.Condition.MonsterOfType => MonsterOfTypeHolds(c, line),
+        ScrCatalogue.Condition.WithinRange => WithinRange(c, line),
         // WE5: the identified count over the operand's objects; none identified is false and, for one object, all is true. An absent
         // object names none, so the condition fails (the set's focus kinds name at most one object).
         ScrCatalogue.Condition.Identified => Objects(c, 0).Count(obj => Items.IsIdentified(obj) ?? throw new MissingObjectStop(line)) > 0,
@@ -247,6 +252,10 @@ internal sealed class ScrInterpreter
         ScrCatalogue.Condition.IsSwitchedOff => ListHolds(c, obj => _shared.Toggled.Contains(obj) != (States.IsSwitchedOff(obj) ?? throw new MissingObjectStop(line))),
         // SC1: the four body bits (0x3C) of the spell flags (case 0x4458D5, field 0x14 through 0x406CA0), over the operand's objects by the list rule of SG6.
         ScrCatalogue.Condition.HasBodySpell => ListHolds(c, obj => ((Spells.SpellFlags(obj) ?? throw new MissingObjectStop(line)) & BodySpellFlags) != 0),
+        // SC18 (ARC-SCRIPT-1734, 0x4451B0 cases 0xC, 0xD, 0x10): polymorphed (0x20000), shrunk (0x80000) and mirror image (0x40000), each a single bit of the same spell flags word (field 0x14, 0x406CA0), over the operand's objects by the list rule of SG6.
+        ScrCatalogue.Condition.IsPolymorphed => ListHolds(c, obj => ((Spells.SpellFlags(obj) ?? throw new MissingObjectStop(line)) & PolymorphedSpellFlag) != 0),
+        ScrCatalogue.Condition.IsShrunk => ListHolds(c, obj => ((Spells.SpellFlags(obj) ?? throw new MissingObjectStop(line)) & ShrunkSpellFlag) != 0),
+        ScrCatalogue.Condition.HasMirrorImage => ListHolds(c, obj => ((Spells.SpellFlags(obj) ?? throw new MissingObjectStop(line)) & MirrorImageSpellFlag) != 0),
         // SC2: influenced by (0x459380) the spell of operand 1, SC3: knows (0x4B1950) the spell of operand 1, SC4: its mastered college (0x4B1CB0) equals operand 1 (−1 matches an object with no mastery, and any object that is not a PC or NPC).
         ScrCatalogue.Condition.InfluencedBySpell => SpellHolds(c, line, (obj, spell) => Spells.IsInfluencedBy(obj, spell)),
         ScrCatalogue.Condition.KnowsSpell => SpellHolds(c, line, (obj, spell) => Spells.KnowsSpell(obj, spell)),
@@ -576,6 +585,16 @@ internal sealed class ScrInterpreter
                 // WE4: the table entry, then the object; an absent object shows nothing (the original passes a null handle on).
                 var number = Get(a, 0);
                 if (OptionalObject(a, 1) is { } on) _shared.EyeCandies.Add(new(number, on));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.PlaySpellEyeCandy:
+            case ScrCatalogue.Action.StopScriptEyeCandy:
+            {
+                // WE11, WE12 (ARC-SCRIPT-1734, 0x447220 cases 0x68 and 0x7C): the number, then the object, as play script eye candy (120); an absent object does nothing. Play spell (104, 0x456E60) shows the spell eye candy
+                // entry number % 10 + number / 10 × 6; stop script (124, 0x44C800 → 0x4CD940) takes the script eye candy of that number off the object. Both are presentation and never change what the run reads.
+                var number = Get(a, 0);
+                if (OptionalObject(a, 1) is { } on)
+                    _shared.EyeCandies.Add(new(number, on, a.Type == ScrCatalogue.Action.PlaySpellEyeCandy ? ScrEyeCandyKind.PlaySpell : ScrEyeCandyKind.StopScript));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.DistanceBetween:
@@ -1389,7 +1408,25 @@ internal sealed class ScrInterpreter
     }
 
     /// <summary>SC1: the four body-spell bits of the spell flags: body of air 0x4, earth 0x8, fire 0x10, water 0x20.</summary>
-    private const int BodySpellFlags = 0x3C;
+    private const int BodySpellFlags = 0x3C, PolymorphedSpellFlag = 0x20000, ShrunkSpellFlag = 0x80000, MirrorImageSpellFlag = 0x40000;
+
+    private bool MonsterOfTypeHolds(ScrClause c, int line)
+    {
+        var type = Get(c, 1);
+        return ListHolds(c, obj => CritterStates.IsMonsterOfType(obj, type) ?? throw new MissingObjectStop(line));
+    }
+
+    // CS14 (case 34): the first object of operand 0 (0x44B960), then the range, x and y values (0x44BA70); the object's location (0x406DA0, field 2) against the point by the tile distance 0x4B96F0, which takes the absolute difference of each pair of 32-bit
+    // coordinates as unsigned values and keeps the larger. The original builds the point's high word as operand 3 or-ed with the sign of operand 2, so a negative x makes y all ones. The test is distance <= range (signed 64-bit). An absent object, or one without a place, stops the run.
+    private bool WithinRange(ScrClause c, int line)
+    {
+        var who = Object(c, 0, line);
+        var range = Get(c, 1); var x = Get(c, 2); var y = Get(c, 3);
+        var at = World.Location(who) ?? throw new MissingObjectStop(line);
+        var pointX = unchecked((uint)x); var pointY = x < 0 ? uint.MaxValue : unchecked((uint)y);
+        var distance = Math.Max(Math.Abs((long)pointX - unchecked((uint)at.X)), Math.Abs((long)pointY - unchecked((uint)at.Y)));
+        return distance <= range;
+    }
 
     // SC2–SC4: the value of operand 1 is read once before the list is walked (0x44BA70, as the original does), then the host answers per object; a null stops the run.
     private bool SpellHolds(ScrClause c, int line, Func<ScrObjectRef, int, bool?> test)
