@@ -47,7 +47,8 @@ session state, no caller yet. The line of fire is ARC-COMBAT-012's
   carried light and worn armour's silent-move adjustments come from the session), so a sneaking hero
   is seen and heard from less far. The scan hears a concealed hero at the silent level, remembers it
   and `AreaAiHost.UpdateDanger` turns the scanner toward it when nothing else was found; the validity
-  test refuses an unseen master prowler. A concealed follower has no margin yet (issue #1560).
+  test refuses an unseen master prowler. A concealed follower is treated the same (ARC-AI-1560, `GameSessionOwner.NpcProwlingMargin`): its
+  own prowling level and training, light and worn armour, and injuries set the margin; its facts carry the concealed and master-prowler flags.
 - **Clear shot** (`LineOfFireRules.ClearShot`, AW8): cover below 26 and no blocker but the target, the
   test of the two attack-goal callbacks; their weapon, reach and goal handling are slice I7's.
 

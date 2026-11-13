@@ -168,6 +168,64 @@ public sealed class AreaRestockHost
         return new(combat.Wearer(state.Conditions), combat.Chooser(state), Item, (_, _) => true);
     }
 
+    /// <summary>
+    /// ARC-MAGIC-1561 (ledger RM3c, IE5, EQ12): the carried light of an NPC whose worn items the session recalculated, as the light recalculation 0x467E80 leaves it: the largest size of its worn items' light flags, each shrunk by its power ratio against the
+    /// NPC's aptitude (<see cref="Arcanum.Simulation.Equipment.EquipmentRules.Light"/>); <see cref="Arcanum.Data.Lighting.CarriedLightSize.None"/> when no worn item gives any. The original recalculates when an item with light flags is wielded or unwielded
+    /// and in the rewield a magick or tech point write runs (0x465530), and leaves the light as saved for any other item. Steamwoven reads the NPC as recalculated when the session dressed it (its worn record: the regeneration's and the AI gate's wields)
+    /// or wrote its magick or tech points (TraitIdx stat 22 or 23), and then only when a worn item has light flags now, or one worn at load had (a light that comes from no worn item stays as saved). The light is derived at the question, with the NPC's aptitude now (the original
+    /// stores the size it computed at the event: the difference is an aptitude that moved since, which the hero's light follows as well). Null: the saved light stands (the NPC was not recalculated, or has no light item now or at load), and for an NPC the
+    /// restock does not know (no wielder).
+    /// </summary>
+    public Arcanum.Data.Lighting.CarriedLightSize? NpcLight(SessionMapId map, string npc, IAreaEventObjects? objects) => NpcLight(map, npc, objects, new(() => _session.QueryMapInventory(map)));
+
+    /// <summary>ARC-MAGIC-1561: <see cref="NpcLight(SessionMapId, string, IAreaEventObjects?)"/> for each of <paramref name="npcs"/> with the map's inventory view read once, and only when an NPC passes the cheap test.</summary>
+    public IReadOnlyDictionary<string, Arcanum.Data.Lighting.CarriedLightSize> NpcLights(SessionMapId map, IEnumerable<string> npcs, IAreaEventObjects? objects)
+    {
+        ArgumentNullException.ThrowIfNull(npcs);
+        var lights = new Dictionary<string, Arcanum.Data.Lighting.CarriedLightSize>(StringComparer.Ordinal);
+        var view = new Lazy<SessionMapInventory?>(() => _session.QueryMapInventory(map));
+        foreach (var npc in npcs)
+            if (NpcLight(map, npc, objects, view) is { } size) lights[npc] = size;
+        return lights;
+    }
+
+    private Arcanum.Data.Lighting.CarriedLightSize? NpcLight(SessionMapId map, string npc, IAreaEventObjects? objects, Lazy<SessionMapInventory?> view)
+    {
+        if (objects is null) return null;
+        // The cheap test first: the viewer asks for every NPC of the shown map each time the session changes.
+        var recalculated = _session.QueryNpcWorn(npc) is not null || _session.QueryCritterIndexedWrites(npc).Stats.Keys.Any(index => index is 22 or 23);
+        if (!recalculated) return null;
+        if (Wielder(map, npc, objects.Critter(npc)) is not { } wielder || Holder(map.RuntimeMap, npc) is not { } found) return null;
+        if (view.Value?.Holders.FirstOrDefault(holder => holder.Entity == npc && holder.Kind == SessionHolderKind.Npc) is not { } listed) return null;
+        // What it wears now: the host's worn items (a broken or destroyed item is taken off), each with the wear facts of its list entry.
+        if (objects.Worn(_session, map.RuntimeMap, npc) is not { } wornNow) return null;
+        var worn = new List<Arcanum.Simulation.Equipment.EquipmentItem>();
+        foreach (var item in wornNow)
+        {
+            // A worn item the host cannot describe leaves the light as saved: the recalculation would not know its flags.
+            if (listed.Items.FirstOrDefault(entry => entry.Entity == item.Entity) is not { } entry || wielder.Items(entry) is not { } facts) return null;
+            worn.Add(facts.Item);
+        }
+        var carries = worn.Any(item => item.Light != 0);
+        if (!carries)
+        {
+            // The light the load gave from a worn item (the seed's worn rows) is cleared when that item left; a light of no worn item stays.
+            var atLoad = found.Holder.Items.Any(entity => found.Map.Seed.Items.FirstOrDefault(row => row.Entity == entity) is { Facts.Worn: true } row &&
+                wielder.Items(new(row.Entity, row.Facts)) is { } facts && facts.Item.Light != 0);
+            if (!atLoad) return null;
+        }
+        return Size(Arcanum.Simulation.Equipment.EquipmentRules.Light(worn, wielder.Chooser.MagickTechAptitude));
+    }
+
+    private static Arcanum.Data.Lighting.CarriedLightSize Size(Arcanum.Simulation.Combat.LightEmission light) => light switch
+    {
+        Arcanum.Simulation.Combat.LightEmission.Small => Arcanum.Data.Lighting.CarriedLightSize.Small,
+        Arcanum.Simulation.Combat.LightEmission.Medium => Arcanum.Data.Lighting.CarriedLightSize.Medium,
+        Arcanum.Simulation.Combat.LightEmission.Large => Arcanum.Data.Lighting.CarriedLightSize.Large,
+        Arcanum.Simulation.Combat.LightEmission.ExtraLarge => Arcanum.Data.Lighting.CarriedLightSize.ExtraLarge,
+        _ => Arcanum.Data.Lighting.CarriedLightSize.None,
+    };
+
     /// <summary>Whether a seed item carries the persistent flag 0x2000 (RK5); an item the session made carries none.</summary>
     public bool Persistent(SessionMapId map, string item) =>
         _inventory.Maps.FirstOrDefault(found => found.RuntimeMap == map.RuntimeMap)?.Persistent(item) == true;
