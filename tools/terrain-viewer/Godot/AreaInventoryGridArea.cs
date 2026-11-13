@@ -181,18 +181,38 @@ public partial class AreaInventoryGridArea : Control
     {
         if (ReferenceEquals(look, Look)) return;
         Look = look; _takeAllDown = false; _arrangeDown = false; _cycleDown = null; QueueRedraw();
+        // ARC-UI-1194: the textures of a look this view no longer shows are let go.
+        if (_onTextureChanged is { } handler)
+            foreach (var texture in _watched.Where(texture => look is null || !look.Art.Values.Contains(texture)).ToArray()) { texture.Changed -= handler; _watched.Remove(texture); }
     }
 
     // ARC-UI-148: the generated interface paints a window's frames at the window's own device scale: the frame scale times the canvas transform's and the
     // viewport's stretch (the bars' own rule). The look's textures are shared by the inventory and the barter panel, so the area that draws a
     // background claims it at that draw (the last drawer wins, which is the window on screen).
+    // ARC-UI-1194: this view draws the textures in its own _Draw, so it does not hear a frame swap by itself: a window nothing else redraws (the barter window at rest)
+    // would keep the Legacy pixels until the pointer moved. It redraws when a texture it claimed changes (a worker painted its generated frame, a scale or pack change).
+    private readonly HashSet<HdInterfaceTexture> _watched = [];
+    private Action? _onTextureChanged;
+
     private void ClaimScale(AreaInventoryArtLook look)
     {
         _deviceScale ??= DeviceScale;
-        foreach (var texture in look.Art.Values) if (texture is HdInterfaceTexture hd) hd.ScaleSource = _deviceScale;
+        _onTextureChanged ??= () => { if (GodotObject.IsInstanceValid(this)) QueueRedraw(); };
+        foreach (var texture in look.Art.Values)
+        {
+            if (texture is not HdInterfaceTexture hd) continue;
+            hd.ScaleSource = _deviceScale;
+            if (_watched.Add(hd)) hd.Changed += _onTextureChanged;
+        }
     }
 
-    private float DeviceScale() =>
+    public override void _ExitTree()
+    {
+        if (_onTextureChanged is { } handler) foreach (var texture in _watched) texture.Changed -= handler;
+        _watched.Clear();
+    }
+
+    internal float DeviceScale() =>
         GodotObject.IsInstanceValid(this) && IsInsideTree() ? _scale * GetGlobalTransformWithCanvas().Scale.X * GetViewport().GetStretchTransform().Scale.X : _scale;
 
     public void Render(AreaInventoryView view)
