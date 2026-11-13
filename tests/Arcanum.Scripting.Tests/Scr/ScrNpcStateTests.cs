@@ -29,7 +29,7 @@ public sealed class ScrNpcStateTests
     {
         CollectionAssert.AreEquivalent(new[] { 22, 30, 31, 45, 46, 59, 99, 140, 141 }, ScrAdmissionSet.S36.Actions.Except(ScrAdmissionSet.S35.Actions).ToArray());
         Assert.IsTrue(ScrAdmissionSet.S35.IsSubsetOf(ScrAdmissionSet.S36));
-        Assert.IsFalse(ScrAdmissionSet.NpcStateHostActions.Contains(ScrCatalogue.Action.ChangeArtNumber));
+        Assert.IsTrue(ScrAdmissionSet.NpcStateHostActions.Contains(ScrCatalogue.Action.ChangeArtNumber), "ARC-SCRIPT-1735: the area hosts apply it");
     }
 
     [TestMethod]

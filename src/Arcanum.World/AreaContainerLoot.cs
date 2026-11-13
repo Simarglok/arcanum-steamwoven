@@ -173,10 +173,20 @@ public static class AreaContainerLoot
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(container);
+        return PickTarget(session, map, container, light) is { } target ? session.PickLock(session.Version, target, lockpick, world) : null;
+    }
+
+    /// <summary>ARC-COMBAT-1776: the session's pick-locks target of a standing <paramref name="container"/> of the map (its lock identity, T0 baseline and lock level, field 57) at the light <paramref name="light"/>; null when it is not a standing one of the map's seed.
+    /// The hero's <see cref="Pick"/> and an NPC's <see cref="GameSessionOwner.PickLockByNpc"/> read the same.</summary>
+    public static SessionPickLockTarget? PickTarget(GameSessionOwner session, AreaInventoryMap map, string container, int light = SessionPickLockTarget.FullLight)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(container);
         if (Facts(session, map, container) is not { } facts) return null;
         var level = facts.Row.EffectiveFields.FirstOrDefault(f => f.Slot == LockLevelSlot && f.Presence == Arcanum.Data.Area.AreaPresence.Value)?.Number ?? 0;
         var difficulty = (int)Math.Clamp(level, -GameSessionOwner.MaxLockDifficulty, GameSessionOwner.MaxLockDifficulty);
-        return session.PickLock(session.Version, new(facts.Openable, facts.Baseline, difficulty, light), lockpick, world);
+        return new(facts.Openable, facts.Baseline, difficulty, light);
     }
 
     /// <summary>

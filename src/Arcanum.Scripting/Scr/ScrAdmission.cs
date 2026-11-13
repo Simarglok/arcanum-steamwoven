@@ -363,8 +363,9 @@ public sealed class ScrAdmissionSet
     public static IReadOnlyList<int> NpcStateActions { get; } = [ScrCatalogue.Action.CritterDisband, ScrCatalogue.Action.SetReaction, ScrCatalogue.Action.AdjustReaction, ScrCatalogue.Action.SetDayStandpoint,
         ScrCatalogue.Action.SetNightStandpoint, ScrCatalogue.Action.SetDayStandpointEx, ScrCatalogue.Action.SetNightStandpointEx, ScrCatalogue.Action.ChangeArtNumber, ScrCatalogue.Action.ChangeScript];
 
-    /// <summary>The actions of <see cref="NpcStateActions"/> the area hosts apply (all but change art number 59, which needs a per-object art overlay the viewer does not have).</summary>
-    public static IReadOnlyList<int> NpcStateHostActions { get; } = [.. NpcStateActions.Where(a => a != ScrCatalogue.Action.ChangeArtNumber)];
+    /// <summary>The actions of <see cref="NpcStateActions"/> the area hosts apply: all nine since ARC-SCRIPT-1735 (change art number 59 writes the session's object art field, <see cref="Arcanum.Session.SessionObjectArt"/>, which the viewer draws; the host refuses a
+    /// run whose target it cannot draw with another art).</summary>
+    public static IReadOnlyList<int> NpcStateHostActions { get; } = NpcStateActions;
 
     /// <summary>
     /// The NPC state set (ARC-SCRIPT-1163, plan slice E5-a, ledger NS1–NS8): <see cref="S35"/> plus critter disband (22), set reaction (30), adjust reaction (31), set day standpoint (45), set night standpoint (46), change art number (59), change script (99) and the extended
