@@ -1383,18 +1383,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (ShownNpc(request.Object)) LastAnimation = _world!.ScriptAnimate!(request.Object.Code, request.Value);
                 continue;
             }
-            if (request.Change is ScrObjectStateChange.Damage or ScrObjectStateChange.DamageUnresistable)
-            {
-                // GT194: an NPC of the shown map, the PC, or (ARC-DEV-255, GT195) a door, window, container, scenery or trap of the shown map; any other object is left as it is, and a destroyed
-                // object takes none (object flags 0x400001, GT195).
-                LastDamage = null;
-                if (IsPc(request.Object) || (ShownNpc(request.Object) || ShownDamageable(request.Object)) && !AlreadyDestroyed(request.Object))
-                    LastDamage = _world!.ScriptDamage!(IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value, request.Value2,
-                        request.Change == ScrObjectStateChange.DamageUnresistable);
-                // ARC-DEV-261 (GT198): the taking-damage script comes before the destroyed gate, so a destroyed object is asked all the same (its answer cannot change the outcome: it takes none).
-                else if (ShownNpc(request.Object) || ShownDamageable(request.Object)) _world!.ScriptDamageAsk?.Invoke(request.Object.Code);
-                continue;
-            }
+            if (request.Change is ScrObjectStateChange.Damage or ScrObjectStateChange.DamageUnresistable) { ApplyScriptDamage(request); continue; }
             if (request.Change == ScrObjectStateChange.GiveSpellMastery)
             {
                 // SC5: the PC, or an NPC of the shown map (ObjectStateRefusal checked its sheet); any other object does nothing in the original. The spell-book rule decides, the run goes on.
@@ -1402,14 +1391,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                     : ShownNpc(request.Object) && AdvancementOf(request.Object) is { } npc && !AreaScriptSpells.GiveMastery(_session, npc, request.Value)) return false;
                 continue;
             }
-            if (request.Change == ScrObjectStateChange.HealHitPoints)
-            {
-                // GT196: a living PC or NPC of the shown map; any other object does nothing in the original.
-                LastHeal = null;
-                if (IsPc(request.Object) || ShownNpc(request.Object) && !AlreadyDestroyed(request.Object))
-                    LastHeal = _world!.ScriptHeal!(IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value);
-                continue;
-            }
+            if (request.Change == ScrObjectStateChange.HealHitPoints) { ApplyScriptHeal(request); continue; }
             if (request.Change == ScrObjectStateChange.CastSpell)
             {
                 // GT183/GT184: the target an NPC of the shown map or the PC; the caster an NPC of the shown map, the PC (ARC-DEV-244: the hero's casting goal) or none (a missing caster handle, 61 and 136). Another map's
@@ -1621,6 +1603,34 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>ARC-SCRIPT-1163 (NS2): what the AI host answered for the last reaction change a run applied (null: none yet).</summary>
     public string? LastReaction { get; private set; }
+
+    /// <summary>ARC-SCRIPT-1563: whether the world gives the script damage (<see cref="ApplyScriptDamage"/>) this host applies; the dialog host asks before it applies anything, so a run it cannot finish is refused whole.</summary>
+    public bool CanApplyScriptDamage => _world?.ScriptDamage is not null;
+
+    /// <summary>ARC-SCRIPT-1563: whether the world gives the script heal (<see cref="ApplyScriptHeal"/>) this host applies.</summary>
+    public bool CanApplyScriptHeal => _world?.ScriptHeal is not null;
+
+    /// <summary>
+    /// One damage (60) or apply unresistable damage (138) request of a run, applied (ARC-SCRIPT-1563: shared by the dialog host, <see cref="AreaScriptHost.Apply"/>). GT194: an NPC of the shown map, the PC, or (ARC-DEV-255, GT195) a door, window, container, scenery or trap
+    /// of the shown map; any other object is left as it is, and a destroyed object takes none (object flags 0x400001, GT195). The victim's taking-damage script is asked (GT198) through the world's damage; a destroyed object is asked all the same.
+    /// </summary>
+    public void ApplyScriptDamage(ScrObjectStateRequest request)
+    {
+        LastDamage = null;
+        if (IsPc(request.Object) || (ShownNpc(request.Object) || ShownDamageable(request.Object)) && !AlreadyDestroyed(request.Object))
+            LastDamage = _world!.ScriptDamage!(IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value, request.Value2,
+                request.Change == ScrObjectStateChange.DamageUnresistable);
+        // ARC-DEV-261 (GT198): the taking-damage script comes before the destroyed gate, so a destroyed object is asked all the same (its answer cannot change the outcome: it takes none).
+        else if (ShownNpc(request.Object) || ShownDamageable(request.Object)) _world!.ScriptDamageAsk?.Invoke(request.Object.Code);
+    }
+
+    /// <summary>One heal hit points (75) request of a run, applied (GT196: a living PC or NPC of the shown map; any other object does nothing in the original). ARC-SCRIPT-1563: shared by the dialog host.</summary>
+    public void ApplyScriptHeal(ScrObjectStateRequest request)
+    {
+        LastHeal = null;
+        if (IsPc(request.Object) || ShownNpc(request.Object) && !AlreadyDestroyed(request.Object))
+            LastHeal = _world!.ScriptHeal!(IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value);
+    }
 
     // ARC-DEV-233: an NPC of the shown map, the only target the goal-starting actions (62, 69, 74, 76) are applied to; the PC, another map's object and a non-NPC are left as they are.
     private bool ShownNpc(ScrObjectRef obj) => obj.Map == _shownMap && !IsPc(obj) && Row(obj) is { Type: NpcType };

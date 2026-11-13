@@ -46,7 +46,10 @@ public sealed class AreaDeferredItemDamageTests
         public List<(string Victim, int Amount)> Heal { get; } = [];
     }
 
-    private static void With(bool hooks, int complexity, Action<AreaConversationHost, GameSessionOwner, SessionScriptRole, SessionScriptRole, Hits> test)
+    // How the shown map's use host stands behind the script host: none (the talk set holds no query, no damage), one whose world gives no damage and heal, or one that gives them (ARC-SCRIPT-1563).
+    private enum UseHost { None, WithoutDamage, WithDamage }
+
+    private static void With(UseHost use, int complexity, Action<AreaConversationHost, GameSessionOwner, SessionScriptRole, SessionScriptRole, Hits> test)
     {
         var root = Directory.CreateTempSubdirectory("arc-script-1482-");
         try
@@ -71,10 +74,14 @@ public sealed class AreaDeferredItemDamageTests
             Assert.AreEqual(GameSessionDisposition.Changed, session.Equip(session.Version, "ring", EquipmentSlot.Ring1, ring, (_, _) => true, Accept).Disposition);
             var host = new AreaConversationHost(snapshot, content, session);
             var hits = new Hits();
-            if (hooks)
+            if (use != UseHost.None)
             {
-                host.Scripts.ScriptDamage = (victim, amount, type, unresistable) => { hits.Damage.Add((victim, amount, type, unresistable)); return "damaged"; };
-                host.Scripts.ScriptHeal = (victim, amount) => { hits.Heal.Add((victim, amount)); return "healed"; };
+                var gives = use == UseHost.WithDamage;
+                var useHost = new AreaUseScriptHost(session, snapshot.RuntimeMap, [], [], content,
+                    new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null,
+                        ScriptDamage: gives ? (victim, amount, type, unresistable) => { hits.Damage.Add((victim, amount, type, unresistable)); return "damaged"; } : null,
+                        ScriptHeal: gives ? (victim, amount) => { hits.Heal.Add((victim, amount)); return "healed"; } : null));
+                host.Scripts.QueryHost = () => useHost;
             }
             test(host, session, new(new(snapshot.RuntimeMap), SessionEventKinds.PlayerEntity), new(new(snapshot.RuntimeMap), "ring"), hits);
         }
@@ -84,13 +91,13 @@ public sealed class AreaDeferredItemDamageTests
     [TestMethod]
     public void A_deferred_poison_script_damages_the_wearer_by_the_items_power_ratio_and_schedules_itself_again()
     {
-        With(hooks: true, complexity: 0, (host, session, pc, ring, hits) =>
+        With(UseHost.WithDamage, complexity: 0, (host, session, pc, ring, hits) =>
         {
             var call = new SessionScriptCall(Poison, 0, pc, ring);
             Assert.IsTrue(host.RunCall(call, out var detail), detail);
             // A neutral item's ratio is 100: 40 into the damage; poison type, no resistance skipped.
             CollectionAssert.AreEqual(new[] { (Arcanum.Simulation.Ai.AiSchedulerRules.Pc, 40, 1, true) }, hits.Damage);
-            Assert.AreEqual(1, host.Scripts.LastHits.Count);
+            Assert.AreEqual("damaged", host.Scripts.LastDamage);
             var next = session.QueryScriptCalls().Single();
             Assert.AreEqual((call, session.QueryClockSnapshot().GameTimestampMs + 10 * 8000L), (next.Call, next.DeadlineMs));
         });
@@ -99,7 +106,7 @@ public sealed class AreaDeferredItemDamageTests
     [TestMethod]
     public void The_script_reads_the_ratio_of_a_worn_item_only_and_a_stranger_item_stops_the_run()
     {
-        With(hooks: true, complexity: 0, (host, session, pc, ring, hits) =>
+        With(UseHost.WithDamage, complexity: 0, (host, session, pc, ring, hits) =>
         {
             Assert.AreEqual(100, host.Scripts.PowerRatio(new(ring.Map.RuntimeMap, "ring"), new(pc.Map.RuntimeMap, pc.Entity)));
             // The item role may name the map the call was scheduled on after the hero travelled: the worn item is found by its entity alone.
@@ -117,12 +124,12 @@ public sealed class AreaDeferredItemDamageTests
     [TestMethod]
     public void Damage_and_heal_of_hit_points_go_to_the_hooks_in_action_order_for_the_pc_only()
     {
-        With(hooks: true, complexity: 0, (host, _, pc, ring, hits) =>
+        With(UseHost.WithDamage, complexity: 0, (host, _, pc, ring, hits) =>
         {
             Assert.IsTrue(host.RunCall(new SessionScriptCall(Healer, 0, pc, ring), out var detail), detail);
             CollectionAssert.AreEqual(new[] { (Arcanum.Simulation.Ai.AiSchedulerRules.Pc, 7, 0, false) }, hits.Damage);
             CollectionAssert.AreEqual(new[] { (Arcanum.Simulation.Ai.AiSchedulerRules.Pc, 3) }, hits.Heal);
-            CollectionAssert.AreEqual(new[] { "damaged", "healed" }, host.Scripts.LastHits.ToArray());
+            Assert.AreEqual(("damaged", "healed"), (host.Scripts.LastDamage, host.Scripts.LastHeal));
             // Another object as the triggerer is left as it is (the run goes on).
             hits.Damage.Clear(); hits.Heal.Clear();
             Assert.IsTrue(host.RunCall(new SessionScriptCall(Healer, 0, new(pc.Map, "oid:npc"), ring), out detail), detail);
@@ -133,7 +140,7 @@ public sealed class AreaDeferredItemDamageTests
     [TestMethod]
     public void A_magickal_item_scales_the_damage_by_its_power_ratio_under_the_heros_aptitude()
     {
-        With(hooks: true, complexity: 60, (host, session, pc, ring, hits) =>
+        With(UseHost.WithDamage, complexity: 60, (host, session, pc, ring, hits) =>
         {
             var ratio = session.QueryWornPowerRatio("ring");
             Assert.IsNotNull(ratio);
@@ -144,38 +151,30 @@ public sealed class AreaDeferredItemDamageTests
     }
 
     [TestMethod]
-    public void A_set_asked_before_the_hooks_exist_does_not_hide_the_damage_actions_afterwards()
+    public void Without_a_use_host_that_gives_damage_a_damaging_script_is_refused_and_the_set_follows_the_use_host()
     {
-        With(hooks: false, complexity: 0, (host, _, _, _, _) =>
-        {
-            Assert.IsFalse(host.Scripts.CallAdmissionFor(null).Actions.Contains(ScrCatalogue.Action.Damage));
-            host.Scripts.ScriptDamage = (_, _, _, _) => "damaged";
-            Assert.IsFalse(host.Scripts.CallAdmissionFor(null).Actions.Contains(ScrCatalogue.Action.Damage), "the heal hook is still missing");
-            host.Scripts.ScriptHeal = (_, _) => "healed";
-            var set = host.Scripts.CallAdmissionFor(null);
-            Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.Damage) && set.Actions.Contains(ScrCatalogue.Action.DamageUnresistable) && set.Actions.Contains(ScrCatalogue.Action.HealHitPoints));
-            host.Scripts.ScriptDamage = null;
-            Assert.IsFalse(host.Scripts.CallAdmissionFor(null).Actions.Contains(ScrCatalogue.Action.Damage), "and gone again with the hook");
-        });
-    }
-
-    [TestMethod]
-    public void Without_the_hooks_the_set_has_no_damage_and_a_damaging_script_is_refused()
-    {
-        With(hooks: false, complexity: 0, (host, _, pc, ring, hits) =>
+        With(UseHost.None, complexity: 0, (host, _, pc, ring, hits) =>
         {
             var set = host.Scripts.CallAdmissionFor(null);
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.MagickTechAdjustment) && set.Actions.Contains(ScrCatalogue.Action.PlayScriptEyeCandy));
-            Assert.IsFalse(set.Actions.Contains(ScrCatalogue.Action.Damage) || set.Actions.Contains(ScrCatalogue.Action.DamageUnresistable) || set.Actions.Contains(ScrCatalogue.Action.HealHitPoints));
+            Assert.IsFalse(set.Actions.Contains(ScrCatalogue.Action.Damage), "the talk set holds damage only while the shown map's use host answers");
             Assert.IsFalse(host.RunCall(new SessionScriptCall(Healer, 0, pc, ring), out var detail));
             StringAssert.Contains(detail, "ActionNotAdmitted");
-            Assert.IsFalse(AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.Damage), "a dialog script does not get damage");
             Assert.AreEqual(0, hits.Damage.Count);
         });
+        // A use host whose world gives no damage admits the actions and refuses the run whole before anything applies (ARC-SCRIPT-1563).
+        With(UseHost.WithoutDamage, complexity: 0, (host, session, pc, ring, hits) =>
+        {
+            Assert.IsTrue(host.Scripts.CallAdmissionFor(null).Actions.Contains(ScrCatalogue.Action.Damage));
+            Assert.IsFalse(host.RunCall(new SessionScriptCall(Poison, 0, pc, ring), out _));
+            Assert.AreEqual(0, session.QueryScriptCalls().Count, "no next call: nothing applied");
+            Assert.AreEqual(0, hits.Damage.Count);
+        });
+        Assert.IsFalse(AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.Damage), "a dialog script without the use host does not get damage");
     }
 
     // ARC-SCRIPT-1482 (opt-in, DAT_ROOT): the six callers of the installed wield-on poisoning items (five attached at point 24) are admitted by the item-event set from line 0 (they only schedule the poison with call script in), and the
-    // six deferred poison scripts are admitted by the deferred-call set with the damage hooks and the use host's random draw, except the four that read get fatigue points (108, 2677 2679 2681 2682), the one action issue #1481 builds.
+    // six deferred poison scripts are admitted by the deferred-call set with the use host (random draw and damage), except the four that read get fatigue points (108, 2677 2679 2681 2682), the one action issue #1481 builds.
     [TestMethod, TestCategory("RealData")]
     public void The_installed_wield_on_poison_scripts_are_admitted_by_the_sets_that_run_them()
     {
@@ -184,11 +183,10 @@ public sealed class AreaDeferredItemDamageTests
         using var content = ConversationSessionFixture.Scripts(root);
         foreach (var caller in new[] { 30088, 30103, 30115, 30147, 30165, 30197 })
             Assert.IsTrue(ScrAdmission.AdmitFrom(content.Script(caller).Program!, SessionItemScripts.Admission, 0).IsAdmitted, $"wield on {caller}");
-        With(hooks: true, complexity: 0, (host, _, _, _, _) =>
+        With(UseHost.WithDamage, complexity: 0, (host, _, _, _, _) =>
         {
-            var deferred = host.Scripts.CallAdmissionFor(null);
-            // The use host's talk set answers the random draw (37) the scripts use; a host without it refuses them, as every deferred call with a draw.
-            var withDraw = new ScrAdmissionSet("poison-deferred", deferred.Conditions, deferred.Actions.Append(ScrCatalogue.Action.Random), deferred.ValueKinds, deferred.FocusKinds, deferred.CounterIndexWraps);
+            // With the shown map's use host the set holds the random draw (37) and the damage actions the scripts use.
+            var withDraw = host.Scripts.CallAdmissionFor(null);
             foreach (var script in new[] { 2664, 2678 })
                 Assert.IsTrue(ScrAdmission.AdmitFrom(content.Script(script).Program!, withDraw, 0).IsAdmitted, $"poison {script}");
             foreach (var script in new[] { 2677, 2679, 2681, 2682 })
