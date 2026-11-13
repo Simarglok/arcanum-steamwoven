@@ -60,7 +60,7 @@ public sealed partial class GameSessionOwner
     /// with the same refusals, policy and single revision as <see cref="EquipBest"/>; with no usable weapon the slot stays empty. The gates of 0x4B83E0 are the
     /// host's: the "auto switch" setting (0x4B8330) on, and the lost weapon the PC's own (the single-player test of the network bits always holds here). The host calls
     /// it right after a weapon wear that broke the weapon (<see cref="SessionWearStepKind.AttackerWeapon"/> with a break, 0x4B5580); the other callers (no ammunition,
-    /// the struck PC's lost weapon, 0x4B3170 and 0x4B4390) are not built.
+    /// the struck PC's lost weapon, 0x4B3170 and 0x4B4390) are the host's too (ARC-COMBAT-1738).
     /// </summary>
     [OriginalFunction(0x4B83E0, OriginalFunctionScope.Partial)]
     public EquipBestResult WieldBestWeapon(GameSessionVersion expected, SessionWearableLookup items, SessionWearArtCheck artCheck, SessionInsertCheck insertCheck,

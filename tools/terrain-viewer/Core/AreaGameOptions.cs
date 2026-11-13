@@ -3,6 +3,7 @@ using System.Text.Json;
 using Arcanum.Data.Content;
 using Arcanum.Data.Messages;
 using Arcanum.Input;
+using Arcanum.Presentation.Display;
 using Arcanum.Presentation.Hud;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
@@ -19,7 +20,7 @@ public enum AreaOption
     Module, Difficulty, ViolenceFilter, DefaultCombatMode, AutoAttack, AutoSwitchWeapons, AlwaysRun, FollowerSkills,
     Brightness, TextDuration, Floats, FloatSpeed, CombatTaunts,
     Effects, Voice, Music,
-    Rules, EvidenceLog, TestTask, ControlScheme, PromptStyle,
+    Rules, ControlScheme, PromptStyle, EvidenceLog, TestTask,
 }
 
 /// <param name="Max">The original's highest value (a slider's 10 unless its record says otherwise, a list's last message number; a
@@ -59,12 +60,10 @@ public sealed record AreaOptionControl(AreaOption Option, AreaOptionsPage Page, 
 public static class AreaOptionTable
 {
     public const string NoModules = "one module is offered; choosing a module is not built";
-    public const string NoViolenceFilter = "its effect on blood and death art is not built";
     public const string NoFollowerSkills = "followers do not use skills on their own yet";
-    public const string NoBrightness = "the gamma control is not built";
     public const string NoTextDuration = "text bubbles are not built";
     public const string NoFastTurnBased = "Fast Turn Based is not built";
-    public const string NoVideoPage = "brightness and text bubbles are not built";
+    public const string NoVideoPage = "text bubbles are not built";
     public const string OffOn = "mes/OptionsOffOn.mes";
     public const string Difficulties = "mes/OptionsDifficulty.mes";
     public const string CombatModes = "mes/OptionsCombatMode.mes";
@@ -85,13 +84,13 @@ public static class AreaOptionTable
     {
         new(AreaOption.Module, AreaOptionsPage.Game, 0, AreaOptionKind.Modules, 0, 0, null, "module", 0, NoModules),
         new(AreaOption.Difficulty, AreaOptionsPage.Game, 1, AreaOptionKind.List, 2, 2, Difficulties, "difficulty", 1, null),
-        new(AreaOption.ViolenceFilter, AreaOptionsPage.Game, 2, AreaOptionKind.List, 1, 1, OffOn, "violence filter", 0, NoViolenceFilter),
+        new(AreaOption.ViolenceFilter, AreaOptionsPage.Game, 2, AreaOptionKind.List, 1, 1, OffOn, "violence filter", 0, null),
         new(AreaOption.DefaultCombatMode, AreaOptionsPage.Game, 3, AreaOptionKind.List, 2, 1, CombatModes, "turn-based", 0, null, NoFastTurnBased),
         new(AreaOption.AutoAttack, AreaOptionsPage.Game, 4, AreaOptionKind.List, 1, 1, OffOn, "auto attack", 1, null),
         new(AreaOption.AutoSwitchWeapons, AreaOptionsPage.Game, 5, AreaOptionKind.List, 1, 1, OffOn, "auto switch", 0, null),
         new(AreaOption.AlwaysRun, AreaOptionsPage.Game, 6, AreaOptionKind.List, 1, 1, OffOn, "always run", 0, null),
         new(AreaOption.FollowerSkills, AreaOptionsPage.Game, 7, AreaOptionKind.List, 1, 1, OffOn, "follower skills", 1, NoFollowerSkills),
-        new(AreaOption.Brightness, AreaOptionsPage.Video, 0, AreaOptionKind.Slider, 9, 9, null, "brightness", 0, NoBrightness),
+        new(AreaOption.Brightness, AreaOptionsPage.Video, 0, AreaOptionKind.Slider, 9, 9, null, "brightness", 0, null),
         new(AreaOption.TextDuration, AreaOptionsPage.Video, 1, AreaOptionKind.Slider, 10, 10, null, "text duration", 6, NoTextDuration),
         // ARC-UI-021: the floating text (CH10).
         new(AreaOption.Floats, AreaOptionsPage.Video, 2, AreaOptionKind.List, 2, 2, FloatLevels, "text floaters", FloaterRules.DefaultLevel, null),
@@ -102,22 +101,24 @@ public static class AreaOptionTable
         new(AreaOption.Music, AreaOptionsPage.Sound, 2, AreaOptionKind.Slider, 10, 10, null, "music volume", 5, null),
         // ARC-UI-014: the rule mode (owner decision D8: the settings menu may switch it in play), after the original's eight Game slots.
         new(AreaOption.Rules, AreaOptionsPage.Game, 8, AreaOptionKind.List, 1, 1, RuleModes, "rules", (int)RuleMode.Steamwoven, null, Project: true),
-        // ARC-GPAD-1376: the opt-in evidence log of the controller test (concept §0.8); off at every start, never saved.
-        new(AreaOption.EvidenceLog, AreaOptionsPage.Video, 6, AreaOptionKind.List, 1, 1, OffOnProject, "evidence log", 0, null, Project: true),
-        // The marker of the test script's task (concept §5): the log's task start and end lines, so the summariser can time it.
-        new(AreaOption.TestTask, AreaOptionsPage.Video, 7, AreaOptionKind.List, TestTaskCount, TestTaskCount, TestTasks, "test task", 0, null, Project: true),
         // ARC-GPAD-1463 (concept docs/input/controller-schemes.md §0.1, owner request 2026-11-12): one Controls line, the original or one of the three
-        // experimental schemes, switching at run time and saved with the game settings; it takes the Game page's eighth slot. The original mouse and
-        // keyboard are live in every value. ARC-GPAD-1374: the prompt style (the glyph family override) is the Video page's.
-        new(AreaOption.ControlScheme, AreaOptionsPage.Game, 11, AreaOptionKind.List, 3, 3, ControlSchemes, "control scheme", (int)ControlChoice.Original, null, Project: true),
-        new(AreaOption.PromptStyle, AreaOptionsPage.Video, 5, AreaOptionKind.List, 4, 4, PromptStyles, "prompt style", (int)Arcanum.Input.PromptStyle.Auto, null, Project: true),
+        // experimental schemes, switching at run time and saved with the game settings. The original mouse and keyboard are live in every value.
+        // ARC-GPAD-1374: the prompt style (the glyph family override) sits beside it. ARC-UI-1737: the Game page holds the original's eight slots (the
+        // seven original lines it shows or will show, and Rules), so the Controls line moved to the Video page, next to the prompt style.
+        new(AreaOption.ControlScheme, AreaOptionsPage.Video, 5, AreaOptionKind.List, 3, 3, ControlSchemes, "control scheme", (int)ControlChoice.Original, null, Project: true),
+        new(AreaOption.PromptStyle, AreaOptionsPage.Video, 6, AreaOptionKind.List, 4, 4, PromptStyles, "prompt style", (int)Arcanum.Input.PromptStyle.Auto, null, Project: true),
+        // ARC-GPAD-1376: the opt-in evidence log of the controller test (concept §0.8); off at every start, never saved. ARC-UI-1737: the original's Violence
+        // Filter needs a Game page slot and the page holds eight lines, so the two test lines moved to the Video page.
+        new(AreaOption.EvidenceLog, AreaOptionsPage.Video, 7, AreaOptionKind.List, 1, 1, OffOnProject, "evidence log", 0, null, Project: true),
+        // The marker of the test script's task (concept §5): the log's task start and end lines, so the summariser can time it.
+        new(AreaOption.TestTask, AreaOptionsPage.Video, 8, AreaOptionKind.List, TestTaskCount, TestTaskCount, TestTasks, "test task", 0, null, Project: true),
         // ARC-UI-146: the HD graphics, HD interface and HD pack lines (ARC-UI-089, ARC-UI-095, ARC-DEV-350) moved to the launcher screen (ARC-UI-143).
     });
 
     public static AreaOptionControl Of(AreaOption option) => All[(int)option];
 
-    /// <summary>A page's controls in slot order (hidden ones included). ARC-COMBAT-1738: the Game page's project lines Evidence Log and Test Task (developer lines of the controller test) moved to the end of the Video page, making room for Auto Switch Weapons (issue 1729).</summary>
-    public static IReadOnlyList<AreaOptionControl> Page(AreaOptionsPage page) => All.Where(control => control.Page == page).OrderBy(control => control.Slot).ToArray();
+    /// <summary>A page's controls in slot order (hidden ones included).</summary>
+    public static IReadOnlyList<AreaOptionControl> Page(AreaOptionsPage page) => All.Where(control => control.Page == page).ToArray();
 
     /// <summary>A page Steamwoven offers: one with a shown control.</summary>
     public static bool Offered(AreaOptionsPage page) => All.Any(control => control.Page == page && control.Shown);
@@ -128,7 +129,7 @@ public static class AreaOptionTable
 /// the floating text's level and speed (ARC-UI-021).</summary>
 public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAttack, bool AlwaysRun, int Effects, int Voice, int Music,
     RuleMode Rules = RuleMode.Steamwoven, int Floats = FloaterRules.DefaultLevel, int FloatSpeed = FloaterRules.DefaultSpeed, bool EvidenceLog = false, int TestTask = 0,
-    ControlSchemeSettings? Controls = null, bool CombatTaunts = true, bool AutoSwitchWeapons = false)
+    ControlSchemeSettings? Controls = null, bool CombatTaunts = true, bool ViolenceFilter = false, int Brightness = 0, bool AutoSwitchWeapons = false)
 {
     /// <summary>ARC-GPAD-1374: the controller scheme choice the three lines show (the defaults when the host passes none).</summary>
     public ControlSchemeSettings Schemes => Controls ?? ControlSchemeSettings.Default;
@@ -151,6 +152,8 @@ public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAt
         AreaOption.Floats => Floats,
         AreaOption.FloatSpeed => FloatSpeed,
         AreaOption.CombatTaunts => CombatTaunts ? 1 : 0,
+        AreaOption.ViolenceFilter => ViolenceFilter ? 1 : 0,
+        AreaOption.Brightness => Brightness,
         AreaOption.AutoSwitchWeapons => AutoSwitchWeapons ? 1 : 0,
         _ => null,
     };
@@ -212,6 +215,17 @@ public sealed record AreaGameSettings
     /// <summary>ARC-AI-1527: the "combat taunts" setting (OH5, 0x4B82E0; default on, the original registers 1): at the end of a hit the hero's followers may comment (<see cref="Arcanum.Simulation.Ai.FollowerRules.TauntKindOf"/>).</summary>
     public bool CombatTaunts { get; init; } = true;
 
+    /// <summary>ARC-UI-1737: the "violence filter" setting (OH2, the global 0x5DE6A4; default off): on, no pool of blood is left, a dying critter falls down plainly and the hit's blood effect is the clean one.</summary>
+    public bool ViolenceFilter { get; init; }
+
+    private readonly int _brightness;
+
+    /// <summary>ARC-UI-1737: the "brightness" setting (OH1, whole values 0 to <see cref="BrightnessRules.Max"/>; default 0): the display's gamma factor 1.0 + 0.1 × the value, here the final colour multiply.</summary>
+    public int Brightness
+    {
+        get => _brightness;
+        init => _brightness = value is < 0 or > BrightnessRules.Max ? throw new ArgumentOutOfRangeException(nameof(value)) : value;
+    }
     /// <summary>ARC-COMBAT-1720: the "auto switch" setting (OH3, getter 0x4B8330; the original never registers it, so it reads 0 until written: default off): the hero's weapon wearing out wields the best remaining weapon for the target (0x4B83E0). The settings file's <c>auto switch</c> line; ARC-COMBAT-1738 shows its options row (Game page, the original's sixth slot).</summary>
     public bool AutoSwitchWeapons { get; init; }
 

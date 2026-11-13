@@ -1208,7 +1208,7 @@ The rules are in the [ledger OH3](../research/ledger/ui-audio.md#hidden-options-
 
 | # | Step | Expected | Status |
 | --- | --- | --- | --- |
-| 1 | Open Options (main menu and in play), Game page. | Auto Switch Weapons is the fourth line after Auto Attack, Off at the first start. Evidence Log and Test Task are now the last lines of the Video page. | open |
+| 1 | Open Options (main menu and in play), Game page. | Auto Switch Weapons is the fifth line, after Auto Attack, Off at the first start. | open |
 | 2 | Turn Auto Switch Weapons On, wield a bow with no arrows (or a gun with no bullets) and attack. | The attack does not shoot, and the hero wields the best other weapon at once; with the option Off nothing changes. | open |
 | 3 | With it On, let an enemy with a critical hit (drop weapon or destroy weapon) strike the hero. | The hero's lost weapon is replaced by the best weapon left; with the option Off the hand stays empty. | open |
 
