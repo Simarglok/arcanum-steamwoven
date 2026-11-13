@@ -239,8 +239,8 @@ public partial class TerrainViewerApp
         if (_schematicScriptOpen is not { } pending) return;
         if (!ReferenceEquals(pending.Session, _areaSession)) { _schematicScriptOpen = null; return; }
         // ARC-UI-1125: an open window does not hold the request (its opener replaces it; the schematic opener toggles, 0x56D130 closes its own open window);
-        // the panels outside the stack and a dialog still do.
-        if (ProgrammaticOpenBlocked || ConversationOpen) return;
+        // the panels outside the stack still do (ARC-UI-1467: an open dialog does not, the opener pops it).
+        if (ProgrammaticOpenBlocked) return;
         _schematicScriptOpen = null;
         if (SchematicsOpen) { CloseSchematicsByPlayer(); return; }
         OpenSchematics(pending.Crafter, replaceWindows: true);

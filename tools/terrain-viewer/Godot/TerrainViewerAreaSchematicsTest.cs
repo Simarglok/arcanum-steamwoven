@@ -180,6 +180,19 @@ public partial class TerrainViewerApp
             QueueScriptSchematics([new(pc, pc, AreaSchematicScriptStatus.Open)]);
             TakeScriptSchematics();
             Require(!SchematicsOpen && WindowPanelsMatchStack && _schematicScriptOpen is null, "a second request closed the window (the opener toggles)");
+            // ARC-UI-1467: the schematic opener pops an open dialog too (0x56D130; the leave case 0x5678D0 ends the dialog, nothing resumes): a request asked for
+            // while a dialog is open ends the dialog and opens the window at once.
+            var standInRow = _readyArea!.Snapshot.Objects[0];
+            _selfTestStandInSpeaker = new AreaSpeaker(0, standInRow, 1, standInRow.WorldX ?? 0, standInRow.WorldY ?? 0);
+            BeginConversation(_selfTestStandInSpeaker, replaceWindows: true);
+            Require(ConversationOpen && !SchematicsOpen, "a dialog is open for the schematic request");
+            QueueScriptSchematics([new(pc, pc, AreaSchematicScriptStatus.Open)]);
+            TakeScriptSchematics();
+            Require(SchematicsOpen && !ConversationOpen && WindowPanelsMatchStack && StackText() == "Game>Schematic" && _schematicScriptOpen is null,
+                "the request ended the open dialog and opened in its place: " + StackText());
+            CloseSchematicsByPlayer();
+            Require(!SchematicsOpen && !ConversationOpen && !WorldModal, "the window closed and the dialog did not come back");
+            _selfTestStandInSpeaker = null;
 
             // ARC-TECHNOLOGY-006: an NPC crafter (synthetic: degree 1 in discipline 0, two parts in its own list on another map's seed)
             // through the production open path the dialog's `su` and action 129 use; its products go to its list, the hero's parts stay.

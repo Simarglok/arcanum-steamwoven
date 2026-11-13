@@ -196,8 +196,8 @@ public partial class TerrainViewerApp
         if (_useScriptHost is { } use) QueueScriptReadings(use.Host.TakeReadings());
         if (_readingScriptOpen is not { } pending) return;
         if (!ReferenceEquals(pending.Session, _areaSession)) { _readingScriptOpen = null; return; }
-        // ARC-UI-1125: an open window does not hold the request (its opener replaces it); the panels outside the stack and a dialog still do.
-        if (ProgrammaticOpenBlocked || ConversationOpen || _readingData is null) return;
+        // ARC-UI-1125: an open window does not hold the request (its opener replaces it); the panels outside the stack still do (ARC-UI-1467: an open dialog does not, the opener pops it).
+        if (ProgrammaticOpenBlocked || _readingData is null) return;
         _readingScriptOpen = null;
         if (_readingData.Data is not { } data) { _readingStatus = $"script reading: the written texts are unavailable ({_readingData.Status})"; RefreshAreaStatus(); return; }
         var document = _areaSession!.QueryWrittenDocument(AreaReading.ScriptFacts(pending.Request), data.Texts);
