@@ -14,7 +14,7 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SessionSpellCasterRemaindersTests
 {
-    private const string Hero = SessionSpellCaster.Hero, Coat = "kit:2", Rat = "oid:rat", Box = "oid:box";
+    private const string Hero = SessionSpellCaster.Hero, Coat = "kit:2", Rat = "oid:rat", Box = "row:Mobile:7", BoxScriptEntity = "oid:box";
     private static readonly SpellLocation HeroTile = new(5, 5), FarTile = new(8, 5);
     private static readonly SpellArea Aim = new(0x4, 0, 0, 0, -1);
     private const int EnvNumber = 120, RechargeNumber = 121, TeleportTileNumber = 122, FleeNumber = 123, BadTraitNumber = 124, MaxedNumber = 125, StopNumber = 126, OtherStopNumber = 127;
@@ -22,7 +22,10 @@ public sealed class SessionSpellCasterRemaindersTests
     private sealed class Map(GameSessionOwner owner) : ISpellCastMap
     {
         public SpellTargetObject? Object(string id) =>
-            id == Hero ? new(id, SpellTargetObject.Pc, HeroTile, HitPoints: owner.QueryHeroLife()!.Status.HitPoints) : null;
+            id == Hero ? new(id, SpellTargetObject.Pc, HeroTile, HitPoints: owner.QueryHeroLife()!.Status.HitPoints)
+            : id == Box ? new(id, 3, FarTile, HitPoints: 10) : null;
+        // ARC-SCRIPT-1576: a script names the box by its own entity, the cast host holds it under another id.
+        public string CastIdOfScriptEntity(string entity) => entity == BoxScriptEntity ? Box : entity;
         public IReadOnlyList<SpellTargetObject> ObjectsInSquare(SpellLocation centre, int radius, int typeMask) => [];
         public IReadOnlyList<SpellTargetObject> ObjectsAt(SpellLocation tile, int typeMask) => [];
         public bool TileBlocked(SpellLocation tile) => false;
@@ -225,5 +228,21 @@ public sealed class SessionSpellCasterRemaindersTests
         Assert.IsTrue(caster.StopSpellOnObject(StopNumber, Hero));
         Assert.IsFalse(caster.StopSpellOnObject(StopNumber, Hero), "none left: the answer is 0");
         Assert.IsFalse(caster.StopSpellOnObject(StopNumber, Rat));
+    }
+
+    // ARC-SCRIPT-1576 (RM5/RM6): the script host's name of a scenery object is not always the cast host's id; the stop spell looks the runs up by the cast id.
+    [TestMethod]
+    public void The_spell_stop_of_a_script_finds_a_run_on_a_scenery_object_by_its_cast_id()
+    {
+        var (owner, caster) = Session();
+        using var _ = owner;
+        Assert.AreEqual(Hero, caster.CastIdOf(Hero), "the PC passes through");
+        Assert.AreEqual(Rat, caster.CastIdOf(Rat), "an entity the map names alike passes through");
+        Assert.AreEqual(Box, caster.CastIdOf(BoxScriptEntity), "the script's name of the scenery is translated");
+        var run = Started(owner, caster, StopNumber, Box);
+        Assert.IsNull(caster.FindRunOnObject(StopNumber, BoxScriptEntity), "the script's own name finds no run: the host holds the cast id");
+        Assert.AreEqual(run.Id, caster.FindRunOnObject(StopNumber, caster.CastIdOf(BoxScriptEntity))?.Id);
+        Assert.IsTrue(caster.StopSpellOnObject(StopNumber, caster.CastIdOf(BoxScriptEntity)));
+        Assert.IsNull(owner.QuerySpellRuns()[run.Id], "the run on the scenery ended");
     }
 }

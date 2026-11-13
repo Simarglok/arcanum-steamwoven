@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from . import gamepad_export_gates as gates
+from tools.local_dev import gamepad_export_gates as gates
 
 HEAD = 'a' * 40
 

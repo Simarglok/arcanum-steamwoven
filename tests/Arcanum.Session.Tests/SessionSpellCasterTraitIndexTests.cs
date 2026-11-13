@@ -96,8 +96,11 @@ public sealed class SessionSpellCasterTraitIndexTests
         Spell(DexMinusOne, StatField, 1, -1), Spell(DexMinusTwo, StatField, 1, -2), Spell(DexMinusMany, StatField, 1, -20), Spell(DexPlusFive, StatField, 1, 5),
         Spell(IntPlus, StatField, 4, 1), Spell(DerivedPlus, StatField, 9, 3), Spell(CharismaPlus, StatField, 7, 1),
         Spell(BadIndex, StatField, 28, 1), Spell(BadField, 99, 0, 1), Spell(StrengthPlus, StatField, 0, 1), Spell(LevelPlus, StatField, 17, 1), Spell(StrengthMinusOne, StatField, 0, -1), Spell(StrengthMinusTen, StatField, 0, -10),
+        Spell(GenderToFemale, StatField, 26, -1), Spell(GenderToMale, StatField, 26, 1), Spell(RaceDwarf, StatField, 27, 1), Spell(RaceTooHigh, StatField, 27, 50), Spell(RaceHuman, StatField, 27, -5), Spell(ConstitutionPlusMany, StatField, 2, 30),
         IntMinusOne, IntMinusTwo, IntMinusMany, Stat25MinusMany, WillMinusOne, WillMinusTwo, LevelMinusMany, LevelPlusMany, ExperiencePlusMany, AlignmentPlusMany, AlignmentMinusMany, FatePlusMany, UnspentMinusMany, Stat25PlusMany,
     }.ToDictionary(r => r.Data.Number);
+
+    private const int GenderToFemale = 270, GenderToMale = 271, RaceDwarf = 272, RaceTooHigh = 273, RaceHuman = 274, ConstitutionPlusMany = 275;
 
     private static (GameSessionOwner Owner, SessionSpellCaster Caster) Session(CombatFields? fields = null)
     {
@@ -251,24 +254,6 @@ public sealed class SessionSpellCasterTraitIndexTests
         Assert.AreEqual(version, owner.Version);
     }
 
-    [TestMethod]
-    public void The_stats_whose_setter_does_more_than_store_are_not_ready_with_the_reason_in_the_ledger()
-    {
-        // Gender and race (the innate effect swap): each is read and not written (magick and tech points run the rewield, ARC-MAGIC-1507, and poison the life state, ARC-MAGIC-1508, below).
-        foreach (var index in new[] { 26, 27 })
-        {
-            var (owner, _) = Session();
-            using var _o = owner;
-            var number = 400 + index;
-            var records = new Dictionary<int, SessionSpellRecord>(Records) { [number] = Spell(number, StatField, index, 1) };
-            var tried = new SessionSpellCaster(owner, n => records.GetValueOrDefault(n), new Map(owner, RatFields()), new Events());
-            var version = owner.Version;
-            Assert.IsNull(tried.Apply(Run(number), 0, At(Rat, SpellTargetObject.Npc)).JumpTo, $"stat {index}");
-            Assert.AreEqual(version, owner.Version, $"stat {index}");
-            Assert.IsTrue(NotReady(tried), $"stat {index}");
-        }
-    }
-
     // ARC-MAGIC-1508 (ledger RM3b, setter case 0x18 → 0x4B0EE0, 0x4B1350): stat 24 is the NPC's poison level, the life state's in the session.
     private static (GameSessionOwner Owner, SessionSpellCaster Caster) PoisonSession(int stored, int constitution, int number, int value, CombatFields? fields = null)
     {
@@ -336,6 +321,125 @@ public sealed class SessionSpellCasterTraitIndexTests
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
         Assert.AreEqual(250, restored.QueryLife(caster.LifeTarget(Rat)!).View!.Record.State.PoisonLevel);
         Assert.AreEqual(2, restored.QueryEvents().Count);
+    }
+
+    // ARC-MAGIC-1509 (ledger RM3b; exe read 0x4B0980 cases 2 and 3 with the table 0x4B0E74, 0x4EA2E0, 0x4B0FD0): gender and race remove the first innate entry of their cause before the store and add the new innate effect after it.
+    // Gender 0 (a woman) adds effect 0x14A with the gender cause, gender 1 nothing; a race adds effect 0x40 + race with the race cause.
+    private static readonly SessionEffectDefinition Female = new(330, [new(EffectAttributeKind.Stat, 11, EffectChangeOperator.Add, 1)]),
+        DwarfEffect = new(65, [new(EffectAttributeKind.Stat, 11, EffectChangeOperator.Add, 2)]), HumanEffect = new(64, [new(EffectAttributeKind.Stat, 11, EffectChangeOperator.Add, 3)]);
+
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster, SessionLifeTarget Target) Innate(bool rules = true, int gender = 1, int race = 0)
+    {
+        var fields = AttackStateTests.Npc(AttackStateTests.Stats(dexterity: 10, gender: gender, race: race), resistances: [10, 0, 0, 0, 5], skills: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        var (owner, caster) = Session(fields);
+        if (rules) owner.AttachInnateEffects([Female, DwarfEffect, HumanEffect]);
+        return (owner, caster, SessionCritterCombat.From(Rat, fields).Combat!.Target);
+    }
+
+    private static (int Number, EffectCause Cause)[] Held(GameSessionOwner owner, SessionLifeTarget target) => [.. owner.QueryNpcEffects(target)!.Entries.Select(e => (e.Number, e.Cause))];
+
+    [TestMethod]
+    public void A_man_made_a_woman_takes_the_female_effect_with_the_gender_cause_and_loses_the_old_gender_entry()
+    {
+        var (owner, caster, target) = Innate();
+        using var _ = owner;
+        // An old gender entry (any number) and an unrelated entry: the removal takes the first entry of the gender cause alone (0x4EA2E0).
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, DwarfEffect, EffectCause.Gender).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, HumanEffect, EffectCause.Race).Disposition);
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(GenderToFemale), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(0, owner.QueryCritterIndexedWrites(Rat).Stats[26]);
+        CollectionAssert.AreEqual(new[] { (64, EffectCause.Race), (330, EffectCause.Gender) }, Held(owner, target));
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void A_woman_made_a_man_loses_the_gender_entry_and_adds_none()
+    {
+        var (owner, caster, target) = Innate(gender: 0);
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, Female, EffectCause.Gender).Disposition);
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(GenderToMale), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(1, owner.QueryCritterIndexedWrites(Rat).Stats[26]);
+        Assert.AreEqual(0, Held(owner, target).Length);
+        // A man made a man (a store of the same value) removes nothing and adds nothing; the same value is no change in the stat.
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(GenderToMale), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(0, Held(owner, target).Length);
+    }
+
+    [TestMethod]
+    public void A_woman_made_a_woman_again_moves_her_female_entry_to_the_end_of_the_list()
+    {
+        // The setter removes before the store whatever the value, then adds: the entry is re-added after the entries that were behind it.
+        var (owner, caster, target) = Innate(gender: 0);
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, Female, EffectCause.Gender).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, HumanEffect, EffectCause.Race).Disposition);
+        // Gender 0 is stored already: a store of -1 clamps to 0 (a lowering of nothing).
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(GenderToFemale), 0, At(Rat, SpellTargetObject.Npc)));
+        CollectionAssert.AreEqual(new[] { (64, EffectCause.Race), (330, EffectCause.Gender) }, Held(owner, target));
+    }
+
+    [TestMethod]
+    public void A_race_change_swaps_the_race_effect_and_changes_the_range_of_the_other_stats()
+    {
+        var (owner, caster, target) = Innate();
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, HumanEffect, EffectCause.Race).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, Female, EffectCause.Gender).Disposition);
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(RaceDwarf), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(1, owner.QueryCritterIndexedWrites(Rat).Stats[27]);
+        CollectionAssert.AreEqual(new[] { (330, EffectCause.Gender), (65, EffectCause.Race) }, Held(owner, target));
+        // The race is stored where the stat ranges read it: a dwarf's constitution goes to 21 where a human's stops at 20.
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(ConstitutionPlusMany), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(21, owner.QueryCritterIndexedWrites(Rat).Stats[2]);
+    }
+
+    [TestMethod]
+    public void A_race_back_to_human_takes_the_human_effect()
+    {
+        var (owner, caster, target) = Innate(race: 1);
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, DwarfEffect, EffectCause.Race).Disposition);
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(RaceHuman), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(0, owner.QueryCritterIndexedWrites(Rat).Stats[27], "clamped to the minimum 0");
+        CollectionAssert.AreEqual(new[] { (64, EffectCause.Race) }, Held(owner, target));
+    }
+
+    [TestMethod]
+    public void A_gender_or_race_swap_without_the_effects_rule_or_for_the_races_eleventh_slot_is_not_ready_and_writes_nothing()
+    {
+        // No rule attached: the effect cannot be added, so nothing is removed or stored.
+        var (owner, caster, target) = Innate(rules: false);
+        using var _o = owner;
+        var version = owner.Version;
+        Assert.IsNull(caster.Apply(Run(GenderToFemale), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        Assert.IsNull(caster.Apply(Run(RaceDwarf), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        Assert.AreEqual(2, caster.Log.Count(e => e.Kind == SpellCastEventKind.ComponentNotReady));
+        Assert.AreEqual(version, owner.Version);
+        // A male made a man needs no rule (nothing to add): only the removal and the store run.
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(GenderToMale), 0, At(Rat, SpellTargetObject.Npc)));
+        // Race 11 (the table's last slot) is a race the character rules do not have: not ready even with the rules.
+        var (owner2, caster2, _) = Innate();
+        using var _o2 = owner2;
+        var version2 = owner2.Version;
+        Assert.IsNull(caster2.Apply(Run(RaceTooHigh), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        Assert.AreEqual(version2, owner2.Version);
+        Assert.IsTrue(NotReady(caster2));
+        Assert.AreEqual(1, owner.QueryCritterIndexedWrites(Rat).Stats[26]);
+        Assert.AreEqual(0, Held(owner, target).Length);
+    }
+
+    [TestMethod]
+    public void The_innate_rules_the_host_attaches_are_checked()
+    {
+        var (owner, _, _) = Innate(rules: false);
+        using var _o = owner;
+        Assert.ThrowsExactly<ArgumentException>(() => owner.AttachInnateEffects([new(158, [new(EffectAttributeKind.Stat, 11, EffectChangeOperator.Add, 1)])]));
+        Assert.ThrowsExactly<ArgumentException>(() => owner.AttachInnateEffects([new(75, [new(EffectAttributeKind.Stat, 11, EffectChangeOperator.Add, 1)])]));
+        owner.AttachInnateEffects([Female]);
+        Assert.AreEqual(Female, owner.InnateRule(330));
+        owner.AttachInnateEffects(null);
+        Assert.IsNull(owner.InnateRule(330));
     }
 
     [TestMethod]
@@ -663,5 +767,281 @@ public sealed class SessionSpellCasterTraitIndexTests
         var kind = InventoryStateTests.Facts(SessionItemType.Generic, 5700).Kind;
         Assert.AreEqual(GameSessionDisposition.Changed, owner.AddItemToNpc(owner.Version, Rat, kind, _ => SessionInsertVerdict.Accepted).Disposition);
         Assert.AreEqual(450, owner.QueryNpcCarry(Exterior, target, stats, 3)!.Weight);
+    }
+
+    // ---- ARC-MAGIC-1510: the hero and a follower whose stats the advancement record holds ----
+
+    // The half-elf hero (dexterity effect +1) with a basic skill keyed on dexterity at 2 points, the first college at rank <colleges>, the first tech discipline at degree <degree>.
+    private static SessionHeroDefinition SkilledHero(int[]? stats = null, int college = 0, int degree = 0)
+    {
+        var basic = new int[12];
+        basic[0] = 2;
+        var colleges = new int[16];
+        colleges[0] = college;
+        var degrees = new int[8];
+        degrees[0] = degree;
+        return HalfElf(stats ?? [8, 10, 8, 8, 8, 8, 8, 8, 0, 0]) with { Advancement = SessionHeroAdvancement.None with { BasicSkills = [.. basic], Colleges = [.. colleges], TechDegrees = [.. degrees] } };
+    }
+
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster) HeroSession(SessionHeroDefinition hero, bool experience = false, IReadOnlyDictionary<int, SessionSpellRecord>? records = null)
+    {
+        var made = GameSessionOwner.Create(Descriptor() with { Hero = hero, Experience = experience ? ExperienceStateTests.Rules() : null });
+        Assert.AreEqual(GameSessionFailure.None, made.Failure);
+        var owner = made.Owner!;
+        var spells = records ?? Records;
+        return (owner, new SessionSpellCaster(owner, n => spells.GetValueOrDefault(n), new Map(owner, RatFields()), new Events()));
+    }
+
+    private static SpellComponentOutcome CastOnHero(SessionSpellCaster caster, int spell) => caster.Apply(Run(spell), 0, At(Hero, SpellTargetObject.Pc));
+
+    [TestMethod]
+    public void The_heros_base_stat_takes_its_stored_value_plus_the_component_and_is_clamped_to_the_races_range()
+    {
+        var (owner, caster) = HeroSession(SkilledHero());
+        using var _ = owner;
+        var version = owner.Version;
+        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(caster, DexPlusFive));
+        Assert.AreEqual(15, owner.QueryHero()!.Stats[1], "stored 10 + 5, the effect's +1 is not part of the base");
+        Assert.AreEqual(16, owner.QueryHeroStats(new(0))!.Value.Snapshot!.GetEffective(CharacterStat.Dexterity));
+        Assert.AreEqual(version.Revision + 1, owner.Version.Revision, "one revision");
+        CollectionAssert.AreEqual(new[] { new SpellCastEvent(SpellCastEventKind.TraitIndexWritten, 1, StatField, Hero, 1) }, caster.Log.ToArray());
+        // A half-elf's dexterity is capped at 21: 15 + 5 + 5 stops there.
+        CastOnHero(caster, DexPlusFive);
+        CastOnHero(caster, DexPlusFive);
+        Assert.AreEqual(21, owner.QueryHero()!.Stats[1]);
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void The_heros_strength_is_stored_and_the_write_goes_through_the_revision_that_settles_encumbrance()
+    {
+        var (owner, caster) = HeroSession(SkilledHero());
+        using var _ = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(caster, StrengthPlus));
+        Assert.AreEqual(9, owner.QueryHero()!.Stats[0]);
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void Lowering_a_heros_stat_is_refused_when_a_skill_keyed_on_it_needs_the_higher_value_reading_the_effective_stat_after_the_write()
+    {
+        var (owner, caster) = HeroSession(SkilledHero());
+        using var _ = owner;
+        // Dexterity 10 (effective 11) down to 9 (effective 10) still holds the skill of 2 points; down to 1 (effective 2) does not.
+        CastOnHero(caster, DexMinusOne);
+        Assert.AreEqual(9, owner.QueryHero()!.Stats[1]);
+        var version = owner.Version;
+        CastOnHero(caster, DexMinusMany);
+        Assert.AreEqual(version, owner.Version, "the guard refuses: nothing written");
+        Assert.AreEqual(9, owner.QueryHero()!.Stats[1]);
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.TraitIndexRefused, 1, 0, Hero, 1), caster.Log.Last());
+        // The stat the guard asked the character owner about is back at its base.
+        Assert.AreEqual(10, owner.QueryHeroStats(new(0))!.Value.Snapshot!.GetEffective(CharacterStat.Dexterity));
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void Lowering_a_heros_intelligence_is_refused_by_a_known_spell_rank_or_a_tech_degree()
+    {
+        // The first college at rank 3 wants intelligence 5: 8 down to 6 holds, down to 4 does not (reason 1).
+        var (owner, caster) = HeroSession(SkilledHero(college: 3));
+        using var _ = owner;
+        CastOnHero(caster, IntMinusTwo.Data.Number);
+        Assert.AreEqual(6, owner.QueryHero()!.Stats[4]);
+        var version = owner.Version;
+        CastOnHero(caster, IntMinusTwo.Data.Number);
+        Assert.AreEqual(version, owner.Version);
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.TraitIndexRefused, 1, 1, Hero, 4), caster.Log.Last());
+        // Degree 4 of the first discipline wants intelligence 13: 14 down to 13 holds, down to 12 does not (reason 2).
+        var (second, tried) = HeroSession(SkilledHero([8, 10, 8, 8, 14, 8, 8, 8, 0, 0], degree: 4));
+        using var _s = second;
+        CastOnHero(tried, IntMinusOne.Data.Number);
+        Assert.AreEqual(13, second.QueryHero()!.Stats[4]);
+        CastOnHero(tried, IntMinusOne.Data.Number);
+        Assert.AreEqual(13, second.QueryHero()!.Stats[4]);
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.TraitIndexRefused, 1, 2, Hero, 4), tried.Log.Last());
+        Assert.IsFalse(NotReady(caster) || NotReady(tried));
+    }
+
+    [TestMethod]
+    public void The_heros_alignment_fate_points_and_unspent_points_are_stored_after_the_clamp()
+    {
+        var (owner, caster) = HeroSession(SkilledHero());
+        using var _ = owner;
+        CastOnHero(caster, AlignmentPlusMany.Data.Number);
+        Assert.AreEqual(1000, owner.QueryHero()!.Alignment);
+        CastOnHero(caster, AlignmentMinusMany.Data.Number);
+        Assert.AreEqual(-1000, owner.QueryHero()!.Alignment);
+        CastOnHero(caster, FatePlusMany.Data.Number);
+        Assert.AreEqual(100, owner.QueryHero()!.Fate.Points);
+        Assert.AreEqual(100, owner.QueryHeroFate()!.Value.Points);
+        CastOnHero(caster, UnspentMinusMany.Data.Number);
+        Assert.AreEqual(0, owner.QueryHero()!.UnspentPoints, "5 - 10 clamped to 0");
+        Assert.IsFalse(NotReady(caster));
+        Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.TraitIndexRefused));
+    }
+
+    [TestMethod]
+    public void A_heros_level_or_experience_that_reaches_no_level_is_stored_and_one_that_does_is_not_ready()
+    {
+        var (owner, caster) = HeroSession(SkilledHero(), experience: true);
+        using var _ = owner;
+        CastOnHero(caster, LevelPlus);
+        Assert.AreEqual(2, owner.QueryHero()!.Level, "level 1 + 1; 0 experience reaches no level of the table");
+        var version = owner.Version;
+        // 2,100,000,000 experience clamped to 2,000,000,000 would run the recalculation 0x4A69C0 up to level 50 (messages, scheme, followers' step): not ready, nothing written.
+        Assert.IsNull(CastOnHero(caster, ExperiencePlusMany.Data.Number).JumpTo);
+        Assert.AreEqual(0, owner.QueryHero()!.Experience);
+        // Level 0 with 0 experience already reaches level 1: the recalculation would raise it again.
+        Assert.IsNull(CastOnHero(caster, LevelMinusMany.Data.Number).JumpTo);
+        Assert.AreEqual(2, owner.QueryHero()!.Level);
+        Assert.AreEqual(2, caster.Log.Count(e => e.Kind == SpellCastEventKind.ComponentNotReady && e.Value == (int)SpellComponentType.TraitIdx));
+        Assert.AreEqual(version.Revision, owner.Version.Revision);
+    }
+
+    [TestMethod]
+    public void A_heros_experience_that_reaches_no_level_is_stored_alone()
+    {
+        var records = new Dictionary<int, SessionSpellRecord>(Records) { [650] = Spell(650, StatField, 18, 100) };
+        var (owner, caster) = HeroSession(SkilledHero(), experience: true, records: records);
+        using var _ = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(caster, 650));
+        var hero = owner.QueryHero()!;
+        Assert.AreEqual((1, 100, 5), (hero.Level, hero.Experience, hero.UnspentPoints), "level 1 needs 1010 experience for level 2");
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void A_heros_level_is_not_ready_without_the_experience_table()
+    {
+        var (owner, caster) = HeroSession(SkilledHero());
+        using var _ = owner;
+        var version = owner.Version;
+        Assert.IsNull(CastOnHero(caster, LevelPlus).JumpTo);
+        Assert.AreEqual(1, owner.QueryHero()!.Level);
+        Assert.AreEqual(version, owner.Version);
+        Assert.IsTrue(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void What_the_heros_state_does_not_hold_is_not_ready_and_a_derived_stat_is_read_not_written()
+    {
+        // Magick and tech points (the rewield runs the worn items' scripts), poison, gender, race, stat 25 and a resistance (the hero stores none).
+        foreach (var index in new[] { 22, 23, 24, 25, 26, 27 })
+        {
+            var number = 600 + index;
+            var records = new Dictionary<int, SessionSpellRecord>(Records) { [number] = Spell(number, StatField, index, 1) };
+            var (owner, caster) = HeroSession(SkilledHero(), records: records);
+            using var _ = owner;
+            var version = owner.Version;
+            Assert.IsNull(CastOnHero(caster, number).JumpTo, $"stat {index}");
+            Assert.AreEqual(version, owner.Version, $"stat {index}");
+            Assert.IsTrue(NotReady(caster), $"stat {index}");
+        }
+        var (hero, cast) = HeroSession(SkilledHero());
+        using var _h = hero;
+        var before = hero.Version;
+        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(cast, DerivedPlus), "stats 8 to 16 are read, not written");
+        Assert.AreEqual(before, hero.Version);
+        Assert.AreEqual(0, cast.Log.Count);
+        Assert.IsNull(CastOnHero(cast, FirePlus).JumpTo);
+        Assert.IsNull(CastOnHero(cast, BadIndex).JumpTo);
+    }
+
+    // The follower's record: the rat's sheet (the stored fields of RatFields) with dexterity 12, level 1, 3 unspent points and the basic skill keyed on dexterity at <skill> points; college 0 at rank 5 so that mastery can create the record.
+    private static SessionNpcAdvancement FollowerRecord(int skill = 0)
+    {
+        var stats = RatFields().Critter!.BaseStats.ToArray();
+        stats[1] = 12;
+        stats[21] = 3;
+        var basic = new int[12];
+        basic[0] = skill;
+        var colleges = new int[16];
+        colleges[0] = 5;
+        var sheet = new AdvancementSheet((CharacterRace)stats[27], false, [.. stats.Take(8)], stats[22], stats[23], stats[17], stats[21], [.. basic], [.. new int[4]], [.. colleges], [.. new int[8]], 0, 0, 0, 0);
+        return new(Rat, sheet, 0);
+    }
+
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster) Recorded(int skill = 0)
+    {
+        var (owner, caster) = Session();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.MasterNpcCollege(owner.Version, FollowerRecord(skill), 0).Disposition);
+        Assert.IsNotNull(owner.QueryNpcAdvancement(Rat));
+        return (owner, caster);
+    }
+
+    [TestMethod]
+    public void A_followers_stat_in_its_advancement_record_is_read_from_the_record_and_written_to_it_and_to_the_indexed_stats()
+    {
+        var (owner, caster) = Recorded();
+        using var _ = owner;
+        var version = owner.Version;
+        // The record holds dexterity 12 (the stored field says 10): 12 + 5 = 17 on both.
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(DexPlusFive), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(17, owner.QueryNpcAdvancement(Rat)!.Sheet.Stats[1]);
+        Assert.AreEqual(17, owner.QueryCritterIndexedWrites(Rat).Stats[1]);
+        Assert.AreEqual(version.Revision + 1, owner.Version.Revision, "one revision for both");
+        CollectionAssert.AreEqual(new[] { new SpellCastEvent(SpellCastEventKind.TraitIndexWritten, 1, StatField, Rat, 1) }, caster.Log.ToArray());
+        // Level and unspent points are the sheet's too.
+        caster.Apply(Run(LevelPlus), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(2, owner.QueryNpcAdvancement(Rat)!.Sheet.Level);
+        caster.Apply(Run(UnspentMinusMany.Data.Number), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(0, owner.QueryNpcAdvancement(Rat)!.Sheet.UnspentPoints, "3 - 10 clamped to 0");
+        Assert.AreEqual(0, owner.QueryCritterIndexedWrites(Rat).Stats[21]);
+        // The rest of the record stays as it was.
+        Assert.AreEqual(5, owner.QueryNpcAdvancement(Rat)!.Sheet.Colleges[0]);
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void The_stats_a_record_does_not_hold_and_the_resistances_stay_the_stored_fields_writes()
+    {
+        var (owner, caster) = Recorded();
+        using var _ = owner;
+        var sheet = owner.QueryNpcAdvancement(Rat)!.Sheet;
+        caster.Apply(Run(AlignmentPlusMany.Data.Number), 0, At(Rat, SpellTargetObject.Npc));
+        caster.Apply(Run(FirePlus), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(1000, owner.QueryCritterIndexedWrites(Rat).Stats[19]);
+        Assert.AreEqual(25, owner.QueryCritterIndexedWrites(Rat).Resistances[1]);
+        Assert.AreEqual(sheet, owner.QueryNpcAdvancement(Rat)!.Sheet, "the record holds neither");
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void A_lowering_of_a_records_stat_asks_the_guards_with_the_records_skills()
+    {
+        // The stored skill has 2 points keyed on dexterity (a lowering to 1 is refused for a follower with no record); the record has none, so dexterity goes down to the minimum.
+        var (owner, caster) = Recorded(skill: 0);
+        using var _ = owner;
+        caster.Apply(Run(DexMinusMany), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(1, owner.QueryNpcAdvancement(Rat)!.Sheet.Stats[1]);
+        Assert.AreEqual(1, owner.QueryCritterIndexedWrites(Rat).Stats[1]);
+        Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.TraitIndexRefused));
+        // With the skill in the record the guard refuses, nothing written.
+        var (kept, tried) = Recorded(skill: 2);
+        using var _k = kept;
+        var version = kept.Version;
+        tried.Apply(Run(DexMinusMany), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(version, kept.Version);
+        Assert.AreEqual(12, kept.QueryNpcAdvancement(Rat)!.Sheet.Stats[1]);
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.TraitIndexRefused, 1, 0, Rat, 1), tried.Log.Last());
+    }
+
+    [TestMethod]
+    public void The_records_write_refuses_what_is_no_record_or_no_sheet_stat_and_a_stale_version()
+    {
+        var (owner, _) = Session();
+        using var _o = owner;
+        var map = Exterior;
+        Assert.AreEqual(GameSessionFailure.InvalidAdvancement, owner.WriteNpcAdvancementStat(owner.Version, map, Rat, 1, 15).Failure, "no record");
+        var (recorded, _) = Recorded();
+        using var _r = recorded;
+        Assert.AreEqual(GameSessionFailure.InvalidAdvancement, recorded.WriteNpcAdvancementStat(recorded.Version, map, Rat, 19, 15).Failure, "alignment is not the sheet's");
+        Assert.AreEqual(GameSessionFailure.InvalidAdvancement, recorded.WriteNpcAdvancementStat(recorded.Version, map, Rat, 1, 99).Failure, "outside the race's range");
+        var stale = recorded.Version;
+        Assert.AreEqual(GameSessionDisposition.Changed, recorded.WriteNpcAdvancementStat(stale, map, Rat, 1, 15).Disposition);
+        Assert.AreEqual(GameSessionFailure.StaleVersion, recorded.WriteNpcAdvancementStat(stale, map, Rat, 1, 16).Failure);
+        Assert.AreEqual(15, recorded.QueryNpcAdvancement(Rat)!.Sheet.Stats[1], "a refusal changes nothing");
+        Assert.AreEqual(GameSessionDisposition.NoChange, recorded.WriteNpcAdvancementStat(recorded.Version, map, Rat, 1, 15).Disposition);
     }
 }

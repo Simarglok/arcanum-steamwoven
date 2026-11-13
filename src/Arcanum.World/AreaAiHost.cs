@@ -12,6 +12,7 @@ using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
+using Arcanum.Simulation.Party;
 using Arcanum.Simulation.Reaction;
 using Arcanum.Simulation.Skills;
 using Arcanum.Simulation.Traps;
@@ -1025,13 +1026,48 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     /// <summary>
+    /// ARC-AI-1527 (FR-DIALOG-003, VB4-1..VB4-5): the viewer's line speaker for a follower comment: the follower's session entity and the message range it says a random line of (the taunt, the upset line, the near-death line;
+    /// 0x413F50, 0x414370, 0x414490). The viewer reads the line text from the module's generated files and floats it over the follower. Null: the comment is chosen but nobody says it (a host without line texts).
+    /// </summary>
+    public Action<string, LoyaltyLines>? FollowerSpeaks { get; set; }
+
+    private void Speak(string follower, LoyaltyLines lines) => FollowerSpeaks?.Invoke(follower, lines);
+
+    /// <summary>
+    /// ARC-AI-1527 (0x4B6B90 → 0x4AE9E0, the end of one attack): the combat taunt of the PC's followers. <see cref="FollowerRules.TauntKindOf"/> asks the kind of the attack's facts; then
+    /// <see cref="FollowerRules.Taunt"/> draws (half the time none) one of the PC's following followers, in the party's order (a follower this host does not resolve is a null entry, FO17), which says its line
+    /// through <see cref="FollowerSpeaks"/>. Returns the comment chosen, or null. The facts' setting is the "combat taunts" option; the attacker is the hero.
+    /// </summary>
+    public FollowerComment? AttackEnded(TauntFacts facts)
+    {
+        ArgumentNullException.ThrowIfNull(facts);
+        if (FollowerRules.TauntKindOf(facts) is not { } kind) return null;
+        var followers = _session.QueryParty().Followers.Where(f => f.Standing == CompanionStanding.Following).Select(f => Find(f.Entity)).ToArray();
+        if (FollowerRules.Taunt(kind, followers, _session.AiRolls) is not { } comment) return null;
+        Speak(comment.Speaker, comment.Lines);
+        return comment;
+    }
+
+    /// <summary>
+    /// ARC-AI-1527 (0x4AEAB0, from the damage step 0x4B4390): a critter that took <paramref name="hitPointsBefore"/> − <paramref name="hitPointsAfter"/> hit points of <paramref name="maximum"/> in a hit says its near-death
+    /// line when it is a follower of the PC and its hit-point percent fell from 20 or more to below (<see cref="FollowerRules.NearDeathOfHit"/>, a killed critter says nothing: FO16). Returns the comment, or null.
+    /// </summary>
+    public FollowerComment? Hurt(string critter, int hitPointsBefore, int hitPointsAfter, int maximum, bool died)
+    {
+        ArgumentNullException.ThrowIfNull(critter);
+        if (critter == Pc || !_session.QueryCompanion(critter).LedByPc) return null;
+        if (FollowerRules.NearDeathOfHit(critter, true, hitPointsBefore, hitPointsAfter, maximum, died) is not { } comment) return null;
+        Speak(comment.Speaker, comment.Lines);
+        return comment;
+    }
+
+    /// <summary>
     /// ARC-WORLD-115 (I9 host part): tell followers (0x4A9B80, <see cref="FollowerRules.TellFollowers"/>) of <paramref name="leader"/>
     /// about <paramref name="other"/>: the leader's direct followers in its follower array's order (only the hero leads here: the
     /// party's followers that follow it, not the waiting ones, that stand on this map), each through the follower rule (never ordered,
     /// never accidental here: the host's attacks are deliberate). A lock or focus and a complaint's −5 toward the hero go through the
     /// session (<see cref="GameSessionOwner.ApplyFollowerRule"/>); the reaction to an attack by the other (case 5) is
-    /// <see cref="MoraleRules.ReactToAttack"/> through the setter, as a victim's. The complaint's upset line is not floated (the line
-    /// texts are the host's, not read yet).
+    /// <see cref="MoraleRules.ReactToAttack"/> through the setter, as a victim's. The complaint's upset line is said through <see cref="FollowerSpeaks"/> (ARC-AI-1527).
     /// </summary>
     private void TellFollowers(string leader, string other, FollowerSide side)
     {
@@ -1049,6 +1085,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                     React(follower, other);
                     break;
                 case FollowerRuleStep.Lock or FollowerRuleStep.Focus or FollowerRuleStep.Complain:
+                    // ARC-AI-1527 (0x414370): the complaint's upset line is the follower's, said whether or not the reaction step below can run.
+                    if (outcome.Line is { } upset) Speak(follower, upset);
                     var facts = ReactionFacts(follower);
                     if (outcome.Step == FollowerRuleStep.Complain && facts is null) break;
                     var result = _session.ApplyFollowerRule(_session.Version, new SessionFollowerRuleRequest
@@ -2416,22 +2454,25 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     /// <summary>
-    /// ARC-MAGIC-035: stop fleeing (0x4AF170): an NPC in FLEE goes to NONE through the setter, then every run of the NPC whose bottom or top goal is flee (25) is ended at level 6 whatever its state was
-    /// (the helper 0x44E4D0; an eye candy or a burning run is left). False: the NPC is not run here or the session refused.
+    /// ARC-MAGIC-035: stop fleeing (0x4AF170): an NPC in FLEE goes to NONE through the setter, then every run of the NPC whose bottom or top goal is flee (25) is ended at level 6
+    /// (the helper 0x44E4D0; an eye candy or a burning run is left). Both steps are the FLEE state's only (<see cref="MoraleRules.StopFleeing"/>, issue #1595): an NPC in another state keeps its flee runs.
+    /// False: the NPC is not run here or the session refused.
     /// </summary>
     public bool SpellStopFleeing(string npc)
     {
         if (npc == Pc || !TryNpc(npc, out _)) return false;
+        // The state is read before the setter: 0x4AF170 does everything inside its FLEE branch.
+        var stop = MoraleRules.StopFleeing(new HostilityCritter { Id = npc, Kind = HostilityKind.Npc }, _session.QueryDanger(npc).State);
         var result = _session.StopFleeing(_session.Version, npc, SetterFacts(npc));
         // The flee goals end whatever the setter did (0x4AF170 calls 0x44E4D0 after it), so a refused setter does not keep them: only the runs whose bottom or top goal is 25 end, at level 6.
-        InterruptRunsWhere(npc, GoalInterruptRules.MaxLevel, r => r.Bottom.Goal == GoalType.Flee || r.Frames[^1].Goal == GoalType.Flee);
+        if (stop.InterruptsFleeGoals) InterruptFleeRuns(npc);
         return result.Failure == GameSessionFailure.None;
     }
 
     /// <summary>
     /// ARC-AI-1134 (ledger DY3, DY7): the kill notification (0x4AA1B0) of an NPC whose death the session processed (<see cref="GameSessionOwner.KillNotice"/>, after the combat focus := killer):
     /// <see cref="MoraleRules.KillNotification"/> over this host's world (the victim stops fleeing; for a PC killer, the live NPCs of the victim's faction in the 7 × 7 square centred on the killer whose combat focus is the killer start backing off) applied in one
-    /// revision, then every run of the victim whose bottom or top goal is flee ends at level 6 (the stop-fleeing helper's interrupt, as <see cref="SpellStopFleeing"/>). False: the victim is not run here, or the world
+    /// revision, then, when the victim was in FLEE, every run of the victim whose bottom or top goal is flee ends at level 6 (the stop-fleeing helper's interrupt, as <see cref="SpellStopFleeing"/>). False: the victim is not run here, or the world
     /// no longer knows it, or the session refused the plan.
     /// </summary>
     public bool NoticeKill(string victim, string? killer)
@@ -2444,7 +2485,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         {
             Victim = SessionCombatant.Critter(victim), Plan = plan, VictimFacts = SetterFacts(victim),
         });
-        InterruptRunsWhere(victim, GoalInterruptRules.MaxLevel, r => r.Bottom.Goal == GoalType.Flee || r.Frames[^1].Goal == GoalType.Flee);
+        // Only a victim that was in FLEE loses its flee runs (the plan read the state before the session applied it).
+        if (plan.VictimStopsFleeing.InterruptsFleeGoals) InterruptFleeRuns(victim);
         return result.Failure == GameSessionFailure.None;
     }
 

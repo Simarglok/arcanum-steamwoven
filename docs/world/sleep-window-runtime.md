@@ -39,6 +39,8 @@ Every rule was read in the retail 1.0.7.4 `Arcanum.exe` ([ledger SWB1–SWB13](.
 - **Stop** (SWB11, SWB12): the key, another window's key, a changed session or the end of the rest removes the pending step, applies the current
   hour's light at once, fades the screen in and closes the window. Only the Esc menu pauses; the steps go on behind it. Nothing in the window
   reads damage or hostile arrivals (SWB13).
+  PROJECT (ARC-UI-1548, [issue #1548](https://github.com/Simarglok/arcanum-steamwoven/issues/1548)): the sleep mode's leave step on the interface stack
+  stops the rest itself (pending step, bed, fade, light), so any leave of the mode, not only the viewer's close routine, ends a running rest.
 
 ## The bed (ARC-WORLD-1162, ledger SWB1, SWB3, SWB5, SWB14–SWB16)
 
@@ -98,10 +100,10 @@ radius (1 tile, 4 for a wanderer) of the current standpoint **at** it; the AI ho
 - **The wakers** (SWB18), each through the re-seat (0x4AD0B0: the bed at the night standpoint, then at the day standpoint; a sleeper that lies in neither is not woken, SWB17): the waypoint step of a sleeper with a list for the
   period, the standpoint step of a sleeper farther than its radius from the current standpoint (the hour switch at 06:00 or 21:00: the NPC day test is hours 6 to 20, SWB20, and the step's 1-in-1000 roll at hours 6 and 21 spreads the
   town's waking), the attack event's victim and a sleeping witness of an attack. The unseat clears the flag 0x1000 and the latch; the waking step answers 1 and moves nothing, the next step walks the NPC.
-- **After a load or a host change** the occupancy (shared, not saved) and the session's saved sleeping flags can disagree, so the first bed question of a host (a route step or a wake) settles them: an NPC of the host that holds a bed
-  without sleeping, or is dead or gone, is taken out; then every NPC the session saved asleep is seated again in the free bed of its nearer standpoint, all of them before any step seats a new one. A killed NPC leaves its bed at
+- **After a load or a host change** the occupancy (shared, not saved) and the session's saved sleeping flags and bed fields can disagree, so the first bed question of a host (a route step or a wake) settles them: an NPC of the host that holds a bed
+  without sleeping, or is dead or gone, is taken out; then every NPC the session saved asleep is seated again, all of them before any step seats a new one: in the exact bed its saved bed field `npc.bed` names (ARC-WORLD-1525, written at the seat, cleared at the unseat, an object field of the NPC saved with it, no schema step; the original keeps the occupant on the bed, field 0x46), else (an older save, a bed of the mobile list, a saved bed that is gone) in the free bed of its nearer standpoint, which is then recorded. A killed NPC leaves its bed at
   once (a project choice: the original's handling of a dead occupant is not read). A sleeper that is saved asleep but whose bed was lost anyway (taken by the hero, say) is woken by its next re-seat instead of sleeping for ever;
-  the original cannot reach that state, its occupant field being saved.
+  the original cannot reach that state, its occupant field being saved. The hero's own rest bed is not saved (a load closes the window).
 
 **What the installed data holds** ([`BedCensusRealDataTests`](../../tests/Arcanum.World.Tests/BedCensusRealDataTests.cs), numbers only): of the **2236** NPC rows of the 80 read maps with a readable route, **41** have their
 night standpoint on a placed bed's tile, **21** their day standpoint and **51** either, so the step seats them. On the main map (ARC-WORLD-1262; the NPC rows of its mobile aggregate, the beds above) **1556** NPC rows have a readable route; **145** have their night
