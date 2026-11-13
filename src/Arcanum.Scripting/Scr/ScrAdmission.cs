@@ -478,6 +478,22 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S56 { get; } = new("S56", S55.Conditions, S55.Actions.Concat(CritterFieldActions).Concat([ScrCatalogue.Action.ToggleInvulnerability, ScrCatalogue.Action.Rename]),
         S55.ValueKinds, S55.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The slide set (ARC-RENDER-1171, ledger SS3, SS4): <see cref="S56"/> plus queue slide (131) and end game and play slides (132), which hand <see cref="ScrSlideRequest"/> effects to the host in action order.
+    /// Queue slide is the one command of the engine-run slide scripts 997 to 999 and of the ending scripts they call (2921 to 2928); end game is the last line of three movie scripts (1105, 2862, 2863, 3061).
+    /// </summary>
+    public static ScrAdmissionSet S58 { get; } = new("S58", S56.Conditions, S56.Actions.Concat([ScrCatalogue.Action.QueueSlide, ScrCatalogue.Action.EndGame]), S56.ValueKinds, S56.FocusKinds, counterIndexWraps: true);
+
+    /// <summary>
+    /// The set the engine runs the slide scripts with (ARC-RENDER-1171, ledger SS2): true, equal, less or equal, local and global flag and PC quest state conditions; the control and arithmetic actions, call script
+    /// (997 calls the ending scripts, which call each other) and queue slide; no object but the player, the triggerer and the attachee (a call's own operands, which are absent here), the extra object and the run's object variables.
+    /// </summary>
+    public static ScrAdmissionSet SlideScripts { get; } = new("S58-slides",
+        [ScrCatalogue.Condition.True, ScrCatalogue.Condition.LocalFlag, ScrCatalogue.Condition.Equal, ScrCatalogue.Condition.LessOrEqual, ScrCatalogue.Condition.GlobalFlag, ScrCatalogue.Condition.PcQuestState],
+        [ScrCatalogue.Action.DoNothing, ScrCatalogue.Action.ReturnSkipDefault, ScrCatalogue.Action.ReturnRunDefault, ScrCatalogue.Action.Goto, ScrCatalogue.Action.SetLocalFlag, ScrCatalogue.Action.ClearLocalFlag,
+         ScrCatalogue.Action.Assign, ScrCatalogue.Action.Add, ScrCatalogue.Action.Subtract, ScrCatalogue.Action.Multiply, ScrCatalogue.Action.Divide, ScrCatalogue.Action.CallScript, ScrCatalogue.Action.QueueSlide],
+        S1.ValueKinds.Concat(StoreValueKinds), [ScrFocusKind.Triggerer, ScrFocusKind.Attachee, ScrFocusKind.ExtraObject, ScrFocusKind.Player, ScrFocusKind.LocalObject], counterIndexWraps: true);
+
     /// <summary>The conditions of <see cref="S51"/> and <see cref="S52"/> a host answers through <see cref="IScrCritterQueries"/>.</summary>
     public static IReadOnlySet<int> CritterQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.IsAnimal, ScrCatalogue.Condition.IsInCombat };
 
