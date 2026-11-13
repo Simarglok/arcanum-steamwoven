@@ -208,6 +208,7 @@ public partial class TerrainViewerApp
                 if (flow.Kind == SceneFlowKind.LoadSave && _menuLoadingSave)
                 {
                     _menuLoadingSave = false;
+                    ClearTransition(); // ARC-UI-1362
                     if (_mainMenu is { } waiting) { waiting.Notice = "the save's map did not load"; RenderMainMenu(); }
                 }
                 // ARC-UI-038: the opening shop's session the flow carried goes with it.
@@ -332,7 +333,7 @@ public partial class TerrainViewerApp
         // ARC-DEV-381: a choice that waits for the start scene takes no other input; Escape or Back takes it back.
         if (_menuDeferred is not null) { if (cancels) CancelDeferredMenuCommand(); return; }
         // ARC-DEV-387: a save's map is loading under the menu; it takes no input until the save is in.
-        if (_menuLoadingSave) return;
+        if (_menuLoadingSave || _pendingLoad is not null) return;
         var command = step();
         // ARC-DEV-387: the New Game window (or any window after it) is the moment the start map's load begins.
         if (_startLoadPending && _mainMenu is { } entered && AreaMainMenu.NeedsStartScene(entered.Window)) BeginStartLoad("the player entered window " + entered.Window);
@@ -357,12 +358,17 @@ public partial class TerrainViewerApp
                 if (_menuAwaitsScene)
                 {
                     if (BeginSaveSceneFlow(latest.Name, "Last save ") is { } lastRefused) { _mainMenu.Notice = lastRefused; break; }
-                    ShowSaveLoadingNotice();
+                    ShowSaveLoadingMenu();
                     return;
                 }
-                if (LoadGame(SaveLibrary.Slot(latest.Name), "Last save ", MainMenuTables(), AreaLoadMessageRoute.Result)) { EndMainMenu("last save " + latest.Name); return; }
-                _mainMenu.Notice = _quickSaveStatus;
-                break;
+                // ARC-UI-1504: the load shows the load screen first; a refusal comes back to the menu with the reason.
+                LoadGameShown(SaveLibrary.Slot(latest.Name), "Last save ", MainMenuTables(), AreaLoadMessageRoute.Result, ok =>
+                {
+                    if (ok) { EndMainMenu("last save " + latest.Name); return; }
+                    if (_mainMenu is not { } menu) return;
+                    menu.Notice = _quickSaveStatus; RenderMainMenu(); RefreshAreaStatus();
+                });
+                return;
             case AreaMenuCommandKind.ViewIntro:
                 // ARC-RENDER-1170 (0x5445F0): movies 1 and 7, then the window shows again; the menu stands under the movies.
                 if (PlayMovies([1, 7], 0, () => { RenderMainMenu(); RefreshAreaStatus(); }, "view intro")) { _mainMenuPanel!.CloseView(); return; }

@@ -401,13 +401,25 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S38 { get; } = new("S38", S37.Conditions, S37.Actions.Append(ScrCatalogue.Action.GetLocation), S37.ValueKinds, S37.FocusKinds, counterIndexWraps: true);
 
     /// <summary>
-    /// The vitals set (ARC-SCRIPT-1481, ledger VT1–VT4): <see cref="S38"/> plus get hit points (107) and get fatigue points (108), which store an object's current and maximum points into their number operands 1 and 2 through
+    /// The loop-break set (ARC-SCRIPT-1166, plan slice E5-e, ledger PG15): <see cref="S38"/> plus loop break (20), which ends the run's running loop at once and goes on after the first loop end following the loop for (the same
+    /// search an empty list does); without a running loop it does nothing. It needs no host answer of its own. Of the 22 installed scripts that carry it, 17 are reached by a live run (68 placed sites, 65 on the main map; census ARC-RES-1101). S39 is left to another task. Call script at (55) is not part of the slice:
+    /// it stands on one line no run reaches.
+    /// </summary>
+    public static ScrAdmissionSet S40 { get; } = new("S40", S38.Conditions, S38.Actions.Append(ScrCatalogue.Action.LoopBreak), S38.ValueKinds, S38.FocusKinds, counterIndexWraps: true);
+
+    /// <summary>
+    /// The spell-stop set (ARC-SCRIPT-1294, ledger RM6): <see cref="S40"/> plus stop spell on object (130, 0x4593F0), which hands the spell number and the first object of its operand to the host; the host finds the first active
+    /// run of that spell that holds the object (0x459290) and interrupts it (0x457110). It needs no answer: the run goes on whether a run was found or not. Four installed scripts carry it (1054, 2789, 2792, 3022).
+    /// </summary>
+    public static ScrAdmissionSet S42 { get; } = new("S42", S40.Conditions, S40.Actions.Append(ScrCatalogue.Action.StopSpellOnObject), S40.ValueKinds, S40.FocusKinds, counterIndexWraps: true);
+
+    /// The vitals set (ARC-SCRIPT-1481, ledger VT1–VT4): <see cref="S42"/> plus get hit points (107) and get fatigue points (108), which store an object's current and maximum points into their number operands 1 and 2 through
     /// <see cref="IScrVitalQueries"/>, and heal poison (128), which lowers the poison level of every object of its operand (the food use script 30282 reads and heals the eater's vitals and poison).
     /// </summary>
-    public static ScrAdmissionSet S41 { get; } = new("S41", S38.Conditions, S38.Actions.Concat([ScrCatalogue.Action.GetHitPoints, ScrCatalogue.Action.GetFatiguePoints, ScrCatalogue.Action.HealPoison]),
-        S38.ValueKinds, S38.FocusKinds, counterIndexWraps: true);
+    public static ScrAdmissionSet S43 { get; } = new("S43", S42.Conditions, S42.Actions.Concat([ScrCatalogue.Action.GetHitPoints, ScrCatalogue.Action.GetFatiguePoints, ScrCatalogue.Action.HealPoison]),
+        S42.ValueKinds, S42.FocusKinds, counterIndexWraps: true);
 
-    /// <summary>The actions of <see cref="S41"/> a host answers through <see cref="IScrVitalQueries"/>.</summary>
+    /// <summary>The actions of <see cref="S43"/> a host answers through <see cref="IScrVitalQueries"/>.</summary>
     public static IReadOnlySet<int> VitalQueryActions { get; } = new HashSet<int> { ScrCatalogue.Action.GetHitPoints, ScrCatalogue.Action.GetFatiguePoints };
 
     /// <summary>The conditions of <see cref="S37"/> a host answers through <see cref="IScrWorldObjectQueries"/>.</summary>
@@ -552,6 +564,9 @@ public static class ScrAdmission
             // A loop end goes on with the next line, or jumps back to the line after the loop for that filled the list: any loop for's.
             ScrCatalogue.Action.LoopEnd => program.Lines.Where(l => IsLoopFor(l.OnTrue) || l.Condition.Type != ScrCatalogue.Condition.True && IsLoopFor(l.OnFalse))
                 .Select(l => l.Number + 1).Prepend(line + 1),
+            // PG15: a loop break goes on with the next line when no loop runs, or after the first loop end following the running loop's loop for: any loop for's.
+            ScrCatalogue.Action.LoopBreak => program.Lines.Where(l => IsLoopFor(l.OnTrue) || l.Condition.Type != ScrCatalogue.Condition.True && IsLoopFor(l.OnFalse))
+                .Select(l => AfterLoopEnd(program, l.Number)).Prepend(line + 1),
             _ => [line + 1],
         };
         return lines.Where(next => next < count);

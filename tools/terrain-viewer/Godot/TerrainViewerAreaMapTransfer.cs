@@ -93,7 +93,7 @@ public partial class TerrainViewerApp
         if (handoff is null && TransitionFadePending) ClearTransition();
         // ARC-DEV-204 (B16): the map of a transfer is there (or the origin again after a failed load): the clock goes; the black stays until the
         // change has run to its end (the fade-in) or gives the draw back below.
-        var transferShown = handoff is { Kind: MapHandoffKind.Transfer };
+        var transferShown = handoff is { Kind: MapHandoffKind.Transfer or MapHandoffKind.QuickLoad }; // ARC-UI-1362: a load of another map shows the screen too
         if (transferShown) EndTransitionLoad();
         // A carried session that this map did not adopt (another load published meanwhile) is released.
         if (handoff?.Adopted is { } stray && !ReferenceEquals(stray, _areaSession)) { stray.Dispose(); handoff.Released?.Dispose(); handoff = null; }
@@ -289,8 +289,11 @@ public partial class TerrainViewerApp
             ScriptReaction: (npc, value, set) => AreaAiHostNow()?.ScriptReaction(npc, value, set) ?? "no AI host",
             // ARC-SCRIPT-1164 (E5-b): a script's set lock state, toggle open or closed and obj is open read the shown map's portals and containers.
             Openable: ScriptOpenable,
+            // ARC-SCRIPT-1294 (RM6): a script's stop spell on object interrupts the first run of the spell that holds the object, in the cast host.
+            ScriptStopSpell: (obj, spell) => AreaAiHostNow()?.ScriptStopSpell(obj, spell) ?? "no AI host",
             // ARC-SCRIPT-1481: get hit points, get fatigue points and get stat 24 of an NPC read the session's life; heal fatigue (the hero's) and heal poison go through its life step.
             Vitals: ScriptVitals, ScriptHealLife: HealLifeByScript);
+
         var inventory = _inventoryHost;
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, inventory?.Maps ?? [], content, world)
         {
@@ -607,9 +610,15 @@ public partial class TerrainViewerApp
             else if (sameMapLoad is not null && !pending.SameMap && _areaSession is { } carried)
             {
                 for (var i = 0; i < 3; i++) AreaSmokeFrame();
+                var quickLoadScreens = _transitionLoads;
                 QuickKey(Key.F8);
                 if (_mapHandoff is null) throw new InvalidOperationException("AREA_MAP_QUICK_LOAD_NOT_STARTED " + _quickSaveStatus);
+                // ARC-UI-1362: a load that opens another map shows the load screen (black with the clock) from the key until the map is there.
+                if (_transitionLoads != quickLoadScreens + 1 || !_transitionScreen.Loading || _transitionScreen.Alpha < 1)
+                    throw new InvalidOperationException($"AREA_MAP_QUICK_LOAD_SCREEN_NOT_SHOWN loads={_transitionLoads - quickLoadScreens} loading={_transitionScreen.Loading} alpha={_transitionScreen.Alpha}");
                 await (_lastLoad ?? Task.CompletedTask);
+                if (_transitionScreen.Covering || _transitionScreen.Loading)
+                    throw new InvalidOperationException($"AREA_MAP_QUICK_LOAD_SCREEN_STAYED shade={_transitionScreen.Shade} loading={_transitionScreen.Loading}");
                 // The saved cell in world cells: a window map (ARC-RENDER-024) loads again around the saved cell, on its own chart.
                 if (!SameMapName(_readyMapName, from) || _worldActor.Session is not AreaGridSession back || back.Chart.ToWorld(back.State.CommittedCell) != map.Chart.ToWorld(near)
                     || _areaSession is null || ReferenceEquals(_areaSession, carried) || _areaSession.QueryActor().Map.RuntimeMap != map.RuntimeMap

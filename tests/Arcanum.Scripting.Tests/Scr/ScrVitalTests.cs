@@ -5,7 +5,7 @@ using static Arcanum.Scripting.Tests.Scr.ScrTestPrograms;
 
 namespace Arcanum.Scripting.Tests.Scr;
 
-/// <summary>The vitals commands of set S41 (ARC-SCRIPT-1481, ledger VT1–VT4): get hit points (107), get fatigue points (108) and heal poison (128), on synthetic programs of the food use script 30282's shapes.</summary>
+/// <summary>The vitals commands of set S43 (ARC-SCRIPT-1481, ledger VT1–VT4): get hit points (107), get fatigue points (108) and heal poison (128), on synthetic programs of the food use script 30282's shapes.</summary>
 [TestClass]
 public sealed class ScrVitalTests
 {
@@ -33,7 +33,7 @@ public sealed class ScrVitalTests
         public (int Current, int Maximum)? FatiguePoints(ScrObjectRef obj) => Fatigue.TryGetValue(obj, out var v) ? v : null;
     }
 
-    // The vitals commands over the smallest set that runs the synthetic programs (S41 itself needs every query interface at once).
+    // The vitals commands over the smallest set that runs the synthetic programs (S43 itself needs every query interface at once).
     private static readonly ScrAdmissionSet Set = new("test-vitals", ScrAdmissionSet.S2.Conditions,
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.GetHitPoints, ScrCatalogue.Action.GetFatiguePoints, ScrCatalogue.Action.HealPoison]), ScrAdmissionSet.S2.ValueKinds,
         [ScrFocusKind.Triggerer, ScrFocusKind.Attachee, ScrFocusKind.ExtraObject]);
@@ -48,11 +48,11 @@ public sealed class ScrVitalTests
     private static ScrRunResult Use(VitalHost host) => ScrDispatcher.RunObject(new(ScrPoint.Use, Item, Eater, Eater), host, new() { Admission = Set });
 
     [TestMethod]
-    public void S41_adds_only_the_three_vitals_commands_over_S38()
+    public void S43_adds_only_the_three_vitals_commands_over_S42()
     {
         CollectionAssert.AreEquivalent(new[] { ScrCatalogue.Action.GetHitPoints, ScrCatalogue.Action.GetFatiguePoints, ScrCatalogue.Action.HealPoison },
-            ScrAdmissionSet.S41.Actions.Except(ScrAdmissionSet.S38.Actions).ToArray());
-        Assert.IsTrue(ScrAdmissionSet.S41.Conditions.SetEquals(ScrAdmissionSet.S38.Conditions) && ScrAdmissionSet.S38.IsSubsetOf(ScrAdmissionSet.S41));
+            ScrAdmissionSet.S43.Actions.Except(ScrAdmissionSet.S42.Actions).ToArray());
+        Assert.IsTrue(ScrAdmissionSet.S43.Conditions.SetEquals(ScrAdmissionSet.S42.Conditions) && ScrAdmissionSet.S42.IsSubsetOf(ScrAdmissionSet.S43));
         Assert.AreEqual((107, 108, 128), (ScrCatalogue.Action.GetHitPoints, ScrCatalogue.Action.GetFatiguePoints, ScrCatalogue.Action.HealPoison));
     }
 
@@ -98,7 +98,7 @@ public sealed class ScrVitalTests
                 Assert.AreEqual((ScrRefusalCode.WriteToNumber, slot), (refusal.Code, refusal.Slot), $"action {action} literal in operand {slot}");
             }
         var program = Program(Do(C(ScrCatalogue.Action.GetHitPoints, (Extra, 0), (Local, 4), (Local, 5))));
-        Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(program, ScrAdmissionSet.S38).Refusal!.Code);
+        Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(program, ScrAdmissionSet.S42).Refusal!.Code);
         var plain = new FakeHost();
         plain.Attach(Item, ScrPoint.Use, Script, program);
         Assert.Throws<ArgumentException>(() => ScrDispatcher.RunObject(new(ScrPoint.Use, Item, Eater, Eater), plain, new() { Admission = Set }));

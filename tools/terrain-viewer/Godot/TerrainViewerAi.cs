@@ -636,6 +636,7 @@ public partial class TerrainViewerApp
         }
         // ARC-DEV-206: tile scripts that waited for an open conversation.
         if (_npcTilePending.Count > 0 && RunNpcTilePending()) redraw = true;
+        if (NoteWalkerTraps(host)) redraw = true;
         foreach (var notice in host.DrainNotices())
         {
             switch (notice.Kind)
@@ -683,6 +684,11 @@ public partial class TerrainViewerApp
                     _aiNotice = $"{AiName(notice.Npc)} picks up an item";
                     GD.Print($"ARC-AI-1309 ai-pickup npc={notice.Npc} item={notice.Item}");
                     SyncAreaInventory();
+                    redraw = true;
+                    break;
+                case AreaAiNoticeKind.Rewield:
+                    // ARC-RENDER-1485: the gate's re-wield (or a pickup's CHECK_WIELD) changed what the NPC wears: its body shows the new weapon and shield (0x465020), so it is drawn again.
+                    GD.Print($"ARC-RENDER-1485 ai-rewield npc={notice.Npc} shown={host.ShownWeapon(notice.Npc)}");
                     redraw = true;
                     break;
                 case AreaAiNoticeKind.Skill:

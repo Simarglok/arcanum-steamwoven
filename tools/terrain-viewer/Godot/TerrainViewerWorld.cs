@@ -912,7 +912,8 @@ public partial class TerrainViewerApp
 
     private void InputWorld(InputEvent input)
     {
-        if (_worldInitialized && !_exiting) WorldObservation(() => InputWorldObserved(input));
+        // ARC-UI-1504: a load waits for its screen's first frame; nothing the player presses in between reaches the game it replaces (releases still do, so no held key stays down).
+        if (_worldInitialized && !_exiting && (_pendingLoad is null || input is InputEventKey { Pressed: false } or InputEventMouseButton { Pressed: false })) WorldObservation(() => InputWorldObserved(input));
     }
     private void InputWorldObserved(InputEvent input)
     {

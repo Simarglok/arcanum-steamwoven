@@ -8,7 +8,7 @@ namespace Arcanum.Session;
 /// ARC-WORLD-044: the PC's reputations (slice 4 of ARC-RES-028), read in the retail 1.0.7.4 executable by two readers (ledger
 /// "Reputations"). The session holds the list in acquisition order with the game time of each, as the original's two PC
 /// fields do; the module's table is data the host passes (<see cref="GameSessionDescriptor.Reputations"/>), never saved.
-/// Single player: the original's network message and the logbook button flash are not modelled.
+/// Single player: the original's network message is not modelled; the logbook button's light is the host's (ARC-UI-1364, QueryHeroInterfaceStamp).
 /// </summary>
 public sealed partial class GameSessionOwner
 {

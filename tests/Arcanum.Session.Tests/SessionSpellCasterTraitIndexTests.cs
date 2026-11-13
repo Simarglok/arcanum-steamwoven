@@ -1,10 +1,13 @@
+using Arcanum.Data.Characters;
 using Arcanum.Data.Combat;
 using Arcanum.Data.Magic;
+using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Magic;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.HeroStateTests;
+using static Arcanum.Session.Tests.InventoryStateTests;
 using static Arcanum.Session.Tests.SessionFixtures;
 using static Arcanum.Session.Tests.SessionSpellRecordsTests;
 
@@ -23,7 +26,7 @@ public sealed class SessionSpellCasterTraitIndexTests
     // The NPC's stored fields: a human with dexterity 10, a skill keyed on dexterity at 2 points (base level 8), resistances 10, 0, 0, 0, 5.
     private static CombatFields RatFields() => AttackStateTests.Npc(AttackStateTests.Stats(dexterity: 10), resistances: [10, 0, 0, 0, 5], skills: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
 
-    private sealed class Map(GameSessionOwner owner) : ISpellCastMap
+    private sealed class Map(GameSessionOwner owner, CombatFields fields) : ISpellCastMap
     {
         public SpellTargetObject? Object(string id) => id switch
         {
@@ -43,11 +46,11 @@ public sealed class SessionSpellCasterTraitIndexTests
         public SpellCastCritter? Critter(string entity)
         {
             if (entity != Rat) return null;
-            var fields = RatFields();
             var critter = fields.Critter!;
             return new(SessionCritterCombat.From(entity, fields).Combat!, fields.Object.Resistances[4], 0, 0, 0, 0)
             {
                 StoredStats = critter.BaseStats, StoredResistances = fields.Object.Resistances, StoredBasicSkills = critter.BasicSkills, StoredTechSkills = critter.TechSkills,
+                Book = SpellBookRules.FromFields(critter.SpellTech), StoredDegrees = critter.SpellTech.Count >= 25 ? [.. critter.SpellTech.Skip(17)] : null,
             };
         }
         public CombatWeapon WieldedWeapon(string entity) => CombatWeapon.Unarmed();
@@ -69,20 +72,48 @@ public sealed class SessionSpellCasterTraitIndexTests
                 Areas = [new(0x4, 0, 0, 0, -1), new(0, 0, 0, 0, -1), new(0, 0, 0, 0, -1), new(0, 0, 0, 0, -1), new(0, 0, 0, 0, -1)] });
 
     // Resistance 1 (fire) +25, resistance 4 (magic) -200, dexterity -1 / -2 / -20 / +5 / +5 again, intelligence +1, a derived stat (9), charisma +1, an index outside field 220.
-    private const int FirePlus = 200, MagicMinus = 201, DexMinusOne = 210, DexMinusTwo = 211, DexMinusMany = 212, DexPlusFive = 213, IntPlus = 214, DerivedPlus = 215, CharismaPlus = 216, BadIndex = 217, BadField = 218, StrengthPlus = 219, LevelPlus = 220;
+    private const int FirePlus = 200, MagicMinus = 201, DexMinusOne = 210, DexMinusTwo = 211, DexMinusMany = 212, DexPlusFive = 213, IntPlus = 214, DerivedPlus = 215, CharismaPlus = 216, BadIndex = 217, BadField = 218, StrengthPlus = 219, LevelPlus = 220, StrengthMinusOne = 221, StrengthMinusTen = 222;
+
+    // Intelligence -1 / -2 / -10, willpower -1 / -2, level -5 / +100, experience, alignment, fate points, unspent points and stat 25 by large amounts.
+    private static SessionSpellRecord IntMinusOne => Spell(230, StatField, 4, -1);
+    private static SessionSpellRecord IntMinusTwo => Spell(231, StatField, 4, -2);
+    private static SessionSpellRecord IntMinusMany => Spell(232, StatField, 4, -10);
+    private static SessionSpellRecord WillMinusOne => Spell(233, StatField, 6, -1);
+    private static SessionSpellRecord WillMinusTwo => Spell(234, StatField, 6, -2);
+    private static SessionSpellRecord LevelMinusMany => Spell(235, StatField, 17, -5);
+    private static SessionSpellRecord LevelPlusMany => Spell(236, StatField, 17, 100);
+    private static SessionSpellRecord ExperiencePlusMany => Spell(237, StatField, 18, 2_100_000_000);
+    private static SessionSpellRecord AlignmentPlusMany => Spell(238, StatField, 19, 2000);
+    private static SessionSpellRecord AlignmentMinusMany => Spell(239, StatField, 19, -3000);
+    private static SessionSpellRecord FatePlusMany => Spell(240, StatField, 20, 200);
+    private static SessionSpellRecord UnspentMinusMany => Spell(241, StatField, 21, -10);
+    private static SessionSpellRecord Stat25PlusMany => Spell(242, StatField, 25, 2000);
+    private static SessionSpellRecord Stat25MinusMany => Spell(243, StatField, 25, -3000);
 
     private static readonly Dictionary<int, SessionSpellRecord> Records = new[]
     {
         Spell(FirePlus, ResistField, 1, 25), Spell(MagicMinus, ResistField, 4, -200),
         Spell(DexMinusOne, StatField, 1, -1), Spell(DexMinusTwo, StatField, 1, -2), Spell(DexMinusMany, StatField, 1, -20), Spell(DexPlusFive, StatField, 1, 5),
         Spell(IntPlus, StatField, 4, 1), Spell(DerivedPlus, StatField, 9, 3), Spell(CharismaPlus, StatField, 7, 1),
-        Spell(BadIndex, StatField, 28, 1), Spell(BadField, 99, 0, 1), Spell(StrengthPlus, StatField, 0, 1), Spell(LevelPlus, StatField, 17, 1),
+        Spell(BadIndex, StatField, 28, 1), Spell(BadField, 99, 0, 1), Spell(StrengthPlus, StatField, 0, 1), Spell(LevelPlus, StatField, 17, 1), Spell(StrengthMinusOne, StatField, 0, -1), Spell(StrengthMinusTen, StatField, 0, -10),
+        IntMinusOne, IntMinusTwo, IntMinusMany, Stat25MinusMany, WillMinusOne, WillMinusTwo, LevelMinusMany, LevelPlusMany, ExperiencePlusMany, AlignmentPlusMany, AlignmentMinusMany, FatePlusMany, UnspentMinusMany, Stat25PlusMany,
     }.ToDictionary(r => r.Data.Number);
 
-    private static (GameSessionOwner Owner, SessionSpellCaster Caster) Session()
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster) Session(CombatFields? fields = null)
     {
         var owner = CreateWith(HalfElf());
-        return (owner, new SessionSpellCaster(owner, n => Records.GetValueOrDefault(n), new Map(owner), new Events()));
+        return (owner, new SessionSpellCaster(owner, n => Records.GetValueOrDefault(n), new Map(owner, fields ?? RatFields()), new Events()));
+    }
+
+    // A learned NPC: intelligence 14 and willpower 14, the first college at rank 3 (its third spell wants willpower 12), the first tech discipline at degree 4 (wants intelligence 13); the rest as the rat's.
+    private static CombatFields Learned(int intelligence = 14, int willpower = 14, int[]? spellTech = null)
+    {
+        var fields = RatFields();
+        var stats = fields.Critter!.BaseStats.ToArray();
+        stats[4] = intelligence;
+        stats[6] = willpower;
+        spellTech ??= [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 4, 0, 0, 0, 0, 0, 0, 0];
+        return fields with { Critter = fields.Critter with { BaseStats = stats, SpellTech = spellTech } };
     }
 
     private static SpellRun Run(int spell) => new(1, spell, SpellRunAction.Begin, new(Hero, SpellObjectFacts.PcType), new(Hero, SpellObjectFacts.PcType), HeroTile, null, FarTile, null, SpellRunFlags.Active);
@@ -210,17 +241,125 @@ public sealed class SessionSpellCasterTraitIndexTests
         var (owner, caster) = Session();
         using var _ = owner;
         var version = owner.Version;
-        // Intelligence (spell and degree guards), the hero (the character owner's stats), an index and a field the host has no state for.
-        Assert.IsNull(caster.Apply(Run(IntPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        // The hero (the character owner's stats), an index and a field the host has no state for, strength of an NPC the map's seed does not list (its carried weight is unknown), and a PC that is not the hero.
         Assert.IsNull(caster.Apply(Run(FirePlus), 0, At(Hero, SpellTargetObject.Pc)).JumpTo);
         Assert.IsNull(caster.Apply(Run(BadIndex), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
         Assert.IsNull(caster.Apply(Run(BadField), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
-        // Strength (the hit-point adjustment), level, and a PC that is not the hero.
         Assert.IsNull(caster.Apply(Run(StrengthPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
-        Assert.IsNull(caster.Apply(Run(LevelPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
         Assert.IsNull(caster.Apply(Run(FirePlus), 0, At("pc:other", SpellTargetObject.Pc)).JumpTo);
-        Assert.AreEqual(7, caster.Log.Count(e => e.Kind == SpellCastEventKind.ComponentNotReady && e.Value == (int)SpellComponentType.TraitIdx));
+        Assert.AreEqual(5, caster.Log.Count(e => e.Kind == SpellCastEventKind.ComponentNotReady && e.Value == (int)SpellComponentType.TraitIdx));
         Assert.AreEqual(version, owner.Version);
+    }
+
+    [TestMethod]
+    public void The_stats_whose_setter_does_more_than_store_are_not_ready_with_the_reason_in_the_ledger()
+    {
+        // Poison (the poison timer and the life state), gender and race (the innate effect swap): each is read and not written (magick and tech points run the rewield, ARC-MAGIC-1507, below).
+        foreach (var index in new[] { 24, 26, 27 })
+        {
+            var (owner, _) = Session();
+            using var _o = owner;
+            var number = 400 + index;
+            var records = new Dictionary<int, SessionSpellRecord>(Records) { [number] = Spell(number, StatField, index, 1) };
+            var tried = new SessionSpellCaster(owner, n => records.GetValueOrDefault(n), new Map(owner, RatFields()), new Events());
+            var version = owner.Version;
+            Assert.IsNull(tried.Apply(Run(number), 0, At(Rat, SpellTargetObject.Npc)).JumpTo, $"stat {index}");
+            Assert.AreEqual(version, owner.Version, $"stat {index}");
+            Assert.IsTrue(NotReady(tried), $"stat {index}");
+        }
+    }
+
+    [TestMethod]
+    public void Level_experience_alignment_fate_unspent_points_and_stat_25_are_stored_after_the_clamp_alone()
+    {
+        var (owner, caster) = Session();
+        using var _ = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(LevelPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(2, owner.QueryCritterIndexedWrites(Rat).Stats[17], "level 1 + 1");
+        caster.Apply(Run(LevelMinusMany.Data.Number), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(0, owner.QueryCritterIndexedWrites(Rat).Stats[17], "down to the minimum 0, no guard on a stat no skill is keyed on");
+        caster.Apply(Run(LevelPlusMany.Data.Number), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(51, owner.QueryCritterIndexedWrites(Rat).Stats[17], "the maximum 51");
+        caster.Apply(Run(ExperiencePlusMany.Data.Number), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(2_000_000_000, owner.QueryCritterIndexedWrites(Rat).Stats[18]);
+        caster.Apply(Run(AlignmentPlusMany.Data.Number), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(1000, owner.QueryCritterIndexedWrites(Rat).Stats[19]);
+        caster.Apply(Run(AlignmentMinusMany.Data.Number), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(-1000, owner.QueryCritterIndexedWrites(Rat).Stats[19]);
+        caster.Apply(Run(FatePlusMany.Data.Number), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(100, owner.QueryCritterIndexedWrites(Rat).Stats[20]);
+        caster.Apply(Run(UnspentMinusMany.Data.Number), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(0, owner.QueryCritterIndexedWrites(Rat).Stats[21]);
+        caster.Apply(Run(Stat25PlusMany.Data.Number), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(1000, owner.QueryCritterIndexedWrites(Rat).Stats[25]);
+        caster.Apply(Run(Stat25MinusMany.Data.Number), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(20, owner.QueryCritterIndexedWrites(Rat).Stats[25], "the minimum of stat 25 is 20, not 0");
+        Assert.IsFalse(NotReady(caster));
+        Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.TraitIndexRefused));
+    }
+
+    [TestMethod]
+    public void Lowering_intelligence_is_refused_when_a_tech_degree_or_a_known_spell_needs_the_higher_value()
+    {
+        var (owner, caster) = Session(Learned());
+        using var _ = owner;
+        // Degree 4 wants intelligence 13: 14 down to 13 holds, down to 12 does not (the base is kept).
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(IntMinusOne.Data.Number), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(13, owner.QueryCritterIndexedWrites(Rat).Stats[4]);
+        var version = owner.Version;
+        caster.Apply(Run(IntMinusOne.Data.Number), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(version, owner.Version, "refused: nothing written");
+        Assert.AreEqual(13, owner.QueryCritterIndexedWrites(Rat).Stats[4]);
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.TraitIndexRefused, 1, 2, Rat, 4), caster.Log.Last(), "reason 2: a degree");
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void Lowering_intelligence_below_the_ranks_minimum_is_refused_by_the_spell_check_before_the_degrees()
+    {
+        // No degrees; the first college at rank 3 wants 5: 14 - 10 = 4 is refused by the spell check (reason 1), 14 - 2 = 12 holds.
+        var spellTech = new[] { 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0 };
+        var (owner, caster) = Session(Learned(spellTech: spellTech));
+        using var _ = owner;
+        caster.Apply(Run(IntMinusTwo.Data.Number), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(12, owner.QueryCritterIndexedWrites(Rat).Stats[4]);
+        var version = owner.Version;
+        caster.Apply(Run(IntMinusMany.Data.Number), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(version, owner.Version);
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.TraitIndexRefused, 1, 1, Rat, 4), caster.Log.Last());
+        // The same NPC knowing no spell goes down to 4 (no degree either).
+        var (empty, tried) = Session(Learned(spellTech: new int[25]));
+        using var _e = empty;
+        tried.Apply(Run(IntMinusMany.Data.Number), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(4, empty.QueryCritterIndexedWrites(Rat).Stats[4]);
+    }
+
+    [TestMethod]
+    public void Lowering_willpower_is_refused_when_a_known_spell_needs_the_higher_value_and_degrees_do_not_count()
+    {
+        // Rank 3 of the first college wants willpower 12 (6, 9, 12, 15, 18): 14 - 2 = 12 holds, 12 - 1 = 11 does not. The degree of 4 asks for intelligence only.
+        var (owner, caster) = Session(Learned());
+        using var _ = owner;
+        caster.Apply(Run(WillMinusTwo.Data.Number), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(12, owner.QueryCritterIndexedWrites(Rat).Stats[6]);
+        var version = owner.Version;
+        caster.Apply(Run(WillMinusOne.Data.Number), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(version, owner.Version);
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.TraitIndexRefused, 1, 1, Rat, 6), caster.Log.Last());
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void Without_a_spell_book_or_degrees_the_guarded_stats_are_not_ready_for_a_lowering_only()
+    {
+        // Fewer spell-and-tech values than the original's 25: there is no book and no degrees to check, so a lowering of intelligence or willpower is not ready; a raise needs none.
+        var (owner, caster) = Session(Learned(spellTech: [0, 0]));
+        using var _ = owner;
+        var version = owner.Version;
+        Assert.IsNull(caster.Apply(Run(IntMinusOne.Data.Number), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        Assert.IsNull(caster.Apply(Run(WillMinusOne.Data.Number), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        Assert.AreEqual(version, owner.Version);
+        Assert.AreEqual(2, caster.Log.Count(e => e.Kind == SpellCastEventKind.ComponentNotReady));
     }
 
     [TestMethod]
@@ -249,5 +388,211 @@ public sealed class SessionSpellCasterTraitIndexTests
         Assert.AreEqual(GameSessionFailure.StaleVersion, owner.WriteCritterResistance(owner.Version with { Revision = owner.Version.Revision + 1 }, map, Rat, 1, 5).Failure);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteCritterResistance(owner.Version, map, Rat, 1, 5).Disposition);
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.WriteCritterResistance(owner.Version, map, Rat, 1, 5).Disposition, "the same value again");
+    }
+
+    // ARC-MAGIC-1507 (ledger RM3b; exe read 0x4B0980 cases 0x16 and 0x17, 0x465530, 0x467E80, 0x4649C0): magick points (22) and tech points (23) are stored after the clamp 0 to 210, then the rewield runs each worn slot's
+    // light recalculation and item script points 25 and 24. Ready when the session lists the NPC and no worn item has a wield script.
+    private const int MagickPlus = 260, TechPlus = 261, MagickMinusMany = 262, TechPlusMany = 263;
+
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster) Dressed(params SessionSeedItem[] items)
+    {
+        var owner = CreateWith(HalfElf());
+        var attached = owner.AttachMapInventory(Exterior, new SessionMapInventorySeed([new(Rat, SessionHolderKind.Npc, false, false, [], items.Select(item => item.Entity).ToArray())], items));
+        Assert.AreEqual(GameSessionFailure.None, attached.Failure);
+        var records = new Dictionary<int, SessionSpellRecord>(Records)
+        {
+            [MagickPlus] = Spell(MagickPlus, StatField, 22, 7), [TechPlus] = Spell(TechPlus, StatField, 23, 9),
+            [MagickMinusMany] = Spell(MagickMinusMany, StatField, 22, -500), [TechPlusMany] = Spell(TechPlusMany, StatField, 23, 500),
+        };
+        return (owner, new SessionSpellCaster(owner, n => records.GetValueOrDefault(n), new Map(owner, RatFields()), new Events()));
+    }
+
+    private static SessionSeedItem Gear(string entity, int location, params int[] scripts) => new(entity, Facts(SessionItemType.Armor, 2800 + location, location, scripts: scripts), null);
+
+    [TestMethod]
+    public void Magick_and_tech_points_are_stored_after_the_clamp_for_an_npc_whose_worn_items_have_no_wield_script()
+    {
+        // A worn vest and helmet (other script points do not count), a carried item with a wield script (not worn: the rewield walks the wear slots only).
+        var (owner, caster) = Dressed(Gear("vest", 1006), Gear("helmet", 1000, SessionScriptPoint.Examine), Gear("spare", -1, SessionScriptPoint.WieldOn, SessionScriptPoint.WieldOff));
+        using var _ = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(TechPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        var stats = owner.QueryCritterIndexedWrites(Rat).Stats;
+        Assert.AreEqual(RatFields().Critter!.BaseStats[22] + 7, stats[22]);
+        Assert.AreEqual(RatFields().Critter!.BaseStats[23] + 9, stats[23]);
+        caster.Apply(Run(TechPlusMany), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(210, owner.QueryCritterIndexedWrites(Rat).Stats[23], "the maximum 210");
+        caster.Apply(Run(MagickMinusMany), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(0, owner.QueryCritterIndexedWrites(Rat).Stats[22], "the minimum 0, no guard on a point pool");
+        Assert.IsFalse(NotReady(caster));
+        Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.TraitIndexRefused));
+    }
+
+    [TestMethod]
+    public void A_worn_item_with_a_wield_script_or_an_unlisted_npc_leaves_the_points_not_ready()
+    {
+        foreach (var point in new[] { SessionScriptPoint.WieldOn, SessionScriptPoint.WieldOff })
+        {
+            var (owner, caster) = Dressed(Gear("vest", 1006), Gear("ring", 1003, point));
+            using var _ = owner;
+            var version = owner.Version;
+            Assert.IsNull(caster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo, $"point {point}");
+            Assert.IsNull(caster.Apply(Run(TechPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo, $"point {point}");
+            Assert.AreEqual(version, owner.Version);
+            Assert.IsTrue(owner.QueryCritterIndexedWrites(Rat).IsEmpty);
+            Assert.AreEqual(2, caster.Log.Count(e => e.Kind == SpellCastEventKind.ComponentNotReady));
+        }
+        // The session does not list the NPC (no inventory view of its map, or a view without it): nothing says what it wears.
+        var (plain, _) = Session();
+        using var _p = plain;
+        var records = new Dictionary<int, SessionSpellRecord>(Records) { [MagickPlus] = Spell(MagickPlus, StatField, 22, 7) };
+        var tried = new SessionSpellCaster(plain, n => records.GetValueOrDefault(n), new Map(plain, RatFields()), new Events());
+        Assert.IsNull(tried.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo, "no inventory view");
+        Assert.IsTrue(NotReady(tried));
+        Assert.IsTrue(plain.QueryCritterIndexedWrites(Rat).IsEmpty);
+        // A view that lists other holders only.
+        var other = CreateWith(HalfElf());
+        using var _x = other;
+        Assert.AreEqual(GameSessionFailure.None, other.AttachMapInventory(Exterior, new SessionMapInventorySeed([new("oid:other", SessionHolderKind.Npc, false, false, [], [])], [])).Failure);
+        var viewed = new SessionSpellCaster(other, n => records.GetValueOrDefault(n), new Map(other, RatFields()), new Events());
+        Assert.IsNull(viewed.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo, "a view without the NPC");
+        Assert.IsTrue(other.QueryCritterIndexedWrites(Rat).IsEmpty);
+    }
+
+    // ARC-MAGIC-1506 (ledger RM3b; exe read 0x4B0980 case 0, 0x45F790, 0x45F820, 0x461410): strength reads the encumbrance level before the store and recalculates after it. The rat's list weighs what its seed items weigh;
+    // a strength of 3 carries 1500 (500 a point), so the levels step at 15 / 30 / 45 / 60 / 75 / 90 % of it.
+    private static readonly SessionEffectDefinition Slow = new(158, [new(EffectAttributeKind.Stat, 11, EffectChangeOperator.Add, -2)]);
+
+    private static SessionMapInventorySeed RatSeed(params int[] weights) => new(
+        [new(Rat, SessionHolderKind.Npc, false, false, [], weights.Select((_, i) => "stone-" + i).ToArray())],
+        weights.Select((w, i) => new SessionSeedItem("stone-" + i, InventoryStateTests.Facts(SessionItemType.Generic, 5600 + i) with { Weight = w }, null)).ToArray());
+
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster, SessionLifeTarget Target) Carrying(int strength, int[] weights, bool rule = true, bool seeded = true)
+    {
+        var fields = RatFields();
+        var stats = fields.Critter!.BaseStats.ToArray();
+        stats[0] = strength;
+        fields = fields with { Critter = fields.Critter with { BaseStats = stats } };
+        var (owner, caster) = Session(fields);
+        if (seeded) Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, RatSeed(weights)).Disposition);
+        if (rule) owner.AttachEncumbranceEffect(Slow);
+        return (owner, caster, SessionCritterCombat.From(Rat, fields).Combat!.Target);
+    }
+
+    private static int Entries(GameSessionOwner owner, SessionLifeTarget target) => owner.QueryNpcEffects(target)!.Count(158);
+
+    [TestMethod]
+    public void A_stronger_npc_that_drops_a_level_loses_the_encumbrance_entries()
+    {
+        // Strength 2 carries 1000: 200 is level 1 (150 to 299); strength 3 carries 1500, where 200 is below 15 % (225): level 0.
+        var (owner, caster, target) = Carrying(2, [200]);
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, Slow, EffectCause.Item, 1).Disposition);
+        Assert.AreEqual(1, Entries(owner, target));
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(StrengthPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(3, owner.QueryCritterIndexedWrites(Rat).Stats[0]);
+        Assert.AreEqual(0, Entries(owner, target), "the recalculation removed every entry of effect 158");
+        Assert.IsFalse(NotReady(caster));
+        CollectionAssert.AreEqual(new[] { SpellCastEventKind.TraitIndexWritten }, caster.Log.Select(e => e.Kind).ToArray());
+    }
+
+    [TestMethod]
+    public void A_weaker_npc_that_gains_levels_gets_one_item_entry_a_level()
+    {
+        // Strength 3 carries 1500 (800 is level 3: 675 to 899); strength 2 carries 1000, where 800 is level 5 (a timer: not ready, below). Strength 4 carries 2000, where 800 is level 2 (600 to 899).
+        var (owner, caster, target) = Carrying(3, [300, 500]);
+        using var _ = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(StrengthPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(4, owner.QueryCritterIndexedWrites(Rat).Stats[0]);
+        Assert.AreEqual(2, Entries(owner, target), "level 3 to level 2: two entries");
+        Assert.AreEqual(2, owner.QueryNpcEffects(target)!.Entries.Count(e => e.Number == 158 && e.Cause == EffectCause.Item));
+    }
+
+    [TestMethod]
+    public void A_level_that_does_not_change_runs_no_recalculation()
+    {
+        var (owner, caster, target) = Carrying(3, [10]);
+        using var _ = owner;
+        var revision = owner.Version.Revision;
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(StrengthPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(4, owner.QueryCritterIndexedWrites(Rat).Stats[0]);
+        Assert.AreEqual(revision + 1, owner.Version.Revision, "the store alone");
+        Assert.AreEqual(0, Entries(owner, target));
+        Assert.AreEqual(0, owner.QueryNpcEffects(target)!.Entries.Count);
+    }
+
+    [TestMethod]
+    public void The_old_entries_of_effect_158_are_replaced_whatever_added_them()
+    {
+        // 800 at strength 3 is level 3; at 4 it is level 2: a spell's own entry of effect 158 goes with the item entries, and two item entries are added.
+        var (owner, caster, target) = Carrying(3, [800]);
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, Slow, EffectCause.Spell, 1).Disposition);
+        caster.Apply(Run(StrengthPlus), 0, At(Rat, SpellTargetObject.Npc));
+        var entries = owner.QueryNpcEffects(target)!.Entries.Where(e => e.Number == 158).ToArray();
+        CollectionAssert.AreEqual(new[] { EffectCause.Item, EffectCause.Item }, entries.Select(e => e.Cause).ToArray());
+    }
+
+    [TestMethod]
+    public void A_level_with_the_fatigue_timer_is_not_ready_and_writes_nothing()
+    {
+        // 800 at strength 2 (1000 carried) is 80 %, level 5 (75 to 89 %): the timer of 0x45E820 mode 1, which the session keeps for the hero alone.
+        var (owner, caster, target) = Carrying(3, [800]);
+        using var _ = owner;
+        var version = owner.Version;
+        Assert.IsNull(caster.Apply(Run(StrengthMinusOne), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        Assert.IsTrue(NotReady(caster));
+        Assert.AreEqual(version, owner.Version);
+        Assert.IsTrue(owner.QueryCritterIndexedWrites(Rat).IsEmpty);
+        Assert.AreEqual(0, Entries(owner, target));
+    }
+
+    [TestMethod]
+    public void Strength_is_not_ready_without_the_list_or_the_rule_of_effect_158()
+    {
+        // The NPC is no holder of the map's seed: its carried weight is unknown. And a level change without the rule has no entries to add; the same change that stays at its level writes.
+        foreach (var (rule, seeded) in new[] { (true, false), (false, true) })
+        {
+            var (owner, caster, _) = Carrying(2, [200], rule, seeded);
+            using var _o = owner;
+            var version = owner.Version;
+            Assert.IsNull(caster.Apply(Run(StrengthPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo, $"rule {rule}, seeded {seeded}");
+            Assert.IsTrue(NotReady(caster));
+            Assert.AreEqual(version, owner.Version);
+        }
+        var (same, tried, _) = Carrying(3, [10], rule: false);
+        using var _s = same;
+        Assert.AreEqual(SpellComponentOutcome.None, tried.Apply(Run(StrengthPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(4, same.QueryCritterIndexedWrites(Rat).Stats[0]);
+    }
+
+    [TestMethod]
+    public void The_level_after_the_store_is_read_with_the_clamped_strength()
+    {
+        // 10 points down clamp at strength 1 (a minimum of 1 for the primary stats): 500 carried, where 200 is 40 % (level 2); at 3 it was 13 % (level 0). The raw sum, below 1, would carry the 300 floor.
+        var (owner, caster, target) = Carrying(3, [200]);
+        using var _ = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(StrengthMinusTen), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(1, owner.QueryCritterIndexedWrites(Rat).Stats[0], "3 - 10 clamped to 1");
+        Assert.AreEqual(2, Entries(owner, target));
+    }
+
+    [TestMethod]
+    public void The_weight_of_the_list_counts_the_seed_items_and_the_made_items_the_session_added()
+    {
+        var (owner, _, target) = Carrying(3, [100, 300]);
+        using var _ = owner;
+        var stats = RatFields().Critter!.BaseStats.ToArray();
+        Assert.AreEqual(400, owner.QueryNpcCarry(Exterior, target, stats, 3)!.Weight);
+        Assert.AreEqual(1500, owner.QueryNpcCarry(Exterior, target, stats, 3)!.CarryWeight);
+        Assert.AreEqual(1, owner.QueryNpcCarry(Exterior, target, stats, 3)!.Level, "400 of 1500 is 26 %: level 1");
+        Assert.AreEqual(1000, owner.QueryNpcCarry(Exterior, target, stats, 2)!.CarryWeight);
+        Assert.AreEqual(2, owner.QueryNpcCarry(Exterior, target, stats, 2)!.Level, "400 of 1000 is 40 %");
+        Assert.IsNull(owner.QueryNpcCarry(new SessionMapId(80), target, stats, 3), "no seed of that map");
+        // A made item the session adds to the NPC weighs its prototype's weight (the session's row, not the seed's facts).
+        owner.AttachItemWeights(_ => new SessionItemWeight(50));
+        var kind = InventoryStateTests.Facts(SessionItemType.Generic, 5700).Kind;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddItemToNpc(owner.Version, Rat, kind, _ => SessionInsertVerdict.Accepted).Disposition);
+        Assert.AreEqual(450, owner.QueryNpcCarry(Exterior, target, stats, 3)!.Weight);
     }
 }

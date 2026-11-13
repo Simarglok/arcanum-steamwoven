@@ -425,7 +425,7 @@ The census is a data answer; each slice keeps its own contract and checks.
   (a97 and a105 are live, a96 and a98 only on unreached lines) are the bulk; global quest state (c7, 6
   roots, all on the main map) and give quest XP (a63, 1 root) are rare. Rumors are 8, 2 and 3
   roots (c40, c41, a51). Quests 1009, 1013 and 1040 are the ones that touch c7.
-- **E5-e, loops and calls (#1166).** `loop_break` (a20): 17 roots, 68 sites (65 on the main map,
+- **E5-e, loops and calls (#1166; done, set S40, [PG15](ledger/scripts.md)).** `loop_break` (a20): 17 roots, 68 sites (65 on the main map,
   24 at the heartbeat), 7 roots (42 sites) alone. `call script at` (a55) occurs on one line no run
   reaches and is not blocked by anything: the slice is `loop break` alone and is an S slice.
 - **E7-b, media actions.** Newspapers (a85, a86 queue and float headline: 8 and 1 roots) and
@@ -437,7 +437,7 @@ The census is a data answer; each slice keeps its own contract and checks.
   are in S31, 48 and 49 occur only on lines no run reaches. No type of E5-a or E5-b is among the
   spell conditions and actions, so those slices do not gate the spell hooks. The spell *effect* and
   state types the census adds as the E4-g slice (play spell eye candy a104, stop script eye candy
-  a124, stop spell a130, get magictech adjustment a80, polymorphed, shrunk and mirror image c12,
+  a124, stop spell a130 (done since ARC-SCRIPT-1294, set S42), get magictech adjustment a80, polymorphed, shrunk and mirror image c12,
   c13, c16) block 78 roots (145 sites, 18 maps); 39 roots (62 sites) alone. Blessing and curse (a25 to a28, c8, c9) are in E5-c, which the
   plan already made the prerequisite of the spell hooks.
 - **MA-10, the raise hook (#1167).** The resurrect point (18) carries 15 placed sites with 13
@@ -482,7 +482,7 @@ dependency on each other and on the census; all four can start.
 
 ## After the vitals commands (ARC-SCRIPT-1481, 2026-11-13)
 
-The probe takes `--set S38` and `--set S41` besides S30 to S33. Under S38 (the widest set before ARC-SCRIPT-1481) 1,558 attached scripts on 6,113 placed sites are admitted whole and script 30282 is refused for `get_hit_points`, `get_fatigue_points` and
-`heal_poison`; under **S41** (S38 plus those three commands) 1,575 scripts on 6,856 sites are admitted (+17 scripts, +743 sites; 30282 is 729 of them) and 30282 is no longer in the refused lists. The numbers above stay those of S33; a host's own set is
+The probe takes `--set S38` and `--set S43` besides S30 to S33. Under S38 (the widest set before ARC-SCRIPT-1481) 1,558 attached scripts on 6,113 placed sites are admitted whole and script 30282 is refused for `get_hit_points`, `get_fatigue_points` and
+`heal_poison`; under **S43** (S38 plus those three commands; S43 itself is S42 plus them) 1,575 scripts on 6,856 sites are admitted (+17 scripts, +743 sites; 30282 is 729 of them) and 30282 is no longer in the refused lists. The numbers above stay those of S33; a host's own set is
 not counted here (the use set holds the three commands since this task, [ledger VT7](ledger/scripts.md#vitals-commands-and-the-food-use-script-arc-script-1481)).
 
