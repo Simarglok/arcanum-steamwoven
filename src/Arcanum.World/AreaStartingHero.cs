@@ -599,8 +599,8 @@ public static class AreaStartingHero
     /// The host mapping from a pre-made hero (Arcanum.Data) to the session's hero definition (moved here from the
     /// ARC-WORLD-015 real-data test). Level-1 defaults per <see cref="PremadeHero"/>; effect changes on stats the character
     /// owner models (primary, derived, magick and tech points) are kept, and since ARC-SKILLS-002 the changes on basic and tech
-    /// skills too, as the hero's innate skill changes; the others (resistances, tech disciplines, special values, level,
-    /// alignment, age …) are dropped and counted in <paramref name="dropped"/>.
+    /// skills too, as the hero's innate skill changes; since ARC-MAGIC-1700 the resistance changes are read from the attached innate rules
+    /// (not dropped); the others (tech disciplines, special values, level, alignment, age …) are dropped and counted in <paramref name="dropped"/>.
     /// </summary>
     public static SessionHeroDefinition Definition(PremadeHero hero, out int dropped)
     {
@@ -622,6 +622,8 @@ public static class AreaStartingHero
                         continue;
                     }
                 }
+                // ARC-MAGIC-1700: a resistance change of an innate effect is read from the attached rule of the effect when the hero's resistances are (GameSessionOwner.AttachInnateEffects), so it is not dropped.
+                if (change.Kind == EffectAttributeKind.Resistance && change.Attribute is >= 0 and <= 4) continue;
                 if (change.Kind != EffectAttributeKind.Stat || Stat(change.Attribute) is not { } stat)
                 {
                     count++;

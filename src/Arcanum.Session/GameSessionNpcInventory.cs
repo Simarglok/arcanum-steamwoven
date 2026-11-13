@@ -66,6 +66,7 @@ public sealed partial class GameSessionOwner
         if (_revision != revision || _inventory.SeedGeneration != seeds) return RejectItem(GameSessionFailure.StaleVersion, verdict);
         if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict);
         var item = CreateMadeItem(new(entity, kind, SessionCreatePlace.NpcList, weight, Holder: npc));
+        StoreInsertPlace(npc, item.Entity);
         if (ammo is { } kept) _inventory.Ammo[item.Entity] = new(item.Entity, kept.AmmoType, kept.Units);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, verdict, Version);
