@@ -544,7 +544,8 @@ public sealed class InterfaceChromeTests
 
     // ARC-UI-1195: the character sheet's frames and buttons.
     private static readonly (string File, int Width, int Height)[] SheetPanels =
-        [("char_maint.art", 800, 400), ("Skills_Window.ART", 235, 325), ("Disciplines_Window.ART", 235, 325), ("char_spells.art", 235, 325)];
+        [("char_maint.art", 800, 400), ("Skills_Window.ART", 235, 325), ("Disciplines_Window.ART", 235, 325), ("char_spells.art", 235, 325),
+         ("Scheme_Rot.ART", 235, 325)];
 
     private static readonly string[] SheetButtons =
     [
@@ -555,12 +556,20 @@ public sealed class InterfaceChromeTests
     ];
 
     [TestMethod]
-    public void The_character_sheet_window_pages_and_buttons_have_recipes_and_the_schemes_page_has_none_yet()
+    public void The_character_sheet_window_pages_the_schemes_page_buttons_and_college_tabs_have_recipes()
     {
         foreach (var (file, _, _) in SheetPanels) Assert.AreEqual(ChromeKind.Panel, InterfaceChromeRecipes.All.Single(r => r.File == file).Kind, file);
         foreach (var file in SheetButtons) Assert.AreEqual(ChromeKind.Button, InterfaceChromeRecipes.All.Single(r => r.File == file).Kind, file);
-        // The schemes page (567, the auto-level tab) is another task's; the NPC sheet and the editor draw the same frames and so the same recipes.
-        CollectionAssert.DoesNotContain(InterfaceChromeRecipes.All.Select(r => r.File).ToArray(), "Scheme_Rot.ART");
+        // ARC-UI-1784: the schemes page (567, the auto-level tab) and the sixteen college tabs have recipes; the NPC sheet and the editor draw the same frames and so the same recipes.
+        Assert.AreEqual(16, InterfaceChromeRecipes.CollegeTabFiles.Distinct().Count());
+        foreach (var file in InterfaceChromeRecipes.CollegeTabFiles)
+        {
+            var tab = InterfaceChromeRecipes.All.Single(r => r.File == file);
+            Assert.AreEqual(ChromeKind.Button, tab.Kind, file);
+            Assert.IsTrue(tab.KeepFace, file);
+        }
+        // The spell icons (32 x 32, one per spell) are illustrations, like the portraits, and stay pictures.
+        Assert.IsFalse(InterfaceChromeRecipes.All.Any(r => System.Text.RegularExpressions.Regex.IsMatch(r.File, @"^s_[a-z]+[1-5]\.art$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)));
         // The recipes are found by the lowercase art name hash whatever the file's own case.
         Assert.IsNotNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity("CHAR_MAINT.ART", new byte[] { 1 }), 0, 1, 1, new byte[4])));
     }
@@ -643,6 +652,47 @@ public sealed class InterfaceChromeTests
                 CollectionAssert.AreNotEqual(frames[0], frames[2], $"{file} hover differs from idle");
             }
         }
+    }
+
+    [TestMethod]
+    public void A_college_tab_keeps_the_balls_picture_inside_a_generated_rim_at_whole_and_fractional_scales()
+    {
+        // A synthetic 24 x 24 round ball: a blue disc of radius 9.5 inside a red outline, transparent corners.
+        const int size = 24;
+        var legacy = new byte[size * size * 4];
+        for (var y = 0; y < size; y++)
+        for (var x = 0; x < size; x++)
+        {
+            double dx = x + 0.5 - 12, dy = y + 0.5 - 12, d = Math.Sqrt(dx * dx + dy * dy);
+            var i = (y * size + x) * 4;
+            if (d >= 12) continue;
+            (legacy[i], legacy[i + 1], legacy[i + 2], legacy[i + 3]) = d < 9.5 ? ((byte)20, (byte)40, (byte)200, (byte)255) : ((byte)200, (byte)30, (byte)30, (byte)255);
+        }
+        var recipe = InterfaceChromeRecipes.All.Single(r => r.File == InterfaceChromeRecipes.CollegeTabFiles[0]);
+        foreach (var scale in new[] { 1.0, 1.5, 2.0, 4.0 })
+        {
+            var rgba = InterfaceChromeRenderer.Render(recipe, size, size, legacy, [], 0, scale);
+            var (pw, ph) = InterfaceChromeRenderer.PixelSize(size, size, scale);
+            Assert.AreEqual(pw * ph * 4, rgba.Length);
+            CollectionAssert.AreEqual(rgba, InterfaceChromeRenderer.Render(recipe, size, size, legacy, [], 0, scale), $"deterministic at {scale}");
+            var centre = Pixel(rgba, pw, pw / 2, ph / 2);
+            Assert.IsTrue(centre.B > 150 && centre.R < 60, $"the ball's own colour stays inside the rim at {scale}: {centre}");
+            Assert.AreEqual(0, Pixel(rgba, pw, 0, 0).A, "the corner is outside the round silhouette");
+            // The Legacy outline's red is replaced by the generated brass ring: no strongly red pixel (R high, G low) is left between the disc and the edge.
+            var ringY = (int)Math.Round(ph * 0.5);
+            for (var x = 0; x < pw; x++)
+            {
+                var p = Pixel(rgba, pw, x, ringY);
+                if (p.A > 0) Assert.IsFalse(p.R > 180 && p.G < 60, $"no Legacy red outline at {scale}, x {x}");
+            }
+        }
+        // KeepFace is what keeps the ball: the same input through a plain button recipe gets the brass face (the glyph test keeps nothing of a plain disc).
+        var plain = new ChromeRecipe("plain.art", ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, []);
+        CollectionAssert.AreNotEqual(InterfaceChromeRenderer.Render(recipe, size, size, legacy, [], 0, 2), InterfaceChromeRenderer.Render(plain, size, size, legacy, [], 0, 2));
+        // Idle, hover and down differ (the ring is lit differently per frame).
+        var frames = Enumerable.Range(0, 3).Select(f => InterfaceChromeRenderer.Render(recipe, size, size, legacy, [], f, 2)).ToArray();
+        CollectionAssert.AreNotEqual(frames[0], frames[1]);
+        CollectionAssert.AreNotEqual(frames[0], frames[2]);
     }
 
     // ARC-UI-1197: the world map and town map window's frame (138 `mapmain`, 800 x 400) with the map view's hole (150, 11, 501 x 365) and the portrait's square hole (25, 24, 89 x 89).
