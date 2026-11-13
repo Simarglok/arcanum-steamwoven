@@ -261,7 +261,7 @@ Plan slice S8 of the [dispatcher research](../research/scr-event-dispatcher.md#1
 - **Poisoning items (ARC-SCRIPT-1482).** The installed wield-on poisoning items (callers 30088, 30103, 30115, 30147, 30165, 30197)
   run inside this set: they add effects and only *schedule* their poison script with call script in (54), which the move puts in the
   session's event queue. The damage is the deferred call's: `AreaScriptHost.CallAdmissionFor` holds the magick-tech adjustment
-  (`GameSessionOwner.QueryWornPowerRatio`, a worn item's ratio) and the eye candy, and its damage (60, 138) and heal hit points (75)
+  (`GameSessionOwner.QueryWornPowerRatio`, a worn item's ratio), the eye candy and, since ARC-SCRIPT-1586, the vitals questions get hit points and get fatigue points (107, 108), which the scripts 2677, 2679, 2681 and 2682 read after their first damage, and its damage (60, 138) and heal hit points (75)
   of the hero come from the talk set while the shown map's use host answers: they go through the use host's session path, no
   attacker (ARC-SCRIPT-1563, ledger [PZ11](../research/ledger/combat.md#poison-sources-arc-res-1329)). The item-event set itself has no damage action and needs none.
 - **Item questions.** The identified test is the host's (`ISessionItemScriptHost.IsIdentified`); the power ratio of the
