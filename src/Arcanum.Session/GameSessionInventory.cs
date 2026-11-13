@@ -582,6 +582,8 @@ internal sealed class InventoryDomain
     {
         if (!Lists.Remove(entity)) return false;
         Unwear(entity);
+        // ARC-AI-1698: the place the insert gave the item leaves with it, so the list's other items keep theirs and the save holds no slot of an item that is no longer there.
+        ForgetSlot(entity);
         return true;
     }
 

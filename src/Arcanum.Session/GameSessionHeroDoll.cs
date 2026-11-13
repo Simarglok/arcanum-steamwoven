@@ -9,14 +9,14 @@ public sealed partial class GameSessionOwner
 {
     /// <summary>
     /// ARC-UI-1145 (the resistance function, ledger EQ8): the five resistance lines of the hero's character sheet: <paramref name="worn"/> (the worn armour's adjustments) over the hero's stored resistances (zero unless a TraitIdx write set them, ARC-MAGIC-1658) and the
-    /// poison bonus of <paramref name="constitution"/> under the durable effects' resistance changes, clamped 0..95; the Magick line is the worn magic resistance under the
+    /// poison bonus of <paramref name="constitution"/> under the innate (ARC-MAGIC-1700) and durable effects' resistance changes, clamped 0..95; the Magick line is the worn magic resistance under the
     /// <c>resistmagic</c> changes (the same values as the doll's armour rating, <see cref="QueryHeroDollRatings"/>). All zero without a hero.
     /// </summary>
     public (DamageResistances Damage, int Magic) QueryHeroSheetResistances(EquipmentResistances worn, int constitution)
     {
         ThrowIfDisposed();
         if (_hero is null) return (DamageResistances.None, 0);
-        var effects = EffectDomain.Resistances(_effects.Entries, _effects.Definitions);
+        var effects = HeroEffectResistances();
         var stored = HeroStoredResistances();
         return (CombatantRules.Resistances(stored.Damage, worn, constitution, false, effects), CombatantRules.MagicResistance(stored.Magic, worn.Magic, false, effects.Magic));
     }
@@ -57,7 +57,7 @@ public sealed partial class GameSessionOwner
             ? item with { Armor = armor with { MagicAcAdjustment = 0, MagicResistances = EquipmentResistances.None } } : pair.Value);
         var equipment = EquipmentRules.Evaluate(shown, HeroAptitude(), HeroWeaponTraining(HeroSkills()));
         var armorClass = AttackRules.ArmorClass(0, equipment.ArmorClassAdjustment, snapshot.GetEffective(CharacterStat.AcAdjustment), value => value, _rules.Combat);
-        var effects = EffectDomain.Resistances(_effects.Entries, _effects.Definitions);
+        var effects = HeroEffectResistances();
         var stored = HeroStoredResistances();
         var resistances = CombatantRules.Resistances(stored.Damage, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), false, effects);
         var magic = CombatantRules.MagicResistance(stored.Magic, equipment.Resistances.Magic, false, effects.Magic);

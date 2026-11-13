@@ -126,6 +126,43 @@ public sealed class AreaObjectTargetsTests
     }
 
     [TestMethod]
+    public void TheBustedTestReadsEachKindsOwnBit()
+    {
+        // ARC-AI-1636 (0x43F630): a portal or container reads the lock domain's busted bit 0x80, a scenery or trap its busted condition (the stored flag 0x2 or a recorded break); a destroyed object is not busted.
+        using var session = ConversationSessionFixture.Create();
+        var door = Row(0, 1);
+        var bustedChest = Row(1, 2, flags: 0x80);
+        var chest = Row(2, 2, flags: 0x11);
+        var storedBusted = Row(3, 3, flags: 0x2);
+        var statue = Row(4, 3);
+        var snare = Row(5, 17, flags: 0x2);
+        var spared = Row(6, 17);
+        var targets = Targets(door, bustedChest, chest, storedBusted, statue, snare, spared);
+        Assert.IsFalse(targets.IsBusted(session, door.Key), "a whole door");
+        Assert.IsTrue(targets.IsBusted(session, bustedChest.Key), "container flag 0x80");
+        Assert.IsFalse(targets.IsBusted(session, chest.Key));
+        Assert.IsTrue(targets.IsBusted(session, storedBusted.Key), "scenery type flag 0x2");
+        Assert.IsFalse(targets.IsBusted(session, statue.Key));
+        Assert.IsTrue(targets.IsBusted(session, snare.Key), "trap type flag 0x2");
+        Assert.IsFalse(targets.IsBusted(session, spared.Key));
+        Assert.IsFalse(targets.IsBusted(session, Key(9)), "a row outside the targets");
+
+        void Condition(string entity, SessionObjectCondition condition) => Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null,
+            [new(new(1), MapChangeKey.ForEntity(entity, GameSessionOwner.ObjectConditionProperty), (long)condition)]).Disposition);
+        Condition(AreaUseScriptHost.EntityId(statue), SessionObjectCondition.Busted);
+        Assert.IsTrue(targets.IsBusted(session, statue.Key), "a break the session recorded");
+        Condition(AreaUseScriptHost.EntityId(statue), SessionObjectCondition.Destroyed);
+        Assert.IsFalse(targets.IsBusted(session, statue.Key), "a destroyed object answers 0");
+        Condition(AreaUseScriptHost.EntityId(storedBusted), SessionObjectCondition.Off);
+        Assert.IsFalse(targets.IsBusted(session, storedBusted.Key), "a switched-off one no longer a target");
+
+        // A window the hits broke: the lock domain's busted bit on frame 0 (the portal's baseline carries the map data's flags).
+        var window = Row(7, 1, art: 0x30000000);
+        var bustedWindow = new AreaObjectTargets(1, [window], new Dictionary<AreaObjectKey, (string, SessionOpenableBaseline)> { [window.Key] = ("sector:1:7", new(OpenableKind.Portal, LockRules.BustedBit, 0, 0)) }, null);
+        Assert.IsTrue(bustedWindow.IsBusted(session, window.Key), "a portal baseline with the busted bit");
+    }
+
+    [TestMethod]
     public void TheStatusLineNamesTheBreak()
     {
         var resolution = new AttackResolution(AttackRefusal.None, AttackOutcome.Hit, AttackMissCause.None, HitLocation.Torso, false, false, null, null, null,
