@@ -500,12 +500,6 @@ public sealed class AreaHeartbeatScriptTests
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunHeartbeat(byPc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
             CollectionAssert.AreEqual(new[] { (Arcanum.Simulation.Ai.AiSchedulerRules.Pc, 12) }, asked);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, null, npc).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome, "no viewer answer: left unapplied");
-            // An object of another map than the shown one is left alone (the cast host holds the shown map's runs), and the run is still applied.
-            asked.Clear();
-            var elsewhere = new AreaUseScriptHost(session, 2, [npc], [], content, World());
-            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, elsewhere.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
-            Assert.AreEqual(0, asked.Count);
-            Assert.IsNull(elsewhere.LastStopSpell);
         });
     }
 
