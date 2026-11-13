@@ -157,7 +157,7 @@ public partial class TerrainViewerApp
         var texts = SleepTexts();
         var rest = new AreaRestRun(opening.Wait);
         var labels = Enumerable.Range(0, AreaRestRules.ButtonCount(opening.Wait)).Select(i => texts.Label(i, opening.Wait)).ToArray();
-        _rest = rest; _restSession = session; _restLog.Clear(); _restBed = bed;
+        _rest = rest; _restSession = session; _restLog.Clear(); _restPresses = 0; _restBed = bed;
         if (!OpenWindowMode(InterfaceMode.Sleep, () => _sleepPanel!.Open(labels, opening.Wait), () => _sleepPanel!.CloseView()))
         {
             // A refused mode change takes the hero out of the bed again (SWB6).

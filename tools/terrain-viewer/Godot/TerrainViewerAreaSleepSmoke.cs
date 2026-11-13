@@ -116,7 +116,7 @@ public partial class TerrainViewerApp
             Require(sounds.SequenceEqual([AreaGameBarLayout.PressSound, AreaGameBarLayout.ReleaseSound]), "the click played the press and the release sounds: " + string.Join(",", sounds));
         }
         else SleepPressedForSelfTest(0);
-        Require(RestForSelfTest is { Pressed: true, Code: 1 } && SleepPanelForSelfTest!.OriginalLook == SleepPanelForSelfTest.ViewForSelfTest.Visible && SleepPanelForSelfTest.ViewForSelfTest.RowCount == buttons, "the press takes the code of one hour and the buttons stay (SWB8: the handler hides nothing)");
+        Require(RestForSelfTest is { Pressed: true, Code: 1 } && SleepOpenForSelfTest && SleepPanelForSelfTest!.IsOpen, "the press takes the code of one hour and the window stays (SWB8: the handler hides nothing; the second press below clicks a button again)");
         Tick(pressedAt + 49);
         Require(Now() == timeBefore && RestLogForSelfTest.Count == 0, "no step before 50 ms");
         Tick(pressedAt + AreaRestRun.FirstStepMs);
