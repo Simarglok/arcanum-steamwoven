@@ -123,6 +123,7 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(entity);
         if (!entity.StartsWith(ObjectStateVocabulary.EntityPrefix, StringComparison.Ordinal)) return SessionCritterIndexedWrites.None;
+        if (!_maps.MayHaveIndexedWrites(entity)) return SessionCritterIndexedWrites.None;
         // Most NPCs have none written and this is read for every build of an NPC's combat values: the builders are made on the first hit only.
         ImmutableSortedDictionary<int, int>.Builder? stats = null, resistances = null;
         for (var i = 0; i < SessionCritterIndexedWrites.StatCount; i++)
