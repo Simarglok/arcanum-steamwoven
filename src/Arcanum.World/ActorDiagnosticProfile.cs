@@ -28,10 +28,10 @@ public sealed class ActorDiagnosticProfile
     private ActorDiagnosticProfile(ActorDiagnosticProfileId id, ActorDiagnosticClock clock,
         ActorDiagnosticResource idle, ActorDiagnosticResource walk, ActorDiagnosticResource? run, ActorDiagnosticResource? vault,
         ActorDiagnosticResource? attack, int coverage, long? rgbaBytes, ActorDiagnosticResource? fallDown = null, ActorDiagnosticResource? getUp = null,
-        ActorDiagnosticResource? lowAttack = null, ActorDiagnosticResource? @throw = null)
+        ActorDiagnosticResource? lowAttack = null, ActorDiagnosticResource? @throw = null, ActorDiagnosticResource? stunned = null)
     {
         Id = id; Clock = clock; Idle = idle; Walk = walk; Run = run; Vault = vault; Attack = attack; FallDown = fallDown; GetUp = getUp;
-        LowAttack = lowAttack; Throw = @throw;
+        LowAttack = lowAttack; Throw = @throw; Stunned = stunned;
         DistinctKeys = coverage; OriginalRgbaBytes = rgbaBytes;
         var actions = new List<ActorDiagnosticAction> { ActorDiagnosticAction.Idle, ActorDiagnosticAction.Walk };
         if (run is not null) actions.Add(ActorDiagnosticAction.Run);
@@ -42,6 +42,7 @@ public sealed class ActorDiagnosticProfile
             if (fallDown is not null) actions.AddRange([ActorDiagnosticAction.FallDown, ActorDiagnosticAction.GetUp]);
             if (lowAttack is not null) actions.Add(ActorDiagnosticAction.LowAttack);
             if (@throw is not null) actions.Add(ActorDiagnosticAction.Throw);
+            if (stunned is not null) actions.Add(ActorDiagnosticAction.Stunned);
         }
         Actions = actions.AsReadOnly();
     }
@@ -61,6 +62,8 @@ public sealed class ActorDiagnosticProfile
     /// <summary>ARC-RENDER-039: the fixed human's selectors of the bare-handed low attack (animation 21, weapon 1) and the throw
     /// (animation 14, no weapon); only a hero body reads them, the fixed human's profiles have neither.</summary>
     public const uint HumanLowAttackSelector = 0x20000541, HumanThrowSelector = 0x20000380;
+    /// <summary>ARC-COMBAT-1741: the fixed human's selector of the stunned ART (animation 23, weapon 1: N1 forces the unarmed letter and no shield); only a hero body reads it.</summary>
+    public const uint HumanStunnedSelector = 0x200005C1;
     /// <summary>The fixed human's selector of an action (a hero body's selectors are its body bits over these).</summary>
     public static uint HumanSelector(ActorDiagnosticAction action) => action switch
     {
@@ -68,6 +71,7 @@ public sealed class ActorDiagnosticProfile
         ActorDiagnosticAction.GetUp => HumanGetUpSelector,
         ActorDiagnosticAction.LowAttack => HumanLowAttackSelector,
         ActorDiagnosticAction.Throw => HumanThrowSelector,
+        ActorDiagnosticAction.Stunned => HumanStunnedSelector,
         _ => HumanFixedArea.Resource(action).Selector,
     };
     public static ActorDiagnosticProfile HumanFixed { get; } = new(ActorDiagnosticProfileId.HumanFixed, ActorDiagnosticClock.ArtMetadata,
@@ -84,9 +88,9 @@ public sealed class ActorDiagnosticProfile
     /// low attack and throw ARTs when they read (each null otherwise).</remarks>
     internal static ActorDiagnosticProfile ForHeroBody(ActorDiagnosticResource idle, ActorDiagnosticResource walk, ActorDiagnosticResource run,
         ActorDiagnosticResource vault, ActorDiagnosticResource attack, int keys, ActorDiagnosticResource? fallDown = null, ActorDiagnosticResource? getUp = null,
-        ActorDiagnosticResource? lowAttack = null, ActorDiagnosticResource? @throw = null) =>
+        ActorDiagnosticResource? lowAttack = null, ActorDiagnosticResource? @throw = null, ActorDiagnosticResource? stunned = null) =>
         new(ActorDiagnosticProfileId.HeroBody, ActorDiagnosticClock.ArtMetadata, idle, walk, run, vault, attack, keys, null,
-            fallDown is not null && getUp is not null ? fallDown : null, fallDown is not null && getUp is not null ? getUp : null, lowAttack, @throw);
+            fallDown is not null && getUp is not null ? fallDown : null, fallDown is not null && getUp is not null ? getUp : null, lowAttack, @throw, stunned);
     public static ActorDiagnosticProfile MonsterRegression { get; } = new(ActorDiagnosticProfileId.MonsterRegression, ActorDiagnosticClock.LegacyOverride,
         new(ActorDiagnosticAction.Idle, 0xc9001810, 4753, 1, 8, 15, 8, 6),
         new(ActorDiagnosticAction.Walk, 0xc9001850, 4754, 1, 8, 8, 15, 10), null, null, null, 184, null);
@@ -111,6 +115,8 @@ public sealed class ActorDiagnosticProfile
     public ActorDiagnosticResource? LowAttack { get; }
     /// <summary>ARC-RENDER-039: the throw ART (animation 14) a hero body attacks with a returning weapon (a boomerang), or null.</summary>
     public ActorDiagnosticResource? Throw { get; }
+    /// <summary>ARC-COMBAT-1741: the stunned ART (animation 23) a hero body plays while its stun goal (57) runs, or null (missing, or left out over the key cap: the stun then ends at once, as an NPC's does without it).</summary>
+    public ActorDiagnosticResource? Stunned { get; }
     /// <summary>The actions this profile decodes, in load order.</summary>
     public IReadOnlyList<ActorDiagnosticAction> Actions { get; }
     public int DistinctKeys { get; }
@@ -135,6 +141,7 @@ public sealed class ActorDiagnosticProfile
         ActorDiagnosticAction.GetUp => GetUp ?? throw MetadataFailure(),
         ActorDiagnosticAction.LowAttack => LowAttack ?? throw MetadataFailure(),
         ActorDiagnosticAction.Throw => Throw ?? throw MetadataFailure(),
+        ActorDiagnosticAction.Stunned => Stunned ?? throw MetadataFailure(),
         _ => throw MetadataFailure()
     };
     public ActorDiagnosticAction ActionFor(uint selector) => selector == Idle.Selector ? ActorDiagnosticAction.Idle
@@ -144,7 +151,8 @@ public sealed class ActorDiagnosticProfile
         : FallDown is not null && selector == FallDown.Selector ? ActorDiagnosticAction.FallDown
         : GetUp is not null && selector == GetUp.Selector ? ActorDiagnosticAction.GetUp
         : LowAttack is not null && selector == LowAttack.Selector ? ActorDiagnosticAction.LowAttack
-        : Throw is not null && selector == Throw.Selector ? ActorDiagnosticAction.Throw : throw MetadataFailure();
+        : Throw is not null && selector == Throw.Selector ? ActorDiagnosticAction.Throw
+        : Stunned is not null && selector == Stunned.Selector ? ActorDiagnosticAction.Stunned : throw MetadataFailure();
 
     public ActorDiagnosticFacing Facing(ActorDiagnosticAction action, int projectOctant)
     {

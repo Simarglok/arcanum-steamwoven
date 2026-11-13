@@ -41,6 +41,7 @@ public sealed class ExecutorRulesTests
         public readonly Dictionary<string, int> Points = [];
         public readonly Dictionary<string, string> Leaders = [];
         public int Range = 1, Cost = 3, WalkMs = 100, RunMs = 50;
+        public bool ViolenceFilter { get; set; }
         public bool Weapon, LineClosed, NoPaths, StoppedShort, Round, Grenades, BackOffStart, Throws, InterruptFails, Boomerang;
         public string? Actor;
         public DangerState State = DangerState.CombatFocus;

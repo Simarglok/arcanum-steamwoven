@@ -16,7 +16,7 @@ namespace Arcanum.World;
 /// point of the map's speakers is modelled; everything the viewer does not model answers "no" (no generator, no trap,
 /// alive and free, not jilted).
 /// </summary>
-public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrReactionQueries, IScrSpellQueries, IScrStoryQueries, IScrItemQueries, IScrVitalQueries
+public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrReactionQueries, IScrSpellQueries, IScrStoryQueries, IScrItemQueries, IScrVitalQueries, IScrCritterQueries, IScrCritterStateQueries
 {
     /// <summary>The PC as the scripts see it; the viewer has one.</summary>
     public const string PcCode = SessionEventKinds.PlayerEntity;
@@ -57,6 +57,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     /// (29) of <see cref="ScrAdmissionSet.S23"/>. ARC-MAGIC-030 (MT21b): plus the spell conditions body spell (14), influenced by spell (35), knows spell (48) and mastered spell college (49)
     /// and give spell mastery in college (112) of <see cref="ScrAdmissionSet.S31"/>, which the use host answers and this host writes. ARC-SCRIPT-1563 (GT194–GT196): plus damage (60), apply unresistable damage (138) and heal hit points (75) of
     /// <see cref="ScrAdmissionSet.S30"/>, which <see cref="Apply"/> hands to the use host's session path (a talk's poison script 1059, a deferred call's poison chain). ARC-SCRIPT-1620 (TI6): plus attack (36) of <see cref="ScrAdmissionSet.S33"/>, which <see cref="Apply"/> hands to the use host's AI path (the PC or an NPC of the shown map as the attacker).
+    /// ARC-SCRIPT-1733 (CS1–CS12): plus obj is animal (37), obj is in combat (31) and the nine critter-state conditions of <see cref="ScrAdmissionSet.CritterStateConditions"/>, which the use host answers.
     /// </summary>
     public static ScrAdmissionSet TalkAdmission { get; } = WithQueries("S3-area-talk-queries", Admission);
 
@@ -64,7 +65,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public static ScrAdmissionSet SkillTalkAdmission { get; } = WithQueries("S3-area-talk-queries-skill", SkillAdmission);
 
     private static ScrAdmissionSet WithQueries(string id, ScrAdmissionSet set) => new(id,
-        set.Conditions.Concat(ScrAdmissionSet.ObjectQueryConditions).Concat(ScrAdmissionSet.ObjectStateQueryConditions).Concat(ScrAdmissionSet.SpellQueryConditions),
+        set.Conditions.Concat(ScrAdmissionSet.ObjectQueryConditions).Concat(ScrAdmissionSet.ObjectStateQueryConditions).Concat(ScrAdmissionSet.SpellQueryConditions)
+            .Concat(ScrAdmissionSet.CritterQueryConditions).Concat(ScrAdmissionSet.CritterStateConditions),
         set.Actions.Concat([ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea, ScrCatalogue.Action.GetReaction, ScrCatalogue.Action.GiveSpellMastery,
             ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.HealHitPoints, ScrCatalogue.Action.Attack]), set.ValueKinds, set.FocusKinds);
 
@@ -157,6 +159,18 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public int Random(int low, int high) => Answering.Random(low, high);
     public int? AreaOf(ScrObjectRef obj) => Answering.AreaOf(obj);
     public int? SpellFlags(ScrObjectRef obj) => Answering.SpellFlags(obj);
+    // ARC-SCRIPT-1733: the critter-state conditions (CS1–CS9) and, with them, obj is animal and obj is in combat are the shown map's use host's answers, as the other object queries are.
+    public bool? IsAnimal(ScrObjectRef obj) => Answering.IsAnimal(obj);
+    public bool? IsInCombat(ScrObjectRef obj) => Answering.IsInCombat(obj);
+    public bool? MetPcBefore(ScrObjectRef npc, ScrObjectRef pc) => Answering.MetPcBefore(npc, pc);
+    public bool? IsInvisible(ScrObjectRef obj) => Answering.IsInvisible(obj);
+    public bool? IsSurrendered(ScrObjectRef obj) => Answering.IsSurrendered(obj);
+    public bool? IsInDialog(ScrObjectRef obj) => Answering.IsInDialog(obj);
+    public bool? CanSee(ScrObjectRef observer, ScrObjectRef target) => Answering.CanSee(observer, target);
+    public bool? CanHear(ScrObjectRef listener, ScrObjectRef source) => Answering.CanHear(listener, source);
+    public bool? IsInvulnerable(ScrObjectRef obj) => Answering.IsInvulnerable(obj);
+    public bool? IsUndead(ScrObjectRef obj) => Answering.IsUndead(obj);
+    public bool? IsProwling(ScrObjectRef obj) => Answering.IsProwling(obj);
     public bool? IsInfluencedBy(ScrObjectRef obj, int spell) => Answering.IsInfluencedBy(obj, spell);
     public bool? KnowsSpell(ScrObjectRef obj, int spell) => Answering.KnowsSpell(obj, spell);
     public int? MasteredCollege(ScrObjectRef obj) => Answering.MasteredCollege(obj);

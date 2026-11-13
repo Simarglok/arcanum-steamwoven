@@ -110,6 +110,8 @@ public interface IAreaDeathHost
 {
     /// <summary>The hero of the current session is dead (the original's death predicate on the PC, PD1).</summary>
     bool HeroDead { get; }
+    /// <summary>ARC-COMBAT-1741: the hero's dying goal (31) is still running, so its dying animation is playing; the 5 s of the death count from its end (the original's UI callback is the goal's last node, PD1). False by default.</summary>
+    bool HeroDying => false;
     /// <summary>A main-menu window (the in-play menu, its save and load windows, the options) is open (PD3).</summary>
     bool MenuOpen { get; }
     AreaSlideTable Slides { get; }
@@ -238,6 +240,8 @@ public sealed class AreaHeroDeath
         {
             case AreaDeathStage.Watching:
                 var dead = host.HeroDead;
+                // ARC-COMBAT-1741: a death starts counting when its dying animation has played (the goal's last node asks for the event, PD1); while it plays the death is not yet seen.
+                if (dead && !_wasDead && host.HeroDying) return;
                 if (dead && !_wasDead) { Stage = AreaDeathStage.Waiting; Remaining = DeathDelay; }
                 _wasDead = dead;
                 return;

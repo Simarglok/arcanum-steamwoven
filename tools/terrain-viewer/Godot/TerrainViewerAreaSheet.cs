@@ -63,6 +63,7 @@ public partial class TerrainViewerApp
             _sheetPanel.SkillSpendRequested += row => PressSkill(row, spend: true);
             _sheetPanel.SkillRefundRequested += row => PressSkill(row, spend: false);
             _sheetPanel.CollegeSelected += SelectCollege;
+            _sheetPanel.SchemeChosen += PressScheme;
             _sheetPanel.SpellLearnRequested += college => PressSpell(college, learn: true);
             _sheetPanel.SpellUnlearnRequested += college => PressSpell(college, learn: false);
             _sheetPanel.StatSpendRequested += row => PressStat(row, spend: true);
@@ -83,7 +84,7 @@ public partial class TerrainViewerApp
         var editor = _areaSession!.OpenHeroEditor();
         if (editor.Failure != GameSessionFailure.None) GD.Print($"ARC-UI-009 editor open refused={editor.Failure}");
         var (skills, spells, stats, tech) = (BuildSkillsPage(), BuildSpellsPage(), AreaStatsPage.Build(_areaSession!), AreaTechPage.Build(_areaSession!));
-        if (!OpenWindowMode(InterfaceMode.Character, () => _sheetPanel!.Open(view, skills, spells, stats, tech), () => { _sheetPanel!.CloseView(); ResetNpcSheet(); }))
+        if (!OpenWindowMode(InterfaceMode.Character, () => _sheetPanel!.Open(view, skills, spells, stats, tech, BuildSchemesPage()), () => { _sheetPanel!.CloseView(); ResetNpcSheet(); }))
         {
             _areaSession.CloseHeroEditor();
             return;
@@ -125,7 +126,7 @@ public partial class TerrainViewerApp
             // Defensive: the open sheet owns every key, so no quick load or map change replaces the session under it; should a
             // session's editor be closed anyway, the open sheet opens it again.
             if (!_areaSession!.HeroEditorOpen) _areaSession.OpenHeroEditor();
-            _sheetPanel!.Render(view, BuildSkillsPage(), BuildSpellsPage(), AreaStatsPage.Build(_areaSession!), AreaTechPage.Build(_areaSession!));
+            _sheetPanel!.Render(view, BuildSkillsPage(), BuildSpellsPage(), AreaStatsPage.Build(_areaSession!), AreaTechPage.Build(_areaSession!), BuildSchemesPage());
         }
         else EndSheet();
     }
@@ -170,14 +171,31 @@ public partial class TerrainViewerApp
 
     private AreaSpellsPageView? BuildSpellsPage() => AreaSpellsPage.Build(_areaSession!, _spellData?.Data, _sheetCollege);
 
+    /// <summary>ARC-UI-1742: the hero's scheme page (null without the name files, so without the original look).</summary>
+    private AreaSchemesPageView? BuildSchemesPage() =>
+        _sheetArtContent is { ArtReady: true } content && _areaSession is { } session ? AreaSchemesPage.BuildForHero(session, content.Texts) : null;
+
+    /// <summary>ARC-UI-1742: the NPC sheet's scheme page: the NPC's own scheme named, the list read-only (mode 2, ledger ALP7).</summary>
+    private AreaSchemesPageView? NpcSchemes() =>
+        _sheetArtContent is { ArtReady: true } content && _sheetNpc is { } npc ? AreaSchemesPage.Build(content.Texts, npc.AutoLevelScheme) : null;
+
+    /// <summary>ARC-UI-1742: a row of the scheme page: the hero's auto-level scheme becomes that scheme (0x4A6D90, ledger ALP5); nothing is bought now.</summary>
+    private void PressScheme(int scheme)
+    {
+        if (!SheetOpen || !SheetActive || _sheetNpc is not null) return;
+        var result = AreaSchemesPage.Choose(_areaSession!, scheme);
+        GD.Print($"ARC-UI-1742 scheme choose scheme={scheme} disposition={result.Disposition} failure={result.Failure}");
+        SyncAreaSheet();
+    }
+
     /// <summary>A college tab press shows that college's spells.</summary>
     private void SelectCollege(int college)
     {
         if (!SheetOpen || !SheetActive || college is < 0 or >= AreaSpellsPage.Colleges) return;
         AdoptSpellData();
         _sheetCollege = college;
-        if (_sheetNpc is { } npc) { _sheetPanel!.Render(npc.View, npc.Skills, NpcSpells(), npc.Stats, npc.Tech); return; }
-        if (AreaCharacterSheet.Build(_areaSession!).View is { } view) _sheetPanel!.Render(view, BuildSkillsPage(), BuildSpellsPage(), AreaStatsPage.Build(_areaSession!), AreaTechPage.Build(_areaSession!));
+        if (_sheetNpc is { } npc) { _sheetPanel!.Render(npc.View, npc.Skills, NpcSpells(), npc.Stats, npc.Tech, NpcSchemes()); return; }
+        if (AreaCharacterSheet.Build(_areaSession!).View is { } view) _sheetPanel!.Render(view, BuildSkillsPage(), BuildSpellsPage(), AreaStatsPage.Build(_areaSession!), AreaTechPage.Build(_areaSession!), BuildSchemesPage());
     }
 
     /// <summary>A + or − press on the spells page: one call of the session's point pool, its message, and the sheet rebuilt.</summary>
