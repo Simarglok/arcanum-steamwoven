@@ -287,6 +287,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     private readonly List<ScrReadingRequest> _readings = [];
     private readonly List<AreaScriptFloat> _floats = [];
     private readonly List<AreaScriptFade> _fades = [];
+    private readonly List<AreaScriptEyeCandy> _eyeCandies = [];
+
+    /// <summary>ARC-SCRIPT-1592: the script eye candy (action 120) of the runs applied since the last call, in order, for the viewer to play on its objects (<see cref="AreaEyeCandyHost.PlayScript"/>); the talk host's
+    /// <see cref="AreaScriptHost.TakeEyeCandies"/> holds those of a dialog's runs.</summary>
+    public IReadOnlyList<AreaScriptEyeCandy> TakeEyeCandies()
+    {
+        var eyeCandies = _eyeCandies.ToArray();
+        _eyeCandies.Clear();
+        return eyeCandies;
+    }
 
     /// <summary>ARC-SCRIPT-1241: the fades (103) of the runs applied since the last call that ask for a movie, in order, for the viewer to play (their clock jumps are done; a sound-only fade plays
     /// nothing here, as no effect sound does for a use click).</summary>
@@ -1522,6 +1532,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: the point {unkept.Point} slot of {unkept.Attachee?.Code ?? "no object"} a callee or a change script wrote is not kept (no loaded element)");
         if (!Apply(effects, write)) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects");
         _floats.AddRange(floats);
+        _eyeCandies.AddRange(AreaScriptEyeCandy.Of(effects));
         var teleport = effects.Teleports.FirstOrDefault();
         if (effects.Dialog is { } talk)
             return new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: conversation of script {talk.Script} node {talk.Node}")

@@ -185,6 +185,15 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     private readonly List<ScrReadingRequest> _readings = [];
     private readonly List<AreaScriptFloat> _floats = [];
     private readonly List<AreaScriptFade> _fades = [];
+    private readonly List<AreaScriptEyeCandy> _eyeCandies = [];
+
+    /// <summary>ARC-SCRIPT-1592: the script eye candy (action 120) of the runs applied since the last call, in order, for the viewer to play on its objects (<see cref="AreaEyeCandyHost.PlayScript"/>).</summary>
+    public IReadOnlyList<AreaScriptEyeCandy> TakeEyeCandies()
+    {
+        var eyeCandies = _eyeCandies.ToArray();
+        _eyeCandies.Clear();
+        return eyeCandies;
+    }
 
     /// <summary>ARC-DEV-324: queues a line for the viewer to float over <paramref name="speaker"/> as a script's float line does (the generic greeting, which is a
     /// floating line and no window).</summary>
@@ -420,6 +429,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
             floats.Add(new(line.Speaker, printed.Text));
         }
         _floats.AddRange(floats);
+        _eyeCandies.AddRange(AreaScriptEyeCandy.Of(effects));
         // The effect rule of every blessing or curse the run adds is known before anything applies (a missing rule refuses the run whole).
         if (!AreaScriptStory.BlessingRulesResolve(_session, effects, IsPc, BlessingEffects)) return false;
         foreach (var write in effects.GlobalFlags)

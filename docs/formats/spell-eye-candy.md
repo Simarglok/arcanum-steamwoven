@@ -49,6 +49,10 @@ are translucent, 55 scaled, 249 have a light, 64 are `anim_forever`. No entry ha
 without a part (nothing is placed). One line, Disarm's destination, reads its `Flags:` as the sound's value (EC2): it places
 nothing, as in the original.
 
+## The script list (`Rules\ScriptEyeCandy.mes`, ARC-SCRIPT-1592)
+
+The script module's init (0x4446E0) loads the same list type (0x4CDB70) from `Rules\ScriptEyeCandy.mes` as the list 0x5E2FB0, with the loader's own defaults (0x4CDB30) instead of the spell list's set-up: one entry per group, message stride 1 and no sound offsets. So **entry `n` is message `n`**, read in a row from message 0 up to the first missing message, each line parsed as above (`EyeCandyListShape.Script`, `SpellEyeCandyTable.OpenScript`); an entry without `Sound:` has none. The number a script's play action names (action 120, 0x44C7A0) is the entry index itself, not scaled by 6. Installed: 75 entries (messages 0 to 74), all with art and animating, 33 looping (`anim_forever`), 13 lit, 22 with a sound. A goal's entry is a reference that names its list (`EyeCandyEntryRef`, spell list 0, script list 3: the list in the bits above 24, the index below), so a script's entry and a spell's entry of the same number are different entries; the other original lists (animation 0x5DE670, weapon 0x5DE610, combat 0x5FC1F8, trap 0x5FC460) have their numbers reserved there and are not read yet.
+
 ## Refusals and differences
 
 | Original 1.0.7.4 | Steamwoven | Mode |
