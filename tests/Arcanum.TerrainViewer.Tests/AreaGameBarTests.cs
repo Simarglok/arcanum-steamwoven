@@ -23,8 +23,9 @@ public sealed class AreaGameBarTests
             var (x, y, w, h) = AreaGameBarLayout.StripRect(spec.Strip);
             Assert.IsTrue(spec.X >= x && spec.X < x + w && spec.Y >= y && spec.Y < y + h, $"{spec.Button} lies in its strip");
         }
-        CollectionAssert.AreEquivalent(new[] { 185, 184, 472, 473, 470, 471, 187, 169, 186, 193, 137, 18, 17, 19, 20, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216 },
-            AreaGameBarLayout.ArtNumbers.ToArray(), "the clock's ten arts are read with the bars (ARC-UI-1111)");
+        CollectionAssert.AreEquivalent(new[] { 185, 184, 472, 473, 470, 471, 187, 169, 186, 193, 137, 18, 17, 19, 20, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216,
+                772, 773, 774, 775, 776, 777, 778, 779, 780, 781, 782 },
+            AreaGameBarLayout.ArtNumbers.ToArray(), "the clock's ten arts (ARC-UI-1111) and the experience strip's eleven are read with the bars (ARC-UI-1365)");
     }
 
     [TestMethod]
