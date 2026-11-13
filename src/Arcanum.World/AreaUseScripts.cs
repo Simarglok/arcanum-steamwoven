@@ -1573,7 +1573,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         var asked = new List<AreaScriptFade>();
         var fadesApplied = AreaScriptFades.Apply(_session, effects, asked);
         _fades.AddRange(asked.Where(fade => fade.Movie != 0));   // the fades before a refused jump keep their movie, as their clock jumps stay
-        if (fadesApplied && effects.Slides.Any(request => request.Kind == ScrSlideKind.EndGame)) _endGame = true;
+        if (effects.Slides.Any(request => request.Kind == ScrSlideKind.EndGame)) _endGame = true;
         if (!fadesApplied) return false;
         // ARC-WORLD-081: each create object adds its item to the ground next to its object (Creatable checked them); under Steamwoven a patch
         // at the limit takes no more (no change).

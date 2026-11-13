@@ -361,10 +361,11 @@ public sealed class AreaHeroDeath
     }
 
     /// <summary>ARC-RENDER-1171 (SS5): the script action end game and play slides (132) asks for the end of the game: the interface event comes
-    /// <see cref="EndGameDelay"/> ms later and the end-game slides show. True when it was taken; a death or an end game already under way takes none (the original's second
-    /// event would find the first one's reset done; a show cannot be asked twice at once).</summary>
+    /// <see cref="EndGameDelay"/> ms later and the end-game slides show. True when it was taken. A death still waiting its 5 s is overtaken, as in the original, whose 50 ms event fires first
+    /// and whose reset leaves the death event no dead PC to find; a show that covers the game already takes none.</summary>
     public bool RequestEndGame()
     {
+        if (Stage == AreaDeathStage.Waiting && Kind == AreaSlideKind.Death) { Kind = AreaSlideKind.EndGame; Remaining = Math.Min(Remaining, EndGameDelay); return true; }
         if (Stage != AreaDeathStage.Watching) return false;
         Kind = AreaSlideKind.EndGame; Stage = AreaDeathStage.Waiting; Remaining = EndGameDelay;
         return true;

@@ -194,7 +194,7 @@ public partial class TerrainViewerApp
     /// </summary>
     private void SyncScriptFades()
     {
-        if (_readyMode != TerrainViewerMode.Area) { _scriptFades.Clear(); return; }
+        if (_readyMode != TerrainViewerMode.Area) { _scriptFades.Clear(); _endGameAsked = false; return; }
         if (_conversationHost is { } talk) foreach (var fade in talk.Scripts.TakeFades()) _scriptFades.Enqueue(fade);
         if (_useScriptHost is { } use) foreach (var fade in use.Host.TakeFades()) _scriptFades.Enqueue(fade);
         while (!_movieActive && _scriptFades.Count > 0)
@@ -212,6 +212,7 @@ public partial class TerrainViewerApp
     private void AbortMovies()
     {
         _scriptFades.Clear();
+        _endGameAsked = false;
         if (!_movieActive) return;
         _movieDone = null;
         EndMovies();

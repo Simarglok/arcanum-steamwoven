@@ -170,4 +170,22 @@ public sealed class AreaSlideShowTests
         show.StartCredits(host);
         Assert.AreEqual(AreaSlideScripts.MaxQueued, show.Queue.Count);
     }
+
+    [TestMethod]
+    public void An_end_game_overtakes_a_death_that_is_still_waiting_and_a_covering_show_takes_none()
+    {
+        var host = new Host { HeroDead = true };
+        host.Queued[AreaSlideKind.EndGame] = [1];
+        var show = new AreaHeroDeath();
+        show.Rebase(false);
+        show.Tick(16, host);
+        Assert.AreEqual((AreaDeathStage.Waiting, AreaSlideKind.Death), (show.Stage, show.Kind));
+        Assert.IsTrue(show.RequestEndGame(), "the original's 50 ms event comes before the death's 5 s");
+        Assert.AreEqual((AreaDeathStage.Waiting, AreaSlideKind.EndGame), (show.Stage, show.Kind));
+        Assert.AreEqual(AreaHeroDeath.EndGameDelay, show.Remaining);
+        show.Tick(AreaHeroDeath.EndGameDelay, host);
+        Assert.AreEqual(AreaDeathStage.FadeOut, show.Stage);
+        CollectionAssert.AreEqual(new[] { 1 }, show.Queue.ToArray(), "script 997's slides, not the death's");
+        Assert.IsFalse(show.RequestEndGame(), "a show that covers the game takes none");
+    }
 }

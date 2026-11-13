@@ -505,8 +505,9 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         var fadesApplied = AreaScriptFades.Apply(_session, effects, asked);
         foreach (var fade in asked)   // the fades before a refused jump keep their movie or sound, as their clock jumps stay
             if (fade.Movie != 0) _fades.Add(fade); else _sounds.Add(new(ScrSoundKind.Effect, fade.Sound));
-        if (!fadesApplied) return false;
+        // The original runs action 132 inline, before anything later in the run refuses; a refused clock jump does not take the request back.
         if (effects.Slides.Any(request => request.Kind == ScrSlideKind.EndGame)) _endGame = true;
+        if (!fadesApplied) return false;
         if (effects.Writeback is not { } writeback) return true;
         if (writeback.Source != ScrSource.Object || writeback.Point != ScrPoint.Dialog || writeback.Attachee is not { } attachee
             || Speaker(attachee) is not { } speaker || LoadedSlot(speaker) is not { } loaded) return false;

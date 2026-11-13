@@ -101,10 +101,10 @@ public partial class TerrainViewerApp
         return false;
     }
 
-    /// <summary>ARC-RENDER-1171: why the credits cannot show (null: they can): no slide table of the shown game, or a show under way.</summary>
+    /// <summary>ARC-RENDER-1171: why the credits cannot show (null: they can): no slide table of the shown game. A show under way is no reason to hide the button (the menu that follows a
+    /// death's or an end game's reset opens while that show is still ending); <see cref="StartCredits"/> refuses it when the button is pressed.</summary>
     private string? CreditsRefusal()
     {
-        if (_heroDeath.Stage != AreaDeathStage.Watching) return "another slide show is under way";
         var table = DeathSlides();
         return table.Loaded ? null : AreaMainMenu.NoCredits + ": " + table.Detail;
     }
@@ -264,6 +264,7 @@ public partial class TerrainViewerApp
     {
         StopDeathSound(ref _deathVoice); StopDeathSound(ref _deathMusic);
         _heroDeathPanel?.Close();
+        _endGameAsked = false;
         _heroDeath.Stop(_heroDeathHost?.HeroDead ?? false);
     }
 

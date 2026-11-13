@@ -261,8 +261,8 @@ public partial class TerrainViewerApp
             _deathSlidesForSelfTest = AreaSlideTable.From(id => id is 45 or 46 ? $"c{id}.bmp C{id}.mp3" : null, "synthetic credits");
             _deathPictureForSelfTest = slide => Image.CreateEmpty(800, 600, false, Image.Format.Rgb8);
             _deathVoiceForSelfTest = slide => { voices++; voicePlaying = true; return true; };
-            _mainMenu!.CreditsRefusal = CreditsRefusal();
-            Require(_mainMenu.CreditsRefusal is null, "the Credits button is shown once the slide table reads: " + _mainMenu.CreditsRefusal);
+            // The menu that opened after the last death's reset has the button already (the refusal is read at its opening, while the show was still ending).
+            Require(_mainMenu!.CreditsRefusal is null, "the Credits button is shown once the slide table reads: " + _mainMenu.CreditsRefusal);
             var creditsIndex = _mainMenu.Shown.ToList().FindIndex(button => button.Role == AreaMenuRole.Credits);
             Require(creditsIndex >= 0, "the main window lists Credits");
             var creditLoads = _sceneLoadsForSelfTest;
