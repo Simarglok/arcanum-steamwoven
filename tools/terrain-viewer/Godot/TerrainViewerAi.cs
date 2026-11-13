@@ -447,7 +447,7 @@ public partial class TerrainViewerApp
 
     /// <summary>
     /// ARC-SCRIPT-1483 (script trigger audit slice 5, ledger CP1–CP5; 0x4B3770, 0x4B2F60): the combat-point scripts of a hit, asked by the session before the damage step, through the shown map's use-script host
-    /// (<see cref="AreaUseScriptHost.RunCombatPoint"/>), in the original's order: the weapon's hit script (7) and, for a critical hit, its critical-hit script (34), each with the attacker as the triggerer and the victim as the extra
+    /// (<see cref="AreaUseScriptHost.RunCombatPoint"/>), in the original's order (but for a hero's thrown item, whose hit script is the thrown-item host's, run after the strike): the weapon's hit script (7) and, for a critical hit, its critical-hit script (34), each with the attacker as the triggerer and the victim as the extra
     /// object, then the attacker's critter-hits script (26) with the victim as the triggerer. The hero has no script data (no attachment of its own here), so point 26 runs for an NPC attacker only; the hero's thrown item's hit script
     /// is the thrown-item host's (ARC-MAGIC-042). The answers cancel nothing (the original's call sites ignore them); a run that is refused or whose effects the host cannot apply is said and the hit goes on. An attacker or victim that is not on
     /// the shown map runs nothing here.
@@ -472,7 +472,9 @@ public partial class TerrainViewerApp
             var weaponMap = IsHero(attacker) && owner.QueryPcInventory().FirstOrDefault(held => held.Entity == weapon) is { Entity: not null } carried ? carried.Origin.RuntimeMap : map;
             var weaponRef = new Arcanum.Scripting.Scr.ScrObjectRef(weaponMap, weapon);
             if (!(hit.Thrown && IsHero(attacker))) Run(Arcanum.Scripting.Scr.ScrPoint.Hit, weaponRef, attackerRef, victimRef);
-            if (hit.Critical) Run(Arcanum.Scripting.Scr.ScrPoint.CriticalHit, weaponRef, attackerRef, victimRef);
+            // 0x4B2F60 (CP2): on the projectile path the critical-hit script runs only for a weapon item (object type 5): a thrown potion, ammunition or junk item runs none. An NPC's thrown item is its wielded weapon; the hero's item is read from its list (an item not found counts as the wielded weapon).
+            var isWeapon = !IsHero(attacker) || owner.QueryPcInventory().FirstOrDefault(held => held.Entity == weapon) is not { Entity: not null } kindHolder || kindHolder.Kind.Type == SessionItemType.Weapon;
+            if (hit.Critical && (!hit.Projectile || isWeapon)) Run(Arcanum.Scripting.Scr.ScrPoint.CriticalHit, weaponRef, attackerRef, victimRef);
         }
         if (!IsHero(attacker)) Run(Arcanum.Scripting.Scr.ScrPoint.CritterHits, attackerRef, victimRef, null);
     }
