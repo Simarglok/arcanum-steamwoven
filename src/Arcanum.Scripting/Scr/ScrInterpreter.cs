@@ -247,7 +247,7 @@ internal sealed class ScrInterpreter
         ScrCatalogue.Condition.IsSwitchedOff => ListHolds(c, obj => _shared.Toggled.Contains(obj) != (States.IsSwitchedOff(obj) ?? throw new MissingObjectStop(line))),
         // SC1: the four body bits (0x3C) of the spell flags (case 0x4458D5, field 0x14 through 0x406CA0), over the operand's objects by the list rule of SG6.
         ScrCatalogue.Condition.HasBodySpell => ListHolds(c, obj => ((Spells.SpellFlags(obj) ?? throw new MissingObjectStop(line)) & BodySpellFlags) != 0),
-        // SC7 (ARC-SCRIPT-1734, 0x4451B0 cases 0xC, 0xD, 0x10): polymorphed (0x20000), shrunk (0x80000) and mirror image (0x40000), each a single bit of the same spell flags word (field 0x14, 0x406CA0), over the operand's objects by the list rule of SG6.
+        // SC18 (ARC-SCRIPT-1734, 0x4451B0 cases 0xC, 0xD, 0x10): polymorphed (0x20000), shrunk (0x80000) and mirror image (0x40000), each a single bit of the same spell flags word (field 0x14, 0x406CA0), over the operand's objects by the list rule of SG6.
         ScrCatalogue.Condition.IsPolymorphed => ListHolds(c, obj => ((Spells.SpellFlags(obj) ?? throw new MissingObjectStop(line)) & PolymorphedSpellFlag) != 0),
         ScrCatalogue.Condition.IsShrunk => ListHolds(c, obj => ((Spells.SpellFlags(obj) ?? throw new MissingObjectStop(line)) & ShrunkSpellFlag) != 0),
         ScrCatalogue.Condition.HasMirrorImage => ListHolds(c, obj => ((Spells.SpellFlags(obj) ?? throw new MissingObjectStop(line)) & MirrorImageSpellFlag) != 0),
@@ -585,7 +585,7 @@ internal sealed class ScrInterpreter
             case ScrCatalogue.Action.PlaySpellEyeCandy:
             case ScrCatalogue.Action.StopScriptEyeCandy:
             {
-                // WE7, WE8 (ARC-SCRIPT-1734, 0x447220 cases 0x68 and 0x7C): the number, then the object, as play script eye candy (120); an absent object does nothing. Play spell (104, 0x456E60) shows the spell eye candy
+                // WE11, WE12 (ARC-SCRIPT-1734, 0x447220 cases 0x68 and 0x7C): the number, then the object, as play script eye candy (120); an absent object does nothing. Play spell (104, 0x456E60) shows the spell eye candy
                 // entry number % 10 + number / 10 × 6; stop script (124, 0x44C800 → 0x4CD940) takes the script eye candy of that number off the object. Both are presentation and never change what the run reads.
                 var number = Get(a, 0);
                 if (OptionalObject(a, 1) is { } on)

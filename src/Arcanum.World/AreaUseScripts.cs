@@ -199,7 +199,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     private static int[] ItemUseVitalActions => [ScrCatalogue.Action.GetHitPoints, ScrCatalogue.Action.GetFatiguePoints, ScrCatalogue.Action.HealPoison, ScrCatalogue.Action.HealHitPoints,
         ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.Destroy];
 
-    /// <summary>ARC-SCRIPT-1734 (WE7, WE8): play spell eye candy (104) and stop script eye candy (124) of <see cref="ScrAdmissionSet.S54"/>, which the use set admits beside play script eye candy (120): the run's result hands them on as eye candy requests and no host shows them yet (#1592).</summary>
+    /// <summary>ARC-SCRIPT-1734 (WE11, WE12): play spell eye candy (104) and stop script eye candy (124) of <see cref="ScrAdmissionSet.S54"/>, which the use set admits beside play script eye candy (120): the run's result hands them on as eye candy requests and no host shows them yet (#1592).</summary>
     private static int[] EyeCandyActions => [ScrCatalogue.Action.PlaySpellEyeCandy, ScrCatalogue.Action.StopScriptEyeCandy];
 
     /// <summary>ARC-DEV-243 (S14g): damage (60), apply unresistable damage (138) and heal hit points (75), which the placed and heartbeat sets admit.</summary>

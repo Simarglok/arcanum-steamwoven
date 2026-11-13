@@ -448,7 +448,7 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S53 { get; } = new("S53", S52.Conditions.Concat(CritterStateConditions), S52.Actions, S52.ValueKinds, S52.FocusKinds, counterIndexWraps: true);
 
     /// <summary>
-    /// The spell-state set (ARC-SCRIPT-1734, ledger SC7, WE7, WE8): <see cref="S53"/> plus the conditions obj is polymorphed (12, bit 0x20000), obj is shrunk (13, 0x80000) and obj has mirror image (16, 0x40000) of the object's spell flags
+    /// The spell-state set (ARC-SCRIPT-1734, ledger SC18, WE11, WE12): <see cref="S53"/> plus the conditions obj is polymorphed (12, bit 0x20000), obj is shrunk (13, 0x80000) and obj has mirror image (16, 0x40000) of the object's spell flags
     /// (<see cref="IScrSpellQueries"/>, as condition 14 reads its body bits), and the eye candy actions play spell eye candy (104, 0x456E60) and stop script eye candy (124, 0x44C800), which hand their number and object to the host as
     /// <see cref="ScrEyeCandy"/> requests (presentation only).
     /// </summary>

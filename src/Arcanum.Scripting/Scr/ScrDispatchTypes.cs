@@ -580,7 +580,7 @@ public readonly record struct ScrEffectRequest(ScrEffectChange Change, ScrObject
 public enum ScrEyeCandyKind { PlayScript, PlaySpell, StopScript }
 
 /// <summary>ARC-SCRIPT-042: a play-script-eye-candy action (120, ledger WE4): the entry of the script eye-candy table and the object it
-/// plays on; ARC-SCRIPT-1734 adds play spell eye candy (104) and stop script eye candy (124, ledger WE7, WE8) in order with it (<see cref="Kind"/>), the number as read. Presentation only; the host shows it (no host plays any yet, #1592).</summary>
+/// plays on; ARC-SCRIPT-1734 adds play spell eye candy (104) and stop script eye candy (124, ledger WE11, WE12) in order with it (<see cref="Kind"/>), the number as read. Presentation only; the host shows it (no host plays any yet, #1592).</summary>
 public readonly record struct ScrEyeCandy(int Number, ScrObjectRef Object, ScrEyeCandyKind Kind = ScrEyeCandyKind.PlayScript);
 
 /// <summary>
@@ -1023,7 +1023,7 @@ public sealed record ScrRunOptions
         if (host is not IScrObjectStateQueries && Admission.Conditions.Any(ScrAdmissionSet.ObjectStateQueryConditions.Contains))
             throw new ArgumentException("A set with the dead or switched-off condition needs a host that implements IScrObjectStateQueries.", nameof(Admission));
         if (host is not IScrSpellQueries && Admission.Conditions.Any(ScrAdmissionSet.SpellQueryConditions.Contains))
-            throw new ArgumentException("A set with a spell condition (body spell, influenced by spell, knows spell, mastered college) needs a host that implements IScrSpellQueries.", nameof(Admission));
+            throw new ArgumentException("A set with a spell condition (body spell, influenced by spell, knows spell, mastered college, polymorphed, shrunk, mirror image) needs a host that implements IScrSpellQueries.", nameof(Admission));
         if (host is not IScrAreaQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetArea))
             throw new ArgumentException("A set with get area needs a host that implements IScrAreaQueries.", nameof(Admission));
         if (host is not IScrStoryQueries && (Admission.Conditions.Any(ScrAdmissionSet.StoryQueryConditions.Contains) || Admission.Actions.Any(ScrAdmissionSet.StoryQueryActions.Contains)))

@@ -6,7 +6,7 @@ using static Arcanum.Scripting.Tests.Scr.ScrTestPrograms;
 namespace Arcanum.Scripting.Tests.Scr;
 
 /// <summary>
-/// ARC-SCRIPT-1734 (ledger SC7, WE7, WE8): obj is polymorphed (12, 0x20000), obj is shrunk (13, 0x80000) and obj has mirror image (16, 0x40000), each one bit of the object's spell flags (0x4451B0 cases 0xC, 0xD, 0x10) over the list rule of the other
+/// ARC-SCRIPT-1734 (ledger SC18, WE11, WE12): obj is polymorphed (12, 0x20000), obj is shrunk (13, 0x80000) and obj has mirror image (16, 0x40000), each one bit of the object's spell flags (0x4451B0 cases 0xC, 0xD, 0x10) over the list rule of the other
 /// object conditions, and the eye candy actions play spell eye candy (104, 0x456E60) and stop script eye candy (124, 0x44C800), which the set S54 holds. Programs, objects and numbers are invented.
 /// </summary>
 [TestClass]
@@ -108,6 +108,8 @@ public sealed class ScrSpellStateTests
             Do(C(ScrCatalogue.Action.StopScriptEyeCandy, N(30), (Triggerer, 0))),
             Do(C(ScrCatalogue.Action.StopScriptEyeCandy, N(31), (12, 0))),
             Do(C(ScrCatalogue.Action.PlaySpellEyeCandy, N(9), (12, 0))),
+            Do(C(ScrCatalogue.Action.StopScriptEyeCandy, N(-5), (Triggerer, 0))),
+            Do(C(ScrCatalogue.Action.PlaySpellEyeCandy, N(100000), (Attachee, -1))),
             Do(C(ScrCatalogue.Action.ReturnSkipDefault)));
         var run = Beat(Host(program));
         Assert.AreEqual(ScrOutcome.SkipDefault, run.Outcome, "the run goes on");
@@ -116,7 +118,9 @@ public sealed class ScrSpellStateTests
             new ScrEyeCandy(30, Pc),
             new ScrEyeCandy(23, Npc, ScrEyeCandyKind.PlaySpell),
             new ScrEyeCandy(30, Pc, ScrEyeCandyKind.StopScript),
-        }, run.Effects.EyeCandies.ToArray(), "an absent object shows and stops nothing (the original passes a null handle on)");
+            new ScrEyeCandy(-5, Pc, ScrEyeCandyKind.StopScript),
+            new ScrEyeCandy(100000, Npc, ScrEyeCandyKind.PlaySpell),
+        }, run.Effects.EyeCandies.ToArray(), "an absent object shows and stops nothing (the original passes a null handle on); the number goes on as read, whatever its sign or size");
     }
 
     [TestMethod]
@@ -135,6 +139,8 @@ public sealed class ScrSpellStateTests
             Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(program, ScrAdmissionSet.S53).Refusal!.Code);
         }
         Assert.IsTrue(ScrAdmissionSet.S53.IsSubsetOf(ScrAdmissionSet.S54));
+        CollectionAssert.AreEquivalent(new[] { ScrCatalogue.Condition.IsPolymorphed, ScrCatalogue.Condition.IsShrunk, ScrCatalogue.Condition.HasMirrorImage }, ScrAdmissionSet.S54.Conditions.Except(ScrAdmissionSet.S53.Conditions).ToArray());
+        CollectionAssert.AreEquivalent(new[] { ScrCatalogue.Action.PlaySpellEyeCandy, ScrCatalogue.Action.StopScriptEyeCandy }, ScrAdmissionSet.S54.Actions.Except(ScrAdmissionSet.S53.Actions).ToArray());
         var plain = new FakeHost();
         plain.Attach(Npc, ScrPoint.Heartbeat, Script, Test(ScrCatalogue.Condition.IsShrunk, Attachee));
         var refused = Assert.Throws<ArgumentException>(() => ScrDispatcher.RunObject(new(ScrPoint.Heartbeat, Npc, Pc, null), plain, Options));

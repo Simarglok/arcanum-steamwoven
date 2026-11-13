@@ -45,7 +45,7 @@ from line 0, static.
 | Point | Name | Call sites (0x441980 callers) | Steamwoven host | Rows (scripts) | Admitted |
 | ---: | --- | --- | --- | ---: | ---: |
 | 0 | examine | 0x57CD93 | the description step of the world hover, hotkey bar and inventory pointer (`AreaUseScriptHost.RunExamine`, ARC-DEV-326); barter and dialog windows not | 54 (31) | under the use set |
-| 1 | use | 0x428C21, 0x428CAB, 0x430CE3, 0x452EEB, 0x462E0C, 0x4BC9A7, 0x572477, 0x5724E5, 0x57A558, 0x57B31F | use click, item use (`AreaUseScriptHost.Admission`) | 2467 (245) | 2445 (ARC-SCRIPT-1734, measured with the trigger census; earlier slices did not recount the point, 2221 was the figure of the audit, ARC-SCRIPT-047) |
+| 1 | use | 0x428C21, 0x428CAB, 0x430CE3, 0x452EEB, 0x462E0C, 0x4BC9A7, 0x572477, 0x5724E5, 0x57A558, 0x57B31F | use click, item use (`AreaUseScriptHost.Admission`) | 2467 (245) | 2445 (ARC-SCRIPT-1734: a run of the opt-in trigger census with `ARC_SCRIPT_TRIGGER_CENSUS`, not pinned by a test; 2221 was the figure of the audit, ARC-SCRIPT-047, and the point was not recounted since) |
 | 2 | destroy | 0x43CD0E | **none** | 26 (7) | — |
 | 3 | unlock | 0x4AEBC5, 0x4AEDC4 | **none** | 0 | — |
 | 4 | get | 0x4618F2 | hero's item moves (`SessionItemScripts`) | 0 | — |
