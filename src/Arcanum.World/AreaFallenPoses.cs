@@ -46,6 +46,8 @@ public sealed record AreaFallenLoad(AreaFallenStatus Status, AreaFallenFrame? Po
 public static class AreaFallenPoses
 {
     public const int FallDown = 7, GetUp = 8, Decapitation = 17, BlownOutChunk = 18, SeveredLeg = 19;
+    /// <summary>ARC-COMBAT-1741: the stunned animation (23, goal 57); its file is the body's name with shield <c>x</c>, weapon <c>b</c> (unarmed) and the animation letter <c>x</c> (N1: animation 23 forces weapon 1 and no shield), and a missing file is a typed refusal (no fall repair).</summary>
+    public const int Stunned = 23;
     public const string Policy = "steamwoven-fallen-pose-v1";
     private static readonly DatReaderOptions Options = new() { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 };
 
@@ -59,7 +61,7 @@ public static class AreaFallenPoses
         ArgumentNullException.ThrowIfNull(visual);
         if (visual.RawArt >> 28 is not (2 or 12 or 13) || visual.Policy.Contains("badart", StringComparison.Ordinal))
             return Refused(AreaFallenStatus.NotACritterArt, $"art class {visual.RawArt >> 28}");
-        if (animation is not (FallDown or GetUp or Decapitation or BlownOutChunk or SeveredLeg)) throw new ArgumentOutOfRangeException(nameof(animation));
+        if (animation is not (FallDown or GetUp or Decapitation or BlownOutChunk or SeveredLeg or Stunned)) throw new ArgumentOutOfRangeException(nameof(animation));
         if (archivePath is null || !File.Exists(archivePath)) return Refused(AreaFallenStatus.SourceUnavailable, visual.Entry.Source.ToString());
         try
         {
@@ -70,13 +72,14 @@ public static class AreaFallenPoses
             if (dot < 4) return Refused(AreaFallenStatus.PoseMissing, "name");
             DatEntry? Find(int anim)
             {
-                var wanted = string.Concat(name.AsSpan(0, dot - 3), "xa", ((char)('a' + anim)).ToString(), name.AsSpan(dot));
+                // An animation from 6 to 19 drops shield and weapon ("xa" + letter); the stunned animation 23 keeps weapon 1 and no shield ("xb" + letter), N1.
+                var wanted = string.Concat(name.AsSpan(0, dot - 3), anim == Stunned ? "xb" : "xa", ((char)('a' + anim)).ToString(), name.AsSpan(dot));
                 var found = archive.Entries.Where(e => string.Equals(Name(e), wanted, StringComparison.OrdinalIgnoreCase)).ToArray();
                 return found.Length == 1 ? found[0] : null;
             }
             var used = animation;
             var entry = Find(animation);
-            if (entry is null && animation is not (FallDown or GetUp)) { used = FallDown; entry = Find(FallDown); }
+            if (entry is null && animation is not (FallDown or GetUp or Stunned)) { used = FallDown; entry = Find(FallDown); }
             if (entry is null) return Refused(AreaFallenStatus.PoseMissing, $"animation {animation}");
             var bytes = archive.ReadEntry(entry);
             var options = new ArtDecoderOptions { MaxInputBytes = 1024 * 1024, MaxFrameCount = 8 * 64 };

@@ -37,6 +37,7 @@ src/Arcanum.Scripting/Dialog/DialogConversation.cs,ReadStore,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,ReadWorldFact,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,SchematicsCommand,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,Store,pending,
+src/Arcanum.Scripting/Dialog/DialogConversationHealer.cs,FormatName,exempt,reference
 src/Arcanum.Scripting/Dialog/DialogConversationNewspaper.cs,PunctuatedHeadline,exempt,host
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,Comment,exempt,host
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,MissingLine,pending,
@@ -512,6 +513,8 @@ src/Arcanum.World/AreaAiHost.cs,UsedItem,pending,
 src/Arcanum.World/AreaAiHostGenerators.cs,Spawn,exempt,host
 src/Arcanum.World/AreaAiHostGround.cs,LooseItems,exempt,host
 src/Arcanum.World/AreaAiHostGround.cs,StartPickup,exempt,host
+src/Arcanum.World/AreaAiHostHealer.cs,HealerCast,exempt,host
+src/Arcanum.World/AreaAiHostHealer.cs,HealerService,exempt,host
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateAlongPath,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateToRandomTile,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,ScriptProne,pending,
