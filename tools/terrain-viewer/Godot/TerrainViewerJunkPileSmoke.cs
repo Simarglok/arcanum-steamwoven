@@ -36,13 +36,28 @@ public partial class TerrainViewerApp
         if (candidate is null) { GD.Print($"ARC-WORLD-063 native-smoke junk-pile NONE map={_readyMapName} (no container with two items)"); return Task.CompletedTask; }
         var spilled = inventory.Holders.Single(h => h.Entity == candidate.Entity).Items.Select(item => item.Entity).ToArray();
         var attacks = 0;
+        var (lastHitPoints, stalled) = (session.QueryObject(candidate.Object!).HitPoints, 0);
+        var damagedWithoutAttack = false;
         for (; attacks < 400 && session.QueryObject(candidate.Object!).Condition == SessionObjectCondition.Whole; attacks++)
         {
+            // ARC-BUG-1536: the stage tests the spill, not the hero's damage. A hero an earlier stage of the map chain left without its weapon
+            // (a critical smoke destroys it) takes a container down to its damage threshold and no further: 20 attacks in a row without a
+            // hit point lost, and the container takes its remaining hit points as damage that is no attack (ARC-DEV-255), which breaks
+            // and spills it the same way.
+            var hitPoints = session.QueryObject(candidate.Object!).HitPoints;
+            stalled = hitPoints < lastHitPoints ? 0 : stalled + 1;
+            lastHitPoints = hitPoints;
+            if (stalled >= 20) { damagedWithoutAttack = true; break; }
             // A critical self-hit may hurt the hero: it recovers between attacks.
             session.ClearStun(session.Version, SessionLifeTarget.Hero);
             session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true });
             var hit = session.AttackObject(session.Version, new() { Target = candidate.Object, HeroWorn = AreaCombatHost.HeroWorn(session, _areaKitDurability) });
             Require(hit.Disposition != GameSessionDisposition.Rejected, $"attack {attacks} accepted ({hit.Failure})");
+        }
+        for (var steps = 0; damagedWithoutAttack && steps < 40 && session.QueryObject(candidate.Object!).Condition == SessionObjectCondition.Whole; steps++)
+        {
+            var damage = session.DamageObject(session.Version, candidate.Object!, Math.Max(1, session.QueryObject(candidate.Object!).HitPoints));
+            Require(damage.Disposition != GameSessionDisposition.Rejected, $"the no-attacker damage was accepted ({damage.Failure})");
         }
         Require(session.QueryObject(candidate.Object!).Condition == SessionObjectCondition.Destroyed,
             $"the container broke within {attacks} attacks (hit points {session.QueryObject(candidate.Object!).HitPoints} left; a hero whose hits stay under its damage threshold cannot break it)");
