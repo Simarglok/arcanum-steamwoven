@@ -1,5 +1,7 @@
 using Arcanum.Data.Area;
 using Arcanum.Session;
+using Arcanum.Simulation.Combat;
+using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
 
@@ -18,13 +20,34 @@ public partial class TerrainViewerApp
     /// </summary>
     private string? HeroWeaponWornOut(SessionAttackWearResult? wear, AreaObjectRecord struck, bool magneticInversion)
     {
-        if (!_gameSettings.AutoSwitchWeapons || wear is null || _areaSession is not { } owner || _inventoryHost is not { } host) return null;
+        if (!_gameSettings.AutoSwitchWeapons || wear is null) return null;
         if (!wear.Steps.Any(step => step is { Kind: SessionWearStepKind.AttackerWeapon, Skip: SessionWearSkip.None, Item.Break: not Arcanum.Simulation.Items.ItemBreakStep.None })) return null;
-        SessionWieldTarget? target = _worldActor.Session is AreaGridSession session && session.Chart.ToWorld(session.State.CommittedCell) is var cell
-            ? new SessionWieldTarget(checked((int)Chebyshev(struck, (cell.X, cell.Y))), magneticInversion) : null;
+        return HeroWieldBest("wear", struck, magneticInversion);
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1738 (OH3 case a, the attack dispatcher's no-ammunition branch): the hero's attack the ammunition check refused (<see cref="AttackRefusal.OutOfAmmunition"/>, the ammunition test answers
+    /// 0) wields the best weapon for the struck object when the setting is on. Returns the entity wielded, or null.
+    /// </summary>
+    private string? HeroOutOfAmmunition(AttackRefusal? refusal, AreaObjectRecord struck, bool magneticInversion) =>
+        _gameSettings.AutoSwitchWeapons && refusal == AttackRefusal.OutOfAmmunition ? HeroWieldBest("no-ammunition", struck, magneticInversion) : null;
+
+    /// <summary>
+    /// ARC-COMBAT-1738 (OH3 case c, the damage step's item-loss branches, messages 19, 22 and 23): an attack that struck the hero (an NPC's hit, an arrow, a throw) and took its
+    /// wielded weapon (the "drop weapon" critical, the "destroy weapon" and "explode weapon" criticals, the "damage weapon" critical that broke it) wields the best weapon
+    /// the hero still holds, with the attacker as the hint for the choice. Returns the entity wielded, or null.
+    /// </summary>
+    private string? HeroWeaponLostToStrike(SessionAttackResult result, AreaObjectRecord? attacker, bool magneticInversion) =>
+        _gameSettings.AutoSwitchWeapons && AreaHeroWeaponLoss.TookStruckWeapon(result.Recipient, result.Criticals, result.Wear) ? HeroWieldBest("struck", attacker, magneticInversion) : null;
+
+    private string? HeroWieldBest(string why, AreaObjectRecord? hint, bool magneticInversion)
+    {
+        if (_areaSession is not { } owner || _inventoryHost is not { } host) return null;
+        SessionWieldTarget? target = hint is not null && _worldActor.Session is AreaGridSession session && session.Chart.ToWorld(session.State.CommittedCell) is var cell
+            ? new SessionWieldTarget(checked((int)Chebyshev(hint, (cell.X, cell.Y))), magneticInversion) : null;
         var result = owner.WieldBestWeapon(owner.Version, entity => host.Wearable(owner, entity, _areaKitWear), (_, _) => true, host.InsertCheck, target);
         var wielded = result.Steps.FirstOrDefault(step => step.Wielded is not null)?.Wielded;
-        GD.Print($"ARC-COMBAT-1720 auto-switch struck={struck.Key} target={(target is { } t ? $"{t.Distance}/{t.MagneticInversion}" : "none")} disposition={result.Disposition} failure={result.Failure}"
+        GD.Print($"ARC-COMBAT-1720 auto-switch why={why} hint={hint?.Key.ToString() ?? "none"} target={(target is { } t ? $"{t.Distance}/{t.MagneticInversion}" : "none")} disposition={result.Disposition} failure={result.Failure}"
             + $" wielded={wielded} unsupported=[{string.Join(",", result.Steps.Where(step => step.Unsupported is not null).Select(step => step.Unsupported))}]");
         return wielded;
     }

@@ -144,6 +144,11 @@ transfer through `ScrDispatcher.RunObject`, in the executable's order ([ledger I
 - An item point runs only when the item's facts list it (the seed's script points); the PC's transfer point always runs, and the
   host's `Slot` answers it (the AREA viewer's PC has no slot, so it ends `NoScript`). Without a host, an item that lists its get,
   remove-item or insert-item point is refused as before, and nothing runs.
+- ARC-MAGIC-1743: the hero's give and sale to an NPC (`GiveItemToNpc`, `BarterSell` with a host; the barter window gives it) runs the item's events of the hero's side as the original does (0x461CA0, ledger IE3, IE4, IE6): wield off (25, a worn
+  item) and remove item (28) with the hero as the triggerer, then insert item (21) with the recipient (an NPC or the merchant's container) as the triggerer, after the insert check accepts and before the move is applied; the points are those of the worn
+  record (a kit or made item too) and of the item's origin seed row. A run the session cannot apply, or a stale version, refuses the move with nothing changed; without a host an item with any of them is refused (`ItemScriptUnsupported`), as is an item
+  whose row is another map's seed row. The recipient's own wield of the item is its re-wield (NPC flag 0x40), not this call. The insert run's printed lines are read for an NPC recipient (a container's run keeps the hero's reading). The dialog's `IN`, the pick pocket's plant and the script command's transfer pass no host and stay refused (#1823); the barter window shows
+  no printed line of these runs (#1824). Only the origin seed row and the worn record show an item's scripts: an unworn kit or made item runs none.
 - Every run uses `SessionItemScripts.Admission` (S6 without the dialog action, story state and deferred calls) and the effect rules
   of the insert-item script above (global flags and printed lines only; a changed attachment, a dialog, story state, a deferred call
   or a trap destruction refuses the transfer). Since ARC-SCRIPT-042 the set also holds the item-effect commands, and a transfer
@@ -356,8 +361,8 @@ and a type the lists do not admit (`InvalidItem`). The kit's numbers skip its pl
   seed not attached, and for a kit or made item, the session does not know the scripts and the item goes unchecked. The light and armour of the hero follow its equipment at once.
 - The PC's re-wield after losing a weapon (PI5): with the "auto switch" setting on, the original wields the best weapon. Since
   ARC-COMBAT-1720 the session has the step (`WieldBestWeapon`, [best items](equipment-runtime.md#best-items-arc-world-034)) and the
-  viewer calls it, with the setting on, after a wear that broke the hero's weapon; the no-ammunition caller (0x4B3170) and the
-  struck PC's item-loss branches (0x4B4390) are not built, and the slot stays empty there.
+  viewer calls it, with the setting on, after a wear that broke the hero's weapon, an attack the ammunition check refused (0x4B3170) and an NPC's strike that took the
+  hero's weapon (0x4B4390, ARC-COMBAT-1738); the hero's self-hit, a spell, trap or script hit are not built, and the slot stays empty there.
 - NPC made items (ARC-WORLD-055) can use this store later. The viewer draws placed items and picks
   them up since ARC-RENDER-033 ([ground items](#ground-items-in-the-viewer-arc-render-033)); a placed made item (an assembly
   product left on the tile) is drawn from its product prototype's art since ARC-WORLD-070.
@@ -918,6 +923,9 @@ slot (wield-off event 25, then remove-item 28). A model gap, not a rule of the g
   the insert check sees it unwielded (inventory location −1, as after the removal), a wield-off script (point 25) runs before the
   remove-item script (28) with the body as triggerer and needs a script host (else `ItemScriptUnsupported`, also for an item of another
   map's seed row), the item enters the hero's list as an unworn item, and a dressed body's record drops it (`Unwear`).
+- ARC-MAGIC-1743 (ledger IE3, IE5, IE6): with the NPC's script context (`npcWearer`: the AREA viewer gives it through `AreaInventoryHost.NpcWearer`, the area's `NpcWieldScripts`) the wield-off run of a looted worn item runs
+  over the NPC's own effect list and stored stats (the NPC as wearer, as the best-items wield's runs) and the gate, wield-off and remove-item runs have the NPC as the triggerer (a printed line is read for an NPC); the
+  insert-item run keeps the hero as triggerer. With the context the runs of the loot (the gate and the insert-item run included) see the NPC as the wearer, so an effect or stat read on the hero in them is refused (`ItemScriptUnsupported`). Without the context the run is the hero-wearer run as before, so an effect on the NPC is refused (`ItemScriptUnsupported`).
 - The other parented moves keep refusing a worn item with `WornItemUnsupported`: a negative `IN`, taking from a living NPC (a purchase,
   `TakeItemFromNpc`), a steal and `RemoveItemFromNpc`. Their original rules were not read in this task.
 - **Not modelled:** the no-drop flag's remove check (0x466DA0), the unwear executor and spells of an item with item spells (0x4CBFC0, 0x457450;
