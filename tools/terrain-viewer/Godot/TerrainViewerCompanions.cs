@@ -226,6 +226,8 @@ public partial class TerrainViewerApp
         // host gives the companion it holds); the others stand.
         var round = owner.QueryCombatRound() is not null;
         var entered = new List<(AreaCompanion Companion, Arcanum.Data.Traversal.AreaStepCell Cell)>();
+        // ARC-WORLD-1469: the steps of the companions on their own walk (the AI host's own were met when it began them, StepMeetsTrap).
+        var stepped = new List<(AreaCompanion Companion, Arcanum.Data.Traversal.AreaStepCell Cell)>();
         var jumpsBefore = group.Companions.ToDictionary(c => c, c => c.Jumps);
         foreach (var (companion, advance) in group.Drive(owner, pc.State, frontier, heldOnly: round))
         {
@@ -233,7 +235,10 @@ public partial class TerrainViewerApp
             if (_mapTransfers is { } transfers)
                 foreach (var evidence in advance.AreaEvidence)
                     if ((evidence.Live?.Disposition ?? evidence.Assessment.Disposition) == Arcanum.Data.Traversal.CardinalTraversalDisposition.Open)
+                    {
                         entered.Add((companion, transfers.Map.Chart.ToWorld(evidence.Key.To)));
+                        if (_aiHost?.Holds(companion.Entity) != true) stepped.Add((companion, transfers.Map.Chart.ToWorld(evidence.Key.To)));
+                    }
         foreach (var item in advance.Movement.Events)
             if (item.Kind is MovementEventKind.StepStarted or MovementEventKind.StepRejected or MovementEventKind.CenterArrived)
                 GD.Print($"ARC-WORLD-016 companion script={companion.Speaker.ScriptId} event={item.Kind} {item.Key.From.X},{item.Key.From.Y}->{item.Key.To.X},{item.Key.To.Y} reason={item.Reason}"
@@ -247,6 +252,7 @@ public partial class TerrainViewerApp
         }
         if (!round) RunCompanionLoyalty(group, owner, pc, frontier);
         RunCompanionTileScripts(entered);
+        RunCompanionTraps(stepped);
         RefreshFollowerPortraits();
     }
 

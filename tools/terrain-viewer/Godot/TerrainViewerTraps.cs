@@ -31,6 +31,9 @@ public partial class TerrainViewerApp
             {
                 // ARC-DEV-260: a trap set off by a ranged attack or by damage with no attacker has no triggerer.
                 ApplyWithoutTriggerer = (row, run, counters, flags) => caster.ApplyTrapEffect(new(map.Id(row), null, run, counters, flags)),
+                // ARC-WORLD-1469 (TT8, TT9): an NPC or a companion that stepped on a trap object or used a trapped one is the triggerer, and its spell flags gate the step.
+                ApplyByCritter = (entity, row, run, counters, flags) => caster.ApplyTrapEffect(new(map.Id(row), entity, run, counters, flags)),
+                SpellFlagsOf = entity => caster.SpellFlags(new(entity, 0)),
             }
             : null;
 
@@ -104,6 +107,32 @@ public partial class TerrainViewerApp
             StopWorldRoute("ROUTE_ENDED_BY_TRAP");
             break;
         }
+    }
+
+    /// <summary>ARC-WORLD-1469 (TT8, TT9): the trap meetings the AI host's walkers had (an NPC's or a companion's step onto a trap object, an opener's use of a trapped door) are logged and shown; true when there
+    /// were any, whose effects changed bodies.</summary>
+    private bool NoteWalkerTraps(AreaAiHost host)
+    {
+        var meetings = host.TakeTrapMeetings();
+        foreach (var notice in meetings)
+        {
+            GD.Print($"ARC-WORLD-1469 walker-trap walker={notice.Walker} " + System.Text.Json.JsonSerializer.Serialize(new { Trap = AreaUseScriptHost.EntityId(notice.Meeting.Row), Cause = notice.Meeting.Cause.ToString(),
+                Outcome = notice.Meeting.Outcome.ToString(), Disposition = notice.Meeting.Result.Mutation.Disposition.ToString(), notice.Meeting.Result.Run?.Script, Removed = notice.Meeting.Result.State.Removed,
+                Victims = notice.Meeting.Effect?.Victims.Count }));
+            if (notice.Meeting.Outcome is SessionTrapOutcome.NoTrap or SessionTrapOutcome.SteppedOver && !notice.Meeting.Rejected) continue;
+            _areaUseStatus = $"{AiName(notice.Walker)}: trap: " + notice.Meeting.Describe();
+        }
+        if (meetings.Count > 0) RefreshAreaStatus();
+        return meetings.Count > 0;
+    }
+
+    /// <summary>ARC-WORLD-1469 (TT9): a following companion on its own walk (the AI host does not hold it) arrives on tiles; each meets the first trap object there with the companion as the triggerer. The walk is
+    /// not cut short yet: the follow goal plans its route again from where the companion stands.</summary>
+    private void RunCompanionTraps(IEnumerable<(AreaCompanion Companion, Arcanum.Data.Traversal.AreaStepCell Cell)> stepped)
+    {
+        if (_aiHost is not { } host) return;
+        foreach (var (companion, cell) in stepped) host.TrapMetOn(companion.Entity, new(checked((int)cell.X), checked((int)cell.Y)));
+        if (NoteWalkerTraps(host)) _canvas?.SetAreaMovingBodies(AreaMovingCommands());
     }
 
     /// <summary>A guarded use site's run: its trap meeting is logged and shown (ARC-WORLD-110).</summary>
