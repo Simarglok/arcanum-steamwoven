@@ -72,6 +72,9 @@ public partial class TerrainViewerApp
             _conversationHost.GiveHeroItem = prototype => ReferenceEquals(_readyArea?.Snapshot, snapshot) && _inventoryHost is { } stock ? UseScriptHost(snapshot)?.GiveHeroPrototypeItem(prototype, stock.InsertCheck) : null;
             // ARC-DEV-193: the reply step's hostile check is asked of the same AI host (alive and kill-on-sight toward the hero).
             _conversationHost.NpcHostile = entity => AreaAiHostNow() is { } hostileAi && hostileAi.HostileToHero(entity);
+            // ARC-SCRIPT-1732: the h: reply's healer menu reads the speaker's facts and starts its service and spells on the shown map's AI host; the spell names are the loaded spell data's.
+            _conversationHost.HealerHost = AreaAiHostNow;
+            _conversationHost.SpellName = spell => { AdoptSpellData(); return Arcanum.World.AreaSpellsPage.SpellName(_spellData?.Data, spell); };
             // ARC-SCRIPT-1165 (E5-c): a dialog script's add blessing and add curse take their effect from the module's tables, as a use script's do.
             _conversationHost.Scripts.BlessingEffects = BlessingEffectOf;
             _conversationHost.Scripts.QueryHost = () => ReferenceEquals(_readyArea?.Snapshot, snapshot) ? UseScriptHost(snapshot) : null;
@@ -451,6 +454,9 @@ public partial class TerrainViewerApp
         // ARC-UI-088: c-e ended the talk; the NPC's character sheet opens and the talk does not resume (WN2).
         if (conversation?.End is { Kind: DialogEndKind.NpcSheetWindow } && talkHost?.TakeNpcSheetSpeaker() is { } sheetSpeaker && _areaSession is not null)
             QueueDialogNpcSheet(talkHost, sheetSpeaker);
+        // ARC-UI-1731: ii or ri ended the talk; the item identify or repair window opens and the talk does not resume (WN1, WN2).
+        if (conversation?.End is { Kind: DialogEndKind.ItemIdentifyWindow or DialogEndKind.ItemRepairWindow } && talkHost?.TakeItemServiceRequest() is { } serviceRequest && _areaSession is not null)
+            QueueDialogItemService(talkHost, serviceRequest);
         if (resume && scripted && conversation?.End is { Kind: DialogEndKind.ReturnToScript })
             _conversationNotice = "the script that started this conversation does not continue here (not modelled)";
         else if (resume && conversation?.End is { Kind: DialogEndKind.ReturnToScript, ScriptLine: { } line } && speaker is not null && talkHost is not null)

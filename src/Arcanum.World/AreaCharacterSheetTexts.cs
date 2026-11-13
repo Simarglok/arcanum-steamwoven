@@ -1,3 +1,4 @@
+using Arcanum.Data.Characters;
 using Arcanum.Data.Content;
 using Arcanum.Data.Messages;
 using Arcanum.Data.Technology;
@@ -21,11 +22,13 @@ public sealed class AreaCharacterSheetTexts
     private static readonly string[] ProjectResistances = ["Damage", "Magick", "Fire", "Poison", "Electrical"];
     private static readonly string[] ProjectDerived =
         ["Carry Wt", "Damage Bonus", "AC Adjust", "Speed", "Heal Rate", "Poison Rec", "Reaction", "Followers"];
-    private readonly MesFile? _charEdit, _stat, _menu, _interface, _tech;
+    private readonly MesFile? _charEdit, _stat, _menu, _interface, _tech, _gameSchemeNames, _userSchemeNames;
     private readonly SchematicCatalog? _schematics;
 
-    private AreaCharacterSheetTexts(MesFile? charEdit, MesFile? stat, MesFile? menu, MesFile? @interface, MesFile? tech, SchematicCatalog? schematics, string detail) =>
-        (_charEdit, _stat, _menu, _interface, _tech, _schematics, Detail) = (charEdit, stat, menu, @interface, tech, schematics, detail);
+    private AreaCharacterSheetTexts(MesFile? charEdit, MesFile? stat, MesFile? menu, MesFile? @interface, MesFile? tech, SchematicCatalog? schematics, string detail,
+        MesFile? gameSchemeNames = null, MesFile? userSchemeNames = null) =>
+        (_charEdit, _stat, _menu, _interface, _tech, _schematics, Detail, _gameSchemeNames, _userSchemeNames) =
+        (charEdit, stat, menu, @interface, tech, schematics, detail, gameSchemeNames, userSchemeNames);
 
     public string Detail { get; }
 
@@ -33,7 +36,8 @@ public sealed class AreaCharacterSheetTexts
     public static AreaCharacterSheetTexts Project(string reason) => new(null, null, null, null, null, null, reason ?? throw new ArgumentNullException(nameof(reason)));
 
     public static AreaCharacterSheetTexts Create(MesFile? charEdit, MesFile? stat, MesFile? menu, MesFile? @interface = null, MesFile? tech = null,
-        SchematicCatalog? schematics = null) => new(charEdit, stat, menu, @interface, tech, schematics, "synthetic");
+        SchematicCatalog? schematics = null, MesFile? gameSchemeNames = null, MesFile? userSchemeNames = null) =>
+        new(charEdit, stat, menu, @interface, tech, schematics, "synthetic", gameSchemeNames, userSchemeNames);
 
     public static AreaCharacterSheetTexts Load(ContentStack stack)
     {
@@ -44,8 +48,11 @@ public sealed class AreaCharacterSheetTexts
         var gameInterface = AreaStartingHero.Table(stack, AreaLevelTexts.InterfacePath, ContentLoadPhase.GameStart, required: true, out var d4);
         var tech = AreaStartingHero.Table(stack, TechTexts.Path, ContentLoadPhase.GameStart, required: true, out var d5);
         var schematics = SchematicCatalog.Open(stack);
-        var missing = new[] { d1, d2, d3, d4, d5, schematics.Catalog is null ? "schematics " + schematics.Status : null }.Where(detail => detail is not null);
-        return new(charEdit, stat, menu, gameInterface, tech, schematics.Catalog, missing.Any() ? "texts: " + string.Join("; ", missing) : "texts read");
+        // ARC-UI-1742: the scheme names the auto-level page lists (the original reads both with the level tables at start-up, 0x4A6620).
+        var gameSchemes = AreaStartingHero.Table(stack, AutoLevelTables.GameNamesPath, ContentLoadPhase.GameStart, required: true, out var d6);
+        var userSchemes = AreaStartingHero.Table(stack, AutoLevelTables.UserNamesPath, ContentLoadPhase.GameStart, required: true, out var d7);
+        var missing = new[] { d1, d2, d3, d4, d5, d6, d7, schematics.Catalog is null ? "schematics " + schematics.Status : null }.Where(detail => detail is not null);
+        return new(charEdit, stat, menu, gameInterface, tech, schematics.Catalog, missing.Any() ? "texts: " + string.Join("; ", missing) : "texts read", gameSchemes, userSchemes);
     }
 
     private static string? Decoded(MesFile? table, int number) =>
@@ -93,6 +100,22 @@ public sealed class AreaCharacterSheetTexts
         var number = SchematicCatalog.FirstLearnedNumberBase + SchematicCatalog.NumbersPerDiscipline * discipline + SchematicCatalog.RecordStride * degree;
         return catalog.Read(number) is { Record: { } record } ? catalog.Text(record.NameText) : null;
     }
+
+    /// <summary>ARC-UI-1742: whether the scheme name files read (the schemes page then lists them).</summary>
+    public bool HasSchemeNames => _gameSchemeNames is not null && _userSchemeNames is not null;
+
+    /// <summary>ARC-UI-1742: the name of <paramref name="scheme"/> (0x4A6DE0: 0 and 50..199 from <c>gamelevelname.mes</c>, 1..49 from
+    /// <c>userlevelname.mes</c>), or null when the files have none (or did not read).</summary>
+    [OriginalFunction(0x55D210, OriginalFunctionScope.Partial)]
+    public string? SchemeName(int scheme) => _gameSchemeNames is null || _userSchemeNames is null ? null
+        : AutoLevelTables.Name(_gameSchemeNames, _userSchemeNames, scheme) is { } bytes ? DecodedName(bytes) : null;
+
+    /// <summary>ARC-UI-1742: the schemes the page lists, in the order of 0x55D060: every number from 0 whose name exists.</summary>
+    public IReadOnlyList<int> SchemeNumbers() => _gameSchemeNames is null || _userSchemeNames is null ? []
+        : AutoLevelTables.NamedSchemes(_gameSchemeNames, _userSchemeNames);
+
+    private static string DecodedName(ReadOnlyMemory<byte> bytes) =>
+        MesText.Decode(bytes.Span, AreaHoverIndex.TextProfile) is { Status: MesDecodeStatus.Decoded, Text: { } text } ? text : string.Empty;
 
     /// <summary>The refusal of charedit.mes <paramref name="number"/> (17..39), or null.</summary>
     public string? Refusal(int number) => Decoded(_charEdit, number);

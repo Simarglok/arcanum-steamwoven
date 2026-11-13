@@ -1218,3 +1218,14 @@ Known differences (documented, not bugs):
 
 - The buttons, the lens cover and the bottom cover are still art ([issue #1810](https://github.com/Simarglok/arcanum-steamwoven/issues/1810)); the zoom and whole-map buttons get a brass frame from the holes of the frame.
 - The compass, the route sketch and the Travel ring are the original's pictures; their small patches of old wood differ a little from the generated wood.
+
+## ARC-SCRIPT-1732 — The healer menu behind `h:` (2026-11-13)
+
+Built from the executable's state machine ([ledger HLR1–HLR12](../research/ledger/social.md#healer-reply-arc-script-1732)); the effects start through the AI host, so the look and the timing of the heal and the spells are for you to judge.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Talk to a town healer (a priest or physician whose talk has the healing reply) and pick it. | The NPC says its menu line; the options are by the healer's rank: its own treatment (when it carries a healing item), up to two lists of spells and the best spell last, and a way out. Each spell is named with its `spell.mes` name. | open |
+| 2 | Choose a spell, then yes, with enough gold; then again with too little. | The price is the reaction-scaled 100 (about 100 at a neutral reaction); the gold goes to the healer, the spell is cast at you (a heal, a poison cure, and at rank 5 a resurrection); with too little gold the healer says its no-money line and nothing is paid. | open |
+| 3 | Choose the healer's own treatment when your hit points are low. | The price follows its heal skill ((level + 2) × (tier + 1), reaction scaled); the healer walks the skill goal and heals through the usual heal check. | open |
+| 4 | Ask a healer who follows you the same. | No price screen and no payment: the service runs at once. | open |

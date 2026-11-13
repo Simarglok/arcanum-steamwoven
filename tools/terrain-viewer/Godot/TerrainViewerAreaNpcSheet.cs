@@ -166,7 +166,7 @@ public partial class TerrainViewerApp
         _sheetPanel!.SetPortrait(null);
         QuarantineWorld(); _quickKeys.Reset();
         _sheetNpc = npc; _sheetPanel.ReadOnly = true;
-        if (!OpenWindowMode(InterfaceMode.Character, () => _sheetPanel!.Open(npc.View, npc.Skills, NpcSpells(), npc.Stats, npc.Tech), () => { _sheetPanel!.CloseView(); ResetNpcSheet(); }))
+        if (!OpenWindowMode(InterfaceMode.Character, () => _sheetPanel!.Open(npc.View, npc.Skills, NpcSpells(), npc.Stats, npc.Tech, NpcSchemes()), () => { _sheetPanel!.CloseView(); ResetNpcSheet(); }))
         {
             ResetNpcSheet();
             return;

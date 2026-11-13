@@ -13,6 +13,7 @@ public sealed class AreaHeroDeathTests
     private sealed class Host : IAreaDeathHost
     {
         public bool HeroDead { get; set; }
+        public bool HeroDying { get; set; }
         public bool MenuOpen { get; set; }
         public AreaSlideTable Slides { get; set; } = AreaSlideTable.From(id => id == 0 ? "death.bmp DeathSound.mp3" : null, "test");
         public bool VoicePlaying { get; set; }
@@ -49,6 +50,25 @@ public sealed class AreaHeroDeathTests
         death.Tick(16, host);
         Assert.AreEqual(AreaDeathStage.Waiting, death.Stage);
         return (death, host);
+    }
+
+    // ARC-COMBAT-1741: the original's 5 s event is asked for by the dying goal's last node, so the count begins when the dying animation has played.
+    [TestMethod]
+    public void A_death_counts_its_five_seconds_from_the_end_of_the_dying_animation()
+    {
+        var host = new Host();
+        var death = new AreaHeroDeath();
+        death.Tick(16, host);
+        host.HeroDead = true; host.HeroDying = true;
+        death.Tick(16, host);
+        death.Tick(20_000, host);
+        Assert.AreEqual(AreaDeathStage.Watching, death.Stage, "the dying animation is playing: the death is not yet counted, however long it takes");
+        host.HeroDying = false;
+        death.Tick(16, host);
+        Assert.AreEqual(AreaDeathStage.Waiting, death.Stage);
+        Assert.AreEqual(AreaHeroDeath.DeathDelay, death.Remaining);
+        death.Tick(AreaHeroDeath.DeathDelay, host);
+        Assert.AreNotEqual(AreaDeathStage.Waiting, death.Stage, "the five seconds ran from the end of the animation");
     }
 
     [TestMethod]

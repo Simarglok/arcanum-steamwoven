@@ -2149,7 +2149,30 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>Whether a dying run (goal 31) of the NPC is on the table: its pool of blood waits for the run to end (B13, 0x42FED0).</summary>
     public bool DyingRunning(string id) => _session.QueryGoals().RunsOf(id).Any(run => run.Frames.Any(f => f.Goal == GoalType.Dying));
 
+    /// <summary>ARC-UI-1737 (ledger OH2): the "violence filter" setting the dying goal's art node reads when it runs (the viewer sets it at the start and at every change of the option).</summary>
+    public bool ViolenceFilter { get; set; }
+
     public AiAnimationClip? Clip(string id, int animation) => _scene.AnimationClip?.Invoke(id, animation);
+
+    /// <summary>
+    /// ARC-COMBAT-1741: the hero's stun run (goal 57, started by the session's life step) stepped by the NPC's stun nodes over this host's ports (the art writes, the clip of the hero's stunned ART, the round test), so the stun
+    /// lasts its frames and plays out the countdown as an NPC's does (GT26, GT27). The hero host owns the run's end hooks; nothing here frees it. No readable stun ART (the clip provider answers none) ends it at its first step.
+    /// </summary>
+    public SessionGoalStepAnswer StepHeroStun(GoalRun run)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        var step = AiExecutorRules.Step(run, this, _session.AiRolls, _session.Rules.Combat);
+        _steps++;
+        if (!step.Ended && step.Run is { } next) return SessionGoalStepAnswer.After(Math.Max(step.DelayMs, 1), next);
+        ClearHeroArt();
+        return SessionGoalStepAnswer.End;
+    }
+
+    /// <summary>ARC-COMBAT-1741: the hero shows its standing art again (its stun ended or was cut short).</summary>
+    public void ClearHeroArt()
+    {
+        if (_arts.Remove(Pc)) ArtRevision++;
+    }
 
     // An NPC with no art written lies in its fall when it is unconscious or dead (a body first seen), except a dead one whose dying goal is on the table: it was killed standing and the goal sets the art.
     public int ShownAnimation(string id) => SyncedArt(id) is { } art ? art.Animation
@@ -3706,6 +3729,17 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// turns it toward the critter it picks the pocket of).</summary>
     public AwarenessResult SeeToward(string observer, string target) =>
         Tile(observer) is { } from && Tile(target) is { } to ? SeeFacing(observer, target, AreaCombatHost.Facing(from, to)) : See(observer, target);
+
+    /// <summary>
+    /// ARC-SCRIPT-1733 (CS5, exe 0x4451B0 case 28 → 0x4AF260): whether a script's obj can see obj holds: the sight check of an NPC this host holds sight facts of toward an NPC or the hero, which needs nothing more than the NPC's own facing (excess 0). Null for an observer that
+    /// is the hero (its facing is not tracked here, <see cref="SeeToward"/>) or that is not an NPC of this host, and for a target it holds no facts of: the script stops as not modelled.
+    /// </summary>
+    public bool? ScriptCanSee(string observer, string target) =>
+        observer == Pc || Find(observer) is null || Find(target) is null || _scene.LineOfFire?.Invoke() is null ? null : See(observer, target).Excess == 0;
+
+    /// <summary>ARC-SCRIPT-1733 (CS6, case 29 → 0x4AF470 with loudness 1): the hearing check of an NPC toward an NPC or the hero at the normal loudness; null as <see cref="ScriptCanSee"/>.</summary>
+    public bool? ScriptCanHear(string listener, string source) =>
+        listener == Pc || Find(listener) is null || Find(source) is null || _scene.LineOfFire?.Invoke() is null ? null : Hear(listener, source, Loudness.Normal).Excess == 0;
 
     private AwarenessResult SeeFacing(string observer, string target, NeighborDirection? facing)
     {

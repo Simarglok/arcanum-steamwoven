@@ -48,6 +48,13 @@ public partial class TerrainViewerApp
         var spell = LearnSmokeSpell(session, records, DamagingSmokeSpell, Require);
         Require(spell is not null, "the hero knows a damaging spell");
 
+        // ARC-UI-1737: ARC_CRITTER_FALL_FILTER=1 runs the stage with the violence filter on (the smoke's own settings file; the stage turns it back off at its end).
+        var filterTurnedOn = System.Environment.GetEnvironmentVariable("ARC_CRITTER_FALL_FILTER") == "1" && !_gameSettings.ViolenceFilter;
+        if (filterTurnedOn) SaveGameSettings(_gameSettings with { ViolenceFilter = true });
+        // ARC_CRITTER_FALL_BRIGHTNESS=N (0 to 9) runs it at that brightness, for the capture's brightness series; turned back to 0 at the end.
+        var brightnessTurnedOn = int.TryParse(System.Environment.GetEnvironmentVariable("ARC_CRITTER_FALL_BRIGHTNESS"), out var brightness) && brightness is > 0 and <= Arcanum.Presentation.Display.BrightnessRules.Max
+            && _gameSettings.Brightness == 0;
+        if (brightnessTurnedOn) SaveGameSettings(_gameSettings with { Brightness = brightness });
         var heroBefore = session.QueryHeroLife()!.Record.State;
         var npcForRestore = candidates[0].Build.Combat!.Target;
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
@@ -162,13 +169,31 @@ public partial class TerrainViewerApp
                 pool = session.QueryBloodPools(new SessionMapId(map.RuntimeMap)).FirstOrDefault(p => p.Critter == entity && !oldPools.Contains(p.Entity));
                 if (pool is null) Frame();
             }
-            Require(pool is not null, "the dying animation left a pool of blood");
-            Require(pool!.Cell == new CellCoord(final.Mover.X, final.Mover.Y), $"the pool of blood is on the cell the body lies on: pool {pool.Cell}, body {final.Mover}");
+            // ARC-UI-1737 (OH2): with the violence filter setting on (a settings file naming it; off by default) no pool is made and the dying animation is the fall-down.
+            var filterOn = _gameSettings.ViolenceFilter;
+            if (filterOn)
+            {
+                Require(pool is null, "with the violence filter on the dying animation leaves no pool of blood");
+                Require(host.ShownAnimation(entity) == DyingAnimationRules.FallDown, $"with the violence filter on the body shows the fall-down: animation {host.ShownAnimation(entity)}");
+            }
+            else
+            {
+                Require(pool is not null, "the dying animation left a pool of blood");
+                Require(pool!.Cell == new CellCoord(final.Mover.X, final.Mover.Y), $"the pool of blood is on the cell the body lies on: pool {pool.Cell}, body {final.Mover}");
+            }
             var lateDrawn = AiMoverCommands().FirstOrDefault(c => c.Identity == target.Row.Key);
             Require(lateDrawn is not null && lateDrawn.MapX == final.DrawX && lateDrawn.MapY == final.DrawY && host.Movers.Of(entity)?.Cell == final.Mover, "the body is still on that cell when the pool appears");
+            // ARC_CRITTER_FALL_CAPTURE: the frame with the body (and its pool, or none) saved for the filter on/off composite.
+            if (System.Environment.GetEnvironmentVariable("ARC_CRITTER_FALL_CAPTURE") is { Length: > 0 } capture)
+            {
+                for (var f = 0; f < 6; f++) { Frame(); await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw); }
+                using var image = GetViewport().GetTexture().GetImage();
+                Require(image.SavePng(capture) == Error.Ok, "the capture saved to " + capture);
+                GD.Print($"ARC-UI-1737 critter-fall capture {capture} body={final.DrawX},{final.DrawY} filter={filterOn} brightness={_gameSettings.Brightness}");
+            }
             GD.Print("ARC-DEV-248 native-smoke critter-fall PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, CalmedAtStart = inDanger, Animal = target.Row.PrototypeNumber, Spell = spell.Data.Number, RanOver = cellsRun.Count, SteppingAtDeath = steppingAtDeath, CastFrames = castFrames,
-                SettledAfterFrames = settledAt, DiedOn = $"{first.Mover.X},{first.Mover.Y}", LyingOn = $"{final.Mover.X},{final.Mover.Y}", Pool = $"{pool.Cell.X},{pool.Cell.Y}",
+                SettledAfterFrames = settledAt, DiedOn = $"{first.Mover.X},{first.Mover.Y}", LyingOn = $"{final.Mover.X},{final.Mover.Y}", Pool = pool is null ? "none (violence filter on)" : $"{pool.Cell.X},{pool.Cell.Y}", ViolenceFilter = filterOn,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
         finally
@@ -178,6 +203,8 @@ public partial class TerrainViewerApp
             if (session.QueryLife(npcForRestore).View?.Status is { } fallen && fallen.IsDead)
                 session.Heal(session.Version, npcForRestore, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
+            if (filterTurnedOn) SaveGameSettings(_gameSettings with { ViolenceFilter = false });
+            if (brightnessTurnedOn) SaveGameSettings(_gameSettings with { Brightness = 0 });
             _areaSmokeTime = (_areaSmokeTime + 19) / 20;
             RestoreHeroForSmoke(session, heroBefore);
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;

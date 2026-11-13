@@ -16,6 +16,8 @@ public interface IAreaHeroRunsViewer
     bool Walking(CellCoord destination);
     /// <summary>ARC-DEV-187: the stun goal's end node: the hero's stunned bit is cleared (idempotent).</summary>
     void HeroStunEnds();
+    /// <summary>ARC-COMBAT-1741: one step of the hero's stun run over the stun nodes (the AI host's ports, which read the hero body's stunned ART); null when the viewer has none (the stun then ends at its first step).</summary>
+    SessionGoalStepAnswer? StepHeroStun(GoalRun run) => null;
     /// <summary>ARC-DEV-189: the knock-down goal's start step (<paramref name="on"/>) forces the hero down (a knock-down result leaves it conscious: the life state alone does not show the fall), its end (false) releases it.</summary>
     void HeroFalls(bool on);
     /// <summary>ARC-DEV-189: the viewer can go on playing the fall or (<paramref name="getUp"/>) the get-up, so the run may keep waiting for it.</summary>
@@ -710,10 +712,17 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
             Steps++; _restartAfterStep = true;
             return StepTurn(run);
         }
-        // ARC-DEV-187: the viewer reads no stun animation (23), so the stun's animation cannot start and the goal ends at its first step, as an NPC's does (goal-table.md §4): its end clears the stunned bit.
-        if (IsHeroStun(run)) { Steps++; _restartAfterStep = true; _viewer.HeroStunEnds(); return SessionGoalStepAnswer.End; }
+        // ARC-DEV-187: a stun whose animation (23) cannot start ends at its first step, as an NPC's does (goal-table.md §4): its end clears the stunned bit.
+        // ARC-COMBAT-1741: the stun nodes run over the hero body's stunned ART, so the stun lasts its frames and counts its plays out; a body with no such ART still ends it at once.
+        if (IsHeroStun(run))
+        {
+            Steps++;
+            if (_viewer.StepHeroStun(run) is { NextDelayMs: not null } playing) return playing;
+            _restartAfterStep = true; _viewer.HeroStunEnds();
+            return SessionGoalStepAnswer.End;
+        }
         // ARC-DEV-189: the hero's states. The knock-down (62) forces the viewer's fall and ends when it lies (an unconscious hero stays down by its life state; a conscious one gets up by the viewer's own rule, the 200 ms wait and the get-up
-        // goal the NPC's node pushes are not modelled); the get-up (63) ends when the hero stands; dying (31) ends at its first step (the death flow reads the life state, the dying animation is the viewer's).
+        // goal the NPC's node pushes are not modelled); the get-up (63) ends when the hero stands; dying (31) waits for the viewer's fall to end (ARC-COMBAT-1741; the death flow reads the life state, the dying animation is the viewer's).
         if (IsHeroDown(run))
         {
             Steps++; _restartAfterStep = true;
@@ -727,6 +736,10 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
                     return SessionGoalStepAnswer.End;
                 case GoalType.GetUp:
                     return _viewer.HeroStandsUp || !_viewer.HeroStateMayWait(true) ? SessionGoalStepAnswer.End : SessionGoalStepAnswer.After(DownStepMs);
+                case GoalType.Dying:
+                    // ARC-COMBAT-1741: the dying goal lasts while the hero's fall plays (the viewer's machine plays it for a dead hero: the dying animation), so the death cover's 5 s count from its end; a hero
+                    // that already lies, or that the viewer cannot draw falling, ends it at once.
+                    return _viewer.HeroFellDown || !_viewer.HeroStateMayWait(false) ? SessionGoalStepAnswer.End : SessionGoalStepAnswer.After(DownStepMs);
                 default:
                     return SessionGoalStepAnswer.End;
             }

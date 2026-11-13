@@ -58,6 +58,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="leaving-a-building-through-a-locked-portal-arc-res-049"></a>[Leaving a building through a locked portal (ARC-RES-049)](ledger/world.md#leaving-a-building-through-a-locked-portal-arc-res-049) | [World, maps and movement](ledger/world.md) | LV1–LV5 |
 | <a id="rendering-body-blends-and-wading-arc-render-018"></a>[Rendering: body blends and wading (ARC-RENDER-018)](ledger/world.md#rendering-body-blends-and-wading-arc-render-018) | [World, maps and movement](ledger/world.md) | BL1–BL5 |
 | <a id="equipment-arc-world-028"></a>[Equipment (ARC-WORLD-028)](ledger/items.md#equipment-arc-world-028) | [Items and inventory](ledger/items.md) | EQ1–EQ14 |
+| <a id="item-identify-and-repair-windows-arc-ui-1731"></a>[Item identify and repair windows (ARC-UI-1731)](ledger/items.md#item-identify-and-repair-windows-arc-ui-1731) | [Items and inventory](ledger/items.md) | IS1–IS7 |
 | <a id="art-names-and-missing-art-arc-res-050"></a>[Art names and missing art (ARC-RES-050)](ledger/data.md#art-names-and-missing-art-arc-res-050) | [Data and loading](ledger/data.md) | MA1–MA8 |
 | <a id="durable-effects-arc-world-029"></a>[Durable effects (ARC-WORLD-029)](ledger/character.md#durable-effects-arc-world-029) | [Character](ledger/character.md) | EF1–EF10 |
 | <a id="experience-and-levels-arc-world-030"></a>[Experience and levels (ARC-WORLD-030)](ledger/character.md#experience-and-levels-arc-world-030) | [Character](ledger/character.md) | XP1–XP12 |
@@ -265,6 +266,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="trainer-reply-arc-script-1150"></a>[Trainer reply (ARC-SCRIPT-1150)](ledger/social.md#trainer-reply-arc-script-1150) | [Reaction, reputation and companions](ledger/social.md) | DTR1–DTR9 |
 | <a id="rumor-reply-arc-script-1304"></a>[Rumor reply (ARC-SCRIPT-1304)](ledger/social.md#rumor-reply-arc-script-1304) | [Reaction, reputation and companions](ledger/social.md) | RMR1–RMR9 |
 | <a id="story-reply-arc-script-1321"></a>[Story reply (ARC-SCRIPT-1321)](ledger/social.md#story-reply-arc-script-1321) | [Reaction, reputation and companions](ledger/social.md) | STY1–STY4 |
+| <a id="healer-reply-arc-script-1732"></a>[Healer reply (ARC-SCRIPT-1732)](ledger/social.md#healer-reply-arc-script-1732) | [Reaction, reputation and companions](ledger/social.md) | HLR1–HLR12 |
 | <a id="insult-line-arc-script-1505"></a>[Insult line (ARC-SCRIPT-1505)](ledger/social.md#insult-line-arc-script-1505) | [Reaction, reputation and companions](ledger/social.md) | INS1–INS4 |
 | <a id="directions-replies-arc-script-1533"></a>[Directions replies (ARC-SCRIPT-1533)](ledger/social.md#directions-replies-arc-script-1533) | [Reaction, reputation and companions](ledger/social.md) | DIR1–DIR9 |
 | <a id="quest-state-reply-arc-script-1532"></a>[Quest-state reply (ARC-SCRIPT-1532)](ledger/social.md#quest-state-reply-arc-script-1532) | [Reaction, reputation and companions](ledger/social.md) | DQR1–DQR5 |
