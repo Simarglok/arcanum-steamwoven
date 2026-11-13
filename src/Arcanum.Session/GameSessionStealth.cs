@@ -31,6 +31,10 @@ public sealed class SessionConcealmentState
 /// prowler's effectiveness and the check's difficulty it came from (null while not concealed).</summary>
 public sealed record SessionProwlingMargin(int Margin, int? Effectiveness, SkillDifficulty? Difficulty);
 
+/// <summary>ARC-AI-1560: a follower as a prowler: the combat build the host reads its light and worn armour from, the advancement sheet
+/// its map data loads (the session's levelled one wins) and the modifiers of its effects, as <see cref="GameSessionOwner.QueryNpcSkills(SessionNpcAdvancement, AdvancementModifiers)"/> takes them.</summary>
+public sealed record SessionNpcProwler(SessionCritterCombat Critter, SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers);
+
 public sealed partial class GameSessionOwner
 {
     /// <summary>The hero's and its followers' concealment.</summary>
@@ -82,6 +86,54 @@ public sealed partial class GameSessionOwner
         ArgumentNullException.ThrowIfNull(observer);
         if (_hero is null || !_combat.HeroConcealed) return new(0, null, null);
         var request = HeroSkillRequest(Skill.Prowling, null);
+        // ARC-AI-1518: the prowler's own light and worn armour (AW4), the hero's whatever the observer facts say.
+        return ProwlingMargin(request, observerPerception, observer, seeing, QueryHeroLight(),
+            EquipmentRules.SilentMoves(_equipment.Items().Values, HeroAptitude()), request.Difficulty.SourceInjuries);
+    }
+
+    /// <summary>
+    /// ARC-AI-1560 (VBG7, the original's prowling flag of any critter, a follower as the prowler): the prowling margin of a concealed follower over one
+    /// observer in a sight or hearing check, as <see cref="HeroProwlingMargin"/> gives the hero's: 0 while the NPC is not in the session's
+    /// concealed set (<see cref="IsConcealed"/>), a refused life record, or invalid input; otherwise <see cref="StealthRules.Margin"/> of
+    /// the NPC's own prowling level and training (<see cref="QueryNpcSkills(SessionNpcAdvancement, AdvancementModifiers)"/>: the sheet the session levelled it to, else its map data's),
+    /// opposed by <paramref name="observerPerception"/>, under the check's difficulty for <paramref name="observer"/> with the NPC's own
+    /// light and worn armour's silent-move terms (the build the host reads its attack from) and its blindness and crippled limbs. The
+    /// effectiveness is not the local PC's (as the other NPC skill checks read it). Stores nothing, so no revision.
+    /// </summary>
+    public SessionProwlingMargin NpcProwlingMargin(SessionNpcProwler prowler, int observerPerception, SkillDifficultyFacts observer, bool seeing)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(prowler);
+        ArgumentNullException.ThrowIfNull(prowler.Critter);
+        ArgumentNullException.ThrowIfNull(prowler.Loaded);
+        ArgumentNullException.ThrowIfNull(prowler.Modifiers);
+        ArgumentNullException.ThrowIfNull(observer);
+        var entity = prowler.Critter.Entity;
+        if (!_combat.Concealed.Contains(entity) || prowler.Loaded.Entity != entity || !AutoLevelRules.IsValid(prowler.Loaded.Sheet) || !AutoLevelRules.IsValid(prowler.Modifiers) ||
+            Resolve(prowler.Critter.Target, out var record, out _, out _) != GameSessionFailure.None)
+            return new(0, null, null);
+        var sheet = _advancement.Npcs.TryGetValue(entity, out var levelled) ? levelled.Sheet : prowler.Loaded.Sheet;
+        var skill = QueryNpcSkills(prowler.Loaded, prowler.Modifiers)[Skill.Prowling];
+        var aptitude = Math.Clamp(AutoLevelRules.DerivedStat(sheet, prowler.Modifiers, CharacterStat.MagickTechAptitude), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);
+        var request = new SkillCheckRequest
+        {
+            Skill = Skill.Prowling,
+            Level = skill.Level,
+            Training = skill.Training,
+            Effectiveness = new()
+            {
+                ExtraordinaryIntelligence = AutoLevelRules.EffectiveStat(sheet, prowler.Modifiers, CharacterStat.Intelligence) >= CharacterStatRules.ExtraordinaryThreshold,
+                Difficulty = _difficulty,
+            },
+        };
+        return ProwlingMargin(request, observerPerception, observer, seeing, prowler.Critter.OwnLight,
+            EquipmentRules.SilentMoves(prowler.Critter.WornItems.Values, aptitude), SourceInjuries(record.State.Conditions));
+    }
+
+    // The margin of a prowler's effectiveness (opposed by the observer's perception) and the check's difficulty for the observer (AW4).
+    private static SessionProwlingMargin ProwlingMargin(SkillCheckRequest request, int observerPerception, SkillDifficultyFacts observer, bool seeing,
+        LightEmission light, IReadOnlyList<int> silentMoves, SkillSourceInjuries injuries)
+    {
         var effectiveness = SkillCheckRules.Effectiveness(Skill.Prowling, request.Level, request.Effectiveness with { OpponentValue = observerPerception });
         var difficulty = SkillCheckRules.Difficulty(Skill.Prowling, request.Training, effectiveness, observer with
         {
@@ -90,10 +142,9 @@ public sealed partial class GameSessionOwner
             TargetCritter = true,
             SeeingCheck = seeing,
             HearingCheck = !seeing,
-            // ARC-AI-1518: the prowler's own light and worn armour (AW4), the hero's whatever the observer facts say.
-            SourceLight = QueryHeroLight(),
-            ArmorSilentMoves = EquipmentRules.SilentMoves(_equipment.Items().Values, HeroAptitude()),
-            SourceInjuries = request.Difficulty.SourceInjuries,
+            SourceLight = light,
+            ArmorSilentMoves = silentMoves,
+            SourceInjuries = injuries,
         });
         return new(StealthRules.Margin(effectiveness, difficulty.Total), effectiveness, difficulty);
     }

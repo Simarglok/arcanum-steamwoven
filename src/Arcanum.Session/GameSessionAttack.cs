@@ -329,6 +329,9 @@ public sealed class SessionCritterCombat
 
     internal IReadOnlyDictionary<EquipmentSlot, EquipmentItem> WornItems => _worn;
 
+    /// <summary>ARC-AI-1560: the light the NPC gives off (its flags and worn items), the prowling difficulty's source light.</summary>
+    internal LightEmission OwnLight => _ownLight;
+
     /// <summary>The NPC as a wearer under <paramref name="conditions"/>: race, gender and crippled arms; its spells, background and art
     /// are not read (never transformed, magick-allergic or unique), so a body armour's unique-art refusal is not seen.</summary>
     public EquipmentWearer Wearer(LifeConditions conditions) => new()
