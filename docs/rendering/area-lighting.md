@@ -187,8 +187,13 @@ the largest of the worn items' light sizes, each shrinking with its effective po
   **Native smoke** (named stage `critter-light`, AI on, a lit map where an NPC carries a light): the NPC's light is in the canvas and not among
   the fixed lights, a terrain pixel near it reads back against the merged lattices, and when the mover stands the NPC on another cell the light
   stands there. It skips a map without such an NPC.
-- **Not drawn yet:** the light a session-dressed NPC would have after its regeneration wields its best items (its worn items' sizes would
-  need the items' light flags and the NPC's aptitude; the saved light stands), a visiting companion's light on another map, shadows.
+- **An NPC whose worn items the session recalculated (ARC-MAGIC-1561, ledger RM3d).** The saved light of a critter stands until the session recalculates its worn items: its
+  best-items wield after a regeneration or the AI gate's re-wield (the NPC's worn record) or a magick or tech point write (TraitIdx stat 22 or 23, the rewield 0x465530). The light is then the largest size of the worn items'
+  light flags, each shrunk by its power ratio against the NPC's aptitude (`AreaRestockHost.NpcLight`, `EquipmentRules.Light`), drawn like the hero's: light ART 1 frame 0, the size's colour, flags 0
+  (`CarriedLightRules`), at the NPC's place with the NPC's pose. It replaces the saved primary light and is read again when the session changes (`TerrainViewerApp.NpcCarriedLights`, part of the
+  carried-light key); a size of none removes the light (the torch left the NPC). It applies only when an item with light flags is worn now or was worn at load, so a light that comes from no worn item stays as saved.
+  Differs from the original, which stores the size at the event: the aptitude of the moment is used. The stage `critter-light` writes a magick point of the NPC and sees its light still at its place.
+- **Not drawn yet:** a visiting companion's light on another map, shadows; the NPC's light after the other callers of the recalculation (a barter, give or loot that moves a worn light item).
 
 ### Live light of a lit eye candy (ARC-MAGIC-1229, FR-LIGHT-011, ledger IW2–IW6)
 

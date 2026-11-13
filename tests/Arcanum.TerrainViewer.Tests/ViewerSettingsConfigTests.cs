@@ -25,7 +25,7 @@ public sealed class ViewerSettingsConfigTests
 
     private static readonly AreaGameSettings Chosen = new(2, true, false)
     {
-        Floats = 0, FloatSpeed = 9, HdInterface = true, GeneratedInterface = true, HdPackSource = HdPackSourceMode.Custom, HdPackPath = "/Volumes/Packs/HD pack",
+        Floats = 0, FloatSpeed = 9, CombatTaunts = false, HdInterface = true, GeneratedInterface = true, HdPackSource = HdPackSourceMode.Custom, HdPackPath = "/Volumes/Packs/HD pack",
         Pad = PadScheme.Pointer, Touch = TouchScheme.Off, Prompts = PromptStyle.SteamDeck,
     };
 
@@ -39,6 +39,7 @@ public sealed class ViewerSettingsConfigTests
         Assert.AreEqual(ViewerSettingsConfig.AlwaysRun, Setting(AreaOption.AlwaysRun));
         Assert.AreEqual(ViewerSettingsConfig.TextFloaters, Setting(AreaOption.Floats));
         Assert.AreEqual(ViewerSettingsConfig.FloatSpeed, Setting(AreaOption.FloatSpeed));
+        Assert.AreEqual(ViewerSettingsConfig.CombatTaunts, Setting(AreaOption.CombatTaunts));
         Assert.AreEqual(ViewerSettingsConfig.EffectsVolume, Setting(AreaOption.Effects));
         Assert.AreEqual(ViewerSettingsConfig.VoiceVolume, Setting(AreaOption.Voice));
         Assert.AreEqual(ViewerSettingsConfig.MusicVolume, Setting(AreaOption.Music));
@@ -48,7 +49,7 @@ public sealed class ViewerSettingsConfigTests
     public void The_game_settings_round_trip_as_lines_and_a_missing_file_reads_the_defaults()
     {
         var text = ArcanumConfig.Format(ViewerSettingsConfig.GameChanges(Chosen).Select(change => new ArcanumConfigEntry(change.Name, change.Value!)));
-        Assert.AreEqual("difficulty=2\nturn-based=1\nauto attack=0\ntext floaters=0\nfloat speed=9\nhd interface=1\ngenerated interface=1\nhd pack=custom\nhd pack path=/Volumes/Packs/HD pack\npad scheme=pointer\ntouch scheme=off\nprompt style=steamdeck\n", text);
+        Assert.AreEqual("difficulty=2\nturn-based=1\nauto attack=0\ntext floaters=0\nfloat speed=9\ncombat taunts=0\nhd interface=1\ngenerated interface=1\nhd pack=custom\nhd pack path=/Volumes/Packs/HD pack\npad scheme=pointer\ntouch scheme=off\nprompt style=steamdeck\n", text);
         var read = Lines(text);
         Assert.AreEqual(Chosen, ViewerSettingsConfig.ReadGame(read));
         Assert.IsTrue(ViewerSettingsConfig.HasGame(read));
@@ -59,11 +60,12 @@ public sealed class ViewerSettingsConfigTests
     [TestMethod]
     public void A_bad_value_takes_that_settings_default_and_leaves_the_others()
     {
-        var read = Lines("difficulty=7\nturn-based=yes\nauto attack=0\ntext floaters=-1\nfloat speed=11\nhd interface=1\ngenerated interface=1\nhd pack=elsewhere\nhd pack path=/x\n");
+        var read = Lines("difficulty=7\nturn-based=yes\nauto attack=0\ntext floaters=-1\nfloat speed=11\ncombat taunts=2\nhd interface=1\ngenerated interface=1\nhd pack=elsewhere\nhd pack path=/x\n");
         var settings = ViewerSettingsConfig.ReadGame(read);
         var defaults = AreaGameSettings.Defaults;
         Assert.AreEqual((defaults.Difficulty, defaults.TurnBased, false, defaults.Floats, defaults.FloatSpeed),
             (settings.Difficulty, settings.TurnBased, settings.AutoAttack, settings.Floats, settings.FloatSpeed));
+        Assert.IsTrue(settings.CombatTaunts, "an out-of-range combat taunts line reads as the default, on");
         Assert.AreEqual((true, true, defaults.HdPackSource, "/x"), (settings.HdInterface, settings.GeneratedInterface, settings.HdPackSource, settings.HdPackPath));
         Assert.IsFalse(ViewerSettingsConfig.ReadGame(Lines("generated interface=1\n")).GeneratedInterface, "the generated interface is on only with the HD interface");
         Assert.AreEqual(HdPackSourceMode.GameFolder, ViewerSettingsConfig.ReadGame(Lines("HD PACK=Game\n")).HdPackSource);
@@ -169,8 +171,8 @@ public sealed class ViewerSettingsConfigTests
         var path = Path.Combine(_root, ArcanumConfig.FileName);
         Assert.AreEqual(ArcanumConfigSaveStatus.Saved, ArcanumConfig.Save(path, ViewerSettingsMigration.Import(legacy)));
         var read = ArcanumConfig.Read(path);
-        // The old file knew no controller lines: they come in at their defaults (Off, Off, Auto).
-        Assert.AreEqual(Chosen with { Pad = PadScheme.Off, Touch = TouchScheme.Off, Prompts = PromptStyle.Auto }, ViewerSettingsConfig.ReadGame(read));
+        // The old file knew no controller lines and no combat taunts line (ARC-AI-1527): they come in at their defaults (Off, Off, Auto; taunts on).
+        Assert.AreEqual(Chosen with { Pad = PadScheme.Off, Touch = TouchScheme.Off, Prompts = PromptStyle.Auto, CombatTaunts = true }, ViewerSettingsConfig.ReadGame(read));
         Assert.AreEqual(new AudioVolumes(4, 0, 10), ViewerSettingsConfig.ReadAudio(read));
         Assert.IsTrue(ViewerSettingsConfig.ReadAlwaysRun(read));
         Assert.AreEqual(VisualProfile.Hd, ViewerSettingsConfig.ReadVisualProfile(read));
