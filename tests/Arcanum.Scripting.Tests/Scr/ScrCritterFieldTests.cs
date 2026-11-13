@@ -189,16 +189,16 @@ public sealed class ScrCritterFieldTests
     }
 
     [TestMethod]
-    public void The_commands_need_a_host_that_answers_them_and_S56_adds_exactly_the_five_actions_to_S54()
+    public void The_commands_need_a_host_that_answers_them_and_S56_adds_exactly_the_five_actions_to_S55()
     {
         var plain = new FakeHost();
         plain.Attach(Sword, 7, 700, Program(Do(C(ScrCatalogue.Action.ReturnRunDefault))));
         var getters = new ScrAdmissionSet("getters-only", ScrAdmissionSet.S5.Conditions, ScrAdmissionSet.S5.Actions.Concat(ScrAdmissionSet.CritterFieldActions), ScrAdmissionSet.S5.ValueKinds, ScrAdmissionSet.S5.FocusKinds);
         Assert.ThrowsExactly<ArgumentException>(() => ScrDispatcher.RunObject(new(7, Sword, Pc, Victim), plain, new() { Admission = getters }));
         CollectionAssert.AreEquivalent(new[] { 38, 39, 89 }, ScrAdmissionSet.CritterFieldActions.ToArray());
-        CollectionAssert.AreEquivalent(new[] { 38, 39, 57, 89, 92 }, ScrAdmissionSet.S56.Actions.Except(ScrAdmissionSet.S54.Actions).ToArray());
-        CollectionAssert.AreEquivalent(ScrAdmissionSet.S54.Conditions.ToArray(), ScrAdmissionSet.S56.Conditions.ToArray());
-        Assert.IsTrue(ScrAdmissionSet.S54.IsSubsetOf(ScrAdmissionSet.S56));
+        CollectionAssert.AreEquivalent(new[] { 38, 39, 57, 89, 92 }, ScrAdmissionSet.S56.Actions.Except(ScrAdmissionSet.S55.Actions).ToArray());
+        CollectionAssert.AreEquivalent(ScrAdmissionSet.S55.Conditions.ToArray(), ScrAdmissionSet.S56.Conditions.ToArray());
+        Assert.IsTrue(ScrAdmissionSet.S55.IsSubsetOf(ScrAdmissionSet.S56));
         Assert.IsTrue(ScrAdmissionSet.S56.IsSubsetOf(ScrAdmissionSet.S56));
         Assert.IsNotNull(new ScrRunOptions { Admission = ScrAdmissionSet.S56 });
     }

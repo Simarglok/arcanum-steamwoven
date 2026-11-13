@@ -459,15 +459,23 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S54 { get; } = new("S54", S53.Conditions.Concat(CritterTailConditions), S53.Actions, S53.ValueKinds, S53.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The spell-state set (ARC-SCRIPT-1734, ledger SC18, WE11, WE12): <see cref="S54"/> plus the conditions obj is polymorphed (12, bit 0x20000), obj is shrunk (13, 0x80000) and obj has mirror image (16, 0x40000) of the object's spell flags
+    /// (<see cref="IScrSpellQueries"/>, as condition 14 reads its body bits), and the eye candy actions play spell eye candy (104, 0x456E60) and stop script eye candy (124, 0x44C800), which hand their number and object to the host as
+    /// <see cref="ScrEyeCandy"/> requests (presentation only).
+    /// </summary>
+    public static ScrAdmissionSet S55 { get; } = new("S55", S54.Conditions.Concat([ScrCatalogue.Condition.IsPolymorphed, ScrCatalogue.Condition.IsShrunk, ScrCatalogue.Condition.HasMirrorImage]),
+        S54.Actions.Concat([ScrCatalogue.Action.PlaySpellEyeCandy, ScrCatalogue.Action.StopScriptEyeCandy]), S54.ValueKinds, S54.FocusKinds, counterIndexWraps: true);
+
     /// <summary>The getters the set <see cref="S56"/> adds, which a host answers through <see cref="IScrCritterFieldQueries"/> (ARC-SCRIPT-1772, ledger CQ1–CQ3): get social class (38), get origin (39) and get faction (89); each stores an NPC field into its number operand 1.</summary>
     public static IReadOnlyList<int> CritterFieldActions { get; } = [ScrCatalogue.Action.GetSocialClass, ScrCatalogue.Action.GetOrigin, ScrCatalogue.Action.GetFaction];
 
     /// <summary>
-    /// The critter getters and writes set (ARC-SCRIPT-1772, ledger CQ1–CQ8; the script census group CRQ, the part <see cref="S53"/> left): <see cref="S54"/> plus the getters of <see cref="CritterFieldActions"/>, toggle invulnerability (57, flips object flag 0x400000,
+    /// The critter getters and writes set (ARC-SCRIPT-1772, ledger CQ1–CQ8; the script census group CRQ, the part <see cref="S53"/> left): <see cref="S55"/> plus the getters of <see cref="CritterFieldActions"/>, toggle invulnerability (57, flips object flag 0x400000,
     /// which condition 30 reads) and rename (92, writes the object's name number, field 0x16), exe 0x447220 cases 0x26, 0x27, 0x39, 0x59 and 0x5C.
     /// </summary>
-    public static ScrAdmissionSet S56 { get; } = new("S56", S54.Conditions, S54.Actions.Concat(CritterFieldActions).Concat([ScrCatalogue.Action.ToggleInvulnerability, ScrCatalogue.Action.Rename]),
-        S54.ValueKinds, S54.FocusKinds, counterIndexWraps: true);
+    public static ScrAdmissionSet S56 { get; } = new("S56", S55.Conditions, S55.Actions.Concat(CritterFieldActions).Concat([ScrCatalogue.Action.ToggleInvulnerability, ScrCatalogue.Action.Rename]),
+        S55.ValueKinds, S55.FocusKinds, counterIndexWraps: true);
 
     /// <summary>The conditions of <see cref="S51"/> and <see cref="S52"/> a host answers through <see cref="IScrCritterQueries"/>.</summary>
     public static IReadOnlySet<int> CritterQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.IsAnimal, ScrCatalogue.Condition.IsInCombat };
@@ -489,9 +497,9 @@ public sealed class ScrAdmissionSet
     public static IReadOnlySet<int> StoryQueryActions { get; } = new HashSet<int> { ScrCatalogue.Action.GetDaySinceStartup, ScrCatalogue.Action.GetCurrentHour, ScrCatalogue.Action.GetCurrentMinute,
         ScrCatalogue.Action.GetHoursSinceStartup, ScrCatalogue.Action.SetGlobalQuestState, ScrCatalogue.Action.SetPcQuestUnbotched };
 
-    /// <summary>The conditions of <see cref="S31"/> a host answers through <see cref="IScrSpellQueries"/>.</summary>
+    /// <summary>The conditions of <see cref="S31"/> and <see cref="S53"/> a host answers through <see cref="IScrSpellQueries"/>.</summary>
     public static IReadOnlySet<int> SpellQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.HasBodySpell, ScrCatalogue.Condition.InfluencedBySpell, ScrCatalogue.Condition.KnowsSpell,
-        ScrCatalogue.Condition.MasteredSpellCollege };
+        ScrCatalogue.Condition.MasteredSpellCollege, ScrCatalogue.Condition.IsPolymorphed, ScrCatalogue.Condition.IsShrunk, ScrCatalogue.Condition.HasMirrorImage };
 
     /// <summary>The actions of <see cref="S15"/>, <see cref="S18"/> and <see cref="S19"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int>

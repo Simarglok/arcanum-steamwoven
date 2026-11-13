@@ -345,8 +345,12 @@ public sealed class AreaInventoryHost
     public InventoryMutationResult Loot(GameSessionOwner session, string holder, string item)
     {
         ArgumentNullException.ThrowIfNull(session);
-        return session.LootItem(session.Version, holder, item, InsertCheck, ItemScripts(session));
+        // ARC-MAGIC-1743: a worn item of a looted NPC runs its wield-off script over the NPC's own effects and stats when the area gives them.
+        return session.LootItem(session.Version, holder, item, InsertCheck, ItemScripts(session), npcWearer: NpcWearer?.Invoke(session.QueryActor().Map, holder));
     }
+
+    /// <summary>ARC-MAGIC-1743: the item script host, life target and stored stats of an NPC as the wearer of the item event scripts of a looted worn item (<see cref="Arcanum.Session.SessionNpcWieldScripts"/>); null while unset.</summary>
+    public Func<SessionMapId, string, SessionNpcWieldScripts?>? NpcWearer { get; set; }
 
     /// <summary>The dialog's negative IN through the session (<see cref="SessionDialogInventoryPort"/>) with this insert check.</summary>
     public SessionDialogInventoryPort DialogPort(GameSessionOwner session, Func<DialogParticipantId, string?> entityOf) =>

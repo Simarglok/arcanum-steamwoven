@@ -604,9 +604,13 @@ public enum ScrEffectChange { Add, Remove }
 /// </summary>
 public readonly record struct ScrEffectRequest(ScrEffectChange Change, ScrObjectRef Object, int Effect, int Cause = 0);
 
+/// <summary>ARC-SCRIPT-1734: which eye candy table an eye candy request names and what it does: <see cref="PlayScript"/> (action 120, entry of the script eye candy table), <see cref="PlaySpell"/> (action 104, 0x456E60: the spell eye candy
+/// entry number % 10 + number / 10 × 6 of the spell table) and <see cref="StopScript"/> (action 124, 0x44C800 → 0x4CD940: take the script eye candy of the number off the object).</summary>
+public enum ScrEyeCandyKind { PlayScript, PlaySpell, StopScript }
+
 /// <summary>ARC-SCRIPT-042: a play-script-eye-candy action (120, ledger WE4): the entry of the script eye-candy table and the object it
-/// plays on. Presentation only; the host shows it.</summary>
-public readonly record struct ScrEyeCandy(int Number, ScrObjectRef Object);
+/// plays on; ARC-SCRIPT-1734 adds play spell eye candy (104) and stop script eye candy (124, ledger WE11, WE12) in order with it (<see cref="Kind"/>), the number as read. Presentation only; the host shows it (no host plays any yet, #1592).</summary>
+public readonly record struct ScrEyeCandy(int Number, ScrObjectRef Object, ScrEyeCandyKind Kind = ScrEyeCandyKind.PlayScript);
 
 /// <summary>
 /// ARC-SKILLS-009: a use-item-with-skill action (79, ledger SX3, SX4) as the run asks for it: the source, the item (absent for a use
@@ -1050,7 +1054,7 @@ public sealed record ScrRunOptions
         if (host is not IScrObjectStateQueries && Admission.Conditions.Any(ScrAdmissionSet.ObjectStateQueryConditions.Contains))
             throw new ArgumentException("A set with the dead or switched-off condition needs a host that implements IScrObjectStateQueries.", nameof(Admission));
         if (host is not IScrSpellQueries && Admission.Conditions.Any(ScrAdmissionSet.SpellQueryConditions.Contains))
-            throw new ArgumentException("A set with a spell condition (body spell, influenced by spell, knows spell, mastered college) needs a host that implements IScrSpellQueries.", nameof(Admission));
+            throw new ArgumentException("A set with a spell condition (body spell, influenced by spell, knows spell, mastered college, polymorphed, shrunk, mirror image) needs a host that implements IScrSpellQueries.", nameof(Admission));
         if (host is not IScrAreaQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetArea))
             throw new ArgumentException("A set with get area needs a host that implements IScrAreaQueries.", nameof(Admission));
         if (host is not IScrStoryQueries && (Admission.Conditions.Any(ScrAdmissionSet.StoryQueryConditions.Contains) || Admission.Actions.Any(ScrAdmissionSet.StoryQueryActions.Contains)))

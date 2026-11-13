@@ -190,7 +190,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation,
                 ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak, ScrCatalogue.Action.CreateObject, ScrCatalogue.Action.GetStat,
-                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, .. CritterFieldWriteActions, .. ItemUseVitalActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
+                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, .. CritterFieldWriteActions, .. ItemUseVitalActions, .. EyeCandyActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
         ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]),
         counterIndexWraps: true);
@@ -203,6 +203,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-SCRIPT-1772 (CQ1–CQ5): the critter getters (38, 39, 89; <see cref="ScrAdmissionSet.CritterFieldActions"/>), toggle invulnerability (57) and rename (92) of <see cref="ScrAdmissionSet.S56"/>, which the use set and so the placed, combat-point, dying and
     /// heartbeat sets admit: the getters are answered here (<see cref="IScrCritterFieldQueries"/>), the two writes go through the session for the PC and an NPC (<see cref="ObjectStateRefusal"/> refuses the rest).</summary>
     private static int[] CritterFieldWriteActions => [.. ScrAdmissionSet.CritterFieldActions, ScrCatalogue.Action.ToggleInvulnerability, ScrCatalogue.Action.Rename];
+    /// <summary>ARC-SCRIPT-1734 (WE11, WE12): play spell eye candy (104) and stop script eye candy (124) of <see cref="ScrAdmissionSet.S55"/>, which the use set admits beside play script eye candy (120): the run's result hands them on as eye candy requests and no host shows them yet (#1592).</summary>
+    private static int[] EyeCandyActions => [ScrCatalogue.Action.PlaySpellEyeCandy, ScrCatalogue.Action.StopScriptEyeCandy];
 
     /// <summary>ARC-DEV-243 (S14g): damage (60), apply unresistable damage (138) and heal hit points (75), which the placed and heartbeat sets admit.</summary>
     private static readonly int[] DamageActions = [ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.HealHitPoints];
@@ -244,6 +246,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <see cref="ScrAdmissionSet.S18"/>. ARC-MAGIC-030 (MT21b): plus the spell conditions (14, 35, 48, 49) and give spell mastery in college (112) of <see cref="ScrAdmissionSet.S31"/>.
     /// ARC-SCRIPT-1359: plus get location (95) of <see cref="ScrAdmissionSet.S38"/> (the Crash Site Molochean agent's heartbeat 1717 reads where it stands before it runs to its tile).
     /// ARC-SCRIPT-1166: plus loop break (20) of <see cref="ScrAdmissionSet.S40"/>. ARC-SCRIPT-1294: plus stop spell on object (130) of <see cref="ScrAdmissionSet.S42"/>.
+    /// ARC-SCRIPT-1734: plus the spell-state conditions (12, 13, 16) and the eye candy actions (104, 124) of <see cref="ScrAdmissionSet.S55"/>; 21 main-map heartbeats stop a script eye candy.
     /// </summary>
     public static ScrAdmissionSet HeartbeatAdmission { get; } = new("S2-area-heartbeat-state-kill-talk-world",
         ScrAdmissionSet.S2.Conditions.Concat([ScrCatalogue.Condition.FollowingPc, ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsDead,
@@ -251,7 +254,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
             ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.GetLocation, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
-            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, .. CritterFieldWriteActions, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. StopSpellActions, .. DamageActions]),
+            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, .. CritterFieldWriteActions, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. StopSpellActions, .. DamageActions, .. EyeCandyActions]),
         ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]));
 

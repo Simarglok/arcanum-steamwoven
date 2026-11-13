@@ -336,6 +336,9 @@ public partial class TerrainViewerApp
         // are rebuilt from the loaded session, not kept from the running one.
         else if (result.Owner.QueryHero()?.Prototype == AreaStartingHero.GenericPrototype + Arcanum.Data.Characters.PremadeHeroReader.PrototypeOffset)
             AdoptHeroTables(LoadedMenuHero(result.Owner));
+        // ARC-MAGIC-1724: a save of schema 98 or before has no stored age for the hero; it is still its prototype's, read from the hero's tables (only then are they looked up).
+        if (result.Owner.QueryHero() is not null && result.Owner.QueryHeroStoredAge() is null &&
+            AreaQuickSave.FillHeroAge(result.Owner, LoadedMenuHero(result.Owner)) is { } ageStatus) GD.Print("ARC-MAGIC-1724 " + ageStatus);
         // The other map's load is asynchronous: its messages wait for the map (StartMapTransfers, the failure in the transfer's fallback).
         if (elsewhere is { } map) { QuickLoadOtherMap(result.Owner, map, prefix + result.Status + from, messages); return true; }
         AdoptLoadedSession(result.Owner, maps, talk);
