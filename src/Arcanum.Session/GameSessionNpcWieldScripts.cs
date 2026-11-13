@@ -45,11 +45,30 @@ public sealed partial class GameSessionOwner
     {
         if (stat == ScriptStatLevel) return npc.Stored.Count == SessionCritterIndexedWrites.StatCount ? npc.Stored[17] : null;
         if (stat == ScriptStatAlignment) return npc.Stored.Count == SessionCritterIndexedWrites.StatCount ? npc.Stored[19] : null;
-        if (stat is not (>= 0 and <= 7 or ScriptStatAptitude) || NpcScriptOwner(npc, entries, definitions) is not { } owner) return null;
+        if (stat is not (>= 0 and <= 7 or ScriptStatAptitude)) return null;
+        return NpcScriptSnapshot(npc, entries, definitions)?.GetEffective(stat == ScriptStatAptitude ? CharacterStat.MagickTechAptitude : (CharacterStat)stat);
+    }
+
+    // The NPC wearer's effective stats under the given effect list, with its poison and crippled legs; null for stored values or a list the character rules refuse.
+    private CharacterStatsSnapshot? NpcScriptSnapshot(NpcWearer npc, IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
+    {
+        if (NpcScriptOwner(npc, entries, definitions) is not { } owner) return null;
         var state = QueryLife(npc.Target).View?.Record.State;
         var poison = state is { } life ? Math.Clamp(life.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel) : 0;
         var crippled = state is { } legs && legs.Conditions.HasFlag(LifeConditions.CrippledLegsBoth);
-        return owner.Query(new(0, poison, crippled)).Snapshot?.GetEffective(stat == ScriptStatAptitude ? CharacterStat.MagickTechAptitude : (CharacterStat)stat);
+        return owner.Query(new(0, poison, crippled)).Snapshot;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-1684: the NPC's stored stats with its advancement record's sheet laid over the ones the sheet holds (primary stats, level, unspent points, magick and tech points, race): a follower with a record keeps those
+    /// there (ledger RM3c), so the scripts read the record's values.
+    /// </summary>
+    internal IReadOnlyList<int> NpcStatsOverSheet(string npc, IReadOnlyList<int> stats)
+    {
+        if (QueryNpcAdvancement(npc) is not { } advanced || stats.Count != SessionCritterIndexedWrites.StatCount) return stats;
+        var values = stats.ToArray();
+        foreach (var index in new[] { 0, 1, 2, 3, 4, 5, 6, 7, 17, 21, 22, 23, 27 }) values[index] = SheetStat(advanced.Sheet, index)!.Value;
+        return Array.AsReadOnly(values);
     }
 
     // The NPC wearer's aptitude as the power ratio reads it (0x461540): the effective aptitude within the equipment rules' range.

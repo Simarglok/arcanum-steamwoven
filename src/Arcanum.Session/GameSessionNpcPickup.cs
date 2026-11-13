@@ -107,7 +107,7 @@ public sealed partial class GameSessionOwner
         bool Stale() => _revision != revision || _inventory.SeedGeneration != seeds || _actor.Map != map || _flags.Version != flagVersion || _inventory.PlacedItem(item) != placed ||
             !ReferenceEquals(_inventory.Objects.PileOf(item), pile) || !KnownNpc(npc) || _durability.Destroyed.Contains(item) || _inventory.Taken.Contains(item) && placed is null;
         // ARC-AI-1655 (0x461810): the item's get script runs before the insert check, with the NPC as the triggerer; skip default leaves the item where it lies.
-        var runs = hasGet || hasInsert ? new ItemScriptRuns(this, scripts!, map.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item] = facts.Complexity }) { NpcPickup = true } : null;
+        var runs = hasGet || hasInsert ? new ItemScriptRuns(this, scripts!, map.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item] = facts.Complexity }) { NpcTriggerer = true } : null;
         if (runs is not null && hasGet)
         {
             var gate = runs.Run(SessionScriptPoint.Get, item, npc, null);

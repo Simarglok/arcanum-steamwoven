@@ -15,6 +15,9 @@ public sealed record SpellWillpowerRead(ExperienceTableStatus Status, IReadOnlyL
 public static class AutoLevelTables
 {
     public const int FirstUserScheme = 1, FirstGameScheme = 50, LastScheme = 199, Spells = 80;
+    /// <summary>ARC-UI-1742: the name files of the schemes (<c>mes\userlevelname.mes</c> for 1..49, <c>mes\gamelevelname.mes</c> for 0 and 50..199).</summary>
+    public const string UserNamesPath = "mes/userlevelname.mes", GameNamesPath = "mes/gamelevelname.mes",
+        UserRulesPath = "rules/userlevel.mes", GameRulesPath = "rules/gamelevel.mes";
     private const int SpellBase = 1000, SpellStride = 50;
     private static readonly int[] DefaultWillpower = [6, 9, 12, 15, 18];
 
@@ -28,6 +31,28 @@ public static class AutoLevelTables
         var file = scheme < FirstGameScheme ? user : game;
         return file.Find(scheme)?.Bytes;
     }
+
+    /// <summary>
+    /// ARC-UI-1742: the name text of <paramref name="scheme"/> as the sheet's scheme page looks it up (0x4A6DE0): scheme 0 and 50..199 from
+    /// <c>mes\gamelevelname.mes</c>, 1..49 from <c>mes\userlevelname.mes</c>, nothing for any other number or a number without an entry. The
+    /// function returns the text's pointer (the earlier reading, FT8, took it for the number), and a stored empty text is a name.
+    /// </summary>
+    [OriginalFunction(0x4A6DE0, OriginalFunctionScope.Full)]
+    public static ReadOnlyMemory<byte>? Name(MesFile gameNames, MesFile userNames, int scheme)
+    {
+        ArgumentNullException.ThrowIfNull(gameNames);
+        ArgumentNullException.ThrowIfNull(userNames);
+        if (scheme is < 0 or > LastScheme) return null;
+        var file = scheme is >= FirstUserScheme and < FirstGameScheme ? userNames : gameNames;
+        return file.Find(scheme)?.Bytes;
+    }
+
+    /// <summary>
+    /// ARC-UI-1742: the scheme numbers the sheet's scheme page lists, in order: every number 0..199 whose name <see cref="Name"/> finds
+    /// (0x55D060 fills its list from 0 up and skips a number without a name).
+    /// </summary>
+    public static IReadOnlyList<int> NamedSchemes(MesFile gameNames, MesFile userNames) =>
+        Array.AsReadOnly(Enumerable.Range(0, LastScheme + 1).Where(scheme => Name(gameNames, userNames, scheme) is not null).ToArray());
 
     /// <summary>
     /// The willpower minimum of each spell 0..79. A record line that starts (after spaces) with <c>IQ:</c> must give one number
