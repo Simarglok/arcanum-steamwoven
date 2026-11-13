@@ -76,7 +76,9 @@ public sealed partial class GameSessionOwner
         if (hero.WaitBit) CancelWaitTimers(entity);
         _party.PutNpcLed(new(entity, leader, true));
         if (copyTempus) WriteTempusFugitOnJoin(entity);
-        if (_combat.Concealed.Contains(leader)) _combat.Concealed.Add(entity); else _combat.Concealed.Remove(entity);
+        // 0x45EE30 gives the joiner its leader's concealment; the session's concealment is the hero's party's (its toggle, its end on an attack and its save cover the hero's followers),
+        // so a follower of an NPC is never concealed here (named: a companion's summon does not sneak with it).
+        _combat.Concealed.Remove(entity);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, new(_identity, _revision));
     }
@@ -127,10 +129,16 @@ public sealed partial class GameSessionOwner
         if (current.WaitBit) CancelWaitTimers(current.Entity);
     }
 
-    // The leave of a follower of an NPC (0x45DFC0 → 0x45E040): out of the leader's array (the gap closed), the forced bit with the record, the Tempus Fugit flag cleared (0x459EA0) and the concealment
-    // ended (0x45EE30 with 0). The caller's revision covers the writes.
+    // The leave of a follower of an NPC (0x45DFC0 → the forced unwait 0x4AA8C0 → 0x45E040): the WAIT bit cleared and its timer removed, out of the leader's array (the gap closed), the forced bit
+    // with the record, the Tempus Fugit flag cleared (0x459EA0) and the concealment ended (0x45EE30 with 0). The caller's revision covers the writes.
     private void LeaveNpcLeader(string entity)
     {
+        var record = _party.Get(entity);
+        if (record.WaitFlag)
+        {
+            _party.Put(record with { WaitFlag = false }, false);
+            CancelWaitTimers(entity);
+        }
         _party.RemoveNpcLed(entity);
         ClearTempusFugitOnLeave(entity);
         _combat.Concealed.Remove(entity);

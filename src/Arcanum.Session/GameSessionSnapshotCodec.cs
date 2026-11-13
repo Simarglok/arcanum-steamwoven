@@ -407,7 +407,7 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteEndObject();
             }
             w.WriteEndArray();
-            // ARC-WORLD-1840 (schema 101): the followers of NPC leaders, grouped by leader in ordinal order, each leader's array in order.
+            // ARC-WORLD-1840 (schema 102): the followers of NPC leaders, grouped by leader in ordinal order, each leader's array in order.
             w.WriteStartArray("npcLed");
             foreach (var led in snapshot.Party.NpcLed)
             {
@@ -1869,7 +1869,10 @@ public static partial class GameSessionSnapshotCodec
                 throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".jilted");
             others[i] = record;
         }
-        // ARC-WORLD-1840: the followers of NPC leaders; a follower appears once, and not in the hero's lists (restore checks the order of leaders, the hero and cycles).
+        // ARC-WORLD-1840: the followers of NPC leaders; a follower appears once, and not in the hero's follower array (it may keep a free record among the others, as a spread-out or
+        // flagged NPC does; restore checks that its standing is free, the order of leaders, the hero and cycles).
+        var heroFollowers = followers.Select(follower => follower.Entity).ToHashSet(StringComparer.Ordinal);
+        var npcSeen = new HashSet<string>(StringComparer.Ordinal);
         items = Array(f["npcLed"], p + ".npcLed", GameSessionOwner.MaxNpcFollowers);
         var npcLed = new SessionNpcFollower[items.Length];
         for (var i = 0; i < items.Length; i++)
@@ -1877,7 +1880,7 @@ public static partial class GameSessionSnapshotCodec
             var path = $"{p}.npcLed[{i}]";
             var item = Fields(items[i], path, NpcLedFields);
             var entity = Entity(item["entity"], path + ".entity");
-            if (!seen.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            if (!npcSeen.Add(entity) || heroFollowers.Contains(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
             npcLed[i] = new(entity, Entity(item["leader"], path + ".leader"), Bool(item["forced"], path + ".forced"));
         }
         return new(followers, others, npcLed);

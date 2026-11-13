@@ -276,7 +276,7 @@ public sealed class AreaAiFollowerTests
         Assert.AreEqual(Pc, host.Leader(companion));
         CollectionAssert.AreEqual(new[] { enemy }, host.Followers(companion).ToArray());
         Assert.IsTrue(host.FactionSame(enemy, companion) && host.FactionSame(companion, enemy) && host.FactionSame(Pc, enemy), "the leader, its follower and the hero at the top");
-        Assert.IsTrue(host.CatchUp(enemy).HasPcLeader, "the catch-up reads the chain (0x4AD4D0 → 0x45DDA0)");
+        Assert.IsFalse(host.CatchUp(enemy).HasPcLeader, "the host cannot move an NPC of the map onto the hero, so it does not catch up (the original's chain catch-up is a named tail)");
         // Its tick's perform starts the follow goal toward its own leader, not the hero.
         Fire(scene, enemy);
         var run = session.QueryGoals().RunsOf(enemy).Single();

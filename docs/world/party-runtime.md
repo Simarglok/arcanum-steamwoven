@@ -105,15 +105,22 @@ while an NPC leads it.
   their own (they keep their flags). The original leaves their handle naming the destroyed object (OM17); that the handle then
   answers no leader is the session's reading, not read in the executable.
 - The AI host answers `Leader` and `PcLeader` from these and `Followers` for any critter; its call sites read the getter the
-  original's function reads (the catch-up 0x4AD4D0, the trap alarm 0x4AA0D0, peace 0x4AA300 and its interrupt 0x44E050, the trap
+  original's function reads (the trap alarm 0x4AA0D0, peace 0x4AA300 and its interrupt 0x44E050, the trap
   avoidance of a drop 0x4BBFE0 and the trap observer read 0x45DDA0; the routine, the follow goal and the healer's free services read
-  0x45DE00), and a leave of an NPC leader ends the follower's run as the hero's leave does (`ObserveLeaves`).
+  0x45DE00), and a leave of an NPC leader (also the first half of a join under another leader) ends the follower's run as the hero's
+  leave does (`ObserveLeaves`). The catch-up (0x4AD4D0) reads the chain too, but the host can jump only the hero's companions onto the
+  hero, so an NPC of the map led through another leader does not catch up (NOT READY below, #1864).
+- A follower of an NPC is never concealed: 0x45EE30 gives the joiner its leader's concealment, but the session's concealment is the
+  hero party's (toggle, end on an attack, save), so a companion's summon does not sneak with it.
+- The leave of an NPC leader clears the follower's WAIT bit and removes its timer (the forced unwait 0x4AA8C0 inside 0x45DFC0).
 
-**NOT READY:** a waiting standing under an NPC leader (the original's wait 0x4AA7A0 keeps any leader); an NPC leader's own charisma
+**NOT READY:** a waiting standing under an NPC leader (the original's wait 0x4AA7A0 keeps any leader; here the wait of an NPC-led
+follower sets the flag as for a leaderless NPC and the leave clears it); the catch-up of an NPC of the map whose chain reaches the hero
+through another leader; the concealment of NPC-led followers; an NPC leader's own charisma
 for the danger setter's extraordinary-charisma test (0x4AABE0 reads the leader's; the host reads only the hero's) and for its
 followers' unforced leave; the followers of a hero's companion travelling with the hero (the move list's followers of followers, GR14:
 the viewer carries only the hero's companions); the dying follower's leave (0x45DA20 leaves the leader and keeps the handle; the
-session keeps the hero's dead followers in the array as before, and an NPC's too).
+session keeps the hero's dead followers in the array as before, and an NPC's too). Tails: #1864.
 
 ## Wait timer and loyalty (ARC-WORLD-045)
 

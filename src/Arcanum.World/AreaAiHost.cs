@@ -336,6 +336,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private readonly Dictionary<string, AreaAiNpc> _followers;
     // ARC-WORLD-119: the companions the hero led at the host's last look (ObserveLeaves).
     private readonly HashSet<string> _led;
+    // ARC-WORLD-1840: the leader each NPC of the map had at the host's last look (ObserveLeaves).
+    private readonly Dictionary<string, string> _npcLeaders = new(StringComparer.Ordinal);
     // ARC-DEV-134 (MIG13 S4): the runs are the session's goal table (GameSessionOwner.QueryGoals); the host keeps none. The steps taken since TakeSteps.
     private int _steps;
     private readonly Dictionary<string, AreaAiTrace> _traces = new(StringComparer.Ordinal);
@@ -400,7 +402,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         _followers = (scene.Followers?.Npcs ?? []).Where(n => !_npcs.ContainsKey(n.Entity)).ToDictionary(n => n.Entity, StringComparer.Ordinal);
         _led = _followers.Keys.Where(f => _session.QueryCompanion(f).LedByPc).ToHashSet(StringComparer.Ordinal);
         // ARC-WORLD-1840: the NPCs of the map with a leader (an NPC summoner's summon, a script's group) at the first look.
-        _led.UnionWith(_npcs.Keys.Where(npc => _session.QueryLeader(npc) is not null));
+        foreach (var npc in _npcs.Keys) if (_session.QueryLeader(npc) is { } leader) _npcLeaders[npc] = leader;
         RestoreMovers();
         RestoreQueuedCasts();
     }
@@ -903,7 +905,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         _followers.Clear();
         foreach (var (entity, npc) in followers) _followers[entity] = npc;
         foreach (var npc in scene.Npcs) if (_npcs.ContainsKey(npc.Entity)) Movers.Rekey(npc.Entity, npc.Row.Key, npc.Origin);
-        _led.RemoveWhere(entity => !_followers.ContainsKey(entity) && !_npcs.ContainsKey(entity));
+        _led.RemoveWhere(entity => !_followers.ContainsKey(entity));
+        foreach (var gone in _npcLeaders.Keys.Where(entity => !_npcs.ContainsKey(entity)).ToArray()) _npcLeaders.Remove(gone);
         _scene = scene with { Npcs = [.. _npcs.Values] };
         // A row the host did not hold stands where the session recorded the NPC, as in a host built for it (the first step would overwrite the place).
         if (added.Count > 0) RestorePlaces(added);
@@ -1222,13 +1225,15 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             if (RunOf(companion) is null) continue;
             if (InterruptRuns(companion, LeaveLevel)) (dropped ??= []).Add(companion);
         }
-        // ARC-WORLD-1840: an NPC of the map that had any leader and has none now (a summon's END, a forced leave) is interrupted the same way; a change of leader is a leave and a join, and
-        // the join interrupts nothing, so only the end of every leader is seen here.
+        // ARC-WORLD-1840: an NPC of the map that left the leader it had (a summon's END, a forced leave, or a join under another leader, whose first half is that leave: 0x45DE90 → 0x45DFC0
+        // → 0x45E040) is interrupted the same way; a join of an NPC that had no leader interrupts nothing.
         foreach (var npc in _npcs.Keys)
         {
-            if (_session.QueryLeader(npc) is not null) { _led.Add(npc); continue; }
-            if (!_led.Remove(npc)) continue;
-            Trace(npc).Event = "left its leader";
+            var now = _session.QueryLeader(npc);
+            var before = _npcLeaders.GetValueOrDefault(npc);
+            if (now is null) _npcLeaders.Remove(npc); else _npcLeaders[npc] = now;
+            if (before is null || before == now) continue;
+            Trace(npc).Event = now is null ? "left its leader" : $"left {before} for {now}";
             if (RunOf(npc) is null) continue;
             if (InterruptRuns(npc, LeaveLevel)) (dropped ??= []).Add(npc);
         }
@@ -1358,7 +1363,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Tile(npc) is not { } at || _session.QuerySectorLoaded(new(_scene.RuntimeMap), ResidentSector.Of(at)) != false;
     /// <summary>ARC-DEV-105 (MIG9 S5, 0x4AD4D0): the follower catch-up's tests as the original reads them: a PC leader, its distance, the NPC flag
     /// WAITING_HERE (field 0x118, 0x8; ours also a waiting standing), the critter flag paralysed (field 0xDA, 0x40) and active (0x45D790).</summary>
-    public AiCatchUpFacts CatchUp(string npc) => new(PcLeader(npc) == Pc, DistanceToPc(npc),
+    /// ARC-WORLD-1840: the original reads the chain's player character (0x45DDA0), so a follower of a companion catches up too; the host moves only the hero's companions (the follower
+    /// source's jump), so an NPC of the map whose chain reaches the hero through another leader answers no PC leader here (#1322's catch-up tail) instead of losing its run each far tick.
+    public AiCatchUpFacts CatchUp(string npc) => new(Leader(npc) == Pc || _followers.ContainsKey(npc) && PcLeader(npc) == Pc, DistanceToPc(npc),
         (Fields(npc)?.Npc is { } fields && (fields.Flags & WaitingHereNpc) != 0) || Waiting(npc),
         Paralysed(npc), Active(npc));
     /// <summary>ARC-DEV-105 (MIG9 S5, 0x4AD4D0 then 0x43E770): the follower's goal run ends (the original's interrupt at priority 4), then it

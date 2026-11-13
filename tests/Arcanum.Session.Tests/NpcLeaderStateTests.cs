@@ -38,7 +38,14 @@ public sealed class NpcLeaderStateTests
         Assert.AreEqual(CompanionStanding.Free, owner.QueryCompanion(Summon).Standing, "the hero does not lead it");
         Assert.AreEqual(0, owner.QueryParty().Followers.Count);
         // The same join again is NoChange; a join under another leader moves it to the end of that array.
+        var same = owner.Version;
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.ForceJoinLeader(owner.Version, Imp, Mage).Disposition);
+        Assert.AreEqual(same, owner.Version);
+        Changed(owner.ForceJoinLeader(owner.Version, Orc, Virgil));
+        Changed(owner.ForceJoinLeader(owner.Version, Summon, Virgil));
+        CollectionAssert.AreEqual(new[] { Imp }, owner.QueryFollowers(Mage).ToArray());
+        CollectionAssert.AreEqual(new[] { Orc, Summon }, owner.QueryFollowers(Virgil).ToArray());
+        Changed(owner.ForceJoinLeader(owner.Version, Summon, Mage));
         // The mage joins the hero: the chain of its summons now reaches the hero.
         Changed(owner.ForceJoinParty(owner.Version, Mage));
         Assert.AreEqual(Hero, owner.QueryLeader(Mage));
@@ -164,6 +171,44 @@ public sealed class NpcLeaderStateTests
         Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(upgraded.Snapshot!));
         var damaged = GameSessionSnapshotCodec.TryDecode(current.Replace("\"schemaVersion\":102,", "\"schemaVersion\":101,"));
         Assert.AreEqual((SnapshotDecodeFailure.UnknownField, "$.party.npcLed"), (damaged.Failure, damaged.Path));
+    }
+
+    // Review finding: a dominated companion keeps its free record (spread out, loyalty marks) next to its NPC link, and the save holds both.
+    [TestMethod]
+    public void A_spread_out_companion_taken_by_an_npc_keeps_its_free_record_and_the_save_round_trips()
+    {
+        using var owner = Create();
+        Changed(owner.ForceJoinParty(owner.Version, Virgil));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetSpreadOut(owner.Version, Virgil, true).Disposition);
+        Changed(owner.ForceJoinLeader(owner.Version, Virgil, Mage));
+        Assert.IsTrue(owner.QueryCompanion(Virgil) is { Standing: CompanionStanding.Free, SpreadOut: true });
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        var decoded = GameSessionSnapshotCodec.TryDecode(text);
+        Assert.AreEqual(SnapshotDecodeFailure.None, decoded.Failure, decoded.Path);
+        using var restored = Restore(decoded.Snapshot!);
+        Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
+        Assert.AreEqual(Mage, restored.QueryLeader(Virgil));
+        // A follower of the hero listed again among the NPC-led ones is not canonical.
+        Changed(owner.ForceJoinParty(owner.Version, Orc));
+        var withOrc = GameSessionSnapshotCodec.Encode(owner.Capture()).Replace("\"npcLed\":[{\"entity\":\"oid:virgil\"", "\"npcLed\":[{\"entity\":\"oid:orc\"");
+        var twice = GameSessionSnapshotCodec.TryDecode(withOrc);
+        Assert.AreEqual((SnapshotDecodeFailure.NotCanonical, "$.party.npcLed[0].entity"), (twice.Failure, twice.Path));
+    }
+
+    [TestMethod]
+    public void A_follower_of_an_npc_is_never_concealed_and_its_leave_clears_the_wait_bit()
+    {
+        using var owner = Create();
+        Changed(owner.ForceJoinLeader(owner.Version, Summon, Mage));
+        Assert.IsFalse(owner.IsConcealed(SessionCombatant.Critter(Summon)));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Summon).Disposition);
+        Assert.IsTrue(owner.QueryCompanion(Summon).WaitFlag);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.LeaveParty(owner.Version, Summon, new PartyLeave(Force: true)).Disposition);
+        Assert.IsFalse(owner.QueryCompanion(Summon).WaitFlag, "the forced unwait inside the leave");
+        Assert.IsNull(owner.QueryWaitTimer(Summon));
+        // An unforced leave under an extraordinary-charisma leader is refused.
+        Changed(owner.ForceJoinLeader(owner.Version, Summon, Mage));
+        Assert.AreEqual(GameSessionFailure.LeaveRefused, owner.LeaveParty(owner.Version, Summon, new PartyLeave(Force: false, LeaderCharisma: 20)).Failure);
     }
 
     private static SessionPartyState Party(params SessionNpcFollower[] led) => new([], [], led);
