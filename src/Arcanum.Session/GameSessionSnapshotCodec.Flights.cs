@@ -7,7 +7,9 @@ namespace Arcanum.Session;
 public static partial class GameSessionSnapshotCodec
 {
     // ARC-DEV-288 (schema 80): the projectiles in flight with the shots they carry.
-    private static readonly string[] FlightsFields = ["lastProjectile", "projectiles", "nextShot", "heroShots", "npcThrows", "npcArrows", "lastMissile", "missiles"];
+    private static readonly string[] FlightsFields = ["lastProjectile", "projectiles", "nextShot", "heroShots", "npcThrows", "npcArrows", "lastMissile", "missiles", "trapShots"];
+    // ARC-TECHNOLOGY-1635 (schema 100): the native traps' shots in flight.
+    private static readonly string[] TrapShotFields = ["shot", "shooter", "victim", "amount"];
     // ARC-DEV-289 (schema 84): the spell missiles in flight.
     private static readonly string[] MissileFields = ["entity", "map", "cell", "offsetX", "offsetY", "flight"];
     private static readonly string[] MissileFlightFields =
@@ -179,6 +181,17 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteEndObject();
             }
             else w.WriteNull("flight");
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+        w.WriteStartArray("trapShots");
+        foreach (var shot in flights.TrapShots.OrderBy(s => s.Shot.Id))
+        {
+            w.WriteStartObject();
+            w.WriteNumber("shot", shot.Shot.Id);
+            w.WriteString("shooter", shot.Shooter);
+            w.WriteString("victim", shot.Victim);
+            w.WriteNumber("amount", shot.Amount);
             w.WriteEndObject();
         }
         w.WriteEndArray();
@@ -380,7 +393,17 @@ public static partial class GameSessionSnapshotCodec
                 Flight = r["flight"].ValueKind == JsonValueKind.Null ? null : MissileFlightOf(r["flight"], at + ".flight"),
             };
         }
-        return new(last, projectiles, nextShot, hero, throws, arrows) { LastMissile = lastMissile, Missiles = missiles };
+        var trapRows = Array(f["trapShots"], p + ".trapShots", GameSessionOwner.MaxShotsInFlight);
+        var trapShots = new SessionSavedTrapShot[trapRows.Length];
+        previousShot = 0;
+        for (var i = 0; i < trapRows.Length; i++)
+        {
+            var at = $"{p}.trapShots[{i}]";
+            var r = Fields(trapRows[i], at, TrapShotFields);
+            var shot = ShotId(r["shot"], at + ".shot", ref previousShot);
+            trapShots[i] = new SessionSavedTrapShot(shot, Entity(r["shooter"], at + ".shooter"), Entity(r["victim"], at + ".victim"), Int(r["amount"], at + ".amount", 0, int.MaxValue));
+        }
+        return new(last, projectiles, nextShot, hero, throws, arrows) { LastMissile = lastMissile, Missiles = missiles, TrapShots = trapShots };
     }
 
     private static SessionMissileFlight MissileFlightOf(JsonElement element, string path)
