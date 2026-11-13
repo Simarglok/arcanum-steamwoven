@@ -56,7 +56,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     /// <see cref="ScrAdmissionSet.S15"/>, float line (23) and get area (84) of <see cref="ScrAdmissionSet.S19"/>, and (ARC-DEV-178, B19) get reaction
     /// (29) of <see cref="ScrAdmissionSet.S23"/>. ARC-MAGIC-030 (MT21b): plus the spell conditions body spell (14), influenced by spell (35), knows spell (48) and mastered spell college (49)
     /// and give spell mastery in college (112) of <see cref="ScrAdmissionSet.S31"/>, which the use host answers and this host writes. ARC-SCRIPT-1563 (GT194–GT196): plus damage (60), apply unresistable damage (138) and heal hit points (75) of
-    /// <see cref="ScrAdmissionSet.S30"/>, which <see cref="Apply"/> hands to the use host's session path (a talk's poison script 1059, a deferred call's poison chain).
+    /// <see cref="ScrAdmissionSet.S30"/>, which <see cref="Apply"/> hands to the use host's session path (a talk's poison script 1059, a deferred call's poison chain). ARC-SCRIPT-1620 (TI6): plus attack (36) of <see cref="ScrAdmissionSet.S33"/>, which <see cref="Apply"/> hands to the use host's AI path (the PC or an NPC of the shown map as the attacker).
     /// </summary>
     public static ScrAdmissionSet TalkAdmission { get; } = WithQueries("S3-area-talk-queries", Admission);
 

@@ -137,7 +137,7 @@ public sealed class AreaHeartbeatScriptTests
             // ARC-SCRIPT-1620 (TI6): 809 has its attachee attack the player (the victims first, the attacker second, as 36 reads them), 810 has the player attack its attachee (the shape of the dialog script 1000's lines), then both run the default.
             Write("scr/00809attacks.scr", Program(Do(new(ScrCatalogue.Action.Attack, (Player, 0), (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00810attacked.scr", Program(Do(new(ScrCatalogue.Action.Attack, (Attachee, -1), (Player, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
-            Write("scr/00811walkattack.scr", Program(Do(new(ScrCatalogue.Action.WalkTo, (Attachee, -1), N(40), N(50))), Do(new(ScrCatalogue.Action.Attack, (Player, 0), (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00811walkattack.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(ChosenFlag))), Do(new(ScrCatalogue.Action.Attack, (Player, 0), (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00808stoppc.scr", Program(Do(new(ScrCatalogue.Action.StopSpellOnObject, N(12), (Player, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // ARC-SCRIPT-1360: 806 has the shape of 2787, the heartbeat of the NPC in the first building: PC quest 1158 unknown: run the default; else switch the attachee on (toggle state) and remove the script.
             Write("scr/00806quest.scr", Program(
@@ -516,14 +516,14 @@ public sealed class AreaHeartbeatScriptTests
         {
             using var session = ConversationSessionFixture.Create();
             var asked = new List<(string Attacker, string Victim)>();
-            var walks = new List<string>();
-            // The scenery's script (type 3, 811) walks and then has the attachee attack the player (a taking-damage run, which any object type has): an object attacker waits for #1619 (VB2-2 gap d); the walk before it is not applied either.
+                        // The scenery's script (type 3, 811) sets a global flag and then has the attachee attack the player (a taking-damage run, which any object type has): an object attacker waits for #1619 (VB2-2 gap d); the flag before it is not applied either.
             var scenery = Row(1, 3, 811, point: ScrPoint.TakingDamage);
             var host = new AreaUseScriptHost(session, 1, [scenery], [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
-                ScriptWalk: (npc, cell, run) => { walks.Add(npc); return "started"; }, ScriptAttack: (attacker, victim) => { asked.Add((attacker, victim)); return "None"; }));
+                ScriptAttack: (attacker, victim) => { asked.Add((attacker, victim)); return "None"; }));
             var run = host.RunTakingDamage(AreaUseScriptHost.EntityId(scenery), null, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, run.Outcome);
-            Assert.AreEqual(0, asked.Count + walks.Count);
+            Assert.AreEqual(0, asked.Count);
+            Assert.IsFalse(host.GlobalFlag(ChosenFlag), "nothing applied before the refusal");
             StringAssert.Contains(run.Detail, "#1619");
             var request = new ScrObjectStateRequest(ScrObjectStateChange.Attack, Ref(2), Other: Ref(1));
             StringAssert.Contains(host.AttackRefusal(request)!, "non-critter");
