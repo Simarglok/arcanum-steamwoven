@@ -836,7 +836,8 @@ public sealed class AreaAiFollowerTests
     [TestMethod]
     public void The_follower_branch_interrupts_a_leftover_run_at_level_3_by_the_tables_rule()
     {
-        var (session, host, _, _, companion) = Open();
+        // ARC-AI-1523: the leader is far (past 4 tiles), so the follow starter takes its start path, which is the one that interrupts.
+        var (session, host, _, _, companion) = Open(companionAt: new(60, 20));
         Assert.AreEqual(DangerState.None, session.QueryDanger(companion).State);
         var attempt = Leftover(host, companion, GoalType.AttemptSpell);
         host.Perform(companion);
@@ -853,6 +854,33 @@ public sealed class AreaAiFollowerTests
         Assert.IsFalse(Alive(host, walk), "a walk is ended at level 3");
         Assert.IsNull(host.RunOf(companion));
         Assert.IsFalse(host.Holds(companion), "and its own walk follows the hero again");
+    }
+
+    /// <summary>
+    /// ARC-AI-1523 (VBG12, 0x4346A0): the follow starter interrupts only on its start path; with the leader near (4 tiles, 7 spread out) or a follow run kept it ends nothing, so a companion's
+    /// please-move (68) goes on instead of being ended by the follower branch (the far case, where the starter starts, is the level-3 test above).
+    /// </summary>
+    [TestMethod]
+    public void A_follow_that_keeps_the_run_or_finds_the_leader_near_does_not_interrupt_a_please_move()
+    {
+        var (session, host, _, _, companion) = Open();
+        Assert.AreEqual(DangerState.None, session.QueryDanger(companion).State);
+        var move = Leftover(host, companion, GoalType.PleaseMove);
+        host.Perform(companion);
+        StringAssert.Contains(host.TraceOf(companion)!.Perform, "Follow by its own walk");
+        Assert.IsTrue(Alive(host, move), "the leader is near: the follow starter ends nothing, the please-move goes on");
+        Assert.IsTrue(host.Holds(companion), "so the host still holds the walk until the move is done");
+    }
+
+    [TestMethod]
+    public void A_follow_that_finds_an_equal_run_queued_does_not_interrupt_the_companions_run()
+    {
+        // The leader is far; a follow run of the companion stands (the starter's duplicate test, AlreadyQueued): the starter keeps it and ends nothing.
+        var (_, host, _, _, companion) = Open(companionAt: new(60, 20));
+        var follow = Leftover(host, companion, GoalType.Follow);
+        host.Perform(companion);
+        StringAssert.Contains(host.TraceOf(companion)!.Perform, "Follow by its own walk");
+        Assert.IsTrue(Alive(host, follow), "an equal follow run is kept, no interrupt");
     }
 
     [TestMethod]
