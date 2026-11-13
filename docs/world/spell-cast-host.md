@@ -100,7 +100,7 @@ The world the run rules ask (MT9a–MT12), for the hero and the map's NPCs:
   component area's test and the re-aim) and the fate "spell at maximum" (MT10).
 - **Components.** Damage and Heal (MT12) are applied to the session's life:
   - an NPC through its life target, the hero as the hero;
-  - the raise script is allowed (no SCR yet).
+  - the raise script (point 0x12, ARC-MAGIC-1167) runs through the SCR dispatcher before the life step, for a dead target and a heal with the raise bit; a skip-default answer refuses the raise (the viewer's `RaiseScript` port, no host: allowed).
 
   - ObjFlag (ARC-DEV-302, MT13's hold part, [below](#hold-flags-arc-dev-302)) writes the three hold flags on a critter (the hero or an
     NPC): entangled and stoned among the spell flags, paralysed among the critter flags; and (ARC-DEV-304,

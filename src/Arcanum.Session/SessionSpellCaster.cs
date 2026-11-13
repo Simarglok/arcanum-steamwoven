@@ -1290,9 +1290,14 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     private void ApplyHeal(SpellRun run, SpellDamageComponent data, SpellRunObject target)
     {
         if (LifeTarget(target.Id) is not { } who) return;
+        var heal = SpellLifeComponents.Heal(data, run, Rolls);
+        // ARC-MAGIC-1167 (RZ1, RZ2): the dead target's raise script (point 0x12) is asked here, before the life step is computed (its effects commit to the session, which the step's port must not do), whenever a raise is asked of a dead
+        // critter, whether its flags refuse it or not (the original runs it before it tests the refusal, 0x4B5A46); false (the script skipped the default) refuses the raise. No host: allowed.
+        var raises = true;
+        if (heal.Resurrect && _owner.QueryLife(who).View?.Status.IsDead == true && RaiseScript is { } asks) raises = asks(target.Id, run.Parent?.Id);
+        // A script whose own effects already revived the target leaves the heal an ordinary one (the original tests "dead" once); a rare edge.
         var before = _owner.QueryLife(who).View?.Status.HitPoints ?? 0;
-        // The raise script (point 0x12) runs no SCR yet: it allows the raise.
-        var healed = _owner.Heal(_owner.Version, who, SpellLifeComponents.Heal(data, run, Rolls), () => true);
+        var healed = _owner.Heal(_owner.Version, who, heal, () => raises);
         _itemEvents.AddRange(healed.ItemEvents);
         if (healed.Disposition == GameSessionDisposition.Changed)
             _log.Add(new(SpellCastEventKind.Healed, run.Id, (_owner.QueryLife(who).View?.Status.HitPoints ?? 0) - before, target.Id));

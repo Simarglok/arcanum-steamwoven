@@ -117,8 +117,7 @@ duties:
 - **No margin.** A heal takes no margin and no AI notice.
 - **Applier.** The session's heal (`LifeRules.Heal`, 0x4B58C0, ledger HL4) applies it.
 - **Raise.** A raise first asks the target's raise script (point 0x12), the host's port. The original runs that script even
-  when the target's flags refuse the raise, and either refusal stops it. The session asks the port while it computes the step,
-  before its later refusals, so the port answers without side effects and does not call the session.
+  when the target's flags refuse the raise, and either refusal stops it. Since ARC-MAGIC-1167 the spell caster asks the raise script (`SessionSpellCaster.RaiseScript`, `AreaUseScriptHost.RunRaise`, ledger RZ1-RZ3) before the life step, because the script's effects commit to the session, and hands the answer to the session's heal as a plain port; the healer is the triggerer, the extra object (the healer's wielded weapon) is none.
 
 ## Data fix DF4
 

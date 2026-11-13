@@ -625,6 +625,7 @@ src/Arcanum.World/AreaUseScripts.cs,IsSurrendered,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsTrap,pending,
 src/Arcanum.World/AreaUseScripts.cs,MagickCancelPercent,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,MetPcBefore,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,RaiseRefuses,exempt,reference
 src/Arcanum.World/AreaUseScripts.cs,RunBed,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunBust,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunCombatPoint,exempt,host
@@ -633,6 +634,7 @@ src/Arcanum.World/AreaUseScripts.cs,RunDying,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunExamine,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunHeartbeat,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunItemUse,pending,
+src/Arcanum.World/AreaUseScripts.cs,RunRaise,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunTakingDamage,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunTrapScript,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunUseScript,pending,
