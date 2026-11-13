@@ -20,7 +20,7 @@ public sealed partial class AreaAiHost
 {
     // The original's NPC flag 0x200 (the "arrived at its standpoint" latch, SWB21): set once by the standpoint step's near branch, cleared by its far branch and by the unseat. ARC-AI-1314: it is the NPC's session state
     // (<see cref="SessionNpcRouteState"/>, saved with the object) over the map row's own bit, so a rebuilt host and a loaded game find an NPC at its standpoint with the latch set and do not look for a bed again.
-    // A sleeper the session's saved critter flag keeps is seated again by <see cref="RecoverSeat"/> (the original's saved occupant is not).
+    // A sleeper the session's saved critter flag keeps is seated again by <see cref="RecoverSeat"/>, in the bed its saved bed field names (ARC-WORLD-1525).
     private const uint StandpointLatchFlag = 0x200;
 
     private static bool LatchData(AreaNpcRoute route) => (route.NpcFlags & StandpointLatchFlag) != 0;
@@ -40,6 +40,14 @@ public sealed partial class AreaAiHost
 
     /// <summary>The bed an NPC lies in, or null.</summary>
     public AreaObjectKey? BedOfSleeper(string npc) => _scene.Beds?.Occupancy.BedOf(npc);
+
+    // ARC-WORLD-1525 (VBG14): the original saves the occupant in the bed's field 0x46; here the sleeper's session field names the bed (SessionNpcBed), by the bed's sector and ordinal. A bed of the mobile list or out of the code's range has no code
+    // and is not saved: the re-seat takes the bed of the nearer standpoint then, as for an older save. A refused write leaves the record as it was (the fallback covers it).
+    private static long? BedCode(AreaObjectKey bed) =>
+        bed.Kind == AreaSourceKind.Static && bed.Sector is { } sector ? SessionNpcBed.Code(sector, bed.SourceIndex) : null;
+
+    private void WriteBedRecord(string npc, AreaObjectKey? bed) =>
+        _session.WriteNpcBed(_session.Version, npc, new SessionMapId(_scene.RuntimeMap), bed is { } placed ? BedCode(placed) : null);
 
     // What the bed part of a route step did (a short text for the NPC's trace), or null when the step has none.
     private string? BedStep(string npc, NpcRouteStep step, AreaNpcRoute? route)
@@ -73,6 +81,7 @@ public sealed partial class AreaAiHost
             beds.Occupancy.Unseat(bed, npc);
             return "sleeping flag refused";
         }
+        WriteBedRecord(npc, bed);
         return "seated" + NudgeOffBed(npc, beds, bed);
     }
 
@@ -106,15 +115,29 @@ public sealed partial class AreaAiHost
         return $", moved {at.X},{at.Y} -> {to.X},{to.Y}";
     }
 
-    // A sleeper whose critter flag the session saved (a load) but whose bed holds nobody (the occupant is not saved): the bed of its standpoint takes it again, as the original's occupant field would hold it.
+    // A sleeper whose critter flag the session saved (a load) but whose bed holds nobody (the occupancy is not saved): ARC-WORLD-1525 (VBG14) the bed the session saved for it takes it again, the exact bed the original's occupant field names;
+    // a save with no such record (an older one, a bed of the mobile list) or a saved bed that is gone or taken falls back to the bed of its nearer standpoint (a sleeper lay in the bed it stood at; here the place says which).
     private string? RecoverSeat(string npc, AreaAiBeds beds, AreaNpcRoute route)
     {
         if (beds.Occupancy.BedOf(npc) is not null || (_session.QueryObjectFlags(npc).CritterSet & unchecked((int)SleepingFlag)) == 0) return null;
+        if (_session.QueryNpcBed(npc) is { } saved)
+            foreach (var (key, _) in beds.Placed())
+                if (BedCode(key) == saved)
+                {
+                    if (beds.Occupancy.Occupant(key) is null && beds.Occupancy.Seat(key, npc))
+                    {
+                        // A save of slice 2 kept the sleeping flag only: the don't-draw flag is written again with it.
+                        WriteSleeping(npc, true);
+                        return "seated again in its saved bed";
+                    }
+                    break;
+                }
         foreach (var stand in NearestFirst(npc, route))
             if (BedAt(beds, new(stand.X, stand.Y)) is { } bed && beds.Occupancy.Occupant(bed) is null && beds.Occupancy.Seat(bed, npc))
             {
                 // A save of slice 2 kept the sleeping flag only: the don't-draw flag is written again with it.
                 WriteSleeping(npc, true);
+                WriteBedRecord(npc, bed);
                 return "seated again";
             }
         return null;
@@ -128,7 +151,7 @@ public sealed partial class AreaAiHost
         return Distance(route.StandpointDay) < Distance(route.StandpointNight) ? [route.StandpointDay, route.StandpointNight] : [route.StandpointNight, route.StandpointDay];
     }
 
-    // The occupancy is shared and not saved, the session's sleeping flags are: the first bed question of a host settles them, so a load into another state, a bed taken by the hero or two sleepers of one tile cannot leave the two
+    // The occupancy is shared and not saved, the session's sleeping flags and bed fields are: the first bed question of a host settles them, so a load into another state, a bed taken by the hero or two sleepers of one tile cannot leave the two
     // disagreeing. An NPC of this host that holds a bed without sleeping (a load before the night) or is dead or gone is taken out; then every NPC the session saved asleep is seated again, all of them before any step seats a new one.
     private bool _bedsReconciled;
 
@@ -158,6 +181,7 @@ public sealed partial class AreaAiHost
         if ((_session.QueryObjectFlags(npc).CritterSet & unchecked((int)SleepingFlag)) != 0 && beds.Occupancy.BedOf(npc) is null)
         {
             WriteLatch(npc, false);
+            WriteBedRecord(npc, null);
             return WriteSleeping(npc, false) ? "stranded sleeper woken" : "stranded sleeper, flag write refused";
         }
         return "not in a bed at a standpoint";
@@ -168,6 +192,7 @@ public sealed partial class AreaAiHost
     {
         if (!beds.Occupancy.Unseat(bed, npc)) return "unseat refused";
         WriteLatch(npc, false);
+        WriteBedRecord(npc, null);
         return WriteSleeping(npc, false) ? "woken" : "woken, flag write refused";
     }
 

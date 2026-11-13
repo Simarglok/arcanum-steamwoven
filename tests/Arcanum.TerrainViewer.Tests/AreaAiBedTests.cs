@@ -346,4 +346,73 @@ public sealed class AreaAiBedTests
             Assert.AreEqual(Arcanum.Simulation.Goals.GoalType.Wander, scene.Host.RunOf(scene.Npc)?.Bottom.Goal, $"{rules}: {Route(scene)}");
         }
     }
+
+    // ARC-WORLD-1525 (VBG14): the bed an NPC lies in is saved on the NPC (the original's occupant field of the bed) and the re-seat finds that exact bed.
+    private static readonly AreaObjectKey OtherBedKey = new(new string('b', 64), 1, AreaSourceKind.Static, 0, 9, 900L, new string('d', 64), 100);
+    private static readonly long? BedCodeOfBedKey = SessionNpcBed.Code(0, 7), BedCodeOfOtherBed = SessionNpcBed.Code(0, 9);
+
+    private static AreaAiRouteTests.Scene OpenTwoBeds(AreaBedOccupancy occupancy) =>
+        AreaAiRouteTests.Open(AreaAiRouteTests.Npc(0, [], 0, (DayStand.X, DayStand.Y), (NightStand.X, NightStand.Y)),
+            beds: new AreaAiBeds(occupancy, () => [(BedKey, NightStand), (OtherBedKey, DayStand)]));
+
+    [TestMethod]
+    public void The_seat_writes_the_bed_on_the_npc_and_the_wake_removes_it()
+    {
+        var scene = Open(new AreaBedOccupancy());
+        Assert.IsNull(scene.Session.QueryNpcBed(scene.Npc));
+        JumpToHour(scene, 3);
+        scene.Host.RunStandpoints(scene.Npc);
+        Assert.AreEqual(BedCodeOfBedKey, scene.Session.QueryNpcBed(scene.Npc));
+        JumpToHour(scene, 12);
+        scene.Host.RunStandpoints(scene.Npc);
+        StringAssert.Contains(Route(scene), "woken");
+        Assert.IsNull(scene.Session.QueryNpcBed(scene.Npc), "the unseat clears the field with the latch and the flags");
+    }
+
+    [TestMethod]
+    public void A_loaded_sleeper_is_seated_again_in_the_bed_its_saved_field_names_not_the_nearer_standpoints()
+    {
+        var occupancy = new AreaBedOccupancy();
+        var scene = OpenTwoBeds(occupancy);
+        WriteSavedSleeper(scene);
+        Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.WriteNpcBed(scene.Session.Version, scene.Npc, new SessionMapId(1), BedCodeOfOtherBed).Disposition);
+        JumpToHour(scene, 3);
+        scene.Host.RunStandpoints(scene.Npc);
+        Assert.AreEqual(scene.Npc, occupancy.Occupant(OtherBedKey), "the bed of the saved field, though the NPC stands nearer the other standpoint");
+        Assert.IsNull(occupancy.Occupant(BedKey));
+        Assert.AreEqual(OtherBedKey, scene.Host.BedOfSleeper(scene.Npc));
+        Assert.AreEqual(BedCodeOfOtherBed, scene.Session.QueryNpcBed(scene.Npc));
+    }
+
+    [TestMethod]
+    public void A_saved_sleeper_with_no_field_or_a_field_naming_no_placed_bed_takes_the_nearer_standpoints_bed_and_records_it()
+    {
+        foreach (var saved in new long?[] { null, SessionNpcBed.Code(0, 55) })
+        {
+            var occupancy = new AreaBedOccupancy();
+            var scene = OpenTwoBeds(occupancy);
+            WriteSavedSleeper(scene);
+            if (saved is not null) Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.WriteNpcBed(scene.Session.Version, scene.Npc, new SessionMapId(1), saved).Disposition);
+            JumpToHour(scene, 3);
+            scene.Host.RunStandpoints(scene.Npc);
+            Assert.AreEqual(scene.Npc, occupancy.Occupant(BedKey), $"fallback ({saved})");
+            Assert.AreEqual(BedCodeOfBedKey, scene.Session.QueryNpcBed(scene.Npc), "the fallback seat records the bed for the next save");
+        }
+    }
+
+    [TestMethod]
+    public void A_saved_bed_that_is_taken_falls_back_and_a_killed_sleeper_clears_its_field()
+    {
+        var occupancy = new AreaBedOccupancy();
+        Assert.IsTrue(occupancy.Seat(OtherBedKey, "pc"));
+        var scene = OpenTwoBeds(occupancy);
+        WriteSavedSleeper(scene);
+        Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.WriteNpcBed(scene.Session.Version, scene.Npc, new SessionMapId(1), BedCodeOfOtherBed).Disposition);
+        JumpToHour(scene, 3);
+        scene.Host.RunStandpoints(scene.Npc);
+        Assert.AreEqual("pc", occupancy.Occupant(OtherBedKey), "the hero's bed is not touched");
+        Assert.AreEqual(scene.Npc, occupancy.Occupant(BedKey));
+        scene.Host.NoticeKill(scene.Npc, null);
+        Assert.IsNull(scene.Session.QueryNpcBed(scene.Npc));
+    }
 }
