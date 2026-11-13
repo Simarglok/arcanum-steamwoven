@@ -613,6 +613,7 @@ public partial class TerrainViewerApp
         }
         // ARC-DEV-206: tile scripts that waited for an open conversation.
         if (_npcTilePending.Count > 0 && RunNpcTilePending()) redraw = true;
+        if (NoteWalkerTraps(host)) redraw = true;
         foreach (var notice in host.DrainNotices())
         {
             switch (notice.Kind)
