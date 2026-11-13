@@ -239,12 +239,13 @@ public sealed class MoraleRulesTests
     }
 
     [TestMethod]
-    public void StopFleeingCalmsOnlyAFleeingNpcAndInterruptsEveryNpcsFleeGoals()
+    public void StopFleeingCalmsAndInterruptsTheFleeGoalsOfAFleeingNpcOnly()
     {
         var npc = new HostilityCritter { Id = "n", Kind = HostilityKind.Npc };
         Assert.AreEqual(new StopFleeingStep(true, true), MoraleRules.StopFleeing(npc, DangerState.Flee));
-        Assert.AreEqual(new StopFleeingStep(false, true), MoraleRules.StopFleeing(npc, DangerState.Surrender), "a surrender is kept");
-        Assert.AreEqual(new StopFleeingStep(false, true), MoraleRules.StopFleeing(npc, DangerState.None));
+        Assert.AreEqual(new StopFleeingStep(false, false), MoraleRules.StopFleeing(npc, DangerState.Surrender), "a surrender is kept, with its flee goals");
+        Assert.AreEqual(new StopFleeingStep(false, false), MoraleRules.StopFleeing(npc, DangerState.None), "outside FLEE nothing is interrupted");
+        Assert.AreEqual(new StopFleeingStep(false, false), MoraleRules.StopFleeing(npc, DangerState.CombatFocus));
         Assert.AreEqual(new StopFleeingStep(false, false), MoraleRules.StopFleeing(npc with { Kind = HostilityKind.Pc }, DangerState.Flee));
     }
 
@@ -311,6 +312,6 @@ public sealed class MoraleRulesTests
         Assert.AreEqual(0, MoraleRules.KillNotification(world, "victim", "gone").BacksOff.Count);
         Assert.AreEqual(0, world.Queries.Count);
         world.Dangers["victim"] = new(DangerState.Surrender, "pc", null, null, []);
-        Assert.AreEqual(new StopFleeingStep(false, true), MoraleRules.KillNotification(world, "victim", null).VictimStopsFleeing);
+        Assert.AreEqual(new StopFleeingStep(false, false), MoraleRules.KillNotification(world, "victim", null).VictimStopsFleeing);
     }
 }

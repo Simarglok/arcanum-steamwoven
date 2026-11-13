@@ -152,7 +152,7 @@ public partial class TerrainViewerApp
     private void FightNextToAreaMapVisitor(AreaCompanion companion)
     {
         if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _readyArea is not { } area || _mapTransfers is not { } transfers)
-        { GD.Print("ARC-DEV-065 native-smoke visitor-fight NONE (no hero)"); return; }
+        { GD.Print("ARC-DEV-065 native-smoke visitor-fight NONE (no hero, combat host or map transfers)"); return; }
         static void Require(bool value, string why)
         {
             if (value) return;
