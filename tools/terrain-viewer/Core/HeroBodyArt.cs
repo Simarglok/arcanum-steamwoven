@@ -62,7 +62,9 @@ public static class HeroBodyArt
                 .Append((ActorDiagnosticAction.FallDown, ActorDiagnosticProfile.HumanFallDownSelector, true))
                 .Append((ActorDiagnosticAction.GetUp, ActorDiagnosticProfile.HumanGetUpSelector, true))
                 .Append((ActorDiagnosticAction.LowAttack, ActorDiagnosticProfile.HumanLowAttackSelector, true))
-                .Append((ActorDiagnosticAction.Throw, ActorDiagnosticProfile.HumanThrowSelector, true));
+                .Append((ActorDiagnosticAction.Throw, ActorDiagnosticProfile.HumanThrowSelector, true))
+                // ARC-COMBAT-1741: the stunned ART (animation 23, unarmed, no shield), optional.
+                .Append((ActorDiagnosticAction.Stunned, ActorDiagnosticProfile.HumanStunnedSelector, true));
             foreach (var (action, humanSelector, optional) in wanted)
             {
                 token.ThrowIfCancellationRequested();
@@ -72,6 +74,8 @@ public static class HeroBodyArt
                     .FirstOrDefault(found => found.Entries.Length != 0, (body.Selector(humanSelector), []));
                 // ARC-RENDER-039: a low attack the repair turned into the attack is the attack's ART, already read.
                 if (action == ActorDiagnosticAction.LowAttack && ((selector >> 6) & 31) != WeaponArtRules.LowAttackAnimation) continue;
+                // ARC-COMBAT-1741: a stun the repair turned into the stand (MA1 pair 23 -> 0) is not a stunned ART: the stun then ends at once, as an unreadable header ends it (GT26).
+                if (action == ActorDiagnosticAction.Stunned && ((selector >> 6) & 31) != HeroBody.StunnedAnimation) continue;
                 if (entries.Length != 1)
                 {
                     if (optional) continue;
@@ -125,10 +129,10 @@ public static class HeroBodyArt
             keys += groups * extra.Resource.FramesPerGroup;
             return extra.Resource;
         }
-        var low = Extra(ActorDiagnosticAction.LowAttack); var thrown = Extra(ActorDiagnosticAction.Throw);
+        var low = Extra(ActorDiagnosticAction.LowAttack); var thrown = Extra(ActorDiagnosticAction.Throw); var stunned = Extra(ActorDiagnosticAction.Stunned);
         var profile = ActorDiagnosticProfile.ForHeroBody(read[ActorDiagnosticAction.Idle].Resource, read[ActorDiagnosticAction.Walk].Resource,
             read[ActorDiagnosticAction.Run].Resource, read[ActorDiagnosticAction.Vault].Resource, read[ActorDiagnosticAction.Attack].Resource, keys,
-            falls ? read[ActorDiagnosticAction.FallDown].Resource : null, falls ? read[ActorDiagnosticAction.GetUp].Resource : null, low, thrown);
+            falls ? read[ActorDiagnosticAction.FallDown].Resource : null, falls ? read[ActorDiagnosticAction.GetUp].Resource : null, low, thrown, stunned);
         var frames = new List<ActorDiagnosticFrame>(keys);
         var textures = new Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture>(keys);
         long rgbaBytes = 0;
