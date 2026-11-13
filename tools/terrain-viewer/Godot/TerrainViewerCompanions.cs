@@ -78,7 +78,8 @@ public partial class TerrainViewerApp
     // its T0 body (commands, visuals and frames) is read from its home map's data (AreaHomeDirectory, by identity: the home map the session's
     // away change names and the stored cell it recorded), on any map and after a quick load or a fresh run; the viewer keeps no body of its own.
     private (string Module, AreaCompanionData? Data, string Detail)? _companionData;
-    private readonly Dictionary<AreaObjectKey, AreaCompanionFacts?> _companionFacts = new();
+    // ARC-MAGIC-1551: kept with the entries a TraitIdx spell wrote into the NPC (their signature), read again when one is written.
+    private readonly Dictionary<AreaObjectKey, (string Written, AreaCompanionFacts? Facts)> _companionFacts = new();
     // The bodies of the shown map's own speakers (its templates), and the frames of the visitors' bodies this scene adds.
     private IReadOnlyList<AreaCompanionTemplate> _ownCompanionTemplates = [];
     private readonly Dictionary<string, IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame>> _visitorFrames = new(StringComparer.Ordinal);
@@ -97,10 +98,11 @@ public partial class TerrainViewerApp
     private AreaCompanionFacts? MapCompanionFacts(AreaSpeaker speaker)
     {
         if (_companionData?.Data is not { } data) return null;
-        if (_companionFacts.TryGetValue(speaker.Row.Key, out var known)) return known;
-        var facts = data.Facts(speaker, out var refusal);
+        var written = AreaWrittenCritterFields.Signature(_areaSession, speaker.Row);
+        if (_companionFacts.TryGetValue(speaker.Row.Key, out var known) && known.Written == written) return known.Facts;
+        var facts = data.Facts(speaker, out var refusal, _areaSession);
         if (refusal is not null) GD.Print($"ARC-WORLD-037 companion facts script={speaker.ScriptId} refused: {refusal}");
-        _companionFacts[speaker.Row.Key] = facts;
+        _companionFacts[speaker.Row.Key] = (written, facts);
         return facts;
     }
 

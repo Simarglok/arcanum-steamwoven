@@ -1107,6 +1107,17 @@ public partial class TerrainViewerApp
                 BackOff = AreaCompanionOrders.Describe(backOff!), Attack = AreaCompanionOrders.Describe(ordered!), Frames = orderFrames, Hit = orderHit,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
 
+            // ARC-AI-1527: a follower's comment line (here the near-death range, 0x4AEAB0) is chosen by the host, read from the player's generated NPC files
+            // (the can-speak head first, the speaker's own override line before the files) and floated over the follower as a white line.
+            var linesBefore = _followerLinesSaid;
+            var nearDeath = host.Hurt(follower, 10, 3, 20, died: false);
+            Require(nearDeath is { Lines: { First: 5500, Last: 5599 } } comment && comment.Speaker == follower, $"a hit from 50 % to 15 % made the follower comment: {nearDeath?.Lines}");
+            // The text comes from the player's generated files: a run whose texts did not load or whose files hold no entry of the range reports SKIP, not a failure.
+            var textsReady = _conversationHost?.GreetingTexts?.Status == AreaGreetingTextsStatus.Ready;
+            if (!textsReady || _followerLinesSaid != linesBefore + 1) GD.Print($"ARC-AI-1527 native-smoke ai-follower-lines SKIP textsReady={textsReady} said={_followerLinesSaid - linesBefore}");
+            else GD.Print("ARC-AI-1527 native-smoke ai-follower-lines text PASS");
+            GD.Print($"ARC-AI-1527 native-smoke ai-follower-lines PASS said={_followerLinesSaid - linesBefore}");
+
             // ARC-WORLD-119: the curse through the AI host (the viewer reads no typed order text, so the smoke sends it): the follower
             // leaves (its run ends, FO20), the hero's attack event on it runs in full and asks its reaction, then its pass runs; the
             // host is kept and runs it on as a free NPC.

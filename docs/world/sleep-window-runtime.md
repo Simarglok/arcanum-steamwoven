@@ -39,6 +39,8 @@ Every rule was read in the retail 1.0.7.4 `Arcanum.exe` ([ledger SWB1–SWB13](.
 - **Stop** (SWB11, SWB12): the key, another window's key, a changed session or the end of the rest removes the pending step, applies the current
   hour's light at once, fades the screen in and closes the window. Only the Esc menu pauses; the steps go on behind it. Nothing in the window
   reads damage or hostile arrivals (SWB13).
+  PROJECT (ARC-UI-1548, [issue #1548](https://github.com/Simarglok/arcanum-steamwoven/issues/1548)): the sleep mode's leave step on the interface stack
+  stops the rest itself (pending step, bed, fade, light), so any leave of the mode, not only the viewer's close routine, ends a running rest.
 
 ## The bed (ARC-WORLD-1162, ledger SWB1, SWB3, SWB5, SWB14–SWB16)
 

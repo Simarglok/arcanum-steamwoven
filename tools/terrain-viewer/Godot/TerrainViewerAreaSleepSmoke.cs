@@ -228,6 +228,54 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-1511 sleep second press restarted the chain presses=2 steps={RestLogForSelfTest.Count}");
         Tick(host + AreaRestFade.DurationMs + 100);
 
+        // ---- issue #1548 (SWB11, SWB12): another window's key (and any other leave of the sleep mode) ends the running rest as the close does ----
+        {
+            var focused = _worldFocused; _worldFocused = true;
+            try
+            {
+                var opened = 0;
+                foreach (var (code, window) in new[] { (Godot.Key.L, "logbook"), (Godot.Key.C, "sheet"), (Godot.Key.I, "inventory"), (Godot.Key.T, "schematics") })
+                {
+                    OpenSleepForSelfTest();
+                    Tick(host + 10);
+                    SleepPressedForSelfTest(4);
+                    Require(SleepOpenForSelfTest && _restDark && RestForSelfTest is { Pending: true }, $"{window}: a 24-hour rest is under way before the key");
+                    Tick(host + 60);
+                    var restSteps = RestLogForSelfTest.Count;
+                    Tick(host + 10);
+                    var handled = HandleGlobalKeyOverInterface(new InputEventKey { Keycode = code, PhysicalKeycode = code, Pressed = true });
+                    Require(handled, $"{window}: the key is routed over the open window");
+                    if (SleepOpenForSelfTest)
+                    {
+                        // The window is not available on this map (its opener did not take the key): the key left the rest alone, which is the refusal's contract.
+                        GD.Print($"ARC-UI-1548 sleep other-window key {window} NONE (the window did not open)");
+                        EndSleep(); Tick(host + AreaRestFade.DurationMs + 100);
+                        continue;
+                    }
+                    opened++;
+                    Require(RestForSelfTest is null && !_restDark && _restBed is null && _restPresses == 0, $"{window}: the key ended the rest (rest {RestForSelfTest?.Code}, dark {_restDark})");
+                    Require(_bedOccupancy.BedOf(AreaScriptHost.PcCode) is null, $"{window}: the hero is out of his bed");
+                    Tick(host + 5_000);
+                    Require(RestLogForSelfTest.Count == restSteps, $"{window}: no step after the key ({restSteps} -> {RestLogForSelfTest.Count})");
+                    Require(WindowPanelsMatchStack && !_sleepPanel!.IsOpen && _sleepPanel.FadeForSelfTest == 0, $"{window}: the stack and the panels agree and the cover is clear after the fade-in");
+                    CloseOtherInterfaceWindows(); Tick(host + AreaRestFade.DurationMs + 100);
+                }
+                // The leave of the mode by any path other than EndSleep (a direct pop of mode 6) ends the rest too.
+                OpenSleepForSelfTest();
+                Tick(host + 10);
+                SleepPressedForSelfTest(4);
+                Require(SleepOpenForSelfTest && _restDark && RestForSelfTest is not null, "a 24-hour rest is under way before the direct pop");
+                CloseWindowMode(Arcanum.World.InterfaceMode.Sleep);
+                Require(!SleepOpenForSelfTest && RestForSelfTest is null && !_restDark && _restBed is null && WindowPanelsMatchStack, "the stack's own close of the sleep mode ended the rest, the fade and the bed");
+                var logged = RestLogForSelfTest.Count;
+                Tick(host + 5_000);
+                Require(RestLogForSelfTest.Count == logged, "no step after the stack's close");
+                Tick(host + AreaRestFade.DurationMs + 100);
+                GD.Print($"ARC-UI-1548 sleep other-window close PASS windows={opened}");
+            }
+            finally { _worldFocused = focused; }
+        }
+
         // ---- a replaced session closes the window and clears the cover ----
         OpenSleepForSelfTest();
         Tick(host + 10);

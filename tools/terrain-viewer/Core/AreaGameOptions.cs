@@ -64,9 +64,8 @@ public static class AreaOptionTable
     public const string NoFollowerSkills = "followers do not use skills on their own yet";
     public const string NoBrightness = "the gamma control is not built";
     public const string NoTextDuration = "text bubbles are not built";
-    public const string NoTaunts = "combat taunts are not built";
     public const string NoFastTurnBased = "Fast Turn Based is not built";
-    public const string NoVideoPage = "brightness, text bubbles and combat taunts are not built";
+    public const string NoVideoPage = "brightness and text bubbles are not built";
     public const string OffOn = "mes/OptionsOffOn.mes";
     public const string Difficulties = "mes/OptionsDifficulty.mes";
     public const string CombatModes = "mes/OptionsCombatMode.mes";
@@ -98,7 +97,7 @@ public static class AreaOptionTable
         // ARC-UI-021: the floating text (CH10).
         new(AreaOption.Floats, AreaOptionsPage.Video, 2, AreaOptionKind.List, 2, 2, FloatLevels, "text floaters", FloaterRules.DefaultLevel, null),
         new(AreaOption.FloatSpeed, AreaOptionsPage.Video, 3, AreaOptionKind.Slider, 10, 10, null, "float speed", FloaterRules.DefaultSpeed, null),
-        new(AreaOption.CombatTaunts, AreaOptionsPage.Video, 4, AreaOptionKind.List, 1, 1, OffOn, "combat taunts", 1, NoTaunts),
+        new(AreaOption.CombatTaunts, AreaOptionsPage.Video, 4, AreaOptionKind.List, 1, 1, OffOn, "combat taunts", 1, null),
         new(AreaOption.Effects, AreaOptionsPage.Sound, 0, AreaOptionKind.Slider, 10, 10, null, "effects volume", 5, null),
         new(AreaOption.Voice, AreaOptionsPage.Sound, 1, AreaOptionKind.Slider, 10, 10, null, "voice volume", 5, null),
         new(AreaOption.Music, AreaOptionsPage.Sound, 2, AreaOptionKind.Slider, 10, 10, null, "music volume", 5, null),
@@ -130,7 +129,7 @@ public static class AreaOptionTable
 /// the floating text's level and speed (ARC-UI-021).</summary>
 public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAttack, bool AlwaysRun, int Effects, int Voice, int Music,
     RuleMode Rules = RuleMode.Steamwoven, int Floats = FloaterRules.DefaultLevel, int FloatSpeed = FloaterRules.DefaultSpeed, bool EvidenceLog = false, int TestTask = 0,
-    ControlSchemeSettings? Controls = null)
+    ControlSchemeSettings? Controls = null, bool CombatTaunts = true)
 {
     /// <summary>ARC-GPAD-1374: the controller scheme choice the three lines show (the defaults when the host passes none).</summary>
     public ControlSchemeSettings Schemes => Controls ?? ControlSchemeSettings.Default;
@@ -152,6 +151,7 @@ public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAt
         AreaOption.PromptStyle => (int)Schemes.Prompts,
         AreaOption.Floats => Floats,
         AreaOption.FloatSpeed => FloatSpeed,
+        AreaOption.CombatTaunts => CombatTaunts ? 1 : 0,
         _ => null,
     };
 }
@@ -208,6 +208,9 @@ public sealed record AreaGameSettings
         get => _floats;
         init => _floats = value is < 0 or > FloaterRules.MaxLevel ? throw new ArgumentOutOfRangeException(nameof(value)) : value;
     }
+
+    /// <summary>ARC-AI-1527: the "combat taunts" setting (OH5, 0x4B82E0; default on, the original registers 1): at the end of a hit the hero's followers may comment (<see cref="Arcanum.Simulation.Ai.FollowerRules.TauntKindOf"/>).</summary>
+    public bool CombatTaunts { get; init; } = true;
 
     /// <summary>The "float speed" (a step of speed + 1 px).</summary>
     public int FloatSpeed
