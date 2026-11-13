@@ -36,7 +36,7 @@ viewer work is split into the slices at the end, each its own task and pull requ
 
 ## Steamwoven design for the viewer
 
-The viewer draws no original interface art (its windows are plain layouts, as in ARC-UI-004 and ARC-UI-007), so each item
+The viewer drew no original interface art here (its windows were plain layouts, as in ARC-UI-004 and ARC-UI-007; the lamp panel took the original's art in ARC-UI-1888, see the [viewer note](../rendering/terrain-viewer.md#combat-action-points-and-turn-order-arc-ui-1114)), so each item
 keeps the original's information and behaviour and draws it with Godot controls:
 
 - **Action points**: 20 cells in four groups of five, filled in the three shares of CH2 (left, cost, shortfall) from the
