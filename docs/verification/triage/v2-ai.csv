@@ -20,74 +20,74 @@ address,name,score,writes,reach,smoke,slice,row
 0x4AF9D0,enemy list remove,6,2,1,1,1,VA16
 0x4BA790,monster generator spawner,6,2,1,1,1,VA20
 0x4BA910,monster generator placement,6,2,1,1,1,VA21
-0x4346A0,follow starter,5,2,1,0,next,
-0x4350F0,skill starter,5,2,1,0,next,
-0x436220,pick locks starter,5,2,0,1,next,
-0x436960,spread out starter,5,2,0,1,next,
-0x45F600,set spread out,5,2,0,1,next,
-0x4A94C0,ai redirect writes,5,2,1,0,next,
-0x4A9650,attack event,5,2,1,0,next,
-0x4AA300,peace,5,2,0,1,next,
-0x4AA4A0,stop attacking,5,2,0,1,next,
-0x4AA580,allow attacking,5,2,0,1,next,
-0x4AABE0,danger setter,5,2,1,0,next,
-0x4AC250,ai cast,5,2,1,0,next,
-0x4AC6E0,combat perform,5,2,1,0,next,
-0x4AD0B0,sleeper bed re-seat,5,2,1,0,next,
-0x4AD4D0,follower catch-up,5,1,2,1,next,
-0x4AF1D0,set no flee,5,2,0,1,next,
-0x4AF8C0,enemy team add,5,2,0,1,next,
-0x4AF930,enemy list add,5,2,1,0,next,
-0x4BA460,generator counters save blob,5,2,0,1,next,
-0x4BA490,generator counters load blob,5,2,0,1,next,
-0x4BA620,monster generator record writer,5,2,0,1,next,
-0x4BA720,monster generator copy marking,5,2,0,1,next,
-0x45F6D0,npc teleport map getter,4,2,0,0,next,
-0x4A84F0,ai pass,4,1,2,0,next,
-0x4AB460,find target,4,1,2,0,next,
-0x4AC180,perform,4,1,2,0,next,
-0x4AC620,perform fleeing,4,1,1,1,next,
-0x4AC660,perform surrender,4,1,1,1,next,
-0x4AD200,ai tick,4,1,2,0,next,
-0x4AD6E0,delayed ai tick,4,1,2,0,next,
-0x4AD730,ai tick schedule,4,1,2,0,next,
-0x4AD7D0,ai tick remove,4,1,1,1,next,
-0x425590,ranged approach callback,3,1,1,0,next,
-0x4A9F10,witness,3,1,1,0,next,
-0x4AA620,reaction to an attack,3,1,1,0,next,
-0x4AB2A0,fight or flee,3,1,1,0,next,
-0x4AC7B0,back off,3,1,1,0,next,
-0x4AD790,immediate ai tick,3,1,1,0,next,
-0x4B4320,fidget after run,3,1,1,0,next,
-0x413F50,follower taunt line,2,0,1,1,next,
-0x414370,upset line,2,0,1,1,next,
-0x4294F0,attack possible,2,0,2,0,next,
-0x4AAB00,danger state read,2,0,2,0,next,
-0x4AB030,flee distance,2,0,1,1,next,
-0x4AB990,target validity,2,0,2,0,next,
-0x4AD060,npc standpoint read,2,0,2,0,next,
-0x4AD420,ai near test,2,0,2,0,next,
-0x4AD610,ai tick distance,2,0,2,0,next,
-0x4AE020,flee party,2,0,1,1,next,
-0x4AE0A0,party size and level sum,2,0,1,1,next,
-0x4AE450,avenge dead ally target,2,0,1,1,next,
-0x4AE9E0,combat taunt,2,0,1,1,next,
-0x4AEAB0,near death line,2,0,1,1,next,
-0x4AF260,sight,2,0,2,0,next,
-0x4AF470,hearing,2,0,2,0,next,
-0x4AF640,sound cost,2,0,2,0,next,
-0x4B6B90,taunt kind,2,0,1,1,next,
-0x4A9E10,noise witnesses,1,0,1,0,next,
-0x4ABC70,ai spell order choice,1,0,1,0,next,
-0x4ABF10,ai list chooser,1,0,1,0,next,
-0x4AD140,tile object finder,1,0,1,0,next,
-0x4AFA90,enemy list pick,1,0,1,0,next,
-0x4BA500,monster generator record reader,1,0,0,1,next,
-0x4CC2A0,ai defensive second value,1,0,1,0,next,
-0x4CC2D0,ai list compare,1,0,1,0,next,
-0x4CC310,ai spell value,1,0,1,0,next,
-0x4CC380,ai global list,1,0,1,0,next,
-0x4CC580,ai list build,1,0,1,0,next,
-0x4CCA30,ai list identification,1,0,1,0,next,
-0x4CCA90,ai list request,1,0,1,0,next,
-0x4CC240,ai global lists init,0,0,0,0,next,
+0x4346A0,follow starter,5,2,1,0,2,VB1-1
+0x4350F0,skill starter,5,2,1,0,2,VB1-2
+0x436220,pick locks starter,5,2,0,1,2,VB1-3
+0x436960,spread out starter,5,2,0,1,2,VB1-4
+0x45F600,set spread out,5,2,0,1,2,VB1-5
+0x4A94C0,ai redirect writes,5,2,1,0,2,VB2-1
+0x4A9650,attack event,5,2,1,0,2,VB2-2
+0x4AA300,peace,5,2,0,1,2,VB2-3
+0x4AA4A0,stop attacking,5,2,0,1,2,VB2-4
+0x4AA580,allow attacking,5,2,0,1,2,VB2-5
+0x4AABE0,danger setter,5,2,1,0,2,VB2-6
+0x4AC250,ai cast,5,2,1,0,2,VB1-6
+0x4AC6E0,combat perform,5,2,1,0,2,VB1-7
+0x4AD0B0,sleeper bed re-seat,5,2,1,0,2,VB3-1
+0x4AD4D0,follower catch-up,5,1,2,1,2,VB3-2
+0x4AF1D0,set no flee,5,2,0,1,2,VB2-7
+0x4AF8C0,enemy team add,5,2,0,1,2,VB2-8
+0x4AF930,enemy list add,5,2,1,0,2,VB2-9
+0x4BA460,generator counters save blob,5,2,0,1,2,VB4-6
+0x4BA490,generator counters load blob,5,2,0,1,2,VB4-7
+0x4BA620,monster generator record writer,5,2,0,1,2,VB4-8
+0x4BA720,monster generator copy unmark,5,2,0,1,2,VB4-9
+0x45F6D0,npc teleport map getter,4,2,0,0,2,VB3-3
+0x4A84F0,ai pass,4,1,2,0,2,VB3-4
+0x4AB460,find target,4,1,2,0,2,VB2-19
+0x4AC180,perform,4,1,2,0,2,VB1-8
+0x4AC620,perform fleeing,4,1,1,1,2,VB1-9
+0x4AC660,perform surrender,4,1,1,1,2,VB1-10
+0x4AD200,ai tick,4,1,2,0,2,VB3-5
+0x4AD6E0,delayed ai tick,4,1,2,0,2,VB3-6
+0x4AD730,ai tick schedule,4,1,2,0,2,VB3-7
+0x4AD7D0,ai tick remove,4,1,1,1,2,VB3-8
+0x425590,ranged approach callback,3,1,1,0,2,VB1-11
+0x4A9F10,witness,3,1,1,0,2,VB2-11
+0x4AA620,reaction to an attack,3,1,1,0,2,VB2-12
+0x4AB2A0,fight or flee,3,1,1,0,2,VB2-13
+0x4AC7B0,back off,3,1,1,0,2,VB1-14
+0x4AD790,immediate ai tick,3,1,1,0,2,VB3-9
+0x4B4320,fidget after run,3,1,1,0,2,VB1-12
+0x413F50,follower taunt line,2,0,1,1,2,VB4-1
+0x414370,upset line,2,0,1,1,2,VB4-2
+0x4294F0,attack possible,2,0,2,0,2,VB1-13
+0x4AAB00,danger state read,2,0,2,0,2,VB2-14
+0x4AB030,flee distance,2,0,1,1,2,VB2-15
+0x4AB990,target validity,2,0,2,0,2,VB2-16
+0x4AD060,npc standpoint read,2,0,2,0,2,VB3-10
+0x4AD420,ai near test,2,0,2,0,2,VB3-11
+0x4AD610,ai tick distance,2,0,2,0,2,VB3-12
+0x4AE020,flee party,2,0,1,1,2,VB3-14
+0x4AE0A0,party size and level sum,2,0,1,1,2,VB3-15
+0x4AE450,avenge dead ally target,2,0,1,1,2,VB2-17
+0x4AE9E0,combat taunt,2,0,1,1,2,VB4-3
+0x4AEAB0,near death line,2,0,1,1,2,VB4-4
+0x4AF260,sight,2,0,2,0,2,VB3-16
+0x4AF470,hearing,2,0,2,0,2,VB3-17
+0x4AF640,sound cost,2,0,2,0,2,VB3-18
+0x4B6B90,taunt kind,2,0,1,1,2,VB4-5
+0x4A9E10,noise witnesses,1,0,1,0,2,VB2-18
+0x4ABC70,ai spell order choice,1,0,1,0,2,VB4-11
+0x4ABF10,ai list chooser,1,0,1,0,2,VB4-12
+0x4AD140,tile object finder,1,0,1,0,2,VB3-13
+0x4AFA90,enemy list pick,1,0,1,0,2,VB2-10
+0x4BA500,monster generator record reader,1,0,0,1,2,VB4-10
+0x4CC2A0,ai defensive second value,1,0,1,0,2,VB4-14
+0x4CC2D0,ai list compare,1,0,1,0,2,VB4-15
+0x4CC310,ai spell value,1,0,1,0,2,VB4-16
+0x4CC380,ai global list,1,0,1,0,2,VB4-17
+0x4CC580,ai list build,1,0,1,0,2,VB4-18
+0x4CCA30,ai list identification,1,0,1,0,2,VB4-19
+0x4CCA90,ai list request,1,0,1,0,2,VB4-20
+0x4CC240,ai global lists init,0,0,0,0,2,VB4-13
