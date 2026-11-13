@@ -320,7 +320,7 @@ public sealed class AreaNpcStateScriptTests
         });
     }
 
-    // ARC-SCRIPT-1826 (AN16): a map-data item carried from another map, and a made or script-created item, as the extra object of a use script of a scenery on the shown map (map 2): the item is named on the shown map and owns no row there.
+    // ARC-SCRIPT-1826 (AN18): a map-data item carried from another map, and a made or script-created item, as the extra object of a use script of a scenery on the shown map (map 2): the item is named on the shown map and owns no row there.
     private sealed class OpenMap : Arcanum.Simulation.Items.IDropMap
     {
         private static readonly (int X, int Y)[] Offsets = [(-1, -1), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1)];

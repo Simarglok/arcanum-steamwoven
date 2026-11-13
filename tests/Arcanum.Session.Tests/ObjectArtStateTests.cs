@@ -67,7 +67,7 @@ public sealed class ObjectArtStateTests
     [TestMethod]
     public void A_made_items_art_record_follows_it_from_map_to_map_is_saved_and_is_the_only_field_a_made_item_keeps()
     {
-        // ARC-SCRIPT-1826 (AN16): a made or script-created item (made:n) is a mobile object for this field: one record whatever map it names, saved in the objects section, cleared by the baseline from any map.
+        // ARC-SCRIPT-1826 (AN18): a made or script-created item (made:n) is a mobile object for this field: one record whatever map it names, saved in the objects section, cleared by the baseline from any map.
         using var owner = Create();
         const string Made = "made:3";
         Assert.AreEqual(GameSessionDisposition.Changed, owner.SetObjectArt(owner.Version, Exterior, Made, 0x6040_0040, baseline: 0x6020_0040).Disposition);

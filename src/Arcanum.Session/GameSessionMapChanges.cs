@@ -52,7 +52,7 @@ internal static class ObjectStateVocabulary
 
     internal static bool Mobile(string? entity, string property) =>
         entity is not null && (entity.StartsWith(EntityPrefix, StringComparison.Ordinal) && (Properties.Contains(property) || Attachment(property) || SessionCritterIndexedWrites.Owns(property))
-            // ARC-SCRIPT-1826 (ledger AN16): a made or script-created item (made:n) is a mobile object too: its art id a script wrote follows it from holder to holder and from map to map. Only this field is kept for it.
+            // ARC-SCRIPT-1826 (ledger AN18): a made or script-created item (made:n) is a mobile object too: its art id a script wrote follows it from holder to holder and from map to map. Only this field is kept for it.
             || property == SessionObjectArt.Property && SessionMadeItem.Number(entity) is not null);
 
     /// <summary>Whether the key is a field of a static object (one record per map, entity and property).</summary>

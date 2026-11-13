@@ -246,4 +246,55 @@ public sealed class FollowerSkillsStateTests
         }
         Assert.IsTrue(refused > 0);
     }
+
+    // ARC-COMBAT-1777 (the chooser 0x4C9050, ledger PL5, OH4): the score of a user is its effectiveness minus the difficulty of the request the use would run.
+
+    [TestMethod]
+    public void The_pick_lock_score_is_effectiveness_minus_difficulty_and_asks_nothing_of_the_session()
+    {
+        using var owner = Owner();
+        var (version, draws) = (owner.Version, owner.QueryRandom().Draws);
+        // The terms are the check's own: the lock's difficulty counts against the score and the lockpicks' bonus for it (the effectiveness is the same for the same user).
+        var user = User(10, SkillTraining.Apprentice);
+        var bare = owner.QueryPickLockScore(user, Target(difficulty: 20), null)!.Value;
+        Assert.AreEqual(15, owner.QueryPickLockScore(user, Target(difficulty: 20), Lockpick(bonus: 15)) - bare, "the lockpicks' bonus is subtracted from the difficulty");
+        Assert.AreEqual(20, owner.QueryPickLockScore(user, Target(difficulty: 0), null) - bare, "the lock's difficulty counts against it");
+        Assert.AreEqual(version, owner.Version);
+        Assert.AreEqual(draws, owner.QueryRandom().Draws, "nothing is rolled");
+    }
+
+    [TestMethod]
+    public void The_pick_lock_score_of_the_hero_carries_the_local_pc_term_and_a_better_user_scores_higher()
+    {
+        using var owner = Owner(difficulty: GameDifficulty.Easy, heroPoints: 2);
+        var hero = owner.QueryPickLockScore(null, Target(), null)!.Value;
+        var same = owner.QueryPickLockScore(User(2, SkillTraining.Master), Target(), null)!.Value;
+        Assert.IsTrue(hero > same, "easy gives the local PC half again, an NPC none (SC12)");
+        Assert.IsTrue(owner.QueryPickLockScore(User(20, SkillTraining.Master), Target(), null) > owner.QueryPickLockScore(User(2, SkillTraining.None), Target(), null));
+        Assert.IsTrue(owner.QueryPickLockScore(User(2, SkillTraining.None), Target(), Lockpick(bonus: 50)) > owner.QueryPickLockScore(User(2, SkillTraining.None), Target(), null));
+    }
+
+    [TestMethod]
+    public void A_user_the_chooser_cannot_score_has_no_score()
+    {
+        using var owner = Owner();
+        using var noHero = Owner(hero: false);
+        Assert.IsNull(noHero.QueryPickLockScore(null, Target(), null), "no hero");
+        Assert.IsNull(owner.QueryPickLockScore(User(10, SkillTraining.None, state: new LifeState(1000, 0, 0, LifeConditions.None, 0)), Target(), null), "a dead NPC");
+        Assert.IsNull(owner.QueryPickLockScore(User(10, SkillTraining.None), Target(difficulty: SessionPickLockTarget.FullLight * 1000), null), "an invalid lock");
+        Assert.IsNull(owner.QueryPickLockScore(User(10, SkillTraining.None), Target(), Lockpick(flags: 0)), "not lockpicks");
+        Assert.IsNull(owner.QueryDisarmScore(User(10, SkillTraining.None), Chest, KnownChest, light: -1), "an invalid light");
+    }
+
+    [TestMethod]
+    public void The_disarm_score_reads_the_trap_objects_difficulty_only_for_a_trap_object()
+    {
+        using var owner = Owner();
+        var user = User(5, SkillTraining.Expert);
+        var easyPlate = owner.QueryDisarmScore(user, Plate, KnownPlate, 0)!.Value;
+        var hardPlate = owner.QueryDisarmScore(user, Plate, KnownPlate, 30)!.Value;
+        Assert.AreEqual(30, easyPlate - hardPlate, "a trap object's difficulty counts");
+        Assert.AreEqual(owner.QueryDisarmScore(user, Chest, KnownChest, 0), owner.QueryDisarmScore(user, Chest, KnownChest, 30), "a trapped chest has none (SP3)");
+        Assert.IsTrue(owner.QueryDisarmScore(null, Plate, KnownPlate, 0) is not null);
+    }
 }

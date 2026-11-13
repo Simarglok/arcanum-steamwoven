@@ -2110,9 +2110,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (IsPc(obj)) return default;
         // 0x43EB30: an object destroyed (object flag 0x1, or by a script) is left as it is, whatever its type.
         if (AlreadyDestroyed(obj)) return default;
-        // ARC-SCRIPT-1826 (AN16): an item the session deleted (its lists no longer name it, so no row or prototype is found for it) is a destroyed object too: left as it is, the run goes on.
+        // ARC-SCRIPT-1826 (AN18): an item the session deleted (its lists no longer name it, so no row or prototype is found for it) is a destroyed object too: left as it is, the run goes on.
         if (_session.IsItemDestroyed(obj.Code)) return default;
-        // ARC-SCRIPT-1826 (AN16): the object's row on a map the host holds; else, for an item, the row of its origin map (a map-data item carried here) or its prototype's art (a made or script-created item).
+        // ARC-SCRIPT-1826 (AN18): the object's row on a map the host holds; else, for an item, the row of its origin map (a map-data item carried here) or its prototype's art (a made or script-created item).
         int type; long? stored;
         if (Row(obj) is { } row) (type, stored) = (row.Type, Number(row, ArtSlot));
         else if (CarriedItemRow(obj) is { } carried)
@@ -2146,7 +2146,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     private ArtChange ArtPlan(ScrObjectStateRequest request) => ArtPlan(request.Object, request.Value);
 
-    // ARC-SCRIPT-1826 (AN16): the map the session names as the origin of an item it moved (the hero's taken item, an item of the hero lying on the ground, an item the hero gave away), or null.
+    // ARC-SCRIPT-1826 (AN18): the map the session names as the origin of an item it moved (the hero's taken item, an item of the hero lying on the ground, an item the hero gave away), or null.
     private SessionMapId? ItemOrigin(string entity)
     {
         foreach (var taken in _session.QueryPcInventory()) if (taken.Entity == entity) return taken.Origin;
@@ -2155,7 +2155,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         return null;
     }
 
-    // ARC-SCRIPT-1826 (AN16): the row of a map-data item that is not a row of a map the host holds under the map the script names (the shown map): carried here from another map, so its row is read by identity from the origin map the session names
+    // ARC-SCRIPT-1826 (AN18): the row of a map-data item that is not a row of a map the host holds under the map the script names (the shown map): carried here from another map, so its row is read by identity from the origin map the session names
     // (the same lookup an item's use script makes, <see cref="OtherMapRow"/>). Null for an object that is no item the session moved, and for an item whose row no map reads.
     private AreaObjectRecord? CarriedItemRow(ScrObjectRef obj)
     {
@@ -2163,7 +2163,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         return read(new(origin.RuntimeMap, obj.Code)) is { Type: >= FirstItemType and <= LastItemType } row ? row : null;
     }
 
-    // ARC-SCRIPT-1826 (AN16): a made or script-created item (made:n) owns no row: the original makes it as a copy of its prototype, so its art is the prototype's current art (the world's prototype reader, as the viewer draws a created item). The hero's
+    // ARC-SCRIPT-1826 (AN18): a made or script-created item (made:n) owns no row: the original makes it as a copy of its prototype, so its art is the prototype's current art (the world's prototype reader, as the viewer draws a created item). The hero's
     // starting kit items (kit:n) are not read this way (the viewer draws their art from the kit load): null, and the run is refused.
     private (int Type, long? Art)? MadeItemArt(ScrObjectRef obj)
     {
