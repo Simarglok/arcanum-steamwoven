@@ -194,6 +194,27 @@ public sealed partial class GameSessionOwner
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
     }
 
+    /// <summary>
+    /// ARC-AI-1653 (the unconceal goal's end node 0x42AFB0 → 0x45EE30, ledger VBG19): the NPC's own goal run stood it up and, unless its leader is
+    /// concealed, ends its concealment. The leader is the hero while the NPC is led by it (following or waiting, HK2 keeps the leader); a
+    /// follower of a sneaking hero therefore stays concealed (it only stands up), while a concealed NPC whose hero is not concealed, or that has
+    /// no leader, stops prowling. The NPC's own followers (the call reaches them too) are not modelled: a follower leads none. One revision of its
+    /// own; no change (not concealed, or its leader is) is <see cref="GameSessionDisposition.NoChange"/>. The hero's own concealment is never touched here.
+    /// </summary>
+    [OriginalFunction(0x42AFB0, OriginalFunctionScope.Partial)]
+    public GameSessionMutationResult EndNpcConcealmentForUnconceal(GameSessionVersion expected, string entity)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(entity)) return Reject(GameSessionFailure.InvalidCompanion);
+        if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+        if (!_combat.Concealed.Contains(entity) || _party.Get(entity).LedByPc && _combat.HeroConcealed)
+            return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        _combat.Concealed.Remove(entity);
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
+    }
+
     private SessionConcealmentState CaptureConcealment() =>
         new(_hero is not null && _combat.HeroConcealed, _combat.Concealed.ToArray());
 

@@ -248,6 +248,23 @@ public sealed class CritterStateGoalsTests
     }
 
     [TestMethod]
+    public void TheStunEndNodeStandsAFlaggedNpcInTheCrouchArtAndAHeroOrAnUnflaggedOneInTheStandingArt()
+    {
+        // ARC-AI-1653 (0x42B250, 0x45EDE0): the standing art reads the critter flag (Prowling), not the shown pose.
+        var world = Arena();
+        world.Movers[Npc] = new(Prowling: true, Fatigue: 20, MaxFatigue: 20);
+        world.Arts[Npc] = (AiExecutorRules.StunAnimation, 1);
+        AiExecutorRules.EndRun(Run(AiExecutorRules.StunFrame(10)), world);
+        Assert.AreEqual((AiExecutorRules.ConcealedAnimation, 0), world.Arts[Npc]);
+
+        world = Arena();
+        world.Movers[Npc] = new(Concealed: true, Fatigue: 20, MaxFatigue: 20);
+        world.Arts[Npc] = (AiExecutorRules.StunAnimation, 1);
+        AiExecutorRules.EndRun(Run(AiExecutorRules.StunFrame(10)), world);
+        Assert.IsFalse(world.Arts.ContainsKey(Npc), "the shown pose is the goals' unconceal test only");
+    }
+
+    [TestMethod]
     public void TheFrameBuildersCarryTheStartersParameters()
     {
         Assert.AreEqual(3, AiExecutorRules.StunFrame(14).Count);

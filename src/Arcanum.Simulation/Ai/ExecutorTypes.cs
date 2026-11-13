@@ -144,7 +144,8 @@ public sealed record AiPath(ImmutableArray<CellCoord> Steps, bool StraightStoppe
 
 /// <summary>
 /// What the executor reads about the object that runs: <see cref="Pc"/> the local PC; knocked down and concealed (the goals get
-/// it up and unconceal it first, a PC is not unconcealed); the encumbrance level (4 is "significant"); current and maximum
+/// it up and unconceal it first, a PC is not unconcealed: <see cref="Concealed"/> is the test 0x426E80, the critter shows the crouch art, animation 5, and
+/// <see cref="Prowling"/> is the critter flag 0x1 the end nodes' standing art reads, 0x45EDE0); the encumbrance level (4 is "significant"); current and maximum
 /// fatigue; <see cref="CannotTurn"/> stoned, stunned or paralysed; <see cref="Entangled"/>; <see cref="SpreadOut"/> NPC flag
 /// "spread out".
 /// </summary>
@@ -152,6 +153,7 @@ public readonly record struct AiMoverFacts(
     bool Pc = false,
     bool KnockedDown = false,
     bool Concealed = false,
+    bool Prowling = false,
     int Encumbrance = 0,
     int Fatigue = 0,
     int MaxFatigue = 0,

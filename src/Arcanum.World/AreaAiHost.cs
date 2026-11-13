@@ -1736,8 +1736,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public AiMoverFacts Mover(string id)
     {
         var status = Status(id);
+        // ARC-AI-1653 (0x426E80): the goals' unconceal test reads the shown art (animation 5, the crouch), not the flag; the end nodes' standing art reads the flag (0x45EDE0).
         return new(Pc: id == Pc, KnockedDown: id != Pc && status is { IsDead: false, IsUnconscious: false } && ShownAnimation(id) == DyingAnimationRules.FallDown,
-            Concealed: false, Fatigue: status?.Fatigue ?? 0, MaxFatigue: status?.MaxFatigue ?? 0, CannotTurn: !Active(id),
+            Concealed: id != Pc && ShownAnimation(id) == AiExecutorRules.ConcealedAnimation, Prowling: id != Pc && _session.IsConcealed(SessionCombatant.Critter(id)), Fatigue: status?.Fatigue ?? 0, MaxFatigue: status?.MaxFatigue ?? 0, CannotTurn: !Active(id),
             SpreadOut: id != Pc && _session.QueryCompanion(id).SpreadOut);
     }
 
@@ -2059,7 +2060,41 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     public int GetUp(string id) => 1;
-    public int Unconceal(string id) => 1;
+
+    /// <summary>
+    /// ARC-AI-1653 (goal 54, collapsed to its end node 0x42AFB0 as the get-up is): the NPC stands up (its art goes back to animation 0) and, unless its leader is concealed,
+    /// the session ends its concealment (<see cref="GameSessionOwner.EndNpcConcealmentForUnconceal"/>), so a follower of a sneaking hero only stands up and
+    /// crouches again when its next goal ends, as the original's does. The run's animation time is not modelled (1 ms, as the get-up).
+    /// </summary>
+    public int Unconceal(string id)
+    {
+        if (id == Pc) return 1;
+        ShowArt(id, 0, 0);
+        _session.EndNpcConcealmentForUnconceal(_session.Version, id);
+        return 1;
+    }
+
+    // ARC-AI-1653 (0x45EE90): setting the flag shows the crouch art and clearing it the standing one, at the moment of the change. The session owns the flag, so the host sees the change here
+    // (the flag as it last saw it), before it reads the art; a follower that stood up with the flag still set (leader concealed) keeps standing until a goal's end node crouches it again.
+    private readonly HashSet<string> _crouchFlag = [];
+
+    private void SyncCrouch(string id)
+    {
+        if (id == Pc) return;
+        var flagged = _session.IsConcealed(SessionCombatant.Critter(id));
+        if (flagged == _crouchFlag.Contains(id)) return;
+        if (flagged)
+        {
+            _crouchFlag.Add(id);
+            if (Status(id) is { IsDead: false, IsUnconscious: false } && !_arts.ContainsKey(id))
+                _arts[id] = (AiExecutorRules.ConcealedAnimation, Math.Max((Clip(id, AiExecutorRules.ConcealedAnimation)?.Frames ?? 1) - 1, 0));
+        }
+        else
+        {
+            _crouchFlag.Remove(id);
+            if (_arts.TryGetValue(id, out var art) && art.Animation == AiExecutorRules.ConcealedAnimation) _arts.Remove(id);
+        }
+    }
 
     // ---- the critter states (ARC-DEV-137, MIG13 S6: goals 57, 62, 63 and 31) ----
 
@@ -2085,10 +2120,16 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public AiAnimationClip? Clip(string id, int animation) => _scene.AnimationClip?.Invoke(id, animation);
 
     // An NPC with no art written lies in its fall when it is unconscious or dead (a body first seen), except a dead one whose dying goal is on the table: it was killed standing and the goal sets the art.
-    public int ShownAnimation(string id) => _arts.TryGetValue(id, out var art) ? art.Animation
+    public int ShownAnimation(string id) => SyncedArt(id) is { } art ? art.Animation
         : Status(id) switch { { IsDead: true } => DyingRunning(id) ? 0 : DyingAnimationRules.FallDown, { IsUnconscious: true } => DyingAnimationRules.FallDown, _ => 0 };
 
-    public int ShownFrame(string id) => _arts.TryGetValue(id, out var art) ? art.Frame : ShownAnimation(id) == 0 ? 0 : Math.Max((Clip(id, ShownAnimation(id))?.Frames ?? 1) - 1, 0);
+    public int ShownFrame(string id) => SyncedArt(id) is { } art ? art.Frame : ShownAnimation(id) == 0 ? 0 : Math.Max((Clip(id, ShownAnimation(id))?.Frames ?? 1) - 1, 0);
+
+    private (int Animation, int Frame)? SyncedArt(string id)
+    {
+        SyncCrouch(id);
+        return _arts.TryGetValue(id, out var art) ? art : null;
+    }
 
     public void ShowArt(string id, int animation, int frame)
     {
