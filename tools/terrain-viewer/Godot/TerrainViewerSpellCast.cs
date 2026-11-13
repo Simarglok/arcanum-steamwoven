@@ -155,6 +155,8 @@ public partial class TerrainViewerApp
             try { return _areaEffectRules?.Invoke(number) is { } rule ? SessionEffectDefinition.FromRule(rule) : null; }
             catch (ArgumentException) { return null; }
         };
+        // ARC-MAGIC-1644: the TraitIdx rewield (magick and tech points) runs the wield scripts of the NPC's worn items through the inventory host's item script host.
+        _spellCaster.ItemScripts = () => _inventoryHost?.ItemScripts(owner);
         // ARC-DEV-352 (E1-b): the Summon component creates on this map from the module's prototypes; the eye candies' callbacks call the runs back.
         WireSummon(_spellCaster);
         _spellCastMap = map; _spellCasterStamp = stamp; _spellLogSeen = 0;
