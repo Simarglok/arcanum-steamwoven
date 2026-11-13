@@ -214,6 +214,7 @@ public sealed partial class SessionSpellCaster
 
         public IReadOnlyList<SpellTargetObject> ObjectsAt(SpellLocation tile, int typeMask) => Join(Here(o => o.Location == tile, typeMask), map.ObjectsAt(tile, typeMask));
         public bool TileBlocked(SpellLocation tile) => map.TileBlocked(tile);
+        public string CastIdOfScriptEntity(string entity) => map.CastIdOfScriptEntity(entity);
         public bool PathExists(SpellTargetObject source, SpellLocation tile) => map.PathExists(source, tile);
         public int SectorKind(SpellLocation location) => map.SectorKind(location);
         public int Direction(SpellLocation from, SpellLocation to) => map.Direction(from, to);
