@@ -42,7 +42,7 @@ public partial class TerrainViewerApp
     /// <summary>The values the options window shows: the host's settings as they are now.</summary>
     private AreaGameOptions CurrentGameOptions() => new(_gameSettings.Difficulty, _turnBasedSetting ? 1 : 0, _gameSettings.AutoAttack, _alwaysRunOption,
         _audioVolumes.Effects, _audioVolumes.Voice, _audioVolumes.Music, _ruleMode, _gameSettings.Floats, _gameSettings.FloatSpeed,
-        EvidenceRecording, EvidenceRecording ? _evidenceTask : 0, _gameSettings.Controls, _gameSettings.CombatTaunts, _gameSettings.ViolenceFilter, _gameSettings.Brightness, _gameSettings.AutoSwitchWeapons);
+        EvidenceRecording, EvidenceRecording ? _evidenceTask : 0, _gameSettings.Controls, _gameSettings.CombatTaunts, _gameSettings.ViolenceFilter, _gameSettings.Brightness, _gameSettings.AutoSwitchWeapons, _gameSettings.FollowerSkills);
 
     private AreaBrightnessLayer? _brightnessLayer;
 
@@ -119,6 +119,11 @@ public partial class TerrainViewerApp
             case AreaOption.AutoSwitchWeapons:
                 if (value is not (0 or 1)) { refused = "out of range"; break; }
                 SaveGameSettings(_gameSettings with { AutoSwitchWeapons = value == 1 });
+                break;
+            // ARC-COMBAT-1777: the follower skills setting (OH4): the lockpick press and the Disarm Traps press read the saved setting when they choose who acts.
+            case AreaOption.FollowerSkills:
+                if (value is not (0 or 1)) { refused = "out of range"; break; }
+                SaveGameSettings(_gameSettings with { FollowerSkills = value == 1 });
                 break;
             case AreaOption.AlwaysRun: SetAlwaysRun(value == 1); break;
             case AreaOption.Effects: PaletteVolumeChanged(AudioChannel.Effects, value); break;

@@ -192,7 +192,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation,
                 ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak, ScrCatalogue.Action.CreateObject, ScrCatalogue.Action.GetStat,
-                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, .. CritterFieldWriteActions, .. ItemUseVitalActions, .. EyeCandyActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
+                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, .. CritterFieldWriteActions, .. ItemUseVitalActions, .. EyeCandyActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, ScrCatalogue.Action.EndGame, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
         ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]),
         counterIndexWraps: true);
@@ -306,6 +306,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         var eyeCandies = _eyeCandies.ToArray();
         _eyeCandies.Clear();
         return eyeCandies;
+    }
+
+    private bool _endGame;
+
+    /// <summary>ARC-RENDER-1171 (SS4): whether a run applied since the last call asked for the end of the game (132); see <see cref="AreaScriptHost.TakeEndGame"/>.</summary>
+    public bool TakeEndGame()
+    {
+        var asked = _endGame;
+        _endGame = false;
+        return asked;
     }
 
     /// <summary>ARC-SCRIPT-1241: the fades (103) of the runs applied since the last call that ask for a movie, in order, for the viewer to play (their clock jumps are done; a sound-only fade plays
@@ -1698,6 +1708,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         var asked = new List<AreaScriptFade>();
         var fadesApplied = AreaScriptFades.Apply(_session, effects, asked);
         _fades.AddRange(asked.Where(fade => fade.Movie != 0));   // the fades before a refused jump keep their movie, as their clock jumps stay
+        if (effects.Slides.Any(request => request.Kind == ScrSlideKind.EndGame)) _endGame = true;
         if (!fadesApplied) return false;
         // ARC-WORLD-081: each create object adds its item to the ground next to its object (Creatable checked them); under Steamwoven a patch
         // at the limit takes no more (no change).
@@ -2110,15 +2121,27 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (IsPc(obj)) return default;
         // 0x43EB30: an object destroyed (object flag 0x1, or by a script) is left as it is, whatever its type.
         if (AlreadyDestroyed(obj)) return default;
-        if (Row(obj) is not { } row) return new($"change art number of {obj.Code} is not modelled (no loaded row)", null, 0);
-        if (Number(row, ArtSlot) is not { } stored) return new($"change art number of {obj.Code} is not modelled (the row names no art)", null, 0);
-        var baseline = unchecked((uint)stored);
-        if (row.Type == NpcType)
+        // ARC-SCRIPT-1826 (AN18): an item the session deleted (its lists no longer name it, so no row or prototype is found for it) is a destroyed object too: left as it is, the run goes on.
+        if (_session.IsItemDestroyed(obj.Code)) return default;
+        // ARC-SCRIPT-1826 (AN18): the object's row on a map the host holds; else, for an item, the row of its origin map (a map-data item carried here) or its prototype's art (a made or script-created item).
+        int type; long? stored;
+        if (Row(obj) is { } row) (type, stored) = (row.Type, Number(row, ArtSlot));
+        else if (CarriedItemRow(obj) is { } carried)
+        {
+            // A carried item destroyed in its map data (object flag 0x1) is left as it is, like any destroyed object (AN5).
+            if (((Number(carried, ObjectFlagsSlot) ?? 0) & DestroyedObjectFlag) != 0) return default;
+            (type, stored) = (carried.Type, Number(carried, ArtSlot));
+        }
+        else if (MadeItemArt(obj) is { } made) (type, stored) = made;
+        else return new($"change art number of {obj.Code} is not modelled (no loaded row)", null, 0);
+        if (stored is not { } storedArt) return new($"change art number of {obj.Code} is not modelled (the row names no art)", null, 0);
+        var baseline = unchecked((uint)storedArt);
+        if (type == NpcType)
             // A critter class (2 critter, 12 monster) answers the id 0: nothing changes. A unique NPC's art (13) takes a number, but the viewer draws an NPC from its body, not from one art id: not modelled.
             return ObjectArtNumber.IsCritterClass(baseline) ? default : new($"change art number of {obj.Code} is not modelled (an NPC of art class {ObjectArtNumber.Class(baseline)})", null, baseline);
         // ARC-SCRIPT-1779 (AN10): an item (types 5..14) takes the number in its own range (0x502830) and keeps the ground art as object field 1; its inventory art (field 0x5D) and its paper-doll art are other fields the action does not write.
-        var isItem = row.Type is >= FirstItemType and <= LastItemType;
-        if (row.Type != SceneryType && !isItem) return new($"change art number of {obj.Code} is not modelled (only scenery and items take a new art, not an object of type {row.Type})", null, baseline);
+        var isItem = type is >= FirstItemType and <= LastItemType;
+        if (type != SceneryType && !isItem) return new($"change art number of {obj.Code} is not modelled (only scenery and items take a new art, not an object of type {type})", null, baseline);
         if (isItem && _session.IsItemDestroyed(obj.Code)) return default;
         var current = _session.QueryObjectArt(new SessionMapId(obj.Map), obj.Code) ?? baseline;
         if (ObjectArtNumber.Class(current) != (isItem ? 6 : 4))
@@ -2133,6 +2156,31 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     private ArtChange ArtPlan(ScrObjectStateRequest request) => ArtPlan(request.Object, request.Value);
+
+    // ARC-SCRIPT-1826 (AN18): the map the session names as the origin of an item it moved (the hero's taken item, an item of the hero lying on the ground, an item the hero gave away), or null.
+    private SessionMapId? ItemOrigin(string entity)
+    {
+        foreach (var taken in _session.QueryPcInventory()) if (taken.Entity == entity) return taken.Origin;
+        foreach (var placed in _session.QueryPlacedItems()) if (placed.Entity == entity) return placed.Origin;
+        foreach (var given in _session.QueryGivenItems()) if (given.Entity == entity) return given.Origin;
+        return null;
+    }
+
+    // ARC-SCRIPT-1826 (AN18): the row of a map-data item that is not a row of a map the host holds under the map the script names (the shown map): carried here from another map, so its row is read by identity from the origin map the session names
+    // (the same lookup an item's use script makes, <see cref="OtherMapRow"/>). Null for an object that is no item the session moved, and for an item whose row no map reads.
+    private AreaObjectRecord? CarriedItemRow(ScrObjectRef obj)
+    {
+        if (OtherMapRow is not { } read || ItemOrigin(obj.Code) is not { } origin) return null;
+        return read(new(origin.RuntimeMap, obj.Code)) is { Type: >= FirstItemType and <= LastItemType } row ? row : null;
+    }
+
+    // ARC-SCRIPT-1826 (AN18): a made or script-created item (made:n) owns no row: the original makes it as a copy of its prototype, so its art is the prototype's current art (the world's prototype reader, as the viewer draws a created item). The hero's
+    // starting kit items (kit:n) are not read this way (the viewer draws their art from the kit load): null, and the run is refused.
+    private (int Type, long? Art)? MadeItemArt(ScrObjectRef obj)
+    {
+        if (GameSessionOwner.ObjectOriginOf(obj.Code) != SessionObjectOrigin.Made || _session.QueryPrototypeItemKind(obj.Code) is not { } kind) return null;
+        return _world?.Item(kind.Prototype - AreaPrototypeItems.PrototypeOffset) is { } prototype ? ((int)kind.Type, prototype.Art) : null;
+    }
 
     // The change of one request, written as the object's art id (the data's id returns the object to its baseline). False when the session refuses.
     private bool ApplyArt(ScrObjectStateRequest request)

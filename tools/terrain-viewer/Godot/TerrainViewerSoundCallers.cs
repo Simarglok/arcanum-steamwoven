@@ -33,8 +33,21 @@ public partial class TerrainViewerApp
     /// </summary>
     private void TickSceneryLoopSounds(AreaSceneryHost host)
     {
+        StopKilledSceneryVoices(host);
         if (_audio is null || AreaSoundCatalog() is not { } catalog) return;
         foreach (var entity in host.TakeSoundBegins()) BeginSceneryLoopSound(host, entity, catalog);
+    }
+
+    /// <summary>ARC-RENDER-1781: a loop an art change killed has its looping voice stopped (the end node 0x42DED0 stops the run's sound handle).</summary>
+    private void StopKilledSceneryVoices(AreaSceneryHost host)
+    {
+        foreach (var entity in host.TakeKilledByArt())
+        {
+            if (_audio is null || !_sceneryVoices.Remove(entity, out var voice)) continue;
+            _audio.Stop(voice);
+            _positionalVoices.RemoveAll(v => v.Handle == voice);
+            _sceneryLoopStops++;
+        }
     }
 
     private void BeginSceneryLoopSound(AreaSceneryHost host, string entity, SoundCatalog catalog)
