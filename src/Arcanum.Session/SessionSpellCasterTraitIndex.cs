@@ -1,6 +1,7 @@
 using Arcanum.Data.Magic;
 using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Skills;
 
@@ -14,9 +15,16 @@ namespace Arcanum.Session;
 /// <list type="bullet">
 /// <item><b>Resistance</b> (field 31, index 0..4 normal, fire, electrical, poison, magic): the indexed write 0x407340 stores the sum unclamped.</item>
 /// <item><b>Base stat</b> (field 220): the stat setter 0x4B0980. A derived stat (8 to 16) is read but never written. The new value is clamped to the stat's range (0x4B0FC0, 0x4B0FD0: for a primary stat 1 to the race's
-/// maximum, <see cref="CharacterStatRules.Range"/>); a lowering is refused, and nothing written, when a skill keyed on the stat needs the higher value (0x4C6B50, <see cref="SkillRules.CheckBaseChange"/>, read with the effective
-/// stat the lower base gives, the NPC's effect list laid over it). The stats whose setter does more than store (strength's hit-point adjustment, intelligence's and willpower's spell and degree guards, level, alignment, experience,
-/// the points, poison, gender and race) and an NPC whose stats the follower's advancement record holds are <b>not ready</b>, as is a hero target (the hero's stats are the character owner's); issue #1295 lists them.</item>
+/// maximum, <see cref="CharacterStatRules.Range"/>; for the others <see cref="CharacterStatRules.StoredRange"/>); a lowering is refused, and nothing written, when a skill keyed on the stat needs the higher value (0x4C6B50,
+/// <see cref="SkillRules.CheckBaseChange"/>, read with the effective stat the lower base gives, the NPC's effect list laid over it) and, for intelligence, when a known spell rank (0x4B1B90) or a tech degree (0x4B02B0)
+/// needs the higher value, for willpower when a known spell rank does (0x4B1C00). Ready for an NPC: the primary stats dexterity, constitution, beauty, intelligence, perception, willpower and charisma, and the stats the
+/// setter stores after the clamp alone for an NPC (ARC-MAGIC-1507 adds magick and tech points, 22 and 23, whose rewield <see cref="RewieldReady"/> accepts when no worn item has a wield script): level (17), experience (18, the level-up 0x4A69C0 is a PC's), alignment (19, the followers' re-check is a PC's), fate points (20), unspent points (21) and 25; the
+/// callbacks after the write (0x460860, 0x4601C0) are the user interface's. <b>Strength</b> (ARC-MAGIC-1506, case 0 of the setter) reads the encumbrance level before the store (0x45F790: the total weight of the NPC's list, 0x461410, and its carry weight, stat 8, which the new strength gives:
+/// <see cref="GameSessionOwner.QueryNpcCarry"/>) and, when the level changed, runs the recalculation 0x45F820 after it (<see cref="GameSessionOwner.RecalculateNpcEncumbrance"/>: every entry of effect 158 leaves the NPC's list, then one
+/// entry a level is added with the item cause, eight at the heaviest). Ready for an NPC the map's inventory seed lists; not ready when the NPC is no holder of it, when effect 158 has no rule to add, and when the new level has the
+/// fatigue timer (level 4 and above: 0x45E820 mode 1 is kept for the hero alone) or the old and new level are not both readable; nothing is written then. The level message is the local PC's and the animation speed
+/// (0x436FA0) the host's. <b>Not ready</b> (issues name them): poison (the poison timer 0x4B1350, the life state), gender and race (the innate effect removal 0x4EA2E0 and add), an NPC whose stats the follower's advancement record
+/// holds, and a hero target (the hero's stats are the character owner's).</item>
 /// </list>
 /// </summary>
 public sealed partial class SessionSpellCaster
@@ -24,8 +32,11 @@ public sealed partial class SessionSpellCaster
     /// <summary>The object fields TraitIdx writes: the indexed base stats (<c>obj_f_critter_stat_base_idx</c>) and the indexed resistances (<c>obj_f_resistance_idx</c>).</summary>
     public const int StatIndexField = 220, ResistanceIndexField = 31;
 
-    // The stats the setter stores with nothing but the clamp and the key-stat guard: dexterity, constitution, beauty, perception and charisma (the others are not ready, see above).
-    private static bool PlainStat(int index) => index is 1 or 2 or 3 or 5 or 7;
+    // The stats the host runs as the setter does for an NPC: the primary stats (strength with its encumbrance recalculation, see below; the guards for intelligence and willpower included) and the stats the setter stores after the clamp alone (the others are not ready, see above).
+    private static bool ReadyStat(int index) => index is 0 or 1 or 2 or 3 or 4 or 5 or 6 or 7 or 17 or 18 or 19 or 20 or 21 or 22 or 23 or 25;
+
+    // The reasons of a refused lowering (the event's value).
+    private const int RefusedBySkill = 0, RefusedBySpell = 1, RefusedByDegree = 2;
 
     // 0x452D80: a target that is no PC or NPC does nothing (the executor tests the cached type); the hero, a stat the setter does more with and an NPC without stored values are not ready.
     [OriginalFunction(0x452D80, OriginalFunctionScope.Partial)]
@@ -44,26 +55,71 @@ public sealed partial class SessionSpellCaster
         if (data.Field != StatIndexField || data.Index is < 0 or >= SessionCritterIndexedWrites.StatCount) return null;
         // The setter returns the derived stats (8 to 16) unwritten.
         if (data.Index is >= 8 and <= 16) return SpellComponentOutcome.None;
-        if (!PlainStat(data.Index) || _owner.QueryNpcAdvancement(obj.Id) is not null) return null;
-        if (stats[27] is < 0 or > 10 || critter.StoredBasicSkills is not { Count: SkillRules.BasicCount } basic || critter.StoredTechSkills is not { Count: SkillRules.TechCount } tech) return null;
-        var stat = (CharacterStat)data.Index;
-        var range = CharacterStatRules.Range((CharacterRace)stats[27], stat);
+        if (!ReadyStat(data.Index) || _owner.QueryNpcAdvancement(obj.Id) is not null) return null;
+        // Magick and tech points run the rewield (0x465530) after the store: with a worn item that carries a wield script the session cannot run it for an NPC, so nothing is written.
+        if (data.Index is 22 or 23 && !RewieldReady(obj.Id, map)) return null;
+        if (stats[27] is < 0 or > 10) return null;
+        if (CharacterStatRules.StoredRange((CharacterRace)stats[27], data.Index) is not { } range) return null;
         var current = stats[data.Index];
         var next = Math.Clamp(unchecked(current + data.Value), range.Minimum, range.Maximum);
-        if (next < current)
+        // Only the primary stats have skills keyed on them, and spells and degrees ask for intelligence and willpower alone.
+        if (next < current && data.Index <= 7)
         {
-            // The guard reads the stat after the write: the stored value of the others, the lower base, the NPC's effects.
+            if (critter.StoredBasicSkills is not { Count: SkillRules.BasicCount } basic || critter.StoredTechSkills is not { Count: SkillRules.TechCount } tech) return null;
+            var stat = (CharacterStat)data.Index;
+            // The guards read the stat after the write: the stored value of the others, the lower base, the NPC's effects.
             if (_owner.QueryNpcEffectiveStat(critter.Combat.Target, stats, stat, next) is not { } effective) return null;
             var check = SkillRules.CheckBaseChange(stat, current, next, effective, basic, tech);
             if (check.Status == SkillKeyStatStatus.Invalid) return null;
-            if (check.Status != SkillKeyStatStatus.Allowed)
+            var refused = check.Status != SkillKeyStatStatus.Allowed ? RefusedBySkill : -1;
+            if (refused < 0 && stat is CharacterStat.Intelligence or CharacterStat.Willpower)
             {
-                _log.Add(new(SpellCastEventKind.TraitIndexRefused, run.Id, 0, obj.Id, data.Index));
+                // The spell ranks the NPC knows (the session's book over its fields'), then for intelligence its tech degrees.
+                if ((_owner.QueryNpcSpellBook(obj.Id) ?? critter.Book) is not { } book || !SpellBookRules.IsValid(book)) return null;
+                var willpower = _owner.AutoLevel?.SpellWillpower ?? AutoLevelRules.DefaultSpellWillpower;
+                if (willpower.Length != SpellBookRules.Spells) return null;
+                if (!SpellBookRules.RanksHold(book.Ranks, stat == CharacterStat.Intelligence ? _ => SpellBookRules.MinimumIntelligence : spell => willpower[spell], effective)) refused = RefusedBySpell;
+                else if (stat == CharacterStat.Intelligence)
+                {
+                    if (critter.StoredDegrees is not { Count: AutoLevelRules.TechDisciplines } degrees || degrees.Any(degree => degree is < 0 or > AutoLevelRules.MaxDegree)) return null;
+                    if (degrees.Any(degree => AutoLevelRules.DegreeMinimumIntelligence(degree) > effective)) refused = RefusedByDegree;
+                }
+            }
+            if (refused >= 0)
+            {
+                _log.Add(new(SpellCastEventKind.TraitIndexRefused, run.Id, refused, obj.Id, data.Index));
                 return SpellComponentOutcome.None;
             }
         }
-        return Report(run, obj.Id, data, _owner.WriteCritterStat(_owner.Version, map, obj.Id, data.Index, next));
+        // ARC-MAGIC-1506 (case 0 of the setter): strength reads the encumbrance level before the store and recalculates after it; the recalculation 0x45F820 acts only when the level changed.
+        SessionEffectDefinition? encumbrance = null;
+        var level = -1;
+        if (data.Index == 0 && next != current)
+        {
+            if (_owner.QueryNpcCarry(map, critter.Combat.Target, stats, current) is not { } before || _owner.QueryNpcCarry(map, critter.Combat.Target, stats, next) is not { } after) return null;
+            if (before.Level != after.Level)
+            {
+                // Not ready: the fatigue timer of a level from 4 (0x45E820 mode 1 is not kept for an NPC), and a level without the rule of effect 158 to add.
+                if (CarryRules.DrainIntervalMs(after.Level) is not null || _owner.EncumbranceRule() is not { } rule) return null;
+                (encumbrance, level) = (rule, after.Level);
+            }
+        }
+        var written = _owner.WriteCritterStat(_owner.Version, map, obj.Id, data.Index, next);
+        var outcome = Report(run, obj.Id, data, written);
+        if (encumbrance is not null && written.Disposition != GameSessionDisposition.Rejected && _owner.RecalculateNpcEncumbrance(critter.Combat.Target, encumbrance, level) is { Disposition: GameSessionDisposition.Rejected } failed)
+            _log.Add(new(SpellCastEventKind.TraitIndexNotSaved, run.Id, (int)failed.Failure, obj.Id));
+        return outcome;
     }
+
+    /// <summary>
+    /// ARC-MAGIC-1507 (ledger RM3b): the rewield 0x465530 the setter runs after storing magick points (22) or tech points (23) walks the wear slots 1000 to 1008; for each worn item it recalculates the wearer's light (0x467E80)
+    /// and runs the item's script points 25 (wield off) and 24 (wield on) with the wearer as the initiator. Ready when the session knows the NPC's list (the holder of its map's inventory view, a dressed NPC's wear record laid
+    /// over the map data) and no worn item has script point 24 or 25: the runs then do nothing (a script run of a point with no script returns at once), and the light stays as saved, as it does after the session dresses an NPC (exact for an NPC wearing no light item; with a light item the original's size follows the item's power against the holder's derived stat 16, #1561)
+    /// (the carried light is not recalculated for an NPC yet, <c>docs/rendering/area-lighting.md</c>). With a worn wield script, or an NPC the session does not list, it is not ready.
+    /// </summary>
+    private bool RewieldReady(string npc, SessionMapId map) =>
+        _owner.QueryMapInventory(map)?.Holders.FirstOrDefault(holder => holder.Entity == npc && holder.Kind == SessionHolderKind.Npc) is { } listed &&
+        !listed.Items.Any(item => item.Facts.Worn && (item.Facts.HasScript(SessionScriptPoint.WieldOn) || item.Facts.HasScript(SessionScriptPoint.WieldOff)));
 
     private SpellComponentOutcome Report(SpellRun run, string entity, TraitIndexData data, GameSessionMutationResult written)
     {
