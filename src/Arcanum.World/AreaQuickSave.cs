@@ -95,6 +95,25 @@ public static class AreaQuickSave
             $"quick loaded: map {actor.Map.RuntimeMap} cell ({actor.Cell.X},{actor.Cell.Y}), session rev {restored.Owner.Version.Revision}");
     }
 
+    /// <summary>
+    /// ARC-MAGIC-1724 (the recorded limit (a) of ARC-MAGIC-1700): a hero loaded from a save of schema 98 or before has no stored age (stat 25: the TraitIdx component treats it as not read), and no build could have
+    /// changed it before schema 99, so it is still its prototype's: this stores the age of <paramref name="tables"/> (the hero's own pre-made or new-character load, read as at its creation) through
+    /// <see cref="GameSessionOwner.WriteHeroAge"/>. Nothing happens (null) for a session without a hero, a hero whose age is stored, tables that are not ready or are another prototype's, or a prototype without an age.
+    /// </summary>
+    /// <returns>A one-line account of what was written or why nothing could be, or null when there was nothing to do.</returns>
+    public static string? FillHeroAge(GameSessionOwner loaded, AreaHeroLoad? tables)
+    {
+        ArgumentNullException.ThrowIfNull(loaded);
+        if (loaded.QueryHero() is not { } hero || loaded.QueryHeroStoredAge() is not null) return null;
+        if (tables is not { Status: AreaHeroStatus.Ready, Definition: { } definition } || definition.Prototype != hero.Prototype)
+            return "hero age not read: the hero's prototype tables are not available (stat 25 stays not ready for it)";
+        if (definition.Age is not { } age) return "hero age not read: the prototype has none (stat 25 stays not ready for it)";
+        var written = loaded.WriteHeroAge(loaded.Version, age);
+        return written.Disposition == GameSessionDisposition.Changed
+            ? $"hero age {age} read from its prototype (a save without a stored age)"
+            : $"hero age not stored: {written.Disposition} {written.Failure}";
+    }
+
     /// <summary>ARC-WORLD-120: true when <paramref name="cell"/> lies in one of the shown map's core sectors. A map too large to load
     /// whole shows a window of sectors around the actor (ARC-RENDER-024), and a save on that map but beyond the window is loaded with
     /// the window moved to its cell, as a save on another map is loaded with that map, instead of being refused as not admitted.</summary>
