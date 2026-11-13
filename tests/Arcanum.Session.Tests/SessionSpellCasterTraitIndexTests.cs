@@ -429,7 +429,7 @@ public sealed class SessionSpellCasterTraitIndexTests
     [TestMethod]
     public void A_weaker_npc_that_gains_levels_gets_one_item_entry_a_level()
     {
-        // Strength 3 carries 1500 (800 is level 3: 675 to 899); strength 2 carries 1000, where 800 is level 4 (a timer: not ready, below). Strength 4 carries 2000, where 800 is level 2 (600 to 899).
+        // Strength 3 carries 1500 (800 is level 3: 675 to 899); strength 2 carries 1000, where 800 is level 5 (a timer: not ready, below). Strength 4 carries 2000, where 800 is level 2 (600 to 899).
         var (owner, caster, target) = Carrying(3, [300, 500]);
         using var _ = owner;
         Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(StrengthPlus), 0, At(Rat, SpellTargetObject.Npc)));
@@ -508,7 +508,7 @@ public sealed class SessionSpellCasterTraitIndexTests
     }
 
     [TestMethod]
-    public void The_weight_of_the_list_counts_the_worn_and_made_items_but_not_the_taken_ones()
+    public void The_weight_of_the_list_counts_the_seed_items_and_the_made_items_the_session_added()
     {
         var (owner, _, target) = Carrying(3, [100, 300]);
         using var _ = owner;
@@ -519,5 +519,10 @@ public sealed class SessionSpellCasterTraitIndexTests
         Assert.AreEqual(1000, owner.QueryNpcCarry(Exterior, target, stats, 2)!.CarryWeight);
         Assert.AreEqual(2, owner.QueryNpcCarry(Exterior, target, stats, 2)!.Level, "400 of 1000 is 40 %");
         Assert.IsNull(owner.QueryNpcCarry(new SessionMapId(80), target, stats, 3), "no seed of that map");
+        // A made item the session adds to the NPC weighs its prototype's weight (the session's row, not the seed's facts).
+        owner.AttachItemWeights(_ => new SessionItemWeight(50));
+        var kind = InventoryStateTests.Facts(SessionItemType.Generic, 5700).Kind;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddItemToNpc(owner.Version, Rat, kind, _ => SessionInsertVerdict.Accepted).Disposition);
+        Assert.AreEqual(450, owner.QueryNpcCarry(Exterior, target, stats, 3)!.Weight);
     }
 }
