@@ -598,9 +598,10 @@ public sealed partial class GameSessionOwner
     private int HeroNormalResistance() => HeroNormalResistance(_effects.Entries, _effects.Definitions);
 
     // ARC-MAGIC-1658: the stored normal resistance (the array a TraitIdx write changes) is the base the worn armour's adjustment is added to, before the effects.
-    private int HeroNormalResistance(IEnumerable<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions) =>
+    // ARC-MAGIC-1700: the innate effects' resistance changes of the hero's race and gender (the state's, which a trial of a swap passes) lie under the durable ones.
+    private int HeroNormalResistance(IEnumerable<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions, SessionHeroState? state = null) =>
         _hero is null ? 0 : Math.Clamp(EffectModifiers.Apply(HeroStoredResistances().Damage.Normal + (_equipment.Worn.Count == 0 ? 0L
-            : EquipmentRules.ResistanceAdjustments(_equipment.Items().Values, HeroAptitude()).Normal), EffectDomain.Resistances(entries, definitions).Normal), 0, 95);
+            : EquipmentRules.ResistanceAdjustments(_equipment.Items().Values, HeroAptitude()).Normal), HeroEffectResistances(entries, definitions, state).Normal), 0, 95);
 
     // Each worn item must be one the hero holds, of a matching type, in one slot, the slot its values belong in, and valid.
     private static GameSessionFailure ImportEquipment(SessionEquipmentState saved, InventoryDomain inventory, bool hero, out EquipmentDomain equipment)
