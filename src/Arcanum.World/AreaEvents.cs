@@ -79,6 +79,11 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
     /// <summary>ARC-WORLD-103: an NPC's best-items wield after its regeneration reads its combat values from the area's combat fields.</summary>
     public SessionNpcWielder? RestockWielder(SessionMapId map, string npc) => Restock?.Wielder(map, npc, _combat()?.Critter(npc));
 
+    /// <summary>ARC-MAGIC-1561: the carried light of an NPC whose worn items the session recalculated (<see cref="AreaRestockHost.NpcLight"/>); null: the saved light stands (also while the restock host loads).</summary>
+    public Arcanum.Data.Lighting.CarriedLightSize? NpcLight(SessionMapId map, string npc) => Restock?.NpcLight(map, npc, _combat());
+    /// <summary>ARC-MAGIC-1561: <see cref="NpcLight"/> for several NPCs of a map at once; null while the restock host loads (nothing is known yet: the caller must not keep the answer).</summary>
+    public IReadOnlyDictionary<string, Arcanum.Data.Lighting.CarriedLightSize>? NpcLights(SessionMapId map, IEnumerable<string> npcs) => Restock?.NpcLights(map, npcs, _combat());
+
     private readonly Action<SessionScriptCall>? _prepareCall;
 
     /// <summary>The reason the last refused call did not run, or null; <see cref="CallRefusals"/> counts the refusals.</summary>
