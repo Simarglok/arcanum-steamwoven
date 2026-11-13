@@ -10,6 +10,7 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Magic;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.HeroStateTests;
 using static Arcanum.Session.Tests.InventoryStateTests;
@@ -840,6 +841,45 @@ public sealed partial class SessionSpellCasterTraitIndexTests
         Assert.AreEqual(GameSessionFailure.None, pass.Failure);
         Assert.AreEqual(SessionNpcEncumbranceEndReason.LevelUnreadable, pass.NpcEncumbranceEnds.Single().Reason);
         Assert.AreEqual(0, RatTimers(owner).Length);
+    }
+
+    // ARC-MAGIC-1686: a timer of the NPC on another map (the one-map rule) makes the next schedule not ready (CanScheduleNpcEncumbrance), so the chain ends with NotScheduled.
+    private static void MakeNextScheduleNotReady(GameSessionOwner owner)
+    {
+        var elsewhere = owner.QueryActor().Map.RuntimeMap + 1;
+        Assert.IsTrue(owner.ScheduleFocusWipe(Rat, elsewhere, owner.QueryClockSnapshot().GameTimestampMs), "a stray timer of the NPC on another map");
+    }
+
+    [TestMethod]
+    public void An_npc_with_a_timer_on_another_map_reports_its_chain_end_as_not_scheduled()
+    {
+        var (owner, caster, target) = Carrying(3, [800]);
+        using var _ = owner;
+        caster.Apply(Run(StrengthMinusOne), 0, At(Rat, SpellTargetObject.Npc));
+        MakeNextScheduleNotReady(owner);
+        owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 60_000, ClockAdvanceReason.OrdinaryAdvance);
+        var pass = owner.ProcessEvents(new RatWorld(target, RatStats(owner, 2)));
+        Assert.AreEqual(GameSessionFailure.None, pass.Failure);
+        Assert.AreEqual(0, RatTimers(owner).Length, "level 5 asked for another timer and the schedule was not ready");
+        var end = pass.NpcEncumbranceEnds.Single();
+        Assert.AreEqual(SessionNpcEncumbranceEndReason.NotScheduled, end.Reason);
+        Assert.AreEqual(Rat, end.Entity);
+    }
+
+    [TestMethod]
+    public void The_frame_step_report_carries_the_npc_encumbrance_chain_ends_of_its_passes()
+    {
+        var (owner, caster, target) = Carrying(3, [800]);
+        using var _ = owner;
+        caster.Apply(Run(StrengthMinusOne), 0, At(Rat, SpellTargetObject.Npc));
+        MakeNextScheduleNotReady(owner);
+        var step = new FrameStep(owner, new RatWorld(target, RatStats(owner, 2)));
+        Assert.AreEqual(0, step.Jump(59_999).NpcEncumbranceEnds.Count, "not yet due");
+        var report = step.Jump(1);
+        Assert.AreEqual(SessionNpcEncumbranceEndReason.NotScheduled, report.NpcEncumbranceEnds.Single().Reason);
+        Assert.AreEqual(Rat, report.NpcEncumbranceEnds.Single().Entity);
+        Assert.AreSame(report, step.Last);
+        Assert.AreEqual(0, step.Jump(1).NpcEncumbranceEnds.Count, "the ends of one call are not carried to the next");
     }
 
     [TestMethod]
