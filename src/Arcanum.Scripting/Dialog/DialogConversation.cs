@@ -318,6 +318,12 @@ public sealed partial class DialogConversation
             }
             NpcLine = insulted;
         }
+        if (plan.Talk is { } talk)
+        {
+            // ARC-SCRIPT-1535 (ledger INS3): an m: or r: node hands the node to the price screen or the rumor draw; no reply of the node is built (0x416840 returns 0).
+            OpenNpcTalk(plan, talk);
+            return;
+        }
         BuildOffers(plan);
     }
 
@@ -1471,6 +1477,16 @@ public sealed partial class DialogConversation
                 insultLine = true;
                 text = string.Empty;
             }
+            else if (marker is { Letter: 'm' or 'r' } && withReplies && !nested && ReadNpcTalk(marker.Value.Letter, raw) is { } npcSource)
+            {
+                // ARC-SCRIPT-1535 (ledger INS3): the m: and r: lines; the follows are planned now, so a pick never half-runs a node, and the node's own replies are not built.
+                var talkPlan = PlanNpcTalk(npc, npcSource, node, out frontier, out failure);
+                if (talkPlan is null)
+                {
+                    return null;
+                }
+                return new StepPlan(npc, action, string.Empty, Array.Empty<ReplyPlan>(), Talk: talkPlan);
+            }
             else if (marker is { Letter: 'g' or 'm' or 'r' } || marker is { Letter: 'i' } && exact)
             {
                 frontier = new DialogConversationFrontier(DialogFrontierKind.UnsupportedGeneratedText, node);
@@ -1924,7 +1940,7 @@ public sealed partial class DialogConversation
     }
 
     private sealed record StepPlan(DlgRecord Npc, IReadOnlyList<ConversationOperation> Action, string NpcText, IReadOnlyList<ReplyPlan> Replies,
-        GreetingPlan? Greeting = null, bool InsultLine = false);
+        GreetingPlan? Greeting = null, bool InsultLine = false, NpcTalkPlan? Talk = null);
 
     /// <summary>A greeting's slots and the planned nodes of its jump and floating slots.</summary>
     private sealed record GreetingPlan(DialogGreetingSlot[] Slots, IReadOnlyDictionary<int, StepPlan> Jumps, IReadOnlyDictionary<int, StepPlan> Floats);
