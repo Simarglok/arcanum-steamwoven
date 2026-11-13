@@ -204,6 +204,8 @@ public sealed partial class GameSessionOwner
             // ARC-WORLD-1526 (GS5): the copy is of the generator object, not of its prototype: the generator's entity is kept as the copy's template (the created record's source), so the world builds the copy's row from the generator's fields.
             var copy = CreateCreatedObject(SessionCreatedKind.Critter, run.Prototype, run.Map, spot, 0, 0, now, summoner: run.Entity);
             _generators.AddCopy(copy.Entity, settings.Slot);
+            // ARC-WORLD-1652 (GS5): the copy holds fresh copies of the generator's items (0x406010); the restock of its source runs after, from the viewer.
+            CopyGeneratorItems(run.Map, run.Entity, copy.Entity);
             made.Add(copy);
         }
         if (made.Count == 0)
