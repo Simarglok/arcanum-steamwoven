@@ -16,7 +16,21 @@ public sealed record AreaTrapEffects(Func<AreaObjectRecord, NativeTrapRun, int, 
     /// <summary>ARC-DEV-260: the same effect with no triggerer (<see cref="Apply"/> has the hero): a trap set off by a ranged attack or by damage with
     /// no attacker (ledger OD4). Null while the host cannot (such a trap is then not met).</summary>
     public Func<AreaObjectRecord, NativeTrapRun, int, int, SessionTrapEffectResult>? ApplyWithoutTriggerer { get; init; }
+
+    /// <summary>ARC-WORLD-1469 (ledger TT8, TT9): the same effect with a critter other than the hero as the triggerer (<c>entity</c>: the NPC or companion that stepped on a trap object or used
+    /// a trapped one): its floating line, its eye candy and, for a radius 0 run, the victim are its. Null while the host cannot (such a trap is then not met by a non-hero).</summary>
+    public Func<string, AreaObjectRecord, NativeTrapRun, int, int, SessionTrapEffectResult>? ApplyByCritter { get; init; }
+
+    /// <summary>ARC-WORLD-1469 (TT9): a critter's spell flags (field 0x14) now, which the step trigger reads (a mover with flag 0x2 or 0x4 sets off no trap object); null: none set.</summary>
+    public Func<string, int>? SpellFlagsOf { get; init; }
 }
+
+/// <summary>
+/// ARC-WORLD-1469: a non-hero walker that meets a trap (<see cref="AreaTraps.StepNpc"/>, <see cref="AreaTraps.UseNpc"/>): the critter's entity (the triggerer of the object entry point), whether the PC
+/// leads it (the observer of TT2: a companion knows the spotted and the PC-placed traps, a free NPC every trap the PC did not place) and, when it has a sheet, the spot roll's inputs (null: it cannot
+/// roll, so a trap it does not know is met without a spot attempt).
+/// </summary>
+public sealed record AreaTrapWalker(string Entity, bool LedByPc, SessionNpcSpot? Spot);
 
 /// <summary>
 /// ARC-WORLD-110: one meeting of the PC with a trap through the object entry point (a use, or a step onto a trap object): the trap's row,
@@ -88,6 +102,9 @@ public sealed record AreaTrapDisarm(AreaObjectRecord Row, SessionDisarmRoll Roll
         return what + check;
     }
 }
+
+/// <summary>ARC-WORLD-1469: one trap meeting of a non-hero walker (<see cref="AreaAiHost.TakeTrapMeetings"/>): who met it and what happened.</summary>
+public sealed record AreaTrapNotice(string Walker, AreaTrapMeeting Meeting);
 
 /// <summary>What the walk check before one step found (TT10): the trap object it spotted (null: none, the step goes), the session's
 /// mark, and how many spot trap rolls it made on the tile's unknown traps (ARC-MAGIC-057, ledger SP1).</summary>
@@ -212,6 +229,31 @@ public sealed class AreaTraps
     public AreaTrapMeeting? Step(CellCoord cell) => TrapObjectsOn(cell) is [var first, ..] ? Meet(first, SessionTrapCause.Step) : null;
 
     /// <summary>
+    /// ARC-WORLD-1469 (ledger TT9, TT7): a non-hero critter's step arrives on <paramref name="cell"/> (0x4305D0 runs for every mover): the first trap object there meets it through the object entry
+    /// point with the critter as the triggerer (cause Step: a critter whose spell flags hold 0x2 or 0x4 steps over it; a trap it knows fires too, a free NPC knowing every trap the PC did not place;
+    /// one it does not know gets the entry point's spot attempt with its own roll, E2). A trap it spots now is marked on the PC's side (a companion) and the step is cancelled, as the hero's; any
+    /// other fires, the critter as the triggerer of the native run. Null when the tile holds no trap object, no cast host is there, or the host cannot apply a critter's trap
+    /// (<see cref="AreaTrapEffects.ApplyByCritter"/>). <see cref="AreaTrapMeeting.EndsWalk"/> says whether the critter's walk ends on the tile.
+    /// </summary>
+    public AreaTrapMeeting? StepNpc(AreaTrapWalker walker, CellCoord cell)
+    {
+        ArgumentNullException.ThrowIfNull(walker);
+        return TrapObjectsOn(cell) is [var first, ..] ? Meet(first, SessionTrapCause.Step, walker) : null;
+    }
+
+    /// <summary>
+    /// ARC-WORLD-1469 (ledger TT7, 0x441980 with point 1): a non-hero critter uses a trapped object (a door its opener goal pushes, node 6 of goal 12, 0x428A10): the meeting of the
+    /// object's trap with the critter as the triggerer, as <see cref="Use"/>'s for the hero, with the critter's own spot attempt. Null when the object carries no trap now, no cast host is there or
+    /// the host cannot apply a critter's trap; <see cref="AreaTrapMeeting.Cancels"/> says whether the use stops (the opener's run then ends).
+    /// </summary>
+    public AreaTrapMeeting? UseNpc(AreaObjectRecord row, AreaTrapWalker walker)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        ArgumentNullException.ThrowIfNull(walker);
+        return Meet(row, SessionTrapCause.Use, walker);
+    }
+
+    /// <summary>
     /// ARC-DEV-260 (ledger OD4, OD6): the trap of an object whose hit points an attack or a damage brought to 0 goes off (0x4BCB00 before the
     /// break, cause <see cref="SessionTrapCause.Attack"/>: no spot attempt, an auto-removing trap stays). <paramref name="byHero"/> says the hero is
     /// the triggerer (a melee attack); a ranged attack or a damage with no attacker has none. Null when the object carries no trap now, or a native
@@ -295,23 +337,29 @@ public sealed class AreaTraps
 
     private int LightAt(AreaObjectRecord row) => _light?.Invoke(row) ?? SessionPickLockTarget.FullLight;
 
-    private AreaTrapMeeting? Meet(AreaObjectRecord row, SessionTrapCause cause)
+    private AreaTrapMeeting? Meet(AreaObjectRecord row, SessionTrapCause cause, AreaTrapWalker? walker = null)
     {
         if (_effects() is not { } effects || _host.TrapBaseline(row) is not { } baseline) return null;
+        // The triggerer: the hero (its roll, its effect), or a walker's own (ARC-WORLD-1469: its observer, its roll, its effect with it as the triggerer).
+        var observer = walker is null ? TrapObserver.Player : walker.LedByPc ? TrapObserver.LedNpc : TrapObserver.FreeNpc;
+        Func<AreaObjectRecord, NativeTrapRun, int, int, SessionTrapEffectResult>? apply = walker is null ? effects.Apply
+            : effects.ApplyByCritter is { } by ? (r, run, counters, flags) => by(walker.Entity, r, run, counters, flags) : null;
+        if (apply is null) return null;
         var trapped = AreaUseScriptHost.Trapped(row);
         var state = _session.QueryTrap(trapped, baseline);
         if (!state.Trapped) return null;
         var native = TrapRules.NativeRun(state.Script, baseline.HeaderFlags);
         if (native is null && cause == SessionTrapCause.Step || TrapEffectRules.Of(state.Script, baseline.Counters) is { Kind: TrapEffectKind.Shot }) return null;
-        // The spot attempt (E2, TT3): the player's detect-traps flag spots without a roll, else the hero's spot trap roll (SP1).
-        var gate = _session.TrapSpotGate(trapped, baseline, TrapObserver.Player, effects.PlayerSpellFlags);
+        // The spot attempt (E2, TT3): the player's detect-traps flag spots without a roll, else the triggerer's own spot trap roll (SP1, SP2).
+        var gate = _session.TrapSpotGate(trapped, baseline, observer, effects.PlayerSpellFlags);
+        var moverFlags = walker is null ? effects.PlayerSpellFlags : effects.SpellFlagsOf?.Invoke(walker.Entity) ?? 0;
         // A step with the step-over spell flags never reaches the entry point, so it never rolls (0x4305D0 before 0x441980).
-        var rolls = gate == TrapSpotGate.Roll && (cause != SessionTrapCause.Step || TrapRules.StepTriggers(effects.PlayerSpellFlags));
-        var spotted = gate == TrapSpotGate.Detected || rolls &&
-            _session.RollHeroSpotTrap(_session.Version, trapped, baseline, effects.PlayerSpellFlags, LightAt(row)).Spotted;
-        var result = _session.TriggerTrap(_session.Version, trapped, baseline, TrapObserver.Player, cause, spotted,
-            cause == SessionTrapCause.Step ? effects.PlayerSpellFlags : 0);
+        var rolls = gate == TrapSpotGate.Roll && (cause != SessionTrapCause.Step || TrapRules.StepTriggers(moverFlags));
+        var spotted = gate == TrapSpotGate.Detected || rolls && (walker is null
+            ? _session.RollHeroSpotTrap(_session.Version, trapped, baseline, effects.PlayerSpellFlags, LightAt(row)).Spotted
+            : walker.Spot is { } spot && _session.RollNpcSpotTrap(_session.Version, spot, trapped, baseline, effects.PlayerSpellFlags, LightAt(row)).Spotted);
+        var result = _session.TriggerTrap(_session.Version, trapped, baseline, observer, cause, spotted, cause == SessionTrapCause.Step ? moverFlags : 0);
         if (result.Outcome != SessionTrapOutcome.Fired || result.Run is not { Effect: not NativeTrapEffect.None } run) return new(row, cause, result, null);
-        return new(row, cause, result, effects.Apply(row, run, baseline.Counters, result.State.ObjectFlags));
+        return new(row, cause, result, apply(row, run, baseline.Counters, result.State.ObjectFlags));
     }
 }

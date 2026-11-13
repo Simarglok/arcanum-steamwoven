@@ -1738,12 +1738,68 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// </summary>
     public bool TrapSpottedOn(string id, CellCoord next)
     {
-        if (id == Pc || _scene.Traps?.Invoke() is not { } traps || _scene.NpcSheet?.Invoke(id) is not { } sheet || RawBuild(id)?.Target is not { } life) return false;
-        var walk = traps.WalkCheckNpc(new(life, sheet.Loaded, sheet.Modifiers, Leader(id) == Pc), next);
+        if (id == Pc || _scene.Traps?.Invoke() is not { } traps || TrapWalker(id)?.Spot is not { } spot) return false;
+        var walk = traps.WalkCheckNpc(spot, next);
         if (walk.Spotted is null) return false;
         Trace(id).Step = $"spotted a trap on {next.X},{next.Y}: the walk stops";
         return true;
     }
+
+    /// <summary>ARC-WORLD-1469: the NPC or companion as a trap's triggerer: its entity, whether the PC leads it and, with a sheet and a life, its spot roll's inputs. Null for the hero.</summary>
+    private AreaTrapWalker? TrapWalker(string id)
+    {
+        if (id == Pc) return null;
+        var led = Leader(id) == Pc;
+        SessionNpcSpot? spot = _scene.NpcSheet?.Invoke(id) is { } sheet && RawBuild(id)?.Target is { } life ? new(life, sheet.Loaded, sheet.Modifiers, led) : null;
+        return new(id, led, spot);
+    }
+
+    /// <summary>
+    /// ARC-WORLD-1469 (ledger TT9, TT8, 0x4305D0): the walker's step arrives on <paramref name="cell"/> (the step the host began, or a companion's own follow step the viewer reports): the first trap
+    /// object there meets it (<see cref="AreaTraps.StepNpc"/>, the walker as the triggerer: a known trap fires, an unknown one gets its own spot attempt first). True when the trap was spotted or
+    /// went off, which ends the walk on that tile. False for the hero, when the map has no trap host or cast host, and for a tile with no trap object.
+    /// </summary>
+    public bool TrapMetOn(string id, CellCoord cell)
+    {
+        if (TrapWalker(id) is not { } walker || _scene.Traps?.Invoke() is not { } traps || traps.StepNpc(walker, cell) is not { } met) return false;
+        Trace(id).Step = $"met a trap on {cell.X},{cell.Y}: {met.Describe()}";
+        _trapMeetings.Add(new(id, met));
+        return met.EndsWalk;
+    }
+
+    /// <summary>
+    /// ARC-WORLD-1469 (ledger TT7, 0x441980 with point 1): the walker uses a trapped object (a door its opener goal pushes). The meeting of its trap with the walker as the triggerer
+    /// (<see cref="AreaTraps.UseNpc"/>); true when the use stops (the trap was spotted now, a native run went off, or the session refused the meeting), which ends the opener's run.
+    /// </summary>
+    public bool TrapMetByUse(string id, AreaObjectRecord row)
+    {
+        if (TrapWalker(id) is not { } walker || _scene.Traps?.Invoke() is not { } traps || traps.UseNpc(row, walker) is not { } met) return false;
+        Trace(id).Step = $"used a trapped object: {met.Describe()}";
+        _trapMeetings.Add(new(id, met));
+        return met.Cancels;
+    }
+
+    private readonly List<AreaTrapNotice> _trapMeetings = [];
+
+    /// <summary>ARC-WORLD-1469: the trap meetings the walkers had since the last call (the viewer logs them and shows the status line), oldest first; the list is emptied.</summary>
+    public IReadOnlyList<AreaTrapNotice> TakeTrapMeetings()
+    {
+        var taken = _trapMeetings.ToArray();
+        _trapMeetings.Clear();
+        return taken;
+    }
+
+    /// <summary><see cref="IAiGoalWorld.StepMeetsTrap"/>: the step just begun onto <paramref name="next"/> meets its trap object (<see cref="TrapMetOn"/>); nothing when that step did not begin.</summary>
+    public bool StepMeetsTrap(string id, CellCoord next)
+    {
+        // Only a step that really began meets its trap: a companion's walk that refused the step, or a mover the host does not run, stands on no new tile.
+        var began = _startedStep == id;
+        _startedStep = null;
+        return began && TrapMetOn(id, next);
+    }
+
+    // The walker whose step <see cref="BeginStep"/> just began (null: none began).
+    private string? _startedStep;
 
     // ---- ARC-DEV-141 (MIG13 S8c): the pushed NPC's bodies for the knockback host (AreaAiKnockbackBodies) ----
 
@@ -1846,14 +1902,15 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     public int BeginStep(string id, CellCoord next, bool running)
     {
+        _startedStep = null;
         if (!TryNpc(id, out var npc) || Tile(id) is not { } from) return 1;
         if (InRound && RoundActor != id) OffTurnSteps++;
         var gait = running ? MovementGait.Run : MovementGait.Walk;
         var direction = AreaCombatHost.Facing(from, next) ?? NeighborDirection.XPlus;
         var duration = _scene.Timing?.For(gait, direction) ?? DiagnosticGridSession.LiveDuration;
         var ms = (int)Int128.Clamp(duration.Value.Numerator * 1000 / duration.Value.Denominator, 1, 10_000);
-        if (_followers.ContainsKey(id)) { if (!_scene.Followers!.Step(id, next, running)) Trace(id).Step = $"walk refused the step to {next.X},{next.Y}"; }
-        else { Movers.Step(id, npc.Row.Key, npc.Origin, next, _nowMs, ms, running); RecordPlace(id); NoteEntered(id, next); }
+        if (_followers.ContainsKey(id)) { if (_scene.Followers!.Step(id, next, running)) _startedStep = id; else Trace(id).Step = $"walk refused the step to {next.X},{next.Y}"; }
+        else { Movers.Step(id, npc.Row.Key, npc.Origin, next, _nowMs, ms, running); RecordPlace(id); NoteEntered(id, next); _startedStep = id; }
         _notices.Add(new(AreaAiNoticeKind.Step, id, null));
         return ms;
     }
