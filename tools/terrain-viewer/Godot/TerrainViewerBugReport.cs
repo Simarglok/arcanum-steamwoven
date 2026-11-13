@@ -163,13 +163,13 @@ public partial class TerrainViewerApp
     private string BugReportWindows() => string.Join(", ", new (bool Open, string Name)[]
     {
         (MainMenuOpen, "main menu"), (HeroDeathCovering, "death screen"), (PaletteOpen, "diagnostic palette"), (ConversationOpen, "dialog"),
-        (InventoryOpen, "inventory"), (SheetOpen, "character sheet"), (LogbookOpen, "logbook"), (SchematicsOpen, "schematics"), (BarterOpen, "barter"),
+        (InventoryOpen, "inventory"), (SheetOpen, "character sheet"), (LogbookOpen, "logbook"), (SchematicsOpen, "schematics"), (BarterOpen, "barter"), (ItemServiceOpen, "item service"),
         (ReadingOpen, "reading"), (SleepOpen, "sleep"), (WorldMapOpen, "world map"), (SaveListOpen, "save list"),
     }.Where(window => window.Open).Select(window => window.Name));
 
     private int BugReportWindowMask() => (MainMenuOpen ? 1 : 0) | (HeroDeathCovering ? 2 : 0) | (PaletteOpen ? 4 : 0) | (ConversationOpen ? 8 : 0)
         | (InventoryOpen ? 16 : 0) | (SheetOpen ? 32 : 0) | (LogbookOpen ? 64 : 0) | (SchematicsOpen ? 128 : 0) | (BarterOpen ? 256 : 0)
-        | (ReadingOpen ? 512 : 0) | (WorldMapOpen ? 1024 : 0) | (SaveListOpen ? 2048 : 0) | (BugReportOpen ? 4096 : 0) | (SleepOpen ? 8192 : 0);
+        | (ReadingOpen ? 512 : 0) | (WorldMapOpen ? 1024 : 0) | (SaveListOpen ? 2048 : 0) | (BugReportOpen ? 4096 : 0) | (SleepOpen ? 8192 : 0) | (ItemServiceOpen ? 16384 : 0);
 
     /// <summary>Per frame: a session event line when the map, the hero's cell or phase, combat or the open windows changed.</summary>
     private void RecordBugReportEvents()

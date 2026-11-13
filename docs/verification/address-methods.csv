@@ -36,6 +36,7 @@ src/Arcanum.Scripting/Dialog/DialogConversation.cs,ReadStore,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,ReadWorldFact,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,SchematicsCommand,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,Store,pending,
+src/Arcanum.Scripting/Dialog/DialogConversationHealer.cs,FormatName,exempt,reference
 src/Arcanum.Scripting/Dialog/DialogConversationNewspaper.cs,PunctuatedHeadline,exempt,host
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,Comment,exempt,host
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,MissingLine,pending,
@@ -473,6 +474,8 @@ src/Arcanum.World/AreaAiHost.cs,RunUseScript,pending,
 src/Arcanum.World/AreaAiHost.cs,RunsOf,pending,
 src/Arcanum.World/AreaAiHost.cs,ScheduleTicks,pending,
 src/Arcanum.World/AreaAiHost.cs,ScriptAttack,pending,
+src/Arcanum.World/AreaAiHost.cs,ScriptCanHear,exempt,host
+src/Arcanum.World/AreaAiHost.cs,ScriptCanSee,exempt,host
 src/Arcanum.World/AreaAiHost.cs,ScriptReaction,exempt,host
 src/Arcanum.World/AreaAiHost.cs,SearchItems,exempt,host
 src/Arcanum.World/AreaAiHost.cs,SeeToward,pending,
@@ -509,6 +512,8 @@ src/Arcanum.World/AreaAiHost.cs,UsedItem,pending,
 src/Arcanum.World/AreaAiHostGenerators.cs,Spawn,exempt,host
 src/Arcanum.World/AreaAiHostGround.cs,LooseItems,exempt,host
 src/Arcanum.World/AreaAiHostGround.cs,StartPickup,exempt,host
+src/Arcanum.World/AreaAiHostHealer.cs,HealerCast,exempt,host
+src/Arcanum.World/AreaAiHostHealer.cs,HealerService,exempt,host
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateAlongPath,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateToRandomTile,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,ScriptProne,pending,
@@ -607,11 +612,17 @@ src/Arcanum.World/AreaTraps.cs,WalkCheckNpc,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,ApplyScriptAttack,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,AreaOf,pending,
 src/Arcanum.World/AreaUseScripts.cs,AttackRefusal,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,CanHear,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,CanSee,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,DyingStops,pending,
 src/Arcanum.World/AreaUseScripts.cs,ExamineSkips,pending,
 src/Arcanum.World/AreaUseScripts.cs,IsAnimal,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,IsInDialog,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,IsProwling,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,IsSurrendered,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsTrap,pending,
 src/Arcanum.World/AreaUseScripts.cs,MagickCancelPercent,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,MetPcBefore,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunBed,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunBust,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunCombatPoint,exempt,host

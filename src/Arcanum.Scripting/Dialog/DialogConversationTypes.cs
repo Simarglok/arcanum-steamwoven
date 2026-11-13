@@ -62,6 +62,8 @@ public sealed record DialogConversationRequest(
 /// <paramref name="Greeting"/> ports (the known areas, the lines), a paying one the <paramref name="World"/>, <paramref name="Gold"/> and purse, and <c>x:</c> the
 /// <paramref name="World"/> port's area marking; without any of them the reply stays a static frontier.
 /// <paramref name="QuestReplies"/> (ARC-SCRIPT-1532) admits the <c>q:</c> quest-state reply together with the <paramref name="Quests"/> and <paramref name="World"/> ports (the PC's quest state and the NPC's reaction); without any of them the reply stays a frontier.
+/// <paramref name="Healer"/> (ARC-SCRIPT-1732) admits the <c>h:</c> healer reply; it also needs the <paramref name="World"/>, <paramref name="Gold"/>, <paramref name="Greeting"/> and
+/// the purse (or trainer) ports; without any of them the reply stays blocked.
 /// </summary>
 public sealed record DialogConversationPorts(
     IDialogStateQueryPort LocalFlags,
@@ -103,7 +105,8 @@ public sealed record DialogConversationPorts(
     IDialogWorldMapPort? WorldMap = null,
     IDialogDirectionsPort? Directions = null,
     IDialogQuestReplyPort? QuestReplies = null,
-    IDialogNewspaperStandPort? NewspaperStand = null);
+    IDialogNewspaperStandPort? NewspaperStand = null,
+    IDialogHealerPort? Healer = null);
 
 public enum DialogReactionMode
 {
@@ -565,6 +568,41 @@ public interface IDialogDirectionsPort
     DialogBearing? Bearing(DialogParticipantId npc, int area);
 }
 
+/// <summary>Which NPC heals which PC (ARC-SCRIPT-1732).</summary>
+public readonly record struct DialogHealerQuery(DialogParticipantId Npc, DialogParticipantId PlayerCharacter);
+
+/// <summary>
+/// What the <c>h:</c> healer menu reads of the NPC (ARC-SCRIPT-1732, ledger HLR2–HLR6): <paramref name="Rank"/> is its rank in the healing college 12 (0x4B1AB0, 0..5: how
+/// many of that college's spells it knows, which sets the menu); <paramref name="SkillAllowed"/> the skill service's test (0x4AE570 for skill 10 answered 0: the NPC holds a
+/// healing item and may use the skill on the PC); <paramref name="SkillLevel"/> and <paramref name="SkillTraining"/> its heal skill's effective level and training tier
+/// (0x4C5EB0, 0x4C60C0: the price is (level + 2) × (tier + 1)); <paramref name="LedByPc"/> that its own leader is the PC (0x45DE00: the services are free);
+/// <paramref name="NoPcLeader"/> that no leader chain ends in a PC (0x45DDA0 is 0; the host answers it from the direct leader, as only the PC leads here: the NPC's own cast is free and the skill's flags carry 0x2000).
+/// </summary>
+public sealed record DialogHealerFacts(int Rank, bool SkillAllowed, int SkillLevel, int SkillTraining, bool LedByPc, bool NoPcLeader);
+
+/// <summary>The healer's own skill service on the PC: the heal skill (10) used by the NPC (0x419CB0 → 0x4350F0).</summary>
+public sealed record HealerSkillCommand(DialogParticipantId PlayerCharacter, DialogParticipantId Npc, int Skill, bool NoPcLeader) : DialogCommand;
+
+/// <summary>The healer's spell on the PC (0x419D50 → 0x455AC0): <paramref name="Free"/> is the cast flag 2, set when the NPC has no PC leader.</summary>
+public sealed record HealerSpellCommand(DialogParticipantId PlayerCharacter, DialogParticipantId Npc, int Spell, bool Free) : DialogCommand;
+
+/// <summary>
+/// Healer seam (ARC-SCRIPT-1732, ledger HLR1–HLR12): what the <c>h:</c> reply's menu reads of the host and the two effects it asks for. <see cref="SkillName"/> and
+/// <see cref="SpellName"/> are the names the menu lines show (<c>skill.mes</c>, <c>spell.mes</c>, null for none). The payment goes through the
+/// <see cref="IDialogGoldPort"/>, the price through the world port's reaction. Calls are synchronous and serialized by the host; a thrown exception fails the
+/// conversation. <see cref="Execute(HealerSkillCommand)"/> and <see cref="Execute(HealerSpellCommand)"/> answer <see cref="DialogCommandResult.Applied"/> when the
+/// effect was started (a heal whose check fails, or a cast that is resisted, is still applied: the original does not look at the result) and
+/// <see cref="DialogCommandResult.Rejected"/> when the host cannot start it.
+/// </summary>
+public interface IDialogHealerPort
+{
+    DialogHealerFacts Facts(DialogHealerQuery query);
+    string? SkillName(int skill);
+    string? SpellName(int spell);
+    DialogCommandResult Execute(HealerSkillCommand command);
+    DialogCommandResult Execute(HealerSpellCommand command);
+}
+
 /// <summary>Result of JO and UW.</summary>
 public enum DialogJoinResult
 {
@@ -757,6 +795,11 @@ public enum DialogOptionTransition
     Rumor,
     /// <summary>ARC-SCRIPT-1304: an option of the rumor talk (the price's yes) that stays inside it.</summary>
     RumorStep,
+    /// <summary>ARC-SCRIPT-1732: a Player <c>h:</c> reply with a healer port: the reply's action runs, then the NPC's healer menu replaces the NPC line and the replies
+    /// (state 11, ledger HLR1); its own transition is followed when the player leaves the menu or after a service.</summary>
+    Healer,
+    /// <summary>ARC-SCRIPT-1732: an option of the healer's talk (a submenu, the skill service, a spell, the price's yes) that stays inside it.</summary>
+    HealerStep,
     /// <summary>ARC-SCRIPT-1321: a Player <c>c:</c> reply with the story and greeting ports: the reply's action runs, then the NPC tells the story line of the current story
     /// state and the PC's class line 1000 is the only way on, which follows the reply's own transition (ledger STY1).</summary>
     Story,

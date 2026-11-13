@@ -53,7 +53,7 @@ from line 0, static.
 | 6 | throw | 0x4B3C6A | **none** | 0 | — |
 | 7 | hit | 0x4B2B7F, 0x4B2F90, 0x4B37A3 | the weapon's hit script before the damage of every resolved hit, hero and NPC (`AreaUseScriptHost.RunCombatPoint`, ARC-SCRIPT-1483; the hero's thrown item's is ARC-MAGIC-042's) | 26 (11) | 26 under the combat-point set (ARC-SCRIPT-1562: the placed set plus 91, 80, 120 and condition 37, 24 rows; ARC-SCRIPT-1661: plus condition 31 and action 137, all 26) |
 | 8 | miss | 0x4B2F06, 0x4B311F, 0x4B3972 | **none** | 0 | — |
-| 9 | dialog | 0x57CC90, 0x5684AA | talk with a hero, heartbeat call-ex | 180 (122) | 52, 1 missing |
+| 9 | dialog | 0x57CC90, 0x5684AA | talk with a hero, heartbeat call-ex | 180 (122) | 124, 1 missing (ARC-SCRIPT-1733: 118 before; the critter-state conditions) |
 | 10 | first heartbeat | 0x4AD2B2 | AI tick, shown map (`HeartbeatAdmission`) | 23 (6) | 23 (was 21) |
 | 11 | catching thief | 0x4AEFCD, 0x4C76E5, 0x4C7900 | pick pocket (use set) | 0 | — |
 | 12 | dying | 0x45DA57 | the session's life step asks the shown map's use-script host (`AreaUseScriptHost.RunDying`, `DyingAdmission`, ARC-DEV-312; every kill path) | 167 (61) | the installed 1805, 2137, 2173 whole; the others not counted yet |
@@ -63,7 +63,7 @@ from line 0, static.
 | 16 | end combat | 0x4A8688, 0x4B7681 | **none** | 0 | — |
 | 17 | buy object | 0x4621D7, 0x578446 | **none** | 0 | — |
 | 18 | resurrect | 0x4B5A46 | **none** | 8 (8) | — |
-| 19 | heartbeat | 0x4AD2E1, 0x4B704A | AI tick, shown map (`HeartbeatAdmission`) | 141 (84) | 81 (was 32) |
+| 19 | heartbeat | 0x4AD2E1, 0x4B704A | AI tick, shown map (`HeartbeatAdmission`) | 141 (84) | 96 (was 32; ARC-SCRIPT-1733: 95 before) |
 | 20 | leader killing | 0x45DB95 | **none** | 0 | — |
 | 21 | insert item | 0x4648C2, 0x465977, 0x46687A, 0x46697F | hero's item moves | 28 (12) | 3 |
 | 22 | will KOS | 0x4AE179 | **none** | 60 (7) | — |

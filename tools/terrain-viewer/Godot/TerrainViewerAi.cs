@@ -243,7 +243,7 @@ public partial class TerrainViewerApp
     private string? ConversationPartnerEntity()
     {
         if (ConversationOpen && _conversationSpeaker is { } speaker) return AreaConversationState.EntityId(speaker.Row);
-        return BarterOpen && _barter is { } barter ? barter.Merchant.Entity : null;
+        return BarterOpen && _barter is { } barter ? barter.Merchant.Entity : ItemServiceOpen && _itemService is { } service ? service.Merchant.Entity : null;
     }
 
     /// <summary>ARC-WORLD-115: the companions of the shown map the AI host runs (ARC-WORLD-119: every one standing here, following,
