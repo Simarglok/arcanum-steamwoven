@@ -542,6 +542,109 @@ public sealed class InterfaceChromeTests
         Assert.AreEqual(255, Pixel(smoothed, 120, 60 + 49, 60).A, "outside the circle the frame is opaque");
     }
 
+    // ARC-UI-1195: the character sheet's frames and buttons.
+    private static readonly (string File, int Width, int Height)[] SheetPanels =
+        [("char_maint.art", 800, 400), ("Skills_Window.ART", 235, 325), ("Disciplines_Window.ART", 235, 325), ("char_spells.art", 235, 325)];
+
+    private static readonly string[] SheetButtons =
+    [
+        "char_minus.art", "char_plus.art", "SP_Minus.ART", "SP_Plus.ART", "SkilAddBut.ART", "SkilMinusBut.ART", "SpellTech_Add.ART", "SpellTech_Minus.ART",
+        "char_Common_Skills.art", "char_Tech_Skills.art", "char_Spells_Skills.art", "char_Schem_Skills.ART", "Combat_But.ART", "Thieving_But.ART", "Social_But.ART",
+        "Technological_But.ART", "Anatomical_But.ART", "Chemistry_But.ART", "Electrical_But.ART", "Explosives_But.ART", "GunSmithy_But.ART", "Mechanical_But.ART",
+        "Smithy_But.ART", "Therapeutics_But.ART",
+    ];
+
+    [TestMethod]
+    public void The_character_sheet_window_pages_and_buttons_have_recipes_and_the_schemes_page_has_none_yet()
+    {
+        foreach (var (file, _, _) in SheetPanels) Assert.AreEqual(ChromeKind.Panel, InterfaceChromeRecipes.All.Single(r => r.File == file).Kind, file);
+        foreach (var file in SheetButtons) Assert.AreEqual(ChromeKind.Button, InterfaceChromeRecipes.All.Single(r => r.File == file).Kind, file);
+        // The schemes page (567, the auto-level tab) is another task's; the NPC sheet and the editor draw the same frames and so the same recipes.
+        CollectionAssert.DoesNotContain(InterfaceChromeRecipes.All.Select(r => r.File).ToArray(), "Scheme_Rot.ART");
+        // The recipes are found by the lowercase art name hash whatever the file's own case.
+        Assert.IsNotNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity("CHAR_MAINT.ART", new byte[] { 1 }), 0, 1, 1, new byte[4])));
+    }
+
+    [TestMethod]
+    public void Every_part_of_a_sheet_recipe_lies_inside_its_frame_and_a_kept_picture_never_covers_a_generated_box()
+    {
+        foreach (var (file, w, h) in SheetPanels)
+        {
+            var recipe = InterfaceChromeRecipes.All.Single(r => r.File == file);
+            var boxes = recipe.Parts.Select(part => part switch
+            {
+                ChromeSunk p => (X: p.X, Y: p.Y, Width: p.Width, Height: p.Height, Kind: "sunk"),
+                ChromeKeep p => (X: p.X, Y: p.Y, Width: p.Width, Height: p.Height, Kind: "keep"),
+                ChromeRivet p => (X: (int)(p.X - p.Radius), Y: (int)(p.Y - p.Radius), Width: (int)Math.Ceiling(2 * p.Radius), Height: (int)Math.Ceiling(2 * p.Radius), Kind: "rivet"),
+                _ => (X: 0, Y: 0, Width: 0, Height: 0, Kind: "other"),
+            }).Where(box => box.Kind != "other").ToArray();
+            Assert.IsTrue(boxes.Length > 0, file);
+            foreach (var (x, y, bw, bh, kind) in boxes)
+                Assert.IsTrue(x >= 0 && y >= 0 && x + bw <= w + 1 && y + bh <= h + 1, $"{file}: a {kind} at ({x}, {y}, {bw} x {bh}) lies inside {w} x {h}");
+            foreach (var keep in boxes.Where(box => box.Kind == "keep"))
+            foreach (var other in boxes.Where(box => box.Kind != "keep"))
+            {
+                // A kept picture may lie wholly inside a generated pit (the info box's divider line); it may not cut into the edge of a box or sit over a rivet.
+                var overlaps = keep.X < other.X + other.Width && other.X < keep.X + keep.Width && keep.Y < other.Y + other.Height && other.Y < keep.Y + keep.Height;
+                var inside = other.Kind == "sunk" && keep.X >= other.X + 2 && keep.Y >= other.Y + 2 && keep.X + keep.Width <= other.X + other.Width - 2 && keep.Y + keep.Height <= other.Y + other.Height - 2;
+                Assert.IsTrue(!overlaps || inside, $"{file}: the kept picture at ({keep.X}, {keep.Y}) covers a generated {other.Kind} at ({other.X}, {other.Y})");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void The_sheet_frames_paint_in_bounds_deterministically_at_whole_and_fractional_scales_and_the_pages_are_darker_than_iron()
+    {
+        foreach (var (file, w, h) in SheetPanels)
+        {
+            var legacy = Frame(w, h, holes: false);
+            var recipe = InterfaceChromeRecipes.All.Single(r => r.File == file);
+            foreach (var scale in new[] { 1.0, 1.5, 2.0, 3.25 })
+            {
+                var a = InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale);
+                var (pw, ph) = InterfaceChromeRenderer.PixelSize(w, h, scale);
+                Assert.AreEqual(pw * ph * 4, a.Length, $"{file} at {scale}");
+                CollectionAssert.AreEqual(a, InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale), $"{file} deterministic at {scale}");
+                for (var i = 3; i < a.Length; i += 4) Assert.AreEqual(255, a[i], $"{file} is opaque at {scale}");
+            }
+        }
+        // The pages are slate, darker than the iron of the bars' frames: the mean brightness of a bare page against a bare iron panel of the same size.
+        var page = new ChromeRecipe("test.art", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.None, []);
+        var iron = new ChromeRecipe("test.art", ChromeKind.Panel, ChromeMaterial.Iron, ChromeSides.None, []);
+        long Sum(byte[] rgba) { long total = 0; for (var i = 0; i < rgba.Length; i += 4) total += rgba[i] + rgba[i + 1] + rgba[i + 2]; return total; }
+        var legacyPage = Frame(80, 80, holes: false);
+        Assert.IsTrue(Sum(InterfaceChromeRenderer.Render(page, 80, 80, legacyPage, [], 0, 2)) < Sum(InterfaceChromeRenderer.Render(iron, 80, 80, legacyPage, [], 0, 2)));
+    }
+
+    [TestMethod]
+    public void The_sheet_buttons_follow_their_silhouette_on_every_frame_at_a_fractional_scale()
+    {
+        // A synthetic round 39 x 39 button (the tabs' size) and a square 32 x 32 one (the technology page's): the silhouette stays, hover and down differ from idle.
+        foreach (var (w, h, round) in new[] { (39, 39, true), (32, 32, false) })
+        {
+            var legacy = new byte[w * h * 4];
+            for (var y = 0; y < h; y++)
+            for (var x = 0; x < w; x++)
+            {
+                double dx = x + 0.5 - w / 2.0, dy = y + 0.5 - h / 2.0;
+                var inside = !round || dx * dx + dy * dy < w * w / 4.0;
+                var i = (y * w + x) * 4;
+                (legacy[i], legacy[i + 1], legacy[i + 2], legacy[i + 3]) = inside ? ((byte)50, (byte)60, (byte)20, (byte)255) : ((byte)0, (byte)0, (byte)0, (byte)0);
+            }
+            foreach (var file in SheetButtons)
+            {
+                var recipe = InterfaceChromeRecipes.All.Single(r => r.File == file);
+                var frames = Enumerable.Range(0, 3).Select(frame => InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], frame, 1.5)).ToArray();
+                var (pw, ph) = InterfaceChromeRenderer.PixelSize(w, h, 1.5);
+                foreach (var frame in frames) Assert.AreEqual(pw * ph * 4, frame.Length, file);
+                Assert.AreEqual(round ? 0 : 255, Pixel(frames[0], pw, 0, 0).A, $"{file} corner");
+                Assert.AreEqual(255, Pixel(frames[0], pw, pw / 2, ph / 2).A, $"{file} middle");
+                CollectionAssert.AreNotEqual(frames[0], frames[1], $"{file} down differs from idle");
+                CollectionAssert.AreNotEqual(frames[0], frames[2], $"{file} hover differs from idle");
+            }
+        }
+    }
+
     // ARC-UI-1196: the logbook's frames (synthetic stand-ins of the frames' sizes and holes; no game art).
     private static readonly string[] LogbookFrames =
         ["logbooks_side.art", "book_main.art", "book_quests.art", "tab_note.art", "tab_quest.art", "tab_rep.art", "tab_blesscurse.art", "tab_egoinjure.art", "tab_backgrnd.art", "tab_keys.art", "pageturn_l.art", "pageturn_r.art"];

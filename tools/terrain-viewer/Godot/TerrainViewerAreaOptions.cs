@@ -1,4 +1,5 @@
 using Arcanum.Presentation.Audio;
+using Arcanum.Presentation.Display;
 using Arcanum.Session;
 using Arcanum.Session.Settings;
 using Arcanum.TerrainViewer.Core;
@@ -34,13 +35,24 @@ public partial class TerrainViewerApp
         _ruleMode = _launcherSettings.Rules;
         GD.Print($"ARC-UI-014 rules {RuleModeNames.Name(_ruleMode)} from {(LauncherSettingsPath() is null ? "default (automated run)" : "launcher settings")}");
         ConfigureControllers(); // ARC-GPAD-1374: the controller scheme choice of the same file
+        ApplyDisplayOptions(); // ARC-UI-1737: the brightness and the violence filter apply at the start
         GD.Print($"ARC-UI-013 game settings difficulty={_gameSettings.Difficulty} turnBased={_gameSettings.TurnBased} autoAttack={_gameSettings.AutoAttack} floats={_gameSettings.Floats} floatSpeed={_gameSettings.FloatSpeed} hdInterface={_gameSettings.HdInterface} generatedInterface={_gameSettings.GeneratedInterface} hdPack={HdPackSourceResolver.ModeName(_gameSettings.HdPackSource)} hdPackPath={(_gameSettings.HdPackPath is null ? "none" : "set")} pad={_gameSettings.Pad} touch={_gameSettings.Touch} prompts={_gameSettings.Prompts} from={_gameSettingsOrigin}");
     }
 
     /// <summary>The values the options window shows: the host's settings as they are now.</summary>
     private AreaGameOptions CurrentGameOptions() => new(_gameSettings.Difficulty, _turnBasedSetting ? 1 : 0, _gameSettings.AutoAttack, _alwaysRunOption,
         _audioVolumes.Effects, _audioVolumes.Voice, _audioVolumes.Music, _ruleMode, _gameSettings.Floats, _gameSettings.FloatSpeed,
-        EvidenceRecording, EvidenceRecording ? _evidenceTask : 0, _gameSettings.Controls, _gameSettings.CombatTaunts);
+        EvidenceRecording, EvidenceRecording ? _evidenceTask : 0, _gameSettings.Controls, _gameSettings.CombatTaunts, _gameSettings.ViolenceFilter, _gameSettings.Brightness, _gameSettings.AutoSwitchWeapons);
+
+    private AreaBrightnessLayer? _brightnessLayer;
+
+    /// <summary>ARC-UI-1737: the brightness layer shows the saved value (created at the first non-zero value, hidden at 0) and the AI host reads the saved violence filter.</summary>
+    private void ApplyDisplayOptions()
+    {
+        if (_brightnessLayer is null && _gameSettings.Brightness > 0) { _brightnessLayer = new AreaBrightnessLayer(); AddChild(_brightnessLayer); }
+        _brightnessLayer?.Apply(_gameSettings.Brightness);
+        if (_aiHost is { } host) host.ViolenceFilter = _gameSettings.ViolenceFilter;
+    }
 
     /// <summary>The options texts, read once a run (the game's files, or the project's with the reason).</summary>
     private AreaOptionsTexts OptionsTexts()
@@ -93,6 +105,20 @@ public partial class TerrainViewerApp
             case AreaOption.CombatTaunts:
                 if (value is not (0 or 1)) { refused = "out of range"; break; }
                 SaveGameSettings(_gameSettings with { CombatTaunts = value == 1 });
+                break;
+            // ARC-UI-1737: the violence filter (OH2: the dying goal's art node, the pool of blood and the hit's blood effect read it when they run) and the brightness (OH1: the final colour multiply, applied at once).
+            case AreaOption.ViolenceFilter:
+                if (value is not (0 or 1)) { refused = "out of range"; break; }
+                SaveGameSettings(_gameSettings with { ViolenceFilter = value == 1 });
+                break;
+            case AreaOption.Brightness:
+                if (value < 0 || value > BrightnessRules.Max) { refused = "out of range"; break; }
+                SaveGameSettings(_gameSettings with { Brightness = value });
+                break;
+            // ARC-COMBAT-1738: the auto switch setting (OH3): the hero's attack and a strike read the saved setting when its weapon is lost.
+            case AreaOption.AutoSwitchWeapons:
+                if (value is not (0 or 1)) { refused = "out of range"; break; }
+                SaveGameSettings(_gameSettings with { AutoSwitchWeapons = value == 1 });
                 break;
             case AreaOption.AlwaysRun: SetAlwaysRun(value == 1); break;
             case AreaOption.Effects: PaletteVolumeChanged(AudioChannel.Effects, value); break;
@@ -152,6 +178,7 @@ public partial class TerrainViewerApp
         if (settings == _gameSettings) return;
         _gameSettings = settings;
         ConfigureControllers(); // ARC-GPAD-1374: the prompts follow at once, no window is touched
+        ApplyDisplayOptions();
         var saved = _gameSettingsStore?.Save(settings) == true;
         _gameSettingsOrigin = saved ? "saved setting" : _gameSettingsStore?.Persistent == true ? "not saved" : "this run only";
         GD.Print($"ARC-UI-013 game settings difficulty={settings.Difficulty} turnBased={settings.TurnBased} autoAttack={settings.AutoAttack} floats={settings.Floats} floatSpeed={settings.FloatSpeed} hdInterface={settings.HdInterface} generatedInterface={settings.GeneratedInterface} hdPack={HdPackSourceResolver.ModeName(settings.HdPackSource)} hdPackPath={(settings.HdPackPath is null ? "none" : "set")} pad={settings.Pad} touch={settings.Touch} prompts={settings.Prompts} saved={saved}");

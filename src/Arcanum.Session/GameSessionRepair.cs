@@ -73,5 +73,73 @@ public sealed partial class GameSessionOwner
             outcome.Condition, check.Fated, Version);
     }
 
+    /// <summary>
+    /// ARC-UI-1731 (ledger IS3, RP2, RP3, DU8): the item part of the paid repair service of an NPC (the skill run of the NPC as
+    /// source on one of the hero's items with the forced flag 0x1000, then the payment, which the caller makes through
+    /// <see cref="GiveGoldToNpc"/>). The check is the NPC's: its Repair level and training from <see cref="QueryNpcSkills(SessionNpcAdvancement, AdvancementModifiers)"/>
+    /// (the sheet the session levelled it to, else <paramref name="loaded"/>), the two draws always taken, no fate (the source is not a PC,
+    /// RP3). The run is forced, so the amount is <see cref="ItemDurabilityRules.RepairAmount"/> (the maximum × effectiveness / 100, at least 1)
+    /// and the item side is <see cref="ItemDurabilityRules.Repair"/> with the NPC's training. The result is a <see cref="SessionRepairResult"/>
+    /// with no hero check and no fate. Refused before anything is rolled: no hero or a dead one (<see cref="GameSessionFailure.RepairUnavailable"/>),
+    /// the hero as the repairer, a sheet that is not the NPC's or not admissible (<see cref="GameSessionFailure.RepairUnavailable"/>), an invalid
+    /// item or baseline (<see cref="GameSessionFailure.InvalidItem"/>), an item the hero does not hold or the session deleted
+    /// (<see cref="GameSessionFailure.ItemNotAvailable"/>), the version, an exhausted random stream, a full durability record store.
+    /// One revision.
+    /// </summary>
+    /// <remarks>Executable: the repair service 0x4C8E60, whose item part is registered as <c>ItemDurabilityRules.Repair</c>.</remarks>
+    public SessionRepairResult RepairForService(GameSessionVersion expected, string npc, SessionNpcAdvancement loaded, AdvancementModifiers modifiers,
+        string entity, ItemCondition baseline)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(loaded);
+        ArgumentNullException.ThrowIfNull(modifiers);
+        if (_hero is null || HeroDead()) return RejectRepair(GameSessionFailure.RepairUnavailable);
+        if (!SessionValidation.Entity(npc) || npc == SessionSpellCaster.Hero || loaded.Entity != npc || !AutoLevelRules.IsValid(loaded.Sheet) ||
+            !AutoLevelRules.IsValid(modifiers))
+            return RejectRepair(GameSessionFailure.RepairUnavailable);
+        if (!SessionValidation.Entity(entity) || !ItemDurabilityRules.IsValid(baseline)) return RejectRepair(GameSessionFailure.InvalidItem);
+        if (_durability.Destroyed.Contains(entity) || !_inventory.Hero.InPack(entity)) return RejectRepair(GameSessionFailure.ItemNotAvailable);
+        if (!IsCurrent(expected)) return RejectRepair(GameSessionFailure.StaleVersion);
+
+        var sheet = _advancement.Npcs.TryGetValue(loaded.Entity, out var levelled) ? levelled.Sheet : loaded.Sheet;
+        var skill = QueryNpcSkills(loaded, modifiers)[Skill.Repair];
+        var request = new SkillCheckRequest
+        {
+            Skill = Skill.Repair,
+            Level = skill.Level,
+            Training = skill.Training,
+            Effectiveness = new()
+            {
+                ExtraordinaryIntelligence = AutoLevelRules.EffectiveStat(sheet, modifiers, CharacterStat.Intelligence) >= CharacterStatRules.ExtraordinaryThreshold,
+                Difficulty = _difficulty,
+            },
+        };
+        var rolls = new SkillRolls(new SeededRandom(_random.Seed, _random.Draws));
+        SkillCheckResult check;
+        try { check = SkillCheckRules.Run(request, rolls, _rules.Combat.InvocationModifierCountedTwice); }
+        catch (SkillRolls.ExhaustedException) { return RejectRepair(GameSessionFailure.RandomExhausted); }
+
+        var training = (RepairTraining)(int)skill.Training;
+        var current = _durability.Records.TryGetValue(entity, out var recorded) ? recorded : baseline;
+        var amount = ItemDurabilityRules.RepairAmount(current, check.Check.Effectiveness, fullRepair: false);
+        var outcome = ItemDurabilityRules.Repair(current, amount, ItemDurabilityRules.RepairAdjustmentPercent(training, current.Broken), training);
+        var changed = outcome.Condition != current;
+        if (changed && !ItemDurabilityRules.IsValid(outcome.Condition)) return RejectRepair(GameSessionFailure.InvalidItem);
+        if (changed && !_durability.Records.ContainsKey(entity) && _durability.Count >= _limits.MaxDurabilityRecords)
+            return RejectRepair(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return RejectRepair(GameSessionFailure.RevisionExhausted);
+
+        _random = rolls.Trial;
+        if (changed)
+        {
+            _durability.Records[entity] = outcome.Condition;
+            if (_equipment.SlotOf(entity) is { } slot)
+                _equipment.Worn[slot] = _equipment.Worn[slot] with { Item = Conditioned(_equipment.Worn[slot].Item, outcome.Condition) };
+        }
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, check, outcome.Status == ItemRepairStatus.Repaired ? amount : 0, outcome.Status,
+            outcome.Condition, false, Version);
+    }
+
     private SessionRepairResult RejectRepair(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, 0, null, null, false, Version);
 }

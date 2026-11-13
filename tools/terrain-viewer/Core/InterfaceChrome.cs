@@ -4,9 +4,9 @@ namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>ARC-UI-140: a surface the generated interface chrome is painted with (our own colours and noise, chosen by eye; not
 /// measured from any game art).</summary>
-/// <remarks>ARC-UI-1196: <see cref="Cloth"/> is a book cover's maroon weave, <see cref="Parchment"/> a page (cream with soft mottling and the shade of the fold at the logbook's spine,
+/// <remarks>ARC-UI-1195: <see cref="Slate"/> is the character sheet's pages. ARC-UI-1196: <see cref="Cloth"/> is a book cover's maroon weave, <see cref="Parchment"/> a page (cream with soft mottling and the shade of the fold at the logbook's spine,
 /// so everything that sits on a page matches it) and <see cref="PageEdge"/> the striped edge of a stack of pages.</remarks>
-public enum ChromeMaterial { Wood, WoodDark, Iron, Dark, Face, Pit, Cloth, Parchment, PageEdge }
+public enum ChromeMaterial { Wood, WoodDark, Iron, Dark, Face, Pit, Slate, Cloth, Parchment, PageEdge }
 
 /// <summary>The edges of a frame that get a rim (a panel's edge facing the play view).</summary>
 [Flags]
@@ -199,8 +199,55 @@ public static class InterfaceChromeRecipes
         // The three lenses (231 barter, 232 loot, 233 own window) are the round view's ring around the live game view's circle.
         var lenses = new[] { "lns_bart.art", "lns_loot.art", "lns_papr.art" }.Select(file => new ChromeRecipe(file, ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [new ChromeRoundView(44.5, 44.5, 44.5)]));
         string[] buttons = ["char_but.art", "log_but.art", "invn_but.art", "tmap_but.art", "lilgrnbut.art",
-            "combat_button.art", "skills_button.art", "spells_button.art", "schematics_button.art"];
-        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, .. lenses, .. LogbookRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, []))];
+            "combat_button.art", "skills_button.art", "spells_button.art", "schematics_button.art",
+            // ARC-UI-1195: the character sheet's buttons (the + and − of the stats, skills, technology and spells pages, the page tabs, the skill group and discipline buttons).
+            "char_minus.art", "char_plus.art", "SP_Minus.ART", "SP_Plus.ART", "SkilAddBut.ART", "SkilMinusBut.ART", "SpellTech_Add.ART", "SpellTech_Minus.ART",
+            "char_Common_Skills.art", "char_Tech_Skills.art", "char_Spells_Skills.art", "char_Schem_Skills.ART",
+            "Combat_But.ART", "Thieving_But.ART", "Social_But.ART", "Technological_But.ART",
+            "Anatomical_But.ART", "Chemistry_But.ART", "Electrical_But.ART", "Explosives_But.ART", "GunSmithy_But.ART", "Mechanical_But.ART", "Smithy_But.ART", "Therapeutics_But.ART"];
+        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, .. lenses, .. SheetPanels(), .. LogbookRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, []))];
+    }
+
+    // ARC-UI-1195: the character sheet's frames (Legacy pixels of each art). Its window (22) is wood with the sunk name box, the info box and the page pit; the stat ovals are
+    // sunk boxes with a rivet at each end and the labels baked into the art (ST, CN, ..) stay pictures; the lamp sockets, the close ring, the alignment gauge, the health and
+    // fatigue discs and the experience ruler are painted illustrations that stay pictures. The three pages (235 x 325) are iron with a rim.
+    private static ChromeRecipe[] SheetPanels()
+    {
+        List<ChromePart> window =
+        [
+            new ChromeSunk(119, 9, 360, 87, ChromeMaterial.Pit),
+            new ChromeSunk(750, 18, 39, 38, ChromeMaterial.Pit),
+            new ChromeSunk(497, 59, 244, 332, ChromeMaterial.Pit),
+            new ChromeSunk(24, 278, 452, 113, ChromeMaterial.Pit),
+            new ChromeKeep(308, 294, 3, 84),
+            new ChromeKeep(8, 6, 97, 97, true),
+            new ChromeKeep(6, 131, 100, 100, true),
+            new ChromeKeep(411, 127, 76, 56, true), new ChromeKeep(411, 197, 76, 56, true),
+            new ChromeKeep(747, 60, 46, 330),
+        ];
+        foreach (var x in new[] { 524, 592, 660 }) window.Add(new ChromeKeep(x, 5, 52, 52, true));
+        for (var row = 0; row < 4; row++)
+        {
+            var y = 40 * row;
+            window.Add(new ChromeSunk(172, 111 + y, 70, 31, ChromeMaterial.Pit)); window.Add(new ChromeSunk(315, 111 + y, 70, 31, ChromeMaterial.Pit));
+            window.Add(new ChromeKeep(127, 111 + y, 40, 30)); window.Add(new ChromeKeep(259, 111 + y, 54, 30));
+            foreach (var x in new[] { 178.5, 235.5, 321.5, 378.5 }) window.Add(new ChromeRivet(x, 126.5 + y, 3.5));
+        }
+        List<ChromePart> skills = [];
+        foreach (var x in new[] { 19, 74, 129, 183 }) skills.Add(new ChromeKeep(x, 16, 36, 35, true));
+        for (var row = 0; row < 4; row++) skills.Add(new ChromeKeep(10, 61 + 66 * row, 215, 64));
+        List<ChromePart> disciplines = [new ChromeKeep(12, 63, 213, 29), new ChromeKeep(10, 93, 24, 230)];
+        List<ChromePart> spells = [];
+        foreach (var x in new[] { 12, 37, 62, 87, 112, 137, 161, 186 }) spells.Add(new ChromeKeep(x, 14, 26, 26, true));
+        foreach (var x in new[] { 24, 49, 74, 99, 123, 148, 173, 198 }) spells.Add(new ChromeKeep(x, 39, 26, 26, true));
+        foreach (var y in new[] { 82, 130, 177, 225, 272 }) spells.Add(new ChromeSunk(16, y - 2, 36, 36, ChromeMaterial.Pit));
+        return
+        [
+            new ChromeRecipe("char_maint.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, window),
+            new ChromeRecipe("Skills_Window.ART", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All, skills),
+            new ChromeRecipe("Disciplines_Window.ART", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All, disciplines),
+            new ChromeRecipe("char_spells.art", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All, spells),
+        ];
     }
 }
 
@@ -223,6 +270,7 @@ public static class InterfaceChromeRenderer
 
     private static readonly Rgb Ink = new(20, 14, 8), BrassLight = new(214, 178, 96), Brass = new(160, 120, 52), BrassDark = new(96, 70, 30);
     private static readonly Rgb WoodLowDefault = new(58, 37, 20), WoodHighDefault = new(112, 76, 43), IronLow = new(44, 46, 50), IronHigh = new(96, 98, 104);
+    private static readonly Rgb SlateLow = new(20, 22, 26), SlateHigh = new(66, 68, 74);
     private static readonly Rgb PitFill = new(3, 3, 5), GridLine = new(48, 54, 64);
     private static readonly Rgb DarkFill = new(8, 8, 14), FaceHigh = new(82, 74, 38), FaceLow = new(34, 30, 14), White = new(255, 255, 255);
 
@@ -574,6 +622,7 @@ public static class InterfaceChromeRenderer
         ChromeMaterial.WoodDark => WoodAt(c, u, v).Times(0.62f),
         ChromeMaterial.Iron => Rgb.Lerp(IronLow, IronHigh, Math.Clamp(0.2f + 0.65f * Fbm(u * 0.22f, v * 0.22f, 7), 0, 1)),
         ChromeMaterial.Pit => PitFill,
+        ChromeMaterial.Slate => Rgb.Lerp(SlateLow, SlateHigh, Math.Clamp(0.15f + 0.75f * Fbm(u * 0.18f, v * 0.18f, 13), 0, 1)),
         ChromeMaterial.Dark => Rgb.Lerp(DarkFill, new Rgb(16, 16, 26), Fbm(u * 0.05f, v * 0.05f, 11)),
         ChromeMaterial.Cloth => ClothAt(u, v),
         ChromeMaterial.Parchment => ParchmentAt(u, v),

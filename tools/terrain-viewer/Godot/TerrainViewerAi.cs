@@ -107,6 +107,7 @@ public partial class TerrainViewerApp
         var mapNumber = CurrentAreaMap;
         var host = new AreaAiHost(session, scene, AreaEvents, AreaCombatWorldNow());
         _aiHost = host; _aiHostStamp = stamp; _aiHostArea = area; _aiPcOccupancy = null; _aiHostBuilds++;
+        host.ViolenceFilter = _gameSettings.ViolenceFilter; // ARC-UI-1737: the dying goal's art node reads it
         host.DoorEnds = DoorRunEnded;
         host.MissileEnds = MissileRunEnded;
         host.ProjectileEnds = ProjectileRunEnded;
@@ -242,7 +243,7 @@ public partial class TerrainViewerApp
     private string? ConversationPartnerEntity()
     {
         if (ConversationOpen && _conversationSpeaker is { } speaker) return AreaConversationState.EntityId(speaker.Row);
-        return BarterOpen && _barter is { } barter ? barter.Merchant.Entity : null;
+        return BarterOpen && _barter is { } barter ? barter.Merchant.Entity : ItemServiceOpen && _itemService is { } service ? service.Merchant.Entity : null;
     }
 
     /// <summary>ARC-WORLD-115: the companions of the shown map the AI host runs (ARC-WORLD-119: every one standing here, following,
@@ -401,7 +402,7 @@ public partial class TerrainViewerApp
             || _combatHost.Build(session, obj.Map, obj.Code).Combat is not { } combat) return false;
         var killed = session.Kill(session.Version, combat.Target);
         GD.Print($"ARC-WORLD-114 script-kill npc={obj.Code} disposition={killed.Disposition} failure={killed.Failure} events={killed.Outcome?.Events}");
-        if (killed.Outcome is { } outcome && outcome.Events.HasFlag(LifeEvents.Died)) _deathAnimations[(obj.Map, obj.Code)] = AreaFallenPoses.Animation(outcome.Death);
+        if (killed.Outcome is { } outcome && outcome.Events.HasFlag(LifeEvents.Died)) _deathAnimations[(obj.Map, obj.Code)] = DeathAnimationOf(outcome.Death);
         return killed.Disposition != GameSessionDisposition.Rejected;
     }
 
@@ -429,7 +430,7 @@ public partial class TerrainViewerApp
         LogObjectHits();
         LogItemHits();
         if (hit.Outcome is { } outcome && outcome.Events.HasFlag(LifeEvents.Died) && id != SessionSpellCaster.Hero)
-            _deathAnimations[(CurrentAreaMap, id)] = AreaFallenPoses.Animation(outcome.Death);
+            _deathAnimations[(CurrentAreaMap, id)] = DeathAnimationOf(outcome.Death);
         // A hero knocked down or out stops its walk and attack, as an NPC's hit does (its fall is not drawn yet).
         if (id == SessionSpellCaster.Hero && _areaSession.QueryHeroLife() is { Status.IsActive: false }) { if (!HeroOnlyHeld(_areaSession)) StopWorldRoute("HERO_DOWN"); CancelAreaAttack("the hero is down"); }
         var aftermath = hit.Applied && hit.Outcome is not null ? ScriptDamageAftermath(_areaSession, id, hit) : "";
@@ -824,6 +825,8 @@ public partial class TerrainViewerApp
                     // ARC-RENDER-1485: the gate's re-wield (or a pickup's CHECK_WIELD) changed what the NPC wears: its body shows the new weapon and shield (0x465020), so it is drawn again.
                     GD.Print($"ARC-RENDER-1485 ai-rewield npc={notice.Npc} shown={host.ShownWeapon(notice.Npc)}");
                     RewieldedNpcs(host).Add(notice.Npc);
+                    // ARC-MAGIC-1684: a line a moved item's wield or insert script printed goes to the message window.
+                    PostNpcPickupLines(notice);
                     redraw = true;
                     break;
                 case AreaAiNoticeKind.Skill:
@@ -918,6 +921,8 @@ public partial class TerrainViewerApp
         var life = hero ? owner.QueryHeroLife() : _combatHost?.Build(owner, notice.Target!).Combat is { } combat ? owner.QueryLife(combat.Target).View : null;
         _aiNotice = $"{AiName(notice.Npc)} attacks {(hero ? "the hero" : AiName(notice.Target!))}: "
             + AreaCombatHost.Describe(result, life?.Status.HitPoints, life?.Status.MaxHitPoints);
+        // ARC-COMBAT-1738 (0x4B4390 → 0x4B83E0): a hero whose weapon the strike took (dropped, destroyed or broken by a critical) wields the best weapon it still holds, before anything reads its equipment.
+        if (hero) HeroWeaponLostToStrike(result, EntityRow(notice.Npc), false);
         FloatCritterAttack(result, notice.Npc, hero ? HeroFloater : notice.Target!);
         // ARC-AI-1527 (0x4AEAB0): a follower of the PC an NPC's hit brought below a fifth of its hit points says its near-death line.
         FollowerAttackComments(result, notice.Npc, hero ? HeroFloater : notice.Target!);
@@ -931,7 +936,7 @@ public partial class TerrainViewerApp
         // A hero knocked down or out stops its walk and attack (its fall is not drawn yet).
         if (hero && owner.QueryHeroLife() is { Status.IsActive: false }) { if (!HeroOnlyHeld(owner)) StopWorldRoute("HERO_DOWN"); CancelAreaAttack("the hero is down"); }
         if (!hero && result.Recipient == DamageRecipient.Target && result.Life is { } dealt && dealt.Events.HasFlag(LifeEvents.Died))
-            _deathAnimations[(CurrentAreaMap, notice.Target!)] = AreaFallenPoses.Animation(dealt.Death);
+            _deathAnimations[(CurrentAreaMap, notice.Target!)] = DeathAnimationOf(dealt.Death);
         SyncAreaCombatBodies();
         SyncAreaInventory();
         RefreshAreaStatus();

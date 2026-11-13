@@ -74,11 +74,13 @@ public partial class TerrainViewerApp
             var launch = flight.Launch;
             // A projectile whose run is gone (dropped at the restore) would hang in the air: it is given up below like one whose rows are gone.
             var running = owner.QueryGoals().RunsOf(saved.Entity).Any(run => !run.Done);
-            var target = launch.Target is { } entity ? ProjectileRowOf(owner, entity) : null;
+            var target = launch.Target is { } entity ? ProjectileRowOf(owner, entity) ?? (owner.QueryTrapShot(flight.Shot) is not null ? _spellCastMap?.Row(entity) : null) : null;
             AreaObjectRecord? shooter = null, thrower = null;
             var resolved = running && target is not null && saved.Map.RuntimeMap == CurrentAreaMap
-                && (launch.Shooter is not { } s || (shooter = ProjectileRowOf(owner, s)) is not null)
+                && (launch.Shooter is not { } s || (shooter = ProjectileRowOf(owner, s)) is not null || owner.QueryTrapShot(flight.Shot) is not null)
                 && (launch.Thrower is not { } t || (thrower = ProjectileRowOf(owner, t)) is not null);
+            // ARC-TECHNOLOGY-1635: a trap's shot flies under the shooter object's row when the shown map has it, else under the stand-in (the cast ids are not entities of the inventory).
+            if (resolved && shooter is null && owner.QueryTrapShot(flight.Shot) is not null) shooter = _spellCastMap is { } cast && launch.Shooter is { } trapShooter ? cast.Row(trapShooter) ?? TrapShooterStandIn : TrapShooterStandIn;
             object? critter = resolved && launch.Critter && _combatHost?.Target(owner, target!.Key) is { Build.Combat: { } combat } npc ? new AttackGoal(npc, combat, null) : null;
             var obj = resolved && launch.Object ? ObjectTargets()?.Target(owner, target!.Key, AreaTrapped) : null;
             resolved &= (!launch.Critter || critter is not null) && (!launch.Object || obj is not null);
@@ -363,6 +365,8 @@ public partial class TerrainViewerApp
             (min, max) => owner.Roll("combat.StrayStrike", min, max).Roll?.Value ?? throw new InvalidOperationException("AREA_STRAY_ROLL_REFUSED"));
         projectile.State = crossed.Shot;
         if (!crossed.Ends) return ProjectileCrossResult.Flies;
+        // ARC-TECHNOLOGY-1635 (TT15): a native trap's shot strikes through the cast host and ends there (no boomerang, no thrown item, no NPC shooter).
+        if (owner.QueryTrapShot(projectile.Shot) is not null) return TrapShotEnd(projectile, crossed.Strike, crossed.Struck);
         // ARC-COMBAT-019: a returning boomerang leaving the tile it flies back to is back in the hero's hand.
         if (crossed.Strike == ProjectileStrikeKind.DestinationEnd && projectile.State.Returning)
         {
@@ -443,6 +447,10 @@ public partial class TerrainViewerApp
     // The attacker as the rules compare it (the hero has no map row; nothing on a tile is this object).
     private static readonly AreaObjectRecord HeroRow = new(new("hero", 0, AreaSourceKind.Mobile, null, 0, 0, "hero", 0), 0, 15, 0, "", "", "", "",
         AreaScope.Core, null, null, null, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true);
+
+    // ARC-TECHNOLOGY-1635: the attacker of a trap's shot whose shooter object has no row of the shown map (a wall of the data, or a shot restored from a save): a row of no tile and no critter, so the stray rule
+    // meets the hero and the companions as it meets them for any shooter that is no critter.
+    private static readonly AreaObjectRecord TrapShooterStandIn = HeroRow with { Key = new("trap-shooter", 0, AreaSourceKind.Mobile, null, 0, 0, "trap-shooter", 0), Type = 1 };
 
     /// <summary>The struck object takes the shot through the session: an NPC with combat values (<see cref="GameSessionOwner.LandShot"/>),
     /// a door, window, container, scenery or trap (<see cref="GameSessionOwner.LandShotOnObject"/>), a wall; a companion or an NPC
@@ -592,7 +600,7 @@ public partial class TerrainViewerApp
         if (result.Life is { } self)
         {
             _attackNotice = $"{AiName(shooter)}'s shot misfired: it takes {self.HitPointDamage} damage";
-            if (self.Events.HasFlag(LifeEvents.Died)) _deathAnimations[(CurrentAreaMap, shooter)] = AreaFallenPoses.Animation(self.Death);
+            if (self.Events.HasFlag(LifeEvents.Died)) _deathAnimations[(CurrentAreaMap, shooter)] = DeathAnimationOf(self.Death);
             SyncAreaCombatBodies();
             SyncAreaInventory();
         }

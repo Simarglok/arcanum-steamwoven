@@ -126,15 +126,15 @@ public partial class TerrainViewerApp
             GD.Print($"{task} generated {window} smoke FAIL the generated interface is on and the window shows the original's look");
             throw new InvalidOperationException($"{task} generated {window} smoke: the generated interface is on and the window shows the original's look");
         }
-        var look = area.Look;
         var textures = arts
-            .Select(number => look.Art.GetValueOrDefault(number) as HdInterfaceTexture ?? throw new InvalidOperationException($"{task} generated {window} smoke: art {number} is no interface texture"))
+            .Select(number => area.Look!.Art.GetValueOrDefault(number) as HdInterfaceTexture ?? throw new InvalidOperationException($"{task} generated {window} smoke: art {number} is no interface texture"))
             .ToArray();
-        return VerifyGeneratedTexturesAsync(task, window, arts, textures, () => area.DeviceScale(), frames, resize, capture);
+        return VerifyGeneratedTexturesAsync(task, window, textures, arts, area.DeviceScale, frames, resize, capture);
     }
 
-    // The same check for any window view: the frames (by art number) it draws and the window's device scale.
-    private async Task VerifyGeneratedTexturesAsync(string task, string window, IReadOnlyList<int> arts, HdInterfaceTexture[] textures, Func<double> device, Func<int, Task> frames, Func<Vector2I, Task> resize, Func<string, Task> capture, Vector2I? biggerSize = null)
+    // ARC-UI-1195: the same check for any window: its textures (one per art number, or every frame of an art when the numbers repeat) and the window's device scale.
+    private async Task VerifyGeneratedTexturesAsync(string task, string window, IReadOnlyList<HdInterfaceTexture> textures, IReadOnlyList<int> arts, Func<float> deviceScale,
+        Func<int, Task> frames, Func<Vector2I, Task> resize, Func<string, Task> capture, Vector2I? biggerTo = null)
     {
         void Require(bool ok, string why)
         {
@@ -142,8 +142,8 @@ public partial class TerrainViewerApp
             GD.Print($"{task} generated {window} smoke FAIL {why}");
             throw new InvalidOperationException($"{task} generated {window} smoke: {why}");
         }
-        Require(InterfaceHd.Generated, "the generated interface is on");
-        double Device() => device();
+        Require(InterfaceHd.Generated && textures.Count > 0 && textures.Count == arts.Count, "the generated interface is on and the window shows the original's look");
+        double Device() => deviceScale();
         async Task Painted(string at)
         {
             // Each draw asks for the frame at the window's current scale; wait for the worker and the swap (at most ~20 s).
@@ -163,8 +163,8 @@ public partial class TerrainViewerApp
         var size = DisplayServer.WindowGetSize();
         try
         {
-            var wanted = biggerSize ?? new Vector2I(1920, 1080);
-            var bigger = new Vector2I(Math.Max(size.X, wanted.X), Math.Max(size.Y, wanted.Y));
+            var target = biggerTo ?? new Vector2I(1920, 1080);
+            var bigger = new Vector2I(Math.Max(size.X, target.X), Math.Max(size.Y, target.Y));
             await resize(bigger);
             await frames(3);
             await Painted("at the bigger size");
@@ -176,7 +176,7 @@ public partial class TerrainViewerApp
         await frames(3);
         await Painted("back at the first size");
         await capture("back");
-        GD.Print($"{task} native generated {window} PASS frames={textures.Length} device-scale={Device():F3}");
+        GD.Print($"{task} native generated {window} PASS frames={textures.Count} device-scale={Device():F3}");
     }
 
     // ARC_AREA_BAR_CAPTURE=PREFIX also saves the whole viewport with the bars as PREFIX-hud-MODE.png (a local, ignored path).

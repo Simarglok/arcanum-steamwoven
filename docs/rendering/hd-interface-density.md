@@ -406,8 +406,8 @@ those of the player's `interface.mes` (the viewer's window ledgers carry them; e
 | --- | --- | --- | --- |
 | ARC-UI-148 | foundation and inventory | 221 pack, 223 paper doll | a window's own fractional scale, grid rule, grid lines; the drop, use and gamble boxes (224, 225, 342–348) are oval buttons with a coloured allowed or refused corner, kept as art |
 | ARC-UI-149 (issue #1194, ARC-UI-1194, [S4](#viewer-slice-s4-arc-ui-1194)) | loot, barter, steal | 234 loot, 235 barter and 825 follower barter, 349 loot doll, the three lenses 231–233; 337 barter doll and 341 doll cover are not built; the gamble boxes stay art | the same frame family as 148 with their own boxes |
-| ARC-UI-150 | character sheet | 22 main, 29 skills, 30 disciplines, 31 spells, tabs 34–36 and 568, `+`/`−` 257, 258 | stat labels baked in the art stay pictures (kept rectangles) |
-| ARC-UI-151 (issue #1196, ARC-UI-1196, [S5](#viewer-slice-s5-arc-ui-1196)) | logbook | 264 side, 260 book, 261 page art, the seven tabs 265–271, the page buttons 272 and 273; 263, 259 and 262 are not drawn by the logbook | a parchment page material; the lens 198 is shared and stays art |
+| ARC-UI-150 (issue #1195, ARC-UI-1195, [S5](#viewer-slice-s5-arc-ui-1195)) | character sheet | 22 main, 29 skills, 30 disciplines, 31 spells, tabs 34–36 and 568, the + and − buttons (23/24, 624/625, 647/648; 257/258 are `SP_Minus`/`SP_Plus`, which the sheet does not draw), the group and discipline buttons 302–313 | stat labels baked in the art stay pictures (kept rectangles); the schemes page 567 and the college tabs are not generated |
+| ARC-UI-151 (issue #1196, ARC-UI-1196, [S6](#viewer-slice-s6-arc-ui-1196)) | logbook | 264 side, 260 book, 261 page art, the seven tabs 265–271, the page buttons 272 and 273; 263, 259 and 262 are not drawn by the logbook | a parchment page material; the lens 198 is shared and stays art |
 | ARC-UI-152 | world and town map | 138 main, 140, 199 side pieces, 219, 220 town map frames | the map picture itself stays art |
 | ARC-UI-153 | schematic window | 365 base and its buttons and tabs | |
 | ARC-UI-154 | message and dialogue frames, Fate, Sleep | 354, 7, 8, 128, 200, 274, 288, 290, 291 (410 × 107 rows), 292, 298, 218 | |
@@ -477,9 +477,37 @@ S4 draws the loot, barter and steal windows (planned as ARC-UI-149, issue #1194)
   the generated wood is plainer than the painted one, the rivets and the ring are ours (the ring is three units wide, the original's is wider), and the follower's plates
   show a little of the old wood at their inner ends.
 
-## Viewer slice S5 (ARC-UI-1196)
+## Viewer slice S5 (ARC-UI-1195)
 
-S5 draws the logbook in the generated interface (planned as ARC-UI-151, issue #1196), at the window's own device scale. Positions, sizes, alpha tests and hit areas are the Legacy ones
+S5 draws the character sheet in the generated interface at the sheet's own device scale ([S3](#viewer-slice-s3-arc-ui-148)). Positions, sizes, alpha tests and hit areas are the Legacy
+ones (D9); only the drawing changes. The frames are the player's `interface.mes` arts, read from the installed game for this slice; the recipes hold only rectangles and colours of our own.
+
+- **Window.** `char_maint.art` (22, 800 × 400, wood): sunk pits for the name box, the info box (its divider line kept), the page area, the schemes tab's square and the eight stat boxes (a sunk
+  box with a rivet at each end, in place of the original's brass ovals; the curled corners of the name and info boxes are not drawn, as in S3). Kept pictures: the stat labels (ST, CN, ..)
+  baked into the art, the close ring (the portrait's cover), the alignment gauge, the health and fatigue discs, the three lamp sockets and the experience ruler.
+- **Pages.** `Skills_Window.ART` (29), `Disciplines_Window.ART` (30) and `char_spells.art` (31, 235 × 325) are a new `ChromeMaterial.Slate` (darker than the iron of the bars; the original's stone is
+  nearly black) with a rim on all sides. Kept: the four skill rows with their gauge machinery, the four group sockets, the discipline header bar and its degree column, the sixteen college sockets;
+  the spell icon squares are sunk pits.
+- **Buttons.** The generic button recipe (generated face and rim following the silhouette, the glyph kept) covers the stat + and − (23, 24), the skills page's (624, 625), the technology and spells
+  pages' (647, 648), the four page tabs (34–36, 568), the four skill groups (302–305) and the eight disciplines (306–313). The issue named 257 and 258 as the + and −; they are `SP_Minus` and `SP_Plus` (22 × 13),
+  which the sheet does not draw, so they carry a recipe for the day something does.
+- **Not generated.** The schemes page 567 (the auto-level tab, issue #1742, a separate task), the sixteen college tabs (their 24 × 24 art is the picture of a ball, the sockets under them are kept) and the spell
+  icons.
+- **Scale.** `AreaCharacterSheetArtView` claims every sheet texture's scale source at its draw (the window's own device scale: the frame scale times the canvas and viewport stretch; the in-game sheet,
+  the NPC's sheet and the creation editor share the textures, the one on screen claims them) and redraws, with the two page views, when a texture it claimed swaps in a painted frame.
+- **Checks.** `InterfaceChromeTests` (the recipes exist, every part lies inside its frame and no kept picture cuts into a generated box, the frames paint in bounds and deterministically at whole and
+  fractional scales, slate is darker than iron, every button recipe keeps its silhouette on each frame). The native smoke has the opt-in `ARC_AREA_WINDOW_ART=legacy|hd|generated` part (with `ARC_HD_PACK`,
+  `ARC_AREA_WINDOW_CAPTURE=PREFIX`) in the sheet smoke of the map stage: for the skills, technology and spells pages it checks that every frame of the window and the page draws generated chrome at
+  `round(size × paint scale)` pixels, resizes the window to 1600 × 1200 (the bars are hidden in the smoke, so the sheet stands at the screen's whole factor: 1, then 2), checks again and goes back. The check asks
+  each texture for its generated frame (which starts the paint), so it proves that the frames paint at the scale, not that a draw used them; the view redraws itself when its device scale changes.
+- **Local observation** (owner's Mac, 1280 × 800 window): the map stage's sheet smoke passes in the Generated, HD and Legacy runs for the skills, technology and spells pages (40, 52 and 28 frames); the
+  sheet stands at the whole factor 1 here (the bars are hidden in the smoke) and 2 in a 1600 × 1200 window, where the frames paint again. The composite (Legacy, HD pack, Generated for the three pages) is in the
+  task thread, not in git. Seen there: the generated wood and slate are plainer than the painted ones, the stat boxes are rectangles with rivets where the original has brass ovals, and the kept label
+  rectangles show a slightly different grain from the generated wood around them.
+
+## Viewer slice S6 (ARC-UI-1196)
+
+S6 draws the logbook in the generated interface (planned as ARC-UI-151, issue #1196), at the window's own device scale. Positions, sizes, alpha tests and hit areas are the Legacy ones
 (D9); only the drawing changes. The arts are the ones the logbook draws (ledger LB14: 264 `LogBooks_Side`, 260 `Book_Main`, 261 `Book_Quests`, tabs 265–271 `Tab_Note`, `Tab_Quest`,
 `Tab_Rep`, `Tab_BlessCurse`, `Tab_EgoInjure`, `Tab_BackGrnd`, `Tab_Keys`, page buttons 272 and 273 `PageTurn_L` and `PageTurn_R`); art 263 (the pack's `Book_Side`) and the page arts 259 and 262 are not called
 by the logbook, so they have no recipe.

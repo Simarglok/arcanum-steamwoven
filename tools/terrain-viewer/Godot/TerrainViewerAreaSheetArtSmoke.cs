@@ -1,3 +1,4 @@
+using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
@@ -89,12 +90,21 @@ public partial class TerrainViewerApp
                 using var shot = GetViewport().GetTexture().GetImage();
                 if (shot.SavePng(capture.Replace(".png", suffix + ".png")) != Error.Ok) throw new InvalidOperationException("ARC-UI-075 sheet art smoke: capture failed");
             }
+            // ARC-UI-1195: with ARC_AREA_WINDOW_ART the sheet's window and the page on show (their frames and buttons) are checked in the generated interface and captured.
+            async Task WindowArt(string page, IEnumerable<int> numbers)
+            {
+                if (!WindowArtSmokeRequested) return;
+                var found = art.TexturesForSelfTest(AreaCharacterSheetArtLayout.WindowArtNumbers.Concat(numbers));
+                await WindowArtSmokeAsync("sheet-" + page, () => found.Select(pair => pair.Texture).ToArray(), found.Select(pair => pair.Art).ToArray(), art.DeviceScale, () => art.ArtSet,
+                    new Vector2I(1600, 1200)); // the bars are hidden here, so the sheet stands at the whole factor of the screen: 2 from 1600 x 1200 (1 at 1280 x 800 and 1920 x 1080)
+            }
             var pages = art.Pages;
             Require(_sheetPanel.PagesReadyForSelfTest && pages.Visible && pages.ShownForSelfTest == AreaSheetTab.Skills, "the pages' art read and the sheet opens on the skills page");
             var entries = new List<AreaMessageEntry?>();
             void Heard(AreaMessageEntry? entry) => entries.Add(entry);
             _sheetPanel.HoverEntryRequested += Heard;
             await Capture("-skills");
+            await WindowArt("skills", AreaCharacterSheetArtLayout.SkillsPageArtNumbers);
             var (gx, gy) = AreaCharacterSheetPagesLayout.GroupTab(3);
             await Click(pages.PointForSelfTest(gx + 5, gy + 5));
             Require(pages.Group == 3, "the technological group tab");
@@ -122,6 +132,7 @@ public partial class TerrainViewerApp
             await Frame();
             Require(entries.Any(entry => entry is { Title.Length: > 0 }), "the pointer over the header writes its text");
             await Capture("-tech");
+            await WindowArt("tech", AreaCharacterSheetArtLayout.TechPageArtNumbers);
             var degree = session.QueryHeroTechnology()!.Value[2].Degree;
             var (tx2, ty2) = AreaCharacterSheetPagesLayout.DegreeSlot(degree);
             if (unspent == 0 && degree < AreaCharacterSheetPagesLayout.Degrees)
@@ -141,6 +152,7 @@ public partial class TerrainViewerApp
             Require(spells.Visible && spells.ViewForSelfTest is not null, "the spells page shows");
             var startCollege = spells.ViewForSelfTest!.College;
             await Capture("-spells");
+            await WindowArt("spells", AreaCharacterSheetArtLayout.SpellsPageArtNumbers);
             _sheetPanel.HoverEntryRequested += Heard;
             entries.Clear();
             var (cx, cy) = AreaCharacterSheetSpellsLayout.CollegeTab(9);
@@ -169,9 +181,56 @@ public partial class TerrainViewerApp
             var (bx, by) = AreaCharacterSheetSpellsLayout.CollegeTab(startCollege);
             await Click(spells.PointForSelfTest(bx + 5, by + 5));
             Require(spells.ViewForSelfTest!.College == startCollege, "the first college is shown again");
+            // ARC-UI-1742: the schemes tab shows the scheme page in the original's look (art 567, the hero's scheme named at the top, fifteen rows of names, the
+            // scroll bar): the pointer over a row lights it, the wheel and the arrows scroll the list, a release on a row writes that scheme into the hero (the original
+            // restores nothing: the smoke writes the first scheme back for the stages after it).
+            var (_, schX, schY, _) = AreaCharacterSheetArtLayout.Tab(AreaSheetTab.Schemes);
+            await Click(art.PointForSelfTest(schX + 5, schY + 5));
+            var schemes = art.Schemes;
+            Require(art.Tab == AreaSheetTab.Schemes && !spells.Visible && !pages.Visible, "the schemes tab");
+            Require(_sheetPanel.SchemesReadyForSelfTest && schemes.Visible && schemes.ViewForSelfTest is not null, "the scheme page shows in the original's look");
+            var schemePage = schemes.ViewForSelfTest!;
+            var startScheme = session.QueryHero()!.Advancement.AutoLevelScheme;
+            Require(schemePage.Scheme == startScheme && schemePage.Entries.Count > AreaSchemesPage.Rows && schemes.BarForSelfTest is { Maximum: > 0 } bar && bar.Value == 0
+                && schemePage.Entries.Zip(schemePage.Entries.Skip(1)).All(pair => pair.First.Number < pair.Second.Number), "the hero's scheme, an ordered list longer than the rows, a bar at its top");
+            await Capture("-schemes");
+            var (rx, ry, _, _) = AreaCharacterSheetSchemesLayout.Row(2);
+            GetViewport().PushInput(new InputEventMouseMotion { Position = schemes.PointForSelfTest(rx + 5, ry + 5), GlobalPosition = schemes.PointForSelfTest(rx + 5, ry + 5) });
+            await Frame();
+            Require(schemes.HoverRowForSelfTest == 2, "the pointer over a row lights it: " + schemes.HoverRowForSelfTest);
+            var wheelAt = schemes.PointForSelfTest(rx + 5, ry + 5);
+            // A wheel turn is a press and a release (Godot keeps the mouse grab on the pressed control until the button mask empties).
+            foreach (var pressed in new[] { true, false })
+                GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.WheelDown, Pressed = pressed, Position = wheelAt, GlobalPosition = wheelAt });
+            await Frame();
+            Require(schemes.ScrollForSelfTest == AreaSheetScrollBar.DefaultWheel, "the wheel scrolls three entries: " + schemes.ScrollForSelfTest);
+            var bar2 = schemes.BarForSelfTest!;
+            var (downX, downY) = bar2.DownArrow;
+            await Click(schemes.PointForSelfTest(downX + 3, downY + 3));
+            Require(schemes.ScrollForSelfTest == AreaSheetScrollBar.DefaultWheel + 1, "the down arrow scrolls one more: " + schemes.ScrollForSelfTest);
+            await Capture("-schemes-scrolled");
+            var rowEntry = AreaCharacterSheetSchemesLayout.EntryAt(schemePage, schemes.ScrollForSelfTest, 2)!;
+            var chosenRow = rowEntry.Number == startScheme ? 3 : 2;
+            var chosen = AreaCharacterSheetSchemesLayout.EntryAt(schemePage, schemes.ScrollForSelfTest, chosenRow)!;
+            var (cx2, cy2, _, _) = AreaCharacterSheetSchemesLayout.Row(chosenRow);
+            var schemeRevision = session.Version.Revision;
+            await Click(schemes.PointForSelfTest(cx2 + 5, cy2 + 5));
+            Require(session.QueryHero()!.Advancement.AutoLevelScheme == chosen.Number && session.Version.Revision == schemeRevision + 1,
+                "a release on a row writes its scheme into the hero: " + session.QueryHero()!.Advancement.AutoLevelScheme);
+            await Frame();
+            Require(schemes.ViewForSelfTest!.Scheme == chosen.Number && schemes.ViewForSelfTest.SchemeName == chosen.Name, "the page names the chosen scheme at the top");
+            Require(session.SetAutoLevelScheme(session.Version, SessionSchemeTarget.Hero, startScheme).Disposition == GameSessionDisposition.Changed, "the first scheme written back");
+            SyncAreaSheet();
+            await Frame();
+            Require(schemes.ViewForSelfTest!.Scheme == startScheme, "the page follows the hero's scheme again");
+            // A tab away and back keeps the scroll while the sheet stays open (the exe's list offset is reset only at an open).
+            var keptScroll = schemes.ScrollForSelfTest;
+            await Click(art.PointForSelfTest(tx + 5, ty + 5));
+            await Click(art.PointForSelfTest(schX + 5, schY + 5));
+            Require(schemes.ScrollForSelfTest == keptScroll, "the list keeps its place between tabs");
             var close = AreaCharacterSheetArtView.CloseRectangle;
             await Click(art.PointForSelfTest(close.X + 20, close.Y + 20));
-            Require(!SheetOpen && !session.HeroEditorOpen, "a release in the close rectangle closed the sheet and its editor");
+            Require(!SheetOpen && !session.HeroEditorOpen, $"a release in the close rectangle closed the sheet and its editor (sheet open {SheetOpen}, editor open {session.HeroEditorOpen}, tab {art.Tab})");
             // ARC-UI-088: the dialog's c-e opens the speaker's sheet in the original's mode 2: the same window over the NPC's values with no + or − button and no
             // editor snapshot; a release in the close rectangle closes it and the next C opens the hero's sheet with its buttons again.
             var npcName = "none (no speaker with a sheet)";
@@ -200,6 +259,14 @@ public partial class TerrainViewerApp
                     await Click(art.PointForSelfTest(nsx + 5, nsy + 5));
                     Require(art.Tab == AreaSheetTab.Spells && spells.Visible, "the spells tab of the NPC's sheet");
                     await Capture("-npc-spells");
+                    // ARC-UI-1742: the NPC sheet's scheme page names the NPC's own scheme and lists the schemes with no row button (mode 2): a press writes nothing.
+                    await Click(art.PointForSelfTest(schX + 5, schY + 5));
+                    Require(art.Tab == AreaSheetTab.Schemes && schemes.Visible && schemes.ReadOnly && schemes.ViewForSelfTest is { } npcPage && npcPage.Scheme == npc.AutoLevelScheme,
+                        "the NPC's scheme page: " + schemes.ViewForSelfTest?.Scheme + " of " + npc.AutoLevelScheme);
+                    var npcRevision = session.Version.Revision;
+                    await Click(schemes.PointForSelfTest(rx + 5, ry + 5));
+                    Require(session.Version.Revision == npcRevision && schemes.HoverRowForSelfTest == -1, "a press on a row of the NPC's list writes nothing");
+                    await Capture("-npc-schemes");
                     var closeNpc = AreaCharacterSheetArtView.CloseRectangle;
                     await Click(art.PointForSelfTest(closeNpc.X + 20, closeNpc.Y + 20));
                     Require(!SheetOpen && _sheetNpc is null && !_sheetPanel.ReadOnly, "a release in the close rectangle closed the NPC's sheet");

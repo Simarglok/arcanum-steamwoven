@@ -18,7 +18,7 @@ namespace Arcanum.World;
 /// diagnostic NPC facts, and the hero's or the diagnostic PC's facts); without a conversation host it has none. ARC-WORLD-096: a
 /// restock event runs through the viewer's restock host (<see cref="AreaRestockHost"/>); without one it waits a minute.
 /// </summary>
-public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, ISessionAiWorld, ISessionRestockWorld, ISessionBodyWorld, ISessionEncounterWorld, ISessionNpcStatsWorld
+public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, ISessionAiWorld, ISessionRestockWorld, ISessionBodyWorld, ISessionEncounterWorld, ISessionNewspaperWorld, ISessionNpcStatsWorld
 {
     private readonly Func<IAreaEventObjects?> _combat;
     private readonly Func<AreaConversationHost?> _talk;
@@ -34,11 +34,16 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
     /// runs (every NPC counts as gone and its sector as not loaded, so its tick schedules no next one).</param>
     /// <param name="round">ARC-WORLD-092: the turn-based round's world of the shown map, for the AI's subturn ends; null: none.</param>
     /// <param name="encounter">ARC-WORLD-1159: the viewer's encounter host; null or a null answer: no encounter roll.</param>
+    /// <param name="newspaper">ARC-UI-1739: the module's written texts (the newspaper file's headlines), which arm the Newspapers chain and draw the default issue; null or a null answer: no chain is armed.</param>
     /// <param name="restock">ARC-WORLD-096: the restock host of the pass's session; null or a null answer: a restock event waits.</param>
+    /// <param name="itemScripts">ARC-MAGIC-1684: the shown map's item script host, which an NPC's best-items wield runs its items' move scripts through; null or a null answer: such an item is not moved.</param>
     public AreaEventWorld(Func<IAreaEventObjects?> combat, Func<AreaConversationHost?> talk, Action<SessionScriptCall>? prepareCall = null,
         Func<bool>? lootShowsContainer = null, Func<ISessionAiWorld?>? ai = null, Func<ISessionCombatWorld?>? round = null,
-        Func<AreaRestockHost?>? restock = null, Func<AreaEncounterHost?>? encounter = null)
+        Func<AreaRestockHost?>? restock = null, Func<AreaEncounterHost?>? encounter = null, Func<Arcanum.Data.Written.WrittenTexts?>? newspaper = null,
+        Func<ISessionItemScriptHost?>? itemScripts = null)
     {
+        _itemScripts = itemScripts;
+        _newspaper = newspaper;
         _encounter = encounter;
         _restock = restock;
         _ai = ai;
@@ -48,6 +53,12 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
         _prepareCall = prepareCall;
         _lootShowsContainer = lootShowsContainer;
     }
+
+    // ---- ARC-UI-1739: the Newspapers event's texts, forwarded from the viewer's reading data ----
+
+    private readonly Func<Arcanum.Data.Written.WrittenTexts?>? _newspaper;
+    /// <summary>The written texts of the module; null without a host or while they load (no chain is armed).</summary>
+    public Arcanum.Data.Written.WrittenTexts? NewspaperTexts => _newspaper?.Invoke();
 
     // ---- ARC-WORLD-1159: the Random Encounters event's host, forwarded to the viewer's encounter host ----
 
@@ -78,6 +89,16 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
     public SessionGeneratedOnceFacts? GeneratedOnceFacts(SessionMapId map, string container) => Restock?.GeneratedOnceFacts(map, container);
     /// <summary>ARC-WORLD-103: an NPC's best-items wield after its regeneration reads its combat values from the area's combat fields.</summary>
     public SessionNpcWielder? RestockWielder(SessionMapId map, string npc) => Restock?.Wielder(map, npc, _combat()?.Critter(npc));
+
+    private readonly Func<ISessionItemScriptHost?>? _itemScripts;
+
+    /// <summary>
+    /// ARC-MAGIC-1684: what the item event scripts of an NPC's best-items wield need: the item script host, the NPC's life target and its stored stats (the combat host's, with what a spell wrote laid over them); null when the host has
+    /// no script host or does not know the NPC's combat values.
+    /// </summary>
+    public SessionNpcWieldScripts? NpcWieldScripts(SessionMapId map, string npc) =>
+        _itemScripts?.Invoke() is { } host && _combat() is { } objects && objects.Critter(npc)?.Target is { } target && objects.StoredStats(npc) is { Count: SessionCritterIndexedWrites.StatCount } stats
+            ? new(host, target, stats) : null;
 
     /// <summary>ARC-MAGIC-1561: the carried light of an NPC whose worn items the session recalculated (<see cref="AreaRestockHost.NpcLight"/>); null: the saved light stands (also while the restock host loads).</summary>
     public Arcanum.Data.Lighting.CarriedLightSize? NpcLight(SessionMapId map, string npc) => Restock?.NpcLight(map, npc, _combat());

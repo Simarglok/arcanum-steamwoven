@@ -122,6 +122,33 @@ public sealed class AreaAiSkillTests
         StringAssert.StartsWith(host.TraceOf(npc)!.Skill, "heal ");
     }
 
+    // ARC-SCRIPT-1732: the healer menu's facts of a speaker and its two starters (0x4AE570, 0x4B1AB0, 0x4C5EB0, 0x4350F0).
+    [TestMethod]
+    public void The_healer_facts_read_the_speakers_rank_skill_and_leaders_and_the_service_starts_the_skill_goal_on_the_hero()
+    {
+        var (session, host, npc, item) = Open(hero: true);
+        var facts = host.HealerFacts(npc) ?? throw new AssertFailedException("no facts");
+        Assert.IsTrue(facts.SkillAllowed, "a healing item in the pack and a critter that is neither undead nor mechanical (0x4AE570)");
+        Assert.AreEqual(0, facts.Rank, "no cast host: no spell book, rank 0");
+        Assert.IsTrue(facts.SkillLevel > 0 && facts.SkillTraining == 0, "the NPC's heal skill: level and training tier");
+        Assert.IsTrue(facts.NoPcLeader && !facts.LedByPc, "a free NPC has no PC leader");
+        Assert.IsNull(host.HealerFacts(AiSchedulerRules.Pc), "the hero is no healer here");
+        Assert.IsNull(host.HealerFacts(Entity(9)), "an object that is no NPC of the host");
+        Assert.IsFalse(Open(critterFlags: 0x4).Host.HealerFacts(npc)!.Value.SkillAllowed, "an undead healer may not use the skill (refusal 2)");
+
+        Assert.IsFalse(host.HealerCast(npc, 60, free: true), "no cast host: the spell cannot start");
+        Assert.IsFalse(host.HealerService(Entity(9)) || host.HealerService(AiSchedulerRules.Pc));
+        var started = session.Version;
+        Assert.IsTrue(host.HealerService(npc));
+        var goal = host.RunOf(npc)?.Bottom ?? throw new AssertFailedException($"no run: {host.TraceOf(npc)?.Perform}");
+        Assert.AreEqual((GoalType.UseSkill, AiSchedulerRules.Pc, AiPassChoice.HealSkill, item), (goal.Goal, goal.Target, goal.Skill, goal.Item), "goal 33 with the heal skill, the hero as the target and the NPC's tool");
+        Assert.AreEqual(started, session.Version, "the start changes no session state");
+        var now = 0L;
+        var heal = Run(host, npc, ref now).Single(n => n.Kind == AreaAiNoticeKind.Skill).Heal ?? throw new AssertFailedException(host.TraceOf(npc)?.Skill ?? "no heal");
+        Assert.AreEqual(GameSessionDisposition.Changed, heal.Disposition, $"{heal.Failure}");
+        Assert.IsNotNull(heal.Check, "the heal check ran on the hero");
+    }
+
     // Hurts the NPC to half its hit points (below the heal skill's 90 %, above the 30 % care line).
     private static int Hurt(GameSessionOwner session, AreaAiHost host, string npc)
     {

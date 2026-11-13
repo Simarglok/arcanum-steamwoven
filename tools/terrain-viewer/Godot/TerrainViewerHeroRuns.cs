@@ -94,6 +94,7 @@ public partial class TerrainViewerApp
         }
 
         public void HeroStunEnds() => app.HeroStunEnded();
+        public SessionGoalStepAnswer? StepHeroStun(GoalRun run) => app._aiHost?.StepHeroStun(run);
         public void HeroFalls(bool on) => app.HeroForcedDown(on);
         public bool HeroFellDown => app.HeroFellDownNow;
         public bool HeroStandsUp => app.HeroStandsUpNow;

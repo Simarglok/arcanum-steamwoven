@@ -12,7 +12,7 @@ namespace Arcanum.TerrainViewer;
 // walk checks the next tile before each step (0x427110: an unknown trap object spotted now is marked and the walk ends there); a step
 // onto a trap object sets it off (0x4305D0) and the walk ends on that tile. A fired native run's effect is the cast host's
 // (SessionSpellCaster.ApplyTrapEffect); without a cast host no trap is met. The spot trap roll (S10) is not made, so only the player's
-// detect-traps spell flag spots an unknown trap; the 30002 shot's missile (ARC-TECHNOLOGY-1619 applies the shot itself), the trap's floating line, its eye candy and the drawing of a spotted
+// detect-traps spell flag spots an unknown trap; the 30002 shot's missile (ARC-TECHNOLOGY-1619 applies the shot, ARC-TECHNOLOGY-1635 flies it: TerrainViewerTrapShots.cs), the trap's floating line, its eye candy and the drawing of a spotted
 // trap object are later slices.
 public partial class TerrainViewerApp
 {

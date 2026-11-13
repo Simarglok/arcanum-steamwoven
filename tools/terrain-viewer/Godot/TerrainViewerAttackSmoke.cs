@@ -117,6 +117,32 @@ public partial class TerrainViewerApp
             Require(_attack is null && _worldActor.State.Action != ActorDiagnosticAction.Attack, "the attack stops with the death");
             Require(session.QueryMapInventory(new(map.RuntimeMap))!.Holders.Single(h => h.Entity == target.Holder.Entity).Dead, "the corpse can be looted");
             Require(experience is null || session.QueryHeroExperience()!.Experience > experience, "the kill paid experience");
+            // ARC-COMBAT-1720: the auto switch host path (0x4B5580 → 0x4B83E0): a wear that broke the weapon asks the session for the best weapon against the struck NPC. The weapon is not really
+            // broken here (the pre-made hero holds one weapon), so the same weapon comes back: nothing with the setting off, the weapon with it on.
+            if (wielded is not null)
+            {
+                var wearStep = new SessionWearStep(SessionWearStepKind.AttackerWeapon, DamageRecipient.Attacker, Arcanum.Simulation.Equipment.EquipmentSlot.Weapon, wielded.Entity, 1, SessionWearSkip.None,
+                    new Arcanum.Session.ItemDurabilityResult(GameSessionDisposition.Changed, GameSessionFailure.None, null, Arcanum.Simulation.Items.ItemBreakStep.Broken, Arcanum.Simulation.Equipment.EquipmentSlot.Weapon, session.Version), null);
+                var brokeWear = new SessionAttackWearResult(GameSessionDisposition.Changed, GameSessionFailure.None, [wearStep], GameSessionFailure.None, session.Version);
+                var savedSettings = _gameSettings;
+                try
+                {
+                    Require(HeroWeaponWornOut(brokeWear, target.Row, false) is null, "auto switch off: nothing is wielded after a broken weapon");
+                    _gameSettings = _gameSettings with { AutoSwitchWeapons = true };
+                    Require(HeroWeaponWornOut(brokeWear, target.Row, false) == wielded.Entity, "auto switch on: the best weapon is wielded after a broken weapon");
+                    Require(session.QueryEquipment().Worn.Any(w => w.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon && w.Entity == wielded.Entity), "the hero wields it");
+                    // ARC-COMBAT-1738: the no-ammunition case (0x4B3170) and the struck hero's lost weapon (0x4B4390) reach the same re-wield.
+                    Require(HeroOutOfAmmunition(AttackRefusal.None, target.Row, false) is null, "a served attack calls no re-wield");
+                    Require(HeroOutOfAmmunition(AttackRefusal.OutOfAmmunition, target.Row, false) == wielded.Entity, "auto switch on: no ammunition wields the best weapon");
+                    var heroStruck = new SessionAttackResult(GameSessionDisposition.Changed, GameSessionFailure.None, null, DamageRecipient.Target, null, null, null, GameSessionFailure.None, session.Version)
+                        { Criticals = [new SessionCriticalStep(SessionCriticalStepKind.DropWeapon, DamageRecipient.Target, Arcanum.Simulation.Equipment.EquipmentSlot.Weapon, wielded.Entity, SessionCriticalStepOutcome.Dropped, null)] };
+                    Require(HeroWeaponLostToStrike(heroStruck, target.Row, false) == wielded.Entity, "auto switch on: a struck hero's dropped weapon wields the best weapon");
+                    _gameSettings = _gameSettings with { AutoSwitchWeapons = false };
+                    Require(HeroOutOfAmmunition(AttackRefusal.OutOfAmmunition, target.Row, false) is null && HeroWeaponLostToStrike(heroStruck, target.Row, false) is null, "auto switch off: the two cases change nothing");
+                }
+                finally { _gameSettings = savedSettings; }
+                GD.Print("ARC-COMBAT-1720 native-smoke auto-switch PASS weapon=" + wielded.Entity);
+            }
             RefreshAreaStatus();
             Require(GetSelfTestSnapshot().Hud.Contains("killed", StringComparison.Ordinal), "the status line names the kill");
             Require(_fallenBodies.ContainsKey(key), "the body is drawn fallen");
