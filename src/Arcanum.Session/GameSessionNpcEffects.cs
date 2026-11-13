@@ -25,6 +25,9 @@ public sealed record SessionNpcEffectsView(string Entity, IReadOnlyList<SessionE
     public int Count(int number) => Entries.Count(e => e.Number == number);
 }
 
+/// <summary>ARC-MAGIC-1644: one change of an NPC's effect list: an add of <see cref="AddCount"/> entries of a rule with a cause, or the removal of the first <see cref="RemoveCount"/> entries of a number (or of a cause).</summary>
+internal readonly record struct NpcEffectOp(SessionEffectDefinition? Add, EffectCause AddCause, int AddCount, int? RemoveNumber, int RemoveCount, EffectCause? RemoveCause);
+
 /// <summary>One NPC's list in the effect domain: the entries and the rule of each number in use.</summary>
 internal sealed class CritterEffectList
 {
@@ -184,7 +187,13 @@ public sealed partial class GameSessionOwner
     // One add or one removal run (the steps the hero's Commit takes), on a trial list: each step moves the damage by the change of the maxima, the life rules must admit
     // the facts after each, then the budgets; nothing is written before every check passed.
     private SessionEffectResult ChangeNpc(GameSessionVersion expected, SessionLifeTarget target, SessionEffectDefinition? add, EffectCause addCause, int addCount,
-        int? removeNumber, int removeCount, EffectCause? removeCause)
+        int? removeNumber, int removeCount, EffectCause? removeCause) =>
+        ChangeNpcOps(expected, target, [new(add, addCause, addCount, removeNumber, removeCount, removeCause)], dryRun: false, revise: true);
+
+    // ARC-MAGIC-1644: the runs of an item event script (the wield scripts of an NPC's worn items) change an NPC's list one action at a time; they apply as one sequence, in order, each
+    // removal meeting the list the earlier actions left. <paramref name="dryRun"/> checks everything and writes nothing (the move's prepare); <paramref name="revise"/> false leaves the
+    // revision to the move that applies it.
+    private SessionEffectResult ChangeNpcOps(GameSessionVersion expected, SessionLifeTarget target, IReadOnlyList<NpcEffectOp> ops, bool dryRun, bool revise)
     {
         if (target.IsHero || !NpcEffectEntity(target.Entity)) return RejectEffect(GameSessionFailure.InvalidLifeTarget);
         var entity = target.Entity!;
@@ -210,28 +219,44 @@ public sealed partial class GameSessionOwner
             }
             if (definitions.Values.Any(d => !EffectDomain.IsValid(d))) return RejectEffect(GameSessionFailure.InvalidEffect);
         }
-        if (add is not null && definitions.TryGetValue(add.Number, out var known) && !known.Changes.IsEmpty && !known.SameAs(add))
-            return RejectEffect(GameSessionFailure.EffectMismatch);
+        // A rule in use with other changes is a mismatch; an add names its rule from then on (the later actions of a sequence meet it).
+        foreach (var op in ops)
+        {
+            if (op.Add is not { } rule) continue;
+            if (definitions.TryGetValue(rule.Number, out var known) && !known.Changes.IsEmpty && !known.SameAs(rule)) return RejectEffect(GameSessionFailure.EffectMismatch);
+            definitions[rule.Number] = rule;
+        }
         if (!IsCurrent(expected)) return RejectEffect(GameSessionFailure.StaleVersion);
-        if (add is not null && addCount > SessionNpcEffectLimits.MaxEntries - entries.Count) return RejectEffect(GameSessionFailure.EffectCapacityExceeded);
 
         var steps = new List<EffectStep>();
-        if (add is not null)
-            steps.AddRange(Enumerable.Repeat(new EffectStep(new SessionEffect(add.Number, addCause), -1), addCount));
-        else
+        var working = new List<SessionEffect>(entries);
+        foreach (var op in ops)
         {
-            var shifted = 0;
-            for (var i = 0; i < entries.Count && steps.Count < removeCount; i++)
+            if (op.Add is { } add)
             {
-                if (removeNumber is { } k ? entries[i].Number != k : entries[i].Cause != removeCause) continue;
+                if (op.AddCount > SessionNpcEffectLimits.MaxEntries - working.Count) return RejectEffect(GameSessionFailure.EffectCapacityExceeded);
+                for (var n = 0; n < op.AddCount; n++)
+                {
+                    var added = new SessionEffect(add.Number, op.AddCause);
+                    steps.Add(new(added, -1));
+                    working.Add(added);
+                }
+                continue;
+            }
+            var shifted = 0;
+            var taken = new List<int>();
+            for (var i = 0; i < working.Count && taken.Count < op.RemoveCount; i++)
+            {
+                if (op.RemoveNumber is { } k ? working[i].Number != k : working[i].Cause != op.RemoveCause) continue;
                 steps.Add(new(null, i - shifted));
+                taken.Add(i);
                 shifted++;
             }
+            for (var n = taken.Count - 1; n >= 0; n--) working.RemoveAt(taken[n]);
         }
         if (steps.Count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, 0, null, null, Version);
         // A change adopts the loaded list: an add or a removal alike takes a place in the session's lists.
         if (!held && _effects.Critters.Count >= SessionNpcEffectLimits.MaxCritters) return RejectEffect(GameSessionFailure.EffectCapacityExceeded);
-        if (add is not null) definitions[add.Number] = add;
 
         var recorded = _life.Critters.TryGetValue(entity, out var life);
         if (!recorded) life = new(target.Loaded, null);
@@ -271,6 +296,7 @@ public sealed partial class GameSessionOwner
         if (timers.Length > 0 && (_events.Count > _events.Limits.MaxPending - timers.Length || _events.NextSequence > long.MaxValue - timers.Length ||
             now > long.MaxValue - SessionEventKinds.RestingDelayMs)) return RejectEffect(GameSessionFailure.EventBudgetExceeded);
         if (_revision == long.MaxValue) return RejectEffect(GameSessionFailure.RevisionExhausted);
+        if (dryRun) return new(GameSessionDisposition.Changed, GameSessionFailure.None, steps.Count, null, null, Version);
 
         var record = held ? list! : new CritterEffectList();
         record.Entries.Clear();
@@ -286,7 +312,7 @@ public sealed partial class GameSessionOwner
         foreach (var (kind, payload) in timers)
             if (_events.ScheduleAfter(kind, payload, SessionEventKinds.Delay(TimerOf(kind)), EventClocks(now)).Disposition != GameEventScheduleDisposition.Added)
                 throw new InvalidOperationException("Timer scheduling failed after admission.");
-        Revise();
+        if (revise) Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, steps.Count, lifeChanged ? next2 : null, null, new(_identity, _revision));
 
         static int Shift(int damage, long change) => (int)Math.Clamp(damage + change, 0, LifeLimits.MaxDamage);

@@ -147,7 +147,7 @@ public sealed partial class GameSessionOwner
     /// aptitude under their effect changes. Nothing is applied before <see cref="Commit"/>. The first run whose effects the session cannot
     /// apply sets <see cref="Failure"/>, and later runs are not made.
     /// </summary>
-    private sealed class ItemScriptRuns
+    internal sealed class ItemScriptRuns
     {
         private readonly GameSessionOwner _owner;
         private readonly ISessionItemScriptHost _host;
@@ -168,21 +168,43 @@ public sealed partial class GameSessionOwner
         private readonly Dictionary<int, SessionEffectDefinition> _definitions;
         private PreparedEffects? _prepared;
         private Dictionary<(string Entity, int Point), ScrSlot>? _planned;
+        // ARC-MAGIC-1644: the wearer when it is an NPC (the hero otherwise): its list, stats and aptitude are the runs' reads and its effect list their target. The actions on the NPC's
+        // list in order, as they apply.
+        private readonly NpcWearer? _npc;
+        private readonly List<NpcEffectOp> _npcOps = [];
 
-        internal ItemScriptRuns(GameSessionOwner owner, ISessionItemScriptHost host, int map, IReadOnlyDictionary<string, int> items)
+        internal ItemScriptRuns(GameSessionOwner owner, ISessionItemScriptHost host, int map, IReadOnlyDictionary<string, int> items, NpcWearer? npc = null)
         {
-            _owner = owner; _host = host; _map = map; _items = items;
-            _entries = [.. owner._effects.Entries];
-            _definitions = new(owner._effects.Definitions);
+            _owner = owner; _host = host; _map = map; _items = items; _npc = npc;
+            if (npc is null)
+            {
+                _entries = [.. owner._effects.Entries];
+                _definitions = new(owner._effects.Definitions);
+            }
+            else
+            {
+                var view = owner.QueryNpcEffects(npc.Target);
+                _entries = [.. view?.Entries ?? []];
+                _definitions = view is null ? [] : view.Definitions.ToDictionary(rule => rule.Number);
+            }
             _reads = new(owner, host, this);
         }
+
+        /// <summary>ARC-MAGIC-1644 (IE7, WE6): the runs are the rewield's: the condition "items are being rewielded" answers true (0x5E87E8).</summary>
+        internal bool Rewielding { get; init; }
+
+        /// <summary>Whether the wearer is the hero (an NPC wearer's runs meet the hero as another object, which the session holds no stats of).</summary>
+        internal bool WearsHero => _npc is null;
+
+        /// <summary>The wearer's entity: the hero's, or the NPC's.</summary>
+        private string Wearer => _npc?.Entity ?? SessionEventKinds.PlayerEntity;
 
         internal GameSessionFailure Failure { get; private set; }
         internal IReadOnlyList<SessionItemScriptRun> Runs => _runs.AsReadOnly();
         internal IReadOnlyList<SessionScriptMessage> Messages => _messages.AsReadOnly();
         /// <summary>Whether committing changes the session: a flag write, a script store cell that differs from the session's (ARC-DEV-152),
         /// a slot or an effect change, a deferred call to schedule or one to remove that is pending (ARC-MAGIC-041).</summary>
-        internal bool Changes => _writes.Count > 0 || _slots.Count > 0 || _steps.Count > 0 || _owner.ScriptCallsChange(_calls) || _reads.StoreChanges;
+        internal bool Changes => _writes.Count > 0 || _slots.Count > 0 || _steps.Count > 0 || _npcOps.Count > 0 || _owner.ScriptCallsChange(_calls) || _reads.StoreChanges;
 
         internal ScrRunResult? Run(int point, string attachee, string triggerer, string? extra)
         {
@@ -220,7 +242,7 @@ public sealed partial class GameSessionOwner
             // read the changed aptitude in the original; the run read the aptitude before the change. A stat read is the same.
             if (aptitude is { } before && Aptitude() != before) return GameSessionFailure.ItemScriptUnsupported;
             foreach (var (stat, value) in statReads)
-                if (HeroStat(stat) != value) return GameSessionFailure.ItemScriptUnsupported;
+                if (WearerStat(stat) != value) return GameSessionFailure.ItemScriptUnsupported;
             foreach (var write in effects.GlobalFlags)
             {
                 _writes.Add(write);
@@ -257,7 +279,8 @@ public sealed partial class GameSessionOwner
         // not the session's.
         private GameSessionFailure Plan(ScrEffectRequest change)
         {
-            if (change.Object.Code != SessionEventKinds.PlayerEntity || change.Object.Map != _map) return GameSessionFailure.ItemScriptUnsupported;
+            if (change.Object.Code != Wearer || change.Object.Map != _map) return GameSessionFailure.ItemScriptUnsupported;
+            if (_npc is not null) return PlanNpc(change);
             var number = change.Effect;
             SessionEffectDefinition? definition = null;
             if (change.Change == ScrEffectChange.Add)
@@ -289,17 +312,45 @@ public sealed partial class GameSessionOwner
             return GameSessionFailure.None;
         }
 
-        // The hero's magick/tech aptitude under the effect list the runs left.
-        private int Aptitude() => _steps.Count == 0 ? _owner.HeroAptitude() : _owner.TrialAptitude(_entries, _definitions);
+        // ARC-MAGIC-1644: one effect action on the NPC wearer, checked as its list admits it (0x4E9F70, 0x4EA100: the item cause, the number in use with the same rule, the capacity; the NPC's list has no innate guard); the life rules'
+        // checks (the maxima, the budgets) are the commit's dry run (<see cref="Prepare"/>).
+        private GameSessionFailure PlanNpc(ScrEffectRequest change)
+        {
+            var number = change.Effect;
+            if (change.Change != ScrEffectChange.Add)
+            {
+                var index = _entries.FindIndex(entry => entry.Number == number);
+                if (index < 0) return GameSessionFailure.None;
+                _entries.RemoveAt(index);
+                _npcOps.Add(new(null, default, 0, number, 1, null));
+                return GameSessionFailure.None;
+            }
+            var definition = _host.EffectDefinition(number);
+            _owner.ThrowIfDisposed();
+            if (definition is null) return GameSessionFailure.ItemScriptUnsupported;
+            if (!EffectDomain.IsValid(definition) || definition.Number != number || SessionItemScripts.Cause(change.Cause) is not { } cause || !EffectDomain.OwnCause(cause))
+                return GameSessionFailure.InvalidEffect;
+            if (_definitions.TryGetValue(number, out var known) && !known.Changes.IsEmpty && !known.SameAs(definition)) return GameSessionFailure.EffectMismatch;
+            if (_entries.Count >= SessionNpcEffectLimits.MaxEntries) return GameSessionFailure.EffectCapacityExceeded;
+            _definitions[number] = definition;
+            _entries.Add(new SessionEffect(number, cause));
+            _npcOps.Add(new(definition, cause, 1, null, 0, null));
+            return GameSessionFailure.None;
+        }
+
+        // The wearer's magick/tech aptitude under the effect list the runs left.
+        private int Aptitude() => _npc is { } npc ? _owner.NpcScriptAptitude(npc, _entries, _definitions) ?? 0
+            : _steps.Count == 0 ? _owner.HeroAptitude() : _owner.TrialAptitude(_entries, _definitions);
 
         /// <summary>
         /// ARC-DEV-366 (GS1, GS3): the stat <paramref name="stat"/> of an object as get stat reads it (0x4B0490): the hero's, under the effect
         /// list the move's earlier runs left; null for any other object and for a stat the session does not hold (GS3), which refuses the run.
         /// </summary>
         internal int? Stat(ScrObjectRef obj, int stat) =>
-            obj.Map != _map || obj.Code != SessionEventKinds.PlayerEntity ? null : HeroStat(stat);
+            obj.Map != _map || obj.Code != Wearer ? null : WearerStat(stat);
 
-        private int? HeroStat(int stat) => _steps.Count == 0 ? _owner.QueryHeroScriptStat(stat) : _owner.TrialScriptStat(stat, _entries, _definitions);
+        private int? WearerStat(int stat) => _npc is { } npc ? _owner.NpcScriptStat(npc, stat, _entries, _definitions)
+            : _steps.Count == 0 ? _owner.QueryHeroScriptStat(stat) : _owner.TrialScriptStat(stat, _entries, _definitions);
 
         /// <summary>WE2: an item of the move and its owner's power ratio (0x461540): the hero's aptitude for the PC, 100 for an owner that is
         /// one of the move's items (not a critter); null for anything else.</summary>
@@ -308,7 +359,8 @@ public sealed partial class GameSessionOwner
             // A complexity beyond the wear rules' bound is not one the rules compute (none installed: items are within ±100).
             if (item.Map != _map || !_items.TryGetValue(item.Code, out var complexity) || owner.Map != _map ||
                 complexity is < -EquipmentLimits.MaxMagnitude or > EquipmentLimits.MaxMagnitude) return null;
-            if (owner.Code == SessionEventKinds.PlayerEntity) return _owner._hero is null ? null : EquipmentRules.EffectivePowerRatio(complexity, Aptitude());
+            if (_npc is not null && owner.Code == _npc.Entity) return _owner.NpcScriptAptitude(_npc, _entries, _definitions) is { } npcAptitude ? EquipmentRules.EffectivePowerRatio(complexity, npcAptitude) : null;
+            if (owner.Code == SessionEventKinds.PlayerEntity && _npc is null) return _owner._hero is null ? null : EquipmentRules.EffectivePowerRatio(complexity, Aptitude());
             return _items.ContainsKey(owner.Code) ? 100 : null;
         }
 
@@ -349,6 +401,9 @@ public sealed partial class GameSessionOwner
                 return;
             }
             if (_steps.Count > 0) Failure = _owner.PrepareEffects([.. _steps], _definitions, 0, out _prepared);
+            // ARC-MAGIC-1644: an NPC wearer's actions are checked as one sequence on its list (nothing written).
+            if (Failure == GameSessionFailure.None && _npc is { } npc && _npcOps.Count > 0)
+                Failure = _owner.ChangeNpcOps(_owner.Version, npc.Target, _npcOps, dryRun: true, revise: false).Failure;
             if (Failure == GameSessionFailure.None && _calls.Count > 0) Failure = _owner.CheckScriptCalls(_calls);
         }
 
@@ -367,6 +422,8 @@ public sealed partial class GameSessionOwner
             _reads.CommitStores();
             foreach (var (key, slot) in _planned ?? throw new InvalidOperationException("ITEM_SCRIPT_COMMIT_UNPREPARED")) _owner._inventory.ScriptSlots[key] = slot;
             if (_prepared is not null) _owner.ApplyEffects(_prepared);
+            if (_npc is { } npc && _npcOps.Count > 0 && _owner.ChangeNpcOps(_owner.Version, npc.Target, _npcOps, dryRun: false, revise: false).Failure != GameSessionFailure.None)
+                throw new InvalidOperationException("ITEM_SCRIPT_NPC_EFFECTS_COMMIT");
             if (_calls.Count > 0) _owner.ApplyScriptCalls(_calls);
         }
     }
@@ -479,8 +536,8 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-SCRIPT-013: the item script host with global flags read from the session; an unknown flag answers false and is recorded, and
     /// the session then refuses the move. ARC-SCRIPT-042: slots come from the move's earlier runs, then from the session's kept slots, then
-    /// from the host; the identified test is the host's, the power ratio the session's, and the items are never being rewielded (the
-    /// session has no rewield yet).
+    /// from the host; the identified test is the host's, the power ratio the session's, and the items are being rewielded only
+    /// in the runs of an NPC's rewield (ARC-MAGIC-1644).
     /// </summary>
     private sealed class SessionFlagReads(GameSessionOwner session, ISessionItemScriptHost host, ItemScriptRuns runs) : IScrHost, IScrItemQueries, IScrStoreQueries, IScrStatQueries
     {
@@ -569,7 +626,7 @@ public sealed partial class GameSessionOwner
             return ratio;
         }
 
-        public bool ItemsBeingRewielded() => false;
+        public bool ItemsBeingRewielded() => runs.Rewielding;
 
         /// <summary>The stats (number, value as the host answered) the current run read through get stat, in order.</summary>
         internal List<(int Stat, int? Value)> StatReads { get; } = [];
@@ -584,6 +641,6 @@ public sealed partial class GameSessionOwner
         }
 
         /// <summary>GS2: the dumb test's background rule, asked only for the hero (the one object <see cref="EffectiveStat"/> answers for).</summary>
-        public bool IsDumbByBackground(ScrObjectRef obj) => obj.Code == SessionEventKinds.PlayerEntity && session.QueryHeroDumbBackground();
+        public bool IsDumbByBackground(ScrObjectRef obj) => obj.Code == SessionEventKinds.PlayerEntity && runs.WearsHero && session.QueryHeroDumbBackground();
     }
 }

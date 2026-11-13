@@ -164,6 +164,24 @@ public sealed class FollowerRulesTests
         Assert.IsNull(FollowerRules.TauntKindOf(hit with { Struck = false }));
     }
 
+    // ARC-AI-1639 (VB4-5): record flag 0x8 is written only by the critical-miss turn (0x4B6410): the hero's self-hit is the stray taunt (kind 1).
+    [TestMethod]
+    public void A_critical_miss_self_hit_asks_the_stray_taunt()
+    {
+        Assert.AreEqual(TauntKind.Stray, FollowerRules.TauntKindOf(FollowerRules.HeroAttackTauntFacts(true, AttackOutcome.CriticalMiss, struckInPcParty: false, aimed: true, selfHitReachesTaunt: true)));
+        // The PC-leader test answers nothing for a PC, so even a struck object the viewer reads as a party member is outside the party: the self-hit does not depend on it.
+        Assert.AreEqual(TauntKind.Stray, FollowerRules.TauntKindOf(FollowerRules.HeroAttackTauntFacts(true, AttackOutcome.CriticalMiss, struckInPcParty: true, aimed: true, selfHitReachesTaunt: true)));
+        // An ammunition shot or a held throw does not call the taunt at the attack's end, and the setting still gates it.
+        Assert.IsNull(FollowerRules.TauntKindOf(FollowerRules.HeroAttackTauntFacts(true, AttackOutcome.CriticalMiss, false, true, selfHitReachesTaunt: false)));
+        Assert.IsNull(FollowerRules.TauntKindOf(FollowerRules.HeroAttackTauntFacts(false, AttackOutcome.CriticalMiss, false, true, selfHitReachesTaunt: true)));
+        // Nothing else changes: a plain miss says nothing, a critical hit on the aimed object is kind 0, a hit on a stray object has no flag 0x8.
+        Assert.IsNull(FollowerRules.TauntKindOf(FollowerRules.HeroAttackTauntFacts(true, AttackOutcome.Miss, false, true, true)));
+        Assert.AreEqual(TauntKind.Critical, FollowerRules.TauntKindOf(FollowerRules.HeroAttackTauntFacts(true, AttackOutcome.CriticalHit, false, true, true)));
+        Assert.IsNull(FollowerRules.TauntKindOf(FollowerRules.HeroAttackTauntFacts(true, AttackOutcome.CriticalHit, false, aimed: false, true)));
+        Assert.IsNull(FollowerRules.TauntKindOf(FollowerRules.HeroAttackTauntFacts(true, AttackOutcome.Hit, false, true, true)));
+        Assert.IsNull(FollowerRules.TauntKindOf(FollowerRules.HeroAttackTauntFacts(true, AttackOutcome.CriticalHit, struckInPcParty: true, aimed: true, true)));
+    }
+
     [TestMethod]
     public void The_taunt_rolls_to_speak_then_draws_an_active_follower()
     {

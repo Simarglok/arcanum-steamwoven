@@ -23,6 +23,12 @@ public sealed partial class SessionSpellCaster
     public Func<int, SessionEffectDefinition?>? EffectDefinitions { get; set; }
 
     /// <summary>
+    /// ARC-MAGIC-1644: the host that runs the item event scripts of an NPC's worn items (<see cref="GameSessionOwner"/>'s item script runs: the script files, the items' attachments, the effect rules) when a TraitIdx write of magick or
+    /// tech points runs the rewield (0x465530, ledger RM3c); null answers none (the host's call). Without one, or when it answers null, a component for an NPC wearing an item with a wield script (24 or 25) is not ready.
+    /// </summary>
+    public Func<ISessionItemScriptHost?>? ItemScripts { get; set; }
+
+    /// <summary>
     /// MG48: the cached target type is also written by a component's re-aim (0x453D40: the type of the parent for the self bit, of the source for the source bit; the last one written wins) and by the
     /// source swap after the targets (0x45148C: the type of the replaced source). A bit whose object is absent writes nothing.
     /// </summary>

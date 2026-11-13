@@ -55,8 +55,7 @@ public enum TauntKind
 /// <summary>
 /// The end of one resolved attack as the combat taunt reads it: the "combat taunts" setting (single player), whether the attacker
 /// is the PC, whether an object was struck and is in the PC's own party (its PC leader is the attacker), the hit (attack-record flag
-/// 0x2), the critical (0x4), whether the struck object is the aimed one, and record flag 0x8 (its writer is the ranged-combat
-/// slice's).
+/// 0x2), the critical (0x4), whether the struck object is the aimed one, and record flag 0x8 (written only by the critical-miss turn 0x4B6410, ARC-AI-1639).
 /// </summary>
 public sealed record TauntFacts
 {

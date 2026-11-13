@@ -708,7 +708,7 @@ public sealed partial class GameSessionOwner
             ArmorClass = AttackRules.ArmorClass(0, equipment.ArmorClassAdjustment, snapshot.GetEffective(CharacterStat.AcAdjustment), value => value,
                 _rules.Combat),
             // ARC-MAGIC-027: the hero's durable effects' resistance changes (the innate entries' are not modelled).
-            Resistances = CombatantRules.Resistances(DamageResistances.None, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), false,
+            Resistances = CombatantRules.Resistances(HeroStoredResistances().Damage, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), false,
                 EffectDomain.Resistances(_effects.Entries, _effects.Definitions)),
             Conditions = CombatantRules.Conditions(status, state, facts.Traits, CombatantFlags.None),
             LightEmission = equipment.Light,
