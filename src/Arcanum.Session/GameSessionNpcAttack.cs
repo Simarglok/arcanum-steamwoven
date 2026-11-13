@@ -161,7 +161,7 @@ public sealed partial class GameSessionOwner
             if (!IsCurrent(expected)) return Refused(GameSessionFailure.StaleVersion);
             if (_revision == long.MaxValue) return Refused(GameSessionFailure.RevisionExhausted);
             // ARC-COMBAT-1717: the weapon thrown at a location flies unchecked to it, as a generic item does.
-            if (request.Flight) return ThrowNpcGeneric(expected, request);
+            if (request.Flight && ShotsInFlight <= MaxShotsInFlight - 1) return ThrowNpcGeneric(expected, request);
             var failure = LandNpcItem(request.Item, request.Target);
             return failure == GameSessionFailure.None ? new(GameSessionDisposition.Changed, GameSessionFailure.None, null, request.Target, Version)
                 : Refused(failure);
@@ -470,11 +470,11 @@ public sealed partial class GameSessionOwner
         var struck = recipient == DamageRecipient.Target ? target : attacker;
         // ARC-DEV-261 (GT198–GT199): the victim's taking-damage script comes first in the damage apply; a veto ends the whole step.
         if (attack.TakingDamage is { } asks && !asks(recipient))
-            return new(resolution.Fate != FateUse.None || thrown || spentNow ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, resolution, recipient, null, null, null, GameSessionFailure.None, Version) { Vetoed = true, Shots = flying, Ammunition = spentAmmo };
+            return new(resolution.Fate != FateUse.None || thrown || spentNow ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, resolution, recipient, null, null, null, GameSessionFailure.None, Version) { Vetoed = true, Shots = flying, Ammunition = spentAmmo, Scatter = scatter };
         // ARC-DEV-312: the attacker is the killer of a target it kills (a critical self-hit has none).
         var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? targetLife : attacker.Target, damage, killer: recipient == DamageRecipient.Target ? attacker.Entity : null);
         if (applied.Disposition == GameSessionDisposition.Rejected)
-            return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, null, null, null, applied.Failure, Version);
+            return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, null, null, null, applied.Failure, Version) { Shots = flying, Ammunition = spentAmmo, Scatter = scatter };
         var outcome = applied.Outcome!;
         SessionExperienceAward? killAward = null;
         var stepFailure = GameSessionFailure.None;
@@ -531,6 +531,7 @@ public sealed partial class GameSessionOwner
             Criticals = criticals,
             Ammunition = spentAmmo,
             Shots = flying,
+            Scatter = scatter,
             ItemSpells = itemSpells,
         };
     }

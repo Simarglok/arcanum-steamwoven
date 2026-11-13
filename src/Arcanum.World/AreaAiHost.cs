@@ -2973,6 +2973,15 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Trace(id).Throw = $"throw {item} at {tile.X},{tile.Y} struck={struck?.Who ?? "-"} {result.Disposition} {result.Failure} {attack?.Resolution?.Outcome}"
             + $" landed={(result.Landed is { } at ? $"{at.X},{at.Y}" : "-")}";
         _notices.Add(new(AreaAiNoticeKind.Throw, id, struck?.Who) { Item = item, Throw = result, Result = attack });
+        // The attack event on the struck critter comes first (the projectile's end alerts it, PF8), before a flight's strike or the at-once fallback's pass.
+        var attackedVictim = struck?.Who is { } hurt && attack is { Disposition: not GameSessionDisposition.Rejected, Resolution.Refusal: AttackRefusal.None } ? hurt : null;
+        if (attackedVictim is { } victim)
+        {
+            AttackEvent(id, victim);
+            // ARC-DEV-292: the thrown item's hit on the struck critter is a damage step on it (the session applied it above).
+            HitEffect(victim, attack);
+            if (VictimReached(attack)) Struck(victim);
+        }
         // ARC-DEV-258: a thrown generic item (a grenade) flies as a projectile; without a viewer to fly it, it lands on the location at once.
         foreach (var shot in result.Shots)
         {
@@ -2988,18 +2997,13 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                 {
                     // ARC-COMBAT-1717 (PF1: no art, the hit resolves at once): a thrown weapon decided a hit strikes where the flight would have met it, then the item lands there.
                     if (_session.QueryNpcShot(shot) is { Hit: true } decided) LandShot(id, shot, decided.Target == SessionNpcShotFacts.HeroTarget ? Pc : decided.Target);
+                    // A decided miss that resolves at once gives the victim its miss-path pass, as an unflown throw's did (ARC-DEV-292).
+                    else if (attackedVictim is { } missed && _session.QueryNpcShot(shot) is not null) Struck(missed);
                     if (_session.LandThrownItem(_session.Version, shot, destination).Disposition == GameSessionDisposition.Rejected) { _session.EndShot(shot); outcome = "given up"; }
                     else outcome = "lands at once";
                 }
             }
             Trace(id).Throw += $" {outcome} shot={shot.Id}";
-        }
-        if (struck?.Who is { } victim && attack is { Disposition: not GameSessionDisposition.Rejected, Resolution.Refusal: AttackRefusal.None })
-        {
-            AttackEvent(id, victim);
-            // ARC-DEV-292: the thrown item's hit on the struck critter is a damage step on it (the session applied it above).
-            HitEffect(victim, attack);
-            if (VictimReached(attack)) Struck(victim);
         }
         return result.Disposition != GameSessionDisposition.Rejected;
     }

@@ -268,6 +268,8 @@ public partial class TerrainViewerApp
         // ARC-COMBAT-1717: a thrown weapon carries the check decided at the throw; the hit's target is the struck critter (the hero, or an NPC of the shown map).
         var decided = owner.QueryNpcShot(shot);
         var weapon = decided is not null;
+        // An unchecked flight of a weapon (a throw at a location) is no size arc either: its parent item is a weapon (PF11).
+        var isWeapon = weapon || map.TryGetRow(thrown.Item, out var parent) && parent.Type == 5;
         var hit = decided is { Hit: true };
         var aimedId = hit ? decided!.Value.Target == SessionNpcShotFacts.HeroTarget ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : decided.Value.Target : null;
         var aimed = row;
@@ -278,7 +280,7 @@ public partial class TerrainViewerApp
         var projectile = new AreaProjectile
         {
             Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = aimed, Thrower = row, Shooter = weapon ? row : null, Destination = destination, Art = art,
-            Flight = new(from, from, [(0, 0)], 1, from, 0, 0, 0), State = new(hit, !hit, thrown.Range), Thrown = thrown, Targetless = !hit, SizeArc = !weapon,
+            Flight = new(from, from, [(0, 0)], 1, from, 0, 0, 0), State = new(hit, !hit, thrown.Range), Thrown = thrown, Targetless = !hit, SizeArc = !isWeapon,
             Launched = new(aimedId ?? thrower, false, false, weapon ? thrower : null, thrower),
         };
         // A weapon's refused launch leaves its shot to the AI host (the hit strikes at once, the item lands); a generic item's ends it (the item stays on the thrower's cell).
