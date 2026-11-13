@@ -1,6 +1,7 @@
 file,member,state,class
 src/Arcanum.Data/Area/AreaMapPlans.cs,CatalogueNumbers,pending,
 src/Arcanum.Data/Audio/MainMenuSound.cs,Choose,pending,
+src/Arcanum.Data/Characters/AutoLevelTables.cs,NamedSchemes,exempt,host
 src/Arcanum.Data/Characters/BackgroundTable.cs,Block,pending,
 src/Arcanum.Data/Characters/InventorySourceBuyRules.cs,LootLineCoins,pending,
 src/Arcanum.Data/Lighting/ObjectLights.cs,IsDayHour,pending,
@@ -514,6 +515,7 @@ src/Arcanum.World/AreaBarter.cs,Open,pending,
 src/Arcanum.World/AreaBeds.cs,IsBedArt,exempt,reference
 src/Arcanum.World/AreaBeds.cs,OccupiedFrame,exempt,host
 src/Arcanum.World/AreaCharacterSheetTexts.cs,DerivedName,pending,
+src/Arcanum.World/AreaCharacterSheetTexts.cs,SchemeNumbers,exempt,host
 src/Arcanum.World/AreaCombat.cs,NpcHolder,pending,
 src/Arcanum.World/AreaCombatRound.cs,Step,pending,
 src/Arcanum.World/AreaCompanionOrders.cs,Issue,pending,
@@ -763,6 +765,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaQuickSave.cs,RouteQuickSaveOverWindo
 tools/terrain-viewer/Godot/TerrainViewerAreaReading.cs,ItemUseScript,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaReading.cs,ReadItem,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaSchematicArt.cs,SchematicSlotEntry,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaSheet.cs,PressScheme,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaSheetArt.cs,SheetHoverEntry,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaSleep.cs,ApplyBedUse,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaSleep.cs,BedScriptAnswer,exempt,host

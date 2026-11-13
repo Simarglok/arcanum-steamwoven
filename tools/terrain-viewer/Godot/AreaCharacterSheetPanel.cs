@@ -51,7 +51,10 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     /// <summary>ARC-UI-076: + or − of a tech discipline (0..7).</summary>
     public event Action<int>? TechSpendRequested;
     public event Action<int>? TechRefundRequested;
-    private bool _pagesReady, _spellsReady;
+    private bool _pagesReady, _spellsReady, _schemesReady;
+    private AreaSchemesPageView? _schemesView;
+    /// <summary>ARC-UI-1742: a row of the scheme page released over itself (the scheme's number).</summary>
+    public event Action<int>? SchemeChosen;
     /// <summary>ARC-UI-077: the text bar entry of a spell 0..79 for the spells page's hover (the app builds it).</summary>
     public Func<int, AreaMessageEntry?>? SpellEntry { get => _artView?.Spells.SpellEntry; set { if (_artView is not null) _artView.Spells.SpellEntry = value; } }
     /// <summary>ARC-UI-075: an interface sound of the art look (3000 / 3001).</summary>
@@ -73,11 +76,12 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     public bool ReadOnly
     {
         get => _artView?.ReadOnly ?? false;
-        set { if (_artView is not null) _artView.ReadOnly = _artView.Pages.ReadOnly = _artView.Spells.ReadOnly = value; }
+        set { if (_artView is not null) _artView.ReadOnly = _artView.Pages.ReadOnly = _artView.Spells.ReadOnly = _artView.Schemes.ReadOnly = value; }
     }
     /// <summary>ARC-UI-075: whether the main page shows in the original's look (its art read). ARC-UI-147: the creation editor too.</summary>
     internal bool PagesReadyForSelfTest => _pagesReady;
     internal bool SpellsReadyForSelfTest => _spellsReady;
+    internal bool SchemesReadyForSelfTest => _schemesReady;
     public bool ArtMode => _artView?.ArtSet == true;
     internal AreaCharacterSheetArtView? ArtViewForSelfTest => _artView;
     /// <summary>ARC-UI-147: the diagnostic panel is drawn (the editor's art look hides it).</summary>
@@ -249,30 +253,31 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     }
 
     public void Open(AreaCharacterSheetView view, AreaSkillsPageView? skills = null, AreaSpellsPageView? spells = null, AreaStatsPageView? stats = null,
-        AreaTechPageView? tech = null)
+        AreaTechPageView? tech = null, AreaSchemesPageView? schemes = null)
     {
-        Show(); Render(view, skills, spells, stats, tech);
+        Show(); Render(view, skills, spells, stats, tech, schemes);
         if (ArtMode) return;
         (_accept ?? _close).GrabFocus();
     }
 
     public void CloseView()
     {
-        _view = null; _skillsView = null; _spellsView = null; _statsView = null; _skillMessage.Text = string.Empty; Hide();
+        _view = null; _skillsView = null; _spellsView = null; _statsView = null; _schemesView = null; _skillMessage.Text = string.Empty; Hide();
         if (_artView is { RegionForSelfTest: not null }) HoverTextRequested?.Invoke(null);
         _artView?.CloseView();
         // The sheet always opens on the skills page (CHW7).
         _artView?.Pages.CloseView();
         _artView?.Spells.CloseView();
+        _artView?.Schemes.CloseView();
         ApplyTab(AreaSheetTab.Skills);
         GetViewport().GuiReleaseFocus();
     }
 
     public void Render(AreaCharacterSheetView view, AreaSkillsPageView? skills = null, AreaSpellsPageView? spells = null, AreaStatsPageView? stats = null,
-        AreaTechPageView? tech = null)
+        AreaTechPageView? tech = null, AreaSchemesPageView? schemes = null)
     {
         ArgumentNullException.ThrowIfNull(view);
-        _view = view; _skillsView = skills; _spellsView = spells; _statsView = stats;
+        _view = view; _skillsView = skills; _spellsView = spells; _statsView = stats; _schemesView = schemes;
         _body.Text = string.Join("\n", AreaCharacterSheet.Lines(view));
         for (var row = 0; row < _statRows.Count; row++)
         {
@@ -335,15 +340,18 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
 
     /// <summary>ARC-UI-075: gives the sheet the original's art, fonts and texts, and the portrait's texture (null: the slot stays empty).</summary>
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaCharacterSheetFonts fonts, AreaCharacterSheetTexts texts, (int X, int Y)[] alignmentHot,
-        bool pages = false, bool spells = false)
+        bool pages = false, bool spells = false, bool schemes = false)
     {
         _artView!.SetArt(art, fonts, texts, alignmentHot);
         // ARC-UI-076: the skills and tech pages in the original's look when their arts read.
         if (pages) _artView.Pages.SetArt(art, fonts, texts);
         // ARC-UI-077: the spells page in the original's look when its arts read too.
         if (spells) _artView.Spells.SetArt(art, fonts, texts);
+        // ARC-UI-1742: the scheme page in the original's look when its arts read too; the creation editor does not choose a scheme yet.
+        if (schemes) _artView.Schemes.SetArt(art, fonts);
         _pagesReady = pages;
         _spellsReady = pages && spells;
+        _schemesReady = pages && schemes && !_creation;
         // The diagnostic pages stay in the host for a game folder whose pages art does not read.
         if (_pages.GetParent() != _host) { _pages.Reparent(_host!); _pages.SetTabHidden(0, true); _pages.CurrentTab = 1; _pages.TabsVisible = false; _pages.CustomMinimumSize = new(300, 0); }
         ApplyTab(_artView.Tab);
@@ -359,7 +367,7 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         var (px, py, pw, ph) = AreaCharacterSheetArtLayout.Panel;
         _host = new ScrollContainer { Name = "RightPanel", Position = new(px, py), Size = new(pw, ph), CustomMinimumSize = new(pw, ph) };
         _notBuilt = new Label { Name = "NotBuilt", Position = new(px, py), Size = new(pw, ph), AutowrapMode = TextServer.AutowrapMode.WordSmart, Visible = false,
-            Text = "NOT READY: this page is built by ARC-UI-076 (tech) and the auto-level schemes are not built." };
+            Text = "NOT READY: this page is built by ARC-UI-076 (tech); the auto-level scheme page is built by ARC-UI-1742 (not in the creation editor yet)." };
         _artView.AddChild(_host); _artView.AddChild(_notBuilt);
         _artView.StatPressed += (row, plus) => { if (plus) StatSpendRequested?.Invoke(row); else StatRefundRequested?.Invoke(row); };
         _artView.CloseRequested += () => CloseRequested?.Invoke();
@@ -374,6 +382,8 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         _artView.Spells.SpellPressed += (college, learn) => { if (learn) SpellLearnRequested?.Invoke(college); else SpellUnlearnRequested?.Invoke(college); };
         _artView.Spells.HoverEntryRequested += entry => HoverEntryRequested?.Invoke(entry);
         _artView.Spells.SoundRequested += id => SoundRequested?.Invoke(id);
+        _artView.Schemes.SchemeChosen += scheme => SchemeChosen?.Invoke(scheme);
+        _artView.Schemes.SoundRequested += id => SoundRequested?.Invoke(id);
     }
 
     /// <summary>Shows the page of a tab: the skills and tech pages in the original's look when their art read, else the diagnostic skills page
@@ -383,12 +393,16 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         if (_host is null || _notBuilt is null || _artView is null) return;
         var original = _pagesReady && tab is AreaSheetTab.Skills or AreaSheetTab.Tech;
         var spells = _spellsReady && tab == AreaSheetTab.Spells;
+        var schemes = _schemesReady && tab == AreaSheetTab.Schemes;
         _artView.Pages.Visible = false;
         if (_artView.Spells.Visible) _artView.Spells.CloseView();
+        // The scheme list keeps its scroll while the sheet stays open (the exe's offset is reset at each open only): the page is hidden, not closed.
+        _artView.Schemes.Visible = false;
         if (original) _artView.Pages.ShowPage(tab == AreaSheetTab.Skills);
         if (spells) { _artView.Spells.ShowPage(); _artView.Spells.Render(_spellsView); }
-        _host.Visible = !original && !spells && tab is AreaSheetTab.Skills or AreaSheetTab.Spells;
-        _notBuilt.Visible = !original && !spells && !_host.Visible;
+        if (schemes) { _artView.Schemes.ShowPage(); _artView.Schemes.Render(_schemesView); }
+        _host.Visible = !original && !spells && !schemes && tab is AreaSheetTab.Skills or AreaSheetTab.Spells;
+        _notBuilt.Visible = !original && !spells && !schemes && !_host.Visible;
         if (_host.Visible) _pages.CurrentTab = tab == AreaSheetTab.Skills ? 1 : 2;
     }
 
@@ -410,6 +424,7 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         _artView!.Render(view, _portrait);
         _artView.Pages.Render(skills, tech);
         _artView.Spells.Render(_spellsView);
+        _artView.Schemes.Render(_schemesView);
         // A stat's text carries the cost of its next point: it is written again after a press changed the cost.
         if (_artView.RegionForSelfTest is { } region) HoverTextRequested?.Invoke(HoverText(region));
     }

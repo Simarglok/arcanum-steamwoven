@@ -1880,7 +1880,7 @@ values (name, level, points, experience to the next level from its stored experi
 `AutoLevelRules.DerivedStat`, stored resistances with the constitution bonus under the NPC's effect list (the session's, else the map data's; the Magick line shows the `resistmagic` changes too, ARC-UI-1145), hit points and fatigue from its life, skills, spell book and tech degrees), no +
 or − on any page (`ReadOnly` of the art view and pages), the next spell grey, no editor snapshot, no pause; a monstrous NPC shows no race or gender. The sheet is the
 talk's moment: the session's later changes do not rebuild it. A release in the close rectangle or `C` closes it, the dialog does not resume, and the next `C`
-opens the hero's sheet. Not built: the follower arrows, the scheme page (the NOT READY note), the portrait or race icon (the slot stays empty), the NPC's worn
+opens the hero's sheet. The scheme page is built (ARC-UI-1742, below): the NPC's scheme name shows and the list scrolls, the rows answer nothing (ALP7). Not built: the follower arrows, the portrait or race icon (the slot stays empty), the NPC's worn
 armour in its resistances; the item windows `ii` and `ri` of the same reply family stay blocked. Known gaps: a stat's colour counts every effect of the NPC (the
 hero's excludes its innate race, background, class and gender causes, which the session's NPC record does not keep); the experience to the next level uses the
 experience stored in the map file against the session's level (a follower the session levelled after the file was written shows an inflated figure); the
@@ -1895,7 +1895,16 @@ target string, and the pick is the session's on the container's lock (`TerrainVi
 (steps 6 to 8, run on the town sector). NOT READY: the container window of See Contents and the item description window (their interaction is not read), the question window for a junk pile's and a container's
 stacks, poison sources.
 
-**Not yet in the original's look:** the auto-level schemes tab (a NOT READY note); the age line (the session has no age); the race icons as portrait fallback; a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) keeps the diagnostic
+**Scheme page (ARC-UI-1742, ledger [ALP1–ALP15](../research/ledger/character.md#character-sheet-scheme-page-arc-ui-1742)):** the fourth tab shows the original's page (art 567):
+the shown critter's scheme name centred in blue at the top, then fifteen rows of the schemes whose name exists in `mes/userlevelname.mes` and `mes/gamelevelname.mes` (scheme 0
+first, 59 in the installed game) in white, the hovered row in blue, and the original's scroll bar (arts 317, 318, 238, 787, 240; arrows by 1, track by 5, wheel by 3, a dragged thumb)
+when the list is longer than fifteen. A release on a row writes the hero's scheme through `AreaSchemesPage.Choose` (no cost, no sound; the next level step runs it, AL12) and the
+list keeps its place while the sheet stays open. The NPC sheet (mode 2) names the NPC's scheme and scrolls the list; its rows answer nothing. Model: `AreaSchemesPage` (World),
+`AreaCharacterSheetSchemes`/`AreaSheetScrollBar` (Core, Godot-free), `AreaCharacterSheetSchemesView` (Godot). F0: the thumb arts are stretched from 11 to the bar's 17 pixels.
+The creation editor (window 14) keeps the NOT READY note ([#1792](https://github.com/Simarglok/arcanum-steamwoven/issues/1792)); the age line and the race icon are [#1791](https://github.com/Simarglok/arcanum-steamwoven/issues/1791). Native smoke: the sheet art stage (`--stages map`) and the
+item-aim stage (NPC page) print `PASS` lines for the page.
+
+**Not yet in the original's look:** the age line (the session has no age); the race icons as portrait fallback; a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) shows the schemes tab's NOT READY note and keeps the diagnostic
 look. Without a game folder (the synthetic self-tests) or when an art does not read, the whole sheet is the diagnostic panel above.
 Native smoke: `./arcanum smoke pr --stages map --map "elven ruins" --hero elf-female` prints `ARC-UI-075 native-smoke sheet art PASS`
 (`ARC_AREA_SHEET_CAPTURE=PATH.png` saves readbacks `PATH-skills.png`, `PATH-tech.png`, `PATH-spells.png`).
