@@ -1,6 +1,7 @@
 using Arcanum.Data.Magic;
 using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Skills;
 
@@ -18,7 +19,11 @@ namespace Arcanum.Session;
 /// <see cref="SkillRules.CheckBaseChange"/>, read with the effective stat the lower base gives, the NPC's effect list laid over it) and, for intelligence, when a known spell rank (0x4B1B90) or a tech degree (0x4B02B0)
 /// needs the higher value, for willpower when a known spell rank does (0x4B1C00). Ready for an NPC: the primary stats dexterity, constitution, beauty, intelligence, perception, willpower and charisma, and the stats the
 /// setter stores after the clamp alone for an NPC (ARC-MAGIC-1507 adds magick and tech points, 22 and 23, whose rewield <see cref="RewieldReady"/> accepts when no worn item has a wield script): level (17), experience (18, the level-up 0x4A69C0 is a PC's), alignment (19, the followers' re-check is a PC's), fate points (20), unspent points (21) and 25; the
-/// callbacks after the write (0x460860, 0x4601C0) are the user interface's. <b>Not ready</b> (issues name them): strength (the encumbrance recalculation 0x45F820 needs the NPC's carried weight), poison (the poison timer 0x4B1350, the life state), gender and race (the innate effect removal 0x4EA2E0 and add), an NPC whose stats the follower's advancement record
+/// callbacks after the write (0x460860, 0x4601C0) are the user interface's. <b>Strength</b> (ARC-MAGIC-1506, case 0 of the setter) reads the encumbrance level before the store (0x45F790: the total weight of the NPC's list, 0x461410, and its carry weight, stat 8, which the new strength gives:
+/// <see cref="GameSessionOwner.QueryNpcCarry"/>) and, when the level changed, runs the recalculation 0x45F820 after it (<see cref="GameSessionOwner.RecalculateNpcEncumbrance"/>: every entry of effect 158 leaves the NPC's list, then one
+/// entry a level is added with the item cause, eight at the heaviest). Ready for an NPC the map's inventory seed lists; not ready when the NPC is no holder of it, when effect 158 has no rule to add, and when the new level has the
+/// fatigue timer (level 4 and above: 0x45E820 mode 1 is kept for the hero alone) or the old and new level are not both readable; nothing is written then. The level message is the local PC's and the animation speed
+/// (0x436FA0) the host's. <b>Not ready</b> (issues name them): poison (the poison timer 0x4B1350, the life state), gender and race (the innate effect removal 0x4EA2E0 and add), an NPC whose stats the follower's advancement record
 /// holds, and a hero target (the hero's stats are the character owner's).</item>
 /// </list>
 /// </summary>
@@ -27,8 +32,8 @@ public sealed partial class SessionSpellCaster
     /// <summary>The object fields TraitIdx writes: the indexed base stats (<c>obj_f_critter_stat_base_idx</c>) and the indexed resistances (<c>obj_f_resistance_idx</c>).</summary>
     public const int StatIndexField = 220, ResistanceIndexField = 31;
 
-    // The stats the host runs as the setter does for an NPC: the primary stats but strength (the guards for intelligence and willpower included) and the stats the setter stores after the clamp alone (the others are not ready, see above).
-    private static bool ReadyStat(int index) => index is 1 or 2 or 3 or 4 or 5 or 6 or 7 or 17 or 18 or 19 or 20 or 21 or 22 or 23 or 25;
+    // The stats the host runs as the setter does for an NPC: the primary stats (strength with its encumbrance recalculation, see below; the guards for intelligence and willpower included) and the stats the setter stores after the clamp alone (the others are not ready, see above).
+    private static bool ReadyStat(int index) => index is 0 or 1 or 2 or 3 or 4 or 5 or 6 or 7 or 17 or 18 or 19 or 20 or 21 or 22 or 23 or 25;
 
     // The reasons of a refused lowering (the event's value).
     private const int RefusedBySkill = 0, RefusedBySpell = 1, RefusedByDegree = 2;
@@ -86,7 +91,24 @@ public sealed partial class SessionSpellCaster
                 return SpellComponentOutcome.None;
             }
         }
-        return Report(run, obj.Id, data, _owner.WriteCritterStat(_owner.Version, map, obj.Id, data.Index, next));
+        // ARC-MAGIC-1506 (case 0 of the setter): strength reads the encumbrance level before the store and recalculates after it; the recalculation 0x45F820 acts only when the level changed.
+        SessionEffectDefinition? encumbrance = null;
+        var level = -1;
+        if (data.Index == 0 && next != current)
+        {
+            if (_owner.QueryNpcCarry(map, critter.Combat.Target, stats, current) is not { } before || _owner.QueryNpcCarry(map, critter.Combat.Target, stats, next) is not { } after) return null;
+            if (before.Level != after.Level)
+            {
+                // Not ready: the fatigue timer of a level from 4 (0x45E820 mode 1 is not kept for an NPC), and a level without the rule of effect 158 to add.
+                if (CarryRules.DrainIntervalMs(after.Level) is not null || _owner.EncumbranceRule() is not { } rule) return null;
+                (encumbrance, level) = (rule, after.Level);
+            }
+        }
+        var written = _owner.WriteCritterStat(_owner.Version, map, obj.Id, data.Index, next);
+        var outcome = Report(run, obj.Id, data, written);
+        if (encumbrance is not null && written.Disposition != GameSessionDisposition.Rejected && _owner.RecalculateNpcEncumbrance(critter.Combat.Target, encumbrance, level) is { Disposition: GameSessionDisposition.Rejected } failed)
+            _log.Add(new(SpellCastEventKind.TraitIndexNotSaved, run.Id, (int)failed.Failure, obj.Id));
+        return outcome;
     }
 
     /// <summary>
