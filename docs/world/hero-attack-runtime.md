@@ -421,8 +421,15 @@ fatigue −3 kept standing and acting.
   cursor. While the hero lies (falling, down, getting up) or is dead, a world press does nothing (`ignored (the hero is down)`,
   UC4: the original's world press returns for a PC that is not active) and the walk keys and stick start no step. Windows and
   keys that check the hero themselves keep their own refusals (combat mode, turn-based, casts, hot keys).
-- **Death.** A dead hero lies on the same fall until the death screen (the dying animation's choice of ARC-COMBAT-005 is not
-  drawn for the hero).
+- **Death.** A dead hero plays the dying animation its dying goal (31) names (ARC-COMBAT-1793): the goal's frame, made at the kill
+  from the killing blow's choice (`AiExecutorRules.DyingAnimationOf`: 7 plain, 17 head hit, 18 blown-out chunk, 19 severed leg), with
+  the Violence Filter forcing 7 (`DyingAnimationRules.Chosen`). The hero body's profile carries the three bloody ARTs as optional
+  actions (`ActorDiagnosticProfile.Decapitation`, `BlownOutChunk`, `SeveredLeg`, read by `HeroBodyArt` with the weapon part cleared like the
+  fall, each within the key cap and only on a body that has the fall); `DyingArt` answers the ART or, when this body lacks it, the plain fall
+  (a typed fallback). The viewer reads the frame once while the goal shows (a goal with count 1, made for a hero that already lay or fell,
+  keeps the plain fall, as an NPC's does, 0x45D730) and the knockdown machine plays that ART instead of the fall; the dying goal waits for it
+  to end, so the death cover's 5 s count from the end of the bloody animation. A hero found dead at a load or a map change lies on the plain
+  fall (no goal is read then). A monster body (hero in a monster body, ARC-MAGIC-052) loads none of them and falls plain.
 - Log lines `ARC-COMBAT-021 hero knockdown stage=… fatigue=…`; the status line adds ` | hero: falling`, `unconscious`, `dead` or
   `getting up`.
 - Native smoke `ARC-COMBAT-021 native-smoke knockdown PASS` (with `--hero`, after the audio stage on the Crash Site exterior and in
@@ -530,7 +537,7 @@ ledger [DA1–DA6](../research/ledger/combat.md#dying-animation-arc-render-040))
 - **Smoke** (stage `attack`): the killed NPC's dying animation draws its frames on the world clock, no pool lies before its dying
   goal ends, the last frame stays (`ARC-RENDER-040 smoke dying npc=… drawn=…`); the knockout plays the fall. When the stage's attacks knock the target out
   before the killing blow, the death is not played (it keeps the fall, above), so the stage checks that rule instead (`FallKept` of the lying show): the dying goal ends, no pool lies before, and the fall's last frame stays (`ARC-RENDER-040 smoke dying npc=… fall-kept`, ARC-DEV-083).
-- **Not ready**: the dying sounds (DA3), the hero's own dying animation (it falls, ARC-COMBAT-021), the dying goal's finish when
+- **Not ready**: the dying sounds (DA3), the dying goal's finish when
   interrupted (DA6: the viewer holds the last frame after a map change or load), an NPC's get-up animation, and HD frames of the poses.
 
 ## Not ready
@@ -545,8 +552,7 @@ ledger [DA1–DA6](../research/ledger/combat.md#dying-animation-arc-render-040))
   darkness penalty (every position is lit), the critical effects listed above as not ready, the taking-damage
   and dying scripts, the hit's blood eye candy (the pool of blood is in since ARC-RENDER-041), the corpse's decay timer, alignment
   and the kill log.
-- The low attack (21) and the boomerang's throw animation (14): the hero always plays the attack (20; ARC-RENDER-039), the hero's own dying animations (since ARC-COMBAT-021 the hero falls when knocked out
-  and lies on that fall when dead), an NPC's get-up animation
+- The low attack (21) and the boomerang's throw animation (14): the hero always plays the attack (20; ARC-RENDER-039), an NPC's get-up animation
   after a knockout (a recovered NPC stands at once), and HD frames of the fallen poses (Legacy per frame).
 - A killed NPC still blocks its cell: step evidence is T0 map data.
 - Companions (Virgil while he stands as a companion actor) are not attackable: their combat goal would need their live cell;

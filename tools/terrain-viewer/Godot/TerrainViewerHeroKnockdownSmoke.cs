@@ -15,7 +15,7 @@ public partial class TerrainViewerApp
     // game clock on by the recovery's minutes, which the audio's night checks would see): a fatigue
     // packet leaves the hero unconscious; it falls (the body's fall-down ART, last frame drawn and uploaded), a press on the ground and the
     // stick do nothing; the session clock flows until the recovery brings it round, and it gets up (the get-up ART) and stands, taking a
-    // press again. The hero's fatigue is healed back afterwards. ARC_AREA_KNOCKDOWN_CAPTURE saves in-app readbacks (down, standing) to
+    // press again. The hero's fatigue is healed back afterwards. ARC_AREA_KNOCKDOWN_CAPTURE saves in-app readbacks (down, standing, stunned-N, dying-BLOW-mid and dying-BLOW-end) to
     // the caller's ignored path.
     private async Task RunAreaHeroKnockdownSmokeAsync(TerrainLoadResult? mapMode = null)
     {
@@ -211,6 +211,45 @@ public partial class TerrainViewerApp
                 stood |= crumpled && _heroKnockdown.Stage == AreaKnockdownStage.Standing;
             }
             Require(crumpled && stood && HeroRunsHost()?.DownRun is null && !_heroKnockdown.Lying, $"the conscious hero fell and got up: fell {crumpled} rose {stood} stage {_heroKnockdown.Stage}");
+            // ARC-COMBAT-1793: a hero a blow kills plays the dying animation its dying goal (31) names (the killing blow's choice: head 17, torso 18, leg 19, a plain kill 7; the Violence Filter forces 7) where its
+            // body has the ART, else the fall; goal 31 lasts while it plays and the hero lies on its last frame. The death flow is off in an automated run, so the smoke raises the hero again after each.
+            if (profile.FallDown is not null)
+            {
+                var dyingReport = new List<string>();
+                foreach (var (blow, location, expected, shown) in new (string, HitLocation?, DeathAnimation, ActorDiagnosticAction)[] {
+                    ("head", HitLocation.Head, DeathAnimation.Head, ActorDiagnosticAction.Decapitation), ("torso", HitLocation.Torso, DeathAnimation.Body, ActorDiagnosticAction.BlownOutChunk),
+                    ("leg", HitLocation.Leg, DeathAnimation.Leg, ActorDiagnosticAction.SeveredLeg), ("kill", null, DeathAnimation.Plain, ActorDiagnosticAction.FallDown) })
+                {
+                    Require(!_heroKnockdown.Lying && session.QueryHeroLife()!.Status.IsActive && HeroRunsHost()?.DownRun is null, $"the hero stands before the {blow}");
+                    var slain = location is { } where ? session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { HitPoints = 1000, Location = where })
+                        : session.Kill(session.Version, SessionLifeTarget.Hero);
+                    Require(slain.Outcome is { } slainOutcome && slainOutcome.Events.HasFlag(LifeEvents.Died) && slainOutcome.Death == expected, $"the {blow} killed the hero with {expected}: {slain.Disposition} {slain.Failure}");
+                    var named = Arcanum.Simulation.Ai.AiExecutorRules.DyingAnimationOf(expected);
+                    Require(HeroRunsHost()?.DownRun?.Bottom is { Goal: Arcanum.Simulation.Goals.GoalType.Dying } dying && dying.Animation == named, $"goal 31 names animation {named} after the {blow}: {HeroRunsHost()?.DownRun?.Bottom}");
+                    var wantedAnimation = DyingAnimationRules.Chosen(named, _gameSettings.ViolenceFilter);
+                    var wantedArt = profile.DyingArt(wantedAnimation)!.Value;
+                    var dyingFrames = new HashSet<int>(); var dyingTicks = 0; var dyingDrawn = false; var wrongDrawn = "";
+                    for (var i = 0; i < 900 && (HeroRunsHost()?.DownRun is not null || i < 3); i++, dyingTicks++)
+                    {
+                        Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector());
+                        if (_readyActor is { Action: var drawnAction } dyingActor && drawnAction is ActorDiagnosticAction.FallDown or ActorDiagnosticAction.Decapitation or ActorDiagnosticAction.BlownOutChunk or ActorDiagnosticAction.SeveredLeg)
+                        {
+                            if (drawnAction == wantedArt.Action) { dyingDrawn = true; dyingFrames.Add(dyingActor.Frame); } else wrongDrawn = drawnAction.ToString();
+                        }
+                        if (i == 12) await Capture($"dying-{blow}-mid");
+                    }
+                    Require(dyingDrawn && wrongDrawn.Length == 0 && dyingFrames.Count > 1, $"the {blow} drew {wantedArt.Action} over {dyingTicks} ticks, {dyingFrames.Count} frames (another action drawn: '{wrongDrawn}')");
+                    Frame();
+                    Require(HeroRunsHost()?.DownRun is null && _worldActor.DownPose is { } held && held.Action == wantedArt.Action && held.Frame == wantedArt.Resource.FramesPerGroup - 1,
+                        $"goal 31 ended and the hero lies on the last frame of {wantedArt.Action}: {_worldActor.DownPose}");
+                    await Capture($"dying-{blow}-end");
+                    dyingReport.Add($"{blow}:{wantedArt.Action}:{wantedArt.Resource.FramesPerGroup}f@{wantedArt.Resource.RawFramesPerSecond}:{dyingTicks}ticks");
+                    session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+                    for (var i = 0; i < 600 && !(_heroKnockdown.Stage == AreaKnockdownStage.Standing && HeroRunsHost()?.DownRun is null); i++) { Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector()); }
+                    Require(!_heroKnockdown.Lying && session.QueryHeroLife()!.Status is { IsDead: false, IsActive: true }, $"the hero was raised and stands: {_heroKnockdown.Stage}");
+                }
+                GD.Print("ARC-COMBAT-1793 hero dying " + string.Join(" ", dyingReport) + $" art={(profile.Decapitation is null ? "none" : "17+18+19")} filter={_gameSettings.ViolenceFilter}");
+            }
             HeroRunsHost()?.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, "SMOKE_DONE"); StopWorldRoute("SMOKE_DONE");
             GD.Print("ARC-COMBAT-021 native-smoke knockdown PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName ?? "crash-site", Body = _heroBodyStatus, FellFrames = fell, RoseFrames = rose, Fatigue = $"{fatigue}->{lowest}->{after.Fatigue}", RecoveredAfterGameSeconds = jumps * 10,
