@@ -15,7 +15,7 @@ namespace Arcanum.TerrainViewer;
 // (GameSessionOwner.UseWrittenItem): a schematic document registers (tech.mes 89 or 88 in the inventory message, the document
 // destroyed when new), any other kind gives its document, and the window opens in place of the inventory (the original pops the
 // current interface mode and pushes the reading mode). Script actions 64 (book), 65 (picture) and 114 (plaque) of the dialog, use,
-// tile and sector scripts the viewer runs open the window for a PC viewer once no dialog, window or palette owns input (PROJECT:
+// tile and sector scripts the viewer runs open the window for a PC viewer once no palette or other panel outside the stack owns input (an open window or dialog is replaced, ARC-UI-1467; PROJECT:
 // the original changes the mode at once; a later request replaces a waiting one). The window is modal like the
 // schematic window (gate closed, clock paused); Escape, a controller cancel or the close button close it (PROJECT keys: the
 // original's window takes no keys and closes by its frame hotspot or any mode change). Sounds: open 3008, a book's page 3010, close
