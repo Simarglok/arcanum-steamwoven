@@ -757,6 +757,48 @@ public partial class TerrainViewerApp
         panel.DropButtonsForSelfTest[line].EmitSignal(BaseButton.SignalName.Pressed);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Require(panel.QuantityForSelfTest == new QuantityBar(0, stack.Units), "the drop asks: " + _inventoryStatus);
+        // ARC-UI-1884 (QW3): with the bars up and the pane's art read, the original's pane in the bottom strip shows the question (background, five buttons,
+        // the kind's icon, the count "0"); its buttons step the count as the window's do (up, down), and the diagnostic row is not drawn.
+        var barForSelfTest = _gameBarForSelfTest;
+        _gameBarForSelfTest = true;
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        if (_gameBarPanel is { Visible: true } && Art(QuantityPaneRules.BackgroundArt) is not null)
+        {
+            var pane = QuantityPaneForSelfTest;
+            Require(pane is not null && pane.BackgroundForSelfTest is not null, "the quantity pane draws its background art 298");
+            Require(QuantityPaneRules.Buttons.All(button => Art(button.Art) is null || pane!.ButtonArtForSelfTest(button.Action) is not null), "the pane's buttons draw their art");
+            GD.Print($"ARC-UI-1884 native-smoke quantity pane icon={(pane!.IconForSelfTest is { } icon ? $"{icon.GetWidth()}x{icon.GetHeight()}" : "none")} count={pane.CountTextForSelfTest}");
+            // ARC_AREA_WINDOW_CAPTURE=PREFIX saves the viewport with the pane (PREFIX-quantity-pane.png) and with the diagnostic row it replaces (PREFIX-quantity-row.png); local, never in git.
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_WINDOW_CAPTURE") is { Length: > 0 } capture)
+            {
+                async Task Shot(string name)
+                {
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    var path = System.IO.Path.GetFullPath(capture) + "-quantity-" + name + ".png";
+                    System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+                    using var image = GetViewport().GetTexture().GetImage();
+                    if (image is null || image.SavePng(path) != Error.Ok) throw new InvalidOperationException("ARC-UI-1884 capture not saved: " + path);
+                    GD.Print($"ARC-UI-1884 quantity capture {name} {image.GetWidth()}x{image.GetHeight()}");
+                }
+                QuantityPaneReleased(QuantityPaneAction.Up, true); QuantityPaneReleased(QuantityPaneAction.Up, true);
+                await Shot("pane");
+                _quantityPaneHiddenForCapture = true;
+                await Shot("row");
+                _quantityPaneHiddenForCapture = false;
+                QuantityPaneReleased(QuantityPaneAction.Down, true); QuantityPaneReleased(QuantityPaneAction.Down, true);
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            }
+            var pressed = QuantityPanePressesForSelfTest;
+            QuantityPaneReleased(QuantityPaneAction.Up, true);
+            Require(panel.QuantityForSelfTest == new QuantityBar(1, stack.Units) && QuantityPanePressesForSelfTest == pressed + 1, "the pane's up button adds one");
+            QuantityPaneReleased(QuantityPaneAction.Down, true);
+            Require(panel.QuantityForSelfTest == new QuantityBar(0, stack.Units), "the pane's down button takes it back");
+            GD.Print("ARC-UI-1884 native-smoke quantity-pane PASS");
+        }
+        else GD.Print("ARC-UI-1884 native-smoke quantity-pane NONE (the interface bars or the pane's art are not up)");
+        _gameBarForSelfTest = barForSelfTest;
         InventoryKey(Key.Kp1); InventoryKey(Key.Enter);
         var dropped = LastQuantityMoveForSelfTest?.Item;
         var placed = session.QueryPlacedItems().FirstOrDefault(item => item.Entity == dropped);

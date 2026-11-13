@@ -1,5 +1,6 @@
 file,member,state,class
 src/Arcanum.Data/Area/AreaMapPlans.cs,CatalogueNumbers,pending,
+src/Arcanum.Data/Area/AreaObjectArt.cs,ResolveItemPaper,exempt,reference
 src/Arcanum.Data/Audio/MainMenuSound.cs,Choose,pending,
 src/Arcanum.Data/Characters/AutoLevelTables.cs,NamedSchemes,exempt,host
 src/Arcanum.Data/Characters/BackgroundTable.cs,Block,pending,
@@ -21,6 +22,8 @@ src/Arcanum.Presentation/Hud/Floaters.cs,LineHeight,pending,
 src/Arcanum.Presentation/Hud/Floaters.cs,Rgb,pending,
 src/Arcanum.Presentation/Hud/HotkeyBar.cs,ItemShowsInventoryArt,pending,
 src/Arcanum.Presentation/Hud/QuantityBar.cs,Ask,pending,
+src/Arcanum.Presentation/Hud/QuantityPane.cs,Cells,exempt,reference
+src/Arcanum.Presentation/Hud/QuantityPane.cs,IconArtId,exempt,reference
 src/Arcanum.Presentation/Hud/SpellPane.cs,ShownColleges,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,OpensWindow,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,ReadCollege,pending,
