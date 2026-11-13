@@ -455,6 +455,19 @@ public sealed partial class DialogConversation
             {
                 continue;
             }
+            // ARC-SCRIPT-1798 (ledger DSV1, DSV2): a skill service reply the NPC cannot do for the PC (0x4AE570 answers non-zero) is left out the same way.
+            if (reply.Service is { } service)
+            {
+                var offered = ServiceOffered(service);
+                if (offered is null)
+                {
+                    return;
+                }
+                if (offered == false)
+                {
+                    continue;
+                }
+            }
             // A directions reply the PC has nothing to ask for is left out whatever its action holds (0x416C10 returns before the states are built).
             if (reply.DirectionsFilter is { } directions)
             {
@@ -484,6 +497,10 @@ public sealed partial class DialogConversation
             var text = reply.Text;
             DialogLineOrigin? origin = null;
             if (reply.Phrase && !PickPhrase(reply.Record.Id, reply.Marker!.Value.Letter, out text, out origin))
+            {
+                return;
+            }
+            if (reply.Service is { } named && !ServiceText(named, text, out text))
             {
                 return;
             }
@@ -1591,6 +1608,7 @@ public sealed partial class DialogConversation
         RumorOffer? rumor = null;
         var story = false;
         var healer = false;
+        TrainerChoice? service = null;
         var newspaper = false;
         DirectionsOffer? directions = null;
         var found = DialogText.Marker(text, out var exact);
@@ -1606,14 +1624,14 @@ public sealed partial class DialogConversation
             return new ReplyPlan(record, gender.Value, record.IqValue!.Value, condition, DialogOptionTextKind.Record, string.Empty, null, DialogOptionTransition.Exit, null, null, null, null,
                 null, QuestReply: questReply);
         }
-        if (found is { Letter: 'u' } && IsRepairServiceReply(text))
+        if (found is { Letter: 'u' } && IsUnreachableServiceReply(text))
         {
-            // ARC-SCRIPT-1534 (ledger DSV1): the repair service reply "u:12" is never offered by the original (0x416C10 → 0x4AE570 case 12 refuses a target that is not an item, and the
-            // target is the PC): it is planned as a reply that is counted among the five eligible ones and then left out, as a directions reply with nothing to ask for.
+            // ARC-SCRIPT-1534 (ledger DSV1), ARC-SCRIPT-1798 (DSV4): the repair service reply "u:12" and the pick-locks reply "u:14" are never offered by the original (0x416C10 → 0x4AE570 cases 12
+            // and 14 refuse a target that is no item (portal or container for 14), and the target is the PC): it is planned as a reply that is counted among the five eligible ones and then left out, as a directions reply with nothing to ask for.
             return new ReplyPlan(record, gender.Value, record.IqValue!.Value, condition, DialogOptionTextKind.Record, string.Empty, null, DialogOptionTransition.Exit, null, null, null, null,
                 null, NeverOffered: true);
         }
-        if (found is { Letter: 'q' or 'u' } || found is { Letter: 'd' or 'x' } && directions is null)
+        if (found is { Letter: 'q' } || found is { Letter: 'u' } && !ServiceAvailable || found is { Letter: 'd' or 'x' } && directions is null)
         {
             // Their visibility depends on world, quest or skill state this runtime cannot read.
             frontier = new DialogConversationFrontier(DialogFrontierKind.UnsupportedGeneratedText, node, Response: response);
@@ -1715,6 +1733,18 @@ public sealed partial class DialogConversation
             text = string.Empty;
             phrase = true;
             healer = true;
+        }
+        else if (found is { Letter: 'u' or 'z' } && ServiceAvailable)
+        {
+            // ARC-SCRIPT-1798 (ledger DSV1, DSV3): the original's skill service reply (the prefix "u:", N by atoi) and spell reply (the prefix "z:", N by atoi), either case, 0x416C10: a generated
+            // phrase (PC lines 900..999 and 1000..1099 with the skill's or spell's name) whose pick runs the reply's action and then offers the skill or spell (states 0xE and 0xF, 0x414810 → 0x419B50, 0x419C30).
+            var number = ReadAtoi(text, 2);
+            kind = DialogOptionTextKind.Generated;
+            marker = found;
+            text = string.Empty;
+            phrase = true;
+            healer = true;
+            service = found is { Letter: 'u' } ? new TrainerChoice(TrainerChoiceKind.HealService, number) : new TrainerChoice(TrainerChoiceKind.HealSpell, Spell: number);
         }
         else if (found is { Letter: 'b' or 'h' or 'l' or 'p' } && exact || found is { Letter: 'c' or 'r' or 't' or 'z' })
         {
@@ -1884,7 +1914,7 @@ public sealed partial class DialogConversation
         }
         return new ReplyPlan(record, gender.Value, gate.IqValue!.Value, condition, kind, text, marker, transition, target, line, action, block,
             block is null ? insult : null, block is null ? barter : null, block is null ? worldMap : null, phrase, block is null ? trainer : null, block is null ? rumor : null, block is null && story,
-            Directions: block is null ? directions : null, DirectionsFilter: directions, Newspaper: block is null && newspaper, Healer: block is null && healer);
+            Directions: block is null ? directions : null, DirectionsFilter: directions, Newspaper: block is null && newspaper, Healer: block is null && healer, Service: block is null ? service : null);
     }
 
     private static bool CheckTokens(string text, DialogNodeId node, DialogResponseId? response, out DialogConversationFrontier? frontier, out DialogConversationFailure? failure)
@@ -2048,7 +2078,8 @@ public sealed partial class DialogConversation
         DirectionsOffer? DirectionsFilter = null,
         bool Newspaper = false,
         bool Healer = false,
-        bool NeverOffered = false);
+        bool NeverOffered = false,
+        TrainerChoice? Service = null);
 
     private sealed record OfferPlan(ReplyPlan Reply, StepPlan? Target);
 }
