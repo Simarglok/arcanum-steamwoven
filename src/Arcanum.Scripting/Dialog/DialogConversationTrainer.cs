@@ -221,7 +221,7 @@ public sealed partial class DialogConversation
             var reply = _talk!.Reply;
             var rumor = reply.Rumor is not null;
             var directions = reply.Directions;
-            var letter = _talk!.Yes is not null ? 'm' : directions is { } d ? (d.Learn ? 'x' : 'd') : rumor ? 'r' : reply.Story ? 'c' : reply.Newspaper ? 'p' : reply.Healer ? 'h' : 't';
+            var letter = _talk!.Yes is not null ? 'm' : directions is { } d ? (d.Learn ? 'x' : 'd') : rumor ? 'r' : reply.Story ? 'c' : reply.Newspaper ? 'p' : reply.Service is { } service ? (service.Kind == TrainerChoiceKind.HealService ? 'u' : 'z') : reply.Healer ? 'h' : 't';
             offers.Add(new DialogOption(index + 1, response, -1, DialogOptionTextKind.Generated, option.Text, new DialogGeneratedMarker(letter),
                 follow ? reply.Transition : directions is not null ? DialogOptionTransition.DirectionsStep : rumor ? DialogOptionTransition.RumorStep : reply.Newspaper ? DialogOptionTransition.NewspaperStep : reply.Healer ? DialogOptionTransition.HealerStep : DialogOptionTransition.TrainerStep,
                 follow && reply.Target is not null ? new DialogNodeId(reply.Target.Id) : null,

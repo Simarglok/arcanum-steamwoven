@@ -14,6 +14,28 @@ public static class SpellEyeCandyRules
     public static bool Plays(bool animates, EyeCandyParts parts) => animates && (parts.Foreground || parts.Underlay);
 }
 
+/// <summary>ARC-SCRIPT-1592 (goal-table GT70, GT79): the eye-candy lists the original keeps, one table each (every add names the table it plays from, and the run keeps it in its slot 12): the spell list 0x5E7568, the animation list 0x5DE670
+/// (a struck critter's blood), the weapon list 0x5DE610, the script list 0x5E2FB0, the combat list 0x5FC1F8 and the trap list 0x5FC460.</summary>
+public enum EyeCandyList { Spell = 0, Anim = 1, Weapon = 2, Script = 3, Combat = 4, Trap = 5 }
+
+/// <summary>
+/// ARC-SCRIPT-1592: an eye-candy run's entry as the goal holds it (<see cref="Arcanum.Simulation.Goals.GoalEyeCandy.Entry"/>): the list in the bits above 24 and the entry's index in that list below, so one integer names the table and the entry
+/// as the original's slots 12 and 17 do and a saved run needs no schema step. The spell list is list 0, so every entry a save or a cast host made before this keeps its number.
+/// </summary>
+public static class EyeCandyEntryRef
+{
+    public const int IndexBits = 24, MaxIndex = (1 << IndexBits) - 1;
+
+    /// <summary>The entry of an index of a list; null for an index outside 0..<see cref="MaxIndex"/> (the original refuses an index past its table).</summary>
+    public static int? Make(EyeCandyList list, int index) => index is >= 0 and <= MaxIndex ? ((int)list << IndexBits) | index : null;
+
+    /// <summary>The list an entry belongs to; a value outside the defined lists (a corrupt save) is returned as it is, which no list resolves.</summary>
+    public static EyeCandyList ListOf(int entry) => (EyeCandyList)(int)((uint)entry >> IndexBits);
+
+    /// <summary>The entry's index in its list.</summary>
+    public static int IndexOf(int entry) => entry & MaxIndex;
+}
+
 /// <summary>The ART facts an eye candy's animation reads (0x5030B0): the frames of its group, its action frame and its frame rate.</summary>
 public readonly record struct EyeCandyClip(int Frames, int ActionFrame, int FramesPerSecond)
 {
