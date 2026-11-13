@@ -91,6 +91,13 @@ public sealed partial class SessionSpellCaster
         return true;
     }
 
+    /// <summary>ARC-SCRIPT-1576: the cast id of the object a script names by <paramref name="entity"/> (the PC's id and any other the map has no other name for pass through); a stop spell action asks the runs by it.</summary>
+    public string CastIdOf(string entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        return entity == Hero ? entity : _map.CastIdOfScriptEntity(entity);
+    }
+
     /// <summary>0x459290: the first run (slot order) that is active, runs <paramref name="spell"/> and holds <paramref name="obj"/> as its target, in its object list or in its summoned list; null when none does.</summary>
     [OriginalFunction(0x459290, OriginalFunctionScope.Full)]
     public SpellRun? FindRunOnObject(int spell, string obj)

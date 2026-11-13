@@ -268,6 +268,22 @@ public sealed class AreaTrapsTests
     }
 
     [TestMethod]
+    public void The_shot_is_met_and_applied_once_the_host_lists_its_shooters()
+    {
+        // ARC-TECHNOLOGY-1619 (TT12, TT15): a host that lists the shooter candidates (AreaTrapEffects.ListsShooters) meets a 30002 trap as any native trap; the effect is the cast host's.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var effects = new Effects(0);
+            var shotRow = Row(1, Scenery, 30002);
+            var (_, traps) = Hosts(session, content, () => effects.Side with { ListsShooters = true }, null, shotRow);
+            var met = traps.Use(shotRow)!;
+            Assert.IsTrue(met is { Outcome: SessionTrapOutcome.Fired, Cancels: true }, met.Describe());
+            CollectionAssert.AreEqual(new[] { 30002 }, effects.Calls.Select(c => c.Run.Script).ToArray());
+        });
+    }
+
+    [TestMethod]
     public void A_step_meets_only_the_first_trap_object_and_no_ordinary_trap_script()
     {
         WithContent(content =>

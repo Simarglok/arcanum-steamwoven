@@ -95,6 +95,15 @@ public partial class TerrainViewerApp
             host.Movers.Restore(npc.Entity, npc.Row.Key, npc.Origin, npc.Origin, host.Movers.FacingOf(npc.Entity, NeighborDirection.XPlus));
             var here = (await WithAreaSmokeCameraHeld(() => Look(home)))?.CarriedLattice(pair);
             Require(here is not null && Holds(here, home), "and back at its place when the mover stands it there");
+            // ARC-MAGIC-1561 (ledger RM3c, IE5): a magick point write makes the session recalculate the NPC's light (the rewield 0x465530 runs 0x467E80). The NPC that carries a saved light stays lit at its place whether the recalculation
+            // keeps the saved light (no light item worn now or at load), gives the size of its worn items, or clears it (a size of None: the light goes with the item); the stage boundary loads the baseline again (ARC-DEV-408).
+            var map = new Arcanum.Session.SessionMapId(host.Scene.RuntimeMap);
+            var written = _areaSession.WriteCritterStat(_areaSession.Version, map, npc.Entity, 22, 1);
+            Require(written.Disposition != Arcanum.Session.GameSessionDisposition.Rejected, "the magick point write of the NPC is accepted: " + written.Failure);
+            var recalculated = AreaEvents.NpcLight(map, npc.Entity);
+            var after = (await WithAreaSmokeCameraHeld(() => Look(home)))?.CarriedLattice(pair);
+            if (recalculated != CarriedLightSize.None) Require(after is not null && Holds(after, home), $"the NPC's light stands at its place after the recalculation (size {recalculated?.ToString() ?? "as saved"})");
+            GD.Print("ARC-MAGIC-1561 critter-light recalculated=" + (recalculated?.ToString() ?? "as-saved"));
             GD.Print("ARC-DEV-353 native-smoke critter-light PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, CritterLights = all.CritterLights.Count, Tried = tried, Hour = driver.Clock.Hour }));
         }
         finally

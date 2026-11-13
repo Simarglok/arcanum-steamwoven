@@ -221,6 +221,8 @@ public sealed partial class AreaAiHost
     public string ScriptStopSpell(string obj, int spell)
     {
         if (_scene.Spells?.Invoke() is not { } spells) return "no cast host";
+        // ARC-SCRIPT-1576: the script names the object by its own entity; the cast host's runs hold the cast id (they differ for a mobile row with no session entity).
+        obj = spells.CastIdOf(obj);
         var run = spells.FindRunOnObject(spell, obj)?.Id;
         return spells.StopSpellOnObject(spell, obj) ? $"stopped, run {run}" : "no run of the spell holds the object";
     }

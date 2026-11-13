@@ -12,7 +12,7 @@ namespace Arcanum.TerrainViewer;
 // walk checks the next tile before each step (0x427110: an unknown trap object spotted now is marked and the walk ends there); a step
 // onto a trap object sets it off (0x4305D0) and the walk ends on that tile. A fired native run's effect is the cast host's
 // (SessionSpellCaster.ApplyTrapEffect); without a cast host no trap is met. The spot trap roll (S10) is not made, so only the player's
-// detect-traps spell flag spots an unknown trap; the 30002 shot, the trap's floating line, its eye candy and the drawing of a spotted
+// detect-traps spell flag spots an unknown trap; the 30002 shot's missile (ARC-TECHNOLOGY-1619 applies the shot itself), the trap's floating line, its eye candy and the drawing of a spotted
 // trap object are later slices.
 public partial class TerrainViewerApp
 {
@@ -26,16 +26,31 @@ public partial class TerrainViewerApp
     /// object and the hero as the triggerer, and the player's spell flags. Null while there is no cast host.</summary>
     private AreaTrapEffects? AreaTrapEffectsNow() =>
         SpellCasterNow() is { } caster && _spellCastMap is { } map
-            ? new((row, run, counters, flags) => caster.ApplyTrapEffect(new(map.Id(row), SessionSpellCaster.Hero, run, counters, flags)),
+            ? new((row, run, counters, flags) => caster.ApplyTrapEffect(TrapFiring(map, row, SessionSpellCaster.Hero, run, counters, flags)),
                 caster.PlayerSpellFlags ?? 0)
             {
                 // ARC-DEV-260: a trap set off by a ranged attack or by damage with no attacker has no triggerer.
-                ApplyWithoutTriggerer = (row, run, counters, flags) => caster.ApplyTrapEffect(new(map.Id(row), null, run, counters, flags)),
+                ApplyWithoutTriggerer = (row, run, counters, flags) => caster.ApplyTrapEffect(TrapFiring(map, row, null, run, counters, flags)),
                 // ARC-WORLD-1469 (TT8, TT9): an NPC or a companion that stepped on a trap object or used a trapped one is the triggerer, and its spell flags gate the step.
-                ApplyByCritter = (entity, row, run, counters, flags) => caster.ApplyTrapEffect(new(map.Id(row), entity, run, counters, flags)),
+                ApplyByCritter = (entity, row, run, counters, flags) => caster.ApplyTrapEffect(TrapFiring(map, row, entity, run, counters, flags)),
                 SpellFlagsOf = entity => caster.SpellFlags(new(entity, 0)),
+                // ARC-TECHNOLOGY-1619 (TT12, TT15): a 30002 shot lists its shooter candidates around the triggerer and shoots.
+                ListsShooters = true,
             }
             : null;
+
+    // The firing of a native trap run with the cast map's ids; a 30002 shot's shooter candidates are the objects around the triggerer with their use scripts (TT12).
+    private SessionTrapFiring TrapFiring(AreaSpellCastMap map, AreaObjectRecord row, string? triggerer, Arcanum.Simulation.Traps.NativeTrapRun run, int counters, int flags)
+    {
+        var firing = new SessionTrapFiring(map.Id(row), triggerer, run, counters, flags);
+        if (Arcanum.Simulation.Traps.TrapEffectRules.Of(run.Script, counters) is not { Kind: Arcanum.Simulation.Traps.TrapEffectKind.Shot } || triggerer is null
+            || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return firing;
+        return firing with
+        {
+            Shooters = AreaTrapShooters.Candidates(map.Object(triggerer)?.Location, map.ObjectsInSquare,
+                id => map.Row(id) is { } shooter && host.TrapBaseline(shooter) is { } baseline ? (baseline.Script, baseline.Counters) : null),
+        };
+    }
 
     /// <summary>
     /// ARC-DEV-260 (ledger OD4, OD15): what the host owes after a hit that brought a door, window, container, scenery, trap or item to 0 hit points:
