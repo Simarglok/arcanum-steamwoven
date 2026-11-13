@@ -20,9 +20,9 @@ public sealed partial class DialogConversation
     // The race group of the NPC's insulted line and last words (0x416840, 0x4191E0, 0x413130 call the race generator with 1000).
     private const int InsultGroup = 1000;
 
-    private sealed record TrainerTalk(ReplyPlan Reply, StepPlan? Target, DialogOperationSource Source);
+    private sealed record TrainerTalk(ReplyPlan Reply, StepPlan? Target, DialogOperationSource Source, FollowPlan? Yes = null);
 
-    private enum TrainerChoiceKind { Skill, Pay, PayRumor, Follow, Area, More, PayDirections, HealMenu, HealService, HealSpell, PayHealService, PayHealSpell }
+    private enum TrainerChoiceKind { Skill, Pay, PayRumor, Follow, Area, More, PayDirections, PayFollow, HealMenu, HealService, HealSpell, PayHealService, PayHealSpell }
 
     private readonly record struct TrainerChoice(TrainerChoiceKind Kind, int Skill = 0, int Price = 0, int Rumor = 0, int Area = 0, int Offset = 0, int Spell = 0);
 
@@ -221,7 +221,7 @@ public sealed partial class DialogConversation
             var reply = _talk!.Reply;
             var rumor = reply.Rumor is not null;
             var directions = reply.Directions;
-            var letter = directions is { } d ? (d.Learn ? 'x' : 'd') : rumor ? 'r' : reply.Story ? 'c' : reply.Healer ? 'h' : 't';
+            var letter = _talk!.Yes is not null ? 'm' : directions is { } d ? (d.Learn ? 'x' : 'd') : rumor ? 'r' : reply.Story ? 'c' : reply.Healer ? 'h' : 't';
             offers.Add(new DialogOption(index + 1, response, -1, DialogOptionTextKind.Generated, option.Text, new DialogGeneratedMarker(letter),
                 follow ? reply.Transition : directions is not null ? DialogOptionTransition.DirectionsStep : rumor ? DialogOptionTransition.RumorStep : reply.Healer ? DialogOptionTransition.HealerStep : DialogOptionTransition.TrainerStep,
                 follow && reply.Target is not null ? new DialogNodeId(reply.Target.Id) : null,
@@ -269,22 +269,32 @@ public sealed partial class DialogConversation
             case TrainerChoiceKind.PayDirections:
                 PayAndTellWay(choice);
                 return Result();
+            case TrainerChoiceKind.PayFollow:
+                PayAndFollow(choice);
+                return Result();
             default:
                 // The way out: the reply's own response (0x414810 case 0, 1 or 2 on the value the reply was built with), its action not run again.
-                switch (talk.Reply.Transition)
-                {
-                    case DialogOptionTransition.Direct:
-                        if (!Admit(talk.Target, 0)) return Result();
-                        _talk = null;
-                        Enter(talk.Target!);
-                        return Result();
-                    case DialogOptionTransition.ScriptLine:
-                        Finish(new DialogConversationEnd(DialogEndKind.ReturnToScript, talk.Reply.ScriptLine));
-                        return Result();
-                    default:
-                        Finish(new DialogConversationEnd(DialogEndKind.ReturnToScript, new DialogScriptLine(_request.CallerLine.Value + 1)));
-                        return Result();
-                }
+                Follow(talk.Reply.Transition, talk.Target, talk.Reply.ScriptLine);
+                return Result();
+        }
+    }
+
+    // Leaves the talk by a response: the next node (entered as an ordinary step), the script line, or the end that returns to the caller's next line.
+    private void Follow(DialogOptionTransition transition, StepPlan? target, DialogScriptLine? line)
+    {
+        switch (transition)
+        {
+            case DialogOptionTransition.Direct:
+                if (!Admit(target, 0)) return;
+                _talk = null;
+                Enter(target!);
+                return;
+            case DialogOptionTransition.ScriptLine:
+                Finish(new DialogConversationEnd(DialogEndKind.ReturnToScript, line));
+                return;
+            default:
+                Finish(new DialogConversationEnd(DialogEndKind.ReturnToScript, new DialogScriptLine(_request.CallerLine.Value + 1)));
+                return;
         }
     }
 
