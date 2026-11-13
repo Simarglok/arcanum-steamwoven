@@ -96,7 +96,7 @@ public sealed class AreaScriptAttackAiHostTests
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, run.Outcome, run.Detail);
             Assert.AreEqual(nameof(AttackEventStop.ObjectAttacker), s.Use.LastAttack);
             Assert.AreEqual(nameof(AttackEventStop.ObjectAttacker), s.Host.TraceOf(AiSchedulerRules.Pc)?.Event);
-            Assert.AreEqual(DangerState.None, s.F.Session.QueryDanger(s.F.B).State, "the PC victim got no focus and the NPC was not asked");
+            Assert.AreEqual(DangerState.None, s.F.Session.QueryDanger(s.F.B).State, "the PC victim got no focus");
             // An NPC victim of the same object is asked into COMBAT_FOCUS on it (0x4AABE0), the event's whole effect.
             s.Use.ApplyScriptAttack(new(ScrObjectStateChange.Attack, new(1, s.F.B), Other: new(1, Scenery)));
             var danger = s.F.Session.QueryDanger(s.F.B);

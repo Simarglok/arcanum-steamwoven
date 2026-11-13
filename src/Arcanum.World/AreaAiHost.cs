@@ -954,7 +954,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// are not told, a PC victim does not respond and no noise is raised) and loudness 1. The victim's own reaction follows as for any attack event: an NPC victim turns, records who hit it and reacts, a PC victim only loses its concealment. A side
     /// this host does not hold ends at the event's own early exits (<see cref="AttackEventStop.Missing"/>), and an attack on itself at <see cref="AttackEventStop.Self"/>. The attacker is the host's NPC (a created critter must be synced
     /// first, <see cref="SyncCreated"/>) or companion, or (ARC-SCRIPT-1679, 0x447D2F gives the event no type test) an object the scene describes (<see cref="AreaAiScene.ObjectFacts"/>: a trap, scenery, portal or container, which makes an NPC victim fight it,
-    /// <see cref="AttackEventStop.ObjectAttacker"/>); returns the stop of the event's plan.
+    /// <see cref="AttackEventStop.ObjectAttacker"/>; a scene without the <c>ObjectFacts</c> hook, or an id it does not describe, such as an item, ends at <see cref="AttackEventStop.Missing"/>); returns the stop of the event's plan.
     /// </summary>
     public AttackEventStop ScriptAttack(string attacker, string victim)
     {

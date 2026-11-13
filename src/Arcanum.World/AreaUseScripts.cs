@@ -1781,9 +1781,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     {
         if (request.Other is not { } attacker) return "attack has no attacker";
         if (IsPc(attacker) || StandsHere(attacker)) return null;
-        if (attacker.Map == _shownMap && Row(attacker) is { } row && row.Type is not (Arcanum.Simulation.Magic.SpellObjectFacts.PcType or Arcanum.Simulation.Magic.SpellObjectFacts.NpcType)
-            && !(row.Type is >= Arcanum.Simulation.Magic.SpellObjectFacts.FirstItemType and <= Arcanum.Simulation.Magic.SpellObjectFacts.LastItemType)) return null;
-        var what = attacker.Map != _shownMap ? "an object of another map that no companion stands for" : Row(attacker) is null ? "an object of no loaded row" : Row(attacker)!.Type == NpcType ? "an NPC that stands elsewhere" : "an item";
+        var row = attacker.Map == _shownMap ? Row(attacker) : null;
+        if (row is { } && row.Type is not (PcType or NpcType) && row.Type is < FirstItemType or > LastItemType) return null;
+        var what = attacker.Map != _shownMap ? "an object of another map that no companion stands for" : row is null ? "an object of no loaded row" : row.Type is >= FirstItemType and <= LastItemType ? "an item" : "an NPC row that is not standing here";
         return $"attack by {attacker.Code} is not modelled ({what} as the attacker; only the PC, an NPC standing on the shown map or an object of it that is no item)";
     }
 
