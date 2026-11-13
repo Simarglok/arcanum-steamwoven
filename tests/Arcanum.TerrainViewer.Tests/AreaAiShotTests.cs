@@ -234,7 +234,7 @@ public sealed class AreaAiShotTests
 
     // ARC-AI-1516 (EX14, VBG5, 0x4B2870/0x4B2690 → 0x4A9650): a missile that meets an object other than its aimed target raises the attack event with the accidental bit: a same-faction
     // bystander struck by a stray arrow records no who-hit-me-last (the shielded case); one of another faction does (the accidental bit only shields one faction).
-    private static AreaAiNotice? ShootAtHeroAndStrike(AreaAiHost host, GameSessionOwner session, string npc, string struck, List<SessionShot> launched)
+    private static void ShootAtHeroAndStrike(AreaAiHost host, GameSessionOwner session, string npc, string struck, List<SessionShot> launched)
     {
         for (var attempt = 0; attempt < 80 && launched.Count == 0; attempt++) host.Hit(npc, AiSchedulerRules.Pc);
         Assert.AreEqual(1, launched.Count, host.TraceOf(npc)?.Hit);
@@ -242,7 +242,7 @@ public sealed class AreaAiShotTests
         Assert.IsNull(session.QueryDanger(struck).HitBy, "no event yet");
         var landed = host.LandShot(npc, launched[0], struck);
         Assert.IsNotNull(landed, host.TraceOf(npc)?.Hit);
-        return host.DrainNotices().FirstOrDefault(n => n.Kind == AreaAiNoticeKind.Hit);
+        host.DrainNotices();
     }
 
     [TestMethod]
@@ -252,7 +252,8 @@ public sealed class AreaAiShotTests
         var (session, host, npc, _) = Open((_, _, shot, _, _) => { launched.Add(shot); return true; }, bystander: true, faction: 5, bystanderOnLine: false);
         Assert.IsTrue(host.FactionSame(npc, Entity(3)));
         ShootAtHeroAndStrike(host, session, npc, Entity(3), launched);
-        Assert.IsNull(session.QueryDanger(Entity(3)).HitBy, "the accidental event between one faction writes no who-hit-me-last: " + host.TraceOf(Entity(3))?.Event);
+        Assert.AreEqual("None", host.TraceOf(Entity(3))?.Event, "the event ran to the reaction step");
+        Assert.IsNull(session.QueryDanger(Entity(3)).HitBy, "the accidental event between one faction writes no who-hit-me-last");
     }
 
     [TestMethod]
@@ -274,8 +275,8 @@ public sealed class AreaAiShotTests
         Assert.AreEqual(1, launched.Count, host.TraceOf(npc)?.Hit);
         Assert.AreEqual(npc, session.QueryDanger(Entity(3)).HitBy?.Entity, "the line's blocker is the shot's target: its event is raised at the shot, deliberate (EX15)");
         host.DrainNotices();
-        host.LandShot(npc, launched[0], Entity(3));
-        Assert.AreEqual(npc, session.QueryDanger(Entity(3)).HitBy?.Entity, "the strike of the aimed target raises no second, accidental event");
+        Assert.IsNotNull(host.LandShot(npc, launched[0], Entity(3)));
+        Assert.AreEqual(npc, session.QueryDanger(Entity(3)).HitBy?.Entity, "the strike of the aimed target stays recorded");
     }
 
     // ARC-COMBAT-1140 (RA4, RH5): a container that stops the line of fire takes the NPC's shot in place of the hero: the shot is decided a hit on it without a skill roll, the viewer is asked to fly it at the blocker,
