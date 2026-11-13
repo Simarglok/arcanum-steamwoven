@@ -105,7 +105,7 @@ longer worn: a `TargetWorn` that still lists it is refused (`InvalidWear`), and 
 is `InvalidAttack`, both before any roll.
 
 **Not ready**: the NPC search budget per real second of the drop's path (DCA2). Also not modelled: the NPC's look-for-weapon/armour flags after a drop, the PC's injury record of a spell, burning, trap or script hit (0x4F5690; the attack steps write it since ARC-UI-097, ledger LB22), the worn armour's
-critical scripts (points 34, 35), the drop script, the stun animation and its duration (goal 57) and an NPC's ammunition. Since
+critical scripts (points 34, 35), the drop script and an NPC's ammunition (the stun's animation and duration are done: ARC-COMBAT-1741). Since
 ARC-WORLD-106 an NPC's armour class, resistances and light come from the items the session's NPC wears
 ([NPC wear in combat](equipment-runtime.md#npc-wear-in-combat-arc-world-106)), so a dropped, destroyed or broken piece no longer
 counts.
@@ -376,7 +376,7 @@ cleared (TT2) does not arise: the session refuses before the item leaves.
   drawn, lit and picked as a moved body (`AreaScenePlan.Repose`). A pose that cannot be read leaves the standing body and is
   logged. Reading a pose opens that archive's index on the main thread (a few milliseconds on the installed archives).
 - The status line names a critical's injuries and drops; the log line `ARC-COMBAT-005 attack-hit` adds the table's effects and
-  each critical item step (`crit=`). The viewer plays no stun animation, so a stun of the hero or the NPC ends at once
+  each critical item step (`crit=`). Since ARC-COMBAT-1741 the viewer plays stun animation 23 for the hero and the NPC (goal 57 over the stunned ART, the hero's body and the NPC's art); only a body with no such ART ends the stun at once
   (`ClearStun`, the contract for an animation that could not start; `ARC-COMBAT-009 stun-ended`); a critical knockout is drawn in
   the fallen pose like any knockout. `TargetCell` is the NPC's map-data cell (NPCs do not move in the viewer); the drop's map is
   `AreaDropMap` over the shown map (ARC-COMBAT-010), and each hit first places the session's actor on the walking hero's committed

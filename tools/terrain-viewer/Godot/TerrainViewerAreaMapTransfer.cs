@@ -303,7 +303,10 @@ public partial class TerrainViewerApp
             },
             // ARC-SCRIPT-1562: the magick-tech adjustments (91, 80) of a combat-point script read an NPC's effective aptitude from the session's life.
             Aptitude: ScriptAptitude,
-            // ARC-SCRIPT-1735 (E5-a tail, NS5): a script's change art number writes the new art id only when an ART file of the module's content names it (0x502220).
+            // ARC-SCRIPT-1733 (CS5, CS6): obj can see obj and obj can hear obj are the AI host's sight (0x4AF260) and hearing (0x4AF470, normal loudness) checks of an NPC.
+            CanSee: (observer, target) => AreaAiHostNow()?.ScriptCanSee(observer, target),
+            CanHear: (listener, source) => AreaAiHostNow()?.ScriptCanHear(listener, source),
+            // ARC-SCRIPT-1735 (E5-a tail, NS5): a script's change art number writes the new art id only when an ART file of the module's content names it.
             ArtExists: aid => ExtraArt()?.Exists(aid) == true);
 
         var inventory = _inventoryHost;

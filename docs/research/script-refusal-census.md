@@ -80,7 +80,7 @@ beyond S33 is not counted.
 ```sh
 "$DOTNET" run --project tools/research/Arcanum.CrashSiteProbe --no-build -- --script-refusal-census-self-test
 "$DOTNET" run --project tools/research/Arcanum.CrashSiteProbe --no-build -- --script-refusal-census \
-  --game-root "$GAME" [--set S30|S31|S32|S33] > "$PRIVATE/refusal-census.json"
+  --game-root "$GAME" [--set S30|S31|S32|S33|S38|S43|S52|S53] > "$PRIVATE/refusal-census.json"
 ```
 
 The run takes about five seconds and is deterministic: two runs on the owner's installation
@@ -486,3 +486,12 @@ The probe takes `--set S38` and `--set S43` besides S30 to S33. Under S38 (the w
 `heal_poison`; under **S43** (S38 plus those three commands; S43 itself is S42 plus them) 1,575 scripts on 6,856 sites are admitted (+17 scripts, +743 sites; 30282 is 729 of them) and 30282 is no longer in the refused lists. The numbers above stay those of S33; a host's own set is
 not counted here (the use set holds the three commands since this task, [ledger VT7](ledger/scripts.md#vitals-commands-and-the-food-use-script-arc-script-1481)).
 
+
+## After the critter-state conditions (ARC-SCRIPT-1733, 2026-11-13)
+
+The probe takes `--set S52` and `--set S53` too. Under **S52** (S51 plus obj is in combat and adjust stat; the widest set before this task) 1,611 attached scripts on 6,957 placed sites are admitted whole and 155 roots (586 sites) are refused for a type; under **S53** (S52 plus the nine
+critter-state conditions of the [CRQ group](ledger/scripts.md#critter-state-and-social-conditions-arc-script-1733-group-crq-of-the-script-census): 10, 15, 25, 26, 28, 29, 30, 38, 51) 1,661 scripts on 7,169 sites are admitted (+50 scripts, +212 sites) and 101 roots (368 sites) are refused for a type. The
+CRQ group, 97 roots on 359 sites blocked under S52 (66 roots on 293 sites freed by it alone), is down to 38 roots on 133 sites under S53 on 6 maps: what stays in it is obj has bad associates (11, 22 roots, all of them also blocked by a polymorph or shrink condition of E4-g), obj is within range (34, 7 roots
+on 7 sites, each freed by it alone), obj is monster of type (19, one root), the getters get origin (39, 3 roots, 46 sites), get faction (89, 2 roots, 11 sites) and get social class (38), toggle invulnerability (57, 2 roots, 13 sites) and rename (92, one root), which the issues named in the pull request carry.
+The census counts a script admitted when the named set admits it; a host runs it under its own set, so the numbers a host admits are the opt-in trigger census's (`ScriptTriggerCensusTests`): the dialog point 9 admits 124 of 180 rows (118 before), the heartbeat point 19 96 of 141 (95 before), the others
+none more; most freed roots are still refused by a host for another type (for example action 22 on the dialog point) and run once that type is admitted.

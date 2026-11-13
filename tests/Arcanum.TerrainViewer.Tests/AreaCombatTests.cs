@@ -189,7 +189,7 @@ public sealed class AreaCombatTests
         {
             // Standing art, the fall (anim h, 3 frames) and a decapitation (anim r, 2 frames); no severed leg.
             File.WriteAllBytes(path, Dat([("art/critter/hmm/hmmuwxaa.art", Art(1)), ("art/critter/hmm/hmmuwxah.art", Art(3)),
-                ("art/critter/hmm/hmmuwxar.art", Art(2))]));
+                ("art/critter/hmm/hmmuwxar.art", Art(2)), ("art/critter/hmm/hmmuwxbx.art", Art(4))]));
             AreaEntryIdentity Identity(int ordinal)
             {
                 using var archive = DatArchive.Open(path);
@@ -213,6 +213,12 @@ public sealed class AreaCombatTests
             Assert.AreEqual((17, 1), (AreaFallenPoses.Load(visual, path, AreaFallenPoses.Decapitation).Pose!.Animation,
                 AreaFallenPoses.Load(visual, path, AreaFallenPoses.Decapitation).Pose!.Key.Frame));
             Assert.AreEqual(7, AreaFallenPoses.Load(visual, path, AreaFallenPoses.SeveredLeg).Pose!.Animation, "a missing bloody death falls");
+            // ARC-COMBAT-1741: the stunned animation 23 names the unarmed, shield-less file (N1: xb + x), plays its frames and keeps the body's facing.
+            var stunned = AreaFallenPoses.Load(visual, path, AreaFallenPoses.Stunned);
+            Assert.AreEqual(AreaFallenStatus.Ready, stunned.Status, stunned.Detail);
+            Assert.AreEqual(4, stunned.Frames.Count);
+            Assert.IsTrue(stunned.Frames.All(f => f.Animation == 23 && f.Key.Group == 5));
+            Assert.AreEqual(10, stunned.FramesPerSecond);
 
             Assert.AreEqual(AreaFallenStatus.EntryMismatch, AreaFallenPoses.Load(visual with { Entry = visual.Entry with { NameSha256 = Digest } }, path, 7).Status);
             Assert.AreEqual(AreaFallenStatus.EntryMismatch, AreaFallenPoses.Load(visual with { Entry = visual.Entry with { Offset = 5 } }, path, 7).Status);
@@ -237,6 +243,8 @@ public sealed class AreaCombatTests
                 entry.Offset, Convert.ToHexString(SHA256.HashData(entry.RawNameBytes.ToArray())).ToLowerInvariant());
             archive.Dispose();
             Assert.AreEqual(AreaFallenStatus.PoseMissing, AreaFallenPoses.Load(Visual(Body(), identity), lonely, 7).Status);
+            // ARC-COMBAT-1741: a stunned ART that is missing is a typed refusal, not the fall (the stun then ends at once).
+            Assert.AreEqual(AreaFallenStatus.PoseMissing, AreaFallenPoses.Load(Visual(Body(), identity), lonely, AreaFallenPoses.Stunned).Status);
         }
         finally { File.Delete(lonely); }
     }

@@ -211,7 +211,7 @@ public sealed class CorePolicyTests
             input with { RenderBranch = ActorDiagnosticRenderBranch.CachedUnsupported }, input with { RenderBranch = ActorDiagnosticRenderBranch.Unknown },
             input with { ScalePercent = 99 }, input with { ScalePercent = 101 }, input with { Shrunk = true }
         }) AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(render, frame), TerrainViewerErrorCode.ActorRenderState, TerrainViewerFailureStage.ActorRenderState);
-        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Action = (ActorDiagnosticAction)9 }, frame), TerrainViewerErrorCode.ActorInput, TerrainViewerFailureStage.ActorInput);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Action = (ActorDiagnosticAction)10 }, frame), TerrainViewerErrorCode.ActorInput, TerrainViewerFailureStage.ActorInput);
         AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Facing = -1 }, frame), TerrainViewerErrorCode.ActorFacing, TerrainViewerFailureStage.ActorFacing);
         AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Frame = -1 }, frame), TerrainViewerErrorCode.ActorFrame, TerrainViewerFailureStage.ActorFrame);
         AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Width = 0 }, frame), TerrainViewerErrorCode.ActorFrame, TerrainViewerFailureStage.ActorFrame);
