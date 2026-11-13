@@ -17,7 +17,7 @@ public sealed class AreaScriptAttackAdmissionTests
             AreaScriptHost.TalkAdmission, AreaScriptHost.SkillTalkAdmission })
         {
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.Attack), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S55), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S58), set.Id);
         }
         // A talk with no use host of its map has no AI path to raise the event through: the plain dialog sets do not hold it.
         foreach (var set in new[] { AreaScriptHost.Admission, AreaScriptHost.SkillAdmission })
