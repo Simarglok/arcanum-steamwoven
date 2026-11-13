@@ -80,7 +80,7 @@ beyond S33 is not counted.
 ```sh
 "$DOTNET" run --project tools/research/Arcanum.CrashSiteProbe --no-build -- --script-refusal-census-self-test
 "$DOTNET" run --project tools/research/Arcanum.CrashSiteProbe --no-build -- --script-refusal-census \
-  --game-root "$GAME" [--set S30|S31|S32|S33|S38|S43|S52|S53] > "$PRIVATE/refusal-census.json"
+  --game-root "$GAME" [--set S30|S31|S32|S33|S38|S43|S52|S53|S54] > "$PRIVATE/refusal-census.json"
 ```
 
 The run takes about five seconds and is deterministic: two runs on the owner's installation
@@ -403,7 +403,7 @@ Quests named by two or more blocked scripts (numbers as the scripts name them):
 The census is a data answer; each slice keeps its own contract and checks.
 
 - **E5-b, world-object commands (#1164).** *Built 2026-11-12 as set S37 (ARC-SCRIPT-1164, [ledger WO1–WO13](ledger/scripts.md#world-object-commands-arc-script-1164-e5-b)); the hosts apply three conditions and six actions; ARC-SCRIPT-1279 (2026-11-12) gave transfer item, set written start, destroy item named and toggle item inventory display their host (the session's named-item move and destroy and its item fields; ledger WO14–WO18).* Census at the survey: 71 blocked scripts, 208 sites alone; installed now: 117 scripts use the 13 commands, S37 admits 84 whole.
-- **E5-a, NPC state actions (#1163).** *Built 2026-11-12 as set S36 (ARC-SCRIPT-1163, [ledger NS1–NS8](ledger/scripts.md#npc-state-commands-arc-script-1163-e5-a)); change art number is left to a slice with a per-object art overlay.* Blocked roots 166, sites 794, maps 24; 110 roots (550
+- **E5-a, NPC state actions (#1163).** *Built 2026-11-12 as set S36 (ARC-SCRIPT-1163, [ledger NS1–NS8](ledger/scripts.md#npc-state-commands-arc-script-1163-e5-a)); change art number was left to a slice with a per-object art overlay, built 2026-11-13 as ARC-SCRIPT-1735 ([ledger AN1–AN9](ledger/scripts.md#change-art-number-arc-script-1735-e5-a-tail): the session's object art field, drawn for a scenery; the hosts' sets now admit the 51 scripts that use it, the host refuses a target it cannot draw).* Blocked roots 166, sites 794, maps 24; 110 roots (550
   sites) are freed by the slice alone. The largest of the plan's slices, and the most useful: it
   contains the three most frequent types of the module's refusals (change script 52 roots, change art
   41, day and night standpoints 44 and 36). *Follow* (action 21) and *attack* (action 36) are already in S33, so the
@@ -438,7 +438,7 @@ The census is a data answer; each slice keeps its own contract and checks.
   spell conditions and actions, so those slices do not gate the spell hooks. The spell *effect* and
   state types the census adds as the E4-g slice (play spell eye candy a104, stop script eye candy
   a124, stop spell a130 (done since ARC-SCRIPT-1294, set S42), get magictech adjustment a80, polymorphed, shrunk and mirror image c12,
-  c13, c16) block 78 roots (145 sites, 18 maps); 39 roots (62 sites) alone. Blessing and curse (a25 to a28, c8, c9) are in E5-c, which the
+  c13, c16) (all done: a130 since ARC-SCRIPT-1294, a80 since ARC-SCRIPT-1562, the rest by ARC-SCRIPT-1734, set S54) block 78 roots (145 sites, 18 maps); 39 roots (62 sites) alone. Blessing and curse (a25 to a28, c8, c9) are in E5-c, which the
   plan already made the prerequisite of the spell hooks.
 - **MA-10, the raise hook (#1167).** The resurrect point (18) carries 15 placed sites with 13
   scripts. 13 of the 15 are admitted whole by S33; the 2 blocked sites are `set_pc_quest_unbotched` (a119, E5-c)
@@ -495,3 +495,19 @@ CRQ group, 97 roots on 359 sites blocked under S52 (66 roots on 293 sites freed 
 on 7 sites, each freed by it alone), obj is monster of type (19, one root), the getters get origin (39, 3 roots, 46 sites), get faction (89, 2 roots, 11 sites) and get social class (38), toggle invulnerability (57, 2 roots, 13 sites) and rename (92, one root), which the issues named in the pull request carry.
 The census counts a script admitted when the named set admits it; a host runs it under its own set, so the numbers a host admits are the opt-in trigger census's (`ScriptTriggerCensusTests`): the dialog point 9 admits 124 of 180 rows (118 before), the heartbeat point 19 96 of 141 (95 before), the others
 none more; most freed roots are still refused by a host for another type (for example action 22 on the dialog point) and run once that type is admitted.
+
+## After the critter-state tail (ARC-SCRIPT-1771, 2026-11-13)
+
+The probe takes `--set S54` too: **S54** is S53 plus obj has bad associates (11), obj is monster of type (19) and obj is within range (34; ledger [CS12–CS16](ledger/scripts.md#critter-state-and-social-conditions-arc-script-1733-group-crq-of-the-script-census)). Under S53 1,661 attached scripts on 7,169 placed
+sites are admitted whole and 101 roots (368 sites) are refused for a type; under **S54** 1,669 scripts on 7,177 sites are admitted (+8 scripts, +8 sites: the seven roots of obj is within range, each freed by it alone, and the one root of obj is monster of type) and 93 roots (360 sites) are refused for a type.
+The CRQ group is down from 38 roots on 133 sites (6 maps) under S53 to 8 roots on 73 sites on 2 maps under S54: obj has bad associates (22 roots) frees almost none by itself, as every root that holds it is also blocked by a polymorph or shrink condition of E4-g (12 and 13); what stays in the group are the
+getters get origin (39), get faction (89) and get social class (38) and the actions toggle invulnerability (57) and rename (92).
+The opt-in trigger census (`ScriptTriggerCensusTests`) on the owner's installation: the heartbeat point 19 admits 97 of 141 rows (96 before), every other point as before (the dialog point 9 124 of 180).
+
+## After the spell-state conditions and eye candy actions (ARC-SCRIPT-1734, 2026-11-13)
+
+The probe takes `--set S55` too. Under **S54** (the widest set before this task: S53 plus the critter-state tail of ARC-SCRIPT-1771) 1,669 attached scripts on 7,177 placed sites are admitted whole and 93 roots (360 sites) are refused for a type; under **S55** (S54 plus obj is polymorphed 12, obj is shrunk 13, obj has mirror image 16, play spell eye
+candy 104 and stop script eye candy 124, [ledger SC18–SC20, WE11–WE13](ledger/scripts.md#spell-state-conditions-and-spell-eye-candy-actions-arc-script-1734-group-e4-g-of-the-script-census)) 1,712 scripts on 7,268 sites are admitted (+43 scripts, +91 sites) and 43 roots (251 sites) are refused for a type. The E4-g group, 56 roots
+on 121 sites on 9 maps blocked under S54 (43 roots on 91 sites on 7 maps freed by it alone), is empty under S55: get magictech adjustment (80) was admitted already by the combat-point set (ARC-SCRIPT-1562, set S51; the S33 baseline of the first census could not know it) and stop spell (130) by ARC-SCRIPT-1294.
+What the hosts admit, from the opt-in real-data check (`AreaScriptSpellTests`): 60 installed scripts use one of the five commands; the use set admits 21 of them whole, the placed set 28, the dying set 30, the combat-point set 28, the heartbeat set 1 and the talk set none (the others stop at commands of other groups).
+The 21 main-map heartbeats that stop a script eye candy (attachment point 19) are refused by the heartbeat set for other commands (assign object, get reaction, float line, play script eye candy), a slice of its own. The trigger census (`ScriptTriggerCensusTests`) is unchanged at the dialog point (124 of 180) and the heartbeat point (96 of 141), and the use point admits 2,445 of 2,467 rows. No host plays an eye candy request yet (#1592).

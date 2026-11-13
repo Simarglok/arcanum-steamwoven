@@ -41,9 +41,10 @@ namespace Arcanum.World;
 /// ARC-SCRIPT-1294 (RM6): <see cref="ScriptStopSpell"/> (object entity, spell) interrupts the first active run of the spell that holds the object (the cast host's <see cref="Arcanum.Session.SessionSpellCaster.StopSpellOnObject"/>) and answers what happened;
 /// without it a run with a stop spell is left unapplied. ARC-SCRIPT-1620 (TI6): <see cref="ScriptAttack"/> (attacker entity, victim entity) raises the attack event of a script's attack (36, 0x447D2F) in the AI host (flags 2, loudness 1) and answers the stop of its plan;
 /// without it a run with an attack is left unapplied.
+/// ARC-SCRIPT-1735 (E5-a tail, ledger NS5, NS9): <see cref="ArtExists"/> says whether an art id names an ART file of the module's content (the original's test 0x502220 before a change art number, action 59, writes the new art id); without it a run with a change art number is left unapplied.
 /// ARC-SCRIPT-1562 (WE2, CP7, CP8): <see cref="Aptitude"/> answers an NPC of the shown map's effective magick-tech aptitude (the hero's is the session's) for the magick-tech adjustments (91, 80) of a combat-point script; without it those runs stop at an NPC.
 /// ARC-SCRIPT-1733 (CS5, CS6): <see cref="CanSee"/> and <see cref="CanHear"/> (observer, target; the PC as the scheduler's id) answer the sight (0x4AF260) and hearing (0x4AF470, normal loudness) checks of an NPC through the AI host, null for an observer or target it
-/// holds no facts of; without them obj can see obj and obj can hear obj stop the run.
+/// holds no facts of (the PC included since ARC-SCRIPT-1773); without them obj can see obj and obj can hear obj stop the run.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
@@ -54,7 +55,8 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Func<string, bool>? ScriptDamageAsk = null, Func<int, bool>? Critter = null, Func<string, AreaObjectRecord?>? CreatedRow = null,
     Action<string>? CritterMade = null, Func<string, int, bool, string>? ScriptReaction = null, Func<ScrObjectRef, AreaScriptOpenable?>? Openable = null,
     Func<string, int, string>? ScriptStopSpell = null, Func<string, AreaScriptVitals?>? Vitals = null, Func<string, int, int, string>? ScriptHealLife = null,
-    Func<string, string, string>? ScriptAttack = null, Func<string, int?>? Aptitude = null, Func<string, string, bool?>? CanSee = null, Func<string, string, bool?>? CanHear = null);
+    Func<string, string, string>? ScriptAttack = null, Func<string, int?>? Aptitude = null, Func<string, string, bool?>? CanSee = null, Func<string, string, bool?>? CanHear = null,
+    Func<uint, bool>? ArtExists = null);
 
 /// <summary>ARC-SCRIPT-1481 (VT1–VT3): the vitals of an NPC of the shown map for get hit points (107), get fatigue points (108) and get stat of the poison level (24): the current and maximum hit points and fatigue and the poison level,
 /// as the session's life status gives them (<see cref="AreaScriptWorld.Vitals"/>).</summary>
@@ -182,14 +184,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// ARC-SCRIPT-1620 (TI6): plus attack (36, 0x447D2F), which raises the attack event of the first object of operand 1 on each object of operand 0 through the AI host (<see cref="AreaScriptWorld.ScriptAttack"/>); 79 installed scripts use it (111 clauses), and the heartbeat set admits it too.
     /// </summary>
     public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading-objects-story-world", ScrAdmissionSet.S4.Conditions.Concat(ScrAdmissionSet.SpellQueryConditions).Concat(ScrAdmissionSet.StoryConditions).Concat(ScrAdmissionSet.WorldObjectConditions)
-            .Concat(ScrAdmissionSet.CritterQueryConditions).Concat(ScrAdmissionSet.CritterStateConditions),
+            .Concat(ScrAdmissionSet.CritterQueryConditions).Concat(ScrAdmissionSet.CritterStateConditions).Concat(ScrAdmissionSet.CritterTailConditions),
         ScrAdmissionSet.S4.Actions.Where(a => a is not ScrCatalogue.Action.Dialog)
             .Concat([ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque,
                 ScrCatalogue.Action.CallScript, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType,
                 ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation,
                 ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak, ScrCatalogue.Action.CreateObject, ScrCatalogue.Action.GetStat,
-                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, .. ItemUseVitalActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
+                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, .. ItemUseVitalActions, .. EyeCandyActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
         ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]),
         counterIndexWraps: true);
@@ -198,6 +200,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// ratio, <see cref="PowerRatio"/>), play script eye candy (120; the use host shows none) and destroy (68; of the item being used only, <see cref="ObjectStateRefusal"/>).</summary>
     private static int[] ItemUseVitalActions => [ScrCatalogue.Action.GetHitPoints, ScrCatalogue.Action.GetFatiguePoints, ScrCatalogue.Action.HealPoison, ScrCatalogue.Action.HealHitPoints,
         ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.Destroy];
+
+    /// <summary>ARC-SCRIPT-1734 (WE11, WE12): play spell eye candy (104) and stop script eye candy (124) of <see cref="ScrAdmissionSet.S55"/>, which the use set admits beside play script eye candy (120): the run's result hands them on as eye candy requests and no host shows them yet (#1592).</summary>
+    private static int[] EyeCandyActions => [ScrCatalogue.Action.PlaySpellEyeCandy, ScrCatalogue.Action.StopScriptEyeCandy];
 
     /// <summary>ARC-DEV-243 (S14g): damage (60), apply unresistable damage (138) and heal hit points (75), which the placed and heartbeat sets admit.</summary>
     private static readonly int[] DamageActions = [ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.HealHitPoints];
@@ -239,14 +244,15 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <see cref="ScrAdmissionSet.S18"/>. ARC-MAGIC-030 (MT21b): plus the spell conditions (14, 35, 48, 49) and give spell mastery in college (112) of <see cref="ScrAdmissionSet.S31"/>.
     /// ARC-SCRIPT-1359: plus get location (95) of <see cref="ScrAdmissionSet.S38"/> (the Crash Site Molochean agent's heartbeat 1717 reads where it stands before it runs to its tile).
     /// ARC-SCRIPT-1166: plus loop break (20) of <see cref="ScrAdmissionSet.S40"/>. ARC-SCRIPT-1294: plus stop spell on object (130) of <see cref="ScrAdmissionSet.S42"/>.
+    /// ARC-SCRIPT-1734: plus the spell-state conditions (12, 13, 16) and the eye candy actions (104, 124) of <see cref="ScrAdmissionSet.S55"/>; 21 main-map heartbeats stop a script eye candy.
     /// </summary>
     public static ScrAdmissionSet HeartbeatAdmission { get; } = new("S2-area-heartbeat-state-kill-talk-world",
         ScrAdmissionSet.S2.Conditions.Concat([ScrCatalogue.Condition.FollowingPc, ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsDead,
-            ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasReputation, ScrCatalogue.Condition.PcQuestState, .. ScrAdmissionSet.SpellQueryConditions, .. ScrAdmissionSet.StoryConditions, .. ScrAdmissionSet.WorldObjectConditions, .. ScrAdmissionSet.CritterQueryConditions, .. ScrAdmissionSet.CritterStateConditions]),
+            ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasReputation, ScrCatalogue.Condition.PcQuestState, .. ScrAdmissionSet.SpellQueryConditions, .. ScrAdmissionSet.StoryConditions, .. ScrAdmissionSet.WorldObjectConditions, .. ScrAdmissionSet.CritterQueryConditions, .. ScrAdmissionSet.CritterStateConditions, .. ScrAdmissionSet.CritterTailConditions]),
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
             ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.GetLocation, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
-            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. StopSpellActions, .. DamageActions]),
+            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. StopSpellActions, .. DamageActions, .. EyeCandyActions]),
         ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]));
 
@@ -287,6 +293,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     private readonly List<ScrReadingRequest> _readings = [];
     private readonly List<AreaScriptFloat> _floats = [];
     private readonly List<AreaScriptFade> _fades = [];
+    private readonly List<AreaScriptEyeCandy> _eyeCandies = [];
+
+    /// <summary>ARC-SCRIPT-1592: the script eye candy (action 120) of the runs applied since the last call, in order, for the viewer to play on its objects (<see cref="AreaEyeCandyHost.PlayScript"/>); the talk host's
+    /// <see cref="AreaScriptHost.TakeEyeCandies"/> holds those of a dialog's runs.</summary>
+    public IReadOnlyList<AreaScriptEyeCandy> TakeEyeCandies()
+    {
+        var eyeCandies = _eyeCandies.ToArray();
+        _eyeCandies.Clear();
+        return eyeCandies;
+    }
 
     /// <summary>ARC-SCRIPT-1241: the fades (103) of the runs applied since the last call that ask for a movie, in order, for the viewer to play (their clock jumps are done; a sound-only fade plays
     /// nothing here, as no effect sound does for a use click).</summary>
@@ -527,7 +543,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <remarks>Exe read 2026-11-13: action 137 at 0x447220 case 0x89, base stat 0x4B0740, stat setter 0x4B0980 with the range tables 0x5B5194 and 0x5B5204.</remarks>
     public bool CanAdjustStat(ScrObjectRef obj, int stat) => stat == AreaScriptStory.AlignmentStat && IsPc(obj) && _session.QueryHero() is not null;
 
-    private const uint ProwlingCritterFlag = 0x1, UndeadCritterFlag = 0x4, InvulnerableObjectFlag = 0x400000, InvisibleSpellFlag = 0x1;
+    private const uint ProwlingCritterFlag = 0x1, UndeadCritterFlag = 0x4, InvulnerableObjectFlag = 0x400000, InvisibleSpellFlag = 0x1,
+        SummonedSpellFlag = 0x4000, NoStrayNpcFlag = 0x8000, AssociateBlockingObjectFlags = 0x102;
+
+    // Object field 0x18 (obj_f_aid, slot 23): the art id the object was built with, which a polymorph does not change (the current art is field 1).
+    private const int BaseArtSlot = 23;
 
     /// <summary>ARC-SCRIPT-1733 (CS1, exe read 2026-11-13: condition 10 at 0x4451B0, 0x4C0C40): met before, of an NPC toward the PC: the same object twice is true; a second object that is not the PC or a first that is not an NPC is false; else whether the NPC's reaction memory holds the PC
     /// in a remembered slot (<see cref="SessionReaction.MetBefore"/>), which the conversation slot is not, so it is false during the first talk. Null for an NPC this host has no row for.</summary>
@@ -551,27 +571,29 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     /// <summary>
-    /// ARC-SCRIPT-1733 (CS4, case 26 → 0x4C1110, 0x460460): an NPC is in dialog while its conversation slot (entry 0 of the reaction-PC array, field 0x129) holds the PC: the session's reaction record. Every other object type goes to a callback of the dialog layer (0x567400 reading the
-    /// dialog slot of the PC, whichever object is asked) which the viewer's conversation host does not give this host: the answer is null and the run stops as not modelled (issue #1773 for the PC branch).
+    /// ARC-SCRIPT-1733 / ARC-SCRIPT-1773 (CS4, case 26 → 0x4C1110, 0x460460): an NPC is in dialog while its conversation slot (entry 0 of the reaction-PC array, field 0x129) holds the PC: the session's reaction record. Every other object type, and the PC, goes to the dialog layer's callback
+    /// (0x460460 → 0x567400 → 0x567420: in single player always the dialog slot 0 of the PC, whichever object was named), which returns the slot's word +0x1850: 1 from the dialog start (0x567460, after the NPC's conversation slot opened) until its close (0x5678D0,
+    /// 0x567A20), else 0. The session's conversation slots tell the same span (<see cref="GameSessionOwner.QueryDialogOpen"/>: the conversation host opens an NPC's slot at the start and closes it at every exit), so a scenery or item answers as the PC does. Null for an object this host
+    /// has no row for.
     /// </summary>
     public bool? IsInDialog(ScrObjectRef obj)
     {
-        if (IsPc(obj)) return null;
+        if (IsPc(obj)) return _session.QueryDialogOpen();
         if (Row(obj) is not { } row) return null;
-        return row.Type == NpcType ? _session.QueryReactionRecord(obj.Code) is { InConversation: true } : null;
+        return row.Type == NpcType ? _session.QueryReactionRecord(obj.Code) is { InConversation: true } : _session.QueryDialogOpen();
     }
 
-    /// <summary>ARC-SCRIPT-1733 (CS5): sight (0x4AF260) of an NPC of the shown map toward an NPC of it or the PC, through the AI host (<see cref="AreaScriptWorld.CanSee"/>); null for any other pair.</summary>
+    /// <summary>ARC-SCRIPT-1733 / ARC-SCRIPT-1773 (CS5): sight (0x4AF260) of an NPC of the shown map or the PC toward an NPC of it or the PC, through the AI host (<see cref="AreaScriptWorld.CanSee"/>); null for any other pair.</summary>
     public bool? CanSee(ScrObjectRef observer, ScrObjectRef target) => Perceives(observer, target, _world?.CanSee);
 
-    /// <summary>ARC-SCRIPT-1733 (CS6): hearing (0x4AF470 at the normal loudness 1) of an NPC of the shown map toward an NPC of it or the PC, through the AI host (<see cref="AreaScriptWorld.CanHear"/>); null for any other pair.</summary>
+    /// <summary>ARC-SCRIPT-1733 / ARC-SCRIPT-1773 (CS6): hearing (0x4AF470 at the normal loudness 1) of an NPC of the shown map or the PC toward an NPC of it or the PC, through the AI host (<see cref="AreaScriptWorld.CanHear"/>); null for any other pair.</summary>
     public bool? CanHear(ScrObjectRef listener, ScrObjectRef source) => Perceives(listener, source, _world?.CanHear);
 
     private bool? Perceives(ScrObjectRef from, ScrObjectRef to, Func<string, string, bool?>? check)
     {
-        if (check is null || IsPc(from) || from.Map != _shownMap || Row(from) is not { Type: NpcType }) return null;
+        if (check is null || (!IsPc(from) && (from.Map != _shownMap || Row(from) is not { Type: NpcType }))) return null;
         if (!IsPc(to) && (to.Map != _shownMap || Row(to) is not { Type: NpcType })) return null;
-        return check(from.Code, IsPc(to) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : to.Code);
+        return check(IsPc(from) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : from.Code, IsPc(to) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : to.Code);
     }
 
     /// <summary>ARC-SCRIPT-1733 (CS7, case 30): object flag 0x400000 (field 0x13) of any object: the PC's and an NPC's as the session has them (the stored flags under the written ones), another row's as stored; null for an object this host has no row for.</summary>
@@ -592,6 +614,48 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (IsPc(obj)) return _session.QueryHero() is not null && _session.IsConcealed(SessionCombatant.Hero);
         if (Row(obj) is not { } row) return null;
         return row.Type == NpcType && (_session.IsConcealed(SessionCombatant.Critter(obj.Code)) || NpcCritterBit(obj, ProwlingCritterFlag) == true);
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-1771 (CS12, exe read 2026-11-13: condition 11 at 0x4451B0 → 0x45F460): for the PC the PC itself, else the object's leader (the hero for a follower of the hero, the only leader the session holds; none: false). True when one of the leader's followers (the session's party)
+    /// is summoned (spell flag 0x4000), has no NPC flag 0x8000 and no animal critter flag and has neither object flag 0x102; a follower with 0x102 only logs a warning and the walk goes on. A follower this host cannot read (it has no row on the shown map) is unknown and the answer is null unless
+    /// another follower decides it. The followers of a follower (0x441260 recurses) are not held by the session and are not walked.
+    /// </summary>
+    public bool? HasBadAssociates(ScrObjectRef obj)
+    {
+        if (IsPc(obj)) { if (_session.QueryHero() is null) return null; }
+        else
+        {
+            if (Row(obj) is not { } row) return null;
+            if (row.Type != NpcType || Leader(obj) is null) return false;
+        }
+        var unknown = false;
+        foreach (var follower in _session.QueryParty().Followers)
+        {
+            var who = new ScrObjectRef(_shownMap, follower.Entity);
+            if (SpellFlags(who) is not { } spell || Row(who) is not { } followerRow) { unknown = true; continue; }
+            if ((unchecked((uint)spell) & SummonedSpellFlag) == 0) continue;
+            if (Arcanum.Data.Combat.CombatFieldReader.Read(followerRow).Fields?.Npc is not { } npc) { unknown = true; continue; }
+            if ((unchecked((uint)_session.QueryObjectFlags(who.Code).Npc(unchecked((int)npc.Flags))) & NoStrayNpcFlag) != 0) continue;
+            if (NpcCritterBit(who, AnimalCritterFlag) is not { } animal) { unknown = true; continue; }
+            if (animal) continue;
+            var stored = unchecked((int)(Number(followerRow, ObjectFlagsSlot) ?? 0));
+            if ((unchecked((uint)_session.QueryObjectFlags(who.Code).Object(stored)) & AssociateBlockingObjectFlags) == 0) return true;
+        }
+        return unknown ? null : false;
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-1771 (CS13, exe read 2026-11-13: condition 19 at 0x4451B0, 0x406CA0 field 0x18, 0x502700 = art type = bits 28..31, 0x503F20 = monster number = bits 23..27 of a type 0xC art): whether the base art of the object (its own art field 0x18, which a polymorph does not touch) is a monster art
+    /// of that number. The PC's base art is a human critter art (class 2: its body and gender come from the character's race), so false. Null for an object this host has no row for, and for an NPC whose art field does not read.
+    /// </summary>
+    public bool? IsMonsterOfType(ScrObjectRef obj, int type)
+    {
+        if (IsPc(obj)) return _session.QueryHero() is null ? null : false;
+        if (Row(obj) is not { } row) return null;
+        if (Number(row, BaseArtSlot) is not { } art) return row.Type == NpcType ? null : false;
+        var id = unchecked((uint)art);
+        return id >> 28 == Arcanum.Simulation.Equipment.BodyArmorArtRules.MonsterArt && (int)((id >> 23) & 31) == type;
     }
 
     // ARC-SCRIPT-1562: what a critter-or-not object gives a magick-tech adjustment: Critter false for a row of the shown map that is neither the PC nor an NPC (no aptitude is read), else the aptitude (the PC's of the session, an NPC's of the world; null when not known).
@@ -1522,6 +1586,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: the point {unkept.Point} slot of {unkept.Attachee?.Code ?? "no object"} a callee or a change script wrote is not kept (no loaded element)");
         if (!Apply(effects, write)) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects");
         _floats.AddRange(floats);
+        _eyeCandies.AddRange(AreaScriptEyeCandy.Of(effects));
         var teleport = effects.Teleports.FirstOrDefault();
         if (effects.Dialog is { } talk)
             return new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: conversation of script {talk.Script} node {talk.Node}")
@@ -1713,6 +1778,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 // NS2: the NPC of the shown map toward the PC only; any other pair is left as it is (the original acts for an NPC and a PC only, and this viewer's facts are the shown map's).
                 if (ShownNpc(request.Object) && request.Other is { } who && IsPc(who))
                     LastReaction = _world!.ScriptReaction!(request.Object.Code, request.Value, request.Change == ScrObjectStateChange.SetReaction);
+                continue;
+            }
+            if (request.Change == ScrObjectStateChange.ChangeArtNumber)
+            {
+                if (!ApplyArt(request)) return false;
                 continue;
             }
             if (request.Change is ScrObjectStateChange.SetDayStandpoint or ScrObjectStateChange.SetNightStandpoint)
@@ -1935,6 +2005,46 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             LastHeal = _world!.ScriptHeal!(IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value);
     }
 
+    // ARC-SCRIPT-1735 (E5-a tail, ledger NS5, NS9): change art number (59) writes an object's art id (field 1). The plan of one request: what the run must refuse (an object the viewer cannot draw with another art), no change (the PC and the critter
+    // classes, a destroyed object, an id no ART file names, an id equal to the current one), or the art id to keep. Scenery of a loaded map only; the rest is refused so the run is left unapplied before anything applies.
+    private const int ArtSlot = 0;
+
+    private readonly record struct ArtChange(string? Refusal, uint? Art, uint Baseline);
+
+    private ArtChange ArtPlan(ScrObjectRef obj, int number)
+    {
+        // NS5: the PC's art is a critter class, whose number setter answers the id 0 (no ART file of this project's reading): nothing changes.
+        if (IsPc(obj)) return default;
+        // 0x43EB30: an object destroyed (object flag 0x1, or by a script) is left as it is, whatever its type.
+        if (AlreadyDestroyed(obj)) return default;
+        if (Row(obj) is not { } row) return new($"change art number of {obj.Code} is not modelled (no loaded row)", null, 0);
+        if (Number(row, ArtSlot) is not { } stored) return new($"change art number of {obj.Code} is not modelled (the row names no art)", null, 0);
+        var baseline = unchecked((uint)stored);
+        if (row.Type == NpcType)
+            // A critter class (2 critter, 12 monster) answers the id 0: nothing changes. A unique NPC's art (13) takes a number, but the viewer draws an NPC from its body, not from one art id: not modelled.
+            return ObjectArtNumber.IsCritterClass(baseline) ? default : new($"change art number of {obj.Code} is not modelled (an NPC of art class {ObjectArtNumber.Class(baseline)})", null, baseline);
+        if (row.Type != SceneryType) return new($"change art number of {obj.Code} is not modelled (only scenery takes a new art, not an object of type {row.Type})", null, baseline);
+        var current = _session.QueryObjectArt(new SessionMapId(obj.Map), obj.Code) ?? baseline;
+        if (ObjectArtNumber.Class(current) != 4)
+            return new($"change art number of {obj.Code} is not modelled (art class {ObjectArtNumber.Class(current)})", null, baseline);
+        var next = ObjectArtNumber.Changed(current, number, out _);
+        if (_world?.ArtExists is not { } exists) return new($"change art number of {obj.Code} needs the module's art index", null, baseline);
+        // 0x502220: the new id is written only when its ART file exists.
+        if (!exists(next)) return new(null, null, baseline);
+        return new(null, next, baseline);
+    }
+
+    private ArtChange ArtPlan(ScrObjectStateRequest request) => ArtPlan(request.Object, request.Value);
+
+    // The change of one request, written as the object's art id (the data's id returns the object to its baseline). False when the session refuses.
+    private bool ApplyArt(ScrObjectStateRequest request)
+    {
+        var plan = ArtPlan(request);
+        if (plan.Art is not { } art) return true;
+        var set = _session.SetObjectArt(_session.Version, new SessionMapId(request.Object.Map), request.Object.Code, art, plan.Baseline);
+        return set.Disposition != GameSessionDisposition.Rejected;
+    }
+
     // ARC-DEV-233: an NPC of the shown map, the only target the goal-starting actions (62, 69, 74, 76) are applied to; the PC, another map's object and a non-NPC are left as they are.
     private bool ShownNpc(ScrObjectRef obj) => obj.Map == _shownMap && !IsPc(obj) && Row(obj) is { Type: NpcType };
 
@@ -2106,7 +2216,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                     return $"set standpoint of {request.Object.Code} names the map {catalogueMap}, which the session cannot keep as a teleport map";
                 continue;
             }
-            if (request.Change == ScrObjectStateChange.ChangeArtNumber) return "change art number is not modelled (no per-object art overlay)";
+            if (request.Change == ScrObjectStateChange.ChangeArtNumber)
+            {
+                if (ArtPlan(request) is { Refusal: { } artRefusal }) return artRefusal;
+                continue;
+            }
             // ARC-SCRIPT-049 (HW4): set faction changes an NPC and leaves any other object as it is; an NPC of another map is not kept.
             if (request.Change == ScrObjectStateChange.SetFaction)
             {

@@ -46,6 +46,14 @@ public partial class TerrainViewerApp
     private readonly List<(int Index, long ReleaseMs, long EndMs, bool Immediate)> _castTimingsForSelfTest = [];
 
     private SpellEyeCandyTable? EyeCandyTable => _spellData?.EyeCandy;
+
+    /// <summary>ARC-SCRIPT-1592: the eye-candy entry of a goal's entry reference (the list and the index in it, <see cref="EyeCandyEntryRef"/>): the spell list or the script list; the other lists (animation, weapon, combat, trap) are not read yet.</summary>
+    private SpellEyeCandyEntry? EyeCandyEntryOf(int entry) => EyeCandyEntryRef.ListOf(entry) switch
+    {
+        EyeCandyList.Spell => EyeCandyTable?.At(EyeCandyEntryRef.IndexOf(entry)),
+        EyeCandyList.Script => _spellData?.ScriptEyeCandy?.At(EyeCandyEntryRef.IndexOf(entry)),
+        _ => null,
+    };
     private const int ForegroundSlots = 7, BackgroundSlots = 7, UnderlaySlots = 4;
 
     /// <summary>Whether the object has a free slot in every list the parts go to (0x4CCF70: a full list places nothing): the cast eye candies and the overlay runs it shows count.</summary>
@@ -132,7 +140,7 @@ public partial class TerrainViewerApp
         if (_eyeCandyHost is { } host && ReferenceEquals(host.Session, session)) return host;
         _eyeCandyHost?.LoseAll();
         _eyeCandyFacts.Clear();
-        _eyeCandyHost = new(session, index => EyeCandyTable?.At(index), EyeCandyFactsOf, null, owner => _eyeCandies.Where(e => e.Object == owner && e.Shown).Select(e => e.Parts), FireBurnerFor(session), SavedOverlayLightSlots);
+        _eyeCandyHost = new(session, EyeCandyEntryOf, EyeCandyFactsOf, null, owner => _eyeCandies.Where(e => e.Object == owner && e.Shown).Select(e => e.Parts), FireBurnerFor(session), SavedOverlayLightSlots);
         // ARC-MAGIC-1280: the overlay runs a load restored (a maintained Illuminate) are the new host's own from its first step: their lights take their slots again.
         _eyeCandyHost.AdoptRestored();
         return _eyeCandyHost;

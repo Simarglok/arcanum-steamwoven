@@ -50,6 +50,8 @@ public sealed class ScrCritterStateTests
         public bool? IsInvulnerable(ScrObjectRef obj) => One(ScrCatalogue.Condition.IsInvulnerable, obj);
         public bool? IsUndead(ScrObjectRef obj) => One(ScrCatalogue.Condition.IsUndead, obj);
         public bool? IsProwling(ScrObjectRef obj) => One(ScrCatalogue.Condition.IsProwling, obj);
+        public bool? HasBadAssociates(ScrObjectRef obj) => null; // ARC-SCRIPT-1771: asked in ScrCritterTailTests
+        public bool? IsMonsterOfType(ScrObjectRef obj, int type) => null;
         public ScrSlot? Slot(ScrObjectRef attachee, int point) => inner.Slot(attachee, point);
         public ScrScriptLookup Script(int number) => inner.Script(number);
         public bool GlobalFlag(int index) => inner.GlobalFlag(index);

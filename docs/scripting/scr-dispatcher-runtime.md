@@ -466,7 +466,8 @@ or 91 implements `IScrItemQueries` (`ScrRunOptions.Validate` refuses one that do
   keeps the low byte), the ratio `IScrItemQueries.PowerRatio(item, owner)` of operands 1 and 2; admission refuses a number literal
   as the store. An absent object or one the host does not know stops the run (`MissingObject`).
 - **Play script eye candy** hands `ScrEyeCandy(number, object)` to the host (`ScrEffects.EyeCandies`); an absent object shows
-  nothing.
+  nothing. ARC-SCRIPT-1592: the dialog host and the use host keep the requests of the runs they applied (`TakeEyeCandies`, in action order,
+  taken once) and the viewer plays them on the shown map every frame as overlay runs of the script list (`AreaEyeCandyHost.PlayScript`, ledger [VT9](../research/ledger/scripts.md)).
 - **Identified** counts `IScrItemQueries.IsIdentified` over operand 0's objects (one at most in the set): true when it is identified,
   false for none or an absent object; an object the host does not know stops the run. **Items being rewielded** is
   `IScrItemQueries.ItemsBeingRewielded`.
@@ -777,9 +778,9 @@ every entry of its sector). Ledger [UF1–UF4](../research/ledger/scripts.md#tow
   sign extension OR-ed in). A disband also removes the leader as the run sees it, so its later following tests read false.
 - **Change script (99)** changes the slot of an attachment point of any object: the run's own attachee and point set the run's own result (as change this script), any other slot keeps its flags and counters, takes the number and is
   kept in `ScrEffects.SlotWrites` and in the run's slot overlay (a later call-ex reads it). A point beyond 35 ends the dispatch (`CallExPoint`).
-- **The host.** `AreaUseScriptHost` holds eight of them in its use, placed, heartbeat and dying sets (`NpcStateHostActions`, all but change art number): disband is the session's forced leave, the reactions go to `AreaScriptWorld.ScriptReaction`
+- **The host.** `AreaUseScriptHost` holds all nine since ARC-SCRIPT-1735 (eight until then) in its use, placed, heartbeat and dying sets (`NpcStateHostActions`): disband is the session's forced leave, the reactions go to `AreaScriptWorld.ScriptReaction`
   (the viewer wires `AreaAiHost.ScriptReaction`), the standpoints are the session's saved object fields (`SessionNpcStandpoint`) that the AI host's route facts prefer to the row's, the extended map is written by
-  `GameSessionOwner.SetTeleportMap`. Change art number is held by S36 only: no host applies it (limits in NS7).
+  `GameSessionOwner.SetTeleportMap`. Change art number (ARC-SCRIPT-1735, ledger [AN1–AN9](../research/ledger/scripts.md#change-art-number-arc-script-1735-e5-a-tail)) writes the object's art id with frame 0 as the session's saved object field `obj.art` (`SessionObjectArt`, `GameSessionOwner.SetObjectArt`, `QueryObjectArt`, `QueryObjectArts`; no schema step) and only when an ART file of the module names the id (`AreaScriptWorld.ArtExists`); the viewer draws a scenery with the new art in place of its T0 body. A scenery of a loaded map is the one target that takes a new art; the PC, a critter class, a destroyed object and an id with no file change nothing; a container, door, trap, item, unique NPC or an object with no loaded row refuses the run (`ArtPlan`).
 - **Tests.** `ScrNpcStateTests` (the interpreter), `AreaNpcStateScriptTests` (the host over a real session), `AreaAiRouteTests` and `AreaAiHostScriptWalkTests` (the AI host's side), `TeleportMapStateTests` (the session's fields and
   their snapshot), `AreaNpcStateScriptAdmissionTests` (the sets and, with `DAT_ROOT`, the 270 installed scripts: S36 admits 208 whole).
 
@@ -832,7 +833,7 @@ The area use host (`AreaUseScriptHost.Admission`, with the placed and dying sets
 (the viewer's `HealLifeByScript`: the session's heal with the fatigue and poison amounts); a negative heal poison amount leaves the run unapplied. Destroy of the **item in use** (`RunItemUse`) takes the food out of the hero's list through the session's used-item
 destruction; destroy of any other non-NPC object stays refused. `RunItemUse(…, target: entity)` makes that object (the PC, or an NPC of the shown map) the extra object (the use's target, ledger IU2); the viewer passes the use's target. Tests: `ScrVitalTests` (the interpreter and the sets),
 `AreaVitalScriptTests` (the host over a session, an NPC's vitals, the self-destroying item and, with `DAT_ROOT`, the installed 30282 admitted and a whole hero leaving the potion alone). Under S43 the census (`--script-refusal-census --set S43`) admits 1,575 attached scripts
-on 6,856 placed sites (S38: 1,558 on 6,113). Not built: an NPC that eats, script eye candy.
+on 6,856 placed sites (S38: 1,558 on 6,113). Not built: an NPC that eats. Script eye candy is played by the viewer since ARC-SCRIPT-1592 ([ledger VT9](../research/ledger/scripts.md)).
 
 ## Checks
 

@@ -72,17 +72,11 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(target);
         if (_hero is null || HeroDead()) return RejectPickLock(GameSessionFailure.PickLockUnavailable);
-        if (!ValidOpenable(target.Openable, target.Baseline) || target.LockDifficulty is < -MaxLockDifficulty or > MaxLockDifficulty ||
-            target.Light is < 0 or > SessionPickLockTarget.FullLight)
-            return RejectPickLock(GameSessionFailure.InvalidOpenable);
+        if (!ValidPickLockTarget(target)) return RejectPickLock(GameSessionFailure.InvalidOpenable);
         if (lockpick is not null)
         {
-            if (!lockpick.Lockpick || lockpick.UsageBonus is < -MaxLockpickBonus or > MaxLockpickBonus || !SessionValidation.Entity(lockpick.Entity) ||
-                !ItemDurabilityRules.IsValid(lockpick.Condition) || lockpick.ScriptPoints is null)
-                return RejectPickLock(GameSessionFailure.InvalidLockpick);
-            if (lockpick.ScriptPoints.Contains(SessionLockpick.UseScript)) return RejectPickLock(GameSessionFailure.ItemScriptUnsupported);
-            if (_durability.Destroyed.Contains(lockpick.Entity) || !_inventory.Hero.InPack(lockpick.Entity))
-                return RejectPickLock(GameSessionFailure.ItemNotAvailable);
+            if (LockpickRefusal(lockpick) is var refusal && refusal != GameSessionFailure.None) return RejectPickLock(refusal);
+            if (!_inventory.Hero.InPack(lockpick.Entity)) return RejectPickLock(GameSessionFailure.ItemNotAvailable);
         }
         if (!IsCurrent(expected)) return RejectPickLock(GameSessionFailure.StaleVersion);
 
@@ -100,14 +94,31 @@ public sealed partial class GameSessionOwner
             charge = ConsumeActionPoints(Version, SessionCombatant.Hero, TurnBasedRules.UseItemCost, world);
             if (charge.Disposition == GameSessionDisposition.Rejected) return RejectPickLock(charge.Failure) with { Charge = charge };
         }
-        return PickLockStep(target, lockpick) with { Charge = charge };
+        return PickLockStep(target, lockpick, HeroSkillRequest(Skill.PickLocks, LockpickCondition(lockpick))) with { Charge = charge };
     }
 
-    private SessionPickLockResult PickLockStep(SessionPickLockTarget target, SessionLockpick? lockpick)
+    // The target's bounds: a portal or container the session knows, its lock difficulty and the light at it.
+    private bool ValidPickLockTarget(SessionPickLockTarget target) =>
+        ValidOpenable(target.Openable, target.Baseline) && target.LockDifficulty is >= -MaxLockDifficulty and <= MaxLockDifficulty &&
+        target.Light is >= 0 and <= SessionPickLockTarget.FullLight;
+
+    // The lockpicks' own refusals, whoever uses them: not lockpicks or values outside the bounds, a use script (the session runs none), an item the session
+    // destroyed. Whether the user holds them is the caller's (the hero's pack here, an NPC's holder for the host).
+    private GameSessionFailure LockpickRefusal(SessionLockpick lockpick)
     {
-        var hero = _hero!;
-        var condition = lockpick is null ? (ItemCondition?)null : QueryItemCondition(lockpick.Entity, lockpick.Condition)!.Value;
-        var request = HeroSkillRequest(Skill.PickLocks, condition);
+        if (!lockpick.Lockpick || lockpick.UsageBonus is < -MaxLockpickBonus or > MaxLockpickBonus || !SessionValidation.Entity(lockpick.Entity) ||
+            !ItemDurabilityRules.IsValid(lockpick.Condition) || lockpick.ScriptPoints is null)
+            return GameSessionFailure.InvalidLockpick;
+        if (lockpick.ScriptPoints.Contains(SessionLockpick.UseScript)) return GameSessionFailure.ItemScriptUnsupported;
+        return _durability.Destroyed.Contains(lockpick.Entity) ? GameSessionFailure.ItemNotAvailable : GameSessionFailure.None;
+    }
+
+    private ItemCondition? LockpickCondition(SessionLockpick? lockpick) =>
+        lockpick is null ? null : QueryItemCondition(lockpick.Entity, lockpick.Condition)!.Value;
+
+    // The check, the outcome and the lock write of a pick on the request of its user (the hero's or an NPC's, which carries no fate and no local-PC term).
+    private SessionPickLockResult PickLockStep(SessionPickLockTarget target, SessionLockpick? lockpick, SkillCheckRequest request)
+    {
         request = request with
         {
             Difficulty = request.Difficulty with
@@ -146,7 +157,7 @@ public sealed partial class GameSessionOwner
 
         // All refusals precede the commit.
         _random = rolls.Trial;
-        if (check.Fated && FateRules.Of(SkillCheckRules.Fate(Skill.PickLocks)) is { } fate) hero.Apply(hero.State.WithFate(FateRules.Use(hero.State.Fate, fate).After));
+        if (check.Fated && FateRules.Of(SkillCheckRules.Fate(Skill.PickLocks)) is { } fate) _hero!.Apply(_hero.State.WithFate(FateRules.Use(_hero.State.Fate, fate).After));
         if (edits.Length > 0)
         {
             if (ApplyChanges(Version, null, edits).Disposition != GameSessionDisposition.Changed)

@@ -168,6 +168,28 @@ public sealed class SpellEyeCandyTableTests
         Assert.AreEqual(((byte)4, (byte)4, (byte)4), Read("{0}{Art: 1, Light: 1, Light Color: (4)}\n").At(0).LightColor);
     }
 
+    [TestMethod]
+    public void The_script_list_has_one_entry_per_message_in_a_row_and_names_its_own_file_in_a_refusal()
+    {
+        // ARC-SCRIPT-1592: entry n of rules\ScriptEyeCandy.mes is message n (the loader's defaults, 0x4CDB30: one entry per group, stride 1) up to the first missing message; a script's play action names that number.
+        var read = SpellEyeCandyTable.Read(Mes("{0}{Art: 3, Flags: overlay_f | animates}\n{1}{Art: 4, Flags: underlay | animates}\n{2}{}\n{3}{Art: 8, Flags: overlay_f | anim_forever}\n{5}{Art: 9, Flags: overlay_f}\n"),
+            AllLoad, EyeCandyListShape.Script);
+        Assert.AreEqual(SpellDataStatus.Read, read.Status);
+        Assert.AreEqual(4, read.Table!.Entries.Count, "message 4 is missing: the list ends before 5");
+        Assert.AreEqual(3, EyeCandyArt.Number(read.Table.At(0).Art!.Value));
+        Assert.AreEqual(4, EyeCandyArt.Number(read.Table.At(1).Art!.Value));
+        Assert.IsNull(read.Table.At(2).Art, "an empty message");
+        Assert.IsTrue((read.Table.At(3).Flags & SpellEyeCandyFlags.Forever) != 0);
+        Assert.IsNull(read.Table.At(4).Art, "past the table");
+        // No sound offsets: an entry without Sound: has none, where the spell list would give it its group's first sound plus an offset.
+        var sounds = SpellEyeCandyTable.Read(Mes("{0}{Art: 3, Sound: 40, Flags: overlay_f | animates}\n{1}{Art: 4, Flags: overlay_f | animates}\n"), AllLoad, EyeCandyListShape.Script);
+        Assert.AreEqual((40, -1), (sounds.Table!.At(0).Sound, sounds.Table.At(1).Sound));
+        var refused = SpellEyeCandyTable.Read(Mes("{5}{Art: 3}\n"), AllLoad, EyeCandyListShape.Script);
+        Assert.AreEqual(SpellDataStatus.FileEmpty, refused.Status);
+        Assert.AreEqual(SpellEyeCandyTable.ScriptPath, refused.Refusal!.File);
+        Assert.AreEqual(SpellEyeCandyTable.Path, SpellEyeCandyTable.Read(Mes("{5}{Art: 3}\n"), AllLoad).Refusal!.File, "the spell list's default");
+    }
+
     private static SpellEyeCandyTable Read(string text)
     {
         var read = SpellEyeCandyTable.Read(Mes(text), AllLoad);

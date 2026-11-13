@@ -970,7 +970,7 @@ companion, a shopkeeper and a guard in any town where a quest script touches the
 
 Known differences (documented, not bugs):
 
-- Change art number (a door, scenery or creature changing its picture from a script) is not built: scripts that use it are still refused, so those quest steps do nothing in Steamwoven.
+- Change art number (ARC-SCRIPT-1735) changes the picture of a **scenery** from a script (kept in the save, drawn in the viewer); a door, container, trap, item or unique NPC target is not built: a script run that reaches one is refused, so that step does nothing in Steamwoven. A critter (the hero, an NPC of a critter or monster body) is never changed (the original builds the art id 0 for them and writes it only if a file of that id exists; not read, F0).
 - A script in a dialog (a talk) that uses one of these actions is still refused; only use, tile, sector, heartbeat and dying scripts run them.
 - A reaction or standpoint change acts for NPCs of the map on screen only.
 
@@ -1202,6 +1202,44 @@ start a game and press `C`. Compare with **HD** and **Legacy**.
 | 4 | Resize the window and open the sheet again. | The frames are sharp at the new size, no seam between the window and the pages. | open |
 | 5 | Open an NPC's sheet in a dialog (reply `c-e`). | The same look, with no + or − buttons. | open |
 
+## ARC-UI-1784 — Generated interface: the schemes page and the college tabs (S5b, 2026-11-13)
+
+The rules are in [viewer slice S5b](../rendering/hd-interface-density.md#viewer-slice-s5b-arc-ui-1784). Set the HD interface line to **Generated (experimental)**, start a game and press `C`. Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open the spells tab. | The sixteen college balls keep their colours and glyphs inside a brass ring drawn by code; hover and the pressed look change the ring and the ball as before. | open |
+| 2 | Open the schemes tab (the fourth, the one with the scroll icon). | The page is dark stone like the other pages: the scheme's name in a sunk plaque with a rivet at each end, the list's pit and the scroll bar's track; the names, the bar's arrows and thumb are where they were. | open |
+| 3 | Resize the window and look at both pages again. | The frames are sharp at the new size. | open |
+| 4 | Look at the spell icons next to the generated pits. | Judge whether they need a generated frame (they are pictures in S5b). | open |
+
+## ARC-UI-1197 — Generated interface: the world map and the town map (S6, 2026-11-13)
+
+The rules are in [viewer slice S6](../rendering/hd-interface-density.md#viewer-slice-s6-arc-ui-1197). Set the HD interface line on the launcher screen to **Generated (experimental)**,
+start a game and press `W` (the town map opens in the Crash Site; on the open ground the world map). Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Press `W` in a 1280 × 800 window. | The window's wood, the brass rim around the map view, the readout boxes, the compass rose, the route sketch and the Travel button's ring sit where they did in HD; the map picture is as before. | open |
+| 2 | Press `Z` or the Zoom and Whole-map buttons to change the view. | The frame does not change; the buttons (still art) answer to hover and press. | open |
+| 3 | Move the pointer over the map. | The two readout boxes show their numbers in the same places. | open |
+| 4 | Resize the window (or go full screen) and open the map again. | The frame is sharp at the new size, no seam between the wood and the kept pictures. | open |
+
+Known differences (documented, not bugs):
+
+- The buttons, the lens cover and the bottom cover are still art ([issue #1810](https://github.com/Simarglok/arcanum-steamwoven/issues/1810)); the zoom and whole-map buttons get a brass frame from the holes of the frame.
+- The compass, the route sketch and the Travel ring are the original's pictures; their small patches of old wood differ a little from the generated wood.
+
+## ARC-COMBAT-1738 — Auto Switch Weapons option and its re-wield cases (2026-11-13)
+
+The rules are in the [ledger OH3](../research/ledger/ui-audio.md#hidden-options-arc-res-1107) and [equipment runtime](../world/equipment-runtime.md). Start a game with a hero who carries two weapons.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open Options (main menu and in play), Game page. | Auto Switch Weapons is the fifth line, after Auto Attack, Off at the first start. | open |
+| 2 | Turn Auto Switch Weapons On, wield a bow with no arrows (or a gun with no bullets) and attack. | The attack does not shoot, and the hero wields the best other weapon at once; with the option Off nothing changes. | open |
+| 3 | With it On, let an enemy with a critical hit (drop weapon or destroy weapon) strike the hero. | The hero's lost weapon is replaced by the best weapon left; with the option Off the hand stays empty. | open |
+
 ## ARC-SCRIPT-1732 — The healer menu behind `h:` (2026-11-13)
 
 Built from the executable's state machine ([ledger HLR1–HLR12](../research/ledger/social.md#healer-reply-arc-script-1732)); the effects start through the AI host, so the look and the timing of the heal and the spells are for you to judge.
@@ -1212,3 +1250,32 @@ Built from the executable's state machine ([ledger HLR1–HLR12](../research/led
 | 2 | Choose a spell, then yes, with enough gold; then again with too little. | The price is the reaction-scaled 100 (about 100 at a neutral reaction); the gold goes to the healer, the spell is cast at you (a heal, a poison cure, and at rank 5 a resurrection); with too little gold the healer says its no-money line and nothing is paid. | open |
 | 3 | Choose the healer's own treatment when your hit points are low. | The price follows its heal skill ((level + 2) × (tier + 1), reaction scaled); the healer walks the skill goal and heals through the usual heal check. | open |
 | 4 | Ask a healer who follows you the same. | No price screen and no payment: the service runs at once. | open |
+
+## ARC-UI-1196 — Generated interface: the logbook (S7, 2026-11-13)
+
+The rules are in [viewer slice S7](../rendering/hd-interface-density.md#viewer-slice-s7-arc-ui-1196). Set the HD interface line on the launcher screen to **Generated (experimental)**,
+start a game and open the logbook (L). Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open the logbook in a 1280 × 800 window. | The side panel is wood with the round view of the hero, the book is a maroon cover with two pages sinking toward the fold and stacks of page edges at both sides; the titles and page numbers sit where they did. | open |
+| 2 | Click each of the seven tabs, move over them. | The paper bookmarks (their own outlines and glyphs) follow the Legacy ones; the shown tab is the pressed one; hints and the page sound are as before. | open |
+| 3 | Fill a tab so it has several spreads (the rumors with many entries) and turn the pages with the two arrows. | The arrows are drawn on the page under them (no box of another colour); a turn plays the page sound; the arrow hides on the first and last spread. | open |
+| 4 | Make the window bigger and smaller while the logbook is open. | The book redraws at the new size (the previous picture stays until it is ready); the lines of the page edges stay one unit wide. | open |
+
+Known differences (documented, not bugs):
+
+- The pages are plainer than the original's (soft clouds, no grain), the cover is a flat weave and the page edges are light regular stripes where the original's are a dark speckle.
+- The ring of the round view (art 198) is the HD pack's (or Legacy) frame: it is shared with the character sheet and the world map.
+
+## ARC-UI-1740 — Gambling: bets in the barter window (2026-11-13)
+
+The rules are in [barter](../world/barter-runtime.md#gambling-arc-ui-1740). Start a game, spend skill points on Gambling for the hero and talk to a merchant who has Gambling points (most shops do).
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open barter and drag one of your own items onto the bet box on the right of the window. | The box stays in its rest art, the item goes back to your grid, nothing is printed. | open |
+| 2 | Drag one of the merchant's wares over the box without releasing. | The box changes to the lit art and the merchant's confirm line with the price shows in the quote line; a very expensive ware (above your limit) or a hero with too little money shows the dark art and the merchant's refusal line instead. | open |
+| 3 | Release the ware on the box. | The merchant says a won or lost line. A win gives the ware for nothing, a loss takes its price in coins and gives the ware; the trade sound plays once; the box returns to rest. | open |
+| 4 | Open barter once, close it and save; bet and note the result; load that save, open barter and bet the same ware. | The outcome is the same win or loss as the first time (the roll is saved, reloading does not reroll). | open |
+

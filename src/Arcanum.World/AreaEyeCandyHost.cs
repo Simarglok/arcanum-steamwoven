@@ -40,7 +40,7 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     private GoalHandle? _stepping;
     private readonly HashSet<GoalHandle> _stale = [];
 
-    /// <param name="entry">The eye-candy table's entry by index, or null.</param>
+    /// <param name="entry">The eye-candy entry by <see cref="EyeCandyEntryRef"/> (the list and the index in it), or null.</param>
     /// <param name="facts">The ART facts of an entry's art and parts (the header reads), or null when the art does not read.</param>
     /// <param name="random">A number in the inclusive range (0x4CEF00).</param>
     /// <param name="otherParts">The parts of the owner's other shown eye candies that are not runs of this host (the casting goal's own cast animation), which fill the same overlay lists.</param>
@@ -187,6 +187,15 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
         if (entry.Light is not null && result.Handle is { } started) ReserveLight(started, owner);
         return true;
     }
+
+    /// <summary>
+    /// ARC-SCRIPT-1592 (WE4, WE5): the script action's play (0x44C7A0): entry <paramref name="number"/> of the script eye-candy list on the owner, as the add 0x4CCF70 with the play flags 0 (no stack, no duplicate test, the tag −1, no limit) and an
+    /// animating run (the +0x1C word 1). Refused (false) for a number past the list or outside the entry range, an entry that plays no run (a static overlay, a part-less entry, one without art), no free place on the owner, or a full table; the
+    /// object's own facing, which the original turns the entry's art to (the art modifier 0x502880 into 0x502930), the sound and the tinting are not modelled (as for every entry of this host).
+    /// </summary>
+    [OriginalFunction(0x44C7A0, OriginalFunctionScope.Partial)]
+    public bool PlayScript(string owner, int number) =>
+        EyeCandyEntryRef.Make(EyeCandyList.Script, number) is { } entry && Play(owner, entry, 0, -1);
 
     /// <summary>The remove 0x4CD940 / 0x4243E0: the owner's runs whose bottom goal is exactly 45 and whose current frame has this entry's art and (unless <paramref name="anyTag"/>) this tag end at level 6. Returns how many. A looping entry played as 47, 58 or 75 (or queued under another run) cannot be removed this way (GT71, GT85).</summary>
     [OriginalFunction(0x4243E0, OriginalFunctionScope.Partial)]
