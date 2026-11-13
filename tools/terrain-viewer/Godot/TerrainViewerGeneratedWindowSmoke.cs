@@ -1,3 +1,4 @@
+using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
 
@@ -62,6 +63,79 @@ public partial class TerrainViewerApp
         {
             _gameSettings = saved;
             SyncInterfaceHd();
+            await Frames(2);
+        }
+    }
+
+    // ARC-UI-1196: the same opt-in for the open logbook (called by the loot-room smoke after the inventory part). Its drawn frames (the side panel, the book, the page art, the seven
+    // tabs: the shown tab's pressed frame, the others' idle one; the page buttons are drawn only with more than one spread, so the renderer's own tests cover them): in the
+    // generated mode every one is generated chrome at round(size x paint scale) pixels of the window's own device scale, again after a bigger window; in the HD and Legacy modes none is.
+    // ARC_AREA_WINDOW_CAPTURE=PREFIX saves the viewport as PREFIX-logbook-MODE[-big|-back].png (local, never in git).
+    private async Task LogbookArtSmokeAsync()
+    {
+        var mode = System.Environment.GetEnvironmentVariable("ARC_AREA_WINDOW_ART");
+        if (string.IsNullOrEmpty(mode)) return;
+        void Fail(string why)
+        {
+            GD.Print($"ARC-UI-1196 logbook art smoke FAIL {why}");
+            throw new InvalidOperationException("ARC-UI-1196 logbook art smoke: " + why);
+        }
+        if (mode is not ("legacy" or "hd" or "generated")) Fail($"ARC_AREA_WINDOW_ART={mode} is not legacy, hd or generated");
+        async Task Frames(int count) { for (var i = 0; i < count; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
+        if (mode != "legacy" && _canvas?.HdSource?.Pack is null) Fail($"the {mode} interface needs ARC_HD_PACK");
+        var saved = _gameSettings;
+        try
+        {
+            if (InventoryOpen) EndInventory();
+            if (LogbookOpen) CloseLogbookByPlayer();
+            _gameSettings = _gameSettings with { HdInterface = mode != "legacy", GeneratedInterface = mode == "generated" };
+            SyncInterfaceHd();
+            // The logbook builds its textures when its art is read: drop them so the book is read again in the mode under test.
+            _logbookArtContent = null; _logbookArtTextures = null;
+            await Frames(3);
+            OpenLogbook();
+            await Frames(3);
+            if (!(LogbookOpen && _logbookPanel is { ArtMode: true } panel && _logbookArtTextures is { } art)) { Fail("the logbook shows the original's look"); return; }
+            var view = panel.ArtViewForSelfTest;
+            var shown = panel.ViewForSelfTest!.Tab;
+            var numbers = new List<int> { AreaLogbookArtLayout.SideArt, AreaLogbookArtLayout.BookArt, AreaLogbookArtLayout.PageArt };
+            var textures = numbers.Select(number => art[number][0]).ToList();
+            for (var i = 0; i < AreaLogbookArtLayout.Tabs.Count; i++)
+            {
+                var tab = AreaLogbookArtLayout.Tabs[i].Art;
+                numbers.Add(tab);
+                textures.Add(art[tab][i == (int)shown ? Math.Min(1, art[tab].Length - 1) : 0]);
+            }
+            async Task Capture(string at)
+            {
+                if (System.Environment.GetEnvironmentVariable("ARC_AREA_WINDOW_CAPTURE") is not { Length: > 0 } capture) return;
+                await Frames(2);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                var path = System.IO.Path.GetFullPath(capture) + $"-logbook-{mode}" + (at == "first" ? "" : "-" + at) + ".png";
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+                using var image = GetViewport().GetTexture().GetImage();
+                if (image is null || image.SavePng(path) != Error.Ok) Fail("readback not saved: " + path);
+                GD.Print($"ARC-UI-1196 logbook capture {mode} {at} {image!.GetWidth()}x{image.GetHeight()}");
+            }
+            if (mode == "generated")
+            {
+                var hd = textures.Select((texture, i) => texture as HdInterfaceTexture ?? throw new InvalidOperationException($"ARC-UI-1196 logbook art smoke: art {numbers[i]} is no interface texture")).ToArray();
+                await VerifyGeneratedTexturesAsync("ARC-UI-1196", "logbook", numbers, hd, () => view.DeviceScale(), Frames, SetSmokeWindowSizeAsync, Capture, new Vector2I(1600, 1200)); // the bars' whole factor (and the logbook's) steps to 2 only from 1200 high
+            }
+            else
+            {
+                await Frames(2);
+                if (textures.OfType<HdInterfaceTexture>().Any(texture => texture.IsGenerated)) Fail($"a frame is generated in the {mode} run");
+                GD.Print($"ARC-UI-1196 logbook art {mode} frames={textures.Count} hd={textures.OfType<HdInterfaceTexture>().Count(texture => texture.IsHd)} generated=0");
+                await Capture("first");
+            }
+        }
+        finally
+        {
+            if (LogbookOpen) CloseLogbookByPlayer();
+            _gameSettings = saved;
+            SyncInterfaceHd();
+            _logbookArtContent = null; _logbookArtTextures = null;
             await Frames(2);
         }
     }

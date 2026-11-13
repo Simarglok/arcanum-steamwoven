@@ -1188,3 +1188,19 @@ Known differences (documented, not bugs):
 - The curved flourishes at the corners of the original's boxes are not drawn; the ring around the round view is three units wide, narrower than the original's.
 - The follower's plates keep a little of the old wood at their inner ends; the barter doll and the doll cover are not built yet.
 
+## ARC-UI-1196 — Generated interface: the logbook (S5, 2026-11-13)
+
+The rules are in [viewer slice S5](../rendering/hd-interface-density.md#viewer-slice-s5-arc-ui-1196). Set the HD interface line on the launcher screen to **Generated (experimental)**,
+start a game and open the logbook (L). Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open the logbook in a 1280 × 800 window. | The side panel is wood with the round view of the hero, the book is a maroon cover with two pages sinking toward the fold and stacks of page edges at both sides; the titles and page numbers sit where they did. | open |
+| 2 | Click each of the seven tabs, move over them. | The paper bookmarks (their own outlines and glyphs) follow the Legacy ones; the shown tab is the pressed one; hints and the page sound are as before. | open |
+| 3 | Fill a tab so it has several spreads (the rumors with many entries) and turn the pages with the two arrows. | The arrows are drawn on the page under them (no box of another colour); a turn plays the page sound; the arrow hides on the first and last spread. | open |
+| 4 | Make the window bigger and smaller while the logbook is open. | The book redraws at the new size (the previous picture stays until it is ready); the lines of the page edges stay one unit wide. | open |
+
+Known differences (documented, not bugs):
+
+- The pages are plainer than the original's (soft clouds, no grain), the cover is a flat weave and the page edges are light regular stripes where the original's are a dark speckle.
+- The ring of the round view (art 198) is the HD pack's (or Legacy) frame: it is shared with the character sheet and the world map.

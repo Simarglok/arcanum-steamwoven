@@ -541,4 +541,165 @@ public sealed class InterfaceChromeTests
         Assert.IsTrue(Pixel(smoothed, 120, 60 + 44, 60).A < 255, "the circle's edge pixel is smoothed");
         Assert.AreEqual(255, Pixel(smoothed, 120, 60 + 49, 60).A, "outside the circle the frame is opaque");
     }
+
+    // ARC-UI-1196: the logbook's frames (synthetic stand-ins of the frames' sizes and holes; no game art).
+    private static readonly string[] LogbookFrames =
+        ["logbooks_side.art", "book_main.art", "book_quests.art", "tab_note.art", "tab_quest.art", "tab_rep.art", "tab_blesscurse.art", "tab_egoinjure.art", "tab_backgrnd.art", "tab_keys.art", "pageturn_l.art", "pageturn_r.art"];
+
+    private static ChromeRecipe Recipe(string file) => InterfaceChromeRecipes.All.Single(r => r.File == file);
+
+    // A frame of w x h whose pixels are one colour, with a transparent rectangle.
+    private static byte[] Flat(int w, int h, (byte R, byte G, byte B) colour, (int X, int Y, int W, int H)? hole = null)
+    {
+        var rgba = new byte[w * h * 4];
+        for (var y = 0; y < h; y++)
+        for (var x = 0; x < w; x++)
+        {
+            var i = (y * w + x) * 4;
+            var clear = hole is { } r && x >= r.X && x < r.X + r.W && y >= r.Y && y < r.Y + r.H;
+            (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]) = clear ? ((byte)0, (byte)0, (byte)0, (byte)0) : (colour.R, colour.G, colour.B, (byte)255);
+        }
+        return rgba;
+    }
+
+    [TestMethod]
+    public void The_logbook_frames_have_recipes_laid_out_by_the_logbook_layout_and_the_shared_lens_has_none()
+    {
+        var names = InterfaceChromeRecipes.All.Select(r => r.File).ToArray();
+        CollectionAssert.IsSubsetOf(LogbookFrames, names);
+        CollectionAssert.AllItemsAreUnique(names);
+        Assert.AreEqual(ChromeHoles.None, Recipe("logbooks_side.art").Holes, "the side's square hole is the live view");
+        Assert.AreEqual(ChromeHoles.Cloth, Recipe("book_quests.art").Holes);
+        // The lens art (pcwincvr, 198) is shared with the character sheet and the world map: no recipe here.
+        CollectionAssert.DoesNotContain(names, "pcwincvr.art");
+        var tabs = new[] { "tab_note.art", "tab_quest.art", "tab_rep.art", "tab_blesscurse.art", "tab_egoinjure.art", "tab_backgrnd.art", "tab_keys.art" };
+        for (var i = 0; i < tabs.Length; i++)
+        {
+            var recipe = Recipe(tabs[i]);
+            Assert.AreEqual(ChromeKind.Tab, recipe.Kind);
+            Assert.AreEqual(AreaLogbookArtLayout.Tabs[i].X - AreaLogbookArtLayout.BookCorner.X, recipe.OriginX, $"{tabs[i]} stands where the layout puts tab {i}");
+            Assert.AreEqual(AreaLogbookArtLayout.Tabs[i].Y, recipe.OriginY);
+        }
+        Assert.AreEqual(AreaLogbookArtLayout.PreviousCorner.X - AreaLogbookArtLayout.BookCorner.X, Recipe("pageturn_l.art").OriginX);
+        Assert.AreEqual(AreaLogbookArtLayout.NextCorner.X - AreaLogbookArtLayout.BookCorner.X, Recipe("pageturn_r.art").OriginX);
+    }
+
+    [TestMethod]
+    public void The_logbook_recipes_paint_in_bounds_deterministically_at_whole_and_fractional_scales()
+    {
+        foreach (var (file, w, h) in new[] { ("logbooks_side.art", 165, 400), ("book_main.art", 635, 400), ("book_quests.art", 561, 355), ("tab_keys.art", 46, 41), ("pageturn_r.art", 18, 22) })
+        {
+            var legacy = Flat(w, h, (200, 190, 170));
+            var recipe = Recipe(file);
+            foreach (var scale in new[] { 1.0, 1.345, 2.0 })
+            {
+                var a = InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale);
+                var (pw, ph) = InterfaceChromeRenderer.PixelSize(w, h, scale);
+                Assert.AreEqual(pw * ph * 4, a.Length, $"{file} at {scale}");
+                CollectionAssert.AreEqual(a, InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale), $"{file} deterministic at {scale}");
+                for (var i = 3; i < a.Length; i += 4) Assert.AreEqual(255, a[i], $"{file} is opaque like its Legacy frame at {scale}");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void The_side_panels_square_hole_is_plain_and_a_covers_hole_has_a_cloth_edge_not_a_brass_one()
+    {
+        // The side panel: a hole at (25, 24, 89, 89) gets no rim, so a pixel beside it equals the same pixel of the frame with no hole.
+        var withHole = Flat(165, 400, (90, 60, 30), (25, 24, 89, 89));
+        var sideA = InterfaceChromeRenderer.Render(Recipe("logbooks_side.art"), 165, 400, withHole, [], 0, 2);
+        var sideB = InterfaceChromeRenderer.Render(Recipe("logbooks_side.art"), 165, 400, Flat(165, 400, (90, 60, 30)), [], 0, 2);
+        Assert.AreEqual(Pixel(sideB, 330, 48, 100), Pixel(sideA, 330, 48, 100), "left of the hole");
+        Assert.AreEqual(Pixel(sideB, 330, 229, 100), Pixel(sideA, 330, 229, 100), "right of the hole");
+        Assert.AreEqual(0, Pixel(sideA, 330, 100, 100).A, "the hole stays clear");
+        // The page art: a cloth frame with a hole at (14, 12, 537, 331). The cloth next to the hole is darker than a few units further in, and not brass-coloured.
+        var frame = Flat(561, 355, (100, 40, 45), (14, 12, 537, 331));
+        var cover = InterfaceChromeRenderer.Render(Recipe("book_quests.art"), 561, 355, frame, [], 0, 2);
+        Assert.AreEqual(0, Pixel(cover, 1122, 400, 300).A, "the hole stays clear");
+        var edge = Pixel(cover, 1122, 13 * 2 + 1, 300);
+        var inner = Pixel(cover, 1122, 6 * 2, 300);
+        Assert.IsTrue(edge.R + edge.G + edge.B < inner.R + inner.G + inner.B, $"{edge} against {inner}");
+        Assert.IsTrue(edge.R > edge.B && edge.G <= edge.R, $"the edge is the cloth's own red-brown, not brass: {edge}");
+    }
+
+    [TestMethod]
+    public void The_parchment_sinks_toward_the_fold_and_matches_across_separately_painted_arts()
+    {
+        // The book: page colour at the middle of the left page is brighter than beside the fold (x 286 of the book), and the fold's own line is the darkest.
+        var book = InterfaceChromeRenderer.Render(Recipe("book_main.art"), 635, 400, Flat(635, 400, (120, 110, 90)), [], 0, 1);
+        int Luma((int R, int G, int B, int A) p) => p.R + p.G + p.B;
+        var far = Enumerable.Range(150, 20).Average(x => Luma(Pixel(book, 635, x, 200)));
+        var near = Enumerable.Range(268, 10).Average(x => Luma(Pixel(book, 635, x, 200)));
+        Assert.IsTrue(near < far - 20, $"near the fold {near} against far {far}");
+        Assert.IsTrue(Luma(Pixel(book, 635, 286, 200)) < near, "the fold's line is darker still");
+        // A page button painted as its own art at the book's offset continues the page: its parchment equals the book's at the same place (the arrow glyph part leaves a flat frame alone).
+        var button = InterfaceChromeRenderer.Render(Recipe("pageturn_l.art"), 18, 22, Flat(18, 22, (120, 110, 90)), [], 0, 1);
+        var ox = AreaLogbookArtLayout.PreviousCorner.X - AreaLogbookArtLayout.BookCorner.X;
+        var oy = AreaLogbookArtLayout.PreviousCorner.Y - AreaLogbookArtLayout.BookCorner.Y;
+        for (var y = 0; y < 22; y += 5)
+        for (var x = 0; x < 18; x += 4)
+            Assert.AreEqual(Pixel(book, 635, ox + x, oy + y), Pixel(button, 18, x, y), $"({x}, {y}) of the button is the page under it");
+    }
+
+    [TestMethod]
+    public void A_glyph_part_multiplies_the_marks_onto_the_ground_and_leaves_the_legacy_grain_out()
+    {
+        // 18 x 22 paper of a flat colour with a grainy patch (a few levels) and a dark mark.
+        var legacy = Flat(18, 22, (200, 190, 170));
+        for (var y = 0; y < 22; y++)
+        for (var x = 0; x < 18; x++) { var i = (y * 18 + x) * 4; if ((x + y) % 2 == 0) legacy[i] += 6; }
+        for (var y = 8; y < 13; y++)
+        for (var x = 7; x < 12; x++) { var i = (y * 18 + x) * 4; (legacy[i], legacy[i + 1], legacy[i + 2]) = (60, 40, 20); }
+        var withGlyph = InterfaceChromeRenderer.Render(Recipe("pageturn_l.art"), 18, 22, legacy, [], 0, 2);
+        var plain = InterfaceChromeRenderer.Render(new ChromeRecipe("t.art", ChromeKind.Panel, ChromeMaterial.Parchment, ChromeSides.None, [], OriginX: Recipe("pageturn_l.art").OriginX, OriginY: Recipe("pageturn_l.art").OriginY), 18, 22, legacy, [], 0, 2);
+        Assert.AreEqual(Pixel(plain, 36, 2, 2), Pixel(withGlyph, 36, 2, 2), "the grain of the Legacy ground is not copied");
+        var mark = Pixel(withGlyph, 36, 19, 20);
+        var ground = Pixel(plain, 36, 19, 20);
+        Assert.IsTrue(mark.R < ground.R * 0.6 && mark.G < ground.G * 0.6, $"the mark {mark} is much darker than the ground {ground}");
+    }
+
+    [TestMethod]
+    public void A_tab_reads_its_paper_from_the_legacy_frame_and_gives_it_an_edge_a_shadow_and_its_glyph()
+    {
+        // 46 x 41: dark stack and wood, a bright paper tab from x 9 to 33 with its lower right corner cut away, and a dark glyph on it.
+        var legacy = Flat(46, 41, (50, 45, 40));
+        for (var y = 0; y < 41; y++)
+        for (var x = 0; x < 46; x++)
+        {
+            var paper = x >= 9 && x <= 33 - Math.Max(0, y - 25) && y < 40;
+            if (!paper) continue;
+            var i = (y * 46 + x) * 4;
+            (legacy[i], legacy[i + 1], legacy[i + 2]) = (190, 185, 170);
+        }
+        for (var y = 10; y < 18; y++)
+        for (var x = 15; x < 24; x++) { var i = (y * 46 + x) * 4; (legacy[i], legacy[i + 1], legacy[i + 2]) = (70, 50, 30); }
+        int Luma((int R, int G, int B, int A) p) => p.R + p.G + p.B;
+        foreach (var frame in new[] { 0, 1 })
+        {
+            var a = InterfaceChromeRenderer.Render(Recipe("tab_quest.art"), 46, 41, legacy, [], frame, 3);
+            CollectionAssert.AreEqual(a, InterfaceChromeRenderer.Render(Recipe("tab_quest.art"), 46, 41, legacy, [], frame, 3), "deterministic");
+            var paper = Pixel(a, 138, 19 * 3, 6 * 3);
+            // Averages over a few units, since the parchment and the page edge both vary in tone.
+            var paperLuma = Enumerable.Range(16, 8).Average(x => Luma(Pixel(a, 138, x * 3, 6 * 3)));
+            var stackLuma = Enumerable.Range(1, 7).Average(x => Luma(Pixel(a, 138, x * 3, 20 * 3)));
+            Assert.IsTrue(paperLuma > 380 && paperLuma > stackLuma * 1.2, $"the paper {paperLuma} is parchment, brighter than the stack {stackLuma}");
+            Assert.IsTrue(Luma(Pixel(a, 138, 19 * 3, 14 * 3)) < Luma(paper) * 0.6, "the glyph's marks are darker than the paper");
+            // The paper's right edge (the last paper pixel of a row) is shaded, and the pixel just beyond it is in its shadow.
+            var edge = Pixel(a, 138, 33 * 3 + 2, 12 * 3);
+            var beyond = Pixel(a, 138, 34 * 3 + 1, 12 * 3);
+            Assert.IsTrue(Luma(edge) < Luma(paper) * 0.8, $"edge {edge} against paper {paper}");
+            Assert.IsTrue(Luma(beyond) < Luma(Pixel(a, 138, 42 * 3, 12 * 3)) * 1.3 + 1, "beyond the edge there is a shadow, not more paper");
+            for (var i = 3; i < a.Length; i += 4) Assert.AreEqual(255, a[i]);
+        }
+    }
+
+    [TestMethod]
+    public void Materials_sample_at_the_recipes_origin_so_separately_painted_pieces_join_without_a_seam()
+    {
+        ChromeRecipe At(int ox) => new("t.art", ChromeKind.Panel, ChromeMaterial.Parchment, ChromeSides.None, [], OriginX: ox);
+        var whole = InterfaceChromeRenderer.Render(At(0), 100, 20, Flat(100, 20, (1, 2, 3)), [], 0, 1);
+        var right = InterfaceChromeRenderer.Render(At(60), 40, 20, Flat(40, 20, (1, 2, 3)), [], 0, 1);
+        for (var y = 0; y < 20; y += 3)
+        for (var x = 0; x < 40; x += 3) Assert.AreEqual(Pixel(whole, 100, 60 + x, y), Pixel(right, 40, x, y), $"({x}, {y})");
+    }
 }
