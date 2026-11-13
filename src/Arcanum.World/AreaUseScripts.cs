@@ -1289,6 +1289,19 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         finally { _clicked = previous; }
     }
 
+    /// <summary>
+    /// ARC-WORLD-1668 (ledger TT18, 0x428A10 → 0x441980 point 1): whether the use script a door's use node ran (<see cref="RunUseScript"/>, the opener as the triggerer and the extra object) stops the use: the dispatcher's answer 0, "skip default",
+    /// which includes a script that runs past its last line. A run that was not applied (refused by the admission, effects the viewer cannot apply, an unreadable or changed file, a requested teleport), an object with no use script and a native trap script the trap code left unmet stop nothing:
+    /// the use goes on (the original's node returns 1 for no attachment: 0x441980 answers 1).
+    /// </summary>
+    public static bool UseStops(AreaScriptedUse ran)
+    {
+        ArgumentNullException.ThrowIfNull(ran);
+        // The dispatcher's stop at a native trap script (30000..30007) is no answer of a script: the trap code runs those, and a trap whose meeting could not be made here (no cast host, a critter the host cannot apply
+        // it for) was left unmet, so the use goes on as before and the door opens (a divergence: the original fires and, for a self-removing trap, consumes it).
+        return ran.Outcome is AreaScriptedUseOutcome.NoTeleport && ran.Run is { } run && run.Outcome == ScrOutcome.SkipDefault && run.Stop != ScrStop.TrapScript;
+    }
+
     /// <summary>ARC-DEV-326: whether an examine run (<see cref="RunExamine"/>) leaves the object without a description: the dispatcher's
     /// "skip default" (return 0 of 0x441980, 0x57CD9B), which includes a script that runs past its last line. A run that was not applied
     /// (refused by the admission, effects the viewer cannot apply, an unreadable or changed file, a requested teleport) or an object with no

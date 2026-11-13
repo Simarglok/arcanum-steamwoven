@@ -1,3 +1,5 @@
+using Arcanum.Scripting.Scr;
+using Arcanum.Session;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Locks;
 using Arcanum.TerrainViewer.Core;
@@ -10,6 +12,8 @@ namespace Arcanum.TerrainViewer;
 // an unlocked door that keeps no portal flag 0x100 as the door's own run (goal 70); the run writes its frames at the ART's pace and turns into the pending close 72; the door is still open one second
 // later; the Esc menu stops the run (five seconds behind it change nothing and the next frame credits one frame, not the time behind it); after the menu the door closes by itself, no sooner than
 // the original's two waits of 1.5 s after its last open frame and (pause excluded) no later than those plus the closing steps. The frame clock is driven with literal host stamps, as the AI smokes do.
+// ARC-WORLD-1668 (ledger TT18, 0x428A10) last part: the closed door is made trapped (the native trap script 30001 with counters 0, so it hurts nobody, written as the session's map changes over its use slot): the hero's use meets the trap on the use node, which ends the run with the door shut
+// (the trap spotted or gone off); with the trap taken away the next use opens it. NONE for this part when the map has no trap host or cast host.
 public partial class TerrainViewerApp
 {
     private void RunAreaDoorCloseSmoke()
@@ -74,13 +78,66 @@ public partial class TerrainViewerApp
             Require(elapsed >= 2 * AiExecutorRules.DoorCloseWaitMs && elapsed <= 2 * AiExecutorRules.DoorCloseWaitMs + 8 * door.StepMs + 200,
                 $"it closed at the original's interval: {elapsed} ms after its last open frame (pause excluded)");
             Require(doors.GoalOf(door) is null or Arcanum.Simulation.Goals.GoalType.AnimateDoorClosed, $"the closing run ended or is on its last wait: {doors.GoalOf(door)}");
+            var trapped = RunDoorTrapPart(door, session, portals, doors);
             GD.Print("ARC-DEV-138 native-smoke door-close PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Map = _readyMapName, door.Entity, door.OpenFrame, door.StepMs, Frames = seen.Count, ClosedAfterMs = elapsed, PausedMs = pausedMs, Parity = "NOT_VERIFIED" }));
+                Map = _readyMapName, door.Entity, door.OpenFrame, door.StepMs, Frames = seen.Count, ClosedAfterMs = elapsed, PausedMs = pausedMs, TrappedDoor = trapped, Parity = "NOT_VERIFIED" }));
         }
         finally
         {
             PortalSmokeClockEnd();
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
+        }
+    }
+
+    /// <summary>ARC-WORLD-1668: the trapped-door part of the door-close smoke; returns what it found ("met" with the meeting's result, or the reason it did not run).</summary>
+    private string RunDoorTrapPart(AreaPortal door, GameSessionOwner session, AreaPortals portals, AreaDoorHost doors)
+    {
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print("ARC-WORLD-1668 door-close trapped-door smoke FAIL: " + why);
+            throw new InvalidOperationException("AREA_DOOR_CLOSE_SMOKE_FAILED");
+        }
+        if (_readyArea is not { } area || AreaTrapsNow() is not { } traps || SpellCasterNow() is null || UseScriptHost(area.Snapshot) is not { } host
+            || area.Snapshot.Objects.FirstOrDefault(o => o.Key == door.Key) is not { } row)
+        { GD.Print($"ARC-WORLD-1668 native-smoke door-trap NONE map={_readyMapName} (no trap host or cast host)"); return "none: no trap host or cast host"; }
+        PortalSmokeUntil(() => doors.GoalOf(door) is null, 3000);
+        Require(portals.Frame(session, door) == 0 && doors.GoalOf(door) is null, $"the door stands shut with no run: frame {portals.Frame(session, door)} goal {doors.GoalOf(door)}");
+        var mapId = new SessionMapId(CurrentAreaMap);
+        var entity = AreaUseScriptHost.EntityId(row);
+        var scriptKey = MapChangeKey.ForEntity(entity, AreaUseScriptHost.SlotProperty(ScrPoint.Use, "script"));
+        var countersKey = MapChangeKey.ForEntity(entity, AreaUseScriptHost.SlotProperty(ScrPoint.Use, "counters"));
+        var stateKey = MapChangeKey.ForEntity(entity, GameSessionOwner.TrapStateProperty);
+        // The three keys as the session held them before the part (null: no change), written back at its end.
+        var before = new[] { scriptKey, countersKey, stateKey }.Select(key => session.QueryMapChange(mapId, key)).ToArray();
+        // The native script 30001 (normal damage to the triggerer alone) with counters 0 (a damage of 0 to 0) makes the door trapped and harmless; a content without it leaves the part undone.
+        Require(session.ApplyChanges(session.Version, null, [new MapChangeEdit(mapId, scriptKey, 30001), new MapChangeEdit(mapId, countersKey, 0)]).Disposition == GameSessionDisposition.Changed, "the trap script is written");
+        MapChangeEdit[] RestoreEdits() => [new(mapId, scriptKey, before[0]), new(mapId, countersKey, before[1]), new(mapId, stateKey, before[2])];
+        try
+        {
+            if (host.TrapState(row) is not { Trapped: true })
+            { GD.Print($"ARC-WORLD-1668 native-smoke door-trap NONE map={_readyMapName} (the content's script 30001 is no trap script)"); return "none: script 30001 is no trap"; }
+            // The use node meets the trap: the opener's run ends, the door stays shut, no opening run starts.
+            var (revision, draws) = (session.Version.Revision, session.QueryRandom().Draws);
+            UsePortal(door);
+            PortalSmokeUntil(() => false, 800);
+            var met = (session.Version.Revision, session.QueryRandom().Draws) != (revision, draws);
+            Require(met, "the use node met the door's trap (the spot roll or the run wrote something)");
+            Require(portals.Frame(session, door) == 0 && doors.GoalOf(door) is null, $"the trapped door stayed shut and started no run: frame {portals.Frame(session, door)} goal {doors.GoalOf(door)} ({_portalNotice})");
+            var outcome = traps.KnownTrap(row) ? "spotted" : host.TrapState(row) is { Removed: true } ? "removed" : "fired";
+            GD.Print($"ARC-WORLD-1668 door-trap met entity={door.Entity} outcome={outcome} status={_portalNotice}");
+            // With the trap taken away (the slot as the data had it) the next use opens the door.
+            Require(session.ApplyChanges(session.Version, null, RestoreEdits()).Disposition == GameSessionDisposition.Changed, "the slot is restored");
+            UsePortal(door);
+            PortalSmokeUntil(() => doors.GoalOf(door) is not null, 800);
+            Require(doors.GoalOf(door) == Arcanum.Simulation.Goals.GoalType.AnimateDoorOpen, $"with no trap the use opened the door: {doors.GoalOf(door)} ({_portalNotice})");
+            PortalSmokeUntil(() => portals.Frame(session, door) == 0 && doors.GoalOf(door) is null, 8000 + 12 * door.StepMs);
+            return "met " + outcome;
+        }
+        finally
+        {
+            // The use slot and the trap state as the session held them (the spot roll's draws and any experience it awarded stay).
+            session.ApplyChanges(session.Version, null, RestoreEdits());
         }
     }
 }

@@ -615,6 +615,7 @@ src/Arcanum.World/AreaUseScripts.cs,RunTakingDamage,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunTrapScript,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunUseScript,pending,
 src/Arcanum.World/AreaUseScripts.cs,TakingDamageVetoes,pending,
+src/Arcanum.World/AreaUseScripts.cs,UseStops,exempt,host
 src/Arcanum.World/AreaWorldMap.cs,Passes,exempt,host
 src/Arcanum.World/DiagnosticGridSession.cs,Relocate,pending,
 src/Arcanum.World/GoalStepper.cs,Step,pending,
@@ -751,9 +752,9 @@ tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,RunMapEnteredSteps,pe
 tools/terrain-viewer/Godot/TerrainViewerAreaPanelArt.cs,HoverPortrait,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,ArmPickPocketFromBar,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,HeroFaceSkill,pending,
-tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,HeroDoorTrap,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,HeroDoorScript,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,HeroDoorUse,pending,
-tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,OpenerDoorTrap,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,OpenerDoorScript,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaQuickSave.cs,RouteQuickSaveOverWindow,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaReading.cs,ItemUseScript,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaReading.cs,ReadItem,pending,

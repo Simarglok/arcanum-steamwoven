@@ -223,17 +223,21 @@ or a companion that arrives on a tile with a trap object sets it off with itself
   companion's goal through `CompanionFollower.EndWalkOnTrap` (a started step still ends at its cell centre, an ordered goal ends, the stop is not remembered as unreachable and the next update goes on approaching from where the
   companion stands, as after a stop before a critter), and a trap that spots the companion marks it. The drive of one frame is complete before the viewer reports its steps, so a frame whose advance spans two steps (a very slow frame) may carry
   the companion past the tile before its goal stops, as for the hero.
-- **Doors.** The opener goals' use step (`AreaDoorHost.UseDoor`, 0x428A10, TT18) asks `AreaDoorHost.OpenerTrap` for an NPC or a companion opener (`AreaAiHost.TrapMetByUse`); a trap that stops the use (spotted, a
-  native run that answers skip default, or a refused meeting) ends the opener's run and the door stays shut. The hero's own door use meets it since ARC-WORLD-1581 ([Hero door use](#hero-door-use-arc-world-1581)).
+- **Doors.** The opener goals' use step (`AreaDoorHost.UseDoor`, 0x428A10, TT18) asks `AreaDoorHost.OpenerScript` for an NPC or a companion opener (`AreaAiHost.TrapMetByUse`, then the door's own use script, ARC-WORLD-1668); a trap that stops the use (spotted, a
+  native run that answers skip default, or a refused meeting) or a script that skips the default ends the opener's run and the door stays shut. The hero's own door use meets it since ARC-WORLD-1581 ([Door use node](#door-use-node-arc-world-1581-arc-world-1668)).
 - **Viewer.** The meetings the walkers had are logged (`ARC-WORLD-1469 walker-trap`) and shown on the status line with the outcome (`AreaAiHost.TakeTrapMeetings`).
 
-## Hero door use (ARC-WORLD-1581)
+## Door use node (ARC-WORLD-1581, ARC-WORLD-1668)
 
-The hero is an opener too (ledger TT18, TT7). Its use node of goal 12 (`AreaDoorHost.UseDoor` for the hero, 0x428A10) charges the action points first in the viewer (`HeroUse`, `TerrainViewerAreaPortals.HeroDoorUse`; the decompiled node shows no charge for a door target, the 2 points are the CT3 model) and then, as the original's node runs the door's use
-script through the object entry point with the hero as the triggerer, meets the door's trap: `AreaDoorHost.HeroTrap` (`HeroDoorTrap` in the viewer) is `AreaTraps.Use` on the door's row, the same meeting a trapped container's open has.
-A trap spotted now, a native run that went off (its effect through the cast host, the hero the triggerer) or a refused meeting answers 0: the hero's run ends, the door stays shut and the points stay spent (the viewer charges before it meets the trap).
-An ordinary (non-native) trap script is not run by this node yet, and no trap on the door goes on as before. Viewer line: `ARC-WORLD-1581 hero-door-trap` and the status line.
-The door's other, non-trap use script is not run by either opener's node (no script run on a door use is built; tracked in the Not modelled list below).
+The hero is an opener too (ledger TT18, TT7). The use node of goal 12 (`AreaDoorHost.UseDoor`, 0x428A10) charges the 2 action points first for any target type, a door included (its first call is the payment 0x4B7CD0 with the cost 2, CT3; ARC-WORLD-1668 re-read the node and found that
+the earlier "no charge for a door target" was a misreading: the charge is the call in the node's first condition, before the access test and the type switch). For the hero the viewer charges in `HeroUse` (`TerrainViewerAreaPortals.HeroDoorUse`) and then, as the original's node runs the door's use
+script through the object entry point (0x441980, point 1) with the user as the triggerer **and** the extra object, runs the door's use slot in two steps (`AreaDoorHost.HeroScript`, `HeroDoorScript` in the viewer; an NPC or companion opener's `OpenerScript`, `OpenerDoorScript`, does the same with itself as the user):
+
+1. The door's trap meets the opener (`AreaTraps.Use` for the hero, `AreaTraps.UseNpc` through `AreaAiHost.TrapMetByUse` for an NPC): a trap spotted now, a native run that went off (its effect through the cast host, the opener the triggerer) or a refused meeting answers 0: the opener's run ends, the door stays shut and the points stay spent.
+2. Then the door's own use script runs (`AreaUseScriptHost.RunUseScript` with the opener as the triggerer and the extra object, its effects applied as a use's are, the printed lines to the message window): an ordinary (non-native) trap script, which the meeting only reports as fired, runs here, and so does a door's plain use script. The dispatcher's answer "skip default"
+(including a script that runs past its last line and a script file the content lacks, as the original's dispatcher does) answers 0 as well (`AreaUseScriptHost.UseStops`): the run ends, the door stays shut. "Run default", a door with no use script, a trap that is gone, a native trap script the trap code could not meet (no cast host, a critter the host cannot apply it for; a divergence: the original fires it and consumes a self-removing trap, here nothing is consumed and the door opens as before) and a run the host cannot apply (refused by the admission, effects it cannot apply, a teleport it refuses, changed files) go on and the door opens.
+
+Viewer lines: `ARC-WORLD-1581 hero-door-trap`, `ARC-WORLD-1668 door-use-script` and the status line. Smoke: the last part of `door-close` makes the closed door trapped (native script 30001 with counters 0) and requires that the hero's use meets the trap and leaves the door shut with no run, and that the next use with the trap gone opens it.
 
 ## Disarm (ARC-SKILLS-1156)
 
@@ -248,7 +252,7 @@ The hero's disarm traps press (E6-a second half; ledger [SP3](../research/ledger
 ## Not modelled here
 
 - The follower who disarms instead of the hero (SP3, 0x57A620). An NPC's or a companion's use of a trapped object other than a door its opener goal pushes
-  (the original's use node 0x428A10 meets the trap of any target it runs the use script of, TT18; a trapped container's opening by an NPC and the NPCs' other uses are not built; the hero's own door use meets the trap since ARC-WORLD-1581).
+  (the original's use node 0x428A10 meets the trap of any target it runs the use script of, TT18; a trapped container's opening by an NPC and the NPCs' other uses are not built, no NPC use goal for them exists: [#1688](https://github.com/Simarglok/arcanum-steamwoven/issues/1688); the door's own use script and its trap are run by the node since ARC-WORLD-1668).
 - The 30002 trap in the viewer (with its shot), an ordinary trap script on a step, and the
   route cost of a known trap (DC8) on the PC's route (the drop map's route has it), the
   attack's trap trigger in the viewer,
@@ -276,6 +280,7 @@ The hero's disarm traps press (E6-a second half; ledger [SP3](../research/ledger
   (stepped over, fired and removed, spotted); `AreaContainerLootTests.cs`: a trap met on the
   use keeps the container shut.
 - ARC-WORLD-1581: `AreaDoorHostTests` (the hero's use node charges, then asks the door's trap; a stopping trap ends the run; a refused charge asks none; an NPC opener does not use the hero's port), `AreaTrapsTests` (a trapped door meets the hero on its use and stays shut).
+- ARC-WORLD-1668: `AreaDoorHostTests` (the ports are now the use-script ports, `HeroScript` and `OpenerScript`), `AreaTrapsTests` (a door's own use script stops the use only when it skips the default; an ordinary trap script runs after its meeting; an NPC opener is triggerer and extra object; no script or no row stops nothing).
 - ARC-WORLD-1469: `AreaTrapsTests` (a free NPC's and a companion's step onto a trap object and use of a trapped one: the triggerer, a known trap, an unknown one with and without a roll or a sheet, the step-over flags, no critter side, who marks it; the AI host's walk ending on the trap's tile and the trap firing once; ARC-WORLD-1582: the walk ending on any trap object not stepped over), `CompanionFollowTests` (a walk ended on a trap tile: goal stopped, step finished, approach resumes, ordered goal ended), `AreaDoorHostTests` (the opener's use node asks the trap), `ExecutorRulesTests` (a step onto a trap ends the walk there).
 - `tests/Arcanum.Session.Tests/TrapEffectTests.cs`: victims (square and triggerer), one draw
   per victim, each damage type's slot, the damage source, an object victim, the spell with no

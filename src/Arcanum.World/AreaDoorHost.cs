@@ -40,24 +40,25 @@ public sealed class AreaDoorHost : IAiDoorWorld, IGoalStepHost
     }
 
     /// <summary>
-    /// ARC-DEV-176 (MIG13 S11d): the viewer's side of the hero as opener. <see cref="HeroUse"/> is the use node of goal 12 for the hero (0x428A10: the action points, the door's use script): false ends the run.
+    /// ARC-DEV-176 (MIG13 S11d): the viewer's side of the hero as opener. <see cref="HeroUse"/> is the use node of goal 12 for the hero (0x428A10: the 2 action points first, then the door's use script, <see cref="HeroScript"/>): false ends the run.
     /// <see cref="HeroNotice"/> reports what a door goal of the hero did (a refusal of the open attempt: locked, jammed, held, script; the opening or closing started) for the status line and the locked sound.
     /// </summary>
     public Func<AreaPortal, bool>? HeroUse { get; set; }
     public Action<AreaPortal, AreaPortalUse>? HeroNotice { get; set; }
 
     /// <summary>
-    /// ARC-WORLD-1469 (ledger TT7, 0x428A10 → 0x441980 point 1): the viewer's side of an NPC or a companion as opener: the use node of goal 12 for it meets the door's trap with the opener as the
-    /// triggerer (the opener's entity and the portal in; true when the use stops, so the opener's run ends). Null: no trap is met, as before.
+    /// ARC-WORLD-1469, ARC-WORLD-1668 (ledger TT18, TT7; 0x428A10 → 0x441980 point 1): the viewer's side of an NPC or a companion as opener. The use node of goal 12 for it runs the door's use script through the object entry point with
+    /// the opener as the triggerer and the extra object: first the door's trap meets the opener (a trap spotted now, a native run that went off or a refused meeting stops the use), then the door's own use script (an ordinary trap script
+    /// included) runs, and an answer of "skip default" stops the use too. The opener's entity and the portal in; true when the use stops, so the opener's run ends and the door stays shut. Null: nothing is met or run, as before.
     /// </summary>
-    public Func<string, AreaPortal, bool>? OpenerTrap { get; set; }
+    public Func<string, AreaPortal, bool>? OpenerScript { get; set; }
 
     /// <summary>
-    /// ARC-WORLD-1581 (ledger TT18, TT7): the same for the hero as opener. After <see cref="HeroUse"/> charged the action points (the viewer's model, CT3; the decompiled node shows no charge for a door target) the node runs the door's use script through the object entry
-    /// point with the hero as the triggerer, so a trapped door meets the hero (the portal in; true when the use stops: the trap was spotted now, a native run went off, or the session refused the meeting),
-    /// which ends the run and leaves the door shut (the points stay spent). Null: no trap is met, as before.
+    /// ARC-WORLD-1581, ARC-WORLD-1668 (ledger TT18, TT7): the same for the hero as opener. After <see cref="HeroUse"/> charged the 2 action points (the node's first call, 0x4B7CD0 with the cost 2, for any target type: CT3) the node runs the door's use script through the object entry
+    /// point with the hero as the triggerer and the extra object: the door's trap meets the hero first, then the door's own use script runs (the portal in; true when the use stops: the trap was spotted now, a native run went off, the session refused
+    /// the meeting, or the script answered "skip default"), which ends the run and leaves the door shut (the points stay spent). Null: nothing is met or run, as before.
     /// </summary>
-    public Func<AreaPortal, bool>? HeroTrap { get; set; }
+    public Func<AreaPortal, bool>? HeroScript { get; set; }
 
     /// <summary>The session this host's doors belong to.</summary>
     public GameSessionOwner Session => _session;
@@ -135,7 +136,7 @@ public sealed class AreaDoorHost : IAiDoorWorld, IGoalStepHost
     }
 
     public bool UseDoor(string opener, string door) => Portal(door) is not { } portal
-        || (opener == AreaHeroRunsHost.Hero ? HeroUse?.Invoke(portal) != false && HeroTrap?.Invoke(portal) != true : OpenerTrap?.Invoke(opener, portal) != true);
+        || (opener == AreaHeroRunsHost.Hero ? HeroUse?.Invoke(portal) != false && HeroScript?.Invoke(portal) != true : OpenerScript?.Invoke(opener, portal) != true);
 
     public bool DoorHeld(string door) => Portal(door) is { } portal && (State(portal).Flags & LockRules.MagicallyHeldBit) != 0;
 
