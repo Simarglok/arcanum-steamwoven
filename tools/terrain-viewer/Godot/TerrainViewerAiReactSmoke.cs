@@ -1,4 +1,5 @@
 using Arcanum.Data.Area;
+using Arcanum.Data.Traversal;
 using Arcanum.Data.Magic;
 using Arcanum.Session;
 using Arcanum.Simulation.Ai;
@@ -14,6 +15,14 @@ namespace Arcanum.TerrainViewer;
 
 public partial class TerrainViewerApp
 {
+    // ARC-DEV-1660: the cast refuses without a line of fire (spell.mes 604, 0x456BC0), so the victim choice tests the line from the hero's cell as the cast map does (the same trace) before taking an animal.
+    private bool ClearLineOfFire(AreaStepCell heroWorld, AreaObjectRecord victim)
+    {
+        if (AreaLineOfFireNow() is not { } lines || victim.WorldX is not { } x || victim.WorldY is not { } y) return false;
+        var trace = LineOfFireRules.Trace(new(checked((int)heroWorld.X), checked((int)heroWorld.Y)), 0, 0, new(checked((int)x), checked((int)y)), lines, _areaSession!.Rules.Combat);
+        return !trace.LineFailed && trace.Cost < LineOfFireRules.ClearShotCover && (trace.Blocker is null || trace.Blocker.Key == victim.Key);
+    }
+
     // ARC-AI-1514 adds a check: a calm bystander the witness rule (0x4A9F10) sends fleeing from the hero at the hit must reach the setter with FLEE. ARC-DEV-1577: the bystanders are every NPC of the map the host runs (animals and humans),
     // and the victim is the animal with the most bystanders the witness rule does not make protectors (a human) within the noise radius, so the flight shows on a map that has one; the stage prints NONE when the map has none.
     // ARC-DEV-264 (B08, smoke plan SM06) native observation (stage "ai-react", only when named, map mode with --hero, AI on, the Crash Site): the hero casts an aggressive single-target damage spell at a calm animal from
@@ -88,11 +97,13 @@ public partial class TerrainViewerApp
                 {
                     targetCell = map.Chart.ToChart(new(animals[c].Row.WorldX!.Value, animals[c].Row.WorldY!.Value));
                     start = await AreaSmokeFightableStartAsync(map, commands[animals[c].Row.Key], targetCell, wanted, wanted, false);
+                    // ARC-DEV-1660: the animal drawn in view is not enough, the spell's cast refuses without a line of fire (spell.mes 604, 0x456BC0): the line from the hero's cell must reach the animal clear.
+                    if (start is not null && !ClearLineOfFire(map.Chart.ToWorld(start.Value), animals[c].Row)) start = null;
                     if (start is not null) { targetIndex = c; distance = wanted; }
                 }
                 if (start is not null) break;
             }
-            if (start is null) { GD.Print($"ARC-DEV-264 native-smoke ai-react NONE map={map.RuntimeMap} (no animal the hero can stand 4 or more cells from and see; spell range {spellRange})"); return; }
+            if (start is null) { GD.Print($"ARC-DEV-264 native-smoke ai-react NONE map={map.RuntimeMap} (no animal the hero can stand 4 or more cells from, see and shoot at with a clear line of fire; spell range {spellRange})"); return; }
             var chosen = animals[targetIndex];
             var entity = chosen.Holder.Entity;
             AreaSmokePlace(map, start.Value);
@@ -161,7 +172,7 @@ public partial class TerrainViewerApp
                 Frame();
                 if (_spellCaster.Log.Skip(logStart).Any(e => e.Kind is SpellCastEventKind.Damaged or SpellCastEventKind.Resisted && e.Object == entity)) hitFrame = frame;
             }
-            Require(hitFrame >= 0, $"the spell's damage landed within 1200 frames; log {string.Join(",", _spellCaster.Log.Skip(logStart).Select(e => e.Kind))}");
+            Require(hitFrame >= 0, $"the spell's damage landed within 1200 frames; log {string.Join(",", _spellCaster.Log.Skip(logStart).Select(e => e.Kind + ":" + e.Value + ":" + e.Object))}; victim {entity[^6..]} cast from {castDistance} cells, hero {HeroTile().X},{HeroTile().Y}, victim tile {TileOf().X},{TileOf().Y}, missiles {_spellNotice}");
             var hitLog = _spellCaster.Log.Skip(logStart).Where(e => e.Object == entity && e.Kind is SpellCastEventKind.Damaged or SpellCastEventKind.Resisted).ToArray();
             if (hitLog.Any(e => e.Kind == SpellCastEventKind.Resisted)) { GD.Print($"ARC-DEV-264 native-smoke ai-react NONE map={map.RuntimeMap} (the animal resisted the spell: a resisted spell tells the AI nothing, 0x4510F0)"); return; }
             var life = session.QueryLife(chosen.Build.Combat!.Target).View;

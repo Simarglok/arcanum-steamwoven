@@ -488,8 +488,8 @@ a dumb PC (its intelligence as the reply gates read it at most 4, the original's
 offset still applied. Without the port, or when its facts are unknown, the text stays empty and the reply works as before; a refused
 roll, a port exception or an undecodable phrase fails the conversation (`InvalidQueryResult`, `QueryException`, `InvalidText`). The
 phrase changes only the text: the transitions and blocks above stay. The `t:` phrase (PC lines 500..599) is built (ARC-SCRIPT-1150); its argument is
-stored after the phrase, not appended to it (ledger DTR1). The `r:` phrase (the PC's class line 2000) is built too (ARC-SCRIPT-1304, ledger RMR1). The `d:` (PC lines 1300..1399) and `x:` (1400..1499) phrases are built (ARC-SCRIPT-1533, ledger DIR1). Not built: the phrases of the prefix markers (`c q u z`;
-`c` reads one line; issues [#1532](https://github.com/Simarglok/arcanum-steamwoven/issues/1532), [#1534](https://github.com/Simarglok/arcanum-steamwoven/issues/1534)) and the healer menu behind `h:` (ARC-SCRIPT-044).
+stored after the phrase, not appended to it (ledger DTR1). The `r:` phrase (the PC's class line 2000) is built too (ARC-SCRIPT-1304, ledger RMR1). The `d:` (PC lines 1300..1399) and `x:` (1400..1499) phrases are built (ARC-SCRIPT-1533, ledger DIR1). Not built: the phrases of the prefix markers (`u z`;
+issue [#1534](https://github.com/Simarglok/arcanum-steamwoven/issues/1534)) and the healer menu behind `h:` (ARC-SCRIPT-044).
 
 ## Trainer reply (ARC-SCRIPT-1150)
 
