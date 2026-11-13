@@ -139,6 +139,9 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
     /// human's bare hands when the body shows no weapon: out of combat mode nothing attacks), the animations 6..19 (run, fall, get up,
     /// vault, and since ARC-RENDER-039 the throw, 14) neither.
     /// </summary>
+    /// <summary>ARC-COMBAT-1741: the stunned animation (goal 57).</summary>
+    public const uint StunnedAnimation = 23;
+
     public uint Selector(uint humanSelector)
     {
         var animation = (humanSelector >> 6) & 31;
@@ -148,6 +151,8 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
             1 => (Weapon, 0),
             WeaponArtRules.AttackAnimation or WeaponArtRules.LowAttackAnimation => (Weapon == 0 ? (int)(humanSelector & 15) : Weapon, Shield),
             >= 6 and <= 19 => (0, 0),
+            // ARC-COMBAT-1741 (N1): the stunned animation names the unarmed weapon letter and no shield whatever the body wields.
+            StunnedAnimation => (WeaponArtRules.Unarmed, 0),
             _ => (Weapon, Shield),
         };
         return (humanSelector & ~0x0FF8003Fu) | BodyBits | ((uint)shield << 19) | (uint)weapon;

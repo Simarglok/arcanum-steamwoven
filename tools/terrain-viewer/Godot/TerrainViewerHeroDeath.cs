@@ -223,6 +223,8 @@ public partial class TerrainViewerApp
     private sealed class DeathHost(TerrainViewerApp app) : IAreaDeathHost
     {
         public bool HeroDead => app._areaSession?.QueryHeroLife()?.Status.IsDead == true;
+        // ARC-COMBAT-1741: the hero's dying goal on the table (it waits for the fall animation to play out).
+        public bool HeroDying => app.ShownHeroRunsHost?.DownRun is { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.Dying };
         public bool MenuOpen => app.MainMenuOpen || app.SaveListOpen || app._mainMenu is not null;
         public AreaSlideTable Slides => app.DeathSlides();
         public bool VoicePlaying => app._deathVoicePlayingForSelfTest is { } synthetic ? synthetic()

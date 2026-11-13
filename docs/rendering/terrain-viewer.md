@@ -2290,8 +2290,7 @@ picture with the slides' music and its voice; ARC-WORLD-120: a newer save of ano
 original's dialog box asks over the slide with the hero's own save, the pointer over the check lights it and a left click
 on it loads the save, which fades in with its hero alive; the loaded hero killed under Original,
 Escape ending the show, the start map loaded again with a fresh session and the main menu reopened, without the box). `ARC_AREA_DEATH_CAPTURE=PATH.png` saves the shown
-slide with the box (original art: never into git). Not done: script-queued slides, the end-game and credits slides, the hero's dying
-animation.
+slide with the box (original art: never into git). Not done: script-queued slides, the end-game and credits slides, the hero's bloody dying animations (17–19 by the killing blow). Since ARC-COMBAT-1741 the dying goal (31) lasts while the hero's fall plays and the death's 5 s count from its end (`IAreaDeathHost.HeroDying`).
 
 ### Options window (ARC-UI-013)
 
