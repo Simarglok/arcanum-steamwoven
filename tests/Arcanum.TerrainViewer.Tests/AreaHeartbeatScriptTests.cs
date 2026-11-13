@@ -5,6 +5,7 @@ using Arcanum.Data.Scripts;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
+using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -21,12 +22,12 @@ public sealed class AreaHeartbeatScriptTests
     private const byte Attachee = 1, Local = 2, Number = 3, GlobalFlag = 4, Everyone = 8, Looped = 10, Player = 21;
     private const int ChosenFlag = 2350;
 
-    private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
-    private static string Entity(int index) => "oid:" + Key(index).ObjectIdSha256;
+    internal static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
+    internal static string Entity(int index) => "oid:" + Key(index).ObjectIdSha256;
     private static ScrObjectRef Ref(int index) => new(1, Entity(index));
 
     // A row with a heartbeat slot (point 19), optionally a dialog slot (point 9), and its object flags.
-    private static AreaObjectRecord Row(int index, int type, int script, uint objectFlags = 0, int dialog = 0, int? faction = null, int point = ScrPoint.Heartbeat)
+    internal static AreaObjectRecord Row(int index, int type, int script, uint objectFlags = 0, int dialog = 0, int? faction = null, int point = ScrPoint.Heartbeat)
     {
         var slots = new List<AreaSparseElement> { new(point, [0, 0, script]) };
         if (dialog != 0) slots.Insert(0, new(ScrPoint.Dialog, [0, 0, dialog]));
@@ -60,7 +61,7 @@ public sealed class AreaHeartbeatScriptTests
         return bytes;
     }
 
-    private static void WithContent(Action<ScriptContent> test)
+    internal static void WithContent(Action<ScriptContent> test)
     {
         var root = Directory.CreateTempSubdirectory("arc-world-114-");
         try
@@ -510,25 +511,67 @@ public sealed class AreaHeartbeatScriptTests
     }
 
     [TestMethod]
-    public void A_script_attack_by_an_object_that_is_no_critter_is_refused_whole_with_a_named_reason()
+    public void A_script_attack_by_a_non_critter_object_of_the_shown_map_goes_to_the_ai_host_and_an_item_attacker_is_refused_whole_with_a_named_reason()
     {
         WithContent(content =>
         {
             using var session = ConversationSessionFixture.Create();
             var asked = new List<(string Attacker, string Victim)>();
-                        // The scenery's script (type 3, 811) sets a global flag and then has the attachee attack the player (a taking-damage run, which any object type has): an object attacker waits for #1619 (VB2-2 gap d); the flag before it is not applied either.
+            AreaScriptWorld World() => new(() => null, _ => false, _ => null, () => null, ScriptAttack: (attacker, victim) => { asked.Add((attacker, victim)); return "ObjectAttacker"; });
+            // ARC-SCRIPT-1679: the scenery's script (type 3, 811) sets a global flag and then has the attachee attack the player (a taking-damage run, which any object type has): 0x447D2F gives the event no type test of the attacker,
+            // so the object goes to the AI host (its object facts, #1619) and the run is applied whole, the flag included.
             var scenery = Row(1, 3, 811, point: ScrPoint.TakingDamage);
-            var host = new AreaUseScriptHost(session, 1, [scenery], [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
-                ScriptAttack: (attacker, victim) => { asked.Add((attacker, victim)); return "None"; }));
+            var host = new AreaUseScriptHost(session, 1, [scenery], [], content, World());
             var run = host.RunTakingDamage(AreaUseScriptHost.EntityId(scenery), null, session.Rules.Scripts);
-            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, run.Outcome);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, run.Outcome, run.Detail);
+            CollectionAssert.AreEqual(new[] { (AreaUseScriptHost.EntityId(scenery), Arcanum.Simulation.Ai.AiSchedulerRules.Pc) }, asked);
+            Assert.AreEqual("ObjectAttacker", host.LastAttack);
+            Assert.IsTrue(host.GlobalFlag(ChosenFlag), "the flag before the attack applied with it");
+            // An item as the attacker (type 6, the AI host describes no item) refuses the run whole, nothing applied before it.
+            asked.Clear();
+            using var itemSession = ConversationSessionFixture.Create();
+            var item = Row(2, 6, 811, point: ScrPoint.TakingDamage);
+            var itemHost = new AreaUseScriptHost(itemSession, 1, [item], [], content, World());
+            var refused = itemHost.RunTakingDamage(AreaUseScriptHost.EntityId(item), null, itemSession.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, refused.Outcome);
             Assert.AreEqual(0, asked.Count);
-            Assert.IsFalse(host.GlobalFlag(ChosenFlag), "nothing applied before the refusal");
-            StringAssert.Contains(run.Detail, "#1619");
+            Assert.IsFalse(itemHost.GlobalFlag(ChosenFlag), "nothing applied before the refusal");
+            StringAssert.Contains(refused.Detail, "an item");
             var request = new ScrObjectStateRequest(ScrObjectStateChange.Attack, Ref(2), Other: Ref(1));
-            StringAssert.Contains(host.AttackRefusal(request)!, "non-critter");
+            StringAssert.Contains(itemHost.AttackRefusal(request with { Other = Ref(2) })!, "an item");
+            Assert.IsNull(host.AttackRefusal(request), "the scenery");
             Assert.IsNull(host.AttackRefusal(request with { Other = new ScrObjectRef(1, AreaScriptHost.PcCode) }));
             StringAssert.Contains(host.AttackRefusal(request with { Other = new ScrObjectRef(2, "oid:other") })!, "another map");
+            StringAssert.Contains(host.AttackRefusal(request with { Other = Ref(9) })!, "no loaded row");
+            StringAssert.Contains(host.AttackRefusal(request with { Other = null })!, "no attacker");
+        });
+    }
+
+    [TestMethod]
+    public void A_carried_follower_named_by_its_home_map_attacks_and_is_attacked_by_identity_not_by_map()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var asked = new List<(string Attacker, string Victim)>();
+            // The follower's record is a row of its home map (2); the viewer says it stands on the shown map (1) by giving its live cell.
+            var follower = Row(3, 16, 809);
+            var standing = new HashSet<string>();
+            var maps = new[] { new AreaInventoryMap(2, new([new(AreaUseScriptHost.EntityId(follower), SessionHolderKind.Npc, false, false, [], [])], []), new Dictionary<string, AreaObjectRecord> { [AreaUseScriptHost.EntityId(follower)] = follower }) };
+            var host = new AreaUseScriptHost(session, 1, [Row(1, 16, 810)], maps, content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                CritterCell: obj => standing.Contains(obj.Code) ? new CellCoord(10, 10) : null, ScriptAttack: (attacker, victim) => { asked.Add((attacker, victim)); return "None"; }));
+            var home = new ScrObjectRef(2, AreaUseScriptHost.EntityId(follower));
+            var request = new ScrObjectStateRequest(ScrObjectStateChange.Attack, Ref(1), Other: home);
+            // Away (another map's critter that stands nowhere here): refused as before, and skipped as a victim.
+            StringAssert.Contains(host.AttackRefusal(request)!, "another map");
+            host.ApplyScriptAttack(new(ScrObjectStateChange.Attack, home, Other: Ref(1)));
+            Assert.AreEqual(0, asked.Count, "a victim that stands elsewhere is left as it is");
+            // Standing here: by identity it is an attacker and a victim.
+            standing.Add(home.Code);
+            Assert.IsNull(host.AttackRefusal(request));
+            host.ApplyScriptAttack(request);
+            host.ApplyScriptAttack(new(ScrObjectStateChange.Attack, home, Other: Ref(1)));
+            CollectionAssert.AreEqual(new[] { (home.Code, Entity(1)), (Entity(1), home.Code) }, asked);
         });
     }
 

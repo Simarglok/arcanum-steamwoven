@@ -18,7 +18,7 @@ namespace Arcanum.Session;
 /// maximum, <see cref="CharacterStatRules.Range"/>; for the others <see cref="CharacterStatRules.StoredRange"/>); a lowering is refused, and nothing written, when a skill keyed on the stat needs the higher value (0x4C6B50,
 /// <see cref="SkillRules.CheckBaseChange"/>, read with the effective stat the lower base gives, the NPC's effect list laid over it) and, for intelligence, when a known spell rank (0x4B1B90) or a tech degree (0x4B02B0)
 /// needs the higher value, for willpower when a known spell rank does (0x4B1C00). Ready for an NPC: the primary stats dexterity, constitution, beauty, intelligence, perception, willpower and charisma, and the stats the
-/// setter stores after the clamp alone for an NPC (ARC-MAGIC-1507 adds magick and tech points, 22 and 23, whose rewield <see cref="RewieldReady"/> accepts when no worn item has a wield script): level (17), experience (18, the level-up 0x4A69C0 is a PC's), alignment (19, the followers' re-check is a PC's), fate points (20), unspent points (21) and 25; the
+/// setter stores after the clamp alone for an NPC (ARC-MAGIC-1507 adds magick and tech points, 22 and 23, whose rewield runs the worn items' wield scripts through <see cref="ItemScripts"/>, ARC-MAGIC-1644): level (17), experience (18, the level-up 0x4A69C0 is a PC's), alignment (19, the followers' re-check is a PC's), fate points (20), unspent points (21) and 25; the
 /// callbacks after the write (0x460860, 0x4601C0) are the user interface's. <b>Strength</b> (ARC-MAGIC-1506, case 0 of the setter) reads the encumbrance level before the store (0x45F790: the total weight of the NPC's list, 0x461410, and its carry weight, stat 8, which the new strength gives:
 /// <see cref="GameSessionOwner.QueryNpcCarry"/>) and, when the level changed, runs the recalculation 0x45F820 after it (<see cref="GameSessionOwner.RecalculateNpcEncumbrance"/>: every entry of effect 158 leaves the NPC's list, then one
 /// entry a level is added with the item cause, eight at the heaviest). A new level from 4 up also schedules the NPC's encumbrance fatigue timer (ARC-MAGIC-1568, <see cref="SessionEventKinds.NpcEncumbrance"/>: 0x45E820 mode 1, one per NPC; it gives an NPC without a life record the record of its loaded state). Ready for an NPC the map's inventory seed lists; not ready when the NPC is no holder of it, when effect 158 has no rule to add, when that timer cannot be scheduled
@@ -69,12 +69,21 @@ public sealed partial class SessionSpellCaster
         var advanced = _owner.QueryNpcAdvancement(obj.Id);
         var recorded = advanced is not null && GameSessionOwner.SheetHoldsStat(data.Index) ? advanced.Sheet : null;
         if (recorded is not null) stats = SheetOver(stats, recorded);
-        // Magick and tech points run the rewield (0x465530) after the store: with a worn item that carries a wield script the session cannot run it for an NPC, so nothing is written.
-        if (data.Index is 22 or 23 && !RewieldReady(obj.Id, map)) return null;
         if (stats[27] is < 0 or > 10) return null;
         if (CharacterStatRules.StoredRange((CharacterRace)stats[27], data.Index) is not { } range) return null;
         var current = stats[data.Index];
         var next = Math.Clamp(unchecked(current + data.Value), range.Minimum, range.Maximum);
+        // Magick and tech points run the rewield (0x465530) after the store (ARC-MAGIC-1644, RM3c): the runs of the worn items' wield scripts are planned here over the stats with the new value laid in, and applied after the write.
+        // Not ready (nothing written) when the NPC is not listed or a run cannot be applied.
+        GameSessionOwner.ItemScriptRuns? rewield = null;
+        if (data.Index is 22 or 23)
+        {
+            var laid = stats.ToArray();
+            laid[data.Index] = next;
+            var planned = _owner.PlanNpcRewield(map, critter.Combat.Target, obj.Id, laid, ItemScripts?.Invoke());
+            if (planned.Failure != GameSessionFailure.None) return null;
+            rewield = planned.Runs;
+        }
         // Only the primary stats have skills keyed on them, and spells and degrees ask for intelligence and willpower alone.
         if (next < current && data.Index <= 7)
         {
@@ -127,6 +136,7 @@ public sealed partial class SessionSpellCaster
         }
         var written = recorded is not null ? _owner.WriteNpcAdvancementStat(_owner.Version, map, obj.Id, data.Index, next) : _owner.WriteCritterStat(_owner.Version, map, obj.Id, data.Index, next);
         var outcome = Report(run, obj.Id, data, written);
+        if (rewield is not null && written.Disposition != GameSessionDisposition.Rejected) _owner.CommitNpcRewield(rewield);
         if (innate is not null && written.Disposition != GameSessionDisposition.Rejected && _owner.AddNpcInnate(critter.Combat.Target, innate, data.Index == 26) is { Disposition: GameSessionDisposition.Rejected } added)
             _log.Add(new(SpellCastEventKind.TraitIndexNotSaved, run.Id, (int)added.Failure, obj.Id));
         if (encumbrance is not null && written.Disposition != GameSessionDisposition.Rejected && _owner.RecalculateNpcEncumbrance(critter.Combat.Target, map, encumbrance, level) is { Disposition: GameSessionDisposition.Rejected } failed)
@@ -221,16 +231,6 @@ public sealed partial class SessionSpellCaster
         if (data.Index == 27 && next > (int)CharacterRace.Orc || !_owner.HeroInnateReady(data.Index == 26, next)) return null;
         return Report(run, Hero, data, _owner.WriteHeroInnate(_owner.Version, data.Index == 26, next));
     }
-
-    /// <summary>
-    /// ARC-MAGIC-1507 (ledger RM3b): the rewield 0x465530 the setter runs after storing magick points (22) or tech points (23) walks the wear slots 1000 to 1008; for each worn item it recalculates the wearer's light (0x467E80)
-    /// and runs the item's script points 25 (wield off) and 24 (wield on) with the wearer as the initiator. Ready when the session knows the NPC's list (the holder of its map's inventory view, a dressed NPC's wear record laid
-    /// over the map data) and no worn item has script point 24 or 25: the runs then do nothing (a script run of a point with no script returns at once), and the light is not written here: the host derives the recalculated carried light from the worn items and the NPC's aptitude for an NPC the session wrote magick or tech points of (ARC-MAGIC-1561, <c>AreaRestockHost.NpcLight</c>, ledger RM3d;
-    /// exact for an NPC wearing no light item, which 0x467E80 leaves alone). With a worn wield script (run for the hero alone, #1644), or an NPC the session does not list, it is not ready.
-    /// </summary>
-    private bool RewieldReady(string npc, SessionMapId map) =>
-        _owner.QueryMapInventory(map)?.Holders.FirstOrDefault(holder => holder.Entity == npc && holder.Kind == SessionHolderKind.Npc) is { } listed &&
-        !listed.Items.Any(item => item.Facts.Worn && (item.Facts.HasScript(SessionScriptPoint.WieldOn) || item.Facts.HasScript(SessionScriptPoint.WieldOff)));
 
     /// <summary>
     /// ARC-MAGIC-1508 (ledger RM3b, the setter's poison case; the addresses are in RM3b): stat 24 is the poison level, which the original stores in the stat array and the session keeps in the NPC's life state (the map data's entry is only what it loads
