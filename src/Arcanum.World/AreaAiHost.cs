@@ -1374,8 +1374,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         {
             // A run left from the fight (a flight, a back-off) is interrupted as the follow starter's own interrupt would (level 3, the table's rule: a spell attempt, priority 4,
             // goes on), so the walk is no longer held by it. ARC-DEV-135: it was a drop at the highest level.
+            // ARC-AI-1523 (VBG12, 0x4346A0): the original interrupts only on its start path; with the leader near or an equal run kept (LeaderNear, AlreadyQueued) the run stays,
+            // so a companion's please-move (68) goes on.
             Trace(npc).Perform = $"{result.Kind} by its own walk";
-            if (current is not null) InterruptRuns(npc, GoalInterruptRules.OrdinaryActions);
+            if (current is not null && result.Refusal is not (AiStartRefusal.LeaderNear or AiStartRefusal.AlreadyQueued)) InterruptRuns(npc, GoalInterruptRules.OrdinaryActions);
             return;
         }
         Started(npc, current, result);
