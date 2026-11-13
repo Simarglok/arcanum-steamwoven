@@ -1,3 +1,4 @@
+using Arcanum.Data.Area;
 using Arcanum.Session;
 using Arcanum.Simulation;
 using Arcanum.Simulation.Ai;
@@ -15,8 +16,8 @@ namespace Arcanum.World;
 /// character is within 30 tiles, or sleeps 800 ms when it is away. The runs step on the animation clock inside the frame step (<see cref="IGoalStepHost"/>), so the loops stop with the Esc pause and take a round's
 /// time jump; a step that moves a frame marks the host (<see cref="TakeChanged"/>) and the viewer redraws the scenery's body. This host answers the scenery ports (<see cref="IAiSceneryWorld"/>) from the loops.
 /// ARC-DEV-144 (S9c): goal 77's fire damage burns the critters on the scenery's tile through <see cref="AreaFireBurner"/> (3 fire, once per round and doubled in a round).
-/// <b>Not ready:</b> the loop's ambient sound of a one-frame ART and of a created scenery (the begin node's sound of the map's own loops is <see cref="TakeSoundBegins"/>, ARC-RENDER-1126), the restart of a loop after an art change or a cleared off flag (the original's restart sites 0x43F710, GT78: the viewer changes neither at run time; <see cref="Restart"/> is
-/// the rule for them), and a loop whose object is stoned later (the spell flag is read at the start only). A loop whose run a table-exhaustion sweep ended stays still until its sector is shown again, as in the original (GT98).
+/// <b>Not ready:</b> the loop's ambient sound of a one-frame ART and of a created scenery (the begin node's sound of the map's own loops is <see cref="TakeSoundBegins"/>, ARC-RENDER-1126), the restart of a loop after a cleared off flag (the original's restart sites 0x43F710, GT78: the viewer changes none at run time; <see cref="Restart"/> is
+/// the rule for it; an art change, ARC-RENDER-1781, goes through <see cref="Reframe"/>), and a loop whose object is stoned later (the spell flag is read at the start only). A loop whose run a table-exhaustion sweep ended stays still until its sector is shown again, as in the original (GT98).
 /// ARC-DEV-352 (E1-b, SUM4, GT77): a scenery the session created at run time (a Summon's piece, <see cref="SessionCreatedObject"/>) gets its loop through <see cref="AddCreated"/> when the viewer first shows it (the original starts the
 /// main run when the object enters the object list) and loses it through <see cref="RemoveCreated"/> when it is destroyed. Its burn carries the summoner as the source (the run's bottom frame slot 4, SUM4): the summoner and the NPCs led by a PC
 /// summoner are spared. The source is the host's, not the saved run's; the viewer gives it on the first loop of the object in a session (after a load too: the original saves the run with its slot) and not to a loop it starts again
@@ -32,6 +33,8 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
     private readonly AreaFireBurner? _fire;
     // ARC-DEV-352: the created sceneries' loops, by entity, with whether they burn and the burn's source.
     private readonly Dictionary<string, (SceneryLoop Loop, bool Burning, string? Source, bool Begun)> _created = new(StringComparer.Ordinal);
+    // ARC-RENDER-1781: the object offset of a scenery whose loop was killed by an art change (the object keeps the offset its frame deltas moved it by, AS6); a loop that takes over later starts from it.
+    private readonly Dictionary<string, (int X, int Y)> _resting = new(StringComparer.Ordinal);
     private bool _changed, _createdChanged;
     // ARC-RENDER-1126: the map's loops whose begin node ran since the last take (the loop sound's decision point).
     private readonly List<string> _soundBegins = [];
@@ -180,7 +183,7 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
 
     /// <summary>
     /// ARC-DEV-144 (GT78): the restart 0x43F710 of one of this host's sceneries after the object changed (its art set, its off flag cleared, the object created or put in the list again), decided by
-    /// <see cref="SceneryAnimationRules.Restart"/> from the object's present flags (the goal too: 77 for flag 0x10, GT77) and this loop's frames (an art set to another number of frames is not followed: the host has no other frames): a scenery that must not animate any more has its run killed (the per-object kill, skipped while this host is stepping a run), one that does animate starts
+    /// <see cref="SceneryAnimationRules.Restart"/> from the object's present flags (the goal too: 77 for flag 0x10, GT77) and this loop's frames (the frames of a changed art are <see cref="Reframe"/>'s): a scenery that must not animate any more has its run killed (the per-object kill, skipped while this host is stepping a run), one that does animate starts
     /// the loop unless it already has a main run (the starter refuses then). The viewer changes neither art nor flags of a shown scenery at run time yet, so no caller exists; a sector shown again goes through <see cref="Start"/>.
     /// </summary>
     public SceneryRestart Restart(string entity, uint objectFlags, uint sceneryFlags, bool ambientSound = false)
@@ -193,6 +196,50 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
             if (refused.Failure == SessionGoalFailure.PassInProgress) StartPending = true; else Refused++;
         }
         return decision;
+    }
+
+    /// <summary>
+    /// ARC-RENDER-1781 (AN1, AN5, AN6, AS1, AS5; exe 0x43EB30, 0x43F710, 0x433580, 0x42DDE0, 0x43F7F0, 0x502BC0, 0x502C40): the scenery <paramref name="row"/> has another art, <paramref name="frames"/> (the new art's frames in frame order, frame 0 shown:
+    /// the action sets frame 0 before it writes the id) with the frame rate <paramref name="framesPerSecond"/> of its ART header. The original's step reads the object's <b>current</b> art every time (the frame count from its header, the next frame, the delta), so the
+    /// loop goes on over the new frames from frame 0 and the offset the object has; the art writer then runs the restart 0x43F710 (<see cref="SceneryAnimationRules.Restart"/>): an art of one frame (no ambient sound) kills the loop's run, an art of several frames starts the loop
+    /// unless the object has a main run already (the starter refuses then), so a running loop keeps its run and the frame delay its begin node stored for the old art, and a scenery with no run gets a new one whose delay is the new art's (1000 / its rate).
+    /// An object with its own loop or none, a map's or a changed one's, is handled alike; the object's place is the row's. Returns what the restart did.
+    /// </summary>
+    public SceneryRestart Reframe(AreaObjectRecord row, IReadOnlyList<AreaVisualRecord> frames, int framesPerSecond, bool ambientSound = false)
+    {
+        ArgumentNullException.ThrowIfNull(row); ArgumentNullException.ThrowIfNull(frames);
+        if (frames.Count == 0 || row.WorldX is not { } x || row.WorldY is not { } y) return SceneryRestart.Skip;
+        var entity = AreaUseScriptHost.EntityId(row);
+        var objectFlags = AreaSceneryAnimation.ObjectFlags(row);
+        var sceneryFlags = AreaSceneryAnimation.SceneryFlags(row);
+        var decision = SceneryAnimationRules.Restart(SceneryAnimationRules.SceneryType, objectFlags, sceneryFlags, frames.Count, ambientSound, _session.QueryGoals().SteppingSlot is not null);
+        var had = _byEntity.TryGetValue(entity, out var old);
+        var offset = had ? (old!.Loop.OffsetX, old.Loop.OffsetY) : _resting.GetValueOrDefault(entity);
+        if (decision == SceneryRestart.Kill)
+        {
+            _session.KillGoals(entity);
+            if (_byEntity.Remove(entity)) { _animation.Remove(entity); _resting[entity] = offset; }
+            _changed = true;
+        }
+        else if (decision == SceneryRestart.Start && frames.Count >= 2)
+        {
+            var running = _session.QueryGoals().MainRunOf(entity) is not null;
+            // The run that exists keeps its stored delay (the begin node read it from the art the run was started with); a run started now reads the new art.
+            var pause = had && running ? old!.Loop.PauseMs : SceneryAnimationRules.PauseMs(framesPerSecond);
+            var burning = (sceneryFlags & AreaSceneryAnimation.BurningFlag) != 0;
+            var loop = new AreaSceneryLoop(row, frames, new SceneryLoop(x, y, frames.Select(f => (f.ArtOffsetX, f.ArtOffsetY)).ToArray(), 0, pause, offset.Item1, offset.Item2), burning);
+            _byEntity[entity] = loop; _animation.Replace(loop); _resting.Remove(entity);
+            if (!running) StartOne(entity, burning);
+            _changed = true;
+        }
+        return decision;
+    }
+
+    /// <summary>ARC-RENDER-1781: the frame and the object offset the scenery shows by its loop, or by the offset its killed loop left (frame 0); null when the host never knew a loop of it.</summary>
+    public (int Frame, int OffsetX, int OffsetY)? Pose(string entity)
+    {
+        if (_byEntity.TryGetValue(entity, out var loop)) return (loop.Loop.Frame, loop.Loop.OffsetX, loop.Loop.OffsetY);
+        return _resting.TryGetValue(entity, out var rest) ? (0, rest.X, rest.Y) : null;
     }
 
     /// <summary>The loops are given up (a window move, a quick load, a replaced session, the map shown elsewhere): their runs end at level 6 and the sceneries stay on the frame they show.</summary>

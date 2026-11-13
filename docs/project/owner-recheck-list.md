@@ -970,7 +970,7 @@ companion, a shopkeeper and a guard in any town where a quest script touches the
 
 Known differences (documented, not bugs):
 
-- Change art number (ARC-SCRIPT-1735) changes the picture of a **scenery** from a script (kept in the save, drawn in the viewer); a door, container, trap, item or unique NPC target is not built: a script run that reaches one is refused, so that step does nothing in Steamwoven. A critter (the hero, an NPC of a critter or monster body) is never changed (the original builds the art id 0 for them and writes it only if a file of that id exists; not read, F0).
+- Change art number (ARC-SCRIPT-1735) changes the picture of a **scenery** from a script (kept in the save, drawn in the viewer; a new art of several frames animates since ARC-RENDER-1781, one of a single frame stops the old loop); a door, container, trap, item or unique NPC target is not built: a script run that reaches one is refused, so that step does nothing in Steamwoven. A critter (the hero, an NPC of a critter or monster body) is never changed (the original builds the art id 0 for them and writes it only if a file of that id exists; not read, F0).
 - A script in a dialog (a talk) that uses one of these actions is still refused; only use, tile, sector, heartbeat and dying scripts run them.
 - A reaction or standpoint change acts for NPCs of the map on screen only.
 
