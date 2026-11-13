@@ -139,6 +139,8 @@ public partial class TerrainViewerApp
         _spellCaster.CastCombat = castCombat;
         // ARC-DEV-254: a script's damage asks the victim's taking-damage script (point 0x17) first.
         _spellCaster.TakingDamage = TakingDamageGoesOn;
+        // ARC-MAGIC-1167 (MA-10): a Heal with the raise bit asks a dead target's raise script (point 0x12) first.
+        _spellCaster.RaiseScript = RaiseGoesOn;
         // ARC-AI-1680: a spell's, trap's or burn's damage step asks a follower's near-death line (0x4AEAB0) as it lands, as the damage step 0x4B4390 does.
         _spellCaster.DamageStepApplied = AskNearDeathOfCastStep;
         // ARC-MAGIC-048 (E4-c): the Use component has its target run its own use script (the target is the triggerer too).
