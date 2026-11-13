@@ -19,9 +19,26 @@ public sealed class AreaCreatedCritters
     private readonly Func<SessionCreatedObject, CreatedObjectRowResult> _row;
 
     /// <param name="prototypes">The game's prototype reader (<see cref="Arcanum.Data.Content.ContentPrototypes.Read"/>), the file lookup the row builder takes.</param>
-    public AreaCreatedCritters(GameSessionOwner session, Func<int, PrototypeFile> prototypes)
-        : this(session, made => CreatedObjectRows.Critter(prototypes ?? throw new ArgumentNullException(nameof(prototypes)), made.Prototype, made.Entity, made.Map.RuntimeMap, made.Cell.X, made.Cell.Y,
-            SummonOf(session, made))) { }
+    /// <param name="template">ARC-WORLD-1526: the base row of an object by entity and home map (the record resolver's), which a monster generator's copy is built from; null: every copy is built from its prototype.</param>
+    public AreaCreatedCritters(GameSessionOwner session, Func<int, PrototypeFile> prototypes, Func<string, int, AreaObjectRecord?>? template = null)
+        : this(session, made => RowOf(session, prototypes ?? throw new ArgumentNullException(nameof(prototypes)), template, made)) { }
+
+    /// <summary>
+    /// ARC-WORLD-1526 (ledger GS5): the row of a created critter. A monster generator's copy (the session holds its slot mark and its template, the generator's entity, <see cref="SessionCreatedObject.Summoner"/>) is a copy of the
+    /// generator OBJECT in the original, so its row is built from the generator's row (<see cref="CreatedObjectRows.CritterFrom"/>: its instance fields, scripts, name, stats and flags over its prototype, unmarked); when the
+    /// generator's row is not known (an older save whose copy names none, the generator's map not held, a template that is no critter's) the copy falls back to its prototype's row, as before this change. Every other created
+    /// critter is built from its prototype. The row is built once per entity (and again after a load or a map change), so a copy built while its generator's row was unknown keeps the prototype row until then (a limit).
+    /// </summary>
+    internal static CreatedObjectRowResult RowOf(GameSessionOwner session, Func<int, PrototypeFile> prototypes, Func<string, int, AreaObjectRecord?>? template, SessionCreatedObject made)
+    {
+        if (template is not null && made.Summoner is { } source && (made.SpellFlags & SessionCreatedObject.SummonedFlag) == 0 && session.QueryGeneratorCopy(made.Entity) is not null &&
+            template(source, made.Map.RuntimeMap) is { } generator)
+        {
+            var copy = CreatedObjectRows.CritterFrom(generator, made.Entity, made.Map.RuntimeMap, made.Cell.X, made.Cell.Y);
+            if (copy.Row is not null) return copy;
+        }
+        return CreatedObjectRows.Critter(prototypes, made.Prototype, made.Entity, made.Map.RuntimeMap, made.Cell.X, made.Cell.Y, SummonOf(session, made));
+    }
 
     // ARC-MAGIC-053 (SUM5): a critter a Summon made (spell flag 0x4000) has its experience cleared and takes the alignment of its summoner when that is the hero (the session keeps no NPC alignment, so an NPC
     // summoner's is not known here); the row is built once, when the critter is first handed to the world, so the alignment is the hero's of that moment (a load builds it again from the hero's then).

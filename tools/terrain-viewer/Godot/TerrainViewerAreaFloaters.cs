@@ -164,6 +164,9 @@ public partial class TerrainViewerApp
             var victim = step.Victim == SessionSpellCaster.Hero ? HeroFloater : step.Victim;
             var attacker = step.Attacker is null ? victim : step.Attacker == SessionSpellCaster.Hero ? HeroFloater : step.Attacker;
             Float(AreaCombatFloaters.Of(step, FloaterSideOf(victim)), attacker, victim);
+            // ARC-AI-1638 (0x4B4390 asks 0x4AEAB0 for every damage): a follower a spell, trap or burn step brings below a fifth says its near-death line; a script's step asked it already in its answer.
+            if (!step.FromScript && step.Victim != SessionSpellCaster.Hero && FollowerHurt(step.Victim, step.Life) is { } near)
+                GD.Print($"ARC-AI-1638 near-death follower={near.Speaker} lines={near.Lines.First}-{near.Lines.Last} after-cast-step attacker={step.Attacker ?? "-"}");
         }
         foreach (var award in caster.TakeExperienceAwards()) LevelAreaFollowers(award);
     }

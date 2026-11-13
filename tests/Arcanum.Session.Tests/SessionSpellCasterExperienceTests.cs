@@ -198,4 +198,19 @@ public sealed class SessionSpellCasterExperienceTests
         var script = caster.TakeDamageSteps().Single();
         Assert.AreEqual((Rat, (string?)null), (script.Victim, script.Attacker));
     }
+
+    [TestMethod]
+    public void Only_a_scripts_damage_step_is_marked_as_the_scripts_so_the_host_asks_the_near_death_line_once()
+    {
+        // ARC-AI-1638: the host asks the follower's near-death line for the steps a spell, a burn or a trap made; a script's damage asks it in its own answer, so its step says FromScript.
+        var record = Bolt(3);
+        var (owner, caster) = Session(record);
+        using var _ = owner;
+        CastAtRat(owner, caster, record);
+        Assert.IsFalse(caster.TakeDamageSteps().Single().FromScript, "a spell's step");
+        Assert.IsTrue(caster.ApplyBurn(Rat, Arcanum.Simulation.Combat.FireDamageRules.Damage(false, false)).Applied);
+        Assert.IsFalse(caster.TakeDamageSteps().Single().FromScript, "a burn's step");
+        Assert.IsTrue(caster.ApplyScriptDamage(Rat, 2, 0, unresistable: true).Applied);
+        Assert.IsTrue(caster.TakeDamageSteps().Single().FromScript, "a script's step");
+    }
 }

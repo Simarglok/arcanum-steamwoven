@@ -300,7 +300,9 @@ public partial class TerrainViewerApp
                 // A critter this run created is synced first (the host holds the attacker only then), as the thrown item's attack does.
                 SyncCreatedCritters(owner, ai);
                 return $"{ai.ScriptAttack(attacker, victim)}";
-            });
+            },
+            // ARC-SCRIPT-1562: the magick-tech adjustments (91, 80) of a combat-point script read an NPC's effective aptitude from the session's life.
+            Aptitude: ScriptAptitude);
 
         var inventory = _inventoryHost;
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, inventory?.Maps ?? [], content, world)

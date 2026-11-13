@@ -61,6 +61,28 @@ public sealed class GeneratorStateTests
         Assert.AreEqual(0, owner.TakeGeneratedCritters().Count, "the queue is taken once");
     }
 
+    // ARC-WORLD-1526 (GS5): the copy is of the generator object, so the created record keeps the generator as its template (the world builds the copy's row from the generator's fields); the link is saved.
+    [TestMethod]
+    public void A_copy_keeps_the_generator_it_copies_as_its_template_and_a_save_keeps_it()
+    {
+        using var owner = Create();
+        var made = owner.RunGenerator(owner.Version, Run(Packed(GeneratorSettings.ByDay | GeneratorSettings.Group, 12, 3, 9))).Made;
+        Assert.AreEqual(3, made.Count);
+        Assert.IsTrue(made.All(copy => copy.Summoner == Generator && copy.SpellFlags == 0), "a generator's copy carries the generator and no spell flag");
+        Assert.IsTrue(made.All(copy => owner.QueryCreatedObject(copy.Entity)!.Summoner == Generator));
+        using var back = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.IsTrue(made.All(copy => back.QueryCreatedObject(copy.Entity)!.Summoner == Generator && back.QueryGeneratorCopy(copy.Entity) == 12));
+    }
+
+    [TestMethod]
+    public void A_generator_named_as_the_absent_role_is_refused_before_any_effect()
+    {
+        using var owner = Create();
+        var revision = owner.Version.Revision;
+        Assert.AreEqual(GameSessionFailure.InvalidCreatedObject, owner.RunGenerator(owner.Version, Run(Packed(GeneratorSettings.ByDay, 4, 2, 9), SessionEventKinds.AbsentRole)).Failure);
+        Assert.AreEqual(revision, owner.Version.Revision);
+    }
+
     [TestMethod]
     public void The_cap_stops_the_ticks_and_a_death_frees_one_place_but_not_the_budget()
     {

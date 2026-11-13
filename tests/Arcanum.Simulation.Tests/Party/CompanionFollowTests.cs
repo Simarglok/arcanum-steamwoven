@@ -137,6 +137,44 @@ public sealed class CompanionFollowTests
     }
 
     [TestMethod]
+    public void A_walk_ended_on_a_trap_tile_stops_the_goal_finishes_the_step_and_goes_on_approaching_from_there()
+    {
+        // ARC-WORLD-1582 (TT17): the step function ends the walk on the trap's tile; the follow goal plans again from where the follower stands.
+        var source = GridSource.Open(24, 3);
+        var host = new RouteHost(source, new(1, 1), Step);
+        var follow = new CompanionFollower(source);
+        // The leader is far at the start, so a goal begins. After the stop the leader stands 3 cells from the follower: between range 2 and the start
+        // distance 4, where a fresh goal would not start, so only the resumed approach (the trap stop's own rule) walks on.
+        Assert.IsFalse(follow.EndWalkOnTrap(host.State.Time), "no goal running: nothing to end");
+        Frames(host, follow, () => new(12, 1), 7); // the second step has just entered (3,1)
+        Assert.AreEqual(MovementPhase.OutboundAfterEntry, host.State.Phase);
+        Assert.IsTrue(follow.EndWalkOnTrap(host.State.Time));
+        Assert.AreEqual((RouteFollowStatus.Stopped, CompanionFollower.TrapEndedReason), (follow.Route.Status, follow.Route.StopReason));
+        Frames(host, follow, () => new(6, 1), 4 * 6);
+        Assert.IsFalse(host.Events.Any(e => e.Kind == MovementEventKind.StepCancelled), "the started step ends at its cell centre");
+        Assert.IsNull(follow.Unreachable, "a walk ended on a trap is not an unreachable goal");
+        Assert.AreEqual(new CellCoord(4, 1), host.State.CommittedCell, "the approach resumes from (3,1) (as after a stop before a critter) and closes to range 2 of the leader");
+        // Without a trap stop the same leader 3 cells away starts nothing.
+        var other = new RouteHost(source, new(3, 1), Step);
+        Frames(other, new CompanionFollower(source), () => new(6, 1), 4 * 6);
+        Assert.AreEqual(new CellCoord(3, 1), other.State.CommittedCell, "within the start distance no goal begins");
+    }
+
+    [TestMethod]
+    public void A_walk_ended_on_a_trap_tile_ends_an_ordered_goal()
+    {
+        var source = GridSource.Open(24, 3);
+        var host = new RouteHost(source, new(3, 1), Step);
+        var follow = new CompanionFollower(source);
+        Assert.IsTrue(follow.WalkTo(new(12, 1), host.State.Time));
+        Frames(host, follow, () => new(2, 1), 7);
+        Assert.IsTrue(follow.EndWalkOnTrap(host.State.Time));
+        Frames(host, follow, () => new(2, 1), 4);
+        Assert.IsFalse(follow.Ordered, "the ordered goal ended on the tile");
+        Assert.AreEqual(new CellCoord(5, 1), host.State.CommittedCell, "the started step ends at its centre and the walk goes no further (the leader is within 4)");
+    }
+
+    [TestMethod]
     public void SpreadOutKeepsTheWiderDistances()
     {
         var source = GridSource.Open(24, 3);

@@ -14,7 +14,7 @@ public enum SessionCreatedKind { Scenery, EyeCandy, Critter }
 /// (<c>scenery:n</c> or <c>eyecandy:n</c>; origins <see cref="SessionObjectOrigin.Scenery"/> and <see cref="SessionObjectOrigin.EyeCandy"/>): its prototype number (the host
 /// reads the art and flags from the game's data by it), its map, its cell and pixel offsets, and the game time it was created. It is map-local state: it belongs to <see cref="Map"/>
 /// ARC-RES-101 (SUM2, SUM4, SUM7): the object also keeps what a summon writes on its creation and a rebuild needs: the spell flags (<see cref="SpellFlags"/>), the summoner (<see cref="Summoner"/>, the entity
-/// whose goal runs' source slot the summon writes; the fire wall's burn spares it and its followers) and the spell run that owns it (<see cref="Run"/>, the run whose summoned list holds it). It has
+/// whose goal runs' source slot the summon writes; the fire wall's burn spares it and its followers; ARC-WORLD-1526: for a critter a monster generator made, which carries no spell flag, the generator object it is the copy of, whose fields are its row's template) and the spell run that owns it (<see cref="Run"/>, the run whose summoned list holds it). It has
 /// no life of its own: it leaves only by a destroy (the record's own Destroy line at the callback or END, SUM-hand-off), singly or with its run's others in one step (<see cref="GameSessionOwner.DestroyCreatedObjects"/>).
 /// It lies in the sector of its cell, so the open map lists it among its residents and the sector's fold reaches it; the other maps' objects stay in the save until their map opens
 /// (nothing here reads the game's data). Saved (schema 85) and never given its number again.

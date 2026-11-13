@@ -78,7 +78,7 @@ FO7, FO8 and FO14, the stage's switches, are read where the leave, the danger up
   speaker's and the PC's genders, the names expanded) and floats it over the follower as a white script line. The "combat taunts"
   setting is on the options window's Video page (default on, the settings file's `combat taunts` line). The line texts are the
   player's and are never stored; no voice is played. NOT READY: a stray hit's taunt (kind 1: the writer of record flag 0x8 is not
-  traced), the near-death line of spell, trap and burn damage, the race-line selection.
+  traced), the race-line selection. The near-death line is asked for every critter damage as the original's damage function does (ARC-AI-1638): the attack path, a script's answer and the spell, trap and burn damage steps (`TickCasterDamage`; a script's step is marked `FromScript` so it asks once).
 - **World-map travel.** Its window's stop attacking for the hero on opening and allow attacking on return (FO5, FO6) are the
   travel host's calls of `StopAttacking` and `AllowAttacking` with the hero; the W panel does not make them yet.
 - **Mind control.** The order reads `CompanionOrderFacts.MindControlled` and the curse's leave the same fact; a controlling spell

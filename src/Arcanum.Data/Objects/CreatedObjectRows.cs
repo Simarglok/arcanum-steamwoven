@@ -98,6 +98,44 @@ public static class CreatedObjectRows
         return new(CreatedRowFailure.None, row);
     }
 
+    /// <summary>
+    /// ARC-WORLD-1526 (ledger GS5, PO4, VB4-9): the row of a critter that is a COPY of the object <paramref name="template"/> (a monster generator's copy: the original duplicates the whole object, all its instance fields, scripts,
+    /// name, stats, flags and held items, where <see cref="Critter"/> reads the prototype only). The copy's fields are the template's: the direct fields stay direct (the instance's own over its prototype's), the effective fields are
+    /// the template's effective ones. What the original then writes on the copy is the unmarking of the generator (NPC flag 0x80000, and with it the object flags 0x400002, cleared), its location, both standpoints (fields 0x121 and 0x122,
+    /// only for a critter) and OF_DYNAMIC (bit 0x2000 of the object flags); the NPC flag 0x2 that <see cref="Critter"/>'s create path (OM13) writes is NOT written: a copy has the flags of its template. The template's held items are
+    /// not part of the row (an open part of GS5); the restock facts (inventory source, field 0xEF) are the template's. A template that is not a critter's row is refused with <see cref="CreatedRowFailure.NotACritter"/>.
+    /// </summary>
+    public static CreatedObjectRowResult CritterFrom(AreaObjectRecord template, string entity, int runtimeMap, int cellX, int cellY)
+    {
+        ArgumentNullException.ThrowIfNull(template);
+        ArgumentNullException.ThrowIfNull(entity);
+        if (!entity.StartsWith(Prefix, StringComparison.Ordinal) || entity.Length == Prefix.Length || runtimeMap < 1 || cellX < 0 || cellY < 0) return new(CreatedRowFailure.InvalidArguments, null);
+        if (template.Type != NpcType) return new(CreatedRowFailure.NotACritter, null);
+
+        var location = (long)(uint)cellX | ((long)(uint)cellY << 32);
+        var direct = new SortedDictionary<int, AreaFieldValue>();
+        var effective = new SortedDictionary<int, AreaFieldValue>();
+        foreach (var field in template.EffectiveFields) effective[field.Slot] = field;
+        foreach (var field in template.DirectFields) direct[field.Slot] = field;
+        long Base(int slot) => effective.TryGetValue(slot, out var held) && held.Presence == AreaPresence.Value ? held.Number ?? 0 : 0;
+        void Own(int slot, long number) => direct[slot] = effective[slot] = new AreaFieldValue(slot, AreaPresence.Value, AreaValueOrigin.Instance, number, [], null);
+        Own(LocationSlot, location);
+        // the generator unmark (ledger VB4-9) touches only an NPC that carries the generator bit (it returns 0 and touches nothing otherwise): the object flags 0x400002 go with the bit.
+        var marked = (Base(NpcFlagsSlot) & GeneratorNpcFlag) != 0;
+        Own(FlagsSlot, (marked ? Base(FlagsSlot) & ~GeneratorObjectFlags : Base(FlagsSlot)) | DynamicFlag);
+        Own(NpcFlagsSlot, Base(NpcFlagsSlot) & ~GeneratorNpcFlag);
+        Own(StandpointDaySlot, location);
+        Own(StandpointNightSlot, location);
+
+        var key = new AreaObjectKey(Source, runtimeMap, AreaSourceKind.Mobile, null, 0, 0, KeyId(entity), 0);
+        var row = new AreaObjectRecord(key, template.Version, template.Type, template.PrototypeNumber, template.PrototypeReferenceSha256, template.PrototypeOwnSha256, "", "", AreaScope.Core, location, cellX, cellY,
+            AreaDisposition.BodyEligibleConditionally, Array.AsReadOnly(direct.Values.ToArray()), Array.AsReadOnly(effective.Values.ToArray()), true, true, true);
+        return new(CreatedRowFailure.None, row);
+    }
+
+    /// <summary>ARC-WORLD-1526: the monster generator's marks a copy loses (0x4BA720): NPC flag 0x80000 and the object flags 0x400002 (off, invulnerable).</summary>
+    public const long GeneratorNpcFlag = 0x80000, GeneratorObjectFlags = 0x400002;
+
     /// <summary>The slots of an object's location, its object flags, an NPC's flags and its day and night standpoints.</summary>
     public const int LocationSlot = 1, FlagsSlot = 18, NpcFlagsSlot = 69, StandpointDaySlot = 78, StandpointNightSlot = 79;
 
