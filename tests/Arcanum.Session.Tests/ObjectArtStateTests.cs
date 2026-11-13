@@ -65,6 +65,27 @@ public sealed class ObjectArtStateTests
     }
 
     [TestMethod]
+    public void A_made_items_art_record_follows_it_from_map_to_map_is_saved_and_is_the_only_field_a_made_item_keeps()
+    {
+        // ARC-SCRIPT-1826 (AN16): a made or script-created item (made:n) is a mobile object for this field: one record whatever map it names, saved in the objects section, cleared by the baseline from any map.
+        using var owner = Create();
+        const string Made = "made:3";
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetObjectArt(owner.Version, Exterior, Made, 0x6040_0040, baseline: 0x6020_0040).Disposition);
+        Assert.AreEqual(0x6040_0040u, owner.QueryObjectArt(Cave, Made), "found by identity from the map it stands on now");
+        Assert.AreEqual(0, owner.Capture().Maps.Count, "an object field, not a per-map change");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetObjectArt(owner.Version, Cave, Made, 0x6060_0040, baseline: 0x6020_0040).Disposition, "a write that names another map moves the record");
+        Assert.IsNull(owner.QueryMapChange(Exterior, SessionObjectArt.Key(Made)));
+        CollectionAssert.AreEqual(new[] { (Made, 0x6060_0040u) }, owner.QueryObjectArts(Cave).ToArray());
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(0x6060_0040u, restored.QueryObjectArt(Exterior, Made));
+        Assert.AreEqual(GameSessionDisposition.Changed, restored.SetObjectArt(restored.Version, Exterior, Made, 0x6020_0040, baseline: 0x6020_0040).Disposition);
+        Assert.IsNull(restored.QueryObjectArt(Cave, Made));
+        // No other field is a made item's own: it is a per-map change, as before.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetMapChange(owner.Version, Exterior, MapChangeKey.ForEntity(Made, "obj.off"), 1).Disposition);
+        Assert.AreEqual(1, owner.Capture().Maps.Count);
+    }
+
+    [TestMethod]
     public void A_save_without_the_field_loads_as_it_was_and_a_refused_write_changes_nothing()
     {
         using var plain = Create();
