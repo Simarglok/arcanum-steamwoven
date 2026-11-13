@@ -80,7 +80,7 @@ beyond S33 is not counted.
 ```sh
 "$DOTNET" run --project tools/research/Arcanum.CrashSiteProbe --no-build -- --script-refusal-census-self-test
 "$DOTNET" run --project tools/research/Arcanum.CrashSiteProbe --no-build -- --script-refusal-census \
-  --game-root "$GAME" [--set S30|S31|S32|S33|S38|S43|S52|S53|S54] > "$PRIVATE/refusal-census.json"
+  --game-root "$GAME" [--set S30|S31|S32|S33|S38|S43|S52|S53|S54|S56] > "$PRIVATE/refusal-census.json"
 ```
 
 The run takes about five seconds and is deterministic: two runs on the owner's installation
