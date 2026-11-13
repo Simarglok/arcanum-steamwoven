@@ -987,6 +987,8 @@ public partial class TerrainViewerApp
             TakeHoldEvent(entry);
             TakeTraitEvent(entry);
             TakeIdentifyEvent(entry);
+            // ARC-MAGIC-1745: a line a wield script of an NPC's rewield printed (the TraitIdx magick and tech points) goes to the message window as any script's printed line.
+            if (entry is { Kind: SpellCastEventKind.ItemScriptLine, Text: { } text }) PostScriptLines([new(entry.Detail, 0, entry.Value, text)]);
             if (AreaSpellCasting.Line(entry, texts, SpellObjectName) is { } line) lines.Add(line);
         }
         // ARC-MAGIC-045: a run wrote or took off an object flag (invisible, translucent, shrunk, don't-draw): the bodies are styled again without waiting for the next selection.

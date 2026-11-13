@@ -169,6 +169,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!SessionValidation.Actor(snapshot.Actor)) return Rejected(GameSessionFailure.InvalidActor);
         if (snapshot.Lighting is { } lighting && !SessionValidation.Lighting(lighting)) return Rejected(GameSessionFailure.InvalidLighting);
         if (snapshot.BarLights is { } barLights && !SessionValidation.BarLights(barLights)) return Rejected(GameSessionFailure.InvalidBarLights);
+        if (snapshot.GamblingRoll is { } gamblingRoll && !SessionValidation.GamblingRoll(gamblingRoll)) return Rejected(GameSessionFailure.InvalidGamblingRoll);
         var limits = options.Limits ?? new GameSessionLimits();
         var failure = ImportMaps(snapshot.Maps, snapshot.Objects.State, limits, out var maps);
         if (failure != GameSessionFailure.None) return Rejected(failure);
@@ -294,7 +295,7 @@ public sealed partial class GameSessionOwner : IDisposable
             snapshot.Lighting, sink, events!, frame)
         { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _danger = danger, _durability = durability, _foundSchematics = found,
           _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty, _hotkeys = hotkeys, _recentActions = recentActions, _scripts = scripts, _pendingHistory = pendingHistory,
-          _spellRuns = spellTable, _maintainBar = maintainBar, _spellLastCost = snapshot.Spells.LastCost, _objectFlags = objectFlags, _traitArt = traitArt, _newspaper = snapshot.Newspaper, _generators = generators, _barLights = snapshot.BarLights };
+          _spellRuns = spellTable, _maintainBar = maintainBar, _spellLastCost = snapshot.Spells.LastCost, _objectFlags = objectFlags, _traitArt = traitArt, _newspaper = snapshot.Newspaper, _generators = generators, _barLights = snapshot.BarLights, _gamblingRoll = snapshot.GamblingRoll };
         foreach (var use in encounterUses) owner._encounterUses[use.Key] = use.Value;
         owner._danger.Here = () => owner._actor.Map;
         // ARC-DEV-208 (MIG14 S2): the saved runs and their steps (a run's step is re-created at its due time).
@@ -1188,9 +1189,11 @@ public sealed partial class GameSessionOwner : IDisposable
     /// </summary>
     [OriginalFunction(0x461CA0, OriginalFunctionScope.Partial)]
     public InventoryMutationResult LootItem(GameSessionVersion expected, string holder, string item, SessionInsertCheck insertCheck,
-        ISessionItemScriptHost? scripts = null, ISessionItemTriggers? triggers = null) => PickedUp(Loot(expected, holder, item, insertCheck, scripts), triggers);
+        ISessionItemScriptHost? scripts = null, ISessionItemTriggers? triggers = null, SessionNpcWieldScripts? npcWearer = null) =>
+        PickedUp(Loot(expected, holder, item, insertCheck, scripts, npcWearer), triggers);
 
-    private InventoryMutationResult Loot(GameSessionVersion expected, string holder, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts)
+    private InventoryMutationResult Loot(GameSessionVersion expected, string holder, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts,
+        SessionNpcWieldScripts? npcWearer = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -1209,11 +1212,11 @@ public sealed partial class GameSessionOwner : IDisposable
         if (row.ScriptPoints.Contains(SessionScriptPoint.Use)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
         // ARC-WORLD-055: a made item the session added to this NPC is in its list too.
         if (_inventory.AddedTo(holder).FirstOrDefault(added => added.Entity == item) is { Entity: not null } made)
-            return Take(seed, new(item, _inventory.Worn(holder, item, _inventory.AddedFacts(made))), holder, insertCheck, scripts, unwield: true);
+            return Take(seed, new(item, _inventory.Worn(holder, item, _inventory.AddedFacts(made))), holder, insertCheck, scripts, unwield: true, npcWearer: npcWearer);
         if (!seed.HolderOf.TryGetValue(item, out var of) || of != holder || _inventory.Taken.Contains(item) || DroppedCell(_actor.Map, seed, item) is not null)
             return RejectItem(GameSessionFailure.ItemNotAvailable);
         // ARC-DEV-202 (B03, ARC-WORLD-103): worn as the session's lists show it (a dressed body's record over its map data).
-        return Take(seed, new(item, _inventory.Worn(holder, item, _inventory.WithAmmo(item, seed.Items[item].Facts))), holder, insertCheck, scripts, unwield: true);
+        return Take(seed, new(item, _inventory.Worn(holder, item, _inventory.WithAmmo(item, seed.Items[item].Facts))), holder, insertCheck, scripts, unwield: true, npcWearer: npcWearer);
     }
 
     /// <summary>
@@ -1811,7 +1814,7 @@ public sealed partial class GameSessionOwner : IDisposable
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision, _frame.RealMs, _frame.AnimationMs),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
             _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(_combat.SubturnStarts), CaptureCombatMode(), CaptureConcealment(), _danger.CaptureBits(), CaptureEvents(), _lighting, _sound.Capture(),
-            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()).WithLinks(_danger.CaptureLinks()), _scripts.Capture(_hero), CaptureResidency(), CaptureGoals(), CaptureSpells(), CaptureNewspaper(), CaptureFlights(), CaptureGenerators(), CaptureEncounters(), _barLights);
+            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()).WithLinks(_danger.CaptureLinks()), _scripts.Capture(_hero), CaptureResidency(), CaptureGoals(), CaptureSpells(), CaptureNewspaper(), CaptureFlights(), CaptureGenerators(), CaptureEncounters(), _barLights, _gamblingRoll);
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
@@ -2159,7 +2162,7 @@ public sealed partial class GameSessionOwner : IDisposable
     [Arcanum.Simulation.OriginalFunction(0x466640, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     [Arcanum.Simulation.OriginalFunction(0x466A00, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     private InventoryMutationResult Take(InventoryDomain.Seed seed, SessionInventoryItem item, string? holder, SessionInsertCheck insertCheck,
-        ISessionItemScriptHost? scripts, SessionMapId? seedMap = null, bool unwield = false, bool toFeet = false)
+        ISessionItemScriptHost? scripts, SessionMapId? seedMap = null, bool unwield = false, bool toFeet = false, SessionNpcWieldScripts? npcWearer = null)
     {
         // ARC-DEV-087 (MIG6e): the map whose seed lists the item; it is the actor's unless the holder is another map's NPC (a carried companion).
         var origin = seedMap ?? _actor.Map;
@@ -2219,7 +2222,11 @@ public sealed partial class GameSessionOwner : IDisposable
         bool Stale() => _revision != revision || _actor.Map != map || _flags.Version != flagVersion || !_inventory.Seeds.TryGetValue(origin, out var current) ||
             !ReferenceEquals(current, seed) || (npc is null ? _inventory.Taken.Contains(item.Entity) : _inventory.NpcOf(item.Entity) != npc);
 
-        var runs = scripts is null ? null : new ItemScriptRuns(this, scripts, map.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item.Entity] = facts.Complexity });
+        // ARC-MAGIC-1743 (IE3, IE5, IE6): the wearer of a looted worn item's wield-off run is its NPC when the host gives its context (its effect list the run changes, its stats the run reads); the NPC is then the
+        // triggerer of the gate, wield-off and remove-item runs (the insert-item run keeps the hero as the triggerer). Without the context the run is the hero-wearer run of before.
+        var wearer = worn && wieldOff && npcWearer is not null && holder is not null && KnownNpc(holder) ? new NpcWearer(holder, npcWearer.Target, NpcStatsOverSheet(holder, npcWearer.Stored)) : null;
+        var runs = scripts is null ? null : new ItemScriptRuns(this, scripts, map.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item.Entity] = facts.Complexity }, wearer);
+        if (runs is not null && wearer is not null) runs.NpcTriggerer = true;
         if (runs is not null)
         {
             // The gate: the item's get script, or the recipient's transfer script (the PC's slot is the host's to answer). The
@@ -2268,6 +2275,7 @@ public sealed partial class GameSessionOwner : IDisposable
             // ARC-DEV-202: a worn item's wield-off script (25) runs before its remove-item script (28), with the body as triggerer (PI2).
             if (wieldOff) runs.Run(SessionScriptPoint.WieldOff, item.Entity, holder!, null);
             if (runs.Failure == GameSessionFailure.None && parented && facts.HasScript(SessionScriptPoint.RemoveItem)) runs.Run(SessionScriptPoint.RemoveItem, item.Entity, holder!, null);
+            if (wearer is not null) runs.NpcTriggerer = false;
             if (runs.Failure == GameSessionFailure.None && !refused && facts.HasScript(SessionScriptPoint.InsertItem))
                 insertRun = runs.Run(SessionScriptPoint.InsertItem, item.Entity, SessionEventKinds.PlayerEntity, null);
             ThrowIfDisposed();

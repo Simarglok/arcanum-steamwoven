@@ -24,6 +24,13 @@ public interface ISpellSocialHost
 
     /// <summary>ARC-AI-1513: the flee-goal interrupt that stop fleeing (0x4AF170) runs for an NPC in FLEE, which set no-flee (0x4AF1D0, the start of mind control) runs first: every flee goal (25) of the NPC is ended. The session has written the state and the bit; no answer is needed (an NPC this host does not run has no goals here).</summary>
     void EndFleeGoals(string npc) { }
+
+    /// <summary>
+    /// ARC-MAGIC-1169 (E1-f, the AI redirect 0x4A9560 of the component 0x451700): the NPCs of the vicinity of <paramref name="target"/> (other than it, living, with the critter flag <paramref name="critterFlag"/> when that is not 0, and
+    /// the intelligence test of <paramref name="minimumIntelligence"/>, −1 when absent) are turned on it: the attack event with the target as attacker, then its focus and who-hit-me-last. Answers how many NPCs were redirected, or null
+    /// when the host does not run the target (the cast host logs it as refused).
+    /// </summary>
+    int? Redirect(string target, uint critterFlag, int minimumIntelligence) => null;
 }
 
 /// <summary>
@@ -51,8 +58,8 @@ public sealed partial class SessionSpellCaster
 
     /// <summary>The detail codes of a <see cref="SpellCastEventKind.SocialEffect"/> line (its <see cref="SpellCastEvent.Value"/>): the reaction change (detail: the delta), peace, flee, stop fleeing, a forced join, a forced leave, no-flee for good, a blinded
     /// condition written (detail 1 on, 0 off), the original's no-ops (<see cref="SocialIgnored"/>) and a step the session does not model (<see cref="SocialNotModelled"/>, detail: 1 a leader that is no hero) or a host that did not run
-    /// the step (<see cref="SocialRefused"/>, detail: the effect it was asked).</summary>
-    public const int SocialReaction = 1, SocialPeace = 2, SocialFlee = 3, SocialStopFleeing = 4, SocialJoin = 5, SocialLeave = 6, SocialNoFlee = 7, SocialBlinded = 8, SocialIgnored = 9, SocialNotModelled = 10, SocialRefused = 11;
+    /// the step (<see cref="SocialRefused"/>, detail: the effect it was asked); the AI redirect (<see cref="SocialRedirect"/>, detail: how many NPCs were turned on the target).</summary>
+    public const int SocialReaction = 1, SocialPeace = 2, SocialFlee = 3, SocialStopFleeing = 4, SocialJoin = 5, SocialLeave = 6, SocialNoFlee = 7, SocialBlinded = 8, SocialIgnored = 9, SocialNotModelled = 10, SocialRefused = 11, SocialRedirect = 12;
 
     /// <summary>ARC-MAGIC-1142: the NPC flag 0x800 (<c>ONF_KOS_OVERRIDE</c>, field 0x118) a charm adds and the attack event clears on an NPC victim.</summary>
     public const int KosOverrideNpcFlag = 0x800;

@@ -57,7 +57,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     /// (29) of <see cref="ScrAdmissionSet.S23"/>. ARC-MAGIC-030 (MT21b): plus the spell conditions body spell (14), influenced by spell (35), knows spell (48) and mastered spell college (49)
     /// and give spell mastery in college (112) of <see cref="ScrAdmissionSet.S31"/>, which the use host answers and this host writes. ARC-SCRIPT-1563 (GT194–GT196): plus damage (60), apply unresistable damage (138) and heal hit points (75) of
     /// <see cref="ScrAdmissionSet.S30"/>, which <see cref="Apply"/> hands to the use host's session path (a talk's poison script 1059, a deferred call's poison chain). ARC-SCRIPT-1620 (TI6): plus attack (36) of <see cref="ScrAdmissionSet.S33"/>, which <see cref="Apply"/> hands to the use host's AI path (the PC or an NPC of the shown map as the attacker).
-    /// ARC-SCRIPT-1733 (CS1–CS12): plus obj is animal (37), obj is in combat (31) and the nine critter-state conditions of <see cref="ScrAdmissionSet.CritterStateConditions"/>, which the use host answers.
+    /// ARC-SCRIPT-1733 (CS1–CS12): plus obj is animal (37), obj is in combat (31) and the nine critter-state conditions of <see cref="ScrAdmissionSet.CritterStateConditions"/>, which the use host answers. ARC-SCRIPT-1771 (CS12–CS14): plus the three of <see cref="ScrAdmissionSet.CritterTailConditions"/>.
     /// </summary>
     public static ScrAdmissionSet TalkAdmission { get; } = WithQueries("S3-area-talk-queries", Admission);
 
@@ -66,7 +66,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
 
     private static ScrAdmissionSet WithQueries(string id, ScrAdmissionSet set) => new(id,
         set.Conditions.Concat(ScrAdmissionSet.ObjectQueryConditions).Concat(ScrAdmissionSet.ObjectStateQueryConditions).Concat(ScrAdmissionSet.SpellQueryConditions)
-            .Concat(ScrAdmissionSet.CritterQueryConditions).Concat(ScrAdmissionSet.CritterStateConditions),
+            .Concat(ScrAdmissionSet.CritterQueryConditions).Concat(ScrAdmissionSet.CritterStateConditions).Concat(ScrAdmissionSet.CritterTailConditions),
         set.Actions.Concat([ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea, ScrCatalogue.Action.GetReaction, ScrCatalogue.Action.GiveSpellMastery,
             ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.HealHitPoints, ScrCatalogue.Action.Attack]), set.ValueKinds, set.FocusKinds);
 
@@ -171,6 +171,9 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public bool? IsInvulnerable(ScrObjectRef obj) => Answering.IsInvulnerable(obj);
     public bool? IsUndead(ScrObjectRef obj) => Answering.IsUndead(obj);
     public bool? IsProwling(ScrObjectRef obj) => Answering.IsProwling(obj);
+    // ARC-SCRIPT-1771: bad associates (CS12) and monster of type (CS13) are the shown map's use host's answers too; obj is within range (CS14) reads only the object's location (IScrWorldQueries).
+    public bool? HasBadAssociates(ScrObjectRef obj) => Answering.HasBadAssociates(obj);
+    public bool? IsMonsterOfType(ScrObjectRef obj, int type) => Answering.IsMonsterOfType(obj, type);
     public bool? IsInfluencedBy(ScrObjectRef obj, int spell) => Answering.IsInfluencedBy(obj, spell);
     public bool? KnowsSpell(ScrObjectRef obj, int spell) => Answering.KnowsSpell(obj, spell);
     public int? MasteredCollege(ScrObjectRef obj) => Answering.MasteredCollege(obj);
@@ -185,6 +188,15 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     private readonly List<ScrReadingRequest> _readings = [];
     private readonly List<AreaScriptFloat> _floats = [];
     private readonly List<AreaScriptFade> _fades = [];
+    private readonly List<AreaScriptEyeCandy> _eyeCandies = [];
+
+    /// <summary>ARC-SCRIPT-1592: the script eye candy (action 120) of the runs applied since the last call, in order, for the viewer to play on its objects (<see cref="AreaEyeCandyHost.PlayScript"/>).</summary>
+    public IReadOnlyList<AreaScriptEyeCandy> TakeEyeCandies()
+    {
+        var eyeCandies = _eyeCandies.ToArray();
+        _eyeCandies.Clear();
+        return eyeCandies;
+    }
 
     /// <summary>ARC-DEV-324: queues a line for the viewer to float over <paramref name="speaker"/> as a script's float line does (the generic greeting, which is a
     /// floating line and no window).</summary>
@@ -422,6 +434,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         _floats.AddRange(floats);
         // The effect rule of every blessing or curse the run adds is known before anything applies (a missing rule refuses the run whole).
         if (!AreaScriptStory.BlessingRulesResolve(_session, effects, IsPc, BlessingEffects)) return false;
+        _eyeCandies.AddRange(AreaScriptEyeCandy.Of(effects));
         foreach (var write in effects.GlobalFlags)
         {
             var flags = _session.Flags;

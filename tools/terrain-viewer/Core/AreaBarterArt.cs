@@ -108,12 +108,14 @@ public static class AreaBarterArtLayout
 
     /// <summary>
     /// A left release with an item held (BT5): the merchant's item on the hero's grid is a buy (0x575200), the hero's item on the shown grid a
-    /// sale (0x575360); anything else puts it back. NOT READY: the gamble (0x579B60: the original puts the item back first, then gambles),
-    /// the hero's grid moves, drop and use boxes of the barter window (the item goes back; the own window has them).
+    /// sale (0x575360); ARC-UI-1740: the merchant's item on the bet box is a bet (0x579B60: the original puts the item back first, then runs the
+    /// bet; the hero's own item there only goes back, as the gate refuses it silently); anything else puts it back. NOT READY: the hero's grid
+    /// moves, drop and use boxes of the barter window (the item goes back; the own window has them).
     /// </summary>
     public static AreaInventoryDrop Release(AreaInventoryHeld held, AreaBarterHit hit)
     {
         ArgumentNullException.ThrowIfNull(held);
+        if (hit.Gamble) return held.Partner ? new(AreaInventoryDropKind.Gamble, held) : new(AreaInventoryDropKind.PutBack, held);
         if (held.Partner) return hit.Cell is { } target ? new(AreaInventoryDropKind.Buy, held, GridSlot: target) : new(AreaInventoryDropKind.PutBack, held);
         return hit.Location is { } location ? new(AreaInventoryDropKind.Sell, held, GridSlot: location) : new(AreaInventoryDropKind.PutBack, held);
     }
@@ -129,10 +131,14 @@ public static class AreaBarterArtLayout
     public static int BoxArt(AreaInventoryIcon icon, AreaInventoryHeld? held, bool over) =>
         AreaLootArtLayout.BoxArt(icon, held, over);
 
-    /// <summary>The gamble box's art (0x573E67..0x573F1C): "off" 345 with nothing held over it. NOT READY: an item held over it shows 344
-    /// when the gamble check 0x579840 (the gambling skill, the item's price against the hero's gold) passes and 346 when it does not; the
-    /// check is not built, so the box keeps its "off" art.</summary>
+    /// <summary>The gamble box's resting art (0x573E67..0x573F1C): "off" 345 with nothing held over it; the box's size is this art's.</summary>
     public static int GambleArt => GambleOffArt;
+
+    /// <summary>
+    /// ARC-UI-1740 (BW3): the box's art now. An item held over it shows 344 when the bet gate 0x579840 passes (<paramref name="gatePasses"/>) and 346
+    /// when it does not; the gate runs once as the item enters the box and moving out sets 345 again, as does a release.
+    /// </summary>
+    public static int GambleBoxArt(bool heldOver, bool gatePasses) => !heldOver ? GambleOffArt : gatePasses ? GambleOnArt : GambleRefusedArt;
 
     /// <summary>PROJECT: the quote line's text for a shown or hero item (the original's hover quote 0x578330 prints a generated phrase of the
     /// merchant's with the price; the generated lines are not built): the item, its unit price, or why it has none; a follower's window has

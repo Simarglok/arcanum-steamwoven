@@ -79,7 +79,11 @@ public sealed record SpellOpenable(SessionOpenable Openable, SessionOpenableBase
 /// <summary>What a cast left for the host to show or do: the run note's kind and run, the local player's spell.mes message, the
 /// component types that are not ready yet, and the objects a component touched.</summary>
 /// <summary>One entry of the cast host's log; <see cref="Detail"/> carries an eye candy's <c>Play:</c> flags (ARC-MAGIC-017).</summary>
-public sealed record SpellCastEvent(SpellCastEventKind Kind, int Run, int Value = 0, string? Object = null, int Detail = 0);
+public sealed record SpellCastEvent(SpellCastEventKind Kind, int Run, int Value = 0, string? Object = null, int Detail = 0)
+{
+    /// <summary>ARC-MAGIC-1745 (<see cref="SpellCastEventKind.ItemScriptLine"/>): the printed line's text, which the viewer's message window posts by the entry type <see cref="Value"/>.</summary>
+    public string? Text { get; init; }
+}
 
 /// <summary>How a casting goal's start went (<see cref="SessionSpellCaster.StartGoal"/>): it started, or it ends because the parent's
 /// action points refused, because the source cannot afford the cast, because the target is destroyed or off, because the caster
@@ -253,6 +257,9 @@ public enum SpellCastEventKind
     TraitIndexRefused,
     /// <summary>ARC-MAGIC-1295: the session refused the TraitIdx write on <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the spell goes on.</summary>
     TraitIndexNotSaved,
+    /// <summary>ARC-MAGIC-1745 (the TraitIdx component 0x452D80, the rewield 0x465530 that magick and tech points run): a line an item event script of the NPC <see cref="SpellCastEvent.Object"/> printed. <see cref="SpellCastEvent.Value"/> is the print action's entry type (the message window's kind),
+    /// <see cref="SpellCastEvent.Detail"/> the script number and <see cref="SpellCastEvent.Text"/> the line; the viewer posts it to the message window as any script's printed line (the world's script message entries).</summary>
+    ItemScriptLine,
 }
 
 /// <summary>
