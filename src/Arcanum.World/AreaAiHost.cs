@@ -3274,7 +3274,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Rotation = GridActorMath.Octant(facing ?? Movers.FacingOf(observer, NeighborDirection.XPlus)),
             Stunned = facts?.Stunned ?? false, Sleeping = facts?.Asleep ?? false, Unconscious = facts?.Unconscious ?? false,
             TargetInvisible = Find(target) is { } seen && (seen.ObjectInvisible || seen.InvisibleSpell), DetectsInvisible = facts?.DetectsInvisible ?? false,
-            ProwlingMargin = ProwlingMargin(observer, target, at, there, facts, map, true),
+            // The margin is read only where the sight check gets as far as Perception (not for a stunned, sleeping or unconscious observer, nor one facing away).
+            ProwlingMargin = facts is { Stunned: false, Asleep: false, Unconscious: false } && AwarenessRules.Faces(at, GridActorMath.Octant(facing ?? Movers.FacingOf(observer, NeighborDirection.XPlus)), there)
+                ? ProwlingMargin(observer, target, at, there, facts, map, true) : 0,
         };
         return AwarenessRules.See(sight, at, 0, 0, there, map, _session.Rules.Combat);
     }
@@ -3314,7 +3316,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         {
             Perception = Math.Clamp(facts?.Perception ?? 0, 0, AwarenessRules.MaxPerception),
             Stunned = facts?.Stunned ?? false, Sleeping = facts?.Asleep ?? false, Unconscious = facts?.Unconscious ?? false,
-            ProwlingMargin = ProwlingMargin(observer, target, at, there, facts, map, false),
+            ProwlingMargin = facts is { Stunned: false, Unconscious: false } ? ProwlingMargin(observer, target, at, there, facts, map, false) : 0,
         };
         return AwarenessRules.Hear(hearing, at, 0, 0, there, loudness, new SoundMap(map), _session.Rules.Combat);
     }

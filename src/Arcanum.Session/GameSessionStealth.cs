@@ -90,9 +90,9 @@ public sealed partial class GameSessionOwner
             TargetCritter = true,
             SeeingCheck = seeing,
             HearingCheck = !seeing,
-            // ARC-AI-1518: the prowler's own light and worn armour (AW4); an observer fact already carrying armour terms wins.
+            // ARC-AI-1518: the prowler's own light and worn armour (AW4), the hero's whatever the observer facts say.
             SourceLight = QueryHeroLight(),
-            ArmorSilentMoves = observer.ArmorSilentMoves.Count > 0 ? observer.ArmorSilentMoves : EquipmentRules.SilentMoves(_equipment.Items().Values, HeroAptitude()),
+            ArmorSilentMoves = EquipmentRules.SilentMoves(_equipment.Items().Values, HeroAptitude()),
             SourceInjuries = request.Difficulty.SourceInjuries,
         });
         return new(StealthRules.Margin(effectiveness, difficulty.Total), effectiveness, difficulty);

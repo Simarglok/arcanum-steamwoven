@@ -98,7 +98,7 @@ public sealed class AreaAiHostSneakTests
         Assert.AreEqual(Pc, ordinary.Target, $"the NPC is hostile to the hero ({ordinary.Reason})");
         f.Session.ToggleHeroConcealment(f.Session.Version);
         var hidden = HostilityRules.FindTarget(host, f.A, f.Session.Rules.Combat);
-        Assert.IsNull(hidden.Target, "the sneaking hero is not heard from 5 tiles (the NPC faces away)");
+        Assert.IsNull(hidden.Target, "the sneaking hero is not heard from 5 tiles, and the NPC faces away from it so it does not see it either");
         Assert.IsNull(hidden.TurnToward, "and not perceived, so nothing to turn toward");
     }
 

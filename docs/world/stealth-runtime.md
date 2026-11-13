@@ -41,7 +41,7 @@ stand and walk are). Followers keep their ordinary follow gait in the viewer: th
 
 ## Boundaries (NOT READY)
 
-- The observers: the AI host's sight and hearing checks ask `HeroProwlingMargin` for a concealed hero (ARC-AI-1518, so the target scan, witnesses and the unseen master prowler rule see it); a concealed follower has no margin yet (issue #1560); the examine lines (ST6)
+- The observers: the AI host's sight and hearing checks ask `HeroProwlingMargin` for a concealed hero (ARC-AI-1518, so the target scan, witnesses and the unseen master prowler rule see it); a concealed follower has no margin yet (issue #1560); worn armour's silent-move adjustments are not saved, so a restored hero's armour counts as silent (issue #1578); the examine lines (ST6)
   and script condition 51 are not wired.
 - Not modelled: the crouch art and its missing-art refusal (ST1), the hotkey's refusal of a stunned or paralysed PC (ST1, one reader only), the followers' stealth gait in the viewer, summoned NPCs created concealed (ST2), the right-click and goal
   54 ends (ST4), NPC attacks on the hero (no NPC attack path yet), the 2 action points per step in a turn-based round and the light
