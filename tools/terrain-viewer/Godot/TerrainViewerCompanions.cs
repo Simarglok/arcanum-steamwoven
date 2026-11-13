@@ -546,11 +546,29 @@ public partial class TerrainViewerApp
                     GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = button, Pressed = down, Position = at!.Value, GlobalPosition = at.Value });
                 for (var frame = 0; frame < 3; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             }
+            // ARC-UI-1736 (FP5): the show/hide button hides the frames and shows them again; one follower has no arrows (they stand from seven).
+            Require(_followerPortraits!.PanelForSelfTest is { Shown: true, Count: 1, ToggleArt: 501, UpArt: null, DownArt: null }, "the panel is shown with the hide button and no arrows: " + _followerPortraits.PanelForSelfTest);
+            await ClickAsync(_followerPortraits.ButtonCentreForSelfTest("toggle"), "the hide button");
+            Require(_followerPortraits.PanelForSelfTest is { Shown: false, ToggleArt: 502 } && _followerPortraits.EntitiesForSelfTest.Count == 0 && _followerPortraits.RightEdge == 0,
+                "hiding removed the frame and set the show art: " + _followerPortraits.PanelForSelfTest);
+            Require(ReferenceEquals(_worldRouteClick, lastClick), "the GUI took the hide press");
+            await ClickAsync(_followerPortraits.ButtonCentreForSelfTest("toggle"), "the show button");
+            Require(_followerPortraits.PanelForSelfTest is { Shown: true, ToggleArt: 501 } && _followerPortraits.EntitiesForSelfTest.Contains(companion.Entity), "showing brought the frame back");
             // ARC-DEV-280 (B33): the original opens the menu on the right button's release over the portrait.
             await ClickAsync(_followerPortraits!.PortraitCentreForSelfTest(companion.Entity), "his portrait button", MouseButton.Right);
             Require(_followerPortraits.MenuShown, "a right click on his portrait opened the order menu");
             Require(_worldFocusExitSignals == focusExits && GetWindow().HasFocus() == windowFocused,
                 $"the order menu kept the world window's focus (exits {focusExits}->{_worldFocusExitSignals}, focused {windowFocused}->{GetWindow().HasFocus()})");
+            // ARC-UI-1736 (FP7, FP8): the menu stands at the frame's right edge and top, with the original's eight rows 18 pixels apart.
+            var openMenu = _followerPortraits.MenuForSelfTest;
+            var factor = _followerPortraits.ScaleForSelfTest;
+            var frameTop = _followerPortraits.PortraitCentreForSelfTest(companion.Entity)!.Value.Y - AreaFollowerFrameLayout.Height * factor / 2;
+            Require(openMenu is { Rows: 8 } && Math.Abs(openMenu.Value.Rect.Position.Y - frameTop) < 2,
+                $"the menu has eight rows at the frame's top ({frameTop}): {openMenu}");
+            var walkAt = _followerPortraits.MenuItemCentreForSelfTest(FollowerMenuItem.Walk)!.Value; var sheetAt = _followerPortraits.MenuItemCentreForSelfTest(FollowerMenuItem.CharacterSheet)!.Value;
+            Require(Math.Abs(sheetAt.Y - walkAt.Y - 18 * 7 * factor) < 2, $"the rows stand 18 pixels apart: walk {walkAt} sheet {sheetAt} at factor {factor}");
+            Require(_followerPortraits.MenuRowStateForSelfTest(FollowerMenuItem.Wait) == FollowerMenuRowState.Normal
+                && _followerPortraits.MenuRowStateForSelfTest(FollowerMenuItem.CharacterSheet) == FollowerMenuRowState.Normal, "Wait and the sheet are normal for a follower in his mind");
             await ClickAsync(_followerPortraits.MenuItemCentreForSelfTest(FollowerMenuItem.Wait), "the menu's wait button");
             Require(!_followerPortraits.MenuShown && _worldFocusExitSignals == focusExits, "choosing closed the menu, still without a focus change");
             Require(ReferenceEquals(_worldRouteClick, lastClick) && ((AreaGridSession)_worldActor.Session!).State.CommittedCell == pcCell,

@@ -97,6 +97,8 @@ public partial class AreaCharacterSheetArtView : Control
     /// <param name="alignmentHot">The hot point of each frame of art 254.</param>
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaCharacterSheetFonts fonts, AreaCharacterSheetTexts texts, (int X, int Y)[] alignmentHot)
     {
+        // ARC-UI-1195: the textures of a look this view no longer shows are let go.
+        if (_onTextureChanged is { } handler) { foreach (var texture in _watched) texture.Changed -= handler; _watched.Clear(); }
         _art = art ?? throw new ArgumentNullException(nameof(art));
         _fonts = fonts ?? throw new ArgumentNullException(nameof(fonts));
         _texts = texts ?? throw new ArgumentNullException(nameof(texts));
@@ -140,12 +142,25 @@ public partial class AreaCharacterSheetArtView : Control
             Scale = new Vector2(factor, factor);
             Position = new Vector2(AreaGameBarPanel.ScreenLeft(screen, factor),
                 MathF.Round((screen.Y - AreaPremadeBrowserArtLayout.ScreenHeight * factor) / 2) + AreaShopArtLayout.Window.Y * factor);
+            RedrawOnScaleChange();
             return;
         }
         var (scale, position) = AreaGameBarPanel.FittedWindow(GetViewportRect().Size, AreaCharacterSheetArtLayout.Width, AreaCharacterSheetArtLayout.Height,
             InterfaceHd.Enabled && InterfaceHd.Pack is not null);
         Scale = new Vector2(scale, scale);
         Position = position;
+        RedrawOnScaleChange();
+    }
+
+    // ARC-UI-1195: a change of the window's scale moves no pixel by itself (the canvas item is only stretched), so the frames are drawn again at the new device scale.
+    private float _drawnScale;
+
+    private void RedrawOnScaleChange()
+    {
+        var device = DeviceScale();
+        if (Math.Abs(device - _drawnScale) < 0.0005f) return;
+        _drawnScale = device;
+        QueueRedraw(); Pages.QueueRedraw(); Spells.QueueRedraw();
     }
 
     private Texture2D? Art(int number, int frame = 0) => AreaCharacterArtDraw.Art(_art, number, frame);
@@ -178,9 +193,43 @@ public partial class AreaCharacterSheetArtView : Control
         return null;
     }
 
+    // ARC-UI-1195: the generated interface paints the sheet's frames at the window's own device scale (the frame scale times the canvas transform's and the viewport's
+    // stretch, the bars' own rule). The sheet's textures are shared (the in-game sheet, the NPC sheet, the creation editor), so the view on screen claims them at its draw.
+    // The pages (the children) draw the same textures at the same scale; a texture swapped in by a worker redraws all three, since each draws in its own _Draw.
+    private readonly HashSet<HdInterfaceTexture> _watched = [];
+    private Action? _onTextureChanged;
+    private Func<float>? _deviceScale;
+
+    internal float DeviceScale() =>
+        GodotObject.IsInstanceValid(this) && IsInsideTree() ? GetGlobalTransformWithCanvas().Scale.X * GetViewport().GetStretchTransform().Scale.X : 1f;
+
+    private void ClaimScale()
+    {
+        _deviceScale ??= DeviceScale;
+        _onTextureChanged ??= () => { if (GodotObject.IsInstanceValid(this)) { QueueRedraw(); Pages.QueueRedraw(); Spells.QueueRedraw(); } };
+        foreach (var frames in _art.Values)
+            foreach (var texture in frames)
+            {
+                if (texture is not HdInterfaceTexture hd) continue;
+                hd.ScaleSource = _deviceScale;
+                if (_watched.Add(hd)) hd.Changed += _onTextureChanged;
+            }
+    }
+
+    public override void _ExitTree()
+    {
+        if (_onTextureChanged is { } handler) foreach (var texture in _watched) texture.Changed -= handler;
+        _watched.Clear();
+    }
+
+    /// <summary>ARC-UI-1195: the textures of the given art numbers that the sheet holds, every frame, with the art number of each (the native smoke).</summary>
+    internal IReadOnlyList<(int Art, HdInterfaceTexture Texture)> TexturesForSelfTest(IEnumerable<int> arts) =>
+        [.. arts.Where(_art.ContainsKey).SelectMany(number => _art[number].OfType<HdInterfaceTexture>().Select(texture => (number, texture)))];
+
     public override void _Draw()
     {
         if (_fonts is not { } fonts || _view is not { } view) return;
+        ClaimScale();
         if (Art(AreaCharacterSheetArtLayout.BackgroundArt) is { } window) DrawTextureRect(window, new Rect2(0, 0, window.GetWidth(), window.GetHeight()), false);
         // The portrait in its slot (141, 21), at its own size (0x4CE470).
         if (_portrait is not null) DrawTextureRect(_portrait, new Rect2(141, 21, _portrait.GetWidth(), _portrait.GetHeight()), false);

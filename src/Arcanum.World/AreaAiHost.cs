@@ -133,7 +133,9 @@ public sealed record AreaAiScene
     /// <summary>ARC-DEV-246 (MIG13 S14l, GT208): the victim's catching-thief script (point 11) after a noticed pick pocket, with the NPC thief as the triggerer; true when the consequences go on ("run default", or no script); false when the script's answer, or a run the viewer cannot finish, stops them; null: no script runs.</summary>
     public Func<string, string, bool>? CatchingThief { get; init; }
     /// <summary>ARC-DEV-258 (MIG13 S14n, GT63): launches the projectile of a generic item (a grenade) an NPC threw: the thrower, its shot, the thrower's tile and the throw's location; true when the
-    /// flight began (the viewer then lands the item where it ends and fires its event). Null or false: the item lands on the location at once, with no event (a flight the projectile host refused to start has ended the shot, and the item stays on the thrower's cell).</summary>
+    /// flight began (the viewer then lands the item where it ends and fires its event). Null or false: the item lands on the location at once, with no event (a flight the projectile host refused to start has ended the shot, and the item stays on the thrower's cell).
+    /// ARC-COMBAT-1717: the same for a thrown weapon, whose destination is the struck critter's tile (a decided hit, the viewer strikes through <see cref="AreaAiHost.LandShot"/> and lands the item) or the scatter tile (a miss); a host that can fly it
+    /// makes the throw fly (<see cref="SessionNpcThrow.Flight"/>), and a false answer there resolves the throw at once (a hit striking first).</summary>
     public Func<string, SessionShot, CellCoord, CellCoord, bool>? LaunchThrown { get; init; }
     /// <summary>ARC-DEV-282 (PF1, PF2): launches the arrow or bullet of an NPC's bow or firearms attack: the shooter, its target (an NPC's entity or the hero), the shot, the shooter's tile and the target's; true
     /// when the flight began (the viewer then lands the strike through <see cref="AreaAiHost.LandShot"/> where it ends). Null: the attack lands at once, as ARC-DEV-273's; false: the host strikes the aimed target at once.</summary>
@@ -2364,10 +2366,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         // The aimed target's attack event was raised at the shot; a stray target's comes with its strike.
         var aimed = _session.QueryNpcShot(shot) is { } facts ? facts.Target == SessionNpcShotFacts.HeroTarget ? Pc : facts.Target : null;
-        if (NpcAttackOf(shooter, struck, flight: false) is not { } attack) { _session.EndShot(shot); return null; }
+        if (NpcAttackOf(shooter, struck, flight: false) is not { } attack) { EndStruckShot(shot); return null; }
         // The strike is a distance-1 hit with no line of its own (the carried check holds the cover); the shooter's worn items are what it wears now.
         var result = _session.LandNpcShot(_session.Version, shot, attack with { Distance = 1, LineOfFire = null });
-        _session.EndShot(shot);
+        EndStruckShot(shot);
         Trace(shooter).Hit = $"shot {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Life?.HitPointDamage}";
         if (result.Disposition == GameSessionDisposition.Rejected) return result;
         _notices.Add(new(AreaAiNoticeKind.Hit, shooter, struck) { Result = result });
@@ -2458,15 +2460,21 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// </summary>
     public SessionObjectAttackResult? LandShotOnObject(string shooter, SessionShot shot, SessionObjectTarget? target, bool wall)
     {
-        if (Build(shooter) is not { } attacker) { _session.EndShot(shot); return null; }
+        if (Build(shooter) is not { } attacker) { EndStruckShot(shot); return null; }
         var result = _session.LandNpcShotOnObject(_session.Version, shot, new SessionNpcObjectAttack(attacker)
         {
             Target = target, Wall = wall, AttackerWorn = _scene.Combat.WornItems(_session, shooter), AttackerCell = Tile(shooter), DropMap = _scene.DropMap?.Invoke(),
             TakingDamage = TakingDamageOfObject(shooter, target), HitScripts = HitScriptsOf(shooter, target?.Entity),
         });
-        _session.EndShot(shot);
+        EndStruckShot(shot);
         Trace(shooter).Hit = $"shot on {target?.Entity ?? "a wall"} {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
         return result;
+    }
+
+    // The end of a shot that struck (or could not): ARC-COMBAT-1717: a thrown weapon's shot stays for the item's landing (<see cref="GameSessionOwner.LandThrownItem"/>, the viewer's, which ends the shot).
+    private void EndStruckShot(SessionShot shot)
+    {
+        if (_session.QueryThrownShot(shot) is null) _session.EndShot(shot);
     }
 
     // The NPC's attack facts on the hero or another NPC (null: no combat values); ARC-DEV-282: <paramref name="flight"/> lets a shot on the ranged path fly.
@@ -2918,7 +2926,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <see cref="StruckAt"/>), then the attack event on it for a resolved attack (the projectile's end alerts the struck object, PF8).
     /// The item must be one the NPC holds (an item gone or taken fails, AG10). A <see cref="AreaAiNoticeKind.Throw"/> notice tells the
     /// viewer. ARC-DEV-258: a generic item (a grenade) flies as a projectile the scene launches (<see cref="AreaAiScene.LaunchThrown"/>; without a viewer it lands
-    /// on the location at once), the thrower the event's parent. NOT READY: the thrown weapon's flight (it lands at once), and a first blocker on the line that is a scenery, a wall,
+    /// on the location at once), the thrower the event's parent. ARC-COMBAT-1717: a thrown weapon flies the same way when the scene can fly it (<see cref="AreaAiScene.LaunchThrown"/>): to the struck critter's tile (a hit, the strike is <see cref="LandShot"/>'s at the viewer's crossing) or free to the scatter tile (a miss); a flight that does not launch resolves at once, a decided hit striking first. NOT READY: a first blocker on the line that is a scenery, a wall,
     /// a dead or unknown critter, and the hero on the line to another target (the line's map holds no hero): the item then lands on the
     /// tile, striking nothing.
     /// </summary>
@@ -2957,32 +2965,45 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             TakingDamage = TakingDamageOf(id, struck?.Who),
             HitScripts = HitScriptsOf(id, struck?.Who),
             ItemTriggers = _scene.Spells?.Invoke()?.ItemTriggers,
+            // ARC-COMBAT-1717: a thrown weapon flies when the scene can fly a thrown item (the viewer); otherwise it lands at once.
+            Flight = _scene.LaunchThrown is not null,
         };
         var result = _session.ThrowByNpc(_session.Version, request);
         var attack = result.Attack;
         Trace(id).Throw = $"throw {item} at {tile.X},{tile.Y} struck={struck?.Who ?? "-"} {result.Disposition} {result.Failure} {attack?.Resolution?.Outcome}"
             + $" landed={(result.Landed is { } at ? $"{at.X},{at.Y}" : "-")}";
         _notices.Add(new(AreaAiNoticeKind.Throw, id, struck?.Who) { Item = item, Throw = result, Result = attack });
-        // ARC-DEV-258: a thrown generic item (a grenade) flies as a projectile; without a viewer to fly it, it lands on the location at once.
-        foreach (var shot in result.Shots)
-        {
-            var flies = _scene.LaunchThrown?.Invoke(id, shot, from, tile) == true;
-            // A launch the projectile host refused has ended the shot already (the item stays on the thrower's cell); a shot still there lands on the location, and one that cannot is given up.
-            var outcome = "flies";
-            if (!flies)
-            {
-                if (_session.QueryThrownShot(shot) is null) outcome = "not flown";
-                else if (_session.LandThrownItem(_session.Version, shot, tile).Disposition == GameSessionDisposition.Rejected) { _session.EndShot(shot); outcome = "given up"; }
-                else outcome = "lands at once";
-            }
-            Trace(id).Throw += $" {outcome} shot={shot.Id}";
-        }
-        if (struck?.Who is { } victim && attack is { Disposition: not GameSessionDisposition.Rejected, Resolution.Refusal: AttackRefusal.None })
+        // The attack event on the struck critter comes first (the projectile's end alerts it, PF8), before a flight's strike or the at-once fallback's pass.
+        var attackedVictim = struck?.Who is { } hurt && attack is { Disposition: not GameSessionDisposition.Rejected, Resolution.Refusal: AttackRefusal.None } ? hurt : null;
+        if (attackedVictim is { } victim)
         {
             AttackEvent(id, victim);
             // ARC-DEV-292: the thrown item's hit on the struck critter is a damage step on it (the session applied it above).
             HitEffect(victim, attack);
             if (VictimReached(attack)) Struck(victim);
+        }
+        // ARC-DEV-258: a thrown generic item (a grenade) flies as a projectile; without a viewer to fly it, it lands on the location at once.
+        foreach (var shot in result.Shots)
+        {
+            // ARC-COMBAT-1717: a thrown weapon flies to the struck critter (a hit) or the scatter tile (a miss); a generic item or an unstruck weapon, to the location.
+            var destination = result.Destination ?? tile;
+            var flies = _scene.LaunchThrown?.Invoke(id, shot, from, destination) == true;
+            // A launch the projectile host refused has ended the shot already (the item stays on the thrower's cell); a shot still there lands on the location, and one that cannot is given up.
+            var outcome = "flies";
+            if (!flies)
+            {
+                if (_session.QueryThrownShot(shot) is null) outcome = "not flown";
+                else
+                {
+                    // ARC-COMBAT-1717 (PF1: no art, the hit resolves at once): a thrown weapon decided a hit strikes where the flight would have met it, then the item lands there.
+                    if (_session.QueryNpcShot(shot) is { Hit: true } decided) LandShot(id, shot, decided.Target == SessionNpcShotFacts.HeroTarget ? Pc : decided.Target);
+                    // A decided miss that resolves at once gives the victim its miss-path pass, as an unflown throw's did (ARC-DEV-292).
+                    else if (attackedVictim is { } missed && _session.QueryNpcShot(shot) is not null) Struck(missed);
+                    if (_session.LandThrownItem(_session.Version, shot, destination).Disposition == GameSessionDisposition.Rejected) { _session.EndShot(shot); outcome = "given up"; }
+                    else outcome = "lands at once";
+                }
+            }
+            Trace(id).Throw += $" {outcome} shot={shot.Id}";
         }
         return result.Disposition != GameSessionDisposition.Rejected;
     }
@@ -3685,6 +3706,17 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// turns it toward the critter it picks the pocket of).</summary>
     public AwarenessResult SeeToward(string observer, string target) =>
         Tile(observer) is { } from && Tile(target) is { } to ? SeeFacing(observer, target, AreaCombatHost.Facing(from, to)) : See(observer, target);
+
+    /// <summary>
+    /// ARC-SCRIPT-1733 (CS5, exe 0x4451B0 case 28 → 0x4AF260): whether a script's obj can see obj holds: the sight check of an NPC this host holds sight facts of toward an NPC or the hero, which needs nothing more than the NPC's own facing (excess 0). Null for an observer that
+    /// is the hero (its facing is not tracked here, <see cref="SeeToward"/>) or that is not an NPC of this host, and for a target it holds no facts of: the script stops as not modelled.
+    /// </summary>
+    public bool? ScriptCanSee(string observer, string target) =>
+        observer == Pc || Find(observer) is null || Find(target) is null || _scene.LineOfFire?.Invoke() is null ? null : See(observer, target).Excess == 0;
+
+    /// <summary>ARC-SCRIPT-1733 (CS6, case 29 → 0x4AF470 with loudness 1): the hearing check of an NPC toward an NPC or the hero at the normal loudness; null as <see cref="ScriptCanSee"/>.</summary>
+    public bool? ScriptCanHear(string listener, string source) =>
+        listener == Pc || Find(listener) is null || Find(source) is null || _scene.LineOfFire?.Invoke() is null ? null : Hear(listener, source, Loudness.Normal).Excess == 0;
 
     private AwarenessResult SeeFacing(string observer, string target, NeighborDirection? facing)
     {

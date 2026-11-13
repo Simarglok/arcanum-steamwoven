@@ -17,7 +17,7 @@ namespace Arcanum.Session.Tests;
 public sealed class NpcThrowStateTests
 {
     internal const string Thrower = "thrower", Dagger = "dagger", Other = "other", Grenade = "grenade";
-    private static readonly CellCoord ThrowerCell = new(90, 200), HeroCell = Start.Cell;
+    internal static readonly CellCoord ThrowerCell = new(90, 200), HeroCell = Start.Cell;
 
     private static CombatFields DaggerFields() =>
         new(CombatFieldOrigin.AreaObject, new CombatObjectFields(5, 5000, 0, 0, 0, 0, 0, 10, 0, 0, 4, [0, 0, 0, 0, 0], 0),
@@ -25,7 +25,7 @@ public sealed class NpcThrowStateTests
             new CombatWeaponFields(CombatWeaponFlags.DefaultThrows, CombatWeaponSkill.Melee, 0, 0, [new(2, 6), new(0, 0), new(0, 0), new(0, 0), new(0, 0)],
                 [0, 0, 0, 0, 0], 10, 0, 1, 0, 0, 0, 10000, 0, 0, 0, 0, 0, 0, 0), null, null, null, null, null);
 
-    private static SessionCritterCombat Combat(string entity = Thrower, bool armed = true, int throwing = 5)
+    internal static SessionCritterCombat Combat(string entity = Thrower, bool armed = true, int throwing = 5)
     {
         var skills = new int[12];
         skills[(int)BasicCombatSkill.Throwing] = throwing;
@@ -45,10 +45,10 @@ public sealed class NpcThrowStateTests
         return owner;
     }
 
-    private static Dictionary<EquipmentSlot, SessionWearItem> Wielded(bool noDrop = false) =>
+    internal static Dictionary<EquipmentSlot, SessionWearItem> Wielded(bool noDrop = false) =>
         new() { [EquipmentSlot.Weapon] = new SessionWearItem(Dagger, new(20, 0, 0, false)) { NoDrop = noDrop } };
 
-    private static SessionNpcThrow AtHero(int throwing = 5) => new(Combat(throwing: throwing), Dagger, 15, ThrowerCell, HeroCell)
+    internal static SessionNpcThrow AtHero(int throwing = 5) => new(Combat(throwing: throwing), Dagger, 15, ThrowerCell, HeroCell)
     {
         StruckHero = true, StruckCell = HeroCell, ThrowerWorn = Wielded(),
     };
@@ -197,6 +197,8 @@ public sealed class NpcThrowStateTests
         var events = owner.QueryShotEndItemEvents(shot, tile);
         var end = events.Single();
         Assert.AreEqual((Arcanum.Simulation.Magic.ItemTriggerEvent.ParentAttacksLocation, Thrower, Grenade), (end.Event, end.Parent, end.Item));
+        // ARC-COMBAT-1719: the weapon's scripts at the end: the thrower is the triggerer and the grenade the attachee, with no target (a lob keeps no check, so it is not critical).
+        Assert.AreEqual(new SessionShotEndScripts(Thrower, Grenade, false, true, null), owner.QueryShotEndScripts(shot));
         Assert.AreEqual(new Arcanum.Simulation.Magic.SpellLocation((uint)tile.X, (uint)tile.Y), end.Tile);
 
         var landing = new CellCoord(97, 203);

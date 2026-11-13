@@ -58,6 +58,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="leaving-a-building-through-a-locked-portal-arc-res-049"></a>[Leaving a building through a locked portal (ARC-RES-049)](ledger/world.md#leaving-a-building-through-a-locked-portal-arc-res-049) | [World, maps and movement](ledger/world.md) | LV1–LV5 |
 | <a id="rendering-body-blends-and-wading-arc-render-018"></a>[Rendering: body blends and wading (ARC-RENDER-018)](ledger/world.md#rendering-body-blends-and-wading-arc-render-018) | [World, maps and movement](ledger/world.md) | BL1–BL5 |
 | <a id="equipment-arc-world-028"></a>[Equipment (ARC-WORLD-028)](ledger/items.md#equipment-arc-world-028) | [Items and inventory](ledger/items.md) | EQ1–EQ14 |
+| <a id="item-identify-and-repair-windows-arc-ui-1731"></a>[Item identify and repair windows (ARC-UI-1731)](ledger/items.md#item-identify-and-repair-windows-arc-ui-1731) | [Items and inventory](ledger/items.md) | IS1–IS7 |
 | <a id="art-names-and-missing-art-arc-res-050"></a>[Art names and missing art (ARC-RES-050)](ledger/data.md#art-names-and-missing-art-arc-res-050) | [Data and loading](ledger/data.md) | MA1–MA8 |
 | <a id="durable-effects-arc-world-029"></a>[Durable effects (ARC-WORLD-029)](ledger/character.md#durable-effects-arc-world-029) | [Character](ledger/character.md) | EF1–EF10 |
 | <a id="experience-and-levels-arc-world-030"></a>[Experience and levels (ARC-WORLD-030)](ledger/character.md#experience-and-levels-arc-world-030) | [Character](ledger/character.md) | XP1–XP12 |

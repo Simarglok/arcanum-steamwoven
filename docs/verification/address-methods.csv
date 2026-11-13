@@ -37,6 +37,7 @@ src/Arcanum.Scripting/Dialog/DialogConversation.cs,ReadStore,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,ReadWorldFact,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,SchematicsCommand,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,Store,pending,
+src/Arcanum.Scripting/Dialog/DialogConversationNewspaper.cs,PunctuatedHeadline,exempt,host
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,Comment,exempt,host
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,MissingLine,pending,
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,ParseSlots,pending,
@@ -118,6 +119,7 @@ src/Arcanum.Session/GameSessionItemTriggers.cs,FireItemEvents,pending,
 src/Arcanum.Session/GameSessionItemTriggers.cs,QueryAttackStartItemEvents,pending,
 src/Arcanum.Session/GameSessionItemTriggers.cs,QueryDyingEndItemEvents,pending,
 src/Arcanum.Session/GameSessionItemTriggers.cs,QueryShotEndItemEvents,pending,
+src/Arcanum.Session/GameSessionItemTriggers.cs,QueryShotEndScripts,exempt,reference
 src/Arcanum.Session/GameSessionItemViewer.cs,QueryItemViewer,pending,
 src/Arcanum.Session/GameSessionJunkPiles.cs,CloseJunkPile,pending,
 src/Arcanum.Session/GameSessionJunkPiles.cs,CloseMapJunkPile,pending,
@@ -129,6 +131,8 @@ src/Arcanum.Session/GameSessionLoyalty.cs,CheckFollowerAfterHit,exempt,host
 src/Arcanum.Session/GameSessionMissiles.cs,CreateMissile,pending,
 src/Arcanum.Session/GameSessionMissiles.cs,MoveMissile,pending,
 src/Arcanum.Session/GameSessionMorale.cs,ApplyKillNotification,pending,
+src/Arcanum.Session/GameSessionNewspaper.cs,WithDefault,exempt,reference
+src/Arcanum.Session/GameSessionNewspaperEvent.cs,ArmNewspaper,exempt,reference
 src/Arcanum.Session/GameSessionNpcAssembly.cs,AssembleSchematicForNpc,pending,
 src/Arcanum.Session/GameSessionNpcAssembly.cs,QueryNpcTechnology,pending,
 src/Arcanum.Session/GameSessionNpcAttack.cs,WithNpcEffects,pending,
@@ -261,6 +265,7 @@ src/Arcanum.Session/SessionSpellCasterTrapDevices.cs,CastAtTileWithoutCaster,pen
 src/Arcanum.Session/SessionSpellCasterTrapDevices.cs,UseScriptTrapDevice,pending,
 src/Arcanum.Session/SessionSpellCasterTrapDevices.cs,UseTrapDevice,pending,
 src/Arcanum.Session/SessionSpellCasterTraps.cs,ApplyTrapEffect,pending,
+src/Arcanum.Session/SessionSpellCasterTraps.cs,StrikeTrapShot,exempt,host
 src/Arcanum.Session/SessionSpellCasterTraps.cs,TrapShot,exempt,host
 src/Arcanum.Simulation/Ai/AwarenessRules.cs,SoundStepCost,pending,
 src/Arcanum.Simulation/Ai/AwarenessRules.cs,WithProwlerLine,pending,
@@ -469,6 +474,8 @@ src/Arcanum.World/AreaAiHost.cs,RunUseScript,pending,
 src/Arcanum.World/AreaAiHost.cs,RunsOf,pending,
 src/Arcanum.World/AreaAiHost.cs,ScheduleTicks,pending,
 src/Arcanum.World/AreaAiHost.cs,ScriptAttack,pending,
+src/Arcanum.World/AreaAiHost.cs,ScriptCanHear,exempt,host
+src/Arcanum.World/AreaAiHost.cs,ScriptCanSee,exempt,host
 src/Arcanum.World/AreaAiHost.cs,ScriptReaction,exempt,host
 src/Arcanum.World/AreaAiHost.cs,SearchItems,exempt,host
 src/Arcanum.World/AreaAiHost.cs,SeeToward,pending,
@@ -604,11 +611,17 @@ src/Arcanum.World/AreaTraps.cs,WalkCheckNpc,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,ApplyScriptAttack,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,AreaOf,pending,
 src/Arcanum.World/AreaUseScripts.cs,AttackRefusal,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,CanHear,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,CanSee,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,DyingStops,pending,
 src/Arcanum.World/AreaUseScripts.cs,ExamineSkips,pending,
 src/Arcanum.World/AreaUseScripts.cs,IsAnimal,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,IsInDialog,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,IsProwling,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,IsSurrendered,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsTrap,pending,
 src/Arcanum.World/AreaUseScripts.cs,MagickCancelPercent,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,MetPcBefore,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunBed,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunBust,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunCombatPoint,exempt,host
@@ -650,6 +663,8 @@ tools/terrain-viewer/Core/AreaDialogBox.cs,Buttons,pending,
 tools/terrain-viewer/Core/AreaFateWindow.cs,Decide,exempt,reference
 tools/terrain-viewer/Core/AreaFateWindow.cs,Load,exempt,reference
 tools/terrain-viewer/Core/AreaFateWindow.cs,TextAt,exempt,reference
+tools/terrain-viewer/Core/AreaFollowerPanelRules.cs,RowState,exempt,reference
+tools/terrain-viewer/Core/AreaFollowerPanelRules.cs,ToggleShown,exempt,reference
 tools/terrain-viewer/Core/AreaGameBar.cs,Exit,pending,
 tools/terrain-viewer/Core/AreaGameBar.cs,SkillButtonName,pending,
 tools/terrain-viewer/Core/AreaHoverDescriptions.cs,Dispatch,pending,
@@ -724,6 +739,7 @@ tools/terrain-viewer/Godot/AreaCharacterArtDraw.cs,Centred,pending,
 tools/terrain-viewer/Godot/AreaCharacterArtDraw.cs,Character,pending,
 tools/terrain-viewer/Godot/AreaCharacterSheetArtView.cs,HitAt,pending,
 tools/terrain-viewer/Godot/AreaCharacterSheetSpellsView.cs,Greyed,pending,
+tools/terrain-viewer/Godot/AreaFollowerPortraits.cs,ResetPanel,exempt,reference
 tools/terrain-viewer/Godot/AreaLogbookArtView.cs,Turn,pending,
 tools/terrain-viewer/Godot/AreaMessageLogView.cs,ApplyArt,pending,
 tools/terrain-viewer/Godot/AreaSaveListArtView.cs,Render,pending,
@@ -737,6 +753,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterArt,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterCycle,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterCycleSpeaker,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterPointerStill,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,FollowerMenuFacts,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaContainerLoot.cs,CloseContainer,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaEncounters.cs,EncounterSiteNow,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaEncounters.cs,HandleEncounterNotices,exempt,host
@@ -758,6 +775,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,RunMapEnteredSteps,pe
 tools/terrain-viewer/Godot/TerrainViewerAreaPanelArt.cs,HoverPortrait,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,ArmPickPocketFromBar,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,HeroFaceSkill,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,PickPocketOn,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,HeroDoorScript,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,HeroDoorUse,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,OpenerDoorScript,exempt,host
@@ -784,7 +802,11 @@ tools/terrain-viewer/Godot/TerrainViewerBodyMoves.cs,UnmovedArmedBodies,exempt,h
 tools/terrain-viewer/Godot/TerrainViewerBodyStyles.cs,SyncAreaBodyStyles,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerBodyStylesSmoke.cs,RunAreaBodyStylesStageAsync,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCombatMode.cs,WorldRightRelease,pending,
+tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerAimItem,exempt,reference
+tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerAimPickPocket,exempt,reference
+tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerAimSpell,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerPortraitClick,pending,
+tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,OpenFollowerSheet,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCompanions.cs,LeaveFollowersCombatMode,pending,
 tools/terrain-viewer/Godot/TerrainViewerCompanions.cs,TransferFacts,pending,
 tools/terrain-viewer/Godot/TerrainViewerConversation.cs,ProcessConversationEnd,pending,
@@ -843,6 +865,7 @@ tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,EndProjectile,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,FireShotEnd,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,LaunchProjectile,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,ProjectileGoalEnded,pending,
+tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,RunShotEndScripts,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,Strike,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,TurnBack,pending,
 tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,AddOccupiedBeds,exempt,host
