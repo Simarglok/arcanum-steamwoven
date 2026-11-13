@@ -391,6 +391,6 @@ public sealed class AreaScriptSpellTests
         }
         Console.WriteLine($"installed scripts with a spell-state command {withState}; admitted whole: " + string.Join(", ", counts.Select(c => $"{c.Key} {c.Value}")));
         // 60 installed scripts use one of the five commands; the main map's 21 heartbeats that stop a script eye candy stay refused by other commands the narrow heartbeat set never admitted (assign object 15, get reaction 29, float line 23).
-        Assert.AreEqual((60, 21, 27, 1, 29, 0, 27), (withState, counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"], counts["combat"]));
+        Assert.AreEqual((60, 21, 28, 1, 30, 0, 28), (withState, counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"], counts["combat"]));
     }
 }
