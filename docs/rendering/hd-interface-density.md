@@ -409,8 +409,8 @@ those of the player's `interface.mes` (the viewer's window ledgers carry them; e
 | ARC-UI-150 (issue #1195, ARC-UI-1195, [S5](#viewer-slice-s5-arc-ui-1195)) | character sheet | 22 main, 29 skills, 30 disciplines, 31 spells, tabs 34–36 and 568, the + and − buttons (23/24, 624/625, 647/648; 257/258 are `SP_Minus`/`SP_Plus`, which the sheet does not draw), the group and discipline buttons 302–313 | stat labels baked in the art stay pictures (kept rectangles); the schemes page 567 and the sixteen college tabs follow in [S5b](#viewer-slice-s5b-arc-ui-1784); the spell icons stay pictures |
 | ARC-UI-151 (issue #1196, ARC-UI-1196, [S7](#viewer-slice-s7-arc-ui-1196)) | logbook | 264 side, 260 book, 261 page art, the seven tabs 265–271, the page buttons 272 and 273; 263, 259 and 262 are not drawn by the logbook | a parchment page material; the lens 198 is shared and stays art |
 | ARC-UI-152 (issue #1197, ARC-UI-1197, [S6](#viewer-slice-s6-arc-ui-1197)) | world and town map | 138 main (the one frame the two windows draw); 140 and 199 (`wp_main`, `WP_Cover`, 130 × 152) and 219 and 220 (`Tmp_Day`, `Tmp_Nght`, two 501 × 365 landscape pictures) are drawn by no window of the viewer, so they are not built (issue #1811) | the map picture itself stays art; the buttons 811–813, the compass button 139, the lens 198 and the cover 217 are issue #1810 |
-| ARC-UI-153 | schematic window | 365 base and its buttons and tabs | |
-| ARC-UI-154 | message and dialogue frames, Fate, Sleep | 354, 7, 8, 128, 200, 274, 288, 290, 291 (410 × 107 rows), 292, 298, 218 | |
+| ARC-UI-153 (issue #1199, ARC-UI-1199, [S8](#viewer-slice-s8-arc-ui-1199)) | schematic window | 365 base, the eight discipline tabs 355, 356, 361–364, 368, 369, the two list buttons 6, the assemble button 357, the page buttons 372 and 373; the lens 231 is the barter window's recipe | the assemble face 358–360, the found and missing tints 830 and 831 and the record's own art stay art; the two gears with a mortarboard and a scroll (the list buttons' labels, painted in the base) stay pictures |
+| ARC-UI-154 (issue #1200, ARC-UI-1200, [S9](#viewer-slice-s9-arc-ui-1200)) | message window, spell and skill panes, Fate, Sleep | 354 message window, 8 spell pane, 274 skill pane (410 × 107), 292 Fate, 565 Sleep and the button 293; 7, 128, 200, 288, 290, 291 (the other modes' 410 × 107 rows), 298 and 218 are drawn by no window and are not built (issue #1870); the dialog box 822–824 is issue #1819 | the Sleep window's art is 565 (ARC-UI-1363), not the 218 the plan named |
 | ARC-UI-155 | reading windows and the remaining small panels | 477, 487, 489, 491, 500 backgrounds, 494 side bar, and what is left | |
 
 A slice is done when its frames draw generated chrome at the window's own device scale in the native smoke (Generated and HD runs), the unit
@@ -578,6 +578,59 @@ by the logbook, so they have no recipe.
 - **Local observation** (owner's Mac, 1280 × 800 window): the loot-room stage passes in the generated, HD and Legacy runs; the device scale is 1 and 2 in the 1600 × 1200 window. The composite (before = the HD pack art that the Generated mode drew until now, after,
   Legacy, and after at scale 2) is in the task thread, not in git. Seen there: the generated pages are plainer than the original's, with soft clouds in place of its grain; the cover is a flat maroon weave; the page edges are
   light and regular stripes where the original's are a dark speckle; the tabs follow the original's outlines and glyphs closely.
+
+## Viewer slice S8 (ARC-UI-1199)
+
+S8 draws the schematic window in the generated interface (planned as ARC-UI-153, issue #1199), at the window's own device scale. Positions, sizes, alpha tests and hit areas are the Legacy ones
+(D9); only the drawing changes. The arts are the ones the window draws ([ledger SW9–SW14](../research/ledger/technology.md), `AreaSchematicWindowLayout`): 365 `Schematic_Base` (800 × 400), the eight discipline tabs
+355, 356, 361–364, 368 and 369 (`Anatomical_Tab` .. `Theraputics_Tab`, 27 × 40, two frames), the two list buttons 6 (`bgrn_but`, 37 × 36, two frames), the assemble button 357 (`CombineButt`, 51 × 51, two frames) and the page buttons
+372 and 373 (`Schm_LArrow`, `Schm_RArrow`, 18 × 22, three frames); the round view's lens 231 is the barter window's recipe ([S4](#viewer-slice-s4-arc-ui-1194)).
+
+- **Base.** Wood with a blueprint page (`ChromeMaterial.Paper`: the parchment's mottling in a warmer cream, with no fold; 201..706 across and 13..379 down) ruled every 32 units from x 227 and y 22 (`ChromeRuling`: a one-unit
+  line, `max(1, round(scale))` device pixels wide, faintly orange, so the hairline stays one device pixel at every scale). The record's picture hole gets the brass rim every hole gets; the lens's square and the eight tab slots take no rim
+  (`ChromeBare`: what is drawn over them, the lens and a tab, carries its own edge). The two component boxes are sunk boxes of paper (the found and missing tints 830 and 831 lie over them); the assemble button's channel is a sunk dark box in which the two round lamp holes of the Legacy base get the brass rim every round hole gets (the assemble face 358–360, the lamps, stays a picture); the two list buttons' round holes get the same brass rim. The two gears with a mortarboard and a scroll (the learned and found buttons' labels, painted in
+  the base) are kept pictures inside an ellipse each. The printed lines that join the record to the two boxes, the ragged edge of the page and its stains are not drawn.
+- **Tabs and buttons.** A discipline tab is `ChromeKind.Tab` as in [S7](#viewer-slice-s7-arc-ui-1196): the ground (dark wood, the page's last units) and the paper bookmark of its own Legacy frame (the shown tab's pressed frame and the idle
+  ones have their own outlines), the paper in `ChromeRecipe.TabPaper` (here `Paper`), a dark edge on its lower right, a light one on its upper left, a soft shadow and the glyph. The two list buttons and the assemble button are the plain brass buttons of
+  [S1](#viewer-slice-s1-arc-ui-140) (generated face and rim following the silhouette, sunk on the down frame); a page button is the page under it (the same paper and ruling, continued through the recipe's origin; at a fractional scale a hairline may step by one device pixel at the button's edge) and the Legacy arrow
+  (`ChromeGlyph`).
+- **Device scale.** `AreaSchematicWindowView` claims the window's own device scale for its textures (the control's scale times the canvas transform's and the viewport's stretch) and redraws when a worker's finished frame replaces
+  the one it drew or the device scale changes (the window is placed every frame and asks for a redraw when its device scale changed).
+- **Not generated.** The assemble face (358–360), the found and missing tints (830, 831), the record's art, the item pictures, the gears, the round view's live copy and the text stay as they are; the lens ring (231) is the barter window's.
+- **Checks.** `InterfaceChromeTests` (the recipes and their origins from the layout and no recipe for the pictures; in-bounds and deterministic paint at whole and fractional scales; the lens and the tab slots plain and the record's hole rimmed;
+  the ruling one unit wide; a page button continues the ruled page; a tab reads its paper, edge, shadow and glyph; the buttons follow their silhouette and sink). The native smoke: the stage `tech-craft` (`./arcanum smoke map "crash site cave" --stages tech-craft`)
+  with `ARC_AREA_WINDOW_ART=legacy|hd|generated` (with `ARC_HD_PACK` for the last two) checks the base, the lens, the list and assemble buttons, the eight tabs (the shown one's pressed frame) and the shown page buttons: in `generated` they are
+  generated chrome at `round(size × paint scale)` pixels of the window's own device scale, again at 1600 × 1200 (the window's whole factor steps to 2 from 1200 high where the bars are hidden) and back; in `hd` and `legacy` none is. `ARC_AREA_WINDOW_CAPTURE=PREFIX` saves the viewport as `PREFIX-schematics-MODE[-big|-back].png`
+  (local, not in git).
+- **Local observation** (owner's Mac, 1280 × 800 window): the stage `tech-craft` passes in the Generated, HD and Legacy runs; in the Generated run 13 frames (the base, the lens, the list button, the assemble button, the eight tabs and, with a second page, the next-page button) are generated at the window's own scale, which is 1 at 1280 × 800 and 2 in the 1600 × 1200 window, where they paint again. The composite (before = the HD pack art that the Generated mode drew until now, after, Legacy) is in the task thread, not in git. Seen there: the page is a warm cream with a plain ruling where the original has stains, a ragged edge and printed connecting lines to the component boxes; the tabs follow the original's outlines and glyphs closely; the buttons are the project's brass buttons; the kept gears sit in a faint ellipse of the old wood; the lens's ring sits on a square patch of wood whose grain differs a little from the window's.
+
+## Viewer slice S9 (ARC-UI-1200)
+
+S8 draws the bottom strip's message window and its spell and skill panes, the Fate window and the Sleep window in the generated interface (planned as ARC-UI-154, issue #1200). Positions, sizes, alpha tests
+and hit areas are the Legacy ones (D9); only the drawing changes. The art numbers are those of the player's `interface.mes`: 354 `DialogueWindow` (the message mode), 8 `spell_ro`, 274 `Skill_Rot` (410 × 107 at
+(196, 492) of the 800 × 600 screen, bar modes 0 to 2), 292 `Fate_Base` (250 × 237 at (0, 41)), 565 `Sleep_Base` (227 × 152 at (573, 42)) and the toggle button 293 `FateBut` (18 × 13, two frames) that both windows draw.
+
+- **Panes.** `ChromeMaterial.Slate` with a rim on every side, as the character sheet's pages ([S5](#viewer-slice-s5-arc-ui-1195)). The message window is one sunk plate under the text area (the original's brass frame
+  without its glow); the spell and skill panes carry a sunk plate for the hover name with a rivet at each end (the original's brass plaque), a sunk well under every icon button (five of 36 × 36 for the spells, four of 43 × 44 for
+  the skills, their places taken from `SpellPaneRules` and `SkillPaneRules`) and, in the spell pane, the sixteen round domes kept as pictures (`ChromeKeep` round, one pixel in from each 24 × 24 college button's corner):
+  a college the hero has no rank in shows no button, so its dome shows. The frames have no holes (`ChromeHoles.None`).
+- **Fate and Sleep.** Slate with a sunk bar behind every second row (rows 1, 3, 5, ..: six in the Fate window, four in the Sleep window, 18 units high); the lines and the button of an odd row sit in the bar. The twelve
+  button holes of the Fate frame stay holes (the buttons are drawn over them) and get no rim of their own, since the button has one. The button `FateBut` is the generic button (generated face and rim following its
+  silhouette, sunk on the down frame, the lamp kept as the glyph); with two frames the hover look is the idle frame, as in the Legacy bar.
+- **Device scale.** The windows stand at the bars' whole factor: `AreaFateView` and `AreaSleepView` claim their own device scale for the window and button textures at every draw (`AreaDeviceScale`, the pattern of the
+  logbook and the sheet, shared by the two views: the control's scale times the canvas transform's and the viewport's stretch) and redraw when a worker's finished frame replaces the one they drew. The three strip panes are
+  textures of the strip itself and use the strip's scale (`InterfaceHd.GeneratedScale`), like the bar buttons.
+- **Not built.** Arts 7 `mess_rot`, 128 `skill_ro`, 200 `MpWt_Rot`, 288 `Combine_Rot`, 290 `Trap_Rot` and 291 `Broadcast_Rot` (the other bar modes' rows, table 0x5C6548), 298 `MultiMove_Base` (the multiplayer move window) and 218
+  `Slp_Main` (800 × 400, the sleep window of an earlier build) are drawn by no window of the viewer, so they have no recipe (a test keeps it so; issue #1870 gives them one when a window draws them). The common dialog box (822 `DialogueBox`, 823 and 824) is issue #1819: the main
+  menu's quit question draws it too, and the menu stays out of the generated interface.
+- **Checks.** `InterfacePaneChromeTests` (the recipes exist and the unused arts have none; every part lies inside its frame and no kept picture cuts into a pit; the message window's text area and the two plaques hold the
+  text areas of their modes; a well holds every icon button and a dome lies under every college button; the bars of the Fate and Sleep windows hold the buttons of the odd rows and no other; every frame paints in bounds,
+  deterministically and, without holes, opaque at whole and fractional scales with black pits (below any slate) and the Fate button holes clear; the button keeps its silhouette, its lamp and a sunk down frame). The native smoke has the
+  opt-in `ARC_AREA_WINDOW_ART=legacy|hd|generated` part (with `ARC_HD_PACK`, `ARC_AREA_WINDOW_CAPTURE=PREFIX`) in the Fate step of the `bar` stage (`fate`), the message log step of the same stage (`message-window`), the spell and skill pane
+  steps of the hotkey bar in the `cast` stage (`spell-pane`, `skill-pane`) and the `sleep` stage (`sleep`, with `--hero`): in `generated` it checks that every frame draws generated chrome at `round(size × paint scale)` pixels of the window's own
+  device scale, resizes the window to 1600 × 1200 (the bars' whole factor steps to 2 from 1200 high), checks again and goes back; in `hd` and `legacy` none is generated.
+- **Local observation.** See the task thread for the composite (before = the HD pack art that Generated drew until now, after, Legacy); it is not in git. Seen: the generated slate is plainer than the original's marbled iron, the
+  pits are black where the original's bars are barely darker than their surroundings, and the first row of the spell pane's top edge (transparent in the Legacy frame for its left 190 units) has no rim.
 
 ## Synthetic comparison
 

@@ -579,7 +579,7 @@ public readonly record struct DialogHealerQuery(DialogParticipantId Npc, DialogP
 /// many of that college's spells it knows, which sets the menu); <paramref name="SkillAllowed"/> the skill service's test (0x4AE570 for skill 10 answered 0: the NPC holds a
 /// healing item and may use the skill on the PC); <paramref name="SkillLevel"/> and <paramref name="SkillTraining"/> its heal skill's effective level and training tier
 /// (0x4C5EB0, 0x4C60C0: the price is (level + 2) × (tier + 1)); <paramref name="LedByPc"/> that its own leader is the PC (0x45DE00: the services are free);
-/// <paramref name="NoPcLeader"/> that no leader chain ends in a PC (0x45DDA0 is 0; the host answers it from the direct leader, as only the PC leads here: the NPC's own cast is free and the skill's flags carry 0x2000).
+/// <paramref name="NoPcLeader"/> that no leader chain ends in a PC (0x45DDA0 is 0, ARC-WORLD-1840: the host walks the chain of leaders: the NPC's own cast is free and the skill's flags carry 0x2000).
 /// <paramref name="SkillAllowed"/>, <paramref name="SkillLevel"/> and <paramref name="SkillTraining"/> are those of the skill the query names (ARC-SCRIPT-1798: <c>u:N</c>; 0x4AE570 passes every skill but 10, 12 and 14).
 /// </summary>
 public sealed record DialogHealerFacts(int Rank, bool SkillAllowed, int SkillLevel, int SkillTraining, bool LedByPc, bool NoPcLeader);

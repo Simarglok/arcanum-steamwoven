@@ -229,6 +229,8 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
     public CellCoord? Cell { get; init; }
     /// <summary>ARC-AI-1655 (<see cref="AreaAiNoticeKind.PickUp"/>, <see cref="AreaAiNoticeKind.PickUpDeclined"/>; ARC-MAGIC-1684, <see cref="AreaAiNoticeKind.Rewield"/>): the lines the item's get or insert-item script (or the scripts of the items a re-wield moved) printed, for the message window.</summary>
     public IReadOnlyList<SessionScriptMessage> Messages { get; init; } = [];
+    /// <summary>ARC-MAGIC-1830 (<see cref="AreaAiNoticeKind.Rewield"/>): the eye candy requests of the scripts of the items a re-wield moved, in order, for the viewer to play.</summary>
+    public IReadOnlyList<Arcanum.Scripting.Scr.ScrEyeCandy> EyeCandies { get; init; } = [];
     public SessionAttackResult? Result { get; init; }
     public int Sound { get; init; }
     public AiAttackSwing Swing { get; init; }
@@ -344,6 +346,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private readonly Dictionary<string, AreaAiNpc> _followers;
     // ARC-WORLD-119: the companions the hero led at the host's last look (ObserveLeaves).
     private readonly HashSet<string> _led;
+    // ARC-WORLD-1840: the leader each NPC of the map had at the host's last look (ObserveLeaves).
+    private readonly Dictionary<string, string> _npcLeaders = new(StringComparer.Ordinal);
     // ARC-DEV-134 (MIG13 S4): the runs are the session's goal table (GameSessionOwner.QueryGoals); the host keeps none. The steps taken since TakeSteps.
     private int _steps;
     private readonly Dictionary<string, AreaAiTrace> _traces = new(StringComparer.Ordinal);
@@ -407,6 +411,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         _npcs = scene.Npcs.ToDictionary(n => n.Entity, StringComparer.Ordinal);
         _followers = (scene.Followers?.Npcs ?? []).Where(n => !_npcs.ContainsKey(n.Entity)).ToDictionary(n => n.Entity, StringComparer.Ordinal);
         _led = _followers.Keys.Where(f => _session.QueryCompanion(f).LedByPc).ToHashSet(StringComparer.Ordinal);
+        // ARC-WORLD-1840: the NPCs of the map with a leader (an NPC summoner's summon, a script's group) at the first look.
+        foreach (var npc in _npcs.Keys) if (_session.QueryLeader(npc) is { } leader) _npcLeaders[npc] = leader;
         RestoreMovers();
         RestoreQueuedCasts();
     }
@@ -910,6 +916,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         foreach (var (entity, npc) in followers) _followers[entity] = npc;
         foreach (var npc in scene.Npcs) if (_npcs.ContainsKey(npc.Entity)) Movers.Rekey(npc.Entity, npc.Row.Key, npc.Origin);
         _led.RemoveWhere(entity => !_followers.ContainsKey(entity));
+        foreach (var gone in _npcLeaders.Keys.Where(entity => !_npcs.ContainsKey(entity)).ToArray()) _npcLeaders.Remove(gone);
         _scene = scene with { Npcs = [.. _npcs.Values] };
         // A row the host did not hold stands where the session recorded the NPC, as in a host built for it (the first step would overwrite the place).
         if (added.Count > 0) RestorePlaces(added);
@@ -1228,6 +1235,18 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             if (RunOf(companion) is null) continue;
             if (InterruptRuns(companion, LeaveLevel)) (dropped ??= []).Add(companion);
         }
+        // ARC-WORLD-1840: an NPC of the map that left the leader it had (a summon's END, a forced leave, or a join under another leader, whose first half is that leave: 0x45DE90 → 0x45DFC0
+        // → 0x45E040) is interrupted the same way; a join of an NPC that had no leader interrupts nothing.
+        foreach (var npc in _npcs.Keys)
+        {
+            var now = _session.QueryLeader(npc);
+            var before = _npcLeaders.GetValueOrDefault(npc);
+            if (now is null) _npcLeaders.Remove(npc); else _npcLeaders[npc] = now;
+            if (before is null || before == now) continue;
+            Trace(npc).Event = now is null ? "left its leader" : $"left {before} for {now}";
+            if (RunOf(npc) is null) continue;
+            if (InterruptRuns(npc, LeaveLevel)) (dropped ??= []).Add(npc);
+        }
         return dropped ?? (IReadOnlyList<string>)[];
     }
 
@@ -1354,7 +1373,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Tile(npc) is not { } at || _session.QuerySectorLoaded(new(_scene.RuntimeMap), ResidentSector.Of(at)) != false;
     /// <summary>ARC-DEV-105 (MIG9 S5, 0x4AD4D0): the follower catch-up's tests as the original reads them: a PC leader, its distance, the NPC flag
     /// WAITING_HERE (field 0x118, 0x8; ours also a waiting standing), the critter flag paralysed (field 0xDA, 0x40) and active (0x45D790).</summary>
-    public AiCatchUpFacts CatchUp(string npc) => new(Leader(npc) == Pc, DistanceToPc(npc),
+    /// ARC-WORLD-1840: the original reads the chain's player character (0x45DDA0), so a follower of a companion catches up too; the host moves only the hero's companions (the follower
+    /// source's jump), so an NPC of the map whose chain reaches the hero through another leader answers no PC leader here (#1322's catch-up tail) instead of losing its run each far tick.
+    public AiCatchUpFacts CatchUp(string npc) => new(Leader(npc) == Pc || _followers.ContainsKey(npc) && PcLeader(npc) == Pc, DistanceToPc(npc),
         (Fields(npc)?.Npc is { } fields && (fields.Flags & WaitingHereNpc) != 0) || Waiting(npc),
         Paralysed(npc), Active(npc));
     /// <summary>ARC-DEV-105 (MIG9 S5, 0x4AD4D0 then 0x43E770): the follower's goal run ends (the original's interrupt at priority 4), then it
@@ -1407,7 +1428,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Trace(npc).Item = $"rewield {(allSlots ? "all" : "weapon")} {result.Disposition} {result.Failure} " + string.Join(", ", result.Steps.Select(step => $"{step.Slot} off={step.TakenOff ?? "-"} on={step.Wielded ?? "-"}"));
         // ARC-RENDER-1485: a changed worn item changes the weapon part and shield bit the NPC's body shows (0x465020, ShownWeapon); the viewer draws its body again.
         // ARC-MAGIC-1684: the lines the moved items' scripts printed go to the message window with the notice.
-        if (result.Disposition == GameSessionDisposition.Changed || result.Messages.Count > 0) _notices.Add(new(AreaAiNoticeKind.Rewield, npc, null) { Messages = result.Messages });
+        if (result.Disposition == GameSessionDisposition.Changed || result.Messages.Count > 0 || result.EyeCandies.Count > 0) _notices.Add(new(AreaAiNoticeKind.Rewield, npc, null) { Messages = result.Messages, EyeCandies = result.EyeCandies });
     }
     // ARC-DEV-301: the gate's demaintain (0x4A8570 step 15 → 0x457450) ends the NPC's maintained spell runs through the cast host.
     public void EndMaintainedSpells(string npc) => _scene.Spells?.Invoke()?.EndMaintainedSpells(npc);
@@ -1930,7 +1951,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private AreaTrapWalker? TrapWalker(string id)
     {
         if (id == Pc) return null;
-        var led = Leader(id) == Pc;
+        // TT2: an NPC with a player character at the top of its chain (0x45DDA0).
+        var led = PcLeader(id) == Pc;
         SessionNpcSpot? spot = _scene.NpcSheet?.Invoke(id) is { } sheet && RawBuild(id)?.Target is { } life ? new(life, sheet.Loaded, sheet.Modifiers, led) : null;
         return new(id, led, spot);
     }
@@ -2629,8 +2651,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var result = _session.MakePeace(_session.Version, new SessionPeaceRequest { Entity = npc, Other = other, Facts = OrderFacts(npc) });
         Trace(npc).Setter = $"spell peace {with} {result.Disposition} {result.Failure}";
         if (result.Failure != GameSessionFailure.None) return false;
-        var head = Leader(with) ?? with;
-        InterruptRunsWhere(npc, 5, r => r.Bottom is { Goal: GoalType.Attack or GoalType.AttemptAttack, Target: { } at } && (at == head || Leader(at) == head));
+        // 0x4AA300 and its interrupt 0x44E050 both read the chain's player character (0x45DDA0).
+        var head = PcLeader(with) ?? with;
+        InterruptRunsWhere(npc, 5, r => r.Bottom is { Goal: GoalType.Attack or GoalType.AttemptAttack, Target: { } at } && (at == head || PcLeader(at) == head));
         if (result.Steps.Count > 0)
             foreach (var follower in result.Steps[0].Followers)
                 InterruptRunsWhere(follower, 5, r => r.Bottom is { Goal: GoalType.Attack or GoalType.AttemptAttack, Target: { } at } && at == npc);
@@ -3267,9 +3290,11 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (NpcCombatMode(npc) is { } context) _session.SetCombatMode(_session.Version, SessionCombatant.Critter(npc), false, context);
     }
 
-    [OriginalFunction(0x45DE00, OriginalFunctionScope.Partial)]
-    [OriginalFunction(0x45DDA0, OriginalFunctionScope.Partial)]
-    public string? Leader(string npc) => npc != Pc && _session.QueryCompanion(npc).LedByPc ? Pc : null;
+    /// <summary>ARC-WORLD-1840: the critter's own leader (0x45DE00): the hero, an NPC leader (a summoner, a script's group) or none (the session's <see cref="GameSessionOwner.QueryLeader"/>).</summary>
+    public string? Leader(string npc) => npc == Pc ? null : _session.QueryLeader(npc);
+
+    /// <summary>ARC-WORLD-1840: the player character at the top of the critter's chain of leaders (0x45DDA0): the hero for a follower of the hero or of anyone the hero leads, else null.</summary>
+    public string? PcLeader(string npc) => npc == Pc ? null : _session.QueryPcLeader(npc);
     public bool Waiting(string npc) => _session.QueryCompanion(npc).WaitBit;
     public void LoyaltyCheck(string npc) { }
     /// <summary>ARC-DEV-170 (B06): the routine of a leaderless NPC (the non-combat perform's branch, 0x4AC583): the unforced waypoint step, the unforced standpoint step when it answered 0
@@ -3616,6 +3641,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var state = LifeState(id) ?? build.Loaded;
         var danger = _session.QueryDanger(id);
         var leader = Leader(id);
+        var pcLeader = PcLeader(id);
         var npcConcealed = _session.IsConcealed(SessionCombatant.Critter(id));
         return new HostilityCritter
         {
@@ -3636,7 +3662,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             KillOnSight = (npc.Flags & KillOnSightNpc) != 0, KosOverride = (NpcFlagsOf(id, npc.Flags) & KosOverrideNpc) != 0,
             Perception = build.EffectiveStat(CharacterStat.Perception, state), Intelligence = build.EffectiveStat(CharacterStat.Intelligence, state),
             Level = build.Level, Alignment = critter.BaseStats.Count > AreaCompanionData.AlignmentStat ? critter.BaseStats[AreaCompanionData.AlignmentStat] : 0,
-            HealthPercent = status is null ? 0 : Percent(status), Leader = leader, PcLeader = leader,
+            HealthPercent = status is null ? 0 : Percent(status), Leader = leader, PcLeader = pcLeader,
             // ARC-AI-1560 (critter flag 0x1, 0x45EDE0, for any critter): a follower the hero's sneak hides is heard at the silent level and refused unseen when it prowls as a master.
             Concealed = npcConcealed, MasterProwler = npcConcealed && NpcSkill(id, Skill.Prowling)?.Training >= SkillTraining.Master,
         };
@@ -3646,13 +3672,16 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     public int Distance(string from, string to) => Tile(from) is { } a && Tile(to) is { } b ? AiExecutorRules.Distance(a, b) : int.MaxValue;
 
-    /// <summary>One faction (0x45D110) as far as this host knows: the hero and its followers, followers of one leader, or one non-zero
-    /// faction; the PC's reputations granting a faction are not read here.</summary>
+    /// <summary>One faction (0x45D110) as far as this host knows: the hero and every critter whose chain of leaders reaches it; two NPCs under the same player character, one the other's leader,
+    /// or two followers of one leader (ARC-WORLD-1840: NPC leaders too); else one non-zero faction. The PC's reputations granting a faction are not read here.</summary>
     public bool FactionSame(string a, string b)
     {
         if (a == b) return a != Pc;
-        if (a == Pc || b == Pc) return Leader(a == Pc ? b : a) == Pc;
-        if (Leader(a) is { } la && la == Leader(b)) return true;
+        if (a == Pc || b == Pc) return PcLeader(a == Pc ? b : a) == Pc;
+        if (PcLeader(a) is { } pa && pa == PcLeader(b)) return true;
+        var la = Leader(a);
+        var lb = Leader(b);
+        if (la == b || lb == a || la is not null && la == lb) return true;
         return Faction(a) is { } fa && fa != 0 && fa == Faction(b);
     }
 
@@ -3695,7 +3724,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // (ARC-DEV-075: only a home the resolver cannot read), is not in a flee test's party count.
     [OriginalFunction(0x441260, OriginalFunctionScope.Partial)]
     public IReadOnlyList<string> Followers(string id) =>
-        id == Pc ? _session.QueryParty().Followers.Select(f => f.Entity).Where(f => Find(f) is not null).ToArray() : [];
+        (id == Pc ? _session.QueryParty().Followers.Select(f => f.Entity) : _session.QueryFollowers(id)).Where(f => Find(f) is not null).ToArray();
 
     /// <summary>
     /// ARC-WORLD-1160 (E3-a; ledger RT2 and SWB4): the NPCs near the hero as the combat-mode exit gate reads them: each active NPC of the shown map that is in the combat-focus state
@@ -3740,7 +3769,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         {
             if (id == Pc || Gone(id) || DeadCritter(id) || Tile(id) is not { } there) continue;
             if (Math.Max(Math.Abs(there.X - at.X), Math.Abs(there.Y - at.Y)) > TrapDeviceRules.AlarmRadius) continue;
-            if ((SpellFlagsOf(id, Fields(id)?.Object.SpellFlags ?? 0) & MindControlledSpell) != 0 || Leader(id) == Pc) continue;
+            if ((SpellFlagsOf(id, Fields(id)?.Object.SpellFlags ?? 0) & MindControlledSpell) != 0 || PcLeader(id) == Pc) continue;
             if (See(id, Pc).Excess != 0 && Hear(id, Pc, Loudness.Silent).Excess != 0) continue;
             AttackEvent(Pc, id, loudness: Loudness.Silent);
             alerted.Add(id);

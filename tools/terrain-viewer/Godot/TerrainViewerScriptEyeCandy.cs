@@ -1,4 +1,5 @@
 using Arcanum.Data.Magic;
+using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 using Arcanum.Simulation.Magic;
 using Arcanum.World;
@@ -8,13 +9,19 @@ namespace Arcanum.TerrainViewer;
 
 // ARC-SCRIPT-1592 (ledger WE4, WE5): the script action 120 (play script eye candy) in the AREA view. The dialog host and the use host (use, tile, sector, dying and combat-point scripts, item use) collect each run's requests; every frame
 // they are taken here and played on their objects as overlay runs of the script list (rules\ScriptEyeCandy.mes, AreaEyeCandyHost.PlayScript), which the eye-candy draw shows like a spell's. Not ready: an object that is not the hero
-// or an NPC, created critter or summoned object of the shown map (scenery, items, portals have no cell the draw knows), the sound, the tinting, the turn of the art to the object's facing, the static (non-animating) entries; the wield scripts of
-// the item host (ARC-MAGIC-1745) and the NPCs' own use scripts (the AI host) play none yet.
+// or an NPC, created critter or summoned object of the shown map (scenery, items, portals have no cell the draw knows), the sound, the tinting, the turn of the art to the object's facing, the static (non-animating) entries; the NPCs' own use scripts (the AI host) and the item host's moves of the hero (ARC-MAGIC-1744 and the
+// equipment windows) play none yet. ARC-MAGIC-1830: the wield scripts of an NPC's rewield (the TraitIdx magick and tech points, the AI gate's re-wield) and of its best-items wield (regeneration, a created critter's stocking) play theirs, as
+// do the hero's TraitIdx rewield scripts, queued by the host that applied them (QueueScriptEyeCandies).
 public partial class TerrainViewerApp
 {
     // Smoke seams and the log: the requests taken, and those the host started.
     private int _scriptEyeCandyTaken, _scriptEyeCandyPlayed;
     private readonly List<(string Owner, int Number)> _scriptEyeCandyPlayedForSelfTest = [];
+    // ARC-MAGIC-1830: the requests of the item event scripts a session move ran (an NPC's rewield or wield), queued by the code that applied the move and taken with the script hosts' above.
+    private readonly List<AreaScriptEyeCandy> _queuedScriptEyeCandies = [];
+
+    /// <summary>ARC-MAGIC-1830: queues the play requests among the eye candy requests of item event scripts a session move ran (<see cref="AreaScriptEyeCandy.Of(IEnumerable{ScrEyeCandy})"/>) for the next <see cref="SyncScriptEyeCandies"/>.</summary>
+    private void QueueScriptEyeCandies(IEnumerable<ScrEyeCandy> candies) => _queuedScriptEyeCandies.AddRange(AreaScriptEyeCandy.Of(candies));
 
     /// <summary>The play requests the script hosts collected, played now on the shown map (the viewer asks for them every frame, before the eye candies are drawn); a request that cannot play (no cast host, another map, an entry without a run) is logged and dropped.</summary>
     private void SyncScriptEyeCandies()
@@ -22,6 +29,8 @@ public partial class TerrainViewerApp
         var requests = new List<AreaScriptEyeCandy>();
         if (_conversationHost?.Scripts is { } talk) requests.AddRange(talk.TakeEyeCandies());
         if (_useScriptHost is { } use) requests.AddRange(use.Host.TakeEyeCandies());
+        requests.AddRange(_queuedScriptEyeCandies);
+        _queuedScriptEyeCandies.Clear();
         if (requests.Count == 0) return;
         if (_readyMode != TerrainViewerMode.Area || _readyArea is null) { GD.Print($"ARC-SCRIPT-1592 script-eye-candy dropped {requests.Count} request(s) (no area is shown)"); return; }
         var caster = SpellCasterNow();

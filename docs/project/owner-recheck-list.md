@@ -1279,3 +1279,39 @@ The rules are in [barter](../world/barter-runtime.md#gambling-arc-ui-1740). Star
 | 3 | Release the ware on the box. | The merchant says a won or lost line. A win gives the ware for nothing, a loss takes its price in coins and gives the ware; the trade sound plays once; the box returns to rest. | open |
 | 4 | Open barter once, close it and save; bet and note the result; load that save, open barter and bet the same ware. | The outcome is the same win or loss as the first time (the roll is saved, reloading does not reroll). | open |
 
+## ARC-UI-1199 — Generated interface: the schematic window (S8, 2026-11-14)
+
+The rules are in [viewer slice S8](../rendering/hd-interface-density.md#viewer-slice-s8-arc-ui-1199). Set the HD interface line on the launcher screen to **Generated (experimental)**,
+start a game with a hero who has technology degrees and open the schematics window (T). Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open the schematics window in a 1280 × 800 window. | The window is wood with a ruled cream page, a brass-rimmed picture frame for the record, two boxes for the components, a dark channel with the assemble button and its two lamps in brass rims; the two gears with the mortarboard and the scroll, the round view of the hero and the record's picture are the originals'. | open |
+| 2 | Click each of the eight discipline tabs and move over them. | The paper bookmarks (their own outlines and glyphs) stick out of the page's right edge; the shown tab is the pressed one; the page and the record change as before. | open |
+| 3 | Press the learned and found buttons and the assemble button; hold each down. | Each is a brass-rimmed round button that sinks while held; texts, sounds and the assembling are as before. | open |
+| 4 | Pick a discipline with several pages and turn them with the two arrows (the arrow hides on the first and last page). | The arrows are drawn on the page under them (no box of another colour); the ruling goes on beneath them. | open |
+| 5 | Make the window bigger and smaller while the window is open. | The frames redraw at the new size (the previous picture stays until it is ready); the lines of the page stay one unit wide. | open |
+
+Known differences (documented, not bugs):
+
+- The page is plainer than the original's (soft clouds and a plain ruling in place of its stains, ragged edges and the printed connecting lines between the record and the two component boxes, which are not drawn).
+- The tabs and arrows follow the Legacy outlines and marks; the assemble face (the two lamps), the found and missing tints and the record's picture stay pictures.
+- The ring of the round view (art 231) is the barter window's recipe and sits on a patch of wood whose grain differs a little from the window's.
+
+## ARC-UI-1200 — Generated interface: message window, spell and skill panes, Fate and Sleep (S9, 2026-11-14)
+
+The rules are in [viewer slice S9](../rendering/hd-interface-density.md#viewer-slice-s9-arc-ui-1200). Set the HD interface line on the launcher screen to **Generated (experimental)**, start a game and compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Look at the message window at the bottom strip; pick something up or wait for a message. | The window is a dark slate frame with a black text area; the entries, icon and scrolling are as before. | open |
+| 2 | Press `M` (spells) with a hero who knows spells, then `K` (skills). | Both panes are slate with five (spells) or four (skills) dark wells under the icon buttons and a dark name plate with a rivet at each end; the sixteen college domes show for colleges you have no rank in; the names appear in the plate when you point at a button. | open |
+| 3 | Press `F` (Fate) and toggle a few buttons. | The window is slate with a dark bar behind every second line; the toggle buttons are generated brass buttons with the green lamp, sunk when on; the lines and sounds are as before. | open |
+| 4 | Open the sleep window (`S`, or the sleep button) and point at its buttons. | Four dark bars behind the odd lines; the buttons are lit under the pointer; the lines read as before. | open |
+| 5 | Make the window bigger and smaller while the Fate or Sleep window is open. | The window redraws at the new size (the previous picture stays until it is ready). | open |
+
+Known differences (documented, not bugs):
+
+- The slate is plainer than the original's marbled iron and the wells and bars are black where the original's are barely darker than their surroundings.
+- The common dialog box (the exit question, the load question after death) stays in the HD or Legacy look: issue #1819.
+- The first rows of the spell pane's top edge are transparent in the Legacy frame, so the rim does not run along them.
