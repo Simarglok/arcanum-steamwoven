@@ -160,7 +160,7 @@ public partial class AreaCharacterSheetArtView : Control
         var device = DeviceScale();
         if (Math.Abs(device - _drawnScale) < 0.0005f) return;
         _drawnScale = device;
-        QueueRedraw(); Pages.QueueRedraw(); Spells.QueueRedraw();
+        QueueRedraw(); Pages.QueueRedraw(); Spells.QueueRedraw(); Schemes.QueueRedraw();
     }
 
     private Texture2D? Art(int number, int frame = 0) => AreaCharacterArtDraw.Art(_art, number, frame);
@@ -195,7 +195,7 @@ public partial class AreaCharacterSheetArtView : Control
 
     // ARC-UI-1195: the generated interface paints the sheet's frames at the window's own device scale (the frame scale times the canvas transform's and the viewport's
     // stretch, the bars' own rule). The sheet's textures are shared (the in-game sheet, the NPC sheet, the creation editor), so the view on screen claims them at its draw.
-    // The pages (the children) draw the same textures at the same scale; a texture swapped in by a worker redraws all three, since each draws in its own _Draw.
+    // The pages (the children, ARC-UI-1784: the schemes page too) draw the same textures at the same scale; a texture swapped in by a worker redraws all of them, since each draws in its own _Draw.
     private readonly HashSet<HdInterfaceTexture> _watched = [];
     private Action? _onTextureChanged;
     private Func<float>? _deviceScale;
@@ -206,7 +206,7 @@ public partial class AreaCharacterSheetArtView : Control
     private void ClaimScale()
     {
         _deviceScale ??= DeviceScale;
-        _onTextureChanged ??= () => { if (GodotObject.IsInstanceValid(this)) { QueueRedraw(); Pages.QueueRedraw(); Spells.QueueRedraw(); } };
+        _onTextureChanged ??= () => { if (GodotObject.IsInstanceValid(this)) { QueueRedraw(); Pages.QueueRedraw(); Spells.QueueRedraw(); Schemes.QueueRedraw(); } };
         foreach (var frames in _art.Values)
             foreach (var texture in frames)
             {
