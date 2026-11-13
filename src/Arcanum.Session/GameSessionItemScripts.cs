@@ -177,6 +177,9 @@ public sealed partial class GameSessionOwner
             _reads = new(owner, host, this);
         }
 
+        /// <summary>ARC-AI-1655: the runs are an NPC's ground pickup, whose triggerer is the NPC: a printed line is read for an NPC triggerer (<see cref="ISessionItemScriptHost.PrintedLineForNpc"/>). Every other move keeps the hero's reading, whatever its triggerer.</summary>
+        internal bool NpcPickup { get; init; }
+
         internal GameSessionFailure Failure { get; private set; }
         internal IReadOnlyList<SessionItemScriptRun> Runs => _runs.AsReadOnly();
         internal IReadOnlyList<SessionScriptMessage> Messages => _messages.AsReadOnly();
@@ -193,7 +196,7 @@ public sealed partial class GameSessionOwner
                 extra is null ? null : new ScrObjectRef(_map, extra)), _reads, new() { Rules = _owner._rules.Scripts, Admission = SessionItemScripts.Admission });
             _owner.ThrowIfDisposed();
             _runs.Add(new(point, attachee, run));
-            Failure = _reads.UnknownFlag || _reads.UnknownObject ? GameSessionFailure.ItemScriptUnsupported : _owner.ItemScriptEffects(run, _host, _messages, triggerer != SessionEventKinds.PlayerEntity);
+            Failure = _reads.UnknownFlag || _reads.UnknownObject ? GameSessionFailure.ItemScriptUnsupported : _owner.ItemScriptEffects(run, _host, _messages, NpcPickup);
             if (Failure == GameSessionFailure.None) Failure = Accept(run);
             return run;
         }

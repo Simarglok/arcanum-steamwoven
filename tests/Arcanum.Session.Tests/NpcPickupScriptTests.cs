@@ -201,6 +201,28 @@ public sealed class NpcPickupScriptTests
     }
 
     [TestMethod]
+    public void AnItemTheHeroTookAndDroppedKeepsItsOriginRowsScriptsForTheNpc()
+    {
+        using var owner = Open();
+        var host = new Host(owner);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "relic", Accept, host).Disposition);
+        owner.PlaceHeroItem("relic", new CellCoord(120, 210));
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.PickUpItemByNpc(owner.Version, Npc, "relic", Accept).Failure, "without a host");
+        var result = owner.PickUpItemByNpc(owner.Version, Npc, "relic", Accept, scripts: host);
+        Assert.AreEqual((GameSessionDisposition.Changed, 1), (result.Disposition, result.Messages.Count), "its origin row's insert-item script runs");
+        CollectionAssert.Contains(Listed(owner), "relic");
+    }
+
+    [TestMethod]
+    public void TheHerosOwnLinesAreStillReadForTheHeroWhenTheNpcReadingIsRefused()
+    {
+        using var owner = Open();
+        var host = new Host(owner) { NpcLine = new(SessionPrintedLineStatus.Unsupported, string.Empty, "differs by gender") };
+        var result = owner.PickUpItem(owner.Version, "relic", Accept, host);
+        Assert.AreEqual((GameSessionDisposition.Changed, "It hums for the hero."), (result.Disposition, result.Messages.Single().Text), "only an NPC pickup reads the NPC's line");
+    }
+
+    [TestMethod]
     public void AnItemWithNoScriptNeverAsksTheHost()
     {
         using var owner = Open();

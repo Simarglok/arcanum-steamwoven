@@ -107,7 +107,7 @@ public sealed partial class GameSessionOwner
         bool Stale() => _revision != revision || _inventory.SeedGeneration != seeds || _actor.Map != map || _flags.Version != flagVersion || _inventory.PlacedItem(item) != placed ||
             !ReferenceEquals(_inventory.Objects.PileOf(item), pile) || !KnownNpc(npc) || _durability.Destroyed.Contains(item) || _inventory.Taken.Contains(item) && placed is null;
         // ARC-AI-1655 (0x461810): the item's get script runs before the insert check, with the NPC as the triggerer; skip default leaves the item where it lies.
-        var runs = hasGet || hasInsert ? new ItemScriptRuns(this, scripts!, map.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item] = facts.Complexity }) : null;
+        var runs = hasGet || hasInsert ? new ItemScriptRuns(this, scripts!, map.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item] = facts.Complexity }) { NpcPickup = true } : null;
         if (runs is not null && hasGet)
         {
             var gate = runs.Run(SessionScriptPoint.Get, item, npc, null);
@@ -131,6 +131,8 @@ public sealed partial class GameSessionOwner
             runs.Prepare();
             if (runs.Failure != GameSessionFailure.None) return RejectItem(runs.Failure, verdict) with { InsertScript = insertRun, Scripts = runs.Runs };
         }
+        // The runs' changes (flags, kept slots) apply before the move, so a merged item's deletion drops the slots its own run kept.
+        runs?.Commit();
         if (into is { } stack)
         {
             // The inserted stack's units join the held one and the inserted item is deleted (from a pile too, DestroyObject takes it out).
@@ -165,7 +167,6 @@ public sealed partial class GameSessionOwner
         // got here): a pile left with one item or none dissolves at once (the last item is dropped again with a decay two days on). A pile the session made goes in this revision; one of the map's data is a map change that
         // takes a revision of its own.
         if (pile is not null && _inventory.Objects.Pile(pile.Entity) is { } left) DissolveJunkPile(left);
-        runs?.Commit();
         Revise();
         if (mapPile is not null && mapPileHolder is not null && _inventory.Seeds.TryGetValue(mapPile.Map, out var standing)) DissolveMapJunkPile(Version, mapPile, standing, mapPileHolder);
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, into?.Entity ?? item, verdict, Version) { InsertScript = insertRun, Scripts = runs?.Runs ?? [], Messages = runs?.Messages ?? [] };
