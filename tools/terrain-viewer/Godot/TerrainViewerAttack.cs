@@ -870,7 +870,7 @@ public partial class TerrainViewerApp
 
     /// <summary>What follows an attack on an NPC (at once, or when a projectile struck it): the sounds, the status line, a stun's
     /// end, the followers' levels, the death pose and the drawn bodies and inventory.</summary>
-    private void FinishCritterHit(AttackGoal struck, SessionAttackResult result)
+    private void FinishCritterHit(AttackGoal struck, SessionAttackResult result, bool aimed = true)
     {
         var owner = _areaSession!;
         _lastCritterAttackForSelfTest = result;
@@ -882,6 +882,8 @@ public partial class TerrainViewerApp
         var life = owner.QueryLife(struck.Combat!.Target).View;
         _attackNotice = AreaCombatHost.Describe(result, life?.Status.HitPoints, life?.Status.MaxHitPoints);
         FloatCritterAttack(result, HeroFloater, struck.Entity);
+        // ARC-AI-1527: the near-death line of a follower the hit brought low and the combat taunt of the hit's end (0x4AEAB0, 0x4B6B90).
+        FollowerAttackComments(result, HeroFloater, struck.Entity, aimed);
         GD.Print($"ARC-COMBAT-005 attack-hit target={struck.Entity} disposition={result.Disposition} failure={result.Failure}"
             + $" outcome={result.Resolution?.Outcome} cause={result.Resolution?.MissCause} damage={result.Life?.HitPointDamage} events={result.Life?.Events}"
             + $" hp={life?.Status.HitPoints}/{life?.Status.MaxHitPoints} xp={result.HitAward?.Award}/{result.KillAward?.Award} step={result.StepFailure}"
