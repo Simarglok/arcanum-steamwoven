@@ -132,7 +132,7 @@ internal sealed class PartyDomain
         NpcLed[record.Entity] = record;
     }
 
-    /// <summary>Takes a follower out of its NPC leader's array (the original's leave 0x45E040 closes the gap); false when it has no NPC leader.</summary>
+    /// <summary>Takes a follower out of its NPC leader's array (the original's removal closes the gap); false when it has no NPC leader.</summary>
     internal bool RemoveNpcLed(string entity)
     {
         if (!NpcLed.Remove(entity, out var record)) return false;

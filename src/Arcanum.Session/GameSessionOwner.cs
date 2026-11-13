@@ -1992,6 +1992,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (copyTempus && !_objectFlags.ContainsKey(current.Entity) && _objectFlags.Count >= MaxObjectFlagCritters)
             return RejectParty(GameSessionFailure.BudgetExceeded, consent);
         if (_revision == long.MaxValue) return RejectParty(GameSessionFailure.RevisionExhausted, consent);
+        // ARC-WORLD-1840: a follower of an NPC leaves that leader first (0x45DFC0 inside the join; its Tempus Fugit flag is cleared, then the hero's copied below).
+        if (_party.NpcLed.ContainsKey(current.Entity)) LeaveNpcLeader(current.Entity);
         _party.Put(next, true);
         if (current.Standing != CompanionStanding.Free) ClearTempusFugitOnLeave(current.Entity);
         if (copyTempus) WriteTempusFugitOnJoin(current.Entity);

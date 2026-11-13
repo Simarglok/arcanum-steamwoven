@@ -26,8 +26,8 @@ public sealed partial class AreaAiHost
         var skill = NpcSkill(npc, Skill.Heal);
         var item = HealingItem(npc);
         var allowed = item is not null && HealSkillAccepts(npc, item, Pc);
-        var leader = Leader(npc);
-        return new(CollegeLevel(npc, HealerCollege), allowed, skill?.Level ?? 0, (int?)skill?.Training ?? 0, leader == Pc, leader is null);
+        // 0x45DE00 for the free services, 0x45DDA0 for "no player character leads it at all" (ARC-WORLD-1840: a follower of an NPC has a leader but may have no PC at the top).
+        return new(CollegeLevel(npc, HealerCollege), allowed, skill?.Level ?? 0, (int?)skill?.Training ?? 0, Leader(npc) == Pc, PcLeader(npc) is null);
     }
 
     /// <summary>

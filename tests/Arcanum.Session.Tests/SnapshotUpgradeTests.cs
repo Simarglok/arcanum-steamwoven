@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":101,\"world\"";
+    private const string Current = "\"schemaVersion\":102,\"world\"";
+    private const string Current101 = "\"schemaVersion\":101,\"world\"";
     private const string Current100 = "\"schemaVersion\":100,\"world\"";
     private const string Current99 = "\"schemaVersion\":99,\"world\"";
     private const string Current98 = "\"schemaVersion\":98,\"world\"";
@@ -300,9 +301,18 @@ public sealed class SnapshotUpgradeTests
     // ARC-UI-1740: the schema 100 text of a schema 101 one whose session threw no gambling roll: the text loses the null gambling roll section. A text with a roll has no older literal: no build before saved one.
     internal static string Schema100(string text)
     {
-        StringAssert.Contains(text, Current);
+        text = Schema101(text);
+        StringAssert.Contains(text, Current101);
         Assert.AreEqual(1, text.Split(NoGamblingRoll).Length - 1, "the gambling roll section is a session's with none thrown");
-        return text.Replace(NoGamblingRoll, "").Replace(Current, Current100);
+        return text.Replace(NoGamblingRoll, "").Replace(Current101, Current100);
+    }
+
+    // ARC-WORLD-1840: the schema 101 text of a schema 102 one in which no NPC leads anyone: the party section loses its closing empty list. A text with a follower of an NPC has no older literal: no build before made one.
+    internal static string Schema101(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.AreEqual(1, text.Split(NoNpcLed).Length - 1, "no NPC leads anyone");
+        return text.Replace(NoNpcLed, "}").Replace(Current, Current101);
     }
 
     // ARC-MAGIC-1658: the schema 98 text of a schema 99 one whose hero (if any) has no resistance written and no age read: the hero section loses its two closing keys. A text with a written resistance or a read age has no older literal:
@@ -734,6 +744,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":102,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":103,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

@@ -262,6 +262,33 @@ public sealed class AreaAiFollowerTests
         Assert.AreEqual(0, scene.Session.QueryGoals().RunsOf(scene.Companion).Length);
     }
 
+    // ARC-WORLD-1840 (#1322): an NPC leads followers as in the original: the host answers the direct leader (0x45DE00), the chain's player character (0x45DDA0) and the followers of any
+    // critter, one faction holds a leader and its followers, and a leave of an NPC leader ends the follower's run as the hero's leave does.
+    [TestMethod]
+    public void An_npc_led_by_the_heros_companion_has_it_as_leader_the_hero_at_the_top_and_follows_it()
+    {
+        var scene = Open(enemyAt: new(4, 20));
+        var (session, host, enemy, companion) = (scene.Session, scene.Host, scene.Enemy, scene.Companion);
+        Assert.IsNull(host.Leader(enemy));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, enemy, companion).Disposition);
+        Assert.AreEqual(companion, host.Leader(enemy));
+        Assert.AreEqual(Pc, host.PcLeader(enemy), "the companion's leader is the hero");
+        Assert.AreEqual(Pc, host.Leader(companion));
+        CollectionAssert.AreEqual(new[] { enemy }, host.Followers(companion).ToArray());
+        Assert.IsTrue(host.FactionSame(enemy, companion) && host.FactionSame(companion, enemy) && host.FactionSame(Pc, enemy), "the leader, its follower and the hero at the top");
+        Assert.IsTrue(host.CatchUp(enemy).HasPcLeader, "the catch-up reads the chain (0x4AD4D0 → 0x45DDA0)");
+        // Its tick's perform starts the follow goal toward its own leader, not the hero.
+        Fire(scene, enemy);
+        var run = session.QueryGoals().RunsOf(enemy).Single();
+        Assert.AreEqual((GoalType.Follow, companion), (run.Bottom.Goal, run.Bottom.Target), $"{host.TraceOf(enemy)?.Perform}");
+        // The leave: no leader, no PC at the top, and the next look ends its run.
+        Assert.AreEqual(GameSessionDisposition.Changed, session.LeaveParty(session.Version, enemy, new PartyLeave(Force: true)).Disposition);
+        Assert.IsNull(host.Leader(enemy));
+        Assert.IsNull(host.PcLeader(enemy));
+        CollectionAssert.AreEqual(new[] { enemy }, host.ObserveLeaves().ToArray());
+        Assert.AreEqual(0, session.QueryGoals().RunsOf(enemy).Length);
+    }
+
     // The NPC's tick, fired through the session's event pass with the host as its world: an immediate tick due 1 ms ahead, the clock moved 10 ms.
     private static AiTickResult Fire(Scene scene, string entity)
     {

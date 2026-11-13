@@ -53,7 +53,6 @@ public sealed partial class GameSessionOwner
     /// leader's Tempus Fugit flag copied (TF3). Already the last follower of that leader is NoChange. The hero follows no one, a critter does not lead itself, and a join that would close a cycle of
     /// leaders (the original's chain query would never end) is <see cref="GameSessionFailure.InvalidCompanion"/>; a full bound is <see cref="GameSessionFailure.BudgetExceeded"/> with nothing changed.
     /// </summary>
-    [OriginalFunction(0x45DE90, OriginalFunctionScope.Partial)]
     public PartyMutationResult ForceJoinLeader(GameSessionVersion expected, string entity, string leader)
     {
         ThrowIfDisposed();
