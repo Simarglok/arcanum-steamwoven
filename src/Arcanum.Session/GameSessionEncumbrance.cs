@@ -133,7 +133,7 @@ public sealed partial class GameSessionOwner
                 var definitions = new Dictionary<int, SessionEffectDefinition>(_effects.Definitions) { [CarryRules.EffectNumber] = definition };
                 var list = _effects.Entries.Where(e => e.Number != CarryRules.EffectNumber)
                     .Concat(Enumerable.Repeat(new SessionEffect(CarryRules.EffectNumber, EffectCause.Item), entries)).ToList();
-                if (steps.Count > 0 && EffectDomain.Bounded(list, definitions) &&
+                if (steps.Count > 0 && EffectDomain.Bounded(list, definitions, innate: HeroInnateRules()) &&
                     PrepareEffects([.. steps], definitions, 0, out var prepared) == GameSessionFailure.None) ApplyEffects(prepared!);
                 else
                 {

@@ -89,6 +89,8 @@ src/Arcanum.Session/GameSessionExperience.cs,RecordNpcKill,pending,
 src/Arcanum.Session/GameSessionFate.cs,HeroFateArmed,pending,
 src/Arcanum.Session/GameSessionFate.cs,QueryHeroFate,pending,
 src/Arcanum.Session/GameSessionFate.cs,UseHeroFate,pending,
+src/Arcanum.Session/GameSessionFollowerSkills.cs,PickLockByNpc,exempt,host
+src/Arcanum.Session/GameSessionFollowerSkills.cs,RollNpcDisarmTrap,exempt,host
 src/Arcanum.Session/GameSessionFollowers.cs,ApplyFollowerRule,pending,
 src/Arcanum.Session/GameSessionGeneratedOnce.cs,GenerateContainerOnce,pending,
 src/Arcanum.Session/GameSessionGoals.cs,InsertGoalAtBottom,pending,
@@ -106,6 +108,7 @@ src/Arcanum.Session/GameSessionHeroName.cs,SetHeroPlayerName,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoForThrow,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoRefusal,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,ThrowHeroItem,pending,
+src/Arcanum.Session/GameSessionHeroWieldScripts.cs,PlanHeroRewield,exempt,host
 src/Arcanum.Session/GameSessionHolderGrid.cs,ArrangeHolderGrid,exempt,host
 src/Arcanum.Session/GameSessionHolderGrid.cs,QueryHolderRoom,exempt,host
 src/Arcanum.Session/GameSessionHolderGrid.cs,StoreInsertPlace,exempt,host
@@ -431,7 +434,6 @@ src/Arcanum.World/AreaAiHost.cs,Active,pending,
 src/Arcanum.World/AreaAiHost.cs,AnimationPriority,pending,
 src/Arcanum.World/AreaAiHost.cs,ApplyStop,pending,
 src/Arcanum.World/AreaAiHost.cs,AttackEnded,exempt,host
-src/Arcanum.World/AreaAiHost.cs,AttemptPickLocks,pending,
 src/Arcanum.World/AreaAiHost.cs,BeginAttack,pending,
 src/Arcanum.World/AreaAiHost.cs,BlastRadius,pending,
 src/Arcanum.World/AreaAiHost.cs,CanHealAndFight,pending,
@@ -786,6 +788,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterPointerStill,pending
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,FollowerMenuFacts,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,Gamble,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaContainerLoot.cs,CloseContainer,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaContainerPick.cs,AiPickLockTarget,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaEncounters.cs,EncounterSiteNow,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaEncounters.cs,HandleEncounterNotices,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,FateToggled,exempt,host

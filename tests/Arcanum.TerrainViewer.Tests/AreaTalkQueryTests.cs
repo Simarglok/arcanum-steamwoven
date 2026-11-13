@@ -5,6 +5,7 @@ using Arcanum.Data.Content;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
@@ -91,6 +92,17 @@ public sealed class AreaTalkQueryTests
                 Do(new(ScrCatalogue.Action.Attack, (Triggerer, -1), (Attachee, -1))),
                 Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
             Write("dlg/00794attack.dlg", Encoding.Latin1.GetBytes("{1}{Hello.}{}{}{}{}{}\n"));
+            // 795 (ARC-SCRIPT-1168): sets global flag 100, casts spell 12 on the PC with the attachee as the caster (action 48 shape), casts spell 13 on the attachee with the PC as the caster freely (118), then spell 14 on the PC with
+            // no caster (61), spell 15 on the PC by the attachee free and unresistable (122), spell 16 on the attachee with no caster unresistably (136), skip default; a talk that has the NPC cast on the player like a paid service.
+            Write("scr/00795cast.scr", Program(
+                Do(new(ScrCatalogue.Action.SetGlobalFlag, N(AreaFlag))),
+                Do(new(ScrCatalogue.Action.CastSpell, (Attachee, -1), N(12), (Triggerer, -1))),
+                Do(new(ScrCatalogue.Action.CastFreeSpell, (Triggerer, -1), N(13), (Attachee, -1))),
+                Do(new(ScrCatalogue.Action.CastSpellOn, N(14), (Triggerer, -1))),
+                Do(new(ScrCatalogue.Action.CastFreeUnresistableSpell, (Attachee, -1), N(15), (Triggerer, -1))),
+                Do(new(ScrCatalogue.Action.CastUnresistableSpellOn, N(16), (Attachee, -1))),
+                Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
+            Write("dlg/00795cast.dlg", Encoding.Latin1.GetBytes("{1}{Hello.}{}{}{}{}{}\n"));
             // 791: sets global flag 100, then floats line 2 of 790's DLG shape (an action field the viewer does not run).
             Write("scr/00791acting.scr", Program(
                 Do(new(ScrCatalogue.Action.SetGlobalFlag, N(AreaFlag))),
@@ -113,7 +125,8 @@ public sealed class AreaTalkQueryTests
 
     // The PC stands next to the NPC (row cell (11, 20)); the shown map's map-list row has the given area.
     private static Talk Create(ScriptContent content, int dialog, (int Area, bool StartMap)? mapArea, int useMap = Map, Func<CellCoord, int?>? startMapAreaAt = null, int reaction = 50,
-        Func<string, int, int, bool, string>? damage = null, Func<string, int, string>? heal = null, Func<string, string, string>? attack = null)
+        Func<string, int, int, bool, string>? damage = null, Func<string, int, string>? heal = null, Func<string, string, string>? attack = null,
+        Func<string?, string, int, bool, bool, string>? cast = null)
     {
         var session = ConversationSessionFixture.Create(Map);
         var row = Row(1, dialog);
@@ -122,7 +135,7 @@ public sealed class AreaTalkQueryTests
         var state = new AreaConversationState(session, map, [AreaConversationState.EntityId(row)], reaction);
         var use = new AreaUseScriptHost(session, useMap, [row], [], content,
             new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, MapArea: () => mapArea,
-                StartMapAreaAt: startMapAreaAt, ScriptDamage: damage, ScriptHeal: heal, ScriptAttack: attack));
+                StartMapAreaAt: startMapAreaAt, ScriptDamage: damage, ScriptHeal: heal, ScriptAttack: attack, ScriptCast: cast));
         var host = new AreaScriptHost(session, map, [speaker], state, content) { QueryHost = () => use };
         return new(session, speaker, host);
     }
@@ -310,6 +323,47 @@ public sealed class AreaTalkQueryTests
     }
 
     [TestMethod]
+    public void A_talks_casts_go_to_the_use_hosts_cast_path_with_the_pc_or_the_npc_as_caster()
+    {
+        WithContent(content =>
+        {
+            var calls = new List<(string? Caster, string Target, int Spell, bool Free, bool Unresistable)>();
+            using var talk = Create(content, 795, (7, false), cast: (caster, target, spell, free, unresistable) => { calls.Add((caster, target, spell, free, unresistable)); return $"cast {spell}"; });
+            var run = talk.Run();
+            Assert.AreEqual(ScrOutcome.SkipDefault, run.Outcome, run.Refusal?.ToString());
+            Assert.AreEqual(5, run.Effects.ObjectStates.Count(r => r.Change == ScrObjectStateChange.CastSpell));
+            Assert.IsTrue(talk.Host.Apply(run.Effects));
+            Assert.IsTrue(talk.Flag, "the run's flag applies with the casts");
+            var npc = talk.Host.Object(talk.Speaker).Code;
+            // In action order: the NPC casts spell 12 on the PC; the PC casts spell 13 freely on the NPC; spell 14 reaches the PC with no caster (then 15 free and unresistable by the NPC, 16 unresistable with no caster).
+            CollectionAssert.AreEqual(new (string?, string, int, bool, bool)[] { (npc, AiSchedulerRules.Pc, 12, false, false), (AiSchedulerRules.Pc, npc, 13, true, false), (null, AiSchedulerRules.Pc, 14, false, false),
+                (npc, AiSchedulerRules.Pc, 15, true, true), (null, npc, 16, false, true) }, calls);
+            Assert.AreEqual("cast 16", talk.Host.LastCast);
+            Assert.AreEqual("cast 16", talk.Host.QueryHost!()!.LastCast);
+        });
+    }
+
+    [TestMethod]
+    public void A_talks_cast_the_world_cannot_apply_refuses_the_run_whole()
+    {
+        WithContent(content =>
+        {
+            // No AI host in the world: the use host has no script cast, the dialog host refuses before anything applies.
+            using var noCast = Create(content, 795, (7, false));
+            var run = noCast.Run();
+            Assert.AreEqual(ScrOutcome.SkipDefault, run.Outcome, run.Refusal?.ToString());
+            Assert.IsFalse(noCast.Host.Apply(run.Effects));
+            Assert.IsFalse(noCast.Flag, "nothing applied");
+            Assert.IsNull(noCast.Host.LastCast);
+            // No use host of the map: the plain talk set holds no cast action and the run is refused at the first one.
+            using var noQueries = Create(content, 795, (7, false), cast: (_, _, _, _, _) => "cast");
+            noQueries.Host.QueryHost = null;
+            var refused = noQueries.Run();
+            Assert.AreEqual((ScrOutcome.Refused, ScrCatalogue.Action.CastSpell), (refused.Outcome, refused.Refusal!.Type));
+        });
+    }
+
+    [TestMethod]
     public void The_talk_set_widens_only_while_a_use_host_of_its_map_answers()
     {
         WithContent(content =>
@@ -323,9 +377,11 @@ public sealed class AreaTalkQueryTests
             Assert.IsTrue(AreaScriptHost.Admission.IsSubsetOf(AreaScriptHost.TalkAdmission) && AreaScriptHost.SkillAdmission.IsSubsetOf(AreaScriptHost.SkillTalkAdmission));
             // ARC-DEV-178: plus get reaction (29) of S23; ARC-MAGIC-030: plus give spell mastery (112) and the four spell conditions of S31.
             Assert.IsTrue(AreaScriptHost.SkillTalkAdmission.IsSubsetOfBesidesStores(ScrAdmissionSet.S55));
-            // ARC-SCRIPT-1563: plus damage (60), apply unresistable damage (138) and heal hit points (75) of S30. ARC-SCRIPT-1620: plus attack (36) of S33.
+            // ARC-SCRIPT-1563: plus damage (60), apply unresistable damage (138) and heal hit points (75) of S30. ARC-SCRIPT-1620: plus attack (36) of S33. ARC-SCRIPT-1168: plus the six cast actions of S29.
             CollectionAssert.AreEquivalent(new[] { ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea, ScrCatalogue.Action.GetReaction, ScrCatalogue.Action.GiveSpellMastery,
-                ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.HealHitPoints, ScrCatalogue.Action.Attack },
+                ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.HealHitPoints, ScrCatalogue.Action.Attack,
+                ScrCatalogue.Action.CastSpell, ScrCatalogue.Action.CastSpellOn, ScrCatalogue.Action.CastFreeSpell, ScrCatalogue.Action.CastUnresistableSpellBy, ScrCatalogue.Action.CastFreeUnresistableSpell,
+                ScrCatalogue.Action.CastUnresistableSpellOn },
                 AreaScriptHost.TalkAdmission.Actions.Except(AreaScriptHost.Admission.Actions).ToArray());
             // ARC-SCRIPT-1733: plus obj is animal, obj is in combat and the nine critter-state conditions, which the use host answers.
             CollectionAssert.AreEquivalent(ScrAdmissionSet.ObjectQueryConditions.Concat(ScrAdmissionSet.ObjectStateQueryConditions).Concat(ScrAdmissionSet.SpellQueryConditions).Concat(ScrAdmissionSet.CritterQueryConditions).Concat(ScrAdmissionSet.CritterStateConditions).Concat(ScrAdmissionSet.CritterTailConditions).ToArray(),
