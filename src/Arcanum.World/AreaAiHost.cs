@@ -2149,6 +2149,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>Whether a dying run (goal 31) of the NPC is on the table: its pool of blood waits for the run to end (B13, 0x42FED0).</summary>
     public bool DyingRunning(string id) => _session.QueryGoals().RunsOf(id).Any(run => run.Frames.Any(f => f.Goal == GoalType.Dying));
 
+    /// <summary>ARC-UI-1737 (ledger OH2): the "violence filter" setting the dying goal's art node reads when it runs (the viewer sets it at the start and at every change of the option).</summary>
+    public bool ViolenceFilter { get; set; }
+
     public AiAnimationClip? Clip(string id, int animation) => _scene.AnimationClip?.Invoke(id, animation);
 
     /// <summary>

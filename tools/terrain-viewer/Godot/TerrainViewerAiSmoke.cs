@@ -239,7 +239,7 @@ public partial class TerrainViewerApp
             var walked = host.Movers.Of(entity) ?? throw new InvalidOperationException("ARC-DEV-094 smoke: the walked NPC has no mover");
             Require(session.QueryNpcPlace(entity) is { } recorded && recorded.World == walked.Cell && recorded.Facing == walked.Facing && recorded.Map.RuntimeMap == host.Scene.RuntimeMap,
                 $"the session holds where it stands: {session.QueryNpcPlace(entity)} against {walked.Cell} {walked.Facing}");
-            var rebuilt = new AreaAiHost(session, host.Scene, AreaEvents, AreaCombatWorldNow());
+            var rebuilt = new AreaAiHost(session, host.Scene, AreaEvents, AreaCombatWorldNow()) { ViolenceFilter = host.ViolenceFilter };
             Require(rebuilt.Movers.Of(entity) is { From: null } back && back.Cell == walked.Cell && back.Facing == walked.Facing,
                 $"a host built again stands it on that cell: {rebuilt.Movers.Of(entity)?.Cell} against {walked.Cell}");
             GD.Print($"ARC-DEV-094 ai smoke place entity={entity} cell={walked.Cell.X},{walked.Cell.Y} facing={walked.Facing} restored=true");

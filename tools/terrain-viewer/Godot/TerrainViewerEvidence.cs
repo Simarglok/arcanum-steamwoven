@@ -6,7 +6,7 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 // ARC-GPAD-1376 (concept §0.8): the opt-in evidence log of the controller test. Off at every start and never saved: the player turns it on
-// in Options (the Evidence Log line, Game page) for a test session. While on, one file per session under the device's own data folder
+// in Options (the Evidence Log line, Video page) for a test session. While on, one file per session under the device's own data folder
 // (user://evidence, or the isolated folder of an automated run) takes one line per semantic command, window open or close, refused open and
 // task marker, with the closed tokens of EvidenceLogCodec: no path, name, item, text or wall-clock time. Nothing is sent anywhere; the owner
 // copies the file by hand to the summariser (tools/input/evidence_summary.py). The control schemes' slices call RecordEvidence for their commands.
