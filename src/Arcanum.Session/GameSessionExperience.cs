@@ -307,6 +307,15 @@ public sealed partial class GameSessionOwner
         if (LifeRules.Evaluate(life, HeroLifeFacts(life)).IsDead) return null;
         var gain = EffectModifiers.Apply(adjusted, _effects.Maximum(EffectSpecial.XpGain));
         var experience = (int)Math.Clamp(hero.Experience + (long)gain, SessionHeroLimits.MinExperience, SessionHeroLimits.MaxExperience);
+        return RecalculateHero(experience, gain);
+    }
+
+    /// <summary>The hero's level recalculation over a stored <paramref name="experience"/>: the hero after it and what it gave, <paramref name="award"/> being the amount the award reports.</summary>
+    /// <remarks>The recalculation 0x4A69C0 (ledger XP5): the award (0x45F110) and the stat setter's experience case (ARC-MAGIC-1628) both end here. Needs a hero and experience data.</remarks>
+    internal HeroAward RecalculateHero(int experience, int award)
+    {
+        var hero = _hero!.State;
+        var life = _life.Hero!.Value.State;
         // The hero's scheme spends each level's points as the level is written (ARC-WORLD-036), over a running copy of its sheet.
         var sheet = AdvancementDomain.HeroSheet(hero);
         var purchases = new List<AdvancementPurchase>();
@@ -337,7 +346,7 @@ public sealed partial class GameSessionOwner
             Written);
         sheet = sheet with { Level = advance.Level, UnspentPoints = advance.UnspentPoints };
         return new(AdvancementDomain.WithSheet(hero, sheet, advance.Experience),
-            new(gain, advance.LevelsGained, advance.PointsGained, advance.Followers, purchases.Count == 0 ? null : purchases.AsReadOnly(),
+            new(award, advance.LevelsGained, advance.PointsGained, advance.Followers, purchases.Count == 0 ? null : purchases.AsReadOnly(),
                 levelUps.Count == 0 ? null : levelUps.AsReadOnly()));
     }
 

@@ -1,10 +1,12 @@
 using Arcanum.Data.Characters;
 using Arcanum.Data.Combat;
 using Arcanum.Data.Magic;
+using Arcanum.Scripting.Scr;
 using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Magic;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -988,53 +990,216 @@ public sealed class SessionSpellCasterTraitIndexTests
         Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.TraitIndexRefused));
     }
 
-    [TestMethod]
-    public void A_heros_level_or_experience_that_reaches_no_level_is_stored_and_one_that_does_is_not_ready()
+    // ARC-MAGIC-1628: the setter's experience case (0x12) runs the recalculation 0x4A69C0 after the store; the level has no case and is stored alone.
+    private const int ExperienceLevelTwo = 651, PoisonPlus = 652, HeroPointsPlus = 653, HeroPointsMinus = 654;
+
+    private static Dictionary<int, SessionSpellRecord> HeroRecords() => new(Records)
     {
-        var (owner, caster) = HeroSession(SkilledHero(), experience: true);
-        using var _ = owner;
-        CastOnHero(caster, LevelPlus);
-        Assert.AreEqual(2, owner.QueryHero()!.Level, "level 1 + 1; 0 experience reaches no level of the table");
-        var version = owner.Version;
-        // 2,100,000,000 experience clamped to 2,000,000,000 would run the recalculation 0x4A69C0 up to level 50 (messages, scheme, followers' step): not ready, nothing written.
-        Assert.IsNull(CastOnHero(caster, ExperiencePlusMany.Data.Number).JumpTo);
-        Assert.AreEqual(0, owner.QueryHero()!.Experience);
-        // Level 0 with 0 experience already reaches level 1: the recalculation would raise it again.
-        Assert.IsNull(CastOnHero(caster, LevelMinusMany.Data.Number).JumpTo);
-        Assert.AreEqual(2, owner.QueryHero()!.Level);
-        Assert.AreEqual(2, caster.Log.Count(e => e.Kind == SpellCastEventKind.ComponentNotReady && e.Value == (int)SpellComponentType.TraitIdx));
-        Assert.AreEqual(version.Revision, owner.Version.Revision);
+        [650] = Spell(650, StatField, 18, 100), [ExperienceLevelTwo] = Spell(ExperienceLevelTwo, StatField, 18, 1500), [PoisonPlus] = Spell(PoisonPlus, StatField, 24, 60),
+        [HeroPointsPlus] = Spell(HeroPointsPlus, StatField, 22, 7), [HeroPointsMinus] = Spell(HeroPointsMinus, StatField, 23, -3),
+    };
+
+    [TestMethod]
+    public void A_heros_level_is_stored_alone_with_or_without_the_experience_table()
+    {
+        foreach (var table in new[] { true, false })
+        {
+            var (owner, caster) = HeroSession(SkilledHero(), experience: table);
+            using var _ = owner;
+            Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(caster, LevelPlus));
+            Assert.AreEqual(2, owner.QueryHero()!.Level, "level 1 + 1");
+            // Level 2 - 5 is clamped to 0: no case runs the recalculation, so the 0 experience is not lifted to level 1.
+            CastOnHero(caster, LevelMinusMany.Data.Number);
+            Assert.AreEqual(0, owner.QueryHero()!.Level);
+            Assert.AreEqual(0, owner.QueryHero()!.Experience);
+            Assert.AreEqual(0, caster.TakeExperienceAwards().Count);
+            Assert.IsFalse(NotReady(caster));
+        }
     }
 
     [TestMethod]
-    public void A_heros_experience_that_reaches_no_level_is_stored_alone()
+    public void A_heros_experience_that_reaches_a_level_runs_the_recalculation_and_queues_the_award_for_the_host()
     {
-        var records = new Dictionary<int, SessionSpellRecord>(Records) { [650] = Spell(650, StatField, 18, 100) };
-        var (owner, caster) = HeroSession(SkilledHero(), experience: true, records: records);
+        var (owner, caster) = HeroSession(SkilledHero(), experience: true, records: HeroRecords());
         using var _ = owner;
-        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(caster, 650));
+        var before = owner.Version;
+        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(caster, ExperienceLevelTwo));
         var hero = owner.QueryHero()!;
-        Assert.AreEqual((1, 100, 5), (hero.Level, hero.Experience, hero.UnspentPoints), "level 1 needs 1010 experience for level 2");
+        // 1500 experience reaches level 2 (1010) and not level 3 (2040); the level's points are added to the 5 unspent ones.
+        Assert.AreEqual((2, 1500), (hero.Level, hero.Experience));
+        Assert.IsTrue(hero.UnspentPoints > 5);
+        Assert.AreEqual(before.Revision + 1, owner.Version.Revision, "one revision");
+        var award = caster.TakeExperienceAwards().Single();
+        Assert.AreEqual(1, award.LevelsGained);
+        Assert.AreEqual(hero.UnspentPoints - 5, award.PointsGained);
+        Assert.AreEqual(2, award.LevelUps!.Single().Level, "the level-up message of the level written");
+        Assert.IsNotNull(award.Followers, "the followers' step");
+        Assert.AreEqual(0, caster.TakeExperienceAwards().Count, "the queue was emptied");
+        Assert.IsFalse(NotReady(caster));
+        // A further write below level 3 (2040) stores the experience alone: no level, no award.
+        var version = owner.Version;
+        Assert.IsNull(CastOnHero(caster, 650).JumpTo);
+        Assert.AreEqual(1600, owner.QueryHero()!.Experience);
+        Assert.AreEqual(version.Revision + 1, owner.Version.Revision);
+        Assert.AreEqual(0, caster.TakeExperienceAwards().Count);
+    }
+
+    [TestMethod]
+    public void A_heros_experience_through_every_level_up_to_the_last_writes_the_threshold()
+    {
+        var (owner, caster) = HeroSession(SkilledHero(), experience: true);
+        using var _ = owner;
+        // 2,100,000,000 is clamped to 2,000,000,000: every level of the table is reached up to the last one, where the recalculation writes the table's threshold as the experience (ledger XP5).
+        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(caster, ExperiencePlusMany.Data.Number));
+        var hero = owner.QueryHero()!;
+        Assert.AreEqual(50, hero.Level);
+        Assert.IsTrue(hero.Experience < 2_000_000_000, "the threshold, not the stored value");
+        var award = caster.TakeExperienceAwards().Single();
+        Assert.AreEqual(49, award.LevelsGained);
+        Assert.AreEqual(49, award.LevelUps!.Count);
         Assert.IsFalse(NotReady(caster));
     }
 
     [TestMethod]
-    public void A_heros_level_is_not_ready_without_the_experience_table()
+    public void A_heros_experience_is_not_ready_without_the_experience_table()
     {
-        var (owner, caster) = HeroSession(SkilledHero());
+        var (owner, caster) = HeroSession(SkilledHero(), records: HeroRecords());
         using var _ = owner;
         var version = owner.Version;
-        Assert.IsNull(CastOnHero(caster, LevelPlus).JumpTo);
-        Assert.AreEqual(1, owner.QueryHero()!.Level);
+        Assert.IsNull(CastOnHero(caster, 650).JumpTo);
+        Assert.AreEqual(0, owner.QueryHero()!.Experience);
         Assert.AreEqual(version, owner.Version);
         Assert.IsTrue(NotReady(caster));
+        Assert.AreEqual(GameSessionFailure.ExperienceUnavailable, owner.WriteHeroExperienceStat(owner.Version, 5).Result.Failure);
+    }
+
+    [TestMethod]
+    public void The_heros_experience_write_refuses_a_stale_version_and_a_value_outside_the_range()
+    {
+        var (owner, _) = HeroSession(SkilledHero(), experience: true);
+        using var _o = owner;
+        var stale = owner.Version;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteHeroExperienceStat(stale, 5).Result.Disposition);
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.WriteHeroExperienceStat(stale, 6).Result.Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidChangeKey, owner.WriteHeroExperienceStat(owner.Version, -1).Result.Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidChangeKey, owner.WriteHeroStat(owner.Version, 18, 5).Failure, "experience goes through the recalculating write");
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.WriteHeroExperienceStat(owner.Version, 5).Result.Disposition);
+        Assert.AreEqual(5, owner.QueryHero()!.Experience);
+    }
+
+    [TestMethod]
+    public void A_heros_poison_is_its_life_states_level_and_sets_the_poison_timers()
+    {
+        var (owner, caster) = HeroSession(SkilledHero(), records: HeroRecords());
+        using var _ = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(caster, PoisonPlus));
+        Assert.AreEqual(60, owner.QueryLife(SessionLifeTarget.Hero).View!.Record.State.PoisonLevel);
+        Assert.IsTrue(owner.QueryEvents().Any(e => e.Kind == SessionEventKinds.HeroPoisonDamage), "a positive level schedules the poison damage");
+        CastOnHero(caster, PoisonPlus);
+        Assert.AreEqual(120, owner.QueryLife(SessionLifeTarget.Hero).View!.Record.State.PoisonLevel, "the second write reads the level the first left");
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.TraitIndexWritten, 1, StatField, Hero, 24), caster.Log.Last());
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void A_heros_poison_becomes_zero_for_an_effective_constitution_of_twenty()
+    {
+        var (owner, caster) = HeroSession(SkilledHero([8, 10, 20, 8, 8, 8, 8, 8, 0, 0]) with { Race = CharacterRace.Human, RaceEffect = null }, records: HeroRecords());
+        using var _ = owner;
+        // A constitution of 20: the setter's test (0x4B0EE0) stores 0.
+        CastOnHero(caster, PoisonPlus);
+        Assert.AreEqual(0, owner.QueryLife(SessionLifeTarget.Hero).View!.Record.State.PoisonLevel);
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void A_heros_magick_and_tech_points_are_stored_clamped_when_no_worn_item_has_a_wield_script()
+    {
+        var (owner, caster) = HeroSession(SkilledHero([8, 10, 8, 8, 8, 8, 8, 8, 5, 2]), records: HeroRecords());
+        using var _ = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(caster, HeroPointsPlus));
+        Assert.AreEqual(12, owner.QueryHero()!.Stats[8], "5 + 7");
+        CastOnHero(caster, HeroPointsMinus);
+        Assert.AreEqual(0, owner.QueryHero()!.Stats[9], "2 - 3 clamped to 0");
+        Assert.AreEqual(0, owner.QueryHeroStoredStat(23));
+        Assert.AreEqual(12, owner.QueryHeroStoredStat(22));
+        Assert.IsFalse(NotReady(caster));
+        // The hero's wear is empty here.
+        Assert.IsTrue(owner.HeroRewieldReady());
+    }
+
+    [TestMethod]
+    public void A_heros_magick_points_are_not_ready_while_a_worn_item_has_a_wield_script()
+    {
+        var (owner, caster) = HeroSession(SkilledHero([8, 10, 8, 8, 8, 8, 8, 8, 5, 2]), records: HeroRecords());
+        using var _ = owner;
+        var kit = owner.QueryHeroKit();
+        Assert.IsTrue(kit.Count > 0, "the fixture hero carries a kit");
+        var worn = owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, EquipmentStateTests.Wearable(1, EquipmentStateTests.Blade, [SessionScriptPoint.WieldOn]), EquipmentStateTests.Drawn, _ => SessionInsertVerdict.Accepted, new NoScriptHost());
+        Assert.AreEqual(GameSessionDisposition.Changed, worn.Disposition, worn.Failure.ToString());
+        Assert.IsFalse(owner.HeroRewieldReady());
+        // Only the wield points count: an item with an insert point alone leaves the rewield ready, one with wield off alone blocks it.
+        Accepts(owner.Unequip(owner.Version, EquipmentSlot.Weapon, _ => SessionInsertVerdict.Accepted, new NoScriptHost()));
+        Accepts(owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, EquipmentStateTests.Wearable(1, EquipmentStateTests.Blade, [SessionScriptPoint.InsertItem]), EquipmentStateTests.Drawn, _ => SessionInsertVerdict.Accepted, new NoScriptHost()));
+        Assert.IsTrue(owner.HeroRewieldReady());
+        Accepts(owner.Unequip(owner.Version, EquipmentSlot.Weapon, _ => SessionInsertVerdict.Accepted, new NoScriptHost()));
+        Accepts(owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, EquipmentStateTests.Wearable(1, EquipmentStateTests.Blade, [SessionScriptPoint.WieldOff]), EquipmentStateTests.Drawn, _ => SessionInsertVerdict.Accepted, new NoScriptHost()));
+        Assert.IsFalse(owner.HeroRewieldReady());
+        var version = owner.Version;
+        Assert.IsNull(CastOnHero(caster, HeroPointsPlus).JumpTo);
+        Assert.AreEqual(5, owner.QueryHero()!.Stats[8]);
+        Assert.AreEqual(version, owner.Version);
+        Assert.IsTrue(NotReady(caster));
+    }
+
+    private static void Accepts(EquipmentMutationResult result) => Assert.AreEqual(GameSessionDisposition.Changed, result.Disposition, result.Failure.ToString());
+
+    [TestMethod]
+    public void A_heros_experience_at_the_last_level_steps_the_followers_with_no_level_even_when_nothing_changes()
+    {
+        var (owner, caster) = HeroSession(SkilledHero() with { Level = 50 }, experience: true);
+        using var _ = owner;
+        // Level 50 reaches the 51 step: the threshold is written as the experience, no level is gained, and the followers get the (50, 51) step.
+        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(caster, ExperiencePlusMany.Data.Number));
+        var first = caster.TakeExperienceAwards().Single();
+        Assert.AreEqual(0, first.LevelsGained);
+        Assert.IsNull(first.LevelUps);
+        Assert.IsNotNull(first.Followers);
+        var experience = owner.QueryHero()!.Experience;
+        Assert.AreEqual(50, owner.QueryHero()!.Level);
+        Assert.IsTrue(experience < 2_000_000_000);
+        // The same write again leaves the hero as it is (NoChange) and still steps the followers, as the original re-runs the step on every write.
+        var version = owner.Version;
+        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(caster, ExperiencePlusMany.Data.Number));
+        Assert.AreEqual(version, owner.Version);
+        Assert.AreEqual(experience, owner.QueryHero()!.Experience);
+        Assert.IsNotNull(caster.TakeExperienceAwards().Single().Followers);
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    // A script host with no script attached to anything: the wield runs find nothing to run.
+    private sealed class NoScriptHost : ISessionItemScriptHost
+    {
+        public ScrSlot? Slot(ScrObjectRef attachee, int point) => null;
+        public ScrScriptLookup Script(int number) => ScrScriptLookup.Missing;
+        public bool GlobalFlag(int index) => throw new InvalidOperationException("not read");
+        public int StoryState() => throw new InvalidOperationException("not admitted");
+        public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
+        public ScrDialogState DialogState(ScrObjectRef attachee) => ScrDialogState.Normal;
+        public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;
+        public bool IsTrapObject(ScrObjectRef attachee) => false;
+        public ScrObjectRef? Player() => new ScrObjectRef(Exterior.RuntimeMap, SessionEventKinds.PlayerEntity);
+        public ScrObjectRef? Leader(ScrObjectRef critter) => null;
+        public bool IsJilted(ScrObjectRef critter) => false;
+        public bool IsPc(ScrObjectRef critter) => critter.Code == SessionEventKinds.PlayerEntity;
+        public SessionPrintedLine PrintedLine(int script, int line) => new(SessionPrintedLineStatus.Shown, "line", "test");
     }
 
     [TestMethod]
     public void What_the_heros_state_does_not_hold_is_not_ready_and_a_derived_stat_is_read_not_written()
     {
-        // Magick and tech points (the rewield runs the worn items' scripts), poison, gender, race, stat 25 and a resistance (the hero stores none).
-        foreach (var index in new[] { 22, 23, 24, 25, 26, 27 })
+        // Stat 25, gender, race and a resistance (the hero stores none): a saved field is needed.
+        foreach (var index in new[] { 25, 26, 27 })
         {
             var number = 600 + index;
             var records = new Dictionary<int, SessionSpellRecord>(Records) { [number] = Spell(number, StatField, index, 1) };
@@ -1150,5 +1315,59 @@ public sealed class SessionSpellCasterTraitIndexTests
         Assert.AreEqual(GameSessionFailure.StaleVersion, recorded.WriteNpcAdvancementStat(stale, map, Rat, 1, 16).Failure);
         Assert.AreEqual(15, recorded.QueryNpcAdvancement(Rat)!.Sheet.Stats[1], "a refusal changes nothing");
         Assert.AreEqual(GameSessionDisposition.NoChange, recorded.WriteNpcAdvancementStat(recorded.Version, map, Rat, 1, 15).Disposition);
+    }
+
+    // ARC-MAGIC-1628: a follower's gender is no sheet field (the stored field and the innate effect, as for any NPC); its race is the sheet's and the sheet must stay valid.
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster) RecordedWithEffects()
+    {
+        var (owner, caster) = Recorded();
+        owner.AttachInnateEffects([Female, DwarfEffect, HumanEffect]);
+        return (owner, caster);
+    }
+
+    [TestMethod]
+    public void A_followers_gender_with_an_advancement_record_is_the_stored_field_and_the_innate_effect()
+    {
+        var (owner, caster) = RecordedWithEffects();
+        using var _ = owner;
+        var sheet = owner.QueryNpcAdvancement(Rat)!.Sheet;
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(GenderToFemale), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(0, owner.QueryCritterIndexedWrites(Rat).Stats[26]);
+        Assert.AreEqual(sheet, owner.QueryNpcAdvancement(Rat)!.Sheet, "the sheet holds no gender");
+        var target = caster.LifeTarget(Rat)!;
+        CollectionAssert.AreEqual(new[] { (330, EffectCause.Gender) }, Held(owner, target));
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void A_followers_race_with_an_advancement_record_is_the_sheets_race_and_the_stored_field_and_adds_the_race_effect()
+    {
+        var (owner, caster) = RecordedWithEffects();
+        using var _ = owner;
+        var from = (int)owner.QueryNpcAdvancement(Rat)!.Sheet.Race;
+        Assert.AreEqual(0, from, "the rat's stored race is human");
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(RaceDwarf), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(CharacterRace.Dwarf, owner.QueryNpcAdvancement(Rat)!.Sheet.Race);
+        Assert.AreEqual(1, owner.QueryCritterIndexedWrites(Rat).Stats[27]);
+        CollectionAssert.AreEqual(new[] { (65, EffectCause.Race) }, Held(owner, caster.LifeTarget(Rat)!));
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void A_followers_race_that_would_leave_its_sheet_invalid_is_not_ready_and_nothing_is_written()
+    {
+        var (owner, caster) = RecordedWithEffects();
+        using var _ = owner;
+        // A dwarf with strength 21 (its maximum), made human again: the human maximum is 20, so the sheet would no longer be valid.
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(RaceDwarf), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteNpcAdvancementStat(owner.Version, Exterior, Rat, 0, 21).Disposition);
+        var held = Held(owner, caster.LifeTarget(Rat)!);
+        var version = owner.Version;
+        var log = caster.Log.Count;
+        Assert.IsNull(caster.Apply(Run(RaceHuman), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        Assert.AreEqual(version, owner.Version, "nothing written, not even the removal of the old race effect");
+        Assert.AreEqual(CharacterRace.Dwarf, owner.QueryNpcAdvancement(Rat)!.Sheet.Race);
+        CollectionAssert.AreEqual(held, Held(owner, caster.LifeTarget(Rat)!));
+        Assert.IsTrue(caster.Log.Skip(log).Any(e => e.Kind == SpellCastEventKind.ComponentNotReady));
     }
 }
