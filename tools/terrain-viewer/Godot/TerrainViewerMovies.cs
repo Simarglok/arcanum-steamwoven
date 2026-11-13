@@ -194,7 +194,7 @@ public partial class TerrainViewerApp
     /// </summary>
     private void SyncScriptFades()
     {
-        if (_readyMode != TerrainViewerMode.Area) { _scriptFades.Clear(); return; }
+        if (_readyMode != TerrainViewerMode.Area) { _scriptFades.Clear(); _endGameAsked = false; return; }
         if (_conversationHost is { } talk) foreach (var fade in talk.Scripts.TakeFades()) _scriptFades.Enqueue(fade);
         if (_useScriptHost is { } use) foreach (var fade in use.Host.TakeFades()) _scriptFades.Enqueue(fade);
         while (!_movieActive && _scriptFades.Count > 0)
@@ -202,12 +202,17 @@ public partial class TerrainViewerApp
             var fade = _scriptFades.Dequeue();
             if (PlayMovies([fade.Movie], fade.Track, null, "script fade")) { _scriptFadesPlayed++; break; }
         }
+        // ARC-RENDER-1171 (SS4, SS5): a script's end game comes after the movies of its run (the original plays them inside the script, the event 50 ms after it) and waits for any other show.
+        if (_conversationHost is { } talkEnd && talkEnd.Scripts.TakeEndGame()) _endGameAsked = true;
+        if (_useScriptHost is { } useEnd && useEnd.Host.TakeEndGame()) _endGameAsked = true;
+        if (_endGameAsked && !_movieActive && _scriptFades.Count == 0 && RequestEndGame()) _endGameAsked = false;
     }
 
     /// <summary>The scene ended or the app closes: a movie in progress stops without its continuation.</summary>
     private void AbortMovies()
     {
         _scriptFades.Clear();
+        _endGameAsked = false;
         if (!_movieActive) return;
         _movieDone = null;
         EndMovies();

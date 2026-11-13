@@ -1094,6 +1094,7 @@ public sealed class InterfaceChromeTests
         }
     }
 
+<<<<<<< HEAD
     // ARC-UI-1817: the follower panel's frames (synthetic stand-ins of the frames' sizes and holes; no game art).
     private static readonly (string File, int W, int H)[] FollowerFiles =
     [
@@ -1119,10 +1120,29 @@ public sealed class InterfaceChromeTests
         for (var y = 4; y < 9; y++)
         for (var x = w / 2 - (y - 3); x <= w / 2 + (y - 3); x++) Set(x, y, ((x + y) % 2 == 0 ? (byte)40 : (byte)20, (byte)200, (byte)40));
         if (w > 40) foreach (var x in new[] { 5, w - 6 }) for (var y = 4; y < 9; y++) for (var dx = -2; dx <= 2; dx++) Set(x + dx, y, (150, 100, 40));
+=======
+    // ARC-UI-1819: the common dialog box (822 `DialogueBox`, 325 x 136) and its round buttons (823 `Lil_Accept`, 824 `Lil_Cancel`, 28 x 29, three frames); synthetic stand-ins, no game art.
+    private const int DialogButtonWidth = 28, DialogButtonHeight = 29;
+
+    // A round 28 x 29 button of a dark face with a coloured mark (a green block for the check, a red one for the cross) in the middle.
+    private static byte[] DialogButton((byte R, byte G, byte B) mark)
+    {
+        var rgba = new byte[DialogButtonWidth * DialogButtonHeight * 4];
+        for (var y = 0; y < DialogButtonHeight; y++)
+        for (var x = 0; x < DialogButtonWidth; x++)
+        {
+            double dx = x + 0.5 - DialogButtonWidth / 2.0, dy = y + 0.5 - DialogButtonHeight / 2.0;
+            var inside = dx * dx + dy * dy <= 13.5 * 13.5;
+            var marked = x >= 9 && x < 19 && y >= 11 && y < 18;
+            var i = (y * DialogButtonWidth + x) * 4;
+            (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]) = !inside ? ((byte)0, (byte)0, (byte)0, (byte)0) : marked ? (mark.R, mark.G, mark.B, (byte)255) : ((byte)40, (byte)44, (byte)24, (byte)255);
+        }
+>>>>>>> origin/main
         return rgba;
     }
 
     [TestMethod]
+<<<<<<< HEAD
     public void The_follower_panel_frames_have_recipes_laid_out_by_the_panel_layout_and_the_bars_stay_art()
     {
         var names = InterfaceChromeRecipes.All.Select(r => r.File).ToArray();
@@ -1177,10 +1197,70 @@ public sealed class InterfaceChromeTests
         {
             var (rx, ry, rw, rh) = AreaFollowerPanelRules.MenuRow((FollowerMenuItem)(2 * k + 1));
             Assert.IsTrue(bands[k].X <= rx && bands[k].X + bands[k].Width >= rx + rw && bands[k].Y <= ry && bands[k].Y + bands[k].Height >= ry + rh, $"band {k} holds row {2 * k + 1}");
+=======
+    public void The_dialog_box_and_its_two_buttons_have_recipes_and_the_font_has_none()
+    {
+        Assert.AreEqual(ChromeKind.Panel, Recipe("DialogueBox.ART").Kind);
+        Assert.AreEqual(ChromeMaterial.Slate, Recipe("DialogueBox.ART").Base);
+        foreach (var file in new[] { "Lil_Accept.ART", "Lil_Cancel.ART" })
+        {
+            Assert.AreEqual(ChromeKind.Button, Recipe(file).Kind, file);
+            Assert.IsFalse(Recipe(file).KeepFace, $"{file}: the face is generated, only the mark is kept");
+        }
+        // The names resolve through the HD key as the viewer asks for them; the text font (229) is a picture and has no recipe.
+        Assert.IsNotNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity("DIALOGUEBOX.ART", new byte[] { 1 }), 0, 1, 1, new byte[4])));
+        Assert.IsNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity("Flare12Font.ART", new byte[] { 1 }), 0, 1, 1, new byte[4])));
+    }
+
+    [TestMethod]
+    public void Every_part_of_the_dialog_recipe_lies_inside_its_frame_holds_the_text_and_covers_no_button()
+    {
+        var parts = Recipe("DialogueBox.ART").Parts;
+        Assert.IsFalse(parts.Any(part => part is ChromeKeep), "the box keeps no picture, so none can cut into a generated plate");
+        var pit = parts.OfType<ChromeSunk>().Single();
+        Assert.IsTrue(pit.X >= 0 && pit.Y >= 0 && pit.X + pit.Width <= AreaDialogBoxLayout.Width && pit.Y + pit.Height <= AreaDialogBoxLayout.Height, "the pit lies inside 325 x 136");
+        var (tx, ty, tw, th) = AreaDialogBoxLayout.Text;
+        // The pit's one-unit rim and one-unit ink line lie outside the text, which is drawn over the black.
+        Assert.IsTrue(tx >= pit.X + 2 && ty >= pit.Y + 2 && tx + tw <= pit.X + pit.Width - 2 && ty + th <= pit.Y + pit.Height - 2, "the pit holds the text's rectangle");
+        foreach (var kind in new[] { AreaDialogBoxKind.Accept, AreaDialogBoxKind.Cancel, AreaDialogBoxKind.YesNo })
+        foreach (var (_, _, x, y) in AreaDialogBoxLayout.Buttons(kind))
+        {
+            Assert.IsTrue(x >= 0 && y >= 0 && x + DialogButtonWidth <= AreaDialogBoxLayout.Width && y + DialogButtonHeight <= AreaDialogBoxLayout.Height, $"a button at ({x}, {y}) lies inside the box");
+            Assert.IsFalse(x < pit.X + pit.Width && pit.X < x + DialogButtonWidth && y < pit.Y + pit.Height && pit.Y < y + DialogButtonHeight, $"the button at ({x}, {y}) stays off the text pit");
         }
     }
 
     [TestMethod]
+    public void The_dialog_box_paints_in_bounds_deterministically_opaque_with_a_black_text_pit_at_whole_and_fractional_scales()
+    {
+        var recipe = Recipe("DialogueBox.ART");
+        var legacy = Flat(AreaDialogBoxLayout.Width, AreaDialogBoxLayout.Height, (60, 60, 64));
+        foreach (var scale in new[] { 1.0, 1.25, 1.5, 2.0, 2.4 })
+        {
+            var a = InterfaceChromeRenderer.Render(recipe, AreaDialogBoxLayout.Width, AreaDialogBoxLayout.Height, legacy, [], 0, scale);
+            var (pw, ph) = InterfaceChromeRenderer.PixelSize(AreaDialogBoxLayout.Width, AreaDialogBoxLayout.Height, scale);
+            Assert.AreEqual(pw * ph * 4, a.Length, $"at {scale}");
+            CollectionAssert.AreEqual(a, InterfaceChromeRenderer.Render(recipe, AreaDialogBoxLayout.Width, AreaDialogBoxLayout.Height, legacy, [], 0, scale), $"deterministic at {scale}");
+            for (var i = 3; i < a.Length; i += 4) Assert.AreEqual(255, a[i], $"the box is opaque at {scale}");
+            var (tx, ty, tw, th) = AreaDialogBoxLayout.Text;
+            foreach (var (x, y) in new[] { (tx, ty), (tx + tw - 1, ty), (tx, ty + th - 1), (tx + tw - 1, ty + th - 1), (tx + tw / 2, ty + th / 2) })
+            {
+                var pixel = Pixel(a, pw, (int)(x * scale), (int)(y * scale));
+                Assert.IsTrue(pixel.R < 12 && pixel.G < 12 && pixel.B < 14, $"the text pit is black at ({x}, {y}) at {scale}");
+            }
+            // The stone around the pit is the generated slate (not black, not the pit), with a rim on the box's edge.
+            var stone = Pixel(a, pw, (int)(160 * scale), (int)(110 * scale));
+            Assert.IsTrue(stone.R > 15 && stone.R < 120, $"the slate at {scale}");
+            // The rim on the box's edge and the pit's own line are brass (red well above blue) within a few device pixels of the edges.
+            bool BrassWithin(int y0) => Enumerable.Range(y0, (int)Math.Ceiling(3 * scale) + 1).Any(y => Pixel(a, pw, (int)(160 * scale), y) is var q && q.R > q.B + 60);
+            Assert.IsTrue(BrassWithin(0), $"the box's top rim is brass at {scale}");
+            Assert.IsTrue(BrassWithin((int)(6 * scale) - 1), $"the pit's line is brass at {scale}");
+>>>>>>> origin/main
+        }
+    }
+
+    [TestMethod]
+<<<<<<< HEAD
     public void The_follower_frames_paint_in_bounds_deterministically_at_whole_and_fractional_scales()
     {
         foreach (var (file, w, h) in FollowerFiles)
@@ -1259,4 +1339,30 @@ public sealed class InterfaceChromeTests
         var (_, walkY, _, walkH) = AreaFollowerPanelRules.MenuRow(FollowerMenuItem.Walk);
         Assert.IsTrue(Lum(Pixel(menu, width, 60 * Scale, (attackY + attackH / 2) * Scale)) < Lum(Pixel(menu, width, 60 * Scale, (walkY + walkH / 2) * Scale)), "the odd rows sit in a dark band");
     }
+=======
+    public void The_dialog_buttons_follow_their_round_silhouette_keep_their_mark_and_sink_on_the_down_frame()
+    {
+        foreach (var (file, mark) in new[] { ("Lil_Accept.ART", ((byte)30, (byte)170, (byte)30)), ("Lil_Cancel.ART", ((byte)170, (byte)30, (byte)30)) })
+        {
+            var legacy = DialogButton(mark);
+            foreach (var scale in new[] { 1.0, 1.5, 2.0 })
+            {
+                var frames = Enumerable.Range(0, 3).Select(f => InterfaceChromeRenderer.Render(Recipe(file), DialogButtonWidth, DialogButtonHeight, legacy, [], f, scale)).ToArray();
+                var (pw, ph) = InterfaceChromeRenderer.PixelSize(DialogButtonWidth, DialogButtonHeight, scale);
+                foreach (var frame in frames)
+                {
+                    Assert.AreEqual(pw * ph * 4, frame.Length, $"{file} at {scale}");
+                    Assert.AreEqual(0, Pixel(frame, pw, 0, 0).A, $"{file}: the corner stays outside the round silhouette at {scale}");
+                    var middle = Pixel(frame, pw, pw / 2, (int)(14.5 * scale));
+                    Assert.AreEqual(255, middle.A, $"{file}: the middle is opaque at {scale}");
+                    // The mark keeps its own colour (a green check stays green, a red cross red) on every frame.
+                    Assert.IsTrue(mark.Item2 > mark.Item1 ? middle.G > middle.R + 60 : middle.R > middle.G + 60, $"{file}: the mark keeps its colour at {scale}");
+                }
+                CollectionAssert.AreNotEqual(frames[0], frames[1], $"{file}: the down frame is drawn differently at {scale}");
+                CollectionAssert.AreNotEqual(frames[0], frames[2], $"{file}: the lit frame is drawn differently at {scale}");
+                CollectionAssert.AreEqual(frames[1], InterfaceChromeRenderer.Render(Recipe(file), DialogButtonWidth, DialogButtonHeight, legacy, [], 1, scale), $"{file}: deterministic at {scale}");
+            }
+        }
+    }
+>>>>>>> origin/main
 }

@@ -985,13 +985,13 @@ toggle. Original visual parity NOT VERIFIED.
 ### Combat action points and turn order (ARC-UI-1114)
 
 Slice 2 of the [combat HUD plan](../research/combat-hud.md#slices) (FR-COMBAT-011, FR-COMBAT-003, FR-UI-005), in `area` with plain Godot
-controls (no original interface art), read in the 1.0.7.4 executable ([ledger CH2–CH6 and CH14](../research/ledger/ui-audio.md#combat-hud-arc-ui-017)).
+controls (the lamp panel took the original's art in ARC-UI-1888, see **Lamp panel art** below), read in the 1.0.7.4 executable ([ledger CH2–CH6 and CH14](../research/ledger/ui-audio.md#combat-hud-arc-ui-017)).
 The rules are `ActionPointRules` and `TurnOrderRules` in `Arcanum.Presentation.Hud`, the cost preview is `AreaActionPointPreview` in
 `Arcanum.World`; the view is `AreaCombatHud` and its host `TerrainViewerAreaCombatHud.cs`. Shown only while a turn-based round runs (a combat
 mode with a round), with a hero, while no window the bars do not reach is open.
 
 - **Lamps** (CH2). A panel of 20 lamps in four groups of five at the original's place just above the interface bar (the lamp panel at 222, 412 of the
-  800 × 600 screen, scaled with the bars; the lamp art and exact lamp places are not drawn, plain rectangles stand for them). On the hero's subturn they
+  800 × 600 screen, scaled with the bars; the plain rectangles stand for the art when the game's art did not read, see **Lamp panel art**). On the hero's subturn they
   light from the left in three shares: the points left after the previewed action (green), the action's cost (orange) and the part of it the points do not
   cover (red), the colours of the original's hidden-interface bar (CH3); more than 20 show what fits, no points light nothing. On another participant's
   subturn three green lights run along the lamps, seven apart, one step every 100 ms (CH5); the lights' clock runs only while another participant acts and starts again with each round, as the original's.
@@ -1004,13 +1004,19 @@ mode with a round), with a hero, while no window the bars do not reach is open.
   participants in round order, the one whose subturn it is marked with `>` (the hero as `Hero`, an NPC by the name the hover gives it). More than 8 participants
   show 8 from the current one on and `+N more`. It hides behind any open window. The list is shown in the Steamwoven rule mode and hidden in Original
   (`InterfaceRuleProfile.TurnOrderListHidden`, [rule modes](../world/rule-modes.md)); the lamps show in both.
-- **Not done.** The 25-point bar of the hidden-interface layout (the viewer has no hide toggle), the lamp arts and positions, the end-turn button on the lamp panel,
-  the item and skill cursors' previews, the Alt variants of the original's preview (attack check on a portal, container or party member), a throw's own cost in the preview (it shows the attack's), the hero's name in the list, a created critter's name in the list (it shows its entity id), the lamps for a negative point count (the original lights the shortfall, the viewer nothing; points are never negative in a round). Visual parity NOT VERIFIED.
+- **Lamp panel art** (ARC-UI-1888, CH1, CH2, CH5, CT5). With the game's art read (arts 294, 295, 296, 315, 297 come with the bars' art) the panel is the original's
+  (`AreaCombatLampLayout`): the panel art 294 (`ap_bar`, 356 × 30) at (222, 412) of the screen, a lit lamp as the art 295 (the points left and the running lights), 296 (the
+  cost) or 315 (the shortfall), 11 × 12 at the x of the table 0x5CAA48 (22, 35, 48, 61, 74, then 93 .. 145, 164 .. 216, 235 .. 287) and y 10 of the panel, an unlit lamp showing the
+  socket of the panel art; the end-turn button is the art 297 (31 × 15 at (320, 9) of the panel, frames idle and pressed as the other bar buttons): its release over it ends the hero's
+  subturn as E does (CT5: the hero must be idle, a window over the world refuses it), with the bar's press and release sounds. The panel takes no pointer (the art is not a hit area, as the
+  plain panel was); only the button does. Without the art (no game folder, the automated runs) the plain controls above draw. In the Generated interface the panel art is a picture
+  until [#1821](https://github.com/Simarglok/arcanum-steamwoven/issues/1821) gives it a recipe.
+- **Not done.** The 25-point bar of the hidden-interface layout (the viewer has no hide toggle), the item and skill cursors' previews, the Alt variants of the original's preview (attack check on a portal, container or party member), a throw's own cost in the preview (it shows the attack's), the hero's name in the list, a created critter's name in the list (it shows its entity id), the lamps for a negative point count (the original lights the shortfall, the viewer nothing; points are never negative in a round). Visual parity NOT VERIFIED.
 
-Checks: `CombatHudTests` (shares, the three cases of the 20-lamp cap, the cue, the list window), `AreaActionPointPreviewTests`, `RuleModeTests`; the native smoke
+Checks: `CombatHudTests` (shares, the three cases of the 20-lamp cap, the cue, the list window), `AreaActionPointPreviewTests`, `RuleModeTests`, `AreaCombatLampLayoutTests` (the panel's tables and the shares' arts, ARC-UI-1888); the native smoke
 stage `turn-based` reads the HUD in a real round on `Arcanum1-024-fixed`: three running lights and a marked NPC on the NPC's subturn, the hero's points as lamps and
 the marked hero on its own, the walk preview's 2 shown as the cost, the same cost kept after the step, the attack preview equal to the weapon's cost, and the HUD gone
-with the round (`ARC_AREA_HUD_CAPTURE=<ignored path prefix>` saves the readbacks the graphics composite is made from).
+with the round; with synthetic art the art panel's lamps stand at the table's places in the shares' arts and the end-turn button ends the hero's subturn (`ARC_AREA_HUD_BARS=1` draws the interface bars of the game's art so the panel draws the game's own, `ARC_AREA_HUD_ART=plain` keeps the plain controls for the "before" frame, `ARC_AREA_WINDOW_ART=legacy|hd` checks the five arts in that interface mode; `ARC_AREA_HUD_CAPTURE=<ignored path prefix> saves the readbacks the graphics composite is made from).
 
 ### Floating text (ARC-UI-021)
 
@@ -1484,7 +1490,7 @@ combined freely (sprites HD with a Legacy interface, or the reverse). The third 
 version 1–4 files read it as off) is the experimental [generated interface](hd-interface-density.md#viewer-slice-s1-arc-ui-140): it keeps the
 HD interface on and draws the chrome of the two HUD strips and the bar buttons by code, with the pictures from the HD redraw (else from the
 Legacy frame); only the drawing changes, every frame keeps its Legacy size, place, alpha test and hit area. ARC-UI-141 paints the chrome at
-the window's exact whole device scale on a worker (the first draw no longer stalls), see [S2](hd-interface-density.md#viewer-slice-s2-arc-ui-141); ARC-UI-148 adds the inventory window's two frames at that window's own (fractional) device scale, see [S3](hd-interface-density.md#viewer-slice-s3-arc-ui-148) and the [plan for the other windows](hd-interface-density.md#generated-windows-plan-arc-ui-148155); ARC-UI-1194 adds the loot, barter and steal windows and the three lenses, see [S4](hd-interface-density.md#viewer-slice-s4-arc-ui-1194); ARC-UI-1195 adds the character sheet, see [S5](hd-interface-density.md#viewer-slice-s5-arc-ui-1195); ARC-UI-1197 adds the world map and town map window's frame, see [S6](hd-interface-density.md#viewer-slice-s6-arc-ui-1197); ARC-UI-1196 adds the logbook, see [S7](hd-interface-density.md#viewer-slice-s7-arc-ui-1196); ARC-UI-1199 adds the schematic window, see [S8](hd-interface-density.md#viewer-slice-s8-arc-ui-1199). **HD pack: Auto/Game/Custom** (ARC-DEV-350, default Auto) is the
+the window's exact whole device scale on a worker (the first draw no longer stalls), see [S2](hd-interface-density.md#viewer-slice-s2-arc-ui-141); ARC-UI-148 adds the inventory window's two frames at that window's own (fractional) device scale, see [S3](hd-interface-density.md#viewer-slice-s3-arc-ui-148) and the [plan for the other windows](hd-interface-density.md#generated-windows-plan-arc-ui-148155); ARC-UI-1194 adds the loot, barter and steal windows and the three lenses, see [S4](hd-interface-density.md#viewer-slice-s4-arc-ui-1194); ARC-UI-1195 adds the character sheet, see [S5](hd-interface-density.md#viewer-slice-s5-arc-ui-1195); ARC-UI-1197 adds the world map and town map window's frame, see [S6](hd-interface-density.md#viewer-slice-s6-arc-ui-1197); ARC-UI-1196 adds the logbook, see [S7](hd-interface-density.md#viewer-slice-s7-arc-ui-1196); ARC-UI-1199 adds the schematic window, see [S8](hd-interface-density.md#viewer-slice-s8-arc-ui-1199). ARC-UI-1200 adds the message window, the spell and skill panes, the Fate window and the Sleep window, see [S9](hd-interface-density.md#viewer-slice-s9-arc-ui-1200); ARC-UI-1819 adds the common dialog box, see [S10](hd-interface-density.md#viewer-slice-s10-arc-ui-1819); ARC-UI-1817 adds the follower panel and the follower order menu, see [S11](hd-interface-density.md#viewer-slice-s11-arc-ui-1817). **HD pack: Auto/Game/Custom** (ARC-DEV-350, default Auto) is the
 third project line: where the active pack is read from, saved in the same file (`hdPack`, `hdPackPath`; file version 4, version 1–3 files
 read it as Auto). Auto prefers the player's iCloud pack folder (macOS, only when that folder exists on this device) when the pack in it
 is whole, and falls back to the installed copy in the game's own `user://hd-packs`; Game reads the installed copy alone; Custom opens the
@@ -2301,6 +2307,19 @@ on it loads the save, which fades in with its hero alive; the loaded hero killed
 Escape ending the show, the start map loaded again with a fresh session and the main menu reopened, without the box). `ARC_AREA_DEATH_CAPTURE=PATH.png` saves the shown
 slide with the box (original art: never into git). Not done: script-queued slides, the end-game and credits slides, the hero in a monster body has no bloody dying animations (the human bodies play 17–19 by the killing blow, ARC-COMBAT-1793). Since ARC-COMBAT-1741 the dying goal (31) lasts while the hero's fall plays and the death's 5 s count from its end (`IAreaDeathHost.HeroDying`).
 
+
+### Slide shows: end game and credits (ARC-RENDER-1171)
+
+The death's show loop (`AreaHeroDeath`, which keeps its name) serves the other two slide show types of the original too ([ledger SS1–SS6](../research/ledger/ui-audio.md#slide-shows-end-game-credits-and-the-queue-arc-render-1171)).
+`AreaSlideScripts.Run` runs the show type's script (997 end game, 998 death, 999 credits) with `ScrAdmissionSet.SlideScripts`, the hero as the player and the session's flags and quest log; its queue slide
+actions (131) give the slide numbers (up to 100), which the table `rules\slide.mes` turns into a picture and a voice as for the death. A death with nothing queued still shows slide 0 (PD4).
+
+- **Credits:** the main menu's Credits button (shown when the game's slide table was read, else hidden with the reason) fades the screen to black over the menu, shows the slides of script 999 (45 to 55 in the
+  installed game) and fades back in over the menu, whose own song stops for the show and plays again after it. A key or a mouse button's release ends a slide, Escape the show.
+- **End game:** the script action end game and play slides (132; Kerghan's dialog script 1105 and the movie scripts 2862, 2863 and 3061 run it) asks the viewer, which waits for the movies of the same run and any other
+  show, then starts the show 50 ms later (a main-menu window open closes and retries 300 ms later): script 997 and the ending scripts it calls queue the slides by flags and quest states; no default slide; then the
+  game resets to the main menu as after a death (no load box).
+
 ### Options window (ARC-UI-013)
 
 The original's options window (its window 6, [ledger OP1–OP8](../research/ledger/ui-audio.md#options-window-arc-ui-013))
@@ -2316,7 +2335,7 @@ project's, except as below.
   arrows 667 and 668 at (+6, +21) and (+180, +21), a slider's bar 623 `SkilGauge` at (+47, +24) as wide as value × 120 / top, a
   list's value centred in red `Flare12Font` at (+47, +30). An arrow is a push button: the pointer over it shows its lit frame, a
   press its down frame with sound 3000, the release over it plays 3001 and changes the value. PROJECT: the shown controls take the
-  page's first slots in order (the Violence Filter (ARC-UI-1737) is the Game page's second line and the Rules line its sixth; ARC-UI-1737 moved the Controls line (ARC-GPAD-1463), ARC-GPAD-1374's Prompt style line and the evidence log's two lines (ARC-GPAD-1376) to the Video page, which holds Brightness, Floats, Float Speed, Combat Taunts, Controls, Prompt style, Evidence Log and Test Task, the eight slots of a page, so the Game page keeps its two free slots for Auto Switch Weapons (shown since ARC-COMBAT-1738, the Game page's fifth line) and Follower Skills (issues 1776 and 1777); ARC-UI-146 removed the HD graphics, HD interface and HD pack lines that stood after Rules, they are the [launcher screen](#launcher-screen-arc-ui-014)'s); the control with the keyboard or controller
+  page's first slots in order (the Violence Filter (ARC-UI-1737) is the Game page's second line and the Rules line its eighth (ARC-COMBAT-1777 put Follower Skills before it); ARC-UI-1737 moved the Controls line (ARC-GPAD-1463), ARC-GPAD-1374's Prompt style line and the evidence log's two lines (ARC-GPAD-1376) to the Video page, which holds Brightness, Floats, Float Speed, Combat Taunts, Controls, Prompt style, Evidence Log and Test Task, the eight slots of a page, so the Game page keeps its two free slots for Auto Switch Weapons (shown since ARC-COMBAT-1738, the Game page's fifth line) and Follower Skills (issues 1776 and 1777); ARC-UI-146 removed the HD graphics, HD interface and HD pack lines that stood after Rules, they are the [launcher screen](#launcher-screen-arc-ui-014)'s); the control with the keyboard or controller
   focus has its label lit in the page buttons' hover red; a text is one line. The line at the top names the hidden controls and the
   notice. Without the game's art (the synthetic self-tests) the whole window is the project's panel.
 
@@ -2328,10 +2347,9 @@ project's, except as below.
 - **Controls.** Each control shows its `options_ui.mes` label (message 100 + 100 × page + slot) and its value: a
   list's text from its value file (`OptionsDifficulty.mes`, `OptionsCombatMode.mes`, `OptionsOffOn.mes`), a slider as
   `N/10`. Game: Difficulty (Easy, Moderate, Hard), Violence Filter, Default Combat Mode (Real Time, Turn Based), Auto Attack, Auto Switch Weapons (Off, On; default Off, ARC-COMBAT-1738), Always
-  Run and the project's Rules line (ARC-UI-014, below). Video: Brightness (0–9), Floats (Never, Minimal, Verbose) and Float Speed (0–10). Sound: Effects, Voice and Music (0–10). The arrows (or Left and Right on the focused control, which Up and Down or
+  Run, Follower Skills (Off, On; default On, ARC-COMBAT-1777: the lockpick use and the skill bar's Disarm Traps go to the best follower, [below](#follower-skills-arc-combat-1777)) and the project's Rules line (ARC-UI-014, below). Video: Brightness (0–9), Floats (Never, Minimal, Verbose) and Float Speed (0–10). Sound: Effects, Voice and Music (0–10). The arrows (or Left and Right on the focused control, which Up and Down or
   a click on an arrow choose, or a controller's confirm) change the value at once, as the original's setters run on each step: a list wraps around at either end, a
-  slider stops there. Hidden with their reasons: Module (one module), Follower
-  Skills (issues 1776 and 1777), and the third combat mode Fast Turn Based (the list cycles Real Time and Turn Based).
+  slider stops there. Hidden with their reasons: Module (one module) and the third combat mode Fast Turn Based (the list cycles Real Time and Turn Based).
 - **What each setting does.** Difficulty is the session's difficulty (its skill and experience readers, ARC-WORLD-030;
   a new game or a load takes the setting). Default Combat Mode is the turn-based setting Space also toggles: with a
   hero it goes through the hero's turn-based switch (a hero in combat mode starts or ends a round; a refusal keeps the
@@ -2370,7 +2388,7 @@ while a control has the focus, the pointer lighting Sound and a click on it show
 saves the Video page's picture to an ignored path (the Game page's next to it with `-game`); ARC-UI-061: the controls at the first slots on the Game and Sound pages, the
 pointer lighting Music's left arrow, a press showing it down with 3000 and the release over it playing 3001 and lowering the music, a release away from it changing nothing;
 the capture also saves the Sound page next to it with `-sound` before the extension). ARC-UI-1737: the Violence Filter line is saved at once, and the Brightness pixel check reads the same frame at 0, 5 and 9 and requires every steady sample to equal the original's ramp (`BrightnessRules.Apply`) and the frame at 0 again to be the first one; the `critter-fall` stage checks no pool and the fall-down with `ARC_CRITTER_FALL_FILTER=1` (and `ARC_CRITTER_FALL_BRIGHTNESS=N`, `ARC_CRITTER_FALL_CAPTURE=PATH` for the capture series). Not done: Text Duration,
-Module, Follower Skills and Fast Turn Based (no function yet).
+Module and Fast Turn Based (no function yet).
 
 ### New-character window (ARC-UI-030)
 
@@ -3397,3 +3415,18 @@ movement speed, world movement, collision, passability, or gameplay. Its HUD
 labels the caller-selected anchor/render policy and **Original placement parity:
 NOT VERIFIED**. This authorized presentation subset does not revise the
 historical NOT READY conclusion for original-runtime parity.
+
+## Follower Skills (ARC-COMBAT-1777)
+
+Follower Skills slice 2 (ledger PL5, SP3, OH4; the chooser 0x4C9050, its setting getter 0x4C8FA0). The Game page's seventh row (`AreaOption.FollowerSkills`, settings-file line `follower skills`, default on, `AreaGameSettings.FollowerSkills`) switches it. With it on and no Ctrl key held
+(`FollowerSkillsAllowed`: the viewer cannot tell the left Ctrl key, which the lockpick use tests, from the right one, which the Disarm Traps press also tests), two presses go to the follower with the strictly best effectiveness minus difficulty (`SkillCheckRules.Score` of the request
+the use would run, `GameSessionOwner.QueryPickLockScore` and `QueryDisarmScore`; the hero scored first with its local-PC term, `AreaAiHost.ChooseSkillUser` over the hero's followers the host runs, `FollowerSkillRules.Choose`: a tie keeps the hero or the earlier follower):
+
+- **The lockpick use** on a door, window or container (`HandOverLockpick`, called by the two armed-lockpick presses before the hero's own skill goal): the follower's skill goal 33 with skill 14 starts (`AreaAiHost.StartPickLocks`, its own lockpicks if it holds any, `FirstLockpicks`, else none), so it walks within range 1 and picks at its attempt node with
+  `PickLockByNpc`; the hero does not move, the pick's cost is the follower's goal's.
+- **The skill bar's Disarm Traps** (`DisarmByFollower`, in `PerformDisarm`): the hero's press pays its 4 action points in a round (`ChargeHeroAction`, the original's 0x57A320), then `AreaTraps.DisarmByNpc` rolls the follower's own check at once from where it stands (`RollNpcDisarmTrap`), a sprung native trap takes effect with the follower as
+  the triggerer and an ordinary trap script runs with it.
+
+The hand-over line (random line 4700..4799 of the follower's dialog override or of the gender pair's gd_npc file, 0x4139A0) floats over the follower through the follower-comment float (`SayFollowerLine`, with its can-speak head test). NOT READY: the lockpicks the candidates are scored with are the ones the hero armed (the original takes the PC's first lockpicks in inventory order); the original's list recurses into followers of followers (the world holds the hero's own);
+the original starts the use-item goal (0x28, no animation) for a follower holding lockpicks and the timed goal for one that does not (both run as goal 33 here); an expert follower's critical-success trap device lands in the hero's pack, not its own; the open parts are [#1878](https://github.com/Simarglok/arcanum-steamwoven/issues/1878); a pick by a follower has no witnesses ([#1860](https://github.com/Simarglok/arcanum-steamwoven/issues/1860)).
+Smoke: the `options` stage checks the row and its saved line, the `disarm` stage's last step joins a following NPC, forces it to score best (`FollowerSkillsScoreForSelfTest`) and checks the hand-over, Ctrl and the option off; unit tests `FollowerSkillRulesTests`, `FollowerSkillsStateTests`, `AreaAiFollowerTests`.

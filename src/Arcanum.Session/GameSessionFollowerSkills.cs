@@ -69,6 +69,39 @@ public sealed partial class GameSessionOwner
         return DisarmStep(expected, trapped, baseline, NpcSkillRequest(user, Skill.DisarmTraps, record, null), trapDifficulty, light, observer, null);
     }
 
+    /// <summary>
+    /// ARC-COMBAT-1777 (the chooser 0x4C9050, ledger PL5, OH4): the score the best-follower chooser gives a user for a lock pick: the skill's effectiveness minus its difficulty (<see cref="SkillCheckRules.Score"/>) for the same request the
+    /// pick would run (the lock's difficulty and light, the lockpicks' bonus; the injuries of the user), the hero's with its local-PC term and an NPC's without it. <paramref name="user"/> null is the hero. Nothing is rolled, charged or
+    /// written. Null when the user cannot be scored (no or dead hero, an NPC whose sheet, modifiers or life record do not hold or that is dead or the hero), an invalid target or lockpicks the pick would refuse.
+    /// </summary>
+    public int? QueryPickLockScore(SessionNpcSkillUser? user, SessionPickLockTarget target, SessionLockpick? lockpick)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(target);
+        if (!ValidPickLockTarget(target) || lockpick is not null && LockpickRefusal(lockpick) != GameSessionFailure.None) return null;
+        var request = SkillUserRequest(user, Skill.PickLocks);
+        return request is null ? null : SkillCheckRules.Score(WithLockFacts(request, target, lockpick));
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1777 (the chooser 0x4C9050, ledger SP3, OH4): the score of a user for a disarm of a trap: effectiveness minus difficulty (<see cref="SkillCheckRules.Score"/>) of the request the disarm would run (the light at the
+    /// trap and, for a trap object only, its difficulty). <paramref name="user"/> null is the hero. Nothing is rolled, charged or written. Null when the user cannot be scored (see <see cref="QueryPickLockScore"/>) or the object, difficulty or light is invalid.
+    /// </summary>
+    public int? QueryDisarmScore(SessionNpcSkillUser? user, SessionTrapped trapped, SessionTrapBaseline baseline, int trapDifficulty = 0, int light = SessionPickLockTarget.FullLight)
+    {
+        ThrowIfDisposed();
+        if (!ValidTrapped(trapped, baseline) || light is < 0 or > SessionPickLockTarget.FullLight || trapDifficulty is < -MaxTrapDifficulty or > MaxTrapDifficulty) return null;
+        var request = SkillUserRequest(user, Skill.DisarmTraps);
+        return request is null ? null : SkillCheckRules.Score(WithTrapFacts(request, baseline, trapDifficulty, light));
+    }
+
+    // The request of a user the chooser scores (the hero when null), without the skill's target terms; null when the user cannot be one.
+    private SkillCheckRequest? SkillUserRequest(SessionNpcSkillUser? user, Skill skill)
+    {
+        if (user is null) return _hero is null || HeroDead() ? null : HeroSkillRequest(skill, null);
+        return NpcSkillUserFailure(user, out var record, out _) == GameSessionFailure.None ? NpcSkillRequest(user, skill, record, null) : null;
+    }
+
     // The NPC user's own facts: not the hero, the sheet and modifiers hold and belong to it, its life record resolves and it is alive.
     private GameSessionFailure NpcSkillUserFailure(SessionNpcSkillUser user, out SessionLifeRecord record, out LifeFacts? facts)
     {
