@@ -75,15 +75,18 @@ public partial class TerrainViewerApp
     private void EnsureTransitionClock()
     {
         if (_transitionClockRead) return;
+        // ARC-UI-1362: a save chosen in the main menu loads before any map was published, so the module comes from the launch arguments then;
+        // with no module known yet nothing is latched and the next load tries again.
+        if ((_arguments ?? _launchArguments)?.ModulePath is not { } module) return;
         _transitionClockRead = true;
-        if (AreaSoundCatalog() is null || _soundContent?.Stack is not { } stack) { GD.Print("ARC-DEV-204 load indicator: no content stack, a black screen alone"); return; }
+        if (SoundCatalogFor(module) is null || _soundContent?.Stack is not { } stack) { GD.Print("ARC-DEV-204 load indicator: no content stack, a black screen alone"); return; }
         var load = AreaInterfaceArt.Load(stack, [AreaTransitionScreen.IndicatorArt]).GetValueOrDefault(AreaTransitionScreen.IndicatorArt);
         if (load is not { Status: AreaInterfaceArtStatus.Ready }) { GD.Print($"ARC-DEV-204 load indicator art {AreaTransitionScreen.IndicatorArt}: {load?.Status.ToString() ?? "not read"} {load?.Detail}"); return; }
         TransitionPanel().SetClock(load.Frames, load.FramesPerSecond);
         GD.Print($"ARC-DEV-204 load indicator {load.Name} {load.Frames.Count} frames at {load.FramesPerSecond}/s");
     }
 
-    /// <summary>A map is loading for a change of place: black with the clock until it is there.</summary>
+    /// <summary>A map is loading (a change of place, a load of a save): black with the clock until it is there.</summary>
     private void BeginTransitionLoad()
     {
         EnsureTransitionClock();

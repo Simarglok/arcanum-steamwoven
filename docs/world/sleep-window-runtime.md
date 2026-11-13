@@ -141,12 +141,26 @@ switch wakes a sleeper only when it is farther than its radius from the *current
 - A town-map sector whose town-map files are not read yet (or cannot be) gets a notice, not message 20; the viewer cannot decide it (SWB3).
 - No step runs under the death cover (the frame is frozen); the pending step waits. The animated-light push is also held during a rest.
 - The chain is the window's own deadline (50 ms, then 200 ms), not an entry of the session's event queue, which has no real-time kind.
-- The window is a diagnostic panel (no original art, 0x235 and 0x23D, no fonts); the fade covers the game view under the windows and the bars,
-  its extent in the original is not checked.
+- **The window's look (ARC-UI-1363)** is the original's: art 565 at (573, 42) of its own size, a push button of art 293 and a line of `sleepUI.mes` (font art 229, white) for each length, as the build
+  0x57B4F0 lays them out (below). Not compared with the original's picture yet ([owner re-check list](../project/owner-recheck-list.md#arc-ui-1363--the-sleep-and-wait-window-in-the-originals-look-2026-11-13)).
+  PROJECT: a button takes the pointer on its art's rectangle, not its opaque pixels; the controller's focus row is drawn lit; a press **hides the buttons and their lines** and keeps the window art
+  (the handler 0x57B710 hides nothing, so in the original the buttons stay and a second press restarts the rest; [issue #1511](https://github.com/Simarglok/arcanum-steamwoven/issues/1511)); the fade
+  covers the game view under the windows and the bars, its extent in the original is not checked. Until the window's art has read (in the background after the map opens) and in a run with no game
+  folder, the plain project panel stands in with the same buttons.
+
+## The window's look (ARC-UI-1363, ledger SZ13, SWB6, SWB7)
+
+The build 0x57B4F0 makes a window of the size of the interface art 565 (`0x235`) at **(573, 42)** of the 800 × 600 screen (the right edge of the play view, the Fate window's family, 292 at (0, 41)). Each length has a
+**push button of art 293** (the Fate window's button art, three frames: idle, down, lit) at x = 8 and y = 3 + 18 × row, made by the bars' button creator (0x54AA60: press sound 3000, release sound 3001, none for the pointer),
+and a **line of text** from `mes\sleepUI.mes` (entries 0..7, in the wait window 12..18) at x = 36 and y = 2 + 18 × row, in a rectangle of the window's width less 36 and 18 high, in the font art 229 with the white
+colour that 0x57B080 makes (entry 255 of each colour table). Eight rows, seven in the wait window. The window is shown at the bars' whole factor of the screen (`AreaGameBarPanel.ScreenFactor`), and the pointer over it
+never reaches the world. A button goes down on a left press, lights under the pointer and acts on the release over it ([`AreaSleepButtons`](../../tools/terrain-viewer/Core/AreaSleepWindow.cs), GB3, GB4).
+The earlier note of the ledger (two art numbers 0x235 and 0x23D) read the window's x position as an art number: 0x23D is 573, the window's x.
 
 Code: [`AreaRest`](../../src/Arcanum.World/AreaRest.cs) (rules, run, fade, texts, party heal),
 [`AreaAiHost.CombatThreats`](../../src/Arcanum.World/AreaAiHost.cs) and `FollowerLifeTargets`,
-[`AreaSleepPanel`](../../tools/terrain-viewer/Godot/AreaSleepPanel.cs) and
+[`AreaSleepPanel`](../../tools/terrain-viewer/Godot/AreaSleepPanel.cs) (the fade and the stand-in panel), [`AreaSleepView`](../../tools/terrain-viewer/Godot/AreaSleepView.cs) and
+[`AreaSleepLayout`](../../tools/terrain-viewer/Core/AreaSleepWindow.cs) (the original-look window and its layout), and
 [`TerrainViewerAreaSleep`](../../tools/terrain-viewer/Godot/TerrainViewerAreaSleep.cs) (opening, keys, steps, the light hold, the bar button).
 Tests: [`AreaRestTests`](../../tests/Arcanum.World.Tests/AreaRestTests.cs); the native smoke `ARC-WORLD-1160 native-smoke sleep PASS` (stage
 `sleep`, [`TerrainViewerAreaSleepSmoke`](../../tools/terrain-viewer/Godot/TerrainViewerAreaSleepSmoke.cs)): in the wilderness sector 1384,239 the
