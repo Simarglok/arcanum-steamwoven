@@ -89,6 +89,13 @@ public partial class TerrainViewerApp
             Require(_dialogBoxContent is { ArtReady: true } && _mainMenuPanel!.QuitInArt && _mainMenuPanel.DialogForSelfTest.LinesForSelfTest >= 1
                 && _mainMenuPanel.DialogForSelfTest.TextForSelfTest == texts.Text(AreaMainMenuTexts.QuitQuestion),
                 $"the quit question is drawn in the original's dialog box ({_dialogBoxContent?.Detail})");
+            // ARC-UI-1819: with ARC_AREA_WINDOW_ART the box's background and the frames of its two buttons are checked in the generated interface at the box's own device scale.
+            if (WindowArtSmokeRequested)
+            {
+                var found = _mainMenuPanel!.DialogForSelfTest.TexturesForSelfTest();
+                await WindowArtSmokeAsync("dialog-box", () => found.Select(pair => pair.Texture).ToArray(), found.Select(pair => pair.Art).ToArray(), _mainMenuPanel.DialogForSelfTest.DeviceScale,
+                    () => _mainMenuPanel.QuitInArt);
+            }
             var no = _mainMenuPanel!.QuitButtonCentreForSelfTest(false) ?? throw new InvalidOperationException("ARC-UI-012 scene flow smoke: no quit box button");
             foreach (var pressed in new[] { true, false })
             {
