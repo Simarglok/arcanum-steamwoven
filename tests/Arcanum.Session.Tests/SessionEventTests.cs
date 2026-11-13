@@ -224,7 +224,7 @@ public sealed class SessionEventTests
             Damage(owner, Npc($"oid:n{i}"), new LifeDamage { HitPoints = 1, Fatigue = 1, Poison = 10 });
         Damage(owner, SessionLifeTarget.Hero, new LifeDamage { HitPoints = 1, Fatigue = 1, Poison = 10 });
         Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxScriptCalls - SessionEffectLimits.MaxTimedEffects - SessionEventKinds.MaxLockResets
-            - SessionEventKinds.MaxWaitTimers - SessionEventKinds.MaxObjectRespawns - SessionEventKinds.MaxSpellRunEvents - SessionEventKinds.MaxItemDecays - SessionEventKinds.MaxBodyDecays - SessionEventKinds.MaxRandomEncounters - SessionEventKinds.MaxFocusWipes
+            - SessionEventKinds.MaxWaitTimers - SessionEventKinds.MaxObjectRespawns - SessionEventKinds.MaxSpellRunEvents - SessionEventKinds.MaxItemDecays - SessionEventKinds.MaxBodyDecays - SessionEventKinds.MaxRandomEncounters - SessionEventKinds.MaxNewspapers - SessionEventKinds.MaxFocusWipes
             - SessionEventKinds.MaxAiTicks - SessionEventKinds.MaxRestocks - SessionEventKinds.MaxTrapDevices - SessionEventKinds.MaxRealSteps - SessionEventKinds.MaxGoalSteps - 1 - GameSessionLimits.PolicyMaxLifeRecords, owner.QueryEvents().Count);
         // ARC-SCRIPT-010: the deferred SCR calls have their own share of the queue on top.
         for (var i = 0; i < SessionEventKinds.MaxScriptCalls; i++)
@@ -272,11 +272,11 @@ public sealed class SessionEventTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ScheduleRestock(owner.Version, "chest:0", true).Disposition);
         // ARC-MAGIC-010: the magic-tech events have a share too (not saved; empty here), and so do the real-time steps (MIG12 S8; not saved); so do the Item Decay events (ARC-WORLD-062) and the
         // hero's encumbrance timer (ARC-WORLD-087; the NPCs' fifth timer each, ARC-MAGIC-1568, is no life step's).
-        Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxSpellRunEvents - SessionEventKinds.MaxItemDecays - SessionEventKinds.MaxBodyDecays - SessionEventKinds.MaxRandomEncounters - SessionEventKinds.MaxFocusWipes - SessionEventKinds.MaxTrapDevices - SessionEventKinds.MaxRealSteps - SessionEventKinds.MaxGoalSteps - 1 - GameSessionLimits.PolicyMaxLifeRecords, owner.QueryEvents().Count);
+        Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxSpellRunEvents - SessionEventKinds.MaxItemDecays - SessionEventKinds.MaxBodyDecays - SessionEventKinds.MaxRandomEncounters - SessionEventKinds.MaxNewspapers - SessionEventKinds.MaxFocusWipes - SessionEventKinds.MaxTrapDevices - SessionEventKinds.MaxRealSteps - SessionEventKinds.MaxGoalSteps - 1 - GameSessionLimits.PolicyMaxLifeRecords, owner.QueryEvents().Count);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, Npc("oid:n0"), new LifeDamage { HitPoints = 1 }).Disposition);
         // A save of a full queue restores.
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
-        Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxSpellRunEvents - SessionEventKinds.MaxItemDecays - SessionEventKinds.MaxBodyDecays - SessionEventKinds.MaxRandomEncounters - SessionEventKinds.MaxFocusWipes - SessionEventKinds.MaxTrapDevices - SessionEventKinds.MaxRealSteps - SessionEventKinds.MaxGoalSteps - 1 - GameSessionLimits.PolicyMaxLifeRecords, restored.QueryEvents().Count);
+        Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxSpellRunEvents - SessionEventKinds.MaxItemDecays - SessionEventKinds.MaxBodyDecays - SessionEventKinds.MaxRandomEncounters - SessionEventKinds.MaxNewspapers - SessionEventKinds.MaxFocusWipes - SessionEventKinds.MaxTrapDevices - SessionEventKinds.MaxRealSteps - SessionEventKinds.MaxGoalSteps - 1 - GameSessionLimits.PolicyMaxLifeRecords, restored.QueryEvents().Count);
     }
 
     [TestMethod]

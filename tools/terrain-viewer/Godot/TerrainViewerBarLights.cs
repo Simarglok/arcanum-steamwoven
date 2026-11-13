@@ -38,7 +38,7 @@ public partial class TerrainViewerApp
         AreaLightSlot.Character => SheetOpen && _sheetNpc is null,
         AreaLightSlot.Logbook => LogbookOpen,
         // The barter window is the inventory window in its barter mode (GB16), so the same flag.
-        AreaLightSlot.Inventory => InventoryOpen || BarterOpen,
+        AreaLightSlot.Inventory => InventoryOpen || BarterOpen || ItemServiceOpen,
         _ => WorldMapOpen,
     };
 

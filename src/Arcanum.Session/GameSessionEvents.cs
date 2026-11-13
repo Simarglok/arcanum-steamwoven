@@ -228,7 +228,7 @@ public static class SessionEventKinds
     /// can always set its timers, the deferred calls, the timed effects' ENDs, the Lock events, the wait timers, the respawns, the
     /// magic-tech events, the Item Decay events, the Decay Dead Bodies and Combat-Focus Wipe events (ARC-MAGIC-1146), the AI ticks, (ARC-WORLD-094) the restock events, the real-time steps and (ARC-DEV-132) one goal step per slot.</summary>
     public const int MaxPending = 5 * GameSessionLimits.PolicyMaxLifeRecords + 4 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects
-        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxBodyDecays + MaxRandomEncounters + MaxFocusWipes + MaxAiTicks + MaxRestocks + MaxTrapDevices + MaxRealSteps + MaxGoalSteps;
+        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxBodyDecays + MaxRandomEncounters + MaxNewspapers + MaxFocusWipes + MaxAiTicks + MaxRestocks + MaxTrapDevices + MaxRealSteps + MaxGoalSteps;
 
     /// <summary>
     /// The original's AI event (kind 10, game time, never saved by the original; ARC-WORLD-084, ledger CL7, CL8): one NPC's AI tick
@@ -279,6 +279,16 @@ public static class SessionEventKinds
     public const string RandomEncounter = "encounter.random";
     /// <summary>Pending Random Encounters events a session holds: one (a chain).</summary>
     public const int MaxRandomEncounters = 1;
+    /// <summary>
+    /// The original's Newspapers event (kind 27, game time, saved; ARC-UI-1739, ledger NQ4, handler 0x4BF270): every game day the head of the newspaper issue queue is removed (<see cref="SessionNewspaperState.Popped"/>, a default issue when none is left behind it) and the event
+    /// sets itself up again a day on. The first one is added when a new game starts, <see cref="NewspaperDayMs"/> less the time of day on (the next midnight); here it is the first event pass of a host that has the newspaper texts (<see cref="ISessionNewspaperWorld"/>; a build's old save has none pending).
+    /// Global, one in a running chain. No entities; value: the game time it was scheduled at. Added without a new registry version, as the kinds before it.
+    /// </summary>
+    public const string Newspaper = "newspaper.daily";
+    /// <summary>The Newspapers event's period: one game day, 86,400,000 ms (0x4BF270).</summary>
+    public const long NewspaperDayMs = 86_400_000;
+    /// <summary>Pending Newspapers events a session holds: one (a chain).</summary>
+    public const int MaxNewspapers = 1;
     /// <summary>Pending Decay Dead Bodies events a session holds: one per NPC life record.</summary>
     public const int MaxBodyDecays = GameSessionLimits.PolicyMaxLifeRecords;
     /// <summary>
@@ -398,6 +408,8 @@ public static class SessionEventKinds
                 new BodyDecayHandler(owner), Validate: BodyDecayPayload),
             new(RandomEncounter, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.KeepExisting, GameEventScopeRule.Global, 0, 1, 0, 0,
                 new RandomEncounterHandler(owner), Validate: payload => payload.Values[0] >= 0),
+            new(Newspaper, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.KeepExisting, GameEventScopeRule.Global, 0, 1, 0, 0,
+                new NewspaperHandler(owner), Validate: payload => payload.Values[0] >= 0),
             new(FocusWipe, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.EntityMap, 1, 2, 0, 0,
                 new FocusWipeHandler(owner), Validate: FocusWipePayload),
             new(Restock, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Replace, GameEventScopeRule.EntityMap, 1, 2, 1, 0,
@@ -573,6 +585,12 @@ internal sealed class RandomEncounterHandler(SessionEventSink sink) : IGameEvent
 {
     public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
         sink.Owner?.FireRandomEncounter(firing) ?? GameEventHandlerOutcome.Refused;
+}
+
+internal sealed class NewspaperHandler(SessionEventSink sink) : IGameEventHandler
+{
+    public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
+        sink.Owner?.FireNewspaper(firing) ?? GameEventHandlerOutcome.Refused;
 }
 
 internal sealed class FocusWipeHandler(SessionEventSink sink) : IGameEventHandler

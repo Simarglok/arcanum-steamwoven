@@ -139,6 +139,10 @@ public sealed record AreaBarterLine(string Entity, string Text, int Count, Trade
 public sealed record AreaBarterView(AreaBarterMerchant Merchant, int HeroGold, int MerchantGold, int Haggle, SkillTraining Training, int Reaction,
     IReadOnlyList<AreaBarterLine> Hero, IReadOnlyList<AreaBarterLine> Wares);
 
+/// <summary>ARC-UI-1731: an item's facts for a quote: its stored item fields (null when none were read), whether it counts as identified, its stored
+/// worth, the worth a quote starts from, its condition (the default when its fields give none) and its stored condition (null when the fields give none).</summary>
+internal sealed record AreaItemFacts(CombatItemFields? Item, bool Identified, int Stored, int Worth, ItemCondition Condition, ItemCondition? Baseline);
+
 /// <summary>The outcome of one buy or sell: the session's result, the units, the price paid in all and the reaction change asked for.</summary>
 public sealed record AreaBarterTrade(InventoryMutationResult Result, int Count, int Total, int ReactionChange, string Text)
 {
@@ -267,22 +271,40 @@ public sealed class AreaBarter
 
     private AreaBarterLine Line(string entity, SessionItemKind kind, TradeDirection direction, TradeParties parties, bool worn, int count)
     {
-        var fields = Fields(entity, kind);
-        var item = fields?.Item;
-        // The identified test of 0x464370 (EquipmentChoice.Identified) with the stored flag or the session's (ARC-WORLD-090: the open
-        // identifies a merchant's goods, a sale the sold item).
-        var identified = item is not null && (item.MagickTechComplexity <= 0 || (item.Flags & 0x1) != 0 || _session.QueryItemIdentified(entity));
-        var stored = item?.Worth ?? 0;
-        var worth = identified ? Math.Max(Arcanum.Simulation.Equipment.EquipmentChoice.MinimumWorth, stored)
-            : Arcanum.Simulation.Equipment.EquipmentChoice.UnidentifiedWorth;
-        var condition = fields is null ? default : SessionItemConditions.FromCombatFields(fields) is { } baseline
-            ? _session.QueryItemCondition(entity, baseline) ?? baseline : default;
+        var facts = ItemFacts(entity, kind);
+        var (identified, stored, worth, condition) = (facts.Identified, facts.Stored, facts.Worth, facts.Condition);
+        var item = facts.Item;
         var trade = new TradeItem(worth, stored, item?.Flags ?? 0, condition, worn, kind.Type == SessionItemType.Gold);
         var quote = Merchant.Follower ? new TradeQuote(0, TradeRefusal.None)
             : TradeRules.Price(direction, trade, parties with { Deals = Merchant.Deals(kind.Prototype - 20) });
         var text = _name(entity, kind) + (count > 1 ? $" ×{count}" : "") + (worn ? " (worn)" : "");
         return new(entity, text, count, quote, worth, kind);
     }
+
+    /// <summary>ARC-UI-1731: what the trade and the item services read of an item: its stored item fields, whether it counts as identified (the
+    /// identified test with the stored flag or the session's: ARC-WORLD-090, the open identifies a merchant's goods, a sale the sold
+    /// item), its stored worth, the worth the quote starts from (the unidentified worth for an unidentified item) and its condition.</summary>
+    internal AreaItemFacts ItemFacts(string entity, SessionItemKind kind)
+    {
+        var fields = Fields(entity, kind);
+        var item = fields?.Item;
+        var identified = item is not null && (item.MagickTechComplexity <= 0 || (item.Flags & 0x1) != 0 || _session.QueryItemIdentified(entity));
+        var stored = item?.Worth ?? 0;
+        var worth = identified ? Math.Max(Arcanum.Simulation.Equipment.EquipmentChoice.MinimumWorth, stored)
+            : Arcanum.Simulation.Equipment.EquipmentChoice.UnidentifiedWorth;
+        ItemCondition? stock = fields is null ? null : SessionItemConditions.FromCombatFields(fields);
+        var condition = stock is { } baseline ? _session.QueryItemCondition(entity, baseline) ?? baseline : default;
+        return new(item, identified, stored, worth, condition, stock);
+    }
+
+    /// <summary>ARC-UI-1731: the session the window runs over, the item services' own trades.</summary>
+    internal GameSessionOwner Session => _session;
+
+    /// <summary>ARC-UI-1731: the gold pile kind a payment to the merchant uses (the data's prototype 9076).</summary>
+    internal SessionItemKind GoldPileKind => GoldKind();
+
+    /// <summary>ARC-UI-1731: the haggle the hero's sale prices use (the hero's Haggle effectiveness and training).</summary>
+    internal (int Haggle, SkillTraining Training) HeroHaggle() => _session.QueryHeroHaggle() ?? (0, SkillTraining.None);
 
     // An item's stored fields: its object row's (instance over prototype), else its kind's prototype.
     private CombatFields? Fields(string entity, SessionItemKind kind)

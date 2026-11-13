@@ -104,6 +104,30 @@ public sealed class WrittenTextsTests
         Assert.AreEqual(WrittenTexts.MaxFillerCount, Texts().NewspaperFiller(1300, WrittenTexts.MaxFillerCount).Count, "the fill wraps");
     }
 
+    // ARC-UI-1739, ledger NP2: the interface's message hook (0x56CCA0) and the default issue's probe loop (0x4BF330).
+    [TestMethod]
+    public void A_headline_is_the_issue_message_without_its_markup_and_with_line_feeds_made_spaces()
+    {
+        var texts = WrittenTexts.Create(null, null, Mes("{5000}{30c First line\nsecond line}{5010}{31 Second issue}"), null, null);
+        Assert.AreEqual("First line second line", texts.Headline(5000), "the font and the c mark are the markup; the line feed becomes a space");
+        Assert.AreEqual("irst line second line", WrittenTexts.Create(null, null, Mes("{5000}{First line\nsecond line}"), null, null).Headline(5000), "no prefix: the original drops the first character");
+        Assert.AreEqual("First line", WrittenTexts.Create(null, null, Mes("{5000}{First line}"), null, null).Headline(5000, WrittenRuleProfile.Steamwoven));
+        Assert.AreEqual(string.Empty, texts.Headline(5001), "no message: an empty text");
+        Assert.AreEqual(string.Empty, WrittenTexts.Create(null, null, null, null, null).Headline(5000), "no newspaper file: an empty text");
+    }
+
+    [TestMethod]
+    public void The_default_issue_choices_count_the_headlines_from_5010_in_steps_of_ten_to_the_first_gap()
+    {
+        string File(params int[] numbers) => string.Concat(numbers.Select(n => $"{{{n}}}{{1 Text {n}}}"));
+        Assert.AreEqual(0, WrittenTexts.Create(null, null, Mes(File(5000)), null, null).DefaultIssueChoices(), "only 5000: no choice, the default issue is 5000");
+        Assert.AreEqual(3, WrittenTexts.Create(null, null, Mes(File(5000, 5010, 5020, 5030, 5050)), null, null).DefaultIssueChoices(), "5040 is missing: the loop stops there");
+        Assert.AreEqual(0, WrittenTexts.Create(null, null, Mes(File(5000, 5020)), null, null).DefaultIssueChoices(), "5010 missing");
+        // A message whose text is only its markup reads empty and ends the loop as a missing one does.
+        Assert.AreEqual(1, WrittenTexts.Create(null, null, Mes("{5010}{1 A}{5020}{1 }"), null, null).DefaultIssueChoices());
+        Assert.AreEqual(0, WrittenTexts.Create(null, null, null, null, null).DefaultIssueChoices());
+    }
+
     [TestMethod]
     public void Plaques_pictures_schematics_and_odd_subtypes()
     {

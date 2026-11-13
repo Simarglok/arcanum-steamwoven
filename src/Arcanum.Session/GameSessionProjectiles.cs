@@ -77,13 +77,13 @@ public sealed partial class GameSessionOwner
 
     /// <summary>The shots in flight against <see cref="MaxShotsInFlight"/>: the hero's and the NPCs' together.</summary>
     // ARC-COMBAT-1717: an NPC's thrown weapon is in both NPC stores (the item to land, the check to strike with), one shot.
-    private int ShotsInFlight => _shots.Count + _npcShots.Count + _npcArrows.Count(pair => !_npcShots.ContainsKey(pair.Key));
+    private int ShotsInFlight => _shots.Count + _npcShots.Count + _npcArrows.Count(pair => !_npcShots.ContainsKey(pair.Key)) + _trapShots.Count;
 
     /// <summary>The shots in flight, oldest first.</summary>
     public IReadOnlyList<SessionShot> QueryShotsInFlight()
     {
         ThrowIfDisposed();
-        return _shots.Keys.Concat(_npcShots.Keys).Concat(_npcArrows.Keys).Distinct().OrderBy(shot => shot.Id).ToArray();
+        return _shots.Keys.Concat(_npcShots.Keys).Concat(_npcArrows.Keys).Concat(_trapShots.Keys).Distinct().OrderBy(shot => shot.Id).ToArray();
     }
 
     /// <summary>ARC-COMBAT-017: the thrown item of <paramref name="shot"/> and its thrown range; null for a shot not in flight or one
@@ -188,6 +188,7 @@ public sealed partial class GameSessionOwner
         var ended = _shots.Remove(shot);
         ended |= _npcShots.Remove(shot);
         ended |= _npcArrows.Remove(shot);
+        ended |= _trapShots.Remove(shot);
         return ended;
     }
 

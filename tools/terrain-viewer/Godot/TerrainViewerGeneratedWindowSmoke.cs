@@ -11,7 +11,13 @@ public partial class TerrainViewerApp
     // PREFIX-WINDOW-MODE[-STAGE].png when ARC_AREA_WINDOW_CAPTURE=PREFIX (local, never in git), and puts the settings back. A window without the variable is left alone.
     private static bool WindowArtSmokeRequested => System.Environment.GetEnvironmentVariable("ARC_AREA_WINDOW_ART") is { Length: > 0 };
 
-    private async Task WindowArtSmokeAsync(string window, AreaInventoryGridArea area, IReadOnlyList<int> arts)
+    private Task WindowArtSmokeAsync(string window, AreaInventoryGridArea area, IReadOnlyList<int> arts) =>
+        WindowArtSmokeAsync(window, () => arts.Select(number => area.Look?.Art.GetValueOrDefault(number)).OfType<HdInterfaceTexture>().ToArray(), arts, area.DeviceScale,
+            () => area.Look is not null);
+
+    // ARC-UI-1195: the same part for any window: its textures (read when asked, after the interface setting is applied), their art numbers, the window's device scale and whether
+    // it shows the original's look.
+    private async Task WindowArtSmokeAsync(string window, Func<IReadOnlyList<HdInterfaceTexture>> textures, IReadOnlyList<int> arts, Func<float> deviceScale, Func<bool> shown, Vector2I? biggerTo = null)
     {
         var mode = System.Environment.GetEnvironmentVariable("ARC_AREA_WINDOW_ART");
         if (string.IsNullOrEmpty(mode)) return;
@@ -44,17 +50,26 @@ public partial class TerrainViewerApp
             _gameSettings = _gameSettings with { HdInterface = mode != "legacy", GeneratedInterface = mode == "generated" };
             SyncInterfaceHd();
             await Frames(3);
-            if (mode == "generated") await VerifyGeneratedWindowAsync("ARC-UI-1194", window, area, arts, Frames, SetSmokeWindowSizeAsync, Capture);
+            if (!shown())
+            {
+                GD.Print($"ARC-UI-1194 window art smoke FAIL {window}: the window does not show the original's look");
+                throw new InvalidOperationException("ARC-UI-1194 window art smoke: the window does not show the original's look");
+            }
+            if (mode == "generated")
+            {
+                var found = textures();
+                await VerifyGeneratedTexturesAsync("ARC-UI-1194", window, found, arts, deviceScale, Frames, SetSmokeWindowSizeAsync, Capture, biggerTo);
+            }
             else
             {
                 // In the legacy and HD runs no frame of the window is generated chrome.
-                var drawn = arts.Select(number => area.Look?.Art.GetValueOrDefault(number)).OfType<HdInterfaceTexture>().ToArray();
-                if (drawn.Length != arts.Count || drawn.Any(texture => texture.IsGenerated))
+                var drawn = textures();
+                if (drawn.Count == 0 || drawn.Count != arts.Count || drawn.Any(texture => texture.IsGenerated))
                 {
-                    GD.Print($"ARC-UI-1194 window art smoke FAIL {window}: the {mode} frames are not generated ({drawn.Length} of {arts.Count} read)");
+                    GD.Print($"ARC-UI-1194 window art smoke FAIL {window}: the {mode} frames are not generated ({drawn.Count} of {arts.Count} read)");
                     throw new InvalidOperationException("ARC-UI-1194 window art smoke: a " + mode + " frame is generated");
                 }
-                GD.Print($"ARC-UI-1194 window art {window} {mode} frames={drawn.Length} hd={drawn.Count(texture => texture.IsHd)}");
+                GD.Print($"ARC-UI-1194 window art {window} {mode} frames={drawn.Count} hd={drawn.Count(texture => texture.IsHd)}");
                 await Capture("first");
             }
         }
