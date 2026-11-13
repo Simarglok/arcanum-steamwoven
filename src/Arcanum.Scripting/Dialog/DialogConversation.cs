@@ -447,6 +447,11 @@ public sealed partial class DialogConversation
                 }
                 reply = resolved;
             }
+            // ARC-SCRIPT-1534: the original's reply builder returns before any state is built for the repair service reply, so it takes a slot of the five and is not shown.
+            if (reply.NeverOffered)
+            {
+                continue;
+            }
             // A directions reply the PC has nothing to ask for is left out whatever its action holds (0x416C10 returns before the states are built).
             if (reply.DirectionsFilter is { } directions)
             {
@@ -1597,6 +1602,13 @@ public sealed partial class DialogConversation
             return new ReplyPlan(record, gender.Value, record.IqValue!.Value, condition, DialogOptionTextKind.Record, string.Empty, null, DialogOptionTransition.Exit, null, null, null, null,
                 null, QuestReply: questReply);
         }
+        if (found is { Letter: 'u' } && IsRepairServiceReply(text))
+        {
+            // ARC-SCRIPT-1534 (ledger DSV1): the repair service reply "u:12" is never offered by the original (0x416C10 → 0x4AE570 case 12 refuses a target that is not an item, and the
+            // target is the PC): it is planned as a reply that is counted among the five eligible ones and then left out, as a directions reply with nothing to ask for.
+            return new ReplyPlan(record, gender.Value, record.IqValue!.Value, condition, DialogOptionTextKind.Record, string.Empty, null, DialogOptionTransition.Exit, null, null, null, null,
+                null, NeverOffered: true);
+        }
         if (found is { Letter: 'q' or 'u' } || found is { Letter: 'd' or 'x' } && directions is null)
         {
             // Their visibility depends on world, quest or skill state this runtime cannot read.
@@ -2020,7 +2032,8 @@ public sealed partial class DialogConversation
         int? QuestReply = null,
         DirectionsOffer? Directions = null,
         DirectionsOffer? DirectionsFilter = null,
-        bool Newspaper = false);
+        bool Newspaper = false,
+        bool NeverOffered = false);
 
     private sealed record OfferPlan(ReplyPlan Reply, StepPlan? Target);
 }
