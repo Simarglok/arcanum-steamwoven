@@ -173,13 +173,13 @@ public partial class TerrainViewerApp
         return row is not null && host.TrapMetByUse(opener, row);
     }
 
-    /// <summary>ARC-WORLD-1581 (TT18, TT7): the use node of goal 12 for the hero runs the door's use script after its charge (0x428A10 → 0x441980, the hero the triggerer): the door's trap meets the hero as a trapped container's does
+    /// <summary>ARC-WORLD-1581 (TT18, TT7): the use node of goal 12 for the hero runs the door's use script (0x428A10 → 0x441980, the hero the triggerer; the viewer asks it after the 2 action points of <see cref="HeroDoorUse"/>, the node's own order for a door is not read): the door's trap meets the hero as a trapped container's does
     /// (<see cref="AreaTraps.Use"/>); true when the use stops (spotted now, a native run went off, a refused meeting) and the hero's run ends with the door shut.</summary>
     private bool HeroDoorTrap(AreaPortal portal)
     {
         if (_readyArea is not { } area || AreaTrapsNow() is not { } traps || area.Snapshot.Objects.FirstOrDefault(o => o.Key == portal.Key) is not { } row || traps.Use(row) is not { } met) return false;
         GD.Print($"ARC-WORLD-1581 hero-door-trap entity={portal.Entity} outcome={met.Outcome} cancels={met.Cancels}");
-        _portalNotice = $"{PortalName(portal)}: trap {met.Describe()}"; RefreshAreaStatus();
+        NoteTrapMeeting(met);
         return met.Cancels;
     }
 

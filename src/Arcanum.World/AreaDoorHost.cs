@@ -53,7 +53,7 @@ public sealed class AreaDoorHost : IAiDoorWorld, IGoalStepHost
     public Func<string, AreaPortal, bool>? OpenerTrap { get; set; }
 
     /// <summary>
-    /// ARC-WORLD-1581 (ledger TT18, TT7): the same for the hero as opener. After <see cref="HeroUse"/> charged the use node's action points the node runs the door's use script through the object entry
+    /// ARC-WORLD-1581 (ledger TT18, TT7): the same for the hero as opener. After <see cref="HeroUse"/> charged the action points (the viewer's model, CT3; the decompiled node shows no charge for a door target) the node runs the door's use script through the object entry
     /// point with the hero as the triggerer, so a trapped door meets the hero (the portal in; true when the use stops: the trap was spotted now, a native run went off, or the session refused the meeting),
     /// which ends the run and leaves the door shut (the points stay spent). Null: no trap is met, as before.
     /// </summary>

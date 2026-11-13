@@ -227,9 +227,9 @@ or a companion that arrives on a tile with a trap object sets it off with itself
 
 ## Hero door use (ARC-WORLD-1581)
 
-The hero is an opener too (ledger TT18, TT7). Its use node of goal 12 (`AreaDoorHost.UseDoor` for the hero, 0x428A10) first charges the action points (`HeroUse`, `TerrainViewerAreaPortals.HeroDoorUse`) and then, as the original's node runs the door's use
+The hero is an opener too (ledger TT18, TT7). Its use node of goal 12 (`AreaDoorHost.UseDoor` for the hero, 0x428A10) charges the action points first in the viewer (`HeroUse`, `TerrainViewerAreaPortals.HeroDoorUse`; the decompiled node shows no charge for a door target, the 2 points are the CT3 model) and then, as the original's node runs the door's use
 script through the object entry point with the hero as the triggerer, meets the door's trap: `AreaDoorHost.HeroTrap` (`HeroDoorTrap` in the viewer) is `AreaTraps.Use` on the door's row, the same meeting a trapped container's open has.
-A trap spotted now, a native run that went off (its effect through the cast host, the hero the triggerer) or a refused meeting answers 0: the hero's run ends, the door stays shut and the points stay spent (the node charges before it meets the trap).
+A trap spotted now, a native run that went off (its effect through the cast host, the hero the triggerer) or a refused meeting answers 0: the hero's run ends, the door stays shut and the points stay spent (the viewer charges before it meets the trap).
 An ordinary (non-native) trap script is not run by this node yet, and no trap on the door goes on as before. Viewer line: `ARC-WORLD-1581 hero-door-trap` and the status line.
 The door's other, non-trap use script is not run by either opener's node (no script run on a door use is built; tracked in the Not modelled list below).
 
