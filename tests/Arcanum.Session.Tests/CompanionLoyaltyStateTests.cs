@@ -571,4 +571,51 @@ public sealed class CompanionLoyaltyStateTests
         saved.SchemaVersion, saved.Identity, revision ?? saved.Revision, saved.Clock, saved.Flags, saved.Actor, saved.Maps.ToArray(), saved.Story, party,
         saved.Hero, saved.Inventory, saved.Equipment, saved.Durability, saved.Schematics, saved.Effects, saved.Experience, saved.Advancement,
         saved.Random, saved.Life, saved.Reactions, saved.Combat, saved.CombatMode, saved.Concealment, saved.Danger, events ?? saved.Events, saved.Lighting, saved.Sound);
+
+    // ARC-AI-1515 (0x4A9650, the follower branch of the PC attacker): the follow check after a hit, the limit ignored; a refusal leaves unforced and sets JILTED.
+    [TestMethod]
+    public void A_refused_follow_check_after_a_hit_makes_the_follower_leave_jilted_with_its_refusal_lines()
+    {
+        using var owner = Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.JoinParty(owner.Version, Npc, Facts(), false).Disposition);
+        var accepted = owner.CheckFollowerAfterHit(owner.Version, Npc, Facts());
+        Assert.AreEqual((GameSessionDisposition.NoChange, FollowConsent.Accepted, false), (accepted.Disposition, accepted.Consent!.Value, accepted.Left));
+        Assert.IsNull(accepted.RefusalLines);
+        Assert.IsTrue(owner.QueryCompanion(Npc).LedByPc);
+
+        var revision = owner.Version.Revision;
+        var refused = owner.CheckFollowerAfterHit(owner.Version, Npc, Facts(reaction: -50));
+        Assert.AreEqual((GameSessionDisposition.Changed, FollowConsent.Dislike, true), (refused.Disposition, refused.Consent!.Value, refused.Left));
+        Assert.AreEqual(new LoyaltyLines(1800, 1899), refused.RefusalLines);
+        Assert.AreEqual(revision + 1, owner.Version.Revision);
+        var left = owner.QueryCompanion(Npc);
+        Assert.IsFalse(left.LedByPc);
+        Assert.IsTrue(left.Jilted);
+        // A free NPC is no follower: no check.
+        var free = owner.CheckFollowerAfterHit(owner.Version, Npc, Facts(reaction: -50));
+        Assert.AreEqual((GameSessionDisposition.NoChange, false), (free.Disposition, free.Consent is not null));
+    }
+
+    [TestMethod]
+    public void A_refused_check_whose_leave_is_refused_leaves_the_follower_in_place_and_a_forced_one_is_accepted()
+    {
+        using var extraordinary = Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, extraordinary.JoinParty(extraordinary.Version, Npc, Facts(), false).Disposition);
+        var revision = extraordinary.Version.Revision;
+        var stays = extraordinary.CheckFollowerAfterHit(extraordinary.Version, Npc, Facts(reaction: -50, charisma: 20));
+        Assert.AreEqual((GameSessionDisposition.NoChange, FollowConsent.Dislike, false, true), (stays.Disposition, stays.Consent!.Value, stays.Left, stays.LeaveRefused));
+        Assert.IsTrue(extraordinary.QueryCompanion(Npc).LedByPc);
+        Assert.AreEqual(revision, extraordinary.Version.Revision);
+
+        using var forced = Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, forced.ForceJoinParty(forced.Version, Npc).Disposition);
+        Assert.AreEqual(FollowConsent.Accepted, forced.CheckFollowerAfterHit(forced.Version, Npc, Facts(reaction: -50)).Consent);
+
+        using var mindControlled = Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, mindControlled.JoinParty(mindControlled.Version, Npc, Facts(), false).Disposition);
+        Assert.AreEqual(FollowConsent.Accepted, mindControlled.CheckFollowerAfterHit(mindControlled.Version, Npc, Facts(reaction: -50) with { MindControlledByPc = true }).Consent);
+
+        Assert.AreEqual(GameSessionFailure.StaleVersion, forced.CheckFollowerAfterHit(forced.Version with { Revision = forced.Version.Revision + 5 }, Npc, Facts()).Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidConsentFacts, forced.CheckFollowerAfterHit(forced.Version, Npc, Facts() with { OtherLeaderCharisma = 3 }).Failure);
+    }
 }

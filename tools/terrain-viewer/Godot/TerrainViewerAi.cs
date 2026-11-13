@@ -162,6 +162,9 @@ public partial class TerrainViewerApp
             HeroCell = () => _worldActor.Session is AreaGridSession hero ? World(hero.Chart.ToWorld(hero.State.CommittedCell)) : null,
             Companions = () => _areaCompanions is { } group
                 ? group.Companions.Select(c => (c.Entity, c.Key, World(chart.ToWorld(c.Grid.State.CommittedCell)))).ToArray() : [],
+            // ARC-AI-1515 (0x4A9650): the follow check of a companion the hero hit reads the conversation state's PC side, as its loyalty step does.
+            FollowFacts = entity => _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == entity) is { } companion && _conversationHost is { } conversation
+                ? AreaCompanionLoyalty.Facts(session, companion, conversation.State) : null,
             Removed = AreaRemovedObjects,
             SwitchedOn = AreaSwitchedOnNpcs,
             LineOfFire = () => AiLineOfFire(host()),
