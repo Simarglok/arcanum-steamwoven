@@ -252,6 +252,10 @@ internal sealed class ScrInterpreter
         ScrCatalogue.Condition.IsSwitchedOff => ListHolds(c, obj => _shared.Toggled.Contains(obj) != (States.IsSwitchedOff(obj) ?? throw new MissingObjectStop(line))),
         // SC1: the four body bits (0x3C) of the spell flags (case 0x4458D5, field 0x14 through 0x406CA0), over the operand's objects by the list rule of SG6.
         ScrCatalogue.Condition.HasBodySpell => ListHolds(c, obj => ((Spells.SpellFlags(obj) ?? throw new MissingObjectStop(line)) & BodySpellFlags) != 0),
+        // SC18 (ARC-SCRIPT-1734, 0x4451B0 cases 0xC, 0xD, 0x10): polymorphed (0x20000), shrunk (0x80000) and mirror image (0x40000), each a single bit of the same spell flags word (field 0x14, 0x406CA0), over the operand's objects by the list rule of SG6.
+        ScrCatalogue.Condition.IsPolymorphed => ListHolds(c, obj => ((Spells.SpellFlags(obj) ?? throw new MissingObjectStop(line)) & PolymorphedSpellFlag) != 0),
+        ScrCatalogue.Condition.IsShrunk => ListHolds(c, obj => ((Spells.SpellFlags(obj) ?? throw new MissingObjectStop(line)) & ShrunkSpellFlag) != 0),
+        ScrCatalogue.Condition.HasMirrorImage => ListHolds(c, obj => ((Spells.SpellFlags(obj) ?? throw new MissingObjectStop(line)) & MirrorImageSpellFlag) != 0),
         // SC2: influenced by (0x459380) the spell of operand 1, SC3: knows (0x4B1950) the spell of operand 1, SC4: its mastered college (0x4B1CB0) equals operand 1 (−1 matches an object with no mastery, and any object that is not a PC or NPC).
         ScrCatalogue.Condition.InfluencedBySpell => SpellHolds(c, line, (obj, spell) => Spells.IsInfluencedBy(obj, spell)),
         ScrCatalogue.Condition.KnowsSpell => SpellHolds(c, line, (obj, spell) => Spells.KnowsSpell(obj, spell)),
@@ -581,6 +585,16 @@ internal sealed class ScrInterpreter
                 // WE4: the table entry, then the object; an absent object shows nothing (the original passes a null handle on).
                 var number = Get(a, 0);
                 if (OptionalObject(a, 1) is { } on) _shared.EyeCandies.Add(new(number, on));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.PlaySpellEyeCandy:
+            case ScrCatalogue.Action.StopScriptEyeCandy:
+            {
+                // WE11, WE12 (ARC-SCRIPT-1734, 0x447220 cases 0x68 and 0x7C): the number, then the object, as play script eye candy (120); an absent object does nothing. Play spell (104, 0x456E60) shows the spell eye candy
+                // entry number % 10 + number / 10 × 6; stop script (124, 0x44C800 → 0x4CD940) takes the script eye candy of that number off the object. Both are presentation and never change what the run reads.
+                var number = Get(a, 0);
+                if (OptionalObject(a, 1) is { } on)
+                    _shared.EyeCandies.Add(new(number, on, a.Type == ScrCatalogue.Action.PlaySpellEyeCandy ? ScrEyeCandyKind.PlaySpell : ScrEyeCandyKind.StopScript));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.DistanceBetween:
@@ -1394,7 +1408,7 @@ internal sealed class ScrInterpreter
     }
 
     /// <summary>SC1: the four body-spell bits of the spell flags: body of air 0x4, earth 0x8, fire 0x10, water 0x20.</summary>
-    private const int BodySpellFlags = 0x3C;
+    private const int BodySpellFlags = 0x3C, PolymorphedSpellFlag = 0x20000, ShrunkSpellFlag = 0x80000, MirrorImageSpellFlag = 0x40000;
 
     private bool MonsterOfTypeHolds(ScrClause c, int line)
     {
