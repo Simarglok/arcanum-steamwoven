@@ -347,6 +347,14 @@ internal static class DialogGreeting
         ClassLine(new Context(facts, sources, port, names, encoding, maxTextBytes), group);
 
     /// <summary>
+    /// ARC-SCRIPT-1505 (ledger INS1, INS2): the NPC's line of the race group <paramref name="group"/> (1000: the insulted line and the last words of an ended talk),
+    /// as the race generator reads it, with the override line 10999 + group / 1000.
+    /// </summary>
+    public static GreetingOutcome NpcRaceGroup(int group, DialogGreetingFacts facts, DialogGreetingSources sources, IDialogGreetingPort port,
+        DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes) =>
+        RaceLine(new Context(facts, sources, port, names, encoding, maxTextBytes), group);
+
+    /// <summary>
     /// ARC-SCRIPT-1304 (ledger RMR7): the text of the rumor the NPC tells: the file by the NPC's gender then the PC's (the same order as the
     /// reputation greetings), message 20 × rumor + the NPC's social class + 1, else 20 × rumor + 1, then the name substitution of the dialog text. A rumor without a text, or without its file, is an empty line (origin <see cref="DialogLineOriginKind.Empty"/>).
     /// </summary>
