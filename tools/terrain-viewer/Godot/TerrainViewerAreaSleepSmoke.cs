@@ -61,6 +61,9 @@ public partial class TerrainViewerApp
 
         Tick(host);
         Require(!SleepOpenForSelfTest, "no sleep window before the key");
+        // ARC-UI-1363: the window's art reads in the background; the window is drawn in the original's look once it has.
+        for (var i = 0; i < 1200 && !SleepArtReadyForSelfTest; i++) await Frames(1);
+        Require(SleepArtReadyForSelfTest, "the window's art (565, 293, font 229) read from the game folder");
         await Shot("before");
         var heroBefore = session.QueryHeroLife()!.Record.State;
 
@@ -76,6 +79,23 @@ public partial class TerrainViewerApp
         var labels = Enumerable.Range(0, buttons).Select(i => SleepPanelForSelfTest!.ButtonTextForSelfTest(i)).ToArray();
         GD.Print($"ARC-WORLD-1160 sleep labels game-text={SleepTexts().FromGame} {string.Join(" | ", labels)}");
         Require(labels.All(label => label.Length > 0 && !label.StartsWith('[')), "every button has a label");
+        // ARC-UI-1363 (SZ13, SWB6, SWB7): the window is the original's art 565 at (573, 42) of the 800 x 600 screen, with a button of art 293 and a line for each length.
+        {
+            Require(SleepPanelForSelfTest!.OriginalLook, "the window is drawn in the original's look (art 565), not as the plain panel");
+            var view = SleepPanelForSelfTest.ViewForSelfTest;
+            var size = GetViewport().GetVisibleRect().Size;
+            var factor = AreaGameBarPanel.ScreenFactor(size);
+            var rect = view.WindowRectForSelfTest;
+            var windowAt = new Vector2(AreaGameBarPanel.ScreenLeft(size, factor) + AreaSleepLayout.ScreenX * factor, AreaSleepLayout.ScreenY * factor);
+            Require(rect.Position.IsEqualApprox(windowAt) && rect.Size.X > 0 && rect.Size.Y > 0, $"the window stands at the original's place: {rect.Position} expected {windowAt}, size {rect.Size}");
+            Require(view.RowCount == buttons && view.ButtonsShown, "every row has its line and a button");
+            // A pointer over a button lights it (frame two steps on, GB4) and the others stay idle.
+            view.HoverForSelfTest(1);
+            var lit = AreaGameBarLayout.Frame(AreaBarButtonLook.Hovered, view.ButtonFramesForSelfTest);
+            Require(view.FrameForSelfTest(1) == lit && view.FrameForSelfTest(2) == 0, $"the pointer lights its button (frame {view.FrameForSelfTest(1)}, expected {lit})");
+            GD.Print($"ARC-UI-1363 sleep window rect={rect} factor={factor} buttons={buttons} button-frames={view.ButtonFramesForSelfTest}");
+            view.Buttons.Reset();
+        }
         await Shot("open");
         // A second open (the key S) closes it, a third opens it again.
         OpenSleepForSelfTest();
@@ -87,7 +107,15 @@ public partial class TerrainViewerApp
         var timeBefore = Now(); var hpBefore = HpDamage(); var fatigueBefore = FatigueDamage();
         Tick(host + 1_000);
         var pressedAt = host;
-        SleepPressedForSelfTest(0);
+        // ARC-UI-1363: the press is a click on the first button of the original-look window (the pointer moves on, presses and releases there: sounds 3000 then 3001).
+        var sounds = SleepPanelForSelfTest!.ViewForSelfTest.SoundsForSelfTest;
+        sounds.Clear();
+        if (SleepPanelForSelfTest.OriginalLook)
+        {
+            SleepPanelForSelfTest.ViewForSelfTest.ClickForSelfTest(0);
+            Require(sounds.SequenceEqual([AreaGameBarLayout.PressSound, AreaGameBarLayout.ReleaseSound]), "the click played the press and the release sounds: " + string.Join(",", sounds));
+        }
+        else SleepPressedForSelfTest(0);
         Require(RestForSelfTest is { Pressed: true, Code: 1 } && !SleepPanelForSelfTest!.ButtonsShown, "the press hides the buttons and takes the code of one hour");
         Tick(pressedAt + 49);
         Require(Now() == timeBefore && RestLogForSelfTest.Count == 0, "no step before 50 ms");
