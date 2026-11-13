@@ -657,6 +657,9 @@ public partial class TerrainViewerApp
 
         void Heal()
         {
+            // ARC-DEV-1839: a critical miss of a shot hurts the hero (5..12 hit points against the hero's 30), and the legs make dozens of shots, so the hero is healed with the target; unhealed, the
+            // misses of the throws and boomerang legs add up on a map battery's hero until one kills it and the next attack click is refused (the hero cannot act).
+            if (session.QueryHeroLife() is { Status.IsDead: false }) session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000 });
             var healed = session.Heal(session.Version, pick.Target.Build.Combat!.Target, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             if (healed.Disposition == GameSessionDisposition.Rejected) GD.Print($"ARC-COMBAT-015 ranged smoke heal refused failure={healed.Failure}");
             SyncAreaCombatBodies();

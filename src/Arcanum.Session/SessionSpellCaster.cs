@@ -83,6 +83,9 @@ public sealed record SpellCastEvent(SpellCastEventKind Kind, int Run, int Value 
 {
     /// <summary>ARC-MAGIC-1745 (<see cref="SpellCastEventKind.ItemScriptLine"/>): the printed line's text, which the viewer's message window posts by the entry type <see cref="Value"/>.</summary>
     public string? Text { get; init; }
+
+    /// <summary>ARC-MAGIC-1830 (<see cref="SpellCastEventKind.ItemScriptEyeCandy"/>): the eye candy request an item event script of an NPC's rewield made, as the script ran it (the viewer plays it as any script's eye candy).</summary>
+    public Arcanum.Scripting.Scr.ScrEyeCandy? EyeCandy { get; init; }
 }
 
 /// <summary>How a casting goal's start went (<see cref="SessionSpellCaster.StartGoal"/>): it started, or it ends because the parent's
@@ -260,6 +263,9 @@ public enum SpellCastEventKind
     /// <summary>ARC-MAGIC-1745 (the TraitIdx component 0x452D80, the rewield 0x465530 that magick and tech points run): a line an item event script of the NPC <see cref="SpellCastEvent.Object"/> printed. <see cref="SpellCastEvent.Value"/> is the print action's entry type (the message window's kind),
     /// <see cref="SpellCastEvent.Detail"/> the script number and <see cref="SpellCastEvent.Text"/> the line; the viewer posts it to the message window as any script's printed line (the world's script message entries).</summary>
     ItemScriptLine,
+    /// <summary>ARC-MAGIC-1830 (the same rewield, hero or NPC): an eye candy request an item event script of the object <see cref="SpellCastEvent.Object"/> made, in order after the printed lines; <see cref="SpellCastEvent.EyeCandy"/> carries it (the object it names, the entry
+    /// and the kind) and <see cref="SpellCastEvent.Value"/> the entry number. The viewer plays it as any script's eye candy.</summary>
+    ItemScriptEyeCandy,
 }
 
 /// <summary>
@@ -1308,7 +1314,25 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         _itemEvents.AddRange(healed.ItemEvents);
         if (healed.Disposition == GameSessionDisposition.Changed)
             _log.Add(new(SpellCastEventKind.Healed, run.Id, (_owner.QueryLife(who).View?.Status.HitPoints ?? 0) - before, target.Id));
+        // The scar removal that comes first in the applier can change the state of a refused raise (disposition Changed): the feedback follows the refusal either way.
+        if (healed.Outcome is { } outcome && outcome.Events.HasFlag(LifeEvents.ResurrectionRefused)) RaiseRefusedFeedback(run, target.Id);
     }
+
+    /// <summary>
+    /// ARC-MAGIC-1838 (RZ3): the refusal feedback (0x45A540, called by the heal applier 0x4B58C0 right after its refusal test, whoever healed): message 0x25D for the player, then the resisted effect (number 0x283) on the target.
+    /// </summary>
+    [OriginalFunction(0x45A540, OriginalFunctionScope.Full)]
+    private void RaiseRefusedFeedback(SpellRun run, string target)
+    {
+        _log.Add(new(SpellCastEventKind.Message, run.Id, RaiseRefusedMessage));
+        _log.Add(new(SpellCastEventKind.EyeCandyAdded, -1, RaiseRefusedEyeCandyEntry, target, 0));
+    }
+
+    /// <summary>ARC-MAGIC-1838 (RZ3): spell.mes shown to the player when a raise is refused (0x45A540 asks message 0x25D).</summary>
+    public const int RaiseRefusedMessage = 605;
+
+    /// <summary>ARC-MAGIC-1838 (RZ3): the eye candy table entry the refusal plays on the target (0x45A540 plays number 0x283 = 643, which 0x456E60 turns into entry 643 % 10 + 643 / 10 · 6 = 387, no run).</summary>
+    public const int RaiseRefusedEyeCandyEntry = 387;
 
     // ---- helpers ----
 
