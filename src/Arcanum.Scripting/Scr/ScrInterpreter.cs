@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S40"/>.
+/// <see cref="ScrAdmissionSet.S42"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -786,6 +786,13 @@ internal sealed class ScrInterpreter
                 var spell = Get(a, 0);
                 var flags = a.Type == ScrCatalogue.Action.CastUnresistableSpellOn ? ScrCastFlags.Unresistable : ScrCastFlags.None;
                 if (OptionalObject(a, 1) is { } target) _shared.ObjectStates.Add(new(ScrObjectStateChange.CastSpell, target, spell, (int)flags));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.StopSpellOnObject:
+            {
+                // RM6 (0x44A895, entry 130): operand 0 the spell (a value), operand 1 the object (the first of its list); nothing without one (the original's test of the handle), the answer of 0x4593F0 is not read. The run goes on.
+                var spell = Get(a, 0);
+                if (OptionalObject(a, 1) is { } obj) _shared.ObjectStates.Add(new(ScrObjectStateChange.StopSpell, obj, spell));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.BecomeProne:
