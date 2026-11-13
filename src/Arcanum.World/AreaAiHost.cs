@@ -66,6 +66,9 @@ public sealed record AreaAiScene
     /// <summary>ARC-TECHNOLOGY-1619 (VB2-2 gap d): what the host knows of an object other than a critter by its session entity (a trap's shooter object, a scenery, a door): the facts the hostility rules read of it (its type, tile, object
     /// flags and busted state), or null for an id that names none. Null delegate: no such object is known, so an attack event of one ends at <see cref="AttackEventStop.Missing"/>.</summary>
     public Func<string, AreaAiObjectFacts?>? ObjectFacts { get; init; }
+    /// <summary>ARC-AI-1636 (VB2-2 gap d): the door, window, container, scenery or trap an object id names as the session damages it (<see cref="AreaObjectAttackTarget.Object"/>, with its map row), for an NPC's fight against an object it holds as
+    /// its COMBAT_FOCUS; null for an id that names none (a wall, an item, an object the session destroyed). Null delegate: such a fight swings and finds nothing to damage.</summary>
+    public Func<string, AreaObjectAttackTarget?>? ObjectAttackTarget { get; init; }
     /// <summary>The hero's world cell now, or null without a hero on this map.</summary>
     public required Func<CellCoord?> HeroCell { get; init; }
     /// <summary>ARC-DEV-116 (MIG11 S5): whether the map list holds a map (the destination of an NPC's change of place, the original's map list lookup);
@@ -1734,9 +1737,11 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>ARC-WORLD-1158: where a critter of this host's map lies now (its body's cell for the Decay Dead Bodies event); null for another map or a critter the host does not hold.</summary>
     public CellCoord? BodyCell(SessionMapId map, string entity) => map.RuntimeMap == _scene.RuntimeMap && entity != Pc ? Tile(entity) : null;
 
-    public bool Gone(string id) => id != Pc && Key(id) is { } key && _scene.Removed?.Invoke().Contains(key) == true;
+    /// <summary>ARC-AI-1636 (0x4294F0: the target's object flags 0x1 destroyed and 0x2 off): a map row the session removed, or an object that is no critter (<see cref="AreaAiScene.ObjectFacts"/>) destroyed or switched off.</summary>
+    public bool Gone(string id) => id != Pc && (Key(id) is { } key && _scene.Removed?.Invoke().Contains(key) == true || _scene.ObjectFacts?.Invoke(id) is { } facts && (facts.Destroyed || facts.Off));
 
-    public bool DeadCritter(string id) => Status(id)?.IsDead ?? true;
+    /// <summary>ARC-AI-1636 (0x429450 and 0x4294F0 test the target's death only for a type 15 or 16): an object that is no critter is never dead; an id the host knows nothing of counts as dead, as before.</summary>
+    public bool DeadCritter(string id) => Status(id) is { } status ? status.IsDead : _scene.ObjectFacts?.Invoke(id) is null;
 
     public AiMoverFacts Mover(string id)
     {
@@ -2274,6 +2279,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// art is decided here and its arrow flies (<see cref="AreaAiScene.LaunchShot"/>); its damage is <see cref="LandShot"/>'s, at the strike.</summary>
     public void Hit(string id, string target)
     {
+        // ARC-AI-1636: the focus is an object that is no critter (a door, container, scenery or trap): the attack is the session's object attack.
+        if (target != Pc && _scene.ObjectFacts?.Invoke(target) is not null) { HitObjectFocus(id, target); return; }
         var aimed = target;
         // ARC-COMBAT-1140 (RA4, RH5): a door, container, scenery, trap or wall that stops the line of fire takes the shot in place of the target.
         if (HitBlockingObject(id, target)) return;
@@ -2369,18 +2376,29 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         AreaObjectAttackTarget? info = null;
         // A wall (type 0) is struck without a target; another blocker must be an object the session damages (an item or a projectile keeps the target, whose check the blocked line fails).
         if (blocker.Type != 0 && ((info = objectOf(blocker)) is not { Refusal: null, Object: not null } || info.Kind == DamageableObjectKind.Item)) return false;
-        var struck = info?.Object;
-        if (Build(id) is not { } attacker) return false;
         var cell = new CellCoord(checked((int)bx), checked((int)by));
+        var result = StrikeObject(id, blocker, info, from, cell, to, $"shot on {(info?.Object?.Entity ?? "a wall")} instead of {target}");
+        // A refused attack leaves the shot to the ordinary flow (the target keeps it).
+        return result is { Disposition: not GameSessionDisposition.Rejected };
+    }
+
+    /// <summary>
+    /// The NPC's attack on the object <paramref name="blocker"/> (row) with the session target <paramref name="info"/> (none: a wall) at <paramref name="cell"/>, from the NPC's tile <paramref name="from"/>; the arrows of a ranged attack
+    /// fly toward <paramref name="to"/>. Shared by the line-of-fire blocker (<see cref="HitBlockingObject"/>) and the object focus (<see cref="HitObjectFocus"/>). Null when the NPC has no combat values; else the session's result, whose
+    /// follow-up (the viewer's floaters, bust script, redraw; the arrows' flight or strike) has been started unless the attack was rejected.
+    /// </summary>
+    private SessionObjectAttackResult? StrikeObject(string id, AreaObjectRecord blocker, AreaObjectAttackTarget? info, CellCoord from, CellCoord cell, CellCoord to, string what)
+    {
+        var struck = info?.Object;
+        if (Build(id) is not { } attacker) return null;
         var result = _session.AttackObjectByNpc(_session.Version, new SessionNpcObjectAttack(attacker)
         {
             Target = struck, Wall = struck is null, Distance = AiExecutorRules.Distance(from, cell), AttackerWorn = _scene.Combat.WornItems(_session, id), AttackerCell = from, DropMap = _scene.DropMap?.Invoke(),
             Flight = _scene.LaunchShotAtObject is not null, TakingDamage = TakingDamageOfObject(id, struck), HitScripts = HitScriptsOf(id, struck?.Entity),
         });
-        Trace(id).Hit = $"shot on {(struck?.Entity ?? "a wall")} instead of {target}: {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
+        Trace(id).Hit = $"{what}: {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
         NeedsAmmunition(id, result.Resolution);
-        // A refused attack leaves the shot to the ordinary flow (the target keeps it).
-        if (result.Disposition == GameSessionDisposition.Rejected) return false;
+        if (result.Disposition == GameSessionDisposition.Rejected) return result;
         if ((result.Shots.Count == 0 || result.Life is not null) && result.Resolution?.Refusal == AttackRefusal.None) _scene.ObjectStruck?.Invoke(id, blocker, info, result);
         // The arrows leave the shooter's tile for the aimed target's; one the viewer cannot fly strikes the blocker at once.
         foreach (var shot in result.Shots)
@@ -2389,7 +2407,24 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                 if (LandShotOnObject(id, shot, struck, struck is null) is { } landed && landed.Disposition != GameSessionDisposition.Rejected) _scene.ObjectStruck?.Invoke(id, blocker, info, landed);
                 _session.EndShot(shot);
             }
-        return true;
+        return result;
+    }
+
+    /// <summary>
+    /// ARC-AI-1636 (VB2-2 gap d; the attack goal's hit step 0x4B3170 on a target that is no critter, exe read in the ledger): an NPC's attack on the object it holds as its COMBAT_FOCUS (a trap's shooter object a trap shot put there,
+    /// <see cref="AttackEvent"/>'s <c>VictimFightsObject</c>). The session damages the object as it does a blocker (<see cref="GameSessionOwner.AttackObjectByNpc"/>, no skill roll: an object has no dodge, RH5) and the attack event of the
+    /// record then goes out for the object as the victim (it tells the NPC's followers and stops). An object the session cannot damage (no target hook, a refusal) is swung at with no effect, as the trace says.
+    /// </summary>
+    private void HitObjectFocus(string id, string target)
+    {
+        if (Tile(id) is not { } from || Tile(target) is not { } cell) return;
+        if (_scene.ObjectAttackTarget?.Invoke(target) is not { Refusal: null, Object: not null } info || info.Kind == DamageableObjectKind.Item)
+        {
+            Trace(id).Hit = $"attack on object {target}: nothing the session damages";
+            return;
+        }
+        var result = StrikeObject(id, info.Row, info, from, cell, cell, $"attack on object {target}");
+        if (result is { Disposition: not GameSessionDisposition.Rejected } && result.Resolution?.Refusal == AttackRefusal.None) AttackEvent(id, target);
     }
 
     private Func<bool>? TakingDamageOfObject(string attacker, SessionObjectTarget? target) =>

@@ -139,7 +139,15 @@ The attack event (0x4A9650, ledger [VB2-2 gap d](../research/ledger/npc-ai.md#pa
 map: type, tile and object flags; the busted state, 0x43F630, is not read), so `Find` answers an object of kind `Object` or `Wall`, its tile answers `Tile` and `Distance`, and the focus is
 valid as the original's validity test 0x4AB990 keeps it (a wall or a busted one is not, a destroyed, off, not drawn or invulnerable one is gone). An NPC victim of such an attacker
 is asked into COMBAT_FOCUS on it through the setter with no alert sound and the event returns (`AreaAiHost.AttackEvent`, plan `VictimFightsObject`); a victim of any other kind does
-nothing more. What the NPC then does with an object as its focus (the original's attack goal on a non-critter) is not built in the host: it keeps the focus and its pass finds no attack ([#1636](https://github.com/Simarglok/arcanum-steamwoven/issues/1636)).
+nothing more.
+
+ARC-AI-1636: the NPC then fights the object. The danger update keeps the focus while 0x4AB990 does (the object whole, not a wall, within the leash), and the viewer fills the busted state of the shooter object
+(`AreaAiObjectFacts.Busted`, 0x43F630 through `AreaObjectTargets.IsBusted`: a portal's or container's lock-domain busted bit 0x80, a scenery's or trap's busted condition; a destroyed object answers 0), so a break drops
+the focus on the next pass (calm down, or the next target). Combat perform (0x4AC6E0) starts the attack goal on the object as on a critter; the goal's tests read a type 15 or 16 only for death (0x429450, 0x4294F0:
+`AreaAiHost.DeadCritter` answers false for an object) and the object's flags 0x1 and 0x2 for its presence (`Gone`). The goal walks next to the object and its hit step is the session's object attack
+(`AreaAiHost.HitObjectFocus` → `GameSessionOwner.AttackObjectByNpc`, no skill roll, the viewer's `AreaAiScene.ObjectStruck` follow-up as for a blocker of the line of fire), after which the attack event of the record (0x4B3170 → 0x4A9650)
+goes out for the object as victim. Not built: the attack animation reads the object's art (0x42B9C0 node 5 reads the target's art and flag 0x80), which the host takes as a standing critter's, and the NPC's spell and item choice for an
+object target (0x4ABC70 reads no target type) runs over the cast host's targets unchanged.
 
 ## Viewer (ARC-WORLD-110)
 
