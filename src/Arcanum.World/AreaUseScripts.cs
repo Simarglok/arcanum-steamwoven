@@ -1711,17 +1711,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 continue;
             }
             if (request.Change == ScrObjectStateChange.HealHitPoints) { ApplyScriptHeal(request); continue; }
-            if (request.Change == ScrObjectStateChange.CastSpell)
-            {
-                // GT183/GT184: the target an NPC of the shown map or the PC; the caster an NPC of the shown map, the PC (ARC-DEV-244: the hero's casting goal) or none (a missing caster handle, 61 and 136). Another map's
-                // object and a non-NPC caster are left as they are.
-                LastCast = null;
-                var free = (request.Value2 & (int)ScrCastFlags.Free) != 0;
-                var unresistable = (request.Value2 & (int)ScrCastFlags.Unresistable) != 0;
-                if ((IsPc(request.Object) || ShownNpc(request.Object)) && (request.Other is not { } by || IsPc(by) || ShownNpc(by)))
-                    LastCast = _world!.ScriptCast!(request.Other is { } caster ? IsPc(caster) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : caster.Code : null, IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value, free, unresistable);
-                continue;
-            }
+            if (request.Change == ScrObjectStateChange.CastSpell) { ApplyScriptCast(request); continue; }
             if (request.Change == ScrObjectStateChange.StopSpell)
             {
                 // RM6 (0x4593F0): the PC or any object of the shown map; the lookup finds a run only where one holds the object, and the run goes on whatever it answers.
@@ -1972,6 +1962,22 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     {
         LastAttack = null;
         if (request.Other is { } attacker && (IsPc(request.Object) || StandsHere(request.Object))) LastAttack = _world!.ScriptAttack!(attacker.Code, request.Object.Code);
+    }
+
+    /// <summary>ARC-SCRIPT-1168: whether the world gives the script cast (<see cref="ApplyScriptCast"/>) this host applies; the dialog host asks before it applies anything, so a run it cannot finish is refused whole.</summary>
+    public bool CanApplyScriptCast => _world?.ScriptCast is not null;
+
+    /// <summary>
+    /// One cast request of a run (the six cast actions 48, 61, 118, 121, 122, 136), applied (ARC-SCRIPT-1168: shared by the dialog host, <see cref="AreaScriptHost.Apply"/>). GT183/GT184: the target an NPC of the shown map or the PC; the caster an NPC of the
+    /// shown map, the PC (ARC-DEV-244: the hero's casting goal) or none (a missing caster handle, 61 and 136). Another map's object and a non-NPC caster are left as they are.
+    /// </summary>
+    public void ApplyScriptCast(ScrObjectStateRequest request)
+    {
+        LastCast = null;
+        var free = (request.Value2 & (int)ScrCastFlags.Free) != 0;
+        var unresistable = (request.Value2 & (int)ScrCastFlags.Unresistable) != 0;
+        if ((IsPc(request.Object) || ShownNpc(request.Object)) && (request.Other is not { } by || IsPc(by) || ShownNpc(by)))
+            LastCast = _world!.ScriptCast!(request.Other is { } caster ? IsPc(caster) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : caster.Code : null, IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value, free, unresistable);
     }
 
     // ARC-SCRIPT-1679 (FM1): an NPC standing on the shown map, told by identity: a row of the shown map, or the row of a carried follower named by its home map whose live cell the viewer gives here (the tile script's test of the same).
