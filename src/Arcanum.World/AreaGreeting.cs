@@ -1,6 +1,7 @@
 using Arcanum.Data;
 using Arcanum.Data.Combat;
 using Arcanum.Data.Content;
+using Arcanum.Data.Maps;
 using Arcanum.Data.Messages;
 using Arcanum.Data.Reputations;
 using Arcanum.Data.Scripts;
@@ -15,7 +16,7 @@ public enum AreaGreetingTextsStatus { Ready, StackFailed, FilesFailed, Reputatio
 
 /// <summary>The texts every greeting of a module reads, or why they could not be read (the greeting then stays a frontier).</summary>
 public sealed record AreaGreetingTexts(AreaGreetingTextsStatus Status, GeneratedDialogFiles? Files, IReadOnlyList<MesFile?> ReputationLines, string Detail,
-    SkillTexts? Skills = null, IReadOnlyList<MesFile?>? RumorLines = null, QuestReplyTable? QuestReplies = null)
+    SkillTexts? Skills = null, IReadOnlyList<MesFile?>? RumorLines = null, QuestReplyTable? QuestReplies = null, WorldAreaTable? Areas = null)
 {
     /// <summary>ARC-SCRIPT-1150: a skill's name for the trainer's menu (<c>skill.mes</c> message 0..11 basic, 12..15 tech), or null when the file is not loaded
     /// or does not hold it.</summary>
@@ -48,13 +49,15 @@ public sealed record AreaGreetingTexts(AreaGreetingTextsStatus Status, Generated
         var skills = SkillTexts.Load(stack);
         // ARC-SCRIPT-1304: the four rumor files of the r: reply's tale; a file that is absent or unusable leaves its rumors without a text.
         var rumors = RumorSpeechTexts.Load(stack);
+        // ARC-SCRIPT-1533: the area table of the d: and x: replies (names and locations, 0x4CAE90, 0x4CAED0); a table that does not load only leaves those replies blocked.
+        var areas = WorldAreaTable.Open(stack);
         // ARC-SCRIPT-1532: the module's quest rules table of the q: reply (read at module load, as the quest experience levels are); a table that is absent or unusable only leaves the q: reply a frontier.
         var questFile = AreaStartingHero.Table(stack, AreaStartingHero.QuestLevelsPath, ContentLoadPhase.ModuleLoaded, required: false, out _);
         var questReplies = questFile is null ? null : QuestReplyTable.Read(questFile).Table;
         return new(AreaGreetingTextsStatus.Ready, files.Files, reputations.Table.Greetings,
             $"{GeneratedDialogFiles.Count - files.Files.Absent.Count} generated-dialog files, {reputations.Table.Greetings.Count(file => file is not null)} reputation greeting files, "
             + $"{rumors.Files.Count(file => file is not null)} rumor files{(rumors.Failures.Count == 0 ? string.Empty : $" ({rumors.Failures.Count} unusable)")}",
-            skills.Texts, rumors.Files, questReplies);
+            skills.Texts, rumors.Files, questReplies, areas.Status == WorldAreaTableStatus.Read ? areas.Table : null);
     }
 }
 
