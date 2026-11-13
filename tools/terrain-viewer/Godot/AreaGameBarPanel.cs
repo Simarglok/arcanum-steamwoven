@@ -25,6 +25,9 @@ public partial class AreaGameBarPanel : CanvasLayer
     // ARC-UI-1111: the clock window of the top strip (GB8) and the face the host last gave it.
     private AreaClockView _clock = null!;
     private AreaClockFace? _clockFace;
+    // ARC-UI-1365: the experience progress strip of the bottom strip (GB13) and the progress the host last gave it.
+    private AreaExperienceStripView _experience = null!;
+    private int? _experienceProgress;
 
     /// <summary>A pointer event on the bars changed something: the host plays the sounds and runs the button's function.</summary>
     public event Action<AreaBarEffect>? Effect;
@@ -95,6 +98,9 @@ public partial class AreaGameBarPanel : CanvasLayer
     public Texture2D? ArtFrame(int number, int frame = 0) => _art.TryGetValue(number, out var frames) && frame >= 0 && frame < frames.Length ? frames[frame] : null;
     /// <summary>ARC-MAGIC-026: every frame of an interface art the bars read (the maintain bar's slot and plugged arts), or null.</summary>
     public Texture2D[]? ArtFrames(int number) => _art.GetValueOrDefault(number);
+    /// <summary>ARC-UI-1364: the art number a button was last drawn with (its lit or map-face art included), -1 when it drew none.</summary>
+    internal int ArtForSelfTest(AreaBarButton button) => _buttons.TryGetValue(button, out var rect) && rect.HasMeta(ArtMeta) ? (int)rect.GetMeta(ArtMeta) : -1;
+    private const string ArtMeta = "bar_art";
     internal int FrameForSelfTest(AreaBarButton button) => _buttons.TryGetValue(button, out var rect) && rect.HasMeta(FrameMeta) ? (int)rect.GetMeta(FrameMeta) : -1;
     internal Vector2 ButtonCentreForSelfTest(AreaBarButton button) => _buttons[button].GetGlobalRect().GetCenter();
     internal Rect2 StripRectForSelfTest(AreaBarStrip strip) => _strips[strip].GetGlobalRect();
@@ -153,6 +159,8 @@ public partial class AreaGameBarPanel : CanvasLayer
         _clock.MouseExited += () => Raise(_bar.Exit(AreaBarButton.Clock));
         _clock.GuiInput += input => ButtonInput(AreaBarButton.Clock, _clock, input);
         _strips[AreaBarStrip.Top].AddChild(_clock);
+        _experience = new AreaExperienceStripView();
+        _strips[AreaBarStrip.Bottom].AddChild(_experience);
         var (ix, iy) = AreaGameBarLayout.HoverImage;
         _hoverImage = new TextureRect
         {
@@ -212,6 +220,16 @@ public partial class AreaGameBarPanel : CanvasLayer
         _clockFace = face;
         RenderClock();
     }
+
+    /// <summary>ARC-UI-1365: the hero's progress toward the next level in thousandths (null: no strip pieces), drawn from the strip's arts.</summary>
+    public void SetExperience(int? progress)
+    {
+        _experienceProgress = progress;
+        _experience.Set(progress, _art);
+    }
+
+    internal IReadOnlyList<(AreaExperiencePiece Piece, int Width)> ExperienceForSelfTest => _experience.DrawnForSelfTest;
+    internal bool ExperienceShownForSelfTest { get => _experience.Visible; set => _experience.Visible = value; }
 
     private void RenderClock() =>
         _clock.Set(_clockFace, ArtFrame(AreaClockLayout.StripArt), _clockFace is { } face ? ArtFrame(face.MoonArt) : null, ArtFrame(AreaClockLayout.NeedleArt));
@@ -293,15 +311,19 @@ public partial class AreaGameBarPanel : CanvasLayer
         foreach (var spec in AreaGameBarLayout.Buttons)
         {
             var rect = _buttons[spec.Button];
-            if (!_art.TryGetValue(spec.Art, out var frames) || frames.Length == 0) { rect.Texture = null; rect.Size = new Vector2(32, 32); rect.RemoveMeta(FrameMeta); continue; }
+            // ARC-UI-1364: the art the game's light callbacks left on the button (lit, or the map's face); the layout's own art when that one did not read.
+            var shown = _bar.Lights.ArtOf(spec.Button) is { } lightArt && _art.TryGetValue(lightArt, out var lightFrames) && lightFrames.Length > 0 ? lightArt : spec.Art;
+            if (!_art.TryGetValue(shown, out var frames) || frames.Length == 0) { rect.Texture = null; rect.Size = new Vector2(32, 32); rect.RemoveMeta(FrameMeta); rect.RemoveMeta(ArtMeta); continue; }
             var look = _downFeedback.TryGetValue(spec.Button, out var feedback) && feedback.Released
                 ? AreaBarButtonLook.Down : _bar.Look(spec.Button);
             var frame = AreaGameBarLayout.Frame(look, frames.Length);
             rect.Texture = frames[frame];
             rect.Size = frames[frame].GetSize();
             rect.SetMeta(FrameMeta, frame);
+            rect.SetMeta(ArtMeta, shown);
         }
         RenderClock();
+        _experience.Set(_experienceProgress, _art);
         _messageLog.Render();
     }
 
