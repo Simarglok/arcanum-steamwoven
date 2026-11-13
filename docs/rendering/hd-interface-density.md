@@ -409,7 +409,7 @@ those of the player's `interface.mes` (the viewer's window ledgers carry them; e
 | ARC-UI-150 (issue #1195, ARC-UI-1195, [S5](#viewer-slice-s5-arc-ui-1195)) | character sheet | 22 main, 29 skills, 30 disciplines, 31 spells, tabs 34–36 and 568, the + and − buttons (23/24, 624/625, 647/648; 257/258 are `SP_Minus`/`SP_Plus`, which the sheet does not draw), the group and discipline buttons 302–313 | stat labels baked in the art stay pictures (kept rectangles); the schemes page 567 and the sixteen college tabs follow in [S5b](#viewer-slice-s5b-arc-ui-1784); the spell icons stay pictures |
 | ARC-UI-151 (issue #1196, ARC-UI-1196, [S7](#viewer-slice-s7-arc-ui-1196)) | logbook | 264 side, 260 book, 261 page art, the seven tabs 265–271, the page buttons 272 and 273; 263, 259 and 262 are not drawn by the logbook | a parchment page material; the lens 198 is shared and stays art |
 | ARC-UI-152 (issue #1197, ARC-UI-1197, [S6](#viewer-slice-s6-arc-ui-1197)) | world and town map | 138 main (the one frame the two windows draw); 140 and 199 (`wp_main`, `WP_Cover`, 130 × 152) and 219 and 220 (`Tmp_Day`, `Tmp_Nght`, two 501 × 365 landscape pictures) are drawn by no window of the viewer, so they are not built (issue #1811) | the map picture itself stays art; the buttons 811–813, the compass button 139, the lens 198 and the cover 217 are issue #1810 |
-| ARC-UI-153 | schematic window | 365 base and its buttons and tabs | |
+| ARC-UI-153 (issue #1199, ARC-UI-1199, [S8](#viewer-slice-s8-arc-ui-1199)) | schematic window | 365 base, the eight discipline tabs 355, 356, 361–364, 368, 369, the two list buttons 6, the assemble button 357, the page buttons 372 and 373; the lens 231 is the barter window's recipe | the assemble face 358–360, the found and missing tints 830 and 831 and the record's own art stay art; the two gears with a mortarboard and a scroll (the list buttons' labels, painted in the base) stay pictures |
 | ARC-UI-154 | message and dialogue frames, Fate, Sleep | 354, 7, 8, 128, 200, 274, 288, 290, 291 (410 × 107 rows), 292, 298, 218 | |
 | ARC-UI-155 | reading windows and the remaining small panels | 477, 487, 489, 491, 500 backgrounds, 494 side bar, and what is left | |
 
@@ -578,6 +578,32 @@ by the logbook, so they have no recipe.
 - **Local observation** (owner's Mac, 1280 × 800 window): the loot-room stage passes in the generated, HD and Legacy runs; the device scale is 1 and 2 in the 1600 × 1200 window. The composite (before = the HD pack art that the Generated mode drew until now, after,
   Legacy, and after at scale 2) is in the task thread, not in git. Seen there: the generated pages are plainer than the original's, with soft clouds in place of its grain; the cover is a flat maroon weave; the page edges are
   light and regular stripes where the original's are a dark speckle; the tabs follow the original's outlines and glyphs closely.
+
+## Viewer slice S8 (ARC-UI-1199)
+
+S8 draws the schematic window in the generated interface (planned as ARC-UI-153, issue #1199), at the window's own device scale. Positions, sizes, alpha tests and hit areas are the Legacy ones
+(D9); only the drawing changes. The arts are the ones the window draws ([ledger SW9–SW14](../research/ledger/technology.md), `AreaSchematicWindowLayout`): 365 `Schematic_Base` (800 × 400), the eight discipline tabs
+355, 356, 361–364, 368 and 369 (`Anatomical_Tab` .. `Theraputics_Tab`, 27 × 40, two frames), the two list buttons 6 (`bgrn_but`, 37 × 36, two frames), the assemble button 357 (`CombineButt`, 51 × 51, two frames) and the page buttons
+372 and 373 (`Schm_LArrow`, `Schm_RArrow`, 18 × 22, three frames); the round view's lens 231 is the barter window's recipe ([S4](#viewer-slice-s4-arc-ui-1194)).
+
+- **Base.** Wood with a blueprint page (`ChromeMaterial.Paper`: the parchment's mottling in a warmer cream, with no fold; 201..706 across and 13..379 down) ruled every 32 units from x 227 and y 22 (`ChromeRuling`: a one-unit
+  line, `max(1, round(scale))` device pixels wide, faintly orange, so the hairline stays one device pixel at every scale). The record's picture hole gets the brass rim every hole gets; the lens's square and the eight tab slots take no rim
+  (`ChromeBare`: what is drawn over them, the lens and a tab, carries its own edge). The two component boxes are sunk boxes of paper (the found and missing tints 830 and 831 lie over them); the assemble button's channel is a sunk dark box with
+  the brass sockets of its two lamps (the assemble face 358–360, the lamps, stays a picture); the two list buttons' sockets are the round holes' brass rims. The two gears with a mortarboard and a scroll (the learned and found buttons' labels, painted in
+  the base) are kept pictures inside an ellipse each. The printed lines that join the record to the two boxes, the ragged edge of the page and its stains are not drawn.
+- **Tabs and buttons.** A discipline tab is `ChromeKind.Tab` as in [S7](#viewer-slice-s7-arc-ui-1196): the ground (dark wood, the page's last units) and the paper bookmark of its own Legacy frame (the shown tab's pressed frame and the idle
+  ones have their own outlines), the paper in `ChromeRecipe.TabPaper` (here `Paper`), a dark edge on its lower right, a light one on its upper left, a soft shadow and the glyph. The two list buttons and the assemble button are the plain brass buttons of
+  [S1](#viewer-slice-s1-arc-ui-140) (generated face and rim following the silhouette, sunk on the down frame); a page button is the page under it (the same paper and ruling, continued through the recipe's origin) and the Legacy arrow
+  (`ChromeGlyph`).
+- **Device scale.** `AreaSchematicWindowView` claims the window's own device scale for its textures (the control's scale times the canvas transform's and the viewport's stretch) and redraws when a worker's finished frame replaces
+  the one it drew or the device scale changes (the window moves with the viewport every frame, so a size change redraws on its own).
+- **Not generated.** The assemble face (358–360), the found and missing tints (830, 831), the record's art, the item pictures, the gears, the round view's live copy and the text stay as they are; the lens ring (231) is the barter window's.
+- **Checks.** `InterfaceChromeTests` (the recipes and their origins from the layout and no recipe for the pictures; in-bounds and deterministic paint at whole and fractional scales; the lens and the tab slots plain and the record's hole rimmed;
+  the ruling one unit wide; a page button continues the ruled page; a tab reads its paper, edge, shadow and glyph; the buttons follow their silhouette and sink). The native smoke: the stage `tech-craft` (`./arcanum smoke map "crash site cave" --stages tech-craft`)
+  with `ARC_AREA_WINDOW_ART=legacy|hd|generated` (with `ARC_HD_PACK` for the last two) checks the base, the lens, the list and assemble buttons, the eight tabs (the shown one's pressed frame) and the shown page buttons: in `generated` they are
+  generated chrome at `round(size × paint scale)` pixels of the window's own device scale, again at 1600 × 1200 (the window's whole factor steps to 2 from 1200 high where the bars are hidden) and back; in `hd` and `legacy` none is. `ARC_AREA_WINDOW_CAPTURE=PREFIX` saves the viewport as `PREFIX-schematics-MODE[-big|-back].png`
+  (local, not in git).
+- **Local observation** (owner's Mac, 1280 × 800 window): the stage `tech-craft` passes in the Generated, HD and Legacy runs; in the Generated run 13 frames (the base, the lens, the list and assemble buttons, the eight tabs) are generated at the window's own scale, which is 1 at 1280 × 800 and 2 in the 1600 × 1200 window, where they paint again. The composite (before = the HD pack art that the Generated mode drew until now, after, Legacy) is in the task thread, not in git. Seen there: the page is a warm cream with a plain ruling where the original has stains, a ragged edge and printed connecting lines to the component boxes; the tabs follow the original's outlines and glyphs closely; the buttons are the project's brass buttons; the kept gears sit in a faint ellipse of the old wood; the lens's ring sits on a square patch of wood whose grain differs a little from the window's.
 
 ## Synthetic comparison
 

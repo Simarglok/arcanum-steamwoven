@@ -1,12 +1,14 @@
 using Arcanum.Data.Hd;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>ARC-UI-140: a surface the generated interface chrome is painted with (our own colours and noise, chosen by eye; not
 /// measured from any game art).</summary>
 /// <remarks>ARC-UI-1195: <see cref="Slate"/> is the character sheet's pages. ARC-UI-1196: <see cref="Cloth"/> is a book cover's maroon weave, <see cref="Parchment"/> a page (cream with soft mottling and the shade of the fold at the logbook's spine,
-/// so everything that sits on a page matches it) and <see cref="PageEdge"/> the striped edge of a stack of pages.</remarks>
-public enum ChromeMaterial { Wood, WoodDark, Iron, Dark, Face, Pit, Slate, Cloth, Parchment, PageEdge }
+/// so everything that sits on a page matches it) and <see cref="PageEdge"/> the striped edge of a stack of pages. ARC-UI-1199: <see cref="Paper"/> is the parchment of a loose sheet (the schematic window's blueprint
+/// page): the same cream and mottling with no fold.</remarks>
+public enum ChromeMaterial { Wood, WoodDark, Iron, Dark, Face, Pit, Slate, Cloth, Parchment, PageEdge, Paper }
 
 /// <summary>The edges of a frame that get a rim (a panel's edge facing the play view).</summary>
 [Flags]
@@ -51,6 +53,15 @@ public sealed record ChromeRoundView(double CenterX, double CenterY, double Radi
 /// keep their own shape and anti-aliasing and the Legacy ground's grain does not carry over.</summary>
 public sealed record ChromeGlyph(int X, int Y, int Width, int Height) : ChromePart;
 
+/// <summary>ARC-UI-1199: the ruled lines of a printed sheet (the schematic window's blueprint page) inside a rectangle: a one-unit line in the rectangle's coordinates at
+/// <paramref name="GridX"/> + k × <paramref name="Step"/> and another set of horizontal ones at <paramref name="GridY"/> + k × <paramref name="Step"/>, each <c>max(1, round(scale))</c> device
+/// pixels wide (the device-pixel grid rule), faintly orange. A separately painted art on the sheet (a page button) passes the lines' phase in its own coordinates, so they continue.</summary>
+public sealed record ChromeRuling(int X, int Y, int Width, int Height, int Step, int GridX, int GridY) : ChromePart;
+
+/// <summary>ARC-UI-1199: a hole of the Legacy frame that takes no rim (the generated rim every hole gets): what is drawn over it (a tab, a lens) carries its own edge. The hole whose box holds
+/// the centre of this rectangle is the one.</summary>
+public sealed record ChromeBare(int X, int Y, int Width, int Height) : ChromePart;
+
 /// <summary>ARC-UI-1196: what is drawn around the holes of a panel's Legacy frame (the transparent regions the live view or the page shows through).</summary>
 public enum ChromeHoles
 {
@@ -78,9 +89,9 @@ public enum ChromeKind
 /// <remarks>ARC-UI-1196: <paramref name="Holes"/> says what the holes of the Legacy frame get; <paramref name="OriginX"/> and <paramref name="OriginY"/> are where the art's corner lies in the
 /// window's larger picture (the logbook's book), in Legacy pixels: the materials are sampled at that offset, so a tab or a page button painted on its own continues the page or the
 /// stack it lies on without a seam. ARC-UI-1784: <paramref name="KeepFace"/> (a button only) keeps the art's whole picture inside the generated rim (a ball whose colour tells the college
-/// apart), where a plain button keeps only the glyph on a generated brass face.</remarks>
+/// apart), where a plain button keeps only the glyph on a generated brass face. ARC-UI-1199: <paramref name="TabPaper"/> is the material of a tab's paper bookmark.</remarks>
 public sealed record ChromeRecipe(string File, ChromeKind Kind, ChromeMaterial Base, ChromeSides Rim, IReadOnlyList<ChromePart> Parts, int DownFrame = 1, int HoverFrame = 2,
-    ChromeHoles Holes = ChromeHoles.Brass, int OriginX = 0, int OriginY = 0, bool KeepFace = false)
+    ChromeHoles Holes = ChromeHoles.Brass, int OriginX = 0, int OriginY = 0, bool KeepFace = false, ChromeMaterial TabPaper = ChromeMaterial.Parchment)
 {
     public string NameSha256 { get; } = HdInterfaceKey.NameSha256(File);
 }
@@ -123,6 +134,46 @@ public static class InterfaceChromeRecipes
             OriginX: AreaLogbookArtLayout.PreviousCorner.X - AreaLogbookArtLayout.BookCorner.X, OriginY: AreaLogbookArtLayout.PreviousCorner.Y - AreaLogbookArtLayout.BookCorner.Y);
         yield return new ChromeRecipe("pageturn_r.art", ChromeKind.Panel, ChromeMaterial.Parchment, ChromeSides.None, [new ChromeGlyph(0, 0, 18, 22)], Holes: ChromeHoles.None,
             OriginX: AreaLogbookArtLayout.NextCorner.X - AreaLogbookArtLayout.BookCorner.X, OriginY: AreaLogbookArtLayout.NextCorner.Y - AreaLogbookArtLayout.BookCorner.Y);
+    }
+
+    // ARC-UI-1199: the schematic window's frames (Legacy pixels of each art; the layout of AreaSchematicWindowLayout). The base (365, 800 x 400) is wood with a blueprint page (a ruled sheet of paper
+    // 201..706 across, 13..379 down, ruled every 32 units from x 227 and y 22), the round view's square hole (the lens art 231 draws its ring over it), the record's picture hole (a brass rim), the two component
+    // slots' boxes (sunk, filled with paper under the found or missing tint), the channel of the assemble button with the sockets of its two lamps, the two list buttons' sockets, and eight tab slots
+    // that take no rim (a tab is a bookmark that sticks out of the page's edge). The two gears with a mortarboard and a scroll (the learned and found buttons' labels) stay pictures. The tabs
+    // (27 x 40) are their ground (the wood, the page's last units) and the paper bookmark of their own Legacy frame; a page button is the sheet under it and the arrow.
+    private const int PageX = 201, PageY = 13, PageWidth = 506, PageHeight = 367, RuleStep = 32, RuleX = 227, RuleY = 22;
+
+    private static ChromeRuling PageRuling(int x, int y, int width, int height) =>
+        new(0, 0, width, height, RuleStep, (((RuleX - x) % RuleStep) + RuleStep) % RuleStep, (((RuleY - y) % RuleStep) + RuleStep) % RuleStep);
+
+    private static IEnumerable<ChromeRecipe> SchematicRecipes()
+    {
+        var parts = new List<ChromePart>
+        {
+            new ChromePlate(PageX, PageY, PageWidth, PageHeight, ChromeMaterial.Paper, Bevel: false),
+            new ChromeRuling(PageX, PageY, PageWidth, PageHeight, RuleStep, RuleX - PageX, RuleY - PageY),
+            new ChromeSunk(577, 179, 103, 71, ChromeMaterial.Paper), new ChromeSunk(577, 275, 103, 71, ChromeMaterial.Paper),
+            new ChromeSunk(39, 334, 126, 30, ChromeMaterial.Pit),
+            new ChromeBare(AreaSchematicWindowLayout.RoundView.X, AreaSchematicWindowLayout.RoundView.Y, AreaSchematicWindowLayout.RoundView.Width, AreaSchematicWindowLayout.RoundView.Height),
+            new ChromeKeep(72, 144, 90, 70, true), new ChromeKeep(71, 231, 96, 72, true),
+        };
+        for (var d = 0; d < AreaSchematicWindowLayout.Disciplines; d++)
+        {
+            var (x, y) = AreaSchematicWindowLayout.DisciplineTab(d);
+            parts.Add(new ChromeBare(x, y, 27, 40));
+        }
+        yield return new ChromeRecipe("Schematic_Base.ART", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, parts);
+        var tabs = new[] { "Anatomical_Tab.ART", "Chemistry_Tab.ART", "Electrical_Tab.ART", "Explosives_Tab.ART", "GunSmithy_Tab.ART", "Mechanical_Tab.ART", "Smithy_Tab.ART", "Theraputics_Tab.ART" };
+        for (var d = 0; d < tabs.Length; d++)
+        {
+            var (x, y) = AreaSchematicWindowLayout.DisciplineTab(d);
+            yield return new ChromeRecipe(tabs[d], ChromeKind.Tab, ChromeMaterial.Wood, ChromeSides.None,
+                [new ChromePlate(0, 0, 27, 40, ChromeMaterial.WoodDark, Bevel: false), new ChromePlate(0, 0, 12, 40, ChromeMaterial.Paper, Bevel: false)], OriginX: x, OriginY: y, TabPaper: ChromeMaterial.Paper);
+        }
+        var (px, py) = AreaSchematicWindowLayout.Previous;
+        var (nx, ny) = AreaSchematicWindowLayout.Next;
+        yield return new ChromeRecipe("Schm_LArrow.ART", ChromeKind.Panel, ChromeMaterial.Paper, ChromeSides.None, [PageRuling(px, py, 18, 22), new ChromeGlyph(0, 0, 18, 22)], Holes: ChromeHoles.None, OriginX: px, OriginY: py);
+        yield return new ChromeRecipe("Schm_RArrow.ART", ChromeKind.Panel, ChromeMaterial.Paper, ChromeSides.None, [PageRuling(nx, ny, 18, 22), new ChromeGlyph(0, 0, 18, 22)], Holes: ChromeHoles.None, OriginX: nx, OriginY: ny);
     }
 
     public static IReadOnlyList<ChromeRecipe> All { get; } = Build();
@@ -213,8 +264,10 @@ public static class InterfaceChromeRecipes
             "char_minus.art", "char_plus.art", "SP_Minus.ART", "SP_Plus.ART", "SkilAddBut.ART", "SkilMinusBut.ART", "SpellTech_Add.ART", "SpellTech_Minus.ART",
             "char_Common_Skills.art", "char_Tech_Skills.art", "char_Spells_Skills.art", "char_Schem_Skills.ART",
             "Combat_But.ART", "Thieving_But.ART", "Social_But.ART", "Technological_But.ART",
-            "Anatomical_But.ART", "Chemistry_But.ART", "Electrical_But.ART", "Explosives_But.ART", "GunSmithy_But.ART", "Mechanical_But.ART", "Smithy_But.ART", "Therapeutics_But.ART"];
-        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, .. lenses, .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
+            "Anatomical_But.ART", "Chemistry_But.ART", "Electrical_But.ART", "Explosives_But.ART", "GunSmithy_But.ART", "Mechanical_But.ART", "Smithy_But.ART", "Therapeutics_But.ART",
+            // ARC-UI-1199: the schematic window's two list buttons (art 6) and its assemble button (357).
+            "bgrn_but.art", "CombineButt.ART"];
+        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, .. lenses, .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. SchematicRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
             // ARC-UI-1784: the spells page's sixteen college tabs (24 x 24 balls, three frames): a generated rim around the ball's own picture.
             .. CollegeTabFiles.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true))];
     }
@@ -472,11 +525,14 @@ public static class InterfaceChromeRenderer
                 case ChromePlate plate: Plate(c, plate); break;
                 case ChromeSunk sunk: Sunk(c, sunk); break;
                 case ChromeGrid grid: Grid(c, grid); break;
+                case ChromeRuling ruling: Ruling(c, ruling); break;
             }
         }
         if (recipe.Holes != ChromeHoles.None)
             foreach (var hole in Holes(c))
-                if (!recipe.Parts.OfType<ChromeRoundView>().Any(view => view.CenterX >= hole.X0 && view.CenterX < hole.X1 && view.CenterY >= hole.Y0 && view.CenterY < hole.Y1)) HoleRim(c, hole, recipe.Holes == ChromeHoles.Cloth);
+                if (!recipe.Parts.OfType<ChromeRoundView>().Any(view => view.CenterX >= hole.X0 && view.CenterX < hole.X1 && view.CenterY >= hole.Y0 && view.CenterY < hole.Y1)
+                    && !recipe.Parts.OfType<ChromeBare>().Any(bare => bare.X + bare.Width * 0.5 >= hole.X0 && bare.X + bare.Width * 0.5 < hole.X1 && bare.Y + bare.Height * 0.5 >= hole.Y0 && bare.Y + bare.Height * 0.5 < hole.Y1))
+                    HoleRim(c, hole, recipe.Holes == ChromeHoles.Cloth);
         foreach (var part in recipe.Parts)
         {
             switch (part)
@@ -523,7 +579,7 @@ public static class InterfaceChromeRenderer
                 if (PaperIn(x - c.S, y) || PaperIn(x - 2 * c.S, y) || PaperIn(x, y - c.S) || PaperIn(x - c.S, y - c.S)) c.Color[i] = c.Color[i].Times(0.55f);
                 continue;
             }
-            var colour = Material(c, ChromeMaterial.Parchment, c.At(x), c.At(y));
+            var colour = Material(c, recipe.TabPaper, c.At(x), c.At(y));
             var p = c.PictureAt(x, y);
             colour = new Rgb(Clamp8(colour.R * (1 + 1.15f * Departure(p.R / median[0], 0.12f))), Clamp8(colour.G * (1 + 1.15f * Departure(p.G / median[1], 0.12f))), Clamp8(colour.B * (1 + 1.15f * Departure(p.B / median[2], 0.12f))));
             if (!PaperAt(x + c.S, y) || !PaperAt(x, y + c.S)) colour = colour.Times(0.62f);
@@ -567,6 +623,30 @@ public static class InterfaceChromeRenderer
         for (var y = 0; y < c.LegacyH; y++)
             for (var x = left; lasts[y] >= 0 && x <= lasts[y]; x++) mask[y * c.LegacyW + x] = true;
         return mask;
+    }
+
+    // ARC-UI-1199: see ChromeRuling. A line is `S` device pixels wide from the device edge of its Legacy position, clipped to the rectangle, and blended faintly over what is there.
+    private static readonly Rgb RuleInk = new(170, 112, 36);
+
+    private static void Ruling(Canvas c, ChromeRuling ruling)
+    {
+        if (ruling.Step <= 0) return;
+        int x0 = c.Edge(ruling.X), y0 = c.Edge(ruling.Y), x1 = c.Edge(ruling.X + ruling.Width), y1 = c.Edge(ruling.Y + ruling.Height);
+        void Line(int lx0, int ly0, int lx1, int ly1)
+        {
+            for (var y = Math.Max(y0, ly0); y < Math.Min(Math.Min(y1, c.H), ly1); y++)
+            for (var x = Math.Max(x0, lx0); x < Math.Min(Math.Min(x1, c.W), lx1); x++) c.Blend(x, y, RuleInk, 0.5f);
+        }
+        for (var gx = ruling.GridX; gx < ruling.Width; gx += ruling.Step)
+        {
+            var dx = c.Edge(ruling.X + gx);
+            Line(dx, y0, dx + c.S, y1);
+        }
+        for (var gy = ruling.GridY; gy < ruling.Height; gy += ruling.Step)
+        {
+            var dy = c.Edge(ruling.Y + gy);
+            Line(x0, dy, x1, dy + c.S);
+        }
     }
 
     // ARC-UI-1196: see ChromeGlyph. The median of the rectangle's opaque Legacy pixels is its ground; a pixel that departs from it by more than a tenth of the ground
@@ -665,13 +745,14 @@ public static class InterfaceChromeRenderer
         ChromeMaterial.Dark => Rgb.Lerp(DarkFill, new Rgb(16, 16, 26), Fbm(u * 0.05f, v * 0.05f, 11)),
         ChromeMaterial.Cloth => ClothAt(u, v),
         ChromeMaterial.Parchment => ParchmentAt(u, v),
+        ChromeMaterial.Paper => PaperAt(u, v),
         ChromeMaterial.PageEdge => PageEdgeAt(u, v),
         _ => FaceHigh,
     };
 
     // ARC-UI-1196: our own cloth, parchment and page edge (colours chosen by eye).
     private static readonly Rgb ClothLow = new(56, 28, 30), ClothHigh = new(98, 50, 52);
-    private static readonly Rgb ParchmentLow = new(132, 126, 110), ParchmentHigh = new(176, 170, 152);
+    private static readonly Rgb ParchmentLow = new(132, 126, 110), ParchmentHigh = new(176, 170, 152), PaperLow = new(172, 150, 108), PaperHigh = new(222, 200, 154);
     private static readonly Rgb PageEdgeLow = new(70, 63, 56), PageEdgeHigh = new(136, 128, 116);
 
     /// <summary>The x, in the book's Legacy pixels, of the fold between the two pages (the book art's 286: the left page ends and the right one starts).</summary>
@@ -682,6 +763,14 @@ public static class InterfaceChromeRenderer
         // A diagonal two-way weave one or two units wide under a slow tone.
         var weave = 0.25f * (MathF.Sin((u + v) * 2.2f) + MathF.Sin((u - v) * 2.2f)) + 0.5f;
         return Rgb.Lerp(ClothLow, ClothHigh, Math.Clamp(0.3f + 0.35f * Fbm(u * 0.08f, v * 0.08f, 41) + 0.35f * weave, 0, 1));
+    }
+
+    // ARC-UI-1199: a loose sheet: the same mottling in a warmer cream, with no fold.
+    private static Rgb PaperAt(float u, float v)
+    {
+        var mottle = Fbm(u * 0.035f, v * 0.04f, 21);
+        var grain = Fbm(u * 0.4f, v * 0.4f, 22);
+        return Rgb.Lerp(PaperLow, PaperHigh, Math.Clamp(0.35f + 0.55f * mottle + 0.1f * (grain - 0.5f), 0, 1));
     }
 
     private static Rgb ParchmentAt(float u, float v)
