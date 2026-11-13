@@ -16,9 +16,16 @@ namespace Arcanum.World;
 /// <param name="Templates">The bodies of the speakers with follow facts that the read listed.</param>
 /// <param name="Frames">The frames the templates' commands draw.</param>
 /// <param name="CoreSectors">The sectors (world cell &gt;&gt; 6) a window holds as core; null for a whole map.</param>
+/// <param name="LedEntities">ARC-AI-1646: the NPCs without a dialog the read was asked to build a body for because the hero leads them (a Dominate Will target); null or empty
+/// for a read made for the speakers only.</param>
 public sealed record AreaHomeRead(int Map, AreaInventoryMap Rows, IReadOnlyList<AreaCompanionTemplate> Templates,
-    IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> Frames, IReadOnlySet<(long X, long Y)>? CoreSectors)
+    IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> Frames, IReadOnlySet<(long X, long Y)>? CoreSectors, IReadOnlySet<string>? LedEntities = null)
 {
+    private static readonly IReadOnlySet<string> NoEntities = new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>The NPCs the read was asked to build led bodies for (<see cref="LedEntities"/>, never null).</summary>
+    public IReadOnlySet<string> Led => LedEntities ?? NoEntities;
+
     /// <summary>Whether the read holds the cell: a whole map holds every cell, a window the cells of its core sectors.</summary>
     public bool Covers(CellCoord cell) => CoreSectors is null || CoreSectors.Contains((cell.X >> 6, cell.Y >> 6));
 
@@ -59,8 +66,9 @@ public sealed record AreaHomeLoad(AreaHomeRead? Read, string Detail);
 public interface IAreaHomeSource
 {
     /// <summary>Reads map <paramref name="runtimeMap"/>: the whole map, or when it opens only as a window the window around
-    /// <paramref name="near"/> (a world cell the map's data lists an object on). A failure is a result, not an exception.</summary>
-    AreaHomeLoad Read(int runtimeMap, CellCoord? near, CancellationToken token);
+    /// <paramref name="near"/> (a world cell the map's data lists an object on). ARC-AI-1646: <paramref name="led"/> names the NPCs of the map without a dialog that
+    /// the hero leads, whose bodies the read builds too (only those, not every NPC of the map); empty for a read of the speakers only. A failure is a result, not an exception.</summary>
+    AreaHomeLoad Read(int runtimeMap, CellCoord? near, IReadOnlySet<string> led, CancellationToken token);
 }
 
 /// <summary>
@@ -75,7 +83,7 @@ public sealed class AreaHomeDirectory(IAreaHomeSource? source, int maxReads = Ar
     public const int DefaultMaxReads = 8;
 
     private readonly List<(AreaHomeRead Read, long Used)> _reads = [];
-    private readonly Dictionary<(int Map, long Sector), string> _failed = [];
+    private readonly Dictionary<(int Map, long Sector, string Led), string> _failed = [];
     private long _clock;
 
     public int MaxReads { get; } = maxReads is >= 1 and <= 64 ? maxReads : throw new ArgumentOutOfRangeException(nameof(maxReads));
@@ -117,11 +125,19 @@ public sealed class AreaHomeDirectory(IAreaHomeSource? source, int maxReads = Ar
     public AreaHomeLoad Home(int map, CellCoord? near = null, CancellationToken token = default)
     {
         if (Held(map, near) is { } held) return new(held, string.Empty);
+        return Fetch(map, near, NoLed, token);
+    }
+
+    private static readonly IReadOnlySet<string> NoLed = new HashSet<string>(StringComparer.Ordinal);
+
+    // One read from the source (ARC-AI-1646: with the led NPCs' bodies), held when it reads; a failure is remembered per map, window and led set.
+    private AreaHomeLoad Fetch(int map, CellCoord? near, IReadOnlySet<string> led, CancellationToken token)
+    {
         if (source is null) return new(null, "no source reads maps");
-        var key = (map, near is { } cell ? Sector(cell) : -1L);
+        var key = (map, near is { } cell ? Sector(cell) : -1L, string.Join(",", led.Order(StringComparer.Ordinal)));
         if (_failed.TryGetValue(key, out var failure)) return new(null, failure);
         AreaHomeLoad load;
-        try { load = source.Read(map, near, token); }
+        try { load = source.Read(map, near, led, token); }
         // An ordinary failure is a result; anything else the source throws is the same failure, except a cancelled read, which is asked again.
         catch (Exception error) when (error is not OperationCanceledException)
         {
@@ -130,6 +146,8 @@ public sealed class AreaHomeDirectory(IAreaHomeSource? source, int maxReads = Ar
         if (load.Read is not { } read) return Failed(key, load.Detail);
         if (read.Map != map) return Failed(key, $"the source returned map {read.Map}");
         if (near is { } wanted && !read.Covers(wanted)) return Failed(key, $"the read of map {map} does not hold the cell {wanted.X},{wanted.Y}");
+        // The directory records what it asked for, so a read is never repeated for the same led NPC.
+        if (led.Count > 0) read = read with { LedEntities = new HashSet<string>(led, StringComparer.Ordinal) };
         Remember(read);
         return new(read, string.Empty);
     }
@@ -147,13 +165,23 @@ public sealed class AreaHomeDirectory(IAreaHomeSource? source, int maxReads = Ar
             _reads[i] = (read, ++_clock);
             return (template, read.FramesOf(template), string.Empty);
         }
-        var load = Home(home, near, token);
+        // A map not held is read once with this entity asked for (ARC-AI-1646: an NPC the hero leads has its body built from the same read).
+        var load = Held(home, near) is { } held ? new AreaHomeLoad(held, string.Empty) : Fetch(home, near, new HashSet<string>(StringComparer.Ordinal) { entity }, token);
         if (load.Read is not { } found) return (null, new Dictionary<AreaFrameKey, DecodedAreaFrame>(), load.Detail);
-        return found.Template(entity) is { } body ? (body, found.FramesOf(body), string.Empty)
-            : (null, new Dictionary<AreaFrameKey, DecodedAreaFrame>(), $"map {home} lists no body for the entity" + (near is null ? " (no stored cell recorded)" : string.Empty));
+        if (found.Template(entity) is { } body) return (body, found.FramesOf(body), string.Empty);
+        // ARC-AI-1646: a read made for the map's speakers (or before the NPC joined the hero) lists no body for an NPC without a dialog that the hero leads now: read the
+        // map again with this NPC's body built too (once: the read then records the NPC), so a Dominate Will target has its body on any map and outside the shown window.
+        if (!found.Led.Contains(entity) && source is not null)
+        {
+            var led = new HashSet<string>(found.Led, StringComparer.Ordinal) { entity };
+            var again = Fetch(home, near, led, token);
+            if (again.Read is not { } rebuilt) return (null, new Dictionary<AreaFrameKey, DecodedAreaFrame>(), again.Detail);
+            if (rebuilt.Template(entity) is { } ledBody) return (ledBody, rebuilt.FramesOf(ledBody), string.Empty);
+        }
+        return (null, new Dictionary<AreaFrameKey, DecodedAreaFrame>(), $"map {home} lists no body for the entity" + (near is null ? " (no stored cell recorded)" : string.Empty));
     }
 
-    private AreaHomeLoad Failed((int Map, long Sector) key, string detail)
+    private AreaHomeLoad Failed((int Map, long Sector, string Led) key, string detail)
     {
         _failed[key] = detail;
         return new(null, detail);
@@ -177,16 +205,16 @@ public sealed class AreaHomeDirectory(IAreaHomeSource? source, int maxReads = Ar
 /// </summary>
 public sealed class AreaMapHomes(TerrainViewerArguments launch, Func<AreaSpeaker, AreaCompanionFacts?> facts) : IAreaHomeSource
 {
-    public AreaHomeLoad Read(int runtimeMap, CellCoord? near, CancellationToken token)
+    public AreaHomeLoad Read(int runtimeMap, CellCoord? near, IReadOnlySet<string> led, CancellationToken token)
     {
-        try { return ReadChecked(runtimeMap, near, token); }
+        try { return ReadChecked(runtimeMap, near, led, token); }
         catch (Exception error) when (error is InvalidOperationException or AreaException or IOException or InvalidDataException or UnauthorizedAccessException)
         {
             return new(null, $"map {runtimeMap} did not read: {error.GetType().Name} {error.Message}");
         }
     }
 
-    private AreaHomeLoad ReadChecked(int runtimeMap, CellCoord? near, CancellationToken token)
+    private AreaHomeLoad ReadChecked(int runtimeMap, CellCoord? near, IReadOnlySet<string> led, CancellationToken token)
     {
         var discovery = ContentMountPlan.Discover(launch.GameRoot ?? throw new InvalidOperationException("AREA_HOMES_GAME_ROOT_REQUIRED"));
         if (discovery.Status != ContentMountStatus.Ready) return new(null, "mount " + discovery.Status);
@@ -219,14 +247,22 @@ public sealed class AreaMapHomes(TerrainViewerArguments launch, Func<AreaSpeaker
         {
             var chart = AreaMapLoadOperation.Chart(snapshot);
             var scene = AreaScenePlan.Create(snapshot, chart);
-            var templates = AreaCompanionTemplate.From(AreaConversationHost.FindSpeakers(snapshot), scene, snapshot.Visuals, chart, new(snapshot.RuntimeMap), facts);
+            var speakers = AreaConversationHost.FindSpeakers(snapshot);
+            var templates = AreaCompanionTemplate.From(speakers, scene, snapshot.Visuals, chart, new(snapshot.RuntimeMap), facts);
+            // ARC-AI-1646: the bodies of the NPCs without a dialog that the hero leads (a speaker keeps its own body): only those rows are built.
+            if (led.Count > 0)
+            {
+                var speaking = speakers.Select(s => AreaConversationState.EntityId(s.Row)).ToHashSet(StringComparer.Ordinal);
+                var wanted = led.Where(e => !speaking.Contains(e)).ToHashSet(StringComparer.Ordinal);
+                templates = [.. templates, .. AreaCompanionTemplate.ForLedMapNpcs(snapshot.Objects, snapshot.Visuals, wanted, scene, chart, new(snapshot.RuntimeMap), facts)];
+            }
             token.ThrowIfCancellationRequested();
             var frames = AreaLoadOperation.CopyFramesOf(owner, snapshot, templates.SelectMany(t => t.Commands).Select(c => c.Frame).Distinct().ToArray(), token);
-            return new(new(snapshot.RuntimeMap, rows, templates, frames, core), build.Detail);
+            return new(new(snapshot.RuntimeMap, rows, templates, frames, core, led.Count > 0 ? led : null), build.Detail);
         }
         catch (Exception error) when (error is InvalidOperationException or AreaException or IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            return new(new(snapshot.RuntimeMap, rows, [], new Dictionary<AreaFrameKey, DecodedAreaFrame>(), core),
+            return new(new(snapshot.RuntimeMap, rows, [], new Dictionary<AreaFrameKey, DecodedAreaFrame>(), core, led.Count > 0 ? led : null),
                 $"{build.Detail}; no bodies: {error.GetType().Name} {error.Message}");
         }
     }

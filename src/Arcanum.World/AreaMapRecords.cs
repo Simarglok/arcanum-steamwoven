@@ -23,12 +23,13 @@ namespace Arcanum.World;
 public sealed class AreaMapRecords(TerrainViewerArguments launch, AreaHomeDirectory? homes = null, Func<int, CellCoord?>? near = null,
     Func<int, string, CellCoord?>? nearEntity = null) : IMapRecordSource
 {
+    private static readonly IReadOnlySet<string> NoLed = new HashSet<string>(StringComparer.Ordinal);
     private readonly IAreaHomeSource _own = new AreaMapHomes(launch, _ => null);
 
     public MapRecordsLoad Load(int runtimeMap, CancellationToken token)
     {
         var at = near?.Invoke(runtimeMap);
-        var load = homes is not null ? homes.Home(runtimeMap, at, token) : _own.Read(runtimeMap, at, token);
+        var load = homes is not null ? homes.Home(runtimeMap, at, token) : _own.Read(runtimeMap, at, NoLed, token);
         return load.Read is { } read ? new(read.Rows, load.Detail) : new(null, load.Detail);
     }
 
@@ -39,7 +40,7 @@ public sealed class AreaMapRecords(TerrainViewerArguments launch, AreaHomeDirect
     {
         if ((nearEntity?.Invoke(runtimeMap, entity) ?? AreaMobileCells.Of(launch.GameRoot, runtimeMap, entity)) is not { } at)
             return new(null, "no stored cell is recorded for the entity");
-        var load = homes is not null ? homes.Home(runtimeMap, at, token) : _own.Read(runtimeMap, at, token);
+        var load = homes is not null ? homes.Home(runtimeMap, at, token) : _own.Read(runtimeMap, at, NoLed, token);
         return load.Read is { } read && read.CoreSectors is not null ? new(read.Rows, load.Detail) : new(null, load.Read is null ? load.Detail : "the map is read whole");
     }
 }

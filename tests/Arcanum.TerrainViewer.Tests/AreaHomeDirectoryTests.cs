@@ -25,7 +25,8 @@ public sealed class AreaHomeDirectoryTests
     private sealed class Source(Func<int, CellCoord?, AreaHomeLoad> read) : IAreaHomeSource
     {
         public readonly List<(int Map, CellCoord? Near)> Asked = [];
-        public AreaHomeLoad Read(int runtimeMap, CellCoord? near, CancellationToken token) { Asked.Add((runtimeMap, near)); return read(runtimeMap, near); }
+        public AreaHomeLoad Read(int runtimeMap, CellCoord? near, IReadOnlySet<string> led, CancellationToken token) { Asked.Add((runtimeMap, near)); AskedLed.Add(led); return read(runtimeMap, near); }
+        public readonly List<IReadOnlySet<string>> AskedLed = [];
     }
 
     [TestMethod]
@@ -39,6 +40,71 @@ public sealed class AreaHomeDirectoryTests
         Assert.AreEqual(0, frames.Count);
         Assert.AreSame(template, homes.Body(template.Entity, 1, null).Template);
         Assert.AreEqual(1, source.Asked.Count, "read once, then held");
+    }
+
+    // ARC-AI-1646: a source that builds the body of the led NPCs it is told about (as AreaMapHomes does), and none otherwise.
+    private sealed class LedBodySource(AreaCompanionTemplate template) : IAreaHomeSource
+    {
+        public readonly List<(int Map, CellCoord? Near, string Led)> Asked = [];
+        public AreaHomeLoad Read(int runtimeMap, CellCoord? near, IReadOnlySet<string> led, CancellationToken token)
+        {
+            Asked.Add((runtimeMap, near, string.Join(",", led.Order(StringComparer.Ordinal))));
+            var templates = led.Contains(template.Entity) ? new[] { template } : [];
+            return new(new(runtimeMap, Rows(runtimeMap), templates, new Dictionary<AreaFrameKey, DecodedAreaFrame>(),
+                near is null ? null : new HashSet<(long X, long Y)> { (near.Value.X >> 6, near.Value.Y >> 6) }), string.Empty);
+        }
+    }
+
+    [TestMethod]
+    public void A_led_npc_without_a_dialog_has_its_body_read_from_the_home_map_and_the_read_is_kept()
+    {
+        var template = AreaVisitorTalkTests.Template();
+        var source = new LedBodySource(template);
+        var homes = new AreaHomeDirectory(source);
+        var (found, _, detail) = homes.Body(template.Entity, 1, null);
+        Assert.AreSame(template, found, detail);
+        Assert.AreEqual(1, source.Asked.Count);
+        Assert.AreEqual(template.Entity, source.Asked[0].Led, "only the led NPC is asked for");
+        Assert.AreSame(template, homes.Body(template.Entity, 1, null).Template);
+        Assert.AreEqual(1, source.Asked.Count, "held after the read");
+        CollectionAssert.AreEquivalent(new[] { template.Entity }, homes.Reads.Single().Led.ToArray());
+    }
+
+    [TestMethod]
+    public void A_read_held_before_the_npc_joined_is_read_again_once_with_the_npc_asked_for()
+    {
+        var template = AreaVisitorTalkTests.Template();
+        var source = new LedBodySource(template);
+        var homes = new AreaHomeDirectory(source);
+        // The read made for the speakers only (a map change before the join, or the viewer's own read of the map it loaded).
+        Assert.IsNotNull(homes.Home(1, Stored).Read);
+        Assert.AreEqual(string.Empty, source.Asked.Single().Led);
+        Assert.IsNull(homes.Held(1, Stored)!.Template(template.Entity));
+        var found = homes.Body(template.Entity, 1, Stored);
+        Assert.AreSame(template, found.Template, found.Detail);
+        Assert.AreEqual(2, source.Asked.Count);
+        Assert.AreEqual(Stored, source.Asked[1].Near, "the window around the NPC's stored cell");
+        Assert.AreEqual(1, homes.Reads.Count, "the second read replaces the first of the same window");
+        Assert.AreSame(template, homes.Body(template.Entity, 1, Stored).Template);
+        Assert.AreEqual(2, source.Asked.Count);
+    }
+
+    [TestMethod]
+    public void A_remembered_read_without_the_led_npc_is_read_again_and_an_npc_the_map_does_not_have_is_asked_once()
+    {
+        var template = AreaVisitorTalkTests.Template();
+        var source = new LedBodySource(template);
+        var homes = new AreaHomeDirectory(source);
+        homes.Remember(Read(1));
+        Assert.AreSame(template, homes.Body(template.Entity, 1, null).Template);
+        Assert.AreEqual(1, source.Asked.Count);
+        var missing = homes.Body("not-on-this-map", 1, null);
+        Assert.IsNull(missing.Template);
+        StringAssert.Contains(missing.Detail, "lists no body");
+        Assert.AreEqual(2, source.Asked.Count);
+        Assert.AreEqual(string.Join(",", new[] { "not-on-this-map", template.Entity }.Order(StringComparer.Ordinal)), source.Asked[1].Led, "the NPCs asked for so far are kept");
+        Assert.IsNull(homes.Body("not-on-this-map", 1, null).Template);
+        Assert.AreEqual(2, source.Asked.Count, "asked once");
     }
 
     [TestMethod]
