@@ -7,6 +7,7 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Magic;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.HeroStateTests;
+using static Arcanum.Session.Tests.InventoryStateTests;
 using static Arcanum.Session.Tests.SessionFixtures;
 using static Arcanum.Session.Tests.SessionSpellRecordsTests;
 
@@ -253,8 +254,8 @@ public sealed class SessionSpellCasterTraitIndexTests
     [TestMethod]
     public void The_stats_whose_setter_does_more_than_store_are_not_ready_with_the_reason_in_the_ledger()
     {
-        // Magick points and tech points (the rewield of the worn items), poison (the poison timer and the life state), gender and race (the innate effect swap): each is read and not written.
-        foreach (var index in new[] { 22, 23, 24, 26, 27 })
+        // Poison (the poison timer and the life state), gender and race (the innate effect swap): each is read and not written (magick and tech points run the rewield, ARC-MAGIC-1507, below).
+        foreach (var index in new[] { 24, 26, 27 })
         {
             var (owner, _) = Session();
             using var _o = owner;
@@ -388,6 +389,74 @@ public sealed class SessionSpellCasterTraitIndexTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteCritterResistance(owner.Version, map, Rat, 1, 5).Disposition);
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.WriteCritterResistance(owner.Version, map, Rat, 1, 5).Disposition, "the same value again");
     }
+
+    // ARC-MAGIC-1507 (ledger RM3b; exe read 0x4B0980 cases 0x16 and 0x17, 0x465530, 0x467E80, 0x4649C0): magick points (22) and tech points (23) are stored after the clamp 0 to 210, then the rewield runs each worn slot's
+    // light recalculation and item script points 25 and 24. Ready when the session lists the NPC and no worn item has a wield script.
+    private const int MagickPlus = 260, TechPlus = 261, MagickMinusMany = 262, TechPlusMany = 263;
+
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster) Dressed(params SessionSeedItem[] items)
+    {
+        var owner = CreateWith(HalfElf());
+        var attached = owner.AttachMapInventory(Exterior, new SessionMapInventorySeed([new(Rat, SessionHolderKind.Npc, false, false, [], items.Select(item => item.Entity).ToArray())], items));
+        Assert.AreEqual(GameSessionFailure.None, attached.Failure);
+        var records = new Dictionary<int, SessionSpellRecord>(Records)
+        {
+            [MagickPlus] = Spell(MagickPlus, StatField, 22, 7), [TechPlus] = Spell(TechPlus, StatField, 23, 9),
+            [MagickMinusMany] = Spell(MagickMinusMany, StatField, 22, -500), [TechPlusMany] = Spell(TechPlusMany, StatField, 23, 500),
+        };
+        return (owner, new SessionSpellCaster(owner, n => records.GetValueOrDefault(n), new Map(owner, RatFields()), new Events()));
+    }
+
+    private static SessionSeedItem Gear(string entity, int location, params int[] scripts) => new(entity, Facts(SessionItemType.Armor, 2800 + location, location, scripts: scripts), null);
+
+    [TestMethod]
+    public void Magick_and_tech_points_are_stored_after_the_clamp_for_an_npc_whose_worn_items_have_no_wield_script()
+    {
+        // A worn vest and helmet (other script points do not count), a carried item with a wield script (not worn: the rewield walks the wear slots only).
+        var (owner, caster) = Dressed(Gear("vest", 1006), Gear("helmet", 1000, SessionScriptPoint.Examine), Gear("spare", -1, SessionScriptPoint.WieldOn, SessionScriptPoint.WieldOff));
+        using var _ = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(TechPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        var stats = owner.QueryCritterIndexedWrites(Rat).Stats;
+        Assert.AreEqual(RatFields().Critter!.BaseStats[22] + 7, stats[22]);
+        Assert.AreEqual(RatFields().Critter!.BaseStats[23] + 9, stats[23]);
+        caster.Apply(Run(TechPlusMany), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(210, owner.QueryCritterIndexedWrites(Rat).Stats[23], "the maximum 210");
+        caster.Apply(Run(MagickMinusMany), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(0, owner.QueryCritterIndexedWrites(Rat).Stats[22], "the minimum 0, no guard on a point pool");
+        Assert.IsFalse(NotReady(caster));
+        Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.TraitIndexRefused));
+    }
+
+    [TestMethod]
+    public void A_worn_item_with_a_wield_script_or_an_unlisted_npc_leaves_the_points_not_ready()
+    {
+        foreach (var point in new[] { SessionScriptPoint.WieldOn, SessionScriptPoint.WieldOff })
+        {
+            var (owner, caster) = Dressed(Gear("vest", 1006), Gear("ring", 1003, point));
+            using var _ = owner;
+            var version = owner.Version;
+            Assert.IsNull(caster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo, $"point {point}");
+            Assert.IsNull(caster.Apply(Run(TechPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo, $"point {point}");
+            Assert.AreEqual(version, owner.Version);
+            Assert.IsTrue(owner.QueryCritterIndexedWrites(Rat).IsEmpty);
+            Assert.AreEqual(2, caster.Log.Count(e => e.Kind == SpellCastEventKind.ComponentNotReady));
+        }
+        // The session does not list the NPC (no inventory view of its map, or a view without it): nothing says what it wears.
+        var (plain, _) = Session();
+        using var _p = plain;
+        var records = new Dictionary<int, SessionSpellRecord>(Records) { [MagickPlus] = Spell(MagickPlus, StatField, 22, 7) };
+        var tried = new SessionSpellCaster(plain, n => records.GetValueOrDefault(n), new Map(plain, RatFields()), new Events());
+        Assert.IsNull(tried.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo, "no inventory view");
+        Assert.IsTrue(NotReady(tried));
+        Assert.IsTrue(plain.QueryCritterIndexedWrites(Rat).IsEmpty);
+        // A view that lists other holders only.
+        var other = CreateWith(HalfElf());
+        using var _x = other;
+        Assert.AreEqual(GameSessionFailure.None, other.AttachMapInventory(Exterior, new SessionMapInventorySeed([new("oid:other", SessionHolderKind.Npc, false, false, [], [])], [])).Failure);
+        var viewed = new SessionSpellCaster(other, n => records.GetValueOrDefault(n), new Map(other, RatFields()), new Events());
+        Assert.IsNull(viewed.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo, "a view without the NPC");
+        Assert.IsTrue(other.QueryCritterIndexedWrites(Rat).IsEmpty);
 
     // ARC-MAGIC-1506 (ledger RM3b; exe read 0x4B0980 case 0, 0x45F790, 0x45F820, 0x461410): strength reads the encumbrance level before the store and recalculates after it. The rat's list weighs what its seed items weigh;
     // a strength of 3 carries 1500 (500 a point), so the levels step at 15 / 30 / 45 / 60 / 75 / 90 % of it.
