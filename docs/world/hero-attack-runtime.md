@@ -426,10 +426,11 @@ fatigue −3 kept standing and acting.
   the Violence Filter forcing 7 (`DyingAnimationRules.Chosen`). The hero body's profile carries the three bloody ARTs as optional
   actions (`ActorDiagnosticProfile.Decapitation`, `BlownOutChunk`, `SeveredLeg`, read by `HeroBodyArt` with the weapon part cleared like the
   fall, each within the key cap and only on a body that has the fall); `DyingArt` answers the ART or, when this body lacks it, the plain fall
-  (a typed fallback). The viewer reads the frame once while the goal shows (a goal with count 1, made for a hero that already lay or fell,
-  keeps the plain fall, as an NPC's does, 0x45D730) and the knockdown machine plays that ART instead of the fall; the dying goal waits for it
-  to end, so the death cover's 5 s count from the end of the bloody animation. A hero found dead at a load or a map change lies on the plain
-  fall (no goal is read then). A monster body (hero in a monster body, ARC-MAGIC-052) loads none of them and falls plain.
+  (a typed fallback). The viewer reads the frame while the goal shows (a goal with count 1, made for a hero that was unconscious or knocked down, and a death first seen
+  while the hero already lay or fell, keep the plain fall, as an NPC's does, 0x45D730; a goal a frame late, after a kill inside a spell run, is
+  read until the plain fall has ended) and the knockdown machine plays that ART instead of the fall; the dying goal waits for it to end, so the
+  death cover's 5 s count from the end of the bloody animation. A window move or transfer keeps the animation of the dead hero (its corpse keeps
+  the bloody last frame); a new session (a load) reads the saved goal if there is one, else the hero lies on the plain fall. A monster body (hero in a monster body, ARC-MAGIC-052) loads none of them and falls plain.
 - Log lines `ARC-COMBAT-021 hero knockdown stage=… fatigue=…`; the status line adds ` | hero: falling`, `unconscious`, `dead` or
   `getting up`.
 - Native smoke `ARC-COMBAT-021 native-smoke knockdown PASS` (with `--hero`, after the audio stage on the Crash Site exterior and in

@@ -248,6 +248,20 @@ public partial class TerrainViewerApp
                     for (var i = 0; i < 600 && !(_heroKnockdown.Stage == AreaKnockdownStage.Standing && HeroRunsHost()?.DownRun is null); i++) { Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector()); }
                     Require(!_heroKnockdown.Lying && session.QueryHeroLife()!.Status is { IsDead: false, IsActive: true }, $"the hero was raised and stands: {_heroKnockdown.Stage}");
                 }
+                // A hero already knocked out lies in its fall and keeps it when killed (0x45D730): no bloody animation, the goal ends at once.
+                {
+                    var koHit = session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { Fatigue = 1000 });
+                    Require(session.QueryHeroLife()!.Status.IsUnconscious, $"the knock-out landed: {koHit.Disposition} {koHit.Failure}");
+                    for (var i = 0; i < 400 && _heroKnockdown.Stage != AreaKnockdownStage.Down; i++) { Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector()); }
+                    Require(_heroKnockdown.Stage == AreaKnockdownStage.Down, $"the knocked-out hero lies: {_heroKnockdown.Stage}");
+                    Require(session.Kill(session.Version, SessionLifeTarget.Hero).Disposition == GameSessionDisposition.Changed, "kill the lying hero");
+                    for (var i = 0; i < 60; i++) { Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector()); if (HeroRunsHost()?.DownRun is null && i > 2) break; }
+                    Require(HeroRunsHost()?.DownRun is null && _worldActor.DownPose is { Action: ActorDiagnosticAction.FallDown } && _heroKnockdown.Stage == AreaKnockdownStage.Down,
+                        $"the lying hero keeps its fall when killed: {_worldActor.DownPose} {_heroKnockdown.Stage}");
+                    session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+                    for (var i = 0; i < 600 && !(_heroKnockdown.Stage == AreaKnockdownStage.Standing && HeroRunsHost()?.DownRun is null); i++) { Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector()); }
+                    Require(!_heroKnockdown.Lying && session.QueryHeroLife()!.Status is { IsDead: false, IsActive: true }, $"the hero was raised again: {_heroKnockdown.Stage}");
+                }
                 GD.Print("ARC-COMBAT-1793 hero dying " + string.Join(" ", dyingReport) + $" art={(profile.Decapitation is null ? "none" : "17+18+19")} filter={_gameSettings.ViolenceFilter}");
             }
             HeroRunsHost()?.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, "SMOKE_DONE"); StopWorldRoute("SMOKE_DONE");

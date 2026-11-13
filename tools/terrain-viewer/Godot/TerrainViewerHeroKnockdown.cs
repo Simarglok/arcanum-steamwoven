@@ -23,6 +23,8 @@ public partial class TerrainViewerApp
     // ARC-COMBAT-1793: the dying animation (7, 17, 18 or 19) the hero's dying goal (31) named at its death, read from the goal's frame before the fall starts; 0 when none was seen (a hero that was already
     // down when killed, a death found at a rebase after a load or a map change, a goal the host did not run): the hero then falls plain, as before.
     private int _heroDyingAnimation;
+    // The stage the hero was in when its death was first seen (null while alive): a hero that already lay or fell keeps the fall whatever its goal's frame says (a conscious hero lying in its fall has no goal 62 left to mark it).
+    private AreaKnockdownStage? _heroDeathFrom;
 
     /// <summary>The knock-down goal's step forces the fall (true) or releases it (false).</summary>
     internal void HeroForcedDown(bool on) => _heroForcedDown = on;
@@ -67,12 +69,15 @@ public partial class TerrainViewerApp
         AreaKnockdownClip? Clip(ActorDiagnosticResource? art) => art is null ? null : new(art.FramesPerGroup, art.RawFramesPerSecond);
         var (fall, getUp) = (Clip(profile.FallDown), Clip(profile.GetUp));
         var down = status.IsDead || status.IsUnconscious || _heroForcedDown;
+        var rebased = false;
         var now = WorldMilliseconds();
         if (_heroKnockdownFor.Session != session.Version.Owner || _heroKnockdownFor.Generation != area.Generation)
         {
             // A new session or map (a load, a transfer, a window move): a hero down already lies, none falls. A forced fall belongs to a run of the old session.
             _heroForcedDown = false;
-            _heroDyingAnimation = 0;
+            // A new session drops the dying animation; a window move or transfer of the same session keeps it (the dead hero's corpse keeps its bloody pose).
+            if (_heroKnockdownFor.Session != session.Version.Owner) { _heroDyingAnimation = 0; _heroDeathFrom = null; }
+            rebased = true;
             down = status.IsDead || status.IsUnconscious;
             _heroKnockdown.Rebase(down, fall);
             _heroKnockdownOctant = _worldActor.State.Facing;
@@ -83,11 +88,17 @@ public partial class TerrainViewerApp
             // Another body (its ARTs read, armour changed): the lying hero keeps its stage on the new body's last fall frame.
             _heroKnockdown.Rebase(down || _heroKnockdown.Stage != AreaKnockdownStage.GettingUp, fall);
         _heroKnockdownFor = (session.Version.Owner, area.Generation, profile);
-        // ARC-COMBAT-1793: a hero killed standing (or getting up) plays the dying animation its dying goal names (the goal's frame, GS: the starter 0x435080); a hero killed while it lies or falls has a goal with
-        // count 1 and keeps its fall, as an NPC does (0x45D730). The goal may start a frame late (a kill inside a spell run waits for the spell system's end), so the frame is read whenever it shows.
-        if (!status.IsDead) _heroDyingAnimation = 0;
-        else if (_heroDyingAnimation == 0 && ShownHeroRunsHost?.DownRun is { Bottom: { Goal: Arcanum.Simulation.Goals.GoalType.Dying, Count: 0 } dying })
-            _heroDyingAnimation = DyingAnimationRules.Chosen(dying.Animation, _gameSettings.ViolenceFilter);
+        // ARC-COMBAT-1793: a hero killed standing (or getting up) plays the dying animation its dying goal names (the goal's frame, the starter 0x435080); a hero that already lies or falls keeps its fall, as an NPC does (0x45D730):
+        // the goal's count says so for an unconscious or knocked-down one, and the stage the death was first seen in for a conscious one lying in the fall (its goal 62 is gone). The goal may start a frame late (a kill inside a spell run
+        // waits for the spell system's end), so the frame is read whenever it shows, until the plain fall has reached its end. A death found at a rebase (a load kept the goal) reads it in the rebase's own frame.
+        if (!status.IsDead) { _heroDyingAnimation = 0; _heroDeathFrom = null; }
+        else
+        {
+            _heroDeathFrom ??= rebased ? AreaKnockdownStage.Standing : _heroKnockdown.Stage;
+            if (_heroDyingAnimation == 0 && _heroDeathFrom is AreaKnockdownStage.Standing or AreaKnockdownStage.GettingUp && (rebased || _heroKnockdown.Stage != AreaKnockdownStage.Down)
+                && ShownHeroRunsHost?.DownRun is { Bottom: { Goal: Arcanum.Simulation.Goals.GoalType.Dying, Count: 0 } dying })
+                _heroDyingAnimation = DyingAnimationRules.Chosen(dying.Animation, _gameSettings.ViolenceFilter);
+        }
         var dyingArt = status.IsDead ? profile.DyingArt(_heroDyingAnimation) : null;
         if (dyingArt is { Resource: var dyingResource } && Clip(dyingResource) is { } dyingClip && dyingClip != fall)
         {
