@@ -36,9 +36,35 @@ public sealed class ObjectArtNumberTests
             Assert.AreEqual(0u, ObjectArtNumber.WithNumber((cls << 28) | 0x1234, 5, out _), $"class {cls}");
             Assert.IsTrue(ObjectArtNumber.IsCritterClass(cls << 28));
         }
-        // An item's range depends on its subtype and is not modelled: the id is kept.
-        Assert.IsFalse(ObjectArtNumber.ItemRangeKnown(6u << 28));
-        Assert.AreEqual((6u << 28) | 0x40, ObjectArtNumber.WithNumber((6u << 28) | 0x40, 3, out _));
+    }
+
+    [TestMethod]
+    public void An_item_number_has_11_bits_at_bit_17_and_a_range_by_its_type_and_coverage()
+    {
+        // Ranges (0x502830, 0x504550, 0x504570): types 0 and 1 and an armour (2) of coverage 0 allow 20 numbers, every other type 1,000; a non-item art id has none.
+        Assert.AreEqual(20u, ObjectArtNumber.ItemRange((6u << 28) | 0u));
+        Assert.AreEqual(20u, ObjectArtNumber.ItemRange((6u << 28) | 1u | (3u << 6)));
+        Assert.AreEqual(20u, ObjectArtNumber.ItemRange((6u << 28) | 2u));
+        Assert.AreEqual(1000u, ObjectArtNumber.ItemRange((6u << 28) | 2u | (5u << 14)), "an armour with coverage");
+        foreach (var type in new[] { 3u, 4u, 5u, 9u, 15u }) Assert.AreEqual(1000u, ObjectArtNumber.ItemRange((6u << 28) | type), $"type {type}");
+        Assert.AreEqual(0u, ObjectArtNumber.ItemRange(4u << 28));
+        Assert.AreEqual(0, ObjectArtNumber.ItemType(4u << 28 | 3));
+        Assert.AreEqual(3, ObjectArtNumber.ItemType((6u << 28) | 0x1243));
+        // The setter replaces bits 17..27 and keeps the type, subtype, place, coverage and destroyed bits.
+        var weapon = (6u << 28) | (7u << 17) | (2u << 14) | 0x400 | (5u << 6) | 1u;
+        Assert.AreEqual((6u << 28) | (19u << 17) | (2u << 14) | 0x400 | (5u << 6) | 1u, ObjectArtNumber.WithNumber(weapon, 19, out var outOfRange));
+        Assert.IsFalse(outOfRange);
+        // 20 is past a 20-number range and the id is kept; the same number on a type with 1,000 numbers is taken.
+        Assert.AreEqual(weapon, ObjectArtNumber.WithNumber(weapon, 20, out outOfRange));
+        Assert.IsTrue(outOfRange);
+        var other = (6u << 28) | (7u << 17) | 4u;
+        Assert.AreEqual((6u << 28) | (999u << 17) | 4u, ObjectArtNumber.WithNumber(other, 999, out outOfRange));
+        Assert.IsFalse(outOfRange);
+        Assert.AreEqual(other, ObjectArtNumber.WithNumber(other, 1000, out outOfRange));
+        Assert.IsTrue(outOfRange);
+        Assert.AreEqual(other, ObjectArtNumber.WithNumber(other, unchecked((uint)-1), out outOfRange), "a negative number is a huge one");
+        // Frame 0 keeps an item id, so the change is the number setter alone.
+        Assert.AreEqual((6u << 28) | (19u << 17) | (2u << 14) | 0x400 | (5u << 6) | 1u, ObjectArtNumber.Changed(weapon, 19, out _));
     }
 
     [TestMethod]

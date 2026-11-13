@@ -183,6 +183,54 @@ public sealed class AreaHeroKnockdownTests
         });
     }
 
+    /// <summary>ARC-COMBAT-1793 (AC1): the hero body reads the optional bloody dying ARTs (17, 18, 19; weapon part cleared like the fall) each on its own, within the key cap; a missing or over-cap one is a typed fallback to the fall.</summary>
+    [TestMethod]
+    public void AHeroBodyReadsTheBloodyDyingArtsEachOptionally()
+    {
+        var fall = ("art/critter/HMF/HMFUWXAh.art", Art(4, 11)); var getUp = ("art/critter/HMF/HMFUWXAi.art", Art(3, 14));
+        // Five used groups a frame: 50 keys, the fall and get-up 35 more, then 5 a frame of each dying ART.
+        var all = LoadWoman(fall, getUp, ("art/critter/HMF/HMFUWXAr.art", Art(6, 12)), ("art/critter/HMF/HMFUWXAs.art", Art(7, 13)), ("art/critter/HMF/HMFUWXAt.art", Art(5, 9)));
+        Assert.AreEqual((6, 12, 7, 13, 5, 9), (all.Profile.Decapitation!.FramesPerGroup, all.Profile.Decapitation.RawFramesPerSecond, all.Profile.BlownOutChunk!.FramesPerGroup,
+            all.Profile.BlownOutChunk.RawFramesPerSecond, all.Profile.SeveredLeg!.FramesPerGroup, all.Profile.SeveredLeg.RawFramesPerSecond));
+        Assert.AreEqual((85 + 5 * (6 + 7 + 5), 85 + 5 * (6 + 7 + 5)), (all.Profile.DistinctKeys, all.Textures.Count));
+        Assert.AreEqual(ActorDiagnosticProfile.HumanDecapitationSelector, all.Profile.Decapitation.Selector);
+        Assert.AreEqual(ActorDiagnosticProfile.HumanBlownOutChunkSelector, all.Profile.BlownOutChunk.Selector);
+        Assert.AreEqual(ActorDiagnosticProfile.HumanSeveredLegSelector, all.Profile.SeveredLeg.Selector);
+        Assert.AreEqual(ActorDiagnosticAction.SeveredLeg, all.Profile.ActionFor(ActorDiagnosticProfile.HumanSeveredLegSelector));
+        Assert.AreEqual(ActorDiagnosticAction.Decapitation, all.Plan(new ActorDiagnosticPlacementInput(6, 1, 0, 0, 0, 0, ActorDiagnosticRenderBranch.NormalUncached,
+            100, false, ActorDiagnosticAction.Decapitation, 5, 3, 0, 0, 0, 0, 0, 0)).Current.Action);
+        // The animation the dying goal names picks the ART; the plain fall (7) and any other number pick the fall.
+        Assert.AreEqual((ActorDiagnosticAction.Decapitation, 6), (all.Profile.DyingArt(17)!.Value.Action, all.Profile.DyingArt(17)!.Value.Resource.FramesPerGroup));
+        Assert.AreEqual(ActorDiagnosticAction.BlownOutChunk, all.Profile.DyingArt(18)!.Value.Action);
+        Assert.AreEqual(ActorDiagnosticAction.SeveredLeg, all.Profile.DyingArt(19)!.Value.Action);
+        Assert.AreEqual(ActorDiagnosticAction.FallDown, all.Profile.DyingArt(7)!.Value.Action);
+        Assert.AreEqual(ActorDiagnosticAction.FallDown, all.Profile.DyingArt(0)!.Value.Action);
+        // One missing, or one that does not read in the body's palette: that ART falls back to the fall, the others still load.
+        foreach (var partial in new[] { LoadWoman(fall, getUp, ("art/critter/HMF/HMFUWXAr.art", Art(6)), ("art/critter/HMF/HMFUWXAt.art", Art(5))),
+            LoadWoman(fall, getUp, ("art/critter/HMF/HMFUWXAr.art", Art(6)), ("art/critter/HMF/HMFUWXAs.art", Art(7, palette: false)), ("art/critter/HMF/HMFUWXAt.art", Art(5))),
+            LoadWoman(fall, getUp, ("art/critter/HMF/HMFUWXAr.art", Art(6)), ("art/critter/HMF/HMFUWXAs.art", [1, 2, 3]), ("art/critter/HMF/HMFUWXAt.art", Art(5))) })
+        {
+            Assert.IsNull(partial.Profile.BlownOutChunk);
+            Assert.IsNotNull(partial.Profile.Decapitation); Assert.IsNotNull(partial.Profile.SeveredLeg);
+            Assert.AreEqual(ActorDiagnosticAction.FallDown, partial.Profile.DyingArt(18)!.Value.Action);
+            Assert.AreEqual(ActorDiagnosticAction.Decapitation, partial.Profile.DyingArt(17)!.Value.Action);
+            Assert.AreEqual(85 + 5 * (6 + 5), partial.Profile.DistinctKeys);
+        }
+        // Over the key cap (768): 85 keys + 5 x 64 frames twice fits (725); a third such ART (1045) is left out and falls back to the fall; a smaller later one would still fit, a larger one would not.
+        var capped = LoadWoman(fall, getUp, ("art/critter/HMF/HMFUWXAr.art", Art(64)), ("art/critter/HMF/HMFUWXAs.art", Art(64)), ("art/critter/HMF/HMFUWXAt.art", Art(64)));
+        Assert.IsNotNull(capped.Profile.Decapitation); Assert.IsNotNull(capped.Profile.BlownOutChunk);
+        Assert.IsNull(capped.Profile.SeveredLeg);
+        Assert.AreEqual(ActorDiagnosticAction.FallDown, capped.Profile.DyingArt(19)!.Value.Action);
+        Assert.AreEqual(ActorDiagnosticAction.BlownOutChunk, capped.Profile.DyingArt(18)!.Value.Action);
+        Assert.AreEqual(85 + 5 * 128, capped.Profile.DistinctKeys);
+        // An ART with more frames than the decoder admits (64 a group) does not read: a typed fallback too.
+        Assert.IsNull(LoadWoman(fall, getUp, ("art/critter/HMF/HMFUWXAr.art", Art(100))).Profile.Decapitation);
+        // A body with no fall takes no dying art either: nothing is drawn falling (the hero lies without a drawn fall).
+        var bare = LoadWoman(("art/critter/HMF/HMFUWXAr.art", Art(6)));
+        Assert.IsNull(bare.Profile.Decapitation);
+        Assert.IsNull(bare.Profile.DyingArt(17)); Assert.IsNull(bare.Profile.DyingArt(7));
+    }
+
     [TestMethod]
     public void TheDownPoseWinsOverTheAttackPoseOnASettledActor()
     {

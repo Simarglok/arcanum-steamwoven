@@ -275,7 +275,7 @@ public sealed class WaitFlagStateTests
         public DialogCommandResult Execute(RumorLogCommand command) => throw new InvalidOperationException();
     }
 
-    private static GameSessionFailure RestoreFailure(GameSessionSnapshot saved, SessionPartyState party)
+    internal static GameSessionFailure RestoreFailure(GameSessionSnapshot saved, SessionPartyState party)
     {
         var result = GameSessionOwner.Restore(WithParty(saved, party), RestoreOptions());
         result.Owner?.Dispose();

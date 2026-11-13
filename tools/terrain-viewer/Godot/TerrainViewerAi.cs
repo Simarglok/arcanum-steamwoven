@@ -493,6 +493,21 @@ public partial class TerrainViewerApp
         return !vetoed;
     }
 
+    /// <summary>
+    /// ARC-MAGIC-1167 (MA-10, ledger RZ1–RZ3): the dead target's raise script (point 0x12) asked by a Heal with the raise bit: true when the raise goes on (no script, a script that ran default, or one the viewer cannot apply), false when
+    /// the script skipped the default and refuses it. The healer is the triggerer. The PC has no script here (no attachment data), so a raise of the hero always goes on.
+    /// </summary>
+    private bool RaiseGoesOn(string target, string? healer)
+    {
+        if (target == SessionSpellCaster.Hero || _areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return true;
+        Arcanum.Scripting.Scr.ScrObjectRef? triggerer = healer is null ? null : healer == SessionSpellCaster.Hero ? host.Pc : new Arcanum.Scripting.Scr.ScrObjectRef(CurrentAreaMap, ScriptCodeOfCast(healer));
+        var ran = Awarded(host, host.RunRaise(ScriptCodeOfCast(target), triggerer, owner.Rules.Scripts));
+        var refused = AreaUseScriptHost.RaiseRefuses(ran);
+        if (ran.Run is not null || ran.Detail.StartsWith("nested", StringComparison.Ordinal))
+            GD.Print($"ARC-MAGIC-1167 raise-script target={target} healer={healer ?? "-"} outcome={ran.Outcome} run={ran.Run?.Outcome} stop={ran.Run?.Stop} refused={refused} detail={ran.Detail}");
+        return !refused;
+    }
+
     /// <summary>ARC-SCRIPT-1483: the combat-point scripts of a hero's hit on <paramref name="victim"/>, the hit event the session raised before its damage step.</summary>
     private Action<SessionHitScriptEvent> HeroHitScripts(string victim) => hit => RunHitScripts(SessionSpellCaster.Hero, victim, hit);
 

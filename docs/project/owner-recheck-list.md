@@ -970,7 +970,7 @@ companion, a shopkeeper and a guard in any town where a quest script touches the
 
 Known differences (documented, not bugs):
 
-- Change art number (ARC-SCRIPT-1735) changes the picture of a **scenery** from a script (kept in the save, drawn in the viewer); a door, container, trap, item or unique NPC target is not built: a script run that reaches one is refused, so that step does nothing in Steamwoven. A critter (the hero, an NPC of a critter or monster body) is never changed (the original builds the art id 0 for them and writes it only if a file of that id exists; not read, F0).
+- Change art number (ARC-SCRIPT-1735) changes the picture of a **scenery** from a script (kept in the save, drawn in the viewer) and, since ARC-SCRIPT-1779, the **ground and flight art of an item** (the item as an object on the ground; its inventory art and paper doll stay, as in the original, ledger AN11); a door, container, trap, unique NPC or made or script-created item target is not built: a script run that reaches one is refused, so that step does nothing in Steamwoven. A critter (the hero, an NPC of a critter or monster body) is never changed (the original builds the art id 0 for them and writes it only if a file of that id exists; not read, F0).
 - A script in a dialog (a talk) that uses one of these actions is still refused; only use, tile, sector, heartbeat and dying scripts run them.
 - A reaction or standpoint change acts for NPCs of the map on screen only.
 
@@ -1279,3 +1279,21 @@ The rules are in [barter](../world/barter-runtime.md#gambling-arc-ui-1740). Star
 | 3 | Release the ware on the box. | The merchant says a won or lost line. A win gives the ware for nothing, a loss takes its price in coins and gives the ware; the trade sound plays once; the box returns to rest. | open |
 | 4 | Open barter once, close it and save; bet and note the result; load that save, open barter and bet the same ware. | The outcome is the same win or loss as the first time (the roll is saved, reloading does not reroll). | open |
 
+## ARC-UI-1199 — Generated interface: the schematic window (S8, 2026-11-14)
+
+The rules are in [viewer slice S8](../rendering/hd-interface-density.md#viewer-slice-s8-arc-ui-1199). Set the HD interface line on the launcher screen to **Generated (experimental)**,
+start a game with a hero who has technology degrees and open the schematics window (T). Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open the schematics window in a 1280 × 800 window. | The window is wood with a ruled cream page, a brass-rimmed picture frame for the record, two boxes for the components, a dark channel with the assemble button and its two lamps in brass rims; the two gears with the mortarboard and the scroll, the round view of the hero and the record's picture are the originals'. | open |
+| 2 | Click each of the eight discipline tabs and move over them. | The paper bookmarks (their own outlines and glyphs) stick out of the page's right edge; the shown tab is the pressed one; the page and the record change as before. | open |
+| 3 | Press the learned and found buttons and the assemble button; hold each down. | Each is a brass-rimmed round button that sinks while held; texts, sounds and the assembling are as before. | open |
+| 4 | Pick a discipline with several pages and turn them with the two arrows (the arrow hides on the first and last page). | The arrows are drawn on the page under them (no box of another colour); the ruling goes on beneath them. | open |
+| 5 | Make the window bigger and smaller while the window is open. | The frames redraw at the new size (the previous picture stays until it is ready); the lines of the page stay one unit wide. | open |
+
+Known differences (documented, not bugs):
+
+- The page is plainer than the original's (soft clouds and a plain ruling in place of its stains, ragged edges and the printed connecting lines between the record and the two component boxes, which are not drawn).
+- The tabs and arrows follow the Legacy outlines and marks; the assemble face (the two lamps), the found and missing tints and the record's picture stay pictures.
+- The ring of the round view (art 231) is the barter window's recipe and sits on a patch of wood whose grain differs a little from the window's.
