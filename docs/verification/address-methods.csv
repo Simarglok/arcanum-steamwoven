@@ -250,6 +250,7 @@ src/Arcanum.Session/SessionSpellCasterScriptDamage.cs,ApplyScriptDamage,pending,
 src/Arcanum.Session/SessionSpellCasterSummon.cs,DestroyCreated,pending,
 src/Arcanum.Session/SessionSpellCasterTeleport.cs,PayTeleportCost,pending,
 src/Arcanum.Session/SessionSpellCasterTeleport.cs,TeleportAllowedFor,pending,
+src/Arcanum.Session/SessionSpellCasterTraitIndex.cs,RewieldReady,exempt,host
 src/Arcanum.Session/SessionSpellCasterTrapDevices.cs,CastAtTileWithoutCaster,pending,
 src/Arcanum.Session/SessionSpellCasterTrapDevices.cs,UseScriptTrapDevice,pending,
 src/Arcanum.Session/SessionSpellCasterTrapDevices.cs,UseTrapDevice,pending,
